@@ -68,6 +68,12 @@ const compare = defineCollection({
     updatedDate: z.coerce.date(),
     draft: z.boolean().default(true),
     pricingLadder: z.literal(true),
+    // Wave 8 (D9): a compare page is the canonical home for competitor facts, so
+    // it declares that it carries competitor claims and names the competitor's
+    // own domain. The compare validator then requires a `## Sources` block with a
+    // citation on that domain. See scripts/compare-validation-lib.mjs.
+    competitorClaims: z.boolean().default(true),
+    competitorDomain: z.string().min(3).optional(),
     canonical: z.url().optional(),
     faq: z
       .array(z.object({ q: z.string(), a: z.string() }))

@@ -7,6 +7,8 @@ disclaimer: "Factual comparison. Corgea is an AI-native application security pla
 updatedDate: 2026-10-04
 draft: false
 pricingLadder: true
+competitorClaims: true
+competitorDomain: corgea.com
 faq:
   - q: "Does LyraShield replace Corgea?"
     a: "No. Corgea is an AI-native AppSec platform spanning AI SAST with BLAST for business-logic detection, SCA with reachability and dead-package analysis, secrets, IaC, containers, plus pre-code PRD security design reviews and a multi-agent AI pentest. LyraShield in open beta is a focused release assurance loop with a checksum-bound evidence record and reviewed fix proposals."
@@ -77,8 +79,23 @@ Read the methodology or try the free browser-local tools at [lyrashieldai.com](h
 
 > Sources: [Corgea homepage](https://corgea.com), [Corgea pricing](https://corgea.com/pricing), [Corgea AI SAST](https://corgea.com/products/ai-sast), [Corgea AI pentest](https://corgea.com/products/ai-pentest), [Corgea secrets scanning](https://corgea.com/products/secrets-scanning), [Corgea dependency scanning](https://corgea.com/products/dependency-scanning), [Corgea docs](https://docs.corgea.app/introduction), [Corgea on GitHub Marketplace](https://github.com/marketplace/corgea).
 
+## Where Corgea is genuinely strong
+
+Corgea is built around the idea that a scanner should adapt to your codebase. Its [Auto-Discovery and Learning announcement](https://corgea.com/blog/introducing-auto-discovery-and-learning) describes how it studies the code before scanning: it detects frameworks, languages and architecture, identifies existing security controls such as auth decorators and ORM usage and generates project-specific false-positive and fix policies. Its Learning feature turns developer feedback into approved policies over time, grouped by project, CWE and language.
+
+Its [AI Pentesting announcement](https://corgea.com/blog/introducing-ai-pentesting) describes a multi-agent architecture where coordinator agents assign specialised sub-agents such as an auth discovery agent or an API exploration agent. The same page says the agents validate exploitability during the test, confirming a finding can be triggered, capturing evidence and explaining business impact. The same page says the platform supports continuous retesting after remediation.
+
+Its [Security Design Reviews announcement](https://corgea.com/blog/introducing-security-design-reviews) describes catching design-level threats at the PRD stage, including the example of a vendor payout API design that lacked an authorization check linking the authenticated user to the vendor they were paying. The [security page](https://docs.corgea.app/security) describes issuing pull requests with fixes for engineering approval.
+
+## Sources
+
+- [Corgea introduction](https://corgea.com)
+- [Corgea Auto-Discovery and Learning](https://corgea.com/blog/introducing-auto-discovery-and-learning)
+- [Corgea AI Pentesting](https://corgea.com/blog/introducing-ai-pentesting)
+- [Corgea Security Design Reviews](https://corgea.com/blog/introducing-security-design-reviews)
+- [Corgea BLAST documentation](https://docs.corgea.app/blast)
+- [Corgea security documentation](https://docs.corgea.app/security)
+
 ## Methodology and scope
 
 This comparison describes published capabilities, not an independent test of either product. Client workflow availability and commercial terms can change. Read [how LyraShield tests, records evidence and reports coverage](/methodology) for its assurance model and verify vendor details before a purchasing decision.
-
-For the long-form version of this comparison, including the evidence model and where each tool fits a release gate, read [LyraShield AI vs Corgea](/blog/corgea-vs-lyrashield).

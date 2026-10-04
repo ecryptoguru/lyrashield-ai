@@ -36,6 +36,30 @@ export const LEGACY_REDIRECTS = [
     target: "/docs/integrations/pi",
     code: "301",
   },
+  // Wave 8 (D9): the 13 long-form `-vs-lyrashield` posts were retired and folded
+  // into their compare page, which is now the canonical home for the comparison.
+  // Both the slashless and trailing-slash forms are listed because the generated
+  // trailing-slash block stops covering these routes once the post files are
+  // deleted, and a trailing-slash request must still reach the compare page
+  // rather than fall through to the platform 404.
+  ...[
+    "aikido",
+    "corgea",
+    "github-advanced-security",
+    "horizon3",
+    "mobb",
+    "pentera",
+    "pixee",
+    "runsybil",
+    "semgrep",
+    "snyk",
+    "sonarqube",
+    "xbow",
+    "zeropath",
+  ].flatMap((slug) => [
+    { source: `/blog/${slug}-vs-lyrashield`, target: `/compare/${slug}`, code: "301" },
+    { source: `/blog/${slug}-vs-lyrashield/`, target: `/compare/${slug}`, code: "301" },
+  ]),
 ]
 
 /** Pages excluded from trailing-slash rules. */

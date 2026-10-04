@@ -7,6 +7,8 @@ disclaimer: "Factual comparison. ZeroPath by ZeroPath Inc. is an AI-native appli
 updatedDate: 2026-10-04
 draft: false
 pricingLadder: true
+competitorClaims: true
+competitorDomain: zeropath.com
 faq:
   - q: "Does LyraShield replace ZeroPath?"
     a: "No. ZeroPath is a unified AI-native SAST plus SCA, secrets, IaC and DAST-style runtime validation with taint tracking, natural-language policy, CycloneDX AI-BOM across 17 component kinds and an open-source MCP server and a downloadable CLI. LyraShield in open beta focuses on agentic pentest as core with SCA, secrets, evidence states and reviewed fix proposals."
@@ -77,8 +79,26 @@ Read the methodology or try the free browser-local tools at [lyrashieldai.com](h
 
 > Sources: [ZeroPath homepage](https://zeropath.com), [ZeroPath SAST](https://zeropath.com/products/sast), [ZeroPath pricing](https://zeropath.com/pricing), [ZeroPath runtime validation](https://zeropath.com/products/runtime-validation), [ZeroPath AI inventory](https://zeropath.com/products/ai-inventory), [ZeroPath docs](https://zeropath.com/docs/scanning/sast-overview), [ZeroPath MCP server (GitHub)](https://github.com/ZeroPathAI/zeropath-mcp-server), [BusinessWire](https://www.businesswire.com/news/home/20260313797057/en/ZeroPath-Scales-AI-Native-Application-Security-for-the-Modern-Development-Era).
 
+## Where ZeroPath is genuinely strong
+
+ZeroPath brings an LLM-powered approach that goes beyond pattern matching. Its [SAST product page](https://zeropath.com/products/sast) describes detecting conventional technical vulnerabilities and complex issues such as business logic flaws and authorization problems that traditional SAST scanners miss. Its [repo context documentation](https://zeropath.com/docs/platform/repo-context) describes analysing endpoint behaviour in context, understanding whether an endpoint is internal, whether input comes from admin-authored config and whether a CLI is operator-run, to reduce false positives.
+
+A standout capability is automated application threat modeling. Its [threat modeling post](https://zeropath.com/blog/automated-threat-modeling) describes generating a threat model for every app it identifies in your repositories, refreshing it on every commit and feeding it into SAST triage, SCA reachability and prioritization. The threat model is editable in a dedicated tab, is monorepo aware and evaluates every change at the agent, pull request and full repository level.
+
+Its [AI inventory page](https://zeropath.com/products/ai-inventory) describes a CycloneDX AI-BOM across component kinds, and its [MCP server repository](https://github.com/ZeroPathAI/zeropath-mcp-server) is open source. The [BusinessWire announcement](https://www.businesswire.com/news/home/20260313797057/en/ZeroPath-Scales-AI-Native-Application-Security-for-the-Modern-Development-Era) covers the company background.
+
+## Sources
+
+- [ZeroPath home page](https://zeropath.com)
+- [ZeroPath SAST](https://zeropath.com/products/sast)
+- [ZeroPath runtime validation](https://zeropath.com/products/runtime-validation)
+- [ZeroPath AI inventory](https://zeropath.com/products/ai-inventory)
+- [ZeroPath automated threat modeling](https://zeropath.com/blog/automated-threat-modeling)
+- [ZeroPath repo context](https://zeropath.com/docs/platform/repo-context)
+- [ZeroPath MCP server (GitHub)](https://github.com/ZeroPathAI/zeropath-mcp-server)
+- [ZeroPath pricing](https://zeropath.com/pricing)
+- [BusinessWire announcement](https://www.businesswire.com/news/home/20260313797057/en/ZeroPath-Scales-AI-Native-Application-Security-for-the-Modern-Development-Era)
+
 ## Methodology and scope
 
 This comparison describes published capabilities, not an independent test of either product. Client workflow availability and commercial terms can change. Read [how LyraShield tests, records evidence and reports coverage](/methodology) for its assurance model and verify vendor details before a purchasing decision.
-
-For the long-form version of this comparison, including the evidence model and where each tool fits a release gate, read [LyraShield AI vs ZeroPath](/blog/zeropath-vs-lyrashield).

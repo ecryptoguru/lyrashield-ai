@@ -7,6 +7,8 @@ disclaimer: 'Factual comparison. <a href="https://www.horizon3.ai/nodezero/">Hor
 updatedDate: 2026-10-04
 draft: false
 pricingLadder: true
+competitorClaims: true
+competitorDomain: horizon3.ai
 faq:
   - q: "Does LyraShield replace Horizon3 NodeZero?"
     a: "No. NodeZero is an autonomous, production-safe pentest that chains weaknesses across internal, external, cloud, Kubernetes, Active Directory and identity, with attack-path diagrams and Quick Verify retests. LyraShield in open beta is app-layer release assurance for AI-built apps with evidence states, coverage receipts and reviewed fix proposals."
@@ -74,8 +76,22 @@ faq:
 
 NodeZero proves production resilience across the environment; LyraShield AI gates AI-built-app releases. [Read our comparison methodology](/methodology) and try the free browser-local tools at [lyrashieldai.com](https://lyrashieldai.com).
 
+## Where Horizon3 NodeZero is genuinely strong
+
+Its core value is autonomous, continuous pentesting at scale. The [NodeZero internal pentesting page](https://horizon3.ai/nodezero/internal-pentesting/) describes how it discovers assets, fingerprints services, compromises credentials, moves laterally, bypasses controls and pivots into cloud environments such as S3, EC2, Microsoft 365 and Azure VMs. The same page says many of the attack paths it executes do not involve any CVE, and that it chains weaknesses together without a predefined script and uses MITRE ATT&CK techniques such as credential dumping.
+
+It scales and it covers the outside. The internal pentesting page says it can test a whole RFC 1918 private IP space and runs concurrent tests in different segments. Its [external pentesting page](https://horizon3.ai/nodezero/external-pentesting/) describes passive asset discovery using DNS and OSINT.
+
+For a security team that wants continuous, attacker-style coverage of a network and infrastructure estate, NodeZero is a credible and well documented choice. It now covers authenticated web applications and APIs alongside infrastructure.
+
+## Sources
+
+- [NodeZero platform overview](https://horizon3.ai/nodezero/)
+- [NodeZero internal pentesting](https://horizon3.ai/nodezero/internal-pentesting/)
+- [NodeZero external pentesting](https://horizon3.ai/nodezero/external-pentesting/)
+- [NodeZero pricing](https://horizon3.ai/pricing/)
+- [MITRE ATT&CK](https://mitre.org)
+
 ## Methodology and scope
 
 This comparison describes published capabilities, not an independent test of either product. Client workflow availability and commercial terms can change. Read [how LyraShield tests, records evidence and reports coverage](/methodology) for its assurance model and verify vendor details before a purchasing decision.
-
-For the long-form version of this comparison, including the evidence model and where each tool fits a release gate, read [LyraShield AI vs Horizon3.ai](/blog/horizon3-vs-lyrashield).

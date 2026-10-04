@@ -7,6 +7,8 @@ disclaimer: "Factual comparison. Semgrep by Semgrep Inc. provides pattern-based 
 updatedDate: 2026-10-04
 draft: false
 pricingLadder: true
+competitorClaims: true
+competitorDomain: semgrep.dev
 faq:
   - q: "Does LyraShield replace Semgrep?"
     a: "No. Semgrep excels at fast, customizable pattern-based scanning with rules that look like code, 30+ languages and an LGPL Community Edition. LyraShield in open beta is not a general SAST engine; it pairs agentic pentest with SCA and secrets to produce evidence states and a checksum-bound assurance record for release decisions."
@@ -76,8 +78,23 @@ faq:
 
 LyraShield AI is live and open for registration — create an account and run your first authorized check through the release-assurance loop: target, review, evidence, fix, retest, report. Prefer to explore first? Read the evidence methodology or try the free browser-local tools.
 
+## Where Semgrep is genuinely strong
+
+Semgrep is the tool most developers reach for when they want lightweight, customizable static analysis. Its [introduction documentation](https://semgrep.dev/docs/introduction) describes support for more than 30 programming languages and a registry of community rules. Its [source repository](https://github.com/semgrep/semgrep) is open source under an LGPL licence and explains that rules are written in a syntax resembling the code being scanned, which makes custom rule authoring approachable without a separate query language.
+
+The commercial AppSec Platform adds cross-file and interfile taint analysis, reachability checks for open-source dependencies, secrets detection, pull request comments and an AI Assistant for triage and remediation. The Semgrep team states in its own documentation that Community Edition, limited to single-function analysis, will miss many true positives and recommends the platform for real security use cases.
+
+Its ecosystem is a real strength. [Semgrep Supply Chain](https://semgrep.dev/docs/supported-languages) covers reachable vulnerabilities in open-source dependencies. Semgrep also ships an [MCP server](https://github.com/semgrep/mcp) and the Guardian plugin for Claude Code and Cursor, so its findings can reach coding agents.
+
+## Sources
+
+- [Semgrep introduction](https://semgrep.dev/docs/introduction)
+- [Semgrep source repository](https://github.com/semgrep/semgrep)
+- [Semgrep supported languages](https://semgrep.dev/docs/supported-languages)
+- [Semgrep Supply Chain overview](https://semgrep.dev/docs/semgrep-supply-chain/overview)
+- [Semgrep MCP server](https://github.com/semgrep/mcp)
+- [Semgrep pricing](https://semgrep.dev/pricing)
+
 ## Methodology and scope
 
 This comparison describes published capabilities, not an independent test of either product. Client workflow availability and commercial terms can change. Read [how LyraShield tests, records evidence and reports coverage](/methodology) for its assurance model and verify vendor details before a purchasing decision.
-
-For the long-form version of this comparison, including the evidence model and where each tool fits a release gate, read [LyraShield AI vs Semgrep](/blog/semgrep-vs-lyrashield).
