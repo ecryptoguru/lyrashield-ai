@@ -83,6 +83,7 @@ async function latestContentDate(): Promise<string> {
 
 const docsLinks = [
   { label: "REST API reference", path: "/docs/integrations/rest-api" },
+  { label: "API v1 OpenAPI reference", path: "/docs/api" },
   { label: "Remote action approvals", path: "/docs/approvals" },
   { label: "Coding-agent integrations", path: "/docs/integrations" },
   { label: "Agent Plugin installation", path: "/docs/integrations/agent-plugins" },
