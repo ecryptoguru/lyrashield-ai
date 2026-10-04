@@ -4,7 +4,7 @@ description: "How LyraShield AI compares to XBOW for autonomous web-app pentest.
 competitor: "XBOW"
 heading: "LyraShield AI vs XBOW"
 disclaimer: "Factual comparison. [XBOW](https://xbow.com/) by XBOW, Inc. is an autonomous offensive security platform that uses AI agents to continuously pentest applications and APIs, independently proving exploitability with working exploits before a finding reaches your team. [LyraShield AI](https://lyrashieldai.com/) is release assurance for AI-built apps: a target → review → evidence → fix → retest → report loop that keeps detection, verification receipts, retest outcomes and limitations distinct. Neither replaces the other — they optimize for different deliverables (XBOW: continuous exploit-proof; LyraShield AI: scoped evidence for an AI-built app release review)."
-updatedDate: 2026-09-19
+updatedDate: 2026-10-04
 draft: false
 pricingLadder: true
 faq:
@@ -31,20 +31,20 @@ faq:
 
 ## Capability comparison
 
-| Capability                                                       | LyraShield AI                                                   | XBOW                                                            |
-| ---------------------------------------------------------------- | --------------------------------------------------------------- | --------------------------------------------------------------- |
-| Agentic / AI-driven pentest                                      | Yes                                                             | Yes (core capability)                                           |
-| Independent finding verification                                 | Yes (separate receipt; scope-bound)                             | Yes (proof is the central deliverable)                          |
-| SCA (dependency scanning)                                        | Yes (engine)                                                    | Not a primary focus                                             |
-| Secret scanning                                                  | Yes (engine + GitHub Action)                                    | Not a primary focus                                             |
-| Evidence states (detected / verified / confirmed / inconclusive) | Yes (4 states)                                                  | Findings carry exploit proof; no explicit multi-state lifecycle |
-| Deterministic retest                                             | Yes                                                             | Re-testing to confirm fixes hold                                |
-| Coverage receipts                                                | Yes (per-control)                                               | No (per-finding case files instead)                             |
-| Assurance reports                                                | Yes (immutable snapshots)                                       | Board-/auditor-ready reporting per finding                      |
-| MCP server integration                                           | Yes (inside AI coding agents)                                   | No (platform-centric)                                           |
-| GitHub Action / SARIF output                                     | Yes                                                             | Not advertised as primary                                       |
-| Permission-gated Fix PR requests                                 | Fix PR requests require permission and a server-generated patch | No (remediation guidance, not executed fixes)                   |
-| AI-generated-code focus                                          | Built for AI-built apps                                         | Not specific to AI-generated code                               |
+| Capability                                                       | LyraShield AI                                                   | XBOW                                                                                         |
+| ---------------------------------------------------------------- | --------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| Agentic / AI-driven pentest                                      | Yes                                                             | Yes (core capability)                                                                        |
+| Independent finding verification                                 | Yes (separate receipt; scope-bound)                             | Yes (proof is the central deliverable)                                                       |
+| SCA (dependency scanning)                                        | Yes (engine)                                                    | Not a primary focus                                                                          |
+| Secret scanning                                                  | Yes (engine + GitHub Action)                                    | Not a primary focus                                                                          |
+| Evidence states (detected / verified / confirmed / inconclusive) | Yes (4 states)                                                  | Findings carry exploit proof; no explicit multi-state lifecycle                              |
+| Deterministic retest                                             | Yes                                                             | Re-testing to confirm fixes hold                                                             |
+| Coverage receipts                                                | Yes (per-control)                                               | No (per-finding case files instead)                                                          |
+| Assurance reports                                                | Yes (immutable snapshots)                                       | Board-/auditor-ready reporting per finding                                                   |
+| MCP server integration                                           | Yes (inside AI coding agents)                                   | No (platform-centric)                                                                        |
+| GitHub Action / SARIF output                                     | Yes                                                             | GitHub Action for PR-triggered assessments via the XBOW API; findings export as CSV and JSON |
+| Permission-gated Fix PR requests                                 | Fix PR requests require permission and a server-generated patch | No (remediation guidance, not executed fixes)                                                |
+| AI-generated-code focus                                          | Built for AI-built apps                                         | Not specific to AI-generated code                                                            |
 
 ## Deployment and pricing
 
