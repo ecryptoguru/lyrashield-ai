@@ -210,30 +210,21 @@ const scannerAvailable = Boolean(appOrigin)
 </style>
 
 <script>
-  import { normalizePublicHttpUrl } from "../../lib/public-url"
+  import { bindLiteHandoff } from "../../lib/lite-handoff"
 
-  const form = document.querySelector<HTMLFormElement>("#home-lite-scan-form")
-  form?.addEventListener("submit", (event) => {
-    event.preventDefault()
-    const input = document.querySelector<HTMLInputElement>("#home-scan-url")
-    const error = document.querySelector<HTMLElement>("#home-scan-error")
-    if (!input || !error) return
-    error.classList.add("hidden")
-    let target = ""
-    try {
-      target = normalizePublicHttpUrl(input.value)
-    } catch {
-      error.textContent = "Enter a valid public HTTP or HTTPS URL without credentials."
+  // The handoff itself lives in lib/lite-handoff.ts, shared with the hero field
+  // so the two forms cannot drift apart.
+  bindLiteHandoff({
+    formId: "home-lite-scan-form",
+    inputId: "home-scan-url",
+    errorId: "home-scan-error",
+    consentId: "home-scan-authorized",
+    onClear: () => document.querySelector("#home-scan-error")?.classList.add("hidden"),
+    onError: (message) => {
+      const error = document.querySelector<HTMLElement>("#home-scan-error")
+      if (!error) return
+      error.textContent = message
       error.classList.remove("hidden")
-      input.focus()
-      return
-    }
-    try {
-      sessionStorage.setItem("lyrashield-lite-target", target)
-      location.assign("/scan?start=1")
-    } catch {
-      error.textContent = "Your browser blocked the private handoff. Open the full Lite Check and paste the URL there."
-      error.classList.remove("hidden")
-    }
+    },
   })
 </script>

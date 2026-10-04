@@ -57,10 +57,12 @@ test("keeps the headline, lede and primary action in the first phone screen", as
     expect(box!.y, `${selector} sits inside the first 640px`).toBeLessThan(640)
   }
 
-  // The card stacks under the actions rather than sitting beside them.
+  // The card stacks under the hero content rather than sitting beside it.
   const card = await page.locator(CARD).boundingBox()
   const actions = await page.locator(".premium-hero__actions").boundingBox()
   expect(card!.y).toBeGreaterThan(actions!.y)
+  const field = await page.locator("#hero-lite-form").boundingBox()
+  expect(card!.y).toBeGreaterThan(field!.y)
 })
 
 test("renders the sample card at the desktop width too", async ({ page }) => {

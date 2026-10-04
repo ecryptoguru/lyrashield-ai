@@ -129,6 +129,10 @@ export const MARKETING_EVENT_ALLOWLIST = {
   $pageview: ["$current_url"],
   landing_view: ["utm_source", "utm_medium", "utm_campaign", "referrer"],
   cta_click: ["cta_id"],
+  // Hero URL field (handoff item 3.1b): the CTA id and a valid/invalid boolean.
+  // The typed URL must never be a property, so it is not in this list and the
+  // forbidden-key sweep would strip it even if a caller passed it.
+  hero_lite_check_submit: ["cta_id", "valid"],
   faq_open: ["question_id"],
   cinematic_chapter_view: ["chapter_id", "mode"],
   cinematic_media_error: ["chapter_id", "asset_type", "source_kind"],

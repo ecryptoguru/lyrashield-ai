@@ -1,5 +1,10 @@
 ---
 import { CTA_LABEL, TRIAL_LINE } from "../../lib/site-copy"
+
+// Same flag the Lite Check section uses: with no scanner configured the field
+// is disabled and shows the same status line, so the hero never offers a
+// control that cannot work.
+const scannerAvailable = Boolean(__MARKETING_SCANNER_URL__.replace(/\/$/, ""))
 import premiumHeroAvif from "../../assets/premium-hero.avif"
 import premiumHeroJpeg from "../../assets/premium-hero.jpg"
 import premiumHeroWebp from "../../assets/premium-hero.webp"
@@ -35,6 +40,7 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
       <li>Fixes are proposals you approve</li>
       <li>A fresh retest confirms each fix</li>
     </ul>
+
     <div class="premium-hero__actions">
       <a
         class="premium-hero__primary"
@@ -50,6 +56,55 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
         Run the free Lite Check
       </a>
     </div>
+
+    <form id="hero-lite-form" class="premium-hero__field" action="/scan" method="get" novalidate>
+      <label class="premium-hero__field-label" for="hero-scan-url">Public app URL</label>
+      <div class="premium-hero__field-row">
+        <input
+          id="hero-scan-url"
+          type="text"
+          inputmode="url"
+          autocomplete="url"
+          maxlength="2048"
+          placeholder="example.com or https://your-app.com"
+          disabled={!scannerAvailable}
+          class="premium-hero__field-input"
+        />
+        <button
+          type="submit"
+          disabled={!scannerAvailable}
+          data-cta-id="hero_lite_check_submit"
+          class="premium-hero__field-button"
+        >
+          Run Lite Check
+        </button>
+      </div>
+      <label class="premium-hero__field-consent">
+        <input
+          id="hero-scan-authorized"
+          type="checkbox"
+          disabled={!scannerAvailable}
+          class="premium-hero__field-check"
+        />
+        <span
+          >I own this app or have permission to test it. The check is passive and read-only. By
+          scanning I agree to the <a href="/terms">Terms</a>.</span
+        >
+      </label>
+      {
+        !scannerAvailable && (
+          <p class="premium-hero__field-status" role="status">
+            The separately protected scanner API is not connected in this environment.
+          </p>
+        )
+      }
+      <p id="hero-scan-error" class="premium-hero__field-error hidden" role="alert"></p>
+      <noscript>
+        <p class="premium-hero__field-status">
+          <a href="/scan">Open the free Lite Check</a> to run the check without JavaScript.
+        </p>
+      </noscript>
+    </form>
     <p class="premium-hero__trial-note">{TRIAL_LINE}</p>
     <a
       class="premium-hero__agent-link"
@@ -211,6 +266,107 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
     content: "✓";
   }
 
+  .premium-hero__field {
+    max-width: 34rem;
+    margin-top: 1.35rem;
+  }
+
+  .premium-hero__field-label {
+    display: block;
+    color: #b7cad8;
+    font: 600 0.72rem/1.4 "JetBrains Mono Variable", monospace;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .premium-hero__field-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    margin-top: 0.5rem;
+  }
+
+  .premium-hero__field-input {
+    flex: 1 1 12rem;
+    min-width: 0;
+    max-width: 100%;
+    min-height: 3.25rem;
+    border: 1px solid rgba(84, 214, 223, 0.3);
+    border-radius: 0.25rem;
+    padding: 0.7rem 0.9rem;
+    color: #edf6fb;
+    background: rgba(8, 17, 28, 0.72);
+    font-size: 1rem;
+  }
+
+  .premium-hero__field-input::placeholder {
+    color: #7d92a4;
+  }
+
+  .premium-hero__field-input:focus-visible {
+    border-color: var(--hero-cyan);
+    outline: 3px solid #f5b84b;
+    outline-offset: 2px;
+  }
+
+  .premium-hero__field-button {
+    flex: 0 1 auto;
+    min-height: 3.25rem;
+    max-width: 100%;
+    border: 1px solid var(--hero-cyan);
+    border-radius: 0.25rem;
+    padding: 0.7rem 1.15rem;
+    color: #08111c;
+    background: var(--hero-cyan);
+    font-size: 0.95rem;
+    font-weight: 750;
+    overflow-wrap: anywhere;
+    cursor: pointer;
+  }
+
+  .premium-hero__field-input:disabled,
+  .premium-hero__field-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
+
+  .premium-hero__field-consent {
+    display: flex;
+    gap: 0.6rem;
+    margin-top: 0.6rem;
+    color: #b7cad8;
+    font-size: 0.8rem;
+    line-height: 1.5;
+  }
+
+  .premium-hero__field-consent a {
+    color: var(--hero-cyan);
+    text-underline-offset: 3px;
+  }
+
+  .premium-hero__field-check {
+    flex: none;
+    margin-top: 0.2rem;
+    width: 1rem;
+    height: 1rem;
+    accent-color: var(--hero-cyan);
+  }
+
+  .premium-hero__field-status,
+  .premium-hero__field-error {
+    margin: 0.6rem 0 0;
+    font-size: 0.8rem;
+    line-height: 1.5;
+  }
+
+  .premium-hero__field-status {
+    color: #91a7b8;
+  }
+
+  .premium-hero__field-error {
+    color: #ff9b93;
+  }
+
   .premium-hero__actions {
     display: flex;
     flex-wrap: wrap;
@@ -351,6 +507,8 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
       order: 3;
     }
 
+    /* The field is the primary action on a phone, so it sits above the sign-up
+       button and the secondary link. */
     .premium-hero__actions {
       order: 4;
       margin-top: 1.1rem;
@@ -361,16 +519,20 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
       padding: 0.7rem 1.05rem;
     }
 
-    .premium-hero__trial-note {
+    .premium-hero__field {
       order: 5;
     }
 
-    .premium-hero__agent-link {
+    .premium-hero__trial-note {
       order: 6;
     }
 
-    .premium-hero__boundary {
+    .premium-hero__agent-link {
       order: 7;
+    }
+
+    .premium-hero__boundary {
+      order: 8;
     }
   }
 
@@ -537,6 +699,9 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
       transition: none;
     }
   }
+</style>
+
+<style>
 
   :global(:root[data-theme="light"]) .premium-hero {
     --hero-cyan: #087f78;
@@ -614,3 +779,39 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
     }
   }
 </style>
+
+<script>
+  import { bindLiteHandoff } from "../../lib/lite-handoff"
+  import { sanitizeMarketingProperties } from "../../lib/posthog-privacy"
+
+  // The hero field never fetches anything. It validates, parks the target for
+  // /scan and navigates, exactly like the Lite Check section further down.
+  //
+  // Analytics carry the CTA id and a boolean only. The typed URL is never a
+  // property, so it cannot leave this component.
+  const capture = (valid: boolean) =>
+    window.posthog?.capture(
+      "hero_lite_check_submit",
+      sanitizeMarketingProperties("hero_lite_check_submit", {
+        cta_id: "hero_lite_check_submit",
+        valid,
+      }) ?? {}
+    )
+
+  const error = () => document.querySelector<HTMLElement>("#hero-scan-error")
+  bindLiteHandoff({
+    formId: "hero-lite-form",
+    inputId: "hero-scan-url",
+    errorId: "hero-scan-error",
+    consentId: "hero-scan-authorized",
+    onClear: () => error()?.classList.add("hidden"),
+    onError: (message) => {
+      const node = error()
+      if (!node) return
+      node.textContent = message
+      node.classList.remove("hidden")
+      capture(false)
+    },
+    onSuccess: () => capture(true),
+  })
+</script>
