@@ -17,9 +17,6 @@ function sourceFiles(dir: string, found: string[] = []): string[] {
       continue
     }
     if (!name.endsWith(".astro") && !name.endsWith(".ts")) continue
-    // The hero CTA labels are owned by Wave 3 item 3.1, which is blocked on the
-    // five-second test (D12). It is excluded here until that item lands.
-    if (full.endsWith("components/landing/PremiumHero.astro")) continue
     found.push(full)
   }
   return found

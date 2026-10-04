@@ -39,32 +39,55 @@ describe("premium assurance-world homepage", () => {
     expect(homepage).not.toContain("<Loop />")
   })
 
-  it("uses approved gateway copy and conversion anchors", () => {
-    expect(hero).toContain("Release assurance for AI-built apps")
-    expect(hero).toContain("Know what your AI-built app is ready to ship.")
-    expect(hero).toContain(
-      "Review an authorized repository, URL or API. See what was checked, what needs attention and"
+  it("uses the approved D1 launch-gate copy and conversion anchors", () => {
+    // D1 Option 1, approved after the five-second test was skipped (2026-10-04).
+    expect(hero).toContain("Open beta · Security review for AI-built apps")
+    expect(hero).toContain("The launch gate for AI-built apps.")
+    expect(heroCopy).toContain(
+      "Point LyraShield at a repository, URL or API you are authorized to test."
     )
-    expect(hero.indexOf("landing_hero&cta=review_app")).toBeLessThan(
+    expect(heroCopy).toContain(
+      "It reviews what your coding agents shipped and returns one verdict: ready, not ready or insufficient evidence."
+    )
+    // The retired category line must not come back (D2 vocabulary lock).
+    expect(hero).not.toContain("Release assurance")
+    expect(hero.indexOf("landing_hero&cta=start_trial")).toBeLessThan(
       hero.indexOf('href="#free-scan"')
     )
     expect(hero).toContain("app.lyrashieldai.com/sign-up")
-    expect(hero).toContain("Missing evidence stays visible")
   })
 
-  it("keeps the hero task-oriented and the artifact example honest", () => {
-    // EXP-001: task CTA outranks account creation; lite check is a real
-    // secondary action, not a buried text link.
-    expect(hero).toContain("Start a review")
-    expect(hero).toContain('data-cta-id="premium-hero-review-app"')
+  it("keeps the hero task-oriented and the sample verdict card honest", () => {
+    // One filled primary CTA and one secondary; the label comes from the single
+    // source so it can never drift from the rest of the site.
+    expect(hero).toContain("CTA_LABEL.signUp")
+    expect(hero).toContain("TRIAL_LINE")
+    expect(hero).toContain('data-cta-id="premium-hero-primary"')
     expect(hero).toContain("premium-hero__secondary")
-    expect(hero).toContain("Try the free Lite Check")
+    expect(hero).toContain("Run the free Lite Check")
     expect(hero).not.toContain("Create account")
-    // The artifact is a synthetic example — it must never claim a verified or
-    // independently-reviewed state.
-    expect(hero).toContain("Example finding · Detected")
+
+    // The artifact is a synthetic sample labelled as one, so it must never show
+    // a retest-confirmed or independently verified state.
+    expect(hero).toContain("Sample verdict card")
+    expect(hero).toContain("Verdict · Insufficient evidence")
+    expect(hero).toContain("Server credential referenced by client build")
+    expect(hero).toContain("Missing rate limit on login route")
+    expect(hero).toContain("7 controls need your evidence")
     expect(hero).toContain("bounded to the checks that ran")
-    expect(hero).not.toMatch(/Verified finding|independent verification/i)
+    // Scope the ban to the rendered artifact: the component's own CSS comment
+    // explains that no verified state may appear, so a whole-file match would
+    // flag the warning itself.
+    const artifactMarkup = hero.slice(
+      hero.indexOf('class="premium-hero__artifact"'),
+      hero.indexOf("</figure>")
+    )
+    expect(artifactMarkup).not.toMatch(/verified|retest-confirmed/i)
+
+    // Both sample findings read Detected and nothing else.
+    const states = hero.match(/premium-hero__artifact-state">([^<]+)</g) ?? []
+    expect(states).toHaveLength(2)
+    for (const state of states) expect(state).toContain(">Detected<")
   })
 
   it("shows a three-step review flow in the landing decision path", () => {
@@ -82,7 +105,7 @@ describe("premium assurance-world homepage", () => {
   it("keeps agent setup subordinate to existing homepage conversions", () => {
     const agentLink = hero.indexOf("premium-hero-agent-setup")
     expect(agentLink).toBeGreaterThan(hero.indexOf("premium-hero-lite-check"))
-    expect(agentLink).toBeGreaterThan(hero.indexOf("premium-hero-review-app"))
+    expect(agentLink).toBeGreaterThan(hero.indexOf("premium-hero-primary"))
   })
 
   it("builds one immutable desktop and portrait track with seven timed chapters", () => {
