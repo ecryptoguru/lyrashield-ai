@@ -61,9 +61,9 @@ describe("public evidence-state copy", () => {
     const violations: string[] = []
     for (const file of copyFiles(src)) {
       const relative = file.slice(src.length + 1)
-      // The compare pages are corrected by PR #913 on their own branch;
-      // /research is on hold under D7 with other work in flight.
-      if (relative.startsWith("content/") || relative === "pages/research.astro") continue
+      // The 13 compare pages live under src/content and are owned by the
+      // compare consolidation; everything else, including /research, is swept.
+      if (relative.startsWith("content/")) continue
       const allowed = ALLOWLIST.filter((entry) => entry.file === relative).map((e) => e.text)
       readFileSync(file, "utf8")
         .split(/\r?\n/)
@@ -106,7 +106,7 @@ describe("public evidence-state copy", () => {
     const violations: string[] = []
     for (const file of copyFiles(src)) {
       const relative = file.slice(src.length + 1)
-      if (relative.startsWith("content/") || relative === "pages/research.astro") continue
+      if (relative.startsWith("content/")) continue
       readFileSync(file, "utf8")
         .split(/\r?\n/)
         .forEach((line) => {
