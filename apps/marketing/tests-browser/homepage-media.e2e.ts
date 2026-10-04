@@ -170,6 +170,23 @@ test("motion video waits for approach and buffers before the story enters view",
         { timeout: 30_000 }
       )
       .toBeGreaterThan(0)
+    await page.locator('[data-chapter-index="0"]').evaluate((chapter) => {
+      const top = chapter.getBoundingClientRect().top + scrollY
+      scrollTo(0, top + chapter.clientHeight * 0.5 - innerHeight * 0.5)
+    })
+    await expect(page.locator("#assurance-world video")).toHaveClass(/is-front/, {
+      timeout: 30_000,
+    })
+    await expect
+      .poll(
+        () =>
+          page.locator("#assurance-world video").evaluate((video) => {
+            const media = video as HTMLVideoElement
+            return media.currentTime > 0 && !media.seeking && media.videoWidth > 0
+          }),
+        { timeout: 30_000 }
+      )
+      .toBe(true)
     await context.close()
   }
 })

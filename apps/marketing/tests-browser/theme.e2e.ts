@@ -109,7 +109,6 @@ for (const viewport of [
     expect(
       await page.locator('[data-chapter-index="0"]').evaluate((el) => el.clientHeight)
     ).toBeGreaterThanOrEqual(expectedChapterHeight)
-    await page.evaluate(() => customElements.whenDefined("evidence-world"))
 
     const gateway = page.locator('[data-chapter-index="0"]')
     const scrollToChapterProgress = async (progress: number) =>
@@ -127,6 +126,7 @@ for (const viewport of [
     // land on any middle chapter; position the first chapter's scroll anchor
     // deliberately so this test starts on card 0 before checking its transition.
     await scrollToChapterProgress(0.2)
+    await page.evaluate(() => customElements.whenDefined("evidence-world"))
     await expect(gateway.locator('[data-story-card-index="0"]')).toHaveClass(/is-card-active/)
     await scrollToChapterProgress(0.7)
     await expect(gateway.locator('[data-story-card-index="1"]')).toHaveClass(/is-card-active/)
