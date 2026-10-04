@@ -8,6 +8,7 @@
     "generate": "prisma generate",
     "migrate": "prisma migrate dev",
     "migrate:deploy": "prisma migrate deploy",
+    "migrate:webhook-empty-state": "node scripts/webhook-empty-state-migration.mjs",
     "push": "prisma db push",
     "seed": "tsx --env-file=../../.env prisma/seed.ts",
     "studio": "prisma studio",
@@ -37,3 +38,4 @@
     "dotenv": "17.4.2"
   }
 }
+

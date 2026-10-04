@@ -64,3 +64,6 @@ assert.match(smoke, /dispatchAttempts, 3/)
 assert.doesNotMatch(smoke, /process\.env\.(?:POLAR|RAZORPAY)|fetch\(|https?:\/\//)
 
 console.log("Webhook cutover verification workflow invariants passed.")
+
+await import("../../../packages/db/scripts/tests/webhook-empty-state-migration.test.mjs")
+

@@ -1,0 +1,145 @@
+import assert from "node:assert/strict"
+import { readFile } from "node:fs/promises"
+import { dirname, resolve } from "node:path"
+import { fileURLToPath } from "node:url"
+import test from "node:test"
+import {
+  assertMigrationUrlBinding,
+  canonicalSupabaseDatabaseIdentity,
+  EXPECTED_EMPTY_MIGRATIONS,
+  hashDatabaseIdentity,
+  validateEmptyStateAuthorization,
+} from "../webhook-empty-state-contract.mjs"
+import { runEmptyStateMigration } from "../webhook-empty-state-migration.mjs"
+
+const projectRef = "yejmvtgsxniatmjbwplk"
+const direct = "postgresql://postgres:masked@db." + projectRef + ".supabase.co:5432/postgres?schema=public"
+const pooler = "postgresql://postgres." + projectRef + ":masked@aws-0-us-east-1.pooler.supabase.com:5432/postgres?schema=public"
+const now = Date.parse("2026-10-04T12:00:00.000Z")
+const sourceSha = "3f4916bc707a6e36495d2b77146160a67d821311"
+const stableNonce = "0123456789abcdefghijklmnopqrstuvwx_ABC"
+const identityHash = hashDatabaseIdentity(canonicalSupabaseDatabaseIdentity([direct]))
+
+function validReceipt(overrides = {}) {
+  return {
+    schemaVersion: "webhook-empty-state-maintenance/v1",
+    mode: "empty-state",
+    sourceSha,
+    runId: "37200000001",
+    owner: "37200000001:1",
+    stableNonce,
+    databaseIdentitySha256: identityHash,
+    rootReceiptSha256: "a".repeat(64),
+    workerStopReceiptSha256: "b".repeat(64),
+    admissionStopValueSha256: "c".repeat(64),
+    issuedAt: new Date(now - 60_000).toISOString(),
+    nonterminalScans: 0,
+    pendingQueueJobs: 0,
+    writersStopped: true,
+    admissionHeld: true,
+    fallbackVerified: true,
+    ...overrides,
+  }
+}
+
+function validEnvironment(overrides = {}) {
+  return {
+    WEBHOOK_EMPTY_STATE_CUTOVER: "true",
+    DATABASE_DIRECT_URL: direct,
+    DATABASE_URL: direct,
+    WEBHOOK_EMPTY_STATE_DATABASE_IDENTITY_SHA256: identityHash,
+    WEBHOOK_EMPTY_STATE_STABLE_NONCE: stableNonce,
+    WEBHOOK_EMPTY_STATE_MAINTENANCE_RECEIPT_BASE64: Buffer.from(JSON.stringify(validReceipt())).toString("base64"),
+    DEPLOY_SHA: sourceSha,
+    GITHUB_RUN_ID: "37200000001",
+    ...overrides,
+  }
+}
+
+test("direct and project-bound Supavisor URLs canonicalize to one logical database", () => {
+  assert.deepEqual(canonicalSupabaseDatabaseIdentity([direct, pooler]), {
+    provider: "supabase", projectRef, database: "postgres", schema: "public",
+  })
+})
+
+test("Supavisor identity requires project ref in its username", () => {
+  const unbound = "postgresql://postgres:masked@aws-0-us-east-1.pooler.supabase.com:5432/postgres?schema=public"
+  assert.throws(() => canonicalSupabaseDatabaseIdentity([unbound]), /username must bind/)
+})
+
+test("rejects direct and pooler URLs bound to different projects", () => {
+  const other = "postgresql://postgres.abcdefghijklmnopqrst:masked@aws-0-us-east-1.pooler.supabase.com:5432/postgres?schema=public"
+  assert.throws(() => canonicalSupabaseDatabaseIdentity([direct, other]), /different Supabase projects/)
+})
+
+test("rejects a non-production database or schema", () => {
+  assert.throws(() => canonicalSupabaseDatabaseIdentity([direct.replace("/postgres?", "/postgres_shadow?")]), /postgres\/public/)
+  assert.throws(() => canonicalSupabaseDatabaseIdentity([direct.replace("schema=public", "schema=private")]), /postgres\/public/)
+})
+
+test("Prisma children require both URL variables to be the identical validated endpoint", () => {
+  assert.equal(assertMigrationUrlBinding({ DATABASE_DIRECT_URL: direct, DATABASE_URL: direct }), direct)
+  assert.throws(() => assertMigrationUrlBinding({ DATABASE_DIRECT_URL: direct, DATABASE_URL: pooler }), /must be the same/)
+  assert.throws(() => assertMigrationUrlBinding({ DATABASE_URL: direct }), /must be the same/)
+})
+
+test("accepts only a fresh, matching, drained, stopped, image-bound maintenance receipt", () => {
+  const result = validateEmptyStateAuthorization(validReceipt(), {
+    sourceSha, runId: "37200000001", stableNonce, databaseIdentitySha256: identityHash, now,
+  })
+  assert.equal(result.mode, "empty-state")
+  for (const change of [
+    { mode: "historical" },
+    { sourceSha: "0".repeat(40) },
+    { runId: "37200000002" },
+    { owner: "37200000001:2" },
+    { stableNonce: "different_nonce_value_0123456789" },
+    { databaseIdentitySha256: "d".repeat(64) },
+    { nonterminalScans: 1 },
+    { pendingQueueJobs: 1 },
+    { writersStopped: false },
+    { admissionHeld: false },
+    { fallbackVerified: false },
+    { issuedAt: new Date(now - 31 * 60_000).toISOString() },
+    { workerStopReceiptSha256: "bad" },
+  ]) {
+    assert.throws(() => validateEmptyStateAuthorization(validReceipt(change), {
+      sourceSha, runId: "37200000001", stableNonce, databaseIdentitySha256: identityHash, now,
+    }))
+  }
+})
+
+test("migration runner refuses missing explicit mode and mismatched identity before connecting", async () => {
+  let constructed = false
+  class NeverConnect {
+    constructor() { constructed = true }
+  }
+  await assert.rejects(runEmptyStateMigration({
+    env: validEnvironment({ WEBHOOK_EMPTY_STATE_CUTOVER: "false" }),
+    ClientClass: NeverConnect,
+  }), /not explicitly enabled/)
+  await assert.rejects(runEmptyStateMigration({
+    env: validEnvironment({ WEBHOOK_EMPTY_STATE_DATABASE_IDENTITY_SHA256: "e".repeat(64) }),
+    ClientClass: NeverConnect,
+  }), /differs from the approved identity/)
+  assert.equal(constructed, false)
+})
+
+test("all four historical Prisma migration files remain byte-for-byte pinned", async () => {
+  const root = resolve(dirname(fileURLToPath(import.meta.url)), "../../prisma/migrations")
+  const { createHash } = await import("node:crypto")
+  for (const migration of EXPECTED_EMPTY_MIGRATIONS) {
+    const contents = await readFile(resolve(root, migration.name, "migration.sql"))
+    assert.equal(createHash("sha256").update(contents).digest("hex"), migration.sha256, migration.name)
+  }
+})
+
+test("runner uses exclusive locks and concurrent index creation; it does not delete data or indexes", async () => {
+  const source = await readFile(resolve(dirname(fileURLToPath(import.meta.url)), "../webhook-empty-state-migration.mjs"), "utf8")
+  assert.match(source, /BEGIN ISOLATION LEVEL READ COMMITTED/)
+  assert.match(source, /row_security = off/)
+  assert.match(source, /LOCK TABLE .*ACCESS EXCLUSIVE MODE/)
+  assert.match(source, /CREATE INDEX CONCURRENTLY/)
+  assert.doesNotMatch(source, /\\bDELETE\\s+FROM\\b|DROP\\s+INDEX/i)
+  assert.doesNotMatch(source, /UPDATE\\s+public\\."?_prisma_migrations/i)
+})
