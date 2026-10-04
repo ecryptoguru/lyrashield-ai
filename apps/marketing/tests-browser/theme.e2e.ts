@@ -109,15 +109,26 @@ for (const viewport of [
     expect(
       await page.locator('[data-chapter-index="0"]').evaluate((el) => el.clientHeight)
     ).toBeGreaterThanOrEqual(expectedChapterHeight)
-    await page.locator("evidence-world").scrollIntoViewIfNeeded()
     await page.evaluate(() => customElements.whenDefined("evidence-world"))
 
     const gateway = page.locator('[data-chapter-index="0"]')
+    const scrollToChapterProgress = async (progress: number) =>
+      gateway.evaluate((chapter, chapterProgress) => {
+        const top = chapter.getBoundingClientRect().top + scrollY
+        scrollTo(
+          0,
+          top +
+            chapter.clientHeight * chapterProgress -
+            innerHeight * (innerWidth < 768 ? 0.68 : 0.5)
+        )
+      }, progress)
+
+    // The world spans the whole story. Scrolling its tall parent into view may
+    // land on any middle chapter; position the first chapter's scroll anchor
+    // deliberately so this test starts on card 0 before checking its transition.
+    await scrollToChapterProgress(0.2)
     await expect(gateway.locator('[data-story-card-index="0"]')).toHaveClass(/is-card-active/)
-    await gateway.evaluate((chapter) => {
-      const top = chapter.getBoundingClientRect().top + scrollY
-      scrollTo(0, top + chapter.clientHeight * 0.7 - innerHeight * (innerWidth < 768 ? 0.68 : 0.5))
-    })
+    await scrollToChapterProgress(0.7)
     await expect(gateway.locator('[data-story-card-index="1"]')).toHaveClass(/is-card-active/)
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
       viewport.width

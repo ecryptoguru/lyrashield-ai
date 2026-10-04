@@ -7,6 +7,8 @@ disclaimer: "Factual comparison. Pixee is an agentic AppSec platform that triage
 updatedDate: 2026-10-04
 draft: false
 pricingLadder: true
+competitorClaims: true
+competitorDomain: pixee.ai
 faq:
   - q: "Does LyraShield replace Pixee?"
     a: "No, they occupy different positions. Pixee is not a scanner; it ingests findings from 10+ tools like CodeQL, Semgrep, Checkmarx and Snyk via SARIF and triages exploitability to generate validated fix PRs. LyraShield in open beta is a detector plus assurer: agentic pentest plus SCA and secrets with checksum-bound reports and reviewed fix proposals."
@@ -76,8 +78,22 @@ Read the methodology or try the free browser-local tools at [lyrashieldai.com](h
 
 > Sources: [Pixee homepage](https://www.pixee.ai/), [Pixee docs](https://docs.pixee.ai/), [Pixee pricing](https://www.pixee.ai/pricing), [Pixee automated code fixes](https://www.pixee.ai/automated-code-fixes), [Pixee AI fix validation](https://www.pixee.ai/ai-fix-validation), [Pixee about](https://www.pixee.ai/about), [Pixee on GitHub (upload-tool-results-action)](https://github.com/pixee/upload-tool-results-action/).
 
+## Where Pixee is genuinely strong
+
+Pixee takes a different starting point than most security tools. It does not run its own scanner. Its [platform page](https://www.pixee.ai/platform) describes sitting on top of the scanners you already use, triaging their output, filtering false positives through exploitability analysis and writing context-aware fixes that match your code conventions. Pixee calls this agentic security engineering.
+
+The reactive side, VulnOps, runs the scanner backlog with 12 native integrations across tools such as SonarQube and Snyk, as described in its [docs](https://docs.pixee.ai/). The proactive side, Foresight, reads design documents before code is written, captures the security promises a design makes and flags on the pull request where shipped code drifted from what was intended.
+
+Pixee's decision not to run its own scanner is a deliberate architectural choice, and it is the reason the tool pairs well with a scanner rather than replacing one. The [Pixee about page](https://www.pixee.ai/about) notes it was co-founded by the co-founder and Chief Scientist of Contrast Security, and the [scanner triage page](https://www.pixee.ai/sca-triage) describes its use in large regulated enterprises.
+
+## Sources
+
+- [Pixee platform](https://www.pixee.ai/platform)
+- [Pixee about](https://www.pixee.ai/about)
+- [Pixee SCA triage](https://www.pixee.ai/sca-triage)
+- [Pixee docs](https://docs.pixee.ai/)
+- [Pixee scanner integrations](https://docs.pixee.ai/integrations/scanners/veracode/)
+
 ## Methodology and scope
 
 This comparison describes published capabilities, not an independent test of either product. Client workflow availability and commercial terms can change. Read [how LyraShield tests, records evidence and reports coverage](/methodology) for its assurance model and verify vendor details before a purchasing decision.
-
-For the long-form version of this comparison, including the evidence model and where each tool fits a release gate, read [LyraShield AI vs Pixee](/blog/pixee-vs-lyrashield).

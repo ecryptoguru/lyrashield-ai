@@ -7,6 +7,8 @@ disclaimer: 'Factual comparison. <a href="https://www.runsybil.com/">RunSybil</a
 updatedDate: 2026-10-04
 draft: false
 pricingLadder: true
+competitorClaims: true
+competitorDomain: runsybil.com
 faq:
   - q: "Does LyraShield replace RunSybil?"
     a: "No. RunSybil is an AI-native black-box offensive platform whose Sybil agents reason like elite attackers without requiring source code, testing multi-tenant and business-logic flaws continuously on every deployment. LyraShield in open beta is source and MCP-aware release assurance for AI-built apps with SCA, secrets, evidence states and reviewed fix proposals."
@@ -75,8 +77,21 @@ faq:
 
 RunSybil automates attacker intuition black-box; LyraShield AI gates AI-built-app releases. [Read our comparison methodology](/methodology) and try the free browser-local tools at [lyrashieldai.com](https://lyrashieldai.com).
 
+## Where RunSybil is genuinely strong
+
+Its core value is black-box, no-source-code offensive testing that reasons like an attacker. Its [blog on automating hacker intuition](https://www.runsybil.com/post/what-does-it-take-to-automate-hacker-intuition) says Sybil operates outside-in, crawling the application to map the attack surface, developing hypotheses about function and purpose and testing them continuously. Its [home page](https://www.runsybil.com/) says it maps the stack, chains vulnerabilities across layers and re-evaluates on every deployment.
+
+It is multi-agent and deployment aware. An independent [review on AppSecSanta](https://appsecsanta.com/runsybil) describes a Discovery Agent that maps the surface, an Attack Agent that validates findings and login agents for authenticated exploration, with the agents learning about the target as they go.
+
+RunSybil positions itself apart from code review assistants because it interacts with the running system rather than reading source. It chains an application flaw into an infrastructure entry point, which is ground a single-layer scanner misses. For a team that wants continuous black-box offensive testing across a full stack, RunSybil is a credible choice.
+
+## Sources
+
+- [RunSybil home page](https://www.runsybil.com/)
+- [RunSybil automating hacker intuition](https://www.runsybil.com/post/what-does-it-take-to-automate-hacker-intuition)
+- [RunSybil independent review (AppSecSanta)](https://appsecsanta.com/runsybil)
+- [OWASP Web Security Testing Guide](https://owasp.org/www-project-web-security-testing-guide/)
+
 ## Methodology and scope
 
 This comparison describes published capabilities, not an independent test of either product. Client workflow availability and commercial terms can change. Read [how LyraShield tests, records evidence and reports coverage](/methodology) for its assurance model and verify vendor details before a purchasing decision.
-
-For the long-form version of this comparison, including the evidence model and where each tool fits a release gate, read [LyraShield AI vs RunSybil](/blog/runsybil-vs-lyrashield).

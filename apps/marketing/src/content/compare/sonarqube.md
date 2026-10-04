@@ -7,6 +7,8 @@ disclaimer: "Factual comparison. SonarQube by SonarSource provides static analys
 updatedDate: 2026-10-04
 draft: false
 pricingLadder: true
+competitorClaims: true
+competitorDomain: sonarsource.com
 faq:
   - q: "Does LyraShield replace SonarQube?"
     a: "No. SonarQube is the long-standing code quality and security standard with 40+ languages, code smells, duplication, complexity metrics, taint analysis, IaC scanning and Quality Gates that block merges. LyraShield in open beta does not focus on code quality; it focuses on release assurance with evidence states and checksum-bound reports."
@@ -76,8 +78,23 @@ faq:
 
 LyraShield AI is live and open for registration — create an account and run your first authorized check through the release-assurance loop: target, review, evidence, fix, retest, report. Prefer to explore first? Read the evidence methodology or try the free browser-local tools.
 
+## Where SonarQube is genuinely strong
+
+SonarQube is one of the most widely deployed static analysis platforms. Its [product page](https://www.sonarsource.com/products/sonarqube/) describes analysis of more than 40 programming languages and frameworks with a very large rule set, detecting bugs, security vulnerabilities, code smells, duplications and maintainability issues. Its [server documentation](https://docs.sonarsource.com/sonarqube-server/discovering/sonarqube-server-editions) describes the edition ladder and the quality gate.
+
+The standout feature is the Quality Gate, a go or no-go check that fails a pipeline when code does not meet defined standards. The product page describes native integration with GitHub, GitLab, Azure DevOps and Bitbucket that decorates pull requests with issue summaries and enforces release criteria. It also describes AI CodeFix for one-click fix suggestions.
+
+SonarQube has framed itself as an independent verification layer for AI-generated code. Its [AI code verification resource](https://www.sonarsource.com/resources/library/ai-code-verification-debt/) argues that using the same tool to generate and verify code produces poor results. The [MCP Server page](https://www.sonarsource.com/products/sonarqube/mcp-server/) describes connecting its analysis engine to AI coding agents, and the [Advanced Security documentation](https://docs.sonarsource.com/sonarqube-server/2026.2/advanced-security/introduction) covers its supply-chain analysis.
+
+## Sources
+
+- [SonarQube product page](https://www.sonarsource.com/products/sonarqube/)
+- [SonarQube Server editions](https://docs.sonarsource.com/sonarqube-server/discovering/sonarqube-server-editions)
+- [SonarQube MCP Server](https://www.sonarsource.com/products/sonarqube/mcp-server/)
+- [SonarQube Advanced Security](https://docs.sonarsource.com/sonarqube-server/2026.2/advanced-security/introduction)
+- [SonarQube AI code verification](https://www.sonarsource.com/resources/library/ai-code-verification-debt/)
+- [SonarQube plans and pricing](https://www.sonarsource.com/plans-and-pricing/)
+
 ## Methodology and scope
 
 This comparison describes published capabilities, not an independent test of either product. Client workflow availability and commercial terms can change. Read [how LyraShield tests, records evidence and reports coverage](/methodology) for its assurance model and verify vendor details before a purchasing decision.
-
-For the long-form version of this comparison, including the evidence model and where each tool fits a release gate, read [LyraShield AI vs SonarQube](/blog/sonarqube-vs-lyrashield).

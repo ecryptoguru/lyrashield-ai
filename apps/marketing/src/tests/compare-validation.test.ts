@@ -1,11 +1,30 @@
+import { readdirSync, readFileSync } from "node:fs"
+import { dirname, join } from "node:path"
+import { fileURLToPath } from "node:url"
+
 import { describe, expect, it } from "vitest"
 
 import program from "../content/compare-program.json"
+import { parseArticle } from "../../scripts/blog-validation-lib.mjs"
 import {
   COMPARE_REVIEW_MAX_AGE_DAYS,
+  COMPARE_SOURCE_MINIMUM,
+  citationHost,
+  collectCompetitorSources,
+  collectDisclaimerAnchors,
+  competitorHostFromDisclaimer,
+  isCompetitorHost,
   validateComparePage,
   validateCompareProgram,
 } from "../../scripts/compare-validation-lib.mjs"
+
+const SOURCES = [
+  "## Sources",
+  "",
+  "- [Rival platform](https://rival.example/platform)",
+  "- [Rival docs](https://docs.rival.example/)",
+  "- [Rival pricing](https://rival.example/pricing)",
+].join("\n")
 
 const BODY = [
   "## Core approach",
@@ -13,6 +32,8 @@ const BODY = [
   "| Aspect | LyraShield AI | Rival |",
   "| --- | --- | --- |",
   "| Focus | Release assurance | Scanning |",
+  "",
+  SOURCES,
   "",
   "## Methodology and scope",
   "",
@@ -28,7 +49,7 @@ const page = (overrides = {}) => ({
     competitor: "Rival",
     heading: "LyraShield AI vs Rival",
     disclaimer:
-      "Factual comparison. This page compares publicly documented capabilities of both platforms and neither replaces the other.",
+      'Factual comparison. <a href="https://rival.example/">Rival</a> is a scanning platform. <a href="https://lyrashieldai.com/">LyraShield AI</a> is release assurance. Neither replaces the other.',
     updatedDate: new Date().toISOString().slice(0, 10),
     draft: false,
     pricingLadder: true,
@@ -134,6 +155,68 @@ describe("compare governance", () => {
     )
   })
 
+  it("requires a competitor-source floor on every page (Wave 8)", () => {
+    const body = BODY.replace(SOURCES, "")
+    expect(validateComparePage(page({ body }))).toContain(
+      `comparison requires at least ${COMPARE_SOURCE_MINIMUM} competitor sources in a "## Sources" block (found 0)`
+    )
+  })
+
+  it("requires at least one source on the competitor's own domain", () => {
+    const body = BODY.replace(
+      "- [Rival platform](https://rival.example/platform)\n- [Rival docs](https://docs.rival.example/)\n- [Rival pricing](https://rival.example/pricing)",
+      "- [Analysis one](https://one.example/a)\n- [Analysis two](https://two.example/b)\n- [Analysis three](https://three.example/c)"
+    )
+    // Neither the Sources block nor the disclaimer carries a vendor-domain link.
+    const data = {
+      ...page().data,
+      disclaimer:
+        'Factual comparison. Rival is a scanning platform. <a href="https://lyrashieldai.com/">LyraShield AI</a> is release assurance. Neither replaces the other.',
+      competitorDomain: "rival.example",
+    }
+    expect(validateComparePage(page({ body, data }))).toContain(
+      "comparison requires at least one source on the competitor's own domain (rival.example)"
+    )
+  })
+
+  it("accepts a vendor-domain citation in the Sources block", () => {
+    const body = BODY.replace(
+      "- [Rival platform](https://rival.example/platform)\n- [Rival docs](https://docs.rival.example/)\n- [Rival pricing](https://rival.example/pricing)",
+      "- [Analysis one](https://one.example/a)\n- [Analysis two](https://two.example/b)\n- [Rival platform](https://rival.example/platform)"
+    )
+    const sources = collectCompetitorSources({ body })
+    expect(sources).toContain("https://rival.example/platform")
+    expect(validateComparePage(page({ body }))).toEqual([])
+  })
+
+  it("honours an explicit competitorClaims: false declaration", () => {
+    const body = BODY.replace(SOURCES, "")
+    const data = { ...page().data, competitorClaims: false, competitorDomain: undefined }
+    expect(validateComparePage(page({ body, data }))).toEqual([])
+  })
+
+  it("rejects a non-boolean competitorClaims declaration", () => {
+    const data = { ...page().data, competitorClaims: "yes" }
+    expect(validateComparePage(page({ data }))).toContain("competitorClaims must be a boolean")
+  })
+
+  it("derives the competitor host from the disclaimer when none is declared", () => {
+    expect(competitorHostFromDisclaimer(page().data)).toBe("rival.example")
+    const data = { ...page().data, competitorDomain: undefined }
+    expect(validateComparePage(page({ data }))).toEqual([])
+  })
+
+  it("skips the vendor-domain half when the disclaimer does not link the competitor", () => {
+    const data = {
+      ...page().data,
+      disclaimer:
+        'Factual comparison. Rival is a scanning platform. <a href="https://lyrashieldai.com/">LyraShield AI</a> is release assurance. Neither replaces the other.',
+    }
+    expect(competitorHostFromDisclaimer(data)).toBeNull()
+    expect(isCompetitorHost("rival.example", null)).toBe(false)
+    expect(validateComparePage(page({ data }))).toEqual([])
+  })
+
   it("does not inherit the blog dash ban", () => {
     expect(validateComparePage(page())).toEqual([])
     expect(page().data.title).toContain("—")
@@ -161,5 +244,31 @@ describe("compare governance", () => {
   it("validates the shipped program manifest", () => {
     expect(validateCompareProgram(program)).toEqual([])
     expect(program).toHaveLength(13)
+  })
+
+  it("every shipped compare page declares claims and cites the vendor", () => {
+    const compareRoot = join(dirname(fileURLToPath(import.meta.url)), "../content/compare")
+    const files = readdirSync(compareRoot).filter((name) => /\.mdx?$/.test(name))
+    expect(files).toHaveLength(13)
+    for (const name of files) {
+      const parsed = parseArticle(readFileSync(join(compareRoot, name), "utf8"))
+      const data = parsed.data as { competitorClaims?: boolean; competitorDomain?: string }
+      const body: string = parsed.body
+      const slug = name.replace(/\.mdx?$/, "")
+      expect(data.competitorClaims, `${slug} must declare competitorClaims`).toBe(true)
+      expect(typeof data.competitorDomain, `${slug} must declare competitorDomain`).toBe("string")
+      const sources = collectCompetitorSources({ body }).filter((url: string) =>
+        /^https:\/\//i.test(url)
+      )
+      expect(
+        sources.length,
+        `${slug} needs at least ${COMPARE_SOURCE_MINIMUM} sources`
+      ).toBeGreaterThanOrEqual(COMPARE_SOURCE_MINIMUM)
+      const citable = [...sources, ...collectDisclaimerAnchors(data)]
+      expect(
+        citable.some((url: string) => isCompetitorHost(citationHost(url), data.competitorDomain)),
+        `${slug} needs a source on ${data.competitorDomain}`
+      ).toBe(true)
+    }
   })
 })
