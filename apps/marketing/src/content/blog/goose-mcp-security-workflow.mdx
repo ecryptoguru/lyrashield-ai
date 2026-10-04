@@ -72,7 +72,7 @@ Restart your Goose session after editing the config file so the agent loads the 
 
 ## 4. Run an inline security check
 
-With the connection verified, run npx -y lyrashield@0.2.14 scan from your project root. The scan targets the repository, reviews the code for candidate issues and records evidence in an immutable assurance record. Detected issues stay in a detected state until independent verification confirms the behavior, so a finding is a prompt to investigate, not a verdict. Read each finding in the session, note the file and line and decide whether the candidate reflects a real weakness or a false positive that deserves a recorded dismissal. The assurance record holds both the confirmed issues and the dismissed ones, so a reviewer can see the full set of decisions, not just the open items.
+With the connection verified, run npx -y lyrashield@0.2.14 scan from your project root. The scan targets the repository, reviews the code for candidate issues and records evidence in a checksum-bound assurance record. Detected issues stay in a detected state until a fresh applicable retest confirms the behavior, so a finding is a prompt to investigate, not a verdict. Read each finding in the session, note the file and line and decide whether the candidate reflects a real weakness or a false positive that deserves a recorded dismissal. The assurance record holds both the confirmed issues and the dismissed ones, so a reviewer can see the full set of decisions, not just the open items.
 
 Review the scan output in the session. If a candidate issue is real, a fix proposal is generated for review. Approval gated fix proposals require a human review before a patch reaches a pull request, so a fix is never automatic. As of August 2026, LyraShield v1 covers agentic pentest, software composition analysis, secrets scanning, a GitHub Action and SARIF output. Run the [free AI app security checklist](/tools/ai-app-security-checklist) to see the full release review.
 
@@ -101,14 +101,14 @@ jobs:
 Tell Goose to use LyraShield before proposing a fix. Add a line to .goosehints in your project root:
 
 ```
-Run the LyraShield scan tool before proposing a fix. Do not apply a patch until a human reviews the fix proposal. Keep detected issues in a detected state until independent verification confirms the behavior.
+Run the LyraShield scan tool before proposing a fix. Do not apply a patch until a human reviews the fix proposal. Keep detected issues in a detected state until a fresh applicable retest confirms the behavior.
 ```
 
 A hints file states intent. The approval gate enforces it. A prompt can be changed in a pull request or ignored under pressure, but a server side gate that blocks a patch until a human binds it to an approval cannot be talked past. That is the difference between stating a policy and holding one. Require a security owner for changes to agent configuration and include .goosehints in normal code review and branch protection. The [Claude Code security workflow](/blog/claude-code-security-workflow) covers a related terminal agent if your team uses multiple tools.
 
 ## Why pair Goose with LyraShield
 
-Goose accelerates implementation as the open source agent from Block. LyraShield AI provides release assurance through a loop of target, review, evidence, fix, retest and report. The platform keeps detected candidates distinct from findings with separate verification receipts and from later retest outcomes. Each receipt is limited to its stated evidence and scope, and the assurance record preserves what was checked and the result. Approval gated fix proposals require review before a patch reaches a pull request, so a fix is never automatic.
+Goose accelerates implementation as the open source agent from Block. LyraShield AI provides release assurance through a loop of target, review, evidence, fix, retest and report. The platform keeps detected candidates, retest outcomes and inconclusive results distinct. Each receipt is limited to its stated evidence and scope, and the assurance record preserves what was checked and the result. Approval gated fix proposals require review before a patch reaches a pull request, so a fix is never automatic.
 
 As of August 2026, LyraShield v1 covers agentic pentest, software composition analysis, secrets scanning, a GitHub Action with a diff aware gate and SARIF output. Approval gated fix proposals are approval-gated fix proposals, not unattended fixes. The GitHub Action runs a diff aware gate so only changed code is scanned on each pull request. [Create an account](https://app.lyrashieldai.com/sign-up) to start or run the [free AI app security checklist](/tools/ai-app-security-checklist) first. The [Lovable app security checklist](/blog/lovable-app-security-checklist) covers a related tool if your team uses multiple agents.
 

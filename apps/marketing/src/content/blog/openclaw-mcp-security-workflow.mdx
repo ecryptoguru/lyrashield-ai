@@ -24,7 +24,7 @@ You can connect OpenClaw to LyraShield AI over MCP to get target aware scans, fi
 
 OpenClaw is built to run many tools in parallel and to coordinate long lived sessions. That parallelism accelerates vibe coding and also expands attack surface quickly, which is why verification close to generation helps. Keep the [vibe coding security guide](/blog/vibe-coding-security-guide) open as your policy reference, then map findings to [OWASP Top 10](https://owasp.org/www-project-top-ten/) and [CWE Top 25](https://cwe.mitre.org/top25/) so triage has a shared vocabulary. Teams that generate large microservice surfaces in one session benefit most from this pairing, because otherwise review struggles to keep up with generation speed.
 
-LyraShield follows a loop of Target to Scan to Evidence State to Fix Proposal to Retest to Assurance Report. Independent verification requires a separate receipt and fix proposals never create a branch or pull request automatically.
+LyraShield follows a loop of Target to Scan to Evidence State to Fix Proposal to Retest to Assurance Report. A retest-confirmed outcome requires a fresh applicable retest and fix proposals never create a branch or pull request automatically.
 
 ## 1. Prerequisites and workspace baseline
 
@@ -138,7 +138,7 @@ Include OWASP mapping when present.
 Save report id for PR gate.
 ```
 
-A useful answer should contain finding id, severity, recorded evidence state, CWE, file plus line, evidence snippet, limitations and suggested patch location. Prioritize independently verified findings only when a separate receipt exists, while retaining detected and inconclusive items for triage. Refer to [OWASP Top 10](https://owasp.org/www-project-top-ten/) and [CWE Top 25](https://cwe.mitre.org/top25/) for category background.
+A useful answer should contain finding id, severity, recorded evidence state, CWE, file plus line, evidence snippet, limitations and suggested patch location. Prioritize retest-confirmed findings only when a clean retest exists, while retaining detected and inconclusive items for triage. Refer to [OWASP Top 10](https://owasp.org/www-project-top-ten/) and [CWE Top 25](https://cwe.mitre.org/top25/) for category background.
 
 Since v1 includes secrets scanning alongside SCA, a single call can surface both hardcoded secrets and vulnerable packages. Treat inline scanning as early signal and keep PR gating as mandatory, because local checks can be skipped when developers are rushing to meet a demo.
 

@@ -22,7 +22,7 @@ Agree on security requirements, authorized targets, test methods, evidence handl
 
 "Review the app before launch" is not enough authority to probe production, upload customer data, test another vendor's account or run a destructive check. It also does not say what result allows release.
 
-The evidence loop in the [LyraShield AI guide to securing vibe-coded apps](/blog/vibe-coding-security-guide) gives agency and client teams shared terms: target, scan, evidence state, fix proposal, retest and assurance report. A detected candidate, independently verified finding and clean retest are different records.
+The evidence loop in the [LyraShield AI guide to securing vibe-coded apps](/blog/vibe-coding-security-guide) gives agency and client teams shared terms: target, scan, evidence state, fix proposal, retest and assurance report. A detected candidate, a retest-confirmed outcome and an inconclusive result are different records.
 
 [NIST SP 800-218](https://csrc.nist.gov/pubs/sp/800/218/final) provides a common secure-development vocabulary that producers, acquirers and suppliers can use to set expectations. [OWASP ASVS 5.0.0](https://owasp.org/projects/asvs) can help define technical requirements and verification scope. Neither source turns an agency review into a guarantee.
 
@@ -110,7 +110,7 @@ The delivery packet should identify:
 
 1. Reviewed release, targets, environment, dates and authorized methods.
 2. Completed, skipped, limited and inapplicable checks.
-3. Detected candidates, verified findings, retest outcomes and open uncertainty.
+3. Detected candidates, retest outcomes, inconclusive results and open uncertainty.
 4. Fixes, mitigations, accepted risks, expiry dates and named owners.
 5. Production secrets and operational access transferred through an approved channel, never embedded in the report.
 6. Monitoring, backups, restore evidence, incident contacts and the party responsible for each.
