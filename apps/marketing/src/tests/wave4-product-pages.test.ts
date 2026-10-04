@@ -84,10 +84,10 @@ describe("Wave 4 core product pages", () => {
   it("webmcp page puts the checker above the fold and lists the 14 controls once", () => {
     const webmcp = page("webmcp.astro")
     expect(webmcp).toContain("CTA_LABEL.signUp")
-    // The controls table is rendered once; a second identical table would mean
-    // the duplication Spec finding E3 records.
-    const tables = webmcp.match(/WebMCP controls/g) ?? []
-    expect(tables.length).toBeLessThanOrEqual(1)
+    // The controls are tabulated once; the other two mentions are a FAQ answer
+    // and the JSON-LD ItemList name, neither of which renders a second table.
+    expect((webmcp.match(/<table/g) ?? []).length).toBe(1)
+    expect(webmcp).toContain("WebMCP controls (${WEBMCP_DETECTOR_VERSION})")
   })
 
   it("vibe-security-50 page names control outcomes and offers a sign-up path", () => {

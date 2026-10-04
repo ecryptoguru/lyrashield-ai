@@ -70,6 +70,22 @@ describe("Wave 7 analytics events", () => {
   it("emits the named events through the data-analytics-event hook", () => {
     const base = readFileSync(new URL("../layouts/Base.astro", import.meta.url), "utf8")
     expect(base).toContain("data-analytics-event")
-    expect(base).toContain("data-analytics-prop")
+    // Props are read from the element's dataset, so the rendered attribute is
+    // data-analytics-prop-<name> (camelCased back on read).
+    expect(base).toContain('key.startsWith("analyticsProp")')
+    const pages = [
+      "pages/pricing.astro",
+      "pages/tools/index.astro",
+      "pages/scan.astro",
+      "pages/compare/[slug].astro",
+      "components/StickyMobileCta.astro",
+      "layouts/ToolLayout.astro",
+    ]
+    for (const relative of pages) {
+      expect(
+        readFileSync(new URL(`../${relative}`, import.meta.url), "utf8"),
+        `${relative} emits no analytics event`
+      ).toContain("data-analytics-event")
+    }
   })
 })
