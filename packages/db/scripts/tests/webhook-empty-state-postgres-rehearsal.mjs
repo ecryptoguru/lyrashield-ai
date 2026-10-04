@@ -107,7 +107,11 @@ try {
 
   const migrationRoot = resolve(fileURLToPath(new URL("../../prisma/migrations/", import.meta.url)))
   const emptyNames = new Set(EXPECTED_EMPTY_MIGRATIONS.map((migration) => migration.name))
-  for (const name of readdirSync(migrationRoot).sort()) {
+  const migrationDirectories = readdirSync(migrationRoot, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .sort()
+  for (const name of migrationDirectories) {
     if (emptyNames.has(name)) continue
     const contents = readFileSync(resolve(migrationRoot, name, "migration.sql"))
     const checksum = createHash("sha256").update(contents).digest("hex")
