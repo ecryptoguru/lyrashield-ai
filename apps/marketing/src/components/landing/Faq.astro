@@ -9,6 +9,14 @@ interface Props {
 }
 
 const { items } = Astro.props
+
+/**
+ * The first five questions are the ones a first-time visitor actually asks, so
+ * they start open (spec section 8 block 8). Every item still renders and all
+ * of them stay in the FAQPage JSON-LD, so collapsing one hides nothing from a
+ * search engine or an answer engine.
+ */
+const OPEN_BY_DEFAULT = 5
 ---
 
 <section aria-labelledby="faq-heading" class="px-4 py-14 sm:px-6 sm:py-16 lg:px-8">
@@ -18,7 +26,7 @@ const { items } = Astro.props
     </h2>
     <div class="mt-12 space-y-4" data-reveal-group>
       {items.map((item, index) => (
-        <details data-reveal class="group rounded-lg border border-border bg-bg-raised transition-colors duration-200 hover:border-accent/50" data-question-id={`question_${index + 1}`}>
+        <details data-reveal open={index < OPEN_BY_DEFAULT} class="group rounded-lg border border-border bg-bg-raised transition-colors duration-200 hover:border-accent/50" data-question-id={`question_${index + 1}`}>
           <summary class="min-h-11 cursor-pointer list-none rounded-lg p-4 font-medium text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
             <span class="flex min-w-0 items-center justify-between gap-4">
               <span class="min-w-0 break-words">{item.q}</span>
