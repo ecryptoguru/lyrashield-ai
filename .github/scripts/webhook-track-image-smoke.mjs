@@ -55,6 +55,8 @@ const eventId = `webhook-image-fixture-${randomUUID()}`
 const jobIds = [0, 1, 2].map((generation) =>
   integrations.webhookTrackRetryJobId({ webhookEventId: eventId, track: "affiliate", generation })
 )
+const additionalEventIds = []
+const additionalJobIds = []
 const workers = []
 let fixtureCreated = false
 let rehearsalFailed = true
