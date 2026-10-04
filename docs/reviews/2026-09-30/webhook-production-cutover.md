@@ -25,6 +25,12 @@ gh workflow run deploy-azure.yml --ref main \
 
 This command dispatches a production maintenance window; it was not executed during source preparation. The first dispatch independently confirms current main. A foreign or concurrent owner receipt fails closed rather than being silently reclaimed.
 
+## Automatic release preflight and exact image proof
+
+When Azure production resources are configured, automatic and normal manual releases run the read-only webhook compatibility check before any image build or registry push. The first-cutover dispatch validates the signed historical UTC receipt and the logical database identity at the same early stage. An early preflight failure leaves the production deployment steps unstarted and avoids publishing images for a known-blocked release. The runtime job repeats its original final compatibility and continuity checks after the build; the early read is a cost-saving preflight, not a replacement for the final check.
+
+Each release worker image is now exercised by digest against disposable PostgreSQL and Redis before the Azure deployment job can start. This is separate from main CI and from tests against another image tag or source SHA. The protected **Verify webhook production prerequisites without deployment** workflow is manually discoverable in GitHub Actions. Run it from the exact current `main` to validate the owner-provided receipt; optionally supply all three worker fields together (product source SHA, engine revision, and `ghcr.io/...@sha256:...`) to rehearse that exact image on disposable services. It has no Azure identity permission and performs no production writes. The workflow does not automatically fail on every main CI run when one-time evidence has not yet been supplied.
+
 ## Implemented maintenance workflow
 
 The protected runtime workflow implements this sequence. Reuse existing queue authority, worker environment parity, stop-provenance capture, Azure helpers and bounded deployment fixtures. Never delete queue keys, replay paid work, reverse additive schema, or infer a drained writer from an empty queue snapshot.
