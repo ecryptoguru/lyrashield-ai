@@ -16,8 +16,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: webhook-production-prerequisites-${{ github.event.pull_request.head.sha }}
-  cancel-in-progress: true
+  group: webhook-production-prerequisites-${{ github.event_name }}-${{ github.event.pull_request.head.sha || github.event.workflow_run.head_sha || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   EXPECTED_SOURCE_SHA: 86537799e615fb3c07376106b315393e81d7ae9d
