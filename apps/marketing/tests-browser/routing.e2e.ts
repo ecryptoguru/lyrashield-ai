@@ -81,17 +81,25 @@ test("retired vs-lyrashield posts redirect permanently to their compare page", a
   }
 })
 
-test("every retired post URL is gone from the served sitemap and llms.txt", async ({ page }) => {
+test("every retired post URL is gone from the served sitemap and llms.txt", async ({
+  page,
+  baseURL,
+}) => {
   const sitemap = await page.request.get("/sitemap-index.xml")
   expect(sitemap.status()).toBe(200)
   const llms = await page.request.get("/llms.txt")
   expect(llms.status()).toBe(200)
   const llmsBody = await llms.text()
 
-  // Follow the sitemap index to its children so the assertion covers the URLs
-  // the crawlers actually see.
+  // The sitemap index advertises absolute production URLs. Fetch each child
+  // from the LOCAL preview under test by taking only its pathname, the same way
+  // scripts/crawl-built-site.mjs does — fetching the absolute URL would hit the
+  // deployed site instead of the build being verified.
   const indexBody = await sitemap.text()
-  const children = [...indexBody.matchAll(/<loc>([^<]+)<\/loc>/g)].map((match) => match[1])
+  const children = [...indexBody.matchAll(/<loc>([^<]+)<\/loc>/g)].map(
+    (match) => new URL(match[1], baseURL).pathname
+  )
+  expect(children.length, "the sitemap index should advertise its children").toBeGreaterThan(0)
   let urls = ""
   for (const child of children) {
     const res = await page.request.get(child)
