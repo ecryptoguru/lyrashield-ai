@@ -34,7 +34,7 @@ function topLevelRoutes(): string[] {
     readdirSync(pagesDir)
       .filter((name) => name.endsWith(".astro"))
       .map((name) => `/${name.replace(/\.astro$/, "")}`)
-      // index.astro is the homepage at "/", and 404 is not a navigable route.
+      // index.astro is the homepage at "/"; 404 is not a navigable route.
       .filter((route) => route !== "/index" && route !== "/404")
       .sort()
   )
@@ -46,7 +46,7 @@ function source(path: string): string {
 
 /**
  * Every on-site destination the header or footer renders, ignoring query and
- * fragment. Two shapes carry them: `href="..."` on an anchor, and
+ * fragment. Two shapes carry them: `href="..."` on an anchor plus
  * `href: "..."` inside the footer's `columns` link objects.
  */
 function navigableHrefs(): Set<string> {
@@ -81,7 +81,7 @@ describe("marketing route coverage", () => {
   })
 
   it("keeps the unlinked-by-decision list honest", () => {
-    // An entry that is in fact linked, or whose page no longer exists, is
+    // An entry that is in fact linked or whose page no longer exists is
     // stale and must be removed rather than left to hide a future page.
     const linked = navigableHrefs()
     for (const route of Object.keys(UNLINKED_BY_DECISION)) {

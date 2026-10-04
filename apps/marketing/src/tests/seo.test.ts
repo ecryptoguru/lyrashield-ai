@@ -301,7 +301,11 @@ describe("marketing SEO metadata", () => {
     const premiumHero = source("../components/landing/PremiumHero.astro")
     const scanner = source("../pages/scan.astro")
 
-    expect(header.match(/href="\/scan"/g)).toHaveLength(2)
+    // The header's route list is data-driven since the five-item redesign, so
+    // assert the destinations rather than a literal count of one href string:
+    // Lite Check is the Free tools menu's "Start here" entry and /scan is still
+    // reachable from both the desktop menu and the mobile sheet.
+    expect(header).toContain('{ label: "Lite Check", href: "/scan", note: "Start here" }')
     expect(header.match(/\$\{appUrl\}\/sign-in/g)).toHaveLength(2)
     expect(header).not.toContain('href="/#free-scan"')
     // The hero primary CTA now jumps to the on-page Lite Check form instead of the
