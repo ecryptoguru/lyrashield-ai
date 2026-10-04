@@ -113,7 +113,9 @@ jobs:
         run: python3 .github/scripts/test_desktop_release.py
 
       - name: Test webhook cutover verification workflow invariants
-        run: node .github/scripts/tests/webhook-cutover-verification.workflow.test.mjs
+        run: |
+          node .github/scripts/tests/webhook-cutover-verification.workflow.test.mjs
+          node --test .github/scripts/tests/webhook-deploy-dispatch.test.mjs
 
       - name: Classify changed files
         id: classify
