@@ -41,6 +41,7 @@ function dispatch(t, options) {
       GITHUB_REPOSITORY: "ecryptoguru/lyrashield-ai",
       GITHUB_RUN_ID: "123456",
       GITHUB_RUN_ATTEMPT: options.attempt ?? "1",
+      GITHUB_REF: "refs/heads/main",
       GITHUB_OUTPUT: output,
     },
   })
