@@ -11,7 +11,17 @@ on:
       - "packages/db/prisma/migrations/20261002130100_webhook_track_utc_schedule_index/migration.sql"
       - "packages/db/prisma/migrations/20261002130200_webhook_track_operator_recovery/migration.sql"
       - "packages/db/scripts/webhook-empty-state-*.mjs"
+      - "packages/db/scripts/webhook-backup-connection.mjs"
+      - "ops/worker/webhook-empty-state-*.mjs"
+      - "ops/worker/tests.webhook-empty-state*.test.mjs"
+      - "ops/worker/Dockerfile.empty-state-rehearsal"
+      - "lint/webhook-empty-state.config.mjs"
+      - "ops/worker/rehearse-webhook-empty-state-trusted-v2.sh"
+      - "packages/integrations/src/queue.ts"
+      - "packages/integrations/src/index.ts"
       - "packages/db/scripts/tests/webhook-empty-state-*.mjs"
+      - ".github/scripts/*webhook-empty-state*.mjs"
+      - ".github/workflows/webhook-empty-state-*.yml"
 
 permissions:
   contents: read
@@ -65,7 +75,41 @@ jobs:
           grep -Eq '^prisma[[:space:]]*:[[:space:]]*7\.9\.1$' <<< "$version"
 
       - name: Run empty-state migration contract tests
-        run: node --test packages/db/scripts/tests/webhook-empty-state-migration.contract.mjs
+        run: >-
+          node --test packages/db/scripts/tests/webhook-empty-state-migration.contract.mjs
+          packages/db/scripts/tests/webhook-empty-state-*.test.mjs
+          ops/worker/tests.webhook-empty-state*.test.mjs
+
+      - name: Check references in every privileged adapter branch
+        run: >-
+          pnpm exec eslint --no-config-lookup --config lint/webhook-empty-state.config.mjs
+          ops/worker/webhook-empty-state-*.mjs packages/db/scripts/webhook-empty-state-*.mjs
+
+      - name: Verify genuine public Actions fixture with default official trust roots
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          fixture_base=https://raw.githubusercontent.com/cli/cli/v2.95.0/pkg/cmd/attestation/test/data
+          curl --fail --silent --show-error --retry 3 "$fixture_base/reusable-workflow-artifact" -o "$RUNNER_TEMP/public-artifact"
+          curl --fail --silent --show-error --retry 3 "$fixture_base/reusable-workflow-attestation.sigstore.json" -o "$RUNNER_TEMP/public-bundle.json"
+          echo "49a3aa6075e0f49f82843e74b5baa614ad2a588e6675612bf108a0a008c5ac25  $RUNNER_TEMP/public-artifact" | sha256sum --check
+          echo "88e35c3496fc9b9bd29629b69271bd32738e170f0d85a12d67da0c72c743f3bd  $RUNNER_TEMP/public-bundle.json" | sha256sum --check
+          gh version
+          gh attestation verify "$RUNNER_TEMP/public-artifact" --bundle "$RUNNER_TEMP/public-bundle.json" \
+            --repo malancas/attest-demo \
+            --signer-workflow github/artifact-attestations-workflows/.github/workflows/attest.yml \
+            --signer-digest 09b495c3f12c7881b3cc17209a327792065c1a1d \
+            --source-digest 95baf27389e83e6a5c48f42e190d48d7abcea19e --source-ref refs/heads/main \
+            --cert-oidc-issuer https://token.actions.githubusercontent.com --deny-self-hosted-runners \
+            --format json > "$RUNNER_TEMP/public-verified.json"
 
       - name: Rehearse fresh empty-state migration and completed retry
         run: node packages/db/scripts/tests/webhook-empty-state-postgres-rehearsal.mjs
+
+      - name: Build disposable trusted-v2 runtime
+        run: docker build -f ops/worker/Dockerfile.empty-state-rehearsal -t lyra-disposable-trusted-v2:local .
+
+      - name: Rehearse enabled copied trusted-v2 with actual PostgreSQL and Prisma
+        run: bash ops/worker/rehearse-webhook-empty-state-trusted-v2.sh

@@ -1,0 +1,9 @@
+# Disposable test runtime. It contains no cloud CLI, credentials or production
+# commands. Execute only on an internal network shared with a disposable PG17.
+FROM node:24-bookworm-slim@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6
+WORKDIR /runtime
+RUN npm init -y && npm install pg@8.23.0 pg-connection-string@2.14.0 prisma@7.9.1 dotenv@17.4.2 tsx@4.21.0
+COPY packages/db /fixture/packages/db
+RUN ln -s /runtime/node_modules /fixture/packages/db/node_modules
+WORKDIR /fixture/packages/db
+ENTRYPOINT ["node", "scripts/tests/webhook-empty-state-trusted-v2-postgres-rehearsal.mjs"]

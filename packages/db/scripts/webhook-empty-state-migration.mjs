@@ -14,6 +14,14 @@ import {
   verifySignedEmptyStateReceipt,
 } from "./webhook-empty-state-contract.mjs"
 
+import { readRootFile, readPolicy, ROOT } from "./webhook-empty-state-root-store.mjs"
+import {
+  validateReceipt,
+  canonical as canonicalReceipt,
+  sha256 as receiptHash,
+} from "./webhook-empty-state-receipt-v2.mjs"
+import { verifyAttestation } from "./webhook-empty-state-attestation.mjs"
+
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..")
 const TABLE = 'public."WebhookEventTrack"'
 const EVENT_TABLE = 'public."WebhookEvent"'
@@ -52,6 +60,28 @@ function decodeSignedReceipt(env) {
 }
 
 function authorizationFor(context, env, now = Date.now()) {
+  if (context.trusted) {
+    const policy = readPolicy()
+    const validated = validateReceipt(context.receipt, policy, now)
+    equal(
+      context.authorizationSha256,
+      validated.authorizationSha256,
+      "Immutable root authorization changed"
+    )
+    equal(
+      context.identityHash,
+      policy.databaseIdentitySha256,
+      "Migration target differs from root policy"
+    )
+    const continuity = spawnSync("/usr/bin/node", [
+      "/opt/lyrashield-worker-host/ops/worker/webhook-empty-state-producer.mjs",
+      "continuity-external", context.runId, String(env.GITHUB_RUN_ATTEMPT || context.receipt.authorization.originalAttempt),
+      context.sourceSha, context.stableNonce,
+    ], { encoding: "utf8", timeout: 15_000, maxBuffer: 4096, env: { PATH: "/usr/bin:/bin", HOME: "/root" } })
+    equal(continuity.status, 0, "Live root continuity observation failed before migration phase")
+    equal(continuity.stdout.trim(), "EMPTY_STATE_LIVE_CONTINUITY_MATCH", "Live owned admission/fence/writer/queue continuity changed")
+    return context.authorization
+  }
   verifySignedEmptyStateReceipt(context.receipt, context.publicKeyPem)
   return validateEmptyStateAuthorization(context.receipt, {
     sourceSha: context.sourceSha,
@@ -96,6 +126,43 @@ function requiredContext(env, now = Date.now()) {
   const stableNonce = env.WEBHOOK_EMPTY_STATE_STABLE_NONCE || ""
   if (!/^[a-f0-9]{40}$/.test(sourceSha)) fail("Exact product source SHA is required")
   if (!/^\d+$/.test(runId)) fail("GitHub workflow run ID is required")
+  if (!rehearsal) {
+    const policy = readPolicy()
+    const receiptPath = `${ROOT}/${runId}/receipt.json`
+    const receipt = readRootFile(receiptPath)
+    const validated = validateReceipt(receipt, policy, now)
+    equal(receipt.authorization.sourceSha, sourceSha, "Trusted source mismatch")
+    equal(receipt.authorization.runId, runId, "Trusted run mismatch")
+    equal(receipt.authorization.nonce, stableNonce, "Trusted nonce mismatch")
+    equal(identityHash, policy.databaseIdentitySha256, "Trusted migration identity mismatch")
+    verifyAttestation(receiptPath, receipt, policy)
+    const context = {
+      trusted: true,
+      databaseUrl,
+      identity,
+      identityHash,
+      sourceSha,
+      runId,
+      stableNonce,
+      receipt,
+      authorizationSha256: validated.authorizationSha256,
+    }
+    // Progress binds immutable authorization, so fresh observations can be
+    // re-attested without changing the original source/run/owner/window.
+    context.authorization = {
+      owner: receipt.authorization.owner,
+      rootReceiptSha256: validated.authorizationSha256,
+      workerStopReceiptSha256: receiptHash(
+        canonicalReceipt({
+          authorizationSha256: validated.authorizationSha256,
+          worker: receipt.evidence.worker.imageDigest,
+        })
+      ),
+      admissionStopValueSha256: receipt.evidence.redis.valueSha256,
+    }
+    authorizationFor(context, env, now)
+    return context
+  }
   const { receipt, publicKeyPem } = decodeSignedReceipt(env)
   const context = { databaseUrl, identity, identityHash, sourceSha, runId, stableNonce, receipt, publicKeyPem }
   context.authorization = authorizationFor(context, env, now)
@@ -121,12 +188,12 @@ function markerFor(context, state) {
 }
 
 async function setMarker(client, context, state, authorize) {
-  authorize()
+  await authorize()
   const result = await client.query(
     "SELECT format('COMMENT ON COLUMN public.\"WebhookEventTrack\".\"nextAttemptAtUtc\" IS %L', $1::text) AS statement",
     [markerFor(context, state)],
   )
-  authorize()
+  await authorize()
   await client.query(result.rows[0].statement)
 }
 
@@ -159,7 +226,7 @@ function assertMarker(marker, context) {
 }
 
 async function beginLocked(client, timeout, authorize) {
-  authorize()
+  await authorize()
   await client.query("BEGIN ISOLATION LEVEL READ COMMITTED")
   await client.query("SET LOCAL lock_timeout = '10s'")
   await client.query("SET LOCAL statement_timeout = '" + (timeout || "5min") + "'")
@@ -167,7 +234,19 @@ async function beginLocked(client, timeout, authorize) {
   await client.query("SET LOCAL search_path = public, pg_temp")
   await client.query("LOCK TABLE " + EVENT_TABLE + " IN ACCESS EXCLUSIVE MODE")
   await client.query("LOCK TABLE " + TABLE + " IN ACCESS EXCLUSIVE MODE")
-  authorize()
+  await authorize()
+}
+
+export async function assertTrustedDatabaseContinuity(client) {
+  // Read through the current connection, including inside our exclusive locks.
+  // A separate collector must never query these tables while this connection holds them.
+  const result = await client.query(`SELECT
+    (SELECT count(*)::text FROM public."Scan" WHERE status IN ('QUEUED','PREFLIGHT','RUNNING','VERIFYING','REQUIRES_APPROVAL')) AS scans,
+    (SELECT count(*)::text FROM public."WebhookEventTrack") AS tracks,
+    (SELECT count(*)::text FROM public."WebhookEvent" WHERE processed=false) AS parents,
+    (SELECT count(*)::text FROM pg_stat_activity WHERE datname=current_database() AND (backend_type='client backend' OR backend_type IS NULL) AND pid<>pg_backend_pid() AND usename NOT IN ('supabase_admin','pgbouncer','authenticator')) AS writers`)
+  const row = result.rows[0]
+  for (const name of ['scans', 'tracks', 'parents', 'writers']) equal(row?.[name], '0', 'Live trusted DB continuity changed: ' + name)
 }
 
 async function rollback(client) { try { await client.query("ROLLBACK") } catch {} }
@@ -253,14 +332,14 @@ async function history(client) {
 }
 
 async function resolveApplied(client, migration, authorize, prismaResolve) {
-  authorize()
+  await authorize()
   const existing = (await history(client)).get(migration.name)
   if (existing) {
     equal(existing.checksum, migration.sha256, "Prisma migration checksum differs: " + migration.name)
     if (!existing.finished_at || existing.rolled_back_at) fail("Prisma migration is partial or rolled back: " + migration.name)
     return
   }
-  authorize()
+  await authorize()
   const result = prismaResolve("pnpm", ["exec", "prisma", "migrate", "resolve", "--applied", migration.name], {
     cwd: packageRoot,
     env: { ...process.env, DATABASE_DIRECT_URL: contextUrl, DATABASE_URL: contextUrl },
@@ -316,7 +395,7 @@ async function createIndexConcurrently(client, authorize) {
   if (active.rows.length) fail("An unknown webhook index build is active")
   await client.query("SET lock_timeout='10s'")
   await client.query("SET statement_timeout='10min'")
-  authorize()
+  await authorize()
   await client.query("CREATE INDEX CONCURRENTLY \"WebhookEventTrack_status_nextAttemptAtUtc_idx\" ON " + TABLE + " (status, \"nextAttemptAtUtc\")")
   if (!(await verifyIndex(client))) fail("Concurrent index build returned without a verified index")
 }
@@ -348,7 +427,7 @@ function delay(milliseconds) {
 async function acquireAdvisoryLock(client, authorize, waitMs, pollMs) {
   const started = performance.now()
   while (true) {
-    authorize()
+    await authorize()
     const result = await client.query("SELECT pg_try_advisory_lock($1, $2) AS acquired", LOCK)
     if (result.rows[0]?.acquired === true) return
     const elapsed = performance.now() - started
@@ -372,7 +451,10 @@ export async function runEmptyStateMigration({
 } = {}) {
   const context = requiredContext(env, clock())
   contextUrl = context.databaseUrl
-  const authorize = () => { context.authorization = authorizationFor(context, env, clock()) }
+  const authorize = async () => {
+    context.authorization = authorizationFor(context, env, clock())
+    if (context.trusted) await assertTrustedDatabaseContinuity(client)
+  }
   const statements = new Map(EXPECTED_EMPTY_MIGRATIONS.map((migration) => [migration.name, migrationSql(migration)]))
   const PgClient = ClientClass || (await import("pg")).Client
   const client = new PgClient({ connectionString: context.databaseUrl, application_name: "lyrashield-empty-state-migration", connectionTimeoutMillis: 10000 })
@@ -385,10 +467,10 @@ export async function runEmptyStateMigration({
   try {
     await client.connect()
     connected = true
-    authorize()
+    await authorize()
     await acquireAdvisoryLock(client, authorize, advisoryLockWaitMs, advisoryLockPollMs)
     lockHeld = true
-    authorize()
+    await authorize()
     const actual = await client.query("SELECT current_database() AS database, current_schema() AS schema")
     equal(actual.rows[0].database, context.identity.database, "Connected database differs from the validated identity")
     equal(actual.rows[0].schema, context.identity.schema, "Connected schema differs from the validated identity")
@@ -402,10 +484,10 @@ export async function runEmptyStateMigration({
         await beginLocked(client, undefined, authorize)
         await assertColumnStage(client, "baseline")
         await assertEmpty(client)
-        authorize()
+        await authorize()
         await client.query(statements.get(EXPECTED_EMPTY_MIGRATIONS[0].name))
         await assertColumnStage(client, "due")
-        authorize()
+        await authorize()
         await client.query(statements.get(EXPECTED_EMPTY_MIGRATIONS[1].name))
         await afterPhase(faultInjector, "core-transaction-after-sql", client, EXPECTED_EMPTY_MIGRATIONS[1].name)
         await assertColumnStage(client, "core")
@@ -459,7 +541,7 @@ export async function runEmptyStateMigration({
         await beginLocked(client, undefined, authorize)
         await assertEmpty(client)
         await assertColumnStage(client, "core")
-        authorize()
+        await authorize()
         await client.query(statements.get(EXPECTED_EMPTY_MIGRATIONS[3].name))
         await assertColumnStage(client, "complete")
         await setMarker(client, context, "operator-columns", authorize)
@@ -482,7 +564,39 @@ export async function runEmptyStateMigration({
     })
     if (marker.state !== "complete") await afterPhase(faultInjector, "complete", client)
     verifyNoPendingMigrations()
-    return { status: "complete", databaseIdentitySha256: context.identityHash, migrationNames: EXPECTED_EMPTY_MIGRATIONS.map((entry) => entry.name) }
+    const result = {
+      status: "complete",
+      databaseIdentitySha256: context.identityHash,
+      migrationNames: EXPECTED_EMPTY_MIGRATIONS.map((entry) => entry.name),
+    }
+    if (context.trusted) {
+      await authorize()
+      const schemaRows = Object.fromEntries(await schema(client))
+      const historyRows = [...(await history(client)).values()].map((row) => ({
+        name: row.name,
+        checksum: row.checksum,
+        finished: Boolean(row.finished_at),
+        rolledBack: Boolean(row.rolled_back_at),
+      }))
+      const indexRows = await client.query(
+        "SELECT pg_get_indexdef(indexrelid) AS definition, indisvalid, indisready FROM pg_index WHERE indexrelid = 'public.\"WebhookEventTrack_status_nextAttemptAtUtc_idx\"'::regclass"
+      )
+      result.sourceSha = context.sourceSha
+      result.runId = context.runId
+      result.completion = {
+        schemaVersion: "webhook-empty-state-completion/v2",
+        state: "complete",
+        sourceSha: context.sourceSha,
+        databaseIdentitySha256: context.identityHash,
+        authorizationSha256: context.authorizationSha256,
+        receiptSha256: receiptHash(canonicalReceipt(context.receipt)),
+        workerImageDigest: context.receipt.evidence.candidate.imageDigest,
+        schemaSha256: receiptHash(canonicalReceipt(schemaRows)),
+        historySha256: receiptHash(canonicalReceipt(historyRows)),
+        indexSha256: receiptHash(canonicalReceipt(indexRows.rows)),
+      }
+    }
+    return result
   } finally {
     if (lockHeld) {
       try { await client.query("SELECT pg_advisory_unlock($1, $2)", LOCK) } catch {}

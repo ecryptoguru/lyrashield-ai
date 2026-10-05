@@ -1,0 +1,58 @@
+name: Protected empty-scheduling cutover (disabled)
+on:
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Exact current main SHA
+        required: true
+        type: string
+      confirmation:
+        description: "webhook-empty-state:<source_sha>"
+        required: true
+        type: string
+      nonce:
+        description: Stable root-policy-approved nonce (32-128 URL-safe characters)
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: deploy-azure-${{ vars.AZURE_RESOURCE_GROUP || 'production' }}-${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
+  cancel-in-progress: false
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Validate exact current-main manual confirmation
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+          NONCE: ${{ inputs.nonce }}
+        run: node .github/scripts/validate-webhook-empty-state-dispatch.mjs
+  trusted-producer:
+    needs: validate
+    # GitHub run IDs are decimal; this fixed sentinel cannot match.
+    # Code review plus explicit owner setup is required to replace this gate.
+    if: ${{ github.run_id == 'disabled-until-owner-approved-cutover' }}
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    # Actual preceding integration commit; no circular/future self-reference.
+    # This reusable workflow independently retains its static disable gate.
+    uses: ecryptoguru/lyrashield-ai/.github/workflows/webhook-empty-state-trusted-attestation.yml@3a403a845df0611762fc0e508de23b2a434fa837
+    with:
+      source_sha: ${{ inputs.source_sha }}
+      run_id: ${{ github.run_id }}
+      run_attempt: ${{ github.run_attempt }}
+      nonce: ${{ inputs.nonce }}
+    secrets:
+      AZURE_DEPLOY_CLIENT_ID: ${{ secrets.AZURE_DEPLOY_CLIENT_ID }}
+      AZURE_DEPLOY_TENANT_ID: ${{ secrets.AZURE_DEPLOY_TENANT_ID }}
+      AZURE_DEPLOY_SUBSCRIPTION_ID: ${{ secrets.AZURE_DEPLOY_SUBSCRIPTION_ID }}

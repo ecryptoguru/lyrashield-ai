@@ -69,7 +69,7 @@ function validReceipt(overrides = {}) {
     fallbackWorkerImageDigest: "sha256:" + "3".repeat(64),
     fallbackSourceSha: "4".repeat(40),
     fallbackEngineRevision: "5".repeat(40),
-    fallbackProtocol: "durable-claims/1",
+    fallbackProtocol: "durable-claims/2",
     fallbackEvidenceSha256: "f".repeat(64),
     issuedAt: new Date(now - 60_000).toISOString(),
     nonterminalScans: 0,
@@ -220,7 +220,7 @@ test("accepts only a fresh, matching, drained, stopped, image-bound maintenance 
     { fallbackVerified: false },
     { redisContinuityVerified: false },
     { appConnectionReadbackVerified: false },
-    { fallbackProtocol: "durable-claims/2" },
+    { fallbackProtocol: "durable-claims/1" },
     { issuedAt: new Date(now - 31 * 60_000).toISOString() },
     { workerStopReceiptSha256: "bad" },
   ]) {

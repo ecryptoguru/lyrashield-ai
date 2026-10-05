@@ -376,7 +376,7 @@ export interface FixGenerateJobData {
 
 let fixGenerateQueue: Queue<FixGenerateJobData, unknown> | null = null
 
-function getFixGenerateQueue(): Queue<FixGenerateJobData, unknown> {
+export function getFixGenerateQueue(): Queue<FixGenerateJobData, unknown> {
   if (!fixGenerateQueue || producerConnections.get(fixGenerateQueue)?.status === "end") {
     fixGenerateQueue = createProducerQueue<FixGenerateJobData, unknown>(FIX_GENERATE_QUEUE_NAME, {
       // The consumer is deterministic from stored evidence (no model call),

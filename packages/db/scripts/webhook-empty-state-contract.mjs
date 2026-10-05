@@ -275,7 +275,7 @@ export function validateEmptyStateAuthorization(receipt, expected) {
   if (!SOURCE_SHA.test(receipt.workerStopSourceSha || "") || !SOURCE_SHA.test(receipt.fallbackSourceSha || "")) {
     throw new Error("Maintenance receipt worker image source is invalid")
   }
-  if (!/^[a-f0-9]{40}$/.test(receipt.fallbackEngineRevision || "") || receipt.fallbackProtocol !== "durable-claims/1") {
+  if (!/^[a-f0-9]{40}$/.test(receipt.fallbackEngineRevision || "") || receipt.fallbackProtocol !== "durable-claims/2") {
     throw new Error("Maintenance receipt fallback protocol is not verified")
   }
   const issued = Date.parse(receipt.issuedAt)
