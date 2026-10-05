@@ -1,0 +1,58 @@
+name: Trusted webhook empty-state producer
+on:
+  workflow_call:
+    inputs:
+      source_sha:
+        required: true
+        type: string
+      run_id:
+        required: true
+        type: string
+      run_attempt:
+        required: true
+        type: string
+      nonce:
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  produce:
+    # Owner-approved root collector installation, trust setup and action-time
+    # maintenance window are separate. Never activate through caller input.
+    if: ${{ false }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: azure-production
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - name: Reject caller data except bounded immutable identifiers
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          RUN_ID: ${{ inputs.run_id }}
+          RUN_ATTEMPT: ${{ inputs.run_attempt }}
+          NONCE: ${{ inputs.nonce }}
+        run: |
+          set -euo pipefail
+          [[ "$SOURCE_SHA" =~ ^[a-f0-9]{40}$ ]]
+          [[ "$RUN_ID" =~ ^[1-9][0-9]{0,19}$ ]]
+          [[ "$RUN_ATTEMPT" =~ ^[1-9][0-9]{0,5}$ ]]
+          [[ "$NONCE" =~ ^[A-Za-z0-9_-]{32,128}$ ]]
+          test "$SOURCE_SHA" = "$GITHUB_SHA"
+          test "$RUN_ID" = "$GITHUB_RUN_ID"
+          test "$RUN_ATTEMPT" = "$GITHUB_RUN_ATTEMPT"
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_EVENT_NAME" = workflow_dispatch
+          test "$GITHUB_REPOSITORY_ID" = 1286618458
+          test "$GITHUB_REPOSITORY_OWNER_ID" = 116722580
+      # The fixed root producer must collect its own observations and return
+      # only a canonical receipt digest. No caller counts, JSON or PEM inputs.
+      # Activation adds the reviewed fixed producer invocation and actions/attest
+      # of that exact digest; no raw receipt is uploaded to this public repo.
+      - name: Require completed producer integration before activation
+        run: |
+          echo 'Trusted producer integration has not been activated.' >&2
+          exit 1

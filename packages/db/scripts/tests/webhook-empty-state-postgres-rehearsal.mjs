@@ -73,7 +73,7 @@ function makeEnvironment({ issuedAt = new Date().toISOString() } = {}) {
     fallbackWorkerImageDigest: "sha256:" + "3".repeat(64),
     fallbackSourceSha: "4".repeat(40),
     fallbackEngineRevision: "5".repeat(40),
-    fallbackProtocol: "durable-claims/1",
+    fallbackProtocol: "durable-claims/2",
     fallbackEvidenceSha256: "f".repeat(64),
     issuedAt,
     nonterminalScans: 0,

@@ -1,0 +1,41 @@
+name: Protected empty-scheduling cutover (disabled)
+on:
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Exact current main SHA
+        required: true
+        type: string
+      confirmation:
+        description: 'webhook-empty-state:<source_sha>'
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: deploy-azure-${{ vars.AZURE_RESOURCE_GROUP || 'production' }}-${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
+  cancel-in-progress: false
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Validate exact current-main manual confirmation
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: node .github/scripts/validate-webhook-empty-state-dispatch.mjs
+  maintenance:
+    needs: validate
+    if: ${{ false }}
+    runs-on: ubuntu-24.04
+    environment: azure-production
+    steps:
+      - run: |
+          echo 'Empty-state maintenance remains disabled pending reviewed producer pin and root trust setup.' >&2
+          exit 1
