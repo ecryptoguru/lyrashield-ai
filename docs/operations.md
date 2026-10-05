@@ -304,3 +304,38 @@ This section retains the approved payout operating model and the unresolved prov
 - Implement a bounded stuck-PROCESSING recovery sweep before activation: query provider status for payouts aged past a threshold; provider-confirmed PAID finalizes the payout and marks its RESERVED commissions PAID; only provider-confirmed FAILED or equivalent authoritative proof that no payout was delivered, marks the payout FAILED and releases its RESERVED commissions back to AVAILABLE. Missing, unavailable, pending or otherwise ambiguous provider status remains PROCESSING with its commissions RESERVED for operator reconciliation. Apply every transition through compare-and-set transactions on the current status so concurrent schedulers cannot double-finalize.
 
 The implementation state remains defined by `AGENTS.md`, `PRD.md` and code under `packages/affiliate`. Historical provider comparisons and planning rationale remain in Git at commit `e3fa791f` under `monetization.md`.
+
+## Owner-approved manual isolated restore
+
+`production-backup.yml` has an opt-in manual `isolated_restore=true` mode. It
+requires `restore=true`, `expected_source_sha` equal to the reviewed current
+main SHA, and original run attempt 1 in both jobs. Dispatch only after separate
+owner approval for production-data processing; a draft PR or merge is not
+execution approval. A changed SHA or failed attempt requires new review rather
+than a rerun.
+
+This mode creates one new encrypted `public`/`app` production backup using the
+existing DB/R2/GPG configuration. It skips retention deletion entirely, then
+restores that run's object with ETag `If-Match` and ciphertext/plaintext SHA256
+checks into disposable GitHub-runner PostgreSQL 17. Redis and the application
+bind only loopback. Schema, audit-chain and readiness verification produce the
+existing digest-only v2 artifact, retained 30 days. The new encrypted object
+remains in the existing bucket and is subject to ordinary scheduled 30-day
+retention; this mode does not delete it or any older object.
+
+Plaintext dumps, audit exports and command/error logs stay in a private 0700
+runner directory with 0600 files. Sensitive phases return exit status without
+publishing diagnostics. `always()` cleanup removes private files and named
+containers; application cleanup validates the session leader's UID, process
+group, session and start time before signalling its group. Cleanup refuses
+stale identity. Hard runner loss or orphaned/unverifiable processes rely on
+hosted-runner teardown, so explicit cleanup is not a secure-erasure guarantee.
+The backup and restore jobs have respective 20/25-minute timeouts; queue/setup
+waits mean this is not a 45-minute wall-clock limit.
+
+Existing credentials authenticate only to their original production database
+and R2 endpoint; the passphrase is used locally. Full private production data
+is decrypted on GitHub's ephemeral runner. No restored writes target
+production. No new cloud resources, grants, credentials, maintenance hold,
+writer stop, migration or cutover is part of this drill. Ordinary scheduled
+backup/weekly-restore behavior is unchanged.

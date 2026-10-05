@@ -33,10 +33,19 @@ test("backup jobs hold production secrets only on reviewed main", () => {
   const workflow = read("production-backup.yml")
   const backup = jobSection(workflow, "backup")
   const restore = jobSection(workflow, "restore")
-  // The backup job runs no repository code; the gate still pins dispatch to
-  // the reviewed ref for consistency with the other maintenance workflows.
+  // Ordinary backups run no repository code. The opt-in private manual mode
+  // checks out only the source guarded before any credential-bearing step.
   assert.match(backup, /^    if: github\.ref == 'refs\/heads\/main'$/m)
-  assert.doesNotMatch(backup, /uses: actions\/checkout@/)
+  assert.match(
+    backup,
+    /name: Checkout isolated restore helpers\n        if: inputs\.isolated_restore\n        uses: actions\/checkout@/
+  )
+  assert.match(backup, /ref: \$\{\{ github\.sha \}\}/)
+  assert.ok(
+    backup.indexOf("Bind isolated restore to the reviewed source") <
+      backup.indexOf("uses: actions/checkout@")
+  )
+  assert.ok(backup.indexOf("uses: actions/checkout@") < backup.indexOf("secrets."))
   // The restore drill does check out the repository and run install/app code
   // with backup credentials, so dispatch is restricted to main.
   assert.match(restore, /github\.ref == 'refs\/heads\/main'/)
