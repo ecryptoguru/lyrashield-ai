@@ -285,9 +285,9 @@ describe("compare governance", () => {
     expect(classes.some((name) => name.startsWith("prose-headings:"))).toBe(true)
 
     // The site switches theme with :root[data-theme], but Tailwind emits
-    // `dark:` inside prefers-color-scheme, so dark:prose-invert follows the OS
-    // rather than the theme. global.css must map the prose variables to the
-    // site tokens instead.
+    // `dark:` inside prefers-color-scheme, so a dark: prose variant follows the
+    // OS rather than the theme. global.css maps the prose variables to the site
+    // tokens instead, and no prose surface should carry a dark: variant.
     const styles = readFileSync(new URL("../styles/global.css", import.meta.url), "utf8")
     for (const token of [
       "--tw-prose-body: var(--text-muted)",

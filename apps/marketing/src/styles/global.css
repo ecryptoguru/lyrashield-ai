@@ -328,8 +328,9 @@ summary::-webkit-details-marker {
    own design tokens for every prose surface instead. Because `.prose` sets
    `--tw-prose-headings` and friends directly, matching its specificity (one
    class) and loading afterwards is enough to win, in both themes. This is
-   unlayered CSS, so it also outranks Tailwind's layered utilities — including
-   the `dark:prose-invert` those pages still carry, which is now inert. */
+   unlayered CSS, so it also outranks Tailwind's layered utilities — which is
+   what the trust pages used to rely on through `dark:prose-invert`. That class
+   has been removed from the markup so the mechanism is not left implied. */
 .prose {
   --tw-prose-body: var(--text-muted);
   --tw-prose-headings: var(--text);
