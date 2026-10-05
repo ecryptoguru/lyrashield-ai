@@ -34,7 +34,7 @@ test("enabled copied candidate adapter survives cold start and crash after eithe
     )
     writeFileSync(
       join(root, "ops/worker/fixture-fs.mjs"),
-      `export * from 'node:fs';import {lstatSync as actual} from 'node:fs';export function lstatSync(p){if(p!==${JSON.stringify(config)})throw Error('unsafe fixture FS access');const s=actual(p);return {isSymbolicLink:()=>false,uid:0,mode:0o600}}`
+      `export * from 'node:fs';import {lstatSync as actual,renameSync as rename} from 'node:fs';export function lstatSync(p){if(p!==${JSON.stringify(config)})throw Error('unsafe fixture FS access');const s=actual(p);return {isSymbolicLink:()=>false,isFile:()=>true,uid:0,nlink:1,size:s.size,mode:0o600}}export function renameSync(a,b){if(globalThis.disposableCandidate.failRename){globalThis.disposableCandidate.failRename=false;throw Error('interrupted rename')}return rename(a,b)}`
     )
     writeFileSync(
       join(root, "ops/worker/fixture-process.mjs"),
@@ -59,7 +59,7 @@ test("enabled copied candidate adapter survives cold start and crash after eithe
       )
     )
     const { promoteCandidate } = await import(pathToFileURL(candidate))
-    for (const crashAfter of [null, "app", "scanner"]) {
+    for (const crashAfter of [null, "app", "scanner", "rename", "unhealthy-scanner"]) {
       const { receipt, policy } = fixture()
       const issuedAt = new Date().toISOString(),
         expiresAt = new Date(Date.now() + 1800000).toISOString()
@@ -127,9 +127,14 @@ test("enabled copied candidate adapter survives cold start and crash after eithe
           const role = args.includes("lyrashield-app") ? "app" : "scanner"
           if (args[1] === "revision" && args[2] === "show")
             return ok({
+              id: policy.resources[role] + "/revisions/" + policy.candidateRevisions[role],
+              name: policy.candidateRevisions[role],
               properties: {
                 active: active[role],
-                replicas: active[role] ? 1 : 0,
+                provisioningState: "Provisioned",
+                runningState: crashAfter === "unhealthy-scanner" && role === "scanner" ? "Failed" : "Running",
+                healthState: crashAfter === "unhealthy-scanner" && role === "scanner" ? "Unhealthy" : "Healthy",
+                replicas: active[role] && !(crashAfter === "unhealthy-scanner" && role === "scanner") ? 1 : 0,
                 template: {
                   containers: [
                     {
@@ -171,10 +176,12 @@ test("enabled copied candidate adapter survives cold start and crash after eithe
         }
         throw Error("unsafe fixture command boundary")
       }
+      holder.failRename = crashAfter === "rename"
       if (crashAfter) {
         await assert.rejects(promoteCandidate())
         assert.equal(holder.files.has(root + "/123/candidate-ready.json"), false)
-        assert.equal(active[crashAfter], true)
+        if (["app", "scanner"].includes(crashAfter)) assert.equal(active[crashAfter], true)
+        if (crashAfter === "unhealthy-scanner") continue
       }
       await promoteCandidate()
       assert.deepEqual(active, { app: true, scanner: true })

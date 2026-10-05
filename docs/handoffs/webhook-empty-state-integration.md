@@ -130,3 +130,14 @@ replay returns the exact stored collect digest. Candidate promotion uses durable
 owned activation intents, revalidates image/connection/completion bindings on
 retry and polls boundedly for actual worker health. Backup collection normalizes
 only logical identity; its credential hash always covers the raw URL.
+
+Recovery regressions now cover Redis DEL success with a lost acknowledgment, a
+committed resume journal rename followed by fsync failure, and config rename
+interruption. Resume always reconciles owned admission and public readiness,
+including when its journal already says complete. Unique owned config temporaries
+allow retry without deleting an earlier interrupted temporary. Exact app/scanner
+revision identity, image, Provisioned/Running/Healthy states and at least one
+running replica are polled boundedly before candidate-ready is written. A failed
+scanner with zero replicas cannot produce candidate readiness. These remain
+enabled disposable-copy tests with provider and root-storage boundaries mocked.
+Vitest excludes the Node-runner files; the dedicated rehearsal retains them.

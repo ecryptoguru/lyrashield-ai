@@ -388,7 +388,7 @@ async function main() {
   }
   // Replayed workflow steps skip only durable, already completed phases. The
   // original authorization remains fixed and current policy is revalidated.
-  if (state && PHASES.indexOf(request.phase) <= PHASES.indexOf(state.phase)) {
+  if (state && request.phase !== "resume" && PHASES.indexOf(request.phase) <= PHASES.indexOf(state.phase)) {
     const receipt =
       PHASES.indexOf(state.phase) >= PHASES.indexOf("collect")
         ? readRootFile(`${directory}/receipt.json`)
@@ -526,7 +526,7 @@ async function main() {
   } else if (request.phase === "candidate") {
     // Candidate promotion is deliberately delegated to the fixed reviewed
     // forward-only helper. It may not start any consumer without the fence proof.
-    run("/usr/bin/node", [BUNDLE + "/ops/worker/webhook-empty-state-candidate.mjs"], false, 300_000)
+    run("/usr/bin/node", [BUNDLE + "/ops/worker/webhook-empty-state-candidate.mjs"], false, 900_000)
   } else if (request.phase === "resume") {
     requireValue(
       readRootFile(`${directory}/candidate-ready.json`).authorizationSha256 ===

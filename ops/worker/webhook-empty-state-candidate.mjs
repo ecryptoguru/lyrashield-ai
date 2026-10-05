@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { containerAppTargetArgs } from "./webhook-empty-state-azure-target.mjs"
 import { pathToFileURL } from "node:url"
+import { randomBytes } from "node:crypto"
 import { spawnSync } from "node:child_process"
 import {
   readFileSync,
@@ -120,7 +121,7 @@ export async function promoteCandidate() {
   checkParents(config)
   const stat = lstatSync(config)
   requireValue(
-    !stat.isSymbolicLink() && stat.uid === 0 && (stat.mode & 0o777) === 0o600,
+    !stat.isSymbolicLink() && stat.isFile() && stat.uid === 0 && stat.nlink === 1 && stat.size <= 65536 && (stat.mode & 0o777) === 0o600,
     "Unsafe worker config"
   )
   const saved = readFileSync(config, "utf8")
@@ -129,7 +130,7 @@ export async function promoteCandidate() {
     /^LYRASHIELD_WORKER_IMAGE=.+$/m,
     `LYRASHIELD_WORKER_IMAGE=${policy.images.candidate}`
   )
-  const temporary = config + ".empty-state.tmp"
+  const temporary = config + ".empty-state." + randomBytes(16).toString("hex") + ".tmp"
   const fd = openSync(
     temporary,
     constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW,
@@ -176,6 +177,15 @@ export async function promoteCandidate() {
     policy.candidate.sourceSha,
     () => validateAuthorization(authorization, readPolicy())
   )
+  const revisionReadiness = {}
+  for (const role of ["app", "scanner"]) {
+    revisionReadiness[role] = await waitForRevisionReady(
+      () => run("/usr/bin/az", ["containerapp", "revision", "show",
+        ...containerAppTargetArgs(policy.resources[role]), "--revision",
+        policy.candidateRevisions[role], "-o", "json"], true),
+      policy, role, () => validateAuthorization(authorization, readPolicy())
+    )
+  }
   const databaseReady = run("/usr/bin/curl", [
     "--fail",
     "--silent",
@@ -193,7 +203,36 @@ export async function promoteCandidate() {
     authorizationSha256: sha256(canonical(authorization)),
     completionSha256: sha256(canonical(proof)),
     observedAt: new Date().toISOString(),
+    revisions: revisionReadiness,
   })
+}
+export async function waitForRevisionReady(observe, policy, role, authorize, {
+  now = Date.now,
+  pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  timeoutMs = 180000,
+  pollMs = 2000,
+} = {}) {
+  const deadline = now() + timeoutMs
+  while (true) {
+    authorize()
+    const actual = await observe(), p = actual?.properties
+    requireValue(actual?.id?.toLowerCase() ===
+      `${policy.resources[role]}/revisions/${policy.candidateRevisions[role]}`.toLowerCase() &&
+      actual.name === policy.candidateRevisions[role] && p?.active === true &&
+      p.template?.containers?.length === 1 && p.template.containers[0].image === policy.images[role],
+      "Foreign candidate revision during readiness")
+    requireValue(!["Failed", "Deprovisioned"].includes(p.provisioningState) &&
+      !["Failed", "Stopped", "Degraded"].includes(p.runningState) && p.healthState !== "Unhealthy",
+      "Candidate revision startup failed; retain maintenance")
+    if (p.provisioningState === "Provisioned" && p.runningState === "Running" &&
+      p.healthState === "Healthy" && Number.isSafeInteger(p.replicas) && p.replicas >= 1) {
+      return { resourceId: actual.id, revision: actual.name, image: policy.images[role],
+        provisioningState: p.provisioningState, runningState: p.runningState,
+        healthState: p.healthState, replicas: p.replicas, observedAt: new Date().toISOString() }
+    }
+    requireValue(now() < deadline, "Candidate revision readiness timed out; retain maintenance")
+    await pause(Math.min(pollMs, deadline - now()))
+  }
 }
 export function activationIntent(authorization, proof, policy, role) {
   return {

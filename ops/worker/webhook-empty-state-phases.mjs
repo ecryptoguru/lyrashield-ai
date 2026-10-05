@@ -62,23 +62,19 @@ export function verifyCompletionProof(proof, receipt, result) {
   return true
 }
 export async function releaseOwnedMaintenance(operations) {
-  let released = false
   try {
     await operations.release()
-    released = true
     await operations.checkPublicReadiness()
     await operations.recheckAuthorization()
     await operations.cleanupOwnedFence()
     await operations.persistCompletion()
   } catch (error) {
-    if (released) {
-      try {
-        await operations.restoreOwnedHold()
-      } catch {
-        throw new Error(
-          "Release failure with foreign or unavailable admission; retain fence and investigate"
-        )
-      }
+    // A failed command may have already deleted the key before losing its ack.
+    // Always reconcile with an owned comparison, preserving any foreign stop.
+    try {
+      await operations.restoreOwnedHold()
+    } catch {
+      throw new Error("Release failure with foreign or unavailable admission; retain fence and investigate")
     }
     throw error
   }

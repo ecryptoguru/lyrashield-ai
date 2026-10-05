@@ -298,6 +298,7 @@ test("candidate health under stop precedes release; post-release failures restor
         throw Error("foreign owner")
       },
       restoreOwnedHold: () => {
+        if (key === "foreign") throw Error("foreign owner")
         key = "owned"
       },
     })

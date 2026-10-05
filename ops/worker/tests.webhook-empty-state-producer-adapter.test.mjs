@@ -42,7 +42,7 @@ test("enabled copied producer executes resume/rehold and completed workflow coll
     cpSync(dirname(parser), join(root, "node_modules/pg-connection-string"), { recursive: true })
     writeFileSync(
       join(root, "packages/db/scripts/webhook-empty-state-root-store.mjs"),
-      `const h=()=>globalThis.disposableProducer;export const ROOT=${JSON.stringify(root)},FENCE=ROOT+'/fence.json';export function checkParents(){} export function readPolicy(){return h().policy} export function readAuthorization(){return h().authorization} export function runDirectory(){return ROOT+'/123'} export function readRootFile(p){if(!h().files.has(p))throw Object.assign(Error('absent'),{code:'ENOENT'});return h().files.get(p)} export function atomicRootWrite(p,v){if(h().failPersist&&p.endsWith('/progress.json')&&v.phase==='resume')throw Error('fixture disk failure');h().files.set(p,v)}`
+      `const h=()=>globalThis.disposableProducer;export const ROOT=${JSON.stringify(root)},FENCE=ROOT+'/fence.json';export function checkParents(){} export function readPolicy(){return h().policy} export function readAuthorization(){return h().authorization} export function runDirectory(){return ROOT+'/123'} export function readRootFile(p){if(!h().files.has(p))throw Object.assign(Error('absent'),{code:'ENOENT'});return h().files.get(p)} export function atomicRootWrite(p,v){if(h().failPersist&&p.endsWith('/progress.json')&&v.phase==='resume')throw Error('fixture disk failure');h().files.set(p,v);if(h().failAfterRename&&p.endsWith('/progress.json')&&v.phase==='resume')throw Error('fixture directory fsync failure')}`
     )
     writeFileSync(
       join(root, "ops/worker/fixture-fs.mjs"),
@@ -128,8 +128,9 @@ test("enabled copied producer executes resume/rehold and completed workflow coll
     holder.files.set(root + "/123/receipt.json", receipt)
     holder.files.set(root + "/123/candidate-ready.json", {
       authorizationSha256: sha256(canonical(receipt.authorization)),
-      completionSha256: "a".repeat(64),
+      completionSha256: sha256(canonical({ state: "complete" })),
     })
+    holder.files.set(root + "/123/completion.json", { state: "complete" })
     let failPublic = true
     holder.command = (binary, args) => {
       if (binary === "/usr/bin/curl")
@@ -145,6 +146,7 @@ test("enabled copied producer executes resume/rehold and completed workflow coll
       } else if (phase === "release-retry") {
         assert.ok(holder.key === stop || holder.key === null)
         holder.key = null
+        if (holder.lostReleaseAck) { holder.lostReleaseAck = false; return { status: 1, stdout: "" } }
       } else if (phase === "claim") {
         assert.ok(holder.key === null || holder.key === stop)
         holder.key = stop
@@ -162,6 +164,16 @@ test("enabled copied producer executes resume/rehold and completed workflow coll
     assert.ok(holder.files.has(fence))
     assert.equal(holder.files.get(progress).phase, "candidate")
     holder.failPersist = false
+    holder.lostReleaseAck = true
+    await assert.rejects(main())
+    assert.equal(holder.key, stop, "lost DEL acknowledgment restores owned hold")
+    assert.ok(holder.files.has(fence))
+    holder.failAfterRename = true
+    await assert.rejects(main())
+    assert.equal(holder.files.get(progress).phase, "resume", "rename committed before fsync failure")
+    assert.equal(holder.key, stop)
+    assert.ok(holder.files.has(fence))
+    holder.failAfterRename = false
     await main()
     assert.equal(holder.key, null)
     assert.equal(holder.files.get(progress).phase, "resume")
