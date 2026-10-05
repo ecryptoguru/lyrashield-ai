@@ -61,16 +61,10 @@ class EvidenceWorldElement extends HTMLElement {
     this.video.addEventListener("seeked", this.handleSeeked)
     this.video.addEventListener("error", this.handleVideoError)
 
-    // Start fetching the scrubbed timeline as soon as this element upgrades,
-    // which the bootstrap in EvidenceWorld.astro now does on idle after load —
-    // in parallel with the rest of the page rather than on approach. The story
-    // is scroll-scrubbed, so a seek into an unbuffered range stalls and drops
-    // back to the poster; that was the first-pass glitch on both desktop and
-    // mobile. Buffering ahead of arrival is the fix.
-    //
-    // Note this is only the network fetch. Scroll/resize listeners still wait
-    // for the IntersectionObserver below, so an unvisited story costs no
-    // per-frame work.
+    // The bootstrap warms the timeline one viewport beyond the visible viewport. Keep
+    // buffering ahead of the 50% activation boundary so the first scrub has
+    // frames ready, while visits that stay near the hero fetch no video.
+    // Scroll/resize listeners still wait for the activation observer below.
     this.assignSource()
 
     this.observer = new IntersectionObserver(this.handleIntent, { rootMargin: "50% 0px" })
