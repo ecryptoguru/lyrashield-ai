@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { containerAppTargetArgs, revisionListArgs } from "./webhook-empty-state-azure-target.mjs"
 import { spawnSync } from "node:child_process"
 import { lstatSync, readFileSync, unlinkSync } from "node:fs"
 import { pathToFileURL } from "node:url"
@@ -138,8 +139,7 @@ function appConnection(policy, name, observedAt) {
     [
       "containerapp",
       "exec",
-      "--ids",
-      policy.resources[name],
+      ...containerAppTargetArgs(policy.resources[name]),
       "--command",
       "node --input-type=module -e " + quoted,
     ],
@@ -150,21 +150,7 @@ function appConnection(policy, name, observedAt) {
   return JSON.parse(lines[0])
 }
 function revisionInventory(resourceId) {
-  const revisions = run(
-    "/usr/bin/az",
-    [
-      "containerapp",
-      "revision",
-      "list",
-      "--ids",
-      resourceId,
-      "--query",
-      "[].{name:name,active:properties.active,replicas:properties.replicas}",
-      "-o",
-      "json",
-    ],
-    true
-  )
+  const revisions = run("/usr/bin/az", revisionListArgs(resourceId), true)
   requireValue(
     Array.isArray(revisions) &&
       revisions.length > 0 &&
@@ -462,8 +448,7 @@ async function main() {
           "containerapp",
           "revision",
           "deactivate",
-          "--ids",
-          policy.resources[name],
+          ...containerAppTargetArgs(policy.resources[name]),
           "--revision",
           revision.name,
           "--only-show-errors",

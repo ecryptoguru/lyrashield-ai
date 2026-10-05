@@ -232,3 +232,14 @@ test("backup safe compatibility normalization preserves endpoint identity and re
   ])
     assert.throws(() => normalizeBackupConnection(url + suffix))
 })
+test("Azure inventory always includes inactive revisions and uses supported fixed target flags", async () => {
+  const { revisionListArgs, containerAppTargetArgs } =
+    await import("./webhook-empty-state-azure-target.mjs")
+  const resource =
+    "/subscriptions/b2f8f58b-18f5-4e49-ac53-06ea04ff0f4c/resourceGroups/LyraShieldAI/providers/Microsoft.App/containerApps/lyrashield-app"
+  const args = revisionListArgs(resource)
+  assert.equal(args.includes("--all"), true)
+  assert.equal(args.includes("--ids"), false)
+  assert.equal(args[args.indexOf("--name") + 1], "lyrashield-app")
+  assert.throws(() => containerAppTargetArgs(resource.replace("lyrashield-app", "foreign-app")))
+})

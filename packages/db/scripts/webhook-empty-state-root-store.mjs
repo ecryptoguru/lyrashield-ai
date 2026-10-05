@@ -99,6 +99,7 @@ export function atomicRootWrite(path, value) {
   }
 }
 const COMPONENTS = [
+  "ops/worker/webhook-empty-state-azure-target.mjs",
   "ops/worker/webhook-empty-state-producer.mjs",
   "ops/worker/webhook-empty-state-observer.mjs",
   "ops/worker/webhook-empty-state-admission.mjs",

@@ -1,3 +1,4 @@
+import { containerAppTargetArgs } from "./webhook-empty-state-azure-target.mjs"
 import { spawnSync } from "node:child_process"
 import {
   runtimeFingerprint,
@@ -23,8 +24,7 @@ export function collectPreparedCandidateFingerprint(policy, role) {
       "containerapp",
       "revision",
       "show",
-      "--ids",
-      policy.resources[role],
+      ...containerAppTargetArgs(policy.resources[role]),
       "--revision",
       revision,
       "-o",
@@ -45,7 +45,7 @@ export function collectPreparedCandidateFingerprint(policy, role) {
   )
   const resource = read(
     "/usr/bin/az",
-    ["containerapp", "show", "--ids", policy.resources[role], "-o", "json"],
+    ["containerapp", "show", ...containerAppTargetArgs(policy.resources[role]), "-o", "json"],
     true
   )
   const environment = {},

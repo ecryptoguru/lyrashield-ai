@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { containerAppTargetArgs } from "./webhook-empty-state-azure-target.mjs"
 import { spawnSync } from "node:child_process"
 import {
   readFileSync,
@@ -66,8 +67,7 @@ try {
         "containerapp",
         "revision",
         "show",
-        "--ids",
-        policy.resources[name],
+        ...containerAppTargetArgs(policy.resources[name]),
         "--revision",
         revision,
         "-o",
@@ -84,8 +84,7 @@ try {
       "containerapp",
       "revision",
       "activate",
-      "--ids",
-      policy.resources[name],
+      ...containerAppTargetArgs(policy.resources[name]),
       "--revision",
       revision,
       "--only-show-errors",
@@ -95,8 +94,7 @@ try {
       "ingress",
       "traffic",
       "set",
-      "--ids",
-      policy.resources[name],
+      ...containerAppTargetArgs(policy.resources[name]),
       "--revision-weight",
       `${revision}=100`,
       "--only-show-errors",
