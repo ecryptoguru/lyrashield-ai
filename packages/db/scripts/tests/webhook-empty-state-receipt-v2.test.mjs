@@ -127,6 +127,7 @@ function fixture() {
       inFlightHandlers: 0,
       trackRows: 0,
       unresolvedParents: 0,
+      unknownWriters: 0,
       candidate: image,
       fallback: image,
       backup,
@@ -322,4 +323,19 @@ test("official verifier CLI arguments omit conflicting signer identity and custo
     "--bundle",
   ])
     assert.equal(args.includes(rejected), false)
+})
+test("live observations between SQL phases reject changed admission or revived writers", () => {
+  for (const mutate of [
+    (r) => (r.evidence.redis.owner = "999:1"),
+    (r) => (r.evidence.redis.valueSha256 = "c".repeat(64)),
+    (r) => (r.evidence.writers[0].revisions[0].active = true),
+    (r) => (r.evidence.queues.fixGenerate.counts.delayed = 1),
+    (r) => (r.evidence.unknownWriters = 1),
+  ]) {
+    const { receipt, policy } = fixture()
+    assert.match(validateReceipt(receipt, policy, now).authorizationSha256, /^[a-f0-9]{64}$/)
+    const live = structuredClone(receipt)
+    mutate(live)
+    assert.throws(() => validateReceipt(live, policy, now))
+  }
 })

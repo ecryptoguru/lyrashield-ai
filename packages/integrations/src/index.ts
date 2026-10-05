@@ -94,4 +94,9 @@ export {
   webhookTrackRetryJobId,
   type WebhookTrackRetryJobData,
 } from "./queue"
-export { FIX_GENERATE_QUEUE_NAME, enqueueFixGenerate, type FixGenerateJobData } from "./queue"
+export {
+  FIX_GENERATE_QUEUE_NAME,
+  getFixGenerateQueue,
+  enqueueFixGenerate,
+  type FixGenerateJobData,
+} from "./queue"

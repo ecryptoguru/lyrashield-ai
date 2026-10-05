@@ -60,7 +60,7 @@ test("raw SQL sees soft-deleted scheduling state and collects all three queues/s
   const client = {
     query: async (query) => {
       sql = query
-      return { rows: [{ scans: "0", handlers: "0", tracks: "0", parents: "1" }] }
+      return { rows: [{ scans: "0", handlers: "0", tracks: "0", parents: "1", writers: "0" }] }
     },
   }
   const queues = Object.fromEntries(

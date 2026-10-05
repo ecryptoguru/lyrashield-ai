@@ -129,6 +129,7 @@ export function validateReceipt(receipt, policy, now = Date.now()) {
       "inFlightHandlers",
       "trackRows",
       "unresolvedParents",
+      "unknownWriters",
       "candidate",
       "fallback",
       "backup",
@@ -256,6 +257,7 @@ export function validateReceipt(receipt, policy, now = Date.now()) {
       evidence.inFlightHandlers,
       evidence.trackRows,
       evidence.unresolvedParents,
+      evidence.unknownWriters,
     ].every((value) => value === 0),
     "Scheduling or unresolved parent state is nonempty"
   )

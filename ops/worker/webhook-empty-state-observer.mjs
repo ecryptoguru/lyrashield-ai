@@ -64,10 +64,11 @@ export async function schedulingObservation(client, queues) {
     (SELECT count(*)::text FROM public."Scan" WHERE status IN ('QUEUED','PREFLIGHT','RUNNING','VERIFYING','REQUIRES_APPROVAL')) AS scans,
     (SELECT count(*)::text FROM public."WebhookEventTrack" WHERE status='processing') AS handlers,
     (SELECT count(*)::text FROM public."WebhookEventTrack") AS tracks,
-    (SELECT count(*)::text FROM public."WebhookEvent" WHERE processed=false) AS parents`)
+    (SELECT count(*)::text FROM public."WebhookEvent" WHERE processed=false) AS parents,
+    (SELECT count(*)::text FROM pg_stat_activity WHERE datname=current_database() AND backend_type='client backend' AND pid<>pg_backend_pid() AND application_name<>'lyrashield-empty-state-migration' AND usename NOT IN ('supabase_admin','pgbouncer','authenticator')) AS writers`)
   const row = result.rows[0]
   const counts = Object.fromEntries(
-    ["scans", "handlers", "tracks", "parents"].map((name) => {
+    ["scans", "handlers", "tracks", "parents", "writers"].map((name) => {
       requireValue(/^[0-9]+$/.test(row[name]), "Invalid raw scheduling count")
       const value = Number(row[name])
       requireValue(Number.isSafeInteger(value), "Unbounded scheduling count")
@@ -89,6 +90,7 @@ export async function schedulingObservation(client, queues) {
     inFlightHandlers: counts.handlers,
     trackRows: counts.tracks,
     unresolvedParents: counts.parents,
+    unknownWriters: counts.writers,
     queues: snapshot,
   }
 }
