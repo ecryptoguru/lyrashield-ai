@@ -166,4 +166,17 @@ describe("Lite Check marketing surface", () => {
     expect(page).toContain('sessionStorage.getItem("lyrashield-lite-target")')
     expect(page).toContain("scanForm?.requestSubmit()")
   })
+
+  it("makes no unmeasured timing claim about how long a scan takes", () => {
+    // Founder ruling D11: no timing claim that nothing in the repo measures.
+    // The Lite Check heading said "in 30 seconds" and the /scan lede said
+    // "Results in seconds"; neither had a measured value behind it.
+    const surfaces = [homeScan, page, home, motionManifest]
+    for (const surface of surfaces) {
+      expect(surface).not.toMatch(/\b(?:in|within)\s+\d+\s+(?:second|minute|hour)s?\b/i)
+      expect(surface).not.toMatch(/\b\d+-(?:second|minute|hour)\b/i)
+      expect(surface).not.toMatch(/results in seconds|under a minute/i)
+    }
+    expect(homeScan).toContain("See your app&apos;s gaps. Free, no signup.")
+  })
 })

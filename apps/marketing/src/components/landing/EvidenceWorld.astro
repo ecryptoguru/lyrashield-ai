@@ -327,10 +327,6 @@ const { manifest } = Astro.props
     font-family: "JetBrains Mono Variable", monospace;
   }
 
-  .evidence-world__points li {
-    justify-content: flex-start;
-  }
-
   .evidence-world__points li::before {
     width: 0.35rem;
     height: 0.35rem;
@@ -430,6 +426,17 @@ const { manifest } = Astro.props
     align-items: center;
     justify-content: flex-end;
     gap: 0.75rem;
+  }
+
+  /* Chapters alternate sides. Even chapters sit right-aligned, so their list
+     rows are pushed to the right edge to match the copy above them. Odd
+     chapters are left cards, so their rows must read from the left — the
+     generic `justify-content: flex-end` on `.evidence-world__copy li` below
+     used to win here (equal specificity, declared later), which right-aligned
+     the bullets inside a left-aligned card. The mobile block below still
+     forces every row left at <=767px, where all cards are left-aligned. */
+  .evidence-world__chapter:nth-child(odd) .evidence-world__points li {
+    justify-content: flex-start;
   }
 
   .evidence-world__copy li i,

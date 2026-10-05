@@ -756,7 +756,7 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
   }
 
   :global(:root[data-theme="light"]) .premium-hero__primary {
-    color: #ffffff;
+    color: #ffffff; /* 4.86:1 on #087f78 */
     background: #087f78;
     box-shadow: 0 0.8rem 2.5rem rgba(8, 127, 120, 0.18);
   }
@@ -778,6 +778,57 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
 
   :global(:root[data-theme="light"]) .premium-hero__artifact-title {
     color: #102235;
+  }
+
+  /* The URL field and the sample-card finding rows carried dark-theme colours
+     with no light override, so on the light hero the "Public app URL" label and
+     the consent sentence sat near 1.6:1 on #eef6fa, the input stayed a heavy
+     dark box and the two finding titles were near-white on the white card.
+     Every colour below clears 4.5:1 against the surface it actually renders on. */
+  :global(:root[data-theme="light"]) .premium-hero__field-label {
+    color: #3c5568; /* 7.13:1 on #eef6fa */
+  }
+
+  :global(:root[data-theme="light"]) .premium-hero__field-input {
+    border-color: rgba(8, 127, 120, 0.35);
+    color: #102235; /* 16.13:1 on #ffffff */
+    background: #ffffff;
+  }
+
+  :global(:root[data-theme="light"]) .premium-hero__field-input::placeholder {
+    color: #5f7081; /* 5.10:1 on #ffffff */
+  }
+
+  /* The dark theme's amber focus ring reaches only 1.62:1 on the light hero, so
+     the light theme reuses the darkened teal already used for the hero link. */
+  :global(:root[data-theme="light"]) .premium-hero__field-input:focus-visible {
+    border-color: #087f78;
+    outline: 3px solid #076c66;
+  }
+
+  :global(:root[data-theme="light"]) .premium-hero__field-consent {
+    color: #40596c; /* 6.70:1 on #eef6fa */
+  }
+
+  :global(:root[data-theme="light"]) .premium-hero__field-consent a {
+    color: #076c66; /* 5.74:1 on #eef6fa */
+  }
+
+  :global(:root[data-theme="light"]) .premium-hero__field-status {
+    color: #3c5568; /* 7.13:1 on #eef6fa */
+  }
+
+  :global(:root[data-theme="light"]) .premium-hero__field-error {
+    color: #b42318; /* 6.01:1 on #eef6fa */
+  }
+
+  :global(:root[data-theme="light"]) .premium-hero__artifact-findings li {
+    color: #102235; /* 15.96:1 on the light card */
+  }
+
+  :global(:root[data-theme="light"]) .premium-hero__artifact-state {
+    border-color: rgba(8, 127, 120, 0.42);
+    color: #087f78;
   }
 
   @media (max-width: 720px) {
