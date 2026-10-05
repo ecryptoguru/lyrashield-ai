@@ -537,7 +537,7 @@ test("an invalid report fails closed while all required routes are still measure
     "https://lyrashieldai.com/webmcp",
   ])
   assert.equal(Object.keys(reports).length, LIGHTHOUSE_PAGES.length)
-  assert.deepEqual(reports._scan, [])
+  assert.equal(reports._scan[0].collectionFailure.code, "INVALID_REPORT")
   assert.equal(evaluateLighthouseReports(reports).failed, true)
   assert.ok(
     existsSync(

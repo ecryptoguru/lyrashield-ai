@@ -405,11 +405,10 @@ export async function collectLighthouseReports({
       const representative =
         successfulSamples.find((entry) => entry && !entry.runtimeError) ?? successfulSamples[0]
       writeFileSync(finalPath, JSON.stringify(representative, null, 2) + "\n")
-      reports[page.name] = samples
     } else {
       rmSync(finalPath, { force: true })
-      reports[page.name] = []
     }
+    reports[page.name] = samples
 
     writeFileSync(
       samplesPath,
