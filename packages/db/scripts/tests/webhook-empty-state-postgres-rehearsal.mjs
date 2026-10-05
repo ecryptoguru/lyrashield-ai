@@ -3,6 +3,7 @@ import { createHash, generateKeyPairSync, randomBytes, randomUUID, sign as signB
 import { readFileSync, readdirSync } from "node:fs"
 import { resolve } from "node:path"
 import { fileURLToPath } from "node:url"
+import { spawnSync } from "node:child_process"
 import { Client } from "pg"
 import { createDisposablePostgresClient, EXPECTED_EMPTY_MIGRATIONS, hashDatabaseIdentity } from "../webhook-empty-state-contract.mjs"
 import { runEmptyStateMigration } from "../webhook-empty-state-migration.mjs"
@@ -221,6 +222,19 @@ function crashAt(phase) {
   return async (seen) => { if (seen === phase) throw new Error("simulated process crash after " + phase) }
 }
 
+async function waitForActivity(applicationName, predicate, timeoutMs = 5_000) {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    const result = await admin.query(
+      "SELECT wait_event_type, wait_event FROM pg_stat_activity WHERE application_name=$1",
+      [applicationName],
+    )
+    if (result.rows.length && predicate(result.rows[0])) return result.rows[0]
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 25))
+  }
+  assert.fail("Timed out waiting for PostgreSQL activity: " + applicationName)
+}
+
 const env = makeEnvironment()
 await prepareBaseline({ processedEvents: true })
 const first = await runEmptyStateMigration({ env })
@@ -256,6 +270,78 @@ for (const phase of ["core-committed", "index-intent", "index-created", "operato
   const resumed = await runEmptyStateMigration({ env: phaseEnv })
   assert.equal(resumed.status, "complete", "retry must recover after " + phase)
   assert.equal((await marker()).state, "complete")
+}
+
+await prepareBaseline()
+const raceWriter = new Client({ connectionString: runnerDatabaseUrl, application_name: "lyrashield-empty-state-concurrent-writer" })
+await raceWriter.connect()
+await raceWriter.query("BEGIN")
+await raceWriter.query('INSERT INTO public."WebhookEvent"(id,processed) VALUES ($1,false)', ["race-parent"])
+await raceWriter.query(
+  'INSERT INTO public."WebhookEventTrack"(id,"webhookEventId",track,status,"updatedAt") VALUES ($1,$2,$3,$4,now())',
+  ["race-track", "race-parent", "billing", "pending"],
+)
+const raceEnvironment = makeEnvironment()
+const raceMigration = runEmptyStateMigration({ env: raceEnvironment })
+await waitForActivity("lyrashield-empty-state-migration", (activity) => activity.wait_event_type === "Lock")
+await raceWriter.query("COMMIT")
+await raceWriter.end()
+await assert.rejects(raceMigration, /WebhookEventTrack contains rows/)
+assert.equal(await hasColumn("nextAttemptAtUtc"), false, "a writer that wins the lock race must block all migration DDL")
+const racedRow = await admin.query('SELECT count(*)::integer AS count FROM public."WebhookEventTrack" WHERE id=$1', ["race-track"])
+assert.equal(racedRow.rows[0].count, 1, "the concurrent writer's committed work must remain intact")
+const raceHistory = await admin.query('SELECT count(*)::integer AS count FROM public."_prisma_migrations" WHERE migration_name = ANY($1::text[])', [EXPECTED_EMPTY_MIGRATIONS.map((migration) => migration.name)])
+assert.equal(raceHistory.rows[0].count, 0, "the runner must not reconcile migration history after losing the empty-state race")
+
+await prepareBaseline()
+const killedEnvironment = makeEnvironment()
+let killedCoreBackend = false
+await assert.rejects(
+  runEmptyStateMigration({
+    env: killedEnvironment,
+    faultInjector: async (phase, client) => {
+      if (phase !== "core-transaction-after-sql") return
+      const backend = await client.query("SELECT pg_backend_pid() AS pid")
+      const termination = await admin.query("SELECT pg_terminate_backend($1) AS terminated", [backend.rows[0].pid])
+      assert.equal(termination.rows[0].terminated, true, "the rehearsal must terminate the migration backend inside the open transaction")
+      killedCoreBackend = true
+    },
+  }),
+  /terminat|connection.*closed|connection.*terminated/i,
+)
+assert.equal(killedCoreBackend, true, "backend termination must happen inside the core migration transaction")
+assert.equal(await hasColumn("nextAttemptAtUtc"), false, "terminating the backend inside the core transaction must roll back its DDL")
+const killedHistory = await admin.query('SELECT count(*)::integer AS count FROM public."_prisma_migrations" WHERE migration_name = ANY($1::text[])', [EXPECTED_EMPTY_MIGRATIONS.map((migration) => migration.name)])
+assert.equal(killedHistory.rows[0].count, 0, "a killed core transaction must not create Prisma history")
+assert.equal(await marker(), null, "a killed core transaction must not persist its progress marker")
+
+for (const migration of EXPECTED_EMPTY_MIGRATIONS) {
+  await prepareBaseline()
+  const resolveEnvironment = makeEnvironment()
+  let interrupted = false
+  await assert.rejects(
+    runEmptyStateMigration({
+      env: resolveEnvironment,
+      prismaResolve: (command, args, options, resolvedMigration) => {
+        const result = spawnSync(command, args, options)
+        if (!interrupted && resolvedMigration === migration.name && !result.error && result.status === 0) {
+          interrupted = true
+          return { ...result, status: 1, error: new Error("simulated lost acknowledgement after Prisma resolve " + migration.name) }
+        }
+        return result
+      },
+    }),
+    new RegExp("simulated lost acknowledgement after Prisma resolve " + migration.name),
+  )
+  assert.equal(interrupted, true, "the test must interrupt immediately after the selected Prisma resolve")
+  const persisted = await admin.query('SELECT checksum,finished_at FROM public."_prisma_migrations" WHERE migration_name=$1', [migration.name])
+  assert.equal(persisted.rows.length, 1, "Prisma's applied record must have committed before the acknowledgement is lost")
+  assert.equal(persisted.rows[0].checksum, migration.sha256)
+  assert.ok(persisted.rows[0].finished_at)
+  const recovered = await runEmptyStateMigration({ env: resolveEnvironment })
+  assert.equal(recovered.status, "complete", "retry must recognize the already applied migration " + migration.name)
+  const duplicateCheck = await admin.query('SELECT count(*)::integer AS count FROM public."_prisma_migrations" WHERE migration_name=$1', [migration.name])
+  assert.equal(duplicateCheck.rows[0].count, 1, "retry must not create a duplicate history row for " + migration.name)
 }
 
 await prepareBaseline()
@@ -347,6 +433,42 @@ await expectFailure(foreignMarkerEnv, /does not match this run/)
   await expectFailure(malformedIndexEnv, /does not match the required definition/)
   const indexHistory = await admin.query('SELECT count(*)::integer AS count FROM public."_prisma_migrations" WHERE migration_name=$1', [EXPECTED_EMPTY_MIGRATIONS[2].name])
   assert.equal(indexHistory.rows[0].count, 0, "malformed index must stop before migration-history reconciliation")
+
+await prepareBaseline()
+const invalidIndexEnv = makeEnvironment()
+await expectFailure(invalidIndexEnv, /simulated process crash after index-intent/, { faultInjector: crashAt("index-intent") })
+await admin.query('INSERT INTO public."WebhookEvent"(id,processed) VALUES ($1,true),($2,true)', ["duplicate-index-parent-a", "duplicate-index-parent-b"])
+await admin.query(
+  'INSERT INTO public."WebhookEventTrack"(id,"webhookEventId",track,status,"nextAttemptAtUtc","updatedAt") VALUES ' +
+  '($1,$2,$3,$4,$5::timestamptz,now()),($6,$7,$8,$9,$5::timestamptz,now())',
+  ["duplicate-index-track-a", "duplicate-index-parent-a", "billing", "pending", "2026-10-01T00:00:00.000Z", "duplicate-index-track-b", "duplicate-index-parent-b", "license", "pending"],
+)
+await assert.rejects(
+  admin.query('CREATE UNIQUE INDEX CONCURRENTLY "WebhookEventTrack_status_nextAttemptAtUtc_idx" ON public."WebhookEventTrack" (status, "nextAttemptAtUtc")'),
+  /could not create unique index|duplicate key value/i,
+)
+const invalidIndex = await admin.query(
+  'SELECT i.indisvalid AS valid, i.indisready AS ready, i.indisunique AS unique FROM pg_class idx ' +
+  'JOIN pg_index i ON i.indexrelid=idx.oid WHERE idx.oid=to_regclass($1)',
+  ['public."WebhookEventTrack_status_nextAttemptAtUtc_idx"'],
+)
+assert.equal(invalidIndex.rows[0]?.valid, false, "failed concurrent uniqueness validation must leave an invalid index")
+assert.equal(invalidIndex.rows[0]?.unique, true, "the invalid index fixture must preserve its unique build definition")
+await expectFailure(invalidIndexEnv, /Existing webhook UTC index is invalid; reviewed repair is required/)
+const invalidIndexHistory = await admin.query('SELECT count(*)::integer AS count FROM public."_prisma_migrations" WHERE migration_name=$1', [EXPECTED_EMPTY_MIGRATIONS[2].name])
+assert.equal(invalidIndexHistory.rows[0].count, 0, "invalid index must stop before Prisma records the index migration")
+const duplicateRows = await admin.query('SELECT count(*)::integer AS count FROM public."WebhookEventTrack" WHERE id LIKE $1', ["duplicate-index-track-%"])
+assert.equal(duplicateRows.rows[0].count, 2, "invalid-index handling must retain all work for operator review")
+await admin.query('DROP INDEX CONCURRENTLY public."WebhookEventTrack_status_nextAttemptAtUtc_idx"')
+await admin.query('DELETE FROM public."WebhookEventTrack" WHERE id LIKE $1', ["duplicate-index-track-%"])
+await admin.query('DELETE FROM public."WebhookEvent" WHERE id LIKE $1', ["duplicate-index-parent-%"])
+assert.equal((await runEmptyStateMigration({ env: invalidIndexEnv })).status, "complete", "an operator-repaired index may be safely rebuilt and reconciled")
+const repairedIndex = await admin.query(
+  'SELECT i.indisvalid AS valid, i.indisready AS ready, i.indisunique AS unique FROM pg_class idx ' +
+  'JOIN pg_index i ON i.indexrelid=idx.oid WHERE idx.oid=to_regclass($1)',
+  ['public."WebhookEventTrack_status_nextAttemptAtUtc_idx"'],
+)
+assert.deepEqual(repairedIndex.rows[0], { valid: true, ready: true, unique: false }, "recovery must produce the exact nonunique concurrent index")
 
 await prepareBaseline()
 const legacyDriftEnv = makeEnvironment()
