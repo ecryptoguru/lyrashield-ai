@@ -656,7 +656,7 @@ for (const scenario of collectionScenarios) {
         if (fixture === "throw") throw new Error("Chrome terminated unexpectedly")
         if (fixture === "NO_NAVSTART") {
           return {
-            report: reportWithoutScores({ code: "NO_NAVSTART" }),
+            report: null,
             diagnostic: "NO_NAVSTART",
             exitCode: 1,
           }
@@ -689,6 +689,20 @@ for (const scenario of collectionScenarios) {
       readFileSync(path.join(reportsDir, "lyrashield-lighthouse_.samples.json"), "utf8")
     )
     assert.equal(samplesRecord.collectionFailures[0].code, scenario.failureCode)
+    assert.equal(samplesRecord.attempted, reports._.length)
+    assert.equal(samplesRecord.sampled, reports._.length - 1)
+    const failedSampleNumber = reports._.length
+    const attemptsDir = path.join(reportsDir, "attempts")
+    const attemptCount = scenario.failureCode === "NO_NAVSTART" ? 2 : 1
+    for (let attempt = 1; attempt <= attemptCount; attempt += 1) {
+      const stem = "lyrashield-lighthouse_.sample-" + failedSampleNumber + ".attempt-" + attempt
+      const metadata = JSON.parse(
+        readFileSync(path.join(attemptsDir, stem + ".metadata.json"), "utf8")
+      )
+      assert.equal(metadata.reportParsed, false)
+      assert.equal(metadata.exitCode, 1)
+      assert.ok(readFileSync(path.join(attemptsDir, stem + ".diagnostic.txt"), "utf8").length > 0)
+    }
     assert.equal(evaluateLighthouseReports(reports).failed, true)
     for (const page of LIGHTHOUSE_PAGES.slice(1)) {
       assert.equal(reports[page.name].length, 2, page.path + " retains both successful samples")
