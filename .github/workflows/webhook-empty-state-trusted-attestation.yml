@@ -129,7 +129,8 @@ jobs:
         run: echo 'Empty-state cutover failed. Retain owned admission and startup fence; no legacy rollback, queue deletion or payment replay.' >> "$GITHUB_STEP_SUMMARY"
 
   disposable-issuance:
-    if: ${{ inputs.disposable_only == true }}
+    # Review/publication only: numeric run IDs cannot equal this sentinel.
+    if: ${{ github.run_id == 'disabled-until-owner-approved-disposable-attestation' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
