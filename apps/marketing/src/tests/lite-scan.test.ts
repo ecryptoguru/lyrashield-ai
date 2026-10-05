@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs"
+import { readdirSync, readFileSync } from "node:fs"
 import { describe, expect, it } from "vitest"
 import { normalizePublicHttpUrl } from "../lib/public-url"
 
@@ -169,14 +169,45 @@ describe("Lite Check marketing surface", () => {
 
   it("makes no unmeasured timing claim about how long a scan takes", () => {
     // Founder ruling D11: no timing claim that nothing in the repo measures.
-    // The Lite Check heading said "in 30 seconds" and the /scan lede said
-    // "Results in seconds"; neither had a measured value behind it.
-    const surfaces = [homeScan, page, home, motionManifest]
-    for (const surface of surfaces) {
-      expect(surface).not.toMatch(/\b(?:in|within)\s+\d+\s+(?:second|minute|hour)s?\b/i)
-      expect(surface).not.toMatch(/\b\d+-(?:second|minute|hour)\b/i)
-      expect(surface).not.toMatch(/results in seconds|under a minute/i)
+    // The Lite Check heading said "in 30 seconds", the /scan lede said
+    // "Results in seconds" and the Claude Code guide said setup took "under
+    // two minutes"; none had a measured value behind it. Scanned across the
+    // whole marketing source rather than a fixed file list so a new page
+    // cannot reintroduce the pattern. Blog posts are excluded: they describe
+    // third-party tools and their own measurements.
+    const timing = [
+      /\b(?:in|within)\s+\d+\s+(?:second|minute|hour)s?\b/i,
+      // Only the second form: a real "30-minute walkthrough" or a "4,500-minute
+      // pool" describes a quantity, not scan speed.
+      /\b\d+-second\b/i,
+      /\bin\s+(?:a\s+few\s+|several\s+)?(?:seconds|minutes)\b/i,
+      /\bin\s+under\s+\w+/i,
+      /\bresults?\s+in\s+seconds\b/i,
+      /\bunder\s+a\s+minute\b/i,
+      /\binstantly\b/i,
+    ]
+    const root = new URL("../", import.meta.url)
+    const walk = (dir: URL): string[] =>
+      readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+        const child = new URL(`${entry.name}${entry.isDirectory() ? "/" : ""}`, dir)
+        if (entry.isDirectory()) {
+          if (["content", "tests"].includes(entry.name)) return []
+          return walk(child)
+        }
+        return /\.(astro|ts|tsx|md|mdx)$/.test(entry.name) && entry.name !== "lite-scan.test.ts"
+          ? [child.pathname]
+          : []
+      })
+
+    const offenders: string[] = []
+    for (const file of walk(root)) {
+      const source = readFileSync(file, "utf8")
+      for (const pattern of timing) {
+        const hit = source.match(pattern)
+        if (hit) offenders.push(`${file.replace(root.pathname, "")}: ${hit[0]}`)
+      }
     }
+    expect(offenders, "unmeasured timing claims").toEqual([])
     expect(homeScan).toContain("See your app&apos;s gaps. Free, no signup.")
   })
 })
