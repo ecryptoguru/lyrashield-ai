@@ -22,7 +22,7 @@ Reduce false positives by checking the reported source, sink, data path, configu
 
 A busy results page does not tell you whether a scanner is inaccurate. It may contain duplicate paths, findings against unreachable code, deliberate test fixtures or several valid observations caused by one defect. Closing alerts until the queue looks manageable improves the display, not necessarily the detection process.
 
-The [LyraShield AI guide to security for vibe-coded applications](/blog/vibe-coding-security-guide) separates detection from independent verification. That distinction matters here. A candidate can be plausible and still not apply to the running system. It can also look harmless in one file while becoming exploitable through configuration or another call path.
+The [LyraShield AI guide to security for vibe-coded applications](/blog/vibe-coding-security-guide) separates detection from retest. That distinction matters here. A candidate can be plausible and still not apply to the running system. It can also look harmless in one file while becoming exploitable through configuration or another call path.
 
 [NIST IR 8165](https://doi.org/10.6028/NIST.IR.8165) describes software verification tools as having different strengths, weaknesses and classes of results. Treating one scanner verdict as complete proof ignores that basic limitation. Your goal is not zero alerts. It is a review process that keeps applicable findings visible and makes inapplicable results explainable.
 
@@ -45,7 +45,7 @@ This is also how you find true positives that initially look noisy. A sanitizer 
 
 ## Verify with a different kind of evidence
 
-Do not call a second model's agreement independent verification. Use evidence that tests the underlying claim: a focused unit or integration test, a data-flow review, a safe request against an authorized test environment, a package inventory or a provider check that does not disclose the secret.
+Do not call a second model's agreement a retest. Use evidence that tests the underlying claim: a focused unit or integration test, a data-flow review, a safe request against an authorized test environment, a package inventory or a provider check that does not disclose the secret.
 
 The [critical finding response guide](/blog/critical-security-finding-response) shows how to preserve the original candidate while confirming applicability. The short version is to state the precondition, perform a bounded check, retain the result and describe what the check could not establish.
 

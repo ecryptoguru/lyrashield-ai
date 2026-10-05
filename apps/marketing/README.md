@@ -5,7 +5,7 @@ Astro 7 marketing site for LyraShield AI. Lives at `apps/marketing` in the monor
 ## Public claim boundary
 
 - Position LyraShield AI as evidence-backed release assurance for AI-built software, not as a generic AI scanner.
-- Distinguish detected risks, independently verified findings, and retest-confirmed fixes.
+- Distinguish detected risks, retest-confirmed fixes and inconclusive results.
 - Describe scanner coverage and limitations explicitly; do not imply every control ran or every finding was verified.
 - PR execution remains fail-closed until a server-generated patch can be bound to an exact approval.
 - The public route set includes `/methodology`, which is the canonical explanation of evidence states, coverage, and non-claims. Keep homepage, tools, blog, and social copy aligned with it.

@@ -22,7 +22,7 @@ Assign one incident owner and contain credible active risk without waiting for p
 
 A scanner's severity rating is useful, but it does not prove that the condition applies, is reachable or has been exploited. Before anyone announces an incident or merges an emergency patch, establish what the tool observed and what remains an assumption.
 
-The [LyraShield AI security guide for vibe-coded applications](/blog/vibe-coding-security-guide) separates a detected candidate from an independently verified finding, a retest-confirmed outcome and an inconclusive result. That vocabulary keeps the response tied to the available evidence.
+The [LyraShield AI security guide for vibe-coded applications](/blog/vibe-coding-security-guide) separates a detected candidate, a retest-confirmed outcome and an inconclusive result. That vocabulary keeps the response tied to the available evidence.
 
 [NIST SP 800-61 Rev. 3](https://csrc.nist.gov/pubs/sp/800/61/r3/final) integrates incident response with risk management and treats detection, response, recovery and later improvement as connected work. [CISA's SSVC guide](https://www.cisa.gov/sites/default/files/publications/cisa-ssvc-guide%20508c.pdf) adds decision context such as exploitation status, technical impact, mission prevalence and public or safety impact. Neither approach says to sort solely by a severity number.
 
@@ -71,7 +71,7 @@ Review:
 - logs for the affected action, using approved access and retention procedures;
 - adjacent systems that share the same component or credential.
 
-The related guide to [verifying a security finding](/blog/verify-security-finding) covers this evidence step in more depth. A second model repeating the alert is not independent verification.
+The related guide to [verifying a security finding](/blog/verify-security-finding) covers this evidence step in more depth. A second model repeating the alert is not a retest.
 
 Check the [CISA Known Exploited Vulnerabilities Catalog](https://www.cisa.gov/known-exploited-vulnerabilities-catalog) when the issue involves a published CVE. Presence in KEV raises urgency only if the affected product and version apply. Absence from KEV does not show that exploitation is impossible.
 

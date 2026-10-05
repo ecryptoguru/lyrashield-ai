@@ -11,7 +11,7 @@ faq:
   - q: How do I store MCP tokens securely in Cursor?
     a: Use .cursor/mcp.json with env var interpolation and never commit raw tokens. Reference secrets with env var interpolation and load them from your shell or secret manager at runtime.
   - q: When should I run SARIF upload for Cursor built code?
-    a: Upload SARIF on every pull request and on main branch builds. Keep the SARIF artifact for release evidence and review verified findings before merging.
+    a: Upload SARIF on every pull request and on main branch builds. Keep the SARIF artifact for release evidence and review retest-confirmed findings before merging.
   - q: Do Cursor rules replace code review?
     a: No. Rules guide behavior but do not enforce security. Pair rules with dependency scanning, secret scanning and an external verification step.
   - q: Where does Cursor store MCP server config?
