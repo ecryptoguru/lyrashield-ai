@@ -20,7 +20,7 @@ faq:
     a: "Keep it unverified when the target version is uncertain, the cited path cannot be inspected, required context is missing, safe reproduction is blocked or the only support is the original detector, a confidence score or another model's opinion."
 ---
 
-**Direct answer:** Confirm that the finding names the tested version and an in-scope component. Inspect the exact code or request path, identify its prerequisites and reproduce the condition with minimum effect in an owned environment. Verify the asserted impact, then retain evidence from a method independent of the original assertion before labeling the finding independently verified.
+**Direct answer:** Confirm that the finding names the tested version and an in-scope component. Inspect the exact code or request path, identify its prerequisites and reproduce the condition with minimum effect in an owned environment. Verify the asserted impact, then retain evidence from a method independent of the original assertion before labeling the finding retest-confirmed.
 
 A scanner alert is a claim. So is an AI review comment or a human note. The claim can be important before it is verified, but its severity label, confidence score and polished explanation do not establish that the condition exists.
 
@@ -99,7 +99,7 @@ Independent does not always mean a different person. It means the verification e
 
 A deterministic integration test can independently support an AI-generated candidate. A qualified reviewer who traces the complete authorization path can support a scanner alert. A controlled runtime request can support a static data-flow report. The method must be capable of observing the claimed condition.
 
-Running the same scanner again with the same rule can establish repeatability, but it does not remove the rule's original assumption. Asking a second model to agree with the first is still model-generated opinion. A high-confidence restatement is not a verification receipt.
+Running the same scanner again with the same rule can establish repeatability, but it does not remove the rule's original assumption. Asking a second model to agree with the first is still model-generated opinion. A high-confidence restatement is not a retest.
 
 Sometimes safe independent evidence is unavailable. The environment may not exist, authorization may be missing or the feature may depend on a third party. Keep the state detected but unverified and record the blocker. Do not force a binary result.
 
@@ -115,15 +115,15 @@ Label inferred impact. If the test demonstrates unauthorized metadata access but
 
 Useful states include:
 
-- **Detected, unverified:** a credible assertion exists, but independent evidence is not complete.
-- **Independently verified:** separate evidence supports the condition under recorded prerequisites.
+- **Detected, unverified:** a credible assertion exists, but supporting evidence is not complete.
+- **Inconclusive:** the available evidence cannot settle the condition either way.
 - **Blocked:** verification cannot proceed because a named dependency, environment or authorization is missing.
 - **Duplicate:** another finding covers the same root cause and affected scope.
 - **False positive:** evidence shows the asserted condition does not apply to the target, with rationale retained.
 
 Accepted risk is a treatment decision after the condition and context are understood. It is not a verification result. Likewise, remediation and retesting happen after initial verification. Keep those stages separate so the record shows what was detected, what was proven, what changed and what a fresh retest observed.
 
-The LyraShield AI [methodology](/methodology) uses exact evidence states. Confidence remains triage metadata. Independently verified requires a separate verification receipt. A clean deterministic retest with complete applicable originating coverage can be retest-confirmed, but that is not the same as independent verification. Incomplete or engine-only absence remains inconclusive under the repository contract.
+The LyraShield AI [methodology](/methodology) uses exact evidence states. Confidence remains triage metadata. A scanner signal stays detected until such a check runs, and only a clean deterministic retest with complete applicable originating coverage produces a retest-confirmed state. Incomplete or engine-only absence remains inconclusive under the repository contract.
 
 The browser-local [AI app security checklist](/tools/ai-app-security-checklist) can help assign owners for validation and retesting. It does not inspect a finding, run a reproduction or issue verification evidence. For independent test design, continue with [security tests for AI-generated code](/blog/ai-generated-tests-security). For architecture context, use [human review and threat modeling](/blog/human-review-threat-model-vibe-coding).
 

@@ -25,7 +25,7 @@ Do not publish an ad hoc article outside the manifest. The twelve defined releas
 ## Non-negotiable claim rules
 
 1. Never mention the upstream engine or publish pricing, customer, benchmark, accuracy, or false-positive claims without approved evidence.
-2. Keep detected, independently verified, retest-confirmed, and inconclusive states distinct. Confidence is triage metadata, not proof.
+2. Keep detected, retest-confirmed and inconclusive states distinct. Confidence is triage metadata, not proof.
 3. Do not imply automatic PR execution. A fix proposal remains approval-bound, and PR execution remains fail-closed until a server-generated patch is bound to the exact approval. Describe this as **"approval-gated"** or **"not unattended fixes"** — never "automatic fixes" or "automatic PR". Both phrases are hard-blocked by `PROHIBITED_CLAIMS` in `apps/marketing/scripts/blog-validation-lib.mjs`, and the regex has no concept of negation: a disclaimer sentence like _"proposals requiring review, not automatic fixes"_ still trips it, because the phrase itself is present. Write around the phrase entirely rather than trying to negate it.
 4. Describe the Lite Check as a bounded passive review of a public surface. It does not authenticate, fuzz, exploit, prove RLS, or cover the full application.
 5. Never invent incidents, scans, customers, quotes, metrics, first-person experience, or source conclusions.

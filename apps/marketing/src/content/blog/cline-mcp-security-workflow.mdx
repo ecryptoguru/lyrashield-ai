@@ -22,7 +22,7 @@ Follow the current [cline integration guide](/docs/integrations/cline) and manua
 
 You can run secure AI app development in Cline by adding LyraShield AI as an MCP server, getting findings with their recorded evidence states and supporting evidence inside Cline and enforcing the same checks in CI with a diff aware GitHub Action that uploads SARIF.
 
-Cline automates file edits and terminal actions, which speeds up feature work but can introduce secrets, injection and vulnerable dependencies when scaffolding is agent driven. The [vibe coding security guide](/blog/vibe-coding-security-guide) explains why verification must be part of the agent loop. LyraShield AI is agent native AppSec for AI built software with a loop from Target to Scan to Evidence State to Fix Proposal to Retest to Assurance Report. This guide gives exact Cline config using `npx -y @lyrashield/mcp@0.2.12` and [https://app.lyrashieldai.com/api/mcp](https://app.lyrashieldai.com/api/mcp), verification, inline checks and the GitHub gate. Findings retain their recorded evidence states; independent verification requires a separate receipt. Current LyraShield tools record fix proposals and queue retests but do not edit code, create branches or open pull requests.
+Cline automates file edits and terminal actions, which speeds up feature work but can introduce secrets, injection and vulnerable dependencies when scaffolding is agent driven. The [vibe coding security guide](/blog/vibe-coding-security-guide) explains why verification must be part of the agent loop. LyraShield AI is agent native AppSec for AI built software with a loop from Target to Scan to Evidence State to Fix Proposal to Retest to Assurance Report. This guide gives exact Cline config using `npx -y @lyrashield/mcp@0.2.12` and [https://app.lyrashieldai.com/api/mcp](https://app.lyrashieldai.com/api/mcp), verification, inline checks and the GitHub gate. Findings retain their recorded evidence states. Current LyraShield tools record fix proposals and queue retests but do not edit code, create branches or open pull requests.
 
 ## 1. Prerequisites and setup
 
@@ -97,7 +97,7 @@ jobs:
           fail_on_severity: HIGH
 ```
 
-This workflow runs the published action's local diff advisory on the pull-request changes. It does not call the remote MCP endpoint, use Bearer authentication or require `LYRASHIELD_API_KEY` and its heuristic output is not a recorded scan or an independent-verification receipt.
+This workflow runs the published action's local diff advisory on the pull-request changes. It does not call the remote MCP endpoint, use Bearer authentication or require `LYRASHIELD_API_KEY` and its heuristic output is not a recorded scan or a retest result.
 
 The diff-aware design matters because Cline sessions often touch dozens of files in a single prompt. The action evaluates the changed lines supplied by the pull-request context and applies the configured severity threshold. Treat it as a fast advisory gate; use a separate recorded LyraShield scan when you need persisted findings, evidence states, coverage receipts or an assurance report.
 

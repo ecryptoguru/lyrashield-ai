@@ -22,7 +22,7 @@ For a local stdio setup, configure the server in Gemini CLI settings and authent
 
 Secure AI generated apps from your terminal by connecting Gemini CLI to LyraShield AI through MCP, running bounded checks without leaving the CLI and enforcing the same policy in a diff aware GitHub Action. The server loads from `settings.json` under `mcpServers` and supports local stdio via `npx -y @lyrashield/mcp@0.2.12` plus remote HTTP with a bearer key.
 
-Gemini CLI brings agent assisted development to the command line, but terminal velocity can miss injection, auth and supply chain risks introduced by scaffolding. The [vibe coding security guide](/blog/vibe-coding-security-guide) calls this unverified generation at scale. LyraShield AI is agent native AppSec for AI built software that follows Target to Scan to Evidence State to Fix Proposal to Retest to Assurance Report. This post shows the exact Gemini CLI config using `npx -y @lyrashield/mcp@0.2.12` and [https://app.lyrashieldai.com/api/mcp](https://app.lyrashieldai.com/api/mcp), plus verification and CI wiring. Findings retain their recorded evidence states; independent verification requires a separate receipt. Current LyraShield tools record fix proposals and queue retests but do not edit code, create branches or open pull requests.
+Gemini CLI brings agent assisted development to the command line, but terminal velocity can miss injection, auth and supply chain risks introduced by scaffolding. The [vibe coding security guide](/blog/vibe-coding-security-guide) calls this unverified generation at scale. LyraShield AI is agent native AppSec for AI built software that follows Target to Scan to Evidence State to Fix Proposal to Retest to Assurance Report. This post shows the exact Gemini CLI config using `npx -y @lyrashield/mcp@0.2.12` and [https://app.lyrashieldai.com/api/mcp](https://app.lyrashieldai.com/api/mcp), plus verification and CI wiring. Findings retain their recorded evidence states. Current LyraShield tools record fix proposals and queue retests but do not edit code, create branches or open pull requests.
 
 ## 1. Prerequisites and setup
 
@@ -89,7 +89,7 @@ Restart Gemini CLI and run `gemini mcp list`, then ask Gemini to call `lyrashiel
 
 ## 4. Run an inline check from the CLI
 
-From Gemini CLI, ask it to scan the authorized target and return findings with their recorded evidence states, file locations, supporting evidence and limitations. Use `lyrashield_scan_target`, then inspect results with `lyrashield_get_findings`; do not filter to “verified,” because independent verification requires a separate receipt.
+From Gemini CLI, ask it to scan the authorized target and return findings with their recorded evidence states, file locations, supporting evidence and limitations. Use `lyrashield_scan_target`, then inspect results with `lyrashield_get_findings`; do not filter to “verified,” because retest-confirmed requires a fresh applicable retest.
 
 The distinction between a finding with a recorded evidence state and raw lint noise matters for blocking merges. A finding with a recorded evidence state includes a concrete file path, a line number and a proof snippet that demonstrates exploitability, such as a stored XSS finding that points to an unsanitized input rendered into the DOM along with a payload that executes in the browser. Raw lint noise flags a pattern without proof, such as a generic usage warning with no reachable input source. You block on the former and triage the latter.
 

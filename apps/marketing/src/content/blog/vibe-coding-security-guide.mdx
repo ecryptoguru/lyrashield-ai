@@ -134,7 +134,7 @@ Agent isolation also has an operational side. Limit run duration and resource us
 
 Choose tests for the target and the claims you need to support. Static analysis, dependency matching, secret scanning, configuration review, browser checks, authenticated integration tests and human evidence answer different questions. [NIST SP 800-115](https://csrc.nist.gov/pubs/sp/800/115/final) advises choosing security assessment techniques with their benefits and limitations in view. One tool result should not be stretched into a statement about paths it never observed.
 
-Keep detection separate from independent verification. A pattern match may identify a credential-like string. A dependency scanner may match an affected version. An engine may assign high confidence. Those are reasons to investigate. An independently verified state requires separate evidence that supports the finding under the stated scope. Confidence alone is triage metadata.
+Keep detection separate from retest. A pattern match may identify a credential-like string. A dependency scanner may match an affected version. An engine may assign high confidence. Those are reasons to investigate. A retest-confirmed state requires a fresh applicable check that supports the finding under the stated scope. Confidence alone is triage metadata.
 
 After a fix, run a fresh, server-owned check against the changed system. Do not turn a manual status change or a client-supplied result into proof. A complete deterministic retest may show that the original condition is absent and support a retest-confirmed outcome. If coverage is incomplete or the original check depended on model judgment, absence may remain inconclusive. Preserve that uncertainty.
 
@@ -154,7 +154,7 @@ Record which checks ran, which subjects they examined, what was skipped and ever
 
 ### Evidence State
 
-Keep detected, independently verified, retest-confirmed and inconclusive outcomes distinct. A detected candidate is a signal worth review. Independent verification needs a separate receipt. Retest-confirmed means a fresh, server-owned, applicable deterministic check found the condition absent with complete relevant coverage. Inconclusive means the available evidence cannot settle the question.
+Keep detected, retest-confirmed and inconclusive outcomes distinct. A detected candidate is a signal worth review. Retest-confirmed means a fresh, server-owned, applicable deterministic check found the condition absent with complete relevant coverage. Inconclusive means the available evidence cannot settle the question.
 
 ### Fix Proposal
 
