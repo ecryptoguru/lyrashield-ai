@@ -15,7 +15,7 @@ docker run -d --name "$database" --network "$network" \
   --network-alias db.yejmvtgsxniatmjbwplk.supabase.co \
   --env POSTGRES_PASSWORD=disposable-only --env POSTGRES_DB=postgres postgres:17-alpine >/dev/null
 ready=false
-for attempt in $(seq 1 30); do
+for ((attempt = 1; attempt <= 30; attempt++)); do
   if docker exec "$database" pg_isready -U postgres -d postgres >/dev/null 2>&1; then ready=true; break; fi
   sleep 1
 done
