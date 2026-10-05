@@ -372,3 +372,27 @@ test("keeps desktop navigation labels on one line at the compact desktop width",
   }
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(1159)
 })
+
+test("left-aligns story-card bullet lists inside left-aligned chapters", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 })
+  await page.goto("/")
+  await page.locator("evidence-world").scrollIntoViewIfNeeded()
+
+  // The bullet lists live on the supporting cards (index 1). Chapter 0
+  // (gateway) is a left card and chapter 3 (evidence-state) is a right card.
+  const leftRows = await page
+    .locator('[data-chapter-index="0"] [data-story-card-index="1"] .evidence-world__points li')
+    .evaluateAll((nodes) => nodes.map((node) => getComputedStyle(node).justifyContent))
+  expect(leftRows.length).toBeGreaterThan(0)
+  for (const justification of leftRows) {
+    expect(justification).toBe("flex-start")
+  }
+
+  const rightRows = await page
+    .locator('[data-chapter-index="3"] [data-story-card-index="1"] .evidence-world__points li')
+    .evaluateAll((nodes) => nodes.map((node) => getComputedStyle(node).justifyContent))
+  expect(rightRows.length).toBeGreaterThan(0)
+  for (const justification of rightRows) {
+    expect(justification).toBe("flex-end")
+  }
+})
