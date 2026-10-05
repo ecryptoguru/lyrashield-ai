@@ -142,7 +142,7 @@ const skillInstallCommand =
   )}
   {!CLI_SKILLS_AVAILABLE && capabilities.includes("skills") && (
     <p>
-      The published CLI package ({CLI_PACKAGE_SPEC}) does not include a LyraShield <code>skills</code>
+      The published CLI package ({CLI_PACKAGE_SPEC}) does not include a LyraShield <code>skills</code>{" "}
       installer yet. {agent.distribution?.state === "PREPARATION" ? (
         <>Skill installation is withheld until a workflow bundle is validated for this client
         surface. Do not copy skills from a mutable preparation branch. Use the direct MCP setup on

@@ -79,7 +79,7 @@ Remote HTTP:
 }
 ```
 
-Remote URL is [https://app.lyrashieldai.com/api/mcp](https://app.lyrashieldai.com/api/mcp) with Bearer `lsk_`. $VAR expansion keeps the key out of the file and Streamable HTTP uses `httpUrl` rather than the SSE-only `url` field. `$VAR`expansion and`mcp.allowed` policy are Gemini CLI specifics that control which servers run without prompting. For sibling editors, see the [Gemini CLI AI app security checklist](/blog/gemini-cli-app-security-checklist) which uses the same gate shape.
+Remote URL is [https://app.lyrashieldai.com/api/mcp](https://app.lyrashieldai.com/api/mcp) with Bearer `lsk_`. $VAR expansion keeps the key out of the file and Streamable HTTP uses `httpUrl` rather than the SSE-only `url` field. `$VAR` expansion and the `mcp.allowed` policy list are Gemini CLI specifics that control which servers run without prompting. For sibling editors, see the [Gemini CLI AI app security checklist](/blog/gemini-cli-app-security-checklist) which uses the same gate shape.
 
 Gemini CLI expands `$VAR_NAME` and `${VAR_NAME}` references in MCP environment values and headers. Export `LYRASHIELD_API_KEY` in the shell that starts Gemini CLI, keep `trust: false` and use `includeTools` to restrict the server surface. A raw key does not belong in `settings.json`.
 
