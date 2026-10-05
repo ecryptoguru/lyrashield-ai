@@ -16,6 +16,13 @@ const { Content } = await render(entry)
 const origin = Astro.site?.origin || "http://localhost:4321"
 const canonical = new URL(`/compare/${entry.id}`, origin).toString()
 const reviewed = updatedDate.toISOString().slice(0, 10)
+// The site vocabulary is "4 Oct 2026" (see the trust-page test); the ISO form
+// stays in the <time datetime> attribute and in the JSON-LD dateModified.
+const reviewedLabel = updatedDate.toLocaleDateString("en-GB", {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+})
 
 const jsonLd: unknown[] = [
   {
@@ -57,7 +64,7 @@ const jsonLd: unknown[] = [
       <h1 class="mt-4 text-4xl font-semibold tracking-tight text-text sm:text-5xl" data-reveal>{heading}</h1>
       <p class="mt-6 text-lg leading-8 text-text-muted" data-reveal>{description}</p>
       <p class="mt-4 text-sm text-text-muted" data-reveal>
-        Last reviewed: <time datetime={reviewed}>{reviewed}</time>
+        Last reviewed: <time datetime={reviewed}>{reviewedLabel}</time>
       </p>
     </header>
 
@@ -75,7 +82,13 @@ const jsonLd: unknown[] = [
       </ul>
     </section>
 
-    <div class="compare-body mt-16 border-t border-border pt-12" data-reveal-group>
+    {/* The rendered markdown below the tables needs the same typography
+        treatment the blog gives its bodies. Without it every heading, list,
+        link and paragraph after the tables rendered as plain 16px text. */}
+    <div
+      class="compare-body prose mt-16 max-w-none border-t border-border pt-12 prose-a:text-accent prose-headings:tracking-tight prose-headings:text-text prose-li:marker:text-accent"
+      data-reveal-group
+    >
       <Content />
     </div>
 

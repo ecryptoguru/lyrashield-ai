@@ -39,6 +39,41 @@ test("canonical pages serve 200 with middleware security headers", async ({ page
   }
 })
 
+test("renders the comparison body with real typography and a themed prose colour", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 })
+  await page.goto("/compare/snyk")
+
+  const body = page.locator(".compare-body")
+  await expect(body).toHaveClass(/prose/)
+
+  // Headings, list markers and links must be styled, not plain 16px text.
+  const h3 = body.locator("h3").first()
+  await expect(h3).toBeVisible()
+  expect(
+    await h3.evaluate((el) => Number.parseFloat(getComputedStyle(el).fontSize))
+  ).toBeGreaterThan(16)
+  const firstLink = body.locator("a").first()
+  expect(await firstLink.evaluate((el) => getComputedStyle(el).textDecorationLine)).toContain(
+    "underline"
+  )
+
+  // The prose colour must follow the site theme, not the operating system.
+  // Tailwind's `dark:` sits inside prefers-color-scheme, so a dark OS with the
+  // site set to light used to leave headings pure white on a light page.
+  await page.emulateMedia({ colorScheme: "dark" })
+  await page.evaluate(() => document.documentElement.setAttribute("data-theme", "light"))
+  const headingOnLight = await h3.evaluate((el) => getComputedStyle(el).color)
+  expect(headingOnLight, "heading colour under a dark OS with the light theme").not.toBe(
+    "rgb(255, 255, 255)"
+  )
+
+  await page.evaluate(() => document.documentElement.setAttribute("data-theme", "dark"))
+  const headingOnDark = await h3.evaluate((el) => getComputedStyle(el).color)
+  expect(headingOnDark, "heading colour under the dark theme").not.toBe(headingOnLight)
+})
+
 test("blog posts still serve after the routing change", async ({ page }) => {
   const res = await page.request.get("/blog/path-traversal-generated-code")
   expect(res.status()).toBe(200)
