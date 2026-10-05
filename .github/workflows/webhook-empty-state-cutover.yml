@@ -64,12 +64,13 @@ jobs:
 
   disposable-attestation:
     needs: validate
-    if: ${{ inputs.disposable_only == true }}
+    # Separate permission approval is required before changing this fixed gate.
+    if: ${{ github.run_id == 'disabled-until-owner-approved-disposable-attestation' }}
     permissions:
       contents: read
       id-token: write
       attestations: write
-    uses: ecryptoguru/lyrashield-ai/.github/workflows/webhook-empty-state-trusted-attestation.yml@49af2ef78d68b8fb3dd53d6777d7455aff836aff
+    uses: ecryptoguru/lyrashield-ai/.github/workflows/webhook-empty-state-trusted-attestation.yml@b926fb882aaf8b1824785e1792a8c80965a8e55b
     with:
       disposable_only: true
       source_sha: ${{ github.sha }}
