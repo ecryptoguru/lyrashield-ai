@@ -1,8 +1,18 @@
 import assert from "node:assert/strict"
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs"
+import { spawnSync } from "node:child_process"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import test from "node:test"
+import { fileURLToPath } from "node:url"
 import {
   collectLighthouseReports,
   evaluateLighthouseReports,
@@ -141,7 +151,7 @@ test("an unmeasurable category forces the tiebreaker sample and never exceeds th
   )
 })
 
-test("the median tolerates a single flaky low sample where a one-shot gate failed", () => {
+test("a straddling pair requires its third sample before the median may pass", () => {
   const perPage = (scores) =>
     Object.fromEntries(
       LIGHTHOUSE_PAGES.map((page) => [
@@ -159,7 +169,7 @@ test("the median tolerates a single flaky low sample where a one-shot gate faile
 
   // 0.69 was the observed homepage low; the two real samples were 0.95 and 0.97.
   assert.equal(evaluateLighthouseReports(perPage([0.69, 0.95, 0.97])).failed, false)
-  assert.equal(evaluateLighthouseReports(perPage([0.69, 0.95])).failed, false)
+  assert.equal(evaluateLighthouseReports(perPage([0.69, 0.95])).failed, true)
   // Two genuinely low samples are still a failure.
   assert.equal(evaluateLighthouseReports(perPage([0.69, 0.79, 0.98])).failed, true)
 })
@@ -350,7 +360,7 @@ test("a low but valid score is not retried and remains a gate failure", async (t
       return {
         report: report(0.79, null, "https://lyrashieldai.com/"),
         diagnostic: "NO_NAVSTART appeared after a complete measurement",
-        exitCode: 1,
+        exitCode: 0,
       }
     },
   })
@@ -380,7 +390,7 @@ test("a finite category score with a NO_NAVSTART runtime error is retained and a
           },
         },
         diagnostic: "NO_NAVSTART",
-        exitCode: 1,
+        exitCode: 0,
       }
     },
   })
@@ -419,7 +429,7 @@ test("runtime errors fail closed while retaining every route's category scores",
       return {
         report: result,
         diagnostic: url.endsWith("/agents") ? "NO_NAVSTART in diagnostic output" : "",
-        exitCode: url.endsWith("/agents") ? 1 : 0,
+        exitCode: 0,
       }
     },
   })
@@ -557,4 +567,209 @@ test("an invalid report fails closed while all required routes are still measure
     ),
     /invalid report JSON/
   )
+})
+
+test("a passing single sample cannot satisfy the required two measurements", () => {
+  const origin = "https://lyrashieldai.com"
+  const reports = Object.fromEntries(
+    LIGHTHOUSE_PAGES.map((page) => [page.name, [report(0.98, null, origin + page.path)]])
+  )
+  const evaluation = evaluateLighthouseReports(reports)
+  assert.equal(evaluation.failed, true)
+  assert.ok(
+    evaluation.messages.includes(
+      "FAIL https://lyrashieldai.com/ collection: collected 1 of 2 required samples"
+    )
+  )
+})
+
+const P = (performance = 0.98, accessibility = 1, seo = 1) => ({
+  performance,
+  accessibility,
+  seo,
+})
+
+const collectionScenarios = [
+  {
+    name: "missing second report cannot pass on one retained sample",
+    sequence: [P(), "missing"],
+    failureCode: "NO_REPORT",
+  },
+  {
+    name: "malformed second report cannot pass on one retained sample",
+    sequence: [P(), "malformed"],
+    failureCode: "INVALID_REPORT",
+  },
+  {
+    name: "thrown Chrome error cannot pass on one retained sample",
+    sequence: [P(), "throw"],
+    failureCode: "NO_REPORT",
+  },
+  {
+    name: "missing third report cannot pass a straddling .69/.95 performance median",
+    sequence: [P(0.69), P(0.95), "missing"],
+    failureCode: "NO_REPORT",
+  },
+  {
+    name: "missing third report cannot pass a straddling accessibility median",
+    sequence: [P(0.98, 0.9), P(), "missing"],
+    failureCode: "NO_REPORT",
+  },
+  {
+    name: "missing third report cannot pass a straddling SEO median",
+    sequence: [P(0.98, 1, 0.9), P(), "missing"],
+    failureCode: "NO_REPORT",
+  },
+  {
+    name: "exhausted NO_NAVSTART retry cannot pass on one retained sample",
+    sequence: [P(), "NO_NAVSTART", "NO_NAVSTART"],
+    failureCode: "NO_NAVSTART",
+  },
+]
+
+for (const scenario of collectionScenarios) {
+  test(scenario.name, async (t) => {
+    const reportsDir = mkdtempSync(path.join(tmpdir(), "lyra-lighthouse-fail-closed-"))
+    t.after(() => rmSync(reportsDir, { recursive: true, force: true }))
+    const origin = "https://lyrashieldai.com"
+    const homepageUrl = origin + "/"
+    const homepageCalls = []
+
+    const reports = await collectLighthouseReports({
+      reportsDir,
+      origin,
+      logger: { warn() {} },
+      invoke: async (url, outputPath) => {
+        if (url !== homepageUrl) {
+          return { report: report(0.98, null, url), diagnostic: "", exitCode: 0 }
+        }
+
+        const fixture = scenario.sequence[homepageCalls.length]
+        homepageCalls.push(fixture)
+        if (fixture === "missing") {
+          return { report: null, diagnostic: "Chrome exited without a report", exitCode: 1 }
+        }
+        if (fixture === "malformed") {
+          writeFileSync(outputPath, "{invalid json")
+          return { diagnostic: "invalid report JSON", exitCode: 1 }
+        }
+        if (fixture === "throw") throw new Error("Chrome terminated unexpectedly")
+        if (fixture === "NO_NAVSTART") {
+          return {
+            report: reportWithoutScores({ code: "NO_NAVSTART" }),
+            diagnostic: "NO_NAVSTART",
+            exitCode: 1,
+          }
+        }
+
+        return {
+          report: {
+            finalUrl: url,
+            categories: {
+              performance: { score: fixture.performance },
+              accessibility: { score: fixture.accessibility },
+              seo: { score: fixture.seo },
+            },
+          },
+          diagnostic: "",
+          exitCode: 0,
+        }
+      },
+    })
+
+    assert.deepEqual(homepageCalls, scenario.sequence)
+    assert.equal(
+      reports._.filter((sample) => !sample.collectionFailure).length,
+      scenario.sequence.filter((item) => typeof item === "object").length
+    )
+    assert.equal(reports._.filter((sample) => sample.collectionFailure).length, 1)
+    const failedSample = reports._.find((sample) => sample.collectionFailure)
+    assert.equal(failedSample.collectionFailure.code, scenario.failureCode)
+    const samplesRecord = JSON.parse(
+      readFileSync(path.join(reportsDir, "lyrashield-lighthouse_.samples.json"), "utf8")
+    )
+    assert.equal(samplesRecord.collectionFailures[0].code, scenario.failureCode)
+    assert.equal(evaluateLighthouseReports(reports).failed, true)
+    for (const page of LIGHTHOUSE_PAGES.slice(1)) {
+      assert.equal(reports[page.name].length, 2, page.path + " retains both successful samples")
+      assert.equal(reports[page.name].some((sample) => sample.collectionFailure), false)
+    }
+  })
+}
+
+test("the CLI exits nonzero for the three previously false-green collection cases", (t) => {
+  const fixtureRoot = mkdtempSync(path.join(tmpdir(), "lyra-lighthouse-cli-fixtures-"))
+  t.after(() => rmSync(fixtureRoot, { recursive: true, force: true }))
+  const binDir = path.join(fixtureRoot, "bin")
+  mkdirSync(binDir, { recursive: true })
+  const npxPath = path.join(binDir, "npx")
+  writeFileSync(
+    npxPath,
+    `#!/usr/bin/env node
+import { mkdirSync, writeFileSync } from "node:fs";
+import path from "node:path";
+const args = process.argv.slice(2);
+const url = args.find((argument) => argument.startsWith("https://"));
+const outputPath = args.find((argument) => argument.startsWith("--output-path=")).slice(14);
+const sample = Number(/\\.sample-(\\d+)\\.attempt-/.exec(outputPath)?.[1]);
+const homepage = url.endsWith("/");
+const fixture = process.env.LIGHTHOUSE_FIXTURE;
+const failedSample = fixture === "missing-third" ? 3 : 2;
+if (homepage && sample === failedSample && fixture !== "malformed-second") process.exit(1);
+if (homepage && sample === 2 && fixture === "malformed-second") {
+  writeFileSync(outputPath, "{invalid json");
+  process.exit(1);
+}
+const performance = homepage && fixture === "missing-third" ? (sample === 1 ? 0.69 : 0.95) : 0.98;
+mkdirSync(path.dirname(outputPath), { recursive: true });
+writeFileSync(outputPath, JSON.stringify({
+  finalUrl: url,
+  categories: {
+    performance: { score: performance },
+    accessibility: { score: 1 },
+    seo: { score: 1 },
+  },
+}));
+`
+  )
+  chmodSync(npxPath, 0o755)
+
+  const scriptPath = fileURLToPath(new URL("../lighthouse-production.mjs", import.meta.url))
+  for (const fixture of ["missing-second", "malformed-second", "missing-third"]) {
+    const reportsDir = path.join(fixtureRoot, fixture)
+    const result = spawnSync(process.execPath, [scriptPath, reportsDir], {
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        LIGHTHOUSE_FIXTURE: fixture,
+        PATH: binDir + path.delimiter + process.env.PATH,
+      },
+    })
+    assert.equal(result.error, undefined, fixture + " subprocess starts")
+    assert.equal(result.status, 1, fixture + " must fail the Lighthouse gate")
+  }
+})
+
+test("a nonzero Lighthouse exit with JSON scores is a failed collection sample", async (t) => {
+  const reportsDir = mkdtempSync(path.join(tmpdir(), "lyra-lighthouse-nonzero-exit-"))
+  t.after(() => rmSync(reportsDir, { recursive: true, force: true }))
+  const page = LIGHTHOUSE_PAGES.find((candidate) => candidate.path === "/")
+  let calls = 0
+  const reports = await collectLighthouseReports({
+    reportsDir,
+    pages: [page],
+    logger: { warn() {} },
+    invoke: async (url) => {
+      calls += 1
+      return {
+        report: report(0.98, null, url),
+        diagnostic: calls === 2 ? "Chrome failed after writing JSON" : "",
+        exitCode: calls === 2 ? 1 : 0,
+      }
+    },
+  })
+
+  assert.equal(calls, 2)
+  assert.equal(reports._[1].collectionFailure.code, "NONZERO_EXIT")
+  assert.equal(evaluateLighthouseReports(reports).failed, true)
 })
