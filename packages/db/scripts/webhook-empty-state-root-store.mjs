@@ -104,6 +104,7 @@ const COMPONENTS = [
   "ops/worker/webhook-empty-state-observer.mjs",
   "ops/worker/webhook-empty-state-admission.mjs",
   "ops/worker/webhook-empty-state-phases.mjs",
+  "ops/worker/webhook-empty-state-runtime.mjs",
   "ops/worker/webhook-empty-state-run-migration.mjs",
   "ops/worker/webhook-empty-state-migration-env.mjs",
   "ops/worker/webhook-empty-state-candidate.mjs",
@@ -116,6 +117,12 @@ const COMPONENTS = [
   "packages/db/scripts/webhook-empty-state-attestation.mjs",
   "packages/db/scripts/webhook-empty-state-migration.mjs",
   "packages/db/scripts/webhook-empty-state-contract.mjs",
+  "packages/db/prisma.config.ts",
+  "packages/db/prisma/schema.prisma",
+  "packages/db/package.json",
+  "pnpm-lock.yaml",
+  "pnpm-workspace.yaml",
+  "package.json",
 ]
 function verifyComponents(policy) {
   requireValue(

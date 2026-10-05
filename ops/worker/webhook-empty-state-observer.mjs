@@ -97,7 +97,7 @@ export async function schedulingObservation(client, queues) {
 async function observe() {
   const [mode, resourceId, observedAt, owner] = process.argv.slice(2)
   requireValue(
-    ["connection", "worker"].includes(mode) &&
+    ["connection", "worker", "runtime"].includes(mode) &&
       typeof resourceId === "string" &&
       resourceId.length < 1024 &&
       Number.isFinite(Date.parse(observedAt)),
@@ -112,6 +112,10 @@ async function observe() {
     workerImport("@lyrashield/integrations"),
     workerImport("ioredis"),
   ])
+  if (mode === "runtime") {
+    validateObserverRuntime(Client, Redis, integrations)
+    return { runtime: "EMPTY_STATE_OBSERVER_RUNTIME_MATCH" }
+  }
   const client = new Client({
     connectionString: process.env.DATABASE_SYSTEM_URL,
     connectionTimeoutMillis: 5000,
@@ -159,6 +163,16 @@ async function observe() {
       integrations.closeRedis(),
     ])
   }
+}
+export function validateObserverRuntime(Client, Redis, integrations) {
+  requireValue(
+    typeof Client === "function" &&
+      typeof Redis === "function" &&
+      ["getScanQueue", "getWebhookTrackRetryQueue", "getFixGenerateQueue"].every(
+        (name) => typeof integrations[name] === "function"
+      ),
+    "Pinned observer runtime lacks actual database/Redis/shared queue exports"
+  )
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {

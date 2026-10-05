@@ -349,3 +349,74 @@ test("acquired restore proof binds exact produced backup object, generation and 
     )
   assert.throws(() => bindRestoreProof(proof, backup, policy, { ...record, expired: true }))
 })
+
+test("fixed runtime acceptance rejects any missing or changed CLI before admission", async () => {
+  const { CLI_ARGUMENTS, validateRuntimeReadbacks } =
+    await import("./webhook-empty-state-runtime.mjs")
+  const versions = Object.fromEntries(
+    Object.keys(CLI_ARGUMENTS).map((name) => [name, name + " pinned"])
+  )
+  validateRuntimeReadbacks(versions, versions)
+  for (const name of Object.keys(versions)) {
+    const absent = { ...versions }
+    delete absent[name]
+    assert.throws(() => validateRuntimeReadbacks(absent, versions))
+    assert.throws(() => validateRuntimeReadbacks({ ...versions, [name]: "changed" }, versions))
+    assert.throws(() => validateRuntimeReadbacks(versions, absent))
+  }
+})
+
+test("installed-layout executable adapters resolve their graph and remain disabled without ambient PATH", async () => {
+  const { mkdtempSync, mkdirSync, cpSync, realpathSync, rmSync } = await import("node:fs")
+  const { tmpdir } = await import("node:os")
+  const { join, dirname, resolve } = await import("node:path")
+  const { fileURLToPath } = await import("node:url")
+  const { createRequire } = await import("node:module")
+  const { spawnSync } = await import("node:child_process")
+  const source = resolve(dirname(fileURLToPath(import.meta.url)), "../..")
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "empty-state-installed-layout-")))
+  try {
+    for (const path of ["ops/worker", "packages/db/scripts"]) {
+      mkdirSync(dirname(join(root, path)), { recursive: true })
+      cpSync(join(source, path), join(root, path), { recursive: true })
+    }
+    // Package subpath exports intentionally omit package.json; resolve its actual entry.
+    const entry = realpathSync(createRequire(import.meta.url).resolve("pg-connection-string"))
+    mkdirSync(join(root, "node_modules"))
+    cpSync(dirname(entry), join(root, "node_modules/pg-connection-string"), { recursive: true })
+    for (const name of ["producer", "run-migration", "candidate", "backup-proof"]) {
+      const result = spawnSync(
+        process.execPath,
+        [join(root, `ops/worker/webhook-empty-state-${name}.mjs`)],
+        {
+          encoding: "utf8",
+          timeout: 10000,
+          env: { PATH: "", HOME: root },
+        }
+      )
+      assert.equal(result.status, 1, name)
+      assert.equal(result.stdout, "", name)
+      assert.doesNotMatch(result.stderr, /ERR_MODULE_NOT_FOUND|ReferenceError|SyntaxError/, name)
+      assert.match(result.stderr, /disabled|failed|retain maintenance/i, name)
+    }
+  } finally {
+    rmSync(root, { recursive: true })
+  }
+})
+
+test("observer runtime preflight requires actual exported shared queue authorities", async () => {
+  const { validateObserverRuntime } = await import("./webhook-empty-state-observer.mjs")
+  const integrations = Object.fromEntries(
+    ["getScanQueue", "getWebhookTrackRetryQueue", "getFixGenerateQueue"].map((name) => [
+      name,
+      () => {},
+    ])
+  )
+  validateObserverRuntime(class {}, class {}, integrations)
+  for (const name of Object.keys(integrations)) {
+    const missing = { ...integrations }
+    delete missing[name]
+    assert.throws(() => validateObserverRuntime(class {}, class {}, missing))
+  }
+  assert.throws(() => validateObserverRuntime(undefined, class {}, integrations))
+})

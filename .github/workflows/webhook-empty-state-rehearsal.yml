@@ -17,8 +17,6 @@ on:
       - "packages/integrations/src/queue.ts"
       - "packages/integrations/src/index.ts"
       - "packages/db/scripts/tests/webhook-empty-state-*.mjs"
-      - "ops/worker/webhook-empty-state-*.mjs"
-      - "ops/worker/tests.webhook-empty-state.test.mjs"
       - ".github/scripts/*webhook-empty-state*.mjs"
       - ".github/workflows/webhook-empty-state-*.yml"
 

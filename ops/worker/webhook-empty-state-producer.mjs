@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { containerAppTargetArgs, revisionListArgs } from "./webhook-empty-state-azure-target.mjs"
+import { probeRootRuntime } from "./webhook-empty-state-runtime.mjs"
 import { spawnSync } from "node:child_process"
 import { lstatSync, readFileSync, unlinkSync } from "node:fs"
 import { pathToFileURL } from "node:url"
@@ -307,7 +308,7 @@ function observerCommand(policy, script, args = []) {
     "run",
     "--rm",
     "--network",
-    "bridge",
+    script === "webhook-empty-state-observer.mjs" && args[0] === "runtime" ? "none" : "bridge",
     "--read-only",
     "--cap-drop=ALL",
     "--security-opt=no-new-privileges",
@@ -398,7 +399,19 @@ async function main() {
   if (request.phase !== "preflight" && request.phase !== "admission" && request.phase !== "resume")
     observerCommand(policy, "webhook-empty-state-admission.mjs", ["assert", stop])
   if (request.phase === "preflight") {
+    // Reject an incomplete root installation before claiming admission.
+    probeRootRuntime(policy)
     const observedAt = new Date().toISOString()
+    const runtime = observerCommand(policy, "webhook-empty-state-observer.mjs", [
+      "runtime",
+      policy.resources.worker,
+      observedAt,
+      "preflight",
+    ])
+    requireValue(
+      JSON.parse(runtime).runtime === "EMPTY_STATE_OBSERVER_RUNTIME_MATCH",
+      "Pinned observer import graph unavailable before admission"
+    )
     const connections = Object.fromEntries(
       ["app", "scanner"].map((name) => [name, appConnection(policy, name, observedAt)])
     )

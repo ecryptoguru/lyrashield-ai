@@ -339,3 +339,115 @@ test("live observations between SQL phases reject changed admission or revived w
     assert.throws(() => validateReceipt(live, policy, now))
   }
 })
+
+test("mocked drain-to-completion-to-startup-to-release handoff binds one authorization", async () => {
+  const { advancePhase, PHASES, verifyCompletionProof, releaseOwnedMaintenance } =
+    await import("../../../../ops/worker/webhook-empty-state-phases.mjs")
+  const { schedulingObservation } =
+    await import("../../../../ops/worker/webhook-empty-state-observer.mjs")
+  const { ownedAdmission } =
+    await import("../../../../ops/worker/webhook-empty-state-admission.mjs")
+  const { receipt, policy } = fixture()
+  policy.images = {
+    candidate: `ghcr.io/ecryptoguru/lyrashield-ai/lyrashield-worker@${policy.candidate.imageDigest}`,
+  }
+  const stop = canonical({
+    operator: "github-actions",
+    reason: "webhook-empty-state",
+    owner: receipt.authorization.owner,
+  })
+  let redisValue = null
+  const redis = {
+    eval: async (script, keys, key, raw) => {
+      assert.equal(keys, 1)
+      assert.equal(key, "lyrashield:scan-admission:stopped")
+      if (script.includes("'SET'")) {
+        if (redisValue && redisValue !== raw) return 0
+        redisValue = raw
+        return 1
+      }
+      if (redisValue !== raw) return 0
+      if (script.includes("'DEL'")) redisValue = null
+      return 1
+    },
+  }
+  let state
+  let completion, fence
+  for (const phase of PHASES) {
+    state = advancePhase(state, phase, receipt.authorization, policy, now)
+    if (phase === "admission") await ownedAdmission("claim", stop, redis)
+    if (phase === "drain") {
+      const queues = Object.fromEntries(
+        QUEUES.map((name) => [
+          name,
+          {
+            getJobCounts: async (...states) => Object.fromEntries(states.map((s) => [s, 0])),
+            getJobSchedulersCount: async () => 0,
+            getRepeatableJobs: async () => [],
+          },
+        ])
+      )
+      const observed = await schedulingObservation(
+        {
+          query: async () => ({
+            rows: [{ scans: "0", handlers: "0", tracks: "0", parents: "0", writers: "0" }],
+          }),
+        },
+        queues
+      )
+      Object.assign(receipt.evidence, observed)
+    }
+    if (["stop", "collect", "migrate", "complete", "candidate"].includes(phase))
+      await ownedAdmission("assert", stop, redis)
+    if (phase === "collect" || phase === "migrate") validateReceipt(receipt, policy, now)
+    if (phase === "complete") {
+      completion = {
+        schemaVersion: "webhook-empty-state-completion/v2",
+        state: "complete",
+        authorizationSha256: sha256(canonical(receipt.authorization)),
+        receiptSha256: sha256(canonical(receipt)),
+        sourceSha: policy.sourceSha,
+        databaseIdentitySha256: policy.databaseIdentitySha256,
+        workerImageDigest: policy.candidate.imageDigest,
+        schemaSha256: H,
+        historySha256: H,
+        indexSha256: H,
+      }
+      verifyCompletionProof(completion, receipt, {
+        status: "complete",
+        sourceSha: policy.sourceSha,
+        runId: policy.runId,
+      })
+      fence = {
+        schemaVersion: "webhook-empty-state-fence/v2",
+        state: "migration-complete",
+        authorization: receipt.authorization,
+        receiptSha256: completion.receiptSha256,
+        completionSha256: sha256(canonical(completion)),
+      }
+    }
+    if (phase === "candidate")
+      validateStartupProof(fence, completion, policy, policy.images.candidate, now)
+    if (phase === "resume") {
+      let persisted = false
+      await releaseOwnedMaintenance({
+        release: () => ownedAdmission("release", stop, redis),
+        checkPublicReadiness: () => assert.equal(redisValue, null),
+        recheckAuthorization: () =>
+          advancePhase(state, "resume", receipt.authorization, policy, now),
+        persistCompletion: () => {
+          persisted = true
+        },
+        cleanupOwnedFence: () => {
+          assert.equal(persisted, true)
+          fence = null
+        },
+        restoreOwnedHold: () => ownedAdmission("claim", stop, redis),
+      })
+    }
+  }
+  assert.equal(redisValue, null)
+  assert.equal(fence, null)
+  assert.equal(state.phase, "resume")
+  assert.equal(state.authorizationSha256, sha256(canonical(receipt.authorization)))
+})

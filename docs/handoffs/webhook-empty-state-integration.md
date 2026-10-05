@@ -13,7 +13,7 @@ This principal can execute arbitrary root RunCommand. Host files and attestation
 are inside that trust boundary and do not isolate against its compromise.
 
 The immutable receipt authorization binds source, original run/attempt/owner,
-nonce, policy/producer hashes, and an explicit maximum 30-minute window. Each
+nonce, policy/producer hashes and an explicit maximum 30-minute window. Each
 phase must recheck root revocation, expiry, identities and owned admission.
 Renewed observations cannot extend authorization. All six queue states on scan,
 webhook retry and fix generation, scheduler/repeat counts, stopped writers,
@@ -84,8 +84,8 @@ uselibpqcompat=1 option is normalized only for logical identity comparison;
 endpoint/user overrides and duplicate options remain rejected. No live backup
 or restore was run for this task.
 
-Local verification checkpoint: 56 focused Node tests, actionlint on all three
-changed workflows, shell syntax, and diff checks pass. Full hosted/postgres/image
+Local verification checkpoint: 60 focused Node tests, actionlint on all four
+changed workflows, shell syntax and diff checks pass. Full hosted/postgres/image
 rehearsal and reviewer confirmation of recovery/consumer startup integration
 remain necessary. Docker is unavailable on this Mac; no root state was installed.
 
@@ -98,10 +98,35 @@ subjects. No custom trusted root or verification bypass was used. These failures
 must be resolved before activation; certificate-policy unit fixtures are not a
 substitute for a real verified canonical receipt roundtrip.
 
-The final local checkpoint has 60 focused tests passing. Broad deploy-script
+The latest local checkpoint has 64 focused tests passing. Broad deploy-script
 testing was attempted but the isolated dependency install is incomplete: worker
 preflight tests cannot import tsx. Full CI and the PostgreSQL/image jobs must
 establish those gates; no broad-suite pass is claimed. The collector now exports
 the shared fix queue through the package entrypoint, rejects unknown live
 database writers, and uses Azure CLI's explicit --all revision inventory with
 supported subscription/group/name flags.
+
+The root preflight now requires approved exact CLI version readbacks at fixed
+/usr/bin paths before claiming admission. It verifies root-owned in-bundle
+resolution of pg, pg-connection-string 2.14.0, Prisma 7.9.1, dotenv and tsx;
+then it imports the actual migration runner and Prisma config with a harmless
+placeholder URL. Installation must preserve the full workspace-relative layout,
+all migration history, schema/config and locked dependencies under the fixed
+bundle root. pnpm must be available at /usr/bin/pnpm. No installer was run.
+A copied-layout subprocess smoke test exercises all four disabled adapters with
+an empty ambient PATH and the actual parser package. A mocked shared-function
+handoff exercises admission, scheduling census, receipt validation, all phases,
+completion proof, candidate startup proof and release. This is not an enabled
+adapter or real-service end-to-end rehearsal.
+
+Hosted checks on 31a28495 passed container build, pinned engine/worker contract
+and the disposable PostgreSQL 17/Prisma rehearsal. General CI stopped at the
+copy-comma ratchet in this document; the new serial comma has been removed.
+Those hosted results precede this runtime-preflight/test patch. Baseline public
+fixture verification without any extra workflow constraints also fails with
+`Error: verifying with issuer "sigstore.dev"`, including an approved network retry.
+
+The preflight also validates the fixed secure migration environment before any
+admission claim and runs a network-disabled import probe in the pinned observer
+image. That probe requires the actual database/Redis constructors and all three
+shared queue exports without instantiating clients or queue consumers.
