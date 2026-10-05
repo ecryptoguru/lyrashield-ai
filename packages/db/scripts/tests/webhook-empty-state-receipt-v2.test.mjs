@@ -19,123 +19,7 @@ import { validateStartupProof } from "../../../../ops/worker/webhook-empty-state
 const H = "a".repeat(64),
   S = "b".repeat(40),
   now = Date.parse("2026-10-05T09:01:00Z")
-function fixture() {
-  const authorization = {
-    sourceSha: S,
-    runId: "123",
-    originalAttempt: 1,
-    owner: "123:1",
-    nonce: "n".repeat(40),
-    issuedAt: "2026-10-05T09:00:00Z",
-    expiresAt: "2026-10-05T09:30:00Z",
-    policySha256: H,
-    producerSha256: H,
-    workflowSha: S,
-    repositoryId: "1286618458",
-    ownerId: "116722580",
-  }
-  const image = {
-    imageDigest: `sha256:${H}`,
-    sourceSha: S,
-    engineRevision: S,
-    protocol: "durable-claims/2",
-    rehearsalRunId: "122",
-    rehearsalSha256: H,
-  }
-  const backup = {
-    objectIdSha256: H,
-    versionId: "etag:123",
-    encryptedSha256: H,
-    dumpSha256: H,
-    databaseIdentitySha256: H,
-    createdAt: "2026-10-05T08:00:00Z",
-    runId: "120",
-  }
-  const restore = {
-    backupSha256: sha256(canonical(backup)),
-    runId: "120",
-    completedAt: "2026-10-05T08:30:00Z",
-    schemaSha256: H,
-    auditSha256: H,
-    readinessSha256: H,
-  }
-  const resources = Object.fromEntries(
-    ["app", "scanner", "worker", "system", "migration", "backup"].map((name) => [
-      name,
-      `/fixed/${name}`,
-    ])
-  )
-  const credentials = Object.fromEntries(
-    [...Object.keys(resources), "redis"].map((name) => [name, H])
-  )
-  const policy = {
-    ...authorization,
-    enabled: true,
-    revoked: false,
-    databaseIdentitySha256: H,
-    resources,
-    credentials,
-    redisIdentitySha256: H,
-    admissionValueSha256: H,
-    candidate: image,
-    fallback: image,
-    backup,
-    restore,
-    actorId: "42",
-  }
-  const observedAt = new Date(now).toISOString()
-  const receipt = {
-    schemaVersion: "webhook-empty-state/v2",
-    mode: "empty-scheduling",
-    authorization,
-    evidence: {
-      observedAt,
-      database: Object.fromEntries(
-        Object.entries(resources).map(([name, resourceId]) => [
-          name,
-          { identitySha256: H, credentialSha256: H, resourceId, observedAt },
-        ])
-      ),
-      redis: { identitySha256: H, credentialSha256: H, owner: "123:1", valueSha256: H },
-      writers: ["app", "scanner"].map((name) => ({
-        resourceId: resources[name],
-        revisions: [{ name: "old", active: false, replicas: 0 }],
-      })),
-      worker: {
-        imageDigest: `sha256:${H}`,
-        sourceSha: S,
-        engineRevision: S,
-        serviceState: "inactive",
-        timerState: "inactive",
-        containers: 0,
-        stopOwner: "123:1",
-        stopAt: observedAt,
-        stopProofSha256: H,
-        startupFenced: true,
-      },
-      queues: Object.fromEntries(
-        QUEUES.map((name) => [
-          name,
-          {
-            counts: Object.fromEntries(STATES.map((state) => [state, 0])),
-            schedulers: 0,
-            repeats: 0,
-          },
-        ])
-      ),
-      nonterminalScans: 0,
-      inFlightHandlers: 0,
-      trackRows: 0,
-      unresolvedParents: 0,
-      unknownWriters: 0,
-      candidate: image,
-      fallback: image,
-      backup,
-      restore,
-    },
-  }
-  return { receipt, policy }
-}
+import { fixture } from "./webhook-empty-state-v2-fixture.mjs"
 test("canonical receipt validates complete, fresh /2 evidence", () => {
   const { receipt, policy } = fixture()
   assert.match(validateReceipt(receipt, policy, now).receiptSha256, /^[a-f0-9]{64}$/)
@@ -439,7 +323,7 @@ test("mocked drain-to-completion-to-startup-to-release handoff binds one authori
           persisted = true
         },
         cleanupOwnedFence: () => {
-          assert.equal(persisted, true)
+          assert.equal(persisted, false)
           fence = null
         },
         restoreOwnedHold: () => ownedAdmission("claim", stop, redis),
@@ -450,4 +334,33 @@ test("mocked drain-to-completion-to-startup-to-release handoff binds one authori
   assert.equal(fence, null)
   assert.equal(state.phase, "resume")
   assert.equal(state.authorizationSha256, sha256(canonical(receipt.authorization)))
+})
+
+test("whole workflow replay output contract returns the original collect digest at every later phase", async () => {
+  const { advancePhase, PHASES, replayPhaseOutput } =
+    await import("../../../../ops/worker/webhook-empty-state-phases.mjs")
+  const { receipt, policy } = fixture()
+  let state
+  for (const durable of PHASES) {
+    state = advancePhase(state, durable, receipt.authorization, policy, now)
+    for (const phase of PHASES.slice(0, PHASES.indexOf(durable) + 1)) {
+      const output = replayPhaseOutput(phase, state, receipt.authorization, policy, receipt, now)
+      assert.equal(output.split("\n").includes(`EMPTY_STATE_PHASE_COMPLETE=${phase}`), true)
+      if (phase === "collect") {
+        const digests = output.split("\n").filter((line) => /^[a-f0-9]{64}$/.test(line))
+        assert.deepEqual(digests, [sha256(canonical(receipt))])
+      }
+    }
+    if (PHASES.indexOf(durable) >= PHASES.indexOf("collect"))
+      assert.throws(() =>
+        replayPhaseOutput(
+          "collect",
+          state,
+          receipt.authorization,
+          { ...policy, revoked: true },
+          receipt,
+          now
+        )
+      )
+  }
 })

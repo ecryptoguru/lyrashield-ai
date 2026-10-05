@@ -15,7 +15,7 @@ function read(binary, args, json = false, env = {}) {
   requireValue(result.status === 0, "Prepared candidate connection readback failed")
   return json ? JSON.parse(result.stdout) : result.stdout.trim()
 }
-export function collectPreparedCandidateFingerprint(policy, role) {
+export function collectPreparedCandidateFingerprint(policy, role, ownedActive = false) {
   requireValue(["app", "scanner"].includes(role), "Unsupported candidate resource")
   const revision = policy.candidateRevisions[role]
   const observed = read(
@@ -34,8 +34,11 @@ export function collectPreparedCandidateFingerprint(policy, role) {
   )
   const containers = observed.properties?.template?.containers
   requireValue(
-    observed.properties.active === false &&
-      observed.properties.replicas === 0 &&
+    ((observed.properties.active === false && observed.properties.replicas === 0) ||
+      (ownedActive &&
+        observed.properties.active === true &&
+        Number.isSafeInteger(observed.properties.replicas) &&
+        observed.properties.replicas >= 0)) &&
       containers?.length === 1 &&
       containers[0].image === policy.images[role] &&
       /^ghcr\.io\/ecryptoguru\/lyrashield-ai\/lyrashield-web@sha256:[a-f0-9]{64}$/.test(

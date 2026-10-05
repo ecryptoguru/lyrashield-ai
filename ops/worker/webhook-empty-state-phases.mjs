@@ -4,6 +4,7 @@ import {
   canonical,
   sha256,
   validateAuthorization,
+  validateReceipt,
 } from "../../packages/db/scripts/webhook-empty-state-receipt-v2.mjs"
 export const PHASES = [
   "preflight",
@@ -67,8 +68,8 @@ export async function releaseOwnedMaintenance(operations) {
     released = true
     await operations.checkPublicReadiness()
     await operations.recheckAuthorization()
-    await operations.persistCompletion()
     await operations.cleanupOwnedFence()
+    await operations.persistCompletion()
   } catch (error) {
     if (released) {
       try {
@@ -81,4 +82,24 @@ export async function releaseOwnedMaintenance(operations) {
     }
     throw error
   }
+}
+
+export function replayPhaseOutput(phase, state, authorization, policy, receipt, now = Date.now()) {
+  requireValue(
+    PHASES.includes(phase) &&
+      PHASES.includes(state?.phase) &&
+      PHASES.indexOf(phase) <= PHASES.indexOf(state.phase),
+    "Phase is not completed for replay"
+  )
+  requireValue(
+    state.authorizationSha256 === validateAuthorization(authorization, policy, now) &&
+      canonical(state.authorization) === canonical(authorization),
+    "Foreign recovery state"
+  )
+  if (PHASES.indexOf(state.phase) >= PHASES.indexOf("collect"))
+    validateReceipt(receipt, policy, now)
+  return (
+    (phase === "collect" ? sha256(canonical(receipt)) + "\n" : "") +
+    `EMPTY_STATE_PHASE_COMPLETE=${phase}\n`
+  )
 }

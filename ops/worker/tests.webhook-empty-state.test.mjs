@@ -381,7 +381,11 @@ test("installed-layout executable adapters resolve their graph and remain disabl
       cpSync(join(source, path), join(root, path), { recursive: true })
     }
     // Package subpath exports intentionally omit package.json; resolve its actual entry.
-    const entry = realpathSync(createRequire(import.meta.url).resolve("pg-connection-string"))
+    const entry = realpathSync(
+      createRequire(new URL("../../packages/db/package.json", import.meta.url)).resolve(
+        "pg-connection-string"
+      )
+    )
     mkdirSync(join(root, "node_modules"))
     cpSync(dirname(entry), join(root, "node_modules/pg-connection-string"), { recursive: true })
     for (const name of ["producer", "run-migration", "candidate", "backup-proof"]) {
@@ -419,4 +423,116 @@ test("observer runtime preflight requires actual exported shared queue authoriti
     assert.throws(() => validateObserverRuntime(class {}, class {}, missing))
   }
   assert.throws(() => validateObserverRuntime(undefined, class {}, integrations))
+})
+
+test("backup collector normalizes logical identity while retaining raw credential binding", async () => {
+  const { backupConnectionObservation } = await import("./webhook-empty-state-observer.mjs")
+  const raw =
+    "postgresql://postgres.yejmvtgsxniatmjbwplk:placeholder@aws-1-ap-south-1.pooler.supabase.com:5432/postgres?sslmode=require"
+  const a = backupConnectionObservation(raw, "2026-10-05T09:00:00Z"),
+    b = backupConnectionObservation(raw + "&uselibpqcompat=1", "2026-10-05T09:00:00Z")
+  assert.equal(a.identitySha256, b.identitySha256)
+  assert.notEqual(a.credentialSha256, b.credentialSha256)
+  assert.throws(() =>
+    backupConnectionObservation(
+      raw + "&uselibpqcompat=1&host=db.foreign.supabase.co",
+      "2026-10-05T09:00:00Z"
+    )
+  )
+})
+
+test("cold worker startup polls boundedly and fails on wrong image, unhealthy or timeout", async () => {
+  const { waitForWorkerReady } = await import("./webhook-empty-state-candidate.mjs")
+  const image = "fixture@sha256:" + "a".repeat(64),
+    sourceSha = "b".repeat(40)
+  let tick = 0,
+    calls = 0
+  const states = [
+    null,
+    { image, sourceSha, status: "running", health: "starting" },
+    { image, sourceSha, status: "running", health: "healthy" },
+  ]
+  await waitForWorkerReady(
+    () => states.shift(),
+    image,
+    sourceSha,
+    () => calls++,
+    {
+      now: () => tick,
+      pause: async (ms) => {
+        tick += ms
+      },
+      timeoutMs: 50,
+      pollMs: 10,
+    }
+  )
+  assert.equal(calls, 3)
+  for (const actual of [
+    { image: "foreign", sourceSha, status: "running", health: "healthy" },
+    { image, sourceSha, status: "exited" },
+    { image, sourceSha, status: "running", health: "unhealthy" },
+  ])
+    await assert.rejects(
+      waitForWorkerReady(
+        () => actual,
+        image,
+        sourceSha,
+        () => {},
+        { timeoutMs: 1 }
+      )
+    )
+  tick = 0
+  await assert.rejects(
+    waitForWorkerReady(
+      () => null,
+      image,
+      sourceSha,
+      () => {},
+      {
+        now: () => tick,
+        pause: async (ms) => {
+          tick += ms
+        },
+        timeoutMs: 20,
+        pollMs: 10,
+      }
+    ),
+    /timed out/
+  )
+})
+
+test("candidate activation recovery accepts only exact owned image/revision/completion", async () => {
+  const { activationIntent, validateActivationIntent } =
+    await import("./webhook-empty-state-candidate.mjs")
+  const authorization = { sourceSha: "a".repeat(40), runId: "1", nonce: "original" },
+    proof = { state: "complete" }
+  const policy = {
+    resources: { app: "fixture/app", scanner: "fixture/scanner" },
+    candidateRevisions: { app: "app-candidate", scanner: "scanner-candidate" },
+    images: {
+      app: "fixture/app@sha256:" + "a".repeat(64),
+      scanner: "fixture/scanner@sha256:" + "b".repeat(64),
+    },
+  }
+  for (const role of ["app", "scanner"]) {
+    const intent = activationIntent(authorization, proof, policy, role)
+    assert.equal(validateActivationIntent(undefined, authorization, proof, policy, role), false)
+    assert.equal(validateActivationIntent(intent, authorization, proof, policy, role), true)
+    for (const key of [
+      "authorizationSha256",
+      "completionSha256",
+      "resourceId",
+      "revision",
+      "image",
+    ])
+      assert.throws(() =>
+        validateActivationIntent(
+          { ...intent, [key]: "foreign" },
+          authorization,
+          proof,
+          policy,
+          role
+        )
+      )
+  }
 })

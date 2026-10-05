@@ -12,6 +12,7 @@ import {
 } from "../../packages/db/scripts/webhook-empty-state-receipt-v2.mjs"
 import { pathToFileURL } from "node:url"
 import { createRequire } from "node:module"
+import { normalizeBackupConnection } from "../../packages/db/scripts/webhook-backup-connection.mjs"
 
 export function connectionObservation(raw, resourceId, observedAt, migration = false) {
   const target = parsePostgresConnectionTarget(raw)
@@ -20,6 +21,15 @@ export function connectionObservation(raw, resourceId, observedAt, migration = f
     identitySha256: hashDatabaseIdentity(canonicalSupabaseDatabaseIdentity([raw])),
     credentialSha256: sha256(raw),
     resourceId,
+    observedAt,
+  }
+}
+export function backupConnectionObservation(raw, observedAt) {
+  const normalized = normalizeBackupConnection(raw)
+  return {
+    identitySha256: normalized.identitySha256,
+    credentialSha256: sha256(raw),
+    resourceId: "backup",
     observedAt,
   }
 }
@@ -65,7 +75,7 @@ export async function schedulingObservation(client, queues) {
     (SELECT count(*)::text FROM public."WebhookEventTrack" WHERE status='processing') AS handlers,
     (SELECT count(*)::text FROM public."WebhookEventTrack") AS tracks,
     (SELECT count(*)::text FROM public."WebhookEvent" WHERE processed=false) AS parents,
-    (SELECT count(*)::text FROM pg_stat_activity WHERE datname=current_database() AND backend_type='client backend' AND pid<>pg_backend_pid() AND application_name<>'lyrashield-empty-state-migration' AND usename NOT IN ('supabase_admin','pgbouncer','authenticator')) AS writers`)
+    (SELECT count(*)::text FROM pg_stat_activity WHERE datname=current_database() AND (backend_type='client backend' OR backend_type IS NULL) AND pid<>pg_backend_pid() AND usename NOT IN ('supabase_admin','pgbouncer','authenticator')) AS writers`)
   const row = result.rows[0]
   const counts = Object.fromEntries(
     ["scans", "handlers", "tracks", "parents", "writers"].map((name) => {
@@ -75,6 +85,17 @@ export async function schedulingObservation(client, queues) {
       return [name, value]
     })
   )
+  const snapshot = await queueObservation(queues)
+  return {
+    nonterminalScans: counts.scans,
+    inFlightHandlers: counts.handlers,
+    trackRows: counts.tracks,
+    unresolvedParents: counts.parents,
+    unknownWriters: counts.writers,
+    queues: snapshot,
+  }
+}
+export async function queueObservation(queues) {
   const snapshot = {}
   for (const [name, queue] of Object.entries(queues)) {
     const [jobs, schedulers, repeats] = await Promise.all([
@@ -85,19 +106,12 @@ export async function schedulingObservation(client, queues) {
     requireValue(Array.isArray(repeats), "Missing repeatable job observations")
     snapshot[name] = { counts: jobs, schedulers, repeats: repeats.length }
   }
-  return {
-    nonterminalScans: counts.scans,
-    inFlightHandlers: counts.handlers,
-    trackRows: counts.tracks,
-    unresolvedParents: counts.parents,
-    unknownWriters: counts.writers,
-    queues: snapshot,
-  }
+  return snapshot
 }
 async function observe() {
   const [mode, resourceId, observedAt, owner] = process.argv.slice(2)
   requireValue(
-    ["connection", "worker", "runtime"].includes(mode) &&
+    ["connection", "worker", "worker-external", "runtime"].includes(mode) &&
       typeof resourceId === "string" &&
       resourceId.length < 1024 &&
       Number.isFinite(Date.parse(observedAt)),
@@ -133,7 +147,7 @@ async function observe() {
     fixGenerate: integrations.getFixGenerateQueue(),
   }
   try {
-    await client.connect()
+    if (mode !== "worker-external") await client.connect()
     const direct = process.env.DATABASE_DIRECT_URL
     requireValue(
       direct === process.env.MIGRATION_DATABASE_URL,
@@ -144,7 +158,7 @@ async function observe() {
       worker: connectionObservation(process.env.DATABASE_URL, resourceId, observedAt),
       system: connectionObservation(process.env.DATABASE_SYSTEM_URL, resourceId, observedAt),
       migration: connectionObservation(direct, "migration", observedAt, true),
-      backup: connectionObservation(backup, "backup", observedAt, true),
+      backup: backupConnectionObservation(backup, observedAt),
     }
     return {
       database,
@@ -153,11 +167,13 @@ async function observe() {
         await redis.get("lyrashield:scan-admission:stopped"),
         owner
       ),
-      ...(await schedulingObservation(client, queues)),
+      ...(mode === "worker-external"
+        ? { queues: await queueObservation(queues) }
+        : await schedulingObservation(client, queues)),
     }
   } finally {
     await Promise.allSettled([
-      client.end(),
+      ...(mode === "worker-external" ? [] : [client.end()]),
       redis.quit(),
       ...Object.values(queues).map((queue) => queue.close()),
       integrations.closeRedis(),

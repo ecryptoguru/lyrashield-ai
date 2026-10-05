@@ -49,15 +49,13 @@ similarity and host-only hashes cannot substitute for a readback.
 
 Before activation, validate the entire root bundle on disposable services,
 including dependency/path resolution, both migration URL aliases, artifact
-acquisition and candidate preparation. The exact production app identity remains
-unproven. Official-root CLI checks against two upstream public fixtures failed
-(`verifying with issuer sigstore.dev` and `GitHub, Inc.`); unit fixtures and CLI
-argument validation do not replace a successful keyless roundtrip. No custom
-roots were installed to make those checks pass. Root collectors, trusted-v2
-runner branch and phase/completion adapters are present but remain disabled and
-must pass a complete disposable integration rehearsal before any owner approval
-request for activation. Failure retains maintenance and additive schema;
-there is no legacy rollback, queue deletion or payment replay.
+acquisition and candidate preparation. Production app identity remains unproven.
+The public official Actions fixture now passes actual gh 2.95.0 verification
+against the default official roots after correcting the signer workflow pin.
+Exact Lyra canonical receipt issuance remains a separate gate. No custom roots
+were installed. Root collectors and adapters remain disabled in the repository.
+Failure retains maintenance and additive schema; there is no legacy rollback,
+queue deletion or payment replay.
 
 ## Review correction checkpoint
 
@@ -84,27 +82,28 @@ uselibpqcompat=1 option is normalized only for logical identity comparison;
 endpoint/user overrides and duplicate options remain rejected. No live backup
 or restore was run for this task.
 
-Local verification checkpoint: 60 focused Node tests, actionlint on all four
-changed workflows, shell syntax and diff checks pass. Full hosted/postgres/image
-rehearsal and reviewer confirmation of recovery/consumer startup integration
-remain necessary. Docker is unavailable on this Mac; no root state was installed.
+Local verification now includes 70 focused tests, an enabled copied candidate
+adapter with cold startup and crashes after either activation, and an enabled
+copied producer resume/rehold plus full workflow replay output test. All adapter
+branches also receive an undefined-reference check. A copied enabled trusted-v2
+runner passed real PostgreSQL 17 and Prisma 7.9.1 fresh/retry migration,
+same-connection lock continuity and revocation/external-stop/unknown-writer/
+soft-deleted-scan negatives. Root storage, cloud and attestation boundaries are
+explicitly mocked in that disposable runner; the official CLI fixture validation
+is separate. Production source guards remain false.
 
-Official-root positive attestation roundtrip remains unproven. GitHub CLI 2.95.0
-(2026-06-17) rejected the official public reusable-workflow fixture with
-`Error: verifying with issuer "sigstore.dev"`. A second official release fixture,
-with its correct repository/predicate, failed with
-`Error: verifying with issuer "GitHub, Inc."`. Artifact hashes matched their
-subjects. No custom trusted root or verification bypass was used. These failures
-must be resolved before activation; certificate-policy unit fixtures are not a
-substitute for a real verified canonical receipt roundtrip.
+Hosted 6e98 smoke testing exposed package resolution from the wrong pnpm scope;
+parser lookup now uses packages/db/package.json. The same Linux disposable image
+exercise exposed Prisma's exported types entrypoint; host preflight now resolves
+the actual prisma/build/index.js CLI instead. Docker 29.8.1 is available with
+approved socket access; the earlier sandbox-only denial did not mean it was
+unavailable. Latest hosted checks must pass on the corrected commit.
 
-The latest local checkpoint has 64 focused tests passing. Broad deploy-script
-testing was attempted but the isolated dependency install is incomplete: worker
-preflight tests cannot import tsx. Full CI and the PostgreSQL/image jobs must
-establish those gates; no broad-suite pass is claimed. The collector now exports
-the shared fix queue through the package entrypoint, rejects unknown live
-database writers, and uses Azure CLI's explicit --all revision inventory with
-supported subscription/group/name flags.
+See webhook-empty-state-attestation-diagnosis.md for exact successful and failed
+CLI commands, fixture hashes/schema/signing times, full identity error and
+default official root provenance. The earlier failures were signer-policy
+mismatches, not an established network, trust or expiry defect. No new GitHub
+write permission was required. Exact Lyra receipt issuance is still unproven.
 
 The root preflight now requires approved exact CLI version readbacks at fixed
 /usr/bin paths before claiming admission. It verifies root-owned in-bundle
@@ -119,14 +118,15 @@ handoff exercises admission, scheduling census, receipt validation, all phases,
 completion proof, candidate startup proof and release. This is not an enabled
 adapter or real-service end-to-end rehearsal.
 
-Hosted checks on 31a28495 passed container build, pinned engine/worker contract
-and the disposable PostgreSQL 17/Prisma rehearsal. General CI stopped at the
-copy-comma ratchet in this document; the new serial comma has been removed.
-Those hosted results precede this runtime-preflight/test patch. Baseline public
-fixture verification without any extra workflow constraints also fails with
-`Error: verifying with issuer "sigstore.dev"`, including an approved network retry.
-
 The preflight also validates the fixed secure migration environment before any
 admission claim and runs a network-disabled import probe in the pinned observer
 image. That probe requires the actual database/Redis constructors and all three
 shared queue exports without instantiating clients or queue consumers.
+
+The runner now keeps external worker/queue/admission checks separate from DB
+continuity reads through its current locked connection, avoiding a collector
+self-deadlock without hiding rows or dropping ownership checks. Completed-phase
+replay returns the exact stored collect digest. Candidate promotion uses durable
+owned activation intents, revalidates image/connection/completion bindings on
+retry and polls boundedly for actual worker health. Backup collection normalizes
+only logical identity; its credential hash always covers the raw URL.

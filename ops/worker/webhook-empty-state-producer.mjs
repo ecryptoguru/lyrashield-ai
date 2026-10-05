@@ -13,7 +13,13 @@ import {
   FENCE,
   checkParents,
 } from "../../packages/db/scripts/webhook-empty-state-root-store.mjs"
-import { advancePhase, verifyCompletionProof, PHASES } from "./webhook-empty-state-phases.mjs"
+import {
+  advancePhase,
+  verifyCompletionProof,
+  releaseOwnedMaintenance,
+  replayPhaseOutput,
+  PHASES,
+} from "./webhook-empty-state-phases.mjs"
 import {
   canonical,
   sha256,
@@ -34,10 +40,10 @@ const BUNDLE = "/opt/lyrashield-worker-host"
 const WORKER_ENV = "/etc/lyrashield/worker.env"
 const MIGRATION_ENV = "/etc/lyrashield/webhook-empty-state.env"
 export const PRODUCTION_CUTOVER_ENABLED = false
-function run(program, args, json = false) {
+function run(program, args, json = false, timeout = 60_000) {
   const result = spawnSync(program, args, {
     encoding: "utf8",
-    timeout: 60_000,
+    timeout,
     maxBuffer: 2_000_000,
     env: { PATH: "/usr/bin:/bin", HOME: "/root" },
   })
@@ -88,7 +94,7 @@ export function validateRootTargets(policy) {
     "Producer source changed"
   )
 }
-function containerProbe(policy, owner, observedAt) {
+function containerProbe(policy, owner, observedAt, externalOnly = false) {
   secureEnv(WORKER_ENV)
   secureEnv(MIGRATION_ENV)
   pinnedImage(policy.images.observer)
@@ -117,7 +123,7 @@ function containerProbe(policy, owner, observedAt) {
     "--import",
     "tsx",
     "/app/packages/db/empty-state/ops/worker/webhook-empty-state-observer.mjs",
-    "worker",
+    externalOnly ? "worker-external" : "worker",
     policy.resources.worker,
     observedAt,
     owner,
@@ -192,11 +198,16 @@ function proveRun(runId, sourceSha, workflowPath) {
     "Evidence workflow did not succeed on exact source"
   )
 }
-export function collectReceipt(policy, authorization, originalConnections) {
+export function collectReceipt(policy, authorization, originalConnections, priorEvidence) {
   const observedAt = new Date().toISOString()
   // Parent and SQL state read directly, including soft-deleted rows. Never
   // receive caller counts, JSON, verified flags, command or trust-root inputs.
-  const observations = containerProbe(policy, authorization.owner, observedAt)
+  const observations = containerProbe(
+    policy,
+    authorization.owner,
+    observedAt,
+    Boolean(priorEvidence)
+  )
   const fence = readRootFile(FENCE)
   requireValue(
     canonical(fence.authorization) === canonical(authorization),
@@ -261,6 +272,7 @@ export function collectReceipt(policy, authorization, originalConnections) {
     mode: "empty-scheduling",
     authorization,
     evidence: {
+      ...priorEvidence,
       observedAt,
       ...observations,
       database,
@@ -289,7 +301,7 @@ export function validateProducerRequest(args, policy) {
         "complete",
         "candidate",
         "resume",
-        "continuity",
+        "continuity-external",
       ].includes(phase) &&
       /^[1-9][0-9]{0,5}$/.test(attempt || "") &&
       Number(attempt) >= policy.originalAttempt &&
@@ -361,11 +373,14 @@ async function main() {
   } catch (error) {
     if (error.code !== "ENOENT") throw error
   }
-  if (request.phase === "continuity") {
+  if (request.phase === "continuity-external") {
+    const prior = readRootFile(`${directory}/receipt.json`)
+    validateReceipt(prior, readPolicy())
     const receipt = collectReceipt(
       policy,
       authorization,
-      readRootFile(`${directory}/connections.json`)
+      readRootFile(`${directory}/connections.json`),
+      prior.evidence
     )
     validateReceipt(receipt, readPolicy())
     process.stdout.write("EMPTY_STATE_LIVE_CONTINUITY_MATCH\n")
@@ -373,14 +388,14 @@ async function main() {
   }
   // Replayed workflow steps skip only durable, already completed phases. The
   // original authorization remains fixed and current policy is revalidated.
-  if (state && PHASES.indexOf(request.phase) < PHASES.indexOf(state.phase)) {
-    requireValue(
-      canonical(state.authorization) === canonical(authorization),
-      "Foreign recovery state"
+  if (state && PHASES.indexOf(request.phase) <= PHASES.indexOf(state.phase)) {
+    const receipt =
+      PHASES.indexOf(state.phase) >= PHASES.indexOf("collect")
+        ? readRootFile(`${directory}/receipt.json`)
+        : undefined
+    process.stdout.write(
+      replayPhaseOutput(request.phase, state, authorization, readPolicy(), receipt)
     )
-    if (PHASES.indexOf(state.phase) >= PHASES.indexOf("collect"))
-      validateReceipt(readRootFile(`${directory}/receipt.json`), readPolicy())
-    process.stdout.write(`EMPTY_STATE_PHASE_COMPLETE=${request.phase}\n`)
     return
   }
   const planned = advancePhase(state, request.phase, authorization, policy)
@@ -489,7 +504,12 @@ async function main() {
   } else if (request.phase === "migrate") {
     // Trusted runner reads fixed root files, official attestation and the
     // identical validated direct/session URL aliases. No PEM/caller JSON path.
-    run("/usr/bin/node", [BUNDLE + "/ops/worker/webhook-empty-state-run-migration.mjs"])
+    run(
+      "/usr/bin/node",
+      [BUNDLE + "/ops/worker/webhook-empty-state-run-migration.mjs"],
+      false,
+      1_200_000
+    )
   } else if (request.phase === "complete") {
     const result = readRootFile(`${directory}/migration-result.json`),
       receipt = readRootFile(`${directory}/receipt.json`)
@@ -506,7 +526,7 @@ async function main() {
   } else if (request.phase === "candidate") {
     // Candidate promotion is deliberately delegated to the fixed reviewed
     // forward-only helper. It may not start any consumer without the fence proof.
-    run("/usr/bin/node", [BUNDLE + "/ops/worker/webhook-empty-state-candidate.mjs"])
+    run("/usr/bin/node", [BUNDLE + "/ops/worker/webhook-empty-state-candidate.mjs"], false, 300_000)
   } else if (request.phase === "resume") {
     requireValue(
       readRootFile(`${directory}/candidate-ready.json`).authorizationSha256 ===
@@ -534,6 +554,31 @@ async function main() {
       intent.authorizationSha256 === sha256(canonical(authorization)) &&
         intent.stopSha256 === sha256(stop),
       "Foreign release intent"
+    )
+    let heldFence
+    try {
+      heldFence = readRootFile(FENCE)
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error
+    }
+    if (!heldFence) {
+      const completion = readRootFile(`${directory}/completion.json`),
+        receipt = readRootFile(`${directory}/receipt.json`)
+      requireValue(
+        sha256(canonical(completion)) === intent.completionSha256,
+        "Release recovery completion changed"
+      )
+      heldFence = {
+        schemaVersion: "webhook-empty-state-fence/v2",
+        authorization,
+        state: "migration-complete",
+        receiptSha256: sha256(canonical(receipt)),
+        completionSha256: intent.completionSha256,
+      }
+    }
+    requireValue(
+      canonical(heldFence.authorization) === canonical(authorization),
+      "Foreign startup fence before release"
     )
     await releaseOwnedMaintenance({
       release: () =>
@@ -566,8 +611,18 @@ async function main() {
           if (error.code !== "ENOENT") throw error
         }
       },
-      restoreOwnedHold: () =>
-        observerCommand(policy, "webhook-empty-state-admission.mjs", ["claim", stop]),
+      restoreOwnedHold: () => {
+        observerCommand(policy, "webhook-empty-state-admission.mjs", ["claim", stop])
+        try {
+          requireValue(
+            canonical(readRootFile(FENCE).authorization) === canonical(authorization),
+            "Foreign fence during re-hold"
+          )
+        } catch (error) {
+          if (error.code !== "ENOENT") throw error
+          atomicRootWrite(FENCE, heldFence)
+        }
+      },
     })
     process.stdout.write("EMPTY_STATE_PHASE_COMPLETE=resume\n")
     return

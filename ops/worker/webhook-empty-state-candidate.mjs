@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { containerAppTargetArgs } from "./webhook-empty-state-azure-target.mjs"
+import { pathToFileURL } from "node:url"
 import { spawnSync } from "node:child_process"
 import {
   readFileSync,
@@ -39,7 +40,7 @@ function run(program, args, json = false) {
   requireValue(result.status === 0, "Candidate promotion failed; retain maintenance")
   return json ? JSON.parse(result.stdout) : result.stdout.trim()
 }
-try {
+export async function promoteCandidate() {
   requireValue(ENABLED, "Candidate adapter remains disabled")
   const policy = readPolicy(),
     authorization = readAuthorization(policy),
@@ -52,7 +53,16 @@ try {
   // admission remains owned/stopped until both candidate resources and worker
   // prove readiness on the completed additive schema.
   const candidateConnections = Object.fromEntries(
-    ["app", "scanner"].map((name) => [name, collectPreparedCandidateFingerprint(policy, name)])
+    ["app", "scanner"].map((name) => {
+      let prior
+      try {
+        prior = readRootFile(`${directory}/activation-${name}.json`)
+      } catch (error) {
+        if (error.code !== "ENOENT") throw error
+      }
+      const ownedActive = validateActivationIntent(prior, authorization, proof, policy, name)
+      return [name, collectPreparedCandidateFingerprint(policy, name, ownedActive)]
+    })
   )
   atomicRootWrite(`${directory}/candidate-connections.json`, candidateConnections)
   for (const name of ["app", "scanner"]) {
@@ -80,15 +90,20 @@ try {
         resource.properties.template.containers[0].image === policy.images[name],
       "Candidate revision image changed"
     )
-    run("/usr/bin/az", [
-      "containerapp",
-      "revision",
-      "activate",
-      ...containerAppTargetArgs(policy.resources[name]),
-      "--revision",
-      revision,
-      "--only-show-errors",
-    ])
+    atomicRootWrite(
+      `${directory}/activation-${name}.json`,
+      activationIntent(authorization, proof, policy, name)
+    )
+    if (resource.properties.active !== true)
+      run("/usr/bin/az", [
+        "containerapp",
+        "revision",
+        "activate",
+        ...containerAppTargetArgs(policy.resources[name]),
+        "--revision",
+        revision,
+        "--only-show-errors",
+      ])
     run("/usr/bin/az", [
       "containerapp",
       "ingress",
@@ -131,29 +146,35 @@ try {
     run("/usr/bin/systemctl", ["enable", unit])
     run("/usr/bin/systemctl", ["start", unit])
   }
-  requireValue(
-    run("/usr/bin/docker", ["inspect", "--format", "{{.Config.Image}}", "lyrashield-worker"]) ===
-      policy.images.candidate,
-    "Running worker image changed"
-  )
-  requireValue(
-    run("/usr/bin/docker", [
-      "inspect",
-      "--format",
-      "{{.State.Health.Status}}",
-      "lyrashield-worker",
-    ]) === "healthy",
-    "Admission-independent worker health unavailable"
-  )
-  requireValue(
-    run("/usr/bin/docker", [
-      "image",
-      "inspect",
-      "--format",
-      '{{index .Config.Labels "org.opencontainers.image.revision"}}',
-      policy.images.candidate,
-    ]) === policy.candidate.sourceSha,
-    "Candidate worker source changed"
+  await waitForWorkerReady(
+    () => {
+      let container
+      try {
+        container = run(
+          "/usr/bin/docker",
+          ["inspect", "--format", "{{json .}}", "lyrashield-worker"],
+          true
+        )
+      } catch {
+        return null
+      }
+      const sourceSha = run("/usr/bin/docker", [
+        "image",
+        "inspect",
+        "--format",
+        '{{index .Config.Labels "org.opencontainers.image.revision"}}',
+        policy.images.candidate,
+      ])
+      return {
+        image: container.Config?.Image,
+        sourceSha,
+        status: container.State?.Status,
+        health: container.State?.Health?.Status,
+      }
+    },
+    policy.images.candidate,
+    policy.candidate.sourceSha,
+    () => validateAuthorization(authorization, readPolicy())
   )
   const databaseReady = run("/usr/bin/curl", [
     "--fail",
@@ -173,7 +194,58 @@ try {
     completionSha256: sha256(canonical(proof)),
     observedAt: new Date().toISOString(),
   })
-} catch {
-  process.stderr.write("Fixed candidate adapter failed; retain maintenance\n")
-  process.exitCode = 1
+}
+export function activationIntent(authorization, proof, policy, role) {
+  return {
+    authorizationSha256: sha256(canonical(authorization)),
+    completionSha256: sha256(canonical(proof)),
+    resourceId: policy.resources[role],
+    revision: policy.candidateRevisions[role],
+    image: policy.images[role],
+  }
+}
+export function validateActivationIntent(prior, authorization, proof, policy, role) {
+  if (!prior) return false
+  requireValue(
+    canonical(prior) === canonical(activationIntent(authorization, proof, policy, role)),
+    "Foreign candidate activation intent"
+  )
+  return true
+}
+export async function waitForWorkerReady(
+  observe,
+  image,
+  sourceSha,
+  authorize,
+  {
+    now = Date.now,
+    pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+    timeoutMs = 180000,
+    pollMs = 2000,
+  } = {}
+) {
+  const deadline = now() + timeoutMs
+  while (true) {
+    authorize()
+    const actual = await observe()
+    if (actual) {
+      requireValue(
+        actual.image === image && actual.sourceSha === sourceSha,
+        "Foreign worker image/source during startup"
+      )
+      requireValue(
+        !["dead", "exited"].includes(actual.status) && actual.health !== "unhealthy",
+        "Worker startup failed"
+      )
+      if (actual.status === "running" && actual.health === "healthy") return
+    }
+    requireValue(now() < deadline, "Worker startup timed out; retain maintenance")
+    await pause(Math.min(pollMs, deadline - now()))
+  }
+}
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  promoteCandidate().catch(() => {
+    process.stderr.write("Fixed candidate adapter failed; retain maintenance\n")
+    process.exitCode = 1
+  })
 }

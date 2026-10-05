@@ -53,7 +53,7 @@ export function probeRootRuntime(policy) {
   const code = `import {createRequire} from 'node:module';import {realpathSync,lstatSync,readFileSync,existsSync} from 'node:fs';import {dirname} from 'node:path';
     const root=${JSON.stringify(BUNDLE)},r=createRequire(root+'/packages/db/package.json');
     for(const name of ['pg','pg-connection-string','prisma','dotenv','tsx']) {
-      const p=realpathSync(r.resolve(name));if(!p.startsWith(root+'/'))throw Error('outside bundle');
+      const p=realpathSync(r.resolve(name==='prisma'?'prisma/build/index.js':name));if(!p.startsWith(root+'/'))throw Error('outside bundle');
       for(let d=p;d!=='/';d=dirname(d)){const s=lstatSync(d);if(s.isSymbolicLink()||s.uid!==0||(s.mode&0o022))throw Error('unsafe dependency');}
       let d=dirname(p),meta;while(d.startsWith(root+'/')){const f=d+'/package.json';if(existsSync(f)){const m=JSON.parse(readFileSync(f,'utf8'));if(m.name===name){meta=m;break;}}d=dirname(d);}if(!meta)throw Error('missing package metadata');
       const v=meta.version;if(name==='prisma'&&v!=='7.9.1'||name==='pg-connection-string'&&v!=='2.14.0')throw Error('wrong dependency');

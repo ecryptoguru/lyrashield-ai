@@ -117,6 +117,7 @@ const COMPONENTS = [
   "packages/db/scripts/webhook-empty-state-attestation.mjs",
   "packages/db/scripts/webhook-empty-state-migration.mjs",
   "packages/db/scripts/webhook-empty-state-contract.mjs",
+  "packages/db/scripts/webhook-backup-connection.mjs",
   "packages/db/prisma.config.ts",
   "packages/db/prisma/schema.prisma",
   "packages/db/package.json",

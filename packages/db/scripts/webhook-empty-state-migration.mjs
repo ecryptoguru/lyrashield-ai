@@ -75,7 +75,7 @@ function authorizationFor(context, env, now = Date.now()) {
     )
     const continuity = spawnSync("/usr/bin/node", [
       "/opt/lyrashield-worker-host/ops/worker/webhook-empty-state-producer.mjs",
-      "continuity", context.runId, String(env.GITHUB_RUN_ATTEMPT || context.receipt.authorization.originalAttempt),
+      "continuity-external", context.runId, String(env.GITHUB_RUN_ATTEMPT || context.receipt.authorization.originalAttempt),
       context.sourceSha, context.stableNonce,
     ], { encoding: "utf8", timeout: 15_000, maxBuffer: 4096, env: { PATH: "/usr/bin:/bin", HOME: "/root" } })
     equal(continuity.status, 0, "Live root continuity observation failed before migration phase")
@@ -188,12 +188,12 @@ function markerFor(context, state) {
 }
 
 async function setMarker(client, context, state, authorize) {
-  authorize()
+  await authorize()
   const result = await client.query(
     "SELECT format('COMMENT ON COLUMN public.\"WebhookEventTrack\".\"nextAttemptAtUtc\" IS %L', $1::text) AS statement",
     [markerFor(context, state)],
   )
-  authorize()
+  await authorize()
   await client.query(result.rows[0].statement)
 }
 
@@ -226,7 +226,7 @@ function assertMarker(marker, context) {
 }
 
 async function beginLocked(client, timeout, authorize) {
-  authorize()
+  await authorize()
   await client.query("BEGIN ISOLATION LEVEL READ COMMITTED")
   await client.query("SET LOCAL lock_timeout = '10s'")
   await client.query("SET LOCAL statement_timeout = '" + (timeout || "5min") + "'")
@@ -234,7 +234,19 @@ async function beginLocked(client, timeout, authorize) {
   await client.query("SET LOCAL search_path = public, pg_temp")
   await client.query("LOCK TABLE " + EVENT_TABLE + " IN ACCESS EXCLUSIVE MODE")
   await client.query("LOCK TABLE " + TABLE + " IN ACCESS EXCLUSIVE MODE")
-  authorize()
+  await authorize()
+}
+
+export async function assertTrustedDatabaseContinuity(client) {
+  // Read through the current connection, including inside our exclusive locks.
+  // A separate collector must never query these tables while this connection holds them.
+  const result = await client.query(`SELECT
+    (SELECT count(*)::text FROM public."Scan" WHERE status IN ('QUEUED','PREFLIGHT','RUNNING','VERIFYING','REQUIRES_APPROVAL')) AS scans,
+    (SELECT count(*)::text FROM public."WebhookEventTrack") AS tracks,
+    (SELECT count(*)::text FROM public."WebhookEvent" WHERE processed=false) AS parents,
+    (SELECT count(*)::text FROM pg_stat_activity WHERE datname=current_database() AND (backend_type='client backend' OR backend_type IS NULL) AND pid<>pg_backend_pid() AND usename NOT IN ('supabase_admin','pgbouncer','authenticator')) AS writers`)
+  const row = result.rows[0]
+  for (const name of ['scans', 'tracks', 'parents', 'writers']) equal(row?.[name], '0', 'Live trusted DB continuity changed: ' + name)
 }
 
 async function rollback(client) { try { await client.query("ROLLBACK") } catch {} }
@@ -320,14 +332,14 @@ async function history(client) {
 }
 
 async function resolveApplied(client, migration, authorize, prismaResolve) {
-  authorize()
+  await authorize()
   const existing = (await history(client)).get(migration.name)
   if (existing) {
     equal(existing.checksum, migration.sha256, "Prisma migration checksum differs: " + migration.name)
     if (!existing.finished_at || existing.rolled_back_at) fail("Prisma migration is partial or rolled back: " + migration.name)
     return
   }
-  authorize()
+  await authorize()
   const result = prismaResolve("pnpm", ["exec", "prisma", "migrate", "resolve", "--applied", migration.name], {
     cwd: packageRoot,
     env: { ...process.env, DATABASE_DIRECT_URL: contextUrl, DATABASE_URL: contextUrl },
@@ -383,7 +395,7 @@ async function createIndexConcurrently(client, authorize) {
   if (active.rows.length) fail("An unknown webhook index build is active")
   await client.query("SET lock_timeout='10s'")
   await client.query("SET statement_timeout='10min'")
-  authorize()
+  await authorize()
   await client.query("CREATE INDEX CONCURRENTLY \"WebhookEventTrack_status_nextAttemptAtUtc_idx\" ON " + TABLE + " (status, \"nextAttemptAtUtc\")")
   if (!(await verifyIndex(client))) fail("Concurrent index build returned without a verified index")
 }
@@ -415,7 +427,7 @@ function delay(milliseconds) {
 async function acquireAdvisoryLock(client, authorize, waitMs, pollMs) {
   const started = performance.now()
   while (true) {
-    authorize()
+    await authorize()
     const result = await client.query("SELECT pg_try_advisory_lock($1, $2) AS acquired", LOCK)
     if (result.rows[0]?.acquired === true) return
     const elapsed = performance.now() - started
@@ -439,7 +451,10 @@ export async function runEmptyStateMigration({
 } = {}) {
   const context = requiredContext(env, clock())
   contextUrl = context.databaseUrl
-  const authorize = () => { context.authorization = authorizationFor(context, env, clock()) }
+  const authorize = async () => {
+    context.authorization = authorizationFor(context, env, clock())
+    if (context.trusted) await assertTrustedDatabaseContinuity(client)
+  }
   const statements = new Map(EXPECTED_EMPTY_MIGRATIONS.map((migration) => [migration.name, migrationSql(migration)]))
   const PgClient = ClientClass || (await import("pg")).Client
   const client = new PgClient({ connectionString: context.databaseUrl, application_name: "lyrashield-empty-state-migration", connectionTimeoutMillis: 10000 })
@@ -452,10 +467,10 @@ export async function runEmptyStateMigration({
   try {
     await client.connect()
     connected = true
-    authorize()
+    await authorize()
     await acquireAdvisoryLock(client, authorize, advisoryLockWaitMs, advisoryLockPollMs)
     lockHeld = true
-    authorize()
+    await authorize()
     const actual = await client.query("SELECT current_database() AS database, current_schema() AS schema")
     equal(actual.rows[0].database, context.identity.database, "Connected database differs from the validated identity")
     equal(actual.rows[0].schema, context.identity.schema, "Connected schema differs from the validated identity")
@@ -469,10 +484,10 @@ export async function runEmptyStateMigration({
         await beginLocked(client, undefined, authorize)
         await assertColumnStage(client, "baseline")
         await assertEmpty(client)
-        authorize()
+        await authorize()
         await client.query(statements.get(EXPECTED_EMPTY_MIGRATIONS[0].name))
         await assertColumnStage(client, "due")
-        authorize()
+        await authorize()
         await client.query(statements.get(EXPECTED_EMPTY_MIGRATIONS[1].name))
         await afterPhase(faultInjector, "core-transaction-after-sql", client, EXPECTED_EMPTY_MIGRATIONS[1].name)
         await assertColumnStage(client, "core")
@@ -526,7 +541,7 @@ export async function runEmptyStateMigration({
         await beginLocked(client, undefined, authorize)
         await assertEmpty(client)
         await assertColumnStage(client, "core")
-        authorize()
+        await authorize()
         await client.query(statements.get(EXPECTED_EMPTY_MIGRATIONS[3].name))
         await assertColumnStage(client, "complete")
         await setMarker(client, context, "operator-columns", authorize)
@@ -555,7 +570,7 @@ export async function runEmptyStateMigration({
       migrationNames: EXPECTED_EMPTY_MIGRATIONS.map((entry) => entry.name),
     }
     if (context.trusted) {
-      authorize()
+      await authorize()
       const schemaRows = Object.fromEntries(await schema(client))
       const historyRows = [...(await history(client)).values()].map((row) => ({
         name: row.name,
