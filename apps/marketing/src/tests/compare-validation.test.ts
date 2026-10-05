@@ -271,4 +271,47 @@ describe("compare governance", () => {
       ).toBe(true)
     }
   })
+
+  it("gives the rendered comparison body real typography", () => {
+    // Without a typography class the markdown below the tables rendered as
+    // plain 16px text: no heading sizes, no list markers, no link styling.
+    const template = readFileSync(new URL("../pages/compare/[slug].astro", import.meta.url), "utf8")
+    const wrapper = template.match(/class="([^"]*compare-body[^"]*)"/)
+    expect(wrapper, "compare-body wrapper present").not.toBeNull()
+    const classes = wrapper![1].split(/\s+/)
+    expect(classes, "compare-body carries the prose class").toContain("prose")
+    expect(classes).toContain("max-w-none")
+    expect(classes.some((name) => name.startsWith("prose-a:"))).toBe(true)
+    expect(classes.some((name) => name.startsWith("prose-headings:"))).toBe(true)
+
+    // The site switches theme with :root[data-theme], but Tailwind emits
+    // `dark:` inside prefers-color-scheme, so dark:prose-invert follows the OS
+    // rather than the theme. global.css must map the prose variables to the
+    // site tokens instead.
+    const styles = readFileSync(new URL("../styles/global.css", import.meta.url), "utf8")
+    for (const token of [
+      "--tw-prose-body: var(--text-muted)",
+      "--tw-prose-headings: var(--text)",
+      "--tw-prose-links: var(--accent)",
+    ]) {
+      expect(styles, `global.css maps ${token}`).toContain(token)
+    }
+
+    // The headings that sit directly above a table ("Core approach",
+    // "Capability comparison") read as that table's caption. Markdown emits no
+    // <caption>, so the heading carries the role.
+    expect(styles).toContain(".compare-body h2:has(+ table)")
+
+    // The existing table scroll container must survive the typography change.
+    expect(styles).toContain(".compare-body table")
+    expect(styles).toContain("overflow-x: auto")
+  })
+
+  it("shows the review date in the site's day-month-year format", () => {
+    const template = readFileSync(new URL("../pages/compare/[slug].astro", import.meta.url), "utf8")
+    expect(template).toContain('toLocaleDateString("en-GB"')
+    // The machine-readable value stays ISO.
+    expect(template).toContain("<time datetime={reviewed}>{reviewedLabel}</time>")
+    expect(template).toContain("dateModified: reviewed")
+  })
 })

@@ -95,4 +95,29 @@ describe("Wave 5 trust pages", () => {
     }
     expect(violations).toEqual([])
   })
+
+  it("5.6 drives @tailwindcss/typography from the site theme, not the OS", () => {
+    // Tailwind emits `dark:` utilities inside @media (prefers-color-scheme: dark),
+    // but this site switches theme with :root[data-theme] and lets the visitor
+    // override the OS. So `dark:prose-invert` on the trust pages followed the
+    // operating system instead of the theme: with a dark OS and the site set to
+    // light, `.prose` headings stayed pure #fff on the #f5f9fa page and were
+    // invisible. The prose variables are mapped to the site's own tokens in
+    // global.css, which overrides Tailwind's layered utilities.
+    const styles = readFileSync(new URL("../styles/global.css", import.meta.url), "utf8")
+    for (const mapping of [
+      "--tw-prose-body: var(--text-muted)",
+      "--tw-prose-headings: var(--text)",
+      "--tw-prose-lead: var(--text-muted)",
+      "--tw-prose-links: var(--accent)",
+      "--tw-prose-bold: var(--text)",
+      "--tw-prose-quote-borders: var(--accent)",
+      "--tw-prose-th-borders: var(--border)",
+    ]) {
+      expect(styles, `global.css must map ${mapping}`).toContain(mapping)
+    }
+    // The mapping must not be scoped to one theme: both themes read the tokens.
+    const mappingBlock = styles.slice(styles.indexOf(".prose {"))
+    expect(mappingBlock.slice(0, mappingBlock.indexOf("}"))).not.toContain("data-theme")
+  })
 })

@@ -152,15 +152,20 @@ const clauses: Array<{ id: string; heading: string; body: string }> = [
       These terms are an agreement between you and LyraShield AI of A 10, Metro Tower, Acharya Vihar,
       Bhubaneswar, Odisha 751022, India (&ldquo;LyraShield&rdquo; or &ldquo;we&rdquo;). They cover
       your use of the LyraShield AI website and the public free tools and your LyraShield AI Cloud
-      account. Purchases are also covered by the <a href="/terms-of-sale">Terms of Sale</a>. Our
-      <a href="/privacy">Privacy page</a> explains how we handle data. By creating an account or by
+      account. Purchases are also covered by the{" "}
+      <a
+        href="/terms-of-sale"
+        class="text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent">Terms of Sale</a>. Our{" "}
+      <a
+        href="/privacy"
+        class="text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent">Privacy page</a> explains how we handle data. By creating an account or by
       using the Lite Check you agree to these terms.
     </p>
     <p class="mt-4 text-sm leading-6 text-text-muted">
       LyraShield AI is in open beta.
     </p>
 
-    <div class="prose prose-slate mt-12 max-w-none dark:prose-invert">
+    <div class="prose-themed prose mt-12 max-w-none">
       {
         clauses.map((clause) => (
           <>
