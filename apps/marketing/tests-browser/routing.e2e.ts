@@ -74,6 +74,67 @@ test("renders the comparison body with real typography and a themed prose colour
   expect(headingOnDark, "heading colour under the dark theme").not.toBe(headingOnLight)
 })
 
+// The swallowed-space bug is invisible in source review and survives both
+// `astro check` and a build: the compiler drops the newline between two
+// children, so `reach us through the` + `<a>support page</a>` renders as
+// "through thesupport page". A source scan catches the shapes we know about,
+// but it missed the one-line variant once. This asserts the rendered DOM, so
+// the class of bug fails here regardless of how it is written.
+test("joins text and inline elements with a space in the rendered DOM", async ({ page }) => {
+  // Walk the text nodes of the main content and look for a word butting
+  // straight into the next element's text, or an element's text butting into a
+  // following word, with no whitespace between them.
+  const adjacency = async (path: string) => {
+    await page.goto(path)
+    return page.evaluate(() => {
+      const main = document.querySelector("main") ?? document.body
+      const problems: string[] = []
+      // Elements whose text is inline prose and should never be flush against
+      // a neighbouring word. Excludes decorative spans that carry their own
+      // margin (a count-up marker, an arrow glyph).
+      const INLINE = "a, code, strong, em, b, abbr"
+      const wordish = /[A-Za-z0-9]$/
+      const startsWordish = /^[A-Za-z0-9]/
+      const walker = document.createTreeWalker(main, NodeFilter.SHOW_ELEMENT)
+      let node: Element | null = walker.currentNode as Element
+      while (node) {
+        for (const el of node.querySelectorAll(INLINE)) {
+          const prev = el.previousSibling
+          const next = el.nextSibling
+          const text = el.textContent ?? ""
+          if (prev && prev.nodeType === Node.TEXT_NODE) {
+            const before = prev.textContent ?? ""
+            if (wordish.test(before) && startsWordish.test(text)) {
+              problems.push(
+                `${el.tagName.toLowerCase()} joined to preceding text: ...${before.slice(-30)}|${text.slice(0, 30)}...`
+              )
+            }
+          }
+          if (next && next.nodeType === Node.TEXT_NODE) {
+            const after = next.textContent ?? ""
+            if (wordish.test(text) && startsWordish.test(after)) {
+              problems.push(
+                `${el.tagName.toLowerCase()} joined to following text: ...${text.slice(-30)}|${after.slice(0, 30)}...`
+              )
+            }
+          }
+        }
+        node = walker.nextNode() as Element | null
+      }
+      return problems
+    })
+  }
+
+  for (const path of [
+    "/terms",
+    "/demo",
+    "/docs/integrations/agent-plugins",
+    "/docs/integrations/zed",
+  ]) {
+    expect(await adjacency(path), `${path} must not swallow a space`).toEqual([])
+  }
+})
+
 test("blog posts still serve after the routing change", async ({ page }) => {
   const res = await page.request.get("/blog/path-traversal-generated-code")
   expect(res.status()).toBe(200)
