@@ -1,7 +1,6 @@
 import { spawnSync } from "node:child_process"
 import {
   appendFileSync,
-  copyFileSync,
   existsSync,
   mkdirSync,
   readFileSync,
@@ -25,6 +24,24 @@ export const LIGHTHOUSE_MINIMUM = Object.freeze({
   seo: 0.95,
 })
 
+/**
+ * Score sampling policy.
+ *
+ * A single Lighthouse sample is not stable: the same page code has measured
+ * anywhere from 0.69 to 0.97 performance because total blocking time swings
+ * with runner contention, the autoplaying hero video and PostHog. Gating on
+ * one sample therefore fails releases at random.
+ *
+ * The gate now takes at least MIN_SAMPLES and at most LIGHTHOUSE_SAMPLE_LIMIT
+ * samples per page and compares the MEDIAN of each category against the
+ * unchanged thresholds. The median needs no tiebreaker when two samples agree
+ * on pass/fail, because the median of two agreeing samples sits on the same
+ * side of the threshold. A third sample is only spent when the first two
+ * straddle a threshold, which is the one case where the median of two samples
+ * could land on the wrong side of a single flaky reading.
+ */
+export const LIGHTHOUSE_SAMPLE_LIMIT = 3
+const MIN_SAMPLES = 2
 const MAX_ATTEMPTS = 2
 
 export function hasNoNavstart(report, diagnostic = "") {
@@ -35,12 +52,23 @@ export function hasNoNavstart(report, diagnostic = "") {
   return /\bNO_NAVSTART\b/.test(diagnostic)
 }
 
+function isValidScore(score) {
+  return typeof score === "number" && Number.isFinite(score) && score >= 0 && score <= 1
+}
+
 function hasValidLighthouseScore(report) {
   if (!report) return false
-  return Object.keys(LIGHTHOUSE_MINIMUM).some((category) => {
-    const score = report.categories?.[category]?.score
-    return typeof score === "number" && Number.isFinite(score) && score >= 0 && score <= 1
-  })
+  return Object.keys(LIGHTHOUSE_MINIMUM).some((category) =>
+    isValidScore(report.categories?.[category]?.score)
+  )
+}
+
+export function median(values) {
+  const sorted = values.filter(isValidScore).sort((a, b) => a - b)
+  if (sorted.length === 0) return null
+  const middle = Math.floor(sorted.length / 2)
+  if (sorted.length % 2 === 1) return sorted[middle]
+  return (sorted[middle - 1] + sorted[middle]) / 2
 }
 
 export function shouldRetryNoNavstart({
@@ -54,55 +82,95 @@ export function shouldRetryNoNavstart({
   )
 }
 
+function samplesFromEntry(entry) {
+  if (Array.isArray(entry)) return entry.filter(Boolean)
+  return entry ? [entry] : []
+}
+
+/**
+ * How many samples this page still needs. Returns the count already collected
+ * when two samples agree on pass/fail for every category, and one more when
+ * the collected samples straddle any threshold.
+ */
+export function neededSampleCount(samples, minimum = LIGHTHOUSE_MINIMUM) {
+  if (samples.length >= LIGHTHOUSE_SAMPLE_LIMIT) return samples.length
+  if (samples.length < MIN_SAMPLES) return MIN_SAMPLES
+  const straddles = Object.keys(minimum).some((category) => {
+    const values = samples.map((sample) => sample?.categories?.[category]?.score)
+    if (values.some((value) => !isValidScore(value))) return true
+    return Math.min(...values) < minimum[category] && Math.max(...values) >= minimum[category]
+  })
+  return straddles ? samples.length + 1 : samples.length
+}
+
+function formatScore(score) {
+  return isValidScore(score) ? String(score) : "missing"
+}
+
 export function evaluateLighthouseReports(reports, origin = "https://lyrashieldai.com") {
   let failed = false
-  const rows = ["| Page | performance | accessibility | seo |", "| --- | --- | --- | --- |"]
+  const rows = [
+    "| Page | samples | performance (median) | accessibility (median) | seo (median) |",
+    "| --- | --- | --- | --- | --- |",
+  ]
   const messages = []
+  const runtimeMessages = []
 
   for (const page of LIGHTHOUSE_PAGES) {
-    const report = reports[page.name]
-    const url =
-      report?.finalDisplayedUrl || report?.finalUrl || new URL(page.path, origin).toString()
-    const cells = []
+    const samples = samplesFromEntry(reports[page.name])
+    const first = samples[0]
+    const url = first?.finalDisplayedUrl || first?.finalUrl || new URL(page.path, origin).toString()
 
-    if (report?.runtimeError) {
+    for (const [index, sample] of samples.entries()) {
+      const detail = Object.keys(LIGHTHOUSE_MINIMUM)
+        .map((category) => category + ": " + formatScore(sample?.categories?.[category]?.score))
+        .join(" ")
+      messages.push("sample " + (index + 1) + "/" + samples.length + " " + url + " " + detail)
+    }
+
+    for (const sample of samples) {
+      if (!sample?.runtimeError) continue
       const code =
-        typeof report.runtimeError.code === "string" && report.runtimeError.code.length > 0
-          ? report.runtimeError.code
+        typeof sample.runtimeError.code === "string" && sample.runtimeError.code.length > 0
+          ? sample.runtimeError.code
           : "unknown"
       const message =
-        typeof report.runtimeError.message === "string" ? report.runtimeError.message : ""
-      messages.push("FAIL " + url + " runtimeError: " + code + (message ? ": " + message : ""))
+        typeof sample.runtimeError.message === "string" ? sample.runtimeError.message : ""
+      runtimeMessages.push(
+        "FAIL " + url + " runtimeError: " + code + (message ? ": " + message : "")
+      )
       failed = true
     }
 
+    const cells = []
     for (const [category, threshold] of Object.entries(LIGHTHOUSE_MINIMUM)) {
-      const score = report?.categories?.[category]?.score
-      const valid = typeof score === "number" && Number.isFinite(score) && score >= 0 && score <= 1
+      const values = samples.map((sample) => sample?.categories?.[category]?.score)
+      const medianScore = median(values)
+      const complete = values.length > 0 && values.every(isValidScore)
       const line =
-        url + " " + category + ": " + (valid ? score : "missing") + " (min " + threshold + ")"
-      if (!valid || score < threshold) {
+        url + " " + category + ": " + formatScore(medianScore) + " (min " + threshold + ")"
+      if (!complete || medianScore === null || medianScore < threshold) {
         messages.push("FAIL " + line)
-        cells.push("**" + (valid ? score : "missing") + "**")
+        cells.push("**" + formatScore(medianScore) + "**")
         failed = true
       } else {
         messages.push("ok   " + line)
-        cells.push(String(score))
+        cells.push(String(medianScore))
       }
     }
 
-    rows.push("| " + url + " | " + cells.join(" | ") + " |")
+    rows.push("| " + url + " | " + samples.length + " | " + cells.join(" | ") + " |")
   }
 
   return {
     failed,
-    messages,
+    messages: [...messages, ...runtimeMessages],
     summary:
       "## Lighthouse production scores\n\n" +
       rows.join("\n") +
       "\n" +
-      messages.filter((message) => message.includes(" runtimeError: ")).join("\n") +
-      (messages.some((message) => message.includes(" runtimeError: ")) ? "\n" : ""),
+      runtimeMessages.join("\n") +
+      (runtimeMessages.length > 0 ? "\n" : ""),
   }
 }
 
@@ -140,12 +208,25 @@ export function runLighthouseAttempt(url, outputPath) {
   }
 }
 
+function sampleScoreRecord(samples) {
+  return Object.fromEntries(
+    Object.keys(LIGHTHOUSE_MINIMUM).map((category) => [
+      category,
+      {
+        samples: samples.map((sample) => sample?.categories?.[category]?.score ?? null),
+        median: median(samples.map((sample) => sample?.categories?.[category]?.score)),
+      },
+    ])
+  )
+}
+
 export async function collectLighthouseReports({
   origin = "https://lyrashieldai.com",
   reportsDir,
   pages = LIGHTHOUSE_PAGES,
   invoke = runLighthouseAttempt,
   logger = console,
+  sampleLimit = LIGHTHOUSE_SAMPLE_LIMIT,
 }) {
   mkdirSync(reportsDir, { recursive: true })
   const attemptsDir = path.join(reportsDir, "attempts")
@@ -155,101 +236,136 @@ export async function collectLighthouseReports({
   for (const page of pages) {
     const url = new URL(page.path, origin).toString()
     const finalPath = path.join(reportsDir, "lyrashield-lighthouse" + page.name + ".json")
-    let lastReport = null
+    const samplesPath = path.join(reportsDir, "lyrashield-lighthouse" + page.name + ".samples.json")
+    const samples = []
     let lastDiagnostic = ""
+    let sample = 0
+    let target = Math.min(MIN_SAMPLES, sampleLimit)
 
-    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
-      const attemptStem = "lyrashield-lighthouse" + page.name + ".attempt-" + attempt
-      const attemptPath = path.join(attemptsDir, attemptStem + ".json")
-      const diagnosticPath = path.join(attemptsDir, attemptStem + ".diagnostic.txt")
-      const metadataPath = path.join(attemptsDir, attemptStem + ".metadata.json")
-      rmSync(attemptPath, { force: true })
-      rmSync(diagnosticPath, { force: true })
-      rmSync(metadataPath, { force: true })
+    while (sample < target) {
+      sample += 1
+      const stem = "lyrashield-lighthouse" + page.name + ".sample-" + sample
+      const samplePath = path.join(attemptsDir, stem + ".json")
+      rmSync(samplePath, { force: true })
+      let lastReport = null
 
-      let result
-      try {
-        result = await invoke(url, attemptPath)
-      } catch (error) {
-        result = {
-          report: null,
-          diagnostic: error instanceof Error ? error.stack || error.message : String(error),
-          exitCode: 1,
+      for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
+        const attemptStem = stem + ".attempt-" + attempt
+        const attemptPath = path.join(attemptsDir, attemptStem + ".json")
+        const diagnosticPath = path.join(attemptsDir, attemptStem + ".diagnostic.txt")
+        const metadataPath = path.join(attemptsDir, attemptStem + ".metadata.json")
+        rmSync(attemptPath, { force: true })
+        rmSync(diagnosticPath, { force: true })
+        rmSync(metadataPath, { force: true })
+
+        let result
+        try {
+          result = await invoke(url, attemptPath)
+        } catch (error) {
+          result = {
+            report: null,
+            diagnostic: error instanceof Error ? error.stack || error.message : String(error),
+            exitCode: 1,
+          }
         }
-      }
 
-      const report = result?.report ?? readReport(attemptPath)
-      const diagnostic = typeof result?.diagnostic === "string" ? result.diagnostic : ""
-      const exitCode = Number.isInteger(result?.exitCode) ? result.exitCode : 1
-      lastReport = report
-      lastDiagnostic = diagnostic
+        const report = result?.report ?? readReport(attemptPath)
+        const diagnostic = typeof result?.diagnostic === "string" ? result.diagnostic : ""
+        const exitCode = Number.isInteger(result?.exitCode) ? result.exitCode : 1
+        lastReport = report
+        lastDiagnostic = diagnostic
 
-      if (report && !existsSync(attemptPath)) {
-        writeFileSync(attemptPath, JSON.stringify(report, null, 2) + "\n")
-      }
+        if (report && !existsSync(attemptPath)) {
+          writeFileSync(attemptPath, JSON.stringify(report, null, 2) + "\n")
+        }
 
-      writeFileSync(diagnosticPath, diagnostic || "(no CLI diagnostic output)\n")
-      writeFileSync(
-        metadataPath,
-        JSON.stringify(
-          {
-            path: page.path,
-            url,
-            attempt,
-            maxAttempts: MAX_ATTEMPTS,
-            exitCode,
-            reportParsed: Boolean(report),
-            reportFile: existsSync(attemptPath) ? path.basename(attemptPath) : null,
-            diagnosticFile: path.basename(diagnosticPath),
-          },
-          null,
-          2
-        ) + "\n"
-      )
-
-      if (exitCode !== 0) {
-        logger.warn(
-          "Lighthouse invocation for " +
-            page.path +
-            " exited " +
-            exitCode +
-            (diagnostic ? ": " + diagnostic.slice(0, 500) : "")
+        writeFileSync(diagnosticPath, diagnostic || "(no CLI diagnostic output)\n")
+        writeFileSync(
+          metadataPath,
+          JSON.stringify(
+            {
+              path: page.path,
+              url,
+              sample,
+              attempt,
+              maxAttempts: MAX_ATTEMPTS,
+              sampleLimit,
+              exitCode,
+              reportParsed: Boolean(report),
+              reportFile: existsSync(attemptPath) ? path.basename(attemptPath) : null,
+              diagnosticFile: path.basename(diagnosticPath),
+            },
+            null,
+            2
+          ) + "\n"
         )
+
+        if (exitCode !== 0) {
+          logger.warn(
+            "Lighthouse invocation for " +
+              page.path +
+              " (sample " +
+              sample +
+              ") exited " +
+              exitCode +
+              (diagnostic ? ": " + diagnostic.slice(0, 500) : "")
+          )
+        }
+
+        if (shouldRetryNoNavstart({ report, diagnostic, attempt })) {
+          logger.warn(
+            "Lighthouse returned NO_NAVSTART for " +
+              page.path +
+              " on sample " +
+              sample +
+              " attempt " +
+              attempt +
+              "; retrying once."
+          )
+          continue
+        }
+
+        break
       }
 
-      if (shouldRetryNoNavstart({ report, diagnostic, attempt })) {
-        logger.warn(
-          "Lighthouse returned NO_NAVSTART for " +
-            page.path +
-            " on attempt " +
-            attempt +
-            "; retrying once."
-        )
-        continue
-      }
-
-      if (report) {
-        copyFileSync(attemptPath, finalPath)
-        reports[page.name] = report
+      if (lastReport) {
+        writeFileSync(samplePath, JSON.stringify(lastReport, null, 2) + "\n")
+        samples.push(lastReport)
       } else {
-        rmSync(finalPath, { force: true })
-        logger.warn("Lighthouse produced no JSON report for " + page.path)
+        logger.warn(
+          "Lighthouse produced no JSON report for " +
+            page.path +
+            " (sample " +
+            sample +
+            ")" +
+            (lastDiagnostic ? ": " + lastDiagnostic.slice(0, 500) : "")
+        )
+        // A page that yields no report at all will not yield one on another
+        // sample, so stop spending samples here rather than doubling the cost
+        // of the failure path.
+        break
       }
-      break
+
+      target = Math.min(neededSampleCount(samples), sampleLimit)
     }
 
-    if (lastReport?.runtimeError?.code === "NO_NAVSTART" && !reports[page.name]) {
-      reports[page.name] = lastReport
-      const lastAttempt = path.join(
-        attemptsDir,
-        "lyrashield-lighthouse" + page.name + ".attempt-" + MAX_ATTEMPTS + ".json"
-      )
-      if (existsSync(lastAttempt)) copyFileSync(lastAttempt, finalPath)
-    } else if (!lastReport && lastDiagnostic && !reports[page.name]) {
-      logger.warn(
-        "Last Lighthouse diagnostic for " + page.path + ": " + lastDiagnostic.slice(0, 500)
-      )
+    if (samples.length > 0) {
+      const representative = samples.find((entry) => entry && !entry.runtimeError) ?? samples[0]
+      writeFileSync(finalPath, JSON.stringify(representative, null, 2) + "\n")
+      reports[page.name] = samples
+    } else {
+      rmSync(finalPath, { force: true })
+      reports[page.name] = []
     }
+
+    writeFileSync(
+      samplesPath,
+      JSON.stringify(
+        { url, sampleLimit, sampled: samples.length, categories: sampleScoreRecord(samples) },
+        null,
+        2
+      ) + "\n"
+    )
   }
 
   return reports
