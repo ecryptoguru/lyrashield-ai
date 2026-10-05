@@ -120,4 +120,57 @@ describe("Wave 5 trust pages", () => {
     const mappingBlock = styles.slice(styles.indexOf(".prose {"))
     expect(mappingBlock.slice(0, mappingBlock.indexOf("}"))).not.toContain("data-theme")
   })
+
+  it("5.7 keeps prose surfaces free of OS-bound and undefined classes", () => {
+    // Two leftovers found in a production pass:
+    //  - `dark:prose-invert` follows prefers-color-scheme, not :root[data-theme],
+    //    so it is the wrong mechanism here and is now inert. Removed from the
+    //    markup so the trap is not left implied.
+    //  - `prose-themed` was a class name with no rule anywhere: dead weight.
+    const offenders: string[] = []
+    for (const file of sourceFiles(src)) {
+      const relative = file.slice(src.length + 1)
+      const body = readFileSync(file, "utf8")
+      if (/\bdark:prose-/.test(body)) offenders.push(`${relative} uses a dark: prose variant`)
+      if (/\bprose-themed\b/.test(body))
+        offenders.push(`${relative} uses the undefined prose-themed`)
+    }
+    expect(offenders).toEqual([])
+  })
+
+  it("5.8 gives every inline prose link visible styling", () => {
+    // The reported shape was an inline link in body copy with no colour or
+    // underline. A link inside a `prose` container inherits accent + underline
+    // from the prose variables; a link outside one must carry its own classes.
+    // This walks each trust page and fails if a bare inline link sits outside
+    // the page's prose container.
+    const bareAnchorOutsideProse = (source: string): string[] => {
+      const lines = source.split("\n")
+      const found: string[] = []
+      let depth = 0
+      let proseDepth: number | null = null
+      lines.forEach((line, index) => {
+        if (proseDepth === null && /class="[^"]*\bprose\b/.test(line)) proseDepth = depth
+        const opens = line.match(/<div\b/g)?.length ?? 0
+        const closes = line.match(/<\/div>/g)?.length ?? 0
+        for (const match of line.matchAll(/<a\b([^>]*)>/g)) {
+          if (proseDepth === null && !match[1].includes("class=")) {
+            found.push(`line ${index + 1}`)
+          }
+        }
+        depth += opens
+        if (proseDepth !== null && closes > 0 && depth - closes <= proseDepth) proseDepth = null
+        depth -= closes
+      })
+      return found
+    }
+
+    const offenders: string[] = []
+    for (const name of TRUST_PAGES) {
+      const body = page(name)
+      const bare = bareAnchorOutsideProse(body)
+      if (bare.length > 0) offenders.push(`${name}: ${bare.join(", ")}`)
+    }
+    expect(offenders).toEqual([])
+  })
 })
