@@ -124,6 +124,73 @@ test("homepage loads only the selected lazy product screenshots for either saved
   }
 })
 
+test("motion video waits for approach and buffers before the story enters view", async ({
+  browser,
+}) => {
+  for (const viewport of [
+    { width: 390, height: 844 },
+    { width: 1440, height: 900 },
+  ]) {
+    const context = await browser.newContext({ viewport, reducedMotion: "no-preference" })
+    const page = await context.newPage()
+    const motionRequests: string[] = []
+    page.on("request", (request) => {
+      if (motionVideo.test(new URL(request.url()).pathname)) motionRequests.push(request.url())
+    })
+    await page.goto("/", { waitUntil: "load" })
+    // Give the former idle-after-load warm path time to run.
+    await page.waitForTimeout(3000)
+    expect(motionRequests).toEqual([])
+    expect(await page.locator("#assurance-world video").getAttribute("src")).toBeNull()
+    await page.evaluate(() => {
+      const story = document.getElementById("assurance-world")!
+      scrollTo(0, story.getBoundingClientRect().top + scrollY - innerHeight * 1.75)
+    })
+    await expect.poll(() => motionRequests.length).toBeGreaterThan(0)
+    expect(
+      await page.locator("#assurance-world").evaluate((story) => story.getBoundingClientRect().top)
+    ).toBeGreaterThan(viewport.height)
+    await page.locator("#assurance-world").scrollIntoViewIfNeeded()
+    await expect(page.locator("#assurance-world")).toHaveClass(/is-enhanced/)
+    await expect
+      .poll(
+        () =>
+          page
+            .locator("#assurance-world video")
+            .evaluate((video) => (video as HTMLVideoElement).readyState),
+        { timeout: 30_000 }
+      )
+      .toBeGreaterThanOrEqual(2)
+    await expect
+      .poll(
+        () =>
+          page
+            .locator("#assurance-world video")
+            .evaluate((video) => (video as HTMLVideoElement).buffered.length),
+        { timeout: 30_000 }
+      )
+      .toBeGreaterThan(0)
+    await page.locator('[data-chapter-index="0"]').evaluate((chapter) => {
+      const top = chapter.getBoundingClientRect().top + scrollY
+      scrollTo(0, top + chapter.clientHeight * 0.5 - innerHeight * 0.5)
+    })
+    await expect(page.locator("#assurance-world video")).toHaveClass(/is-front/, {
+      timeout: 30_000,
+    })
+    await expect
+      .poll(
+        () =>
+          page.locator("#assurance-world video").evaluate((video) => {
+            const media = video as HTMLVideoElement
+            return media.currentTime > 0 && !media.seeking && media.videoWidth > 0
+          }),
+        { timeout: 30_000 }
+      )
+      .toBe(true)
+    await context.close()
+  }
+})
+
 test("reduced motion and Save-Data keep the static evidence world without loading video", async ({
   browser,
 }) => {

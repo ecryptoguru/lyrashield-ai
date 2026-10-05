@@ -112,27 +112,27 @@ const { manifest } = Astro.props
     )
     observer.observe(el)
 
-    // Warm the story in parallel with the rest of the page instead of waiting
-    // for the observer above. The timeline is scroll-scrubbed, so arriving at
-    // the story with an empty buffer meant the first pass stuttered while the
-    // browser range-requested each seek — visible on desktop and mobile alike.
-    // Upgrading the element early lets it start fetching (see assignSource);
-    // the observer still owns when scroll listeners attach, and whichever path
-    // fires first wins because bootstrapEvidenceWorld is idempotent.
-    //
-    // Deliberately gated: this pulls a multi-megabyte video on a visit that may
-    // never reach the story, so skip it when the visitor has asked for less
-    // (reduced motion, Save-Data) or is on a 2g-class connection, where the
-    // poster fallback is the better experience anyway. It is also scheduled
-    // after load and on idle so it never competes with the hero for bandwidth.
+    // Buffer one viewport beyond the visible viewport, without downloading
+    // the timeline while a visitor is still at the hero. Use height-based
+    // pixels: IntersectionObserver percentage margins are based on width.
+    // The controller's existing 50% observer still owns story activation.
     if (!reduced && !saveData && !slowNetwork) {
-      const idle = "requestIdleCallback" in window ? window.requestIdleCallback : undefined
-      const schedule = () => {
-        if (idle) idle(bootstrapEvidenceWorld, { timeout: 2500 })
-        else setTimeout(bootstrapEvidenceWorld, 900)
+      let warmObserver: IntersectionObserver | undefined
+      const observeApproach = () => {
+        warmObserver?.disconnect()
+        warmObserver = new IntersectionObserver(
+          (entries, obs) => {
+            if (!entries.some((entry) => entry.isIntersecting)) return
+            obs.disconnect()
+            removeEventListener("resize", observeApproach)
+            bootstrapEvidenceWorld()
+          },
+          { rootMargin: `${innerHeight}px 0px` }
+        )
+        warmObserver.observe(el)
       }
-      if (document.readyState === "complete") schedule()
-      else addEventListener("load", schedule, { once: true })
+      addEventListener("resize", observeApproach, { passive: true })
+      observeApproach()
     }
   } else {
     bootstrapEvidenceWorld()

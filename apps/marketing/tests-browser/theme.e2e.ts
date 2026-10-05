@@ -109,7 +109,6 @@ for (const viewport of [
     expect(
       await page.locator('[data-chapter-index="0"]').evaluate((el) => el.clientHeight)
     ).toBeGreaterThanOrEqual(expectedChapterHeight)
-    await page.evaluate(() => customElements.whenDefined("evidence-world"))
 
     const gateway = page.locator('[data-chapter-index="0"]')
     const scrollToChapterProgress = async (progress: number) =>
@@ -127,6 +126,7 @@ for (const viewport of [
     // land on any middle chapter; position the first chapter's scroll anchor
     // deliberately so this test starts on card 0 before checking its transition.
     await scrollToChapterProgress(0.2)
+    await page.evaluate(() => customElements.whenDefined("evidence-world"))
     await expect(gateway.locator('[data-story-card-index="0"]')).toHaveClass(/is-card-active/)
     await scrollToChapterProgress(0.7)
     await expect(gateway.locator('[data-story-card-index="1"]')).toHaveClass(/is-card-active/)
@@ -286,6 +286,11 @@ test("keeps mobile menu rows content-sized when the browser expands dialogs", as
   const menu = page.locator("#mobile-menu")
   const firstLink = menu.getByRole("link", { name: "Coding agents" })
   await expect(menu).toBeVisible()
+  // The entrance animation scales the dialog from 0.98, temporarily making
+  // a 44px row measure 43px. Measure touch targets after the animation ends.
+  await menu.evaluate(async (dialog) => {
+    await Promise.all(dialog.getAnimations().map((animation) => animation.finished))
+  })
   expect((await menu.boundingBox())!.height).toBeLessThanOrEqual(852)
   // min-height: 2.75rem renders as 43.83px at this width, so round to the
   // nearest pixel before checking the 44px touch target.
