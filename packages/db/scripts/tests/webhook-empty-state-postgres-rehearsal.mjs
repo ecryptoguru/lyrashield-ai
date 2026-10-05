@@ -283,10 +283,11 @@ await raceWriter.query(
 )
 const raceEnvironment = makeEnvironment()
 const raceMigration = runEmptyStateMigration({ env: raceEnvironment })
+const raceMigrationRejected = assert.rejects(raceMigration, /WebhookEventTrack contains rows/)
 await waitForActivity("lyrashield-empty-state-migration", (activity) => activity.wait_event_type === "Lock")
 await raceWriter.query("COMMIT")
 await raceWriter.end()
-await assert.rejects(raceMigration, /WebhookEventTrack contains rows/)
+await raceMigrationRejected
 assert.equal(await hasColumn("nextAttemptAtUtc"), false, "a writer that wins the lock race must block all migration DDL")
 const racedRow = await admin.query('SELECT count(*)::integer AS count FROM public."WebhookEventTrack" WHERE id=$1', ["race-track"])
 assert.equal(racedRow.rows[0].count, 1, "the concurrent writer's committed work must remain intact")
@@ -331,7 +332,11 @@ for (const migration of EXPECTED_EMPTY_MIGRATIONS) {
         return result
       },
     }),
-    new RegExp("simulated lost acknowledgement after Prisma resolve " + migration.name),
+    (error) => {
+      assert.equal(error.message, "Prisma could not resolve applied migration " + migration.name)
+      assert.doesNotMatch(error.message, /simulated lost acknowledgement/)
+      return true
+    },
   )
   assert.equal(interrupted, true, "the test must interrupt immediately after the selected Prisma resolve")
   const persisted = await admin.query('SELECT checksum,finished_at FROM public."_prisma_migrations" WHERE migration_name=$1', [migration.name])
