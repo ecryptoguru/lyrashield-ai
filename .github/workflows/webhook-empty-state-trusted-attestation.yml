@@ -129,8 +129,8 @@ jobs:
         run: echo 'Empty-state cutover failed. Retain owned admission and startup fence; no legacy rollback, queue deletion or payment replay.' >> "$GITHUB_STEP_SUMMARY"
 
   disposable-issuance:
-    # Review/publication only: numeric run IDs cannot equal this sentinel.
-    if: ${{ github.run_id == 'disabled-until-owner-approved-disposable-attestation' }}
+    # Owner-approved synthetic-only window; never a production root trust pin.
+    if: ${{ inputs.disposable_only == true && github.actor_id == '116722580' && github.repository_id == '1286618458' && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && github.run_attempt == '1' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -146,6 +146,8 @@ jobs:
         with:
           node-version: 24
       - name: Generate synthetic canonical receipt (no service connections)
+        env:
+          DISPOSABLE_NONCE: ${{ inputs.nonce }}
         run: node approval-fixtures/disposable-attestation.mjs prepare
       - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
         with:
@@ -164,3 +166,13 @@ jobs:
           printf '%s' "$GH_TOKEN" | sudo /usr/bin/gh auth login --hostname github.com --with-token
       - name: Actual application verification and certificate linkage negatives
         run: sudo --preserve-env=GITHUB_RUN_ID,GITHUB_RUN_ATTEMPT,GITHUB_SHA,GITHUB_ACTOR_ID,GITHUB_REF,GITHUB_EVENT_NAME,RUNNER_TEMP node approval-fixtures/disposable-attestation.mjs verify
+      - name: Retain only synthetic digest and verification provenance
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: disposable-attestation-provenance
+          path: |
+            ${{ runner.temp }}/disposable-manifest.json
+            ${{ runner.temp }}/disposable-verification.json
+          if-no-files-found: ignore
+          retention-days: 3

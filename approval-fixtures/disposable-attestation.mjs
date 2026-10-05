@@ -23,6 +23,14 @@ export async function main() {
     receiptPath = dir + "/disposable-receipt.json",
     policyPath = dir + "/disposable-policy.json"
   if (process.argv[2] === "prepare") {
+    assert.equal(process.env.GITHUB_ACTOR_ID, "116722580")
+    assert.equal(process.env.GITHUB_RUN_ATTEMPT, "1")
+    assert.equal(process.env.DISPOSABLE_NONCE, "disposable-only-public-fixture-nonce-0000000000")
+    assert.ok(
+      Date.now() >= Date.parse("2026-10-05T07:34:00Z") &&
+        Date.now() < Date.parse("2026-10-05T09:00:00Z"),
+      "Approved disposable issuance window expired"
+    )
     assert.equal(process.env.GITHUB_REF, "refs/heads/main")
     assert.equal(process.env.GITHUB_EVENT_NAME, "workflow_dispatch")
     const endpoint = new URL(process.env.ACTIONS_ID_TOKEN_REQUEST_URL)
@@ -50,6 +58,21 @@ export async function main() {
       actorId: process.env.GITHUB_ACTOR_ID,
       workflowBytes: readFileSync(WORKFLOW, "utf8"),
     })
+    writeFileSync(
+      dir + "/disposable-manifest.json",
+      canonical({
+        syntheticOnly: true,
+        sourceSha: receipt.authorization.sourceSha,
+        runId: receipt.authorization.runId,
+        originalAttempt: receipt.authorization.originalAttempt,
+        workflowSha: policy.workflowSha,
+        actorId: policy.actorId,
+        issuedAt: receipt.authorization.issuedAt,
+        expiresAt: receipt.authorization.expiresAt,
+        receiptSha256: sha256(canonical(receipt)),
+        workflowFileSha256: policy.workflowFileSha256,
+      })
+    )
     writeFileSync(receiptPath, canonical(receipt), { mode: 0o600 })
     writeFileSync(policyPath, canonical(policy), { mode: 0o600 })
     writeFileSync(
@@ -119,6 +142,28 @@ export async function main() {
     const changed = structuredClone(receipt.authorization)
     changed.nonce += "X"
     assert.throws(() => validateAuthorization(changed, policy))
+    writeFileSync(
+      dir + "/disposable-verification.json",
+      canonical({
+        syntheticOnly: true,
+        receiptSha256: sha256(canonical(receipt)),
+        runId: receipt.authorization.runId,
+        workflowSha: policy.workflowSha,
+        actualVerifyAttestationPassed: true,
+        linkageNegatives: [
+          "workflow",
+          "source",
+          "run",
+          "attempt",
+          "actor",
+          "nonce",
+          "digest",
+          "repository",
+        ],
+        authorizationNonceNegativePassed: true,
+        productionAuthorized: false,
+      })
+    )
     console.log("Disposable exact application verification passed; production remains disabled")
   }
 }
