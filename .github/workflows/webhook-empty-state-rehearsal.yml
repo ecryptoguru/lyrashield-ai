@@ -12,6 +12,10 @@ on:
       - "packages/db/prisma/migrations/20261002130200_webhook_track_operator_recovery/migration.sql"
       - "packages/db/scripts/webhook-empty-state-*.mjs"
       - "packages/db/scripts/tests/webhook-empty-state-*.mjs"
+      - "ops/worker/webhook-empty-state-*.mjs"
+      - "ops/worker/tests.webhook-empty-state.test.mjs"
+      - ".github/scripts/*webhook-empty-state*.mjs"
+      - ".github/workflows/webhook-empty-state-*.yml"
 
 permissions:
   contents: read
@@ -65,7 +69,10 @@ jobs:
           grep -Eq '^prisma[[:space:]]*:[[:space:]]*7\.9\.1$' <<< "$version"
 
       - name: Run empty-state migration contract tests
-        run: node --test packages/db/scripts/tests/webhook-empty-state-migration.contract.mjs
+        run: >-
+          node --test packages/db/scripts/tests/webhook-empty-state-migration.contract.mjs
+          packages/db/scripts/tests/webhook-empty-state-*.test.mjs
+          ops/worker/tests.webhook-empty-state.test.mjs
 
       - name: Rehearse fresh empty-state migration and completed retry
         run: node packages/db/scripts/tests/webhook-empty-state-postgres-rehearsal.mjs

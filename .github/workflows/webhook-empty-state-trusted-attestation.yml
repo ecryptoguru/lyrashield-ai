@@ -14,13 +14,22 @@ on:
       nonce:
         required: true
         type: string
+    secrets:
+      AZURE_DEPLOY_CLIENT_ID:
+        required: true
+      AZURE_DEPLOY_TENANT_ID:
+        required: true
+      AZURE_DEPLOY_SUBSCRIPTION_ID:
+        required: true
 permissions:
   contents: read
 jobs:
   produce:
     # Owner-approved root collector installation, trust setup and action-time
     # maintenance window are separate. Never activate through caller input.
-    if: ${{ false }}
+    # GitHub run IDs are decimal; this fixed sentinel cannot match.
+    # This static disable avoids actionlint's bare-boolean condition error.
+    if: ${{ github.run_id == 'disabled-until-owner-approved-cutover' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     environment: azure-production
@@ -48,11 +57,69 @@ jobs:
           test "$GITHUB_EVENT_NAME" = workflow_dispatch
           test "$GITHUB_REPOSITORY_ID" = 1286618458
           test "$GITHUB_REPOSITORY_OWNER_ID" = 116722580
-      # The fixed root producer must collect its own observations and return
-      # only a canonical receipt digest. No caller counts, JSON or PEM inputs.
-      # Activation adds the reviewed fixed producer invocation and actions/attest
-      # of that exact digest; no raw receipt is uploaded to this public repo.
-      - name: Require completed producer integration before activation
+      - name: Login with the existing protected deployment principal
+        uses: Azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906
+        with:
+          client-id: ${{ secrets.AZURE_DEPLOY_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_DEPLOY_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_DEPLOY_SUBSCRIPTION_ID }}
+      - name: Fixed root preflight, owned admission, normal drain and writer stop
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          RUN_ID: ${{ inputs.run_id }}
+          RUN_ATTEMPT: ${{ inputs.run_attempt }}
+          NONCE: ${{ inputs.nonce }}
         run: |
-          echo 'Trusted producer integration has not been activated.' >&2
-          exit 1
+          set -euo pipefail
+          for phase in preflight admission drain stop; do
+            az vm run-command invoke --ids /subscriptions/b2f8f58b-18f5-4e49-ac53-06ea04ff0f4c/resourceGroups/LyraShieldAI/providers/Microsoft.Compute/virtualMachines/lyrashield-worker \
+              --command-id RunShellScript --scripts "node /opt/lyrashield-worker-host/ops/worker/webhook-empty-state-producer.mjs $phase $RUN_ID $RUN_ATTEMPT $SOURCE_SHA $NONCE" \
+              --query 'value[0].message' -o tsv > "$RUNNER_TEMP/root-phase.txt"
+            # Azure wraps guest script errors; never accept transport success
+            # alone. The fixed producer emits this only after all phase gates.
+            grep -Fxq "EMPTY_STATE_PHASE_COMPLETE=$phase" "$RUNNER_TEMP/root-phase.txt"
+          done
+      - name: Acquire digest from fixed root producer
+        id: collect
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          RUN_ID: ${{ inputs.run_id }}
+          RUN_ATTEMPT: ${{ inputs.run_attempt }}
+          NONCE: ${{ inputs.nonce }}
+        run: |
+          set -euo pipefail
+          az vm run-command invoke --ids /subscriptions/b2f8f58b-18f5-4e49-ac53-06ea04ff0f4c/resourceGroups/LyraShieldAI/providers/Microsoft.Compute/virtualMachines/lyrashield-worker \
+            --command-id RunShellScript --scripts "node /opt/lyrashield-worker-host/ops/worker/webhook-empty-state-producer.mjs collect $RUN_ID $RUN_ATTEMPT $SOURCE_SHA $NONCE" \
+            --query 'value[0].message' -o tsv > "$RUNNER_TEMP/root-digest.txt"
+          grep -Fxq 'EMPTY_STATE_PHASE_COMPLETE=collect' "$RUNNER_TEMP/root-digest.txt"
+          receipt_sha256=$(grep -Ex '[a-f0-9]{64}' "$RUNNER_TEMP/root-digest.txt")
+          [[ "$receipt_sha256" =~ ^[a-f0-9]{64}$ ]]
+          echo "receipt_sha256=$receipt_sha256" >> "$GITHUB_OUTPUT"
+          printf '{"receiptSha256":"%s"}' "$receipt_sha256" > "$RUNNER_TEMP/predicate.json"
+      - name: Attest only exact canonical receipt digest
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
+        with:
+          subject-name: webhook-empty-state-canonical-receipt-v2
+          subject-digest: sha256:${{ steps.collect.outputs.receipt_sha256 }}
+          predicate-type: https://lyrashieldai.com/attestations/webhook-empty-state/v2
+          predicate-path: ${{ runner.temp }}/predicate.json
+          create-storage-record: true
+          push-to-registry: false
+          show-summary: false
+      - name: Verify attestation, atomic migration, completion proof and candidate readiness
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          RUN_ID: ${{ inputs.run_id }}
+          RUN_ATTEMPT: ${{ inputs.run_attempt }}
+          NONCE: ${{ inputs.nonce }}
+        run: |
+          set -euo pipefail
+          for phase in migrate complete candidate resume; do
+            az vm run-command invoke --ids /subscriptions/b2f8f58b-18f5-4e49-ac53-06ea04ff0f4c/resourceGroups/LyraShieldAI/providers/Microsoft.Compute/virtualMachines/lyrashield-worker \
+              --command-id RunShellScript --scripts "node /opt/lyrashield-worker-host/ops/worker/webhook-empty-state-producer.mjs $phase $RUN_ID $RUN_ATTEMPT $SOURCE_SHA $NONCE" \
+              --query 'value[0].message' -o tsv > "$RUNNER_TEMP/root-phase.txt"
+            grep -Fxq "EMPTY_STATE_PHASE_COMPLETE=$phase" "$RUNNER_TEMP/root-phase.txt"
+          done
+      - name: Failure retains maintenance
+        if: failure()
+        run: echo 'Empty-state cutover failed. Retain owned admission and startup fence; no legacy rollback, queue deletion or payment replay.' >> "$GITHUB_STEP_SUMMARY"

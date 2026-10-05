@@ -7,7 +7,11 @@ on:
         required: true
         type: string
       confirmation:
-        description: 'webhook-empty-state:<source_sha>'
+        description: "webhook-empty-state:<source_sha>"
+        required: true
+        type: string
+      nonce:
+        description: Stable root-policy-approved nonce (32-128 URL-safe characters)
         required: true
         type: string
 permissions:
@@ -29,10 +33,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           SOURCE_SHA: ${{ inputs.source_sha }}
           CONFIRMATION: ${{ inputs.confirmation }}
+          NONCE: ${{ inputs.nonce }}
         run: node .github/scripts/validate-webhook-empty-state-dispatch.mjs
   maintenance:
     needs: validate
-    if: ${{ false }}
+    # GitHub run IDs are decimal; this fixed sentinel cannot match.
+    # This static disable avoids actionlint's bare-boolean condition error.
+    if: ${{ github.run_id == 'disabled-until-owner-approved-cutover' }}
     runs-on: ubuntu-24.04
     environment: azure-production
     steps:

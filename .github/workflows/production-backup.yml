@@ -411,6 +411,7 @@ jobs:
           ) ORDER BY \"workspaceId\", \"createdAt\", id), '[]'::json)::text FROM \"AuditLog\"" > "$RUNNER_TEMP/audit.json"
 
           pnpm --filter @lyrashield/db exec tsx scripts/verify-audit-chain-file.ts "$RUNNER_TEMP/audit.json"
+          query "SELECT COALESCE(json_agg(json_build_object('name',migration_name,'checksum',checksum) ORDER BY migration_name),'[]'::json)::text FROM public.\"_prisma_migrations\" WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL" > "$RUNNER_TEMP/restore-schema.json"
 
       - name: Start the application against the restored database
         shell: bash
@@ -432,12 +433,32 @@ jobs:
           trap 'kill "$web_pid" 2>/dev/null || true' EXIT
           for _ in $(seq 1 45); do
             if curl --fail --silent http://127.0.0.1:3100/api/ready | grep -qx '{"status":"ready","checks":{"database":true,"redis":true}}'; then
+              printf '%s' '{"status":"ready","checks":{"database":true,"redis":true}}' > "$RUNNER_TEMP/restore-ready.json"
               exit 0
             fi
             sleep 2
           done
           cat "$RUNNER_TEMP/restore-web.log"
           exit 1
+
+      - name: Emit public-safe exact-object restore proof
+        env:
+          PRODUCTION_DATABASE_DIRECT_URL: ${{ secrets.PRODUCTION_DATABASE_DIRECT_URL }}
+          R2_BACKUP_BUCKET: ${{ secrets.R2_BACKUP_BUCKET }}
+          R2_S3_ENDPOINT: ${{ secrets.R2_S3_ENDPOINT }}
+          BACKUP_DAY: ${{ needs.backup.outputs.backup_day }}
+          BACKUP_ENCRYPTED_SHA256: ${{ needs.backup.outputs.encrypted_sha256 }}
+          BACKUP_DUMP_SHA256: ${{ needs.backup.outputs.dump_sha256 }}
+          BACKUP_ETAG: ${{ needs.backup.outputs.object_etag }}
+        run: node .github/scripts/write-webhook-empty-state-restore-proof.mjs
+
+      - name: Publish digest-only restore provenance
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: webhook-empty-state-restore-proof-${{ github.run_id }}
+          path: ${{ runner.temp }}/webhook-empty-state-restore-proof.json
+          if-no-files-found: error
+          retention-days: 30
 
       - name: Clean up isolated restore services
         if: always()

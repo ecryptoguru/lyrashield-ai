@@ -14,6 +14,14 @@ import {
   verifySignedEmptyStateReceipt,
 } from "./webhook-empty-state-contract.mjs"
 
+import { readRootFile, readPolicy, ROOT } from "./webhook-empty-state-root-store.mjs"
+import {
+  validateReceipt,
+  canonical as canonicalReceipt,
+  sha256 as receiptHash,
+} from "./webhook-empty-state-receipt-v2.mjs"
+import { verifyAttestation } from "./webhook-empty-state-attestation.mjs"
+
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..")
 const TABLE = 'public."WebhookEventTrack"'
 const EVENT_TABLE = 'public."WebhookEvent"'
@@ -52,6 +60,21 @@ function decodeSignedReceipt(env) {
 }
 
 function authorizationFor(context, env, now = Date.now()) {
+  if (context.trusted) {
+    const policy = readPolicy()
+    const validated = validateReceipt(context.receipt, policy, now)
+    equal(
+      context.authorizationSha256,
+      validated.authorizationSha256,
+      "Immutable root authorization changed"
+    )
+    equal(
+      context.identityHash,
+      policy.databaseIdentitySha256,
+      "Migration target differs from root policy"
+    )
+    return context.authorization
+  }
   verifySignedEmptyStateReceipt(context.receipt, context.publicKeyPem)
   return validateEmptyStateAuthorization(context.receipt, {
     sourceSha: context.sourceSha,
@@ -96,6 +119,43 @@ function requiredContext(env, now = Date.now()) {
   const stableNonce = env.WEBHOOK_EMPTY_STATE_STABLE_NONCE || ""
   if (!/^[a-f0-9]{40}$/.test(sourceSha)) fail("Exact product source SHA is required")
   if (!/^\d+$/.test(runId)) fail("GitHub workflow run ID is required")
+  if (!rehearsal) {
+    const policy = readPolicy()
+    const receiptPath = `${ROOT}/${runId}/receipt.json`
+    const receipt = readRootFile(receiptPath)
+    const validated = validateReceipt(receipt, policy, now)
+    equal(receipt.authorization.sourceSha, sourceSha, "Trusted source mismatch")
+    equal(receipt.authorization.runId, runId, "Trusted run mismatch")
+    equal(receipt.authorization.nonce, stableNonce, "Trusted nonce mismatch")
+    equal(identityHash, policy.databaseIdentitySha256, "Trusted migration identity mismatch")
+    verifyAttestation(receiptPath, receipt, policy)
+    const context = {
+      trusted: true,
+      databaseUrl,
+      identity,
+      identityHash,
+      sourceSha,
+      runId,
+      stableNonce,
+      receipt,
+      authorizationSha256: validated.authorizationSha256,
+    }
+    // Progress binds immutable authorization, so fresh observations can be
+    // re-attested without changing the original source/run/owner/window.
+    context.authorization = {
+      owner: receipt.authorization.owner,
+      rootReceiptSha256: validated.authorizationSha256,
+      workerStopReceiptSha256: receiptHash(
+        canonicalReceipt({
+          authorizationSha256: validated.authorizationSha256,
+          worker: receipt.evidence.worker.imageDigest,
+        })
+      ),
+      admissionStopValueSha256: receipt.evidence.redis.valueSha256,
+    }
+    authorizationFor(context, env, now)
+    return context
+  }
   const { receipt, publicKeyPem } = decodeSignedReceipt(env)
   const context = { databaseUrl, identity, identityHash, sourceSha, runId, stableNonce, receipt, publicKeyPem }
   context.authorization = authorizationFor(context, env, now)
@@ -482,7 +542,39 @@ export async function runEmptyStateMigration({
     })
     if (marker.state !== "complete") await afterPhase(faultInjector, "complete", client)
     verifyNoPendingMigrations()
-    return { status: "complete", databaseIdentitySha256: context.identityHash, migrationNames: EXPECTED_EMPTY_MIGRATIONS.map((entry) => entry.name) }
+    const result = {
+      status: "complete",
+      databaseIdentitySha256: context.identityHash,
+      migrationNames: EXPECTED_EMPTY_MIGRATIONS.map((entry) => entry.name),
+    }
+    if (context.trusted) {
+      authorize()
+      const schemaRows = Object.fromEntries(await schema(client))
+      const historyRows = [...(await history(client)).values()].map((row) => ({
+        name: row.name,
+        checksum: row.checksum,
+        finished: Boolean(row.finished_at),
+        rolledBack: Boolean(row.rolled_back_at),
+      }))
+      const indexRows = await client.query(
+        "SELECT pg_get_indexdef(indexrelid) AS definition, indisvalid, indisready FROM pg_index WHERE indexrelid = 'public.\"WebhookEventTrack_status_nextAttemptAtUtc_idx\"'::regclass"
+      )
+      result.sourceSha = context.sourceSha
+      result.runId = context.runId
+      result.completion = {
+        schemaVersion: "webhook-empty-state-completion/v2",
+        state: "complete",
+        sourceSha: context.sourceSha,
+        databaseIdentitySha256: context.identityHash,
+        authorizationSha256: context.authorizationSha256,
+        receiptSha256: receiptHash(canonicalReceipt(context.receipt)),
+        workerImageDigest: context.receipt.evidence.candidate.imageDigest,
+        schemaSha256: receiptHash(canonicalReceipt(schemaRows)),
+        historySha256: receiptHash(canonicalReceipt(historyRows)),
+        indexSha256: receiptHash(canonicalReceipt(indexRows.rows)),
+      }
+    }
+    return result
   } finally {
     if (lockHeld) {
       try { await client.query("SELECT pg_advisory_unlock($1, $2)", LOCK) } catch {}
