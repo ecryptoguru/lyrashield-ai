@@ -376,6 +376,10 @@ export async function runEmptyStateMigration({
   const statements = new Map(EXPECTED_EMPTY_MIGRATIONS.map((migration) => [migration.name, migrationSql(migration)]))
   const PgClient = ClientClass || (await import("pg")).Client
   const client = new PgClient({ connectionString: context.databaseUrl, application_name: "lyrashield-empty-state-migration", connectionTimeoutMillis: 10000 })
+  // A backend can disappear between statements (for example during host failover).
+  // Keep node-postgres's asynchronous connection event from becoming an unhandled
+  // process-level error; the awaited query still rejects and drives rollback/retry.
+  client.on("error", () => {})
   let connected = false
   let lockHeld = false
   try {
