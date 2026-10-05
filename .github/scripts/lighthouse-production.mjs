@@ -114,18 +114,45 @@ export function evaluateLighthouseReports(reports, origin = "https://lyrashielda
     "| --- | --- | --- | --- | --- |",
   ]
   const messages = []
+  const collectionMessages = []
   const runtimeMessages = []
 
   for (const page of LIGHTHOUSE_PAGES) {
     const samples = samplesFromEntry(reports[page.name])
+    const collectedSamples = samples.filter((sample) => !sample?.collectionFailure)
     const first = samples[0]
     const url = first?.finalDisplayedUrl || first?.finalUrl || new URL(page.path, origin).toString()
+
+    const requiredSamples = neededSampleCount(collectedSamples)
+    if (collectedSamples.length < requiredSamples) {
+      collectionMessages.push(
+        "FAIL " +
+          url +
+          " collection: collected " +
+          collectedSamples.length +
+          " of " +
+          requiredSamples +
+          " required samples"
+      )
+      failed = true
+    }
 
     for (const [index, sample] of samples.entries()) {
       const detail = Object.keys(LIGHTHOUSE_MINIMUM)
         .map((category) => category + ": " + formatScore(sample?.categories?.[category]?.score))
         .join(" ")
       messages.push("sample " + (index + 1) + "/" + samples.length + " " + url + " " + detail)
+
+      if (sample?.collectionFailure) {
+        collectionMessages.push(
+          "FAIL " +
+            url +
+            " collection: sample " +
+            (sample.collectionFailure.sample ?? index + 1) +
+            " could not be collected"
+        )
+        failed = true
+      }
     }
 
     for (const sample of samples) {
@@ -144,7 +171,7 @@ export function evaluateLighthouseReports(reports, origin = "https://lyrashielda
 
     const cells = []
     for (const [category, threshold] of Object.entries(LIGHTHOUSE_MINIMUM)) {
-      const values = samples.map((sample) => sample?.categories?.[category]?.score)
+      const values = collectedSamples.map((sample) => sample?.categories?.[category]?.score)
       const medianScore = median(values)
       const complete = values.length > 0 && values.every(isValidScore)
       const line =
@@ -159,18 +186,18 @@ export function evaluateLighthouseReports(reports, origin = "https://lyrashielda
       }
     }
 
-    rows.push("| " + url + " | " + samples.length + " | " + cells.join(" | ") + " |")
+    rows.push("| " + url + " | " + collectedSamples.length + " | " + cells.join(" | ") + " |")
   }
 
   return {
     failed,
-    messages: [...messages, ...runtimeMessages],
+    messages: [...messages, ...collectionMessages, ...runtimeMessages],
     summary:
       "## Lighthouse production scores\n\n" +
       rows.join("\n") +
       "\n" +
-      runtimeMessages.join("\n") +
-      (runtimeMessages.length > 0 ? "\n" : ""),
+      [...collectionMessages, ...runtimeMessages].join("\n") +
+      (collectionMessages.length + runtimeMessages.length > 0 ? "\n" : ""),
   }
 }
 
@@ -239,6 +266,7 @@ export async function collectLighthouseReports({
     const samplesPath = path.join(reportsDir, "lyrashield-lighthouse" + page.name + ".samples.json")
     const samples = []
     let lastDiagnostic = ""
+    let lastExitCode = 1
     let sample = 0
     let target = Math.min(MIN_SAMPLES, sampleLimit)
 
@@ -248,10 +276,12 @@ export async function collectLighthouseReports({
       const samplePath = path.join(attemptsDir, stem + ".json")
       rmSync(samplePath, { force: true })
       let lastReport = null
+      let lastAttemptPath = null
 
       for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
         const attemptStem = stem + ".attempt-" + attempt
         const attemptPath = path.join(attemptsDir, attemptStem + ".json")
+        lastAttemptPath = attemptPath
         const diagnosticPath = path.join(attemptsDir, attemptStem + ".diagnostic.txt")
         const metadataPath = path.join(attemptsDir, attemptStem + ".metadata.json")
         rmSync(attemptPath, { force: true })
@@ -274,6 +304,7 @@ export async function collectLighthouseReports({
         const exitCode = Number.isInteger(result?.exitCode) ? result.exitCode : 1
         lastReport = report
         lastDiagnostic = diagnostic
+        lastExitCode = exitCode
 
         if (report && !existsSync(attemptPath)) {
           writeFileSync(attemptPath, JSON.stringify(report, null, 2) + "\n")
@@ -329,6 +360,14 @@ export async function collectLighthouseReports({
       }
 
       if (lastReport) {
+        if (lastExitCode !== 0) {
+          lastReport.collectionFailure = {
+            code: hasNoNavstart(lastReport, lastDiagnostic) ? "NO_NAVSTART" : "NONZERO_EXIT",
+            sample,
+            exitCode: lastExitCode,
+            diagnostic: lastDiagnostic,
+          }
+        }
         writeFileSync(samplePath, JSON.stringify(lastReport, null, 2) + "\n")
         samples.push(lastReport)
       } else {
@@ -340,28 +379,50 @@ export async function collectLighthouseReports({
             ")" +
             (lastDiagnostic ? ": " + lastDiagnostic.slice(0, 500) : "")
         )
-        // A page that yields no report at all will not yield one on another
-        // sample, so stop spending samples here rather than doubling the cost
-        // of the failure path.
+        const collectionFailure = {
+          code: hasNoNavstart(null, lastDiagnostic)
+            ? "NO_NAVSTART"
+            : lastAttemptPath && existsSync(lastAttemptPath)
+              ? "INVALID_REPORT"
+              : "NO_REPORT",
+          sample,
+          exitCode: lastExitCode,
+          diagnostic: lastDiagnostic,
+        }
+        const failedSample = { finalUrl: url, categories: {}, collectionFailure }
+        writeFileSync(samplePath, JSON.stringify(failedSample, null, 2) + "\n")
+        samples.push(failedSample)
         break
       }
+
+      if (lastReport.collectionFailure) break
 
       target = Math.min(neededSampleCount(samples), sampleLimit)
     }
 
-    if (samples.length > 0) {
-      const representative = samples.find((entry) => entry && !entry.runtimeError) ?? samples[0]
+    const successfulSamples = samples.filter((entry) => !entry?.collectionFailure)
+    if (successfulSamples.length > 0) {
+      const representative =
+        successfulSamples.find((entry) => entry && !entry.runtimeError) ?? successfulSamples[0]
       writeFileSync(finalPath, JSON.stringify(representative, null, 2) + "\n")
-      reports[page.name] = samples
     } else {
       rmSync(finalPath, { force: true })
-      reports[page.name] = []
     }
+    reports[page.name] = samples
 
     writeFileSync(
       samplesPath,
       JSON.stringify(
-        { url, sampleLimit, sampled: samples.length, categories: sampleScoreRecord(samples) },
+        {
+          url,
+          sampleLimit,
+          sampled: successfulSamples.length,
+          attempted: samples.length,
+          collectionFailures: samples
+            .filter((entry) => entry?.collectionFailure)
+            .map((entry) => entry.collectionFailure),
+          categories: sampleScoreRecord(successfulSamples),
+        },
         null,
         2
       ) + "\n"
