@@ -252,7 +252,7 @@ async function history(client) {
   return new Map(result.rows.map((row) => [row.name, row]))
 }
 
-async function resolveApplied(client, migration, authorize) {
+async function resolveApplied(client, migration, authorize, prismaResolve) {
   authorize()
   const existing = (await history(client)).get(migration.name)
   if (existing) {
@@ -261,12 +261,12 @@ async function resolveApplied(client, migration, authorize) {
     return
   }
   authorize()
-  const result = spawnSync("pnpm", ["exec", "prisma", "migrate", "resolve", "--applied", migration.name], {
+  const result = prismaResolve("pnpm", ["exec", "prisma", "migrate", "resolve", "--applied", migration.name], {
     cwd: packageRoot,
     env: { ...process.env, DATABASE_DIRECT_URL: contextUrl, DATABASE_URL: contextUrl },
     encoding: "utf8",
     maxBuffer: 1024 * 1024,
-  })
+  }, migration.name)
   if (result.error || result.status !== 0) fail("Prisma could not resolve applied migration " + migration.name)
   const row = (await history(client)).get(migration.name)
   if (!row || row.checksum !== migration.sha256 || !row.finished_at || row.rolled_back_at) {
@@ -357,8 +357,8 @@ async function acquireAdvisoryLock(client, authorize, waitMs, pollMs) {
   }
 }
 
-async function afterPhase(faultInjector, phase, client) {
-  if (faultInjector) await faultInjector(phase, client)
+async function afterPhase(faultInjector, phase, client, detail) {
+  if (faultInjector) await faultInjector(phase, client, detail)
 }
 
 export async function runEmptyStateMigration({
@@ -366,6 +366,7 @@ export async function runEmptyStateMigration({
   ClientClass,
   clock = Date.now,
   faultInjector,
+  prismaResolve = spawnSync,
   advisoryLockWaitMs = DEFAULT_ADVISORY_LOCK_WAIT_MS,
   advisoryLockPollMs = DEFAULT_ADVISORY_LOCK_POLL_MS,
 } = {}) {
@@ -375,6 +376,10 @@ export async function runEmptyStateMigration({
   const statements = new Map(EXPECTED_EMPTY_MIGRATIONS.map((migration) => [migration.name, migrationSql(migration)]))
   const PgClient = ClientClass || (await import("pg")).Client
   const client = new PgClient({ connectionString: context.databaseUrl, application_name: "lyrashield-empty-state-migration", connectionTimeoutMillis: 10000 })
+  // A backend can disappear between statements (for example during host failover).
+  // Keep node-postgres's asynchronous connection event from becoming an unhandled
+  // process-level error; the awaited query still rejects and drives rollback/retry.
+  client.on("error", () => {})
   let connected = false
   let lockHeld = false
   try {
@@ -402,6 +407,7 @@ export async function runEmptyStateMigration({
         await assertColumnStage(client, "due")
         authorize()
         await client.query(statements.get(EXPECTED_EMPTY_MIGRATIONS[1].name))
+        await afterPhase(faultInjector, "core-transaction-after-sql", client, EXPECTED_EMPTY_MIGRATIONS[1].name)
         await assertColumnStage(client, "core")
         await verifyUtc(client)
         await setMarker(client, context, "core-committed", authorize)
@@ -415,9 +421,9 @@ export async function runEmptyStateMigration({
     await verifyUtc(client)
     if (marker.state === "complete") await verifyHistory(client)
     await assertColumnStage(client, schemaStage)
-    await resolveApplied(client, EXPECTED_EMPTY_MIGRATIONS[0], authorize)
+    await resolveApplied(client, EXPECTED_EMPTY_MIGRATIONS[0], authorize, prismaResolve)
     await assertColumnStage(client, schemaStage)
-    await resolveApplied(client, EXPECTED_EMPTY_MIGRATIONS[1], authorize)
+    await resolveApplied(client, EXPECTED_EMPTY_MIGRATIONS[1], authorize, prismaResolve)
 
     if (!["index-ready", "operator-columns", "complete"].includes(marker.state)) {
       if (marker.state !== "index-intent") {
@@ -446,7 +452,7 @@ export async function runEmptyStateMigration({
     } else if (!(await verifyIndex(client))) fail("Owned progress marker claims an index that is absent")
     await assertColumnStage(client, marker.state === "operator-columns" || marker.state === "complete" ? "complete" : "core")
     if (!(await verifyIndex(client))) fail("UTC index is not verified before migration reconciliation")
-    await resolveApplied(client, EXPECTED_EMPTY_MIGRATIONS[2], authorize)
+    await resolveApplied(client, EXPECTED_EMPTY_MIGRATIONS[2], authorize, prismaResolve)
 
     if (!["operator-columns", "complete"].includes(marker.state)) {
       await transaction(client, async () => {
@@ -464,7 +470,7 @@ export async function runEmptyStateMigration({
     await assertColumnStage(client, "complete")
     await verifyUtc(client)
     if (!(await verifyIndex(client))) fail("UTC index is not verified before migration reconciliation")
-    await resolveApplied(client, EXPECTED_EMPTY_MIGRATIONS[3], authorize)
+    await resolveApplied(client, EXPECTED_EMPTY_MIGRATIONS[3], authorize, prismaResolve)
     await transaction(client, async () => {
       await beginLocked(client, undefined, authorize)
       await assertColumnStage(client, "complete")

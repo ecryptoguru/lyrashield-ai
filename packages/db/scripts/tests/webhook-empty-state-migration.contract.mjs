@@ -269,6 +269,7 @@ test("receipt expiry while waiting for the advisory lock prevents all migration 
   let clockNow = now
   const seenQueries = []
   class WaitingClient {
+    on() { return this }
     async connect() {}
     async query(sql) {
       seenQueries.push(sql)
