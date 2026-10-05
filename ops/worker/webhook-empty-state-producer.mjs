@@ -57,7 +57,9 @@ function secureEnv(path) {
 }
 function pinnedImage(image) {
   requireValue(
-    /^ghcr\.io\/ecryptoguru\/lyrashield-worker@sha256:[a-f0-9]{64}$/.test(image || ""),
+    /^ghcr\.io\/ecryptoguru\/lyrashield-ai\/lyrashield-worker@sha256:[a-f0-9]{64}$/.test(
+      image || ""
+    ),
     "Unapproved worker image reference"
   )
 }
@@ -520,28 +522,42 @@ async function main() {
         intent.stopSha256 === sha256(stop),
       "Foreign release intent"
     )
-    observerCommand(policy, "webhook-empty-state-admission.mjs", ["release-retry", stop])
-    const publicReady = run("/usr/bin/curl", [
-      "--fail",
-      "--silent",
-      "--show-error",
-      "--max-time",
-      "15",
-      "https://app.lyrashieldai.com/api/ready/scans",
-    ])
-    if (publicReady !== '{"status":"ready","checks":{"worker":true}}') {
-      observerCommand(policy, "webhook-empty-state-admission.mjs", ["claim", stop])
-      throw new Error("Public readiness failed; owned admission restored where possible")
-    }
-    try {
-      requireValue(
-        canonical(readRootFile(FENCE).authorization) === canonical(authorization),
-        "Foreign startup fence"
-      )
-      unlinkSync(FENCE)
-    } catch (error) {
-      if (error.code !== "ENOENT") throw error
-    }
+    await releaseOwnedMaintenance({
+      release: () =>
+        observerCommand(policy, "webhook-empty-state-admission.mjs", ["release-retry", stop]),
+      checkPublicReadiness: () => {
+        const ready = run("/usr/bin/curl", [
+          "--fail",
+          "--silent",
+          "--show-error",
+          "--max-time",
+          "15",
+          "https://app.lyrashieldai.com/api/ready/scans",
+        ])
+        requireValue(
+          ready === '{"status":"ready","checks":{"worker":true}}',
+          "Public scan readiness failed after owned release"
+        )
+      },
+      recheckAuthorization: () => validateAuthorization(authorization, readPolicy()),
+      persistCompletion: () =>
+        atomicRootWrite(statePath, { ...planned, lastAttempt: request.attempt }),
+      cleanupOwnedFence: () => {
+        try {
+          requireValue(
+            canonical(readRootFile(FENCE).authorization) === canonical(authorization),
+            "Foreign startup fence"
+          )
+          unlinkSync(FENCE)
+        } catch (error) {
+          if (error.code !== "ENOENT") throw error
+        }
+      },
+      restoreOwnedHold: () =>
+        observerCommand(policy, "webhook-empty-state-admission.mjs", ["claim", stop]),
+    })
+    process.stdout.write("EMPTY_STATE_PHASE_COMPLETE=resume\n")
+    return
   }
   validateAuthorization(authorization, readPolicy())
   atomicRootWrite(statePath, { ...planned, lastAttempt: request.attempt })

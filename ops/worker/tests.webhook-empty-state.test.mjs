@@ -243,3 +243,109 @@ test("Azure inventory always includes inactive revisions and uses supported fixe
   assert.equal(args[args.indexOf("--name") + 1], "lyrashield-app")
   assert.throws(() => containerAppTargetArgs(resource.replace("lyrashield-app", "foreign-app")))
 })
+test("candidate health under stop precedes release; post-release failures restore hold and preserve foreign owners", async () => {
+  const { releaseOwnedMaintenance } = await import("./webhook-empty-state-phases.mjs")
+  for (const failAt of [null, "public", "authorization", "persist", "cleanup"]) {
+    let key = "owned",
+      proof = false
+    const calls = []
+    proof = true
+    calls.push("candidate-health-under-stop")
+    assert.equal(key, "owned")
+    const operations = {
+      release: () => {
+        assert.equal(proof, true)
+        assert.equal(key, "owned")
+        calls.push("release")
+        key = null
+      },
+      checkPublicReadiness: () => {
+        assert.equal(key, null)
+        calls.push("public")
+        if (failAt === "public") throw Error("503")
+      },
+      recheckAuthorization: () => {
+        calls.push("authorization")
+        if (failAt === "authorization") throw Error("expired")
+      },
+      persistCompletion: () => {
+        calls.push("persist")
+        if (failAt === "persist") throw Error("crash after DEL")
+      },
+      cleanupOwnedFence: () => {
+        calls.push("cleanup")
+        if (failAt === "cleanup") throw Error("disk failure")
+      },
+      restoreOwnedHold: () => {
+        calls.push("restore")
+        assert.equal(key, null)
+        key = "owned"
+      },
+    }
+    if (failAt) {
+      await assert.rejects(releaseOwnedMaintenance(operations))
+      assert.equal(key, "owned")
+    } else {
+      await releaseOwnedMaintenance(operations)
+      assert.equal(key, null)
+    }
+    assert.deepEqual(calls.slice(0, 3), ["candidate-health-under-stop", "release", "public"])
+  }
+  let key = "foreign"
+  await assert.rejects(
+    releaseOwnedMaintenance({
+      release: () => {
+        throw Error("foreign owner")
+      },
+      restoreOwnedHold: () => {
+        key = "owned"
+      },
+    })
+  )
+  assert.equal(key, "foreign")
+})
+test("acquired restore proof binds exact produced backup object, generation and target", async () => {
+  const { bindRestoreProof } = await import("./webhook-empty-state-backup-proof.mjs")
+  const { sha256 } = await import("../../packages/db/scripts/webhook-empty-state-receipt-v2.mjs")
+  const H = "a".repeat(64),
+    S = "b".repeat(40)
+  const backup = {
+    runId: "120",
+    objectIdSha256: H,
+    versionId: 'etag:"123"',
+    encryptedSha256: H,
+    dumpSha256: H,
+    databaseIdentitySha256: H,
+    createdAt: "2026-10-05T08:00:00Z",
+  }
+  const policy = { restoreArtifactId: 1, backupSourceSha: S, databaseIdentitySha256: H }
+  const record = { id: 1, expired: false, workflow_run: { id: 120, head_sha: S } }
+  const proof = {
+    schemaVersion: "webhook-empty-state-restore-evidence/v2",
+    runId: "120",
+    sourceSha: S,
+    objectIdSha256: H,
+    versionIdSha256: sha256('"123"'),
+    encryptedSha256: H,
+    dumpSha256: H,
+    databaseIdentitySha256: H,
+    completedAt: "2026-10-05T08:30:00Z",
+    schemaSha256: H,
+    auditSha256: H,
+    readinessSha256: H,
+  }
+  assert.equal(
+    bindRestoreProof(proof, backup, policy, record).backupSha256,
+    sha256(canonical(backup))
+  )
+  for (const field of [
+    "objectIdSha256",
+    "versionIdSha256",
+    "encryptedSha256",
+    "databaseIdentitySha256",
+  ])
+    assert.throws(() =>
+      bindRestoreProof({ ...proof, [field]: "c".repeat(64) }, backup, policy, record)
+    )
+  assert.throws(() => bindRestoreProof(proof, backup, policy, { ...record, expired: true }))
+})

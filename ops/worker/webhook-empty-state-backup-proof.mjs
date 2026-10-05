@@ -1,3 +1,4 @@
+import { pathToFileURL } from "node:url"
 // Root-owned acquisition: exact object readback and exact successful restore
 // artifact, never caller JSON or a latest object selection.
 import { spawnSync } from "node:child_process"
@@ -54,120 +55,123 @@ export function bindRestoreProof(proof, backup, policy, record) {
     readinessSha256: proof.readinessSha256,
   }
 }
-try {
-  requireValue(ENABLED, "Backup acquisition adapter remains disabled")
-  const policy = readPolicy()
-  readAuthorization(policy)
-  const directory = runDirectory(policy.runId),
-    target = policy.backupTarget
-  requireValue(
-    /^https:\/\/[a-f0-9]{32}\.r2\.cloudflarestorage\.com$/.test(target.endpoint || "") &&
-      /^[a-z0-9][a-z0-9-]{1,62}$/.test(target.bucket || "") &&
-      /^daily\/lyrashield-[0-9]{4}-[0-9]{2}-[0-9]{2}-[1-9][0-9]*\.dump\.gpg$/.test(
-        target.key || ""
-      ),
-    "Invalid fixed backup target"
-  )
-  const backup = policy.backup
-  requireValue(
-    sha256(`${target.endpoint}/${target.bucket}/${target.key}`) === backup.objectIdSha256,
-    "Backup object identifier changed"
-  )
-  const head = command(
-    "/usr/bin/aws",
-    [
-      "s3api",
-      "head-object",
-      "--bucket",
-      target.bucket,
-      "--key",
-      target.key,
-      "--endpoint-url",
-      target.endpoint,
-    ],
-    true
-  )
-  requireValue(
-    head.Metadata?.sha256 === backup.dumpSha256 &&
-      `etag:${head.ETag}` === backup.versionId &&
-      new Date(head.LastModified).toISOString() === backup.createdAt,
-    "Backup object checksum, generation or timestamp changed"
-  )
-  const temporary = mkdtempSync(join(directory, "backup-proof-"))
+function main() {
   try {
-    command("/usr/bin/aws", [
-      "s3api",
-      "get-object",
-      "--bucket",
-      target.bucket,
-      "--key",
-      target.key,
-      "--endpoint-url",
-      target.endpoint,
-      "--if-match",
-      head.ETag,
-      join(temporary, "backup.gpg"),
-    ])
+    requireValue(ENABLED, "Backup acquisition adapter remains disabled")
+    const policy = readPolicy()
+    readAuthorization(policy)
+    const directory = runDirectory(policy.runId),
+      target = policy.backupTarget
     requireValue(
-      sha256(readFileSync(join(temporary, "backup.gpg"))) === backup.encryptedSha256,
-      "Actual ciphertext differs from approved object"
+      /^https:\/\/[a-f0-9]{32}\.r2\.cloudflarestorage\.com$/.test(target.endpoint || "") &&
+        /^[a-z0-9][a-z0-9-]{1,62}$/.test(target.bucket || "") &&
+        /^daily\/lyrashield-[0-9]{4}-[0-9]{2}-[0-9]{2}-[1-9][0-9]*\.dump\.gpg$/.test(
+          target.key || ""
+        ),
+      "Invalid fixed backup target"
     )
-    const run = command(
-      "/usr/bin/gh",
-      ["api", `repos/${REPOSITORY}/actions/runs/${backup.runId}`],
+    const backup = policy.backup
+    requireValue(
+      sha256(`${target.endpoint}/${target.bucket}/${target.key}`) === backup.objectIdSha256,
+      "Backup object identifier changed"
+    )
+    const head = command(
+      "/usr/bin/aws",
+      [
+        "s3api",
+        "head-object",
+        "--bucket",
+        target.bucket,
+        "--key",
+        target.key,
+        "--endpoint-url",
+        target.endpoint,
+      ],
       true
     )
     requireValue(
-      run.status === "completed" &&
-        run.conclusion === "success" &&
-        run.head_sha === policy.backupSourceSha &&
-        run.path === ".github/workflows/production-backup.yml",
-      "Exact backup/restore run did not succeed"
+      head.Metadata?.sha256 === backup.dumpSha256 &&
+        `etag:${head.ETag}` === backup.versionId &&
+        new Date(head.LastModified).toISOString() === backup.createdAt,
+      "Backup object checksum, generation or timestamp changed"
     )
-    const record = command(
-      "/usr/bin/gh",
-      ["api", `repos/${REPOSITORY}/actions/artifacts/${policy.restoreArtifactId}`],
-      true
-    )
-    requireValue(
-      Number.isSafeInteger(record.size_in_bytes) &&
-        record.size_in_bytes > 0 &&
-        record.size_in_bytes <= 65536,
-      "Unbounded restore proof artifact"
-    )
-    const archive = spawnSync(
-      "/usr/bin/gh",
-      ["api", `repos/${REPOSITORY}/actions/artifacts/${policy.restoreArtifactId}/zip`],
-      {
-        encoding: null,
-        timeout: 30_000,
-        maxBuffer: 65536,
-        env: { PATH: "/usr/bin:/bin", HOME: "/root" },
-      }
-    )
-    requireValue(
-      archive.status === 0 && record.digest === "sha256:" + sha256(archive.stdout),
-      "Authenticated artifact digest mismatch"
-    )
-    writeFileSync(join(temporary, "restore.zip"), archive.stdout, { mode: 0o600, flag: "wx" })
-    const proof = JSON.parse(
-      command("/usr/bin/unzip", [
-        "-p",
-        join(temporary, "restore.zip"),
-        "webhook-empty-state-restore-proof.json",
+    const temporary = mkdtempSync(join(directory, "backup-proof-"))
+    try {
+      command("/usr/bin/aws", [
+        "s3api",
+        "get-object",
+        "--bucket",
+        target.bucket,
+        "--key",
+        target.key,
+        "--endpoint-url",
+        target.endpoint,
+        "--if-match",
+        head.ETag,
+        join(temporary, "backup.gpg"),
       ])
-    )
-    const restore = bindRestoreProof(proof, backup, policy, record)
-    requireValue(
-      canonical(restore) === canonical(policy.restore),
-      "Restore evidence differs from root approval"
-    )
-    atomicRootWrite(`${directory}/backup.json`, backup)
-    atomicRootWrite(`${directory}/restore.json`, restore)
-  } finally {
-    rmSync(temporary, { recursive: true })
+      requireValue(
+        sha256(readFileSync(join(temporary, "backup.gpg"))) === backup.encryptedSha256,
+        "Actual ciphertext differs from approved object"
+      )
+      const run = command(
+        "/usr/bin/gh",
+        ["api", `repos/${REPOSITORY}/actions/runs/${backup.runId}`],
+        true
+      )
+      requireValue(
+        run.status === "completed" &&
+          run.conclusion === "success" &&
+          run.head_sha === policy.backupSourceSha &&
+          run.path === ".github/workflows/production-backup.yml",
+        "Exact backup/restore run did not succeed"
+      )
+      const record = command(
+        "/usr/bin/gh",
+        ["api", `repos/${REPOSITORY}/actions/artifacts/${policy.restoreArtifactId}`],
+        true
+      )
+      requireValue(
+        Number.isSafeInteger(record.size_in_bytes) &&
+          record.size_in_bytes > 0 &&
+          record.size_in_bytes <= 65536,
+        "Unbounded restore proof artifact"
+      )
+      const archive = spawnSync(
+        "/usr/bin/gh",
+        ["api", `repos/${REPOSITORY}/actions/artifacts/${policy.restoreArtifactId}/zip`],
+        {
+          encoding: null,
+          timeout: 30_000,
+          maxBuffer: 65536,
+          env: { PATH: "/usr/bin:/bin", HOME: "/root" },
+        }
+      )
+      requireValue(
+        archive.status === 0 && record.digest === "sha256:" + sha256(archive.stdout),
+        "Authenticated artifact digest mismatch"
+      )
+      writeFileSync(join(temporary, "restore.zip"), archive.stdout, { mode: 0o600, flag: "wx" })
+      const proof = JSON.parse(
+        command("/usr/bin/unzip", [
+          "-p",
+          join(temporary, "restore.zip"),
+          "webhook-empty-state-restore-proof.json",
+        ])
+      )
+      const restore = bindRestoreProof(proof, backup, policy, record)
+      requireValue(
+        canonical(restore) === canonical(policy.restore),
+        "Restore evidence differs from root approval"
+      )
+      atomicRootWrite(`${directory}/backup.json`, backup)
+      atomicRootWrite(`${directory}/restore.json`, restore)
+    } finally {
+      rmSync(temporary, { recursive: true })
+    }
+  } catch {
+    process.stderr.write("Fixed backup/restore acquisition failed\n")
+    process.exitCode = 1
   }
-} catch {
-  process.stderr.write("Fixed backup/restore acquisition failed\n")
-  process.exitCode = 1
 }
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main()

@@ -98,7 +98,7 @@ subjects. No custom trusted root or verification bypass was used. These failures
 must be resolved before activation; certificate-policy unit fixtures are not a
 substitute for a real verified canonical receipt roundtrip.
 
-The final local checkpoint has 58 focused tests passing. Broad deploy-script
+The final local checkpoint has 60 focused tests passing. Broad deploy-script
 testing was attempted but the isolated dependency install is incomplete: worker
 preflight tests cannot import tsx. Full CI and the PostgreSQL/image jobs must
 establish those gates; no broad-suite pass is claimed. The collector now exports

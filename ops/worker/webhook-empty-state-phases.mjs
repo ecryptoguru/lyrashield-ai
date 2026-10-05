@@ -60,3 +60,25 @@ export function verifyCompletionProof(proof, receipt, result) {
     requireValue(/^[a-f0-9]{64}$/.test(proof[field] || ""), "Missing schema/index/history readback")
   return true
 }
+export async function releaseOwnedMaintenance(operations) {
+  let released = false
+  try {
+    await operations.release()
+    released = true
+    await operations.checkPublicReadiness()
+    await operations.recheckAuthorization()
+    await operations.persistCompletion()
+    await operations.cleanupOwnedFence()
+  } catch (error) {
+    if (released) {
+      try {
+        await operations.restoreOwnedHold()
+      } catch {
+        throw new Error(
+          "Release failure with foreign or unavailable admission; retain fence and investigate"
+        )
+      }
+    }
+    throw error
+  }
+}

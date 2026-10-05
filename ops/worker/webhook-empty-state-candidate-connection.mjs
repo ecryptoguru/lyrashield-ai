@@ -38,7 +38,7 @@ export function collectPreparedCandidateFingerprint(policy, role) {
       observed.properties.replicas === 0 &&
       containers?.length === 1 &&
       containers[0].image === policy.images[role] &&
-      /^ghcr\.io\/ecryptoguru\/lyrashield-(app|scanner)@sha256:[a-f0-9]{64}$/.test(
+      /^ghcr\.io\/ecryptoguru\/lyrashield-ai\/lyrashield-web@sha256:[a-f0-9]{64}$/.test(
         policy.images[role]
       ),
     "Prepared candidate must be inert on the exact image before identity verification"
