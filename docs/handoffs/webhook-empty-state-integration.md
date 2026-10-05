@@ -31,9 +31,12 @@ files under root0700 run directories.
 
 Pin rollout needs two reviews: first merge the disabled reusable workflow and
 producer; then pin its actual merged commit in the caller and root approval
-policy. A workflow cannot honestly pin its unknown future commit. The literal
-false caller gate remains until this actual commit pin and owner-approved setup
-are reviewed. No repository variable, permission, grant, secret or root file is
+policy. A workflow cannot honestly pin its unknown future commit. The caller now pins actual integration commit
+`3a403a845df0611762fc0e508de23b2a434fa837`; both workflows remain disabled by
+an impossible decimal-run-ID sentinel, and every root mutator plus the original
+atomic runner retains a literal false guard. The pin must be replaced with the
+owner-approved reviewed production producer commit as part of a separate
+activation review. No repository variable, permission, grant, secret or root file is
 activated by this draft.
 
 Backup restore uses the current run's exact object, ciphertext SHA-256, plaintext
@@ -44,8 +47,14 @@ PRODUCTION_DATABASE_DIRECT_URL is not assumed equal to DATABASE_DIRECT_URL.
 App connection identity remains unproven after the previous exec404; schema
 similarity and host-only hashes cannot substitute for a readback.
 
-Remaining integration gates in this draft must be closed before activation:
-root-owned fixed collectors, authenticated rehearsal and exact restore proof,
-producer/canonical attestation roundtrip, atomic runner v2 integration, and phase
-orchestration/completion proof. Failure retains maintenance and additive schema;
+Before activation, validate the entire root bundle on disposable services,
+including dependency/path resolution, both migration URL aliases, artifact
+acquisition and candidate preparation. The exact production app identity remains
+unproven. Official-root CLI checks against two upstream public fixtures failed
+(`verifying with issuer sigstore.dev` and `GitHub, Inc.`); unit fixtures and CLI
+argument validation do not replace a successful keyless roundtrip. No custom
+roots were installed to make those checks pass. Root collectors, trusted-v2
+runner branch and phase/completion adapters are present but remain disabled and
+must pass a complete disposable integration rehearsal before any owner approval
+request for activation. Failure retains maintenance and additive schema;
 there is no legacy rollback, queue deletion or payment replay.

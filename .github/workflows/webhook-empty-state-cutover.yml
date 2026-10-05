@@ -35,14 +35,24 @@ jobs:
           CONFIRMATION: ${{ inputs.confirmation }}
           NONCE: ${{ inputs.nonce }}
         run: node .github/scripts/validate-webhook-empty-state-dispatch.mjs
-  maintenance:
+  trusted-producer:
     needs: validate
     # GitHub run IDs are decimal; this fixed sentinel cannot match.
-    # This static disable avoids actionlint's bare-boolean condition error.
+    # Code review plus explicit owner setup is required to replace this gate.
     if: ${{ github.run_id == 'disabled-until-owner-approved-cutover' }}
-    runs-on: ubuntu-24.04
-    environment: azure-production
-    steps:
-      - run: |
-          echo 'Empty-state maintenance remains disabled pending reviewed producer pin and root trust setup.' >&2
-          exit 1
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    # Actual preceding integration commit; no circular/future self-reference.
+    # This reusable workflow independently retains its static disable gate.
+    uses: ecryptoguru/lyrashield-ai/.github/workflows/webhook-empty-state-trusted-attestation.yml@3a403a845df0611762fc0e508de23b2a434fa837
+    with:
+      source_sha: ${{ inputs.source_sha }}
+      run_id: ${{ github.run_id }}
+      run_attempt: ${{ github.run_attempt }}
+      nonce: ${{ inputs.nonce }}
+    secrets:
+      AZURE_DEPLOY_CLIENT_ID: ${{ secrets.AZURE_DEPLOY_CLIENT_ID }}
+      AZURE_DEPLOY_TENANT_ID: ${{ secrets.AZURE_DEPLOY_TENANT_ID }}
+      AZURE_DEPLOY_SUBSCRIPTION_ID: ${{ secrets.AZURE_DEPLOY_SUBSCRIPTION_ID }}
