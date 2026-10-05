@@ -73,6 +73,13 @@ function authorizationFor(context, env, now = Date.now()) {
       policy.databaseIdentitySha256,
       "Migration target differs from root policy"
     )
+    const continuity = spawnSync("/usr/bin/node", [
+      "/opt/lyrashield-worker-host/ops/worker/webhook-empty-state-producer.mjs",
+      "continuity", context.runId, String(env.GITHUB_RUN_ATTEMPT || context.receipt.authorization.originalAttempt),
+      context.sourceSha, context.stableNonce,
+    ], { encoding: "utf8", timeout: 15_000, maxBuffer: 4096, env: { PATH: "/usr/bin:/bin", HOME: "/root" } })
+    equal(continuity.status, 0, "Live root continuity observation failed before migration phase")
+    equal(continuity.stdout.trim(), "EMPTY_STATE_LIVE_CONTINUITY_MATCH", "Live owned admission/fence/writer/queue continuity changed")
     return context.authorization
   }
   verifySignedEmptyStateReceipt(context.receipt, context.publicKeyPem)

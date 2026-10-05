@@ -135,3 +135,100 @@ test("phase progression preserves immutable authorization and rejects skips or r
     advancePhase(state, "resume", { ...authorization, nonce: "x".repeat(40) }, approved, now)
   )
 })
+test("all executable admission actions use single-key owned comparison and reject foreign state", async () => {
+  const { ownedAdmission } = await import("./webhook-empty-state-admission.mjs")
+  const raw = canonical({
+    operator: "github-actions",
+    reason: "webhook-empty-state",
+    owner: "1:1",
+    runId: "1",
+  })
+  for (const phase of ["claim", "assert", "release"]) {
+    const calls = []
+    const redis = {
+      eval: async (...args) => {
+        calls.push(args)
+        return 1
+      },
+    }
+    await ownedAdmission(phase, raw, redis)
+    assert.equal(calls.length, 1)
+    assert.equal(calls[0][1], 1)
+    assert.equal(calls[0][2], "lyrashield:scan-admission:stopped")
+    assert.equal(calls[0][3], raw)
+    await assert.rejects(ownedAdmission(phase, raw, { eval: async () => 0 }), /Foreign/)
+  }
+})
+test("fixed migration env binds both aliases without shell evaluation or transaction pooling", async () => {
+  const { parseFixedMigrationEnvironment } = await import("./webhook-empty-state-migration-env.mjs")
+  const { hashDatabaseIdentity, canonicalSupabaseDatabaseIdentity } =
+    await import("../../packages/db/scripts/webhook-empty-state-contract.mjs")
+  const url =
+    "postgresql://postgres.yejmvtgsxniatmjbwplk:placeholder@aws-1-ap-south-1.pooler.supabase.com:5432/postgres?sslmode=verify-full"
+  const identity = hashDatabaseIdentity(canonicalSupabaseDatabaseIdentity([url]))
+  assert.deepEqual(
+    parseFixedMigrationEnvironment(
+      `DATABASE_DIRECT_URL=${url}\nMIGRATION_DATABASE_URL=${url}\n`,
+      identity
+    ),
+    { DATABASE_DIRECT_URL: url, DATABASE_URL: url }
+  )
+  for (const raw of [
+    `DATABASE_DIRECT_URL=${url}\nDATABASE_URL=${url}x`,
+    `DATABASE_DIRECT_URL=${url}\nDATABASE_DIRECT_URL=${url}`,
+    `DATABASE_DIRECT_URL=${url.replace(":5432", ":6543")}`,
+    `DATABASE_DIRECT_URL=${url}\nCOMMAND=anything`,
+  ])
+    assert.throws(() => parseFixedMigrationEnvironment(raw, identity))
+})
+test("refreshed worker and candidate targets/credential continuity fail closed", async () => {
+  const { runtimeFingerprint, validateConsumerFingerprint } =
+    await import("./webhook-empty-state-consumer-identity.mjs")
+  const env = {
+    DATABASE_URL:
+      "postgresql://postgres.yejmvtgsxniatmjbwplk:placeholder@aws-1-ap-south-1.pooler.supabase.com:5432/postgres?sslmode=verify-full",
+    DATABASE_SYSTEM_URL:
+      "postgresql://postgres:placeholder@db.yejmvtgsxniatmjbwplk.supabase.co:5432/postgres",
+    REDIS_URL: "rediss://placeholder@example.test:6379/0",
+  }
+  const fingerprint = runtimeFingerprint(env)
+  const policy = {
+    databaseIdentitySha256: fingerprint.database.identitySha256,
+    redisIdentitySha256: fingerprint.redis.identitySha256,
+    credentials: {
+      worker: fingerprint.database.credentialSha256,
+      app: fingerprint.database.credentialSha256,
+      system: fingerprint.system.credentialSha256,
+      redis: fingerprint.redis.credentialSha256,
+    },
+    candidateCredentials: { app: { system: fingerprint.system.credentialSha256 } },
+  }
+  assert.equal(validateConsumerFingerprint(fingerprint, policy, "worker"), true)
+  assert.equal(validateConsumerFingerprint(fingerprint, policy, "app"), true)
+  for (const role of ["worker", "app"])
+    for (const changed of [
+      { DATABASE_URL: env.DATABASE_URL.replace("yejmvtgsxniatmjbwplk", "abcdefghijklmnopqrst") },
+      { DATABASE_SYSTEM_URL: env.DATABASE_SYSTEM_URL.replace("placeholder", "rotated") },
+      { REDIS_URL: "rediss://placeholder@wrong.test:6379/0" },
+    ])
+      assert.throws(() =>
+        validateConsumerFingerprint(runtimeFingerprint({ ...env, ...changed }), policy, role)
+      )
+})
+test("backup safe compatibility normalization preserves endpoint identity and rejects overrides", async () => {
+  const { normalizeBackupConnection } =
+    await import("../../packages/db/scripts/webhook-backup-connection.mjs")
+  const url =
+    "postgresql://postgres:placeholder@db.yejmvtgsxniatmjbwplk.supabase.co:5432/postgres?sslmode=require"
+  const expected = normalizeBackupConnection(url).identitySha256
+  for (const key of ["uselibpqcompat", "%75selibpqcompat"])
+    assert.equal(normalizeBackupConnection(url + `&${key}=1`).identitySha256, expected)
+  for (const suffix of [
+    "&uselibpqcompat=1&host=wrong.test",
+    "&uselibpqcompat=1&user=wrong",
+    "&uselibpqcompat=1&uselibpqcompat=1",
+    "&uselibpqcompat=0",
+    "&%68ost=wrong.test",
+  ])
+    assert.throws(() => normalizeBackupConnection(url + suffix))
+})

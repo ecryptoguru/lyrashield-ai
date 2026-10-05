@@ -2,10 +2,7 @@
 // gates succeed. The public artifact contains digests/provenance only.
 import { readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
-import {
-  canonicalSupabaseDatabaseIdentity,
-  hashDatabaseIdentity,
-} from "../../packages/db/scripts/webhook-empty-state-contract.mjs"
+import { normalizeBackupConnection } from "../../packages/db/scripts/webhook-backup-connection.mjs"
 import {
   canonical,
   sha256,
@@ -22,9 +19,9 @@ requireValue(
 )
 const directory = env.RUNNER_TEMP
 const objectKey = `daily/lyrashield-${env.BACKUP_DAY}-${env.GITHUB_RUN_ID}.dump.gpg`
-const backupIdentitySha256 = hashDatabaseIdentity(
-  canonicalSupabaseDatabaseIdentity([env.PRODUCTION_DATABASE_DIRECT_URL])
-)
+const backupIdentitySha256 = normalizeBackupConnection(
+  env.PRODUCTION_DATABASE_DIRECT_URL
+).identitySha256
 const proof = {
   schemaVersion: "webhook-empty-state-restore-evidence/v2",
   runId: env.GITHUB_RUN_ID,

@@ -10,21 +10,17 @@ import {
   validateAuthorization,
 } from "../../packages/db/scripts/webhook-empty-state-receipt-v2.mjs"
 import { runEmptyStateMigration } from "../../packages/db/scripts/webhook-empty-state-migration.mjs"
+import { loadFixedMigrationEnvironment } from "./webhook-empty-state-migration-env.mjs"
 const ENABLED = false
 try {
   requireValue(ENABLED, "Production empty-state runner adapter remains disabled")
   const policy = readPolicy(),
     authorization = readAuthorization(policy)
   validateAuthorization(authorization, policy)
-  // The approved host environment supplies a validated direct/session URL.
-  // Both driver aliases are exactly equal before any Prisma child is spawned.
-  requireValue(
-    process.env.DATABASE_DIRECT_URL && process.env.DATABASE_DIRECT_URL === process.env.DATABASE_URL,
-    "Migration URL aliases must be identical"
-  )
+  const migrationEnv = loadFixedMigrationEnvironment(policy.databaseIdentitySha256)
   const result = await runEmptyStateMigration({
     env: {
-      ...process.env,
+      ...migrationEnv,
       WEBHOOK_EMPTY_STATE_CUTOVER: "true",
       DEPLOY_SHA: authorization.sourceSha,
       GITHUB_RUN_ID: authorization.runId,

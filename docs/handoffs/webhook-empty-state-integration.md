@@ -58,3 +58,42 @@ runner branch and phase/completion adapters are present but remain disabled and
 must pass a complete disposable integration rehearsal before any owner approval
 request for activation. Failure retains maintenance and additive schema;
 there is no legacy rollback, queue deletion or payment replay.
+
+## Review correction checkpoint
+
+Executable admission actions now import their fixed runtime dependency correctly.
+The migration adapter loads the root-owned fixed environment without shell
+execution and binds both aliases to one approved direct/session endpoint. The
+runner reacquires live root admission/fence/writer/queue/identity observations
+before its SQL and reconciliation phases. Same-run recovery skips durable
+completed phases and retains original authorization. Release uses a durable
+intent and idempotent owned comparison so a crash after DEL cannot release a
+foreign stop. Candidate health is checked independently of scan admission;
+public scan readiness follows owned release, with an owned hold restored on
+failure where possible.
+
+The refreshed worker environment is checked by the startup fence before any
+consumer starts. Inert prepared app/scanner candidates are probed using their
+exact image and version-bound runtime connections before activation. Probe
+values remain in child environments/private host memory, never command args.
+
+The existing production-backup workflow is active: exact-object restore and
+public-safe restore-proof changes therefore require ordinary review/CI before
+merge even though every new cutover mutation path is disabled. Its documented
+uselibpqcompat=1 option is normalized only for logical identity comparison;
+endpoint/user overrides and duplicate options remain rejected. No live backup
+or restore was run for this task.
+
+Local verification checkpoint: 56 focused Node tests, actionlint on all three
+changed workflows, shell syntax, and diff checks pass. Full hosted/postgres/image
+rehearsal and reviewer confirmation of recovery/consumer startup integration
+remain necessary. Docker is unavailable on this Mac; no root state was installed.
+
+Official-root positive attestation roundtrip remains unproven. GitHub CLI 2.95.0
+(2026-06-17) rejected the official public reusable-workflow fixture with
+`Error: verifying with issuer "sigstore.dev"`. A second official release fixture,
+with its correct repository/predicate, failed with
+`Error: verifying with issuer "GitHub, Inc."`. Artifact hashes matched their
+subjects. No custom trusted root or verification bypass was used. These failures
+must be resolved before activation; certificate-policy unit fixtures are not a
+substitute for a real verified canonical receipt roundtrip.

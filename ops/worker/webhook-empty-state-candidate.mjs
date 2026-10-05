@@ -26,6 +26,7 @@ import {
   validateAuthorization,
 } from "../../packages/db/scripts/webhook-empty-state-receipt-v2.mjs"
 import { validateStartupProof } from "./webhook-empty-state-startup-fence.mjs"
+import { collectPreparedCandidateFingerprint } from "./webhook-empty-state-candidate-connection.mjs"
 const ENABLED = false
 function run(program, args, json = false) {
   const result = spawnSync(program, args, {
@@ -49,6 +50,10 @@ try {
   // No legacy rollback is implemented: all mutations are forward-only and
   // admission remains owned/stopped until both candidate resources and worker
   // prove readiness on the completed additive schema.
+  const candidateConnections = Object.fromEntries(
+    ["app", "scanner"].map((name) => [name, collectPreparedCandidateFingerprint(policy, name)])
+  )
+  atomicRootWrite(`${directory}/candidate-connections.json`, candidateConnections)
   for (const name of ["app", "scanner"]) {
     const revision = policy.candidateRevisions?.[name]
     requireValue(
@@ -134,15 +139,35 @@ try {
     "Running worker image changed"
   )
   requireValue(
-    run("/usr/bin/curl", [
-      "--fail",
-      "--silent",
-      "--show-error",
-      "--max-time",
-      "15",
-      "https://app.lyrashieldai.com/api/ready/scans",
-    ]) === '{"status":"ready","checks":{"worker":true}}',
-    "Candidate readiness unavailable"
+    run("/usr/bin/docker", [
+      "inspect",
+      "--format",
+      "{{.State.Health.Status}}",
+      "lyrashield-worker",
+    ]) === "healthy",
+    "Admission-independent worker health unavailable"
+  )
+  requireValue(
+    run("/usr/bin/docker", [
+      "image",
+      "inspect",
+      "--format",
+      '{{index .Config.Labels "org.opencontainers.image.revision"}}',
+      policy.images.candidate,
+    ]) === policy.candidate.sourceSha,
+    "Candidate worker source changed"
+  )
+  const databaseReady = run("/usr/bin/curl", [
+    "--fail",
+    "--silent",
+    "--show-error",
+    "--max-time",
+    "15",
+    "https://app.lyrashieldai.com/api/ready",
+  ])
+  requireValue(
+    databaseReady === '{"status":"ready","checks":{"database":true,"redis":true}}',
+    "Admission-independent app readiness unavailable"
   )
   validateAuthorization(authorization, readPolicy())
   atomicRootWrite(`${directory}/candidate-ready.json`, {

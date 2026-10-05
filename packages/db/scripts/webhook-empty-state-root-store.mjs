@@ -55,7 +55,7 @@ export function readRootFile(path) {
 }
 export function atomicRootWrite(path, value) {
   requireValue(
-    process.getuid?.() === 0 && path.startsWith(ROOT + "/"),
+    process.getuid?.() === 0 && resolve(path) === path && path.startsWith(ROOT + "/"),
     "Root-only fixed state directory"
   )
   checkParents(path)
@@ -98,6 +98,45 @@ export function atomicRootWrite(path, value) {
     throw error
   }
 }
+const COMPONENTS = [
+  "ops/worker/webhook-empty-state-producer.mjs",
+  "ops/worker/webhook-empty-state-observer.mjs",
+  "ops/worker/webhook-empty-state-admission.mjs",
+  "ops/worker/webhook-empty-state-phases.mjs",
+  "ops/worker/webhook-empty-state-run-migration.mjs",
+  "ops/worker/webhook-empty-state-migration-env.mjs",
+  "ops/worker/webhook-empty-state-candidate.mjs",
+  "ops/worker/webhook-empty-state-candidate-connection.mjs",
+  "ops/worker/webhook-empty-state-consumer-identity.mjs",
+  "ops/worker/webhook-empty-state-startup-fence.mjs",
+  "ops/worker/webhook-empty-state-backup-proof.mjs",
+  "packages/db/scripts/webhook-empty-state-receipt-v2.mjs",
+  "packages/db/scripts/webhook-empty-state-root-store.mjs",
+  "packages/db/scripts/webhook-empty-state-attestation.mjs",
+  "packages/db/scripts/webhook-empty-state-migration.mjs",
+  "packages/db/scripts/webhook-empty-state-contract.mjs",
+]
+function verifyComponents(policy) {
+  requireValue(
+    policy.components &&
+      Object.keys(policy.components).sort().join(",") === [...COMPONENTS].sort().join(","),
+    "Incomplete installed component policy"
+  )
+  for (const name of COMPONENTS) {
+    const path = "/opt/lyrashield-worker-host/" + name
+    checkParents(path)
+    const entry = lstatSync(path)
+    requireValue(
+      !entry.isSymbolicLink() &&
+        entry.isFile() &&
+        entry.uid === 0 &&
+        !(entry.mode & 0o022) &&
+        /^[a-f0-9]{64}$/.test(policy.components[name]) &&
+        sha256(readFileSync(path)) === policy.components[name],
+      "Installed fixed component digest changed"
+    )
+  }
+}
 export function readPolicy() {
   requireValue(process.getuid?.() === 0, "Trusted producer requires root")
   const policy = readRootFile(POLICY),
@@ -108,6 +147,7 @@ export function readPolicy() {
     policy.schemaVersion === "webhook-empty-state-policy/v2",
     "Wrong root policy version"
   )
+  verifyComponents(policy)
   return policy
 }
 export function runDirectory(runId) {

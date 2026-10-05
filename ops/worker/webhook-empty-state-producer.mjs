@@ -11,7 +11,7 @@ import {
   FENCE,
   checkParents,
 } from "../../packages/db/scripts/webhook-empty-state-root-store.mjs"
-import { advancePhase, verifyCompletionProof } from "./webhook-empty-state-phases.mjs"
+import { advancePhase, verifyCompletionProof, PHASES } from "./webhook-empty-state-phases.mjs"
 import {
   canonical,
   sha256,
@@ -300,6 +300,7 @@ export function validateProducerRequest(args, policy) {
         "complete",
         "candidate",
         "resume",
+        "continuity",
       ].includes(phase) &&
       /^[1-9][0-9]{0,5}$/.test(attempt || "") &&
       Number(attempt) >= policy.originalAttempt &&
@@ -371,6 +372,28 @@ async function main() {
   } catch (error) {
     if (error.code !== "ENOENT") throw error
   }
+  if (request.phase === "continuity") {
+    const receipt = collectReceipt(
+      policy,
+      authorization,
+      readRootFile(`${directory}/connections.json`)
+    )
+    validateReceipt(receipt, readPolicy())
+    process.stdout.write("EMPTY_STATE_LIVE_CONTINUITY_MATCH\n")
+    return
+  }
+  // Replayed workflow steps skip only durable, already completed phases. The
+  // original authorization remains fixed and current policy is revalidated.
+  if (state && PHASES.indexOf(request.phase) < PHASES.indexOf(state.phase)) {
+    requireValue(
+      canonical(state.authorization) === canonical(authorization),
+      "Foreign recovery state"
+    )
+    if (PHASES.indexOf(state.phase) >= PHASES.indexOf("collect"))
+      validateReceipt(readRootFile(`${directory}/receipt.json`), readPolicy())
+    process.stdout.write(`EMPTY_STATE_PHASE_COMPLETE=${request.phase}\n`)
+    return
+  }
   const planned = advancePhase(state, request.phase, authorization, policy)
   // Admission value is deterministic from original authorization, preserved on
   // retries. Its owner never changes to a later workflow attempt.
@@ -384,7 +407,7 @@ async function main() {
     at: authorization.issuedAt,
   })
   requireValue(sha256(stop) === policy.admissionValueSha256, "Approved admission value changed")
-  if (request.phase !== "preflight" && request.phase !== "admission")
+  if (request.phase !== "preflight" && request.phase !== "admission" && request.phase !== "resume")
     observerCommand(policy, "webhook-empty-state-admission.mjs", ["assert", stop])
   if (request.phase === "preflight") {
     const observedAt = new Date().toISOString()
@@ -491,14 +514,49 @@ async function main() {
       "Candidate readiness proof missing"
     )
     validateAuthorization(authorization, readPolicy())
-    observerCommand(policy, "webhook-empty-state-admission.mjs", ["release", stop])
-    // Retain completion history; only an owned completed run may remove the
-    // startup fence. Failure at any earlier phase leaves maintenance in place.
+    const intentPath = `${directory}/release-intent.json`
+    let intent
+    try {
+      intent = readRootFile(intentPath)
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error
+    }
+    if (!intent) {
+      observerCommand(policy, "webhook-empty-state-admission.mjs", ["assert", stop])
+      intent = {
+        authorizationSha256: sha256(canonical(authorization)),
+        stopSha256: sha256(stop),
+        completionSha256: readRootFile(`${directory}/candidate-ready.json`).completionSha256,
+      }
+      atomicRootWrite(intentPath, intent)
+    }
     requireValue(
-      canonical(readRootFile(FENCE).authorization) === canonical(authorization),
-      "Foreign startup fence"
+      intent.authorizationSha256 === sha256(canonical(authorization)) &&
+        intent.stopSha256 === sha256(stop),
+      "Foreign release intent"
     )
-    unlinkSync(FENCE)
+    observerCommand(policy, "webhook-empty-state-admission.mjs", ["release-retry", stop])
+    const publicReady = run("/usr/bin/curl", [
+      "--fail",
+      "--silent",
+      "--show-error",
+      "--max-time",
+      "15",
+      "https://app.lyrashieldai.com/api/ready/scans",
+    ])
+    if (publicReady !== '{"status":"ready","checks":{"worker":true}}') {
+      observerCommand(policy, "webhook-empty-state-admission.mjs", ["claim", stop])
+      throw new Error("Public readiness failed; owned admission restored where possible")
+    }
+    try {
+      requireValue(
+        canonical(readRootFile(FENCE).authorization) === canonical(authorization),
+        "Foreign startup fence"
+      )
+      unlinkSync(FENCE)
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error
+    }
   }
   validateAuthorization(authorization, readPolicy())
   atomicRootWrite(statePath, { ...planned, lastAttempt: request.attempt })

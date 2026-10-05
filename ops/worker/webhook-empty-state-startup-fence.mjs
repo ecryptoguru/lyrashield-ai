@@ -13,6 +13,10 @@ import {
   validateAuthorization,
 } from "../../packages/db/scripts/webhook-empty-state-receipt-v2.mjs"
 
+import {
+  readRefreshedWorkerFingerprint,
+  validateConsumerFingerprint,
+} from "./webhook-empty-state-consumer-identity.mjs"
 export function fencePresent(path = FENCE) {
   try {
     const entry = lstatSync(path)
@@ -53,6 +57,7 @@ if (process.argv[1]?.endsWith("webhook-empty-state-startup-fence.mjs")) {
     if (fencePresent()) {
       const fence = readRootFile(FENCE),
         policy = readPolicy()
+      validateConsumerFingerprint(readRefreshedWorkerFingerprint(), policy, "worker")
       validateStartupProof(
         fence,
         readRootFile(`${ROOT}/${policy.runId}/completion.json`),
