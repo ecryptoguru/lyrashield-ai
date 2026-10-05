@@ -2,6 +2,11 @@ name: Protected empty-scheduling cutover (disabled)
 on:
   workflow_dispatch:
     inputs:
+      disposable_only:
+        description: Synthetic attestation rehearsal only; production stays disabled
+        default: false
+        required: false
+        type: boolean
       source_sha:
         description: Exact current main SHA
         required: true
@@ -17,7 +22,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: deploy-azure-${{ vars.AZURE_RESOURCE_GROUP || 'production' }}-${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
+  group: deploy-azure-${{ vars.AZURE_RESOURCE_GROUP || 'production' }}-${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}${{ inputs.disposable_only && '-disposable-attestation' || '' }}
   cancel-in-progress: false
 jobs:
   validate:
@@ -56,3 +61,18 @@ jobs:
       AZURE_DEPLOY_CLIENT_ID: ${{ secrets.AZURE_DEPLOY_CLIENT_ID }}
       AZURE_DEPLOY_TENANT_ID: ${{ secrets.AZURE_DEPLOY_TENANT_ID }}
       AZURE_DEPLOY_SUBSCRIPTION_ID: ${{ secrets.AZURE_DEPLOY_SUBSCRIPTION_ID }}
+
+  disposable-attestation:
+    needs: validate
+    if: ${{ inputs.disposable_only == true }}
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    uses: ecryptoguru/lyrashield-ai/.github/workflows/webhook-empty-state-trusted-attestation.yml@49af2ef78d68b8fb3dd53d6777d7455aff836aff
+    with:
+      disposable_only: true
+      source_sha: ${{ github.sha }}
+      run_id: ${{ github.run_id }}
+      run_attempt: ${{ github.run_attempt }}
+      nonce: ${{ inputs.nonce }}
