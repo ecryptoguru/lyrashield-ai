@@ -129,8 +129,8 @@ jobs:
         run: echo 'Empty-state cutover failed. Retain owned admission and startup fence; no legacy rollback, queue deletion or payment replay.' >> "$GITHUB_STEP_SUMMARY"
 
   disposable-issuance:
-    # Owner-approved synthetic-only window; never a production root trust pin.
-    if: ${{ inputs.disposable_only == true && github.actor_id == '116722580' && github.repository_id == '1286618458' && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && github.run_attempt == '1' }}
+    # Synthetic signing test complete; numeric run IDs cannot match this gate.
+    if: ${{ github.run_id == 'disabled-until-owner-approved-disposable-attestation' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:

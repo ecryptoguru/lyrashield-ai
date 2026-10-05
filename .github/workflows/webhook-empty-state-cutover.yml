@@ -64,13 +64,13 @@ jobs:
 
   disposable-attestation:
     needs: validate
-    # Owner-approved single synthetic test; production caller remains false.
-    if: ${{ inputs.disposable_only == true && github.actor_id == '116722580' && github.repository_id == '1286618458' && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && github.run_attempt == '1' }}
+    # Single synthetic test complete; caller and pinned signer are independently disabled.
+    if: ${{ github.run_id == 'disabled-until-owner-approved-disposable-attestation' }}
     permissions:
       contents: read
       id-token: write
       attestations: write
-    uses: ecryptoguru/lyrashield-ai/.github/workflows/webhook-empty-state-trusted-attestation.yml@97b218bdcbec9b66825166231d081a36a4d76346
+    uses: ecryptoguru/lyrashield-ai/.github/workflows/webhook-empty-state-trusted-attestation.yml@23a5ae415ece87fd36c2a32ccc018cf808568b41
     with:
       disposable_only: true
       source_sha: ${{ github.sha }}
