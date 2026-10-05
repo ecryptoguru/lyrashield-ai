@@ -11,7 +11,7 @@ describe("buildDocsJsonLd", () => {
       origin,
       path: "/docs/integrations/claude-code",
       title: "LyraShield MCP for Claude Code — Setup Guide",
-      description: "Add the LyraShield MCP server to Claude Code in under two minutes.",
+      description: "Add the LyraShield MCP server to Claude Code.",
       updatedDate: "2026-09-08",
       breadcrumbLabel: "Claude Code",
     })
@@ -23,7 +23,7 @@ describe("buildDocsJsonLd", () => {
           "@context": "https://schema.org",
           "@type": "TechArticle",
           headline: "LyraShield MCP for Claude Code — Setup Guide",
-          description: "Add the LyraShield MCP server to Claude Code in under two minutes.",
+          description: "Add the LyraShield MCP server to Claude Code.",
           url: "https://lyrashieldai.com/docs/integrations/claude-code",
           dateModified: "2026-09-08",
           author: { "@id": "https://lyrashieldai.com/#organization" },
