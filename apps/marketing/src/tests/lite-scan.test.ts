@@ -180,7 +180,9 @@ describe("Lite Check marketing surface", () => {
       // Only the second form: a real "30-minute walkthrough" or a "4,500-minute
       // pool" describes a quantity, not scan speed.
       /\b\d+-second\b/i,
-      /\bin\s+(?:a\s+few\s+|several\s+)?(?:seconds|minutes)\b/i,
+      // Literal spaces, not \s+: nested quantifiers here trip
+      // security/detect-unsafe-regex.
+      /\bin (?:a few|several) (?:seconds|minutes)\b/i,
       /\bin\s+under\s+\w+/i,
       /\bresults?\s+in\s+seconds\b/i,
       /\bunder\s+a\s+minute\b/i,
