@@ -540,7 +540,13 @@ jobs:
 
       - name: Clean up isolated restore services
         if: always()
-        run: docker rm -f lyrashield-restore-postgres lyrashield-restore-redis 2>/dev/null || true
+        run: |
+          if [ "$ISOLATED_RESTORE" = true ]; then
+            # Remove anonymous PGDATA/Redis volumes with their first container removal.
+            docker rm -fv lyrashield-restore-postgres lyrashield-restore-redis >/dev/null 2>&1 || true
+          else
+            docker rm -f lyrashield-restore-postgres lyrashield-restore-redis 2>/dev/null || true
+          fi
 
       - name: Remove private isolated restore files and process group
         if: ${{ always() && inputs.isolated_restore }}

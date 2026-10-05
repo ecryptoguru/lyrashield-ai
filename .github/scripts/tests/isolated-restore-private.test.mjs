@@ -227,7 +227,7 @@ test("actual cleanup removes private plaintext/logs/proof and targets only mocke
   assert.equal(existsSync(join(f.base, "webhook-empty-state-restore-proof.json")), false)
   assert.equal(
     readFileSync(f.calls, "utf8"),
-    "kill -0 -- -987654\nkill -KILL -- -987654\ndocker rm -f lyrashield-isolated-backup-4321\ndocker rm -f lyrashield-restore-postgres lyrashield-restore-redis\n"
+    "kill -0 -- -987654\nkill -KILL -- -987654\ndocker rm -fv lyrashield-isolated-backup-4321\ndocker rm -fv lyrashield-restore-postgres lyrashield-restore-redis\n"
   )
 })
 
@@ -388,4 +388,23 @@ test("sensitive phases capture logs before work; exact-object linkage and digest
   const artifact = step("Publish digest-only restore provenance")
   assert.match(artifact, /path: \$\{\{ runner\.temp \}\}\/webhook-empty-state-restore-proof\.json/)
   assert.doesNotMatch(artifact, /audit\.json|backup\.dump|private-operation\.log|restore-web\.log/)
+})
+
+test("first isolated container removal deletes anonymous restored-data volumes", () => {
+  const firstCleanup = step("Clean up isolated restore services")
+  assert.match(
+    firstCleanup,
+    /if \[ "\$ISOLATED_RESTORE" = true \]; then\n[\s\S]*?docker rm -fv lyrashield-restore-postgres lyrashield-restore-redis/
+  )
+  assert.match(
+    firstCleanup,
+    /else\n\s+docker rm -f lyrashield-restore-postgres lyrashield-restore-redis/
+  )
+  assert.ok(
+    workflow.indexOf("Clean up isolated restore services") <
+      workflow.indexOf("Remove private isolated restore files and process group")
+  )
+  const cleanupHelper = readFileSync(helper, "utf8")
+  assert.match(cleanupHelper, /docker rm -fv "lyrashield-isolated-backup-/)
+  assert.match(cleanupHelper, /docker rm -fv lyrashield-restore-postgres lyrashield-restore-redis/)
 })

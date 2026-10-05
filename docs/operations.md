@@ -325,8 +325,9 @@ retention; this mode does not delete it or any older object.
 
 Plaintext dumps, audit exports and command/error logs stay in a private 0700
 runner directory with 0600 files. Sensitive phases return exit status without
-publishing diagnostics. `always()` cleanup removes private files and named
-containers; application cleanup validates the session leader's UID, process
+publishing diagnostics. The first isolated `docker rm -fv` removes anonymous
+restored-data volumes together with their containers; `always()` cleanup also
+removes private files and named backup containers; application cleanup validates the session leader's UID, process
 group, session and start time before signalling its group. Cleanup refuses
 stale identity. Hard runner loss or orphaned/unverifiable processes rely on
 hosted-runner teardown, so explicit cleanup is not a secure-erasure guarantee.

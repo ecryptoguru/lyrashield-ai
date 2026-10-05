@@ -71,9 +71,9 @@ case "${1:-source}" in
       cleanup_status=0
       stop_web || cleanup_status=1
       if [[ "${GITHUB_RUN_ID:-}" =~ ^[1-9][0-9]*$ ]]; then
-        docker rm -f "lyrashield-isolated-backup-$GITHUB_RUN_ID" >/dev/null 2>&1 || true
+        docker rm -fv "lyrashield-isolated-backup-$GITHUB_RUN_ID" >/dev/null 2>&1 || true
       fi
-      docker rm -f lyrashield-restore-postgres lyrashield-restore-redis >/dev/null 2>&1 || true
+      docker rm -fv lyrashield-restore-postgres lyrashield-restore-redis >/dev/null 2>&1 || true
       rm -rf -- "$ISOLATED_RESTORE_TEMP"
       rm -f -- "$RUNNER_TEMP/webhook-empty-state-restore-proof.json"
       exit "$cleanup_status"
