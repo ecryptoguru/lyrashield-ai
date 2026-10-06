@@ -54,9 +54,17 @@ checksums and full catalog validation. Maintenance still requires owned admissio
 drained work, excluded old writers and repeated pre-migration checks. All failure
 and retry recovery behavior remains unchanged.
 
-The additional web digest is an exact published build artifact. Its current
-deployment has not been independently inventoried in this task; the protected
-classifier must still prove that every active writer uses an admitted tuple.
+- Read-only Azure control-plane inventory used existing authenticated access and
+  only `az containerapp revision list` for `LyraShieldAI/lyrashield-app` and
+  `LyraShieldAI/lyrashield-scanner`, selecting active revisions' container images.
+  Both applications had two active revisions: the first source and web digest
+  above, and the second source and web digest above. All four references matched
+  their complete role-specific profiles. The reviewed inventory script SHA-256
+  was `72334d758f639aebd20b82882fe22613c82a45e208d098d7515025b54c0f12db`.
+  No environment values, secrets, runtime commands or mutations were requested.
+
+The inventory is a point-in-time observation. The protected classifier must
+still prove that every active writer uses an admitted tuple on each release.
 This correction does not authorize a release retry, migration, promotion, registry
 access change or live checkout/accounting action. Required CI and independent
 review remain necessary before merge. Full production cutover is not yet proven.
