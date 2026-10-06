@@ -37,7 +37,11 @@ const configPreviewClients = [
 
 describe("integration guide routes", () => {
   it("points the user guide at the registry-derived integration directory", () => {
-    expect(userGuide).toMatch(/\[client-specific setup guides\]\(\/docs\/integrations\)/)
+    const href = userGuide.match(/\[client-specific setup guides\]\(([^)]+)\)/)?.[1]
+    expect(href).toBeDefined()
+    const destination = new URL(href!, "https://lyrashieldai.com")
+    expect(destination.origin).toBe("https://lyrashieldai.com")
+    expect(destination.pathname).toBe("/docs/integrations")
   })
 
   it("resolves every preferred registry link to an authored or generated page", () => {

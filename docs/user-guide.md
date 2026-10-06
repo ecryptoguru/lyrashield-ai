@@ -12,11 +12,11 @@ This guide covers the public Lite Check, authenticated dashboard, scan choices, 
 
 ## 1. Important product boundaries
 
-LyraShield AI uses precise result language:
+LyraShield AI currently produces three shipped evidence states: Detected, Validated and Inconclusive. Its schema also defines a future Verified state:
 
 - **Detected** means a scanner or engine returned evidence for a possible issue.
 - **Validated** or **retest-confirmed** means a fresh deterministic retest no longer found the issue within its completed scope.
-- **Verified** means independent verification evidence exists. Model confidence alone never creates this state.
+- **Verified** is defined for a future independent verification step; no finding is in it today. Model confidence alone never creates this state.
 - **Inconclusive** means the available scan could not establish a reliable result.
 - **No finding** means the assigned check completed without returning a mapped finding. It does not mean the application is universally safe.
 - **Evidence required** means the control needs deployment, operational or human-review proof that a repository or URL scan cannot safely establish.
@@ -275,7 +275,7 @@ Threat-intelligence enrichment prioritizes review but does not change severity o
 2. Create and edit a fix proposal describing the change you intend to make.
 3. Apply the change yourself. Saving a proposal does not modify the repository.
 4. Queue a fresh retest after applying the change.
-5. Review whether the retest is validated, independently verified, blocked or inconclusive.
+5. Review whether the retest is validated, blocked or inconclusive; independently verified remains a future state.
 6. Generate an assurance report from the retained retest when appropriate.
 
 Depending on your permission, you may also mark a finding as accepted risk or false positive. These are audited decisions, not silent deletion. When you do, the UI requires a short reason; the reason is stored as the finding's status reason and is shown on the finding detail for future reviewers.
