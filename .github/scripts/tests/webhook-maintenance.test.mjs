@@ -598,7 +598,10 @@ for (const archived of [false, true]) {
     writeFileSync(f.redis, "null")
     const before = readFileSync(f.state, "utf8")
     for (const phase of ["recovery-probe", "recovery", "claim", "hold"]) {
-      const result = f.local(phase, { LYRASHIELD_ADMISSION_STOP_OWNER: "123:2" })
+      const result = f.local(phase, {
+        LYRASHIELD_ADMISSION_STOP_OWNER: "123:2",
+        LYRASHIELD_WEBHOOK_CUTOVER_ATTEMPT: "2",
+      })
       assert.notEqual(result.status, 0, phase)
       assert.match(result.stderr, /Completed cutover cannot re-enter maintenance/)
       assert.equal(JSON.parse(readFileSync(f.redis)), null)
