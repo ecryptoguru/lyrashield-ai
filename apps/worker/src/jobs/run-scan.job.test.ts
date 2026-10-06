@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { logger } from "@lyrashield/logger"
 
 const completeUsage = vi.hoisted(() => ({
-  model: "azure_ai/gpt-5.6-luna",
+  model: "azure_ai/gpt-6-luna",
   request_count: 1,
   input_tokens: 1_000,
   cached_input_tokens: 0,
@@ -169,12 +169,12 @@ vi.mock("../engine/runner", () => ({
         run_id: scanId,
         run_name: scanId,
         status: "completed",
-        model: "azure_ai/gpt-5.6-luna",
+        model: "azure_ai/gpt-6-luna",
         reasoning_effort: "medium",
-        delegate_model: "azure_ai/gpt-5.6-luna",
+        delegate_model: "azure_ai/gpt-6-luna",
         delegate_reasoning_effort: "medium",
         model_routing_policy:
-          "coordinator=azure_ai/gpt-5.6-luna@medium;delegate=azure_ai/gpt-5.6-luna@medium;v=1",
+          "coordinator=azure_ai/gpt-6-luna@medium;delegate=azure_ai/gpt-6-luna@medium;v=1",
         llm_usage: completeUsage,
       },
       summary: "Scan completed with 0 findings",
@@ -183,10 +183,9 @@ vi.mock("../engine/runner", () => ({
   })),
   cleanupEngineWorkspace: vi.fn().mockResolvedValue(undefined),
   resolveEngineProfile: vi.fn((mode: string) => ({
-    model:
-      mode === "DEEP" || mode === "CUSTOM" ? "azure_ai/gpt-5.6-terra" : "azure_ai/gpt-5.6-luna",
+    model: mode === "DEEP" || mode === "CUSTOM" ? "azure_ai/gpt-6-sol" : "azure_ai/gpt-6-luna",
     reasoningEffort: "medium",
-    delegateModel: "azure_ai/gpt-5.6-luna",
+    delegateModel: "azure_ai/gpt-6-luna",
     delegateReasoningEffort: "medium",
   })),
   interpretExitCode: vi.fn((code: number) => {
@@ -694,9 +693,9 @@ it("extracts a privacy-bounded provider usage summary", () => {
 
 describe("engineRoutingCoverageIssue", () => {
   const profile = {
-    model: "azure_ai/gpt-5.6-terra",
+    model: "azure_ai/gpt-6-sol",
     reasoningEffort: "medium" as const,
-    delegateModel: "azure_ai/gpt-5.6-luna",
+    delegateModel: "azure_ai/gpt-6-luna",
     delegateReasoningEffort: "high" as const,
   }
 
@@ -708,12 +707,12 @@ describe("engineRoutingCoverageIssue", () => {
         start_time: "",
         end_time: null,
         status: "completed",
-        model: "azure_ai/gpt-5.6-luna",
+        model: "azure_ai/gpt-6-luna",
         reasoning_effort: "medium",
-        delegate_model: "azure_ai/gpt-5.6-luna",
+        delegate_model: "azure_ai/gpt-6-luna",
         delegate_reasoning_effort: "high",
         model_routing_policy:
-          "coordinator=azure_ai/gpt-5.6-luna@medium;delegate=azure_ai/gpt-5.6-luna@high;v=1",
+          "coordinator=azure_ai/gpt-6-luna@medium;delegate=azure_ai/gpt-6-luna@high;v=1",
       })
     ).toMatchObject({ scanner: "engine", status: "partial", subject: "routing-receipt" })
   })
@@ -731,7 +730,7 @@ describe("engineRoutingCoverageIssue", () => {
         delegate_model: profile.delegateModel,
         delegate_reasoning_effort: profile.delegateReasoningEffort,
         model_routing_policy:
-          "coordinator=azure_ai/gpt-5.6-terra@medium;delegate=azure_ai/gpt-5.6-luna@high;v=1",
+          "coordinator=azure_ai/gpt-6-sol@medium;delegate=azure_ai/gpt-6-luna@high;v=1",
       })
     ).toBeNull()
   })
@@ -1874,7 +1873,8 @@ describe("processScanJob", () => {
           run_name: "scan-1",
           status: "completed",
           llm_usage: {
-            model: "azure_ai/gpt-5.6-luna",
+            model: "azure_ai/gpt-6-luna",
+            accountingComplete: true,
             request_count: 1,
             input_tokens: 17_500_000,
             cached_input_tokens: 0,
@@ -1889,6 +1889,19 @@ describe("processScanJob", () => {
             long_cache_write_input_tokens: 0,
             long_output_tokens: 0,
             total_cost_usd: 3.5,
+            model_usage_buckets: [
+              {
+                model: "azure_ai/gpt-6-luna",
+                standard_input_tokens: 0,
+                standard_cached_input_tokens: 0,
+                standard_cache_write_input_tokens: 0,
+                standard_output_tokens: 0,
+                long_input_tokens: 17_500_000,
+                long_cached_input_tokens: 0,
+                long_cache_write_input_tokens: 0,
+                long_output_tokens: 0,
+              },
+            ],
           },
         },
         summary: "Engine completed above budget",
@@ -1932,7 +1945,7 @@ describe("processScanJob", () => {
     expect(completeScanWithScore).not.toHaveBeenCalled()
   })
 
-  it("uses the permanent GPT-5.6 rate card when engine cost is unavailable", async () => {
+  it("uses complete GPT-6 model buckets when provider cost is unavailable", async () => {
     vi.mocked(runEngine).mockResolvedValue({
       exitCode: 0,
       output: {
@@ -1944,7 +1957,8 @@ describe("processScanJob", () => {
           run_name: "scan-1",
           status: "completed",
           llm_usage: {
-            model: "azure_ai/gpt-5.6-luna",
+            model: "azure_ai/gpt-6-luna",
+            accountingComplete: true,
             request_count: 7,
             input_tokens: 18_420,
             cached_input_tokens: 6_100,
@@ -1958,6 +1972,19 @@ describe("processScanJob", () => {
             long_cached_input_tokens: 0,
             long_cache_write_input_tokens: 0,
             long_output_tokens: 0,
+            model_usage_buckets: [
+              {
+                model: "azure_ai/gpt-6-luna",
+                standard_input_tokens: 18_420,
+                standard_cached_input_tokens: 6_100,
+                standard_cache_write_input_tokens: 0,
+                standard_output_tokens: 2_310,
+                long_input_tokens: 0,
+                long_cached_input_tokens: 0,
+                long_cache_write_input_tokens: 0,
+                long_output_tokens: 0,
+              },
+            ],
           },
         },
         summary: "Engine completed without a cost field",
@@ -1971,8 +1998,8 @@ describe("processScanJob", () => {
       where: { id: "scan-1" },
       data: {
         providerCostUsd: null,
-        billedCostUsd: "0.0053580000",
-        actualCostCents: 1,
+        billedCostUsd: "0.0024480000",
+        actualCostCents: 0,
         llmRequestCount: 7,
         llmInputTokens: 18_420,
         llmCachedInputTokens: 6_100,
@@ -1985,9 +2012,9 @@ describe("processScanJob", () => {
       "info",
       "AI usage counters recorded",
       expect.objectContaining({
-        calculatedCostUsd: 0.005358,
-        costSource: "azure_rate_card",
-        pricingEffectiveDate: "2026-08-06",
+        calculatedCostUsd: 0.002448,
+        costSource: "azure_published_rate_card",
+        pricingEffectiveDate: "2026-09-22",
         reconciliationStatus: "rate_card_only",
       })
     )
@@ -2005,7 +2032,8 @@ describe("processScanJob", () => {
           run_name: "scan-1",
           status: "completed",
           llm_usage: {
-            model: "azure_ai/gpt-5.6-luna",
+            model: "azure_ai/gpt-6-luna",
+            accountingComplete: true,
             request_count: 7,
             input_tokens: 18_420,
             cached_input_tokens: 6_100,
@@ -2020,6 +2048,19 @@ describe("processScanJob", () => {
             long_cached_input_tokens: 0,
             long_cache_write_input_tokens: 0,
             long_output_tokens: 0,
+            model_usage_buckets: [
+              {
+                model: "azure_ai/gpt-6-luna",
+                standard_input_tokens: 18_420,
+                standard_cached_input_tokens: 6_100,
+                standard_cache_write_input_tokens: 0,
+                standard_output_tokens: 2_310,
+                long_input_tokens: 0,
+                long_cached_input_tokens: 0,
+                long_cache_write_input_tokens: 0,
+                long_output_tokens: 0,
+              },
+            ],
           },
         },
         summary: "Engine completed with provider telemetry",
@@ -2043,9 +2084,9 @@ describe("processScanJob", () => {
       "info",
       "AI usage counters recorded",
       expect.objectContaining({
-        calculatedCostUsd: 0.005358,
+        calculatedCostUsd: 0.002448,
         engineReportedCostUsd: 0.02,
-        costSource: "rate_card_and_engine_reported",
+        costSource: "azure_published_rate_card_and_engine_reported",
         reconciliationStatus: "mismatch",
       })
     )
@@ -2090,7 +2131,8 @@ describe("processScanJob", () => {
           run_name: "scan-1",
           status: "completed",
           llm_usage: {
-            model: "azure_ai/gpt-5.6-luna",
+            model: "azure_ai/gpt-6-luna",
+            accountingComplete: true,
             request_count: 1,
             input_tokens: 1_000,
             cached_input_tokens: 0,
@@ -2104,7 +2146,20 @@ describe("processScanJob", () => {
             long_cached_input_tokens: 0,
             long_cache_write_input_tokens: 0,
             long_output_tokens: 0,
-            total_cost_usd: 0.00032,
+            total_cost_usd: 0.00015,
+            model_usage_buckets: [
+              {
+                model: "azure_ai/gpt-6-luna",
+                standard_input_tokens: 1_000,
+                standard_cached_input_tokens: 0,
+                standard_cache_write_input_tokens: 0,
+                standard_output_tokens: 100,
+                long_input_tokens: 0,
+                long_cached_input_tokens: 0,
+                long_cache_write_input_tokens: 0,
+                long_output_tokens: 0,
+              },
+            ],
           },
         },
         summary: "Engine completed",
@@ -2121,8 +2176,8 @@ describe("processScanJob", () => {
     expect(prisma.scan.update).toHaveBeenCalledWith({
       where: { id: "scan-1" },
       data: expect.objectContaining({
-        providerCostUsd: "0.0003200000",
-        billedCostUsd: "0.0003200000",
+        providerCostUsd: "0.0001500000",
+        billedCostUsd: "0.0001500000",
         llmRequestCount: 1,
       }),
     })
@@ -2452,7 +2507,7 @@ describe("processScanJob", () => {
           run_name: "scan-1",
           status: "stopped",
           llm_usage: {
-            model: "azure_ai/gpt-5.6-luna",
+            model: "azure_ai/gpt-6-luna",
             request_count: 5,
             input_tokens: 5_000_000,
             cached_input_tokens: 0,
@@ -2525,7 +2580,7 @@ describe("processScanJob", () => {
           run_name: "scan-1",
           status: "completed",
           llm_usage: {
-            model: "azure_ai/gpt-5.6-luna",
+            model: "azure_ai/gpt-6-luna",
             request_count: 3,
             input_tokens: 18_420,
             cached_input_tokens: 6_100,
@@ -3108,7 +3163,7 @@ describe("processScanJob", () => {
       expect.objectContaining({
         calculatedCostUsd: null,
         pricingMethod: "model_mix_unpriceable",
-        reconciliationStatus: "model_mix_unpriceable",
+        reconciliationStatus: "incomplete_provider_receipts",
       })
     )
   })

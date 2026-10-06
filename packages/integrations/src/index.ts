@@ -70,7 +70,18 @@ export {
   type ConnectorAdmissionReason,
 } from "./connectors/admission"
 
-export { getRedis, closeRedis } from "./redis"
+export {
+  getRedis,
+  closeRedis,
+  getAiResultCacheRedis,
+  getAiResultCacheRedisForPurge,
+  closeAiResultCacheRedis,
+} from "./redis"
+export {
+  AI_RESULT_CACHE_KEY_PREFIX,
+  aiResultCacheTargetIndexKey,
+  purgeAiResultCacheWorkspaceEntries,
+} from "./ai-result-cache-admin"
 export {
   getScanQueue,
   enqueueScan,

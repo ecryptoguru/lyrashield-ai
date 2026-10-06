@@ -30,12 +30,9 @@ Public name: **LyraShield AI**. Canonical domain: `lyrashieldai.com`. Do not ren
 
 Current release and runtime evidence lives in [PRD §8](./PRD.md#8-current-production-evidence) and [codebase §11](./codebase.md#11-production-topology-and-accepted-evidence). Refresh deployed state before operational action.
 
-## Immediate execution queue
+## Operational handoff
 
-1. On deployed product `4822306e24f375800981bf282fd992a9c15dcde8` (which includes merged PR #454), complete a successful canonical/OG URL and PNG readback from an owner-authorized active scorecard. The historical fixture is revoked and returns 404; do not enumerate or create a production scorecard without authorization.
-2. Retain longer-window Redis command/capacity evidence and complete RazorpayX/Payoneer payout plus tax-form operations before paid scale.
-3. Triage the 25 findings retained by current Standard scan `cmt9el7p7000001hdjnjo90wk` and obtain independent verification where warranted. Keep all unverified results `DETECTED` or `INCONCLUSIVE`.
-4. After founder authorization, run separate controlled Deep/Sol acceptance with exact image, routing, cost, receipts, and terminal proof.
+Consult the [dated execution queue](./docs/handoffs/codex-setup-queue-2026-10-02.md) only for relevant follow-up work; refresh its deployment, scan and financial evidence before acting. Do not enumerate or create production scorecards, perform live financial actions, or run paid acceptance scans without explicit authorization. Keep unverified findings `DETECTED` or `INCONCLUSIVE`; require independent verification where warranted.
 
 ## Founder decisions
 
@@ -110,7 +107,7 @@ Decided on 2026-09-22: retain and publish the existing Cloud and minute-pack pri
 
 ### Models and agents
 
-- Routing authority: `resolveEngineProfile()`; budget authority: `resolveScanBudgetUsd()`; price authority: `gpt56-pricing.ts`.
+- Routing authority: `resolveEngineProfile()`; budget authority: `resolveScanBudgetUsd()`; price authority: `gpt6-pricing.ts`.
 - Keep validated fallback model and positive policy checks.
 - Deep/Custom use GPT-6 Sol/medium root and Luna/high specialists; see [model routing](./codebase.md#model-routing-and-accounting).
 - Model-facing inputs use `normalizeInput()` and `PromptInjectionGuard`; no ad hoc regex replacement.

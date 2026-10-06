@@ -1,3 +1,4 @@
+import { setTimeout as sleep } from "node:timers/promises"
 import process from "node:process"
 import {
   LyraShieldError,
@@ -190,24 +191,6 @@ function extractInternalScanId(resultLocation: string | null): string | null {
   return /^[A-Za-z0-9_-]{1,128}$/.test(trimmed) ? trimmed : null
 }
 
-function sleepMs(ms: number, signal: AbortSignal): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (signal.aborted) {
-      reject(new DOMException("Aborted", "AbortError"))
-      return
-    }
-    const onAbort = () => {
-      clearTimeout(timer)
-      reject(new DOMException("Aborted", "AbortError"))
-    }
-    const timer = setTimeout(() => {
-      signal.removeEventListener("abort", onAbort)
-      resolve()
-    }, ms)
-    signal.addEventListener("abort", onAbort, { once: true })
-  })
-}
-
 /**
  * Wait on a durable agent operation to COMPLETED/FAILED/CONFLICT, then — when
  * the operation produced an internal scan id — continue waiting on that scan
@@ -291,7 +274,7 @@ export async function runOperationWait(
         )
         return EXIT_WAIT_TIMEOUT
       }
-      await sleepMs(Math.min(pollIntervalMs, remaining), control.signal)
+      await sleep(Math.min(pollIntervalMs, remaining), undefined, { signal: control.signal })
     }
   } catch (err) {
     if (

@@ -33,6 +33,8 @@ export type EngineTriageOverlayResult = {
 
 export async function runEngineTriageOverlay(params: {
   scanId: string
+  workspaceId: string
+  targetId: string
   sponsorAccountId: string
   targetType: string
   mode: ScanJobData["mode"]
@@ -52,6 +54,8 @@ export async function runEngineTriageOverlay(params: {
 }): Promise<EngineTriageOverlayResult> {
   const {
     scanId,
+    workspaceId,
+    targetId,
     sponsorAccountId,
     targetType,
     mode,
@@ -108,6 +112,12 @@ export async function runEngineTriageOverlay(params: {
     triageCapUsd: env.LYRASHIELD_AI_TRIAGE_MAX_BUDGET_USD,
   })
   let triageTerminalReason = triageEligibility.reason
+  let cacheOperations = {
+    readCommands: 0,
+    writeCommands: 0,
+    bytesRead: 0,
+    bytesWritten: 0,
+  }
 
   if (
     targetType === "REPO" &&
@@ -118,13 +128,19 @@ export async function runEngineTriageOverlay(params: {
     try {
       const triageResult = await runEngineTriage({
         scanId,
+        workspaceId,
+        targetId,
         profile: resolveEngineProfile("STANDARD"),
         input: triageInput,
         maxBudgetUsd: triageEligibility.maxBudgetUsd!,
         timeoutMs: resolveScannerPhaseTimeoutMs(scanRuntimeBudgetMs, elapsedScanMs()),
         shouldCancel: async () => hasGlobalScanTimeout() || (await isScanCancelled()),
       })
+      cacheOperations = triageResult.cacheOperations ?? cacheOperations
       const artifact = triageResult.artifact
+      const reuseWithoutProviderRequest =
+        triageResult.source === "singleflight" ||
+        (triageResult.source === "exact_cache" && Boolean(triageResult.reuseReceipt))
       if (triageResult.llmUsage) {
         const mergedUsage = mergeLlmUsage(
           engineResult.output.runRecord?.llm_usage,
@@ -161,6 +177,30 @@ export async function runEngineTriageOverlay(params: {
             }
           }
         }
+      } else if (artifact && reuseWithoutProviderRequest) {
+        // An exact completed artifact makes no provider request. Preserve the
+        // main scan's existing ledger and apply the same non-authoritative
+        // overlay only after its provenance receipt has been validated.
+        await updateAccounting()
+        aiSecuritySignals = applyEngineTriageArtifact(aiSecuritySignals, artifact)
+        triageSnapshot = {
+          status: artifact.status,
+          terminalReason: artifact.terminalReason,
+          policyVersion: artifact.policyVersion,
+          modelRoute: artifact.modelRoute,
+          inputChecksum: artifact.inputChecksum,
+          redactionReceipt: artifact.redactionReceipt.inputChecksum,
+          resultCount: artifact.results.length,
+        }
+        logger.info("AI triage reused result applied", {
+          scanId,
+          source: triageResult.source,
+          ...(triageResult.reuseReceipt
+            ? { artifactSha256: triageResult.reuseReceipt.artifactSha256 }
+            : {}),
+          currentProviderRequests: 0,
+          currentProviderCostUsd: 0,
+        })
       } else if (artifact) {
         await updateAccounting()
         triageSnapshot = {
@@ -175,7 +215,13 @@ export async function runEngineTriageOverlay(params: {
       } else {
         await updateAccounting()
       }
-      triageTerminalReason = triageSnapshot?.terminalReason ?? "TRIAGE_ARTIFACT_UNAVAILABLE"
+      triageTerminalReason =
+        triageSnapshot?.terminalReason ??
+        (triageResult.cancelled
+          ? "TRIAGE_CANCELLED"
+          : triageResult.timedOut
+            ? "TRIAGE_TIMEOUT"
+            : "TRIAGE_ARTIFACT_UNAVAILABLE")
     } catch {
       // An additive overlay can never fail the deterministic scan.
       triageTerminalReason = "TRIAGE_COMMAND_FAILED"
@@ -193,6 +239,7 @@ export async function runEngineTriageOverlay(params: {
         status: triageSnapshot?.status ?? "DISABLED",
         terminalReason: triageSnapshot?.terminalReason ?? triageTerminalReason,
         resultCount: triageSnapshot?.resultCount ?? 0,
+        cacheOperations,
       }
     ).catch((eventErr) =>
       logger.warn("Failed to persist AI-assisted triage terminal state", {

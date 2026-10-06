@@ -15,7 +15,7 @@
     "typecheck:browser-harness": "pnpm --filter @lyrashield/web exec tsc --noEmit -p ../../e2e/browser/tsconfig.json",
     "lint:browser-harness": "pnpm exec eslint e2e/browser --max-warnings 0",
     "format": "prettier --write \"**/*.{ts,tsx,md,json,yml,yaml}\"",
-    "format:check": "git ls-files -z -- '*.ts' '*.tsx' '*.md' '*.json' '*.yml' '*.yaml' | xargs -0 prettier --check",
+    "format:check": "git ls-files -z -- '*.ts' '*.tsx' '*.md' '*.json' '*.yml' '*.yaml' | node -e 'const fs=require(\"node:fs\");let s=\"\";process.stdin.setEncoding(\"utf8\");process.stdin.on(\"data\",chunk=>s+=chunk);process.stdin.on(\"end\",()=>process.stdout.write(s.split(\"\\0\").filter(p=>p&&fs.existsSync(p)).join(\"\\0\")+\"\\0\"))' | xargs -0 prettier --check",
     "db:generate": "pnpm --filter @lyrashield/db generate",
     "db:migrate": "pnpm --filter @lyrashield/db migrate",
     "prisma:migrate:check": "pnpm --filter @lyrashield/db exec prisma migrate diff --from-migrations ./prisma/migrations --to-schema ./prisma/schema.prisma --exit-code",

@@ -6,13 +6,13 @@ import {
 } from "./engine-output-schema"
 import { boundedString, HTTP_EXCHANGE_ID_PATTERN, MAX_DB_INTEGER } from "./output-parser-common"
 import type { EngineRunRecord } from "./output-parser-types"
-import { sumUsdCosts } from "./gpt56-pricing"
+import { sumUsdCosts } from "./gpt6-pricing"
 
 const MAX_RUN_TARGETS = 100
 const MAX_LLM_USAGE_NODES = 500
 const MAX_DB_DECIMAL_12_6 = 1_000_000
 const MAX_LLM_USAGE_REQUESTS = 10_000
-const GPT_56_LONG_CONTEXT_THRESHOLD_TOKENS = 272_000
+const GPT_6_LONG_CONTEXT_THRESHOLD_TOKENS = 272_000
 function usageInteger(value: unknown): number | undefined {
   return typeof value === "number" &&
     Number.isSafeInteger(value) &&
@@ -202,7 +202,7 @@ const USAGE_BUCKET_KEYS = [
 
 /**
  * Combines independently metered engine phases only when both receipts expose
- * exact per-request GPT-5.6 buckets. An incomplete receipt stays unpriceable.
+ * exact per-request GPT-6 buckets. An incomplete receipt stays unpriceable.
  */
 export function mergeLlmUsage(
   base: Record<string, unknown> | undefined,
@@ -295,9 +295,7 @@ function sumRequestUsageDetail(value: unknown, key: string): number | undefined 
 function boundedPricedModel(value: unknown): string | undefined {
   if (typeof value !== "string" || value.length === 0 || value.length > 128) return undefined
   const normalized = value.toLowerCase().replaceAll("_", "-")
-  return /(?:^|[/.-])(?:gpt-5\.6-(?:terra|luna)|gpt-6-(?:sol|luna))(?:$|[/.-])/.test(normalized)
-    ? value
-    : undefined
+  return /(?:^|[/.-])gpt-6-(?:sol|luna)(?:$|[/.-])/.test(normalized) ? value : undefined
 }
 
 function normalizeRequestUsageBuckets(value: unknown): Record<string, unknown> {
@@ -338,7 +336,7 @@ function normalizeRequestUsageBuckets(value: unknown): Record<string, unknown> {
     ) {
       return {}
     }
-    const prefix = inputTokens > GPT_56_LONG_CONTEXT_THRESHOLD_TOKENS ? "long" : "standard"
+    const prefix = inputTokens > GPT_6_LONG_CONTEXT_THRESHOLD_TOKENS ? "long" : "standard"
     buckets[`${prefix}_input_tokens` as keyof typeof buckets] += inputTokens
     buckets[`${prefix}_cached_input_tokens` as keyof typeof buckets] += cachedInputTokens
     buckets[`${prefix}_cache_write_input_tokens` as keyof typeof buckets] += cacheWriteInputTokens

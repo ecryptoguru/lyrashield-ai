@@ -2,6 +2,7 @@ import { isJsonObject } from "@lyrashield/types"
 import type { AISecuritySignal, AISecurityTriage } from "./types"
 
 export const ENGINE_TRIAGE_SCHEMA_VERSION = "ai-security-triage/1.0" as const
+export const ENGINE_TRIAGE_POLICY_VERSION = "ai-security-triage-policy/1.0" as const
 
 export type EngineTriageStatus = "COMPLETED" | "DISABLED" | "FAILED" | "BUDGET_STOPPED"
 
