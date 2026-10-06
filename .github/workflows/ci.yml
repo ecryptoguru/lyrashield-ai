@@ -364,6 +364,10 @@ jobs:
         if: needs.changes.outputs.marketing-tests == 'true' && needs.changes.outputs.app != 'true' && needs.changes.outputs.shared != 'true'
         run: pnpm --filter @lyrashield/marketing lint
 
+      - name: Lint motion
+        if: needs.changes.outputs.motion-tests == 'true' && needs.changes.outputs.app != 'true' && needs.changes.outputs.shared != 'true'
+        run: pnpm --filter @lyrashield/marketing-motion lint
+
       - name: Typecheck
         if: needs.changes.outputs.app == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')
         run: pnpm typecheck
@@ -387,6 +391,10 @@ jobs:
       - name: Typecheck marketing
         if: needs.changes.outputs.marketing-tests == 'true' && needs.changes.outputs.app != 'true' && needs.changes.outputs.shared != 'true'
         run: pnpm --filter @lyrashield/marketing typecheck
+
+      - name: Typecheck motion
+        if: needs.changes.outputs.motion-tests == 'true' && needs.changes.outputs.app != 'true' && needs.changes.outputs.shared != 'true'
+        run: pnpm --filter @lyrashield/marketing-motion typecheck
 
       # Deterministic, offline blog gates. These ran only by hand before, which is
       # how an unterminated code span reached the build stage: MDX compiled the
@@ -589,6 +597,10 @@ jobs:
           # so nothing promotes a preview build.
           LYRASHIELD_LOCAL_PREVIEW=1 pnpm --filter @lyrashield/marketing build
           touch apps/marketing/dist/.local-preview
+
+      - name: Build motion
+        if: needs.changes.outputs.motion-tests == 'true' && needs.changes.outputs.app != 'true' && needs.changes.outputs.shared != 'true'
+        run: pnpm --filter @lyrashield/marketing-motion build
 
       # Cache the Playwright browser binary so the install step does not
       # re-download chromium on every run. Keyed on the @playwright/test

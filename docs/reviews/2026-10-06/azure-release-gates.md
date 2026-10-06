@@ -60,6 +60,7 @@ promise that every future run will save their sum.
 | Before                                                                  | After                                                                                                                                      |
 | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
 | Every shared change selected marketing and motion                       | Independent flags select the relevant project and its dependency closure; root dependency/build inputs and unknown paths still select both |
+| Motion-only changes built the unrelated marketing site                  | Motion-only changes lint, typecheck and build their own desktop/portrait Vite artifact; broad builds are not duplicated                    |
 | Marketing browser tests ran for unrelated ops and workflow changes      | Marketing browser tests select marketing source and its transitive workspace dependency graph                                              |
 | Ordinary app implementation selected the entire ops Node suite          | Ops selects workflows, helpers, runtime operations, package manifests/shared dependencies and unknown paths                                |
 | Native catalog and queue tests ran in a dedicated step and again in ops | CI runs them once with disposable services; the default local runner retains them                                                          |
@@ -86,8 +87,8 @@ were issued for this plan.
 ## Proposed bounded read-only inventory
 
 Repository-variable metadata identifies resource group `LyraShieldAI`, app
-`lyrashield-app` and scanner `lyrashield-scanner`. The workflow defaults the
-worker VM to `lyrashield-worker` when its variable is absent. Registry package
+`lyrashield-app` and scanner `lyrashield-scanner`. Read-only environment-variable
+metadata confirms the `azure-production` worker VM is `lyrashield-worker`. Registry package
 metadata alone cannot establish deployment. Its authenticated versions API also
 returned HTTP 403 because the current GitHub credential lacks `read:packages`.
 Do not expand credential scopes as part of this patch.
@@ -97,9 +98,9 @@ The smallest useful operational inventory has two stages:
 1. Control-plane reads: list only active revisions for the two named Container
    Apps and extract their digest-pinned image references. Validate the known
    repository prefixes, 40-hex source tags and 64-hex digest strings before
-   output. Inspect only OCI revision/engine labels for those exact manifests
-   using already authorized registry access. Existing build records can prove
-   what was published, but not what is currently deployed.
+   output. Registry inspection is blocked by the permission denial; do not use
+   another identity or route to evade it. Existing build records can prove what
+   was published, but not what is currently deployed.
 2. If no existing captured and independently verified VM probe response is
    available, run the existing read-only worker collector once against the named
    VM. It reads the running container's image/labels and existing runtime image
@@ -116,17 +117,28 @@ control-plane revision metadata cannot prove the OCI image running inside a VM.
 Neither stage authorizes maintenance, queue writes, migration, restart, promotion
 or a legacy-profile expansion.
 
-A concrete local proposal is prepared at
-`/tmp/lyrashield-webhook-inventory-proposal.mjs`, SHA-256
-`6090446a5a89175a9f3eb668cb0078e0acfd16864e6458a8a26526e9c0de921a`.
-It is the current verifier with one additional fixed-shape provenance report in
-the existing mismatch branch. The report contains only already validated
-40-hex source/engine identities, 64-hex OCI digests and fixed protocol enums.
-It retains the same fail-closed classification and never writes a deployment mode
-on mismatch. It has not been executed against production or published as a live
-workflow. Its existing registry verification reads `ghcr-token` through the
-configured Key Vault; bounded authorization must explicitly cover that in-memory
-credential use without disclosure or credential changes. An isolated ephemeral
-runner must own its Docker login configuration. The guest collector remains the
-existing running-container inspection and five catalog SELECTs; no new guest
-operation is added.
+The earlier combined registry/VM proposal is withdrawn following the registry
+permission denial. A separate VM-only proposal is prepared at
+`/tmp/lyrashield-webhook-vm-inventory-proposal.mjs`, SHA-256
+`e2debc921ae9aec922dcb1ac36fd6ffed1bab6052819225271ec887b81f0d82e`.
+It invokes only the existing running-container inspection and five catalog
+SELECTs on `LyraShieldAI/lyrashield-worker`. It does not contact GitHub Packages,
+GHCR or Key Vault and performs no Docker login, pull, credential change or grant.
+It uses the established Azure management authentication to invoke Run Command;
+the in-container database client uses its existing system connection internally.
+No database credential is captured or emitted. A new read-only database session
+is opened to the already configured endpoint. No new endpoint or identity is
+introduced. Azure Run Command submits a new remote-execution request through the
+existing management API and may retain its normal command/output metadata. No
+persistent login, token scope expansion, role assignment or access grant is
+required. The proposal does not use an alternate credential to bypass the
+registry denial.
+
+Its final report is capped at 2,048 bytes and contains `version`, fixed
+`registryProvenance: UNVERIFIED`, validated worker source/engine/digest and fixed
+schema/migration/protocol match booleans. The internal Azure frame remains capped
+at 3,500 bytes with a 65,536-byte decoded limit; provider output is captured in
+memory and raw command exceptions are suppressed. No container environment,
+configuration file, URL, catalog expression or raw provider output is published.
+The proposal has not been executed. It does not establish remote registry/build
+provenance or authorize changing baseline admission.

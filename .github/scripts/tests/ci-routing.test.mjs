@@ -320,6 +320,19 @@ test("marketing routing covers its current transitive workspace dependency graph
   assert.ok(seen.size > 0)
 })
 
+test("motion-only changes check their own artifact without duplicating broad builds", () => {
+  for (const name of ["Lint motion", "Typecheck motion", "Build motion"]) {
+    assert.equal(runs(name, ["apps/marketing-motion/src/scene.ts"]), true, name)
+    assert.equal(runs(name, ["apps/marketing/src/pages/index.astro"]), false, name)
+    assert.equal(runs(name, ["pnpm-lock.yaml"]), false, name)
+    assert.equal(
+      runs(name, ["apps/marketing-motion/src/scene.ts", "apps/web/src/app/page.tsx"]),
+      false,
+      name
+    )
+  }
+})
+
 test("ops and native service tests select their dependency closure without ordinary UI changes", () => {
   for (const [paths, expected] of [
     [[".github/workflows/release-tauri.yml"], true],
