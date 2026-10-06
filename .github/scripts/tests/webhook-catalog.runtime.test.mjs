@@ -8,7 +8,10 @@ const { PrismaPg } = require("@prisma/adapter-pg")
 const { Pool } = require("pg")
 
 test("worker constraint catalog query preserves values through the pinned Prisma adapter", async () => {
+  assert.equal(process.env.LYRASHIELD_TEST_DB_DISPOSABLE, "1")
   const target = new URL(process.env.DATABASE_URL ?? "")
+  assert.ok(["postgres:", "postgresql:"].includes(target.protocol))
+  assert.equal(target.port || "5432", "5432")
   assert.ok(["localhost", "127.0.0.1", "[::1]"].includes(target.hostname))
   assert.equal(target.pathname, "/lyrashield")
   const source = readFileSync(new URL("../verify-webhook-cutover.mjs", import.meta.url), "utf8")
