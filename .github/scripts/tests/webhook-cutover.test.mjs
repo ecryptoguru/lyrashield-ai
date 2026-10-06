@@ -382,7 +382,10 @@ function fixture(t, scenario, expectedMode) {
     writeFileSync(file, `#!${process.execPath}\n${body}`)
     chmodSync(file, 0o755)
   }
-  executable("systemctl", `process.exit(${scenario === "worker service inactive" ? 3 : 0})`)
+  executable(
+    "systemctl",
+    `const scenario=${JSON.stringify(scenario)}; const state=scenario==="worker service inactive"?"inactive":scenario==="worker service failed"?"failed":scenario==="worker service transitional"?"activating":scenario==="worker service unknown"?"unexpected":"active"; process.stdout.write(state+"\\n"); process.exit(state==="active"?0:3)`
+  )
   executable(
     "sed",
     `if(${JSON.stringify(scenario)}==="worker rollback image unavailable") process.exit(1); console.log(${JSON.stringify(scenario === "rollback mismatch" ? "legacy" : workerImage)})`
@@ -620,6 +623,9 @@ for (const scenario of [
   "disconnect error redaction",
   "untrusted error redaction",
   "worker service inactive",
+  "worker service failed",
+  "worker service transitional",
+  "worker service unknown",
   "worker rollback image unavailable",
   "worker container inspect failed",
   "worker image inspect failed",
@@ -643,6 +649,9 @@ for (const scenario of [
     assert.match(result.stderr, expected)
     const workerPhases = {
       "worker service inactive": "WORKER_SERVICE_INACTIVE",
+      "worker service failed": "WORKER_SERVICE_FAILED",
+      "worker service transitional": "WORKER_SERVICE_TRANSITION",
+      "worker service unknown": "WORKER_SERVICE_STATE",
       "worker rollback image unavailable": "WORKER_ROLLBACK_IMAGE",
       "worker container inspect failed": "WORKER_CONTAINER_INSPECT",
       "worker image inspect failed": "WORKER_IMAGE_INSPECT",
@@ -654,6 +663,10 @@ for (const scenario of [
     if (workerPhases[scenario]) {
       assert.match(result.stderr, /Worker compatibility probe failed \(/)
       assert.ok(result.stderr.includes(`${workerPhases[scenario]})`))
+      assert.doesNotMatch(
+        result.stdout + result.stderr,
+        /(?:^|\n)(?:inactive|failed|activating|unexpected)(?:\r?\n|$)/
+      )
     }
   })
 }
