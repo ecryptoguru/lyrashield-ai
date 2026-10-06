@@ -246,16 +246,33 @@ describe("marketing SEO metadata", () => {
   it("binds the live Cloudflare smoke check to the exact marketing build revision", () => {
     const config = source("../../astro.config.mjs")
     const seoHead = source("../components/SeoHead.astro")
-    const workflow = source("../../../../.github/workflows/ci.yml")
+    const workflow = source("../../../../.github/workflows/deploy-marketing.yml")
+    const release = source("../../../../.github/workflows/release-production.yml")
 
     expect(config).toContain("process.env.LYRASHIELD_MARKETING_REVISION || process.env.GITHUB_SHA")
     expect(config).toContain("__MARKETING_BUILD_REVISION__: JSON.stringify(buildRevision)")
     expect(seoHead).toContain(
       '<meta name="lyrashield-build-revision" content={__MARKETING_BUILD_REVISION__} />'
     )
-    expect(workflow).toContain("LYRASHIELD_MARKETING_REVISION: ${{ github.sha }}")
+    expect(workflow).toMatch(
+      /workflow_call:\n    inputs:\n      source_sha:\n        required: true\n        type: string/
+    )
+    expect(workflow).toContain('[[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]')
+    expect(workflow).toContain("ref: ${{ inputs.source_sha }}")
+    expect(workflow).toContain("LYRASHIELD_MARKETING_REVISION: ${{ inputs.source_sha }}")
+    expect(workflow).toContain(
+      'const marker = `<meta name="lyrashield-build-revision" content="${expected}">`'
+    )
+    expect(workflow).toContain("if (!html.includes(marker))")
     expect(workflow).toContain("Generated marketing artifact serves revision ${expected}")
-    expect(workflow).toContain('if [ "$live_revision" = "$GITHUB_SHA" ]; then')
+    expect(workflow).toContain('worker.assets?.directory !== "../client"')
+    expect(workflow).toContain("SOURCE_SHA: ${{ inputs.source_sha }}")
+    expect(workflow).toContain('if [ "$live_revision" = "$SOURCE_SHA" ]; then')
+
+    const marketingRelease = release.split("  deploy-marketing:\n")[1]?.split(/\n  [a-z-]+:\n/)[0]
+    expect(marketingRelease).toBeDefined()
+    expect(marketingRelease).toContain("uses: ./.github/workflows/deploy-marketing.yml")
+    expect(marketingRelease).toContain("source_sha: ${{ github.sha }}")
   })
 
   it("captures privacy-bounded PostHog page lifecycle events without query or fragment data", () => {
