@@ -78,6 +78,8 @@ faq:
 
 Aikido is the broad AppSec platform; LyraShield AI is the release-assurance loop for AI-built apps. [Read our comparison methodology](https://lyrashieldai.com) and try the free browser-local tools at [lyrashieldai.com](https://lyrashieldai.com).
 
+> Sources: [Aikido platform](https://www.aikido.dev/platform), [Aikido SAST](https://www.aikido.dev/code/static-code-analysis-sast), [Aikido SCA](https://www.aikido.dev/code/open-source-dependency-scanning-sca).
+
 ## Methodology and scope
 
 This comparison describes published capabilities, not an independent test of either product. Client workflow availability and commercial terms can change. Read [how LyraShield tests, records evidence and reports coverage](/methodology) for its assurance model and verify vendor details before a purchasing decision.

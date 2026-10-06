@@ -1,8 +1,8 @@
 # LyraShield AI — Litepaper
 
-## Version 1.0.1 — 2026-09-19
+## Version 1.1.0 — 2026-10-06
 
-> A short, public overview of LyraShield AI: what it does, who it is for and how it earns trust. For the full product narrative see [`whitepaper.md`](./whitepaper.md); for the technical specification see [`yellowpaper.md`](./yellowpaper.md).
+> A short, public overview of LyraShield AI: what it does, who it is for, what makes it different and how it earns trust. For the full product narrative see [`whitepaper.md`](./whitepaper.md); for the technical specification see [`yellowpaper.md`](./yellowpaper.md).
 
 ---
 
@@ -27,7 +27,22 @@ Target → Scan → Evidence State → Fix Proposal → Retest → Assurance Rep
 - Produce approval-gated fix proposals, server-owned retests and shareable assurance reports.
 - Never claim broader coverage or certainty than retained evidence supports.
 
-## 3. Two modes, one account
+## 3. What makes it different
+
+Most security tools answer "what did the scanner flag?" LyraShield answers "what was tested, what was proven, and what remains unknown — and can you show that to a client, investor or reviewer?"
+
+1. **Evidence states, not confidence scores.** Every result carries an explicit state — `DETECTED`, `VALIDATED`, `VERIFIED` or `INCONCLUSIVE`. Confidence is triage metadata and never proof; engine-only absence is always inconclusive. A score or AI suggestion is never treated as verification.
+2. **Purpose-built for AI-built software.** The public AI-Built Failure Taxonomy catalogs how AI-generated apps characteristically fail; eight deterministic AI App Security signals (AI-01–AI-08) map to the OWASP Top 10 for LLM Applications (2025); 14 WebMCP controls review the agent tool surface itself — agent rules, MCP configs, embedded secrets and prompt-injection exposure.
+3. **It runs where the coding agent runs.** A published CLI, an MCP server with 21 tools over stdio and remote Streamable HTTP with hosted OAuth, a portable Agent Plugin, a 51-entry install registry resolving to 48 preferred client surfaces, and an account-less, diff-aware GitHub Action. Assurance without leaving the editor, terminal or CI pipeline.
+4. **An approval-gated fix loop that closes itself.** Fix pull requests are created only from a server-generated patch bound to an explicit human approval — no client-authored patches, nothing auto-merges. When a fix branch merges, the server automatically queues a fresh retest and re-evaluates the release gate.
+5. **A launch verdict you can verify yourself.** The Launch Gate is a named, versioned standard producing `READY` / `NOT_READY` / `INSUFFICIENT_EVIDENCE` per target. Launch Readiness Reports are ed25519-signed with a public verify endpoint, and release-identity confirmation answers only `MATCH`, `MISMATCH` or `UNAVAILABLE` for a caller-supplied commit or artifact digest.
+6. **Honest coverage accounting.** The Vibe Security 50 contract records one immutable receipt per control; "no finding" is never presented as "passed", and seven operational controls are explicitly marked evidence-required because no scan can prove them.
+7. **Two modes, one loop.** Cloud (hosted subscription; LyraShield pays model cost) and Local/Desktop (one-year BYOK license with perpetual fallback; scans run on your machine and nothing syncs by default).
+8. **Fail-closed trust architecture.** Tenant isolation by Postgres row-level security, engine output treated as untrusted and bounded, and every result manifest binding the exact product revision, worker image digest and engine revision into its checksum.
+
+These differentiators are product design choices, not performance claims. LyraShield does not claim broader detection than its retained evidence supports (§8).
+
+## 4. Two modes, one account
 
 | Mode              | Execution                                              | Commercial model                         |
 | ----------------- | ------------------------------------------------------ | ---------------------------------------- |
@@ -36,7 +51,7 @@ Target → Scan → Evidence State → Fix Proposal → Retest → Assurance Rep
 
 Both modes share the same engine and the same loop. Optional Cloud Sync moves selected Local findings into the Cloud dashboard; nothing syncs by default.
 
-## 4. What's covered
+## 5. What's covered
 
 - **Vibe Security 50** — a versioned 50-control coverage contract across code, URL and operational risk families. Every scan produces an immutable per-control receipt; an unreported control is never presented as passed.
 - **Launch Gate** — a named, versioned readiness standard producing `READY` / `NOT_READY` / `INSUFFICIENT_EVIDENCE` verdicts, persisted append-only per target.
@@ -45,9 +60,9 @@ Both modes share the same engine and the same loop. Optional Cloud Sync moves se
 - **WebMCP Assurance** — 14 deterministic controls over browser-registered agent tool surfaces.
 - **AI App Security** — eight deterministic signals mapped to the OWASP Top 10 for LLM Applications (2025).
 - **Lite Check** — a free, passive, no-signup outside-in check of a public URL.
-- **Distribution** — CLI, MCP server, 26 documented client workflows (including standalone CLI paths), a diff-aware GitHub Action and a versioned public API. A documented workflow is not a verified installation on every client and platform.
+- **Distribution** — CLI, MCP server and a 51-entry install registry resolving to 48 preferred client surfaces, a diff-aware GitHub Action and a versioned public API. A documented workflow is not a verified installation on every client and platform.
 
-## 5. Honest evidence states
+## 6. Honest evidence states
 
 Trust comes from not overclaiming. Every result carries an explicit state:
 
@@ -61,7 +76,7 @@ Trust comes from not overclaiming. Every result carries an explicit state:
 
 Confidence is triage metadata, never proof. Engine-only absence is always inconclusive.
 
-## 6. Business model at a glance
+## 7. Business model at a glance
 
 - **Cloud** — two product lines. _Scan_ (find what's wrong): free 7-day trial, Starter, Pro. _Agency_ (team assurance): Agency tier and contact-led Enterprise. Metered in agent-minutes; failed scans are never billed.
 - **Local/Desktop** — one-time one-year licenses (Individual, Team perpetual, Team subscription) plus a Cloud Sync add-on. No lifetime deals.
@@ -70,17 +85,17 @@ Confidence is triage metadata, never proof. Engine-only absence is always inconc
 
 Final publishable pricing and production purchase admission remain founder-gated launch decisions.
 
-## 7. Roadmap at a glance
+## 8. What we do not claim
+
+LyraShield AI does not claim certification, compliance, guaranteed security, universal detection or adversarial robustness. Reports are evidence summaries, not SOC 2, ISO, GDPR or PCI attestations. Every public statement is bounded by the claims-readiness policy summarized in the whitepaper.
+
+## 9. Roadmap at a glance
 
 Phase 1 (current): AI app builders, founders, agencies and small SaaS teams — live in open beta with open registration.
 
 Phase 2 (planned): enterprise governance — SSO/SCIM, advanced policy, private workers, evidence export and enterprise integrations — sequenced behind design-partner validation, not speculation.
 
-## 8. What we do not claim
-
-LyraShield AI does not claim certification, compliance, guaranteed security, universal detection or adversarial robustness. Reports are evidence summaries, not SOC 2, ISO, GDPR or PCI attestations. Every public statement is bounded by the claims-readiness policy summarized in the whitepaper.
-
-## 9. Links
+## 10. Links
 
 - Product: `https://app.lyrashieldai.com`
 - Free Lite Check: `https://lyrashieldai.com/scan`

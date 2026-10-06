@@ -8,15 +8,24 @@ const canonical = new URL("/methodology", origin).toString()
 const title = "AI app security evidence methodology | LyraShield AI"
 const buildDate = buildDateFor("src/pages/methodology.astro")
 const description =
-  "How LyraShield AI records authorized scan scope, coverage, finding evidence, independent verification, retest outcomes and every known limitation."
-const evidenceStates = [
+  "How LyraShield AI records authorized scan scope, coverage, finding evidence states, retest outcomes and every known limitation."
+// The last editorial review of this page's content. Visible text, the
+// <time datetime> attribute and the sitemap lastmod all derive from this one
+// constant so they cannot drift apart.
+const reviewed = "2026-10-05"
+const reviewedLabel = new Date(`${reviewed}T00:00:00Z`).toLocaleDateString("en-US", {
+  year: "numeric",
+  month: "long",
+  day: "numeric",
+  timeZone: "UTC",
+})
+// States a finding can carry today. Independently verified stays a separate,
+// future-defined state: it requires a verification step LyraShield does not
+// ship yet, so no finding carries it.
+const shippedStates = [
   {
     name: "Detected candidate",
     meaning: "A scanner found a signal worth reviewing. Confidence can help prioritize it, but does not prove exploitability.",
-  },
-  {
-    name: "Independently verified",
-    meaning: "A separate verification receipt supports the finding. Engine confidence alone never creates this state.",
   },
   {
     name: "Retest-confirmed",
@@ -27,10 +36,17 @@ const evidenceStates = [
     meaning: "The available retest evidence cannot establish that the condition is gone. The uncertainty remains visible.",
   },
 ]
+const futureStates = [
+  {
+    name: "Independently verified",
+    meaning: "A separate verification receipt would support the finding. This state is defined but not produced today; engine confidence alone never creates it.",
+  },
+]
+const evidenceStates = [...shippedStates, ...futureStates]
 const faq = [
   {
     q: "What is an evidence state?",
-    a: "An evidence state describes how much support a finding has. Detected, independently verified, retest-confirmed and inconclusive are separate states, not interchangeable labels.",
+    a: "An evidence state describes how much support a finding has. Detected candidate, retest-confirmed and inconclusive ship today; independently verified is a defined fourth state that requires a separate verification step LyraShield has not shipped, so no finding carries it. The states are not interchangeable labels.",
   },
   {
     q: "Does a clean or high score prove an app is secure?",
@@ -85,7 +101,7 @@ const jsonLd = [
     "@type": "DefinedTermSet",
     name: "LyraShield AI Evidence States",
     description:
-      "The four evidence states LyraShield AI assigns to security findings, from initial detection to retest-confirmed resolution.",
+      "The evidence states LyraShield AI defines for security findings. Three ship today — detected candidate, retest-confirmed and inconclusive; independently verified is a defined future state.",
     hasDefinedTerm: evidenceStates.map((state) => ({
       "@type": "DefinedTerm",
       name: state.name,
@@ -108,19 +124,20 @@ const jsonLd = [
         A security result should say what it knows—and what it does not.
       </h1>
       <p class="mt-6 text-lg leading-8 text-text-muted" data-reveal>
-        An evidence state records how strongly a security finding is supported. LyraShield uses
-        four. Detected candidate means a scanner saw a signal. Independently verified means a
-        separate receipt supports it. Retest-confirmed means a server-owned retest found the
-        condition absent after a fix. Inconclusive means the evidence cannot establish the
-        condition is gone. These are never blended into a single score.
+        An evidence state records how strongly a security finding is supported. LyraShield defines
+        four and ships three today. Detected candidate means a scanner saw a signal.
+        Retest-confirmed means a server-owned retest found the condition absent after a fix.
+        Inconclusive means the evidence cannot establish the condition is gone. A fourth state —
+        independently verified, where a separate verification receipt supports the finding — is
+        defined but not produced today. These are never blended into a single score.
       </p>
       <div class="mt-6 rounded-xl border border-border bg-bg-raised p-5 text-sm leading-7 text-text-muted" data-reveal="fade">
         <p class="font-semibold text-text">TL;DR</p>
         <p class="mt-2">
-          Every finding carries one of four evidence states: <strong>detected candidate</strong> (a scanner signal that needs review), <strong>independently verified</strong> (a separate receipt supports it), <strong>retest-confirmed</strong> (a deterministic retest found the condition absent) or <strong>inconclusive</strong> (the retained evidence cannot establish resolution). A score or clean result never overrides these facts.
+          Every finding carries one of three shipped evidence states: <strong>detected candidate</strong> (a scanner signal that needs review), <strong>retest-confirmed</strong> (a deterministic retest found the condition absent) or <strong>inconclusive</strong> (the retained evidence cannot establish resolution). <strong>Independently verified</strong> — a separate verification receipt supporting the finding — is a fourth defined state that is not produced today. A score or clean result never overrides these facts.
         </p>
       </div>
-      <p class="mt-4 text-sm text-text-muted" data-reveal="fade">Last reviewed: <time datetime="2026-07-29">July 29, 2026</time> · Maintained by LyraShield Security + Engineering</p>
+      <p class="mt-4 text-sm text-text-muted" data-reveal="fade">Last reviewed: <time datetime={reviewed}>{reviewedLabel}</time> · Maintained by LyraShield Security + Engineering</p>
     </header>
 
     <section aria-labelledby="record-heading" class="mt-16 border-y border-border py-12">
@@ -210,7 +227,7 @@ const jsonLd = [
 
     <section aria-labelledby="interpret-heading" class="py-16" data-reveal-group>
       <h2 id="interpret-heading" class="text-2xl font-semibold text-text" data-reveal>How should you interpret a LyraShield AI result?</h2>
-      <p class="mt-5 max-w-3xl text-lg leading-8 text-text-muted" data-reveal>Read the result in this order: confirm the authorized target and mode, inspect completed and limited coverage, separate detected candidates from independently verified findings, then read the retest receipt and retained limitations. A LyraShield score or confidence value never replaces the underlying scope, coverage, evidence-state and retest facts.</p>
+      <p class="mt-5 max-w-3xl text-lg leading-8 text-text-muted" data-reveal>Read the result in this order: confirm the authorized target and mode, inspect completed and limited coverage, separate detected candidates from retest-confirmed results, then read the retest receipt and retained limitations. A LyraShield score or confidence value never replaces the underlying scope, coverage, evidence-state and retest facts.</p>
       <p class="mt-5 max-w-3xl leading-7 text-text-muted" data-reveal>For a broader catalog of web application verification requirements, consult the <a href="https://owasp.org/asvs" rel="noreferrer" class="font-medium text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">OWASP Application Security Verification Standard</a>. This reference does not imply certification or full ASVS coverage.</p>
       <p class="mt-5 max-w-3xl leading-7 text-text-muted" data-reveal>LyraShield AI does not claim "SOC 2 compliant," "certified," "guarantees security," "AI safety tested" (without a named framework) or "adversarial robustness proven." Each of those requires external attestation, a reproducible evaluation corpus, a defined threat model or a formal certificate that LyraShield has not yet obtained.</p>
     </section>

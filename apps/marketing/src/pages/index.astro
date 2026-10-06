@@ -37,7 +37,7 @@ const faqItems = [
   },
   {
     q: "What does a LyraShield result actually prove?",
-    a: "Only what the retained evidence supports. We keep detected candidates, independently verified findings, validated fixes (retest-confirmed), inconclusive retests and checks that were limited or not applicable distinct. Missing proof stays visible.",
+    a: "Only what the retained evidence supports. We keep detected candidates, retest-confirmed results, inconclusive retests and checks that were limited or not applicable distinct. Missing proof stays visible rather than becoming a silent pass.",
   },
   {
     q: "Does LyraShield automatically fix my code?",
@@ -141,6 +141,24 @@ const jsonLd = [
       <p class="mt-4 text-sm leading-6 text-text-muted">
         Fixes are proposals, retests are separate runs, and a finding changes state only when retained evidence supports it.
       </p>
+      <div class="mt-6 grid gap-4 sm:grid-cols-2">
+        <a
+          href="/scan"
+          data-cta-id="homepage-path-developer"
+          class="lift rounded-xl border border-border bg-bg p-5 font-semibold text-text hover:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        >
+          Review your AI-built app
+          <span class="mt-1 block text-sm font-normal text-text-muted">Start with the free Lite Check, then run a full review from a free account.</span>
+        </a>
+        <a
+          href="/demo"
+          data-cta-id="homepage-path-agency"
+          class="lift rounded-xl border border-border bg-bg p-5 font-semibold text-text hover:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        >
+          Review client releases
+          <span class="mt-1 block text-sm font-normal text-text-muted">Walk through the evidence and handoff workflow with the founder.</span>
+        </a>
+      </div>
     </div>
   </section>
   <HeroProductFrame />

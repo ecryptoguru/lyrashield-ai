@@ -14,6 +14,8 @@ const BODY = [
   "| --- | --- | --- |",
   "| Focus | Release assurance | Scanning |",
   "",
+  "> Sources: [Rival platform](https://rival.example/platform).",
+  "",
   "## Methodology and scope",
   "",
   "See [how LyraShield reports coverage](/methodology) for the assurance model.",
@@ -104,6 +106,13 @@ describe("compare governance", () => {
     const body = `${BODY}\n\n[Rival](http://rival.example)`
     expect(validateComparePage(page({ body }))).toContain(
       "citation must use HTTPS: http://rival.example"
+    )
+  })
+
+  it("requires a Sources block with an official HTTPS source", () => {
+    const body = BODY.replace("> Sources: [Rival platform](https://rival.example/platform).\n\n", "")
+    expect(validateComparePage(page({ body }))).toContain(
+      "released comparison needs a Sources block with at least one official HTTPS source"
     )
   })
 

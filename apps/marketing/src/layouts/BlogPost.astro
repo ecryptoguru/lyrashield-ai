@@ -20,6 +20,8 @@ interface Props {
   pubDate: Date
   updatedDate?: Date
   author: CollectionEntry<"authors">
+  reviewer?: CollectionEntry<"authors">
+  reviewedDate?: Date
   tags: string[]
   draft: boolean
   canonical?: string
@@ -37,6 +39,8 @@ const {
   pubDate,
   updatedDate,
   author,
+  reviewer,
+  reviewedDate,
   tags,
   draft,
   canonical,
@@ -95,7 +99,25 @@ const jsonLd: unknown[] = [
     author: authorJsonLd,
     publisher: { "@id": publisherId },
     isPartOf: { "@id": `${siteOrigin}/blog#collection` },
-    mainEntityOfPage: { "@type": "WebPage", "@id": pageUrl },
+    // Technical-review attribution lives on the associated WebPage entity, not
+    // on the article itself: it describes who reviewed the published page, and
+    // only renders when a real paired reviewer/reviewedDate is set.
+    mainEntityOfPage: {
+      "@type": "WebPage",
+      "@id": pageUrl,
+      ...(reviewer && reviewedDate
+        ? {
+            reviewedBy: {
+              "@type": reviewer.data.kind,
+              name: reviewer.data.name,
+              ...(reviewer.data.profileUrl
+                ? { url: new URL(reviewer.data.profileUrl, siteOrigin).toString() }
+                : {}),
+            },
+            lastReviewed: reviewedDate.toISOString().slice(0, 10),
+          }
+        : {}),
+    },
     image: {
       "@type": "ImageObject",
       url: imageUrl,
@@ -166,6 +188,17 @@ if (faq && faq.length > 0) {
           )}
           {author && (
             <span class="ml-2">· {author.data.name}</span>
+          )}
+          {reviewer && reviewedDate && (
+            <span class="ml-2">
+              · Technically reviewed by{" "}
+              {reviewer.data.profileUrl ? (
+                <a href={reviewer.data.profileUrl} class="underline decoration-accent/40 underline-offset-2 hover:decoration-accent">{reviewer.data.name}</a>
+              ) : (
+                reviewer.data.name
+              )}{" "}
+              on <time datetime={reviewedDate.toISOString().slice(0, 10)}>{reviewedDate.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric", timeZone: "UTC" })}</time>
+            </span>
           )}
           <span class="ml-2">· {readingMinutes} min read</span>
         </p>

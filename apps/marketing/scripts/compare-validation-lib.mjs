@@ -82,6 +82,23 @@ export function validateComparePage({ slug, data, body, programEntry, context = 
     if (/^http:\/\//i.test(link)) errors.push(`citation must use HTTPS: ${link}`)
   }
 
+  // Minimum provenance gate: a released comparison must name where its vendor
+  // claims came from — either the `> Sources:` blockquote convention or a
+  // `## Sources` section containing at least one HTTPS source. This does not
+  // verify claim-level accuracy: negative, capability and pricing claims
+  // still need human review against the cited pages.
+  const sourcesBlock =
+    body.match(/^>\s*Sources?:[^\n]*(?:\n>[^\n]*)*/m)?.[0] ??
+    (() => {
+      const heading = body.match(/^##\s+Sources?\b/im)
+      return heading ? body.slice(body.indexOf(heading[0])) : ""
+    })()
+  if (!/https:\/\//.test(sourcesBlock)) {
+    errors.push(
+      "released comparison needs a Sources block with at least one official HTTPS source"
+    )
+  }
+
   // Internal links have to resolve, and the methodology link is mandatory: these
   // pages assert a testing model and must point at where that model is described.
   const internal = extractLinks(body).filter((link) => link.startsWith("/"))

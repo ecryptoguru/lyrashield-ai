@@ -74,6 +74,8 @@ faq:
 
 NodeZero proves production resilience across the environment; LyraShield AI gates AI-built-app releases. [Read our comparison methodology](https://lyrashieldai.com) and try the free browser-local tools at [lyrashieldai.com](https://lyrashieldai.com).
 
+> Sources: [NodeZero platform](https://horizon3.ai/nodezero/), [NodeZero internal pentesting](https://horizon3.ai/nodezero/internal-pentesting/), [NodeZero external pentesting](https://horizon3.ai/nodezero/external-pentesting/).
+
 ## Methodology and scope
 
 This comparison describes published capabilities, not an independent test of either product. Client workflow availability and commercial terms can change. Read [how LyraShield tests, records evidence and reports coverage](/methodology) for its assurance model and verify vendor details before a purchasing decision.

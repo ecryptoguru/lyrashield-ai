@@ -76,6 +76,8 @@ faq:
 
 LyraShield AI is live and open for registration — create an account and run your first authorized check through the release-assurance loop: target, review, evidence, fix, retest, report. Prefer to explore first? Read the evidence methodology or try the free browser-local tools.
 
+> Sources: [SonarQube](https://www.sonarsource.com/products/sonarqube/).
+
 ## Methodology and scope
 
 This comparison describes published capabilities, not an independent test of either product. Client workflow availability and commercial terms can change. Read [how LyraShield tests, records evidence and reports coverage](/methodology) for its assurance model and verify vendor details before a purchasing decision.

@@ -18,7 +18,16 @@ const canonical = new URL("/about", origin).toString()
 const title = "About LyraShield AI — Release Assurance for AI-Built Apps"
 const description =
   "LyraShield AI is built by Ankit Das, an AI/ML engineer with 16+ years across Web3, AI and application security. The mission and the approach."
-const updatedDate = "2026-09-20"
+// One editorial review date drives the visible "Last reviewed" text, the
+// <time datetime> attribute, the page JSON-LD dateModified and the sitemap
+// lastmod (parsed in astro.config.mjs). Change this constant only.
+const updatedDate = "2026-10-05"
+const updatedDateLabel = new Date(`${updatedDate}T00:00:00Z`).toLocaleDateString("en-US", {
+  year: "numeric",
+  month: "long",
+  day: "numeric",
+  timeZone: "UTC",
+})
 
 const founder = {
   name: "Ankit Das",
@@ -97,6 +106,9 @@ const jsonLd: unknown[] = [
         believe a security result should say what it knows — and what it does not — rather than
         turning scanner confidence into a universal verdict.
       </p>
+      <p class="mt-4 text-sm text-text-muted" data-reveal="fade">
+        Last reviewed: <time datetime={updatedDate}>{updatedDateLabel}</time>
+      </p>
     </header>
 
     <section aria-labelledby="origin-heading" class="mt-16 border-t border-border pt-12" data-reveal-group>
@@ -132,7 +144,7 @@ const jsonLd: unknown[] = [
       <dl class="mt-8 grid gap-x-10 gap-y-8 md:grid-cols-2" data-reveal-group>
         <div data-reveal>
           <dt class="font-semibold text-text">Evidence states</dt>
-          <dd class="mt-2 leading-7 text-text-muted">Every finding carries one of four states: detected candidate, independently verified, retest-confirmed or inconclusive. A score never overrides these facts.</dd>
+          <dd class="mt-2 leading-7 text-text-muted">Every finding carries one of three shipped states: detected candidate, retest-confirmed or inconclusive. Independently verified is a fourth defined state that is not produced today. A score never overrides these facts.</dd>
         </div>
         <div data-reveal>
           <dt class="font-semibold text-text">Coverage receipts</dt>
@@ -190,7 +202,7 @@ const jsonLd: unknown[] = [
 
     <section aria-labelledby="stats-heading" class="mt-12" data-reveal-group>
       <h3 class="text-lg font-semibold text-text" data-reveal>Building with AI, daily</h3>
-      <p class="mt-2 text-sm text-text-muted" data-reveal>From ChatGPT Codex usage data — the real numbers behind the decision to build LyraShield AI.</p>
+      <p class="mt-2 text-sm text-text-muted" data-reveal>From the founder's ChatGPT usage data export, counts as of mid-2026 — provider-reported personal usage figures behind the decision to build LyraShield AI, not LyraShield scan results.</p>
       <div class="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-4" data-reveal-group>
         {stats.map((stat) => (
           <div class="rounded-lg border border-border bg-bg-raised p-4 text-center" data-reveal>
@@ -215,7 +227,7 @@ const jsonLd: unknown[] = [
         </li>
         <li class="flex gap-4" data-reveal>
           <span class="font-mono text-sm text-accent shrink-0">03</span>
-          <p class="leading-7 text-text-muted"><strong class="text-text">Evidence states are not interchangeable.</strong> Detected, independently verified, retest-confirmed and inconclusive are separate states with distinct meanings. Scanner confidence alone never creates a verified state.</p>
+          <p class="leading-7 text-text-muted"><strong class="text-text">Evidence states are not interchangeable.</strong> Detected candidate, retest-confirmed and inconclusive ship today; independently verified is defined for a future separate verification step. Scanner confidence alone never creates a verified state.</p>
         </li>
         <li class="flex gap-4" data-reveal>
           <span class="font-mono text-sm text-accent shrink-0">04</span>

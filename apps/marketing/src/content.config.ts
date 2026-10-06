@@ -54,6 +54,19 @@ const blog = defineCollection({
       .min(2)
       .max(4)
       .optional(),
+    // Optional technical-review attribution. Both fields must appear together
+    // (or neither): a reviewer with no date is an unverifiable claim and a
+    // review date with no reviewer is a meaningless stamp. Only set them when a
+    // real named technical review happened — see /blog/editorial-policy.
+    reviewer: reference("authors").optional(),
+    reviewedDate: z.coerce.date().optional(),
+  }).superRefine((data, ctx) => {
+    if ((data.reviewer === undefined) !== (data.reviewedDate === undefined)) {
+      ctx.addIssue({
+        code: "custom",
+        message: "reviewer and reviewedDate must be set together or not at all",
+      })
+    }
   }),
 })
 

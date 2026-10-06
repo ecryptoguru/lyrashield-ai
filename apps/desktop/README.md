@@ -5,7 +5,7 @@ LyraShield Local — a BYOK desktop security scanner built with Tauri v2.
 ## Prerequisites
 
 - **Rust** (stable, 1.77+) — `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`
-- **Node.js** 24+ and **pnpm** 11+
+- **Node.js** 24+ and **pnpm** 12.2.0 (pinned at the monorepo root)
 - A bundled LyraShield Engine sidecar in production. Debug builds may use
   `LYRASHIELD_ENGINE_BIN` or a developer `lyrashield`/`strix` install on PATH.
 - **Docker Desktop** (macOS/Windows) or Docker Engine (Linux) — scans run in a hardened sandbox

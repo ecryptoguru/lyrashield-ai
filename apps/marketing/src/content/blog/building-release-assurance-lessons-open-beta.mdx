@@ -3,6 +3,7 @@ slug: building-release-assurance-lessons-open-beta
 title: What Building Release Assurance Taught Me
 description: Honest founder notes on shipping LyraShield AI in open beta, why proving a finding beats flagging it and how we handle fix proposals.
 pubDate: 2026-09-23
+updatedDate: 2026-10-06
 author: lyrashield-team
 tags: [vibe-coding-security, verification, web-security]
 draft: false
@@ -13,7 +14,7 @@ faq:
   - q: Why are approval gated fix proposals safer than auto applied patches
     a: Auto applied patches can break auth or data flows you did not intend to change. Proposals requiring review keep you in control and let you approve the diff before it lands.
   - q: What is live in LyraShield AI today and what is next
-    a: As of August 2026 LyraShield is in open beta with open registration at lyrashieldai.com. Core scanning, MCP integration and GitHub Action are live. Deeper fix PR automation and billing are on our near term roadmap.
+    a: As of October 2026 LyraShield is in open beta with open registration. Core scanning, MCP integration, the GitHub Action and paid plans are live. Deeper fix PR automation is on our roadmap.
   - q: How does LyraShield fit with the vibe coding security guide
     a: The guide covers the common risks in vibe coded stacks. LyraShield adds a release check that verifies those risks in your actual build, with evidence you can review before launch.
 ---
@@ -32,7 +33,7 @@ Early on we flagged [CWE 798 Use of Hard coded Credentials](https://cwe.mitre.or
 
 Same with access control. Static analysis of middleware is not enough in vibe coded stacks. Auth is scattered. One AI prompt adds a check in the frontend, another forgets the server guard. [OWASP Top 10](https://owasp.org/www-project-top-ten/) still lists broken access control near the top and [CWE 287 Improper Authentication](https://cwe.mitre.org/data/definitions/287.html) shows how often the check is in the wrong place. We had to stop at pattern match and start tracing whether the check is enforced on the server path serving the data.
 
-That shift cost us weeks. Proving means you need route maps and a tiny runtime check, not just AST. But every founder told us the same thing. I dont need another scanner that tells me what might be wrong. I need to know what will break when I ship. That became our filter. If we cannot show evidence, we do not show the finding.
+That shift cost us weeks. Proving means you need route maps and a tiny runtime check, not just AST. But every founder told us the same thing. I dont need another scanner that tells me what might be wrong. I need to know what will break when I ship. That became our filter. If we cannot show evidence, the finding stays marked as a detected candidate instead of a proof.
 
 If you want the raw list we verify before release, we keep it in our [AI app security checklist](/tools/ai-app-security-checklist). It is a working doc, not marketing.
 
@@ -46,7 +47,7 @@ That is why we never frame it as applied for you. We say proposals requiring rev
 
 I see why others market one click remediation. It converts. But in a vibe coded stack where one file is your DB and API and UI glued by AI, an auto rewrite can turn a security risk into an availability risk. You fixed a low leak and broke checkout.
 
-So we built the opposite habit. Every proposal comes with why we think it is reachable, what path or payload proved it and the minimal change. You decide.
+So we built the opposite habit. Every proposal comes with why we think it is reachable, the evidence behind it, a path or payload when we have one, and the minimal change. You decide.
 
 We also set a hard rule: no proposal touches auth or payments without a test note. If we cannot point to a test that checks the flow after the change, we do not propose it. I would rather ship nothing than a confident wrong fix.
 
@@ -58,7 +59,7 @@ Building the MCP server humbled me. I read the [model context protocol intro](ht
 
 Our MCP tool returns a redacted proof. Finding type, file, line, reachability, hint. No secret value. Ever. You can call it from Cursor or Claude Code and it does not dump a key into your agent history. That was a deliberate choice and it took an extra sprint to get right.
 
-The GitHub Action taught a different lesson. Founders do not want another dashboard. They want a check that fails the PR when something real is about to ship. So we built the Action to block on verified high severity only, not on every maybe. I borrowed the layering idea from [MDN web security docs](https://developer.mozilla.org/en-US/docs/Web/Security): enforce the critical ones in the path, warn on the rest.
+The GitHub Action taught a different lesson. Founders do not want another dashboard. They want a check that fails the PR when something real is about to ship. So we built the Action to block on evidence backed high severity only, not on every maybe. I borrowed the layering idea from [MDN web security docs](https://developer.mozilla.org/en-US/docs/Web/Security): enforce the critical ones in the path, warn on the rest.
 
 Config is boring on purpose. If you have a lyrashield.yaml we read it. If not, sane defaults. No org wide secret to start. That mattered in open beta. People try it in five minutes without handing us broad tokens.
 
@@ -74,7 +75,9 @@ That rule slows marketing. I have rewritten posts three times to cut a maybe ove
 
 Vibe coders also do not say vulnerability management. They say can I ship this. So we stopped using auditor words in UI. We show can this route leak data, yes or no, with a snippet. Is this secret in the client bundle, yes or no, with the bundle path. Plain beats compliance speak for this audience.
 
-We also separate what is live from what is coming. Mixing those breaks trust. So we keep a simple built vs coming table in docs and I repeat it here. As of August 2026 LyraShield AI is in open beta with open registration at lyrashieldai.com. Core scanning, MCP integration and GitHub Action are live. Deeper fix PR automation and billing are on our near term roadmap and not yet live.
+We also separate what is live from what is coming. Mixing those breaks trust. So we keep a simple built vs coming table in docs and I repeat it here. As of October 2026 LyraShield AI is in open beta with open registration. Core scanning, MCP integration, the GitHub Action and paid plans are live. Deeper fix PR automation is on our roadmap.
+
+Update, October 2026: this post described billing as roadmap work. Paid plans are now live; see [pricing](/pricing).
 
 ## What is live today and what is still coming
 
@@ -86,9 +89,9 @@ Here is the snapshot we share internally and externally:
 | -------- | ----------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
 | Scanning | Secret reachability, auth enforcement checks, IDOR evidence, client bundle analysis | Wider framework adapters and deeper data flow tracking                 |
 | Editor   | MCP server with redacted proofs for Cursor and Claude Code                          | Inline proposal preview inside editor                                  |
-| CI       | GitHub Action that blocks PRs on verified high severity                             | Fix proposal hints inside Action logs with safe apply in CI            |
+| CI       | GitHub Action that blocks PRs on evidence backed high severity                      | Fix proposal hints inside Action logs with safe apply in CI            |
 | Fixes    | Proposals requiring review with evidence and minimal diff                           | One click proposal to PR branch after approval, only after your review |
-| Accounts | Open registration and individual projects                                           | Team roles and billing not yet live as of August 2026                  |
+| Accounts | Open registration, individual projects and paid plans                               | Granular team roles on the near term roadmap                           |
 
 If this resonates, start where we started. Run our [AI app security checklist](/tools/ai-app-security-checklist) on your next build, then run LyraShield AI from [lyrashieldai.com](https://app.lyrashieldai.com/sign-up). You will get a short report of what we could prove reachable and a proposal you can read before you merge.
 

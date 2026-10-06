@@ -347,6 +347,128 @@ describe("marketing SEO metadata", () => {
     expect(toolLayout).toContain("opens in a new tab")
   })
 
+  it("states three shipped evidence states with the fourth marked future-defined", () => {
+    const llms = source("../pages/llms.txt.ts")
+    const methodology = source("../pages/methodology.astro")
+    const home = source("../pages/index.astro")
+    const about = source("../pages/about.astro")
+
+    // The audit found llms.txt claiming four states while defining three —
+    // the contradiction is what answer engines were reading.
+    expect(llms).toContain("three shipped evidence states")
+    expect(llms).not.toContain("one of four evidence states")
+    expect(llms).toContain("defined, not shipped")
+    expect(llms).toContain("No finding carries this state today")
+
+    // Methodology is the fact authority the summary defers to.
+    expect(methodology).toContain("ships three today")
+    expect(methodology).toContain("not produced today")
+    expect(methodology).not.toContain("one of four evidence states")
+    expect(methodology).not.toContain("LyraShield uses\n")
+
+    // Everywhere else the states are enumerated must tell the same story.
+    expect(home).not.toContain("independently verified findings")
+    expect(about).toContain("three shipped states")
+    expect(about).not.toContain("one of four states")
+  })
+
+  it("never groups the server-fetched Lite Check under browser-local data flow", () => {
+    const llms = source("../pages/llms.txt.ts")
+
+    // The Lite Check fetches the authorized URL from LyraShield's server; only
+    // the tool registry is browser-local. The audit found both described as
+    // "entirely client-side".
+    expect(llms).toContain("run entirely client-side")
+    expect(llms).toContain("it is not browser-local")
+    expect(llms).not.toContain("Lite Check and these")
+    expect(llms).not.toMatch(/Lite Check[^\n]*run entirely client-side/)
+  })
+
+  it("keeps tool-page trial copy inside the published plan limits", () => {
+    const toolLayout = source("../layouts/ToolLayout.astro")
+
+    // Trial is 60 minutes / 3 targets — "run every review layer" overstated
+    // coverage on all seven tool pages.
+    expect(toolLayout).toContain("run the checks available for your authorized target and plan")
+    expect(toolLayout).not.toContain("run every review layer")
+  })
+
+  it("drives visible, attribute, schema and sitemap dates from one constant per page", () => {
+    const pages = [
+      ["../pages/about.astro", "updatedDate"],
+      ["../pages/evidence-vault.astro", "reviewed"],
+      ["../pages/vibe-security-50.astro", "reviewed"],
+      ["../pages/methodology.astro", "reviewed"],
+    ] as const
+    const config = source("../../astro.config.mjs")
+    // Literal patterns keyed by constant name — a dynamic RegExp would trip
+    // security/detect-non-literal-regexp even though the inputs are fixed.
+    const hardcodedLabel: Record<string, RegExp> = {
+      reviewed: /datetime=\{reviewed\}>\s*[A-Z][a-z]+ \d{1,2}, \d{4}/,
+      updatedDate: /datetime=\{updatedDate\}>\s*[A-Z][a-z]+ \d{1,2}, \d{4}/,
+    }
+    const declaration: Record<string, RegExp> = {
+      reviewed: /const reviewed = "\d{4}-\d{2}-\d{2}"/,
+      updatedDate: /const updatedDate = "\d{4}-\d{2}-\d{2}"/,
+    }
+
+    for (const [path, constant] of pages) {
+      const page = source(path)
+      // One constant feeds every surface; a literal month string inside the
+      // <time> element is exactly how the Oct-2026 drift shipped.
+      expect(page, `${path} visible <time> must derive from ${constant}`).toContain(
+        `datetime={${constant}}`
+      )
+      expect(page, `${path} must not hardcode the visible date`).not.toMatch(
+        hardcodedLabel[constant]
+      )
+      expect(page, `${path} must declare the constant`).toMatch(declaration[constant])
+    }
+
+    // JSON-LD dateModified uses the same constants, and the sitemap lastmod
+    // parse in astro.config.mjs reads them rather than a git timestamp.
+    expect(source("../pages/about.astro")).toContain("dateModified: updatedDate")
+    expect(source("../pages/evidence-vault.astro")).toContain("dateModified: reviewed")
+    expect(source("../pages/vibe-security-50.astro")).toContain("dateModified: reviewed")
+    expect(config).toContain('["evidence-vault", "/evidence-vault"]')
+    expect(config).toContain('["vibe-security-50", "/vibe-security-50"]')
+    expect(config).toContain('["about", "/about"]')
+    expect(config).toContain("const\\s+(?:reviewed|updatedDate|reviewedDate)")
+  })
+
+  it("keeps the founder build log consistent with current product availability", () => {
+    const post = source("../content/blog/building-release-assurance-lessons-open-beta.mdx")
+
+    // Paid plans are live; describing billing as roadmap work is the stale
+    // claim the audit flagged. The visible correction note keeps the original
+    // firsthand framing honest.
+    expect(post).toContain("updatedDate: 2026-10-06")
+    expect(post).toContain("Update, October 2026")
+    expect(post).toContain("paid plans are live")
+    expect(post).not.toContain("billing are on our near term roadmap")
+    expect(post).not.toContain("billing not yet live")
+    // A finding without proof stays a detected candidate — it is never hidden,
+    // and a proposal never claims universal reachability or payload proof.
+    expect(post).toContain("stays marked as a detected candidate")
+    expect(post).not.toContain("If we cannot show evidence, we do not show the finding")
+  })
+
+  it("requires paired reviewer and reviewedDate before any review attribution renders", () => {
+    const config = source("../content.config.ts")
+    const validator = source("../../scripts/blog-validation-lib.mjs")
+    const post = source("../layouts/BlogPost.astro")
+    const route = source("../pages/blog/[slug].astro")
+
+    // All-or-nothing pairing is enforced in both the collection schema and the
+    // offline validator; rendering only happens when both resolve.
+    expect(config).toContain("reviewer and reviewedDate must be set together or not at all")
+    expect(validator).toContain("reviewer and reviewedDate must be set together or not at all")
+    expect(post).toContain("reviewer && reviewedDate")
+    expect(post).toContain("Technically reviewed by")
+    expect(post).toContain("reviewedBy")
+    expect(route).toContain("post.data.reviewer ? getEntry(post.data.reviewer)")
+  })
+
   it("publishes the coding-agent entry in human and machine-readable discovery", () => {
     const llms = source("../pages/llms.txt.ts")
     const agents = source("../pages/agents.astro")

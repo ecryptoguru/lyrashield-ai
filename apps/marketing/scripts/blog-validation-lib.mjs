@@ -28,6 +28,8 @@ const BLOG_FRONTMATTER_KEYS = Object.freeze([
   "heroImage",
   "canonical",
   "faq",
+  "reviewer",
+  "reviewedDate",
   // Reserved by Astro's glob loader to override an entry id; not part of the
   // collection schema but a valid frontmatter key.
   "slug",
@@ -543,6 +545,24 @@ export function validateArticle(article, programEntry, context = {}) {
         if (seenQuestions.has(question)) errors.push(`duplicate FAQ question: ${item.q.trim()}`)
         seenQuestions.add(question)
       }
+    }
+  }
+
+  // Reviewer attribution is all-or-nothing: a named reviewer needs the date
+  // the review happened, and a review date needs a named reviewer. The
+  // collection schema enforces the same pairing; this check fails earlier with
+  // a clearer message and covers the rendered contract too.
+  if ((data.reviewer === undefined) !== (data.reviewedDate === undefined)) {
+    errors.push("reviewer and reviewedDate must be set together or not at all")
+  }
+  if (data.reviewer !== undefined && typeof data.reviewer !== "string") {
+    errors.push("reviewer must reference an authors collection entry")
+  }
+  if (data.reviewedDate !== undefined) {
+    const reviewed = new Date(data.reviewedDate)
+    if (Number.isNaN(reviewed.getTime())) errors.push("reviewedDate is not a valid date")
+    else if (data.pubDate && reviewed < new Date(data.pubDate)) {
+      errors.push("reviewedDate cannot precede pubDate")
     }
   }
 

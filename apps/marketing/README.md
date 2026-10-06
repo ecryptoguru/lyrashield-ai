@@ -10,6 +10,21 @@ Astro 7 marketing site for LyraShield AI. Lives at `apps/marketing` in the monor
 - PR execution remains fail-closed until a server-generated patch can be bound to an exact approval.
 - The public route set includes `/methodology`, which is the canonical explanation of evidence states, coverage, and non-claims. Keep homepage, tools, blog, and social copy aligned with it.
 
+## Product differentiators for copy
+
+The eight approved USPs (owner: `docs/whitepaper.md` §2.0; keep the three lists in step when one changes):
+
+1. Evidence states, not confidence scores — every result is DETECTED / VALIDATED / VERIFIED / INCONCLUSIVE.
+2. Built for AI-built software — AI-Built Failure Taxonomy, AI App Security (AI-01–AI-08, OWASP LLM Top 10 2025), WebMCP controls on the agent tool surface.
+3. Agent-native — CLI, MCP server (21 tools, hosted OAuth), Agent Plugin, 51-entry registry / 48 preferred client surfaces, account-less GitHub Action.
+4. Approval-gated fix loop that closes itself — server-generated patch, explicit human approval, never auto-merges, automatic retest on merge.
+5. A launch verdict anyone can verify — versioned Launch Gate plus ed25519-signed reports with a public verify endpoint.
+6. Honest coverage accounting — Vibe Security 50 per-control receipts; "no finding" is never "passed".
+7. Two modes, one loop — Cloud subscription and BYOK Local/Desktop.
+8. Fail-closed trust architecture — RLS tenancy, untrusted engine output, provenance-bound manifests.
+
+Copy rule: state each as a design commitment, never as a detection, benchmark or guarantee claim.
+
 ## Environment
 
 Copy `.env.example` to `.env` and `.dev.vars.example` to `.dev.vars`, then edit both:

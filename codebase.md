@@ -237,7 +237,7 @@ Authorities:
 
 - `apps/worker/src/engine/runner.ts`: `resolveEngineProfile()`.
 - `apps/worker/src/engine/command-builder.ts`: `resolveScanBudgetUsd()`.
-- `apps/worker/src/engine/gpt56-pricing.ts`: versioned rate card.
+- `apps/worker/src/engine/gpt6-pricing.ts`: GPT-6 rate card.
 
 Safe/Quick/Standard use GPT-6 Luna/medium. Deep/Custom use GPT-6 Sol/medium root plus Luna/high specialists. The fallback model remains mandatory and policy values may only lower caps. Private receipts preserve actual model, requests, token buckets, cache reads/writes, long-context usage, provider cost, billed cost and reconciliation status.
 
@@ -506,7 +506,7 @@ The following evidence describes the 2026-08-26 deployment; it is not runtime ac
 - Scan `cmt9el7p7000001hdjnjo90wk`.
 - `OnboardingAI2` revision `1689f3607d68764e09769535df8e368c4d5ad2fe`.
 - Completed in 10m 9s.
-- 189 Luna/medium requests; no Terra.
+- 189 Luna/medium requests; no Sol.
 - 8,549,456 input, 6,535,778 cached input, 136,759 cache-write input, and 32,092 output tokens; no long-context bucket.
 - Raw provider cost `$0.57879951`; stored provider and billed cost `$0.578800` under the `$3.20` cap; per-request model buckets matched the engine total.
 - 25 retained findings, zero independently verified. Seventeen remain `DETECTED`; eight remain `INCONCLUSIVE`.
@@ -541,7 +541,7 @@ This is target/revision-scoped runtime and accounting proof, not a security guar
 | `apps/worker/src/jobs/run-scan/`                        | Scan lifecycle phases (authority, preparation, execution, settlement, finalization) |
 | `apps/worker/src/engine/runner.ts`                      | Bounded/cancellable engine subprocess                                               |
 | `apps/worker/src/engine/command-builder.ts`             | Engine arguments and budget policy                                                  |
-| `apps/worker/src/engine/gpt56-pricing.ts`               | Versioned historical GPT-5.6 and active GPT-6 rate cards                            |
+| `apps/worker/src/engine/gpt6-pricing.ts`                | GPT-6 rate cards and per-request cache usage accounting                             |
 | `apps/worker/src/engine/scanner-orchestrator.ts`        | Deterministic and engine result merge                                               |
 | `apps/worker/src/engine/result-integrity.ts`            | Manifest/candidate/receipt boundary                                                 |
 | `packages/db/src/api-key-service.ts`                    | Workspace API-key creation, listing, revocation, and verification                   |
@@ -568,7 +568,7 @@ See [AGENTS.md](./AGENTS.md#landmines) for the current engineering rules and ope
 ## 14. Compact implementation ledger
 
 - **2026-07-04 to 07-06:** foundation, auth/tenancy, UI/DX, RLS, queue, engine boundary, findings, SCA, secrets, URL scanning, reports, schedules, notifications, MCP, approvals.
-- **2026-07-10 to 07-15:** tenant/reliability hardening, controlled engine ownership, scorecards/referrals, GPT-5.6 routing, result manifests/receipts, evidence-backed copy.
+- **2026-07-10 to 07-15:** tenant/reliability hardening, controlled engine ownership, scorecards/referrals, model routing, result manifests/receipts, evidence-backed copy.
 - **2026-07-16 to 07-18:** Cloudflare launch, Lite Scanner, production marketing, PostHog, accounting, fail-closed queue admission/recovery.
 - **2026-07-24 to 08-03:** CLI/agent distribution, UX V2, migration-first Azure deploys, RLS reproduction, worker recovery and digest integrity.
 - **2026-08-04 to 08-13:** Parallel Search, OAuth/MCP marketplace, URL/API profiles, reproducible engine releases, claims map, AI App Security and eval harness.

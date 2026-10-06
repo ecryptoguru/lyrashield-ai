@@ -36,6 +36,19 @@ export const LEGACY_REDIRECTS = [
     target: "/docs/integrations/pi",
     code: "301",
   },
+  // /blog/1 is not a generated route (page 1 IS /blog) and Astro middleware
+  // never runs for asset-layer requests, so both spellings redirect here at
+  // the Workers asset layer — the middleware map keeps the SSR fallback.
+  {
+    source: "/blog/1",
+    target: "/blog",
+    code: "301",
+  },
+  {
+    source: "/blog/1/",
+    target: "/blog",
+    code: "301",
+  },
 ]
 
 /** Pages excluded from trailing-slash rules. */

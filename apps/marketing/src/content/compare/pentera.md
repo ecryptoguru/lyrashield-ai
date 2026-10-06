@@ -74,6 +74,8 @@ faq:
 
 Pentera validates enterprise exposure; LyraShield AI gates AI-built-app releases. [Read our comparison methodology](https://lyrashieldai.com) and try the free browser-local tools at [lyrashieldai.com](https://lyrashieldai.com).
 
+> Sources: [Pentera platform](https://pentera.io/pentera-platform/), [Pentera automated pentesting](https://pentera.io/solution/automated-pentesting/), [Pentera Core](https://pentera.io/pentera-core/).
+
 ## Methodology and scope
 
 This comparison describes published capabilities, not an independent test of either product. Client workflow availability and commercial terms can change. Read [how LyraShield tests, records evidence and reports coverage](/methodology) for its assurance model and verify vendor details before a purchasing decision.

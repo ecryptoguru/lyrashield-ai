@@ -18,7 +18,16 @@ import {
 
 const origin = Astro.site?.origin || "http://localhost:4321"
 const canonical = new URL("/vibe-security-50", origin).toString()
-const reviewed = "2026-08-15"
+// One editorial review date drives the visible text, the <time datetime>
+// attribute, the page JSON-LD dateModified and the sitemap lastmod (parsed in
+// astro.config.mjs). Update all four surfaces by changing this constant only.
+const reviewed = "2026-10-05"
+const reviewedLabel = new Date(`${reviewed}T00:00:00Z`).toLocaleDateString("en-US", {
+  year: "numeric",
+  month: "long",
+  day: "numeric",
+  timeZone: "UTC",
+})
 
 // Every number on this page is derived from the same registry the scanner executes, so the
 // published list and the counts cited in llms.txt and on the homepage cannot drift apart.
@@ -161,7 +170,7 @@ const jsonLd = [
       <p class="mt-4 text-sm text-text-muted" data-reveal="fade">
         This page is generated from the same registry the scanner executes, so the list below and
         the counts quoted elsewhere on this site cannot drift apart. Last reviewed:{" "}
-        <time datetime={reviewed}>August 15, 2026</time>.
+        <time datetime={reviewed}>{reviewedLabel}</time>.
       </p>
     </header>
 

@@ -20,9 +20,9 @@ Use this index to find the owning document and avoid duplicating current truth.
 
 ## Papers (public + investor safe)
 
-- [`litepaper.md`](./litepaper.md) — executive overview of the product, modes, coverage and business model.
-- [`whitepaper.md`](./whitepaper.md) — authoritative public description: problem, product, evidence model, assurance features, commercial model, claims boundary, roadmap.
-- [`yellowpaper.md`](./yellowpaper.md) — technical specification: architecture, scan pipeline, coverage contracts, evidence integrity, tenancy, distribution contracts.
+- [`litepaper.md`](./litepaper.md) — executive overview of the product, differentiators, modes, coverage and business model.
+- [`whitepaper.md`](./whitepaper.md) — product explanation: differentiators, audience journeys, release-loop walkthrough, eight-class failure taxonomy, scoring examples, report interpretation, commercial model, claims boundary and FAQ.
+- [`yellowpaper.md`](./yellowpaper.md) — technical reference: nine execution profiles and budget ceilings, coverage/state contracts, manifest and retest integrity, fix orchestration, gate/score/identity rules, authorization, MCP catalog and client-quality parity.
 
 ## Operational documents
 
@@ -37,6 +37,7 @@ Use this index to find the owning document and avoid duplicating current truth.
 - [`editorial/`](./editorial/) — claim maps, briefs, research and image manifests consumed by marketing validators.
 - [`growth/`](./growth/) — analytics taxonomy, experiment ledger and PostHog dashboard spec.
 - [`marketplace/`](./marketplace/) — marketplace export source, licenses, validator and reviewer artifacts.
+- [`handoffs/`](./handoffs/) — dated execution queues moved out of `AGENTS.md`. Dated working material, never current truth; `PRD.md` §9 owns the open-gate list and git history is the recovery path.
 
 ## Historical archive
 

@@ -75,6 +75,8 @@ faq:
 
 RunSybil automates attacker intuition black-box; LyraShield AI gates AI-built-app releases. [Read our comparison methodology](https://lyrashieldai.com) and try the free browser-local tools at [lyrashieldai.com](https://lyrashieldai.com).
 
+> Sources: [RunSybil](https://www.runsybil.com/), [RunSybil on automating hacker intuition](https://www.runsybil.com/post/what-does-it-take-to-automate-hacker-intuition).
+
 ## Methodology and scope
 
 This comparison describes published capabilities, not an independent test of either product. Client workflow availability and commercial terms can change. Read [how LyraShield tests, records evidence and reports coverage](/methodology) for its assurance model and verify vendor details before a purchasing decision.

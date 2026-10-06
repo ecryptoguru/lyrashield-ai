@@ -71,6 +71,16 @@ describe("integration guide routes", () => {
         target: "/docs/integrations/pi",
         code: "301",
       },
+      {
+        source: "/blog/1",
+        target: "/blog",
+        code: "301",
+      },
+      {
+        source: "/blog/1/",
+        target: "/blog",
+        code: "301",
+      },
     ])
     for (const redirect of LEGACY_REDIRECTS) {
       expect(redirectLines).toContain(`${redirect.source} ${redirect.target} ${redirect.code}`)
