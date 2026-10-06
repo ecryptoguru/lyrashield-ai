@@ -4,6 +4,10 @@
 /docs/integrations/windsurf /docs/integrations/devin 301
 /docs/integrations/picode /docs/integrations/pi 301
 /docs/integrations/picode/ /docs/integrations/pi 301
+# /blog/1 is not a generated route (page 1 IS /blog). Send both spellings to
+# the hub at the asset layer; src/middleware.ts keeps the SSR fallback.
+/blog/1 /blog 301
+/blog/1/ /blog 301
 
 /blog/aikido-vs-lyrashield /compare/aikido 301
 /blog/aikido-vs-lyrashield/ /compare/aikido 301

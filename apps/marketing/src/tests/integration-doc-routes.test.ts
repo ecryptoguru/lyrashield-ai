@@ -37,7 +37,11 @@ const configPreviewClients = [
 
 describe("integration guide routes", () => {
   it("points the user guide at the registry-derived integration directory", () => {
-    expect(userGuide).toMatch(/\[client-specific setup guides\]\(\/docs\/integrations\)/)
+    const href = userGuide.match(/\[client-specific setup guides\]\(([^)]+)\)/)?.[1]
+    expect(href).toBeDefined()
+    const destination = new URL(href!, "https://lyrashieldai.com")
+    expect(destination.origin).toBe("https://lyrashieldai.com")
+    expect(destination.pathname).toBe("/docs/integrations")
   })
 
   it("resolves every preferred registry link to an authored or generated page", () => {
@@ -80,6 +84,18 @@ describe("integration guide routes", () => {
         {
           source: "/docs/integrations/picode/",
           target: "/docs/integrations/pi",
+          code: "301",
+        },
+        // /blog/1 is not a generated route (page 1 IS /blog); both spellings
+        // redirect permanently to the hub at the asset layer.
+        {
+          source: "/blog/1",
+          target: "/blog",
+          code: "301",
+        },
+        {
+          source: "/blog/1/",
+          target: "/blog",
           code: "301",
         },
       ])

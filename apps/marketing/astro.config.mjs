@@ -122,18 +122,34 @@ function contentLastmod() {
     }
   }
 
-  // WebMCP pillar page.
-  const webmcpPath = new URL("./src/pages/webmcp.astro", import.meta.url)
-  try {
-    const content = readFileSync(webmcpPath, "utf8")
-    const match = content.match(
-      /(?:const\s+reviewed|dateModified)\s*=\s*["']([0-9]{4}-[0-9]{2}-[0-9]{2})["']/
-    )
-    if (match) {
-      const date = new Date(match[1])
-      if (!Number.isNaN(date.valueOf())) map.set("/webmcp", date)
-    }
-  } catch {}
+  // Editorially dated pages: each declares one `const reviewed|updatedDate|
+  // reviewedDate` constant that also drives the page's visible text, <time
+  // datetime> attribute and JSON-LD dateModified. Parsing that same constant
+  // here keeps the sitemap lastmod equal to the date the page displays —
+  // a git-derived date would disagree with it (the Oct 2026 drift).
+  for (const [pageFile, route] of [
+    ["webmcp", "/webmcp"],
+    ["methodology", "/methodology"],
+    ["about", "/about"],
+    ["evidence-vault", "/evidence-vault"],
+    ["vibe-security-50", "/vibe-security-50"],
+    ["ai-safety", "/ai-safety"],
+    ["blog/editorial-policy", "/blog/editorial-policy"],
+  ]) {
+    try {
+      const content = readFileSync(
+        new URL(`./src/pages/${pageFile}.astro`, import.meta.url),
+        "utf8"
+      )
+      const match = content.match(
+        /const\s+(?:reviewed|updatedDate|reviewedDate)\s*=\s*["']([0-9]{4}-[0-9]{2}-[0-9]{2})["']/
+      )
+      if (match) {
+        const date = new Date(match[1])
+        if (!Number.isNaN(date.valueOf())) map.set(route, date)
+      }
+    } catch {}
+  }
 
   // Git layer: for routes with a resolvable source file, the last commit that
   // touched that file is the page's real freshness signal. Only fills entries

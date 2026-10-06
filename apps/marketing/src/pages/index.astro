@@ -187,6 +187,28 @@ const jsonLd = [
       <p class="mt-4 text-sm leading-6 text-text-muted">
         Works alongside the scanners you already run. LyraShield adds evidence states, fix proposals and retests.
       </p>
+      {/* Two audience paths (SEO plan Task 5): solo builders enter through the
+          free Lite Check; agencies and consultants reviewing client releases
+          get the founder walkthrough. Copy stays inside trial limits — no
+          "full review" promise. */}
+      <div class="mt-6 grid gap-4 sm:grid-cols-2">
+        <a
+          href="/scan"
+          data-cta-id="homepage-path-developer"
+          class="lift rounded-xl border border-border bg-bg p-5 font-semibold text-text hover:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        >
+          Review your AI-built app{" "}
+          <span class="mt-1 block text-sm font-normal text-text-muted">Start with the free Lite Check, then run your first review from a free trial.</span>
+        </a>
+        <a
+          href="/demo"
+          data-cta-id="homepage-path-agency"
+          class="lift rounded-xl border border-border bg-bg p-5 font-semibold text-text hover:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        >
+          Review client releases{" "}
+          <span class="mt-1 block text-sm font-normal text-text-muted">Walk through the evidence and handoff workflow with the founder.</span>
+        </a>
+      </div>
     </div>
   </section>
 

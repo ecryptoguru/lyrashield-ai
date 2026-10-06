@@ -22,7 +22,16 @@ const canonical = new URL("/vibe-security-50", origin).toString()
 const appUrl =
   (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/\/$/, "") ||
   "https://app.lyrashieldai.com"
-const reviewed = "2026-08-15"
+// One editorial review date drives the visible text, the <time datetime>
+// attribute, the page JSON-LD dateModified and the sitemap lastmod (parsed in
+// astro.config.mjs). Update all four surfaces by changing this constant only.
+const reviewed = "2026-10-05"
+const reviewedLabel = new Date(`${reviewed}T00:00:00Z`).toLocaleDateString("en-GB", {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+  timeZone: "UTC",
+})
 
 // Every number on this page is derived from the same registry the scanner executes, so the
 // published list and the counts cited in llms.txt and on the homepage cannot drift apart.
@@ -164,7 +173,7 @@ const jsonLd = [
       </p>
       <p class="mt-4 text-sm text-text-muted" data-reveal="fade">
         This page is generated from the same registry the scanner executes, so the list below and the counts quoted elsewhere on this site cannot drift apart.
-        Last reviewed: <time datetime={reviewed}>5 Oct 2026</time>. The evidence definitions behind a full review are defined on{" "}
+        Last reviewed: <time datetime={reviewed}>{reviewedLabel}</time>. The evidence definitions behind a full review are defined on{" "}
         <a href="/methodology" class="font-medium text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent">the methodology page</a>.
       </p>
     </header>

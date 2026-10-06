@@ -168,6 +168,46 @@ describe("blog validator", () => {
     expect(errors).toContain("unresolved placeholder: lorem ipsum")
   })
 
+  it.each([
+    [2, 400],
+    [2, 1700],
+    [1, 800],
+    [1, 3500],
+  ])(
+    "treats total article length as guidance for program index %s with %s words",
+    (index, words) => {
+      const entry = {
+        index,
+        slug: "length-guidance",
+        cluster: "Access",
+        cta: "Pillar + RLS Checker",
+      }
+      const article = {
+        slug: entry.slug,
+        data: stableFrontmatter,
+        body: `${Array(45).fill("answer").join(" ")}
+
+## Verify safely
+
+[Authority guide](/blog/vibe-coding-security-guide)
+
+${Array(words).fill("guidance").join(" ")}
+
+[RLS checker](/tools/supabase-rls-checker) and [related article](/blog/related-article).
+
+${Array.from({ length: 8 }, (_, i) => `[RFC ${i}](https://www.rfc-editor.org/rfc/rfc${9110 + i})`).join(" ")}
+`,
+      }
+      const context = {
+        availableSlugs: new Set(["vibe-coding-security-guide", "related-article"]),
+        programBySlug: new Map([
+          ["related-article", { index: 3, slug: "related-article", cluster: "Access" }],
+        ]),
+      }
+      expect(validateArticle(article, entry, context)).toEqual([])
+    }
+  )
+
   it("enforces the final shared-image distribution", () => {
     expect(validateUsageCounts(sharedUsageDistribution(), true)).toEqual([])
     expect(validateUsageCounts([...Array(IMAGE_CORPUS.shared - 1).fill(3)], true)).toContain(
@@ -537,6 +577,44 @@ ${filler}
         { slug: "post" }
       )
     ).toContain("duplicate FAQ question: where does the config live?")
+  })
+
+  it("requires reviewer and reviewedDate to be set together", () => {
+    const minimal = { slug: "post", body: "Body copy without an H1." }
+    expect(
+      validateArticle({ ...minimal, data: { reviewer: "lyrashield-team" } }, { slug: "post" })
+    ).toContain("reviewer and reviewedDate must be set together or not at all")
+    expect(
+      validateArticle({ ...minimal, data: { reviewedDate: "2026-10-06" } }, { slug: "post" })
+    ).toContain("reviewer and reviewedDate must be set together or not at all")
+    // A complete, well-ordered pair produces no pairing error.
+    expect(
+      validateArticle(
+        {
+          ...minimal,
+          data: {
+            pubDate: "2026-09-22",
+            reviewer: "lyrashield-team",
+            reviewedDate: "2026-10-06",
+          },
+        },
+        { slug: "post" }
+      )
+    ).not.toContain("reviewer and reviewedDate must be set together or not at all")
+    // A review cannot predate the article.
+    expect(
+      validateArticle(
+        {
+          ...minimal,
+          data: {
+            pubDate: "2026-09-22",
+            reviewer: "lyrashield-team",
+            reviewedDate: "2026-01-01",
+          },
+        },
+        { slug: "post" }
+      )
+    ).toContain("reviewedDate cannot precede pubDate")
   })
 
   it("validates catalog paths, dimensions, budgets, hashes, clusters, and adjacency", () => {
