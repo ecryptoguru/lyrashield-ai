@@ -7,7 +7,16 @@ import { VIBE_SECURITY_CONTROLS } from "../../../../packages/security/src/vibe-s
 
 const origin = Astro.site?.origin || "http://localhost:4321"
 const canonical = new URL("/evidence-vault", origin).toString()
-const reviewed = "2026-08-15"
+// One editorial review date drives the visible text, the <time datetime>
+// attribute, the page JSON-LD dateModified and the sitemap lastmod (parsed in
+// astro.config.mjs). Update all four surfaces by changing this constant only.
+const reviewed = "2026-10-05"
+const reviewedLabel = new Date(`${reviewed}T00:00:00Z`).toLocaleDateString("en-GB", {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+  timeZone: "UTC",
+})
 
 const evidenceControls = [...VIBE_SECURITY_CONTROLS]
   .filter((control) => control.strategy === "evidence")
@@ -159,7 +168,7 @@ const jsonLd = [
         the seven evidence-required Vibe Security 50 controls.
       </p>
       <p class="mt-4 text-sm text-text-muted" data-reveal="fade">
-        Last reviewed: <time datetime={reviewed}>5 Oct 2026</time>
+        Last reviewed: <time datetime={reviewed}>{reviewedLabel}</time>
       </p>
       <div
         class="mt-8 flex flex-wrap gap-4"

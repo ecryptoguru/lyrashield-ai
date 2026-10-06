@@ -57,6 +57,20 @@ const FORBIDDEN =
   /\bindependently verified\b|\bverification receipt\b|\bindependent verification\b/i
 
 describe("public evidence-state copy", () => {
+  it.each(["litepaper.md", "whitepaper.md", "yellowpaper.md", "user-guide.md"])(
+    "marks the independent-verification state as future-only in %s",
+    (name) => {
+      const document = readFileSync(join(src, "../../../docs", name), "utf8")
+      const state = document
+        .split(/\r?\n/)
+        .find((line) => /\| `VERIFIED`|→ VERIFIED|\*\*Verified\*\*/.test(line))
+      expect(state, `${name} must qualify its independent-verification state`).toMatch(
+        /future|not produced/i
+      )
+      expect(document).toMatch(/three shipped evidence states/i)
+    }
+  )
+
   it("never presents independent verification as a shipped state", () => {
     const violations: string[] = []
     for (const file of copyFiles(src)) {

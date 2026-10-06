@@ -21,6 +21,21 @@ Product promise:
 - Produce approval-gated fix proposals, server-owned retests, and shareable assurance reports.
 - Never claim broader coverage or certainty than retained evidence supports.
 
+### Differentiators (USPs)
+
+The eight commitments that separate LyraShield from point scanners and generic SAST. Each is a design property, not a detection-performance claim, and public copy must keep them inside the claims boundary (§1 UX and claims principles, [policies.md](./docs/policies.md)):
+
+1. Evidence states instead of confidence scores (§3).
+2. Coverage organized around how AI-built apps fail — AI-Built Failure Taxonomy, AI App Security AI-01–AI-08 (OWASP LLM Top 10, 2025), WebMCP controls (§4).
+3. Agent-native distribution — CLI, MCP (21 tools), portable Agent Plugin, 51-entry registry / 48 preferred client surfaces, account-less GitHub Action (§2).
+4. Approval-gated fix loop with automatic retest and gate re-evaluation on merge (§4 Remediation).
+5. Versioned Launch Gate verdicts plus signed, publicly verifiable reports and release-identity confirmation (§4 Launch gate).
+6. Honest coverage ledger — Vibe Security 50 (`vibe-security-50/1.2.0`) per-control receipts; "no finding" never reads as "passed" (§3).
+7. Two modes, one loop — Cloud subscription and BYOK Local/Desktop with perpetual fallback (§1 Product modes).
+8. Fail-closed trust architecture — RLS tenancy, untrusted bounded engine output, execution provenance bound into manifest checksums (§6).
+
+The public narrative versions of this list live in `docs/litepaper.md` §3 and `docs/whitepaper.md` §2.0; keep the three in step when one changes.
+
 ### Product modes
 
 | Mode          | Commercial model                              | Execution             | Model cost                                    |

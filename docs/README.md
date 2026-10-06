@@ -20,9 +20,11 @@ Use this index to find the owning document and avoid duplicating current truth.
 
 ## Papers (public + investor safe)
 
-- [`litepaper.md`](./litepaper.md) — executive overview of the product, modes, coverage and business model.
-- [`whitepaper.md`](./whitepaper.md) — authoritative public description: problem, product, evidence model, assurance features, commercial model, claims boundary, roadmap.
-- [`yellowpaper.md`](./yellowpaper.md) — technical specification: architecture, scan pipeline, coverage contracts, evidence integrity, tenancy, distribution contracts.
+Keep these three documents separate: the litepaper gives a short executive overview, the whitepaper explains the product and the yellowpaper provides technical reference. Product scope and release evidence belong to `PRD.md`; runtime and code ownership belong to `codebase.md`. The papers summarize those owners and must not establish a second release-status ledger.
+
+- [`litepaper.md`](./litepaper.md) — executive overview of the product, differentiators, modes, coverage and business model.
+- [`whitepaper.md`](./whitepaper.md) — product explanation: differentiators, audience journeys, release-loop walkthrough, eight-class failure taxonomy, scoring examples, report interpretation, commercial model, claims boundary and FAQ.
+- [`yellowpaper.md`](./yellowpaper.md) — technical reference: nine execution profiles and budget ceilings, coverage/state contracts, manifest and retest integrity, fix orchestration, gate/score/identity rules, authorization, MCP catalog and client-quality parity.
 
 ## Operational documents
 
@@ -37,6 +39,8 @@ Use this index to find the owning document and avoid duplicating current truth.
 - [`editorial/`](./editorial/) — claim maps, briefs, research and image manifests consumed by marketing validators.
 - [`growth/`](./growth/) — analytics taxonomy, experiment ledger and PostHog dashboard spec.
 - [`marketplace/`](./marketplace/) — marketplace export source, licenses, validator and reviewer artifacts.
+- [`handoffs/`](./handoffs/) — dated operational context and execution queues. Refresh their source and evidence before acting; `PRD.md` §9 owns the current open gates.
+- [`reviews/`](./reviews/) — dated review evidence and reproducible probe fixtures. Preserve evidence and executable fixtures referenced by operations; completed review findings belong in the current owner or Git history.
 
 ## Historical archive
 

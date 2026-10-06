@@ -4,17 +4,19 @@ Last checked against the application code: 2026-09-19. Client-specific runtime a
 
 LyraShield AI helps builders review an application before release and retain an evidence-backed record of what was checked.
 
+Unlike a point scanner, it separates what was detected from what was actually proven, reviews the AI-specific surfaces of your app (agent rules, MCP configs, LLM patterns), proposes fixes through an approval-gated server-generated patch flow, retests automatically after a fix merges and packages the outcome as a signed, shareable report. It runs from the dashboard, the CLI, MCP clients and CI. See the [litepaper](./litepaper.md) for the full differentiator list.
+
 ## Target → Scan → Evidence State → Fix Proposal → Retest → Assurance Report
 
 This guide covers the public Lite Check, authenticated dashboard, scan choices, findings, fixes, reports, scorecards, teams, integrations (agents and services), schedules, notifications, the CLI, MCP tools and current limitations.
 
 ## 1. Important product boundaries
 
-LyraShield AI uses precise result language:
+LyraShield AI currently produces three shipped evidence states: Detected, Validated and Inconclusive. Its schema also defines a future Verified state:
 
 - **Detected** means a scanner or engine returned evidence for a possible issue.
 - **Validated** or **retest-confirmed** means a fresh deterministic retest no longer found the issue within its completed scope.
-- **Verified** means independent verification evidence exists. Model confidence alone never creates this state.
+- **Verified** is defined for a future independent verification step; no finding is in it today. Model confidence alone never creates this state.
 - **Inconclusive** means the available scan could not establish a reliable result.
 - **No finding** means the assigned check completed without returning a mapped finding. It does not mean the application is universally safe.
 - **Evidence required** means the control needs deployment, operational or human-review proof that a repository or URL scan cannot safely establish.
@@ -273,7 +275,7 @@ Threat-intelligence enrichment prioritizes review but does not change severity o
 2. Create and edit a fix proposal describing the change you intend to make.
 3. Apply the change yourself. Saving a proposal does not modify the repository.
 4. Queue a fresh retest after applying the change.
-5. Review whether the retest is validated, independently verified, blocked or inconclusive.
+5. Review whether the retest is validated, blocked or inconclusive; independently verified remains a future state.
 6. Generate an assurance report from the retained retest when appropriate.
 
 Depending on your permission, you may also mark a finding as accepted risk or false positive. These are audited decisions, not silent deletion. When you do, the UI requires a short reason; the reason is stored as the finding's status reason and is shown on the finding detail for future reviewers.
@@ -504,9 +506,9 @@ The current settings surface reports retention and telemetry configuration but d
 
 ### Workspace API keys
 
-Owners and Admins can open **Settings → API keys** to create, list, and revoke workspace credentials for the REST API, CLI, CI, or local stdio clients. Choose read-only access unless the client needs write operations. Up to 20 active keys are allowed per workspace.
+Owners and Admins can open **Settings → API keys** to create, list and revoke workspace credentials for the REST API, CLI, CI or local stdio clients. Choose read-only access unless the client needs write operations. Up to 20 active keys are allowed per workspace.
 
-The complete `lsk_` value appears only after creation. Copy it to a secret manager or other private store before dismissing the notice; the key cannot be retrieved from Settings later. The list shows a short identifying prefix, scope, and last-use time. Revocation cannot be undone. To rotate a credential, create a replacement, update the client, then revoke the old key.
+The complete `lsk_` value appears only after creation. Copy it to a secret manager or other private store before dismissing the notice; the key cannot be retrieved from Settings later. The list shows a short identifying prefix, scope and last-use time. Revocation cannot be undone. To rotate a credential, create a replacement, update the client, then revoke the old key.
 
 Keys remain limited by both their read/write scope and the creator's current workspace membership and permissions. If the creator is removed or becomes inactive, keys they created stop authenticating. Hosted remote MCP accepts API keys for read calls, but mutations require a browser-confirmed OAuth connection; local stdio and direct REST requests use the credential's scope and current workspace permissions.
 
@@ -531,9 +533,9 @@ npx -y lyrashield@0.2.14 gate           # CI-friendly diff-aware security gate
 Published CLI `lyrashield@0.2.14` is the current setup path. Its `init` and `install <agent>` commands write only for client configurations covered by the published install contract; they preserve unrelated settings, while clients without a verified writer receive guided instructions. Preview supported changes with `--dry-run` before writing. Plugin entries that require manual activation return guided instructions instead of copying a plugin directory. Follow each current guide with pinned MCP `0.2.12`; `packages/agent-registry` owns the client paths. The CLI, MCP and plugin packages target Node.js 24 or newer. A successful installer or `doctor` result does not prove the client loaded a tool; restart the client and make a read call.
 
 - **Agent Plugin package** — `@lyrashield/agent-plugin@0.1.31` is published and passes portable MCP schema validation; public marketplace listing and authenticated client acceptance are separate pending checks. Do not install from the mutable marketplace preparation branch or use an older portable plugin without schema validation. Use the current [client guides](https://lyrashieldai.com/docs/integrations/agent-plugins) with published `@lyrashield/mcp@0.2.12`: Claude uses `.mcp.json` with `mcpServers`; Cursor uses `.cursor/mcp.json` or `~/.cursor/mcp.json` with `mcpServers`; Codex uses `[mcp_servers.lyrashield]` in `~/.codex/config.toml`; Copilot CLI uses `mcpServers` and `type: "local"` in `~/.copilot/mcp-config.json`; VS Code uses `servers` and `type: "stdio"` in `.vscode/mcp.json`. Authenticate local stdio separately with `npx -y lyrashield@0.2.14 login --oauth`, restart the client, confirm tool discovery, then call `lyrashield_list_workspaces`. Kiro follows its own current guide; copying a plugin directory alone does not establish installation or authenticated acceptance.
-- **Config-file** — the published CLI `0.2.14` writer preserves unrelated settings, refuses symlinked destinations and malformed roots, and refuses to place a raw API key in a conventionally shared file unless you explicitly pass `--inline-secret` and the file is gitignored.
+- **Config-file** — the published CLI `0.2.14` writer preserves unrelated settings, refuses symlinked destinations and malformed roots and refuses to place a raw API key in a conventionally shared file unless you explicitly pass `--inline-secret` and the file is gitignored.
 - **Vendor CLI** — Amp is configured by shelling out to `amp mcp add`.
-- **Client guides** — The current [client-specific setup guides](/docs/integrations) are generated from the agent registry and cover each preferred integration. Pi has built-in MCP over stdio and Streamable HTTP, plus hosted OAuth and Agent Skills support; it reads user-level `~/.pi/agent/mcp.json` and project `.pi/mcp.json` after project trust. The standalone CLI and CI path remains available, but a client configuration or discovery check alone is not a LyraShield-authenticated runtime receipt. Aider uses the standalone CLI or CI. Codebuff’s current [official MCP guide](https://www.codebuff.com/docs/tips/mcp-servers) supports project `.agents/mcp.json` and global `~/.agents/mcp.json` under `mcpServers`; use the published `@lyrashield/mcp@0.2.12` direct-MCP path. Its separate native reviewer adapter is read-only and remains a preparation artifact. Cline CLI reads `~/.cline/data/settings/cline_mcp_settings.json` with `CLINE_MCP_SETTINGS_PATH` as an override.
+- **Client guides** — The current [client-specific setup guides](https://lyrashieldai.com/docs/integrations) are generated from the agent registry and cover each preferred integration. Pi has built-in MCP over stdio and Streamable HTTP, plus hosted OAuth and Agent Skills support; it reads user-level `~/.pi/agent/mcp.json` and project `.pi/mcp.json` after project trust. The standalone CLI and CI path remains available, but a client configuration or discovery check alone is not a LyraShield-authenticated runtime receipt. Aider uses the standalone CLI or CI. Codebuff’s current [official MCP guide](https://www.codebuff.com/docs/tips/mcp-servers) supports project `.agents/mcp.json` and global `~/.agents/mcp.json` under `mcpServers`; use the published `@lyrashield/mcp@0.2.12` direct-MCP path. Its separate native reviewer adapter is read-only and remains a preparation artifact. Cline CLI reads `~/.cline/data/settings/cline_mcp_settings.json` with `CLINE_MCP_SETTINGS_PATH` as an override.
 
 `uninstall <agent>` removes the managed LyraShield entry through that client's installation strategy; inspect its dry-run preview before changing a client.
 

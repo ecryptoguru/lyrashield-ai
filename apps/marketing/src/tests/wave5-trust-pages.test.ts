@@ -66,14 +66,22 @@ describe("Wave 5 trust pages", () => {
   })
 
   it("5.4 shows one date format and a Last reviewed line on every trust page", () => {
-    // The vocabulary lock fixes the format as "4 Oct 2026".
+    // The vocabulary lock fixes the format as "4 Oct 2026". A page may print
+    // the date literally or derive it from its single editorial-date constant
+    // (so text, datetime attribute, JSON-LD and sitemap cannot disagree); a
+    // derived label must keep the same d-MMM-yyyy shape.
     const DATE = /\b\d{1,2} (?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d{4}\b/
+    const DERIVED_LABEL = /\{(?:reviewedLabel|updatedDateLabel|reviewedDateLabel)\}/
     const violations: string[] = []
     for (const name of TRUST_PAGES) {
       const body = page(name)
       if (!body.includes("Last reviewed:")) violations.push(`${name} has no Last reviewed line`)
       const reviewedLine = body.split("\n").find((line) => line.includes("Last reviewed:")) ?? ""
-      if (!DATE.test(reviewedLine)) {
+      if (DERIVED_LABEL.test(reviewedLine)) {
+        if (!body.includes('toLocaleDateString("en-GB"')) {
+          violations.push(`${name} derives its label outside the en-GB d MMM yyyy shape`)
+        }
+      } else if (!DATE.test(reviewedLine)) {
         violations.push(`${name} does not use the "4 Oct 2026" date format`)
       }
     }
