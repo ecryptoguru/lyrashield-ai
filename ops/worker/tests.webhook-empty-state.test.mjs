@@ -219,7 +219,7 @@ test("refreshed worker and candidate targets/credential continuity fail closed",
     DATABASE_URL:
       "postgresql://worker_runtime.yejmvtgsxniatmjbwplk:placeholder@aws-1-ap-south-1.pooler.supabase.com:5432/postgres?sslmode=verify-full",
     DATABASE_SYSTEM_URL:
-      "postgresql://system_admin:placeholder@db.yejmvtgsxniatmjbwplk.supabase.co:5432/postgres",
+      "postgresql://system_admin:placeholder@db.yejmvtgsxniatmjbwplk.supabase.co:5432/postgres?sslmode=require",
     REDIS_URL: "rediss://placeholder@example.test:6379/0",
   }
   const fingerprint = runtimeFingerprint(env)
@@ -265,6 +265,20 @@ test("refreshed worker and candidate targets/credential continuity fail closed",
       { REDIS_URL: "rediss://placeholder@wrong.test:6379/0" },
       { DATABASE_URL: env.DATABASE_URL.replace("worker_runtime.", "scanner_runtime.") },
       { DATABASE_SYSTEM_URL: env.DATABASE_SYSTEM_URL.replace("system_admin", "worker_runtime") },
+      { DATABASE_URL: env.DATABASE_URL.replace("?sslmode=verify-full", "") },
+      { DATABASE_URL: env.DATABASE_URL.replace("sslmode=verify-full", "sslmode=disable") },
+      {
+        DATABASE_URL: env.DATABASE_URL.replace(
+          "sslmode=verify-full",
+          "sslmode=require&sslmode=verify-full"
+        ),
+      },
+      {
+        DATABASE_URL: env.DATABASE_URL.replace(
+          "sslmode=verify-full",
+          "sslmode=require&uselibpqcompat=true"
+        ),
+      },
     ])
       assert.throws(() =>
         validateConsumerFingerprint(runtimeFingerprint({ ...env, ...changed }), policy, role)

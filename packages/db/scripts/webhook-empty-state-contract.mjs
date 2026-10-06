@@ -144,6 +144,10 @@ export function normalizeDefault(value) {
 function parseDatabaseUrl(raw, label) {
   const parsed = parsePostgresConnectionTarget(raw, label)
   const { url, user, database, schema, port } = parsed
+  const sslmode = url.searchParams.get("sslmode")
+  if (!url.searchParams.has("sslmode") || !SAFE_SSL_MODES.has(sslmode)) {
+    throw new Error(`${label} must explicitly require verified TLS`)
+  }
   if (!database || database !== "postgres" || schema !== "public") {
     throw new Error(`${label} must target postgres/public`)
   }

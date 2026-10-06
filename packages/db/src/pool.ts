@@ -145,6 +145,26 @@ class ObservablePrismaPg extends PrismaPg {
  */
 const DEFAULT_DB_POOL_MAX = 4
 
+function requireSupabaseVerifiedTls(connectionString: string): void {
+  let url: URL
+  try {
+    url = new URL(connectionString)
+  } catch {
+    return
+  }
+  const supabaseHost =
+    /^db\.[a-z0-9]{20}\.supabase\.co$/i.test(url.hostname) ||
+    /\.pooler\.supabase\.com$/i.test(url.hostname)
+  if (!supabaseHost) return
+  const modes = url.searchParams.getAll("sslmode")
+  if (modes.length !== 1 || !["require", "verify-full"].includes(modes[0])) {
+    throw new Error("Supabase PostgreSQL URLs require exactly one verified sslmode")
+  }
+  if ([...url.searchParams.keys()].some((key) => key.toLowerCase() === "uselibpqcompat")) {
+    throw new Error("Supabase PostgreSQL compatibility mode is not allowed")
+  }
+}
+
 export function resolveDbPoolMax(runtimeEnv: NodeJS.ProcessEnv = process.env): number {
   const raw = runtimeEnv.LYRASHIELD_DB_POOL_MAX?.trim()
   if (!raw) return DEFAULT_DB_POOL_MAX
@@ -159,6 +179,7 @@ export function createBoundedPgAdapter(
   connectionString: string,
   scope: DatabasePoolScope = "db"
 ): PrismaPg {
+  requireSupabaseVerifiedTls(connectionString)
   return new ObservablePrismaPg(
     {
       connectionString,

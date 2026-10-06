@@ -21,9 +21,9 @@ import { candidateConnectionProbeSource } from "./webhook-empty-state-candidate-
 test("serialized candidate probe runs without module-scope bindings", () => {
   const env = {
     DATABASE_URL:
-      "postgresql://worker_runtime:disposable-only@db.yejmvtgsxniatmjbwplk.supabase.co:5432/postgres",
+      "postgresql://worker_runtime:disposable-only@db.yejmvtgsxniatmjbwplk.supabase.co:5432/postgres?sslmode=require",
     DATABASE_SYSTEM_URL:
-      "postgresql://system_admin:disposable-system@db.yejmvtgsxniatmjbwplk.supabase.co:5432/postgres",
+      "postgresql://system_admin:disposable-system@db.yejmvtgsxniatmjbwplk.supabase.co:5432/postgres?sslmode=require",
     REDIS_URL: "rediss://disposable-only@redis.invalid:6379/0",
   }
   const result = spawnSync(
@@ -103,9 +103,9 @@ test("enabled copied candidate adapter survives cold start and crash after eithe
       policy.candidateRevisions = { app: "app-candidate", scanner: "scanner-candidate" }
       const env = {
         DATABASE_URL:
-          "postgresql://worker_runtime:disposable-only@db.yejmvtgsxniatmjbwplk.supabase.co:5432/postgres",
+          "postgresql://worker_runtime:disposable-only@db.yejmvtgsxniatmjbwplk.supabase.co:5432/postgres?sslmode=require",
         DATABASE_SYSTEM_URL:
-          "postgresql://system_admin:disposable-system@db.yejmvtgsxniatmjbwplk.supabase.co:5432/postgres",
+          "postgresql://system_admin:disposable-system@db.yejmvtgsxniatmjbwplk.supabase.co:5432/postgres?sslmode=require",
         REDIS_URL: "rediss://disposable-only@redis.invalid:6379/0",
       }
       const fingerprint = runtimeFingerprint(env)

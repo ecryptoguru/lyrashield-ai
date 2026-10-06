@@ -14,7 +14,10 @@ function createTestPool(connect: pg.Pool["connect"]): pg.Pool {
   return pool
 }
 
-afterEach(() => vi.restoreAllMocks())
+afterEach(() => {
+  vi.restoreAllMocks()
+  vi.unstubAllEnvs()
+})
 
 describe("resolveDbPoolMax", () => {
   it("defaults to 4 when the env override is unset", () => {
@@ -40,6 +43,35 @@ describe("createBoundedPgAdapter", () => {
     const pool = adapter.underlyingDriver()
 
     expect(pool.connect).not.toBe(pg.Pool.prototype.connect)
+    await adapter.dispose()
+  })
+
+  it("requires explicit verified Supabase TLS rather than PGSSLMODE fallback", () => {
+    const direct = "postgresql://u:p@db.yejmvtgsxniatmjbwplk.supabase.co:5432/postgres"
+    vi.stubEnv("PGSSLMODE", "verify-full")
+    expect(() => createBoundedPgAdapter(direct)).toThrow(/exactly one verified sslmode/)
+    expect(() => createBoundedPgAdapter(`${direct}?sslmode=disable`)).toThrow(
+      /exactly one verified sslmode/
+    )
+    expect(() => createBoundedPgAdapter(`${direct}?sslmode=require&sslmode=verify-full`)).toThrow(
+      /exactly one verified sslmode/
+    )
+    expect(() => createBoundedPgAdapter(`${direct}?sslmode=require&uselibpqcompat=true`)).toThrow(
+      /compatibility mode is not allowed/
+    )
+    expect(() => createBoundedPgAdapter(`${direct}?sslmode=require&%75selibpqcompat=true`)).toThrow(
+      /compatibility mode is not allowed/
+    )
+  })
+
+  it("uses explicit verified URL TLS when PGSSLMODE is weaker", async () => {
+    vi.stubEnv("PGSSLMODE", "disable")
+    const adapter = await createBoundedPgAdapter(
+      "postgresql://u:p@db.yejmvtgsxniatmjbwplk.supabase.co:5432/postgres?sslmode=require"
+    ).connect()
+    const ssl = adapter.underlyingDriver().options.ssl
+    expect(ssl).toBeTruthy()
+    expect(ssl).not.toBe(false)
     await adapter.dispose()
   })
 })

@@ -1,5 +1,6 @@
 import test from "node:test"
 import assert from "node:assert/strict"
+import { spawnSync } from "node:child_process"
 import {
   mkdtempSync,
   mkdirSync,
@@ -16,6 +17,30 @@ import { createRequire } from "node:module"
 import { fixture } from "../../packages/db/scripts/tests/webhook-empty-state-v2-fixture.mjs"
 import { canonical, sha256 } from "../../packages/db/scripts/webhook-empty-state-receipt-v2.mjs"
 import { advancePhase, PHASES } from "./webhook-empty-state-phases.mjs"
+import { appConnectionProbeSource } from "./webhook-empty-state-producer.mjs"
+
+test("embedded producer connection probe fails closed without explicit verified TLS", () => {
+  const base =
+    "postgresql://worker_runtime:disposable-only@db.yejmvtgsxniatmjbwplk.supabase.co:5432/postgres"
+  const source = appConnectionProbeSource("fixture-resource", "2026-10-06T00:00:00.000Z")
+  const run = (url, extra = {}) =>
+    spawnSync(process.execPath, ["--input-type=module", "-e", source], {
+      encoding: "utf8",
+      timeout: 5000,
+      env: { DATABASE_URL: url, ...extra },
+    })
+  for (const [url, extra] of [
+    [base, { PGSSLMODE: "verify-full" }],
+    [`${base}?sslmode=disable`, {}],
+    [`${base}?sslmode=require&sslmode=verify-full`, {}],
+    [`${base}?sslmode=require&uselibpqcompat=true`, {}],
+  ]) {
+    assert.notEqual(run(url, extra).status, 0)
+  }
+  const result = run(`${base}?sslmode=require`)
+  assert.equal(result.status, 0, result.stderr)
+  assert.equal(JSON.parse(result.stdout).resourceId, "fixture-resource")
+})
 
 test("enabled copied producer executes resume/rehold and completed workflow collect replay", async () => {
   const root = realpathSync(mkdtempSync(join(tmpdir(), "producer-adapter-disposable-"))),

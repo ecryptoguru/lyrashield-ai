@@ -20,8 +20,8 @@ import {
 import { runEmptyStateMigration } from "../webhook-empty-state-migration.mjs"
 
 const projectRef = "localprojectfixture1"
-const direct = "postgresql://postgres:masked@db." + projectRef + ".supabase.co:5432/postgres?schema=public"
-const pooler = "postgresql://postgres." + projectRef + ":masked@fixture.pooler.supabase.com:5432/postgres?schema=public"
+const direct = "postgresql://postgres:masked@db." + projectRef + ".supabase.co:5432/postgres?schema=public&sslmode=require"
+const pooler = "postgresql://postgres." + projectRef + ":masked@fixture.pooler.supabase.com:5432/postgres?schema=public&sslmode=require"
 const testProjectRef = "localtestprojectref1"
 const testDatabaseUrl = "postgresql://postgres:masked@127.0.0.1:5432/postgres?schema=public"
 const now = Date.parse("2026-10-04T12:00:00.000Z")
@@ -182,8 +182,19 @@ test("signed maintenance receipt rejects tampering and an untrusted key", () => 
 })
 
 test("Supavisor identity requires project ref in its username", () => {
-  const unbound = "postgresql://postgres:masked@fixture.pooler.supabase.com:5432/postgres?schema=public"
+  const unbound = "postgresql://postgres:masked@fixture.pooler.supabase.com:5432/postgres?schema=public&sslmode=require"
   assert.throws(() => canonicalSupabaseDatabaseIdentity([unbound]), /username must bind/)
+})
+
+test("production Supabase identities require explicit verified TLS and reject compatibility mode", () => {
+  for (const url of [
+    direct.replace("&sslmode=require", ""),
+    direct.replace("sslmode=require", "sslmode=disable"),
+    direct.replace("sslmode=require", "sslmode=require&sslmode=verify-full"),
+    direct.replace("sslmode=require", "sslmode=require&uselibpqcompat=true"),
+  ]) {
+    assert.throws(() => canonicalSupabaseDatabaseIdentity([url]))
+  }
 })
 
 test("signed principal policy names independent expected roles", async () => {
@@ -211,7 +222,7 @@ test("signed principal policy names independent expected roles", async () => {
 })
 
 test("rejects direct and pooler URLs bound to different projects", () => {
-  const other = "postgresql://postgres.testprojectfixture99:masked@fixture.pooler.supabase.com:5432/postgres?schema=public"
+  const other = "postgresql://postgres.testprojectfixture99:masked@fixture.pooler.supabase.com:5432/postgres?schema=public&sslmode=require"
   assert.throws(() => canonicalSupabaseDatabaseIdentity([direct, other]), /different Supabase projects/)
 })
 
