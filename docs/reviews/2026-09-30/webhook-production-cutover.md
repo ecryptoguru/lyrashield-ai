@@ -2,19 +2,17 @@
 
 The ordinary production workflow now refuses to migrate or change production configuration unless every active app/scanner revision and the running worker implement `durable-claims/2`, the claim migration is completed, and the worker's configured rollback image equals its verified running image. The guard runs in the protected `azure-production` job and has no confirmation-string bypass. All active revisions are checked, including zero-traffic revisions reachable through revision URLs.
 
-**The first transition requires a separately authorized maintenance release.** Current production has legacy writers; ordinary automatic release remains blocked. The protected `Deploy to Azure` dispatch now accepts `webhook_claims_cutover: true` only with the exact current main SHA and `confirmation: webhook-cutover:<source_sha>`. The runtime job retains the `azure-production` environment and the existing global Azure deployment concurrency group. Automatic CI releases cannot choose this mode. Manual production deployment or disabling the guard is not an approved bootstrap mechanism. Founder approval must authorize the app/worker maintenance window. The selected mode does not replace infrastructure readback proof.
+**The first transition uses the maintenance release.** Current production has legacy writers; ordinary automatic release remains blocked. The protected `Deploy to Azure` dispatch now accepts `webhook_claims_cutover: true` only with the exact current main SHA and `confirmation: webhook-cutover:<source_sha>`. The runtime job retains the `azure-production` environment and the existing global Azure deployment concurrency group. Automatic CI releases cannot choose this mode. Manual production deployment or disabling the guard is not an approved bootstrap mechanism. Founder approval must authorize the app/worker maintenance window. The selected mode does not replace infrastructure readback proof.
 
-Before dispatch, configure the `azure-production` GitHub Environment secrets `WEBHOOK_LEGACY_TIMEZONE_REVIEW_PUBLIC_KEY_PEM` and `WEBHOOK_LEGACY_TIMEZONE_REVIEW_RECEIPT`. The deployment validates the detached Ed25519 signature, current source SHA, review age (30 days), UTC assertion and a SHA-256 logical database identity before Azure login or any maintenance claim. The receipt must refer to the evidence used to establish how pre-cutover timestamp values were written; code and a fresh migration do not establish that historical fact. The migration database URL is read only to calculate its host/database/schema identity and is never printed.
-
-Keep the Ed25519 private key in the operator's approved signing store, outside the repository. Configure only its PEM public key in the protected Environment. Compute the migration target identity without printing its connection string:
-
-```bash
-MIGRATION_DATABASE_URL="$DATABASE_DIRECT_URL" node .github/scripts/migration-database-identity.mjs
-```
-
-For the exact reviewed main SHA, build the payload in this property order: `schemaVersion` (`webhook-timezone-review/v1`), `sourceSha`, `legacyTimezone` (`UTC`), `reviewedAt` (ISO-8601 with timezone), `evidenceRef` (an HTTPS or GitHub Actions run reference), `reviewer` (operator identifier) and `databaseIdentitySha256` (the command output above). Sign the UTF-8 bytes of `JSON.stringify(payload)` using Ed25519 and store the base64 signature as the `signature` property. Put the resulting JSON in `WEBHOOK_LEGACY_TIMEZONE_REVIEW_RECEIPT`. The receipt and key are protected Environment configuration; do not commit them or paste the private key into a workflow input. The validator emits only a generic pass/fail and never prints the receipt or database URL. A changed source, database, key, timestamp interpretation or receipt requires a newly signed receipt.
-
-Example for the authorized operator, after merge and review of the exact main SHA:
+The first transition uses the same controlled maintenance workflow, without
+separate signing keys or historical review receipts. It checks the actual
+legacy scheduling columns after every writer is stopped. If either
+`nextAttemptAt` or `leaseExpiresAt` contains a value, migration stops. Complete
+or resolve existing work through its normal receipt-aware path; do not clear
+schedules to make the check pass. If both values are NULL everywhere, UTC
+conversion preserves NULLs without a historical timezone assumption. A partial
+UTC schema also stops the release; an already installed complete UTC schema
+supports same-run recovery without checking the compatibility shadow columns.
 
 ```bash
 gh workflow run deploy-azure.yml --ref main \
@@ -23,13 +21,14 @@ gh workflow run deploy-azure.yml --ref main \
   -f confirmation="webhook-cutover:$REVIEWED_MAIN_SHA"
 ```
 
-This command dispatches a production maintenance window; it was not executed during source preparation. The first dispatch independently confirms current main. A foreign or concurrent owner receipt fails closed rather than being silently reclaimed.
+## Release checks
 
-## Automatic release preflight and exact image proof
-
-When Azure production resources are configured, automatic and normal manual releases run the read-only webhook compatibility check before any image build or registry push. The first-cutover dispatch validates the signed historical UTC receipt and the logical database identity at the same early stage. An early preflight failure leaves the production deployment steps unstarted and avoids publishing images for a known-blocked release. The runtime job repeats its original final compatibility and continuity checks after the build; the early read is a cost-saving preflight, not a replacement for the final check.
-
-Each release worker image is now exercised by digest against disposable PostgreSQL and Redis before the Azure deployment job can start. This is separate from main CI and from tests against another image tag or source SHA. The protected **Verify webhook production prerequisites without deployment** workflow is manually discoverable in GitHub Actions. Run it from the exact current `main` to validate the owner-provided receipt; optionally supply all three worker fields together (product source SHA and engine revision plus `ghcr.io/...@sha256:...`) to rehearse that exact image on disposable services. It has no Azure identity permission and performs no production writes. The workflow does not automatically fail on every main CI run when one-time evidence has not yet been supplied.
+PR CI verifies source and migration contracts. Protected main merges start the
+release workflow directly. Azure builds and verifies the digest-pinned worker
+once, then repeats the final compatibility and continuity checks before live
+promotion. The exact worker image is tested on disposable PostgreSQL and Redis
+without production credentials. Cloudflare releases independently, and
+Lighthouse measurements run outside the deployment path.
 
 ## Implemented maintenance workflow
 

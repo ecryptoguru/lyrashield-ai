@@ -76,6 +76,12 @@ assert_receipt() {
 assert_empty() {
   oneshot 'const {getSystemPrisma}=await import("@lyrashield/db"); const {getScanQueue,getWebhookTrackRetryQueue,closeRedis}=await import("@lyrashield/integrations"); const prisma=getSystemPrisma(); const scan=getScanQueue(); const webhook=getWebhookTrackRetryQueue(); try { const [count,a,b]=await Promise.all([prisma.scan.count({where:{status:{in:["QUEUED","PREFLIGHT","RUNNING","VERIFYING","REQUIRES_APPROVAL"]}}}),scan.getJobCounts("wait","active","delayed","prioritized"),webhook.getJobCounts("wait","active","delayed","prioritized")]); if(count!==0 || Object.values(a).some(Boolean) || Object.values(b).some(Boolean)) throw new Error("Cutover requires drained scans and retry queue"); } finally { await Promise.allSettled([prisma.$disconnect(),scan.close(),webhook.close(),closeRedis()]); }'
 }
+# Once all writers are stopped, require legacy scheduling values to be empty.
+# The additive UTC migration then preserves NULLs without guessing historical
+# timezone settings. A partial schema or remaining scheduled work fails closed.
+assert_legacy_schedule_drained() {
+  oneshot 'const {getSystemPrisma}=await import("@lyrashield/db"); const prisma=getSystemPrisma(); try { const [schema]=await prisma.$queryRaw`SELECT count(*)::integer AS count FROM information_schema.columns WHERE table_schema=current_schema() AND table_name=${"WebhookEventTrack"} AND column_name IN (${"nextAttemptAtUtc"},${"leaseExpiresAtUtc"})`; if(schema.count!==2) { if(schema.count!==0) throw new Error("Partial webhook UTC schema; inspect migration state"); const [legacy]=await prisma.$queryRaw`SELECT count(*)::integer AS count FROM "WebhookEventTrack" WHERE "nextAttemptAt" IS NOT NULL OR "leaseExpiresAt" IS NOT NULL`; if(legacy.count!==0) throw new Error("Legacy webhook scheduling values remain; drain existing work before the first UTC migration"); } } finally { await prisma.$disconnect(); }'
+}
 assert_stopped() {
   [ "$(systemctl is-active "$service" || true)" = inactive ] || exit 1
   [ "$(systemctl is-enabled "$service" || true)" = disabled ] || exit 1
@@ -175,6 +181,7 @@ verify)
   assert_receipt
   assert_stopped
   assert_empty
+  assert_legacy_schedule_drained
   echo 'WEBHOOK_QUIESCENCE_VERIFIED'
   ;;
 resume)

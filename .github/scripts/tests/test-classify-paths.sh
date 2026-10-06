@@ -126,7 +126,6 @@ for path in \
   .github/scripts/azure_secret_set.sh \
   .github/scripts/validate-worker-provenance.sh \
   .github/scripts/migration-database-identity.mjs \
-  .github/scripts/verify-webhook-timezone-evidence.mjs \
   .github/scripts/verify-webhook-cutover.mjs; do
   out=$(run_classify "$path")
   assert_eq "$path: Azure deploy" "true" "$(get_field "$out" "azure-deploy")"
@@ -255,7 +254,6 @@ for path in \
   .github/scripts/azure_secret_set.sh \
   .github/scripts/validate-worker-provenance.sh \
   .github/scripts/migration-database-identity.mjs \
-  .github/scripts/verify-webhook-timezone-evidence.mjs \
   .github/scripts/verify-webhook-cutover.mjs; do
   out=$(run_classify "$path")
   assert_eq "$path: Azure deploy" "true" "$(get_field "$out" "azure-deploy")"

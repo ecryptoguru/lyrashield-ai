@@ -1,8 +1,6 @@
 name: CI
 
 on:
-  push:
-    branches: [main]
   pull_request:
     branches: [main]
 
@@ -11,7 +9,7 @@ permissions:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: true
 
 jobs:
   security:
@@ -79,7 +77,6 @@ jobs:
       shared: ${{ steps.classify.outputs.shared }}
       marketing-deploy: ${{ steps.classify.outputs.marketing-deploy }}
       azure-deploy: ${{ steps.classify.outputs.azure-deploy }}
-      current-main: ${{ steps.classify.outputs.current-main }}
     steps:
       - name: Configure git default branch
         run: git config --global init.defaultBranch main
@@ -128,11 +125,6 @@ jobs:
           CI_HEAD_SHA: ${{ github.event.after || github.sha }}
         run: |
           set -euo pipefail
-          if [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref }}" = "refs/heads/main" ]; then
-            HEAD_SHA="$CI_HEAD_SHA" bash .github/scripts/classify-main-change-gap.sh
-            exit 0
-          fi
-
           # Pull requests retain their event base..head diff.
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             BASE="${{ github.event.pull_request.base.sha }}"
@@ -156,24 +148,6 @@ jobs:
           # so it is testable independently of the workflow runtime.
           # See .github/scripts/tests/test-classify-paths.sh.
           printf '%s\n' "$files" | bash .github/scripts/classify-paths.sh
-
-      - name: Save production release routing decision
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        shell: bash
-        run: |
-          mkdir -p ci-routing
-          printf '%s\n' '${{ steps.classify.outputs.azure-deploy }}' > ci-routing/azure-deploy
-
-      # workflow_run events cannot read job outputs. This artifact carries the
-      # current-main Azure route derived from the last successful deployment.
-      - name: Upload production release routing decision
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: ci-routing
-          path: ci-routing/azure-deploy
-          if-no-files-found: error
-          retention-days: 1
 
   lint-and-typecheck:
     name: Lint, Typecheck, Test & Build
@@ -784,259 +758,6 @@ jobs:
   # distinct from the production scopes so PR layers cannot poison release
   # cache entries. Build args are dummy values; production URLs/keys come only
   # from the deploy workflow.
-  container-build:
-    name: Container image build (no push)
-    needs: changes
-    if: needs.changes.outputs.azure-deploy == 'true'
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-    steps:
-      - name: Checkout app
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-
-      # Same immutable engine pin the release build consumes; read from
-      # deploy-azure.yml so the PR gate cannot drift from production.
-      - name: Read pinned engine revision
-        id: engine
-        shell: bash
-        run: |
-          revision="$(sed -nE 's/^  ENGINE_REVISION: ([0-9a-f]{40})$/\1/p' .github/workflows/deploy-azure.yml)"
-          if ! [[ "$revision" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "::error::deploy-azure.yml must contain one immutable ENGINE_REVISION"
-            exit 1
-          fi
-          echo "revision=$revision" >> "$GITHUB_OUTPUT"
-
-      - name: Checkout pinned engine
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          repository: ${{ github.repository_owner }}/lyrashield-engine
-          ref: ${{ steps.engine.outputs.revision }}
-          fetch-depth: 0
-          path: lyrashield-engine
-          token: ${{ secrets.GITHUB_TOKEN }}
-          persist-credentials: false
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-
-      - name: Build web image (no push)
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
-        with:
-          context: .
-          target: runner
-          push: false
-          build-args: |
-            BUILD_APP_URL=https://app.example.invalid
-            BUILD_PUBLIC_APP_URL=https://scanner.example.invalid
-            BUILD_PUBLIC_MARKETING_URL=https://marketing.example.invalid
-            BUILD_TRUSTED_PROXY_IP_HEADER=x-forwarded-for
-            BUILD_LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=1
-            BUILD_NEXT_PUBLIC_POSTHOG_KEY=
-            BUILD_NEXT_PUBLIC_SENTRY_DSN=
-            BUILD_NEXT_PUBLIC_SENTRY_RELEASE=pr-gate-${{ github.sha }}
-          cache-from: type=gha,scope=container-build-web
-          cache-to: type=gha,mode=max,scope=container-build-web
-
-      - name: Build worker image (no push)
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
-        with:
-          context: .
-          target: worker
-          push: false
-          build-contexts: |
-            engine=lyrashield-engine
-          build-args: |
-            BUILD_TRUSTED_PROXY_IP_HEADER=x-forwarded-for
-          cache-from: type=gha,scope=container-build-worker
-          cache-to: type=gha,mode=max,scope=container-build-worker
-
-      - name: Build egress-proxy image (no push)
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
-        with:
-          context: .
-          target: egress-proxy
-          push: false
-          cache-from: type=gha,scope=container-build-egress-proxy
-          cache-to: type=gha,mode=max,scope=container-build-egress-proxy
-
-  deploy-marketing:
-    name: Deploy Marketing to Cloudflare
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.changes.outputs.current-main == 'true' && needs.changes.outputs.marketing-deploy == 'true'
-    needs: [security, lint-and-typecheck, changes]
-    runs-on: ubuntu-latest
-    environment:
-      name: cloudflare-production
-      url: https://lyrashieldai.com
-    steps:
-      # Routing compares the current source with Cloudflare's exact homepage
-      # revision marker, so a later docs-only push still carries any earlier
-      # undeployed marketing or shared changes into CI and deployment routing.
-      # App-only changes do not affect the marketing Worker. Unknown production
-      # baselines fail closed to full validation and both release routes.
-      # The smoke step below is what actually proves the deploy landed.
-      - name: Configure git default branch
-        run: git config --global init.defaultBranch main
-
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Setup pnpm
-        uses: pnpm/setup@c9883cc79df532ad1a7b81bf9ab944ceb090d65c # v2.0.0
-        with:
-          # Every workflow runs pnpm install as an explicit step; the
-          # successor action's install default is true, so opt out.
-          install: false
-
-      - name: Setup Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 24
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Build production marketing Worker
-        env:
-          PUBLIC_POSTHOG_KEY: ${{ vars.POSTHOG_PUBLIC_PROJECT_KEY }}
-          LYRASHIELD_MARKETING_REVISION: ${{ github.sha }}
-        run: |
-          if [[ ! "$PUBLIC_POSTHOG_KEY" =~ ^phc_[A-Za-z0-9]+$ ]]; then
-            echo "::error::POSTHOG_PUBLIC_PROJECT_KEY is missing or malformed."
-            exit 1
-          fi
-          pnpm --filter @lyrashield/marketing build
-
-      - name: Verify generated marketing revision
-        env:
-          EXPECTED_REVISION: ${{ github.sha }}
-        run: |
-          node --input-type=module <<'NODE'
-          import { readFileSync } from "node:fs"
-
-          const expected = process.env.EXPECTED_REVISION
-          if (!/^[0-9a-f]{40}$/.test(expected ?? "")) {
-            throw new Error("EXPECTED_REVISION must be a full Git SHA")
-          }
-
-          const html = readFileSync("apps/marketing/dist/client/index.html", "utf8")
-          const marker = `<meta name="lyrashield-build-revision" content="${expected}">`
-          if (!html.includes(marker)) {
-            throw new Error("Generated marketing homepage is missing the exact build revision")
-          }
-
-          const worker = JSON.parse(
-            readFileSync("apps/marketing/dist/server/wrangler.json", "utf8")
-          )
-          if (worker.assets?.directory !== "../client") {
-            throw new Error("Generated Cloudflare Worker does not serve the verified client artifact")
-          }
-          console.log(`Generated marketing artifact serves revision ${expected}`)
-          NODE
-
-      - name: Apply D1 migrations and deploy
-        uses: cloudflare/wrangler-action@953926a2e2182532811c01a25e53647d93bf07c0 # v4.1.3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          workingDirectory: apps/marketing
-          # VULN-H-002: no wranglerVersion — the action uses the wrangler
-          # resolved by pnpm-lock.yaml (4.125.0), which the frozen lockfile
-          # and minimumReleaseAge already vet. A floating major would hand
-          # the production Cloudflare token to whatever 4.x is newest.
-          command: |
-            d1 migrations apply lyrashield-marketing-waitlist --remote --config dist/server/wrangler.json
-            deploy --config dist/server/wrangler.json
-
-      - name: Smoke production routes
-        shell: bash
-        run: |
-          for path in / /methodology /tools /robots.txt /sitemap-index.xml /llms.txt; do
-            curl --fail --silent --show-error --retry 5 --retry-all-errors \
-              "https://lyrashieldai.com${path}" > /dev/null
-          done
-          curl --silent --show-error --retry 5 --retry-all-errors \
-            "https://lyrashieldai.com/api/waitlist/position?code=INVALID" \
-            --output /dev/null --write-out '%{http_code}' | grep --quiet '^404$'
-          curl --silent --show-error --head "https://www.lyrashieldai.com/tools?source=ci" \
-            | grep --ignore-case --quiet '^location: https://lyrashieldai.com/tools?source=ci'
-
-      - name: Assert the live homepage is the build we just shipped
-        shell: bash
-        run: |
-          # A 200 cannot detect a stale deploy — the previous smoke step passed happily for
-          # hours against an old build. These assert markers that only exist in the current
-          # homepage, so a skipped, failed, or cache-pinned deploy fails the run instead.
-          #
-          # If you intentionally change or remove either element, update the marker here in
-          # the same commit. A failure means the live site is not serving this commit.
-          #
-          # Retried with backoff: a wrangler deploy that itself succeeds can take a short
-          # window to propagate across Cloudflare's edge, and the very first check here once
-          # failed one second after a deploy that had already reported success. A
-          # cache-busting query param avoids being served a stale edge-cached response during
-          # that window.
-          markers=(
-            'data-cta-id="premium-hero-lite-check"'
-            'data-cta-id="story-report-create-account"'
-          )
-
-          for attempt in $(seq 1 8); do
-            homepage="$(curl --fail --silent --show-error --retry 5 --retry-all-errors \
-              -H 'Cache-Control: no-cache' \
-              "https://lyrashieldai.com/?cachebust=${GITHUB_SHA}-${attempt}")"
-            live_revision="$(printf '%s' "$homepage" | sed -n 's/.*<meta name="lyrashield-build-revision" content="\([0-9a-f]\{40\}\)".*/\1/p' | head -n 1)"
-
-            if [ "$live_revision" = "$GITHUB_SHA" ]; then
-              missing=""
-              for marker in "${markers[@]}"; do
-                if ! printf '%s' "$homepage" | grep --quiet --fixed-strings "$marker"; then
-                  missing="$marker"
-                  break
-                fi
-              done
-
-              if [ -z "$missing" ]; then
-                echo "Live homepage serves revision ${GITHUB_SHA} with expected feature markers (attempt ${attempt})."
-                exit 0
-              fi
-            fi
-
-            echo "Attempt ${attempt}: live revision '${live_revision:-missing}', expected '${GITHUB_SHA}', missing marker '${missing:-none}'; retrying in 15s..."
-            sleep 15
-          done
-
-          echo "::error::Live homepage did not serve revision '${GITHUB_SHA}' with all expected markers after 8 attempts."
-          exit 1
-
-      - name: Submit the live sitemap to IndexNow
-        continue-on-error: true
-        shell: bash
-        run: |
-          # Bing's index backs Microsoft Copilot answers, so this is the one
-          # discovery signal that is fully in-repo. The script never exits
-          # non-zero on a network or provider failure; continue-on-error keeps
-          # a discovery hint from ever failing a release.
-          node apps/marketing/scripts/indexnow.mjs --origin https://lyrashieldai.com
-
-      - name: Lighthouse production measurement
-        shell: bash
-        run: node .github/scripts/lighthouse-production.mjs lighthouse-reports
-
-      - name: Upload Lighthouse reports
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: lighthouse-reports
-          path: lighthouse-reports/
-          if-no-files-found: ignore
-          retention-days: 14
-
   desktop-rust:
     name: Desktop Rust (cargo)
     needs: [changes]

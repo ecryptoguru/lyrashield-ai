@@ -1,86 +1,64 @@
 name: Release production
 
 on:
-  workflow_run:
-    workflows: [CI]
+  push:
     branches: [main]
-    types: [completed]
 
 permissions:
-  actions: read
   contents: read
-  packages: write
 
+# Protected main already requires the three PR checks with an up-to-date base.
+# Deploy the exact merge once; do not repeat the PR test/build pipeline.
 concurrency:
-  group: release-production-${{ github.event.workflow_run.head_sha }}
+  group: release-production-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
   routing:
-    name: Read CI release routing decision
-    if: github.event.workflow_run.conclusion == 'success'
+    name: Route the current merged source
     runs-on: ubuntu-latest
-    # This job only downloads the CI routing artifact and reads the main ref;
-    # registry push rights stay with the reusable deploy job that needs them.
     permissions:
       actions: read
       contents: read
+      deployments: read
     outputs:
-      azure-deploy: ${{ steps.routing.outputs.azure-deploy }}
-      current-main: ${{ steps.current-main.outputs.current }}
+      azure-deploy: ${{ steps.classify.outputs.azure-deploy }}
+      marketing-deploy: ${{ steps.classify.outputs.marketing-deploy }}
+      current-main: ${{ steps.classify.outputs.current-main }}
     steps:
-      - name: Download CI routing decision
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - name: Checkout merged source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          name: ci-routing
-          path: ci-routing
-          run-id: ${{ github.event.workflow_run.id }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
 
-      - name: Validate CI routing decision
-        id: routing
-        shell: bash
-        run: |
-          set -euo pipefail
-          decision="$(tr -d '[:space:]' < ci-routing/azure-deploy)"
-          case "$decision" in
-            true|false) ;;
-            *) echo "::error::Invalid CI Azure release routing decision."; exit 1 ;;
-          esac
-          echo "azure-deploy=$decision" >> "$GITHUB_OUTPUT"
-          if [ "$decision" = false ]; then
-            echo "No Azure runtime changes detected; skipping production release." >> "$GITHUB_STEP_SUMMARY"
-          fi
-
-      - name: Confirm release source is current main
-        id: current-main
+      - name: Classify changes since successful production releases
+        id: classify
         env:
           GH_TOKEN: ${{ github.token }}
-          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          latest_main="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq .object.sha)"
-          if ! [[ "$HEAD_SHA" =~ ^[0-9a-f]{40}$ && "$latest_main" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "::error::Release source or main reference is not an immutable SHA."
-            exit 1
-          fi
-          if [ "$HEAD_SHA" = "$latest_main" ]; then
-            echo "current=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "current=false" >> "$GITHUB_OUTPUT"
-            echo "Skipping superseded release ${HEAD_SHA}; main is now ${latest_main}." >> "$GITHUB_STEP_SUMMARY"
-          fi
+          HEAD_SHA: ${{ github.sha }}
+        run: bash .github/scripts/classify-main-change-gap.sh
 
   deploy-azure:
     needs: routing
     if: needs.routing.outputs.current-main == 'true' && needs.routing.outputs.azure-deploy == 'true'
     uses: ./.github/workflows/deploy-azure.yml
     with:
-      source_sha: ${{ github.event.workflow_run.head_sha }}
+      source_sha: ${{ github.sha }}
     secrets: inherit
     permissions:
       actions: read
       contents: read
       id-token: write
       packages: write
+
+  deploy-marketing:
+    needs: routing
+    if: needs.routing.outputs.current-main == 'true' && needs.routing.outputs.marketing-deploy == 'true'
+    uses: ./.github/workflows/deploy-marketing.yml
+    with:
+      source_sha: ${{ github.sha }}
+    secrets: inherit
+    permissions:
+      contents: read

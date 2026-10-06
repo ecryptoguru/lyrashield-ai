@@ -1,9 +1,7 @@
 name: Update GitHub Action version
 
 on:
-  workflow_run:
-    workflows: [CI]
-    types: [completed]
+  push:
     branches: [main]
 
 permissions:
@@ -16,7 +14,6 @@ concurrency:
 jobs:
   update-action-version:
     name: Update v2 action tag
-    if: github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     steps:
       - name: Configure git default branch
@@ -29,9 +26,9 @@ jobs:
           ref: main
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Update v2 tag to latest green main
+      - name: Update v2 tag to tested main
         env:
-          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          HEAD_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
@@ -39,7 +36,7 @@ jobs:
           git cat-file -e "${HEAD_SHA}^{commit}"
           git merge-base --is-ancestor "$HEAD_SHA" origin/main
           if [ "$HEAD_SHA" != "$(git rev-parse origin/main)" ]; then
-            echo "Skipping superseded CI source $HEAD_SHA"
+            echo "Skipping superseded release source $HEAD_SHA"
             exit 0
           fi
           if git rev-parse --verify 'refs/tags/v2^{commit}' >/dev/null 2>&1; then
