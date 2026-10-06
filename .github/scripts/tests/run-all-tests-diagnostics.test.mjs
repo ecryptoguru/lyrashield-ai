@@ -77,6 +77,48 @@ test("CI suites that omit core do not try to read its report", () => {
   }
 })
 
+test("CI ops omits only the two already verified native service suites", () => {
+  const dir = mkdtempSync(join(tmpdir(), "lyrashield-ops-dedup-"))
+  try {
+    const node = join(dir, "node")
+    writeFileSync(
+      node,
+      `#!${process.execPath}\nrequire("node:fs").writeFileSync(process.env.OPS_ARGS, JSON.stringify(process.argv.slice(2)))\n`
+    )
+    chmodSync(node, 0o755)
+    const runner = fileURLToPath(new URL("../../../run-all-tests.mjs", import.meta.url))
+    for (const verified of ["0", "1"]) {
+      const argsPath = join(dir, `args-${verified}.json`)
+      const result = spawnSync(process.execPath, [runner], {
+        cwd: fileURLToPath(new URL("../../../", import.meta.url)),
+        env: {
+          ...process.env,
+          LYRASHIELD_TEST_SUITES: "ops",
+          LYRASHIELD_OPS_RUNTIME_ALREADY_VERIFIED: verified,
+          OPS_ARGS: argsPath,
+          PATH: `${dir}:${process.env.PATH}`,
+        },
+        encoding: "utf8",
+      })
+      assert.equal(result.status, 0, result.stderr)
+      const args = JSON.parse(readFileSync(argsPath, "utf8"))
+      if (verified === "0") {
+        assert.deepEqual(args, ["--test", ".github/scripts/tests/*.test.mjs"])
+      } else {
+        assert.ok(args.includes(".github/scripts/tests/webhook-cutover.test.mjs"))
+        assert.ok(args.includes(".github/scripts/tests/lighthouse-production.test.mjs"))
+        assert.ok(args.includes(".github/scripts/tests/webhook-deploy-dispatch.test.mjs"))
+        assert.ok(
+          args.includes(".github/scripts/tests/webhook-cutover-verification.workflow.test.mjs")
+        )
+        assert.ok(args.every((arg) => !/webhook-(catalog|queue)\.runtime\.test\.mjs$/.test(arg)))
+      }
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
 test("requested test suites execute sequentially and report wall time", () => {
   const dir = mkdtempSync(join(tmpdir(), "lyrashield-test-order-"))
   try {

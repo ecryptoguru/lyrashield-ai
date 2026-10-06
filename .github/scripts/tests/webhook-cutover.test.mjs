@@ -582,6 +582,24 @@ for (const scenario of [
   })
 }
 
+test("baseline mismatch exposes fixed boolean predicates without admitting an unknown source", (t) => {
+  const result = fixture(t, "legacy unapproved source")
+  assert.notEqual(result.status, 0)
+  assert.equal(result.githubOutput, "")
+  const line = result.stdout
+    .split("\n")
+    .find((value) => value.startsWith("WEBHOOK_BASELINE_MATCHES="))
+  assert.ok(line)
+  const matches = JSON.parse(line.slice("WEBHOOK_BASELINE_MATCHES=".length))
+  assert.equal(matches.legacyWorkerSource, false)
+  assert.equal(matches.legacyMigrations, true)
+  assert.equal(matches.legacyColumns, true)
+  assert.equal(matches.constraints, true)
+  assert.equal(matches.indexes, true)
+  assert.ok(Object.values(matches).every((value) => typeof value === "boolean"))
+  assert.doesNotMatch(line, /[a-f0-9]{40}|sha256:|postgres:|pending|SYNTHETIC_CREDENTIAL/)
+})
+
 test("ordinary app-only rollout requires explicit topology", (t) => {
   const appOnly = fixture(t, "explicit app-only")
   assert.equal(appOnly.status, 0, appOnly.stderr)

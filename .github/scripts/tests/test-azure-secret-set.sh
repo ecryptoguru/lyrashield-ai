@@ -210,8 +210,13 @@ if (
   # shellcheck disable=SC1090
   source "$helper"
   azure_keyvault_sync_env_group test-vault failure-secret:KV_FAILURE_SENTINEL
-); then
+) 2>"$tmp/keyvault-failure.err"; then
   fail "expected failed Key Vault sync to return non-zero"
+fi
+grep -Fq '::error::Failed to sync Key Vault secret failure-secret.' "$tmp/keyvault-failure.err" || \
+  fail "failed Key Vault sync did not surface its diagnostic"
+if grep -Fq 'failure-path-secret-sentinel' "$tmp/keyvault-failure.err"; then
+  fail "failed Key Vault sync exposed its secret value"
 fi
 failed_secret_file=$(tail -n 1 "$FAKE_FILE_PATHS")
 [ -n "$failed_secret_file" ] || fail "fake Azure CLI did not observe the uploaded secret file"

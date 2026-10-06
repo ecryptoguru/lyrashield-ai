@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process"
-import { readFileSync } from "node:fs"
+import { readFileSync, readdirSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { assertNamedTestsPassed } from "./.github/scripts/assert-named-vitest-tests.mjs"
@@ -31,7 +31,25 @@ const allSuites = [
   },
   // Node 22+ expands the glob natively; no shell needed.
   { name: "motion", command: ["node", "--test", "apps/marketing-motion/tests/*.test.mjs"] },
-  { name: "ops", command: ["node", "--test", ".github/scripts/tests/*.test.mjs"] },
+  {
+    name: "ops",
+    command: [
+      "node",
+      "--test",
+      ...(process.env.LYRASHIELD_OPS_RUNTIME_ALREADY_VERIFIED === "1"
+        ? readdirSync(".github/scripts/tests")
+            .filter(
+              (file) =>
+                file.endsWith(".test.mjs") &&
+                !["webhook-catalog.runtime.test.mjs", "webhook-queue.runtime.test.mjs"].includes(
+                  file
+                )
+            )
+            .sort()
+            .map((file) => `.github/scripts/tests/${file}`)
+        : [".github/scripts/tests/*.test.mjs"]),
+    ],
+  },
 ]
 
 const requestedSuites = [
