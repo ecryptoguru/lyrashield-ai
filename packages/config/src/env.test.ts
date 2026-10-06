@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest"
 import { z } from "zod"
-import { resolveWorkerExecutionProvenanceFrom } from "./env"
+import { resolveWorkerExecutionProvenanceFrom, validateAiResultCacheConfig } from "./env"
 
 // Test the Zod schema directly without importing the module
 // (which calls loadEnv() at import time and would throw)
@@ -10,6 +10,7 @@ const envSchema = z
     DATABASE_DIRECT_URL: z.string().url().optional().or(z.literal("")),
     DATABASE_SYSTEM_URL: z.string().url().optional().or(z.literal("")),
     REDIS_URL: z.string().url().optional().or(z.literal("")),
+    UPSTASH_REDIS_REST_URL: z.string().url().optional().or(z.literal("")),
     BETTER_AUTH_SECRET: z.string().min(32, "BETTER_AUTH_SECRET must be at least 32 characters"),
     BETTER_AUTH_URL: z.string().url("BETTER_AUTH_URL must be a valid URL"),
     GITHUB_CLIENT_ID: z.string().optional().or(z.literal("")),
@@ -29,7 +30,19 @@ const envSchema = z
     LYRASHIELD_MAX_INPUT_TOKENS: z.coerce.number().int().positive().optional(),
     LYRASHIELD_PROMPT_CACHE_EXPLICIT: z.enum(["0", "1"]).optional().default("1"),
     LYRASHIELD_PROMPT_CACHE: z.enum(["0", "1"]).optional().default("1"),
+    LYRASHIELD_PROMPT_CACHE_POLICY: z.enum(["stable", "hybrid", "off"]).optional(),
     LYRASHIELD_PROMPT_CACHE_ROUTING: z.enum(["0", "1"]).optional().default("1"),
+    LYRASHIELD_AI_RESULT_CACHE_MODE: z
+      .enum(["off", "observe", "enforce"])
+      .optional()
+      .default("off"),
+    LYRASHIELD_AI_CACHE_REDIS_URL: z.string().optional().or(z.literal("")),
+    LYRASHIELD_AI_CACHE_KEY_SECRET: z.string().optional().or(z.literal("")),
+    LYRASHIELD_AI_CACHE_PROVIDER_FINGERPRINT: z
+      .string()
+      .regex(/^[a-fA-F0-9]{64}$/)
+      .optional()
+      .or(z.literal("")),
     LYRASHIELD_IMAGE: z.string().optional().or(z.literal("")),
     LYRASHIELD_ENGINE_PATH: z.string().optional().or(z.literal("")),
     LYRASHIELD_EGRESS_PROXY_URL: z.string().url().optional().or(z.literal("")),
@@ -354,7 +367,7 @@ describe("Env Validation Schema", () => {
     })
   })
 
-  it("enables GPT-5.6 prompt cache reads and writes by default", () => {
+  it("enables GPT-6 prompt cache reads and writes by default", () => {
     const parsed = envSchema.parse(validEnv)
     expect(parsed.LYRASHIELD_PROMPT_CACHE_EXPLICIT).toBe("1")
     expect(parsed.LYRASHIELD_PROMPT_CACHE).toBe("1")
@@ -366,6 +379,83 @@ describe("Env Validation Schema", () => {
       envSchema.parse({ ...validEnv, LYRASHIELD_PROMPT_CACHE_ROUTING: "0" })
         .LYRASHIELD_PROMPT_CACHE_ROUTING
     ).toBe("0")
+  })
+
+  it("keeps exact AI-result reuse off by default and validates cache modes", () => {
+    expect(envSchema.parse(validEnv).LYRASHIELD_AI_RESULT_CACHE_MODE).toBe("off")
+    expect(
+      envSchema.parse({ ...validEnv, LYRASHIELD_AI_RESULT_CACHE_MODE: "observe" })
+        .LYRASHIELD_AI_RESULT_CACHE_MODE
+    ).toBe("observe")
+    expect(
+      envSchema.safeParse({ ...validEnv, LYRASHIELD_AI_RESULT_CACHE_MODE: "force" }).success
+    ).toBe(false)
+    expect(
+      envSchema.safeParse({ ...validEnv, LYRASHIELD_AI_CACHE_PROVIDER_FINGERPRINT: "short" })
+        .success
+    ).toBe(false)
+  })
+
+  it("requires a credentialed TLS Redis endpoint and private key when exact reuse is enabled", () => {
+    const base = {
+      mode: "enforce" as const,
+      redisUrl: "rediss://default:token@cache.example:6379",
+      keySecret: "k".repeat(32),
+      providerFingerprint: "a".repeat(64),
+    }
+    expect(validateAiResultCacheConfig(base)).toEqual([])
+    expect(
+      validateAiResultCacheConfig({ ...base, redisUrl: "redis://cache.example:6379" })
+    ).toEqual(
+      expect.arrayContaining([expect.objectContaining({ path: "LYRASHIELD_AI_CACHE_REDIS_URL" })])
+    )
+    expect(validateAiResultCacheConfig({ ...base, keySecret: "short" })).toEqual(
+      expect.arrayContaining([expect.objectContaining({ path: "LYRASHIELD_AI_CACHE_KEY_SECRET" })])
+    )
+    expect(
+      validateAiResultCacheConfig({
+        mode: "off",
+        redisUrl: "rediss://default:token@cache.example:6379",
+      })
+    ).toEqual([])
+  })
+
+  it("requires exact-result Redis to use a host separate from BullMQ and rate limits", () => {
+    const base = {
+      mode: "observe" as const,
+      redisUrl: "rediss://default:token@cache.example:6379",
+      keySecret: "k".repeat(32),
+      providerFingerprint: "a".repeat(64),
+    }
+    expect(
+      validateAiResultCacheConfig({
+        ...base,
+        queueRedisUrl: "rediss://default:q@cache.example:6379",
+      })
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: "LYRASHIELD_AI_CACHE_REDIS_URL",
+          message: expect.stringContaining("BullMQ"),
+        }),
+      ])
+    )
+    expect(
+      validateAiResultCacheConfig({ ...base, rateLimitRestUrl: "https://cache.example" })
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: "LYRASHIELD_AI_CACHE_REDIS_URL",
+          message: expect.stringContaining("rate-limit Redis"),
+        }),
+      ])
+    )
+    expect(
+      validateAiResultCacheConfig({
+        ...base,
+        queueRedisUrl: "rediss://default:q@queue.example:6379",
+      })
+    ).toEqual([])
   })
 })
 

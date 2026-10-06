@@ -168,7 +168,7 @@ describe("Myra production calendar guards", () => {
       MYRA_AZURE_OPENAI_ENDPOINT: "https://example.services.ai.azure.com",
       MYRA_AZURE_OPENAI_API_KEY: "test-key",
     }
-    await expectRejectedFor("MYRA_MODEL", { ...provider, MYRA_MODEL: "gpt-5.6-luna" })
+    await expectRejectedFor("MYRA_MODEL", { ...provider, MYRA_MODEL: "gpt-4o" })
     const mod = await importEnv({ ...provider, MYRA_MODEL: "gpt-6-luna" })
     expect(mod.env.MYRA_MODEL).toBe("gpt-6-luna")
   })

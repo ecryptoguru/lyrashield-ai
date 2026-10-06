@@ -25,6 +25,76 @@ function isLiteralLoopbackHttpUrl(raw: string): boolean {
   }
 }
 
+export function validateAiResultCacheConfig(input: {
+  mode: "off" | "observe" | "enforce"
+  redisUrl?: string
+  keySecret?: string
+  providerFingerprint?: string
+  queueRedisUrl?: string
+  rateLimitRestUrl?: string
+}): Array<{ path: string; message: string }> {
+  const issues: Array<{ path: string; message: string }> = []
+  const redisUrl = input.redisUrl?.trim() ?? ""
+  let validRedisUrl = false
+  let cacheHost = ""
+  if (redisUrl) {
+    try {
+      const parsed = new URL(redisUrl)
+      validRedisUrl =
+        parsed.protocol === "rediss:" &&
+        Boolean(parsed.hostname && parsed.username && parsed.password)
+      cacheHost = parsed.hostname.toLowerCase()
+    } catch {
+      validRedisUrl = false
+    }
+    if (!validRedisUrl) {
+      issues.push({
+        path: "LYRASHIELD_AI_CACHE_REDIS_URL",
+        message: "must be a credentialed TLS Redis URL when configured",
+      })
+    }
+  }
+  if (validRedisUrl && cacheHost) {
+    for (const [url, source] of [
+      [input.queueRedisUrl, "BullMQ"],
+      [input.rateLimitRestUrl, "rate-limit Redis"],
+    ] as const) {
+      if (!url?.trim()) continue
+      try {
+        if (new URL(url).hostname.toLowerCase() === cacheHost) {
+          issues.push({
+            path: "LYRASHIELD_AI_CACHE_REDIS_URL",
+            message: `must use a dedicated Redis host distinct from ${source}`,
+          })
+        }
+      } catch {
+        // The owning environment schema reports malformed queue/rate-limit URLs.
+      }
+    }
+  }
+  if (input.mode !== "off") {
+    if (!redisUrl || !validRedisUrl) {
+      issues.push({
+        path: "LYRASHIELD_AI_CACHE_REDIS_URL",
+        message: "is required as a credentialed TLS Redis URL when exact result reuse is enabled",
+      })
+    }
+    if (Buffer.byteLength(input.keySecret ?? "", "utf8") < 32) {
+      issues.push({
+        path: "LYRASHIELD_AI_CACHE_KEY_SECRET",
+        message: "must contain at least 32 bytes when exact result reuse is enabled",
+      })
+    }
+    if (!/^[a-fA-F0-9]{64}$/.test(input.providerFingerprint ?? "")) {
+      issues.push({
+        path: "LYRASHIELD_AI_CACHE_PROVIDER_FINGERPRINT",
+        message: "must be a SHA-256 fingerprint when exact result reuse is enabled",
+      })
+    }
+  }
+  return issues
+}
+
 const envSchema = z
   .object({
     // Database
@@ -136,10 +206,24 @@ const envSchema = z
     // GPT-6 explicit cache breakpoints. The engine ignores this for unsupported models.
     LYRASHIELD_PROMPT_CACHE_EXPLICIT: z.enum(["0", "1"]).optional().default("1"),
     LYRASHIELD_PROMPT_CACHE: z.enum(["0", "1"]).optional().default("1"),
+    LYRASHIELD_PROMPT_CACHE_POLICY: z.enum(["stable", "hybrid", "off"]).optional(),
     // GPT-6 prompt-cache routing. The LyraShield worker enables it by default
     // for the admitted GPT-6 deployments; set "0" to turn it off after a
     // provider smoke scan shows the deployment does not honor the routing key.
     LYRASHIELD_PROMPT_CACHE_ROUTING: z.enum(["0", "1"]).optional().default("1"),
+    // Exact triage-result reuse is an optional application cache. It uses a
+    // dedicated TLS Redis endpoint and remains off unless an operator enables it.
+    LYRASHIELD_AI_RESULT_CACHE_MODE: z
+      .enum(["off", "observe", "enforce"])
+      .optional()
+      .default("off"),
+    LYRASHIELD_AI_CACHE_REDIS_URL: z.string().optional().or(z.literal("")),
+    LYRASHIELD_AI_CACHE_KEY_SECRET: z.string().optional().or(z.literal("")),
+    LYRASHIELD_AI_CACHE_PROVIDER_FINGERPRINT: z
+      .string()
+      .regex(/^[a-fA-F0-9]{64}$/)
+      .optional()
+      .or(z.literal("")),
     LYRASHIELD_IMAGE: z.string().optional().or(z.literal("")),
     LYRASHIELD_ENGINE_PATH: z.string().optional().or(z.literal("")),
     LYRASHIELD_RUNTIME_BACKEND: z.enum(["docker"]).optional().or(z.literal("")),
@@ -657,6 +741,18 @@ const envSchema = z
         message:
           "LYRASHIELD_AUTH_ASSESSMENT_ALLOWLIST must name at least one valid workspaceId or workspaceId:targetId entry when the authenticated assessment beta is enabled",
       })
+    }
+  })
+  .superRefine((val, ctx) => {
+    for (const issue of validateAiResultCacheConfig({
+      mode: val.LYRASHIELD_AI_RESULT_CACHE_MODE,
+      redisUrl: val.LYRASHIELD_AI_CACHE_REDIS_URL,
+      keySecret: val.LYRASHIELD_AI_CACHE_KEY_SECRET,
+      providerFingerprint: val.LYRASHIELD_AI_CACHE_PROVIDER_FINGERPRINT,
+      queueRedisUrl: val.REDIS_URL,
+      rateLimitRestUrl: val.UPSTASH_REDIS_REST_URL,
+    })) {
+      ctx.addIssue({ code: "custom", path: [issue.path], message: issue.message })
     }
   })
   .superRefine((val, ctx) => {

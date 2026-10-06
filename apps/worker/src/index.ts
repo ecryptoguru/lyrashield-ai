@@ -6,6 +6,7 @@ import { logger } from "@lyrashield/logger"
 import { env, resolveWorkerExecutionProvenance } from "@lyrashield/config"
 import { resolveDbPoolMax } from "@lyrashield/db"
 import {
+  closeAiResultCacheRedis,
   registerScanWorker,
   unregisterScanWorker,
   SCAN_WORKER_HEARTBEAT_MS,
@@ -336,6 +337,8 @@ async function shutdown(signal: string, exitCode = 0): Promise<void> {
       error: error instanceof Error ? error.message : String(error),
     })
   })
+
+  await closeAiResultCacheRedis()
 
   process.exit(forcedExit ? 1 : exitCode)
 }

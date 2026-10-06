@@ -44,7 +44,10 @@ test("Azure caller passes reusable-workflow inputs through supported contexts", 
 
   const reusableInputs = deploy.slice(inputsStart, inputsEnd)
   assert.match(reusableInputs, /source_sha: \$\{\{ inputs\.source_sha \|\| github\.sha \}\}/)
-  assert.match(reusableInputs, /engine_revision: \$\{\{ needs\.build\.outputs\.engine_revision \}\}/)
+  assert.match(
+    reusableInputs,
+    /engine_revision: \$\{\{ needs\.build\.outputs\.engine_revision \}\}/
+  )
   assert.doesNotMatch(reusableInputs, /\$\{\{\s*env\./)
   assert.match(caller, /engine_revision: \$\{\{ steps\.meta\.outputs\.engine_revision \}\}/)
   assert.match(caller, /echo "engine_revision=\$\{\{ env\.ENGINE_REVISION \}\}"/)
@@ -105,9 +108,13 @@ fi
 `,
     { mode: 0o700 }
   )
-  writeFileSync(path.join(bin, "curl"), '#!/usr/bin/env bash\nprintf "curl\\n" >> "$FAKE_AZ_CALLS"\n', {
-    mode: 0o700,
-  })
+  writeFileSync(
+    path.join(bin, "curl"),
+    '#!/usr/bin/env bash\nprintf "curl\\n" >> "$FAKE_AZ_CALLS"\n',
+    {
+      mode: 0o700,
+    }
+  )
   writeFileSync(path.join(bin, "sleep"), "#!/usr/bin/env bash\nexit 0\n", { mode: 0o700 })
   for (const name of ["az", "curl", "sleep"]) chmodSync(path.join(bin, name), 0o700)
   const script = `
@@ -145,28 +152,25 @@ ca_deactivate_superseded app app current-r rollback-r rg
     if (parts[1] === "ingress") return `containerapp ingress ${parts[2]} ${parts[3]}`
     return `containerapp ${parts[1]}`
   }
-  assert.deepEqual(
-    commands.map(operation).filter(Boolean),
-    [
-      "containerapp show",
-      "containerapp revision show",
-      "rest get",
-      "rest patch",
-      "rest get",
-      "containerapp ingress traffic set",
-      "containerapp revision activate",
-      "containerapp ingress traffic set",
-      "containerapp ingress traffic show",
-      "containerapp revision show",
-      "containerapp revision deactivate",
-      "containerapp ingress traffic show",
-      "containerapp ingress traffic show",
-      "containerapp revision list",
-      "containerapp ingress traffic show",
-      "containerapp revision deactivate",
-      "containerapp revision list",
-    ]
-  )
+  assert.deepEqual(commands.map(operation).filter(Boolean), [
+    "containerapp show",
+    "containerapp revision show",
+    "rest get",
+    "rest patch",
+    "rest get",
+    "containerapp ingress traffic set",
+    "containerapp revision activate",
+    "containerapp ingress traffic set",
+    "containerapp ingress traffic show",
+    "containerapp revision show",
+    "containerapp revision deactivate",
+    "containerapp ingress traffic show",
+    "containerapp ingress traffic show",
+    "containerapp revision list",
+    "containerapp ingress traffic show",
+    "containerapp revision deactivate",
+    "containerapp revision list",
+  ])
   assert.match(readFileSync(calls, "utf8"), /patch-body:.*clientCertificateMode.*Require/)
   assert.equal(readFileSync(mode, "utf8").trim(), "Require")
 
@@ -200,9 +204,15 @@ test("deployment step order, recovery conditions and app/scanner env key sets st
   ]
   const positions = orderedSteps.map((name) => runtime.indexOf(`      - name: ${name}\n`))
   assert.ok(positions.every((position) => position >= 0))
-  assert.deepEqual(positions, [...positions].sort((a, b) => a - b))
+  assert.deepEqual(
+    positions,
+    [...positions].sort((a, b) => a - b)
+  )
 
-  assert.equal(normalizedIf("Deactivate superseded Container App revisions"), "steps.smoke-public.outcome == 'success'")
+  assert.equal(
+    normalizedIf("Deactivate superseded Container App revisions"),
+    "steps.smoke-public.outcome == 'success'"
+  )
   assert.equal(
     normalizedIf("Roll back production traffic on health failure"),
     "inputs.webhook_claims_cutover != true && failure() && (steps.promote.outcome == 'failure' || steps.smoke-public.outcome == 'failure' || steps.worker-vm.outcome == 'failure')"
@@ -252,28 +262,80 @@ test("deployment step order, recovery conditions and app/scanner env key sets st
     "MYRA_AZURE_OPENAI_DEPLOYMENT",
   ])
   assert.deepEqual(envKeys(app, "--set-env-vars"), [
-    "NEXT_PUBLIC_APP_URL", "NEXT_PUBLIC_MARKETING_URL", "BETTER_AUTH_URL", "PLATFORM_ADMIN_EMAILS",
-    "IP_HASH_SALT", "LYRASHIELD_REQUIRE_EMAIL_VERIFICATION", "LYRASHIELD_PRODUCT_REVISION",
-    "CLOUDFLARE_ORIGIN_MTLS", "CLOUDFLARE_AOP_CERT_SHA256", "DEPLOY_PROBE_CERT_SHA256",
-    "POLAR_ENVIRONMENT", "POLAR_ACCESS_TOKEN", "POLAR_WEBHOOK_SECRET", "POLAR_PRODUCT_IDS",
-    "POLAR_LOCAL_PRODUCT_IDS", "POLAR_BILLING_ADMISSION", "POLAR_LOCAL_BILLING_ADMISSION",
-    "RAZORPAY_KEY_ID", "RAZORPAY_KEY_SECRET", "RAZORPAY_WEBHOOK_SECRET", "RAZORPAY_PLAN_IDS",
-    "RAZORPAY_BILLING_ADMISSION", "RAZORPAY_LOCAL_BILLING_ADMISSION", "BILLING_CANARY_WORKSPACE_IDS",
-    "REDIS_URL", "UPSTASH_REDIS_REST_URL", "UPSTASH_REDIS_REST_TOKEN", "LYRASHIELD_EVIDENCE_KEK",
-    "LYRASHIELD_EVIDENCE_KEK_ACTIVE_REF", "LYRASHIELD_EVIDENCE_KEK_KEYRING", "S3_ENDPOINT", "S3_BUCKET",
-    "S3_ACCESS_KEY", "S3_SECRET_KEY", "S3_REGION", "GITHUB_APP_ID", "GITHUB_APP_SLUG",
-    "GITHUB_APP_PRIVATE_KEY", "GITHUB_WEBHOOK_SECRET", "MYRA_PUBLIC_ENABLED", "MYRA_DASHBOARD_ENABLED",
-    "MYRA_OPERATOR_ENABLED", "MYRA_WRITES_ENABLED", "MYRA_PUBLIC_BOOKING_ENABLED", "MYRA_GENERATION_ENABLED",
-    "MYRA_PROVIDER", "MYRA_CALENDAR_PROVIDER", "MYRA_AZURE_OPENAI_ENDPOINT", "MYRA_MODEL",
-    "MYRA_MONTHLY_BUDGET_USD", "MYRA_GOOGLE_CLIENT_ID", "MYRA_GOOGLE_CALENDAR_ID", "MYRA_SUPPORT_NOTIFY_EMAIL",
+    "NEXT_PUBLIC_APP_URL",
+    "NEXT_PUBLIC_MARKETING_URL",
+    "BETTER_AUTH_URL",
+    "PLATFORM_ADMIN_EMAILS",
+    "IP_HASH_SALT",
+    "LYRASHIELD_REQUIRE_EMAIL_VERIFICATION",
+    "LYRASHIELD_PRODUCT_REVISION",
+    "CLOUDFLARE_ORIGIN_MTLS",
+    "CLOUDFLARE_AOP_CERT_SHA256",
+    "DEPLOY_PROBE_CERT_SHA256",
+    "POLAR_ENVIRONMENT",
+    "POLAR_ACCESS_TOKEN",
+    "POLAR_WEBHOOK_SECRET",
+    "POLAR_PRODUCT_IDS",
+    "POLAR_LOCAL_PRODUCT_IDS",
+    "POLAR_BILLING_ADMISSION",
+    "POLAR_LOCAL_BILLING_ADMISSION",
+    "RAZORPAY_KEY_ID",
+    "RAZORPAY_KEY_SECRET",
+    "RAZORPAY_WEBHOOK_SECRET",
+    "RAZORPAY_PLAN_IDS",
+    "RAZORPAY_BILLING_ADMISSION",
+    "RAZORPAY_LOCAL_BILLING_ADMISSION",
+    "BILLING_CANARY_WORKSPACE_IDS",
+    "REDIS_URL",
+    "UPSTASH_REDIS_REST_URL",
+    "UPSTASH_REDIS_REST_TOKEN",
+    "LYRASHIELD_EVIDENCE_KEK",
+    "LYRASHIELD_EVIDENCE_KEK_ACTIVE_REF",
+    "LYRASHIELD_EVIDENCE_KEK_KEYRING",
+    "S3_ENDPOINT",
+    "S3_BUCKET",
+    "S3_ACCESS_KEY",
+    "S3_SECRET_KEY",
+    "S3_REGION",
+    "GITHUB_APP_ID",
+    "GITHUB_APP_SLUG",
+    "GITHUB_APP_PRIVATE_KEY",
+    "GITHUB_WEBHOOK_SECRET",
+    "MYRA_PUBLIC_ENABLED",
+    "MYRA_DASHBOARD_ENABLED",
+    "MYRA_OPERATOR_ENABLED",
+    "MYRA_WRITES_ENABLED",
+    "MYRA_PUBLIC_BOOKING_ENABLED",
+    "MYRA_GENERATION_ENABLED",
+    "MYRA_PROVIDER",
+    "MYRA_CALENDAR_PROVIDER",
+    "MYRA_AZURE_OPENAI_ENDPOINT",
+    "MYRA_MODEL",
+    "MYRA_MONTHLY_BUDGET_USD",
+    "MYRA_GOOGLE_CLIENT_ID",
+    "MYRA_GOOGLE_CALENDAR_ID",
+    "MYRA_SUPPORT_NOTIFY_EMAIL",
   ])
   assert.deepEqual(envKeys(scanner, "--set-env-vars"), [
-    "NEXT_PUBLIC_APP_URL", "NEXT_PUBLIC_MARKETING_URL", "BETTER_AUTH_URL", "PLATFORM_ADMIN_EMAILS",
-    "IP_HASH_SALT", "LYRASHIELD_REQUIRE_EMAIL_VERIFICATION", "POLAR_BILLING_ADMISSION",
-    "POLAR_LOCAL_BILLING_ADMISSION", "RAZORPAY_BILLING_ADMISSION", "RAZORPAY_LOCAL_BILLING_ADMISSION",
-    "BILLING_CANARY_WORKSPACE_IDS", "CLOUDFLARE_ORIGIN_MTLS", "CLOUDFLARE_AOP_CERT_SHA256",
-    "DEPLOY_PROBE_CERT_SHA256", "REDIS_URL", "UPSTASH_REDIS_REST_URL", "UPSTASH_REDIS_REST_TOKEN",
+    "NEXT_PUBLIC_APP_URL",
+    "NEXT_PUBLIC_MARKETING_URL",
+    "BETTER_AUTH_URL",
+    "PLATFORM_ADMIN_EMAILS",
+    "IP_HASH_SALT",
+    "LYRASHIELD_REQUIRE_EMAIL_VERIFICATION",
+    "POLAR_BILLING_ADMISSION",
+    "POLAR_LOCAL_BILLING_ADMISSION",
+    "RAZORPAY_BILLING_ADMISSION",
+    "RAZORPAY_LOCAL_BILLING_ADMISSION",
+    "BILLING_CANARY_WORKSPACE_IDS",
+    "CLOUDFLARE_ORIGIN_MTLS",
+    "CLOUDFLARE_AOP_CERT_SHA256",
+    "DEPLOY_PROBE_CERT_SHA256",
+    "REDIS_URL",
+    "UPSTASH_REDIS_REST_URL",
+    "UPSTASH_REDIS_REST_TOKEN",
   ])
+  assert.doesNotMatch(scanner, /LYRASHIELD_AI_(?:RESULT_CACHE|CACHE_)/)
 
   for (const file of [
     ".github/workflows/deploy-azure.yml",
@@ -295,7 +357,10 @@ test("deployment step order, recovery conditions and app/scanner env key sets st
     "MYRA_GOOGLE_CLIENT_SECRET",
     "MYRA_GOOGLE_REFRESH_TOKEN",
   ]) {
-    assert.doesNotMatch(appDeploy, new RegExp(`^[ \\t]+[A-Z0-9_]+: \\$\\{\\{ secrets\\.${secret} \\}\\}`, "m"))
+    assert.doesNotMatch(
+      appDeploy,
+      new RegExp(`^[ \\t]+[A-Z0-9_]+: \\$\\{\\{ secrets\\.${secret} \\}\\}`, "m")
+    )
     assert.match(runtime, new RegExp(`secrets\\.${secret} != ''`))
   }
 })
@@ -304,7 +369,10 @@ test("scanner update never binds GitHub App credentials", () => {
   const scanner = functionBody(rollout, "deploy-scanner-container-app")
   const update = scanner.split("--set-env-vars")[1]?.split("--output none")[0]
   assert.ok(update)
-  assert.doesNotMatch(update, /GITHUB_APP_ID|GITHUB_APP_SLUG|GITHUB_APP_PRIVATE_KEY|GITHUB_WEBHOOK_SECRET|GITHUB_APP_CLIENT_ID|GITHUB_APP_CLIENT_SECRET/)
+  assert.doesNotMatch(
+    update,
+    /GITHUB_APP_ID|GITHUB_APP_SLUG|GITHUB_APP_PRIVATE_KEY|GITHUB_WEBHOOK_SECRET|GITHUB_APP_CLIENT_ID|GITHUB_APP_CLIENT_SECRET/
+  )
   assert.match(scanner, /--remove-env-vars[\s\S]*GITHUB_APP_PRIVATE_KEY/)
 })
 

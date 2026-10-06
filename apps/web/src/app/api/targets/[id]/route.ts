@@ -9,6 +9,7 @@ import {
 } from "@lyrashield/db"
 import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
+import { purgeAiResultCacheWorkspaceEntries } from "@lyrashield/integrations"
 import { PatchTargetSchema } from "@lyrashield/types"
 import { logger } from "@lyrashield/logger"
 import { z } from "zod"
@@ -181,6 +182,15 @@ async function deleteTarget(request: Request, { params }: { params: Promise<{ id
   try {
     const { session } = await requirePermission(workspaceId, PERMISSIONS.target.delete)
     await softDeleteTarget(workspaceId, id, session.userId)
+    try {
+      await purgeAiResultCacheWorkspaceEntries(workspaceId, [id])
+    } catch (purgeError) {
+      // The target is already soft-deleted and cannot be scanned again. Cache
+      // entries expire absolutely; Redis failure must not undo the deletion.
+      logger.warn("Exact AI-result cache purge failed after target deletion", {
+        errorType: purgeError instanceof Error ? purgeError.name : "unknown",
+      })
+    }
     logger.info("Target soft-deleted", { targetId: id, workspaceId, actorUserId: session.userId })
     revalidateDashboardAggregates(workspaceId)
     return new NextResponse(null, { status: 204 })

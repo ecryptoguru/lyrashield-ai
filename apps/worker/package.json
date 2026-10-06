@@ -10,6 +10,7 @@
     "verify:queue-orphan-fixture": "node --env-file-if-exists=../../.env --import tsx src/operations/verify-queue-orphan-fixture.ts",
     "verify:checkout-readiness": "node --env-file-if-exists=../../.env --import tsx src/operations/verify-checkout-readiness.ts",
     "review:terminal-cost-disposition": "node --env-file-if-exists=../../.env --import tsx src/operations/review-terminal-cost-disposition.ts",
+    "review:cache-economics": "node --env-file-if-exists=../../.env --import tsx src/operations/review-cache-economics.ts",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src --max-warnings 0",
     "comp:grant": "node --env-file-if-exists=../../.env --import tsx src/operations/complimentary-grant.ts"

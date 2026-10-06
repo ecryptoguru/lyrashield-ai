@@ -401,9 +401,9 @@ describe("resolveEngineProfile", () => {
     )
   })
 
-  it("rejects GPT-5.6 Sol deployments", () => {
-    expect(() => resolveEngineProfile("SAFE", { LYRASHIELD_LLM: "azure/gpt-5.6-sol" })).toThrow(
-      "Sol or Luna"
+  it("rejects unapproved model deployments", () => {
+    expect(() => resolveEngineProfile("SAFE", { LYRASHIELD_LLM: "azure/gpt-4o" })).toThrow(
+      "require a GPT-6"
     )
   })
 
@@ -630,7 +630,7 @@ describe("buildEngineEnv", () => {
     expect(engineEnv.STRIX_RUN_TYPE).toBe("repository")
   })
 
-  it("enables explicit GPT-5.6 prompt-cache reads and writes by default", () => {
+  it("enables explicit GPT-6 prompt-cache reads and writes by default", () => {
     const engineEnv = buildEngineEnv({
       model: "azure/gpt-6-luna",
       reasoningEffort: "medium",

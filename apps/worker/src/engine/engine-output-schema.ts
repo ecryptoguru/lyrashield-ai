@@ -505,7 +505,9 @@ export const promptCacheReceiptSchema = z
     enabled: z.boolean(),
     routing_enabled: z.boolean(),
     routing: z.literal("stable-prompt-v2").nullable(),
-    mode: z.enum(["explicit", "implicit"]).nullable(),
+    // `explicit` remains readable for legacy engine receipts. Current engines
+    // report the effective policy posture instead of the provider API mode.
+    mode: z.enum(["stable", "hybrid", "off", "explicit", "implicit"]).nullable(),
     ttl: z.literal("30m").nullable(),
   })
   .strip()
