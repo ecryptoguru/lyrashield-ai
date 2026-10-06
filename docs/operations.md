@@ -160,21 +160,34 @@ Flip to `public` per provider. `canary` remains available as a kill-switch.
 
 ### Durable webhook-track UTC schema cutover
 
-The UTC scheduler columns and audited recovery counters require the controlled
-first-cutover path. Before dispatching it, confirm the legacy timestamp values
-were written as UTC wall times; the additive migration interprets them with
-`AT TIME ZONE 'UTC'`. If that assumption cannot be established from the
-production database session configuration and receipts, stop and resolve the
-timezone mapping before any migration runs.
+The first durable webhook writer upgrade uses the `Deploy to Azure` workflow
+on exact current `main`, with `webhook_claims_cutover=true` and confirmation
+`webhook-cutover:<source_sha>`. It drains existing queues, pauses app/scanner
+writers, stops the worker and checks the database before migration.
 
-Use the `Deploy to Azure` workflow on the exact current `main` SHA with
-`webhook_claims_cutover=true` and confirmation `webhook-cutover:<source_sha>`.
-That path claims an owned admission stop, closes old webhook writers, proves
-scan and webhook queues are empty, stops the legacy worker, applies the
-additive migrations, verifies the schema and boots the compatible worker before
-reopening ingress. Do not run the UTC migrations through a normal release or
-resume admission manually if a phase fails; preserve the cutover receipt and
-keep admission held for operator recovery.
+Legacy `nextAttemptAt` and `leaseExpiresAt` values must both be empty after
+writers stop. The UTC migration then preserves NULLs and needs no historical
+timezone review, signing key or operator attestation. Remaining schedules,
+leases or a partial UTC schema stop the migration. Let existing work complete
+or use receipt-aware recovery; never clear data or replay paid work to pass.
+
+The workflow retains its owned maintenance record across retries, applies
+additive migrations, verifies compatible images and readiness, then reopens
+ingress. Rerun the same failed Actions run for recovery. A failed migration
+never reverses schema or resumes a legacy writer.
+
+### CI and release flow
+
+Pull requests run the required security, lint/typecheck/test/build and pinned
+engine/worker checks. Protected main requires an up-to-date base and passing
+checks. A merge starts `Release production` directly; it does not run the PR
+pipeline again. Azure and Cloudflare route independently from their last
+successful deployed revision, including pending changes from failed releases.
+
+Azure builds each image once and verifies the exact worker digest before
+promotion. Cloudflare retains generated-artifact validation and live route/
+revision checks. Production Lighthouse scores run nightly or on demand,
+with reports and unchanged thresholds, outside the deployment path.
 
 ### Checkout rollback
 

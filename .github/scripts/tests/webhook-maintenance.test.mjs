@@ -59,7 +59,7 @@ function setup(t, scenario = "normal") {
   const db = path.join(directory, "db.mjs")
   writeFileSync(
     db,
-    `export const getSystemPrisma=()=>({scan:{count:async()=>${scenario === "active scan" ? 1 : 0}},$disconnect:async()=>{}})`
+    `export const getSystemPrisma=()=>({scan:{count:async()=>${scenario === "active scan" ? 1 : 0}},$queryRaw:async(sql)=>{if(${JSON.stringify(scenario)}==="legacy query unavailable")throw new Error("database unavailable");return [{count:sql[0].includes("information_schema")?${scenario === "UTC installed" ? 2 : scenario === "partial UTC schema" ? 1 : 0}:${scenario === "legacy scheduled" || scenario === "UTC installed" ? 1 : 0}}]},$disconnect:async()=>{}})`
   )
   const integration = path.join(directory, "integrations.mjs")
   writeFileSync(
@@ -359,3 +359,22 @@ test("migration database identity accepts different roles and ports before claim
   )
   assert.equal(readFileSync(fixture.redis, "utf8"), "null")
 })
+
+for (const [scenario, succeeds] of [
+  ["legacy scheduled", false],
+  ["partial UTC schema", false],
+  ["legacy query unavailable", false],
+  ["UTC installed", true],
+]) {
+  test(`first UTC migration checks actual drained scheduling data: ${scenario}`, (t) => {
+    const f = setup(t, scenario)
+    assert.equal(f.vm("claim").status, 0)
+    const quiesced = f.local("quiesce")
+    const verified = quiesced.status === 0 ? f.vm("verify") : quiesced
+    assert.equal(verified.status === 0, succeeds, verified.stderr)
+    if (!succeeds) {
+      assert.notEqual(JSON.parse(readFileSync(f.redis)), null, "maintenance stays held")
+      assert.equal(JSON.parse(readFileSync(f.state)).worker, "inactive")
+    }
+  })
+}

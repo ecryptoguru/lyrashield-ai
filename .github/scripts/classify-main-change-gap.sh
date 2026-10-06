@@ -64,7 +64,7 @@ read_marketing_sha() {
 }
 
 read_azure_sha() {
-  local deployments candidates deployment_id deployment_sha statuses success_logs log_url run_id run_details run_path run_sha conclusion
+  local deployments candidates deployment_id deployment_sha statuses success_logs log_url run_id run_details run_path run_sha conclusion job_id job_details
   deployments="$(gh api "repos/${GITHUB_REPOSITORY}/deployments?environment=azure-production&ref=main&per_page=100" 2>/dev/null)" || return 1
   jq -e 'type == "array"' >/dev/null 2>&1 <<<"$deployments" || return 1
   candidates="$(jq -r 'sort_by(.created_at) | reverse | .[] | [.id, .sha] | @tsv' <<<"$deployments")"
@@ -82,8 +82,9 @@ read_azure_sha() {
     success_logs="$(jq -r '.[0] | select(.state == "success") | .log_url // empty' <<<"$statuses")"
     while IFS= read -r log_url; do
       [[ -n "$log_url" ]] || continue
-      if [[ "$log_url" =~ /actions/runs/([0-9]+)(/job/[0-9]+)?$ ]]; then
+      if [[ "$log_url" =~ /actions/runs/([0-9]+)(/job/([0-9]+))?$ ]]; then
         run_id="${BASH_REMATCH[1]}"
+        job_id="${BASH_REMATCH[3]:-}"
       else
         continue
       fi
@@ -95,10 +96,22 @@ read_azure_sha() {
         .github/workflows/release-production.yml|.github/workflows/deploy-azure.yml) ;;
         *) continue ;;
       esac
-      if [[ "$conclusion" == success && "$run_sha" == "$deployment_sha" ]]; then
-        printf '%s\n' "$deployment_sha"
-        return 0
+      [[ "$run_sha" == "$deployment_sha" ]] || continue
+      if [[ -n "$job_id" ]]; then
+        job_details="$(gh api "repos/${GITHUB_REPOSITORY}/actions/jobs/${job_id}" 2>/dev/null)" || continue
+        # Marketing and cleanup can fail independently. Require the actual
+        # successful Azure runtime job, not the parent workflow conclusion or
+        # another protected-environment preflight/admin job.
+        jq -e --argjson run "$run_id" --arg sha "$deployment_sha" '
+          .run_id == $run and .head_sha == $sha and
+          .status == "completed" and .conclusion == "success" and
+          (.name == "Deploy Azure Container Apps" or (.name | endswith(" / Deploy Azure Container Apps")))
+        ' >/dev/null 2>&1 <<<"$job_details" || continue
+      elif [[ "$conclusion" != success ]]; then
+        continue
       fi
+      printf '%s\n' "$deployment_sha"
+      return 0
     done <<<"$success_logs"
   done <<<"$candidates"
   return 1

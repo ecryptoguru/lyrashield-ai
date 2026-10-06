@@ -1,6 +1,5 @@
 import test from "node:test"
 import assert from "node:assert/strict"
-import { readFileSync } from "node:fs"
 import { buildSyntheticReceipt } from "../../../approval-fixtures/disposable-attestation.mjs"
 import { validateReceipt } from "../../../packages/db/scripts/webhook-empty-state-receipt-v2.mjs"
 
@@ -11,10 +10,7 @@ const metadata = {
   runId: "9988776655",
   originalAttempt: 2,
   actorId: "42",
-  workflowBytes: readFileSync(
-    new URL("../../workflows/webhook-empty-state-trusted-attestation.yml", import.meta.url),
-    "utf8"
-  ),
+  workflowBytes: "synthetic-disposable-workflow",
 }
 
 test("synthetic issuance receipt satisfies full v2 contract with exact fresh ownership", () => {

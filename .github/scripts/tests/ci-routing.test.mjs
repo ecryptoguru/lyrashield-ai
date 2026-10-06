@@ -118,7 +118,7 @@ function installCommand(directory, name, contents) {
 
 function runMainGap(
   fixture,
-  { cloudflareSha, deployments, statuses, runs: runFixtures, latestMainSha }
+  { cloudflareSha, deployments, statuses, runs: runFixtures, jobs, latestMainSha }
 ) {
   const outputFile = path.join(fixture.directory, "github-output")
   const repositoryName = "example/lyrashield-ai"
@@ -129,6 +129,8 @@ function runMainGap(
   writeJson("deployments.json", deployments ?? [])
   for (const [id, value] of Object.entries(statuses ?? {})) writeJson(`statuses-${id}.json`, value)
   for (const [id, value] of Object.entries(runFixtures ?? {})) writeJson(`run-${id}.json`, value)
+
+  for (const [id, value] of Object.entries(jobs ?? {})) writeJson(`job-${id}.json`, value)
 
   installCommand(
     fixture.binaryDirectory,
@@ -143,6 +145,10 @@ case "$endpoint" in
     id="\${endpoint#repos/${repositoryName}/deployments/}"
     id="\${id%%/*}"
     cat "$GH_FIXTURE_DIR/statuses-$id.json"
+    ;;
+  repos/${repositoryName}/actions/jobs/*)
+    id="\${endpoint##*/}"
+    cat "$GH_FIXTURE_DIR/job-$id.json"
     ;;
   repos/${repositoryName}/actions/runs/*)
     id="\${endpoint##*/}"
@@ -197,10 +203,17 @@ function azureCodeReleaseFixture(id, sha, runId, pathName, conclusion = "success
     statuses: [
       {
         state: "success",
-        log_url: `https://github.com/example/lyrashield-ai/actions/runs/${runId}/job/55`,
+        log_url: `https://github.com/example/lyrashield-ai/actions/runs/${runId}/job/${runId * 10}`,
       },
     ],
     run: { path: pathName, head_sha: sha, conclusion },
+    job: {
+      run_id: runId,
+      head_sha: sha,
+      status: "completed",
+      conclusion,
+      name: "deploy-azure / deploy / Deploy Azure Container Apps",
+    },
   }
 }
 
@@ -214,6 +227,9 @@ function azureFixtures(entries) {
       entries.flatMap(({ statuses, run }) =>
         statuses.map((status) => [status.log_url.match(/\/runs\/(\d+)\//)[1], run])
       )
+    ),
+    jobs: Object.fromEntries(
+      entries.map(({ statuses, job }) => [statuses[0].log_url.match(/\/job\/(\d+)$/)[1], job])
     ),
   }
 }
@@ -249,34 +265,38 @@ test("runtime, mixed, dependency and unknown paths retain production regression 
   }
 })
 
-test("CI cancels superseded PRs without interrupting a main release verification", () => {
-  const concurrency = workflow.match(/^concurrency:\n((?:  .*\n)+)/m)?.[1] ?? ""
-  assert.match(concurrency, /^  group: ci-\$\{\{ github\.ref \}\}$/m)
-  assert.match(
-    concurrency,
-    /^  cancel-in-progress: \$\{\{ github\.event_name == 'pull_request' \}\}$/m
-  )
+test("PR CI cancels superseded work and releases run independently from protected main", () => {
+  assert.match(workflow, /  pull_request:/)
+  assert.doesNotMatch(workflow, /  push:/)
+  assert.match(workflow, /^  cancel-in-progress: true$/m)
+  assert.doesNotMatch(workflow, /deploy-marketing:|container-build:|ci-routing/)
   const classifyStep = workflow
     .split("- name: Classify changed files\n")[1]
     ?.split("\n      - name:")[0]
-  assert.ok(classifyStep, "missing changed-path classifier step")
-  assert.match(classifyStep, /classify-main-change-gap\.sh/)
+  assert.ok(classifyStep)
   assert.match(classifyStep, /github\.event\.pull_request\.base\.sha/)
   assert.match(classifyStep, /github\.event\.pull_request\.head\.sha/)
   assert.match(classifyStep, /git diff --no-renames --name-only/)
-  assert.match(
-    workflow,
-    /needs\.changes\.outputs\.current-main == 'true' && needs\.changes\.outputs\.marketing-deploy == 'true'/
-  )
 })
 
-test("Lighthouse production measurement can fail the release verification", () => {
-  const step = workflow.match(
-    /      - name: Lighthouse production measurement\n([\s\S]*?)(?=      - name: Upload Lighthouse reports)/
-  )?.[0]
-  assert.ok(step, "Missing production Lighthouse step")
-  assert.doesNotMatch(step, /^        continue-on-error:/m)
-  assert.match(step, /run: node \.github\/scripts\/lighthouse-production\.mjs lighthouse-reports/)
+test("production Lighthouse remains a real quality gate outside the deployment path", () => {
+  const measurement = readFileSync(
+    new URL("../../workflows/lighthouse-production.yml", import.meta.url),
+    "utf8"
+  )
+  const marketing = readFileSync(
+    new URL("../../workflows/deploy-marketing.yml", import.meta.url),
+    "utf8"
+  )
+  assert.match(measurement, /  schedule:/)
+  assert.match(measurement, /timeout-minutes: 20/)
+  assert.match(
+    measurement,
+    /run: node \.github\/scripts\/lighthouse-production\.mjs lighthouse-reports/
+  )
+  assert.doesNotMatch(marketing, /lighthouse-production|Lighthouse production/)
+  assert.match(marketing, /Smoke production routes/)
+  assert.match(marketing, /Assert the live homepage/)
   assert.match(lighthouseScript, /if \(evaluation\.failed\) process\.exitCode = 1/)
 })
 
@@ -422,24 +442,20 @@ test("stale main runs retain validation but cannot route a production deployment
   assert.equal(result.outputs["marketing-deploy"], "true")
 })
 
-test("automatic Azure release remains bound to the completed run's current-main SHA", () => {
-  assert.match(
-    productionRelease,
-    /^  group: release-production-\$\{\{ github\.event\.workflow_run\.head_sha \}\}$/m
-  )
+test("Azure and marketing releases route the exact current merged SHA independently", () => {
+  assert.match(productionRelease, /  push:\n    branches: \[main\]/)
+  assert.doesNotMatch(productionRelease, /workflow_run:|download-artifact|ci-routing/)
   assert.match(productionRelease, /^  cancel-in-progress: false$/m)
-
-  const currentMainCheck = productionRelease
-    .split("- name: Confirm release source is current main\n")[1]
-    ?.split("\n      - name:")[0]
-  assert.ok(currentMainCheck, "missing current-main SHA check")
-  assert.match(currentMainCheck, /gh api .*\/git\/ref\/heads\/main/)
-  assert.match(currentMainCheck, /if \[ "\$HEAD_SHA" = "\$latest_main" \]/)
-  assert.match(
-    productionRelease,
-    /if: needs\.routing\.outputs\.current-main == 'true' && needs\.routing\.outputs\.azure-deploy == 'true'/
-  )
-  assert.match(productionRelease, /source_sha: \$\{\{ github\.event\.workflow_run\.head_sha \}\}/)
+  assert.match(productionRelease, /HEAD_SHA: \$\{\{ github\.sha \}\}/)
+  assert.match(productionRelease, /classify-main-change-gap\.sh/)
+  for (const route of ["azure", "marketing"]) {
+    const release = productionRelease.split(`  deploy-${route}:\n`)[1]?.split(/\n  [a-z-]+:\n/)[0]
+    assert.ok(release)
+    assert.match(release, /needs: routing/)
+    assert.match(release, /needs\.routing\.outputs\.current-main == 'true'/)
+    assert.match(release, /source_sha: \$\{\{ github\.sha \}\}/)
+    assert.doesNotMatch(release, /needs:.*deploy-/)
+  }
 })
 
 test("rendered-copy comma ratchet is a blocking CI step", () => {
@@ -456,3 +472,87 @@ test("CI tooling gates also run when shared ratchet baselines change", () => {
   assert.ok(step, "Missing CI tooling lint gate")
   assert.match(step, /needs\.changes\.outputs\.shared == 'true'/)
 })
+
+test("a successful Azure runtime deployment remains current when independent marketing fails", (t) => {
+  const f = createMainGapFixture({ pendingFile: "packages/shared/src/pending.ts" })
+  t.after(() => rmSync(f.directory, { recursive: true, force: true }))
+  const entry = azureCodeReleaseFixture(
+    1,
+    f.pendingSha,
+    404,
+    ".github/workflows/release-production.yml",
+    "failure"
+  )
+  entry.job.conclusion = "success"
+  const result = runMainGap(f, { cloudflareSha: f.deployedSha, ...azureFixtures([entry]) })
+  assert.equal(result.status, 0, result.stderr)
+  assert.equal(result.outputs["azure-deploy"], "false")
+  assert.equal(result.outputs["marketing-deploy"], "true")
+})
+
+for (const mutation of [
+  (job) => {
+    job.name = "Check existing webhook writers before image build"
+  },
+  (job) => {
+    job.head_sha = "0".repeat(40)
+  },
+  (job) => {
+    job.run_id = 1
+  },
+  (job) => {
+    job.conclusion = "failure"
+  },
+]) {
+  test("Azure routing rejects an unrelated, mismatched or failed environment job", (t) => {
+    const f = createMainGapFixture()
+    t.after(() => rmSync(f.directory, { recursive: true, force: true }))
+    const entry = azureCodeReleaseFixture(
+      1,
+      f.pendingSha,
+      404,
+      ".github/workflows/release-production.yml"
+    )
+    mutation(entry.job)
+    const result = runMainGap(f, { cloudflareSha: f.deployedSha, ...azureFixtures([entry]) })
+    assert.equal(result.status, 0, result.stderr)
+    assert.equal(result.outputs["azure-deploy"], "true")
+  })
+}
+
+for (const current of [true, false]) {
+  test(`marketing source check skips superseded work cleanly: current=${current}`, (t) => {
+    const workflow = readFileSync(
+      new URL("../../workflows/deploy-marketing.yml", import.meta.url),
+      "utf8"
+    )
+    const source = workflow
+      .split("        run: |\n")[1]
+      .split("\n  deploy-marketing:")[0]
+      .split("\n")
+      .map((line) => line.replace(/^ {10}/, ""))
+      .join("\n")
+    const directory = mkdtempSync(path.join(tmpdir(), "marketing-current-"))
+    t.after(() => rmSync(directory, { recursive: true, force: true }))
+    const sha = "a".repeat(40)
+    installCommand(
+      directory,
+      "gh",
+      `#!/bin/sh\nprintf '%s\n' '${current ? sha : "b".repeat(40)}'\n`
+    )
+    const output = path.join(directory, "output")
+    const result = spawnSync("bash", ["-c", source], {
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        PATH: `${directory}:${process.env.PATH}`,
+        SOURCE_SHA: sha,
+        GITHUB_REPOSITORY: "example/repo",
+        GITHUB_OUTPUT: output,
+      },
+    })
+    assert.equal(result.status, 0, result.stderr)
+    assert.equal(readFileSync(output, "utf8"), `current=${current}\n`)
+    assert.match(workflow, /if: needs\.source\.outputs\.current == 'true'/)
+  })
+}

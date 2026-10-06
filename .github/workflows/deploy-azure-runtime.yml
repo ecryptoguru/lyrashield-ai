@@ -181,17 +181,6 @@ jobs:
           ref: ${{ env.DEPLOY_SHA }}
           persist-credentials: false
 
-      # The legacy timestamp interpretation is an external operator fact. Require
-      # its signed evidence before Azure login, admission changes or migration work.
-      - name: Verify webhook timezone evidence
-        if: inputs.webhook_claims_cutover == true
-        env:
-          EXPECTED_SOURCE_SHA: ${{ inputs.source_sha }}
-          MIGRATION_DATABASE_URL: ${{ secrets.DATABASE_DIRECT_URL }}
-          WEBHOOK_LEGACY_TIMEZONE_REVIEW_RECEIPT: ${{ secrets.WEBHOOK_LEGACY_TIMEZONE_REVIEW_RECEIPT }}
-          WEBHOOK_LEGACY_TIMEZONE_REVIEW_PUBLIC_KEY_PEM: ${{ secrets.WEBHOOK_LEGACY_TIMEZONE_REVIEW_PUBLIC_KEY_PEM }}
-        run: node .github/scripts/verify-webhook-timezone-evidence.mjs
-
       # Myra fail-closed check (Deep Review v18): confirmed writes require the
       # Google calendar provider and usable credentials; the mock adapter and
       # its fault switches must never reach production.
