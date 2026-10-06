@@ -53,7 +53,7 @@ These are separate trust and deployment boundaries. A marketing deployment does 
 
 ### 1.1 Web request pipeline
 
-The protected request boundary resolves rate limiting and request context, authenticates a supported credential, validates input, checks workspace membership/permission, and performs scoped data access. Sensitive changes also require the applicable audit and idempotency boundary.
+The protected request boundary resolves rate limiting and request context, authenticates a supported credential, validates input, checks workspace membership/permission and performs scoped data access. Sensitive changes also require the applicable audit and idempotency boundary.
 
 The conceptual sequence is:
 
@@ -138,7 +138,7 @@ Retained composed local transport tests are different from exact worker-image de
 
 Admission readiness combines a live worker lease with the absence of an admission stop. Redis uncertainty fails closed. Process health alone is insufficient.
 
-Controlled worker promotion pauses new admission, requires an empty/nonactive queue boundary, checks an immutable digest and provenance labels, restarts, verifies readiness, and releases only its own stop. Ambiguous paid work is not automatically replayed.
+Controlled worker promotion pauses new admission, requires an empty/nonactive queue boundary, checks an immutable digest and provenance labels, restarts, verifies readiness and releases only its own stop. Ambiguous paid work is not automatically replayed.
 
 Database migrations are forward-only. Image rollback does not reverse schema or reconstruct an earlier ledger.
 
@@ -493,13 +493,13 @@ An applicable required family needs COMPLETED or NOT_APPLICABLE receipts. At lea
 
 Decision precedence:
 
-| Order | Condition                                                                                               | Verdict               |
-| ----- | ------------------------------------------------------------------------------------------------------- | --------------------- |
-| 1     | Unsupported target type                                                                                 | INSUFFICIENT_EVIDENCE |
-| 2     | No completed coverage, missing/incomplete required family, or explicitly incomplete assessment identity | INSUFFICIENT_EVIDENCE |
-| 3     | Unresolved Critical/High blocker after applicable resolution/disposition                                | NOT_READY             |
-| 4     | Unresolved finding lacks scoped positive evidence and applicable disposition                            | INSUFFICIENT_EVIDENCE |
-| 5     | Remaining implemented checks satisfied                                                                  | READY                 |
+| Order | Condition                                                                                              | Verdict               |
+| ----- | ------------------------------------------------------------------------------------------------------ | --------------------- |
+| 1     | Unsupported target type                                                                                | INSUFFICIENT_EVIDENCE |
+| 2     | No completed coverage, missing/incomplete required family or explicitly incomplete assessment identity | INSUFFICIENT_EVIDENCE |
+| 3     | Unresolved Critical/High blocker after applicable resolution/disposition                               | NOT_READY             |
+| 4     | Unresolved finding lacks scoped positive evidence and applicable disposition                           | INSUFFICIENT_EVIDENCE |
+| 5     | Remaining implemented checks satisfied                                                                 | READY                 |
 
 OPEN, FIX_READY, PR_OPENED, TICKET_CREATED and FIXED_PENDING_RETEST count as unresolved. DUPLICATE depends on canonical resolution. Historical direct FIXED and unbound human dispositions remain blocking until trusted resolution/applicable disposition exists.
 

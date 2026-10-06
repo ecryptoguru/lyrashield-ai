@@ -29,16 +29,16 @@ Target → Scan → Evidence State → Fix Proposal → Retest → Assurance Rep
 
 ## 3. What makes it different
 
-Most security tools answer "what did the scanner flag?" LyraShield answers "what was tested, what was proven, and what remains unknown — and can you show that to a client, investor or reviewer?"
+Most security tools answer "what did the scanner flag?" LyraShield answers "what was tested, what was proven and what remains unknown — and can you show that to a client, investor or reviewer?"
 
 1. **Evidence states, not confidence scores.** Every result carries an explicit state — `DETECTED`, `VALIDATED`, `VERIFIED` or `INCONCLUSIVE`. Confidence is triage metadata and never proof; engine-only absence is always inconclusive. A score or AI suggestion is never treated as verification.
 2. **Purpose-built for AI-built software.** The public AI-Built Failure Taxonomy catalogs how AI-generated apps characteristically fail; eight deterministic AI App Security signals (AI-01–AI-08) map to the OWASP Top 10 for LLM Applications (2025); 14 WebMCP controls review the agent tool surface itself — agent rules, MCP configs, embedded secrets and prompt-injection exposure.
-3. **It runs where the coding agent runs.** A published CLI, an MCP server with 21 tools over stdio and remote Streamable HTTP with hosted OAuth, a portable Agent Plugin, a 51-entry install registry resolving to 48 preferred client surfaces, and an account-less, diff-aware GitHub Action. Assurance without leaving the editor, terminal or CI pipeline.
+3. **It runs where the coding agent runs.** A published CLI, an MCP server with 21 tools over stdio and remote Streamable HTTP with hosted OAuth, a portable Agent Plugin, a 51-entry install registry resolving to 48 preferred client surfaces and an account-less, diff-aware GitHub Action. Assurance without leaving the editor, terminal or CI pipeline.
 4. **An approval-gated fix loop that closes itself.** Fix pull requests are created only from a server-generated patch bound to an explicit human approval — no client-authored patches, nothing auto-merges. When a fix branch merges, the server automatically queues a fresh retest and re-evaluates the release gate.
 5. **A launch verdict you can verify yourself.** The Launch Gate is a named, versioned standard producing `READY` / `NOT_READY` / `INSUFFICIENT_EVIDENCE` per target. Launch Readiness Reports are ed25519-signed with a public verify endpoint, and release-identity confirmation answers only `MATCH`, `MISMATCH` or `UNAVAILABLE` for a caller-supplied commit or artifact digest.
 6. **Honest coverage accounting.** The Vibe Security 50 contract records one immutable receipt per control; "no finding" is never presented as "passed", and seven operational controls are explicitly marked evidence-required because no scan can prove them.
 7. **Two modes, one loop.** Cloud (hosted subscription; LyraShield pays model cost) and Local/Desktop (one-year BYOK license with perpetual fallback; scans run on your machine and nothing syncs by default).
-8. **Fail-closed trust architecture.** Tenant isolation by Postgres row-level security, engine output treated as untrusted and bounded, and every result manifest binding the exact product revision, worker image digest and engine revision into its checksum.
+8. **Fail-closed trust architecture.** Tenant isolation by Postgres row-level security, engine output treated as untrusted and bounded and every result manifest binding the exact product revision, worker image digest and engine revision into its checksum.
 
 These differentiators are product design choices, not performance claims. LyraShield does not claim broader detection than its retained evidence supports (§8).
 

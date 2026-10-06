@@ -275,24 +275,9 @@
       "59b86a23b012ac765aeb5b9bc2c74cc96a3f2a728a0f03a88512910bf3ef4c4d": 1,
       "f1a2c0bdea8485984259a934cab3b2d73f426bcab2b9b4b68e4c0a50c9e7fb18": 1
     },
-    "docs/user-guide.md": {
-      "539c759701ef643196edceaef2b874c4f4cec649709f9fd6b897ac090975e33a": 1,
-      "53d7f90ebb2c5fc8cd50d5b00ee8d6f200b74f44c036a03ba526f65390273a5e": 1,
-      "cd24a1635df7976ff055371c95f61795158d7a087fdf9b86f499e66d6bdc194e": 1
-    },
     "docs/webmcp-runtime.md": {
       "690834858b1ae05e6a3318212c83189e53dc840519c117c758fdd46680d4e190": 1,
       "e3daa94966a073bae192b9da7f385de46b58c9f6f3f9b4767f149c3f8cb278c4": 1
-    },
-    "docs/whitepaper.md": {
-      "68f4af70b2fe7566f0fee9128f167482e0b6edfd17669307b1439d5d3d22e0d5": 1
-    },
-    "docs/yellowpaper.md": {
-      "145b208dec256acb9d9dc423947defde000678e584a958f0aac4708fad42b5eb": 1,
-      "2f62b077a47a8ec09d81b399caabc80ee024d518478df706a696fc4291d0a129": 1,
-      "722a8dd14792f12d23d657d9d1216cadd74d9c951c6ad3f29118c81d559f56b3": 1,
-      "d240317d98df0835b00d9bfd93774e1fc46d46fbcabdbca55bd375dd9bcaccd7": 1,
-      "f9c5d209bd557f844e657eea0ea54abc935688befe9e601c28043e5755db62ba": 1
     },
     "packages/agent-registry/src/index.ts": {
       "d53e24013ef3ba0ffd3e62faa35f681243a54b15bf4e8aae371eae61c04a296e": 1

@@ -2,7 +2,7 @@
 
 ## Version 1.1.0 — 2026-10-06
 
-> The public product explanation for LyraShield AI: who it serves, what makes it different, how the assurance loop works, and what its evidence can establish. The [litepaper](./litepaper.md) is the executive overview; the [yellowpaper](./yellowpaper.md) specifies the technical contracts. Executable source governs implementation; dated release evidence in [PRD.md](../PRD.md#8-current-production-evidence) governs deployment claims. This revision is a documentation review, not a new production acceptance.
+> The public product explanation for LyraShield AI: who it serves, what makes it different, how the assurance loop works and what its evidence can establish. The [litepaper](./litepaper.md) is the executive overview; the [yellowpaper](./yellowpaper.md) specifies the technical contracts. Executable source governs implementation; dated release evidence in [PRD.md](../PRD.md#8-current-production-evidence) governs deployment claims. This revision is a documentation review, not a new production acceptance.
 
 ## Contents
 
@@ -27,7 +27,7 @@
 
 AI-assisted development can shorten the path from an idea to working software. Working software still needs review: authorization boundaries, credentials, dependencies, model integrations and release identity do not become trustworthy merely because a demonstration succeeds.
 
-LyraShield AI is an evidence-backed release-assurance product for AI-built software. It reviews an authorized target, retains what was assessed, separates detected risks from independently verified evidence and retest-confirmed outcomes, supports authorized fix proposals, and packages the result into reviewable reports.
+LyraShield AI is an evidence-backed release-assurance product for AI-built software. It reviews an authorized target, retains what was assessed, separates detected risks from independently verified evidence and retest-confirmed outcomes, supports authorized fix proposals and packages the result into reviewable reports.
 
 Its organizing principle is that a finding, a score, a completed scan and a security guarantee are different things. Coverage gaps and inconclusive results belong in the record, not outside it. The intended outcome is a better-informed release decision and a defensible handoff—not a claim that software is universally safe.
 
@@ -126,13 +126,13 @@ Phase 1 focuses on builders, founders, developers, small SaaS teams and agencies
 
 #### Solo builder: review before a public launch
 
-Connect an authorized target, select the least intensive review that answers the question, and read findings alongside coverage. A missing family receipt or capped source collection is a reason to investigate, not a reason to rely on a high score.
+Connect an authorized target, select the least intensive review that answers the question and read findings alongside coverage. A missing family receipt or capped source collection is a reason to investigate, not a reason to rely on a high score.
 
 The useful result is an ordered remediation list and an assessment record. The builder still decides whether remaining operational risks are acceptable.
 
 #### SaaS team: review a change, then retest
 
-Use local diff checks as a pre-filter, then a recorded PR or repository review when durable evidence is needed. Track the source revision, review server-generated patch proposals, and queue a fresh retest after applying changes.
+Use local diff checks as a pre-filter, then a recorded PR or repository review when durable evidence is needed. Track the source revision, review server-generated patch proposals and queue a fresh retest after applying changes.
 
 A merge is a code event. A validated retest is an evidence event. The team should not treat them as interchangeable.
 
@@ -238,7 +238,7 @@ A clean deterministic retest can produce a retest-confirmed outcome within its s
 
 The gate evaluates retained evidence, while applicability checks whether that assessment can still describe the requested release. An expired assessment or changed policy prevents reuse as current assurance.
 
-The builder then issues a report, checks whether it is signed, and shares the appropriate artifact. The recipient reads non-coverage and freshness as carefully as the verdict.
+The builder then issues a report, checks whether it is signed and shares the appropriate artifact. The recipient reads non-coverage and freshness as carefully as the verdict.
 
 ### 3.5 Monitoring is a new observation, not a permanent guarantee
 
@@ -410,7 +410,7 @@ Static pattern evidence does not establish all runtime data-flow paths. Unsuppor
 
 #### AIB-07 — Placeholder logic that ships as if real
 
-A security-relevant stub returns success, a tautological check passes, or incomplete logic retains a production-looking interface.
+A security-relevant stub returns success, a tautological check passes or incomplete logic retains a production-looking interface.
 
 Mapped surfaces: engine and SAST review. Control: `vibe-49`. Catalog severity: Medium.
 
