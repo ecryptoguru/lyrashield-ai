@@ -57,6 +57,12 @@ case "$1" in
     esac
     ;;
   run)
+    case "$*" in *'--user 0:0'*) ;; *) exit 2;; esac
+    case "$*" in *'--cap-drop ALL'*) ;; *) exit 2;; esac
+    case "$*" in *'--security-opt no-new-privileges'*) ;; *) exit 2;; esac
+    case "$*" in *'--read-only'*) ;; *) exit 2;; esac
+    case "$*" in *'/run/cutover-receipt.json:ro'*) ;; *) exit 2;; esac
+    case "$*" in *'--network bridge'*) ;; *) exit 2;; esac
     env_file=''
     previous=''
     for arg in "$@"; do
@@ -109,6 +115,8 @@ source=$(<"$script")
 [[ "$source" == *'journalctl -u "$service" -n 50'* ]]
 [[ "$source" == *'redis.get("lyrashield:scan-admission:stopped")'* ]]
 [[ "$source" == *'awk '\''/^REDIS_URL=/'* ]]
+[[ "$source" == *'--user 0:0 --cap-drop ALL --security-opt no-new-privileges'* ]]
+[[ "$source" != *'lyrashield_worker_env_args'* ]]
 [[ "$source" != *'redis.set('* && "$source" != *'redis.del('* && "$source" != *'redis.eval('* ]]
 [[ "$source" != *'systemctl restart'* && "$source" != *'systemctl stop'* && "$source" != *'systemctl enable'* && "$source" != *'systemctl disable'* ]]
 echo 'Read-only webhook VM diagnostic redaction test passed.'
