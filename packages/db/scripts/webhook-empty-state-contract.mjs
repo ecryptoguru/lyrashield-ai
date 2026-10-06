@@ -217,6 +217,9 @@ export function validateDatabasePrincipalPolicy(principals) {
   if ([principals.app, principals.scanner, principals.worker].includes(principals.system)) {
     throw new Error("DATABASE_SYSTEM_URL must bind a separate principal")
   }
+  if ([principals.app, principals.scanner, principals.worker].includes(principals.migration)) {
+    throw new Error("Migration database principal must be separate from runtime principals")
+  }
   return true
 }
 

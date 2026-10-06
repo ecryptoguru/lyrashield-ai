@@ -1,5 +1,6 @@
 import test from "node:test"
 import assert from "node:assert/strict"
+import { spawnSync } from "node:child_process"
 import {
   mkdtempSync,
   mkdirSync,
@@ -15,6 +16,25 @@ import { fileURLToPath, pathToFileURL } from "node:url"
 import { canonical, sha256 } from "../../packages/db/scripts/webhook-empty-state-receipt-v2.mjs"
 import { fixture } from "../../packages/db/scripts/tests/webhook-empty-state-v2-fixture.mjs"
 import { runtimeFingerprint } from "./webhook-empty-state-consumer-identity.mjs"
+import { candidateConnectionProbeSource } from "./webhook-empty-state-candidate-connection.mjs"
+
+test("serialized candidate probe runs without module-scope bindings", () => {
+  const env = {
+    DATABASE_URL:
+      "postgresql://worker_runtime:disposable-only@db.yejmvtgsxniatmjbwplk.supabase.co:5432/postgres",
+    DATABASE_SYSTEM_URL:
+      "postgresql://system_admin:disposable-system@db.yejmvtgsxniatmjbwplk.supabase.co:5432/postgres",
+    REDIS_URL: "rediss://disposable-only@redis.invalid:6379/0",
+  }
+  const result = spawnSync(
+    process.execPath,
+    ["--input-type=module", "-e", candidateConnectionProbeSource()],
+    { encoding: "utf8", timeout: 5000, env }
+  )
+  assert.equal(result.error, undefined, result.error?.message)
+  assert.equal(result.status, 0, result.stderr)
+  assert.deepEqual(JSON.parse(result.stdout), runtimeFingerprint(env))
+})
 
 test("enabled copied candidate adapter survives cold start and crash after either activation without promoting foreign state", async () => {
   const root = realpathSync(mkdtempSync(join(tmpdir(), "candidate-adapter-disposable-")))

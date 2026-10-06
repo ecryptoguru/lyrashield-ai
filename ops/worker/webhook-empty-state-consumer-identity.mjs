@@ -7,6 +7,9 @@ const hash = (value) => createHash("sha256").update(value).digest("hex")
 // Self-contained so the exact image can run this probe without starting any
 // application/queue consumer or loading a caller-provided module.
 export function runtimeFingerprint(env) {
+  // Keep the probe self-contained because the candidate adapter serializes
+  // this function into a fresh Node process in the exact candidate image.
+  const hash = (value) => createHash("sha256").update(value).digest("hex")
   const database = (raw) => {
     if (typeof raw !== "string" || raw.length > 8192) throw Error("Missing connection")
     const u = new URL(raw),

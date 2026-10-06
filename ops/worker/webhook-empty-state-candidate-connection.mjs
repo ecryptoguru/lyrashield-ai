@@ -15,6 +15,9 @@ function read(binary, args, json = false, env = {}) {
   requireValue(result.status === 0, "Prepared candidate connection readback failed")
   return json ? JSON.parse(result.stdout) : result.stdout.trim()
 }
+export function candidateConnectionProbeSource() {
+  return `import {createHash} from 'node:crypto';const fingerprint=(${runtimeFingerprint.toString()})(process.env);process.stdout.write(JSON.stringify(fingerprint));`
+}
 export function collectPreparedCandidateFingerprint(policy, role, ownedActive = false) {
   requireValue(["app", "scanner"].includes(role), "Unsupported candidate resource")
   const revision = policy.candidateRevisions[role]
@@ -87,7 +90,6 @@ export function collectPreparedCandidateFingerprint(policy, role, ownedActive = 
   // Run only the immutable connection probe in the EXACT candidate image with
   // no network/consumer entrypoint. Values travel through the child environment,
   // never command arguments, logs, predicates or public artifacts.
-  const code = `import {createHash} from 'node:crypto';const fingerprint=(${runtimeFingerprint.toString()})(process.env);process.stdout.write(JSON.stringify(fingerprint));`
   const fingerprint = read(
     "/usr/bin/docker",
     [
@@ -108,7 +110,7 @@ export function collectPreparedCandidateFingerprint(policy, role, ownedActive = 
       "node",
       "--input-type=module",
       "-e",
-      code,
+      candidateConnectionProbeSource(),
     ],
     true,
     environment

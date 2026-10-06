@@ -72,6 +72,21 @@ test("root policy digest binds the signed principal expectations", () => {
   wrongPolicy.databasePrincipals.system = "worker_runtime"
   wrongPolicy.policySha256 = sha256(canonical(wrongPolicy))
   assert.throws(() => validateRootPolicyIntegrity(wrongPolicy), /separate principal/)
+  const migrationPolicy = structuredClone(policy)
+  delete migrationPolicy.policySha256
+  migrationPolicy.databasePrincipals.migration = migrationPolicy.databasePrincipals.worker
+  migrationPolicy.policySha256 = sha256(canonical(migrationPolicy))
+  assert.throws(() => validateRootPolicyIntegrity(migrationPolicy), /separate from runtime/)
+  const { receipt, policy: receiptPolicy } = fixture()
+  assert.throws(() => validateReceipt(receipt, migrationPolicy, now), /separate from runtime/)
+  const wrongMigrationReceipt = structuredClone(receipt)
+  wrongMigrationReceipt.evidence.database.migration.principalSha256 = sha256(
+    receiptPolicy.databasePrincipals.worker
+  )
+  assert.throws(
+    () => validateReceipt(wrongMigrationReceipt, receiptPolicy, now),
+    /Missing or changed migration database identity/
+  )
 })
 test("startup denies reboot before completion even for /2 candidate", () => {
   const { receipt, policy } = fixture()
