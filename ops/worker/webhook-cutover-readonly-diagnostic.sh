@@ -103,10 +103,8 @@ fi
 
 # Parse and compare the stop value in memory. Only whitelisted receipt fields
 # and the equality result are printed; admissionStopValue itself is never output.
-set -a
-. "$config"
-set +a
-case "${LYRASHIELD_WORKER_IMAGE:-}" in *@sha256:*) worker_digest=${LYRASHIELD_WORKER_IMAGE##*@sha256:};; *) worker_digest=;; esac
+LYRASHIELD_WORKER_IMAGE=$(sed -n 's/^LYRASHIELD_WORKER_IMAGE=//p' "$config" | head -n 1)
+case "$LYRASHIELD_WORKER_IMAGE" in *@sha256:*) worker_digest=${LYRASHIELD_WORKER_IMAGE##*@sha256:};; *) worker_digest=;; esac
 case "$worker_digest" in *[!a-f0-9]*|'') worker_digest=;; esac
 [ "${#worker_digest}" -eq 64 ] || {
   printf 'receipt_present=true\nreceipt_metadata=unavailable\nreceipt_matches_expected=unavailable\nredis_admission_owner_match=unavailable\n'
