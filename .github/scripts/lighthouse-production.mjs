@@ -56,11 +56,8 @@ function isValidScore(score) {
   return typeof score === "number" && Number.isFinite(score) && score >= 0 && score <= 1
 }
 
-function hasValidLighthouseScore(report) {
-  if (!report) return false
-  return Object.keys(LIGHTHOUSE_MINIMUM).some((category) =>
-    isValidScore(report.categories?.[category]?.score)
-  )
+function hasValidPerformanceScore(report) {
+  return isValidScore(report?.categories?.performance?.score)
 }
 
 export function median(values) {
@@ -78,7 +75,9 @@ export function shouldRetryNoNavstart({
   maxAttempts = MAX_ATTEMPTS,
 }) {
   return (
-    attempt < maxAttempts && hasNoNavstart(report, diagnostic) && !hasValidLighthouseScore(report)
+    attempt < maxAttempts &&
+    hasNoNavstart(report, diagnostic) &&
+    !hasValidPerformanceScore(report)
   )
 }
 

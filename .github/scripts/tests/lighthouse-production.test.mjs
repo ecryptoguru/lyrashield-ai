@@ -53,6 +53,18 @@ function reportWithoutScores(runtimeError) {
   }
 }
 
+function reportWithoutPerformanceScore(runtimeError, accessibility = 1, seo = 1) {
+  return {
+    finalUrl: "https://lyrashieldai.com/agents",
+    runtimeError,
+    categories: {
+      performance: { score: null },
+      accessibility: { score: accessibility },
+      seo: { score: seo },
+    },
+  }
+}
+
 test("recognizes the exact NO_NAVSTART runtime error", () => {
   assert.equal(hasNoNavstart(report(null, { code: "NO_NAVSTART" })), true)
   assert.equal(hasNoNavstart(null, "LighthouseError: NO_NAVSTART"), true)
@@ -68,6 +80,14 @@ test("retries a NO_NAVSTART once and never retries a second time", () => {
   const failure = reportWithoutScores({ code: "NO_NAVSTART" })
   assert.equal(shouldRetryNoNavstart({ report: failure, attempt: 1 }), true)
   assert.equal(shouldRetryNoNavstart({ report: failure, attempt: 2 }), false)
+
+  const partialFailure = reportWithoutPerformanceScore({ code: "NO_NAVSTART" })
+  assert.equal(
+    shouldRetryNoNavstart({ report: partialFailure, attempt: 1 }),
+    true,
+    "non-performance category scores do not make a NO_NAVSTART performance report usable"
+  )
+  assert.equal(shouldRetryNoNavstart({ report: partialFailure, attempt: 2 }), false)
 })
 
 test("does not retry other runtime errors or real score failures", () => {
@@ -301,7 +321,7 @@ test("retries exactly once for NO_NAVSTART per sample and retains the successful
     invoke: async (_url, outputPath) => {
       attempts.push(outputPath)
       if (attempts.length === 1) {
-        const failed = reportWithoutScores({ code: "NO_NAVSTART" })
+        const failed = reportWithoutPerformanceScore({ code: "NO_NAVSTART" })
         return { report: failed, diagnostic: "NO_NAVSTART", exitCode: 1 }
       }
       return { report: report(0.98), diagnostic: "", exitCode: 0 }
@@ -368,7 +388,7 @@ test("a low but valid score is not retried and remains a gate failure", async (t
   assert.equal(evaluateLighthouseReports(reports).failed, true)
 })
 
-test("a finite category score with a NO_NAVSTART runtime error is retained and assessed", async (t) => {
+test("a partial NO_NAVSTART report is retried once and remains a collection failure", async (t) => {
   const reportsDir = mkdtempSync(path.join(tmpdir(), "lyra-lighthouse-partial-"))
   t.after(() => rmSync(reportsDir, { recursive: true, force: true }))
   const page = LIGHTHOUSE_PAGES.find((candidate) => candidate.path === "/agents")
@@ -377,37 +397,31 @@ test("a finite category score with a NO_NAVSTART runtime error is retained and a
     reportsDir,
     pages: [page],
     logger: { warn() {} },
-    invoke: async (url) => {
+    invoke: async () => {
       attempts += 1
       return {
-        report: {
-          finalUrl: url,
-          runtimeError: { code: "NO_NAVSTART" },
-          categories: {
-            performance: { score: null },
-            accessibility: { score: 0.9 },
-            seo: { score: 1 },
-          },
-        },
+        report: reportWithoutPerformanceScore({ code: "NO_NAVSTART" }, 0.9, 1),
         diagnostic: "NO_NAVSTART",
-        exitCode: 0,
+        exitCode: 1,
       }
     },
   })
-  assert.equal(
-    attempts,
-    LIGHTHOUSE_SAMPLE_LIMIT,
-    "an unmeasurable performance category keeps asking for a tiebreaker"
-  )
+  assert.equal(attempts, 2, "partial categories trigger one bounded retry")
+  assert.equal(reports._agents.length, 1, "exhausted collection stops further samples")
+  assert.equal(reports._agents[0].collectionFailure.code, "NO_NAVSTART")
   assert.equal(reports._agents[0].categories.accessibility.score, 0.9)
   const evaluation = evaluateLighthouseReports(reports)
   assert.equal(evaluation.failed, true)
   assert.ok(
     evaluation.messages.includes(
-      "FAIL https://lyrashieldai.com/agents accessibility: 0.9 (min 0.95)"
+      "FAIL https://lyrashieldai.com/agents collection: collected 0 of 2 required samples"
     )
   )
-  assert.ok(evaluation.messages.includes("ok   https://lyrashieldai.com/agents seo: 1 (min 0.95)"))
+  const partialScoreSummary = [
+    "sample 1/1 https://lyrashieldai.com/agents ",
+    "performance: missing accessibility: 0.9 seo: 1",
+  ].join("")
+  assert.ok(evaluation.messages.includes(partialScoreSummary))
   assert.ok(
     evaluation.messages.includes("FAIL https://lyrashieldai.com/agents runtimeError: NO_NAVSTART")
   )
