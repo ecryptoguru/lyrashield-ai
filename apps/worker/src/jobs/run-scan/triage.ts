@@ -35,10 +35,6 @@ export type EngineTriageOverlayResult = {
   reconciliationReason?: string
 }
 
-function terminalReason(snapshot: EngineTriageSnapshot | undefined): string | null {
-  return snapshot ? snapshot.terminalReason : "TRIAGE_ARTIFACT_UNAVAILABLE"
-}
-
 function artifactSnapshot(
   artifact: EngineTriageArtifact,
   accountingAvailable = true
@@ -54,10 +50,138 @@ function artifactSnapshot(
   }
 }
 
+type OverlayAttemptOutcome = {
+  aiSecuritySignals: AISecuritySignal[]
+  triageSnapshot: EngineTriageSnapshot | undefined
+  triageTerminalReason: string | null
+  cacheOperations: {
+    readCommands: number
+    writeCommands: number
+    bytesRead: number
+    bytesWritten: number
+  }
+}
+
+async function attemptRepoTriageOverlay(args: {
+  scanId: string
+  workspaceId: string
+  targetId: string
+  triageInput: NonNullable<ReturnType<typeof buildEngineTriageInput>>
+  maxBudgetUsd: number
+  scanRuntimeBudgetMs: number
+  elapsedScanMs: () => number
+  hasGlobalScanTimeout: () => boolean
+  isScanCancelled: () => Promise<boolean>
+  engineResult: EngineRunResult
+  aiSecuritySignals: AISecuritySignal[]
+  updateAccounting: (llmUsage?: Record<string, unknown>) => Promise<void>
+}): Promise<OverlayAttemptOutcome> {
+  const {
+    scanId,
+    workspaceId,
+    targetId,
+    triageInput,
+    scanRuntimeBudgetMs,
+    elapsedScanMs,
+    hasGlobalScanTimeout,
+    isScanCancelled,
+    engineResult,
+    updateAccounting,
+  } = args
+  let aiSecuritySignals = args.aiSecuritySignals
+  let triageSnapshot: EngineTriageSnapshot | undefined
+  let triageTerminalReason: string | null = null
+  let cacheOperations = { readCommands: 0, writeCommands: 0, bytesRead: 0, bytesWritten: 0 }
+  try {
+    const triageResult = await runEngineTriage({
+      scanId,
+      workspaceId,
+      targetId,
+      profile: resolveEngineProfile("STANDARD"),
+      input: triageInput,
+      maxBudgetUsd: args.maxBudgetUsd,
+      timeoutMs: resolveScannerPhaseTimeoutMs(scanRuntimeBudgetMs, elapsedScanMs()),
+      shouldCancel: async () => hasGlobalScanTimeout() || (await isScanCancelled()),
+    })
+    cacheOperations = triageResult.cacheOperations ?? cacheOperations
+    const artifact = triageResult.artifact
+    const reuseWithoutProviderRequest =
+      triageResult.source === "singleflight" ||
+      (triageResult.source === "exact_cache" && Boolean(triageResult.reuseReceipt))
+    if (triageResult.llmUsage) {
+      const mergedUsage = mergeLlmUsage(
+        engineResult.output.runRecord?.llm_usage,
+        triageResult.llmUsage
+      )
+      if (mergedUsage) {
+        if (triageResult.llmUsage["accountingComplete"] === false)
+          mergedUsage["accountingComplete"] = false
+        await updateAccounting(mergedUsage)
+        if (artifact) {
+          aiSecuritySignals = applyEngineTriageArtifact(aiSecuritySignals, artifact)
+          triageSnapshot = artifactSnapshot(artifact)
+        }
+      } else {
+        // The overlay may have spent tokens even though its receipt cannot
+        // be merged with the scan usage. Invalidate the total rather than
+        // retaining a billable amount for only the engine phase.
+        await updateAccounting()
+        if (!artifact) {
+          triageTerminalReason = "TRIAGE_ARTIFACT_UNAVAILABLE"
+        } else {
+          triageSnapshot = artifactSnapshot(artifact, false)
+        }
+      }
+    } else if (artifact && reuseWithoutProviderRequest) {
+      // An exact completed artifact makes no provider request. Preserve the
+      // main scan's existing ledger and apply the same non-authoritative
+      // overlay only after its provenance receipt has been validated.
+      aiSecuritySignals = applyEngineTriageArtifact(aiSecuritySignals, artifact)
+      triageSnapshot = {
+        status: artifact.status,
+        terminalReason: artifact.terminalReason,
+        policyVersion: artifact.policyVersion,
+        modelRoute: artifact.modelRoute,
+        inputChecksum: artifact.inputChecksum,
+        redactionReceipt: artifact.redactionReceipt.inputChecksum,
+        resultCount: artifact.results.length,
+      }
+      logger.info("AI triage reused result applied", {
+        scanId,
+        source: triageResult.source,
+        ...(triageResult.reuseReceipt
+          ? { artifactSha256: triageResult.reuseReceipt.artifactSha256 }
+          : {}),
+        currentProviderRequests: 0,
+        currentProviderCostUsd: 0,
+      })
+    } else if (reuseWithoutProviderRequest) {
+      // A shared attempt without an artifact still made no request for this scan.
+      // Keep its main-engine checkpoint; the terminal reason below records the gap.
+    } else if (artifact) {
+      await updateAccounting()
+      triageSnapshot = { ...artifactSnapshot(artifact), resultCount: 0 }
+    } else {
+      await updateAccounting()
+    }
+    triageTerminalReason = triageSnapshot
+      ? triageSnapshot.terminalReason
+      : triageResult.cancelled
+        ? "TRIAGE_CANCELLED"
+        : triageResult.timedOut
+          ? "TRIAGE_TIMEOUT"
+          : "TRIAGE_ARTIFACT_UNAVAILABLE"
+  } catch {
+    // An additive overlay can never fail the deterministic scan.
+    triageTerminalReason = "TRIAGE_COMMAND_FAILED"
+  }
+  return { aiSecuritySignals, triageSnapshot, triageTerminalReason, cacheOperations }
+}
+
 export async function runEngineTriageOverlay(params: {
   scanId: string
+  scope: { workspaceId: string; targetId: string; targetType: string }
   sponsorAccountId: string
-  targetType: string
   mode: ScanJobData["mode"]
   deterministicRetest: boolean
   agentMinuteTerminalError: ScanTerminalError | null
@@ -75,8 +199,8 @@ export async function runEngineTriageOverlay(params: {
 }): Promise<EngineTriageOverlayResult> {
   const {
     scanId,
+    scope: { workspaceId, targetId, targetType },
     sponsorAccountId,
-    targetType,
     mode,
     deterministicRetest,
     agentMinuteTerminalError,
@@ -131,6 +255,12 @@ export async function runEngineTriageOverlay(params: {
     triageCapUsd: env.LYRASHIELD_AI_TRIAGE_MAX_BUDGET_USD,
   })
   let triageTerminalReason: string | null = triageEligibility.reason
+  let cacheOperations = {
+    readCommands: 0,
+    writeCommands: 0,
+    bytesRead: 0,
+    bytesWritten: 0,
+  }
 
   if (
     targetType === "REPO" &&
@@ -138,51 +268,24 @@ export async function runEngineTriageOverlay(params: {
     triageEligibility.eligible &&
     !hasGlobalScanTimeout()
   ) {
-    try {
-      const triageResult = await runEngineTriage({
-        scanId,
-        profile: resolveEngineProfile("STANDARD"),
-        input: triageInput,
-        maxBudgetUsd: triageEligibility.maxBudgetUsd!,
-        timeoutMs: resolveScannerPhaseTimeoutMs(scanRuntimeBudgetMs, elapsedScanMs()),
-        shouldCancel: async () => hasGlobalScanTimeout() || (await isScanCancelled()),
-      })
-      const artifact = triageResult.artifact
-      if (triageResult.llmUsage) {
-        const mergedUsage = mergeLlmUsage(
-          engineResult.output.runRecord?.llm_usage,
-          triageResult.llmUsage
-        )
-        if (mergedUsage) {
-          if (triageResult.llmUsage["accountingComplete"] === false)
-            mergedUsage["accountingComplete"] = false
-          await updateAccounting(mergedUsage)
-          if (artifact) {
-            aiSecuritySignals = applyEngineTriageArtifact(aiSecuritySignals, artifact)
-            triageSnapshot = artifactSnapshot(artifact)
-          }
-        } else {
-          // The overlay may have spent tokens even though its receipt cannot
-          // be merged with the scan usage. Invalidate the total rather than
-          // retaining a billable amount for only the engine phase.
-          await updateAccounting()
-          if (!artifact) {
-            triageTerminalReason = "TRIAGE_ARTIFACT_UNAVAILABLE"
-          } else {
-            triageSnapshot = artifactSnapshot(artifact, false)
-          }
-        }
-      } else if (artifact) {
-        await updateAccounting()
-        triageSnapshot = { ...artifactSnapshot(artifact), resultCount: 0 }
-      } else {
-        await updateAccounting()
-      }
-      triageTerminalReason = terminalReason(triageSnapshot)
-    } catch {
-      // An additive overlay can never fail the deterministic scan.
-      triageTerminalReason = "TRIAGE_COMMAND_FAILED"
-    }
+    const attempt = await attemptRepoTriageOverlay({
+      scanId,
+      workspaceId,
+      targetId,
+      triageInput,
+      maxBudgetUsd: triageEligibility.maxBudgetUsd!,
+      scanRuntimeBudgetMs,
+      elapsedScanMs,
+      hasGlobalScanTimeout,
+      isScanCancelled,
+      engineResult,
+      aiSecuritySignals,
+      updateAccounting,
+    })
+    aiSecuritySignals = attempt.aiSecuritySignals
+    triageSnapshot = attempt.triageSnapshot
+    triageTerminalReason = attempt.triageTerminalReason
+    cacheOperations = attempt.cacheOperations
   }
   if (targetType === "REPO" && triageFeatureEnabled && (triageSnapshot || triageInput)) {
     await addScanEvent(
@@ -196,6 +299,7 @@ export async function runEngineTriageOverlay(params: {
         status: triageSnapshot?.status ?? "DISABLED",
         terminalReason: triageSnapshot?.terminalReason ?? triageTerminalReason,
         resultCount: triageSnapshot?.resultCount ?? 0,
+        cacheOperations,
       }
     ).catch((eventErr) =>
       logger.warn("Failed to persist AI-assisted triage terminal state", {

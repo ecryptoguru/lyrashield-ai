@@ -36,6 +36,11 @@ const {
     checkScanUrlSafeMock: vi.fn(),
   }
 })
+const purgeAiResultCacheWorkspaceEntriesMock = vi.hoisted(() => vi.fn())
+vi.mock("@lyrashield/integrations", () => ({
+  purgeAiResultCacheWorkspaceEntries: (...args: unknown[]) =>
+    purgeAiResultCacheWorkspaceEntriesMock(...args),
+}))
 
 vi.mock("@lyrashield/db", () => ({
   prisma: {
@@ -86,6 +91,11 @@ describe("DELETE /api/targets/[id]", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     requirePermission.mockResolvedValue({ session: { userId: "user-1" } })
+    purgeAiResultCacheWorkspaceEntriesMock.mockResolvedValue({
+      available: true,
+      targetsVisited: 1,
+      entriesDeleted: 0,
+    })
   })
 
   it("returns 204 on success and routes through target.delete", async () => {
@@ -96,6 +106,16 @@ describe("DELETE /api/targets/[id]", () => {
     expect(res.status).toBe(204)
     expect(requirePermission).toHaveBeenCalledWith("ws-1", "target:delete")
     expect(softDeleteTargetMock).toHaveBeenCalledWith("ws-1", "t-1", "user-1")
+    expect(purgeAiResultCacheWorkspaceEntriesMock).toHaveBeenCalledWith("ws-1", ["t-1"])
+  })
+
+  it("keeps target deletion successful if the best-effort cache purge fails", async () => {
+    softDeleteTargetMock.mockResolvedValue({ id: "t-1" })
+    purgeAiResultCacheWorkspaceEntriesMock.mockRejectedValue(new Error("Redis unavailable"))
+
+    const res = await DELETE(req("t-1", "ws-1"), ctx("t-1"))
+
+    expect(res.status).toBe(204)
   })
 
   it("returns 409 with TARGET_HAS_ACTIVE_SCAN when a scan is queued or running", async () => {

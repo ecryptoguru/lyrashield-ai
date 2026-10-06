@@ -203,6 +203,37 @@ write_secret_optional LYRASHIELD_WEB_SEARCH_API_KEY worker-web-search-api-key
 # Vault refresh path without adding a second configuration channel.
 write_secret_optional LYRASHIELD_AI_TRIAGE_ENABLED worker-ai-triage-enabled
 write_secret_optional LYRASHIELD_AI_TRIAGE_MAX_BUDGET_USD worker-ai-triage-max-budget-usd
+# Exact triage-result reuse uses a dedicated Redis instance. Its mode is
+# persisted in the worker Key Vault so the worker and promotion preflight read
+# the same setting; absent configuration remains off.
+read_secret_optional worker-ai-result-cache-mode
+cache_mode=${secret_value:-off}
+case "$cache_mode" in
+  off|observe|enforce) ;;
+  *) echo "Worker exact AI-result cache mode is invalid" >&2; exit 1 ;;
+esac
+printf 'LYRASHIELD_AI_RESULT_CACHE_MODE=%s\n' "$cache_mode" >>"$temporary_file"
+if [ "$cache_mode" != "off" ]; then
+  write_secret LYRASHIELD_AI_CACHE_PROVIDER_FINGERPRINT worker-ai-cache-fingerprint
+  case "$secret_value" in
+    ''|*[!a-fA-F0-9]*) echo "Worker exact AI-result cache fingerprint is invalid" >&2; exit 1 ;;
+  esac
+  if [ "${#secret_value}" -ne 64 ]; then
+    echo "Worker exact AI-result cache fingerprint is invalid" >&2
+    exit 1
+  fi
+  write_secret LYRASHIELD_AI_CACHE_REDIS_URL worker-ai-cache-url
+  case "$secret_value" in
+    rediss://* ) ;;
+    *) echo "Worker exact AI-result cache endpoint must use TLS Redis" >&2; exit 1 ;;
+  esac
+  write_secret LYRASHIELD_AI_CACHE_KEY_SECRET worker-ai-cache-key
+  cache_key_bytes=$(printf '%s' "$secret_value" | wc -c | tr -d ' ')
+  if [ "$cache_key_bytes" -lt 32 ]; then
+    echo "Worker exact AI-result cache key must contain at least 32 bytes" >&2
+    exit 1
+  fi
+fi
 
 uses_ghcr=false
 for image in "${LYRASHIELD_WORKER_IMAGE:-}" "${LYRASHIELD_SANDBOX_IMAGE:-}"; do

@@ -118,3 +118,5 @@ verify-*.mts
 
 # Dogfood/browser QA output (screenshots, auth state)
 dogfood-output/
+
+.serena/

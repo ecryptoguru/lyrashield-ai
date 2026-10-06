@@ -28,6 +28,18 @@ step_deploy-app-container-app() {
   if [ "${MYRA_GOOGLE_REFRESH_TOKEN_CONFIGURED}" = "true" ]; then
     MYRA_ENV+=("MYRA_GOOGLE_REFRESH_TOKEN=secretref:myra-g-refresh")
   fi
+  # Web only purges completed cache entries; provider-result reuse runs in the worker.
+  # When disabled, retain prior credential bindings so existing entries can still be purged.
+  CACHE_PURGE_ENV=("LYRASHIELD_AI_RESULT_CACHE_MODE=off")
+  case "${LYRASHIELD_AI_RESULT_CACHE_MODE:-off}" in
+    observe|enforce)
+      CACHE_PURGE_ENV+=(
+        "LYRASHIELD_AI_CACHE_REDIS_URL=secretref:ai-cache-url"
+        "LYRASHIELD_AI_CACHE_KEY_SECRET=secretref:ai-cache-key"
+      ) ;;
+    off) ;;
+    *) echo "::error::Invalid exact AI-result cache mode."; exit 1 ;;
+  esac
   probe_dir=$(mktemp -d)
   trap 'rm -rf "$probe_dir"' EXIT
   openssl req -x509 -newkey rsa:2048 -nodes -days 1 \
@@ -121,6 +133,7 @@ step_deploy-app-container-app() {
       "MYRA_GOOGLE_CALENDAR_ID=${MYRA_GOOGLE_CALENDAR_ID}" \
       "MYRA_SUPPORT_NOTIFY_EMAIL=${MYRA_SUPPORT_NOTIFY_EMAIL}" \
       "${MYRA_ENV[@]}" \
+      "${CACHE_PURGE_ENV[@]}" \
       "${EMAIL_ENV[@]}" \
       "${OAUTH_ENV[@]}" \
     --output none

@@ -107,7 +107,7 @@ Decided on 2026-09-22: retain and publish the existing Cloud and minute-pack pri
 
 ### Models and agents
 
-- Routing authority: `resolveEngineProfile()`; budget authority: `resolveScanBudgetUsd()`; price authority: `gpt56-pricing.ts`.
+- Routing authority: `resolveEngineProfile()`; budget authority: `resolveScanBudgetUsd()`; price authority: `gpt6-pricing.ts`.
 - Keep validated fallback model and positive policy checks.
 - Deep/Custom use GPT-6 Sol/medium root and Luna/high specialists; see [model routing](./codebase.md#model-routing-and-accounting).
 - Model-facing inputs use `normalizeInput()` and `PromptInjectionGuard`; no ad hoc regex replacement.
