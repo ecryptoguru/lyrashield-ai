@@ -1,5 +1,6 @@
 import test from "node:test"
 import assert from "node:assert/strict"
+import { spawnSync } from "node:child_process"
 import {
   mkdtempSync,
   mkdirSync,
@@ -15,6 +16,25 @@ import { fileURLToPath, pathToFileURL } from "node:url"
 import { canonical, sha256 } from "../../packages/db/scripts/webhook-empty-state-receipt-v2.mjs"
 import { fixture } from "../../packages/db/scripts/tests/webhook-empty-state-v2-fixture.mjs"
 import { runtimeFingerprint } from "./webhook-empty-state-consumer-identity.mjs"
+import { candidateConnectionProbeSource } from "./webhook-empty-state-candidate-connection.mjs"
+
+test("serialized candidate probe runs without module-scope bindings", () => {
+  const env = {
+    DATABASE_URL:
+      "postgresql://worker_runtime:disposable-only@db.yejmvtgsxniatmjbwplk.supabase.co:5432/postgres?sslmode=verify-full",
+    DATABASE_SYSTEM_URL:
+      "postgresql://system_admin:disposable-system@db.yejmvtgsxniatmjbwplk.supabase.co:5432/postgres?sslmode=verify-full",
+    REDIS_URL: "rediss://disposable-only@redis.invalid:6379/0",
+  }
+  const result = spawnSync(
+    process.execPath,
+    ["--input-type=module", "-e", candidateConnectionProbeSource()],
+    { encoding: "utf8", timeout: 5000, env }
+  )
+  assert.equal(result.error, undefined, result.error?.message)
+  assert.equal(result.status, 0, result.stderr)
+  assert.deepEqual(JSON.parse(result.stdout), runtimeFingerprint(env))
+})
 
 test("enabled copied candidate adapter survives cold start and crash after either activation without promoting foreign state", async () => {
   const root = realpathSync(mkdtempSync(join(tmpdir(), "candidate-adapter-disposable-")))
@@ -27,6 +47,12 @@ test("enabled copied candidate adapter survives cold start and crash after eithe
       mkdirSync(dirname(join(root, path)), { recursive: true })
       cpSync(join(source, path), join(root, path), { recursive: true })
     }
+    mkdirSync(join(root, "packages/db/node_modules"), { recursive: true })
+    cpSync(
+      realpathSync(join(source, "packages/db/node_modules/pg-connection-string")),
+      join(root, "packages/db/node_modules/pg-connection-string"),
+      { recursive: true }
+    )
     const store = join(root, "packages/db/scripts/webhook-empty-state-root-store.mjs")
     writeFileSync(
       store,
@@ -61,8 +87,9 @@ test("enabled copied candidate adapter survives cold start and crash after eithe
     const { promoteCandidate } = await import(pathToFileURL(candidate))
     for (const crashAfter of [null, "app", "scanner", "rename", "unhealthy-scanner"]) {
       const { receipt, policy } = fixture()
-      const issuedAt = new Date().toISOString(),
-        expiresAt = new Date(Date.now() + 1800000).toISOString()
+      const issuedAtMs = Date.now(),
+        issuedAt = new Date(issuedAtMs).toISOString(),
+        expiresAt = new Date(issuedAtMs + 30 * 60_000).toISOString()
       Object.assign(receipt.authorization, { issuedAt, expiresAt })
       Object.assign(policy, { issuedAt, expiresAt })
       const base =
@@ -77,13 +104,20 @@ test("enabled copied candidate adapter survives cold start and crash after eithe
       policy.candidateRevisions = { app: "app-candidate", scanner: "scanner-candidate" }
       const env = {
         DATABASE_URL:
-          "postgresql://postgres:disposable-only@db.yejmvtgsxniatmjbwplk.supabase.co:5432/postgres",
+          "postgresql://worker_runtime:disposable-only@db.yejmvtgsxniatmjbwplk.supabase.co:5432/postgres?sslmode=verify-full",
         DATABASE_SYSTEM_URL:
-          "postgresql://postgres:disposable-system@db.yejmvtgsxniatmjbwplk.supabase.co:5432/postgres",
+          "postgresql://system_admin:disposable-system@db.yejmvtgsxniatmjbwplk.supabase.co:5432/postgres?sslmode=verify-full",
         REDIS_URL: "rediss://disposable-only@redis.invalid:6379/0",
       }
       const fingerprint = runtimeFingerprint(env)
       policy.databaseIdentitySha256 = fingerprint.database.identitySha256
+      policy.databasePrincipals = {
+        app: "worker_runtime",
+        scanner: "worker_runtime",
+        worker: "worker_runtime",
+        system: "system_admin",
+        migration: "postgres",
+      }
       policy.redisIdentitySha256 = fingerprint.redis.identitySha256
       policy.credentials.redis = fingerprint.redis.credentialSha256
       policy.candidateCredentials = {}

@@ -1,13 +1,14 @@
 import { constants, openSync, fstatSync, readFileSync, closeSync } from "node:fs"
 import { checkParents } from "../../packages/db/scripts/webhook-empty-state-root-store.mjs"
 import {
+  assertSupabaseDatabasePrincipal,
   assertMigrationUrlBinding,
   canonicalSupabaseDatabaseIdentity,
   hashDatabaseIdentity,
   parsePostgresConnectionTarget,
 } from "../../packages/db/scripts/webhook-empty-state-contract.mjs"
 import { requireValue } from "../../packages/db/scripts/webhook-empty-state-receipt-v2.mjs"
-export function parseFixedMigrationEnvironment(bytes, expectedIdentity) {
+export function parseFixedMigrationEnvironment(bytes, expectedIdentity, expectedPrincipal = "postgres") {
   requireValue(
     typeof bytes === "string" && bytes.length <= 65536,
     "Invalid fixed migration environment"
@@ -33,6 +34,7 @@ export function parseFixedMigrationEnvironment(bytes, expectedIdentity) {
   const direct = values.DATABASE_DIRECT_URL
   const env = { DATABASE_DIRECT_URL: direct, DATABASE_URL: values.DATABASE_URL || direct }
   assertMigrationUrlBinding(env)
+  assertSupabaseDatabasePrincipal(direct, expectedPrincipal, "Migration DATABASE_DIRECT_URL")
   requireValue(
     parsePostgresConnectionTarget(direct).port === "5432" &&
       hashDatabaseIdentity(canonicalSupabaseDatabaseIdentity([direct])) === expectedIdentity,
@@ -42,7 +44,11 @@ export function parseFixedMigrationEnvironment(bytes, expectedIdentity) {
     requireValue(values.MIGRATION_DATABASE_URL === direct, "Migration alias changed")
   return env
 }
-export function loadFixedMigrationEnvironment(expectedIdentity) {
+export function loadFixedMigrationEnvironment(expectedIdentity, expectedPrincipal) {
+  requireValue(
+    typeof expectedPrincipal === "string",
+    "Signed migration principal expectation is required"
+  )
   const path = "/etc/lyrashield/webhook-empty-state.env"
   checkParents(path)
   const fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW)
@@ -56,7 +62,7 @@ export function loadFixedMigrationEnvironment(expectedIdentity) {
         stat.size <= 65536,
       "Unsafe fixed migration environment"
     )
-    return parseFixedMigrationEnvironment(readFileSync(fd, "utf8"), expectedIdentity)
+    return parseFixedMigrationEnvironment(readFileSync(fd, "utf8"), expectedIdentity, expectedPrincipal)
   } finally {
     closeSync(fd)
   }

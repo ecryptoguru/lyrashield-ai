@@ -19,6 +19,7 @@ import {
   requireValue,
   validateAuthorization,
 } from "./webhook-empty-state-receipt-v2.mjs"
+import { validateDatabasePrincipalPolicy } from "./webhook-empty-state-contract.mjs"
 
 export const ROOT = "/var/lib/lyrashield/webhook-empty-state"
 export const POLICY = "/etc/lyrashield/webhook-empty-state-policy.json"
@@ -148,16 +149,22 @@ function verifyComponents(policy) {
 }
 export function readPolicy() {
   requireValue(process.getuid?.() === 0, "Trusted producer requires root")
-  const policy = readRootFile(POLICY),
-    unsigned = { ...policy }
+  const policy = readRootFile(POLICY)
+  validateRootPolicyIntegrity(policy)
+  verifyComponents(policy)
+  return policy
+}
+export function validateRootPolicyIntegrity(policy) {
+  requireValue(policy && typeof policy === "object" && !Array.isArray(policy), "Root policy is malformed")
+  const unsigned = { ...policy }
   delete unsigned.policySha256
   requireValue(sha256(canonical(unsigned)) === policy.policySha256, "Root policy digest mismatch")
   requireValue(
-    policy.schemaVersion === "webhook-empty-state-policy/v2",
+    policy.schemaVersion === "webhook-empty-state-policy/v3",
     "Wrong root policy version"
   )
-  verifyComponents(policy)
-  return policy
+  validateDatabasePrincipalPolicy(policy.databasePrincipals)
+  return true
 }
 export function runDirectory(runId) {
   requireValue(/^[1-9][0-9]{0,19}$/.test(runId || ""), "Invalid run ID")

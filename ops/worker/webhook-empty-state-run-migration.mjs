@@ -17,7 +17,10 @@ try {
   const policy = readPolicy(),
     authorization = readAuthorization(policy)
   validateAuthorization(authorization, policy)
-  const migrationEnv = loadFixedMigrationEnvironment(policy.databaseIdentitySha256)
+  const migrationEnv = loadFixedMigrationEnvironment(
+    policy.databaseIdentitySha256,
+    policy.databasePrincipals?.migration
+  )
   const result = await runEmptyStateMigration({
     env: {
       ...migrationEnv,
