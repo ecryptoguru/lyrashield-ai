@@ -1,6 +1,6 @@
 # LyraShield CLI 0.2.14
 
-The `lyrashield` command-line interface installs, configures, and drives LyraShield scans from a terminal or CI pipeline.
+The `lyrashield` command-line interface installs, configures, and drives LyraShield scans from a terminal or CI pipeline. Scans started here produce the same evidence-backed record as the dashboard: explicit evidence states, coverage receipts, approval-gated fix proposals and server-owned retests — never a bare confidence score.
 
 ## Quick start
 

@@ -4,6 +4,8 @@ Last checked against the application code: 2026-09-19. Client-specific runtime a
 
 LyraShield AI helps builders review an application before release and retain an evidence-backed record of what was checked.
 
+Unlike a point scanner, it separates what was detected from what was actually proven, reviews the AI-specific surfaces of your app (agent rules, MCP configs, LLM patterns), proposes fixes through an approval-gated server-generated patch flow, retests automatically after a fix merges, and packages the outcome as a signed, shareable report. It runs from the dashboard, the CLI, MCP clients and CI. See the [litepaper](./litepaper.md) for the full differentiator list.
+
 ## Target → Scan → Evidence State → Fix Proposal → Retest → Assurance Report
 
 This guide covers the public Lite Check, authenticated dashboard, scan choices, findings, fixes, reports, scorecards, teams, integrations (agents and services), schedules, notifications, the CLI, MCP tools and current limitations.
