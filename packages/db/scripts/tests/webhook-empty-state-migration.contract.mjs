@@ -5,11 +5,14 @@ import { dirname, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import test from "node:test"
 import {
+  assertDisposablePostgresUrl,
   assertMigrationUrlBinding,
   createDisposablePostgresClient,
   canonicalSupabaseDatabaseIdentity,
   EXPECTED_EMPTY_MIGRATIONS,
   hashDatabaseIdentity,
+  parseSupabaseDatabasePrincipal,
+  assertSupabaseDatabasePrincipal,
   parsePostgresConnectionTarget,
   normalizeDefault,
   validateEmptyStateAuthorization,
@@ -18,8 +21,8 @@ import {
 import { runEmptyStateMigration } from "../webhook-empty-state-migration.mjs"
 
 const projectRef = "localprojectfixture1"
-const direct = "postgresql://postgres:masked@db." + projectRef + ".supabase.co:5432/postgres?schema=public"
-const pooler = "postgresql://postgres." + projectRef + ":masked@fixture.pooler.supabase.com:5432/postgres?schema=public"
+const direct = "postgresql://postgres:masked@db." + projectRef + ".supabase.co:5432/postgres?schema=public&sslmode=verify-full"
+const pooler = "postgresql://postgres." + projectRef + ":masked@fixture.pooler.supabase.com:5432/postgres?schema=public&sslmode=verify-full"
 const testProjectRef = "localtestprojectref1"
 const testDatabaseUrl = "postgresql://postgres:masked@127.0.0.1:5432/postgres?schema=public"
 const now = Date.parse("2026-10-04T12:00:00.000Z")
@@ -113,6 +116,12 @@ test("direct and project-bound Supavisor URLs canonicalize to one logical databa
   assert.deepEqual(canonicalSupabaseDatabaseIdentity([direct, pooler]), {
     provider: "supabase", projectRef, database: "postgres", schema: "public",
   })
+  const workerPooler = pooler.replace("postgres.", "worker_runtime.")
+  assert.equal(parseSupabaseDatabasePrincipal(workerPooler), "worker_runtime")
+  assert.equal(hashDatabaseIdentity(canonicalSupabaseDatabaseIdentity([direct])),
+    hashDatabaseIdentity(canonicalSupabaseDatabaseIdentity([workerPooler])))
+  assert.throws(() => assertSupabaseDatabasePrincipal(workerPooler, "postgres"), /principal differs/)
+  assert.equal(assertSupabaseDatabasePrincipal(workerPooler, "worker_runtime"), "worker_runtime")
 })
 
 test("column default normalization preserves case inside SQL string literals", () => {
@@ -131,7 +140,9 @@ test("effective node-postgres target rejects query endpoint, credential, duplica
     "%75ser=attacker",
     "options=-c%20search_path=private",
     "schema=public&schema=public",
-    "sslmode=require&sslmode=verify-full",
+    "sslmode=verify-full&sslmode=verify-full",
+    "uselibpqcompat=1",
+    "%75selibpqcompat=1",
   ]
   for (const attack of attacks) {
     assert.throws(() => parsePostgresConnectionTarget(direct + "&" + attack), /unsupported|duplicate/, attack)
@@ -164,6 +175,15 @@ test("disposable rehearsal rejects effective host overrides before constructing 
   assert.ok(source.indexOf("createDisposablePostgresClient(databaseUrl") < source.indexOf("DROP TABLE"))
 })
 
+test("generic disposable PostgreSQL targets preserve require and no-mode behavior", () => {
+  const requireTls = "postgresql://postgres:masked@127.0.0.1:5432/postgres?sslmode=require"
+  const defaultMode = "postgresql://postgres:masked@127.0.0.1:5432/postgres"
+  assert.equal(parsePostgresConnectionTarget(requireTls).url.searchParams.get("sslmode"), "require")
+  assert.equal(assertDisposablePostgresUrl(requireTls).host, "127.0.0.1")
+  assert.equal(parsePostgresConnectionTarget(defaultMode).host, "127.0.0.1")
+  assert.equal(assertDisposablePostgresUrl(defaultMode).port, "5432")
+})
+
 test("signed maintenance receipt rejects tampering and an untrusted key", () => {
   const receipt = signReceipt(validReceipt())
   assert.equal(verifySignedEmptyStateReceipt(receipt, publicKeyPem), true)
@@ -172,12 +192,48 @@ test("signed maintenance receipt rejects tampering and an untrusted key", () => 
 })
 
 test("Supavisor identity requires project ref in its username", () => {
-  const unbound = "postgresql://postgres:masked@fixture.pooler.supabase.com:5432/postgres?schema=public"
+  const unbound = "postgresql://postgres:masked@fixture.pooler.supabase.com:5432/postgres?schema=public&sslmode=verify-full"
   assert.throws(() => canonicalSupabaseDatabaseIdentity([unbound]), /username must bind/)
 })
 
+test("production Supabase identities require explicit verified TLS and reject compatibility mode", () => {
+  for (const url of [
+    direct.replace("&sslmode=verify-full", ""),
+    direct.replace("sslmode=verify-full", "sslmode=require"),
+    direct.replace("sslmode=verify-full", "sslmode=disable"),
+    direct.replace("sslmode=verify-full", "sslmode=verify-full&sslmode=verify-full"),
+    direct.replace("sslmode=verify-full", "sslmode=verify-full&uselibpqcompat=true"),
+  ]) {
+    assert.throws(() => canonicalSupabaseDatabaseIdentity([url]))
+  }
+})
+
+test("signed principal policy names independent expected roles", async () => {
+  const { validateDatabasePrincipalPolicy } = await import("../webhook-empty-state-contract.mjs")
+  const valid = {
+    app: "worker_runtime",
+    scanner: "scanner_runtime",
+    worker: "worker_runtime",
+    system: "system_admin",
+    migration: "postgres",
+  }
+  assert.equal(validateDatabasePrincipalPolicy(valid), true)
+  for (const changed of [
+    { ...valid, worker: "system_admin" },
+    { ...valid, system: "scanner_runtime" },
+    { ...valid, migration: "invalid principal" },
+    { ...valid, backup: "postgres" },
+    { ...valid, system: valid.worker },
+    { ...valid, app: "postgres", worker: "postgres" },
+    { ...valid, scanner: "postgres" },
+    { ...valid, migration: valid.worker },
+    { ...valid, migration: valid.scanner },
+  ])
+    assert.throws(() => validateDatabasePrincipalPolicy(changed))
+})
+
 test("rejects direct and pooler URLs bound to different projects", () => {
-  const other = "postgresql://postgres.testprojectfixture99:masked@fixture.pooler.supabase.com:5432/postgres?schema=public"
+  const other = "postgresql://postgres.testprojectfixture99:masked@fixture.pooler.supabase.com:5432/postgres?schema=public&sslmode=verify-full"
   assert.throws(() => canonicalSupabaseDatabaseIdentity([direct, other]), /different Supabase projects/)
 })
 

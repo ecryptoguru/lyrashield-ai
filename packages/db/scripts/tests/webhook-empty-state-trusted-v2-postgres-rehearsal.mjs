@@ -2,6 +2,7 @@
 // attestation and external cloud commands are explicit mocked boundaries;
 // authorization, same-connection DB continuity, SQL and Prisma are real.
 import assert from "node:assert/strict"
+import { spawnSync } from "node:child_process"
 import { createHash, randomUUID } from "node:crypto"
 import {
   mkdtempSync,
@@ -38,6 +39,58 @@ assert.equal(target.username, "postgres")
 assert.equal(target.pathname, "/postgres")
 assert.equal(target.password, "disposable-only")
 assert.equal(process.env.LYRASHIELD_TRUSTED_FIXTURE_NETWORK, "isolated-docker-only")
+assert.ok(process.env.LYRASHIELD_TRUSTED_FIXTURE_WRONG_CA_PATH)
+const tlsProbe = new Client({ connectionString: trustedUrl })
+await tlsProbe.connect()
+const tlsState = await tlsProbe.query("SELECT ssl FROM pg_stat_ssl WHERE pid = pg_backend_pid()")
+assert.equal(tlsState.rows[0]?.ssl, true, "trusted Supabase-alias connection must negotiate verified TLS")
+await tlsProbe.end()
+const rejectsTls = async (connectionString) => {
+  const client = new Client({ connectionString })
+  try {
+    await assert.rejects(client.connect())
+  } finally {
+    await client.end().catch(() => {})
+  }
+}
+await rejectsTls(trustedUrl.replace(target.hostname, "wrong.invalid"))
+const wrongCaProbe = spawnSync(
+  process.execPath,
+  [
+    "--input-type=module",
+    "-e",
+    `import { Client } from "pg"
+const client = new Client({
+  connectionString: process.env.LYRASHIELD_TRUSTED_FIXTURE_DATABASE_URL,
+})
+try {
+  await client.connect()
+  await client.end()
+  process.exitCode = 19
+} catch (error) {
+  const reason = [error?.code, error?.message].filter(Boolean).join(" ")
+  if (!/(?:CERTIFICATE|CERT_|SELF_SIGNED|ISSUER|UNABLE_TO_VERIFY)/i.test(reason)) {
+    process.stderr.write("Unexpected wrong-CA probe error: " + (error?.code || "unknown") + "\\n")
+    process.exitCode = 20
+  } else {
+    await client.end().catch(() => {})
+    process.exitCode = 0
+  }
+}`,
+  ],
+  {
+    encoding: "utf8",
+    timeout: 10_000,
+    env: {
+      ...process.env,
+      NODE_EXTRA_CA_CERTS: process.env.LYRASHIELD_TRUSTED_FIXTURE_WRONG_CA_PATH,
+      PGSSLROOTCERT: process.env.LYRASHIELD_TRUSTED_FIXTURE_WRONG_CA_PATH,
+      SSL_CERT_FILE: process.env.LYRASHIELD_TRUSTED_FIXTURE_WRONG_CA_PATH,
+    },
+  }
+)
+assert.equal(wrongCaProbe.error, undefined, wrongCaProbe.error?.message)
+assert.equal(wrongCaProbe.status, 0, "wrong CA must reject the verified TLS connection")
 const root = mkdtempSync(join(tmpdir(), "trusted-v2-disposable-"))
 const db = join(root, "packages/db"),
   scripts = join(db, "scripts")
