@@ -19,6 +19,7 @@ test("maintenance drain detects paused and waiting-for-children jobs in disposab
   assert.equal(target.password, "")
   const source = readFileSync(new URL("../webhook-claims-vm.sh", import.meta.url), "utf8")
   const states = JSON.parse(`[${source.match(/scan\.getJobCounts\(([^)]+)\)/)?.[1]}]`)
+  assert.deepEqual(states, JSON.parse(`[${source.match(/webhook\.getJobCounts\(([^)]+)\)/)?.[1]}]`))
   const connection = { host: target.hostname, port: Number(target.port || "6379") }
   const suffix = randomBytes(8).toString("hex")
   const paused = new Queue(`catalog-paused-${suffix}`, { connection })
@@ -27,7 +28,13 @@ test("maintenance drain detects paused and waiting-for-children jobs in disposab
   const flow = new FlowProducer({ connection })
   t.after(async () => {
     try {
-      for (const queue of [parent, child, paused]) await queue.obliterate({ force: true })
+      const cleanup = await Promise.allSettled(
+        [parent, child, paused].map((queue) => queue.obliterate({ force: true }))
+      )
+      const errors = cleanup
+        .filter((result) => result.status === "rejected")
+        .map((result) => result.reason)
+      if (errors.length) throw new AggregateError(errors, "disposable queue cleanup failed")
     } finally {
       await Promise.all([flow.close(), parent.close(), child.close(), paused.close()])
     }
