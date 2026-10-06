@@ -1,22 +1,21 @@
 # MCP protocol conformance
 
-Baseline: `@modelcontextprotocol/sdk` **1.30.1** and `@lyrashield/mcp` 0.2.12. The SDK
-floor is `^1.30.1` in `packages/mcp` and `packages/cli` (the CLI uses the SDK as an MCP
-client); `pnpm-lock.yaml` resolves `1.30.1` with integrity
-`sha512-H2HxLvC3HDNybePJaLdSrU1hhUK5iQw+WvV1b01myFyI7sdVGe1u/IPTE5D9fGCiJDVtgMV/lmFkQXLmQyIFYA==`.
+Baseline: `@modelcontextprotocol/sdk` **1.31.0** and `@lyrashield/mcp` 0.2.12. The SDK
+floor is `^1.31.0` in `packages/mcp` and `packages/cli` (the CLI uses the SDK as an MCP
+client); `pnpm-lock.yaml` resolves `1.31.0` with integrity
+`sha512-UvTMgnNlnIBO/22ob2RcVGDlcvOslQs8T59+FTGdA0L27a39fdGF/EDETNtDVK4DZGpwomlsYpRdA8UXcVL/pw==`.
 
 ## SDK version decision
 
-- npm `@modelcontextprotocol/sdk` has exactly one dist-tag, `latest: 1.30.1` — there is
-  no beta channel. The `1.30.0` → `1.30.1` patch adds a bounded HTTP request-body read
-  (4 MiB default → HTTP 413), a 100-message JSON-RPC batch cap (→ HTTP 400), and an
-  auth resource-URI fix. `dist/esm/types.js` is byte-identical between the two:
-  `LATEST_PROTOCOL_VERSION` stays `2025-11-25` and `SUPPORTED_PROTOCOL_VERSIONS` stays
-  `["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05", "2024-10-07"]` — verified
-  by importing the installed package and asserted in `src/protocol.test.ts`.
-- 1.30.1 was published 2026-09-23, inside the repo's 7-day `minimumReleaseAge` gate, so
-  `pnpm-workspace.yaml` carries an explicit `minimumReleaseAgeExclude` entry with the
-  reason recorded inline.
+- At the npm registry snapshot on 2026-10-06, the SDK's `latest` dist-tag is 1.32.1
+  (published 2026-10-05); 1.32.0 was published 2026-10-02. Both releases are younger
+  than the repository's seven-day `minimumReleaseAge: 10080` policy. Version 1.31.0,
+  published 2026-09-28, is the patched v1 release for
+  [GHSA-6qxp-vccf-f47h](https://github.com/advisories/GHSA-6qxp-vccf-f47h) and passes
+  the age gate without an SDK-specific exclusion, so the workspace resolves to it.
+- Importing the locked 1.31.0 package reports `LATEST_PROTOCOL_VERSION` as `2025-11-25`
+  and the five supported versions listed below; the MCP package's `src/protocol.test.ts`
+  asserts these installed-package values.
 
 ## Compatibility matrix
 
@@ -69,21 +68,20 @@ checks.
 
 | Item                                                    | Behavior                                                                                                                   | Reason unsupported                                                                                                         |
 | ------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `server/discover`                                       | JSON-RPC `-32601 Method not found`                                                                                         | No stable SDK ≤1.30.1 — `src/http-transport.test.ts`, `src/packed-stdio.test.ts`                                           |
+| `server/discover`                                       | JSON-RPC `-32601 Method not found`                                                                                         | Not implemented by this server — `src/http-transport.test.ts`, `src/packed-stdio.test.ts`                                  |
 | `resources/list`, `prompts/list`, `completion/complete` | JSON-RPC `-32601 Method not found`                                                                                         | Intentionally not enabled — no such server capability is registered (`src/create-server.ts`); `src/http-transport.test.ts` |
-| MRTR retry/input-response exchange                      | Not implemented                                                                                                            | No stable SDK ≤1.30.1 exposes it; not emulated (`src/protocol.test.ts`)                                                    |
-| `Mcp-Method` / `Mcp-Name` transport headers             | Not consumed                                                                                                               | No stable SDK ≤1.30.1 reads them (`src/protocol.test.ts`)                                                                  |
-| List-result `ttlMs` / `cacheScope`                      | Not advertised                                                                                                             | No stable SDK ≤1.30.1 schema (`src/protocol.test.ts`)                                                                      |
-| Protocol version `2026-07-28`                           | **Blocked — recorded, not emulated** (see receipt below)                                                                   | No stable SDK ≤1.30.1 supports it                                                                                          |
+| MRTR retry/input-response exchange                      | Not implemented                                                                                                            | Not implemented or emulated by this package (`src/protocol.test.ts`)                                                       |
+| `Mcp-Method` / `Mcp-Name` transport headers             | Not consumed                                                                                                               | Not consumed by this server (`src/protocol.test.ts`)                                                                       |
+| List-result `ttlMs` / `cacheScope`                      | Not advertised                                                                                                             | Not advertised by this server (`src/protocol.test.ts`)                                                                     |
+| Protocol version `2026-07-28`                           | **Blocked — recorded, not emulated** (see receipt below)                                                                   | Absent from the pinned 1.31.0 SDK supported-version list                                                                   |
 | MCP Tasks (`experimental/tasks`, protocol `2025-11-25`) | Conditional: stdio; hosted connected OAuth only. Other credentials/protocols omit task capability and keep immediate calls | `src/local-task-backend.test.ts`, `apps/web/src/app/api/mcp/tasks.test.ts`; rationale below                                |
 
 ## Blocked feature receipt: protocol `2026-07-28`
 
-The MCP specification dated `2026-07-28` is published, but as of
-`@modelcontextprotocol/sdk` **1.30.1** — the newest stable release on npm — no stable
-SDK supports negotiating it: `SUPPORTED_PROTOCOL_VERSIONS` ends at `2025-11-25`.
-LyraShield therefore does **not** hand-emulate `2026-07-28` semantics. Fail-closed
-behavior is verified instead:
+The pinned `@modelcontextprotocol/sdk` **1.31.0** reports
+`SUPPORTED_PROTOCOL_VERSIONS` as `2025-11-25`, `2025-06-18`, `2025-03-26`,
+`2024-11-05` and `2024-10-07`; it does not include `2026-07-28`. LyraShield therefore
+does **not** hand-emulate `2026-07-28` semantics. Fail-closed behavior is verified:
 
 - `initialize` requesting `2026-07-28` is answered with `2025-11-25`, never the unknown
   version — the client decides whether to continue (`src/http-transport.test.ts`,
@@ -91,9 +89,9 @@ behavior is verified instead:
 - Any non-initialize request bearing `MCP-Protocol-Version: 2026-07-28` is rejected
   HTTP 400 `-32000` with the full supported-version list (`src/http-transport.test.ts`).
 
-This stays blocked until a stable SDK release negotiates `2026-07-28`; the
-parameterized matrix above then picks it up automatically from
-`SUPPORTED_PROTOCOL_VERSIONS`.
+This remains blocked for the pinned SDK until its supported-version list includes
+`2026-07-28` and the package's conformance tests pass for that version. The
+parameterized matrix above picks up versions listed by the installed SDK automatically.
 
 ## Task behavior
 

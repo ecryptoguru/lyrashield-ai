@@ -64,7 +64,7 @@ function setup(t, scenario = "normal") {
   const integration = path.join(directory, "integrations.mjs")
   writeFileSync(
     integration,
-    `const queue=()=>({getJobCounts:async()=>({wait:${scenario === "retry pending" ? 1 : 0},active:0,delayed:0,prioritized:0}),close:async()=>{}});export const getScanQueue=queue,getWebhookTrackRetryQueue=queue,closeRedis=async()=>{}`
+    `const queue=()=>({getJobCounts:async(...states)=>Object.fromEntries(states.map(name=>[name,(name==="wait"&&${scenario === "retry pending"})||(name==="paused"&&${scenario === "paused jobs"})||(name==="waiting-children"&&${scenario === "waiting children"})?1:0])),close:async()=>{}});export const getScanQueue=queue,getWebhookTrackRetryQueue=queue,closeRedis=async()=>{}`
   )
   const billing = path.join(directory, "billing.mjs")
   writeFileSync(
@@ -169,13 +169,23 @@ for (const scenario of [
   "foreign stop",
   "active scan",
   "retry pending",
+  "paused jobs",
+  "waiting children",
   "old replica",
   "stale environment",
 ]) {
   test(`maintenance fails closed without stopping paid work: ${scenario}`, (t) => {
     const f = setup(t, scenario)
     const claimed = f.vm("claim")
-    if (["stale environment", "active scan", "retry pending"].includes(scenario)) {
+    if (
+      [
+        "stale environment",
+        "active scan",
+        "retry pending",
+        "paused jobs",
+        "waiting children",
+      ].includes(scenario)
+    ) {
       assert.notEqual(claimed.status, 0)
       assert.equal(JSON.parse(readFileSync(f.redis)), null)
       return
@@ -497,6 +507,8 @@ for (const [scenario, succeeds] of [
 for (const scenario of [
   "active scan",
   "retry pending",
+  "paused jobs",
+  "waiting children",
   "nonterminal track",
   "legacy scheduled",
   "legacy query unavailable",

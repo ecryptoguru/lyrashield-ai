@@ -99,7 +99,7 @@ function fixture(t, scenario, expectedMode) {
   const digest = legacy ? legacyWorkerDigest : defaultDigest
   const writerDigest = legacy ? legacyWriterDigest : defaultDigest
   const workerImage = `ghcr.io/example/worker:${workerProduct}@${digest}`
-  const state = {
+  const state = structuredClone({
     protocol: legacy ? "durable-claims/1" : protocol,
     product: workerProduct,
     engine: legacy ? legacyEngine : engine,
@@ -131,7 +131,7 @@ function fixture(t, scenario, expectedMode) {
         name: "WebhookEventTrack_webhookEventId_fkey",
         type: "f",
         definition:
-          "FOREIGN KEY (webhookEventId) REFERENCES WebhookEvent(id) ON UPDATE CASCADE ON DELETE CASCADE",
+          'FOREIGN KEY ("webhookEventId") REFERENCES "WebhookEvent"(id) ON UPDATE CASCADE ON DELETE CASCADE',
         validated: true,
       },
       {
@@ -150,6 +150,44 @@ function fixture(t, scenario, expectedMode) {
             "nextAttemptAtUtc",
           ]),
         ],
+  })
+  if (
+    scenario === "legacy wrong status literal case" ||
+    scenario === "current wrong status literal case"
+  ) {
+    state.columns = state.columns.map((column) =>
+      column.name === "status" ? { ...column, default: "'Pending'::text" } : column
+    )
+  }
+  if (
+    scenario === "legacy wrong status literal whitespace" ||
+    scenario === "current wrong status literal whitespace"
+  ) {
+    state.columns = state.columns.map((column) =>
+      column.name === "status" ? { ...column, default: "'pending '::text" } : column
+    )
+  }
+  if (scenario === "legacy wrong FK quoted case" || scenario === "current wrong FK quoted case") {
+    state.constraints = state.constraints.map((constraint) =>
+      constraint.name === "WebhookEventTrack_webhookEventId_fkey"
+        ? {
+            ...constraint,
+            definition:
+              'FOREIGN KEY ("webhookeventid") REFERENCES "WebhookEvent"(id) ON UPDATE CASCADE ON DELETE CASCADE',
+          }
+        : constraint
+    )
+  }
+  if (scenario === "legacy wrong FK target" || scenario === "current wrong FK target") {
+    state.constraints = state.constraints.map((constraint) =>
+      constraint.name === "WebhookEventTrack_webhookEventId_fkey"
+        ? {
+            ...constraint,
+            definition:
+              'FOREIGN KEY ("webhookEventId") REFERENCES "OtherWebhookEvent"(id) ON UPDATE CASCADE ON DELETE CASCADE',
+          }
+        : constraint
+    )
   }
   if (scenario === "old worker") state.protocol = "durable-claims/1"
   if (scenario === "unknown worker protocol") state.protocol = "durable-claims/3"
@@ -341,10 +379,22 @@ function fixture(t, scenario, expectedMode) {
       PATH: `${directory}:${process.env.PATH}`,
       AZURE_KEY_VAULT_NAME: "vault",
       GHCR_USERNAME: "owner",
+      AZURE_WEBHOOK_WRITER_TOPOLOGY:
+        scenario === "unknown topology"
+          ? "unknown"
+          : ["explicit app-only", "app-only with scanner"].includes(scenario)
+            ? "app-only"
+            : "app-and-scanner",
       AZURE_RESOURCE_GROUP: "test",
       AZURE_WORKER_VM_NAME: "worker",
       AZURE_APP_CONTAINER_APP_NAME: "app",
-      AZURE_SCANNER_CONTAINER_APP_NAME: scenario === "legacy missing scanner" ? "" : "scanner",
+      AZURE_SCANNER_CONTAINER_APP_NAME: [
+        "legacy missing scanner",
+        "ordinary missing scanner",
+        "explicit app-only",
+      ].includes(scenario)
+        ? ""
+        : "scanner",
     },
   })
   return { ...result, githubOutput: readFileSync(output, "utf8") }
@@ -382,6 +432,14 @@ for (const scenario of [
   "legacy partial migration",
   "legacy partial schema",
   "legacy wrong generation default",
+  "legacy wrong status literal case",
+  "current wrong status literal case",
+  "legacy wrong status literal whitespace",
+  "current wrong status literal whitespace",
+  "legacy wrong FK quoted case",
+  "current wrong FK quoted case",
+  "legacy wrong FK target",
+  "current wrong FK target",
   "legacy missing generation check",
   "legacy invalid schedule index",
   "legacy partial schedule index",
@@ -523,3 +581,17 @@ for (const scenario of [
     assert.match(result.stderr, expected)
   })
 }
+
+test("ordinary app-only rollout requires explicit topology", (t) => {
+  const appOnly = fixture(t, "explicit app-only")
+  assert.equal(appOnly.status, 0, appOnly.stderr)
+  for (const scenario of [
+    "ordinary missing scanner",
+    "app-only with scanner",
+    "unknown topology",
+  ]) {
+    const rejected = fixture(t, scenario)
+    assert.notEqual(rejected.status, 0)
+    assert.equal(rejected.githubOutput, "")
+  }
+})
