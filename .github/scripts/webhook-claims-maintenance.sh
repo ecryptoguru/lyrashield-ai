@@ -3,14 +3,15 @@
 set -euo pipefail
 # JMESPath literals use backticks, not shell substitutions.
 phase=${1:?phase}
-: "${DEPLOY_SHA:?}" "${RG:?}" "${WORKER_VM_NAME:?}" "${LYRASHIELD_ADMISSION_STOP_OWNER:?}" "${LYRASHIELD_WEBHOOK_CUTOVER_RUN_ID:?}"
+: "${DEPLOY_SHA:?}" "${RG:?}" "${WORKER_VM_NAME:?}" "${LYRASHIELD_ADMISSION_STOP_OWNER:?}" "${LYRASHIELD_WEBHOOK_CUTOVER_RUN_ID:?}" "${LYRASHIELD_WEBHOOK_CUTOVER_ATTEMPT:?}"
 [[ "$DEPLOY_SHA" =~ ^[a-f0-9]{40}$ && "$LYRASHIELD_WEBHOOK_CUTOVER_RUN_ID" =~ ^[0-9]+$ && "$LYRASHIELD_ADMISSION_STOP_OWNER" =~ ^[0-9]+:[0-9]+$ ]] || exit 1
+[[ "$LYRASHIELD_WEBHOOK_CUTOVER_ATTEMPT" =~ ^[1-9][0-9]*$ ]] || exit 1
 source ops/deployment/azure-vm-run-command.sh
 vm_phase() {
   local action=$1 payload env_payload command result
   payload=$(base64 < .github/scripts/webhook-claims-vm.sh | tr -d '\n')
   env_payload=$(base64 < ops/worker/worker-env.sh | tr -d '\n')
-  command="set -eu; directory=\$(mktemp -d /var/lib/lyrashield/webhook-claims-run.XXXXXX); trap 'rm -rf \"\$directory\"' EXIT; printf '%s' '$env_payload' | base64 -d > \"\$directory/worker-env.sh\"; printf '%s' '$payload' | base64 -d > \"\$directory/cutover.sh\"; LYRASHIELD_WORKER_ENV_LIB=\"\$directory/worker-env.sh\" sh \"\$directory/cutover.sh\" '$action' '$DEPLOY_SHA' '$LYRASHIELD_ADMISSION_STOP_OWNER' '$LYRASHIELD_WEBHOOK_CUTOVER_RUN_ID' '${MIGRATION_DATABASE_IDENTITY:-}'"
+  command="set -eu; directory=\$(mktemp -d /var/lib/lyrashield/webhook-claims-run.XXXXXX); trap 'rm -rf \"\$directory\"' EXIT; printf '%s' '$env_payload' | base64 -d > \"\$directory/worker-env.sh\"; printf '%s' '$payload' | base64 -d > \"\$directory/cutover.sh\"; LYRASHIELD_WORKER_ENV_LIB=\"\$directory/worker-env.sh\" sh \"\$directory/cutover.sh\" '$action' '$DEPLOY_SHA' '$LYRASHIELD_ADMISSION_STOP_OWNER' '$LYRASHIELD_WEBHOOK_CUTOVER_RUN_ID' '${MIGRATION_DATABASE_IDENTITY:-}' '$LYRASHIELD_WEBHOOK_CUTOVER_ATTEMPT'"
   result=$(azure_vm_run_command_with_retry --name "$WORKER_VM_NAME" --resource-group "$RG" --command-id RunShellScript --scripts "$command" --query 'value[0].message' --output tsv)
   printf '%s\n' "$result"
   case "$action" in

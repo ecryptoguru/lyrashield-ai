@@ -127,6 +127,7 @@ function setup(t, scenario = "normal") {
     WORKER_VM_NAME: "worker",
     LYRASHIELD_ADMISSION_STOP_OWNER: owner,
     LYRASHIELD_WEBHOOK_CUTOVER_RUN_ID: "123",
+    LYRASHIELD_WEBHOOK_CUTOVER_ATTEMPT: "1",
   }
   const vm = (phase, overrides = {}) =>
     spawnSync(
@@ -138,6 +139,7 @@ function setup(t, scenario = "normal") {
         overrides.TEST_OWNER ?? owner,
         overrides.TEST_RUN_ID ?? "123",
         overrides.MIGRATION_DATABASE_IDENTITY ?? "",
+        overrides.TEST_ATTEMPT ?? overrides.LYRASHIELD_WEBHOOK_CUTOVER_ATTEMPT ?? "1",
       ],
       { encoding: "utf8", env: { ...env, ...overrides } }
     )
@@ -299,6 +301,42 @@ test("same GitHub run rerun preserves the original nonce and owner after stoppin
   assert.match(recovered.stdout, /ADMISSION_STOP_OWNER=123:1/)
   assert.equal(readFileSync(f.redis, "utf8"), original)
   assert.equal(f.vm("stop").status, 0)
+})
+
+test("attempt 2 stays distinct from immutable receipt owner through failed-maintenance hold", (t) => {
+  const f = setup(t)
+  assert.equal(f.vm("claim").status, 0)
+  const originalStop = readFileSync(f.redis, "utf8")
+  assert.equal(f.local("quiesce").status, 0)
+
+  const retryEnv = {
+    LYRASHIELD_ADMISSION_STOP_OWNER: "123:2",
+    LYRASHIELD_WEBHOOK_CUTOVER_ATTEMPT: "2",
+  }
+  const probe = f.local("recovery-probe", retryEnv)
+  assert.equal(probe.status, 0, probe.stderr)
+  const reclaimed = f.local("claim", retryEnv)
+  assert.equal(reclaimed.status, 0, reclaimed.stderr)
+  const currentReceipt = JSON.parse(readFileSync(f.receipt))
+  assert.equal(currentReceipt.owner, "123:1")
+  assert.deepEqual(currentReceipt.attempts, [1, 2])
+  assert.equal(currentReceipt.lastAttempt, 2)
+  assert.equal(readFileSync(f.redis, "utf8"), originalStop)
+
+  // GITHUB_ENV carries the original receipt owner into later steps. The
+  // independent workflow-attempt value must stay 2 so a later hold cannot
+  // roll receipt history backward to the owner suffix 1.
+  const held = f.local("hold", {
+    LYRASHIELD_ADMISSION_STOP_OWNER: "123:1",
+    LYRASHIELD_WEBHOOK_CUTOVER_ATTEMPT: "2",
+  })
+  assert.equal(held.status, 0, held.stderr)
+  const heldReceipt = JSON.parse(readFileSync(f.receipt))
+  assert.equal(heldReceipt.owner, "123:1")
+  assert.deepEqual(heldReceipt.attempts, [1, 2])
+  assert.equal(heldReceipt.lastAttempt, 2)
+  assert.equal(readFileSync(f.redis, "utf8"), originalStop)
+  assert.equal(JSON.parse(readFileSync(f.state)).active, 0)
 })
 
 test("retry receipt probe distinguishes verified ownership from truly absent state", (t) => {
