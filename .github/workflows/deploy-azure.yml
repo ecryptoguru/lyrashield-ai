@@ -58,10 +58,7 @@ jobs:
 
   preflight-compatible-baseline:
     name: Check existing webhook writers before image build
-    if: >-
-      github.ref == 'refs/heads/main' &&
-      vars.AZURE_RESOURCE_GROUP != '' &&
-      ((vars.AZURE_APP_CONTAINER_APP_NAME != '') || (vars.AZURE_SCANNER_CONTAINER_APP_NAME != ''))
+    if: github.ref == 'refs/heads/main'
     outputs:
       webhook_claims_cutover: ${{ steps.verify-baseline.outputs.webhook_claims_cutover }}
     runs-on: ubuntu-24.04
@@ -94,6 +91,14 @@ jobs:
             exit 1
           fi
 
+      - name: Validate required Azure writer configuration
+        env:
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          AZURE_APP_CONTAINER_APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
+        run: |
+          test -n "$AZURE_RESOURCE_GROUP" || { echo '::error::Missing Azure resource group'; exit 1; }
+          test -n "$AZURE_APP_CONTAINER_APP_NAME" || { echo '::error::Missing Azure app writer baseline'; exit 1; }
+
       - name: Log in to Azure for read-only compatibility preflight
         uses: Azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
         with:
@@ -118,6 +123,7 @@ jobs:
           AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
           AZURE_APP_CONTAINER_APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
           AZURE_SCANNER_CONTAINER_APP_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
+          AZURE_WEBHOOK_WRITER_TOPOLOGY: ${{ vars.AZURE_WEBHOOK_WRITER_TOPOLOGY || 'app-and-scanner' }}
           AZURE_WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
           AZURE_KEY_VAULT_NAME: ${{ vars.AZURE_KEY_VAULT_NAME || 'lyrashieldprodsecrets' }}
           GHCR_USERNAME: ${{ github.repository_owner }}
@@ -143,7 +149,7 @@ jobs:
     if: ${{ !cancelled() &&
       github.ref == 'refs/heads/main' &&
       needs.validate-manual-production-dispatch.result == 'success' &&
-      (needs.preflight-compatible-baseline.result == 'success' || needs.preflight-compatible-baseline.result == 'skipped') }}
+      needs.preflight-compatible-baseline.result == 'success' }}
     permissions:
       contents: read
       packages: write

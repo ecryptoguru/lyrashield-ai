@@ -99,7 +99,7 @@ function fixture(t, scenario, expectedMode) {
   const digest = legacy ? legacyWorkerDigest : defaultDigest
   const writerDigest = legacy ? legacyWriterDigest : defaultDigest
   const workerImage = `ghcr.io/example/worker:${workerProduct}@${digest}`
-  const state = {
+  const state = structuredClone({
     protocol: legacy ? "durable-claims/1" : protocol,
     product: workerProduct,
     engine: legacy ? legacyEngine : engine,
@@ -131,7 +131,7 @@ function fixture(t, scenario, expectedMode) {
         name: "WebhookEventTrack_webhookEventId_fkey",
         type: "f",
         definition:
-          "FOREIGN KEY (webhookEventId) REFERENCES WebhookEvent(id) ON UPDATE CASCADE ON DELETE CASCADE",
+          'FOREIGN KEY ("webhookEventId") REFERENCES "WebhookEvent"(id) ON UPDATE CASCADE ON DELETE CASCADE',
         validated: true,
       },
       {
@@ -150,6 +150,44 @@ function fixture(t, scenario, expectedMode) {
             "nextAttemptAtUtc",
           ]),
         ],
+  })
+  if (
+    scenario === "legacy wrong status literal case" ||
+    scenario === "current wrong status literal case"
+  ) {
+    state.columns = state.columns.map((column) =>
+      column.name === "status" ? { ...column, default: "'Pending'::text" } : column
+    )
+  }
+  if (
+    scenario === "legacy wrong status literal whitespace" ||
+    scenario === "current wrong status literal whitespace"
+  ) {
+    state.columns = state.columns.map((column) =>
+      column.name === "status" ? { ...column, default: "'pending '::text" } : column
+    )
+  }
+  if (scenario === "legacy wrong FK quoted case" || scenario === "current wrong FK quoted case") {
+    state.constraints = state.constraints.map((constraint) =>
+      constraint.name === "WebhookEventTrack_webhookEventId_fkey"
+        ? {
+            ...constraint,
+            definition:
+              'FOREIGN KEY ("webhookeventid") REFERENCES "WebhookEvent"(id) ON UPDATE CASCADE ON DELETE CASCADE',
+          }
+        : constraint
+    )
+  }
+  if (scenario === "legacy wrong FK target" || scenario === "current wrong FK target") {
+    state.constraints = state.constraints.map((constraint) =>
+      constraint.name === "WebhookEventTrack_webhookEventId_fkey"
+        ? {
+            ...constraint,
+            definition:
+              'FOREIGN KEY ("webhookEventId") REFERENCES "OtherWebhookEvent"(id) ON UPDATE CASCADE ON DELETE CASCADE',
+          }
+        : constraint
+    )
   }
   if (scenario === "old worker") state.protocol = "durable-claims/1"
   if (scenario === "unknown worker protocol") state.protocol = "durable-claims/3"
@@ -320,7 +358,7 @@ function fixture(t, scenario, expectedMode) {
   )
   executable(
     "docker",
-    `const args=process.argv.slice(2); if(args[0]==="login") process.exit(0); if(args[0]==="buildx") { const inspected=args[3]; const revision=inspected.match(/:([a-f0-9]{40})@sha256:/)?.[1]; console.log(JSON.stringify({config:{Labels:{"org.opencontainers.image.revision":${JSON.stringify(scenario === "OCI mismatch" ? "legacy" : "")} || revision}}})); } else if(args[0]==="inspect") { const format=args[2]; console.log(format.includes("State.Running")?"true":format.includes("Config.Image")?${JSON.stringify(workerImage)}:format.includes("engine.revision")?${JSON.stringify(state.engine)}:${JSON.stringify(workerProduct)}); } else if(args[0]==="exec") { const code=args[args.indexOf("-e")+1]; process.argv=[process.execPath,...args.slice(args.indexOf("-e")+3)]; const state=${JSON.stringify(state)}; const expectedChecksums=${JSON.stringify(migrationChecksums)}; process.env.LYRASHIELD_PRODUCT_REVISION=state.product; process.env.LYRASHIELD_WORKER_IMAGE_DIGEST=state.digest; if(state.engine) process.env.LYRASHIELD_ENGINE_REVISION=state.engine; else delete process.env.LYRASHIELD_ENGINE_REVISION; const prisma={$queryRawUnsafe:async(query,...parameters)=>{ if(${JSON.stringify(scenario)}==="probe error redaction") throw new Error("SYNTHETIC_CREDENTIAL_DO_NOT_LOG"); if(query.includes("current_schema()")) return [{schema:state.schema}]; if(query.includes("_prisma_migrations")) return state.migrationNames.map(migration_name=>({migration_name,checksum:state.badMigrationChecksum?"0".repeat(64):expectedChecksums[migration_name],finished_at:migration_name===state.unfinishedMigration?null:new Date(),rolled_back_at:migration_name===state.rolledBackMigration?new Date():null})); if(query.includes("FROM pg_attribute a")) return (query.includes("pg_namespace")?state.columns:[...(state.columns??[]),...(state.foreignSchemaColumns??[])]).map(column=>({...column,defaultExpr:column.default})); if(query.includes("pg_constraint")) return state.constraints; if(query.includes("pg_index")) return state.indexes; throw new Error("Unexpected worker schema probe"); },$disconnect:async()=>{if(${JSON.stringify(scenario)}==="disconnect error redaction")throw new Error("SYNTHETIC_CREDENTIAL_DO_NOT_LOG")}}; const load=async(name)=>name==="node:zlib"?import("node:zlib"):name==="@lyrashield/billing"?{WEBHOOK_TRACK_CLAIM_PROTOCOL:state.protocol}:name==="@lyrashield/db"?{getSystemPrisma:()=>prisma}:Promise.reject(new Error("Unexpected module")); new Function("load","return (async()=>{"+code.replaceAll("import(","load(")+"})()")(load).catch(error=>{console.error(error.message);process.exit(1)}); } else process.exit(1);`
+    `const args=process.argv.slice(2); if(args[0]==="login") process.exit(0); if(args[0]==="buildx") { const inspected=args[3]; const revision=inspected.match(/:([a-f0-9]{40})@sha256:/)?.[1]; console.log(JSON.stringify({config:{Labels:{"org.opencontainers.image.revision":${JSON.stringify(scenario === "OCI mismatch" ? "legacy" : "")} || revision}}})); } else if(args[0]==="inspect") { const format=args[2]; console.log(format.includes("State.Running")?"true":format.includes("Config.Image")?${JSON.stringify(workerImage)}:format.includes("engine.revision")?${JSON.stringify(state.engine)}:${JSON.stringify(workerProduct)}); } else if(args[0]==="exec") { const code=args[args.indexOf("-e")+1]; process.argv=[process.execPath,...args.slice(args.indexOf("-e")+3)]; const state=${JSON.stringify(state)}; const expectedChecksums=${JSON.stringify(migrationChecksums)}; process.env.LYRASHIELD_PRODUCT_REVISION=state.product; process.env.LYRASHIELD_WORKER_IMAGE_DIGEST=state.digest; if(state.engine) process.env.LYRASHIELD_ENGINE_REVISION=state.engine; else delete process.env.LYRASHIELD_ENGINE_REVISION; const prisma={$queryRawUnsafe:async(query,...parameters)=>{ if(${JSON.stringify(scenario)}==="probe error redaction") throw new Error("SYNTHETIC_CREDENTIAL_DO_NOT_LOG"); if(query.includes("current_schema()")) return [{schema:state.schema}]; if(query.includes("_prisma_migrations")) return state.migrationNames.map(migration_name=>({migration_name,checksum:state.badMigrationChecksum?"0".repeat(64):expectedChecksums[migration_name],finished_at:migration_name===state.unfinishedMigration?null:new Date(),rolled_back_at:migration_name===state.rolledBackMigration?new Date():null})); if(query.includes("FROM pg_attribute a")) return (query.includes("pg_namespace")?state.columns:[...(state.columns??[]),...(state.foreignSchemaColumns??[])]).map(column=>({...column,defaultExpr:column.default})); if(query.includes("pg_constraint")) {if(!query.includes("contype::text AS type")) throw new Error("UnsupportedNativeDataType: char");return state.constraints;} if(query.includes("pg_index")) return state.indexes; throw new Error("Unexpected worker schema probe"); },$disconnect:async()=>{if(${JSON.stringify(scenario)}==="disconnect error redaction")throw new Error("SYNTHETIC_CREDENTIAL_DO_NOT_LOG")}}; const load=async(name)=>name==="node:zlib"?import("node:zlib"):name==="@lyrashield/billing"?{WEBHOOK_TRACK_CLAIM_PROTOCOL:state.protocol}:name==="@lyrashield/db"?{getSystemPrisma:()=>prisma}:Promise.reject(new Error("Unexpected module")); new Function("load","return (async()=>{"+code.replaceAll("import(","load(")+"})()")(load).catch(error=>{console.error(error.message);process.exit(1)}); } else process.exit(1);`
   )
   executable(
     "az",
@@ -341,10 +379,22 @@ function fixture(t, scenario, expectedMode) {
       PATH: `${directory}:${process.env.PATH}`,
       AZURE_KEY_VAULT_NAME: "vault",
       GHCR_USERNAME: "owner",
+      AZURE_WEBHOOK_WRITER_TOPOLOGY:
+        scenario === "unknown topology"
+          ? "unknown"
+          : ["explicit app-only", "app-only with scanner"].includes(scenario)
+            ? "app-only"
+            : "app-and-scanner",
       AZURE_RESOURCE_GROUP: "test",
       AZURE_WORKER_VM_NAME: "worker",
       AZURE_APP_CONTAINER_APP_NAME: "app",
-      AZURE_SCANNER_CONTAINER_APP_NAME: scenario === "legacy missing scanner" ? "" : "scanner",
+      AZURE_SCANNER_CONTAINER_APP_NAME: [
+        "legacy missing scanner",
+        "ordinary missing scanner",
+        "explicit app-only",
+      ].includes(scenario)
+        ? ""
+        : "scanner",
     },
   })
   return { ...result, githubOutput: readFileSync(output, "utf8") }
@@ -382,6 +432,14 @@ for (const scenario of [
   "legacy partial migration",
   "legacy partial schema",
   "legacy wrong generation default",
+  "legacy wrong status literal case",
+  "current wrong status literal case",
+  "legacy wrong status literal whitespace",
+  "current wrong status literal whitespace",
+  "legacy wrong FK quoted case",
+  "current wrong FK quoted case",
+  "legacy wrong FK target",
+  "current wrong FK target",
   "legacy missing generation check",
   "legacy invalid schedule index",
   "legacy partial schedule index",
@@ -523,3 +581,17 @@ for (const scenario of [
     assert.match(result.stderr, expected)
   })
 }
+
+test("ordinary app-only rollout requires explicit topology", (t) => {
+  const appOnly = fixture(t, "explicit app-only")
+  assert.equal(appOnly.status, 0, appOnly.stderr)
+  for (const scenario of [
+    "ordinary missing scanner",
+    "app-only with scanner",
+    "unknown topology",
+  ]) {
+    const rejected = fixture(t, scenario)
+    assert.notEqual(rejected.status, 0)
+    assert.equal(rejected.githubOutput, "")
+  }
+})

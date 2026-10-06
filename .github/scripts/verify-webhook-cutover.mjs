@@ -96,7 +96,7 @@ const legacyConstraints = [
     name: "WebhookEventTrack_webhookEventId_fkey",
     type: "f",
     definition:
-      "foreign key (webhookeventid) references webhookevent(id) on update cascade on delete cascade",
+      'foreign key ("webhookEventId") references "WebhookEvent"(id) on update cascade on delete cascade',
   },
   {
     name: "WebhookEventTrack_generation_nonnegative",
@@ -138,6 +138,12 @@ const group = process.env.AZURE_RESOURCE_GROUP
 const worker = process.env.AZURE_WORKER_VM_NAME
 if (!process.env.AZURE_APP_CONTAINER_APP_NAME) fail("Missing app writer baseline")
 if (!group || !worker) fail("Missing resource group or worker VM")
+const topology = process.env.AZURE_WEBHOOK_WRITER_TOPOLOGY || "app-and-scanner"
+if (!["app-and-scanner", "app-only"].includes(topology)) fail("Unknown webhook writer topology")
+if (topology === "app-and-scanner" && !process.env.AZURE_SCANNER_CONTAINER_APP_NAME)
+  fail("Missing scanner writer baseline")
+if (topology === "app-only" && process.env.AZURE_SCANNER_CONTAINER_APP_NAME)
+  fail("App-only topology cannot omit a configured scanner writer")
 
 const vault = process.env.AZURE_KEY_VAULT_NAME
 const registryUser = process.env.GHCR_USERNAME
@@ -258,7 +264,7 @@ try {
   );
   probePhase = "CONSTRAINTS";
   const constraints = await prisma.$queryRawUnsafe(
-    "SELECT conname AS name, contype AS type, lower(pg_get_constraintdef(oid, true)) AS definition, convalidated AS validated FROM pg_constraint WHERE conrelid = (SELECT c.oid FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = $1 AND c.relname = $2 AND c.relkind = 'r') AND contype IN ('p', 'f', 'c') ORDER BY conname",
+    "SELECT conname AS name, contype::text AS type, pg_get_constraintdef(oid, true) AS definition, convalidated AS validated FROM pg_constraint WHERE conrelid = (SELECT c.oid FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = $1 AND c.relname = $2 AND c.relkind = 'r') AND contype IN ('p', 'f', 'c') ORDER BY conname",
     schema,
     "WebhookEventTrack",
   );
@@ -382,12 +388,80 @@ if (
 
 const migrationRows = state.migrationRows
 if (!Array.isArray(migrationRows)) fail("Webhook migration readback unavailable")
-const normalizeCatalog = (value) =>
-  String(value ?? "")
-    .toLowerCase()
-    .replaceAll('"', "")
-    .replace(/\s+/g, " ")
-    .trim()
+// PostgreSQL may vary keyword casing and whitespace in catalog-rendered SQL,
+// but case and whitespace inside literals and quoted identifiers are semantic.
+// Only `id` and `generation` are lower-case identifiers in this fixed schema
+// whose quoted and unquoted forms are equivalent in the expected definitions.
+const lowerUnquotedCatalogIdentifiers = new Set(["id", "generation"])
+const normalizeCatalog = (value) => {
+  const source = String(value ?? "")
+  let normalized = ""
+  let index = 0
+  let pendingSpace = false
+
+  const append = (token) => {
+    if (pendingSpace && normalized) normalized += " "
+    normalized += token
+    pendingSpace = false
+  }
+
+  while (index < source.length) {
+    if (/\s/.test(source[index])) {
+      pendingSpace = true
+      index += 1
+      while (index < source.length && /\s/.test(source[index])) index += 1
+      continue
+    }
+
+    const quote = source[index]
+    if (quote === "'" || quote === '"') {
+      const start = index
+      index += 1
+      let contents = ""
+      let closed = false
+      while (index < source.length) {
+        if (source[index] === quote) {
+          if (source[index + 1] === quote) {
+            contents += quote
+            index += 2
+            continue
+          }
+          index += 1
+          closed = true
+          break
+        }
+        contents += source[index]
+        index += 1
+      }
+      if (!closed) return `\u0000invalid-catalog-sql:${source}`
+
+      if (quote === "'") {
+        append(source.slice(start, index))
+      } else if (
+        lowerUnquotedCatalogIdentifiers.has(contents) &&
+        /^[a-z_][a-z0-9_$]*$/.test(contents)
+      ) {
+        append(contents)
+      } else {
+        append(`"${contents.replaceAll('"', '""')}"`)
+      }
+      continue
+    }
+
+    const start = index
+    while (
+      index < source.length &&
+      !/\s/.test(source[index]) &&
+      source[index] !== "'" &&
+      source[index] !== '"'
+    ) {
+      index += 1
+    }
+    append(source.slice(start, index).toLowerCase())
+  }
+
+  return normalized.trim()
+}
 const migrationsMatch = (expected) =>
   migrationRows.length === expected.length &&
   expected.every((name) => {

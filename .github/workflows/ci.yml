@@ -251,6 +251,10 @@ jobs:
         if: needs.changes.outputs.docs-only != 'true'
         run: pnpm db:generate
 
+      - name: Test webhook catalog Prisma compatibility
+        if: needs.changes.outputs.docs-only != 'true'
+        run: node --test .github/scripts/tests/webhook-catalog.runtime.test.mjs .github/scripts/tests/webhook-queue.runtime.test.mjs
+
       - name: Informational dead-code inventory
         if: needs.changes.outputs.docs-only != 'true' && needs.changes.outputs.tooling-only != 'true'
         # Findings are candidate evidence until the 4a baseline is cleared.

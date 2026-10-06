@@ -102,7 +102,12 @@ function executable(directory, name, body) {
 
 function fixture(
   t,
-  { attempt = "2", latestMain = sourceSha, probeOutput = "WEBHOOK_RECOVERY_RECEIPT_ABSENT\n" } = {}
+  {
+    attempt = "2",
+    latestMain = sourceSha,
+    probeOutput = "WEBHOOK_RECOVERY_RECEIPT_ABSENT\n",
+    topology = "app-and-scanner",
+  } = {}
 ) {
   const directory = mkdtempSync(path.join(tmpdir(), "ls-cutover-preflight-"))
   t.after(() => rmSync(directory, { recursive: true, force: true }))
@@ -119,7 +124,7 @@ function fixture(
   executable(
     directory,
     "bash",
-    `const fs=require("node:fs"); const args=process.argv.slice(2); if(args.join(" ")!==".github/scripts/webhook-claims-maintenance.sh recovery-probe") process.exit(2); const required=["RG","WORKER_VM_NAME","LYRASHIELD_ADMISSION_STOP_OWNER","LYRASHIELD_WEBHOOK_CUTOVER_RUN_ID"]; if(required.some(name=>!process.env[name])) { console.error("required recovery-probe environment missing"); process.exit(41); } fs.writeFileSync(${JSON.stringify(envCapture)},JSON.stringify(Object.fromEntries([...required,"DEPLOY_SHA"].map(name=>[name,process.env[name]])))); process.stdout.write(process.env.PROBE_OUTPUT??"");`
+    `const fs=require("node:fs"); const args=process.argv.slice(2); if(args.join(" ")!==".github/scripts/webhook-claims-maintenance.sh recovery-probe") process.exit(2); const required=["RG","WORKER_VM_NAME","LYRASHIELD_ADMISSION_STOP_OWNER","LYRASHIELD_WEBHOOK_CUTOVER_RUN_ID"]; if(required.some(name=>!process.env[name] && !(name==="AZURE_SCANNER_CONTAINER_APP_NAME" && process.env.AZURE_WEBHOOK_WRITER_TOPOLOGY==="app-only"))) { console.error("required recovery-probe environment missing"); process.exit(41); } fs.writeFileSync(${JSON.stringify(envCapture)},JSON.stringify(Object.fromEntries([...required,"DEPLOY_SHA"].map(name=>[name,process.env[name]])))); process.stdout.write(process.env.PROBE_OUTPUT??"");`
   )
   executable(
     directory,
@@ -129,7 +134,7 @@ function fixture(
   executable(
     directory,
     "node",
-    `const fs=require("node:fs"); const args=process.argv.slice(2); const required=["AZURE_RESOURCE_GROUP","AZURE_APP_CONTAINER_APP_NAME","AZURE_SCANNER_CONTAINER_APP_NAME","AZURE_WORKER_VM_NAME","AZURE_KEY_VAULT_NAME","GHCR_USERNAME"]; if(args[0]!==".github/scripts/verify-webhook-cutover.mjs" || args[1]!=="--github-output" || args[2]!==process.env.GITHUB_OUTPUT || required.some(name=>!process.env[name])) process.exit(2); fs.writeFileSync(${JSON.stringify(classifierEnvCapture)},JSON.stringify(Object.fromEntries(required.map(name=>[name,process.env[name]])))); fs.writeFileSync(${JSON.stringify(classifierCalled)},"called"); fs.appendFileSync(args[2],"webhook_claims_cutover=false\\n");`
+    `const fs=require("node:fs"); const args=process.argv.slice(2); const required=["AZURE_WEBHOOK_WRITER_TOPOLOGY","AZURE_RESOURCE_GROUP","AZURE_APP_CONTAINER_APP_NAME","AZURE_SCANNER_CONTAINER_APP_NAME","AZURE_WORKER_VM_NAME","AZURE_KEY_VAULT_NAME","GHCR_USERNAME"]; if(args[0]!==".github/scripts/verify-webhook-cutover.mjs" || args[1]!=="--github-output" || args[2]!==process.env.GITHUB_OUTPUT || required.some(name=>!process.env[name] && !(name==="AZURE_SCANNER_CONTAINER_APP_NAME" && process.env.AZURE_WEBHOOK_WRITER_TOPOLOGY==="app-only"))) process.exit(2); fs.writeFileSync(${JSON.stringify(classifierEnvCapture)},JSON.stringify(Object.fromEntries(required.map(name=>[name,process.env[name]])))); fs.writeFileSync(${JSON.stringify(classifierCalled)},"called"); fs.appendFileSync(args[2],"webhook_claims_cutover=false\\n");`
   )
 
   const env = {
@@ -146,7 +151,8 @@ function fixture(
     LYRASHIELD_WEBHOOK_CUTOVER_RUN_ID: "123",
     AZURE_RESOURCE_GROUP: "fixture-rg",
     AZURE_APP_CONTAINER_APP_NAME: "fixture-app",
-    AZURE_SCANNER_CONTAINER_APP_NAME: "fixture-scanner",
+    AZURE_WEBHOOK_WRITER_TOPOLOGY: topology,
+    AZURE_SCANNER_CONTAINER_APP_NAME: topology === "app-only" ? "" : "fixture-scanner",
     AZURE_WORKER_VM_NAME: "fixture-worker",
     AZURE_KEY_VAULT_NAME: "fixture-kv",
     GHCR_USERNAME: "fixture-owner",
@@ -181,6 +187,7 @@ test("absent receipt on current main forwards verifier environment and output pa
   assert.deepEqual(JSON.parse(readFileSync(f.classifierEnvCapture, "utf8")), {
     AZURE_RESOURCE_GROUP: "fixture-rg",
     AZURE_APP_CONTAINER_APP_NAME: "fixture-app",
+    AZURE_WEBHOOK_WRITER_TOPOLOGY: "app-and-scanner",
     AZURE_SCANNER_CONTAINER_APP_NAME: "fixture-scanner",
     AZURE_WORKER_VM_NAME: "fixture-worker",
     AZURE_KEY_VAULT_NAME: "fixture-kv",
@@ -204,4 +211,12 @@ test("stale source with absent receipt and conflicting markers fail before class
   assert.notEqual(conflict.result.status, 0)
   assert.equal(readFileSync(conflict.outputPath, "utf8"), "")
   assert.throws(() => readFileSync(conflict.classifierCalled), { code: "ENOENT" })
+})
+
+test("explicit app-only topology reaches the classifier without a scanner name", (t) => {
+  const f = fixture(t, { topology: "app-only" })
+  assert.equal(f.result.status, 0, f.result.stderr)
+  const captured = JSON.parse(readFileSync(f.classifierEnvCapture, "utf8"))
+  assert.equal(captured.AZURE_WEBHOOK_WRITER_TOPOLOGY, "app-only")
+  assert.equal(captured.AZURE_SCANNER_CONTAINER_APP_NAME, "")
 })

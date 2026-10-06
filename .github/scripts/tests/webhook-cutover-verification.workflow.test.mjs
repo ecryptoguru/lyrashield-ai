@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import { spawnSync } from "node:child_process"
 import { existsSync, readFileSync } from "node:fs"
 
 const deploy = readFileSync(".github/workflows/deploy-azure.yml", "utf8")
@@ -116,5 +117,40 @@ assert.match(smoke, /recoverDueWebhookTrackRetries/)
 assert.match(smoke, /claim_expired_requires_receipt_review/)
 assert.match(smoke, /fixture-worker-smoke-pro-monthly/)
 assert.doesNotMatch(smoke, /process\.env\.(?:POLAR|RAZORPAY)|fetch\(|https?:\/\//)
+
+assert.match(baseline, /if: github.ref == 'refs\/heads\/main'/)
+assert.ok(
+  baseline.indexOf("Validate required Azure writer configuration") <
+    baseline.indexOf("Log in to Azure")
+)
+assert.match(baseline, /test -n "\$AZURE_RESOURCE_GROUP"/)
+assert.match(baseline, /test -n "\$AZURE_APP_CONTAINER_APP_NAME"/)
+assert.match(job(deploy, "build"), /needs\.preflight-compatible-baseline\.result == 'success'/)
+assert.doesNotMatch(job(deploy, "build"), /preflight-compatible-baseline\.result == 'skipped'/)
+
+const configurationStep = baseline.slice(
+  baseline.indexOf("- name: Validate required Azure writer configuration"),
+  baseline.indexOf("- name: Log in to Azure")
+)
+const configurationShell = configurationStep.split("run: |\n")[1].trim()
+for (const [group, app, expectedStatus] of [
+  ["", "app", 1],
+  ["group", "", 1],
+  ["group", "app", 0],
+]) {
+  const checked = spawnSync("bash", ["-c", configurationShell], {
+    encoding: "utf8",
+    env: { PATH: process.env.PATH, AZURE_RESOURCE_GROUP: group, AZURE_APP_CONTAINER_APP_NAME: app },
+  })
+  assert.equal(checked.status, expectedStatus)
+}
+
+for (const guardedWorkflow of [baseline, runtime]) {
+  assert.match(
+    guardedWorkflow,
+    /AZURE_WEBHOOK_WRITER_TOPOLOGY: \$\{\{ vars\.AZURE_WEBHOOK_WRITER_TOPOLOGY \|\| 'app-and-scanner' \}\}/
+  )
+}
+assert.equal((runtime.match(/AZURE_WEBHOOK_WRITER_TOPOLOGY:/g) ?? []).length, 2)
 
 console.log("Webhook production preflight invariants passed.")
