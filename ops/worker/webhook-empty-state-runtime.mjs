@@ -30,7 +30,10 @@ export function validateRuntimeReadbacks(actual, approved) {
     )
 }
 export function probeRootRuntime(policy) {
-  loadFixedMigrationEnvironment(policy.databaseIdentitySha256)
+  loadFixedMigrationEnvironment(
+    policy.databaseIdentitySha256,
+    policy.databasePrincipals?.migration
+  )
   const observed = {}
   for (const [name, args] of Object.entries(CLI_ARGUMENTS)) {
     const binary = realpathSync(`/usr/bin/${name}`)

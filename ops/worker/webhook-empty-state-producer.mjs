@@ -130,18 +130,21 @@ function containerProbe(policy, owner, observedAt, externalOnly = false) {
   ]
   return run("/usr/bin/docker", args, true)
 }
+export function appConnectionProbeSource(resourceId, observedAt) {
+  return `import {createHash} from 'node:crypto';
+    const raw=process.env.DATABASE_URL; if(!raw||raw.length>8192)throw Error('missing');
+    const u=new URL(raw), keys=[...u.searchParams.keys()];
+    if(!['postgres:','postgresql:'].includes(u.protocol)||u.hash||u.pathname!='/postgres'||(u.searchParams.get('schema')||'public')!=='public'||new Set(keys).size!==keys.length||keys.some(k=>!['schema','sslmode'].includes(k))||u.searchParams.get('sslmode')!=='verify-full')throw Error('unsafe');
+    let ref,principal;const direct=u.hostname.match(/^db\\.([a-z0-9]{20})\\.supabase\\.co$/i), user=decodeURIComponent(u.username);
+    if(direct&&/^[a-z_][a-z0-9_$]{0,62}$/.test(user)&&(!u.port||u.port==='5432')){ref=direct[1];principal=user;}
+    else if(/\\.pooler\\.supabase\\.com$/i.test(u.hostname)&&['','5432','6543'].includes(u.port)){const p=user.match(/^([a-z_][a-z0-9_$]{0,62})\\.([a-z0-9]{20})$/i);if(p&&p[1]===p[1].toLowerCase()){principal=p[1];ref=p[2];}}
+    if(!ref||!principal)throw Error('unbound');const h=v=>createHash('sha256').update(v).digest('hex');
+    console.log(JSON.stringify({identitySha256:h(JSON.stringify({provider:'supabase',projectRef:ref.toLowerCase(),database:'postgres',schema:'public'})),principalSha256:h(principal),credentialSha256:h(raw),resourceId:${JSON.stringify(resourceId)},observedAt:${JSON.stringify(observedAt)}}));`
+}
 function appConnection(policy, name, observedAt) {
   // This is a readback from the actual runtime, not a host-only URL hash or
   // schema similarity. exec404/missing module/readback fails closed.
-  const code = `import {createHash} from 'node:crypto';
-    const raw=process.env.DATABASE_URL; if(!raw||raw.length>8192)throw Error('missing');
-    const u=new URL(raw), keys=[...u.searchParams.keys()];
-    if(!['postgres:','postgresql:'].includes(u.protocol)||u.hash||u.pathname!='/postgres'||(u.searchParams.get('schema')||'public')!=='public'||new Set(keys).size!==keys.length||keys.some(k=>!['schema','sslmode'].includes(k))||u.searchParams.has('sslmode')&&!['require','verify-full'].includes(u.searchParams.get('sslmode')))throw Error('unsafe');
-    let ref;const direct=u.hostname.match(/^db\\.([a-z0-9]{20})\\.supabase\\.co$/i), user=decodeURIComponent(u.username);
-    if(direct&&user==='postgres'&&(!u.port||u.port==='5432'))ref=direct[1];
-    else if(/\\.pooler\\.supabase\\.com$/i.test(u.hostname)&&['','5432','6543'].includes(u.port)){const p=user.match(/^postgres\\.([a-z0-9]{20})$/i);if(p)ref=p[1];}
-    if(!ref)throw Error('unbound');const h=v=>createHash('sha256').update(v).digest('hex');
-    console.log(JSON.stringify({identitySha256:h(JSON.stringify({provider:'supabase',projectRef:ref.toLowerCase(),database:'postgres',schema:'public'})),credentialSha256:h(raw),resourceId:${JSON.stringify(policy.resources[name])},observedAt:${JSON.stringify(observedAt)}}));`
+  const code = appConnectionProbeSource(policy.resources[name], observedAt)
   const quoted = "'" + code.replaceAll("'", "'\"'\"'") + "'"
   const result = run(
     "/usr/bin/az",
@@ -268,7 +271,7 @@ export function collectReceipt(policy, authorization, originalConnections, prior
     scanner: originalConnections.scanner,
   }
   const receipt = {
-    schemaVersion: "webhook-empty-state/v2",
+    schemaVersion: "webhook-empty-state/v3",
     mode: "empty-scheduling",
     authorization,
     evidence: {
@@ -433,6 +436,7 @@ async function main() {
     for (const name of ["app", "scanner"])
       requireValue(
         connections[name].identitySha256 === policy.databaseIdentitySha256 &&
+          connections[name].principalSha256 === sha256(policy.databasePrincipals[name]) &&
           connections[name].credentialSha256 === policy.credentials[name],
         "Runtime connection differs from approved identity"
       )

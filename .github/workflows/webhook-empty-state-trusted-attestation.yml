@@ -103,9 +103,9 @@ jobs:
       - name: Attest only exact canonical receipt digest
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
         with:
-          subject-name: webhook-empty-state-canonical-receipt-v2
+          subject-name: webhook-empty-state-canonical-receipt-v3
           subject-digest: sha256:${{ steps.collect.outputs.receipt_sha256 }}
-          predicate-type: https://lyrashieldai.com/attestations/webhook-empty-state/v2
+          predicate-type: https://lyrashieldai.com/attestations/webhook-empty-state/v3
           predicate-path: ${{ runner.temp }}/predicate.json
           create-storage-record: true
           push-to-registry: false
@@ -151,9 +151,9 @@ jobs:
         run: node approval-fixtures/disposable-attestation.mjs prepare
       - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
         with:
-          subject-name: webhook-empty-state-canonical-receipt-v2
+          subject-name: webhook-empty-state-canonical-receipt-v3
           subject-digest: sha256:${{ env.DISPOSABLE_RECEIPT_SHA256 }}
-          predicate-type: https://lyrashieldai.com/attestations/webhook-empty-state/v2
+          predicate-type: https://lyrashieldai.com/attestations/webhook-empty-state/v3
           predicate-path: ${{ runner.temp }}/disposable-predicate.json
           create-storage-record: true
           push-to-registry: false

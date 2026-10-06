@@ -1,11 +1,12 @@
 import { createHash } from "node:crypto"
+import { validateDatabasePrincipalPolicy } from "./webhook-empty-state-contract.mjs"
 
 export const REPOSITORY = "ecryptoguru/lyrashield-ai"
 export const REPOSITORY_ID = "1286618458"
 export const OWNER_ID = "116722580"
 export const WORKFLOW = ".github/workflows/webhook-empty-state-trusted-attestation.yml"
 export const CALLER = ".github/workflows/webhook-empty-state-cutover.yml"
-export const PREDICATE = "https://lyrashieldai.com/attestations/webhook-empty-state/v2"
+export const PREDICATE = "https://lyrashieldai.com/attestations/webhook-empty-state/v3"
 export const QUEUES = ["scan", "webhookTrackRetry", "fixGenerate"]
 export const STATES = ["wait", "active", "delayed", "prioritized", "waiting-children", "paused"]
 export const sha256 = (value) => createHash("sha256").update(value).digest("hex")
@@ -60,6 +61,11 @@ export function validateAuthorization(authorization, policy, now = Date.now()) {
     "Root policy disabled or revoked"
   )
   requireValue(
+    policy.schemaVersion === "webhook-empty-state-policy/v3",
+    "Wrong root policy version"
+  )
+  validateDatabasePrincipalPolicy(policy.databasePrincipals)
+  requireValue(
     authorization.repositoryId === REPOSITORY_ID && authorization.ownerId === OWNER_ID,
     "Wrong repository identity"
   )
@@ -109,7 +115,7 @@ export function validateAuthorization(authorization, policy, now = Date.now()) {
 export function validateReceipt(receipt, policy, now = Date.now()) {
   exactKeys(receipt, ["schemaVersion", "mode", "authorization", "evidence"], "Receipt")
   requireValue(
-    receipt.schemaVersion === "webhook-empty-state/v2" && receipt.mode === "empty-scheduling",
+    receipt.schemaVersion === "webhook-empty-state/v3" && receipt.mode === "empty-scheduling",
     "Wrong receipt mode"
   )
   const authorizationSha256 = validateAuthorization(receipt.authorization, policy, now)
@@ -153,10 +159,11 @@ export function validateReceipt(receipt, policy, now = Date.now()) {
   for (const [name, connection] of Object.entries(evidence.database)) {
     exactKeys(
       connection,
-      ["identitySha256", "credentialSha256", "resourceId", "observedAt"],
+      ["identitySha256", "principalSha256", "credentialSha256", "resourceId", "observedAt"],
       `${name} connection`
     )
     hash(connection.identitySha256, name + " logical identity")
+    hash(connection.principalSha256, name + " principal")
     hash(connection.credentialSha256, name)
     hash(policy.credentials?.[name], name + " approved credential")
     requireValue(
@@ -165,6 +172,9 @@ export function validateReceipt(receipt, policy, now = Date.now()) {
     )
     requireValue(
       connection.identitySha256 === policy.databaseIdentitySha256 &&
+        connection.principalSha256 === sha256(
+          name === "backup" ? "postgres" : policy.databasePrincipals[name]
+        ) &&
         connection.resourceId === policy.resources[name] &&
         Date.parse(connection.observedAt) >= Date.parse(receipt.authorization.issuedAt) &&
         Date.parse(connection.observedAt) <= observed &&

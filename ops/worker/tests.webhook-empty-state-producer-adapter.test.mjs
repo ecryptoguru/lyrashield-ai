@@ -1,5 +1,6 @@
 import test from "node:test"
 import assert from "node:assert/strict"
+import { spawnSync } from "node:child_process"
 import {
   mkdtempSync,
   mkdirSync,
@@ -16,6 +17,31 @@ import { createRequire } from "node:module"
 import { fixture } from "../../packages/db/scripts/tests/webhook-empty-state-v2-fixture.mjs"
 import { canonical, sha256 } from "../../packages/db/scripts/webhook-empty-state-receipt-v2.mjs"
 import { advancePhase, PHASES } from "./webhook-empty-state-phases.mjs"
+import { appConnectionProbeSource } from "./webhook-empty-state-producer.mjs"
+
+test("embedded producer connection probe fails closed without explicit verified TLS", () => {
+  const base =
+    "postgresql://worker_runtime:disposable-only@db.yejmvtgsxniatmjbwplk.supabase.co:5432/postgres"
+  const source = appConnectionProbeSource("fixture-resource", "2026-10-06T00:00:00.000Z")
+  const run = (url, extra = {}) =>
+    spawnSync(process.execPath, ["--input-type=module", "-e", source], {
+      encoding: "utf8",
+      timeout: 5000,
+      env: { DATABASE_URL: url, ...extra },
+    })
+  for (const [url, extra] of [
+    [base, { PGSSLMODE: "verify-full" }],
+    [`${base}?sslmode=disable`, {}],
+    [`${base}?sslmode=require`, {}],
+    [`${base}?sslmode=verify-full&sslmode=verify-full`, {}],
+    [`${base}?sslmode=verify-full&uselibpqcompat=true`, {}],
+  ]) {
+    assert.notEqual(run(url, extra).status, 0)
+  }
+  const result = run(`${base}?sslmode=verify-full`)
+  assert.equal(result.status, 0, result.stderr)
+  assert.equal(JSON.parse(result.stdout).resourceId, "fixture-resource")
+})
 
 test("enabled copied producer executes resume/rehold and completed workflow collect replay", async () => {
   const root = realpathSync(mkdtempSync(join(tmpdir(), "producer-adapter-disposable-"))),
@@ -75,8 +101,9 @@ test("enabled copied producer executes resume/rehold and completed workflow coll
     writeFileSync(path, code)
     const { main } = await import(pathToFileURL(path)),
       { receipt, policy } = fixture()
-    const issuedAt = new Date().toISOString(),
-      expiresAt = new Date(Date.now() + 1800000).toISOString()
+    const issuedMs = Date.now(),
+      issuedAt = new Date(issuedMs).toISOString(),
+      expiresAt = new Date(issuedMs + 1800000).toISOString()
     Object.assign(receipt.authorization, { issuedAt, expiresAt, producerSha256: sha256(code) })
     Object.assign(policy, { issuedAt, expiresAt, producerSha256: sha256(code) })
     receipt.evidence.observedAt = issuedAt
@@ -146,7 +173,10 @@ test("enabled copied producer executes resume/rehold and completed workflow coll
       } else if (phase === "release-retry") {
         assert.ok(holder.key === stop || holder.key === null)
         holder.key = null
-        if (holder.lostReleaseAck) { holder.lostReleaseAck = false; return { status: 1, stdout: "" } }
+        if (holder.lostReleaseAck) {
+          holder.lostReleaseAck = false
+          return { status: 1, stdout: "" }
+        }
       } else if (phase === "claim") {
         assert.ok(holder.key === null || holder.key === stop)
         holder.key = stop
@@ -170,7 +200,11 @@ test("enabled copied producer executes resume/rehold and completed workflow coll
     assert.ok(holder.files.has(fence))
     holder.failAfterRename = true
     await assert.rejects(main())
-    assert.equal(holder.files.get(progress).phase, "resume", "rename committed before fsync failure")
+    assert.equal(
+      holder.files.get(progress).phase,
+      "resume",
+      "rename committed before fsync failure"
+    )
     assert.equal(holder.key, stop)
     assert.ok(holder.files.has(fence))
     holder.failAfterRename = false

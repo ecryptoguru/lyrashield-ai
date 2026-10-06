@@ -3,6 +3,7 @@
 import {
   canonicalSupabaseDatabaseIdentity,
   hashDatabaseIdentity,
+  parseSupabaseDatabasePrincipal,
   parsePostgresConnectionTarget,
 } from "../../packages/db/scripts/webhook-empty-state-contract.mjs"
 import {
@@ -19,6 +20,7 @@ export function connectionObservation(raw, resourceId, observedAt, migration = f
   if (migration) requireValue(target.port === "5432", "Migration must use direct/session5432")
   return {
     identitySha256: hashDatabaseIdentity(canonicalSupabaseDatabaseIdentity([raw])),
+    principalSha256: sha256(parseSupabaseDatabasePrincipal(raw)),
     credentialSha256: sha256(raw),
     resourceId,
     observedAt,
@@ -28,6 +30,7 @@ export function backupConnectionObservation(raw, observedAt) {
   const normalized = normalizeBackupConnection(raw)
   return {
     identitySha256: normalized.identitySha256,
+    principalSha256: sha256("postgres"),
     credentialSha256: sha256(raw),
     resourceId: "backup",
     observedAt,
