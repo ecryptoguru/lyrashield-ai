@@ -506,7 +506,7 @@ The following evidence describes the 2026-08-26 deployment; it is not runtime ac
 - Scan `cmt9el7p7000001hdjnjo90wk`.
 - `OnboardingAI2` revision `1689f3607d68764e09769535df8e368c4d5ad2fe`.
 - Completed in 10m 9s.
-- 189 Luna/medium requests; no Sol.
+- 189 Luna/medium requests; no Terra.
 - 8,549,456 input, 6,535,778 cached input, 136,759 cache-write input, and 32,092 output tokens; no long-context bucket.
 - Raw provider cost `$0.57879951`; stored provider and billed cost `$0.578800` under the `$3.20` cap; per-request model buckets matched the engine total.
 - 25 retained findings, zero independently verified. Seventeen remain `DETECTED`; eight remain `INCONCLUSIVE`.
@@ -568,7 +568,7 @@ See [AGENTS.md](./AGENTS.md#landmines) for the current engineering rules and ope
 ## 14. Compact implementation ledger
 
 - **2026-07-04 to 07-06:** foundation, auth/tenancy, UI/DX, RLS, queue, engine boundary, findings, SCA, secrets, URL scanning, reports, schedules, notifications, MCP, approvals.
-- **2026-07-10 to 07-15:** tenant/reliability hardening, controlled engine ownership, scorecards/referrals, model routing, result manifests/receipts, evidence-backed copy.
+- **2026-07-10 to 07-15:** tenant/reliability hardening, controlled engine ownership, scorecards/referrals, GPT-5.6 routing, result manifests/receipts, evidence-backed copy.
 - **2026-07-16 to 07-18:** Cloudflare launch, Lite Scanner, production marketing, PostHog, accounting, fail-closed queue admission/recovery.
 - **2026-07-24 to 08-03:** CLI/agent distribution, UX V2, migration-first Azure deploys, RLS reproduction, worker recovery and digest integrity.
 - **2026-08-04 to 08-13:** Parallel Search, OAuth/MCP marketplace, URL/API profiles, reproducible engine releases, claims map, AI App Security and eval harness.

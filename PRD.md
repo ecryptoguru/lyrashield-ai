@@ -400,7 +400,7 @@ This proves release and scan-admission readiness for that deployment. It does no
 - Target: `ecryptoguru/OnboardingAI2@1689f3607d68764e09769535df8e368c4d5ad2fe`
 - Terminal state: `COMPLETED`
 - Duration: 10m 9s
-- Routing: 189 requests, all on the Luna route at medium reasoning; no Sol
+- Routing: 189 requests, all `azure_ai/gpt-5.6-luna` at medium reasoning; no Terra
 - Tokens: 8,549,456 input, 6,535,778 cached input, 136,759 cache-write input, 32,092 output; no long-context bucket
 - Provider cost: `$0.57879951`; rate-card and billed cost: `$0.578800`, reconciled under the `$3.20` cap
 - Usage debit: 10 Standard agent-minutes from 596,659 ms wall time, 1× multiplier
