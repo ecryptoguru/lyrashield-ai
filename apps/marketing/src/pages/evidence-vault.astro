@@ -2,24 +2,40 @@
 import Base from "@layouts/Base.astro"
 import Faq from "@components/landing/Faq.astro"
 import FinalCta from "@components/landing/FinalCta.astro"
+import { CTA_LABEL } from "../lib/site-copy"
 import { VIBE_SECURITY_CONTROLS } from "../../../../packages/security/src/vibe-security-controls"
 
 const origin = Astro.site?.origin || "http://localhost:4321"
 const canonical = new URL("/evidence-vault", origin).toString()
-// One editorial review date drives the visible text, the <time datetime>
-// attribute, the page JSON-LD dateModified and the sitemap lastmod (parsed in
-// astro.config.mjs). Update all four surfaces by changing this constant only.
-const reviewed = "2026-10-05"
-const reviewedLabel = new Date(`${reviewed}T00:00:00Z`).toLocaleDateString("en-US", {
-  year: "numeric",
-  month: "long",
-  day: "numeric",
-  timeZone: "UTC",
-})
+const reviewed = "2026-08-15"
 
 const evidenceControls = [...VIBE_SECURITY_CONTROLS]
   .filter((control) => control.strategy === "evidence")
   .sort((a, b) => a.rank - b.rank)
+
+// What a reviewer accepts for each evidence-required control. Keyed by the
+// registry title so the list cannot drift from the control set above it.
+const EVIDENCE_SUBMISSIONS: Record<string, string> = {
+  "Missing audit trails":
+    "A retention policy plus a sample export from your audit log covering a real change, with the timestamp and actor fields visible.",
+  "Missing monitoring and alerts":
+    "The alert rules you run and one alert that fired, showing the condition, the notification target and the time to acknowledge.",
+  "Missing backup and recovery proof":
+    "A restore runbook and a dated record of a restore test, including how long it took and what was verified after it finished.",
+  "Missing agent sandbox and egress controls":
+    "The sandbox and egress configuration your agents run under, plus one example of an outbound request that was denied.",
+  "AI-generated test fabrication and blind spots":
+    "A sample of AI-written tests next to the code they cover, with a note on which behaviours you verified by hand.",
+  "Multi-agent propagation":
+    "A trust map for your agents: which agent may call which, what each is allowed to change and where a human confirms before a write.",
+  "No accountable human review or threat model":
+    "A named reviewer or role, the approval step they own and a threat model or review checklist the team actually uses.",
+}
+
+const evidenceSubmissions = evidenceControls.map((control) => ({
+  control: control.title,
+  submit: EVIDENCE_SUBMISSIONS[control.title] ?? "An attestation describing the practice and any supporting artifact.",
+}))
 
 const title = "Operational Evidence Vault | LyraShield AI"
 const description =
@@ -32,7 +48,7 @@ const faq = [
   },
   {
     q: "What does the Operational Evidence Vault do?",
-    a: "It creates an append-only, workspace-scoped record for each evidence-required control. You submit an attestation and any supporting files; a reviewer accepts, rejects or requests a revision; and every change creates a new immutable version rather than overwriting the last.",
+    a: "It creates an append-only, workspace-scoped record for each evidence-required control. You submit an attestation and any supporting files; a reviewer accepts, rejects or requests a revision; and every change creates a new version rather than overwriting the last.",
   },
   {
     q: "Are artifact files stored securely?",
@@ -44,7 +60,7 @@ const faq = [
   },
   {
     q: "Does this make LyraShield SOC 2 compliant, certified or adversarially robust?",
-    a: "No. LyraShield does not claim SOC 2 compliance, certification, security guarantees, AI safety testing (without a named framework) or adversarial robustness. Each of those requires external attestation, a reproducible evaluation corpus, a defined threat model or a formal certificate. The evidence vault supports release assurance; it does not produce those claims.",
+    a: "No. LyraShield does not claim SOC 2 compliance, certification, security guarantees, AI safety testing (without a named framework) or adversarial robustness. Each of those requires external attestation, a reproducible evaluation corpus, a defined threat model or a formal certificate. The evidence vault supports the launch gate; it does not produce those claims.",
   },
 ]
 
@@ -61,7 +77,7 @@ const jsonLd = [
     about: [
       "AI application security",
       "security evidence",
-      "release assurance",
+      "launch gate",
       "Vibe Security 50",
     ],
   },
@@ -143,7 +159,7 @@ const jsonLd = [
         the seven evidence-required Vibe Security 50 controls.
       </p>
       <p class="mt-4 text-sm text-text-muted" data-reveal="fade">
-        Last reviewed: <time datetime={reviewed}>{reviewedLabel}</time>
+        Last reviewed: <time datetime={reviewed}>5 Oct 2026</time>
       </p>
       <div
         class="mt-8 flex flex-wrap gap-4"
@@ -259,16 +275,36 @@ const jsonLd = [
           </dd>
         </div>
         <div data-reveal>
-          <dt class="font-semibold text-text">Immutable snapshots</dt>
+          <dt class="font-semibold text-text">Checksum-bound snapshots</dt>
           <dd class="mt-2 leading-7 text-text-muted">
-            Private assurance reports freeze the current evidence state at creation
-            time; public shared reports omit it entirely.
+            A private assurance report is written once per scan and report type, so it records the
+            evidence state at creation time; public shared reports omit it entirely.
           </dd>
         </div>
       </dl>
     </section>
 
     <Faq items={faq} />
+
+    <section aria-labelledby="submit-heading" class="mt-14 border-t border-border pt-12">
+      <h2 id="submit-heading" class="text-2xl font-semibold text-text" data-reveal>
+        What you can submit
+      </h2>
+      <p class="mt-3 max-w-2xl leading-7 text-text-muted" data-reveal>
+        Each control takes an attestation plus any supporting files. These are the
+        artifacts reviewers most often accept.
+      </p>
+      <dl class="mt-8 grid gap-x-10 gap-y-8 md:grid-cols-2" data-reveal-group>
+        {
+          evidenceSubmissions.map((item) => (
+            <div data-reveal>
+              <dt class="font-semibold text-text">{item.control}</dt>
+              <dd class="mt-2 leading-7 text-text-muted">{item.submit}</dd>
+            </div>
+          ))
+        }
+      </dl>
+    </section>
 
     <section
       aria-labelledby="start-heading"
@@ -279,8 +315,8 @@ const jsonLd = [
         Start with a free check
       </h2>
       <p class="mt-3 max-w-2xl leading-7 text-text-muted" data-reveal>
-        Run a passive Lite Check in 30 seconds, then create a workspace to collect
-        evidence for the controls that matter most.
+        Run a passive Lite Check, then start a free trial to collect evidence for the
+        controls that matter most.
       </p>
       <div class="mt-8 flex flex-wrap gap-4" data-reveal>
         <a
@@ -295,7 +331,7 @@ const jsonLd = [
           class="inline-flex min-h-12 items-center justify-center rounded-lg border border-border bg-bg-raised px-5 text-sm font-semibold text-text transition-colors hover:border-accent/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
           data-cta-id="evidence-vault-create-account"
         >
-          Create free account
+          {CTA_LABEL.signUp}
         </a>
       </div>
     </section>

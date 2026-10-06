@@ -74,22 +74,18 @@ test("homepage loads only the selected lazy product screenshots for either saved
       })
     ).toBe(true)
 
+    // The collage is block 5 now, so it sits below the fold and the browser may
+    // defer it past this point. Lazy loading is asserted on the attributes
+    // above; here the point is that nothing eager was fetched and that the
+    // theme selects exactly one file per frame, which is checked after the
+    // scroll below where the images are guaranteed to have loaded.
     await page.waitForTimeout(500)
     const initialProductRequests = requests.filter((path) => productImage.test(path))
-    const expectedSuffix = theme === "light" ? "-light.webp" : ".webp"
-    const primaryPaths = initialProductRequests.filter((path) => path.includes("/console-home"))
-    expect(primaryPaths).toHaveLength(1)
-    expect(primaryPaths[0].endsWith(expectedSuffix)).toBe(true)
-    for (const imageName of [
-      "console-home",
-      "console-issues-thumb",
-      "console-coding-agents-thumb",
-    ]) {
-      const paths = initialProductRequests.filter((path) => path.includes(`/${imageName}`))
-      expect(paths.length).toBeLessThanOrEqual(1)
-      if (paths.length === 1) expect(paths[0].endsWith(expectedSuffix)).toBe(true)
-    }
     expect(initialProductRequests.length).toBeLessThanOrEqual(3)
+    // Nothing from the collage may be fetched eagerly at either theme.
+    await expect(
+      page.locator(".hero-frame__img[loading='eager'], .hero-frame__img[fetchpriority='high']")
+    ).toHaveCount(0)
 
     console.log(
       JSON.stringify({
@@ -110,6 +106,87 @@ test("homepage loads only the selected lazy product screenshots for either saved
           )
       )
       .toBe(3)
+
+    // After the scroll the collage is loaded, so the theme contract is asserted
+    // here: exactly one file per frame, and the right variant for the theme.
+    const expectedSuffix = theme === "light" ? "-light.webp" : ".webp"
+    const loaded = requests.filter((path) => productImage.test(path))
+    for (const imageName of [
+      "console-home",
+      "console-issues-thumb",
+      "console-coding-agents-thumb",
+    ]) {
+      const paths = loaded.filter((path) => path.includes(`/${imageName}`))
+      expect(paths.length, `${imageName} must load exactly once`).toBe(1)
+      expect(paths[0].endsWith(expectedSuffix), `${imageName} must match the theme`).toBe(true)
+    }
+    await context.close()
+  }
+})
+
+test("motion video waits for approach and buffers before the story enters view", async ({
+  browser,
+}) => {
+  for (const viewport of [
+    { width: 390, height: 844 },
+    { width: 1440, height: 900 },
+  ]) {
+    const context = await browser.newContext({ viewport, reducedMotion: "no-preference" })
+    const page = await context.newPage()
+    const motionRequests: string[] = []
+    page.on("request", (request) => {
+      if (motionVideo.test(new URL(request.url()).pathname)) motionRequests.push(request.url())
+    })
+    await page.goto("/", { waitUntil: "load" })
+    // Give the former idle-after-load warm path time to run.
+    await page.waitForTimeout(3000)
+    expect(motionRequests).toEqual([])
+    expect(await page.locator("#assurance-world video").getAttribute("src")).toBeNull()
+    await page.evaluate(() => {
+      const story = document.getElementById("assurance-world")!
+      scrollTo(0, story.getBoundingClientRect().top + scrollY - innerHeight * 1.75)
+    })
+    await expect.poll(() => motionRequests.length).toBeGreaterThan(0)
+    expect(
+      await page.locator("#assurance-world").evaluate((story) => story.getBoundingClientRect().top)
+    ).toBeGreaterThan(viewport.height)
+    await page.locator("#assurance-world").scrollIntoViewIfNeeded()
+    await expect(page.locator("#assurance-world")).toHaveClass(/is-enhanced/)
+    await expect
+      .poll(
+        () =>
+          page
+            .locator("#assurance-world video")
+            .evaluate((video) => (video as HTMLVideoElement).readyState),
+        { timeout: 30_000 }
+      )
+      .toBeGreaterThanOrEqual(2)
+    await expect
+      .poll(
+        () =>
+          page
+            .locator("#assurance-world video")
+            .evaluate((video) => (video as HTMLVideoElement).buffered.length),
+        { timeout: 30_000 }
+      )
+      .toBeGreaterThan(0)
+    await page.locator('[data-chapter-index="0"]').evaluate((chapter) => {
+      const top = chapter.getBoundingClientRect().top + scrollY
+      scrollTo(0, top + chapter.clientHeight * 0.5 - innerHeight * 0.5)
+    })
+    await expect(page.locator("#assurance-world video")).toHaveClass(/is-front/, {
+      timeout: 30_000,
+    })
+    await expect
+      .poll(
+        () =>
+          page.locator("#assurance-world video").evaluate((video) => {
+            const media = video as HTMLVideoElement
+            return media.currentTime > 0 && !media.seeking && media.videoWidth > 0
+          }),
+        { timeout: 30_000 }
+      )
+      .toBe(true)
     await context.close()
   }
 })

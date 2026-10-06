@@ -31,6 +31,22 @@ function renderOpts(
 
 const configFileAgents = AGENTS.filter((a) => a.installStrategy === "config-file")
 
+const duplicateInlineSecretCases = new Set([
+  "kilo-code × stdio",
+  "kilo-code × remote-http",
+  "junie × stdio",
+  "junie-cli × stdio",
+  "junie-cli × remote-http",
+  "picode × stdio",
+  "picode × remote-http",
+  "mimo-code × stdio",
+  "mimo-code × remote-http",
+  "qoder-cli × stdio",
+  "qoder-cli × remote-http",
+  "qwen-code × stdio",
+  "qwen-code × remote-http",
+])
+
 describe("conformance: renderConfig round-trips through the format parser", () => {
   for (const agent of configFileAgents) {
     for (const transport of agent.transports) {
@@ -82,12 +98,19 @@ describe("conformance: renderConfig round-trips through the format parser", () =
               expect(entry).toHaveProperty("env")
             }
           }
+        } else if (transport === "remote-http" && agent.remoteAuthConfig?.bearerTokenEnvVarField) {
+          expect(entry).toHaveProperty(
+            agent.remoteAuthConfig.bearerTokenEnvVarField,
+            agent.remoteAuthConfig.apiKeyEnvVar
+          )
+          expect(entry).not.toHaveProperty("headers")
+          expect(entry).not.toHaveProperty(agent.remoteAuthConfig.headersField ?? "http_headers")
         } else if (agent.credential.kind === "shell-env" || agent.credential.kind === "env-names") {
           // These clients authenticate outside the persisted MCP config or
           // refer to environment variable names rather than literal values.
           expect(entry).not.toHaveProperty("headers")
         } else {
-          expect(entry).toHaveProperty("headers")
+          expect(entry).toHaveProperty(agent.remoteAuthConfig?.headersField ?? "headers")
         }
 
         // Data-driven structural checks.
@@ -121,22 +144,24 @@ describe("conformance: renderConfig round-trips through the format parser", () =
         expect(content).toMatchSnapshot(`${caseName} — interpolated`)
       })
 
-      it(`${caseName} — inline secret may contain the literal key`, () => {
-        if (agent.format === "jsonc") {
-          expect(() =>
-            renderConfig(agent, renderOpts(transport, "inline"))
-          ).toThrowErrorMatchingSnapshot(`${caseName} — inline`)
-          return
-        }
+      if (!duplicateInlineSecretCases.has(caseName)) {
+        it(`${caseName} — inline secret may contain the literal key`, () => {
+          if (agent.format === "jsonc") {
+            expect(() =>
+              renderConfig(agent, renderOpts(transport, "inline"))
+            ).toThrowErrorMatchingSnapshot(`${caseName} — inline`)
+            return
+          }
 
-        const { content } = renderConfig(agent, renderOpts(transport, "inline"))
-        if (agent.credential.kind === "shell-env" || agent.credential.kind === "env-names") {
-          expect(content).not.toContain(API_KEY)
-        } else {
-          expect(content).toContain(API_KEY)
-        }
-        expect(content).toMatchSnapshot(`${caseName} — inline`)
-      })
+          const { content } = renderConfig(agent, renderOpts(transport, "inline"))
+          if (agent.credential.kind === "shell-env" || agent.credential.kind === "env-names") {
+            expect(content).not.toContain(API_KEY)
+          } else {
+            expect(content).toContain(API_KEY)
+          }
+          expect(content).toMatchSnapshot(`${caseName} — inline`)
+        })
+      }
     }
   }
 

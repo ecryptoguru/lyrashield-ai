@@ -12,6 +12,15 @@ on:
         required: false
         default: false
         type: boolean
+      isolated_restore:
+        description: Manual isolated restore without retention deletion; private logs and cleanup
+        required: false
+        default: false
+        type: boolean
+      expected_source_sha:
+        description: Exact reviewed main SHA required for isolated restore
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -30,6 +39,7 @@ env:
   # deleted after each successful upload. 30 days covers a month of audit recovery;
   # adjust here (or override via a repository variable of the same name).
   BACKUP_RETENTION_DAYS: "30"
+  ISOLATED_RESTORE: ${{ github.event_name == 'workflow_dispatch' && inputs.isolated_restore }}
 
 jobs:
   backup:
@@ -38,8 +48,36 @@ jobs:
     # production maintenance workflows); scheduled runs always land on the
     # default branch already.
     if: github.ref == 'refs/heads/main'
+    timeout-minutes: ${{ inputs.isolated_restore && 20 || 360 }}
     runs-on: ubuntu-latest
+    outputs:
+      backup_day: ${{ steps.upload.outputs.backup_day }}
+      encrypted_sha256: ${{ steps.upload.outputs.encrypted_sha256 }}
+      dump_sha256: ${{ steps.upload.outputs.dump_sha256 }}
+      object_etag: ${{ steps.upload.outputs.object_etag }}
     steps:
+      - name: Bind isolated restore to the reviewed source
+        if: inputs.isolated_restore
+        env:
+          EXPECTED_SOURCE_SHA: ${{ inputs.expected_source_sha }}
+          RESTORE_REQUESTED: ${{ inputs.restore }}
+        run: |
+          set -euo pipefail
+          [[ "$EXPECTED_SOURCE_SHA" =~ ^[a-f0-9]{40}$ ]]
+          test "$EXPECTED_SOURCE_SHA" = "$GITHUB_SHA"
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          test "$RESTORE_REQUESTED" = true
+
+      - name: Checkout isolated restore helpers
+        if: inputs.isolated_restore
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Prepare private isolated backup files
+        if: inputs.isolated_restore
+        run: bash .github/scripts/isolated-restore-private.sh prepare
+
       - name: Verify production backup configuration
         shell: bash
         env:
@@ -51,6 +89,7 @@ jobs:
           R2_S3_ENDPOINT: ${{ secrets.R2_S3_ENDPOINT }}
         run: |
           set -euo pipefail
+          if [ "$ISOLATED_RESTORE" = true ]; then source .github/scripts/isolated-restore-private.sh; fi
           for name in \
             AWS_ACCESS_KEY_ID \
             AWS_SECRET_ACCESS_KEY \
@@ -64,6 +103,7 @@ jobs:
           command -v gpg >/dev/null
 
       - name: Create, encrypt, and upload backup
+        id: upload
         shell: bash
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_BACKUP_ACCESS_KEY_ID }}
@@ -74,7 +114,9 @@ jobs:
           R2_S3_ENDPOINT: ${{ secrets.R2_S3_ENDPOINT }}
         run: |
           set -euo pipefail
-          backup_name="lyrashield-$(date -u +%F)-${GITHUB_RUN_ID}.dump"
+          if [ "$ISOLATED_RESTORE" = true ]; then source .github/scripts/isolated-restore-private.sh; fi
+          backup_day="$(date -u +%F)"
+          backup_name="lyrashield-${backup_day}-${GITHUB_RUN_ID}.dump"
           dump_path="$RUNNER_TEMP/$backup_name"
           encrypted_path="$dump_path.gpg"
           object_key="daily/${backup_name}.gpg"
@@ -90,7 +132,9 @@ jobs:
           # any dangling or duplicated ?/& that remain.
           pg_dump_url="$(sed -E 's/([?&])uselibpqcompat[^&]*(&|$)/\1/; s/&&/\&/g; s/\?&/?/g; s/[?&]$//' <<< "$pg_dump_url")"
 
-          docker run --rm \
+          backup_container_args=()
+          if [ "$ISOLATED_RESTORE" = true ]; then backup_container_args=(--name "lyrashield-isolated-backup-$GITHUB_RUN_ID"); fi
+          docker run --rm "${backup_container_args[@]}" \
             --env PG_URL="$pg_dump_url" \
             --volume "$RUNNER_TEMP:/backup" \
             postgres@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73 \
@@ -101,6 +145,7 @@ jobs:
             gpg --batch --yes --pinentry-mode loopback --passphrase-fd 0 \
               --symmetric --cipher-algo AES256 --output "$encrypted_path" "$dump_path"
 
+          encrypted_sha256="$(sha256sum "$encrypted_path" | awk '{print $1}')"
           aws s3 cp "$encrypted_path" "s3://$R2_BACKUP_BUCKET/$object_key" \
             --endpoint-url "$R2_S3_ENDPOINT" \
             --metadata "sha256=$dump_sha256,backup-format=postgres-custom,schemas=public-app" \
@@ -109,9 +154,22 @@ jobs:
           remote_sha256="$(aws s3api head-object --bucket "$R2_BACKUP_BUCKET" --key "$object_key" \
             --endpoint-url "$R2_S3_ENDPOINT" --query 'Metadata.sha256' --output text)"
           test "$remote_sha256" = "$dump_sha256"
+          object_etag="$(aws s3api head-object --bucket "$R2_BACKUP_BUCKET" --key "$object_key" \
+            --endpoint-url "$R2_S3_ENDPOINT" --query ETag --output text)"
+          [[ "$object_etag" =~ ^\"[a-f0-9-]+\"$ ]]
+          # R2 has no S3 object versions: the exact ciphertext hash plus an
+          # If-Match ETag GET below bind this produced object without pretending
+          # that a mutable 'latest' selection is a restore proof.
+          {
+            echo "backup_day=$backup_day"
+            echo "encrypted_sha256=$encrypted_sha256"
+            echo "dump_sha256=$dump_sha256"
+            echo "object_etag=$object_etag"
+          } >> "$GITHUB_OUTPUT"
           rm -f "$dump_path" "$encrypted_path"
 
       - name: Retain last N days of backups
+        if: ${{ !inputs.isolated_restore }}
         shell: bash
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_BACKUP_ACCESS_KEY_ID }}
@@ -181,6 +239,10 @@ jobs:
           echo "Deleted ${delete_count} backup(s) older than ${retention_days} days."
           rm -f "$delete_keys_file" "${delete_keys_file}.payload"
 
+      - name: Remove private isolated backup files
+        if: ${{ always() && inputs.isolated_restore }}
+        run: bash .github/scripts/isolated-restore-private.sh cleanup
+
   restore:
     name: Weekly isolated restore drill
     needs: backup
@@ -188,13 +250,30 @@ jobs:
     # while holding backup credentials, so a manual dispatch may only ever
     # execute the reviewed main ref.
     if: ${{ github.ref == 'refs/heads/main' && (inputs.restore || github.event.schedule == '0 2 * * 0') }}
+    timeout-minutes: ${{ inputs.isolated_restore && 25 || 360 }}
     runs-on: ubuntu-latest
     steps:
+      - name: Bind isolated restore to the reviewed source
+        if: inputs.isolated_restore
+        env:
+          EXPECTED_SOURCE_SHA: ${{ inputs.expected_source_sha }}
+          RESTORE_REQUESTED: ${{ inputs.restore }}
+        run: |
+          set -euo pipefail
+          [[ "$EXPECTED_SOURCE_SHA" =~ ^[a-f0-9]{40}$ ]]
+          test "$EXPECTED_SOURCE_SHA" = "$GITHUB_SHA"
+          test "$GITHUB_RUN_ATTEMPT" = 1
+          test "$RESTORE_REQUESTED" = true
+
       - name: Configure git default branch
         run: git config --global init.defaultBranch main
 
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Prepare private isolated restore files
+        if: inputs.isolated_restore
+        run: bash .github/scripts/isolated-restore-private.sh prepare
 
       - name: Setup pnpm
         uses: pnpm/setup@c9883cc79df532ad1a7b81bf9ab944ceb090d65c # v2.0.0
@@ -215,7 +294,7 @@ jobs:
       - name: Generate Prisma Client
         run: pnpm db:generate
 
-      - name: Restore latest encrypted backup into PostgreSQL 16
+      - name: Restore the exact produced encrypted backup into PostgreSQL 17
         shell: bash
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_BACKUP_ACCESS_KEY_ID }}
@@ -223,21 +302,26 @@ jobs:
           BACKUP_ENCRYPTION_PASSPHRASE: ${{ secrets.BACKUP_ENCRYPTION_PASSPHRASE }}
           R2_BACKUP_BUCKET: ${{ secrets.R2_BACKUP_BUCKET }}
           R2_S3_ENDPOINT: ${{ secrets.R2_S3_ENDPOINT }}
+          BACKUP_DAY: ${{ needs.backup.outputs.backup_day }}
+          BACKUP_ENCRYPTED_SHA256: ${{ needs.backup.outputs.encrypted_sha256 }}
+          BACKUP_DUMP_SHA256: ${{ needs.backup.outputs.dump_sha256 }}
+          BACKUP_ETAG: ${{ needs.backup.outputs.object_etag }}
         run: |
           set -euo pipefail
+          if [ "$ISOLATED_RESTORE" = true ]; then source .github/scripts/isolated-restore-private.sh; fi
           command -v aws >/dev/null
           command -v gpg >/dev/null
-          object_key="$(aws s3api list-objects-v2 --bucket "$R2_BACKUP_BUCKET" --prefix daily/ \
-            --endpoint-url "$R2_S3_ENDPOINT" \
-            --query 'reverse(sort_by(Contents,&LastModified))[0].Key' --output text)"
-          test -n "$object_key" && test "$object_key" != "None"
-
+          [[ "$BACKUP_DAY" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]
+          [[ "$BACKUP_ENCRYPTED_SHA256" =~ ^[a-f0-9]{64}$ ]]
+          [[ "$BACKUP_DUMP_SHA256" =~ ^[a-f0-9]{64}$ ]]
+          [[ "$BACKUP_ETAG" =~ ^\"[a-f0-9-]+\"$ ]]
+          object_key="daily/lyrashield-${BACKUP_DAY}-${GITHUB_RUN_ID}.dump.gpg"
           encrypted_path="$RUNNER_TEMP/backup.gpg"
           dump_path="$RUNNER_TEMP/backup.dump"
-          aws s3 cp "s3://$R2_BACKUP_BUCKET/$object_key" "$encrypted_path" \
-            --endpoint-url "$R2_S3_ENDPOINT" --no-progress
-          expected_sha256="$(aws s3api head-object --bucket "$R2_BACKUP_BUCKET" --key "$object_key" \
-            --endpoint-url "$R2_S3_ENDPOINT" --query 'Metadata.sha256' --output text)"
+          aws s3api get-object --bucket "$R2_BACKUP_BUCKET" --key "$object_key" \
+            --if-match "$BACKUP_ETAG" --endpoint-url "$R2_S3_ENDPOINT" "$encrypted_path" >/dev/null
+          test "$(sha256sum "$encrypted_path" | awk '{print $1}')" = "$BACKUP_ENCRYPTED_SHA256"
+          expected_sha256="$BACKUP_DUMP_SHA256"
           printf '%s' "$BACKUP_ENCRYPTION_PASSPHRASE" | \
             gpg --batch --yes --pinentry-mode loopback --passphrase-fd 0 \
               --decrypt --output "$dump_path" "$encrypted_path"
@@ -245,7 +329,7 @@ jobs:
 
           docker run -d --name lyrashield-restore-postgres \
             -e POSTGRES_USER=restore -e POSTGRES_PASSWORD=restore -e POSTGRES_DB=lyrashield_restore \
-            -p 5433:5432 postgres@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73 >/dev/null
+            -p "${ISOLATED_RESTORE_BIND:-}5433:5432" postgres@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73 >/dev/null
           for _ in $(seq 1 30); do
             docker exec lyrashield-restore-postgres pg_isready -U restore -d lyrashield_restore && break
             sleep 2
@@ -367,6 +451,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          if [ "$ISOLATED_RESTORE" = true ]; then source .github/scripts/isolated-restore-private.sh; fi
           query() { docker exec lyrashield-restore-postgres psql -U restore -d lyrashield_restore -Atqc "$1"; }
           migration_count="$(query 'SELECT count(*) FROM "_prisma_migrations" WHERE finished_at IS NOT NULL')"
           test "$migration_count" -gt 0 || {
@@ -387,27 +472,39 @@ jobs:
           ) ORDER BY \"workspaceId\", \"createdAt\", id), '[]'::json)::text FROM \"AuditLog\"" > "$RUNNER_TEMP/audit.json"
 
           pnpm --filter @lyrashield/db exec tsx scripts/verify-audit-chain-file.ts "$RUNNER_TEMP/audit.json"
+          query "SELECT COALESCE(json_agg(json_build_object('name',migration_name,'checksum',checksum) ORDER BY migration_name),'[]'::json)::text FROM public.\"_prisma_migrations\" WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL" > "$RUNNER_TEMP/restore-schema.json"
 
       - name: Start the application against the restored database
         shell: bash
         run: |
           set -euo pipefail
-          docker run -d --name lyrashield-restore-redis -p 6379:6379 redis@sha256:ff02b58f971e7d7d156a1267e283fcbbeee91773b6aa36c49dac28ecfe28eadf >/dev/null
+          if [ "$ISOLATED_RESTORE" = true ]; then source .github/scripts/isolated-restore-private.sh; fi
+          docker run -d --name lyrashield-restore-redis -p "${ISOLATED_RESTORE_BIND:-}6379:6379" redis@sha256:ff02b58f971e7d7d156a1267e283fcbbeee91773b6aa36c49dac28ecfe28eadf >/dev/null
           for _ in $(seq 1 30); do
             docker exec lyrashield-restore-redis redis-cli ping | grep -qx PONG && break
             sleep 1
           done
+          web_command=(pnpm --filter @lyrashield/web dev --port 3100)
+          if [ "$ISOLATED_RESTORE" = true ]; then
+            # Record identity from inside the session before application code runs.
+            web_command=(setsid bash -c 'bash .github/scripts/isolated-restore-private.sh record-web "$$" || exit 1; exec pnpm --filter @lyrashield/web dev --port 3100 --hostname 127.0.0.1')
+          fi
           DATABASE_URL='postgresql://restore:restore@127.0.0.1:5433/lyrashield_restore?schema=public' \
           REDIS_URL='redis://127.0.0.1:6379' \
           BETTER_AUTH_SECRET='restore-drill-secret-not-for-production' \
           BETTER_AUTH_URL='http://127.0.0.1:3100' \
           NEXT_PUBLIC_APP_URL='http://127.0.0.1:3100' \
           TRUSTED_PROXY_IP_HEADER='x-forwarded-for' \
-          pnpm --filter @lyrashield/web dev --port 3100 > "$RUNNER_TEMP/restore-web.log" 2>&1 &
+          "${web_command[@]}" > "$RUNNER_TEMP/restore-web.log" 2>&1 &
           web_pid=$!
-          trap 'kill "$web_pid" 2>/dev/null || true' EXIT
+          if [ "$ISOLATED_RESTORE" = true ]; then
+            trap 'bash .github/scripts/isolated-restore-private.sh stop-web' EXIT
+          else
+            trap 'kill "$web_pid" 2>/dev/null || true' EXIT
+          fi
           for _ in $(seq 1 45); do
             if curl --fail --silent http://127.0.0.1:3100/api/ready | grep -qx '{"status":"ready","checks":{"database":true,"redis":true}}'; then
+              printf '%s' '{"status":"ready","checks":{"database":true,"redis":true}}' > "$RUNNER_TEMP/restore-ready.json"
               exit 0
             fi
             sleep 2
@@ -415,6 +512,42 @@ jobs:
           cat "$RUNNER_TEMP/restore-web.log"
           exit 1
 
+      - name: Emit public-safe exact-object restore proof
+        env:
+          PRODUCTION_DATABASE_DIRECT_URL: ${{ secrets.PRODUCTION_DATABASE_DIRECT_URL }}
+          R2_BACKUP_BUCKET: ${{ secrets.R2_BACKUP_BUCKET }}
+          R2_S3_ENDPOINT: ${{ secrets.R2_S3_ENDPOINT }}
+          BACKUP_DAY: ${{ needs.backup.outputs.backup_day }}
+          BACKUP_ENCRYPTED_SHA256: ${{ needs.backup.outputs.encrypted_sha256 }}
+          BACKUP_DUMP_SHA256: ${{ needs.backup.outputs.dump_sha256 }}
+          BACKUP_ETAG: ${{ needs.backup.outputs.object_etag }}
+        run: |
+          set -euo pipefail
+          public_temp="$RUNNER_TEMP"
+          if [ "$ISOLATED_RESTORE" = true ]; then source .github/scripts/isolated-restore-private.sh; fi
+          node .github/scripts/write-webhook-empty-state-restore-proof.mjs
+          if [ "$ISOLATED_RESTORE" = true ]; then
+            cp "$RUNNER_TEMP/webhook-empty-state-restore-proof.json" "$public_temp/webhook-empty-state-restore-proof.json"
+          fi
+
+      - name: Publish digest-only restore provenance
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: webhook-empty-state-restore-proof-${{ github.run_id }}
+          path: ${{ runner.temp }}/webhook-empty-state-restore-proof.json
+          if-no-files-found: error
+          retention-days: 30
+
       - name: Clean up isolated restore services
         if: always()
-        run: docker rm -f lyrashield-restore-postgres lyrashield-restore-redis 2>/dev/null || true
+        run: |
+          if [ "$ISOLATED_RESTORE" = true ]; then
+            # Remove anonymous PGDATA/Redis volumes with their first container removal.
+            docker rm -fv lyrashield-restore-postgres lyrashield-restore-redis >/dev/null 2>&1 || true
+          else
+            docker rm -f lyrashield-restore-postgres lyrashield-restore-redis 2>/dev/null || true
+          fi
+
+      - name: Remove private isolated restore files and process group
+        if: ${{ always() && inputs.isolated_restore }}
+        run: bash .github/scripts/isolated-restore-private.sh cleanup

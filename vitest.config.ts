@@ -39,6 +39,8 @@ export default defineConfig({
       "apps/marketing-motion/tests/**",
       // These use node:test and run in the ops suite, not Vitest.
       ".github/scripts/tests/**",
+      "ops/worker/tests.*.test.mjs",
+      "packages/db/scripts/tests/*.test.mjs",
       ...(!disposableDatabaseTests ? databaseIntegrationTests : []),
     ],
     coverage: {

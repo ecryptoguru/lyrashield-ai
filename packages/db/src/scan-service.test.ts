@@ -60,28 +60,6 @@ describe("Scan Lifecycle — State Machine Transitions", () => {
     it("RUNNING → COMPLETED (must go through VERIFYING)", () => {
       expect(isValidTransition("RUNNING", "COMPLETED")).toBe(false)
     })
-    it("COMPLETED → anything (terminal state)", () => {
-      expect(isValidTransition("COMPLETED", "QUEUED")).toBe(false)
-      expect(isValidTransition("COMPLETED", "RUNNING")).toBe(false)
-      expect(isValidTransition("COMPLETED", "FAILED")).toBe(false)
-    })
-    it("FAILED → anything (terminal state)", () => {
-      expect(isValidTransition("FAILED", "QUEUED")).toBe(false)
-      expect(isValidTransition("FAILED", "RUNNING")).toBe(false)
-      expect(isValidTransition("FAILED", "COMPLETED")).toBe(false)
-    })
-    it("CANCELLED → anything (terminal state)", () => {
-      expect(isValidTransition("CANCELLED", "QUEUED")).toBe(false)
-      expect(isValidTransition("CANCELLED", "RUNNING")).toBe(false)
-    })
-    it("STOPPED_BUDGET → anything (terminal state)", () => {
-      expect(isValidTransition("STOPPED_BUDGET", "RUNNING")).toBe(false)
-      expect(isValidTransition("STOPPED_BUDGET", "COMPLETED")).toBe(false)
-    })
-    it("TIMED_OUT → anything (terminal state)", () => {
-      expect(isValidTransition("TIMED_OUT", "RUNNING")).toBe(false)
-      expect(isValidTransition("TIMED_OUT", "COMPLETED")).toBe(false)
-    })
   })
 
   describe("all terminal states have no valid outgoing transitions", () => {

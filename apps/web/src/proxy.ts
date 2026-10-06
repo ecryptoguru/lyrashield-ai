@@ -38,14 +38,44 @@ function generateNonce(): string {
   return btoa(binary)
 }
 
+function browserSentryConnectOrigin(dsn: string | undefined): string | null {
+  if (!dsn) return null
+
+  try {
+    const url = new URL(dsn)
+    if (
+      url.protocol !== "https:" ||
+      !url.username ||
+      url.password ||
+      url.pathname === "/" ||
+      url.search ||
+      url.hash
+    ) {
+      return null
+    }
+    return url.origin
+  } catch {
+    return null
+  }
+}
+
 function buildCspHeader(nonce: string, upgradeInsecureRequests: boolean): string {
+  const sentryOrigin = browserSentryConnectOrigin(process.env.NEXT_PUBLIC_SENTRY_DSN)
+  const connectSources = [
+    "'self'",
+    "https://api.razorpay.com",
+    "https://us.i.posthog.com",
+    "https://us-assets.i.posthog.com",
+    ...(sentryOrigin ? [sentryOrigin] : []),
+    ...(isDev ? ["ws:"] : []),
+  ]
   const directives = [
     "default-src 'self'",
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic' https://checkout.razorpay.com https://us-assets.i.posthog.com${isDev ? " 'unsafe-eval'" : ""}`,
     "style-src 'self' 'unsafe-inline'",
     `img-src 'self' blob: data: https://avatars.githubusercontent.com https://lh3.googleusercontent.com`,
     "font-src 'self'",
-    `connect-src 'self' https://api.razorpay.com https://us.i.posthog.com https://us-assets.i.posthog.com${isDev ? " ws:" : ""}`,
+    `connect-src ${connectSources.join(" ")}`,
     "frame-src 'self' https://api.razorpay.com https://checkout.razorpay.com",
     "object-src 'none'",
     // Pin the directives default-src would otherwise inherit so a future

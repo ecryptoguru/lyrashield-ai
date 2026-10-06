@@ -25,14 +25,17 @@ Public name: **LyraShield AI**. Canonical domain: `lyrashieldai.com`. Do not ren
 
 ## Release contract — 2026-09-30
 
-- Cloud and Desktop release workflows pin engine `9d90be5aaf92f86bb5c1ba55a8138545764fdd44`, which includes the GPT-6-only model boundary, Local scan integrity/viewer fixes, a request-bounded model-stream idle guard, four-agent concurrency for Quick scans, method/status-aware relay framing with audited dependency compatibility, and the v23 runtime-budget/bounded-stream/abandoned-spend remediation. A source pin does not establish a completed deployment or signed Desktop release; verify the exact release run separately. Desktop launch work remains deferred.
+- Cloud and Desktop release workflows pin engine `3001517530300ca5f602536bfadcbd3c95ad3039`, which includes the GPT-6-only model boundary, Local scan integrity/viewer fixes, a request-bounded model-stream idle guard, four-agent concurrency for Quick scans, method/status-aware relay framing with audited dependency compatibility, the v23 runtime-budget/bounded-stream/abandoned-spend remediation and the bounded Docker image acquisition fix, and PR #199 artifact identity/revision recovery, usage accounting, sandbox identity and isolation, telemetry redaction, and viewer/TUI recovery. A source pin does not establish a completed deployment or signed Desktop release; verify the exact release run separately. Desktop launch work remains deferred.
 - Product `main` requires `SCA & Secret Scan`, `Lint, Typecheck, Test & Build` and `Pinned Engine / Worker Contract`, with strict up-to-date branch checks. Update the engine's reverse `.lyrashield-worker-pin` only to an exact merged product commit after compatibility verification.
 
 Current release and runtime evidence lives in [PRD §8](./PRD.md#8-current-production-evidence) and [codebase §11](./codebase.md#11-production-topology-and-accepted-evidence). Refresh deployed state before operational action.
 
-## Operational handoff
+## Immediate execution queue
 
-Consult the [dated execution queue](./docs/handoffs/codex-setup-queue-2026-10-02.md) only for relevant follow-up work; refresh its deployment, scan and financial evidence before acting. Do not enumerate or create production scorecards, perform live financial actions, or run paid acceptance scans without explicit authorization. Keep unverified findings `DETECTED` or `INCONCLUSIVE`; require independent verification where warranted.
+1. On deployed product `4822306e24f375800981bf282fd992a9c15dcde8` (which includes merged PR #454), complete a successful canonical/OG URL and PNG readback from an owner-authorized active scorecard. The historical fixture is revoked and returns 404; do not enumerate or create a production scorecard without authorization.
+2. Retain longer-window Redis command/capacity evidence and complete RazorpayX/Payoneer payout plus tax-form operations before paid scale.
+3. Triage the 25 findings retained by current Standard scan `cmt9el7p7000001hdjnjo90wk` and obtain independent verification where warranted. Keep all unverified results `DETECTED` or `INCONCLUSIVE`.
+4. After founder authorization, run separate controlled Deep/Sol acceptance with exact image, routing, cost, receipts, and terminal proof.
 
 ## Founder decisions
 

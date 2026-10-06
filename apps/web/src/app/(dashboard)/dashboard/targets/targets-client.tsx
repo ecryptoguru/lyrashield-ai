@@ -20,6 +20,64 @@ import {
 import { RepoTargetForm, TargetCreatePanel, UrlTargetForm } from "./targets-form"
 import { TargetsEmptyState, TargetsTable } from "./targets-table"
 
+function TargetAddRouteSync({
+  router,
+  searchParams,
+}: {
+  router: ReturnType<typeof useRouter>
+  searchParams: ReturnType<typeof useSearchParams>
+}) {
+  useEffect(() => {
+    if (searchParams.get("add") !== "1") return
+    const params = new URLSearchParams(searchParams.toString())
+    params.delete("add")
+    router.replace(
+      params.size > 0 ? `/dashboard/targets?${params.toString()}` : "/dashboard/targets",
+      { scroll: false }
+    )
+  }, [router, searchParams])
+  return null
+}
+
+function TargetsPageHeader({
+  filterProjectId,
+  showForm,
+  hasTargets,
+  onClearProjectFilter,
+  onToggleForm,
+}: {
+  filterProjectId: string | null
+  showForm: boolean
+  hasTargets: boolean
+  onClearProjectFilter: () => void
+  onToggleForm: () => void
+}) {
+  return (
+    <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div>
+        {filterProjectId && (
+          <button
+            type="button"
+            onClick={onClearProjectFilter}
+            className="text-muted-foreground hover:text-foreground mb-2 flex cursor-pointer items-center gap-1 text-sm transition-colors"
+          >
+            <ArrowLeft className="h-3 w-3" aria-hidden="true" />
+            All {TARGET_PLURAL.toLowerCase()}
+          </button>
+        )}
+        <h1 className="text-2xl font-bold tracking-tight">{TARGET_PLURAL}</h1>
+        <p className="text-muted-foreground mt-1 text-sm">Repositories and URLs to scan</p>
+      </div>
+      {hasTargets && (
+        <Button onClick={onToggleForm} className="shrink-0" aria-expanded={showForm}>
+          <Plus className="h-4 w-4" aria-hidden="true" />
+          {showForm ? "Close form" : `Add ${TARGET_SINGULAR.toLowerCase()}`}
+        </Button>
+      )}
+    </div>
+  )
+}
+
 export function TargetsClient({
   workspaceId,
   initialProjectId,
@@ -42,7 +100,7 @@ export function TargetsClient({
   const [targets, setTargets] = useState<Target[]>(initialData ?? [])
   const [nextCursor, setNextCursor] = useState<string | null>(initialNextCursor ?? null)
   const [loading, setLoading] = useState(!initialData)
-  const [showForm, setShowForm] = useState(false)
+  const [showForm, setShowForm] = useState(searchParams.get("add") === "1")
   const [formType, setFormType] = useState<"REPO" | "URL">("REPO")
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -234,29 +292,17 @@ export function TargetsClient({
           {deleteError}
         </p>
       )}
-      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          {filterProjectId && (
-            <button
-              type="button"
-              onClick={() => {
-                setFilterProjectId(null)
-                router.push("/dashboard/targets")
-              }}
-              className="text-muted-foreground hover:text-foreground mb-2 flex cursor-pointer items-center gap-1 text-sm transition-colors"
-            >
-              <ArrowLeft className="h-3 w-3" aria-hidden="true" />
-              All {TARGET_PLURAL.toLowerCase()}
-            </button>
-          )}
-          <h1 className="text-2xl font-bold tracking-tight">{TARGET_PLURAL}</h1>
-          <p className="text-muted-foreground mt-1 text-sm">Repositories and URLs to scan</p>
-        </div>
-        <Button onClick={() => setShowForm(!showForm)} className="shrink-0">
-          <Plus className="h-4 w-4" aria-hidden="true" />
-          New {TARGET_SINGULAR}
-        </Button>
-      </div>
+      <TargetAddRouteSync router={router} searchParams={searchParams} />
+      <TargetsPageHeader
+        filterProjectId={filterProjectId}
+        showForm={showForm}
+        hasTargets={targets.length > 0}
+        onClearProjectFilter={() => {
+          setFilterProjectId(null)
+          router.push("/dashboard/targets")
+        }}
+        onToggleForm={() => setShowForm(!showForm)}
+      />
 
       {showForm && (
         <TargetCreatePanel formType={formType} onFormTypeChange={setFormType} error={error}>
@@ -296,11 +342,11 @@ export function TargetsClient({
         </TargetCreatePanel>
       )}
 
-      {targets.length === 0 ? (
+      {targets.length === 0 && !showForm ? (
         <TargetsEmptyState onAdd={() => setShowForm(true)} />
-      ) : (
+      ) : targets.length > 0 ? (
         <TargetsTable targets={targets} onDelete={(t) => void handleDeleteTarget(t)} />
-      )}
+      ) : null}
 
       <LoadMore
         cursor={nextCursor}

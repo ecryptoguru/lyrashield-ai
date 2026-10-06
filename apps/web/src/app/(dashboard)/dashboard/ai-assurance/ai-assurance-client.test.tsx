@@ -46,6 +46,7 @@ describe("AiAssuranceClient", () => {
     )
 
     expect(html).toContain("AI assurance control evidence")
+    expect(html).toContain('aria-label="Generate report for AI assurance"')
     for (let index = 1; index <= 7; index++) expect(html).toContain(`Control ${index}`)
     expect(html).toContain("Customer-declared")
     expect(html).toContain("not verification, certification or data-lineage proof")

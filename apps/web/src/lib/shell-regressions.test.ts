@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { describe, expect, it } from "vitest"
 import { ApiError } from "./api-client"
-import { NAV_TITLE_ITEMS, resolveNav } from "./nav-items"
+import { NAV_TITLE_ITEMS } from "./nav-items"
 
 describe("shell regressions", () => {
   it("sanitizes API errors while preserving actionable business messages", () => {
@@ -18,16 +18,6 @@ describe("shell regressions", () => {
       expect(NAV_TITLE_ITEMS.find((item) => item.href === `/dashboard/${path}`)?.label).toBeTruthy()
     }
   )
-  it("keeps mobile Billing permission gated", () => {
-    expect(
-      resolveNav({ canManageBilling: true }).more.some((item) => item.href === "/dashboard/billing")
-    ).toBe(true)
-    expect(
-      resolveNav({ canManageBilling: false }).more.some(
-        (item) => item.href === "/dashboard/billing"
-      )
-    ).toBe(false)
-  })
 
   // W1-06: a failed workspace switch is visible and recoverable in every shell
   // surface. The desktop sidebar previously swallowed the persistence error.

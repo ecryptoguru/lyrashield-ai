@@ -255,17 +255,17 @@ async function handleMergedFixPullRequest(
   let loopClosureDelivered = false
   try {
     const { handleFixPrMergedAndReevaluate } = await import("@lyrashield/db")
-    const outcome = await handleFixPrMergedAndReevaluate(
+    const outcome = await handleFixPrMergedAndReevaluate({
       workspaceId,
-      pullRequest.head.ref,
-      pullRequest.number,
-      async (mode, sponsorAccountId, tx) => {
+      branchName: pullRequest.head.ref,
+      prNumber: pullRequest.number,
+      assertRetestAllowed: async (mode, sponsorAccountId, tx) => {
         const entitlement = await assertScanAllowed(workspaceId, mode, sponsorAccountId, tx)
         if (!entitlement.allowed) throw new Error(entitlement.code ?? "RETEST_NOT_ENTITLED")
-        await assertScanWorkerAvailable()
       },
-      repoFullName
-    )
+      repoFullName,
+      assertRetestWorkerAvailable: assertScanWorkerAvailable,
+    })
     if (outcome) {
       // The retest scan exists but is not queued yet — packages/db
       // cannot reach the scan queue. Enqueue it here; a queue

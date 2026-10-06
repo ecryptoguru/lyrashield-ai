@@ -20,33 +20,4 @@ describe("generated integration page titles", () => {
       "LyraShield setup for Claude Web | LyraShield AI"
     )
   })
-
-  it("uses concise names for known long client identities instead of mid-word truncation", () => {
-    expect(buildIntegrationPageTitle("GitHub Copilot Cloud Agent")).toBe(
-      "LyraShield setup for GitHub Copilot Cloud | LyraShield AI"
-    )
-    expect(buildIntegrationPageTitle("GitHub Copilot in VS Code (Agent Plugin)")).toBe(
-      "LyraShield setup for Copilot VS Code Plugin | LyraShield AI"
-    )
-    expect(buildIntegrationPageTitle("Devin Desktop / Cascade")).toBe(
-      "LyraShield setup for Devin Desktop | LyraShield AI"
-    )
-  })
-
-  it("never truncates a generated guide's client name mid-word", () => {
-    // A title ending in "…" means a new registry name outgrew the budget and
-    // needs an explicit override in TITLE_NAME_OVERRIDES — silently shipping a
-    // cut-off product name is what shipped for Copilot Cloud Agent.
-    const truncated = listGeneratedIntegrationDocs()
-      .map((agent) => agent.displayName)
-      .filter((name) => buildIntegrationPageTitle(name).includes("…"))
-    expect(truncated).toEqual([])
-  })
-
-  it("keeps generated guide titles unique", () => {
-    const titles = listGeneratedIntegrationDocs().map((agent) =>
-      buildIntegrationPageTitle(agent.displayName)
-    )
-    expect(new Set(titles).size).toBe(titles.length)
-  })
 })

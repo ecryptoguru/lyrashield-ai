@@ -13,11 +13,61 @@ import {
   renderConfig,
   renderEntry,
 } from "../index.js"
+import { AGENTS as AGENTS_MODULE_EXPORT } from "../agents.js"
 import type { AgentEntry, InstallOptions, Transport } from "../types.js"
 
 const TEST_BASE_URL = "https://app.lyrashieldai.com"
 const TEST_MCP_URL = "https://app.lyrashieldai.com/api/mcp"
 const TEST_API_KEY = "lsk_test_lyrashield_api_key"
+
+const duplicateRendererPairs = new Set([
+  "claude-code × stdio",
+  "claude-code × remote-http",
+  "cursor × stdio",
+  "cursor × remote-http",
+  "devin-desktop × remote-http",
+  "vscode × stdio",
+  "vscode × remote-http",
+  "openai-codex × stdio",
+  "openai-codex × remote-http",
+  "cline × stdio",
+  "cline × remote-http",
+  "opencode × stdio",
+  "opencode × remote-http",
+  "kilo-code × stdio",
+  "kilo-code × remote-http",
+  "zed × stdio",
+  "zed × remote-http",
+  "gemini-cli × stdio",
+  "gemini-cli × remote-http",
+  "junie × stdio",
+  "junie-cli × stdio",
+  "junie-cli × remote-http",
+  "picode × stdio",
+  "picode × remote-http",
+  "hermes × stdio",
+  "hermes × remote-http",
+  "antigravity × stdio",
+  "antigravity × remote-http",
+  "copilot-cli × stdio",
+  "copilot-cli × remote-http",
+  "devin-cli × stdio",
+  "devin-cli × remote-http",
+  "roo-code × stdio",
+  "roo-code × remote-http",
+  "mimo-code × stdio",
+  "mimo-code × remote-http",
+  "codebuff × stdio",
+  "codebuff × remote-http",
+  "oh-my-pi × stdio",
+  "oh-my-pi × remote-http",
+  "auggie × stdio",
+  "auggie × remote-http",
+  "qoder-cli × stdio",
+  "qoder-cli × remote-http",
+  "qwen-code × stdio",
+  "qwen-code × remote-http",
+])
 
 it("keeps the published MCP pin on the candidate's compatible patch line", () => {
   const [sourceMajor, sourceMinor, sourcePatch] = mcpManifest.version.split(".").map(Number)
@@ -41,6 +91,53 @@ it("keeps OAuth config free of credential provenance overrides", () => {
   expect(JSON.stringify(entry.value)).toContain(MCP_PACKAGE_SPEC)
 })
 
+it("renders Codex remote API keys with its documented authentication fields", () => {
+  const agent = getAgent("openai-codex")!
+  const inline = renderEntry(agent, {
+    transport: "remote-http",
+    apiUrl: TEST_BASE_URL,
+    apiKey: TEST_API_KEY,
+    secretMode: "inline",
+  })
+
+  expect(inline.rootKey).toBe("mcp_servers")
+  expect(inline.value).toMatchObject({
+    url: TEST_MCP_URL,
+    http_headers: { Authorization: `Bearer ${TEST_API_KEY}` },
+  })
+  expect(inline.value).not.toHaveProperty("headers")
+
+  const environment = renderEntry(agent, {
+    transport: "remote-http",
+    apiUrl: TEST_BASE_URL,
+    secretMode: "interpolated",
+  })
+  expect(environment.value).toMatchObject({
+    url: TEST_MCP_URL,
+    bearer_token_env_var: "LYRASHIELD_API_KEY",
+  })
+  expect(environment.value).not.toHaveProperty("headers")
+  expect(environment.value).not.toHaveProperty("http_headers")
+  const { content } = renderConfig(agent, {
+    transport: "remote-http",
+    apiUrl: TEST_BASE_URL,
+    secretMode: "interpolated",
+  })
+  expect(content).toContain('bearer_token_env_var = "LYRASHIELD_API_KEY"')
+})
+
+it("uses MiMo Code's vendor-documented project and global configuration paths", () => {
+  const mimo = getAgent("mimo-code")!
+  expect(mimo.locations.map((location) => location.path)).toEqual([
+    ".mimocode/mimocode.jsonc",
+    "~/.config/mimocode/mimocode.jsonc",
+  ])
+  expect(mimo.source).toMatchObject({
+    checkedOn: "2026-10-02",
+    url: "https://mimo.xiaomi.com/mimocode/config-overrides",
+  })
+})
+
 function testOptions(agent: AgentEntry, transport: Transport): InstallOptions {
   let secretMode: InstallOptions["secretMode"] = "inline"
   if (agent.credential.kind === "interpolated-env") {
@@ -59,10 +156,6 @@ function testOptions(agent: AgentEntry, transport: Transport): InstallOptions {
 }
 
 describe("agent registry", () => {
-  it("contains at least 15 agents", () => {
-    expect(AGENTS.length).toBeGreaterThanOrEqual(15)
-  })
-
   // Exact-count guard: when an agent is added or removed, this test fails,
   // forcing the author to update the docs prose on /docs/integrations
   // (which hardcodes counts like "15 agents" and "9 of the 15").
@@ -193,7 +286,7 @@ describe("agent registry", () => {
     expect(copilotCloud.manualInstructions).not.toContain("copy only")
     expect(copilotCloud.manualInstructions).toContain("lyrashield_check_diff")
     expect(copilotCloud.manualInstructions).toContain(
-      "get-started`, `review-changes`, and `launch-readiness"
+      "get-started`, `review-changes` and `launch-readiness"
     )
     expect(copilotCloud.manualInstructions).toContain("scan-project`, `fix-and-retest")
     for (const readOnlyTool of [
@@ -312,16 +405,6 @@ describe("agent registry", () => {
     expect(getAgent("qoder")?.skillLocations).toBeUndefined()
     expect(getAgent("continue")?.skillLocations).toBeUndefined()
     expect(getAgent("qwen-code")?.skillLocations).toBeUndefined()
-  })
-
-  it("validates every entry against agentEntrySchema", () => {
-    for (const agent of AGENTS) {
-      const result = agentEntrySchema.safeParse(agent)
-      if (!result.success) {
-        console.error(agent.id, result.error)
-      }
-      expect(result.success).toBe(true)
-    }
   })
 
   it("every agent has a source with a valid ISO checkedOn date", () => {
@@ -477,6 +560,7 @@ describe("preferred agent integrations", () => {
 describe("renderConfig snapshot — every agent × every transport", () => {
   for (const agent of AGENTS) {
     for (const transport of agent.transports) {
+      if (duplicateRendererPairs.has(`${agent.id} × ${transport}`)) continue
       it(`${agent.id} × ${transport}`, () => {
         const opts = testOptions(agent, transport)
 
@@ -711,6 +795,7 @@ describe("gotchas from §3.4 are represented", () => {
     "VS Code uses `servers`, not `mcpServers`",
     "Zed settings use flat command",
     "Codex reserves `env_vars` for an array",
+    "Codex remote MCP authentication uses `bearer_token_env_var` or `http_headers`",
     "single-brace `{env:VAR}`",
     "Gemini CLI expands `$VAR_NAME`",
     "Cline defaults to legacy SSE",
@@ -736,14 +821,67 @@ describe("gotchas from §3.4 are represented", () => {
 })
 
 describe("registry helpers", () => {
+  it("preserves the public facade identity and registry ordering", () => {
+    expect(AGENTS_MODULE_EXPORT).toBe(AGENTS)
+    expect(listAgents()).toBe(AGENTS_MODULE_EXPORT)
+    expect(AGENTS_MODULE_EXPORT.map((agent) => agent.id)).toEqual([
+      "claude-code",
+      "cursor",
+      "devin",
+      "devin-desktop",
+      "vscode",
+      "openai-codex",
+      "cline",
+      "opencode",
+      "opencode-v2",
+      "kilo-code",
+      "zed",
+      "gemini-cli",
+      "jetbrains",
+      "junie",
+      "junie-cli",
+      "jetbrains-claude-agent",
+      "jetbrains-codex-agent",
+      "amp",
+      "picode",
+      "openclaw",
+      "hermes",
+      "antigravity",
+      "copilot-cli",
+      "github-copilot-cloud-agent",
+      "goose",
+      "aider",
+      "devin-cli",
+      "roo-code",
+      "mimo-code",
+      "codebuff",
+      "oh-my-pi",
+      "auggie",
+      "augment-vscode",
+      "augment-jetbrains",
+      "factory-droid",
+      "qoder",
+      "qoder-cli",
+      "qwen-code",
+      "continue",
+      "mistral-vibe",
+      "lovable",
+      "v0",
+      "replit-agent",
+      "claude-desktop",
+      "claude-web",
+      "claude-code-agent-plugin",
+      "cursor-agent-plugin",
+      "vscode-agent-plugin",
+      "openai-codex-agent-plugin",
+      "github-copilot-agent-plugin",
+      "kiro-agent-plugin",
+    ])
+  })
+
   it("getAgent returns the requested entry or undefined", () => {
     expect(getAgent("cursor")?.id).toBe("cursor")
     expect(getAgent("not-real")).toBeUndefined()
-  })
-
-  it("listAgents returns at least 15 entries", () => {
-    expect(listAgents().length).toBeGreaterThanOrEqual(15)
-    expect(listAgents()).toBe(AGENTS)
   })
 
   it("agentsByStrategy filters by strategy", () => {

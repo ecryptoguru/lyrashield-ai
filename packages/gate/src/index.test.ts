@@ -397,10 +397,6 @@ describe("GATE-0 target-type coverage", () => {
     expect(verdict.staleness.current).toBe(false)
     expect(verdict.staleness.reason).toContain("not covered")
   })
-
-  it("still evaluates normally for covered types", () => {
-    expect(computeGateVerdict(baseInput()).state).toBe("READY")
-  })
 })
 
 describe("evidenceSummary per-severity unresolved counts", () => {

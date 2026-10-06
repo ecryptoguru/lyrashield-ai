@@ -1,6 +1,6 @@
 # LyraShield Review for Codebuff
 
-PREPARATION ONLY: the `0.1.31` Agent Plugin, MCP `0.2.12`, and CLI `0.2.14` npm packages are
+PREPARATION ONLY: the `0.1.31` Agent Plugin, MCP `0.2.12` and CLI `0.2.14` npm packages are
 published. This Codebuff agent bundle is separate from the Agent Plugin npm package; update the
 existing listing only after reviewing and testing the exact Codebuff artifact.
 

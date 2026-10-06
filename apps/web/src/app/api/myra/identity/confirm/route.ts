@@ -9,7 +9,7 @@ import { confirmIdentityCode, resolveMyraRequest } from "@lyrashield/myra/server
 import { identityConfirmSchema } from "@lyrashield/myra"
 import { logger } from "@lyrashield/logger"
 import { checkMyraRateLimit, clientIpFromRequest } from "@/lib/rate-limit"
-import { withApiRequest } from "@/lib/api-auth"
+import { withCookieMutation } from "@/lib/api-auth"
 import {
   myraFail,
   myraNotFound,
@@ -67,4 +67,4 @@ async function post(request: Request): Promise<Response> {
   }
 }
 
-export const POST = withApiRequest(post)
+export const POST = withCookieMutation(post)

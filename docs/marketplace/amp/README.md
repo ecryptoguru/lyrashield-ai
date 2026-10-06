@@ -43,13 +43,13 @@ workflow. Do not add a project API key or bearer header.
 
 Amp gives directly configured servers precedence over a server of the same name bundled in a
 skill. A direct `lyrashield` connection can therefore keep the MCP tools visible outside the
-on-demand skill. If you want lazy loading, inspect existing personal, workspace, project, and CLI
+on-demand skill. If you want lazy loading, inspect existing personal, workspace, project and CLI
 MCP configuration for a duplicate server before adding this package; change only the duplicate
 entry you own.
 
 The skills preserve LyraShield's authorization and evidence boundaries:
 
-- `get-started` selects one accessible workspace, paginates authorized targets, and stays
+- `get-started` selects one accessible workspace, paginates authorized targets and stays
   read-only.
 - `review-changes` uses the local advisory diff tool by default. A recorded Quick scan happens only
   when explicitly requested.
@@ -61,11 +61,11 @@ The skills preserve LyraShield's authorization and evidence boundaries:
 ## Compatibility evidence and limitations
 
 - Official Amp skills and MCP documentation were checked on 2026-10-01. Amp documents `amp skill
-add <source>`, recursive skill discovery, per-skill `mcp.json`, remote HTTP URLs, and OAuth
+add <source>`, recursive skill discovery, per-skill `mcp.json`, remote HTTP URLs and OAuth
   handling for supported servers.
 - Amp's reviewed docs do not state a minimum client version for local skill `mcp.json` support.
   This package has no authenticated Amp runtime receipt; treat the integration as prepared, not
-  runtime-verified. Confirm skill discovery, OAuth, workspace selection, and a read-only call in
+  runtime-verified. Confirm skill discovery, OAuth, workspace selection and a read-only call in
   the exact Amp CLI/client version before promoting the support claim.
 - This source directory has no independent Amp release number. Pin the immutable marketplace
   release commit and hashes in the channel ledger when export is ready. No marketplace submission

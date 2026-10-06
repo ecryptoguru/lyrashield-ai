@@ -20,7 +20,7 @@ For explicit slash commands, copy selected Markdown files from
 command files are independent of the skill installation.
 
 Augment's rule renderer uses `.augment/rules/lyrashield.md` for LyraShield-owned project guidance.
-Keep this file separate from `.augment-guidelines`, `AGENTS.md`, `CLAUDE.md`, and other user-authored
+Keep this file separate from `.augment-guidelines`, `AGENTS.md`, `CLAUDE.md` and other user-authored
 rules. Rules have a separate JetBrains extension gate; check Augment's current
 [guidelines documentation](https://docs.augmentcode.com/setup-augment/guidelines).
 
@@ -33,7 +33,7 @@ published packages:
 
 1. On Node.js 24 or later, run `npx -y lyrashield@0.2.14 login --oauth` in the same OS account that
    will run the JetBrains IDE, then select the intended workspace.
-2. Open the Augment panel, open **Settings → MCP → Import from JSON**, and import:
+2. Open the Augment panel, open **Settings → MCP → Import from JSON** and import:
 
    ```json
    {

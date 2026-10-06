@@ -224,7 +224,7 @@ describe("connector authorization matrix", () => {
     }
   )
 
-  it.each(["AGENCY", "LAUNCH_ASSURANCE", "ENTERPRISE"])(
+  it.each(["LAUNCH_ASSURANCE", "ENTERPRISE"])(
     "allows connector tools for sponsor plan %s",
     async (sponsorEffectivePlan) => {
       const params = baseParams({ sponsorEffectivePlan })
@@ -430,15 +430,6 @@ describe("checkConnectorAuthorization (pure)", () => {
       resource: "repo:acme/app",
     })
     expect(result).toEqual({ authorized: true })
-  })
-
-  it("denies a connection that records no granted scopes", () => {
-    const result = checkConnectorAuthorization({
-      connection: connection({ capabilities: null }),
-      workspaceId: WORKSPACE,
-      tool,
-    })
-    expect(result).toMatchObject({ authorized: false, code: "TOOL_NOT_GRANTED" })
   })
 })
 

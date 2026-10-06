@@ -272,7 +272,7 @@ export function ApiKeysSection({
                 onChange={(e) => setName(e.target.value)}
                 maxLength={100}
                 placeholder="e.g. Cursor on my laptop, CI pipeline"
-                className="border-input bg-background w-full rounded-md border px-3 py-2 text-sm"
+                className="border-input bg-background w-full rounded-md border px-3 py-2 text-base md:text-sm"
               />
             </div>
             <fieldset className="space-y-1">

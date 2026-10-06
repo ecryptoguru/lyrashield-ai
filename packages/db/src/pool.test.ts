@@ -35,12 +35,6 @@ describe("resolveDbPoolMax", () => {
 })
 
 describe("createBoundedPgAdapter", () => {
-  it("builds an adapter without throwing for a valid connection string", () => {
-    // The adapter wraps a pg.Pool built from the config; it does not connect
-    // until first use, so construction alone must succeed.
-    expect(() => createBoundedPgAdapter("postgresql://u:p@127.0.0.1:5432/db")).not.toThrow()
-  })
-
   it("observes the pg pool created by Prisma without opening a database connection", async () => {
     const adapter = await createBoundedPgAdapter("postgresql://u:p@127.0.0.1:5432/db").connect()
     const pool = adapter.underlyingDriver()

@@ -6,15 +6,8 @@ import { tmpdir } from "node:os"
 import test from "node:test"
 
 const workflow = readFileSync(".github/workflows/deploy-azure.yml", "utf8")
-const start = workflow.indexOf("        run: |") + "        run: |\n".length
-const end = workflow.indexOf("\n  build:", start)
-const script = workflow
-  .slice(start, end)
-  .split("\n")
-  .map((line) => line.replace(/^ {10}/, ""))
-  .join("\n")
 const source = "a".repeat(40)
-function dispatch(t, attempt, originalStatus, currentMain = source) {
+function dispatch(t, attempt, originalStatus, currentMain = source, workflowRef = "refs/heads/main") {
   const directory = mkdtempSync(path.join(tmpdir(), "ls-cutover-dispatch-"))
   t.after(() => rmSync(directory, { recursive: true, force: true }))
   const gh = path.join(directory, "gh")
@@ -25,7 +18,7 @@ function dispatch(t, attempt, originalStatus, currentMain = source) {
   chmodSync(gh, 0o755)
   const output = path.join(directory, "output")
   writeFileSync(output, "")
-  const result = spawnSync("bash", ["-c", script], {
+  const result = spawnSync("bash", [".github/scripts/validate-webhook-deploy-dispatch.sh"], {
     encoding: "utf8",
     env: {
       ...process.env,
@@ -34,6 +27,7 @@ function dispatch(t, attempt, originalStatus, currentMain = source) {
       CONFIRMATION: `webhook-cutover:${source}`,
       WEBHOOK_CLAIMS_CUTOVER: "true",
       GITHUB_RUN_ATTEMPT: String(attempt),
+      GITHUB_REF: workflowRef,
       GITHUB_RUN_ID: "123",
       GITHUB_REPOSITORY: "example/repository",
       GITHUB_OUTPUT: output,
@@ -41,8 +35,24 @@ function dispatch(t, attempt, originalStatus, currentMain = source) {
   })
   return { ...result, output: readFileSync(output, "utf8") }
 }
+test("dispatch uses the trusted main validator and rejects caller refs before release jobs", () => {
+  const job = workflow.slice(
+    workflow.indexOf("  validate-manual-production-dispatch:"),
+    workflow.indexOf("\n  preflight-cutover-evidence:")
+  )
+  assert.match(job, /if: github\.event_name != 'workflow_dispatch' \|\| github\.ref == 'refs\/heads\/main'/)
+  const checkoutAt = job.indexOf("name: Checkout trusted main dispatch validator")
+  const validatorAt = job.indexOf("run: bash \.github\/scripts\/validate-webhook-deploy-dispatch\.sh")
+  assert.ok(checkoutAt >= 0 && checkoutAt < validatorAt)
+  const checkout = job.slice(checkoutAt, validatorAt)
+  assert.match(checkout, /uses: actions\/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1/)
+  assert.match(checkout, /ref: refs\/heads\/main/)
+  assert.match(checkout, /persist-credentials: false/)
+})
 test("new dispatch must still select current main", (t) =>
   assert.notEqual(dispatch(t, 1, "success", "b".repeat(40)).status, 0))
+test("dispatch helper rejects an untrusted caller branch", (t) =>
+  assert.notEqual(dispatch(t, 1, "success", source, "refs/heads/feature/untrusted").status, 0))
 test("same run preserves successfully validated original SHA after main advances but demands receipt proof", (t) => {
   const result = dispatch(t, 2, "success", "b".repeat(40))
   assert.equal(result.status, 0, result.stderr)

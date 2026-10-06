@@ -319,6 +319,49 @@ summary::-webkit-details-marker {
   color: #c2251c;
 }
 
+/* @tailwindcss/typography, driven by the site theme.
+   Tailwind emits `dark:` utilities inside `@media (prefers-color-scheme: dark)`,
+   but this site switches theme with `:root[data-theme]` and lets the visitor
+   override the OS. So `dark:prose-invert` followed the operating system, not the
+   theme: with a dark OS and the site set to light, `.prose` headings stayed pure
+   #fff on the #f5f9fa page — invisible. Map the prose variables to the site's
+   own design tokens for every prose surface instead. Because `.prose` sets
+   `--tw-prose-headings` and friends directly, matching its specificity (one
+   class) and loading afterwards is enough to win, in both themes. This is
+   unlayered CSS, so it also outranks Tailwind's layered utilities — which is
+   what the trust pages used to rely on through `dark:prose-invert`. That class
+   has been removed from the markup so the mechanism is not left implied. */
+.prose {
+  --tw-prose-body: var(--text-muted);
+  --tw-prose-headings: var(--text);
+  --tw-prose-lead: var(--text-muted);
+  --tw-prose-links: var(--accent);
+  --tw-prose-bold: var(--text);
+  --tw-prose-counters: var(--text-muted);
+  --tw-prose-bullets: var(--border);
+  --tw-prose-hr: var(--border);
+  --tw-prose-quotes: var(--text);
+  --tw-prose-quote-borders: var(--accent);
+  --tw-prose-captions: var(--text-muted);
+  --tw-prose-code: var(--text);
+  --tw-prose-th-borders: var(--border);
+  --tw-prose-td-borders: var(--border);
+}
+
+/* A heading that immediately precedes a table reads as that table's caption
+   ("Core approach", "Capability comparison", "Deployment and pricing"), so it
+   takes the small-label treatment instead of full heading scale. Markdown emits
+   no <caption> element, so the heading itself carries the role. */
+.compare-body h2:has(+ table) {
+  margin-top: 2.75rem;
+  margin-bottom: 0.25rem;
+  color: var(--text);
+  font-size: 0.8rem;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 /* Rendered-markdown comparison tables.
    The compare pages render 7-column tables from markdown. `body` sets
    `overflow-x: clip`, so without an explicit scroll container the right-hand

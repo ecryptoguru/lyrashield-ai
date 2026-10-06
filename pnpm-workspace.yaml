@@ -70,12 +70,16 @@ overrides:
   "svgo@<4.1.0": "^4.1.0"
   # GHSA-4mjr-xmp4-gh2g: Express admits vulnerable qs.
   "qs@<6.16.0": "^6.16.0"
+  # GHSA-jqcg-44mw-7w3h: patch Express's proxy trust-subnet handling.
+  "proxy-addr@<2.0.8": "^2.0.8"
+  # GHSA-68fv-2mgg-jv7q: patch indexed source-map section offset handling.
+  "source-map-js@<1.2.2": "^1.2.2"
   # GHSA-3f6p-5ww8-9rcr and GHSA-rgwj-5xj2-c3m3: keep Prisma/Better Auth on fixed mysql2.
   mysql2: "3.23.1"
   # GHSA-7w5x-hrqm-74c2: smol-toml <=1.7.0 DoS via malformed TOML.
   # Transitive via markdownlint-cli2; force the patched line (already used
   # by @astrojs/internal-helpers).
-  smol-toml: ">=1.7.1"
+  smol-toml: "^1.7.1"
 
 allowBuilds:
   "@prisma/engines": true
@@ -112,3 +116,18 @@ minimumReleaseAgeExclude:
   # would deadlock the publish pipeline and buys nothing (we control the
   # artifact end-to-end). Exempt the whole scope permanently.
   - "@lyrashield/*"
+  # GHSA-68fv-2mgg-jv7q: allow only the published fix through the age gate.
+  - "source-map-js@1.2.2"
+# GHSA-ch52-4w7c-c8xp has no patched npm version as of 2026-10-03. Astro's
+# remote asset helper creates a fresh Request(src) and only asks its cache
+# policy for storable/timeToLive; it does not invoke the vulnerable
+# evaluateRequest(max-stale) path. The characterization test must be updated
+# before changing Astro usage. Remove this exception after the upstream fix:
+# https://github.com/kornelski/http-cache-semantics/pull/58
+# GHSA-vfj7-8cjw-p6xm also has no patched npm release. `pnpm why --prod braces`
+# is empty: this copy is used only by root ESLint/Markdown tooling. Keep the
+# ignore scoped to that exact advisory and remove it when upstream fixes braces.
+auditConfig:
+  ignoreGhsas:
+    - GHSA-ch52-4w7c-c8xp
+    - GHSA-vfj7-8cjw-p6xm

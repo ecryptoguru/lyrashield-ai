@@ -121,6 +121,16 @@ describe("domain verification card", () => {
     expect(html).not.toContain("TXT value</")
     expect(harness.buttons.get("Verify now")?.disabled).toBe(false)
   })
+  it("does not show the raw ISO expiry in the initial domain status", () => {
+    const html = render({
+      ...defaults,
+      canValidate: false,
+      initialStatus: "Verified until 2099-01-01T00:00:00.000Z",
+    })
+
+    expect(html).toContain("Verified until Jan 1, 2099, 00:00 UTC")
+    expect(html).not.toContain("2099-01-01T00:00:00.000Z")
+  })
   it("preserves the server's self-attested label for pending DNS proof without granting verification", async () => {
     const html = await load([proof])
     expect(html).toContain("Self-attested")

@@ -4,8 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
-import { authClient } from "@lyrashield/auth"
-import { invalidateAnalyticsPreference } from "@/lib/analytics"
+import { signOutAndClearSessionData } from "@/lib/sign-out"
 import { LogOut } from "lucide-react"
 import { Button, cn } from "@lyrashield/ui"
 import { WorkspaceSwitcher } from "./workspace-switcher"
@@ -139,9 +138,8 @@ export function V2Sidebar({
   }
 
   async function handleSignOut() {
-    const result = await authClient.signOut()
+    const result = await signOutAndClearSessionData()
     if (result.error) return
-    invalidateAnalyticsPreference()
     router.push("/sign-in")
     router.refresh()
   }

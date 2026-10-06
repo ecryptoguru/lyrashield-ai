@@ -190,7 +190,7 @@ export function SupportCaseDetail(props: {
                   maxLength={4000}
                   rows={4}
                   onChange={(event) => onHandoffSummaryChange(event.target.value)}
-                  className="border-input bg-background focus-visible:ring-ring mt-2 w-full rounded-md border px-3 py-2 text-sm focus-visible:ring-2 focus-visible:outline-none"
+                  className="border-input bg-background focus-visible:ring-ring mt-2 w-full rounded-md border px-3 py-2 text-base focus-visible:ring-2 focus-visible:outline-none md:text-sm"
                 />
               </div>
             ) : null}
@@ -324,7 +324,7 @@ export function SupportCaseDetail(props: {
                 onChange={(e) => onReplyBodyChange(e.target.value)}
                 rows={4}
                 maxLength={4000}
-                className="border-input bg-background focus-visible:ring-ring mt-2 w-full resize-none rounded-md border px-3 py-2 text-sm focus-visible:ring-2 focus-visible:outline-none"
+                className="border-input bg-background focus-visible:ring-ring mt-2 w-full resize-none rounded-md border px-3 py-2 text-base focus-visible:ring-2 focus-visible:outline-none md:text-sm"
                 placeholder="Reply as the operator. The requester sees this verbatim."
               />
               <div className="mt-2">

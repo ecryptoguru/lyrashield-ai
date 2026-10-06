@@ -43,7 +43,7 @@ import { OnboardingWizard } from "./onboarding-wizard"
 import { OnboardingScanRecovery } from "./onboarding-scan-recovery"
 import { Button } from "@lyrashield/ui"
 import { getOnboardingReviewOptions } from "./onboarding-flow.utils"
-import { apiPost, apiPatch } from "@/lib/api-client"
+import { ApiError, apiPost, apiPatch } from "@/lib/api-client"
 import {
   OnboardingAlerts,
   OnboardingStepSection,
@@ -54,6 +54,7 @@ import {
   UrlTargetView,
   type Repo,
 } from "./onboarding-step-views"
+import { TargetNameSection } from "./onboarding-target-name-section"
 
 type Element = ReactElement<{
   children?: ReactNode
@@ -80,6 +81,7 @@ const VIEW_COMPONENTS = new Set<unknown>([
   RepoSelectView,
   StepProgress,
   TargetDetailsView,
+  TargetNameSection,
   UrlTargetView,
 ])
 
@@ -173,6 +175,7 @@ it("continues through a failed eligibility preflight without passing the click e
     productName: "Project",
     onProductNameChange: vi.fn(),
     retryingExistingTarget: false,
+    hasFailedScanAttempt: false,
     reviewOptions,
     selectedReview: reviewOptions[0],
     eligibility: { status: "error" },
@@ -204,6 +207,7 @@ it("shows and invokes the start-trial action for TRIAL_AVAILABLE", () => {
     productName: "Project",
     onProductNameChange: vi.fn(),
     retryingExistingTarget: false,
+    hasFailedScanAttempt: false,
     reviewOptions,
     selectedReview: reviewOptions[0],
     eligibility: {
@@ -243,6 +247,7 @@ it("renders the Agency plan as a human-readable onboarding label", () => {
     productName: "Project",
     onProductNameChange: vi.fn(),
     retryingExistingTarget: true,
+    hasFailedScanAttempt: false,
     reviewOptions,
     selectedReview: reviewOptions[0],
     eligibility: {
@@ -597,4 +602,251 @@ it("retries an uncertain scan start with the same idempotency key", async () => 
     .headers?.["Idempotency-Key"]
   expect(firstKey).toMatch(/^[0-9a-f-]{36}$/i)
   expect(retryKey).toBe(firstKey)
+})
+
+it("uses a fresh key after the server proves the previous scan was not submitted", async () => {
+  const storage = new Map<string, string>()
+  vi.stubGlobal("window", {
+    sessionStorage: {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => storage.set(key, value),
+      removeItem: (key: string) => storage.delete(key),
+    },
+  })
+  const initialState = {
+    currentStep: 3,
+    completed: false,
+    skipped: false,
+    workspaceId: "ws-1",
+    targetId: "target-1",
+    selectedGoal: "LAUNCH_REVIEW",
+    targetType: "REPO",
+    targetName: "My repo",
+    updatedAt: "2026-09-27T00:00:00.000Z",
+  }
+  api.patch
+    .mockResolvedValueOnce(initialState)
+    .mockResolvedValueOnce(initialState)
+    .mockResolvedValueOnce({ ...initialState, currentStep: 4, completed: true })
+  const refusal = new ApiError("SCAN_SERVICE_UNAVAILABLE", "Scanning is unavailable.", 503)
+  refusal.details = { operationOutcome: "OPERATION_NOT_SUBMITTED" }
+  api.post.mockRejectedValueOnce(refusal).mockResolvedValueOnce({ id: "scan-2" })
+
+  const checkAvailability = () =>
+    render("REPO", initialState).find((element) =>
+      String(element.props.children).includes("Check availability")
+    )!.props.onClick!()
+  const start = () =>
+    render("REPO", initialState).find((element) =>
+      String(element.props.children).includes("Start release check")
+    )!.props.onClick!()
+
+  await checkAvailability()
+  await new Promise<void>((resolve) => setTimeout(resolve, 0))
+  await start()
+  await new Promise<void>((resolve) => setTimeout(resolve, 0))
+
+  expect(storage.size).toBe(0)
+  expect(
+    render("REPO", initialState).some((element) => element.props.children === "Retry same details")
+  ).toBe(false)
+
+  await start()
+  await new Promise<void>((resolve) => setTimeout(resolve, 0))
+
+  expect(apiPost).toHaveBeenCalledTimes(2)
+  const firstKey = (vi.mocked(apiPost).mock.calls[0]?.[2] as { headers?: Record<string, string> })
+    .headers?.["Idempotency-Key"]
+  const retryKey = (vi.mocked(apiPost).mock.calls[1]?.[2] as { headers?: Record<string, string> })
+    .headers?.["Idempotency-Key"]
+  expect(firstKey).toMatch(/^[0-9a-f-]{36}$/i)
+  expect(retryKey).toMatch(/^[0-9a-f-]{36}$/i)
+  expect(retryKey).not.toBe(firstKey)
+})
+
+it("does not start the trial again after trial activation succeeded but scan admission failed", async () => {
+  const storage = new Map<string, string>()
+  vi.stubGlobal("window", {
+    sessionStorage: {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => storage.set(key, value),
+      removeItem: (key: string) => storage.delete(key),
+    },
+  })
+  const review = getOnboardingReviewOptions("github")[0]!
+  const initialState = {
+    currentStep: 3,
+    completed: false,
+    skipped: false,
+    workspaceId: "ws-1",
+    targetId: "target-1",
+    selectedGoal: review.goal,
+    targetType: "REPO",
+    targetName: "Project",
+  }
+  api.get.mockResolvedValue({
+    allowed: false,
+    code: "TRIAL_AVAILABLE",
+    message: "Start your trial.",
+    plan: "FREE",
+    isTrial: false,
+    remainingMinutes: 0,
+  })
+  api.patch.mockResolvedValue({ ...initialState, completed: true, currentStep: 4 })
+  const refusedScan = new ApiError("SCAN_SERVICE_UNAVAILABLE", "Scan service unavailable.", 503)
+  refusedScan.details = { operationOutcome: "OPERATION_NOT_SUBMITTED" }
+  api.post
+    .mockResolvedValueOnce({ started: true, trialEndsAt: "2026-10-09T00:00:00.000Z" })
+    .mockRejectedValueOnce(refusedScan)
+    .mockResolvedValueOnce({ id: "scan-2" })
+
+  const click = async (label: string) => {
+    const button = render("REPO", initialState).find(
+      (element) => element.type === Button && String(element.props.children).includes(label)
+    )
+    expect(button, `expected button containing ${label}`).toBeDefined()
+    await button!.props.onClick!()
+    await new Promise<void>((resolve) => setTimeout(resolve, 0))
+  }
+
+  await click("Check availability")
+  await click("Start your free trial")
+  await click("Start your free trial")
+
+  const trialStarts = vi
+    .mocked(apiPost)
+    .mock.calls.filter(([url]) => url === "/api/billing/trial/start")
+  const scanStarts = vi.mocked(apiPost).mock.calls.filter(([url]) => url === "/api/scans")
+  expect(trialStarts).toHaveLength(1)
+  expect(scanStarts).toHaveLength(2)
+})
+
+it("rechecks eligibility after an unknown trial-start response before deciding to retry it", async () => {
+  const storage = new Map<string, string>()
+  vi.stubGlobal("window", {
+    sessionStorage: {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => storage.set(key, value),
+      removeItem: (key: string) => storage.delete(key),
+    },
+  })
+  const review = getOnboardingReviewOptions("github")[0]!
+  const initialState = {
+    currentStep: 3,
+    completed: false,
+    skipped: false,
+    workspaceId: "ws-1",
+    targetId: "target-1",
+    selectedGoal: review.goal,
+    targetType: "REPO",
+    targetName: "Project",
+  }
+  api.get
+    .mockResolvedValueOnce({
+      allowed: false,
+      code: "TRIAL_AVAILABLE",
+      message: "Start your trial.",
+      plan: "FREE",
+      isTrial: false,
+      remainingMinutes: 0,
+    })
+    .mockResolvedValueOnce({
+      allowed: true,
+      code: null,
+      message: null,
+      plan: "TRIAL",
+      isTrial: true,
+      remainingMinutes: 60,
+    })
+  api.patch.mockResolvedValue({ ...initialState, completed: true, currentStep: 4 })
+  api.post
+    .mockRejectedValueOnce(new ApiError("NETWORK_ERROR", "Network request failed", 0))
+    .mockResolvedValueOnce({ started: true, trialEndsAt: "2026-10-09T00:00:00.000Z" })
+    .mockResolvedValueOnce({ id: "scan-2" })
+
+  const click = async (label: string) => {
+    const button = render("REPO", initialState).find(
+      (element) => element.type === Button && String(element.props.children).includes(label)
+    )
+    expect(button, `expected button containing ${label}`).toBeDefined()
+    await button!.props.onClick!()
+    await new Promise<void>((resolve) => setTimeout(resolve, 0))
+  }
+
+  await click("Check availability")
+  await click("Start your free trial")
+  await click("Start your free trial")
+
+  expect(api.get).toHaveBeenCalledTimes(2)
+  expect(
+    render("REPO", initialState).some(
+      (element) =>
+        element.type === Button && String(element.props.children).includes("Start release check")
+    )
+  ).toBe(true)
+  await click("Start release check")
+
+  const trialStarts = vi
+    .mocked(apiPost)
+    .mock.calls.filter(([url]) => url === "/api/billing/trial/start")
+  const scanStarts = vi.mocked(apiPost).mock.calls.filter(([url]) => url === "/api/scans")
+  expect(trialStarts).toHaveLength(1)
+  expect(scanStarts).toHaveLength(1)
+})
+
+it("retries trial activation only when refreshed eligibility still says it is available", async () => {
+  const storage = new Map<string, string>()
+  vi.stubGlobal("window", {
+    sessionStorage: {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => storage.set(key, value),
+      removeItem: (key: string) => storage.delete(key),
+    },
+  })
+  const review = getOnboardingReviewOptions("github")[0]!
+  const initialState = {
+    currentStep: 3,
+    completed: false,
+    skipped: false,
+    workspaceId: "ws-1",
+    targetId: "target-1",
+    selectedGoal: review.goal,
+    targetType: "REPO",
+    targetName: "Project",
+  }
+  const trialAvailable = {
+    allowed: false,
+    code: "TRIAL_AVAILABLE",
+    message: "Start your trial.",
+    plan: "FREE",
+    isTrial: false,
+    remainingMinutes: 0,
+  }
+  api.get.mockResolvedValue(trialAvailable)
+  api.patch.mockResolvedValue({ ...initialState, completed: true, currentStep: 4 })
+  api.post
+    .mockRejectedValueOnce(new ApiError("NETWORK_ERROR", "Network request failed", 0))
+    .mockResolvedValueOnce({ started: true, trialEndsAt: "2026-10-09T00:00:00.000Z" })
+    .mockResolvedValueOnce({ id: "scan-2" })
+
+  const click = async (label: string) => {
+    const button = render("REPO", initialState).find(
+      (element) => element.type === Button && String(element.props.children).includes(label)
+    )
+    expect(button, `expected button containing ${label}`).toBeDefined()
+    await button!.props.onClick!()
+    await new Promise<void>((resolve) => setTimeout(resolve, 0))
+  }
+
+  await click("Check availability")
+  await click("Start your free trial")
+  await click("Start your free trial")
+
+  expect(api.get).toHaveBeenCalledTimes(2)
+  const trialStarts = vi
+    .mocked(apiPost)
+    .mock.calls.filter(([url]) => url === "/api/billing/trial/start")
+  const scanStarts = vi.mocked(apiPost).mock.calls.filter(([url]) => url === "/api/scans")
+  expect(trialStarts).toHaveLength(2)
+  expect(scanStarts).toHaveLength(1)
 })

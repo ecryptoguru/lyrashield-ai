@@ -42,6 +42,7 @@ export function createListScanAttachmentsTool(context: ToolHandlerContext): McpT
       "List the workspace's active scan attachments (id, filename, media type, size, checksum). Attachments are immutable input evidence referenced by id in scan runs — never host paths.",
     inputSchema: {
       type: "object",
+      additionalProperties: false,
       properties: {
         workspaceId: { type: "string", description: "Workspace ID" },
       },

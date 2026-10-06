@@ -1,0 +1,178 @@
+name: Trusted webhook empty-state producer
+on:
+  workflow_call:
+    inputs:
+      disposable_only:
+        required: false
+        default: false
+        type: boolean
+      source_sha:
+        required: true
+        type: string
+      run_id:
+        required: true
+        type: string
+      run_attempt:
+        required: true
+        type: string
+      nonce:
+        required: true
+        type: string
+    secrets:
+      AZURE_DEPLOY_CLIENT_ID:
+        required: false
+      AZURE_DEPLOY_TENANT_ID:
+        required: false
+      AZURE_DEPLOY_SUBSCRIPTION_ID:
+        required: false
+permissions:
+  contents: read
+jobs:
+  produce:
+    # Owner-approved root collector installation, trust setup and action-time
+    # maintenance window are separate. Never activate through caller input.
+    # GitHub run IDs are decimal; this fixed sentinel cannot match.
+    # This static disable avoids actionlint's bare-boolean condition error.
+    if: ${{ github.run_id == 'disabled-until-owner-approved-cutover' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: azure-production
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - name: Reject caller data except bounded immutable identifiers
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          RUN_ID: ${{ inputs.run_id }}
+          RUN_ATTEMPT: ${{ inputs.run_attempt }}
+          NONCE: ${{ inputs.nonce }}
+        run: |
+          set -euo pipefail
+          [[ "$SOURCE_SHA" =~ ^[a-f0-9]{40}$ ]]
+          [[ "$RUN_ID" =~ ^[1-9][0-9]{0,19}$ ]]
+          [[ "$RUN_ATTEMPT" =~ ^[1-9][0-9]{0,5}$ ]]
+          [[ "$NONCE" =~ ^[A-Za-z0-9_-]{32,128}$ ]]
+          test "$SOURCE_SHA" = "$GITHUB_SHA"
+          test "$RUN_ID" = "$GITHUB_RUN_ID"
+          test "$RUN_ATTEMPT" = "$GITHUB_RUN_ATTEMPT"
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_EVENT_NAME" = workflow_dispatch
+          test "$GITHUB_REPOSITORY_ID" = 1286618458
+          test "$GITHUB_REPOSITORY_OWNER_ID" = 116722580
+      - name: Login with the existing protected deployment principal
+        uses: Azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906
+        with:
+          client-id: ${{ secrets.AZURE_DEPLOY_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_DEPLOY_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_DEPLOY_SUBSCRIPTION_ID }}
+      - name: Fixed root preflight, owned admission, normal drain and writer stop
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          RUN_ID: ${{ inputs.run_id }}
+          RUN_ATTEMPT: ${{ inputs.run_attempt }}
+          NONCE: ${{ inputs.nonce }}
+        run: |
+          set -euo pipefail
+          for phase in preflight admission drain stop; do
+            az vm run-command invoke --ids /subscriptions/b2f8f58b-18f5-4e49-ac53-06ea04ff0f4c/resourceGroups/LyraShieldAI/providers/Microsoft.Compute/virtualMachines/lyrashield-worker \
+              --command-id RunShellScript --scripts "node /opt/lyrashield-worker-host/ops/worker/webhook-empty-state-producer.mjs $phase $RUN_ID $RUN_ATTEMPT $SOURCE_SHA $NONCE" \
+              --query 'value[0].message' -o tsv > "$RUNNER_TEMP/root-phase.txt"
+            # Azure wraps guest script errors; never accept transport success
+            # alone. The fixed producer emits this only after all phase gates.
+            grep -Fxq "EMPTY_STATE_PHASE_COMPLETE=$phase" "$RUNNER_TEMP/root-phase.txt"
+          done
+      - name: Acquire digest from fixed root producer
+        id: collect
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          RUN_ID: ${{ inputs.run_id }}
+          RUN_ATTEMPT: ${{ inputs.run_attempt }}
+          NONCE: ${{ inputs.nonce }}
+        run: |
+          set -euo pipefail
+          az vm run-command invoke --ids /subscriptions/b2f8f58b-18f5-4e49-ac53-06ea04ff0f4c/resourceGroups/LyraShieldAI/providers/Microsoft.Compute/virtualMachines/lyrashield-worker \
+            --command-id RunShellScript --scripts "node /opt/lyrashield-worker-host/ops/worker/webhook-empty-state-producer.mjs collect $RUN_ID $RUN_ATTEMPT $SOURCE_SHA $NONCE" \
+            --query 'value[0].message' -o tsv > "$RUNNER_TEMP/root-digest.txt"
+          grep -Fxq 'EMPTY_STATE_PHASE_COMPLETE=collect' "$RUNNER_TEMP/root-digest.txt"
+          receipt_sha256=$(grep -Ex '[a-f0-9]{64}' "$RUNNER_TEMP/root-digest.txt")
+          [[ "$receipt_sha256" =~ ^[a-f0-9]{64}$ ]]
+          echo "receipt_sha256=$receipt_sha256" >> "$GITHUB_OUTPUT"
+          printf '{"receiptSha256":"%s"}' "$receipt_sha256" > "$RUNNER_TEMP/predicate.json"
+      - name: Attest only exact canonical receipt digest
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
+        with:
+          subject-name: webhook-empty-state-canonical-receipt-v3
+          subject-digest: sha256:${{ steps.collect.outputs.receipt_sha256 }}
+          predicate-type: https://lyrashieldai.com/attestations/webhook-empty-state/v3
+          predicate-path: ${{ runner.temp }}/predicate.json
+          create-storage-record: true
+          push-to-registry: false
+          show-summary: false
+      - name: Verify attestation, atomic migration, completion proof and candidate readiness
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          RUN_ID: ${{ inputs.run_id }}
+          RUN_ATTEMPT: ${{ inputs.run_attempt }}
+          NONCE: ${{ inputs.nonce }}
+        run: |
+          set -euo pipefail
+          for phase in migrate complete candidate resume; do
+            az vm run-command invoke --ids /subscriptions/b2f8f58b-18f5-4e49-ac53-06ea04ff0f4c/resourceGroups/LyraShieldAI/providers/Microsoft.Compute/virtualMachines/lyrashield-worker \
+              --command-id RunShellScript --scripts "node /opt/lyrashield-worker-host/ops/worker/webhook-empty-state-producer.mjs $phase $RUN_ID $RUN_ATTEMPT $SOURCE_SHA $NONCE" \
+              --query 'value[0].message' -o tsv > "$RUNNER_TEMP/root-phase.txt"
+            grep -Fxq "EMPTY_STATE_PHASE_COMPLETE=$phase" "$RUNNER_TEMP/root-phase.txt"
+          done
+      - name: Failure retains maintenance
+        if: failure()
+        run: echo 'Empty-state cutover failed. Retain owned admission and startup fence; no legacy rollback, queue deletion or payment replay.' >> "$GITHUB_STEP_SUMMARY"
+
+  disposable-issuance:
+    # Synthetic signing test complete; numeric run IDs cannot match this gate.
+    if: ${{ github.run_id == 'disabled-until-owner-approved-disposable-attestation' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 24
+      - name: Generate synthetic canonical receipt (no service connections)
+        env:
+          DISPOSABLE_NONCE: ${{ inputs.nonce }}
+        run: node approval-fixtures/disposable-attestation.mjs prepare
+      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
+        with:
+          subject-name: webhook-empty-state-canonical-receipt-v3
+          subject-digest: sha256:${{ env.DISPOSABLE_RECEIPT_SHA256 }}
+          predicate-type: https://lyrashieldai.com/attestations/webhook-empty-state/v3
+          predicate-path: ${{ runner.temp }}/disposable-predicate.json
+          create-storage-record: true
+          push-to-registry: false
+          show-summary: false
+      - name: Authenticate read-only discovery in ephemeral runner root HOME
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$GH_TOKEN" | sudo /usr/bin/gh auth login --hostname github.com --with-token
+      - name: Actual application verification and certificate linkage negatives
+        run: sudo --preserve-env=GITHUB_RUN_ID,GITHUB_RUN_ATTEMPT,GITHUB_SHA,GITHUB_ACTOR_ID,GITHUB_REF,GITHUB_EVENT_NAME,RUNNER_TEMP node approval-fixtures/disposable-attestation.mjs verify
+      - name: Retain only synthetic digest and verification provenance
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: disposable-attestation-provenance
+          path: |
+            ${{ runner.temp }}/disposable-manifest.json
+            ${{ runner.temp }}/disposable-verification.json
+          if-no-files-found: ignore
+          retention-days: 3

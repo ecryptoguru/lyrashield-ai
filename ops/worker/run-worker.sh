@@ -1,6 +1,7 @@
 #!/bin/sh
 set -eu
 
+
 runtime_config="${LYRASHIELD_WORKER_RUNTIME_CONFIG:-/etc/lyrashield/worker-runtime.conf}"
 environment_file="${LYRASHIELD_WORKER_ENV_FILE:-/etc/lyrashield/worker.env}"
 worker_env_lib="${LYRASHIELD_WORKER_ENV_LIB:-/opt/lyrashield-worker-host/worker-env.sh}"
@@ -29,6 +30,15 @@ set +a
 : "${LYRASHIELD_WORKER_IMAGE:?Set an immutable worker image in the runtime configuration}"
 : "${LYRASHIELD_SANDBOX_IMAGE:?Set an immutable sandbox image in the runtime configuration}"
 : "${LYRASHIELD_SANDBOX_NETWORK:=lyrashield-sandbox}"
+
+# Fixed host path: a matching /2 image is insufficient during empty-state
+# maintenance. This runs before registry login, pulls or any consumer startup.
+empty_state_fence=/var/lib/lyrashield/webhook-empty-state/fence.json
+if [ -e "$empty_state_fence" ] || [ -L "$empty_state_fence" ]; then
+  fence_verifier=/opt/lyrashield-worker-host/ops/worker/webhook-empty-state-startup-fence.mjs
+  [ ! -L "$fence_verifier" ] && [ "$(stat -c '%u:%a' "$fence_verifier")" = 0:644 ] || exit 1
+  node "$fence_verifier"
+fi
 
 case "$LYRASHIELD_WORKER_IMAGE" in
   *@sha256:????????????????????????????????????????????????????????????????) ;;
@@ -154,7 +164,7 @@ if [ -e "$cutover_receipt" ]; then
   docker run --rm --network none --env-file "$environment_file" $env_args \
     --env TMPDIR=/tmp --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m \
     -w /app/apps/worker "$LYRASHIELD_WORKER_IMAGE" \
-    node --import tsx --input-type=module -e 'import {createHash} from "node:crypto"; const receipt=JSON.parse(process.argv[1]); const billing=await import("@lyrashield/billing"); const hash=(value)=>createHash("sha256").update(value??"").digest("hex"); if(process.env.LYRASHIELD_PRODUCT_REVISION!==receipt.productRevision || billing.WEBHOOK_TRACK_CLAIM_PROTOCOL!=="durable-claims/1" || receipt.databaseUrlSha256!==hash(process.env.DATABASE_URL) || receipt.databaseSystemUrlSha256!==hash(process.env.DATABASE_SYSTEM_URL) || receipt.redisUrlSha256!==hash(process.env.REDIS_URL)) throw new Error("Cutover worker environment does not match owned receipt");' "$saved_cutover"
+    node --import tsx --input-type=module -e 'import {createHash} from "node:crypto"; const receipt=JSON.parse(process.argv[1]); const billing=await import("@lyrashield/billing"); const hash=(value)=>createHash("sha256").update(value??"").digest("hex"); if(process.env.LYRASHIELD_PRODUCT_REVISION!==receipt.productRevision || billing.WEBHOOK_TRACK_CLAIM_PROTOCOL!=="durable-claims/2" || receipt.databaseUrlSha256!==hash(process.env.DATABASE_URL) || receipt.databaseSystemUrlSha256!==hash(process.env.DATABASE_SYSTEM_URL) || receipt.redisUrlSha256!==hash(process.env.REDIS_URL)) throw new Error("Cutover worker environment does not match owned receipt");' "$saved_cutover"
 fi
 
 socket_group=$(stat -c '%g' /var/run/docker.sock)

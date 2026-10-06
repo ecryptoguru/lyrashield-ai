@@ -1,6 +1,6 @@
 # LyraShield AI for Junie
 
-**State: PREPARATION.** Shared skills and a local MCP snippet are staged. `@lyrashield/mcp@0.2.12` and CLI `lyrashield@0.2.14` are published. Junie CLI, Junie IDE, and JetBrains AI Assistant remain distinct surfaces; no runtime receipt is confirmed here.
+**State: PREPARATION.** Shared skills and a local MCP snippet are staged. `@lyrashield/mcp@0.2.12` and CLI `lyrashield@0.2.14` are published. Junie CLI, Junie IDE and JetBrains AI Assistant remain distinct surfaces; no runtime receipt is confirmed here.
 
 Merge [`mcp.json`](./mcp.json) into project `.junie/mcp/mcp.json` or user `~/.junie/mcp/mcp.json` (Windows: `%USERPROFILE%\.junie\mcp\mcp.json`). Preserve other entries. Run `npx -y lyrashield@0.2.14 login --oauth` in the same OS account. Local stdio reads the LyraShield credential store; Node.js 24 or newer is required.
 

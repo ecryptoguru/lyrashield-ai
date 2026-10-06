@@ -11,6 +11,7 @@ const {
   isTrialAvailable,
   resolveAccountBilling,
   resolveWorkspaceScanSponsor,
+  hasBillingPermission,
 } = vi.hoisted(() => ({
   getCachedSession: vi.fn(),
   getCachedWorkspaceId: vi.fn(),
@@ -21,6 +22,9 @@ const {
   isTrialAvailable: vi.fn(),
   resolveAccountBilling: vi.fn(),
   resolveWorkspaceScanSponsor: vi.fn(),
+  hasBillingPermission: vi.fn(
+    (role: string, permission: string) => role === "OWNER" && permission === "billing:manage"
+  ),
 }))
 
 vi.mock("@/lib/cache", () => ({
@@ -31,7 +35,7 @@ vi.mock("@lyrashield/db", () => ({
   prisma: { workspaceMember: { findUnique: (...args: unknown[]) => findUnique(...args) } },
 }))
 vi.mock("@lyrashield/auth", () => ({
-  hasPermission: () => true,
+  hasPermission: (...args: [string, string]) => hasBillingPermission(...args),
   PERMISSIONS: { billing: { manage: "billing:manage" } },
 }))
 vi.mock("@lyrashield/billing", () => ({
@@ -41,6 +45,7 @@ vi.mock("@lyrashield/billing", () => ({
   isTrialAvailable: (...args: unknown[]) => isTrialAvailable(...args),
   resolveAccountBilling: (...args: unknown[]) => resolveAccountBilling(...args),
   resolveWorkspaceScanSponsor: (...args: unknown[]) => resolveWorkspaceScanSponsor(...args),
+  TRIAL_AGENT_MINUTES: 60,
   // Mirror the real catalog shape: only the purchasable cloud plan ids have
   // entries, so FREE and TEAM fall through to the plan token.
   CLOUD_PLAN_MAP: {
@@ -61,7 +66,7 @@ vi.mock("@/lib/billing-admission", () => ({
 }))
 vi.mock("./billing-actions", () => ({ BillingActions: () => null }))
 vi.mock("./buy-pack-button", () => ({ BuyPackButton: () => null }))
-vi.mock("./upgrade-now-button", () => ({ UpgradeNowButton: () => null }))
+vi.mock("./upgrade-now-button", () => ({ UpgradeNowButton: () => "Upgrade Now CTA" }))
 vi.mock("./spend-limit-form", () => ({ SpendLimitForm: () => null }))
 vi.mock("./billing-return-notice", () => ({ BillingReturnNotice: () => null }))
 
@@ -106,6 +111,23 @@ describe("billing page plan label", () => {
     getGraceState.mockResolvedValue({ inGrace: false, remainingMs: 0 })
     isTrialAvailable.mockResolvedValue(false)
     resolveWorkspaceScanSponsor.mockResolvedValue(null)
+    hasBillingPermission.mockImplementation(
+      (role: string, permission: string) => role === "OWNER" && permission === "billing:manage"
+    )
+  })
+
+  it("shows the trial upgrade action only to members with billing:manage", async () => {
+    mockPlan("FREE")
+    getAccountTrialState.mockResolvedValue({ ...inactiveTrial, isActive: true, daysLeft: 4 })
+
+    findUnique.mockResolvedValue({ role: "OWNER" })
+    const ownerHtml = renderToString(await BillingPage({ searchParams: Promise.resolve({}) }))
+    expect(ownerHtml).toContain("Upgrade Now CTA")
+
+    findUnique.mockResolvedValue({ role: "VIEWER" })
+    const viewerHtml = renderToString(await BillingPage({ searchParams: Promise.resolve({}) }))
+    expect(viewerHtml).not.toContain("Upgrade Now CTA")
+    expect(hasBillingPermission).toHaveBeenCalledWith("VIEWER", "billing:manage")
   })
 
   it("labels a FREE plan as Free, not the raw token", async () => {
@@ -150,7 +172,7 @@ describe("billing page plan label", () => {
     getAccountTrialState.mockResolvedValue({ ...inactiveTrial, isExpired: true, minutesLeft: 37 })
     getUsageBalance.mockResolvedValue({
       poolConsumed: 9,
-      poolMinutes: 60,
+      poolMinutes: 100,
       packRemaining: 12,
       totalRemaining: 63,
       packs: [{ remainingMinutes: 12, expiresAt: null, purchasedAt: new Date("2026-09-01") }],
@@ -160,6 +182,7 @@ describe("billing page plan label", () => {
 
     expect(html).toContain("Unused trial minutes were forfeited.")
     expect(html).toContain("9<!-- --> used of<!-- --> <!-- -->60")
+    expect(html).toContain('style="width:15%"')
     expect(html.replaceAll("<!-- -->", "")).toContain("0 agent-minutes available")
     expect(html).toContain('Pack Minutes</p><p class="text-xl font-semibold">12</p>')
     expect(html).toContain('Total Remaining</p><p class="text-xl font-semibold">0</p>')
@@ -181,6 +204,7 @@ describe("billing page plan label", () => {
     const html = renderToString(await BillingPage({ searchParams: Promise.resolve({}) }))
 
     expect(html.replaceAll("<!-- -->", "")).toContain("80 agent-minutes available")
+    expect(html).toContain("20<!-- --> used of<!-- --> <!-- -->100")
     expect(html).not.toContain("Unused trial minutes were forfeited.")
   })
 

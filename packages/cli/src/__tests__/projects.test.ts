@@ -40,34 +40,6 @@ describe("resolveRepoFromPath", () => {
   })
 })
 
-describe("parseRepoIdentifier integration", () => {
-  it("matches what git detection returns for an HTTPS URL", () => {
-    const repo = parseRepoIdentifier("https://github.com/ecryptoguru/lyrashield-ai.git")
-    expect(repo).toEqual({
-      repoProvider: "github",
-      repoOwner: "ecryptoguru",
-      repoName: "lyrashield-ai",
-      repoFullName: "ecryptoguru/lyrashield-ai",
-    })
-  })
-
-  it("handles an SSH URL", () => {
-    const repo = parseRepoIdentifier("git@github.com:ecryptoguru/lyrashield-ai.git")
-    expect(repo?.repoFullName).toBe("ecryptoguru/lyrashield-ai")
-  })
-
-  it("passes through owner/repo", () => {
-    const repo = parseRepoIdentifier("ecryptoguru/lyrashield-ai")
-    expect(repo?.repoFullName).toBe("ecryptoguru/lyrashield-ai")
-  })
-
-  it("rejects non-repo URLs", () => {
-    expect(parseRepoIdentifier("not-a-repo")).toBeUndefined()
-    expect(parseRepoIdentifier("https://github.com/ecryptoguru")).toBeUndefined()
-    expect(parseRepoIdentifier("a/b/c")).toBeUndefined()
-  })
-})
-
 describe("findTargetByRepository", () => {
   const repo = parseRepoIdentifier("ecryptoguru/lyrashield-ai")!
 

@@ -244,6 +244,10 @@ export async function recordAgentMinutes(
   // larger values indicate a bug or abuse attempt.
   const MAX_TICK_MS = 60 * 60 * 1000 // 1 hour
   if (!Number.isFinite(ms) || ms > MAX_TICK_MS) {
+    logger.warn("Ignoring out-of-range agent-minute tick", {
+      reason:
+        ms > MAX_TICK_MS ? "agent_minute_tick_exceeds_one_hour" : "agent_minute_tick_not_finite",
+    })
     return { created: false, minutes: 0, idempotencyKey, overageMinutes: 0, accountId: "" }
   }
 

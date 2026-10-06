@@ -11,7 +11,7 @@ faq:
   - q: "Does Pi Coding Agent support MCP natively?"
     a: "Yes. Pi has built-in MCP over stdio and Streamable HTTP with OAuth support. It reads user-level ~/.pi/agent/mcp.json and project .pi/mcp.json after project trust. Pi also discovers skills in ~/.agents/skills/ and .agents/skills/."
   - q: "How do I use LyraShield beside Pi today?"
-    a: "Add https://app.lyrashieldai.com/api/mcp with pi mcp add, sign in with pi mcp login lyrashield, and verify with pi mcp list plus a read-only call. Use the CLI and GitHub Action as complementary paths."
+    a: "Add https://app.lyrashieldai.com/api/mcp with pi mcp add, sign in with pi mcp login lyrashield and verify with pi mcp list plus a read-only call. Use the CLI and GitHub Action as complementary paths."
   - q: "What Pi surfaces require security review?"
     a: "Review installed packages, extensions, skills, prompt files, custom tools and the command permissions granted to the agent. Pin dependencies and keep credentials outside the working tree."
   - q: "Will lyrashield init write a Pi MCP file?"
@@ -46,9 +46,9 @@ For a user-level setup, Pi writes `~/.pi/agent/mcp.json`. A project-level server
 
 Pi discovers Agent Skills from `~/.agents/skills/` and `.agents/skills/`. Install only reviewed skill directories containing `SKILL.md`; project skills can instruct the model to run scripts or modify files and should be reviewed before granting project trust.
 
-The LyraShield CLI remains useful for a local or CI check. Authenticate that separate surface with `npx -y lyrashield@0.2.14 login --oauth`, verify with `npx -y lyrashield@0.2.14 doctor`, and use `npx -y lyrashield@0.2.14 scan` only when explicitly requested. Its credential store is separate from Pi's hosted OAuth credentials. The earlier CLI 0.2.13 release printed an obsolete Pi recipe. Use Pi’s native MCP commands for hosted OAuth, and install shared skills with the current documented CLI command.
+The LyraShield CLI remains useful for a local or CI check. Authenticate that separate surface with `npx -y lyrashield@0.2.14 login --oauth`, verify with `npx -y lyrashield@0.2.14 doctor` and use `npx -y lyrashield@0.2.14 scan` only when explicitly requested. Its credential store is separate from Pi's hosted OAuth credentials. The earlier CLI 0.2.13 release printed an obsolete Pi recipe. Use Pi’s native MCP commands for hosted OAuth, and install shared skills with the current documented CLI command.
 
-Keep the working loop simple: Pi changes code; when explicitly requested, use its authenticated MCP connection or the CLI to assess the authorized target; a developer reviews findings with their recorded evidence states; CI repeats the selected diff gate. Independent verification still requires its own receipt. A detected or inconclusive result does not become verified because Pi displayed it.
+Keep the working loop simple: Pi changes code; when explicitly requested, use its authenticated MCP connection or the CLI to assess the authorized target; a developer reviews findings with their recorded evidence states; CI repeats the selected diff gate. A retest-confirmed outcome still requires its own fresh applicable retest. A detected or inconclusive result does not become verified because Pi displayed it.
 
 ## 3. Scope Pi authority and credentials
 
@@ -95,7 +95,7 @@ Target CI:
 
 Pi configuration should be reviewed whenever it can read source, invoke tools or resolve credentials. The [OWASP Top 10](https://owasp.org/www-project-top-ten/) provides a baseline for authorization and injection checks, [CWE-798](https://cwe.mitre.org/data/definitions/798.html) covers hardcoded credential exposure and the [Model Context Protocol specification](https://modelcontextprotocol.io/specification/) defines MCP transport and tool contracts. These sources do not prove a Pi setup is safe. They help a reviewer confirm enabled tools, secret references and the exact configuration revision retained with the release evidence. Repeat the review after changing an extension, skill, MCP server or approval boundary.
 
-Pi gives you a minimal, composable harness with built-in MCP, skills, packages, extensions, prompt templates and tools. LyraShield connects through Pi's hosted OAuth MCP path and also offers a standalone CLI and runner-local SARIF gate. LyraShield keeps detected candidates, separate verification receipts and retest outcomes distinct; fix proposals remain approval-gated.
+Pi gives you a minimal, composable harness with built-in MCP, skills, packages, extensions, prompt templates and tools. LyraShield connects through Pi's hosted OAuth MCP path and also offers a standalone CLI and runner-local SARIF gate. LyraShield keeps detected candidates, retest outcomes and inconclusive results distinct; fix proposals remain approval-gated.
 
 Use Pi's LyraShield MCP connection for an explicitly requested workflow, or use `npx -y lyrashield@0.2.14 scan` as a CLI path when requested. Follow the [Pi integration guide](/docs/integrations/pi) for MCP, OAuth, skills and CLI setup. Setup instructions do not constitute a client-runtime receipt; retain an authenticated runtime result before claiming Pi acceptance. The platform is live in open beta and scans, findings and evidence, approval-gated fix proposals, retests and reports are implemented. Automatic server-generated Fix PR execution is not enabled.
 

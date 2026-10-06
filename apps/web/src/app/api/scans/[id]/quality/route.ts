@@ -1,5 +1,5 @@
-import { getScanQualitySurface } from "@lyrashield/db"
-import { requirePermission } from "@lyrashield/auth/server"
+import { getScanQualitySurface, withWorkspaceRLS } from "@lyrashield/db"
+import { assertOAuthDelegatedScope, requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
 import { authErrorResponse } from "../../../../../lib/api-auth"
@@ -30,7 +30,25 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const workspaceId = parsedWorkspace.data
 
   try {
-    await requirePermission(workspaceId, PERMISSIONS.scan.view)
+    const { session } = await requirePermission(workspaceId, PERMISSIONS.scan.view)
+    const connection = session.oauth
+    if (
+      connection?.connectionId &&
+      connection.scopes.includes("lyrashield.write") &&
+      !connection.allTargets
+    ) {
+      const scan = await withWorkspaceRLS(workspaceId, (tx) =>
+        tx.scan.findFirst({
+          where: { id: parsedId.data, workspaceId, deletedAt: null },
+          select: { targetId: true },
+        })
+      )
+      if (!scan) {
+        return apiError("SCAN_NOT_FOUND", "Scan not found", 404)
+      }
+      assertOAuthDelegatedScope(session, scan.targetId)
+    }
+
     const surface = await getScanQualitySurface(parsedId.data, workspaceId)
     if (!surface) {
       return apiError("SCAN_NOT_FOUND", "Scan not found", 404)

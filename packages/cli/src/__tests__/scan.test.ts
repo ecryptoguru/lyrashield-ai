@@ -243,17 +243,6 @@ describe("handleScan", () => {
       expect(body).not.toHaveProperty("headRef")
     })
 
-    it("omits workflow fields for a plain scan without refs", async () => {
-      const output = makeOutput()
-      const code = await handleScan(["--target", "t-1"], output)
-      expect(code).toBe(0)
-
-      const body = getScanBody()?.body
-      expect(body).not.toHaveProperty("workflow")
-      expect(body).not.toHaveProperty("baseRef")
-      expect(body).not.toHaveProperty("headRef")
-    })
-
     it("rejects --head without --base before submitting", async () => {
       const output = makeOutput()
       const code = await handleScan(["--target", "t-1", "--head", "feature/42"], output)

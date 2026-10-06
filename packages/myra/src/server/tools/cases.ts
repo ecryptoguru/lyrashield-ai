@@ -22,6 +22,13 @@ const SUPPORT_INBOX = "support@lyrashieldai.com"
 
 export const proposeSupportCaseInput = submitCasePayloadSchema
 export const submitSupportCaseInput = submitCasePayloadSchema
+// attach_trace adds this owner-checked internal reference to a persisted
+// proposal after validating it against the caller's conversation. Keep the
+// public propose/submit tool schemas strict and do not expose traceId as a
+// caller-supplied case field.
+const submitCaseExecutionPayloadSchema = submitCasePayloadSchema
+  .extend({ traceId: z.string().min(4).max(80).optional() })
+  .strict()
 export const readOwnCaseInput = z.object({
   caseId: z.string().max(80).optional(),
   reference: z.string().max(20).optional(),
@@ -181,7 +188,7 @@ export async function executeSubmitSupportCase(
   payload: Record<string, unknown>,
   ctx: OperationContext
 ): Promise<ExecutorOutcome> {
-  const parsed = submitCasePayloadSchema.parse(payload)
+  const parsed = submitCaseExecutionPayloadSchema.parse(payload)
 
   // Re-verify the reply destination at execution time.
   let replyEmail: string | null = null

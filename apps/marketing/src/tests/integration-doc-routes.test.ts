@@ -13,6 +13,7 @@ import {
 import { allRoutes, LEGACY_REDIRECTS } from "../../scripts/redirects-lib.mjs"
 
 const pageDirectory = new URL("../pages/docs/integrations/", import.meta.url)
+const userGuide = readFileSync(new URL("../../../../docs/user-guide.md", import.meta.url), "utf8")
 const authoredPages = readdirSync(pageDirectory)
   .filter((file) => file.endsWith(".astro") && file !== "[slug].astro")
   .map((file) => file.replace(/\.astro$/, ""))
@@ -35,6 +36,10 @@ const configPreviewClients = [
 ]
 
 describe("integration guide routes", () => {
+  it("points the user guide at the registry-derived integration directory", () => {
+    expect(userGuide).toMatch(/\[client-specific setup guides\]\(\/docs\/integrations\)/)
+  })
+
   it("resolves every preferred registry link to an authored or generated page", () => {
     const explicit = new Set(EXPLICIT_INTEGRATION_DOC_SLUGS)
     const generated = new Set(listGeneratedIntegrationDocs().map((agent) => agent.docsSlug))
@@ -60,28 +65,25 @@ describe("integration guide routes", () => {
     const redirects = readFileSync(new URL("../../public/_redirects", import.meta.url), "utf8")
     const redirectLines = new Set(redirects.split("\n").map((line) => line.trim()))
 
-    expect(LEGACY_REDIRECTS).toEqual([
-      {
-        source: "/docs/integrations/picode",
-        target: "/docs/integrations/pi",
-        code: "301",
-      },
-      {
-        source: "/docs/integrations/picode/",
-        target: "/docs/integrations/pi",
-        code: "301",
-      },
-      {
-        source: "/blog/1",
-        target: "/blog",
-        code: "301",
-      },
-      {
-        source: "/blog/1/",
-        target: "/blog",
-        code: "301",
-      },
-    ])
+    // The legacy region also carries the Wave 8 compare-consolidation redirects
+    // (both the slashless and the trailing-slash form of each retired
+    // -vs-lyrashield post). Assert the Pi pair is present and correct rather
+    // than pinning the whole array, so adding a legacy redirect elsewhere does
+    // not break an unrelated guide assertion.
+    expect(LEGACY_REDIRECTS).toEqual(
+      expect.arrayContaining([
+        {
+          source: "/docs/integrations/picode",
+          target: "/docs/integrations/pi",
+          code: "301",
+        },
+        {
+          source: "/docs/integrations/picode/",
+          target: "/docs/integrations/pi",
+          code: "301",
+        },
+      ])
+    )
     for (const redirect of LEGACY_REDIRECTS) {
       expect(redirectLines).toContain(`${redirect.source} ${redirect.target} ${redirect.code}`)
     }

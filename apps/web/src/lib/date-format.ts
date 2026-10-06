@@ -35,8 +35,17 @@ export function formatDateTime(value: DateInput) {
   return `${formatDate(value)}, ${formatTime(value)}`
 }
 
+/** Format a timestamp in the fixed UTC timezone and name that zone for readers. */
+export function formatDateTimeUtc(value: DateInput) {
+  return `${formatDateTime(value)} UTC`
+}
+
 export function formatTime(value: DateInput) {
   return timeFormatter.format(parseDate(value))
+}
+
+export function formatTimeUtc(value: DateInput) {
+  return `${formatTime(value)} UTC`
 }
 
 const localDateFormatter = new Intl.DateTimeFormat("en-US", {

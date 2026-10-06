@@ -16,6 +16,14 @@ interface ScanMeta {
   diffHead: string | null
 }
 
+function emptyFindingsMessage(status: ScanStatus): string {
+  if (status === "running") return "Waiting for findings…"
+  if (status === "cancelled") return "Scan cancelled."
+  if (status === "failed") return "Scan failed. No findings were returned."
+  if (status === "pending") return "Waiting for the scan to start…"
+  return "No findings."
+}
+
 export function ScanProgressScreen(props: Props) {
   return <ScanProgress key={props.scanId} {...props} />
 }
@@ -238,13 +246,7 @@ function ScanProgress({ scanId, onBack }: Props) {
               findings are never fabricated for cloud scans.
             </p>
           ) : findings.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              {status === "running"
-                ? "Waiting for findings…"
-                : status === "cancelled"
-                  ? "Scan cancelled."
-                  : "No findings."}
-            </p>
+            <p className="text-sm text-muted-foreground">{emptyFindingsMessage(status)}</p>
           ) : (
             <div className="space-y-2">
               {findings.map((f) => (

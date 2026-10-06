@@ -1,6 +1,6 @@
 # LyraShield AI for Devin CLI and plugins
 
-**State: PREPARATION.** Agent Plugin `0.1.31` is published on npm, but this Devin-specific bundle has no public listing or Devin CLI, cloud, or Desktop runtime receipt. The hosted endpoint is the current LyraShield MCP service.
+**State: PREPARATION.** Agent Plugin `0.1.31` is published on npm, but this Devin-specific bundle has no public listing or Devin CLI, cloud or Desktop runtime receipt. The hosted endpoint is the current LyraShield MCP service.
 
 For local testing, use Devin's documented local install from a checkout:
 

@@ -90,7 +90,7 @@ function buildClientGroups(source: AgentOnboardingClient[]): AgentOnboardingClie
 const clients = buildClients()
 
 export const agentOnboarding = {
-  title: "Release assurance for coding agents",
+  title: "Launch gate for coding agents",
   description:
     "Give your coding agent evidence-backed checks, reviewable fix proposals and a fresh retest before you ship.",
   setupHeading: "Set up and authenticate",
@@ -103,8 +103,8 @@ export const agentOnboarding = {
     "Read-only tools are available after workspace authentication.",
     "Fixes are proposals for review, not automatic code changes or merges.",
     "Hosted writes require a browser-confirmed connection grant and execution-time scope checks. Nondelegated callers receive connect_required; local stdio clients use local approval.",
-    "CLI config writes are available only for exact client contracts recorded by the installer. When a guide has no pinned install command, use its manual setup and preserve existing settings, comments where supported, and symlinks.",
-    "A CLI preview, config entry, or doctor result does not prove client discovery or authentication; restart the client and complete a read-only authenticated call.",
+    "CLI config writes are available only for exact client contracts recorded by the installer. When a guide has no pinned install command, use its manual setup and preserve existing settings, comments where supported and symlinks.",
+    "A CLI preview, config entry or doctor result does not prove client discovery or authentication; restart the client and complete a read-only authenticated call.",
   ],
   clients,
   clientGroups: buildClientGroups(clients),

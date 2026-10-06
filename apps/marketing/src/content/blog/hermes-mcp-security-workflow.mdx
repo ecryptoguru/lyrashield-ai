@@ -30,7 +30,7 @@ LyraShield follows a clear loop of Target to Scan to Evidence State to Fix Propo
 
 You need Node.js 24 or newer which you can confirm via [Node.js docs](https://nodejs.org/en/docs), Hermes installed locally, Git with PR workflow and a LyraShield API key shaped as lsk\_... Export LYRASHIELD_API_KEY in your shell and never commit the raw value. Hermes reads `${env:VAR}` inside config.yaml at startup, so the indirect reference stays safe.
 
-LyraShield combines bounded repository review, SCA, secrets scanning, a GitHub Action and SARIF. Findings retain their recorded evidence states; scan detection alone is not independent verification. Fix proposals and retests remain approval-gated and PR execution remains unavailable until a server-generated patch can be bound to an exact approval. Read [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro) to see why local stdio suits desktop tools and streamable HTTP suits remote servers.
+LyraShield combines bounded repository review, SCA, secrets scanning, a GitHub Action and SARIF. Findings retain their recorded evidence states; scan detection alone is not a retest. Fix proposals and retests remain approval-gated and PR execution remains unavailable until a server-generated patch can be bound to an exact approval. Read [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro) to see why local stdio suits desktop tools and streamable HTTP suits remote servers.
 
 Quick sanity check before editing config:
 
@@ -124,7 +124,7 @@ Add OWASP mapping when present.
 Persist report id for PR gate.
 ```
 
-A good response contains finding id, severity, evidence state, CWE, file and line, evidence snippet and suggested patch location. Prioritize independently verified findings while retaining detected and inconclusive items for triage. See [OWASP Top 10](https://owasp.org/www-project-top-ten/) and [CWE Top 25](https://cwe.mitre.org/top25/) for definitions when triaging.
+A good response contains finding id, severity, evidence state, CWE, file and line, evidence snippet and suggested patch location. Prioritize retest-confirmed findings while retaining detected and inconclusive items for triage. See [OWASP Top 10](https://owasp.org/www-project-top-ten/) and [CWE Top 25](https://cwe.mitre.org/top25/) for definitions when triaging.
 
 This inline step also surfaces secrets that were templated into fixtures. Since v1 includes secrets scanning alongside SCA, one scan can reveal both hardcoded creds and vulnerable packages. Rotate any exposed secret before merging the fix PR.
 
@@ -158,7 +158,7 @@ jobs:
           fail_on_severity: HIGH
 ```
 
-Require the security job in branch protection. The pairing of MCP for local dev and the Action for CI reflects ideas from [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro) around keeping context close to the agent while enforcing policy centrally. Details for reusable workflows live in [GitHub Actions docs](https://docs.github.com/en/actions). Once required, developers cannot merge when findings meet the configured severity gate; that policy does not turn a detected finding into an independently verified one.
+Require the security job in branch protection. The pairing of MCP for local dev and the Action for CI reflects ideas from [Model Context Protocol](https://modelcontextprotocol.io/docs/getting-started/intro) around keeping context close to the agent while enforcing policy centrally. Details for reusable workflows live in [GitHub Actions docs](https://docs.github.com/en/actions). Once required, developers cannot merge when findings meet the configured severity gate; that policy does not turn a detected finding into a retest-confirmed one.
 
 ## 6. Add agent rules for consistent secure coding
 

@@ -640,23 +640,6 @@ exports[`conformance: renderConfig round-trips through the format parser > herme
       LYRASHIELD_API_KEY: "\${env:LYRASHIELD_API_KEY}""
 `;
 
-exports[`conformance: renderConfig round-trips through the format parser > junie × stdio — inline secret may contain the literal key > junie × stdio — inline 1`] = `
-"{
-  "mcpServers": {
-    "lyrashield": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@lyrashield/mcp@0.2.12"
-      ],
-      "env": {
-        "LYRASHIELD_API_URL": "https://app.lyrashieldai.com"
-      }
-    }
-  }
-}"
-`;
-
 exports[`conformance: renderConfig round-trips through the format parser > junie × stdio — interpolated secret is safe > junie × stdio — interpolated 1`] = `
 "{
   "mcpServers": {
@@ -674,38 +657,11 @@ exports[`conformance: renderConfig round-trips through the format parser > junie
 }"
 `;
 
-exports[`conformance: renderConfig round-trips through the format parser > junie-cli × remote-http — inline secret may contain the literal key > junie-cli × remote-http — inline 1`] = `
-"{
-  "mcpServers": {
-    "lyrashield": {
-      "url": "https://app.lyrashieldai.com/api/mcp"
-    }
-  }
-}"
-`;
-
 exports[`conformance: renderConfig round-trips through the format parser > junie-cli × remote-http — interpolated secret is safe > junie-cli × remote-http — interpolated 1`] = `
 "{
   "mcpServers": {
     "lyrashield": {
       "url": "https://app.lyrashieldai.com/api/mcp"
-    }
-  }
-}"
-`;
-
-exports[`conformance: renderConfig round-trips through the format parser > junie-cli × stdio — inline secret may contain the literal key > junie-cli × stdio — inline 1`] = `
-"{
-  "mcpServers": {
-    "lyrashield": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@lyrashield/mcp@0.2.12"
-      ],
-      "env": {
-        "LYRASHIELD_API_URL": "https://app.lyrashieldai.com"
-      }
     }
   }
 }"
@@ -728,19 +684,11 @@ exports[`conformance: renderConfig round-trips through the format parser > junie
 }"
 `;
 
-exports[`conformance: renderConfig round-trips through the format parser > kilo-code × remote-http — inline secret may contain the literal key > kilo-code × remote-http — inline 1`] = `[Error: renderConfig cannot preserve JSONC comments; use renderEntry + mergeJsonc instead.]`;
-
 exports[`conformance: renderConfig round-trips through the format parser > kilo-code × remote-http — interpolated secret is safe > kilo-code × remote-http — interpolated 1`] = `[Error: renderConfig cannot preserve JSONC comments; use renderEntry + mergeJsonc instead.]`;
-
-exports[`conformance: renderConfig round-trips through the format parser > kilo-code × stdio — inline secret may contain the literal key > kilo-code × stdio — inline 1`] = `[Error: renderConfig cannot preserve JSONC comments; use renderEntry + mergeJsonc instead.]`;
 
 exports[`conformance: renderConfig round-trips through the format parser > kilo-code × stdio — interpolated secret is safe > kilo-code × stdio — interpolated 1`] = `[Error: renderConfig cannot preserve JSONC comments; use renderEntry + mergeJsonc instead.]`;
 
-exports[`conformance: renderConfig round-trips through the format parser > mimo-code × remote-http — inline secret may contain the literal key > mimo-code × remote-http — inline 1`] = `[Error: renderConfig cannot preserve JSONC comments; use renderEntry + mergeJsonc instead.]`;
-
 exports[`conformance: renderConfig round-trips through the format parser > mimo-code × remote-http — interpolated secret is safe > mimo-code × remote-http — interpolated 1`] = `[Error: renderConfig cannot preserve JSONC comments; use renderEntry + mergeJsonc instead.]`;
-
-exports[`conformance: renderConfig round-trips through the format parser > mimo-code × stdio — inline secret may contain the literal key > mimo-code × stdio — inline 1`] = `[Error: renderConfig cannot preserve JSONC comments; use renderEntry + mergeJsonc instead.]`;
 
 exports[`conformance: renderConfig round-trips through the format parser > mimo-code × stdio — interpolated secret is safe > mimo-code × stdio — interpolated 1`] = `[Error: renderConfig cannot preserve JSONC comments; use renderEntry + mergeJsonc instead.]`;
 
@@ -812,16 +760,14 @@ exports[`conformance: renderConfig round-trips through the format parser > opena
 "[mcp_servers.lyrashield]
 url = "https://app.lyrashieldai.com/api/mcp"
 
-[mcp_servers.lyrashield.headers]
+[mcp_servers.lyrashield.http_headers]
 Authorization = "Bearer lsk_testkey123""
 `;
 
 exports[`conformance: renderConfig round-trips through the format parser > openai-codex × remote-http — interpolated secret is safe > openai-codex × remote-http — interpolated 1`] = `
 "[mcp_servers.lyrashield]
 url = "https://app.lyrashieldai.com/api/mcp"
-
-[mcp_servers.lyrashield.headers]
-Authorization = "Bearer <LYRASHIELD_API_KEY>""
+bearer_token_env_var = "LYRASHIELD_API_KEY""
 `;
 
 exports[`conformance: renderConfig round-trips through the format parser > openai-codex × stdio — inline secret may contain the literal key > openai-codex × stdio — inline 1`] = `
@@ -912,38 +858,11 @@ exports[`conformance: renderConfig round-trips through the format parser > openc
 }"
 `;
 
-exports[`conformance: renderConfig round-trips through the format parser > picode × remote-http — inline secret may contain the literal key > picode × remote-http — inline 1`] = `
-"{
-  "mcpServers": {
-    "lyrashield": {
-      "url": "https://app.lyrashieldai.com/api/mcp"
-    }
-  }
-}"
-`;
-
 exports[`conformance: renderConfig round-trips through the format parser > picode × remote-http — interpolated secret is safe > picode × remote-http — interpolated 1`] = `
 "{
   "mcpServers": {
     "lyrashield": {
       "url": "https://app.lyrashieldai.com/api/mcp"
-    }
-  }
-}"
-`;
-
-exports[`conformance: renderConfig round-trips through the format parser > picode × stdio — inline secret may contain the literal key > picode × stdio — inline 1`] = `
-"{
-  "mcpServers": {
-    "lyrashield": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@lyrashield/mcp@0.2.12"
-      ],
-      "env": {
-        "LYRASHIELD_API_URL": "https://app.lyrashieldai.com"
-      }
     }
   }
 }"
@@ -966,40 +885,12 @@ exports[`conformance: renderConfig round-trips through the format parser > picod
 }"
 `;
 
-exports[`conformance: renderConfig round-trips through the format parser > qoder-cli × remote-http — inline secret may contain the literal key > qoder-cli × remote-http — inline 1`] = `
-"{
-  "mcpServers": {
-    "lyrashield": {
-      "url": "https://app.lyrashieldai.com/api/mcp",
-      "type": "http"
-    }
-  }
-}"
-`;
-
 exports[`conformance: renderConfig round-trips through the format parser > qoder-cli × remote-http — interpolated secret is safe > qoder-cli × remote-http — interpolated 1`] = `
 "{
   "mcpServers": {
     "lyrashield": {
       "url": "https://app.lyrashieldai.com/api/mcp",
       "type": "http"
-    }
-  }
-}"
-`;
-
-exports[`conformance: renderConfig round-trips through the format parser > qoder-cli × stdio — inline secret may contain the literal key > qoder-cli × stdio — inline 1`] = `
-"{
-  "mcpServers": {
-    "lyrashield": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@lyrashield/mcp@0.2.12"
-      ],
-      "env": {
-        "LYRASHIELD_API_URL": "https://app.lyrashieldai.com"
-      }
     }
   }
 }"
@@ -1022,38 +913,11 @@ exports[`conformance: renderConfig round-trips through the format parser > qoder
 }"
 `;
 
-exports[`conformance: renderConfig round-trips through the format parser > qwen-code × remote-http — inline secret may contain the literal key > qwen-code × remote-http — inline 1`] = `
-"{
-  "mcpServers": {
-    "lyrashield": {
-      "httpUrl": "https://app.lyrashieldai.com/api/mcp"
-    }
-  }
-}"
-`;
-
 exports[`conformance: renderConfig round-trips through the format parser > qwen-code × remote-http — interpolated secret is safe > qwen-code × remote-http — interpolated 1`] = `
 "{
   "mcpServers": {
     "lyrashield": {
       "httpUrl": "https://app.lyrashieldai.com/api/mcp"
-    }
-  }
-}"
-`;
-
-exports[`conformance: renderConfig round-trips through the format parser > qwen-code × stdio — inline secret may contain the literal key > qwen-code × stdio — inline 1`] = `
-"{
-  "mcpServers": {
-    "lyrashield": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@lyrashield/mcp@0.2.12"
-      ],
-      "env": {
-        "LYRASHIELD_API_URL": "https://app.lyrashieldai.com"
-      }
     }
   }
 }"

@@ -4,43 +4,54 @@ import {
   TOOL_OPERATION_MAP,
   checkDelegatedOperationAuthorization,
 } from "../agent-authorization"
+import { createAllTools, type ToolHandlerContext } from "../../../../packages/mcp/src/tools"
+import { MUTATING_TOOL_NAMES } from "../../../../packages/mcp/src/tool-policy"
 
-describe("WP-02 Agent Authorization and 14-tool Catalog", () => {
-  it("maps tools accurately to canonical operations and mutation classifications", () => {
-    const mutatingTools = [
-      "lyrashield_scan_target",
-      "lyrashield_create_report",
-      "lyrashield_create_fix_proposal",
-      "lyrashield_request_retest",
-      "lyrashield_create_fix_pr",
-      "lyrashield_cancel_scan",
-      "lyrashield_upload_scan_attachment",
-      "lyrashield_delete_scan_attachment",
-      "lyrashield_request_fix_pr",
-    ]
+const toolContext: ToolHandlerContext = { apiBaseUrl: "", apiKey: "" }
 
-    for (const tool of mutatingTools) {
-      expect(TOOL_OPERATION_MAP[tool]).toBeDefined()
-      expect(TOOL_OPERATION_MAP[tool].mutating).toBe(true)
+describe("MCP agent authorization tool catalog", () => {
+  it("maps exactly the catalog tools and matches their mutation classification", () => {
+    const catalog = createAllTools(toolContext)
+    const catalogNames = catalog.map((tool) => tool.name).sort()
+    expect(Object.keys(TOOL_OPERATION_MAP).sort()).toEqual(catalogNames)
+
+    for (const tool of catalog) {
+      expect(TOOL_OPERATION_MAP[tool.name]).toBeDefined()
+      expect(TOOL_OPERATION_MAP[tool.name].mutating).toBe(tool.mutating)
     }
 
-    const readTools = [
-      "lyrashield_get_workspace",
-      "lyrashield_list_targets",
-      "lyrashield_get_target",
-      "lyrashield_get_findings",
-      "lyrashield_get_finding_detail",
-      "lyrashield_get_scan_status",
-      "lyrashield_get_reports",
-      "lyrashield_check_eligibility",
-      "lyrashield_get_verdict",
-      "lyrashield_list_scan_attachments",
-    ]
-
-    for (const tool of readTools) {
-      expect(TOOL_OPERATION_MAP[tool]).toBeDefined()
-      expect(TOOL_OPERATION_MAP[tool].mutating).toBe(false)
+    for (const name of MUTATING_TOOL_NAMES) {
+      expect(TOOL_OPERATION_MAP[name]?.mutating, name).toBe(true)
     }
+  })
+
+  it("keeps scan-quality as a workspace read that needs no delegated target grant", () => {
+    expect(TOOL_OPERATION_MAP.lyrashield_get_scan_quality).toMatchObject({
+      canonicalOperation: CANONICAL_OPERATIONS.SCAN_READ,
+      mutating: false,
+      requiresTarget: false,
+      isBillable: false,
+    })
+
+    const result = checkDelegatedOperationAuthorization({
+      connection: {
+        id: "read-only-conn",
+        workspaceId: "ws-1",
+        status: "ACTIVE",
+        expiresAt: null,
+        allowedTargetIds: [],
+        allTargets: false,
+        allowedOperations: [],
+        allowedProfiles: [],
+      },
+      workspaceId: "ws-1",
+      operationName: "lyrashield_get_scan_quality",
+    })
+
+    expect(result).toMatchObject({
+      authorized: true,
+      canonicalOperation: CANONICAL_OPERATIONS.SCAN_READ,
+    })
   })
 
   it("authorizes valid connection within target and operation scope", () => {

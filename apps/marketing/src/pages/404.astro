@@ -8,8 +8,22 @@ const description = "The page you're looking for doesn't exist."
 <Base title={title} description={description} noindex>
   <section class="px-4 py-24 text-center sm:px-6 lg:px-8">
     <h1 class="text-4xl font-semibold tracking-tight text-text sm:text-5xl">404</h1>
-    <p class="mt-4 text-lg text-text-muted">This page doesn't exist.</p>
-    <a href="/" class="mt-8 inline-block rounded-lg bg-accent px-5 py-3 text-sm font-medium text-bg hover:bg-accent/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+    <p class="mt-4 text-lg text-text-muted">This page doesn't exist. These four are a good place to start.</p>
+    <ul class="mx-auto mt-8 flex max-w-xl flex-wrap justify-center gap-3">
+      <li>
+        <a href="/scan" class="inline-flex min-h-11 items-center rounded-lg bg-accent px-5 text-sm font-semibold text-bg hover:bg-accent/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Run the free Lite Check</a>
+      </li>
+      <li>
+        <a href="/pricing" class="inline-flex min-h-11 items-center rounded-lg border border-border bg-bg-raised px-5 text-sm font-semibold text-text hover:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Pricing</a>
+      </li>
+      <li>
+        <a href="/blog" class="inline-flex min-h-11 items-center rounded-lg border border-border bg-bg-raised px-5 text-sm font-semibold text-text hover:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Guides</a>
+      </li>
+      <li>
+        <a href="/docs/integrations" class="inline-flex min-h-11 items-center rounded-lg border border-border bg-bg-raised px-5 text-sm font-semibold text-text hover:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Docs</a>
+      </li>
+    </ul>
+    <a href="/" class="mt-8 inline-block text-sm font-medium text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
       Back to home
     </a>
   </section>

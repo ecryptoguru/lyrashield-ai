@@ -170,13 +170,17 @@ describe("worker Docker runtime", () => {
   })
 
   it("pins and records the exact engine revision used by production workers", () => {
-    const reviewedEngineRevision = "9d90be5aaf92f86bb5c1ba55a8138545764fdd44"
+    const reviewedEngineRevision = "3001517530300ca5f602536bfadcbd3c95ad3039"
     expect(deployWorkflow).toContain(`ENGINE_REVISION: ${reviewedEngineRevision}`)
     expect(desktopReleaseWorkflow).toContain(`ENGINE_REVISION: ${reviewedEngineRevision}`)
     expect(deployWorkflow).toContain("ref: ${{ env.ENGINE_REVISION }}")
     expect(deployWorkflow).toContain("io.lyrashield.engine.revision=${{ env.ENGINE_REVISION }}")
     expect(deployWorkflow).not.toContain("continue-on-error: true")
-    expect(deployWorkflow.match(/persist-credentials: false/g) ?? []).toHaveLength(2)
+    const runtimeCheckouts = deployRuntimeWorkflow.match(/uses: actions\/checkout@/g) ?? []
+    const runtimeCheckoutsWithoutPersistedCredentials =
+      deployRuntimeWorkflow.match(/persist-credentials: false/g) ?? []
+    expect(runtimeCheckouts.length).toBeGreaterThanOrEqual(2)
+    expect(runtimeCheckoutsWithoutPersistedCredentials).toHaveLength(runtimeCheckouts.length)
     expect(deployWorkflow).not.toContain("runs-on: ubuntu-latest")
     // v16 4.3: the deploy job now uses federated OIDC for Azure login
     // (id-token: write in ITS permissions block only). The reproducibility

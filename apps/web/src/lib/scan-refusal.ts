@@ -87,3 +87,30 @@ export async function refuseScan(params: {
   }
   return apiError(code, message, status, headers, { refusal: { reason }, ...details })
 }
+
+const DEFINITIVE_POST_SUBMISSION_REFUSALS = new Set<ScanRefusalReason>([
+  "concurrency_limit",
+  "scan_in_progress",
+  "target_not_found",
+  "plan_invalid",
+])
+
+/** Builds route refusals while keeping durable-operation outcomes in sync. */
+export function createScanRefusalContext(request: Pick<Request, "headers">) {
+  const submission = { attempted: false }
+  const handleRefusal = (params: Parameters<typeof refuseScan>[0]) => {
+    if (submission.attempted && DEFINITIVE_POST_SUBMISSION_REFUSALS.has(params.reason)) {
+      submission.attempted = false
+    }
+
+    return refuseScan({
+      ...params,
+      details:
+        request.headers.has("idempotency-key") && !submission.attempted
+          ? { ...(params.details ?? {}), operationOutcome: "OPERATION_NOT_SUBMITTED" }
+          : params.details,
+    })
+  }
+
+  return { submission, refuseScan: handleRefusal }
+}

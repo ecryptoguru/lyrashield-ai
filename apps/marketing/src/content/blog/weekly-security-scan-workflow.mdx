@@ -79,7 +79,7 @@ The exact cron expression is less important than the surrounding contract. Recor
 4. **Retest rule.** Require a fresh run after a fix or material mitigation. Keep the original result and the retest result separate.
 5. **Failure policy.** Decide which event-triggered failures block a merge and how scheduled-run failures are escalated.
 
-A notification is only delivery. It must not change a detected candidate into a verified finding or turn a failed scan into a pass.
+A notification is only delivery. It must not change a detected candidate into a retest-confirmed one or turn a failed scan into a pass.
 
 ## Choose frequency from consequences
 

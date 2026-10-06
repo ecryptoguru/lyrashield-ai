@@ -158,18 +158,67 @@ separately approved non-admin canary is needed to verify aggregate inclusion.
 
 Flip to `public` per provider. `canary` remains available as a kill-switch.
 
+### Durable webhook-track UTC schema cutover
+
+The UTC scheduler columns and audited recovery counters require the controlled
+first-cutover path. Before dispatching it, confirm the legacy timestamp values
+were written as UTC wall times; the additive migration interprets them with
+`AT TIME ZONE 'UTC'`. If that assumption cannot be established from the
+production database session configuration and receipts, stop and resolve the
+timezone mapping before any migration runs.
+
+Use the `Deploy to Azure` workflow on the exact current `main` SHA with
+`webhook_claims_cutover=true` and confirmation `webhook-cutover:<source_sha>`.
+That path claims an owned admission stop, closes old webhook writers, proves
+scan and webhook queues are empty, stops the legacy worker, applies the
+additive migrations, verifies the schema and boots the compatible worker before
+reopening ingress. Do not run the UTC migrations through a normal release or
+resume admission manually if a phase fails; preserve the cutover receipt and
+keep admission held for operator recovery.
+
 ### Checkout rollback
 
 Set the affected `*_BILLING_ADMISSION` back to `off` and redeploy. Existing
 subscriptions are unaffected — admission gates _new_ purchases only. Failed
-tracks below the retry cap can reconcile; `dead_letter` tracks are terminal and
-are **not** automatically re-enqueued. Check `admin → Billing`, retain event
-and track IDs and diagnose provider delivery and processing without exposing
-raw payloads. There is currently no supported operator retry/reset operation
-for dead-letter tracks. Do not edit database state or enqueue a track directly.
+tracks below the retry cap can reconcile; `dead_letter` tracks are not
+automatically re-enqueued. Check `admin → Billing`, retain event and track IDs
+and diagnose provider delivery and processing without exposing raw payloads.
+
+An elevated platform administrator can request recovery with
+`POST /api/admin/webhook-tracks/{trackId}/retry`. The operation requires a
+cookie session with recent TOTP elevation, a single-use action nonce, the
+expected generation and a bounded audit reason. It only retries replay-safe
+minute-pack billing events with a verified provider receipt. It also accepts a
+historical `pending` or `failed` pack track, or an orphaned `processing` track
+with no claim token or lease, only when both old and UTC due-time columns are
+NULL. These rows are never retried automatically because the old worker may
+have completed an effect without recording an attempt. Each recovery archives
+that cycle's attempts, resets the bounded automatic attempt budget and allows
+at most three operator recoveries. Stale generations, exhausted
+recovery counts, subscriptions, licenses and affiliate effects are rejected.
+The durable row remains due if Redis enqueue fails, so the worker sweep can
+recover it. Never edit database state or enqueue a track directly.
+
+For an unsafe dead letter, or a historical null-due pending, failed or orphaned
+processing track whose effect must not be replayed, use
+`POST /api/admin/webhook-tracks/{trackId}/disposition`. It requires a separate
+TOTP elevation, single-use action nonce, expected generation, one of the
+bounded reasons (`effect_confirmed` or `no_effect_required`) and a short opaque
+evidence reference. The transaction records the disposition in the platform
+audit log and moves the track to `reviewed`; it never enqueues a job or calls a
+provider handler. Use `effect_confirmed` only after the actual entitlement,
+license, refund or affiliate effect is verified or corrected through its own
+audited workflow. Use `no_effect_required` only when the provider receipt proves
+no business effect was due. A reviewed track is not a successful payment or
+fulfillment receipt. It is terminal for retries, reduces the dead-letter count
+and, once every required track is succeeded or reviewed, marks the parent event
+processed so duplicate delivery cannot run the handler again. If a required
+business effect is missing and cannot be replayed safely, leave the track
+unresolved until an approved domain-specific correction is complete.
+
 Provider redelivery may retry eligible nonterminal tracks but can expire or be
-rejected as stale. Keep the affected rail unready until an authorized recovery
-operation is implemented and its idempotency and audit behavior are verified.
+rejected as stale. Keep the affected rail unready until the provider receipt,
+track state and audit entry have been reviewed.
 
 ### What this runbook does not cover
 
@@ -255,3 +304,39 @@ This section retains the approved payout operating model and the unresolved prov
 - Implement a bounded stuck-PROCESSING recovery sweep before activation: query provider status for payouts aged past a threshold; provider-confirmed PAID finalizes the payout and marks its RESERVED commissions PAID; only provider-confirmed FAILED or equivalent authoritative proof that no payout was delivered, marks the payout FAILED and releases its RESERVED commissions back to AVAILABLE. Missing, unavailable, pending or otherwise ambiguous provider status remains PROCESSING with its commissions RESERVED for operator reconciliation. Apply every transition through compare-and-set transactions on the current status so concurrent schedulers cannot double-finalize.
 
 The implementation state remains defined by `AGENTS.md`, `PRD.md` and code under `packages/affiliate`. Historical provider comparisons and planning rationale remain in Git at commit `e3fa791f` under `monetization.md`.
+
+## Owner-approved manual isolated restore
+
+`production-backup.yml` has an opt-in manual `isolated_restore=true` mode. It
+requires `restore=true`, `expected_source_sha` equal to the reviewed current
+main SHA, and original run attempt 1 in both jobs. Dispatch only after separate
+owner approval for production-data processing; a draft PR or merge is not
+execution approval. A changed SHA or failed attempt requires new review rather
+than a rerun.
+
+This mode creates one new encrypted `public`/`app` production backup using the
+existing DB/R2/GPG configuration. It skips retention deletion entirely, then
+restores that run's object with ETag `If-Match` and ciphertext/plaintext SHA256
+checks into disposable GitHub-runner PostgreSQL 17. Redis and the application
+bind only loopback. Schema, audit-chain and readiness verification produce the
+existing digest-only v2 artifact, retained 30 days. The new encrypted object
+remains in the existing bucket and is subject to ordinary scheduled 30-day
+retention; this mode does not delete it or any older object.
+
+Plaintext dumps, audit exports and command/error logs stay in a private 0700
+runner directory with 0600 files. Sensitive phases return exit status without
+publishing diagnostics. The first isolated `docker rm -fv` removes anonymous
+restored-data volumes together with their containers; `always()` cleanup also
+removes private files and named backup containers; application cleanup validates the session leader's UID, process
+group, session and start time before signalling its group. Cleanup refuses
+stale identity. Hard runner loss or orphaned/unverifiable processes rely on
+hosted-runner teardown, so explicit cleanup is not a secure-erasure guarantee.
+The backup and restore jobs have respective 20/25-minute timeouts; queue/setup
+waits mean this is not a 45-minute wall-clock limit.
+
+Existing credentials authenticate only to their original production database
+and R2 endpoint; the passphrase is used locally. Full private production data
+is decrypted on GitHub's ephemeral runner. No restored writes target
+production. No new cloud resources, grants, credentials, maintenance hold,
+writer stop, migration or cutover is part of this drill. Ordinary scheduled
+backup/weekly-restore behavior is unchanged.

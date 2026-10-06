@@ -14,19 +14,12 @@ const inter = Inter({
 
 export const metadata: Metadata = {
   title: "LyraShield AI — Release assurance for AI-built apps",
-  // Bounded product description: findings carry evidence states and fixes are
-  // review-gated proposals — never claim verified vulnerabilities here.
   description:
-    "Connect a GitHub repo or paste an app URL. LyraShield records findings with evidence states, prepares review-gated fix proposals and produces a release report.",
-  // The app host is do-not-index (robots.txt disallows all). A root default
-  // keeps routes without their own robots field — like /buy/local — out of
-  // search indexes; stronger per-route policies (noimageindex, no-referrer)
-  // still override this where they are declared.
-  robots: { index: false, follow: false, noarchive: true },
+    "Connect a GitHub repo or paste an app URL. LyraShield safely scans it, verifies real vulnerabilities, explains the risk and helps create fix PRs.",
   openGraph: {
     title: "LyraShield AI — Release assurance for AI-built apps",
     description:
-      "Connect a GitHub repo or paste an app URL. LyraShield records findings with evidence states, prepares review-gated fix proposals and produces a release report.",
+      "Connect a GitHub repo or paste an app URL. LyraShield safely scans it, verifies real vulnerabilities, explains the risk and helps create fix PRs.",
     type: "website",
     siteName: "LyraShield AI",
   },

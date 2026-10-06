@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs"
+import { readdirSync, readFileSync } from "node:fs"
 import { describe, expect, it } from "vitest"
 import { normalizePublicHttpUrl } from "../lib/public-url"
 
@@ -9,14 +9,15 @@ const homeScan = readFileSync(
   "utf8"
 )
 const motionManifest = readFileSync(new URL("../lib/motion-manifest.ts", import.meta.url), "utf8")
+const liteHandoff = readFileSync(new URL("../lib/lite-handoff.ts", import.meta.url), "utf8")
 const toolsIndex = readFileSync(new URL("../pages/tools/index.astro", import.meta.url), "utf8")
 const toolLayout = readFileSync(new URL("../layouts/ToolLayout.astro", import.meta.url), "utf8")
 const globalStyles = readFileSync(new URL("../styles/global.css", import.meta.url), "utf8")
 
 describe("Lite Check marketing surface", () => {
   it("keeps the founder-provided promise and permission copy", () => {
-    expect(page).toContain("Free security check for AI-built apps")
-    expect(page).toContain("Scan my app")
+    expect(page).toContain("Run the free Lite Check")
+    expect(page).toContain("A free security check for AI-built apps")
     expect(page).toContain("Scan only apps you own or have permission to test")
     expect(page).toContain("We only read what your app already sends to any visitor.")
   })
@@ -35,7 +36,7 @@ describe("Lite Check marketing surface", () => {
   it("routes users from a Lite result into the live authenticated app", () => {
     expect(page).toContain("PUBLIC_APP_URL")
     expect(page).toContain("Full loop · open registration")
-    expect(page).toContain("Review this app for real")
+    expect(page).toContain("CTA_LABEL.signUp")
     expect(page).toContain(
       "href={`${dashboardOrigin}/sign-up?source=lite_check&cta=review_app&from=scan&target=url`}"
     )
@@ -150,12 +151,65 @@ describe("Lite Check marketing surface", () => {
   it("starts the real Lite Check from the homepage without putting the target in the URL", () => {
     expect(home).toContain("<HomeLiteScan />")
     expect(homeScan).toContain('id="free-scan"')
-    expect(homeScan).toContain('sessionStorage.setItem("lyrashield-lite-target", target)')
-    expect(homeScan).toContain('location.assign("/scan?start=1")')
-    expect(homeScan).toContain("Enter a valid public HTTP or HTTPS URL without credentials.")
     expect(homeScan).toContain('href="/terms"')
+    // The handoff literals now live in one shared module used by both the Lite
+    // Check section and the hero field, so they are asserted there instead.
+    expect(homeScan).toContain('from "../../lib/lite-handoff"')
+    expect(liteHandoff).toContain('export const LITE_TARGET_KEY = "lyrashield-lite-target"')
+    expect(liteHandoff).toContain('export const LITE_SCAN_HREF = "/scan?start=1"')
+    expect(liteHandoff).toContain("sessionStorage.setItem(LITE_TARGET_KEY, target)")
+    expect(liteHandoff).toContain("navigate(LITE_SCAN_HREF)")
+    expect(liteHandoff).toContain("Enter a valid public HTTP or HTTPS URL without credentials.")
+    // The target must never travel with the navigation.
+    expect(liteHandoff).not.toMatch(/navigate\([^)]*target/)
+    // /scan still consumes the parked target and auto-submits.
     expect(page).toContain('sessionStorage.getItem("lyrashield-lite-target")')
     expect(page).toContain("scanForm?.requestSubmit()")
-    expect(homeScan).not.toMatch(/location\.assign\([^)]*target/)
+  })
+
+  it("makes no unmeasured timing claim about how long a scan takes", () => {
+    // Founder ruling D11: no timing claim that nothing in the repo measures.
+    // The Lite Check heading said "in 30 seconds", the /scan lede said
+    // "Results in seconds" and the Claude Code guide said setup took "under
+    // two minutes"; none had a measured value behind it. Scanned across the
+    // whole marketing source rather than a fixed file list so a new page
+    // cannot reintroduce the pattern. Blog posts are excluded: they describe
+    // third-party tools and their own measurements.
+    const timing = [
+      /\b(?:in|within)\s+\d+\s+(?:second|minute|hour)s?\b/i,
+      // Only the second form: a real "30-minute walkthrough" or a "4,500-minute
+      // pool" describes a quantity, not scan speed.
+      /\b\d+-second\b/i,
+      // Literal spaces, not \s+: nested quantifiers here trip
+      // security/detect-unsafe-regex.
+      /\bin (?:a few|several) (?:seconds|minutes)\b/i,
+      /\bin\s+under\s+\w+/i,
+      /\bresults?\s+in\s+seconds\b/i,
+      /\bunder\s+a\s+minute\b/i,
+      /\binstantly\b/i,
+    ]
+    const root = new URL("../", import.meta.url)
+    const walk = (dir: URL): string[] =>
+      readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+        const child = new URL(`${entry.name}${entry.isDirectory() ? "/" : ""}`, dir)
+        if (entry.isDirectory()) {
+          if (["content", "tests"].includes(entry.name)) return []
+          return walk(child)
+        }
+        return /\.(astro|ts|tsx|md|mdx)$/.test(entry.name) && entry.name !== "lite-scan.test.ts"
+          ? [child.pathname]
+          : []
+      })
+
+    const offenders: string[] = []
+    for (const file of walk(root)) {
+      const source = readFileSync(file, "utf8")
+      for (const pattern of timing) {
+        const hit = source.match(pattern)
+        if (hit) offenders.push(`${file.replace(root.pathname, "")}: ${hit[0]}`)
+      }
+    }
+    expect(offenders, "unmeasured timing claims").toEqual([])
+    expect(homeScan).toContain("See your app&apos;s gaps. Free, no signup.")
   })
 })

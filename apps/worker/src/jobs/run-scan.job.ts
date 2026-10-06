@@ -483,10 +483,8 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
 
       const triageOverlay = await runEngineTriageOverlay({
         scanId,
-        workspaceId,
-        targetId: target.id,
+        scope: { workspaceId, targetId: target.id, targetType: target.type },
         sponsorAccountId: scanRecord.sponsorAccountId ?? scanRecord.createdById,
-        targetType: target.type,
         mode,
         deterministicRetest,
         agentMinuteTerminalError,

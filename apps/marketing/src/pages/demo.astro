@@ -5,7 +5,7 @@ import { MYRA_COPY, MYRA_LIMITS } from "@lyrashield/myra"
 const origin = Astro.site?.origin || "http://localhost:4321"
 const canonical = new URL("/demo", origin).toString()
 const description =
-  "Book a 30-minute walkthrough of LyraShield AI with the founder — how evidence, retests and release records fit your app."
+  "Book a 30-minute walkthrough of LyraShield AI with the founder — how evidence, retests and launch reports fit your app."
 const title = "Book a demo | LyraShield AI"
 // Last content change to this page — the explicit freshness input for the
 // WebPage dateModified (same convention as about.astro's updatedDate).
@@ -46,9 +46,8 @@ const jsonLd: unknown[] = [
       See how LyraShield fits your app.
     </h1>
     <p class="mt-6 text-lg leading-8 text-text-muted">
-      Walk through the product with Ankit. Discuss what you are shipping — your own app, or
-      releases you review for clients — how the evidence and retest workflow works and where a
-      review would fit your release process.
+      Walk through the product with Ankit. Discuss what you are shipping, how the evidence and
+      retest workflow works and where a review would fit your release process.
     </p>
     <p class="mt-4 text-sm leading-6 text-text-muted">
       Choose a time below when booking is available or request a time and we will follow up by email.
@@ -354,7 +353,7 @@ const jsonLd: unknown[] = [
 
       <noscript>
         <p class="mt-4 text-sm text-text-muted">
-          Booking needs JavaScript. You can also reach us through the
+          Booking needs JavaScript. You can also reach us through the{" "}
           <a href="/support" class="text-accent underline underline-offset-4">support page</a>.
         </p>
       </noscript>

@@ -1,11 +1,13 @@
 /** Durable, generation-bound webhook retry execution and bounded queue recovery. */
-import { prisma } from "@lyrashield/db"
+import { getSystemPrisma, prisma } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 import {
   WEBHOOK_TRACK_IDS,
   WEBHOOK_TRACK_MAX_ATTEMPTS,
   retryWebhookTrack,
   getWebhookTrackRetrySchedule,
+  isExpiredWebhookTrackReplaySafe,
+  normalizeProviderEvent,
   type WebhookTrackHandlers,
   type WebhookTrackId,
 } from "@lyrashield/billing"
@@ -22,10 +24,10 @@ export async function representWebhookTrackRetry(
   track: WebhookTrackId
 ): Promise<boolean> {
   const schedule = await getWebhookTrackRetrySchedule(webhookEventId, track)
-  if (!schedule?.nextAttemptAt) return false
+  if (!schedule) return false
   await enqueueWebhookTrackRetry(
     { webhookEventId, track, generation: schedule.generation },
-    { delayMs: Math.max(0, schedule.nextAttemptAt.getTime() - Date.now()) }
+    { delayMs: schedule.delayMs }
   )
   return true
 }
@@ -69,44 +71,89 @@ export async function processWebhookTrackRetry(
 export async function recoverDueWebhookTrackRetries(
   limit = 100
 ): Promise<{ examined: number; represented: number; ambiguous: number }> {
-  // A crashed claim may have completed an external effect. Stop for receipt review.
-  // Bound both recovery writes and queue work, even after a long outage.
-  const expired = await prisma.webhookEventTrack.findMany({
-    where: { status: "processing", leaseExpiresAt: { lte: new Date() } },
-    select: { id: true, claimToken: true },
-    orderBy: { leaseExpiresAt: "asc" },
-    take: limit,
-  })
+  // The tracked subset is narrow by design. Pack credits/reversals have
+  // transactionally idempotent provider identities; every other expired
+  // handler remains receipt-review-only because it may have secondary effects.
+  const expired = await prisma.$queryRaw<
+    Array<{
+      id: string
+      webhookEventId: string
+      track: string
+      generation: number
+      attempts: number
+      claimToken: string | null
+    }>
+  >`
+    SELECT id, "webhookEventId", track, generation, attempts, "claimToken"
+    FROM "WebhookEventTrack"
+    WHERE status = 'processing' AND "leaseExpiresAtUtc" <= now()
+    ORDER BY "leaseExpiresAtUtc" ASC, id ASC
+    LIMIT ${limit}
+  `
   let ambiguous = 0
+  let recoveredExpired = 0
   for (const row of expired) {
-    const changed = await prisma.webhookEventTrack.updateMany({
-      where: {
-        id: row.id,
-        status: "processing",
-        claimToken: row.claimToken,
-        leaseExpiresAt: { lte: new Date() },
-      },
-      data: {
-        status: "dead_letter",
-        lastError: "claim_expired_requires_receipt_review",
-        claimToken: null,
-        leaseExpiresAt: null,
-        nextAttemptAt: null,
-      },
-    })
-    ambiguous += changed.count
+    const track = row.track as WebhookTrackId
+    let replaySafe = false
+    if (WEBHOOK_TRACK_IDS.includes(track)) {
+      const stored = await getSystemPrisma().webhookEvent.findUnique({
+        where: { id: row.webhookEventId },
+        select: { provider: true, externalId: true, eventType: true, payload: true },
+      })
+      if (stored && (stored.provider === "polar" || stored.provider === "razorpay")) {
+        try {
+          const event = normalizeProviderEvent({
+            provider: stored.provider,
+            eventType: stored.eventType,
+            payload: stored.payload,
+            deliveryId: stored.externalId,
+          })
+          replaySafe =
+            row.attempts < WEBHOOK_TRACK_MAX_ATTEMPTS &&
+            isExpiredWebhookTrackReplaySafe(track, event)
+        } catch {
+          // Malformed historical receipts are never promoted to auto-replay.
+        }
+      }
+    }
+    if (replaySafe) {
+      const changed = await prisma.$executeRaw`
+        UPDATE "WebhookEventTrack"
+        SET status = 'failed', "lastError" = 'claim_expired_replay_safe',
+            generation = generation + 1, "nextAttemptAtUtc" = now(),
+            "nextAttemptAt" = now() AT TIME ZONE current_setting('TimeZone'), "claimToken" = NULL,
+            "leaseExpiresAtUtc" = NULL, "leaseExpiresAt" = NULL, "updatedAt" = now()
+        WHERE id = ${row.id} AND "webhookEventId" = ${row.webhookEventId}
+          AND track = ${row.track} AND generation = ${row.generation}
+          AND "claimToken" IS NOT DISTINCT FROM ${row.claimToken}
+          AND status = 'processing' AND "leaseExpiresAtUtc" <= now()
+      `
+      recoveredExpired += changed
+    } else {
+      const changed = await prisma.$executeRaw`
+        UPDATE "WebhookEventTrack"
+        SET status = 'dead_letter', "lastError" = 'claim_expired_requires_receipt_review',
+            "claimToken" = NULL, "leaseExpiresAtUtc" = NULL, "leaseExpiresAt" = NULL,
+            "nextAttemptAtUtc" = NULL, "nextAttemptAt" = NULL,
+            "updatedAt" = now()
+        WHERE id = ${row.id} AND "webhookEventId" = ${row.webhookEventId}
+          AND track = ${row.track} AND generation = ${row.generation}
+          AND "claimToken" IS NOT DISTINCT FROM ${row.claimToken}
+          AND status = 'processing' AND "leaseExpiresAtUtc" <= now()
+      `
+      ambiguous += changed
+    }
   }
-  const due = await prisma.webhookEventTrack.findMany({
-    where: {
-      status: { in: ["pending", "failed"] },
-      nextAttemptAt: { lte: new Date() },
-      claimToken: null,
-      attempts: { lt: WEBHOOK_TRACK_MAX_ATTEMPTS },
-    },
-    select: { webhookEventId: true, track: true, generation: true, nextAttemptAt: true },
-    orderBy: [{ nextAttemptAt: "asc" }, { id: "asc" }],
-    take: limit,
-  })
+  const due = await prisma.$queryRaw<
+    Array<{ webhookEventId: string; track: string; generation: number }>
+  >`
+    SELECT "webhookEventId", track, generation
+    FROM "WebhookEventTrack"
+    WHERE status IN ('pending', 'failed') AND "nextAttemptAtUtc" <= now()
+      AND "claimToken" IS NULL AND attempts < ${WEBHOOK_TRACK_MAX_ATTEMPTS}
+    ORDER BY "nextAttemptAtUtc" ASC, id ASC
+    LIMIT ${limit}
+  `
   let represented = 0
   for (const row of due) {
     if (!WEBHOOK_TRACK_IDS.includes(row.track as WebhookTrackId)) continue
@@ -115,18 +162,13 @@ export async function recoverDueWebhookTrackRetries(
       const retained = await getWebhookTrackRetryQueue().getJob(webhookTrackRetryJobId(row))
       const state = await retained?.getState()
       if (state === "completed" || state === "failed") {
-        const advanced = await prisma.webhookEventTrack.updateMany({
-          where: {
-            webhookEventId: row.webhookEventId,
-            track: row.track,
-            generation,
-            status: { in: ["pending", "failed"] },
-            claimToken: null,
-            nextAttemptAt: { lte: new Date() },
-          },
-          data: { generation: { increment: 1 } },
-        })
-        if (!advanced.count) continue
+        const advanced = await prisma.$executeRaw`
+          UPDATE "WebhookEventTrack" SET generation = generation + 1
+          WHERE "webhookEventId" = ${row.webhookEventId} AND track = ${row.track}
+            AND generation = ${generation} AND status IN ('pending', 'failed')
+            AND "claimToken" IS NULL AND "nextAttemptAtUtc" <= now()
+        `
+        if (!advanced) continue
         generation++
       }
       await enqueueWebhookTrackRetry({
@@ -140,5 +182,7 @@ export async function recoverDueWebhookTrackRetries(
     }
   }
   if (ambiguous) logger.warn("Webhook claims require receipt review", { ambiguous })
+  if (recoveredExpired)
+    logger.info("Expired idempotent webhook claims scheduled", { recoveredExpired })
   return { examined: due.length, represented, ambiguous }
 }

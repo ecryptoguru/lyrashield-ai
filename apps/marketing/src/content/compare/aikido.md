@@ -3,50 +3,52 @@ title: "LyraShield vs Aikido — release assurance compared"
 description: "How LyraShield AI compares to Aikido for developer-centric CI/CD security. Approach, evidence states, coverage framework and deployment model differences."
 competitor: "Aikido"
 heading: "LyraShield AI vs Aikido"
-disclaimer: "Factual comparison. [Aikido Security](https://www.aikido.dev/) is a unified security platform covering code, cloud and runtime from one interface — SAST, SCA, secrets, IaC/container scanning, CSPM, DAST, AI pentesting and runtime protection — with auto-generated fix PRs. [LyraShield AI](https://lyrashieldai.com/) is release assurance for AI-built apps: a target → review → evidence → fix → retest → report loop with evidence states, immutable assurance reports and reviewed fix proposals. Aikido is a broad AppSec platform with a pentest layer; LyraShield AI is a focused release-assurance loop purpose-built for AI-generated code. Neither replaces the other."
-updatedDate: 2026-09-19
+disclaimer: 'Factual comparison. <a href="https://www.aikido.dev/">Aikido Security</a> is a unified security platform covering code, cloud and runtime from one interface — SAST, SCA, secrets, IaC/container scanning, CSPM, DAST, AI pentesting and runtime protection — with auto-generated fix PRs. <a href="https://lyrashieldai.com/">LyraShield AI</a> is release assurance for AI-built apps: a target → review → evidence → fix → retest → report loop with evidence states, checksum-bound assurance reports and reviewed fix proposals. Aikido is a broad AppSec platform with a pentest layer; LyraShield AI is a focused release-assurance loop purpose-built for AI-generated code. Neither replaces the other.'
+updatedDate: 2026-10-04
 draft: false
 pricingLadder: true
+competitorClaims: true
+competitorDomain: aikido.dev
 faq:
   - q: "Does LyraShield replace Aikido?"
-    a: "No. Aikido is a unified code to cloud to runtime platform covering SAST, SCA, secrets, IaC, containers, CSPM, DAST, AI pentesting and runtime protection, with AutoFix PRs and a free forever tier. LyraShield in open beta is not a broad AppSec stack; it is a focused loop for AI-built apps with reviewed fix proposals and immutable assurance."
+    a: "No. Aikido is a unified code to cloud to runtime platform covering SAST, SCA, secrets, IaC, containers, CSPM, DAST, AI pentesting and runtime protection, with AutoFix PRs and a free forever tier. LyraShield in open beta is not a broad AppSec stack; it is a focused loop for AI-built apps with reviewed fix proposals and a checksum-bound assurance record."
   - q: "Can I use Aikido and LyraShield together?"
     a: "Yes. Use Aikido for broad, continuous scanning and runtime protection across your estate and add LyraShield for the release assurance run before you ship AI-built apps. Both support GitHub integrations, so findings can coexist. Aikido publishes its plan pricing on its pricing page; LyraShield pricing is live at lyrashieldai.com/pricing."
   - q: "When should I choose Aikido over LyraShield?"
-    a: "Choose Aikido when you want one platform for code, cloud and runtime, with auto-generated fix PRs, malware detection in dependencies and published pricing including a free tier. Its 200+ AI agents for continuous pentesting are a genuine strength for coverage. Choose LyraShield when you need explicit approval gates and immutable evidence for release decisions."
+    a: "Choose Aikido when you want one platform for code, cloud and runtime, with auto-generated fix PRs, malware detection in dependencies and published pricing including a free tier. Its 200+ AI agents for continuous pentesting are a genuine strength for coverage. Choose LyraShield when you need explicit approval gates and a checksum-bound evidence record for release decisions."
   - q: "How do their fix models differ?"
     a: "Aikido AutoFix generates reviewable fix PRs across code, dependencies, IaC and containers. LyraShield records fix proposals for review; a Fix PR request requires permission and a server-generated patch, while repository review and merge controls remain separate. A fresh retest records the outcome."
 ---
 
 ## Core approach
 
-| Aspect                  | LyraShield AI                                                                  | Aikido                                                                             |
-| ----------------------- | ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------- |
-| Primary focus           | Evidence-backed release assurance for AI-built apps                            | Unified AppSec platform: code, cloud, runtime in one system                        |
-| Scanning approach       | Agentic engine with coverage framework and evidence states; AI-pattern focus   | Multi-engine (SAST, SCA, secrets, IaC, containers, CSPM, DAST) + AI pentest agents |
-| Finding lifecycle       | Detected → independently verified → retest-confirmed or inconclusive           | Open → triaged (AutoT deprioritizes non-risk) → AutoFix PR or ticket               |
-| Control framework       | Vibe Security 50 (43 code/URL review + 7 evidence-required)                    | No published control framework; rule engine + context-based prioritization         |
-| AI-generated code focus | Built for AI-built apps; scans agent rules, MCP configs, AI patterns           | AI Code Quality review + malware detection; not AI-code-specific assurance         |
-| Fix model               | Recorded fix proposals; Fix PR execution is not enabled in the current release | AutoFix generates reviewable PRs across code, deps, IaC, containers                |
+| Aspect                  | LyraShield AI                                                                                   | Aikido                                                                             |
+| ----------------------- | ----------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| Primary focus           | Evidence-backed release assurance for AI-built apps                                             | Unified AppSec platform: code, cloud, runtime in one system                        |
+| Scanning approach       | Agentic engine with coverage framework and evidence states; AI-pattern focus                    | Multi-engine (SAST, SCA, secrets, IaC, containers, CSPM, DAST) + AI pentest agents |
+| Finding lifecycle       | Detected → retest-confirmed or inconclusive                                                     | Open → triaged (AutoT deprioritizes non-risk) → AutoFix PR or ticket               |
+| Control framework       | Vibe Security 50 (43 code/URL review + 7 evidence-required)                                     | No published control framework; rule engine + context-based prioritization         |
+| AI-generated code focus | Built for AI-built apps; scans agent rules, agent instruction files and AI patterns             | AI Code Quality review + malware detection; not AI-code-specific assurance         |
+| Fix model               | Recorded fix proposals; Fix PRs open only after a human approves, with a server-generated patch | AutoFix generates reviewable PRs across code, deps, IaC, containers                |
 
 ## Capability comparison
 
-| Capability                          | LyraShield AI                                                   | Aikido                                                         |
-| ----------------------------------- | --------------------------------------------------------------- | -------------------------------------------------------------- |
-| Static analysis (SAST)              | Agentic                                                         | Yes (pattern + context)                                        |
-| SCA (dependency scanning)           | Yes (engine)                                                    | Yes (with malware detection)                                   |
-| Secret scanning                     | Yes (engine + GitHub Action)                                    | Yes                                                            |
-| IaC / container scanning            | Not a primary focus                                             | Yes                                                            |
-| Cloud posture (CSPM)                | Not a primary focus                                             | Yes                                                            |
-| DAST / surface monitoring           | Via agentic pentest                                             | Yes (surface monitoring)                                       |
-| AI / agentic pentest                | Yes                                                             | Yes (200+ agents; continuous autonomous pentesting)            |
-| Evidence states (4-state lifecycle) | Yes                                                             | No (AutoT prioritization instead)                              |
-| Deterministic retest                | Yes                                                             | Re-test after fix (continuous testing)                         |
-| Coverage receipts                   | Yes (per-control)                                               | No                                                             |
-| Assurance reports (immutable)       | Yes                                                             | Audit-grade pentest reports                                    |
-| MCP server integration              | Yes (inside AI coding agents)                                   | Not advertised                                                 |
-| Permission-gated Fix PR requests    | Fix PR requests require permission and a server-generated patch | AutoFix PRs (reviewable, not permission-gated Fix PR requests) |
-| Runtime protection                  | Not in v1                                                       | Yes (in-app firewall, bot/device protection)                   |
+| Capability                          | LyraShield AI                                                                                  | Aikido                                                         |
+| ----------------------------------- | ---------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| Static analysis (SAST)              | Agentic plus a deterministic pattern scanner plus a deterministic pattern scanner              | Yes (pattern + context)                                        |
+| SCA (dependency scanning)           | Yes (engine)                                                                                   | Yes (with malware detection)                                   |
+| Secret scanning                     | Yes (engine + GitHub Action)                                                                   | Yes                                                            |
+| IaC / container scanning            | Deterministic Terraform, Kubernetes, Compose and Dockerfile checks; no container image scanner | Yes                                                            |
+| Cloud posture (CSPM)                | Not a primary focus                                                                            | Yes                                                            |
+| DAST / surface monitoring           | Via agentic pentest                                                                            | Yes (surface monitoring)                                       |
+| AI / agentic pentest                | Yes                                                                                            | Yes (200+ agents; continuous autonomous pentesting)            |
+| Evidence states (4-state lifecycle) | Yes                                                                                            | No documented equivalent (AutoTriage prioritization instead)   |
+| Deterministic retest                | Yes                                                                                            | Re-test after fix (continuous testing)                         |
+| Coverage receipts                   | Yes (per-control)                                                                              | No documented equivalent                                       |
+| Assurance reports (checksum-bound)  | Yes                                                                                            | Audit-grade pentest reports                                    |
+| MCP server integration              | Yes (runs checks and records evidence inside AI coding agents)                                 | Yes (Aikido MCP plugin for Cursor and Claude Code and others)  |
+| Permission-gated Fix PR requests    | Fix PR requests require permission and a server-generated patch                                | AutoFix PRs (reviewable, not permission-gated Fix PR requests) |
+| Runtime protection                  | Not in v1                                                                                      | Yes (in-app firewall, bot/device protection)                   |
 
 ## Deployment and pricing
 
@@ -61,7 +63,7 @@ faq:
 ### Use LyraShield AI when
 
 - Your app is AI-built and you need AI-specific pattern coverage and an assurance record for the release
-- You need immutable assurance reports with coverage receipts for compliance or client handoff
+- You need checksum-bound assurance reports with coverage receipts for compliance or client handoff
 - You want reviewable fix proposals and a separate permission gate for Fix PR requests
 - You want security checks inside your AI coding agent via MCP
 - You want a focused release-assurance loop, not a broad AppSec stack
@@ -76,12 +78,24 @@ faq:
 
 ---
 
-Aikido is the broad AppSec platform; LyraShield AI is the release-assurance loop for AI-built apps. [Read our comparison methodology](https://lyrashieldai.com) and try the free browser-local tools at [lyrashieldai.com](https://lyrashieldai.com).
+Aikido is the broad AppSec platform; LyraShield AI is the release-assurance loop for AI-built apps. [Read our comparison methodology](/methodology) and try the free browser-local tools at [lyrashieldai.com](https://lyrashieldai.com).
 
-> Sources: [Aikido platform](https://www.aikido.dev/platform), [Aikido SAST](https://www.aikido.dev/code/static-code-analysis-sast), [Aikido SCA](https://www.aikido.dev/code/open-source-dependency-scanning-sca).
+## Where Aikido is genuinely strong
+
+Its breadth is the headline. A single platform covers repository scanning, cloud configuration, containers and domains. Its [SCA page](https://www.aikido.dev/code/open-source-dependency-scanning-sca) says it correlates findings across stages to avoid duplicate alerts and traces whether your code actually reaches a vulnerable dependency. The same page describes pre-CVE intelligence and detection of known malicious packages across npm, PyPI, GitHub Actions and Maven.
+
+Aikido has strong developer workflow integration. Its [SAST page](https://www.aikido.dev/code/static-code-analysis-sast) shows vulnerabilities flagged inline in the editor, offers one-click AutoFix that opens a pull request and supports custom rules for codebase-specific risks. Its [SBOM page](https://www.aikido.dev/use-cases/sbom-generator-create-software-bill-of-materials) describes one-click CycloneDX, SPDX or CSV export.
+
+Aikido also ships an [MCP plugin](https://help.aikido.dev/ai-and-dev-tools/aikido-mcp) that connects its security engine to AI coding tools and scans AI-generated code for vulnerabilities and hardcoded secrets as it is created. That is a direct overlap with part of what LyraShield does and it is worth stating plainly.
+
+## Sources
+
+- [Aikido platform overview](https://www.aikido.dev/platform)
+- [Aikido SAST product page](https://www.aikido.dev/code/static-code-analysis-sast)
+- [Aikido SCA product page](https://www.aikido.dev/code/open-source-dependency-scanning-sca)
+- [Aikido SBOM export](https://www.aikido.dev/use-cases/sbom-generator-create-software-bill-of-materials)
+- [Aikido MCP plugin documentation](https://help.aikido.dev/ai-and-dev-tools/aikido-mcp)
 
 ## Methodology and scope
 
 This comparison describes published capabilities, not an independent test of either product. Client workflow availability and commercial terms can change. Read [how LyraShield tests, records evidence and reports coverage](/methodology) for its assurance model and verify vendor details before a purchasing decision.
-
-For the long-form version of this comparison, including the evidence model and where each tool fits a release gate, read [LyraShield AI vs Aikido](/blog/aikido-vs-lyrashield).

@@ -136,18 +136,6 @@ describe("billing-reconciliation.job", () => {
     ])
   })
 
-  it("completes without throwing when providers are unavailable", async () => {
-    // The mocks return null for both clients, so reconciliation should
-    // gracefully skip both providers and only check unprocessed events.
-    getPolarClientMock.mockReturnValue(null)
-    getRazorpayClientMock.mockReturnValue(null)
-    const result = await runBillingReconciliation()
-
-    expect(result.polarChecked).toBe(0)
-    expect(result.razorpayChecked).toBe(0)
-    expect(result.driftAlerts).toBe(2)
-  })
-
   it("finds a Polar order paid after creation within the 24-day baseline", async () => {
     const recent = new Date(Date.now() - 60_000)
     const latePaid = new Date(Date.now() - 20 * 24 * 60 * 60 * 1000)

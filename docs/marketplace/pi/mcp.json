@@ -2,7 +2,7 @@
   "mcpServers": {
     "lyrashield": {
       "url": "https://app.lyrashieldai.com/api/mcp",
-      "description": "LyraShield workspace, target, scan, finding, retest, and release-readiness tools"
+      "description": "LyraShield workspace, target, scan, finding, retest and release-readiness tools"
     }
   }
 }

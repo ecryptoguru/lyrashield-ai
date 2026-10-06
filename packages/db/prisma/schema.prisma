@@ -809,41 +809,41 @@ model Policy {
 }
 
 model Scan {
-  id                    String     @id @default(cuid())
-  workspaceId           String
-  projectId             String?
-  targetId              String?
-  policyId              String?
-  goal                  ScanGoal
-  mode                  ScanMode   @default(SAFE)
-  status                ScanStatus @default(QUEUED)
-  triggerType           String     @default("manual")
-  startedAt             DateTime?
-  endedAt               DateTime?
-  summary               String?
-  errorCategory         String?
-  errorMessage          String?
-  riskScoreBefore       Int?
-  riskScoreAfter        Int?
-  estimatedCostCents    Int?
-  actualCostCents       Int?
-  providerCostUsd       Decimal?   @db.Decimal(19, 10)
-  billedCostUsd         Decimal?   @db.Decimal(19, 10)
-  llmRequestCount       Int?
-  llmInputTokens        Int?
-  llmCachedInputTokens  Int?
-  llmOutputTokens       Int?
-  determinismMode       String?    @default("default")
-  durationMs            Int?
-  finalizationStartedAt DateTime?
+  id                            String     @id @default(cuid())
+  workspaceId                   String
+  projectId                     String?
+  targetId                      String?
+  policyId                      String?
+  goal                          ScanGoal
+  mode                          ScanMode   @default(SAFE)
+  status                        ScanStatus @default(QUEUED)
+  triggerType                   String     @default("manual")
+  startedAt                     DateTime?
+  endedAt                       DateTime?
+  summary                       String?
+  errorCategory                 String?
+  errorMessage                  String?
+  riskScoreBefore               Int?
+  riskScoreAfter                Int?
+  estimatedCostCents            Int?
+  actualCostCents               Int?
+  providerCostUsd               Decimal?   @db.Decimal(19, 10)
+  billedCostUsd                 Decimal?   @db.Decimal(19, 10)
+  llmRequestCount               Int?
+  llmInputTokens                Int?
+  llmCachedInputTokens          Int?
+  llmOutputTokens               Int?
+  determinismMode               String?    @default("default")
+  durationMs                    Int?
+  finalizationStartedAt         DateTime?
   // Immutable server-owned execution plan snapshot + its canonical-JSON sha256.
   // Written once at creation; NULL on scans created before the column existed.
-  executionPlan         Json?
-  executionPlanHash     String?
-  sarifUri              String?
-  createdById           String
+  executionPlan                 Json?
+  executionPlanHash             String?
+  sarifUri                      String?
+  createdById                   String
   // Immutable billing identity for this scan; NULL on legacy scans means createdById.
-  sponsorAccountId      String?
+  sponsorAccountId              String?
   // The delegated OAuth connection grant that authorized this scan, when it was
   // created through a hosted MCP/agent credential instead of a browser session
   // or workspace API key. Persisted at the synchronous admission boundary so
@@ -854,9 +854,9 @@ model Scan {
   // producers, which never carry a delegated grant.
   delegatedConnectionId         String?
   delegatedAuthorizationVersion Int?
-  deletedAt             DateTime?
-  createdAt             DateTime   @default(now())
-  updatedAt             DateTime   @updatedAt
+  deletedAt                     DateTime?
+  createdAt                     DateTime   @default(now())
+  updatedAt                     DateTime   @updatedAt
 
   workspace               Workspace                @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   project                 Project?                 @relation(fields: [projectId], references: [id], onDelete: SetNull)
@@ -1747,28 +1747,36 @@ model WebhookEvent {
 
 /// Durable per-track processing state for a WebhookEvent (billing/license/
 /// affiliate). The parent `processed` flag is DERIVED: true only when every
-/// applicable track row is "succeeded". Child rows are loaded only through
-/// webhookEventId; workspaceId mirrors the parent for traceability and is not
+/// applicable track row is "succeeded" or has an audited "reviewed" disposition.
+/// A reviewed row is terminal and never claims its business effect ran. Child
+/// rows are loaded only through webhookEventId; workspaceId mirrors the parent
+/// for traceability and is not
 /// auto-scoped (not in WORKSPACE_SCOPED_MODELS — no RLS policy on this table).
 model WebhookEventTrack {
-  id             String    @id @default(cuid())
-  webhookEventId String
-  workspaceId    String?
+  id                    String    @id @default(cuid())
+  webhookEventId        String
+  workspaceId           String?
   // "billing" | "license" | "affiliate"
-  track          String
-  // "pending" | "processing" | "succeeded" | "failed" | "dead_letter"
-  status         String    @default("pending")
-  attempts       Int       @default(0)
-  generation     Int       @default(0)
+  track                 String
+  // "pending" | "processing" | "succeeded" | "failed" | "dead_letter" | "reviewed"
+  status                String    @default("pending")
+  attempts              Int       @default(0)
+  historicalAttempts    Int       @default(0)
+  operatorRecoveryCount Int       @default(0)
+  generation            Int       @default(0)
   // Null on historical rows: do not automatically replay unknown effects.
-  nextAttemptAt  DateTime?
-  claimToken     String?
-  leaseExpiresAt DateTime?
+  nextAttemptAt         DateTime? @default(now())
+  claimToken            String?
+  leaseExpiresAt        DateTime?
+  // UTC-native scheduler fields. The timestamp-without-time-zone columns are
+  // retained during rollout for compatibility with the prior worker version.
+  nextAttemptAtUtc      DateTime? @default(now()) @db.Timestamptz(3)
+  leaseExpiresAtUtc     DateTime? @db.Timestamptz(3)
   // Bounded reason string (truncated, identifiers/reason codes only).
-  lastError      String?
-  completedAt    DateTime?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  lastError             String?
+  completedAt           DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 
   webhookEvent WebhookEvent @relation(fields: [webhookEventId], references: [id], onDelete: Cascade)
 
@@ -1776,6 +1784,7 @@ model WebhookEventTrack {
   @@index([status])
   @@index([track, status])
   @@index([status, nextAttemptAt])
+  @@index([status, nextAttemptAtUtc], map: "WebhookEventTrack_status_nextAttemptAtUtc_idx")
 }
 
 /// Durable receipt for an authentic (provider-signature-valid), identifiable
@@ -1903,10 +1912,10 @@ model AgentConnection {
   user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   operations AgentOperation[]
 
+  @@unique([id, workspaceId])
   @@index([workspaceId])
   @@index([userId])
   @@index([status])
-  @@unique([id, workspaceId])
   @@map("agent_connections")
 }
 
@@ -1996,12 +2005,12 @@ model AccountAcquisition {
 // Account-level optional analytics choice. It follows the user across
 // workspaces and devices, and is isolated with account-owned RLS.
 model AccountPreference {
-  id              String   @id @default(cuid())
-  accountId       String   @unique
-  analyticsEnabled Boolean @default(true)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @default(now()) @updatedAt
-  user            User     @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  id               String   @id @default(cuid())
+  accountId        String   @unique
+  analyticsEnabled Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @default(now()) @updatedAt
+  user             User     @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
   @@map("account_preferences")
 }
@@ -2727,37 +2736,37 @@ model MyraOperation {
 }
 
 model DemoBooking {
-  id                 String            @id @default(cuid())
-  status             DemoBookingStatus @default(HELD)
-  attendeeEmail      String
-  attendeeName       String
-  attendeeContext    String?           @db.Text
-  attendeeVerifiedAt DateTime?
-  startsAt           DateTime
-  endsAt             DateTime
+  id                   String            @id @default(cuid())
+  status               DemoBookingStatus @default(HELD)
+  attendeeEmail        String
+  attendeeName         String
+  attendeeContext      String?           @db.Text
+  attendeeVerifiedAt   DateTime?
+  startsAt             DateTime
+  endsAt               DateTime
   // Buffered window (startsAt-buffer … endsAt+buffer) used by the exclusion
   // constraint — overlap protection covers the whole hold, not just a start
   // time.
-  holdStartsAt       DateTime
-  holdEndsAt         DateTime
-  timezone           String
-  organizerEmail     String
+  holdStartsAt         DateTime
+  holdEndsAt           DateTime
+  timezone             String
+  organizerEmail       String
   // Deterministic provider event id for timeout reconciliation — a retried
   // insert reuses it instead of creating a second event.
-  providerEventId    String?           @unique
-  meetLink           String?
-  conferenceState    String            @default("none") // none|pending|ready|failed
-  manageTokenHash    String?           @unique
+  providerEventId      String?           @unique
+  meetLink             String?
+  conferenceState      String            @default("none") // none|pending|ready|failed
+  manageTokenHash      String?           @unique
   manageTokenExpiresAt DateTime
   manageTokenRevokedAt DateTime?
-  idempotencyKey     String            @unique
-  accountId          String?
-  publicSessionId    String?
-  conversationId     String?
-  rescheduledFromId  String?
-  canceledAt         DateTime?
-  createdAt          DateTime          @default(now())
-  updatedAt          DateTime          @updatedAt
+  idempotencyKey       String            @unique
+  accountId            String?
+  publicSessionId      String?
+  conversationId       String?
+  rescheduledFromId    String?
+  canceledAt           DateTime?
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
 
   @@index([holdStartsAt, holdEndsAt])
   @@index([status])
@@ -2872,12 +2881,12 @@ model MyraAuditEvent {
 }
 
 model MyraGenerationReservation {
-  traceId     String   @id
+  traceId     String    @id
   monthStart  DateTime
-  reservedUsd Decimal  @db.Decimal(19, 4)
-  actualUsd   Decimal? @db.Decimal(19, 4)
-  status      String   @default("RESERVED") // RESERVED|SETTLED|RELEASED
-  createdAt   DateTime @default(now())
+  reservedUsd Decimal   @db.Decimal(19, 4)
+  actualUsd   Decimal?  @db.Decimal(19, 4)
+  status      String    @default("RESERVED") // RESERVED|SETTLED|RELEASED
+  createdAt   DateTime  @default(now())
   settledAt   DateTime?
 
   @@index([monthStart, status])

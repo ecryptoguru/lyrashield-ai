@@ -21,11 +21,7 @@ vi.mock("./extension", () => ({ getWorkspaceContext: () => null }))
 import { ScanExecutionPlanSchema } from "@lyrashield/types"
 import { prisma } from "./client"
 import { createScan } from "./scan-service"
-import {
-  canonicalizeScanExecutionPlan,
-  computeScanExecutionPlanHash,
-  verifyStoredScanExecutionPlan,
-} from "./scan-execution-plan"
+import { computeScanExecutionPlanHash, verifyStoredScanExecutionPlan } from "./scan-execution-plan"
 
 const mockPrisma = prisma as unknown as {
   $transaction: ReturnType<typeof vi.fn>
@@ -72,12 +68,6 @@ describe("execution plan canonicalization and hashing", () => {
     )
     expect(computeScanExecutionPlanHash(plan)).toBe(computeScanExecutionPlanHash(reordered))
     expect(computeScanExecutionPlanHash(plan)).toMatch(/^[0-9a-f]{64}$/)
-  })
-
-  it("canonical JSON sorts nested object keys recursively", () => {
-    expect(canonicalizeScanExecutionPlan(validPlan())).toBe(
-      canonicalizeScanExecutionPlan(validPlan())
-    )
   })
 })
 

@@ -143,16 +143,33 @@ export async function onRefund(payload: RefundPayload): Promise<ClawbackResult> 
   const manualReview = originalAmount.gt(new Prisma.Decimal(CLAWBACK_MANUAL_REVIEW_THRESHOLD_USD))
   if (manualReview) return flagManualReview("amount_above_threshold")
 
-  // S5: Update the EXISTING commission in place — avoids the unique constraint
-  // violation that would occur if we tried to create a new Commission row with
-  // the same (conversionId, affiliateId).
-  await prisma.commission.update({
-    where: { id: commission.id },
-    data: {
-      status: "REVERSED",
-      amount: new Prisma.Decimal(0),
-    },
+  // Reversal and referral accounting are one idempotent transaction. The
+  // conditional writes make duplicate deliveries a no-op and keep the count
+  // from crossing zero under concurrent refunds.
+  const reversal = await prisma.$transaction(async (tx) => {
+    const changed = await tx.commission.updateMany({
+      where: { id: commission.id, status: commission.status },
+      data: { status: "REVERSED", amount: new Prisma.Decimal(0) },
+    })
+    if (changed.count === 0) return { replay: true, referralDecremented: false }
+
+    if (!conversion.subscriptionId) return { replay: false, referralDecremented: false }
+    const referral = await tx.affiliate.updateMany({
+      where: { id: conversion.affiliateId, activeReferrals: { gt: 0 } },
+      data: { activeReferrals: { decrement: 1 } },
+    })
+    return { replay: false, referralDecremented: referral.count === 1 }
   })
+
+  if (reversal.replay) {
+    return {
+      reversed: true,
+      commissionId: commission.id,
+      manualReview: false,
+      notFound: false,
+      replay: true,
+    }
+  }
 
   // Log the original amount for audit trail
   logger.info("Clawback: commission reversed", {
@@ -163,25 +180,10 @@ export async function onRefund(payload: RefundPayload): Promise<ClawbackResult> 
     manualReview,
   })
 
-  // C3: Decrement activeReferrals if this was a first-payment subscription.
-  // Guard against going below 0.
-  if (conversion.subscriptionId) {
-    const affiliate = await prisma.affiliate.findUnique({
-      where: { id: conversion.affiliateId },
-      select: { activeReferrals: true },
+  if (reversal.referralDecremented) {
+    logger.info("Clawback: activeReferrals decremented", {
+      affiliateId: conversion.affiliateId,
     })
-
-    if (affiliate && affiliate.activeReferrals > 0) {
-      await prisma.affiliate.update({
-        where: { id: conversion.affiliateId },
-        data: { activeReferrals: { decrement: 1 } },
-      })
-
-      logger.info("Clawback: activeReferrals decremented", {
-        affiliateId: conversion.affiliateId,
-        previousCount: affiliate.activeReferrals,
-      })
-    }
   }
 
   return {

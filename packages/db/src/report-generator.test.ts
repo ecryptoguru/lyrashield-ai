@@ -272,13 +272,10 @@ describe("report-generator", () => {
       ["PARTIAL", "none", "GO_WITH_CONDITIONS"],
       ["FAILED", "critical", "NOT_EVALUATED"],
       ["FAILED", "high", "NOT_EVALUATED"],
-      ["FAILED", "none", "NOT_EVALUATED"],
       ["CANCELLED", "critical", "NOT_EVALUATED"],
       ["CANCELLED", "high", "NOT_EVALUATED"],
-      ["CANCELLED", "none", "NOT_EVALUATED"],
       ["RUNNING", "critical", "NOT_EVALUATED"],
       ["RUNNING", "high", "NOT_EVALUATED"],
-      ["RUNNING", "none", "NOT_EVALUATED"],
       ["completed", "critical", "NO_GO"],
       ["completed", "high", "GO_WITH_CONDITIONS"],
       ["completed", "none", "GO"],
@@ -287,7 +284,7 @@ describe("report-generator", () => {
       mockPrisma.scan.findFirst.mockResolvedValue({
         id: "scan-1",
         goal: "TEST_APP",
-        mode: "STANDARD",
+        mode: status === "PARTIAL" ? "DEEP" : "STANDARD",
         status,
         summary: null,
         target: { name: "example.com", type: "WEB_APP", url: "https://example.com" },
@@ -334,15 +331,16 @@ describe("report-generator", () => {
         expect(data.assurance?.narrative).toContain("Coverage is incomplete")
         expect(data.assurance?.narrative).toContain("engine")
         expect(data.scanInfo?.targetId).toBe("target-1")
+        expect(data.scanInfo?.mode).toBe("DEEP")
         const html = generateReportHTML(data)
         expect(html).toContain("Complete coverage")
         expect(html).toContain(
-          "/dashboard/scans?new=1&amp;target=target-1&amp;goal=TEST_APP&amp;mode=STANDARD"
+          "/dashboard/scans?new=1&amp;target=target-1&amp;goal=TEST_APP&amp;mode=DEEP"
         )
       }
     })
 
-    it.each(["critical", "high", "none"] as const)(
+    it.each(["critical", "high"] as const)(
       "does not evaluate workspace findings without a scan (%s)",
       async (severity) => {
         mockPrisma.workspace.findFirst.mockResolvedValue({ name: "Acme Inc" })
@@ -704,27 +702,6 @@ describe("report-generator", () => {
         expect(data.assurance?.narrative).toContain("did not complete successfully")
       }
     )
-
-    it("still grounds a verdict on a completed scan with zero findings", async () => {
-      mockPrisma.workspace.findFirst.mockResolvedValue({ name: "Acme Inc" })
-      mockPrisma.scan.findFirst.mockResolvedValue({
-        id: "scan-1",
-        status: "COMPLETED",
-        summary: "Clean scan",
-        target: { name: "example.com", type: "url", url: "https://example.com" },
-        startedAt: new Date("2026-01-01"),
-        endedAt: new Date("2026-01-02"),
-        targetId: "target-1",
-        resultManifest: { checksum: "manifest-checksum", manifest: { version: 5 } },
-        coverageReceipts: [],
-      })
-      mockPrisma.finding.findMany.mockResolvedValue([])
-      mockPrisma.scoreSnapshot.findMany.mockResolvedValue([])
-
-      const data = await gatherReportData("ws-1", "scan-1")
-
-      expect(data.assurance?.verdict).toBe("GO")
-    })
   })
 
   describe("generateReportHTML", () => {

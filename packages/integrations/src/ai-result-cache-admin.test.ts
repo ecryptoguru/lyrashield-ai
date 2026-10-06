@@ -43,10 +43,7 @@ describe("exact AI-result cache purge", () => {
   })
 
   it("deduplicates known targets and never discovers keys with a database scan", async () => {
-    const result = await purgeAiResultCacheWorkspaceEntries("workspace-1", [
-      "target-1",
-      "target-1",
-    ])
+    const result = await purgeAiResultCacheWorkspaceEntries("workspace-1", ["target-1", "target-1"])
 
     expect(redis.smembers).toHaveBeenCalledTimes(1)
     expect(redis.smembers).toHaveBeenCalledWith(

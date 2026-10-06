@@ -1,6 +1,6 @@
 ---
 name: lyrashield
-description: Run LyraShield security scans, review findings, and drive the fix → verify loop.
+description: Run LyraShield security scans, review findings and drive the fix → verify loop.
 ---
 
 ## Pre-PR check
@@ -33,8 +33,8 @@ Use a stable idempotency key for each intended mutating action and reuse it for 
 Reuse a returned scan or operation ID instead of starting another action. For findings, follow
 nextCursor with lyrashield_get_findings(cursor=...) until it is absent; a partial page is
 not a complete review. Poll scan and operation status starting at five seconds, back off up to
-30 seconds, stop on a terminal state, and return the resumable ID after a bounded session.
-Treat failed, cancelled, inconclusive, and insufficient-evidence states explicitly.
+30 seconds, stop on a terminal state and return the resumable ID after a bounded session.
+Treat failed, cancelled, inconclusive and insufficient-evidence states explicitly.
 
 Deeper modes consume more compute and take longer. Choose the least intensive goal and mode that answer the user's request.
 
@@ -58,7 +58,7 @@ Match the workflow to the user's explicit request:
 - "Check this diff" / "Review my changes": use the read-only advisory `lyrashield_check_diff`; it is not a recorded scan.
 - "Run a Quick scan" / "Scan this project": use `lyrashield_get_scan_eligibility` as an advisory preflight, then `lyrashield_scan_target` or `lyrashield_run_pr_scan` only when requested.
 - "Explain this finding" / "How should I fix it?": use `lyrashield_explain_finding` and `lyrashield_generate_fix_plan` with the selected workspace and finding.
-- "I applied the fix": use `lyrashield_verify_fix` with `workspaceId` and `findingId`, poll the returned retest scan to a terminal state, and include its outcome and scan reference. Call it independently verified only when a separate independent-verification receipt exists.
+- "I applied the fix": use `lyrashield_verify_fix` with `workspaceId` and `findingId`, poll the returned retest scan to a terminal state and include its outcome and scan reference. Call it independently verified only when a separate independent-verification receipt exists.
 - "Is this target ready to ship?": use `lyrashield_get_launch_readiness` for the selected workspace and target, bound to the supplied commit or artifact digest when available.
 
 Read the connected client's current tool schema before building arguments. Tool availability can differ by client; never invent an operation or field, and never replace a missing tool with a guessed API call.

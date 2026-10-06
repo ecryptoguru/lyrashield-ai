@@ -76,3 +76,41 @@ test("CI suites that omit core do not try to read its report", () => {
     rmSync(dir, { recursive: true, force: true })
   }
 })
+
+test("requested test suites execute sequentially and report wall time", () => {
+  const dir = mkdtempSync(join(tmpdir(), "lyrashield-test-order-"))
+  try {
+    for (const command of ["pnpm", "vitest"]) {
+      const executable = join(dir, command)
+      writeFileSync(
+        executable,
+        `#!${process.execPath}\nconst fs=require("node:fs"); const name=process.argv[1].split("/").at(-1); fs.appendFileSync(process.env.SUITE_ORDER, "start:"+name+"\\n"); setTimeout(()=>fs.appendFileSync(process.env.SUITE_ORDER, "end:"+name+"\\n"), 40)\n`
+      )
+      chmodSync(executable, 0o755)
+    }
+    const runner = fileURLToPath(new URL("../../../run-all-tests.mjs", import.meta.url))
+    const result = spawnSync(process.execPath, [runner], {
+      cwd: fileURLToPath(new URL("../../../", import.meta.url)),
+      env: {
+        ...process.env,
+        CI: "",
+        RUNNER_TEMP: dir,
+        LYRASHIELD_TEST_SUITES: "marketing,core",
+        SUITE_ORDER: join(dir, "order"),
+        PATH: `${dir}:${process.env.PATH}`,
+      },
+      encoding: "utf8",
+    })
+    assert.equal(result.status, 0, result.stderr)
+    assert.match(result.stdout, /marketing tests exited with code 0 after \d+\.\d+s/)
+    assert.match(result.stdout, /core tests exited with code 0 after \d+\.\d+s/)
+    assert.deepEqual(readFileSync(join(dir, "order"), "utf8").trim().split("\n"), [
+      "start:pnpm",
+      "end:pnpm",
+      "start:vitest",
+      "end:vitest",
+    ])
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})

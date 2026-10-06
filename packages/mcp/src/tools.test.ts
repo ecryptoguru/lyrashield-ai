@@ -97,7 +97,8 @@ describe("createScanTargetTool", () => {
     const request = mockFetch.mock.calls[0]![1] as RequestInit
     expect(JSON.parse(String(request.body))).toMatchObject({ goal: "TEST_APP", mode: "STANDARD" })
     const modeSchema = tool.inputSchema.properties.mode as { description: string }
-    expect(modeSchema.description).toContain("STANDARD")
+    expect(modeSchema.description).toContain("Defaults to STANDARD")
+    expect(tool.inputSchema.required ?? []).not.toContain("mode")
   })
 
   it("returns error on API failure", async () => {

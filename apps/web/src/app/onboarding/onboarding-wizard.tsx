@@ -12,10 +12,9 @@ import {
   type OnboardingWizardProps,
 } from "./onboarding-wizard-model"
 import {
-  buildUrlTargetPayload,
   displayStepForPath,
   getOnboardingReviewOptions,
-  nextStepForPath,
+  onboardingStepEyebrow,
   pathNeedsRepo,
   stepModelForPath,
   targetNameFromUrl,
@@ -27,6 +26,7 @@ import { useOnboardingRepos } from "./use-onboarding-repos"
 import { useOnboardingScan } from "./use-onboarding-scan"
 import { useOnboardingTargetBinding } from "./use-onboarding-target-binding"
 import { useOnboardingNavigation } from "./use-onboarding-navigation"
+import { useOnboardingStepActions } from "./use-onboarding-step-actions"
 
 export function OnboardingWizard({
   principalId,
@@ -145,7 +145,6 @@ export function OnboardingWizard({
   const { choosePath, skipOnboarding } = useOnboardingNavigation({
     data,
     completionPath,
-    productName,
     router,
     connectGitHub,
     ensureWorkspace,
@@ -154,64 +153,29 @@ export function OnboardingWizard({
     setError,
     setFailure,
     setPath,
-    setProductName,
   })
-
-  // Validate the URL/API inputs and advance to target details. The target is
-  // NOT created here — creation is deferred to createTargetAndStart (the same
-  // step the GitHub path uses) so the name/environment the user confirmed on
-  // the first screen are what actually get saved, and so going Back ->
-  // Continue never orphans a duplicate target.
-  function continueWithUrlTarget() {
-    const payload = buildUrlTargetPayload({
-      workspaceId: data.workspaceId,
-      path,
-      name: productName,
-      url: urlForm.url,
-      environment,
-      ownershipAttested: urlForm.ownershipAttested,
-    })
-    if (!payload) {
-      setError(
-        urlForm.ownershipAttested
-          ? "Enter a name and a valid URL to continue."
-          : "Confirm you own or are authorized to scan this target."
-      )
-      return
-    }
-    setError(null)
-    setFailure(null)
-    const next = nextStepForPath(payload.type === "API" ? "api" : "url")
-    if (next !== null) setStep(next)
-  }
-
-  async function confirmRepoAndContinue() {
-    if (!selectedRepo) {
-      setError("Select a repository to continue.")
-      return
-    }
-    // W2.3: the repo-select step is only reachable through the GitHub path,
-    // but OnboardingState persists only currentStep — after the OAuth install
-    // redirect the wizard restores with path null and step 2. Re-binding the
-    // path here keeps review options (REPO) and target creation (repository
-    // payload) from falling into the URL/API branch and blocking the first
-    // scan with "Add a valid target".
-    if (!path) setPath("github")
-    track("repos_selected", { selected_count: 1 })
-    setProductName(selectedRepo.name)
-    setStep(3)
-  }
+  const { continueWithUrlTarget, confirmRepoAndContinue } = useOnboardingStepActions({
+    workspaceId: data.workspaceId,
+    path,
+    productName,
+    urlForm,
+    environment,
+    selectedRepo,
+    setError,
+    setFailure,
+    setPath,
+    setProductName,
+    setStep,
+  })
 
   // The progress list and the current-step indicator both derive from the step
   // model in onboarding-flow.utils (v16 3.1) — the same definitions the
   // wizard's step transitions use, so the highlight and the "Step N of M"
   // announcement cannot drift from the rendered list. Workspace naming is not
   // a step (W2-01): the server provisions the workspace.
-  const steps = stepModelForPath(path)
+  const steps = stepModelForPath(path, step)
   const displayStep = displayStepForPath(step, path)
-  const eyebrow = `Step ${step} of ${steps.length} · ${
-    steps[Math.min(displayStep, steps.length - 1)]!.label
-  }`
+  const eyebrow = onboardingStepEyebrow(step, path)
   const busy = loading || pendingScanSubmission?.state === "accepted"
 
   return (
@@ -287,6 +251,7 @@ export function OnboardingWizard({
         onRepoBack={() => setStep(1)}
         onRepoContinue={confirmRepoAndContinue}
         retryingExistingTarget={retryingExistingTarget}
+        hasFailedScanAttempt={Boolean(error) || failure !== null}
         reviewOptions={reviewOptions}
         selectedReview={selectedReview}
         eligibility={visibleEligibility}

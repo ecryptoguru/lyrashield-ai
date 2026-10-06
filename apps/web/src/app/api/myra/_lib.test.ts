@@ -86,6 +86,7 @@ describe("Myra verified-account gate", () => {
     expect(myraPrincipalEnabled(ankit)).toBe(true)
     expect(myraWritesEnabled(ankit)).toBe(true)
     expect(myraPrincipalEnabled({ ...ankit, email: "other@example.com" })).toBe(true)
+    expect(myraPrincipalEnabled({ ...ankit, email: "dev@example.com" })).toBe(true)
     expect(myraWritesEnabled({ ...ankit, emailVerified: false })).toBe(false)
     expect(myraWritesEnabled()).toBe(false)
   })
@@ -125,19 +126,5 @@ describe("Myra verified-account gate", () => {
     // in the executor, independent of booking admission.
     expect(myraWritesEnabled(anonymous, "send_case_reply")).toBe(false)
     expect(myraWritesEnabled(anonymous, "submit_support_case")).toBe(true)
-  })
-
-  it("admits user writes for a verified non-production account", () => {
-    const dev = {
-      kind: "user" as const,
-      accountId: "account-2",
-      sessionId: "session-2",
-      email: "dev@example.com",
-      emailVerified: true,
-      workspaceId: null,
-      role: null,
-    }
-    expect(myraWritesEnabled(dev)).toBe(true)
-    expect(myraPrincipalEnabled(dev)).toBe(true)
   })
 })

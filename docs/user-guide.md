@@ -4,8 +4,6 @@ Last checked against the application code: 2026-09-19. Client-specific runtime a
 
 LyraShield AI helps builders review an application before release and retain an evidence-backed record of what was checked.
 
-Unlike a point scanner, it separates what was detected from what was actually proven, reviews the AI-specific surfaces of your app (agent rules, MCP configs, LLM patterns), proposes fixes through an approval-gated server-generated patch flow, retests automatically after a fix merges, and packages the outcome as a signed, shareable report. It runs from the dashboard, the CLI, MCP clients and CI. See the [litepaper](./litepaper.md) for the full differentiator list.
-
 ## Target → Scan → Evidence State → Fix Proposal → Retest → Assurance Report
 
 This guide covers the public Lite Check, authenticated dashboard, scan choices, findings, fixes, reports, scorecards, teams, integrations (agents and services), schedules, notifications, the CLI, MCP tools and current limitations.
@@ -187,10 +185,10 @@ The authenticated dashboard exposes one-off review depths that depend on the sel
 
 | User option          | Backend mode | Repository model route                   | Maximum duration |
 | -------------------- | ------------ | ---------------------------------------- | ---------------: |
-| Release Check        | QUICK        | GPT-6 Luna, medium                       |           15 min |
+| Release Check        | QUICK        | GPT-6 Luna, medium                       |           23 min |
 | Code Review          | STANDARD     | GPT-6 Luna, medium                       |           23 min |
 | Deep Security Review | DEEP         | GPT-6 Sol/medium + Luna/high specialists |           45 min |
-| Weekly Monitor       | QUICK        | GPT-6 Luna, medium                       |           15 min |
+| Weekly Monitor       | QUICK        | GPT-6 Luna, medium                       |           23 min |
 
 For an authorized repository target, Deep is the intrusive agentic pentest profile: it may execute and investigate code inside LyraShield's isolated sandbox. That authorization does not extend to attacking a deployed URL or API. URL/API Deep is a separate non-mutating, engine-backed behavior profile described below.
 
@@ -219,7 +217,7 @@ LyraShield applies protected internal run limits automatically. The dashboard do
 2. Select **New Scan**.
 3. Choose a target.
 4. Choose a review depth that is available for that target type. Locked options explain why they are unavailable (for example, Contract Review requires an OpenAPI document on an API target).
-5. Review the selected workflow description. You may attach workspace evidence files to the scan; attachments are validated and resolved before billing or queue work, host paths are never accepted, and the CLI accepts a repeatable `--attachment` flag referencing uploaded attachment IDs.
+5. Review the selected workflow description. You may attach workspace evidence files to the scan. Attachments are validated and resolved before billing or queue work. Host paths are never accepted. The CLI accepts a repeatable `--attachment` flag referencing uploaded attachment IDs.
 6. Select **Start Scan**.
 
 Only one active scan may run against the same target. Wait for it to finish or cancel it before starting another.
@@ -530,12 +528,12 @@ npx -y lyrashield@0.2.14 gate           # CI-friendly diff-aware security gate
 
 `login --oauth` opens hosted consent with PKCE, then saves tokens and the selected workspace to `~/.lyrashield/credentials.json` with `0o600` permissions. Failed login preserves existing credentials. `login` accepts an API key instead. `LYRASHIELD_API_URL` defaults to `https://app.lyrashieldai.com`. Shared credential storage keeps refresh, logout and profile changes consistent between the local CLI and stdio MCP. A hosted OAuth client authenticates in that client and does not need this local login step.
 
-Published CLI `0.2.14` is the current setup path. Its `init` and `install <agent>` commands use the registry's supported installation strategy, preserve existing configuration, and preview writes with `--dry-run`. Plugin entries that require manual activation return guided instructions instead of copying a plugin directory. Follow each current guide with pinned MCP `0.2.12`; `packages/agent-registry` owns the client paths. The CLI, MCP and plugin packages target Node.js 24 or newer. A successful installer or `doctor` result does not prove the client loaded a tool; restart the client and make a read call.
+Published CLI `lyrashield@0.2.14` is the current setup path. Its `init` and `install <agent>` commands write only for client configurations covered by the published install contract; they preserve unrelated settings, while clients without a verified writer receive guided instructions. Preview supported changes with `--dry-run` before writing. Plugin entries that require manual activation return guided instructions instead of copying a plugin directory. Follow each current guide with pinned MCP `0.2.12`; `packages/agent-registry` owns the client paths. The CLI, MCP and plugin packages target Node.js 24 or newer. A successful installer or `doctor` result does not prove the client loaded a tool; restart the client and make a read call.
 
 - **Agent Plugin package** — `@lyrashield/agent-plugin@0.1.31` is published and passes portable MCP schema validation; public marketplace listing and authenticated client acceptance are separate pending checks. Do not install from the mutable marketplace preparation branch or use an older portable plugin without schema validation. Use the current [client guides](https://lyrashieldai.com/docs/integrations/agent-plugins) with published `@lyrashield/mcp@0.2.12`: Claude uses `.mcp.json` with `mcpServers`; Cursor uses `.cursor/mcp.json` or `~/.cursor/mcp.json` with `mcpServers`; Codex uses `[mcp_servers.lyrashield]` in `~/.codex/config.toml`; Copilot CLI uses `mcpServers` and `type: "local"` in `~/.copilot/mcp-config.json`; VS Code uses `servers` and `type: "stdio"` in `.vscode/mcp.json`. Authenticate local stdio separately with `npx -y lyrashield@0.2.14 login --oauth`, restart the client, confirm tool discovery, then call `lyrashield_list_workspaces`. Kiro follows its own current guide; copying a plugin directory alone does not establish installation or authenticated acceptance.
 - **Config-file** — the published CLI `0.2.14` writer preserves unrelated settings, refuses symlinked destinations and malformed roots, and refuses to place a raw API key in a conventionally shared file unless you explicitly pass `--inline-secret` and the file is gitignored.
 - **Vendor CLI** — Amp is configured by shelling out to `amp mcp add`.
-- **Guided manual** — Devin, JetBrains AI & Junie, OpenClaw, Goose, Aider and Codebuff receive client-specific instructions. Pi has built-in MCP over stdio and Streamable HTTP, hosted OAuth, and Agent Skills support; it reads user-level `~/.pi/agent/mcp.json` and project `.pi/mcp.json` after project trust. The standalone CLI and CI path remains available, but a client configuration or discovery check alone is not a LyraShield-authenticated runtime receipt. Aider uses the standalone CLI or CI. Codebuff’s current [official MCP guide](https://www.codebuff.com/docs/tips/mcp-servers) supports project `.agents/mcp.json` and global `~/.agents/mcp.json` under `mcpServers`; use the published `@lyrashield/mcp@0.2.12` direct-MCP path. Its separate native reviewer adapter is read-only and remains a preparation artifact. Cline CLI reads `~/.cline/data/settings/cline_mcp_settings.json` with `CLINE_MCP_SETTINGS_PATH` as an override.
+- **Client guides** — The current [client-specific setup guides](/docs/integrations) are generated from the agent registry and cover each preferred integration. Pi has built-in MCP over stdio and Streamable HTTP, plus hosted OAuth and Agent Skills support; it reads user-level `~/.pi/agent/mcp.json` and project `.pi/mcp.json` after project trust. The standalone CLI and CI path remains available, but a client configuration or discovery check alone is not a LyraShield-authenticated runtime receipt. Aider uses the standalone CLI or CI. Codebuff’s current [official MCP guide](https://www.codebuff.com/docs/tips/mcp-servers) supports project `.agents/mcp.json` and global `~/.agents/mcp.json` under `mcpServers`; use the published `@lyrashield/mcp@0.2.12` direct-MCP path. Its separate native reviewer adapter is read-only and remains a preparation artifact. Cline CLI reads `~/.cline/data/settings/cline_mcp_settings.json` with `CLINE_MCP_SETTINGS_PATH` as an override.
 
 `uninstall <agent>` removes the managed LyraShield entry through that client's installation strategy; inspect its dry-run preview before changing a client.
 

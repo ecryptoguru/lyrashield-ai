@@ -1,0 +1,127 @@
+name: Verify webhook production prerequisites without deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      worker_source_sha:
+        description: Immutable product source recorded in the worker image OCI labels (optional with the other image fields)
+        required: false
+        type: string
+      worker_engine_revision:
+        description: Immutable engine revision recorded in the worker image OCI labels (optional with the other image fields)
+        required: false
+        type: string
+      worker_image:
+        description: Full ghcr.io image reference pinned by @sha256 digest (optional with the other image fields)
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  group: webhook-production-prerequisites-${{ github.ref }}-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  validate-request:
+    name: Confirm current-main source and optional image inputs
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout selected immutable source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Confirm current main and complete optional image inputs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ github.sha }}
+          WORKER_SOURCE_SHA: ${{ inputs.worker_source_sha }}
+          WORKER_ENGINE_REVISION: ${{ inputs.worker_engine_revision }}
+          WORKER_IMAGE: ${{ inputs.worker_image }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [ "$GITHUB_REF" = "refs/heads/main" ]
+          [[ "$SOURCE_SHA" =~ ^[a-f0-9]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          latest_main="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq .object.sha)"
+          if [ "$SOURCE_SHA" != "$latest_main" ]; then
+            echo "::error::Run this verify-only workflow from the exact current main branch."
+            exit 1
+          fi
+          provided=0
+          for value in "$WORKER_SOURCE_SHA" "$WORKER_ENGINE_REVISION" "$WORKER_IMAGE"; do
+            [ -n "$value" ] && provided=$((provided + 1))
+          done
+          if [ "$provided" -ne 0 ] && [ "$provided" -ne 3 ]; then
+            echo "::error::Provide worker source SHA, engine revision, and digest-pinned image together, or leave all three blank."
+            exit 1
+          fi
+
+  verify-timezone-receipt:
+    name: Verify signed UTC review receipt (no deployment)
+    needs: validate-request
+    runs-on: ubuntu-24.04
+    environment:
+      name: azure-production
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout the selected immutable source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          path: product
+          persist-credentials: false
+
+      - name: Reconfirm source remains current main before receipt validation
+        working-directory: product
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          latest_main="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq .object.sha)"
+          if [ "$SOURCE_SHA" != "$latest_main" ]; then
+            echo "::error::Source changed after request validation; rerun from current main and refresh any receipt."
+            exit 1
+          fi
+
+      - name: Validate signed receipt and logical database identity
+        working-directory: product
+        env:
+          EXPECTED_SOURCE_SHA: ${{ github.sha }}
+          MIGRATION_DATABASE_URL: ${{ secrets.DATABASE_DIRECT_URL }}
+          WEBHOOK_LEGACY_TIMEZONE_REVIEW_RECEIPT: ${{ secrets.WEBHOOK_LEGACY_TIMEZONE_REVIEW_RECEIPT }}
+          WEBHOOK_LEGACY_TIMEZONE_REVIEW_PUBLIC_KEY_PEM: ${{ secrets.WEBHOOK_LEGACY_TIMEZONE_REVIEW_PUBLIC_KEY_PEM }}
+        run: node .github/scripts/verify-webhook-timezone-evidence.mjs
+
+      - name: Summarize read-only result
+        if: success()
+        run: |
+          {
+            echo "## Read-only webhook prerequisite verification passed"
+            echo
+            echo "This job verifies the signed UTC review receipt and logical migration database identity. It does not log in to Azure, claim maintenance, change configuration, deploy, migrate, or alter production data."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  verify-worker-image:
+    name: Rehearse the selected exact worker image on disposable services
+    needs: validate-request
+    if: ${{ inputs.worker_image != '' && inputs.worker_source_sha != '' && inputs.worker_engine_revision != '' && needs.validate-request.result == 'success' }}
+    permissions:
+      contents: read
+      packages: read
+    uses: ./.github/workflows/verify-webhook-worker-image.yml
+    with:
+      product_source_sha: ${{ inputs.worker_source_sha }}
+      engine_revision: ${{ inputs.worker_engine_revision }}
+      worker_image: ${{ inputs.worker_image }}

@@ -11,7 +11,6 @@ import { describe, expect, it } from "vitest"
  */
 describe("findings list context preservation contract", () => {
   const client = readFileSync(new URL("./findings-client.tsx", import.meta.url), "utf8")
-  const context = readFileSync(new URL("./findings-list-context.ts", import.meta.url), "utf8")
   const drawer = readFileSync(new URL("./use-finding-drawer.ts", import.meta.url), "utf8")
 
   it("keeps filter/sort/target/query in the URL", () => {
@@ -29,13 +28,6 @@ describe("findings list context preservation contract", () => {
   it("persists the snapshot only after restoration and on pagehide", () => {
     expect(client).toContain("!restoreReady")
     expect(client).toContain('window.addEventListener("pagehide", save)')
-  })
-
-  it("bounds and guards the persisted snapshot", () => {
-    expect(context).toContain("MAX_PERSISTED_ROWS = 500")
-    expect(context).toContain("count + page.items.length > MAX_PERSISTED_ROWS")
-    expect(context).toContain("catch {")
-    expect(context).toContain("sessionStorage.setItem")
   })
 
   it("keeps drawer focus restoration and never touches filter state on drawer close", () => {

@@ -19,7 +19,7 @@ metadata:
 
 Use the LyraShield MCP connection to inspect release-assurance evidence, summarize current
 issues and explain connection requirements. Prefer read-only tools. Do not claim a security
-guarantee, universal detection, or compliance. Preserve coverage limits and evidence states.
+guarantee, universal detection or compliance. Preserve coverage limits and evidence states.
 
 The skill is a community ClawHub listing. It is not an official OpenClaw channel. Link to
 LyraShield dashboard evidence instead of

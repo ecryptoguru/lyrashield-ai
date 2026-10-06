@@ -18,7 +18,10 @@ fi
 
 checks_endpoint="repos/$repository/commits/$revision/check-runs"
 for check_name in "verify" "Build and smoke-test sandbox image"; do
-  if [ "$(gh api "$checks_endpoint" --jq "any(.check_runs[]; .name == \"$check_name\" and .status == \"completed\" and .conclusion == \"success\")")" != "true" ]; then
+  if ! gh api --paginate "$checks_endpoint" |
+    jq -e -s --arg check_name "$check_name" \
+      '[.[] | .check_runs[]?] | any(.[]; .name == $check_name and .status == "completed" and .conclusion == "success")' \
+      >/dev/null; then
     echo "engine revision $revision does not have a successful '$check_name' check" >&2
     exit 1
   fi

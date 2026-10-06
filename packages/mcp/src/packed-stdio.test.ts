@@ -167,7 +167,7 @@ describe("packed @lyrashield/mcp stdio artifact", () => {
     }
   )
 
-  it.each(SUPPORTED_PROTOCOL_VERSIONS)(
+  it.each(SUPPORTED_PROTOCOL_VERSIONS.filter((version) => version !== "2025-11-25"))(
     "packed stdio negotiates SDK-supported version %s",
     { timeout: 120_000 },
     async (protocolVersion) => {

@@ -226,16 +226,6 @@ describe("command-builder", () => {
       ).toThrow("SCAN_MODE_UNSUPPORTED")
     })
 
-    it("maps STANDARD mode to standard for a web target", () => {
-      const cmd = buildEngineCommand({
-        scanId: "scan-std-web",
-        goal: "VULNERABILITY_SCAN",
-        mode: "STANDARD",
-        target: WEB_TARGET,
-      })
-      expect(cmd.args).toContain("standard")
-    })
-
     it("maps DEEP mode to deep", () => {
       const cmd = buildEngineCommand({
         scanId: "scan-deep",

@@ -6,7 +6,7 @@ const canonical = new URL("/blog/editorial-policy", origin).toString()
 const title = "Editorial Policy for Security Guidance | LyraShield AI"
 const description =
   "How LyraShield AI researches, reviews, corrects, illustrates and publishes practical security guidance for builders of AI-built applications."
-const reviewedDate = "2026-10-06"
+const reviewedDate = "2026-07-17"
 const jsonLd = [
   {
     "@context": "https://schema.org",
@@ -43,7 +43,7 @@ const jsonLd = [
         responsibility.
       </p>
       <p class="editorial-policy__reviewed">
-        Last reviewed: <time datetime={reviewedDate}>October 6, 2026</time>
+        Last reviewed: <time datetime={reviewedDate}>July 17, 2026</time>
       </p>
     </header>
 
@@ -99,23 +99,6 @@ const jsonLd = [
           links continue to reach the intended guidance. Editorial cleanup that does not change the
           guidance does not receive a misleading material-update claim.
         </p>
-      </section>
-
-      <section aria-labelledby="checklist-heading">
-        <h2 id="checklist-heading">Pre-publication checklist</h2>
-        <p>
-          Before an article ships, the reviewer confirms each of the following. A failed item blocks
-          publication; it is not a style preference.
-        </p>
-        <ul class="editorial-policy__checklist">
-          <li>Product availability statements were checked against the current product, and "live" is separated from roadmap items with an explicit as-of date.</li>
-          <li>Each material technical claim has a named source and a date; cross-study or cross-vendor comparisons stay inside what the sources actually establish.</li>
-          <li>Examples use inert code, synthetic accounts or owned systems, never real customer data or third-party targets.</li>
-          <li>Limitations and boundaries are stated next to the capability they bound, not only on a separate page.</li>
-          <li>The visible body, frontmatter FAQ and any structured data describe the same facts, dates and evidence states.</li>
-          <li>Material updates carry a truthful update date and, where readers need it, a correction note; cosmetic edits do not claim fresh review.</li>
-          <li>Where a named technical reviewer checked the article, the byline records it; the absence of one is never implied away.</li>
-        </ul>
       </section>
 
       <section aria-labelledby="images-heading">
@@ -214,17 +197,6 @@ const jsonLd = [
     margin: 1rem 0 0;
     color: var(--color-text-muted);
     line-height: 1.75;
-  }
-
-  .editorial-policy__checklist {
-    margin: 1rem 0 0;
-    padding-left: 1.25rem;
-    color: var(--color-text-muted);
-    line-height: 1.75;
-  }
-
-  .editorial-policy__checklist li {
-    margin-top: 0.5rem;
   }
 
   .editorial-policy a {

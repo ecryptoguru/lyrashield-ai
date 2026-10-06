@@ -8,7 +8,7 @@ verified.
 
 Pi packages can be installed from Git and can expose conventional `skills/` directories without a
 Pi-specific executable extension. The package root remains the shared marketplace root; this folder
-contains only Pi-specific instructions, a secret-free MCP example, and an offline validator. The
+contains only Pi-specific instructions, a secret-free MCP example and an offline validator. The
 five focused workflow skills are `get-started`, `review-changes`, `scan-project`, `fix-and-retest`,
 and `launch-readiness`. The generated root also retains the legacy `lyrashield` skill for backward
 compatibility.
@@ -31,7 +31,7 @@ pi install --local git:github.com/ecryptoguru/lyrashield-marketplace@<released-t
 
 That declaration is written to `.pi/settings.json` and is loaded only after project trust is granted.
 Review the release and every skill before trusting the project. `pi list` shows configured packages;
-it does not prove an MCP connection, authenticated tool call, or scan. A project declaration with
+it does not prove an MCP connection, authenticated tool call or scan. A project declaration with
 the same Git package identity normally replaces the personal package entry.
 
 The current source checkout is not itself the exported package root, and the release tag placeholder
@@ -62,7 +62,7 @@ Pi reads user-level MCP servers from `~/.pi/agent/mcp.json`. It reads project se
 the user entry. Keep credential-bearing connections at user scope. If the connection needs sign-in,
 complete the browser flow with `pi mcp login lyrashield`, then make a read-only LyraShield call such
 as workspace discovery. Setup and discovery alone are not an authenticated runtime receipt. Do not
-start a paid scan unless the user explicitly requests it and the workspace, target, and profile are
+start a paid scan unless the user explicitly requests it and the workspace, target and profile are
 authorized.
 
 Local stdio uses the published CLI `0.2.14` and MCP `0.2.12`, which include the explicit idempotency
@@ -88,13 +88,13 @@ node docs/marketplace/pi/validate.mjs
 ```
 
 The offline maintainer validator runs from the LyraShield AI source checkout before export. It checks
-the secret-free Pi MCP example, package/trust instructions, and the presence of the five canonical
+the secret-free Pi MCP example, package/trust instructions and the presence of the five canonical
 source skills. Maintainer validators are omitted from the public marketplace export. This check does
 not establish Pi runtime or catalog acceptance.
 
 ## Official references
 
 - [Pi Packages](https://pi.dev/docs/latest/packages) — Git and npm package sources, conventional
-  resource directories, project trust, and package identity.
+  resource directories, project trust and package identity.
 - [Pi Skills](https://pi.dev/docs/latest/skills) — Agent Skills discovery and trust guidance.
-- [Pi MCP](https://pi.dev/docs/latest/mcp) — built-in MCP configuration, OAuth, and project trust.
+- [Pi MCP](https://pi.dev/docs/latest/mcp) — built-in MCP configuration, OAuth and project trust.

@@ -2,6 +2,7 @@
 import Base from "@layouts/Base.astro"
 import { agentOnboarding } from "../lib/agent-onboarding"
 import { buildDateFor } from "../lib/build-date"
+import { CTA_LABEL } from "../lib/site-copy"
 
 const origin = Astro.site?.origin || "http://localhost:4321"
 const canonical = new URL("/agents", origin).toString()
@@ -14,6 +15,10 @@ const buildDate = buildDateFor("src/pages/agents.astro", "src/lib/agent-onboardi
 // honest when the page ships without .git.
 const updatedDate = "2026-10-02"
 const dateModified = buildDate ?? `${updatedDate}T00:00:00.000Z`
+
+const appUrl =
+  (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/\/$/, "") ||
+  "https://app.lyrashieldai.com"
 
 const answerFirst =
   `LyraShield documents ${agentOnboarding.clients.length} coding-agent workflows. Most connect through MCP; Aider uses the standalone CLI or CI path, while Pi has built-in MCP and OAuth support. Availability and setup differ by client and the integration labels below show the evidence behind each claim; LyraShield runtime acceptance remains client-specific. Read-only tools can retrieve recorded findings; hosted writes run only within a browser-confirmed connection grant and are checked again at execution.`
@@ -113,7 +118,7 @@ const jsonLd = [
         class="mt-4 max-w-3xl text-4xl font-semibold tracking-tight text-text sm:text-5xl lg:text-6xl"
         data-reveal
       >
-        Release assurance your coding agent can act on.
+        A launch gate your coding agent can act on.
       </h1>
       <p class="mt-5 max-w-2xl text-lg leading-8 text-text-muted" data-reveal>
         {answerFirst}
@@ -136,7 +141,7 @@ const jsonLd = [
       </h2>
       <ol
         class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
-        aria-label="Release assurance workflow"
+        aria-label="Launch gate workflow"
         data-reveal-group
       >
         {
@@ -217,6 +222,20 @@ const jsonLd = [
         supported and symlinks; restart the client, confirm discovery and complete an authenticated
         read-only call. Marketplace listing and runtime acceptance remain separate evidence.
       </p>
+      <label class="mt-6 block max-w-md">
+        <span class="text-sm font-semibold text-text">Find your client</span>
+        <input
+          type="search"
+          id="agent-client-filter"
+          data-agent-client-filter
+          placeholder="Search clients by name"
+          autocomplete="off"
+          class="mt-2 min-h-12 w-full rounded-lg border border-border bg-bg-raised px-4 text-base text-text placeholder:text-text-muted focus:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        />
+      </label>
+      <p id="agent-client-empty" class="mt-4 hidden text-sm text-text-muted" role="status">
+        No documented client matches that search. Clear the field to see all clients.
+      </p>
       {
         agentOnboarding.clientGroups.map((group) => (
           <div class="mt-10" data-reveal-group>
@@ -228,7 +247,7 @@ const jsonLd = [
               aria-label={`Coding agents: ${group.label}`}
             >
               {group.clients.map((client) => (
-                <li data-reveal>
+                <li data-reveal data-agent-client={client.name.toLowerCase()}>
                   <a
                     href={client.href}
                     class="flex min-h-[4.5rem] flex-col justify-center gap-1 rounded-xl border border-border bg-bg-raised p-4 transition-colors hover:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
@@ -245,6 +264,28 @@ const jsonLd = [
       }
     </div>
   </section>
+
+  <script>
+    // Client picker: a plain substring filter over the rendered client list. It
+    // touches no network surface and reads no value the visitor did not type
+    // into the filter field itself.
+    const filter = document.querySelector<HTMLInputElement>("[data-agent-client-filter]")
+    const empty = document.getElementById("agent-client-empty")
+    if (filter) {
+      const items = Array.from(document.querySelectorAll<HTMLElement>("[data-agent-client]"))
+      const apply = () => {
+        const term = filter.value.trim().toLowerCase()
+        let visible = 0
+        for (const item of items) {
+          const match = term.length === 0 || (item.dataset.agentClient ?? "").includes(term)
+          item.hidden = !match
+          if (match) visible += 1
+        }
+        empty?.classList.toggle("hidden", visible > 0)
+      }
+      filter.addEventListener("input", apply)
+    }
+  </script>
 
   <section class="px-4 py-12 sm:px-6 lg:px-8" id="safety">
     <div class="mx-auto max-w-5xl rounded-2xl border border-border bg-bg-raised p-6 sm:p-10" data-reveal>
@@ -267,7 +308,7 @@ const jsonLd = [
   </section>
 
   <section class="px-4 py-12 sm:px-6 lg:px-8">
-    <div class="mx-auto max-w-5xl" data-reveal>
+    <div class="mx-auto flex max-w-5xl flex-col gap-4 sm:flex-row sm:items-center sm:justify-between" data-reveal>
       <p class="text-text-muted">
         Read the{" "}
         <a href="/docs/integrations/agent-plugins" class="font-semibold text-accent underline underline-offset-4">
@@ -279,6 +320,13 @@ const jsonLd = [
         </a>{" "}
         for the full setup and safety model.
       </p>
+      <a
+        href={`${appUrl}/sign-up?source=agents`}
+        data-cta-id="agents-start-trial"
+        class="lift inline-flex min-h-12 shrink-0 items-center justify-center rounded-lg bg-accent px-6 text-sm font-semibold text-bg transition-colors hover:bg-accent/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+      >
+        {CTA_LABEL.signUp}
+      </a>
     </div>
   </section>
 </Base>

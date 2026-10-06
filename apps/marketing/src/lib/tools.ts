@@ -29,8 +29,8 @@ export const tools = [
   },
   {
     slug: "ai-app-security-scanner",
-    title: "AI App Security Scanner",
-    seoTitle: "AI App Security Scanner | LyraShield AI",
+    title: "Local Code Scanner",
+    seoTitle: "Local Code Scanner for AI Apps | LyraShield AI",
     description:
       "Scan selected source files locally for AI-specific security signals mapped to the OWASP Top 10 for LLM Applications (2025).",
     summary:
@@ -214,3 +214,67 @@ export type Tool = (typeof tools)[number]
 export function toolUrl(slug: Tool["slug"]): string {
   return `/tools/${slug}`
 }
+
+/**
+ * Task-shaped link labels for the tools index (Spec item 6.1). The index used
+ * to render seven identical "Open tool" buttons, which told a visitor nothing
+ * about which check to run first.
+ */
+export const TOOL_TASK_LABELS: Record<Tool["slug"], string> = {
+  "ai-app-security-checklist": "Plan the review",
+  "ai-app-security-scanner": "Scan your code",
+  "security-headers-checker": "Check headers",
+  "secret-exposure-scanner": "Find exposed secrets",
+  "supabase-rls-checker": "Review RLS policies",
+  "jwt-session-inspector": "Inspect a session token",
+  "webmcp-security-checker": "Review agent tools",
+}
+
+/**
+ * One representative result line per tool, shown before a visitor runs it
+ * (Spec item 6.5). Both sampled tool pages previously showed only
+ * "Results appear here", so a visitor could not tell what they would get.
+ */
+export const TOOL_SAMPLE_RESULTS: Record<Tool["slug"], string> = {
+  "ai-app-security-checklist":
+    "7 of 11 launch controls documented · 4 need an owner before release",
+  "ai-app-security-scanner":
+    "3 signals detected across 12 files · 1 high, 2 review · 5 checks not assessed",
+  "security-headers-checker": "2 headers missing · Content-Security-Policy and Referrer-Policy",
+  "secret-exposure-scanner": "1 high-confidence credential pattern found in a client bundle",
+  "supabase-rls-checker": "2 policies allow an anonymous read on a tenant table",
+  "jwt-session-inspector":
+    "Token has no expiry claim and is not marked HttpOnly at the cookie layer",
+  "webmcp-security-checker":
+    "2 of 14 controls detected · a write tool is registered without a confirmation boundary",
+}
+
+/**
+ * Visitor-shaped grouping for the tools index (Spec item 6.1): group by what
+ * the visitor has, not by what the tool is called.
+ */
+export const TOOL_GROUPS: Array<{
+  id: string
+  label: string
+  blurb: string
+  slugs: Tool["slug"][]
+}> = [
+  {
+    id: "app",
+    label: "Your running app",
+    blurb: "Checks that read a live surface, pasted headers or a session token.",
+    slugs: ["security-headers-checker", "secret-exposure-scanner", "jwt-session-inspector"],
+  },
+  {
+    id: "code",
+    label: "Your code",
+    blurb: "Checks that read selected files or policies on your device.",
+    slugs: ["ai-app-security-checklist", "ai-app-security-scanner", "supabase-rls-checker"],
+  },
+  {
+    id: "agents",
+    label: "Your agent surfaces",
+    blurb: "Checks for the tools a page or agent exposes to a model.",
+    slugs: ["webmcp-security-checker"],
+  },
+]

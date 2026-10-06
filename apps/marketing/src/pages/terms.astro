@@ -1,17 +1,32 @@
 ---
 import Base from "@layouts/Base.astro"
 import { buildDateFor } from "../lib/build-date"
+
 const origin = Astro.site?.origin || "http://localhost:4321"
 const canonical = new URL("/terms", origin).toString()
 const abuseEmail = (import.meta.env.PUBLIC_ABUSE_EMAIL as string | undefined) || ""
 const buildDate = buildDateFor("src/pages/terms.astro")
+
+/**
+ * Terms of Service for the site, the free tools and the Cloud account.
+ *
+ * Drafted from the product facts and the existing Terms of Sale and Privacy
+ * pages. It has not been reviewed by a lawyer. The three clauses a lawyer
+ * should look at first are the limitation of liability (13), the indemnity (14)
+ * and governing law (15).
+ */
+const effectiveDate = "5 Oct 2026"
+const lastReviewed = "5 Oct 2026"
+const lastReviewedIso = "2026-10-05"
+
 const description =
-  "Read the authorization, passive-use, privacy, result-limit and abuse-reporting terms for LyraShield AI's free public security tools."
+  "The terms that cover your use of the LyraShield AI website, the public free tools and your LyraShield AI Cloud account."
+
 const jsonLd = [
   {
     "@context": "https://schema.org",
     "@type": "WebPage",
-    name: "LyraShield AI free tools terms and acceptable use",
+    name: "LyraShield AI Terms of Service",
     description,
     url: canonical,
     ...(buildDate ? { dateModified: buildDate } : {}),
@@ -22,23 +37,155 @@ const jsonLd = [
     "@type": "BreadcrumbList",
     itemListElement: [
       { "@type": "ListItem", position: 1, name: "Home", item: `${origin}/` },
-      { "@type": "ListItem", position: 2, name: "Terms", item: canonical },
+      { "@type": "ListItem", position: 2, name: "Terms of Service", item: canonical },
     ],
   },
 ]
+
+const clauses: Array<{ id: string; heading: string; body: string }> = [
+  {
+    id: "who-may-use",
+    heading: "1. Who may use LyraShield",
+    body: "You must be at least 18 years old and able to enter a binding agreement. If you use LyraShield for an organization you confirm that you have authority to bind it and \u201cyou\u201d includes that organization. LyraShield is a tool for professional and business use.",
+  },
+  {
+    id: "the-service",
+    heading: "2. The service",
+    body: "LyraShield AI helps you check software you own or are authorized to test and keeps a record of what was tested and what evidence supports each result. The Cloud service includes a hosted dashboard and scans and findings and retests and reports and shareable scorecards and integrations (MCP and CLI and GitHub). Local mode is licensed separately. LyraShield is in open beta. Features can change and availability is not guaranteed.",
+  },
+  {
+    id: "authorization",
+    heading: "3. Authorization to test",
+    body: "You may submit only targets you own or have explicit permission to test. You are responsible for that permission and for any scope limits you set. For targets that need it we may ask you to verify control of the domain before scanning. We run only the checks and scope you configure. Do not use LyraShield to disrupt or harass anyone or to evade access controls or to probe private systems or to collect another person\u2019s data.",
+  },
+  {
+    id: "free-tools",
+    heading: "4. What the free tools do",
+    body: "The public Lite Check makes bounded GET requests for a public page and a small number of same-origin assets already linked by that page. It does not log in or exploit or fuzz or brute-force or enumerate a database or actively test row-level security. The browser-local tools run in your browser.",
+  },
+  {
+    id: "acceptable-use",
+    heading: "5. Acceptable use",
+    body: "You will not misuse the service or attempt to interfere with it or reverse engineer it or use it to build a competing product or resell access without our written agreement or share credentials or API keys or exceed rate limits. You will keep API keys and OAuth grants secure and you are responsible for activity under them.",
+  },
+  {
+    id: "agents",
+    heading: "6. Coding agents and MCP access",
+    body: "Hosted actions that change anything run only inside a grant that you confirm in your browser. You are responsible for what a connected agent is allowed to do inside that grant. You can revoke a grant or an API key at any time in the dashboard. We fail closed: if a grant or approval cannot be checked the action does not run.",
+  },
+  {
+    id: "results",
+    heading: "7. Results and limits",
+    body: "Results are limited to the scope you authorized and the checks that ran. A finding is a detected candidate until retest evidence shows otherwise and a clean result does not prove that nothing is wrong. LyraShield is not a penetration test and not a certification and not a warranty or guarantee that your software has no vulnerabilities. You decide what to fix and when to ship.",
+  },
+  {
+    id: "fix-proposals",
+    heading: "8. Fix proposals",
+    body: "Fix proposals are suggestions. A fix pull request opens only after a human approves it and it carries a server-generated patch. You review and approve changes and you are responsible for any change you approve or merge.",
+  },
+  {
+    id: "fees",
+    heading: "9. Fees and trial",
+    body: "New Cloud accounts start a 7-day limited trial with the allowance shown at sign-up. No card is required. Paid plans and minute packs are described on the pricing page and governed by the Terms of Sale which covers billing and renewal and cancellation and refunds.",
+  },
+  {
+    id: "your-data",
+    heading: "10. Your data",
+    body: "You keep ownership of your content and targets and findings. You give us the right to process them to provide the service. How we process personal data is described on the Privacy page. Shared scorecards are privacy-bounded and omit repository coordinates and raw secrets. You can request deletion of your account or workspace through the dashboard or at support@lyrashieldai.com.",
+  },
+  {
+    id: "ip",
+    heading: "11. Intellectual property and feedback",
+    body: "We own the service and its software and content apart from what you submit. We grant you a limited non-exclusive non-transferable right to use the service under these terms. Open-source components are licensed under their own licenses. If you send feedback we may use it without obligation to you.",
+  },
+  {
+    id: "third-parties",
+    heading: "12. Third-party services",
+    body: "The service relies on providers such as cloud hosting and payment processors (Polar and Razorpay) and bot verification (Cloudflare Turnstile) and analytics (PostHog) and model providers (including Microsoft Azure OpenAI for the support assistant) and GitHub when you connect it. Their own terms apply to their services and we are not responsible for them.",
+  },
+  {
+    id: "liability",
+    heading: "13. Disclaimers and limitation of liability",
+    body: "The service is provided as is and as available during open beta. To the extent the law allows we disclaim all implied warranties including merchantability and fitness for a particular purpose and non-infringement. To the extent the law allows we are not liable for indirect or incidental or special or consequential damages or for lost profits or data or goodwill. Our total liability for any claim relating to the service is limited to the greater of the amount you paid us in the 12 months before the claim and USD 100. Nothing in these terms limits liability that cannot be limited by law including for fraud or willful misconduct.",
+  },
+  {
+    id: "indemnity",
+    heading: "14. Indemnity",
+    body: "You will defend and indemnify us against claims and losses arising from your use of the service in breach of these terms including a claim by a third party that you scanned or tested a target you were not authorized to test.",
+  },
+  {
+    id: "governing-law",
+    heading: "15. Governing law and disputes",
+    body: "These terms are governed by the laws of India. Courts at Bhubaneswar, Odisha, India have exclusive jurisdiction except where mandatory consumer law gives you rights in your home country. Before filing a claim please contact us at support@lyrashieldai.com so we can try to resolve it.",
+  },
+  {
+    id: "termination",
+    heading: "16. Suspension and termination",
+    body: "You may stop using LyraShield and close your account at any time. We may suspend or end access if you breach these terms or abuse the service against third parties or fail to pay or if the law requires it. Clauses that by their nature should survive will survive termination.",
+  },
+  {
+    id: "changes",
+    heading: "17. Changes",
+    body: "We may update these terms. We will change the last-reviewed date and for material changes make a reasonable effort to notify account holders before the change applies. Continued use after the effective date is acceptance.",
+  },
+  {
+    id: "abuse",
+    heading: "18. Reporting abuse and security issues",
+    body: "If you believe LyraShield was used against your service without permission keep the target URL and approximate time and relevant request logs and email the abuse contact on the security reporting page. Report suspected vulnerabilities through the security reporting channel. Do not include credentials or customer data.",
+  },
+  {
+    id: "general",
+    heading: "19. General",
+    body: "These terms and the Terms of Sale and the Privacy page are the whole agreement. If a clause is unenforceable the rest stays in force. You may not transfer your rights without our consent. Our failure to enforce a clause is not a waiver. Contact: support@lyrashieldai.com.",
+  },
+]
 ---
-<Base title="Free tools terms and acceptable use | LyraShield AI" description={description} canonical={canonical} jsonLd={jsonLd} noindex>
+<Base title="Terms of Service | LyraShield AI" description={description} canonical={canonical} jsonLd={jsonLd} noindex>
   <article class="mx-auto max-w-3xl px-4 py-16 sm:px-6 lg:px-8 lg:py-24">
-    <p class="font-mono text-xs font-semibold tracking-[.2em] text-accent uppercase">Free tools · acceptable use</p>
-    <h1 class="mt-4 text-4xl font-semibold tracking-tight text-text sm:text-5xl">Use the Lite Check only with permission.</h1>
-    <p class="mt-6 text-lg leading-8 text-text-muted">These terms cover the public LyraShield AI Lite Check and browser-local tools. They are a product-use summary for founder review, not a substitute for finalized company legal terms.</p>
-    <p class="mt-4 text-sm text-text-muted">Last reviewed: <time datetime="2026-07-16">July 16, 2026</time></p>
-    <div class="prose prose-slate mt-12 max-w-none dark:prose-invert">
-      <h2>Authorization</h2><p>Submit only an app you own or have explicit permission to test. Do not use the service to disrupt, harass, evade access controls, probe private systems or collect another person's data.</p>
-      <h2>What the Lite Check does</h2><p>The check performs bounded GET requests for a public page and a small number of same-origin assets already linked by that page. It does not authenticate, exploit, fuzz, brute-force, enumerate a database or actively test row-level security.</p>
-      <h2>Results and limitations</h2><p>A Lite Check is outside-only and incomplete. It is not the official LyraShield Score, a penetration test, certification, warranty or guarantee that an application has no vulnerabilities.</p>
-      <h2>Privacy</h2><p>Page bodies and matched credential values are processed transiently and are not intentionally persisted by the scanner. Public scorecards contain aggregate counters only. Approved analytics receives only coarse funnel events with no target identifiers, subject to browser privacy signals.</p>
-      <h2 id="report-abuse">Report suspected abuse</h2><p>If you believe this tool was used against your service without permission, preserve the target URL, approximate time and relevant request logs. {abuseEmail ? <a href={`mailto:${abuseEmail}?subject=Lite%20Check%20abuse%20report`}>Email the monitored abuse contact</a> : <span>The monitored abuse contact will appear here after founder approval; public indexing remains blocked until it is configured.</span>}</p>
+    <p class="font-mono text-xs font-semibold tracking-[0.2em] text-accent uppercase">Legal</p>
+    <h1 class="mt-4 text-4xl font-semibold tracking-tight text-text sm:text-5xl">Terms of Service</h1>
+    <p class="mt-6 text-lg leading-8 text-text-muted">
+      Effective date: <time datetime="2026-10-05">{effectiveDate}</time>. Last reviewed: <time
+        datetime={lastReviewedIso}>{lastReviewed}</time>.
+    </p>
+    <p class="mt-6 leading-8 text-text-muted">
+      These terms are an agreement between you and LyraShield AI of A 10, Metro Tower, Acharya Vihar,
+      Bhubaneswar, Odisha 751022, India (&ldquo;LyraShield&rdquo; or &ldquo;we&rdquo;). They cover
+      your use of the LyraShield AI website and the public free tools and your LyraShield AI Cloud
+      account. Purchases are also covered by the{" "}
+      <a
+        href="/terms-of-sale"
+        class="text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent">Terms of Sale</a>. Our{" "}
+      <a
+        href="/privacy"
+        class="text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent">Privacy page</a> explains how we handle data. By creating an account or by
+      using the Lite Check you agree to these terms.
+    </p>
+    <p class="mt-4 text-sm leading-6 text-text-muted">
+      LyraShield AI is in open beta.
+    </p>
+
+    <div class="prose mt-12 max-w-none">
+      {
+        clauses.map((clause) => (
+          <>
+            <h2 id={clause.id}>{clause.heading}</h2>
+            <p>{clause.body}</p>
+          </>
+        ))
+      }
+      <h2 id="abuse-contact">Report suspected abuse</h2>
+      <p>
+        If you believe this tool was used against your service without permission, preserve the target
+        URL, approximate time and relevant request logs.{" "}
+        {abuseEmail ? (
+          <a href={`mailto:${abuseEmail}?subject=Lite%20Check%20abuse%20report`}>
+            Email the monitored abuse contact
+          </a>
+        ) : (
+          <a href="/security-reporting">Use the security reporting channel</a>
+        )}
+      </p>
     </div>
   </article>
 </Base>

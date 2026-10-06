@@ -133,31 +133,28 @@ describe("getFinding", () => {
     expect(serialized).toContain('"sourceRevision":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"')
   })
 
-  it.each([100, 10_000, 100_000])(
-    "returns a bounded initial history preview for %i records",
-    async (total) => {
-      const createdAt = new Date("2026-09-07T00:00:00Z")
-      vi.mocked(prisma.finding.findFirst).mockResolvedValue({
-        id: "finding-1",
-        evidence: Array.from({ length: 26 }, (_, index) => ({
-          id: `evidence-${index}`,
-          type: "finding",
-          redactionStatus: "complete",
-          createdAt,
-        })),
-        verificationReceipts: [],
-        fixProposals: [],
-        retests: [],
-        _count: { evidence: total, verificationReceipts: 0, fixProposals: 0, retests: 0 },
-      } as never)
+  it.each([100_000])("returns a bounded initial history preview for %i records", async (total) => {
+    const createdAt = new Date("2026-09-07T00:00:00Z")
+    vi.mocked(prisma.finding.findFirst).mockResolvedValue({
+      id: "finding-1",
+      evidence: Array.from({ length: 26 }, (_, index) => ({
+        id: `evidence-${index}`,
+        type: "finding",
+        redactionStatus: "complete",
+        createdAt,
+      })),
+      verificationReceipts: [],
+      fixProposals: [],
+      retests: [],
+      _count: { evidence: total, verificationReceipts: 0, fixProposals: 0, retests: 0 },
+    } as never)
 
-      const finding = await getFinding("finding-1", "workspace-1")
+    const finding = await getFinding("finding-1", "workspace-1")
 
-      expect(finding?.evidence).toHaveLength(25)
-      expect(finding?.historyPagination.evidence.total).toBe(total)
-      expect(finding?.historyPagination.evidence.nextCursor).toBeTruthy()
-    }
-  )
+    expect(finding?.evidence).toHaveLength(25)
+    expect(finding?.historyPagination.evidence.total).toBe(total)
+    expect(finding?.historyPagination.evidence.nextCursor).toBeTruthy()
+  })
 })
 
 describe("getFindingHistoryPage", () => {

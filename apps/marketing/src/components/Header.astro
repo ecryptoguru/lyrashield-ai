@@ -1,7 +1,44 @@
 ---
-import { tools, toolUrl } from "../lib/tools"
+import { toolUrl } from "../lib/tools"
+import { CTA_LABEL } from "../lib/site-copy"
 
 const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/\/$/, "")
+
+// Spec section 7: four to seven top-level items, Pricing as plain text beside
+// one sign-up button. WebMCP leaves the header (D6); it is linked from
+// /agents and /vibe-security-50 instead. "Book a demo" leaves the header too
+// and stays in the Enterprise row, the home closer and the footer.
+const path = Astro.url.pathname.replace(/\/$/, "") || "/"
+const isActive = (href: string) => {
+  const target = href.split("#")[0]?.replace(/\/$/, "") || ""
+  if (!target) return false
+  return path === target || path.startsWith(`${target}/`)
+}
+const activeClass = "bg-bg-raised text-text"
+
+const productItems = [
+  { label: "How it works", href: "/#how-it-works" },
+  { label: "Evidence and retests", href: "/methodology" },
+  { label: "Vibe Security 50", href: "/vibe-security-50" },
+  { label: "Operational Evidence Vault", href: "/evidence-vault" },
+  { label: "Compare tools", href: "/compare" },
+]
+const freeToolItems = [
+  { label: "Lite Check", href: "/scan", note: "Start here" },
+  { label: "Security Headers and CORS Checker", href: toolUrl("security-headers-checker") },
+  { label: "Secret Exposure Scanner", href: toolUrl("secret-exposure-scanner") },
+  { label: "Supabase RLS Policy Checker", href: toolUrl("supabase-rls-checker") },
+  { label: "All free tools", href: "/tools" },
+]
+const learnItems = [
+  { label: "Guides", href: "/blog" },
+  { label: "Docs", href: "/docs/integrations" },
+  { label: "API reference", href: "/docs/integrations/rest-api" },
+  // #913 renamed this label to "MCP guard evaluation". The restructure moved
+  // the destination out of the header, so it is kept here rather than dropped.
+  { label: "MCP guard evaluation", href: "/ai-safety" },
+  { label: "Support", href: "/support" },
+]
 ---
 
 <header id="site-header" class="sticky top-0 z-40 border-b border-border bg-bg/85 backdrop-blur-xl">
@@ -14,82 +51,83 @@ const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/
       <span class="header-beta-badge rounded border border-accent/50 bg-accent-dim/40 px-1.5 py-0.5 text-[10px] font-semibold tracking-[0.12em] text-accent uppercase">Open beta</span>
     </a>
     <!--
-      The full nav switches on at lg (1024px). It fits there only because the
-      scoped rule further down tightens the link padding and gaps inside the
-      lg-to-xl band: the row (logo, five nav items, theme toggle, Sign in, Get
-      started) is naturally ~1097px wide and needed ~1104px of viewport, so at
-      1024-1096px it overflowed the page by up to 73px (iPad landscape, small
-      laptops). Shrinking the link padding to 0.5rem and the gaps to 0.25rem
-      takes the row under 1024px, so the breakpoint can stay at lg and no width
-      loses its nav. Loosening that rule without re-measuring reintroduces it.
+      The full nav switches on at lg (1024px). The row is the logo, five nav
+      items (three of them menus), the theme toggle, Sign in and Start free
+      trial. It fits at 1024px only because the scoped rule further down
+      tightens the link padding and gaps inside the lg-to-xl band; loosening
+      that rule without re-measuring reintroduces the iPad-landscape overflow
+      (the CTA was clipped to "Get starte").
     -->
     <nav aria-label="Main" class="flex shrink-0 items-center gap-1 sm:gap-2">
       <ul class="hidden shrink-0 items-center gap-1 whitespace-nowrap lg:flex lg:gap-2">
-        <li>
-          <a href="/webmcp" class="inline-flex min-h-11 items-center rounded-lg px-3 text-sm text-text-muted hover:bg-bg-raised hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
-            WebMCP
-          </a>
-        </li>
-        <li>
-          <a href="/scan" class="inline-flex min-h-11 items-center rounded-lg px-3 text-sm font-medium text-accent hover:bg-bg-raised focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
-            Free scan
-          </a>
-        </li>
-        <li>
-          <a href="/pricing" class="inline-flex min-h-11 items-center rounded-lg px-3 text-sm text-text-muted hover:bg-bg-raised hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
-            Pricing
-          </a>
+        <li class="relative">
+          <details class="group">
+            <summary class={`inline-flex min-h-11 cursor-pointer list-none items-center gap-1 rounded-lg px-3 text-sm hover:bg-bg-raised hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent ${isActive("/methodology") || isActive("/vibe-security-50") || isActive("/evidence-vault") || isActive("/compare") ? activeClass : "text-text-muted"}`}>
+              <span>Product</span>
+              <svg data-nav-chevron viewBox="0 0 16 16" class="size-3.5 -translate-y-px transition-transform group-open:rotate-180" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
+                <path d="m4 6 4 4 4-4" />
+              </svg>
+            </summary>
+            <div class="absolute top-full left-0 mt-1 grid w-64 gap-1 rounded-xl border border-border bg-bg-raised p-2 shadow-xl">
+              {productItems.map((item) => (
+                <a href={item.href} class="rounded-lg px-3 py-2 text-sm text-text-muted hover:bg-bg hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+                  {item.label}
+                </a>
+              ))}
+            </div>
+          </details>
         </li>
         <li>
           <a
             href="/agents"
-            class="inline-flex min-h-11 items-center rounded-lg px-3 text-sm text-text-muted hover:bg-bg-raised hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            class={`inline-flex min-h-11 items-center rounded-lg px-3 text-sm hover:bg-bg-raised hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent ${isActive("/agents") ? activeClass : "text-text-muted"}`}
             data-cta-id="header-for-agents"
           >
-            For agents
+            Coding agents
           </a>
         </li>
         <li class="relative">
           <details class="group">
-            <summary class="inline-flex min-h-11 cursor-pointer list-none items-center gap-1 rounded-lg px-3 text-sm text-text-muted hover:bg-bg-raised hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+            <summary class={`inline-flex min-h-11 cursor-pointer list-none items-center gap-1 rounded-lg px-3 text-sm hover:bg-bg-raised hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent ${isActive("/tools") || isActive("/scan") ? activeClass : "text-text-muted"}`}>
               <span>Free tools</span>
               <svg data-nav-chevron viewBox="0 0 16 16" class="size-3.5 -translate-y-px transition-transform group-open:rotate-180" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
                 <path d="m4 6 4 4 4-4" />
               </svg>
             </summary>
             <div class="absolute top-full right-0 mt-1 grid w-72 gap-1 rounded-xl border border-border bg-bg-raised p-2 shadow-xl">
-              <a href="/tools" class="rounded-lg px-3 py-2 text-sm font-medium text-accent hover:bg-bg">All free tools</a>
-              <a href="/webmcp" class="rounded-lg px-3 py-2 text-sm text-text-muted hover:bg-bg hover:text-text">WebMCP Assurance</a>
-              {tools.map((tool) => (
-                <a href={toolUrl(tool.slug)} class="rounded-lg px-3 py-2 text-sm text-text-muted hover:bg-bg hover:text-text">
-                  {tool.title}
+              {freeToolItems.map((item) => (
+                <a href={item.href} class="flex items-center justify-between gap-3 rounded-lg px-3 py-2 text-sm text-text-muted hover:bg-bg hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+                  <span>{item.label}</span>
+                  {item.note && <span class="font-mono text-[10px] tracking-wider text-accent uppercase">{item.note}</span>}
                 </a>
               ))}
             </div>
           </details>
         </li>
+        <li>
+          <a href="/pricing" class={`inline-flex min-h-11 items-center rounded-lg px-3 text-sm hover:bg-bg-raised hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent ${isActive("/pricing") ? activeClass : "text-text-muted"}`}>
+            Pricing
+          </a>
+        </li>
         <li class="relative">
           <details class="group">
-            <summary class="inline-flex min-h-11 cursor-pointer list-none items-center gap-1 rounded-lg px-3 text-sm text-text-muted hover:bg-bg-raised hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
-              <span>Resources</span>
+            <summary class={`inline-flex min-h-11 cursor-pointer list-none items-center gap-1 rounded-lg px-3 text-sm hover:bg-bg-raised hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent ${isActive("/blog") || isActive("/docs") || isActive("/support") ? activeClass : "text-text-muted"}`}>
+              <span>Learn</span>
               <svg data-nav-chevron viewBox="0 0 16 16" class="size-3.5 -translate-y-px transition-transform group-open:rotate-180" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
                 <path d="m4 6 4 4 4-4" />
               </svg>
             </summary>
             <div class="absolute top-full right-0 mt-1 grid w-56 gap-1 rounded-xl border border-border bg-bg-raised p-2 shadow-xl">
-              <a href="/#how-it-works" class="rounded-lg px-3 py-2 text-sm text-text-muted hover:bg-bg hover:text-text">How it works</a>
-              <a href="/methodology" class="rounded-lg px-3 py-2 text-sm text-text-muted hover:bg-bg hover:text-text">Methodology</a>
-              <a href="/vibe-security-50" class="rounded-lg px-3 py-2 text-sm text-text-muted hover:bg-bg hover:text-text">Vibe Security 50</a>
-              <a href="/evidence-vault" class="rounded-lg px-3 py-2 text-sm text-text-muted hover:bg-bg hover:text-text">Evidence Vault</a>
-              <a href="/ai-safety" class="rounded-lg px-3 py-2 text-sm text-text-muted hover:bg-bg hover:text-text">AI safety evaluation</a>
-              <a href="/blog" class="rounded-lg px-3 py-2 text-sm text-text-muted hover:bg-bg hover:text-text">Guides</a>
-              <a href="/docs/integrations" class="rounded-lg px-3 py-2 text-sm text-text-muted hover:bg-bg hover:text-text">Integration docs</a>
-              <a href="/demo" class="rounded-lg px-3 py-2 text-sm text-text-muted hover:bg-bg hover:text-text">Book a demo</a>
+              {learnItems.map((item) => (
+                <a href={item.href} class="rounded-lg px-3 py-2 text-sm text-text-muted hover:bg-bg hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+                  {item.label}
+                </a>
+              ))}
             </div>
           </details>
         </li>
         {appUrl && (
-          <li>
+          <li class="flex items-center gap-1">
             <a href={`${appUrl}/sign-in`} class="inline-flex min-h-11 items-center rounded-lg px-3 text-sm text-text-muted hover:bg-bg-raised hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent" data-cta-id="header_sign_in">
               Sign in
             </a>
@@ -98,7 +136,7 @@ const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/
               class="inline-flex min-h-11 items-center rounded-lg bg-accent px-4 text-sm font-semibold text-bg transition-colors hover:bg-accent/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
               data-cta-id="header_get_started"
             >
-              Get started
+              {CTA_LABEL.signUp}
             </a>
           </li>
         )}
@@ -115,6 +153,13 @@ const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/
         <svg viewBox="0 0 24 24" class="hidden size-5 menu-close-icon" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>
       </button>
 
+      <!--
+        The mobile sheet carries the same destinations as the desktop header as
+        one accordion per menu. It is a full-height sheet that scrolls inside
+        the viewport (max-height 100dvh, overflow-y auto), so no destination is
+        dropped to make it fit a short screen. tests-browser/theme.e2e.ts
+        asserts it scrolls and reaches every destination.
+      -->
       <dialog
         id="mobile-menu"
         aria-label="Mobile navigation"
@@ -122,35 +167,39 @@ const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/
         style="top: max(4.5rem, calc(4rem + env(safe-area-inset-top))); right: max(1rem, env(safe-area-inset-right)); bottom: auto; left: auto;"
       >
         <div class="mobile-menu__primary">
+          <a href="/pricing" class="menu-link inline-flex min-h-11 items-center rounded-xl px-3 text-sm text-text-muted hover:bg-bg hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Pricing</a>
           <a
             href="/agents"
             class="menu-link inline-flex min-h-11 items-center rounded-xl px-3 text-sm text-text-muted hover:bg-bg hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
             data-cta-id="header-for-agents-mobile"
           >
-            For agents
+            Coding agents
           </a>
-          <a href="/webmcp" class="menu-link inline-flex min-h-11 items-center rounded-xl px-3 text-sm text-text-muted hover:bg-bg hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">WebMCP</a>
-          <a href="/scan" class="menu-link inline-flex min-h-11 items-center rounded-xl px-3 text-sm font-medium text-accent hover:bg-bg focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Free scan</a>
-          <a href="/pricing" class="menu-link inline-flex min-h-11 items-center rounded-xl px-3 text-sm text-text-muted hover:bg-bg hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Pricing</a>
         </div>
         <div class="mobile-menu__section">
-          <p>Resources</p>
-          {/* Deliberately fewer items than the desktop Resources menu. Adding every
-              resource here regressed
-              tests-browser/theme.e2e.ts's "keeps the compact mobile menu inside
-              the visible viewport" check at 390x400 — a real short-viewport
-              phone case. Re-verify that test before growing this list again. */}
-          <div class="mobile-menu__resources">
-            <a href="/#how-it-works" class="menu-link mobile-menu__resource">How it works</a>
-            <a href="/methodology" class="menu-link mobile-menu__resource">Methodology</a>
-            <a href="/tools" class="menu-link mobile-menu__resource">Free tools</a>
-            <a href="/blog" class="menu-link mobile-menu__resource">Guides</a>
-          </div>
+          <details class="mobile-menu__accordion">
+            <summary class="menu-link">Product</summary>
+            <div class="mobile-menu__accordion-body">
+              {productItems.map((item) => <a href={item.href} class="menu-link mobile-menu__resource">{item.label}</a>)}
+            </div>
+          </details>
+          <details class="mobile-menu__accordion">
+            <summary class="menu-link">Free tools</summary>
+            <div class="mobile-menu__accordion-body">
+              {freeToolItems.map((item) => <a href={item.href} class="menu-link mobile-menu__resource">{item.label}</a>)}
+            </div>
+          </details>
+          <details class="mobile-menu__accordion">
+            <summary class="menu-link">Learn</summary>
+            <div class="mobile-menu__accordion-body">
+              {learnItems.map((item) => <a href={item.href} class="menu-link mobile-menu__resource">{item.label}</a>)}
+            </div>
+          </details>
         </div>
         {appUrl && (
           <div class="mobile-menu__account">
             <a href={`${appUrl}/sign-in`} class="menu-link inline-flex min-h-11 items-center justify-center rounded-xl px-3 text-sm text-text-muted hover:bg-bg hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent" data-cta-id="header_sign_in_mobile">Sign in</a>
-            <a href={`${appUrl}/sign-up?source=marketing_header&cta=get_started_mobile`} class="menu-link inline-flex min-h-11 items-center justify-center rounded-xl bg-accent px-4 text-sm font-semibold text-bg transition-colors hover:bg-accent/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent" data-cta-id="header_get_started_mobile">Get started</a>
+            <a href={`${appUrl}/sign-up?source=marketing_header&cta=get_started_mobile`} class="menu-link inline-flex min-h-11 items-center justify-center rounded-xl bg-accent px-4 text-sm font-semibold text-bg transition-colors hover:bg-accent/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent" data-cta-id="header_get_started_mobile">{CTA_LABEL.signUp}</a>
           </div>
         )}
       </dialog>
@@ -247,7 +296,11 @@ const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/
         }
       })
 
-      menu.querySelectorAll<HTMLAnchorElement>(".menu-link").forEach((link) => {
+      // Close the sheet only when a real link is followed. The accordion
+      // <summary> elements also carry the menu-link class, so a plain
+      // querySelectorAll(".menu-link") would close the sheet the moment a
+      // visitor opened a menu — the accordion could never be used.
+      menu.querySelectorAll<HTMLAnchorElement>("a.menu-link").forEach((link) => {
         link.addEventListener("click", () => menu.close())
       })
 
@@ -327,10 +380,9 @@ const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/
 
   #mobile-menu {
     box-sizing: border-box;
-    height: fit-content;
-    max-height: calc(
-      100dvh - max(4.5rem, calc(4rem + env(safe-area-inset-top))) - max(1rem, env(safe-area-inset-bottom))
-    );
+    /* No display here: a closed <dialog> must stay hidden, and the
+       #mobile-menu[open] rule below sets the grid layout when it opens. */
+    max-height: 100dvh;
     align-content: start;
     overflow-y: auto;
     overscroll-behavior: contain;
@@ -345,6 +397,15 @@ const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/
   .mobile-menu__account {
     display: grid;
     gap: 0.25rem;
+  }
+
+  /* A touch target must be 44px, not 2.75rem: 2.75rem resolves against the root
+     font-size, which can land a fraction under 44 and fail the minimum. */
+  .mobile-menu__primary .menu-link,
+  .mobile-menu__account .menu-link,
+  .mobile-menu__resource,
+  .mobile-menu__accordion > summary {
+    min-height: 44px;
   }
 
   .mobile-menu__account {
@@ -366,6 +427,44 @@ const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/
     font-weight: 600;
     letter-spacing: 0.12em;
     text-transform: uppercase;
+  }
+
+  .mobile-menu__accordion {
+    border-bottom: 1px solid var(--border);
+  }
+
+  .mobile-menu__accordion > summary {
+    display: flex;
+    min-height: 2.75rem;
+    cursor: pointer;
+    list-style: none;
+    align-items: center;
+    justify-content: space-between;
+    border-radius: 0.75rem;
+    padding: 0 0.75rem;
+    color: var(--text);
+    font-size: 0.875rem;
+    font-weight: 600;
+  }
+
+  .mobile-menu__accordion > summary::after {
+    content: "";
+    width: 0.5rem;
+    height: 0.5rem;
+    border-right: 1.75px solid currentColor;
+    border-bottom: 1.75px solid currentColor;
+    transform: rotate(45deg) translateY(-0.1rem);
+    transition: transform 150ms ease-out;
+  }
+
+  .mobile-menu__accordion[open] > summary::after {
+    transform: rotate(-135deg) translateY(-0.1rem);
+  }
+
+  .mobile-menu__accordion-body {
+    display: grid;
+    gap: 0.125rem;
+    padding-bottom: 0.375rem;
   }
 
   .mobile-menu__resources {
@@ -417,35 +516,6 @@ const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/
     #site-header nav[aria-label="Main"] > ul > li > details > summary {
       padding-left: 0.5rem;
       padding-right: 0.5rem;
-    }
-  }
-
-  @media (max-height: 25rem) {
-    #mobile-menu {
-      gap: 0.125rem;
-      padding: 0.25rem;
-    }
-
-    .mobile-menu__primary,
-    .mobile-menu__resources {
-      gap: 0.125rem;
-    }
-
-    .mobile-menu__primary {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
-    .mobile-menu__section {
-      margin-top: 0;
-    }
-
-    .mobile-menu__section > p {
-      margin-bottom: 0;
-    }
-
-    .mobile-menu__account {
-      margin-top: 0;
-      padding-top: 0.25rem;
     }
   }
 

@@ -5,6 +5,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 const state = vi.hoisted(() => ({
   workspaceId: "workspace-a",
   listFixProposals: vi.fn(),
+  permanentRedirect: vi.fn((destination: string) => {
+    throw new Error(`NEXT_REDIRECT:${destination}`)
+  }),
 }))
 
 vi.mock("@/lib/cache", () => ({
@@ -26,6 +29,7 @@ vi.mock("./findings-client", () => ({ FindingsClient: () => null }))
 vi.mock("./evidence-list", () => ({ EvidenceList: () => null }))
 vi.mock("./fixes-client", () => ({ FixesClient: () => null }))
 vi.mock("@/components/dashboard-section-tabs", () => ({ DashboardSectionTabs: () => null }))
+vi.mock("next/navigation", () => ({ permanentRedirect: state.permanentRedirect }))
 
 import FindingsPage from "./page"
 import { EvidenceList } from "./evidence-list"
@@ -55,6 +59,18 @@ it("describes a scan-scoped findings view without exposing its database id", asy
 
   expect(html).toContain("Single scan")
   expect(html).not.toContain("scan-secret-id")
+})
+
+it("permanently redirects the legacy reports tab and preserves its report scope", async () => {
+  const destination = "/dashboard/reports?scanId=scan-a&targetId=target-a"
+
+  await expect(
+    FindingsPage({
+      searchParams: Promise.resolve({ tab: "reports", scanId: "scan-a", targetId: "target-a" }),
+    })
+  ).rejects.toThrow(`NEXT_REDIRECT:${destination}`)
+
+  expect(state.permanentRedirect).toHaveBeenCalledWith(destination)
 })
 
 describe.each(["evidence", "fixes"])("%s list navigation", (tab) => {

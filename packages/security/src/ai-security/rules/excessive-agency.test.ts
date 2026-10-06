@@ -49,7 +49,15 @@ describe("AI-05 excessive agency", () => {
       '  name: "delete_file",',
       '  name: "remove_user",',
       '  name: "rm_rf",',
+      '  name: "DeleteFile",',
+      '  name: "bulkDelete",',
+      '  name: "softDelete",',
+      '  name: "dropTable",',
       "tool.deleteFile(path)",
+      "tool.DeleteFile(path)",
+      "tool.bulkDelete(path)",
+      "tool.softDelete(path)",
+      "tool.dropTable()",
       "tool.truncate()",
     ]) {
       expect(state(line), `missed destructive call: ${line}`).toBe("DETECTED")
@@ -59,6 +67,8 @@ describe("AI-05 excessive agency", () => {
       "await db.drop(table)",
       "collection.deleteMany({ active: false })",
       "toolbar.deleteFile(path)",
+      '  name: "dropDown",',
+      "tool.dropDown()",
     ]) {
       expect(state(line), `false agent permission finding on: ${line}`).toBe("NO_FINDING")
     }

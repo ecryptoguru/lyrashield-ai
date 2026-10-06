@@ -22,7 +22,7 @@ You can wire Amp directly to LyraShield AI via MCP to get target aware verificat
 
 Vibe coding with Amp is fast because the agent fills in routes, components and API handlers from short prompts. Speed amplifies both delivery and risk, which is why early verification matters. A solid policy reference is the [vibe coding security guide](/blog/vibe-coding-security-guide) that outlines hygiene, review checkpoints and supply chain controls. For category background, consult [OWASP Top 10](https://owasp.org/www-project-top-ten/) and [CWE Top 25](https://cwe.mitre.org/top25/) to map common issues in generated front ends and APIs to concrete weakness types.
 
-LyraShield AI is designed to keep the loop of Target to Scan to Evidence State to Fix Proposal to Retest to Assurance Report inside MCP, so you do not leave the editor to get proof. That loop is intentionally human reviewed at the PR stage, which aligns with how most teams already ship. Findings retain their recorded evidence states; independent verification requires a separate receipt. Current LyraShield tools record fix proposals and queue retests but do not edit code, create branches or open pull requests.
+LyraShield AI is designed to keep the loop of Target to Scan to Evidence State to Fix Proposal to Retest to Assurance Report inside MCP, so you do not leave the editor to get proof. That loop is intentionally human reviewed at the PR stage, which aligns with how most teams already ship. Findings retain their recorded evidence states. Current LyraShield tools record fix proposals and queue retests but do not edit code, create branches or open pull requests.
 
 ## 1. Prerequisites and project setup
 
@@ -107,7 +107,7 @@ If OWASP mapping exists, include URL from https://owasp.org/www-project-top-ten/
 Store report id for later PR gate.
 ```
 
-A useful result should include finding id, severity, recorded evidence state, CWE, file path and line, evidence snippet, limitations and suggested patch location. Prioritize independently verified findings when a separate receipt exists, while retaining detected and inconclusive items for triage. For definitions, read [OWASP Top 10](https://owasp.org/www-project-top-ten/) and [CWE Top 25](https://cwe.mitre.org/top25/).
+A useful result should include finding id, severity, recorded evidence state, CWE, file path and line, evidence snippet, limitations and suggested patch location. Prioritize retest-confirmed findings when a clean retest exists, while retaining detected and inconclusive items for triage. For definitions, read [OWASP Top 10](https://owasp.org/www-project-top-ten/) and [CWE Top 25](https://cwe.mitre.org/top25/).
 
 Keep the loop human reviewed. `lyrashield_record_fix_proposal` records the intended remediation; it does not edit code or open a branch. After a developer applies the change, `lyrashield_verify_fix` queues a retest whose outcome must be polled and reported with its evidence state.
 

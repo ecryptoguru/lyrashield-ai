@@ -69,7 +69,7 @@ export interface AiResultCacheTransaction {
   ): AiResultCacheTransaction
   sadd(key: string, member: string): AiResultCacheTransaction
   expire(key: string, ttlSeconds: number): AiResultCacheTransaction
-  exec(): Promise<Array<[Error | null, unknown]> | null>
+  exec: () => Promise<Array<[Error | null, unknown]> | null>
 }
 
 export type AiResultReuseReceipt = {
@@ -336,6 +336,58 @@ function artifactMatchesDescriptor(
   )
 }
 
+function decodeCacheEnvelope(args: {
+  raw: string
+  digest: string
+  descriptor: AiResultCacheDescriptor
+  now: number
+}): { artifact: EngineTriageArtifact; reuseReceipt: AiResultReuseReceipt } | null {
+  let decoded: unknown
+  try {
+    decoded = JSON.parse(args.raw)
+  } catch {
+    return null
+  }
+  if (typeof decoded !== "object" || decoded === null || Array.isArray(decoded)) {
+    return null
+  }
+  const envelope = decoded as Partial<CacheEnvelope>
+  const createdAt = Date.parse(String(envelope.createdAt ?? ""))
+  const expiresAt = Date.parse(String(envelope.expiresAt ?? ""))
+  if (
+    envelope.version !== CACHE_VALUE_VERSION ||
+    envelope.descriptorHmac !== args.digest ||
+    !Number.isFinite(createdAt) ||
+    !Number.isFinite(expiresAt) ||
+    createdAt > args.now ||
+    expiresAt <= args.now ||
+    expiresAt !== createdAt + AI_RESULT_CACHE_TTL_SECONDS * 1000 ||
+    typeof envelope.artifactSha256 !== "string" ||
+    typeof envelope.artifact !== "object"
+  ) {
+    return null
+  }
+  const artifact = parseEngineTriageArtifact(envelope.artifact)
+  if (
+    !artifact ||
+    !artifactMatchesDescriptor(artifact, args.descriptor) ||
+    sha256(canonicalJson(artifact)) !== envelope.artifactSha256
+  ) {
+    return null
+  }
+  return {
+    artifact,
+    reuseReceipt: {
+      version: "ai-result-reuse/1.0",
+      artifactSha256: envelope.artifactSha256,
+      createdAt: new Date(createdAt).toISOString(),
+      expiresAt: new Date(expiresAt).toISOString(),
+      currentProviderRequests: 0,
+      currentProviderCostUsd: 0,
+    },
+  }
+}
+
 export function createAiResultCache(params: {
   redis: AiResultCacheRedis | (() => AiResultCacheRedis | null)
   secret: string
@@ -410,51 +462,11 @@ export function createAiResultCache(params: {
         if (!raw || Buffer.byteLength(raw, "utf8") > AI_RESULT_CACHE_MAX_BYTES) {
           return { outcome: "miss" }
         }
-        let decoded: unknown
-        try {
-          decoded = JSON.parse(raw)
-        } catch {
+        const entry = decodeCacheEnvelope({ raw, digest, descriptor, now })
+        if (!entry) {
           return { outcome: "miss" }
         }
-        if (typeof decoded !== "object" || decoded === null || Array.isArray(decoded)) {
-          return { outcome: "miss" }
-        }
-        const envelope = decoded as Partial<CacheEnvelope>
-        const createdAt = Date.parse(String(envelope.createdAt ?? ""))
-        const expiresAt = Date.parse(String(envelope.expiresAt ?? ""))
-        if (
-          envelope.version !== CACHE_VALUE_VERSION ||
-          envelope.descriptorHmac !== digest ||
-          !Number.isFinite(createdAt) ||
-          !Number.isFinite(expiresAt) ||
-          createdAt > now ||
-          expiresAt <= now ||
-          expiresAt !== createdAt + AI_RESULT_CACHE_TTL_SECONDS * 1000 ||
-          typeof envelope.artifactSha256 !== "string" ||
-          typeof envelope.artifact !== "object"
-        ) {
-          return { outcome: "miss" }
-        }
-        const artifact = parseEngineTriageArtifact(envelope.artifact)
-        if (
-          !artifact ||
-          !artifactMatchesDescriptor(artifact, descriptor) ||
-          sha256(canonicalJson(artifact)) !== envelope.artifactSha256
-        ) {
-          return { outcome: "miss" }
-        }
-        return {
-          outcome: "hit",
-          artifact,
-          reuseReceipt: {
-            version: "ai-result-reuse/1.0",
-            artifactSha256: envelope.artifactSha256,
-            createdAt: new Date(createdAt).toISOString(),
-            expiresAt: new Date(expiresAt).toISOString(),
-            currentProviderRequests: 0,
-            currentProviderCostUsd: 0,
-          },
-        }
+        return { outcome: "hit", artifact: entry.artifact, reuseReceipt: entry.reuseReceipt }
       } catch {
         reportFailure(now, logger)
         return { outcome: "unavailable" }

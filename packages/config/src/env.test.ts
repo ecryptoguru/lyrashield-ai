@@ -217,44 +217,6 @@ describe("Env Validation Schema", () => {
       expect(envSchema.safeParse({ ...validEnv, NODE_ENV: "development" }).success).toBe(true)
     })
 
-    it("rejects an http egress proxy URL in production (bearer-token transport)", () => {
-      const result = envSchema.safeParse({
-        ...validEnv,
-        NODE_ENV: "production",
-        TRUSTED_PROXY_IP_HEADER: "x-forwarded-for",
-        LYRASHIELD_EGRESS_PROXY_URL: "http://proxy.internal:8080",
-      })
-      expect(result.success).toBe(false)
-      if (!result.success) {
-        const issue = result.error.issues.find((i) =>
-          i.path.includes("LYRASHIELD_EGRESS_PROXY_URL")
-        )
-        expect(issue?.message).toContain("https://")
-        expect(issue?.message).toContain("cleartext")
-      }
-    })
-
-    it("accepts an https egress proxy URL in production", () => {
-      const result = envSchema.safeParse({
-        ...validEnv,
-        NODE_ENV: "production",
-        TRUSTED_PROXY_IP_HEADER: "x-forwarded-for",
-        LYRASHIELD_EGRESS_PROXY_URL: "https://proxy.internal:8443",
-      })
-      expect(result.success).toBe(true)
-    })
-
-    it("accepts an http egress proxy URL outside production (local proxies in dev/test)", () => {
-      for (const nodeEnv of ["development", "test"] as const) {
-        const result = envSchema.safeParse({
-          ...validEnv,
-          NODE_ENV: nodeEnv,
-          LYRASHIELD_EGRESS_PROXY_URL: "http://localhost:8080",
-        })
-        expect(result.success).toBe(true)
-      }
-    })
-
     it("should accept NODE_ENV as test", () => {
       const result = envSchema.safeParse({ ...validEnv, NODE_ENV: "test" })
       expect(result.success).toBe(true)

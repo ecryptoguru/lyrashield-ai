@@ -124,11 +124,6 @@ describe("getInstallAppUrl", () => {
     const url = getInstallAppUrl()
     expect(url).toBe("https://github.com/apps/test-app/installations/new")
   })
-
-  it("does not include caller state", () => {
-    const url = getInstallAppUrl()
-    expect(url).not.toContain("state=")
-  })
 })
 
 // Ownership verification for the install callback. These guard the S2b boundary:

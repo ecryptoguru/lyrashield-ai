@@ -16,7 +16,7 @@ directories from the mutable marketplace preparation branch into `.github/skills
 enable its full plugin in repository settings. No current skill-copy install recipe is provided by
 this guide. The portable plugin's hosted OAuth descriptor cannot authenticate Cloud Agent.
 
-The planned read-only set is `get-started`, `review-changes`, and `launch-readiness`. Recorded-scan,
+The planned read-only set is `get-started`, `review-changes` and `launch-readiness`. Recorded-scan,
 fix and retest workflows require an OAuth-capable client, so `scan-project`, `fix-and-retest` and
 the backward-compatible `lyrashield` skill remain excluded here. The optional recorded-scan action
 in `review-changes` is also outside the allowlist. After an immutable bundle is reviewed and

@@ -29,10 +29,35 @@ export async function handleCancel(args: string[], output: Output): Promise<numb
       workspaceId,
       ...(parsed["idempotency-key"] ? { idempotencyKey: parsed["idempotency-key"] } : {}),
     })
-    output.result({ ...res, scanId: res.id, terminalStatus: res.status ?? "CANCELLED" })
+    const resultId = res.id || scanId
+    let scanStatus: string | undefined
+    try {
+      const current = await getScan(client, resultId, { workspaceId })
+      if (!isNotModified(current)) scanStatus = current.status
+    } catch {
+      // The cancellation POST was accepted. A failed follow-up GET cannot
+      // prove the scan stopped, so report an accepted request with unknown
+      // current status rather than fabricating a terminal state.
+    }
+
+    if (scanStatus === "CANCELLED") {
+      output.result({ ...res, scanId: resultId, terminalStatus: "CANCELLED" })
+      output.notice(`Scan ${resultId} is cancelled. Confirm with: lyrashield status ${resultId}`)
+      return 0
+    }
+
+    output.result({
+      ...res,
+      scanId: resultId,
+      cancellationRequested: true,
+      ...(scanStatus ? { scanStatus } : {}),
+    })
     output.notice(
-      `Cancellation recorded for scan ${res.id} — the worker stops it shortly. ` +
-        `Confirm with: lyrashield status ${res.id}`
+      scanStatus
+        ? `Cancellation request accepted for scan ${resultId}; it is currently ${scanStatus}. ` +
+            `Confirm with: lyrashield status ${resultId}`
+        : `Cancellation request accepted for scan ${resultId}; current status could not be verified. ` +
+            `Confirm with: lyrashield status ${resultId}`
     )
     return 0
   } catch (err) {

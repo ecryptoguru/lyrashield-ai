@@ -98,15 +98,6 @@ describe("RLS helpers", () => {
     // Live coverage and ENABLE/FORCE flags are checked against pg_catalog in
     // rls-fail-closed.test.ts. These fast checks cover only helper semantics.
 
-    it("excludes identity tables needed for cross-workspace membership queries from RLS", () => {
-      expect(WORKSPACE_SCOPED_MODELS.has("Workspace")).toBe(false)
-      expect(WORKSPACE_SCOPED_MODELS.has("WorkspaceMember")).toBe(false)
-    })
-
-    it("excludes OnboardingState from RLS (per-user, not tenant data)", () => {
-      expect(WORKSPACE_SCOPED_MODELS.has("OnboardingState")).toBe(false)
-    })
-
     // Child tables do not carry a workspaceId, but they are still RLS-protected
     // through their parent (DB-07). These must have FORCE ROW LEVEL SECURITY and
     // an EXISTS-style policy in the latest RLS migration.

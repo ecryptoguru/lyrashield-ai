@@ -8,4 +8,4 @@ Copy selected skill folders to `.mimocode/skills/<name>/` or `~/.config/mimocode
 
 Verify `mimo mcp` and make a read-only call before asking for a recorded scan. Runtime acceptance remains unverified.
 
-Sources: [official repository](https://github.com/XiaomiMiMo/MiMo-Code), [configuration reference](https://github.com/XiaomiMiMo/MiMo-Code/blob/main/packages/opencode/src/skill/builtin/.bundle/mimocode-docs/reference/config.md), [setup guide](https://github.com/XiaomiMiMo/MiMo-Code/blob/main/packages/opencode/src/skill/builtin/.bundle/mimocode-docs/reference/guide.md), [product docs](https://mimo.mi.com/docs/en-US/updates/feature/mimo-code).
+Sources: [official repository](https://github.com/XiaomiMiMo/MiMo-Code), [configuration reference](https://mimo.xiaomi.com/mimocode/config-overrides), [MCP servers guide](https://mimo.xiaomi.com/mimocode/mcp-servers), [product docs](https://mimo.mi.com/docs/en-US/updates/feature/mimo-code).

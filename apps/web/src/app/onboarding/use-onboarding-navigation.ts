@@ -11,7 +11,6 @@ import type { OnboardingPersist } from "./use-onboarding-persistence"
 export function useOnboardingNavigation(params: {
   data: OnboardingData
   completionPath: string
-  productName: string
   router: { push: (path: string) => void; refresh: () => void }
   connectGitHub: () => Promise<unknown> | void
   ensureWorkspace: () => Promise<unknown>
@@ -20,7 +19,6 @@ export function useOnboardingNavigation(params: {
   setError: (message: string | null) => void
   setFailure: (failure: OnboardingFailureState) => void
   setPath: (path: OnboardingPath) => void
-  setProductName: (name: string) => void
 }) {
   async function skipOnboarding() {
     params.setLoading(true)
@@ -63,13 +61,9 @@ export function useOnboardingNavigation(params: {
         params.setLoading(false)
       }
     }
-    // URL / API: prefill a sensible target name, then collect the URL. The
-    // onward step comes from the shared step model so the wizard and the flow
-    // logic cannot diverge.
+    // Keep the target name empty so the example remains a placeholder instead
+    // of looking like a value the user should append to.
     params.setPath(next)
-    if (!params.productName) {
-      params.setProductName(next === "api" ? "Production API" : "Staging Site")
-    }
   }
 
   return { choosePath, skipOnboarding }

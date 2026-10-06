@@ -20,7 +20,7 @@ If you want explicit slash commands, copy the selected Markdown files from
 command files are independent of the skill installation.
 
 Augment's rule renderer uses the project file `.augment/rules/lyrashield.md` for LyraShield-owned
-guidance. Keep that file separate from `.augment-guidelines`, `AGENTS.md`, `CLAUDE.md`, and other
+guidance. Keep that file separate from `.augment-guidelines`, `AGENTS.md`, `CLAUDE.md` and other
 user-authored rules. Rules and user guidelines have their own extension gates; follow Augment's
 current [guidelines documentation](https://docs.augmentcode.com/setup-augment/guidelines).
 
@@ -33,7 +33,7 @@ credential store with the published packages:
 
 1. On Node.js 24 or later, run `npx -y lyrashield@0.2.14 login --oauth` in the same OS account that
    will run VS Code, then select the intended workspace.
-2. Open the Augment panel, open **Settings → MCP → Import from JSON**, and import:
+2. Open the Augment panel, open **Settings → MCP → Import from JSON** and import:
 
    ```json
    {

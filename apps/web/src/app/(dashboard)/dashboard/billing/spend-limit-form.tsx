@@ -74,7 +74,7 @@ export function SpendLimitForm({ workspaceId, currentCents }: SpendLimitFormProp
             setDollars(e.target.value)
             setSaved(false)
           }}
-          className="w-40 rounded-md border px-3 py-2 text-sm"
+          className="w-40 rounded-md border px-3 py-2 text-base md:text-sm"
           placeholder="0.00"
         />
         <button

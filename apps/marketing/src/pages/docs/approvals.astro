@@ -62,8 +62,9 @@ const jsonLd: unknown[] = [techArticle, breadcrumbList]
   </p>
   <p>
     Historical agent-action approval records stay readable for audit. Browser Fix PR requests
-    still use an exact-patch approval and the REST approval routes below. These routes do not
-    reactivate the retired remote MCP <code>PENDING</code> flow:
+    still use an exact-patch approval. A Fix PR opens only after a human approves, with a
+    server-generated patch. The REST approval routes below do not reactivate the retired remote
+    MCP <code>PENDING</code> flow:
   </p>
   <ul>
     <li><code>GET /api/v1/agent-approvals?workspaceId=&lt;id&gt;</code> — list approvals</li>

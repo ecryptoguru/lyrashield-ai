@@ -13,12 +13,12 @@ on:
         required: true
         type: string
       webhook_claims_cutover:
-        description: Authorize the controlled app and worker maintenance window for first durable webhook claims cutover
+        description: Only for the founder-approved first app/worker maintenance window; signed historical UTC evidence and all drain, identity, and fallback gates are still required
         required: false
         default: false
         type: boolean
       confirmation:
-        description: Type deploy:<source_sha> to confirm emergency production deployment
+        description: Type deploy:<source_sha> for a normal manual deploy or webhook-cutover:<source_sha> for the approved first cutover
         required: true
         type: string
 
@@ -36,7 +36,7 @@ env:
   WEB_IMAGE: ghcr.io/${{ github.repository }}/lyrashield-web
   WORKER_IMAGE: ghcr.io/${{ github.repository }}/lyrashield-worker
   EGRESS_PROXY_IMAGE: ghcr.io/${{ github.repository }}/lyrashield-egress-proxy
-  ENGINE_REVISION: 9d90be5aaf92f86bb5c1ba55a8138545764fdd44
+  ENGINE_REVISION: 3001517530300ca5f602536bfadcbd3c95ad3039
   MARKETING_URL: ${{ vars.LYRASHIELD_MARKETING_URL || 'https://lyrashieldai.com' }}
   APP_URL: ${{ vars.LYRASHIELD_APP_URL || 'https://app.lyrashieldai.com' }}
   SCANNER_URL: ${{ vars.LYRASHIELD_SCANNER_URL || 'https://scanner.lyrashieldai.com' }}
@@ -48,10 +48,19 @@ env:
 jobs:
   validate-manual-production-dispatch:
     name: Validate emergency production dispatch
+    if: github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     outputs:
       recovery_requires_receipt: ${{ steps.dispatch.outputs.recovery_requires_receipt }}
     steps:
+      - name: Checkout trusted main dispatch validator
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/heads/main
+          fetch-depth: 1
+          persist-credentials: false
+
       - name: Require the current main SHA and exact confirmation
         if: github.event_name == 'workflow_dispatch'
         id: dispatch
@@ -60,45 +69,150 @@ jobs:
           SOURCE_SHA: ${{ inputs.source_sha }}
           CONFIRMATION: ${{ inputs.confirmation }}
           WEBHOOK_CLAIMS_CUTOVER: ${{ inputs.webhook_claims_cutover }}
+        run: bash .github/scripts/validate-webhook-deploy-dispatch.sh
+
+  preflight-cutover-evidence:
+    name: Verify signed cutover evidence before image build
+    needs: validate-manual-production-dispatch
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      github.event_name == 'workflow_dispatch' &&
+      inputs.webhook_claims_cutover == true &&
+      vars.AZURE_RESOURCE_GROUP != '' &&
+      ((vars.AZURE_APP_CONTAINER_APP_NAME != '') || (vars.AZURE_SCANNER_CONTAINER_APP_NAME != ''))
+    runs-on: ubuntu-24.04
+    environment:
+      name: azure-production
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout exact cutover source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.DEPLOY_SHA }}
+          persist-credentials: false
+
+      - name: Confirm cutover source remains current main
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ env.DEPLOY_SHA }}
+          RECOVERY_REQUIRES_RECEIPT: ${{ needs.validate-manual-production-dispatch.outputs.recovery_requires_receipt }}
         shell: bash
         run: |
           set -euo pipefail
-          echo "recovery_requires_receipt=false" >> "$GITHUB_OUTPUT"
-          expected_confirmation="deploy:${SOURCE_SHA}"
-          if [ "$WEBHOOK_CLAIMS_CUTOVER" = true ]; then
-            expected_confirmation="webhook-cutover:${SOURCE_SHA}"
-          fi
-          if ! [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]] || [ "$CONFIRMATION" != "$expected_confirmation" ]; then
-            echo "::error::Manual production deployment requires the current main SHA and deploy:<source_sha>."
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          latest_main="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq .object.sha)"
+          if [ "$SOURCE_SHA" != "$latest_main" ] && [ "$RECOVERY_REQUIRES_RECEIPT" != true ]; then
+            echo "::error::Cutover source is no longer current main; select the current SHA and refresh the signed receipt."
             exit 1
           fi
-          latest_main="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq .object.sha)"
-          if [ "$SOURCE_SHA" = "$latest_main" ]; then exit 0; fi
-          if [ "${GITHUB_RUN_ATTEMPT:-1}" -gt 1 ] && [ "$WEBHOOK_CLAIMS_CUTOVER" = true ]; then
-            original_validation=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/attempts/1/jobs" \
-              --jq '.jobs[] | select(.name == "Validate emergency production dispatch") | .conclusion')
-            if [ "$original_validation" != success ]; then
-              echo "::error::Maintenance recovery requires successful original dispatch validation."
-              exit 1
-            fi
-            latest_main="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq .object.sha)"
-            if [ "$SOURCE_SHA" != "$latest_main" ]; then
-              echo "recovery_requires_receipt=true" >> "$GITHUB_OUTPUT"
-            fi
-            echo "Recovering the original approved immutable source in the same GitHub run."
-            exit 0
+          if [ "$SOURCE_SHA" != "$latest_main" ]; then
+            echo "Revalidating signed evidence for the original immutable source; runtime recovery still requires its owned maintenance receipt."
           fi
+
+      - name: Verify signed historical UTC receipt before image build
+        env:
+          EXPECTED_SOURCE_SHA: ${{ env.DEPLOY_SHA }}
+          MIGRATION_DATABASE_URL: ${{ secrets.DATABASE_DIRECT_URL }}
+          WEBHOOK_LEGACY_TIMEZONE_REVIEW_RECEIPT: ${{ secrets.WEBHOOK_LEGACY_TIMEZONE_REVIEW_RECEIPT }}
+          WEBHOOK_LEGACY_TIMEZONE_REVIEW_PUBLIC_KEY_PEM: ${{ secrets.WEBHOOK_LEGACY_TIMEZONE_REVIEW_PUBLIC_KEY_PEM }}
+        run: node .github/scripts/verify-webhook-timezone-evidence.mjs
+
+      - name: Summarize blocked cutover evidence preflight
+        if: failure()
+        env:
+          SOURCE_SHA: ${{ env.DEPLOY_SHA }}
+        run: |
+          {
+            echo "## Cutover evidence preflight blocked"
+            echo
+            echo "No container images were built or pushed, and no Azure runtime or database changes were made."
+            echo "A designated reviewer must substantiate the historical UTC interpretation; an authorized signer must sign a source- and database-bound receipt."
+            echo "After that evidence is approved, place only the Ed25519 public key and signed receipt in the azure-production Environment secrets."
+            echo "See [the cutover runbook](https://github.com/ecryptoguru/lyrashield-ai/blob/main/docs/reviews/2026-09-30/webhook-production-cutover.md)."
+            echo "Then rerun the no-deployment verifier and use the protected maintenance dispatch only after founder approval."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  preflight-compatible-baseline:
+    name: Check existing webhook writers before image build
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.event_name != 'workflow_dispatch' || inputs.webhook_claims_cutover != true) &&
+      vars.AZURE_RESOURCE_GROUP != '' &&
+      ((vars.AZURE_APP_CONTAINER_APP_NAME != '') || (vars.AZURE_SCANNER_CONTAINER_APP_NAME != ''))
+    runs-on: ubuntu-24.04
+    environment:
+      name: azure-production
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout exact deployment source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.DEPLOY_SHA }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Confirm deployment source remains current main
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ env.DEPLOY_SHA }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
           latest_main="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq .object.sha)"
           if [ "$SOURCE_SHA" != "$latest_main" ]; then
-            echo "::error::Manual production deployment may only target current main."
+            echo "::error::Release source is no longer current main; the queued current-main release must perform the deployment."
             exit 1
           fi
 
+      - name: Log in to Azure for read-only compatibility preflight
+        uses: Azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ secrets.AZURE_DEPLOY_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_DEPLOY_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_DEPLOY_SUBSCRIPTION_ID }}
+
+      - name: Ensure Container Apps extension
+        run: az extension add --name containerapp --yes --only-show-errors
+
+      - name: Verify compatible webhook baseline before image build
+        env:
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          AZURE_APP_CONTAINER_APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
+          AZURE_SCANNER_CONTAINER_APP_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
+          AZURE_WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
+          AZURE_KEY_VAULT_NAME: ${{ vars.AZURE_KEY_VAULT_NAME || 'lyrashieldprodsecrets' }}
+          GHCR_USERNAME: ${{ github.repository_owner }}
+        run: node .github/scripts/verify-webhook-cutover.mjs
+
+      - name: Summarize blocked compatibility preflight
+        if: failure()
+        run: |
+          {
+            echo "## Azure release stopped before image build"
+            echo
+            echo "The preflight is read-only. No container images were built or pushed, and no Azure runtime or database changes were made."
+            echo "Review the failed read-only step. Incompatible writers require the separately approved first-cutover maintenance window; do not deactivate a revision or retry an ordinary release as a shortcut."
+            echo "See [the cutover runbook](https://github.com/ecryptoguru/lyrashield-ai/blob/main/docs/reviews/2026-09-30/webhook-production-cutover.md) and run the protected no-deployment verifier."
+            echo "A cutover dispatch requires current main, webhook_claims_cutover=true, and confirmation webhook-cutover:<source_sha> after the founder-approved window."
+          } >> "$GITHUB_STEP_SUMMARY"
+
   build:
-    needs: validate-manual-production-dispatch
+    needs:
+      - validate-manual-production-dispatch
+      - preflight-cutover-evidence
+      - preflight-compatible-baseline
     name: Build and push container images
     runs-on: ubuntu-24.04
-    if: github.ref == 'refs/heads/main'
+    if: ${{ !cancelled() &&
+      github.ref == 'refs/heads/main' &&
+      needs.validate-manual-production-dispatch.result == 'success' &&
+      (needs.preflight-cutover-evidence.result == 'success' || needs.preflight-cutover-evidence.result == 'skipped') &&
+      (needs.preflight-compatible-baseline.result == 'success' || needs.preflight-compatible-baseline.result == 'skipped') }}
     permissions:
       contents: read
       packages: write
@@ -345,9 +459,22 @@ jobs:
           delete-untagged: true
           dry-run: false
 
+  verify-built-worker-image:
+    name: Rehearse exact release worker image on disposable services
+    needs: build
+    if: needs.build.result == 'success'
+    permissions:
+      contents: read
+      packages: read
+    uses: ./.github/workflows/verify-webhook-worker-image.yml
+    with:
+      product_source_sha: ${{ inputs.source_sha || github.sha }}
+      engine_revision: ${{ needs.build.outputs.engine_revision }}
+      worker_image: ${{ needs.build.outputs.worker_image }}@${{ needs.build.outputs.worker_digest }}
+
   deploy:
     name: Deploy Azure Container Apps
-    needs: [build, validate-manual-production-dispatch]
+    needs: [build, verify-built-worker-image, validate-manual-production-dispatch]
     if: >
       (vars.AZURE_RESOURCE_GROUP != '') &&
       ((vars.AZURE_APP_CONTAINER_APP_NAME != '') || (vars.AZURE_SCANNER_CONTAINER_APP_NAME != ''))

@@ -16,10 +16,11 @@ import {
 } from "@lyrashield/ui"
 import { apiGetPaginated, apiPost, apiPatch, apiDelete } from "@/lib/api-client"
 import { paginatedResponseSchema } from "@/lib/api-schemas"
-import { formatDate, formatDateTime } from "@/lib/date-format"
+import { formatDate, formatDateTimeUtc } from "@/lib/date-format"
 import { getGoalLabel, modeLabel } from "@/lib/labels"
 import { Skeleton } from "@/components/ui/skeleton"
 import { getManualScanOptions } from "@/lib/scan-presets"
+import { scheduleTargetOptionLabel } from "@/lib/schedule-labels"
 import { InlineConfirm } from "@/components/ui/inline-confirm"
 import { DashboardErrorCard } from "@/components/dashboard-error-card"
 
@@ -265,7 +266,7 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
                   <option value="">Select a target</option>
                   {targets.map((t) => (
                     <option key={t.id} value={t.id}>
-                      {t.name} ({t.type})
+                      {scheduleTargetOptionLabel(t)}
                     </option>
                   ))}
                 </Select>
@@ -442,8 +443,8 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
                   <p className="text-muted-foreground font-mono text-xs">{schedule.cron}</p>
                   <p className="text-muted-foreground mt-1 text-xs">
                     Created {formatDate(schedule.createdAt)}
-                    {schedule.lastRunAt && <> · Last run {formatDateTime(schedule.lastRunAt)}</>}
-                    {schedule.nextRunAt && <> · Next run {formatDateTime(schedule.nextRunAt)}</>}
+                    {schedule.lastRunAt && <> · Last run {formatDateTimeUtc(schedule.lastRunAt)}</>}
+                    {schedule.nextRunAt && <> · Next run {formatDateTimeUtc(schedule.nextRunAt)}</>}
                   </p>
                 </div>
                 <div className="flex items-center gap-2">

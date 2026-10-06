@@ -9,7 +9,7 @@ draft: false
 heroImage: agent-security-20
 faq:
   - q: "Does Pi Coding Agent include native MCP support?"
-    a: "Yes. Pi includes built-in MCP over stdio and Streamable HTTP, with OAuth for hosted servers. Pi documents a user-level server file, a trusted project file, and built-in OAuth sign-in."
+    a: "Yes. Pi includes built-in MCP over stdio and Streamable HTTP, with OAuth for hosted servers. Pi documents a user-level server file, a trusted project file and built-in OAuth sign-in."
   - q: "How do I run LyraShield after Pi edits?"
     a: "Use pi mcp add lyrashield --url https://app.lyrashieldai.com/api/mcp, then pi mcp login lyrashield. Confirm tools with pi mcp list and make a read-only call before any scan. CLI and CI remain optional alternatives."
   - q: "Does this support PR gating?"
@@ -18,7 +18,7 @@ faq:
     a: Follow /docs/integrations/pi for manual setup. Use pinned CLI commands for documented config or skill installs; marketplace plugins remain separately gated. Use CLI 0.2.14 and MCP 0.2.12 for local stdio, then verify discovery and a read-only client call.
 ---
 
-Pi Coding Agent is fast and deliberately small, with built-in MCP for stdio and Streamable HTTP, OAuth sign-in, and Agent Skills support. The recommended LyraShield connection uses hosted OAuth through Pi's user-level server configuration. A trusted project can also define a server; a project entry replaces a same-named user entry. Some extensions can replace Pi's built-in MCP implementation, so check which configuration source is active if an extension changes the client.
+Pi Coding Agent is fast and deliberately small, with built-in MCP for stdio and Streamable HTTP, OAuth sign-in and Agent Skills support. The recommended LyraShield connection uses hosted OAuth through Pi's user-level server configuration. A trusted project can also define a server; a project entry replaces a same-named user entry. Some extensions can replace Pi's built-in MCP implementation, so check which configuration source is active if an extension changes the client.
 
 This guide preserves a clear evidence boundary. Pi's MCP status command shows configured connections and discovered tools; it does not prove that a LyraShield-authenticated tool call or scan completed. Retain the tool result and scan receipt for that claim. The [vibe coding security guide](/blog/vibe-coding-security-guide) explains why generated code still needs independent checks and the [Pi integration guide](/docs/integrations/pi) records the current setup path.
 
@@ -48,7 +48,7 @@ Record the Pi version, enabled packages and extensions, active skills, project r
 
 Let Pi make the authorized code change and inspect the diff. When a scan is explicitly requested, use the connected LyraShield MCP tool or the CLI against the authorized target and scope; do not let a routine code review trigger paid scan work. Review the returned scan identity and every finding's recorded evidence state, location and limitation.
 
-A finding marked detected remains a candidate for triage. An inconclusive result remains uncertain. Independent verification requires a separate accepted receipt and a fix requires a fresh retest. Pi can help edit code in response to reviewed guidance, but its confidence does not change LyraShield's evidence state.
+A finding marked detected remains a candidate for triage. An inconclusive result remains uncertain. A retest-confirmed outcome requires a fresh applicable retest and a fix requires its own retest. Pi can help edit code in response to reviewed guidance, but its confidence does not change LyraShield's evidence state.
 
 Use a short project instruction such as:
 

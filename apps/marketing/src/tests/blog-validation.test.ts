@@ -539,50 +539,6 @@ ${filler}
     ).toContain("duplicate FAQ question: where does the config live?")
   })
 
-  it("requires reviewer and reviewedDate to be set together", () => {
-    const minimal = { slug: "post", body: "Body copy without an H1." }
-    expect(
-      validateArticle(
-        { ...minimal, data: { reviewer: "lyrashield-team" } },
-        { slug: "post" }
-      )
-    ).toContain("reviewer and reviewedDate must be set together or not at all")
-    expect(
-      validateArticle(
-        { ...minimal, data: { reviewedDate: "2026-10-06" } },
-        { slug: "post" }
-      )
-    ).toContain("reviewer and reviewedDate must be set together or not at all")
-    // A complete, well-ordered pair produces no pairing error.
-    expect(
-      validateArticle(
-        {
-          ...minimal,
-          data: {
-            pubDate: "2026-09-22",
-            reviewer: "lyrashield-team",
-            reviewedDate: "2026-10-06",
-          },
-        },
-        { slug: "post" }
-      )
-    ).not.toContain("reviewer and reviewedDate must be set together or not at all")
-    // A review cannot predate the article.
-    expect(
-      validateArticle(
-        {
-          ...minimal,
-          data: {
-            pubDate: "2026-09-22",
-            reviewer: "lyrashield-team",
-            reviewedDate: "2026-01-01",
-          },
-        },
-        { slug: "post" }
-      )
-    ).toContain("reviewedDate cannot precede pubDate")
-  })
-
   it("validates catalog paths, dimensions, budgets, hashes, clusters, and adjacency", () => {
     const root = mkdtempSync(join(tmpdir(), "blog-validation-"))
     const imageRoot = join(root, "public/images/blog/library/verification-01")

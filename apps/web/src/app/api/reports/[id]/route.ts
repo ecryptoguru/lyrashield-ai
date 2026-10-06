@@ -30,11 +30,22 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       return apiError("MISSING_PARAM", "workspaceId is required", 400)
     }
 
-    await requirePermission(workspaceId, PERMISSIONS.report.download)
+    const { session } = await requirePermission(workspaceId, PERMISSIONS.report.download)
 
     const report = await getShareableReport(id, workspaceId)
     if (!report) {
       return apiError("REPORT_NOT_FOUND", "Report not found", 404)
+    }
+    if (
+      session.oauth?.connectionId &&
+      session.oauth.scopes.includes("lyrashield.write") &&
+      !session.oauth.allTargets
+    ) {
+      const delegation = await resolveReportDelegationTarget(id, workspaceId)
+      if (!delegation) {
+        return apiError("REPORT_NOT_FOUND", "Report not found", 404)
+      }
+      assertOAuthDelegatedScope(session, delegation.targetId)
     }
 
     // Private issue-time provenance rides along only on this authenticated

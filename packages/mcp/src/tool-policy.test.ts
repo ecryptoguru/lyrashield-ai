@@ -29,4 +29,11 @@ describe("MUTATING_TOOL_NAMES", () => {
       expect(tools.get(name)?.inputSchema.additionalProperties, name).toBe(false)
     }
   })
+
+  it("rejects extra arguments for every read-only tool", () => {
+    const readOnlyTools = createAllTools(dummyContext).filter((tool) => !tool.mutating)
+    for (const tool of readOnlyTools) {
+      expect.soft(tool.inputSchema.additionalProperties, tool.name).toBe(false)
+    }
+  })
 })

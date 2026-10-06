@@ -87,7 +87,7 @@ Version rules:
 
 Generated output—`.next`, `dist`, `.turbo`, `.astro`, `.wrangler`, motion renders, media-local, Prisma generated client, `node_modules`, and `*.tsbuildinfo`—is not source.
 
-The former `packages/eval-ai-safety` runner was removed as unused in `b96e597`. Its recorded 2026-08-13 result artifact remains at `apps/marketing/src/data/ai-safety-results.json` and is rendered by `apps/marketing/src/pages/ai-safety.astro`; rerunning that historical benchmark requires restoring or replacing the runner. The separate fixed, non-destructive live AI safety catalog is tracked in `packages/types/src/ai-safety-tests.ts` and documented in `docs/yellowpaper.md` §3.5.
+The former `packages/eval-ai-safety` runner was removed as unused in `b96e597`. Its recorded 2026-08-13 result artifact was deleted from `apps/marketing/src/data/ai-safety-results.json` in the landing-page redesign (Wave 0 item 0.2), and `apps/marketing/src/pages/ai-safety.astro` no longer renders any figure from it: the page is now "MCP guard evaluation" and describes only the guard's pattern categories and its limits. Rerunning that historical benchmark requires restoring or replacing the runner. The separate fixed, non-destructive live AI safety catalog is tracked in `packages/types/src/ai-safety-tests.ts` and documented in `docs/yellowpaper.md` §3.5.
 
 ## 4. Runtime architecture
 
@@ -216,7 +216,7 @@ Alternatives: `FAILED`, `PARTIAL` (engine stopped with findings preserved), `CAN
 
 ### Engine boundary
 
-Cloud and Desktop release workflows pin engine `9d90be5aaf92f86bb5c1ba55a8138545764fdd44`, including the request-bounded model-stream idle guard for Lyra's custom provider, four-agent concurrency for Quick scans, method/status-aware relay framing with audited dependency compatibility, and the v23 remediation: runtime deadlines covering preprocessing/acquisition, bounded stream-timeout salvage of partial evidence, conservative abandoned-request spend, strict TUI types, and source-acquisition decomposition. Product branch protection requires the `Pinned Engine / Worker Contract` job alongside security and lint/typecheck/test/build. Engine CI separately tests its exact `.lyrashield-worker-pin` consumer; refresh that reverse pin after the reviewed product merge. Source compatibility, production promotion and signed Desktop publication remain separate gates. Desktop launch work remains deferred.
+Cloud and Desktop release workflows pin engine `3001517530300ca5f602536bfadcbd3c95ad3039`, including the request-bounded model-stream idle guard for Lyra's custom provider, four-agent concurrency for Quick scans, method/status-aware relay framing with audited dependency compatibility, the v23 remediation: runtime deadlines covering preprocessing/acquisition, bounded stream-timeout salvage of partial evidence, conservative abandoned-request spend, strict TUI types, source-acquisition decomposition and bounded Docker image acquisition, plus PR #199 artifact identity/revision recovery, usage accounting, sandbox identity and isolation, telemetry redaction, and viewer/TUI recovery. Product branch protection requires the `Pinned Engine / Worker Contract` job alongside security and lint/typecheck/test/build. Engine CI separately tests its exact `.lyrashield-worker-pin` consumer; refresh that reverse pin after the reviewed product merge. Source compatibility, production promotion and signed Desktop publication remain separate gates. Desktop launch work remains deferred.
 
 - Product code lives in engine `lyrashield/**` and `lyrashield_adapter/**`; upstream `strix/**` retains only hard-gated generic seams.
 - Stable upstream releases enter through reviewed PRs; never force-push or auto-resolve conflicts.
@@ -506,7 +506,7 @@ The following evidence describes the 2026-08-26 deployment; it is not runtime ac
 - Scan `cmt9el7p7000001hdjnjo90wk`.
 - `OnboardingAI2` revision `1689f3607d68764e09769535df8e368c4d5ad2fe`.
 - Completed in 10m 9s.
-- 189 Luna/medium requests; no Sol.
+- 189 Luna/medium requests; no Terra.
 - 8,549,456 input, 6,535,778 cached input, 136,759 cache-write input, and 32,092 output tokens; no long-context bucket.
 - Raw provider cost `$0.57879951`; stored provider and billed cost `$0.578800` under the `$3.20` cap; per-request model buckets matched the engine total.
 - 25 retained findings, zero independently verified. Seventeen remain `DETECTED`; eight remain `INCONCLUSIVE`.
@@ -568,7 +568,7 @@ See [AGENTS.md](./AGENTS.md#landmines) for the current engineering rules and ope
 ## 14. Compact implementation ledger
 
 - **2026-07-04 to 07-06:** foundation, auth/tenancy, UI/DX, RLS, queue, engine boundary, findings, SCA, secrets, URL scanning, reports, schedules, notifications, MCP, approvals.
-- **2026-07-10 to 07-15:** tenant/reliability hardening, controlled engine ownership, scorecards/referrals, model routing, result manifests/receipts, evidence-backed copy.
+- **2026-07-10 to 07-15:** tenant/reliability hardening, controlled engine ownership, scorecards/referrals, GPT-5.6 routing, result manifests/receipts, evidence-backed copy.
 - **2026-07-16 to 07-18:** Cloudflare launch, Lite Scanner, production marketing, PostHog, accounting, fail-closed queue admission/recovery.
 - **2026-07-24 to 08-03:** CLI/agent distribution, UX V2, migration-first Azure deploys, RLS reproduction, worker recovery and digest integrity.
 - **2026-08-04 to 08-13:** Parallel Search, OAuth/MCP marketplace, URL/API profiles, reproducible engine releases, claims map, AI App Security and eval harness.

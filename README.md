@@ -8,21 +8,6 @@ LyraShield AI turns a target into a release-assurance loop:
 
 It keeps detected findings, independently verified evidence, retest-confirmed results, and inconclusive checks distinct. A score or AI suggestion is never treated as proof by itself.
 
-## Why LyraShield
-
-A scanner tells you what it flagged. LyraShield tells you what was tested, what was proven, what remains unknown — and hands you a record you can show to a client, investor or reviewer. Eight design choices carry that difference:
-
-1. **Evidence states, not confidence scores.** Every result is `DETECTED`, `VALIDATED`, `VERIFIED` or `INCONCLUSIVE`. Confidence is triage metadata; engine-only absence is always inconclusive; a clean retest is retest-confirmed, never silently "verified".
-2. **Built for how AI-built apps actually fail.** The public AI-Built Failure Taxonomy, eight AI App Security signals (AI-01–AI-08) mapped to the OWASP Top 10 for LLM Applications (2025), and 14 WebMCP controls that review the agent tool surface itself — agent rules, MCP configs, embedded secrets, prompt-injection exposure.
-3. **Agent-native.** Assurance runs where the coding agent already works: published CLI, MCP server (21 tools, stdio + remote Streamable HTTP with hosted OAuth), portable Agent Plugin, a 51-entry install registry resolving to 48 preferred client surfaces, and an account-less GitHub Action.
-4. **An approval-gated fix loop that closes itself.** Fix PRs come only from a server-generated patch bound to an explicit human approval — no client-authored patches, nothing auto-merges. A merged fix branch automatically queues a retest and re-evaluates the gate.
-5. **A launch verdict anyone can verify.** The Launch Gate (`lyrashield-gate/2.3.0`) produces `READY` / `NOT_READY` / `INSUFFICIENT_EVIDENCE` per target; reports are ed25519-signed with a public verify endpoint; release-identity confirmation answers only `MATCH`, `MISMATCH` or `UNAVAILABLE`.
-6. **Honest coverage accounting.** The Vibe Security 50 contract (`vibe-security-50/1.2.0`) records one immutable receipt per control — "no finding" is never "passed", and seven evidence-required controls are marked as such because no scan can prove them.
-7. **Two modes, one loop.** Cloud (subscription; LyraShield pays model cost) and Local/Desktop (one-year BYOK license with perpetual fallback; scans stay on your machine, nothing syncs by default).
-8. **Fail-closed trust architecture.** Postgres RLS tenant isolation, untrusted and bounded engine output, and every result manifest binding the exact product revision, worker image digest and engine revision into its checksum.
-
-These are design commitments, not detection-performance claims — see the claims boundary in [PRD §1](PRD.md#1-product-definition) and [policies.md](docs/policies.md).
-
 ## Try it
 
 LyraShield AI is live in **open beta with open registration** — anyone can create a free account today. There is no waitlist or invitation gate.
@@ -51,12 +36,12 @@ npx -y lyrashield@0.2.14 skills install pi --project # install LyraShield workfl
 
 `lyrashield` is published on npm (also available as the scoped alias `@lyrashield/cli`, now deprecated). It installs through the paths defined in `packages/agent-registry`:
 
+The coordinated CLI release adds the safe atomic config writer and shared skills installer. Config-file commands remain limited to clients whose install contract matches the verified CLI release; the CLI preserves unrelated settings and customized skills.
+
 - **Agent Plugin** — the published `@lyrashield/agent-plugin` package provides portable artifacts for supported clients. The CLI gives client-specific setup guidance where a writable local plugin path is not verified; public marketplace listing and authenticated client acceptance are tracked separately. Plugin files never inline a raw API key.
 - **Config-file** — the published CLI merges entries while preserving unrelated settings, refuses symlinked destinations and malformed roots, and preserves existing file permissions. It refuses to place a raw API key in a conventionally shared file unless you explicitly pass `--inline-secret` and the file is gitignored.
 - **Guided manual** — for clients whose tooling has no writable config file, the CLI prints exact copy-paste command/argument/env values.
 - **Vendor CLI** — Amp is configured by shelling out to `amp mcp add`.
-
-The coordinated CLI release adds the safe atomic config writer and shared skills installer. Config-file commands remain limited to clients whose install contract matches the verified CLI release; the CLI preserves unrelated settings and customized skills.
 
 Run `npx -y lyrashield@0.2.14 doctor` to inspect local configuration and credentials. Client activation and authenticated acceptance remain separate checks.
 
@@ -202,7 +187,7 @@ See [PRD release status](PRD.md#9-release-status) for the current deployment and
 
 ## Further reading
 
-See the [documentation map](docs/README.md) for current owners, including the [operator runbook](docs/operations.md), the [litepaper](docs/litepaper.md) (executive overview), the [whitepaper](docs/whitepaper.md) (authoritative public description) and the [yellowpaper](docs/yellowpaper.md) (technical specification).
+See the [documentation map](docs/README.md) for current owners, including the [operator runbook](docs/operations.md).
 
 ## License
 

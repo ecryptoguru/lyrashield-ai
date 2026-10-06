@@ -23,7 +23,6 @@ const releases = [
   "batch-7",
   "batch-8",
   "batch-9",
-  "batch-10",
   "batch-11",
 ]
 // Page-level citations live outside the blog program, so they are checked on

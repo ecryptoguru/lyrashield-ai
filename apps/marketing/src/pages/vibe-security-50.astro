@@ -1,5 +1,6 @@
 ---
 import Base from "@layouts/Base.astro"
+import { CTA_LABEL } from "../lib/site-copy"
 import {
   VIBE_SECURITY_CONTROLS,
   VIBE_SECURITY_COVERAGE_VERSION,
@@ -18,16 +19,10 @@ import {
 
 const origin = Astro.site?.origin || "http://localhost:4321"
 const canonical = new URL("/vibe-security-50", origin).toString()
-// One editorial review date drives the visible text, the <time datetime>
-// attribute, the page JSON-LD dateModified and the sitemap lastmod (parsed in
-// astro.config.mjs). Update all four surfaces by changing this constant only.
-const reviewed = "2026-10-05"
-const reviewedLabel = new Date(`${reviewed}T00:00:00Z`).toLocaleDateString("en-US", {
-  year: "numeric",
-  month: "long",
-  day: "numeric",
-  timeZone: "UTC",
-})
+const appUrl =
+  (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/\/$/, "") ||
+  "https://app.lyrashieldai.com"
+const reviewed = "2026-08-15"
 
 // Every number on this page is derived from the same registry the scanner executes, so the
 // published list and the counts cited in llms.txt and on the homepage cannot drift apart.
@@ -168,15 +163,15 @@ const jsonLd = [
         they ask you for evidence instead of guessing.
       </p>
       <p class="mt-4 text-sm text-text-muted" data-reveal="fade">
-        This page is generated from the same registry the scanner executes, so the list below and
-        the counts quoted elsewhere on this site cannot drift apart. Last reviewed:{" "}
-        <time datetime={reviewed}>{reviewedLabel}</time>.
+        This page is generated from the same registry the scanner executes, so the list below and the counts quoted elsewhere on this site cannot drift apart.
+        Last reviewed: <time datetime={reviewed}>5 Oct 2026</time>. The evidence definitions behind a full review are defined on{" "}
+        <a href="/methodology" class="font-medium text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent">the methodology page</a>.
       </p>
     </header>
 
     <section aria-labelledby="language-heading" class="mt-16 border-y border-border py-12">
       <h2 id="language-heading" class="text-2xl font-semibold text-text" data-reveal>
-        What a result does and does not say
+        Control outcomes: what a result does and does not say
       </h2>
       <dl class="mt-8 grid gap-x-10 gap-y-8 md:grid-cols-2" data-reveal-group>
         <div data-reveal>
@@ -284,7 +279,14 @@ const jsonLd = [
           class="inline-flex min-h-12 items-center justify-center rounded-lg bg-accent px-5 text-sm font-semibold text-bg shadow-lg shadow-accent/15 transition-colors hover:bg-accent/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
           data-cta-id="vibe50_lite_check"
         >
-          Run a free Lite Check
+          Run Lite Check
+        </a>
+        <a
+          href={`${appUrl}/sign-up?source=vibe_security_50`}
+          class="inline-flex min-h-12 items-center justify-center rounded-lg border border-accent px-5 text-sm font-semibold text-accent transition-colors hover:bg-accent-dim/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
+          data-cta-id="vibe50_start_trial"
+        >
+          {CTA_LABEL.signUp}
         </a>
         <a
           href="/methodology"

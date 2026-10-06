@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test"
+import { readdirSync } from "node:fs"
 
 // Routing and freshness regression coverage for the trailing-slash
 // canonicalisation work (PR #591 + follow-ups). Every canonical URL on this
@@ -38,6 +39,102 @@ test("canonical pages serve 200 with middleware security headers", async ({ page
   }
 })
 
+test("renders the comparison body with real typography and a themed prose colour", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 })
+  await page.goto("/compare/snyk")
+
+  const body = page.locator(".compare-body")
+  await expect(body).toHaveClass(/prose/)
+
+  // Headings, list markers and links must be styled, not plain 16px text.
+  const h3 = body.locator("h3").first()
+  await expect(h3).toBeVisible()
+  expect(
+    await h3.evaluate((el) => Number.parseFloat(getComputedStyle(el).fontSize))
+  ).toBeGreaterThan(16)
+  const firstLink = body.locator("a").first()
+  expect(await firstLink.evaluate((el) => getComputedStyle(el).textDecorationLine)).toContain(
+    "underline"
+  )
+
+  // The prose colour must follow the site theme, not the operating system.
+  // Tailwind's `dark:` sits inside prefers-color-scheme, so a dark OS with the
+  // site set to light used to leave headings pure white on a light page.
+  await page.emulateMedia({ colorScheme: "dark" })
+  await page.evaluate(() => document.documentElement.setAttribute("data-theme", "light"))
+  const headingOnLight = await h3.evaluate((el) => getComputedStyle(el).color)
+  expect(headingOnLight, "heading colour under a dark OS with the light theme").not.toBe(
+    "rgb(255, 255, 255)"
+  )
+
+  await page.evaluate(() => document.documentElement.setAttribute("data-theme", "dark"))
+  const headingOnDark = await h3.evaluate((el) => getComputedStyle(el).color)
+  expect(headingOnDark, "heading colour under the dark theme").not.toBe(headingOnLight)
+})
+
+// The swallowed-space bug is invisible in source review and survives both
+// `astro check` and a build: the compiler drops the newline between two
+// children, so `reach us through the` + `<a>support page</a>` renders as
+// "through thesupport page". A source scan catches the shapes we know about,
+// but it missed the one-line variant once. This asserts the rendered DOM, so
+// the class of bug fails here regardless of how it is written.
+test("joins text and inline elements with a space in the rendered DOM", async ({ page }) => {
+  // Walk the text nodes of the main content and look for a word butting
+  // straight into the next element's text, or an element's text butting into a
+  // following word, with no whitespace between them.
+  const adjacency = async (path: string) => {
+    await page.goto(path)
+    return page.evaluate(() => {
+      const main = document.querySelector("main") ?? document.body
+      const problems: string[] = []
+      // Elements whose text is inline prose and should never be flush against
+      // a neighbouring word. Excludes decorative spans that carry their own
+      // margin (a count-up marker, an arrow glyph).
+      const INLINE = "a, code, strong, em, b, abbr"
+      const wordish = /[A-Za-z0-9]$/
+      const startsWordish = /^[A-Za-z0-9]/
+      const walker = document.createTreeWalker(main, NodeFilter.SHOW_ELEMENT)
+      let node: Element | null = walker.currentNode as Element
+      while (node) {
+        for (const el of node.querySelectorAll(INLINE)) {
+          const prev = el.previousSibling
+          const next = el.nextSibling
+          const text = el.textContent ?? ""
+          if (prev && prev.nodeType === Node.TEXT_NODE) {
+            const before = prev.textContent ?? ""
+            if (wordish.test(before) && startsWordish.test(text)) {
+              problems.push(
+                `${el.tagName.toLowerCase()} joined to preceding text: ...${before.slice(-30)}|${text.slice(0, 30)}...`
+              )
+            }
+          }
+          if (next && next.nodeType === Node.TEXT_NODE) {
+            const after = next.textContent ?? ""
+            if (wordish.test(text) && startsWordish.test(after)) {
+              problems.push(
+                `${el.tagName.toLowerCase()} joined to following text: ...${text.slice(-30)}|${after.slice(0, 30)}...`
+              )
+            }
+          }
+        }
+        node = walker.nextNode() as Element | null
+      }
+      return problems
+    })
+  }
+
+  for (const path of [
+    "/terms",
+    "/demo",
+    "/docs/integrations/agent-plugins",
+    "/docs/integrations/zed",
+  ]) {
+    expect(await adjacency(path), `${path} must not swallow a space`).toEqual([])
+  }
+})
+
 test("blog posts still serve after the routing change", async ({ page }) => {
   const res = await page.request.get("/blog/path-traversal-generated-code")
   expect(res.status()).toBe(200)
@@ -56,6 +153,66 @@ test("legacy Pi integration URLs redirect permanently to the canonical guide", a
     const res = await page.request.get(path, { maxRedirects: 0 })
     expect(res.status(), `${path} must be 301`).toBe(301)
     expect(res.headers()["location"]).toBe("/docs/integrations/pi")
+  }
+})
+
+test("retired vs-lyrashield posts redirect permanently to their compare page", async ({ page }) => {
+  // Wave 8 (D9): the 13 long-form posts were retired and their content folded
+  // into the compare page. Both the slashless and the trailing-slash form must
+  // reach /compare/<slug>, never the platform 404 or the drop-trailing-slash
+  // 307. The slugs are derived from the compare collection so the two lists
+  // cannot drift apart.
+  const slugs = readdirSync(new URL("../src/content/compare/", import.meta.url))
+    .filter((name) => name.endsWith(".md"))
+    .map((name) => name.replace(/\.md$/, ""))
+    .sort()
+  expect(slugs, "the compare program should still be 13 pages").toHaveLength(13)
+
+  for (const slug of slugs) {
+    for (const path of [`/blog/${slug}-vs-lyrashield`, `/blog/${slug}-vs-lyrashield/`]) {
+      const res = await page.request.get(path, { maxRedirects: 0 })
+      expect(res.status(), `${path} must be 301`).toBe(301)
+      expect(res.headers()["location"], `${path} target`).toBe(`/compare/${slug}`)
+    }
+  }
+})
+
+test("every retired post URL is gone from the served sitemap and llms.txt", async ({
+  page,
+  baseURL,
+}) => {
+  const sitemap = await page.request.get("/sitemap-index.xml")
+  expect(sitemap.status()).toBe(200)
+  const llms = await page.request.get("/llms.txt")
+  expect(llms.status()).toBe(200)
+  const llmsBody = await llms.text()
+
+  // The sitemap index advertises absolute production URLs. Fetch each child
+  // from the LOCAL preview under test by taking only its pathname, the same way
+  // scripts/crawl-built-site.mjs does — fetching the absolute URL would hit the
+  // deployed site instead of the build being verified.
+  const indexBody = await sitemap.text()
+  const children = [...indexBody.matchAll(/<loc>([^<]+)<\/loc>/g)].map(
+    (match) => new URL(match[1], baseURL).pathname
+  )
+  expect(children.length, "the sitemap index should advertise its children").toBeGreaterThan(0)
+  let urls = ""
+  for (const child of children) {
+    const res = await page.request.get(child)
+    if (res.status() === 200) urls += await res.text()
+  }
+
+  const compareSlugs = readdirSync(new URL("../src/content/compare/", import.meta.url))
+    .filter((name) => name.endsWith(".md"))
+    .map((name) => name.replace(/\.md$/, ""))
+  for (const slug of compareSlugs) {
+    const retired = `/blog/${slug}-vs-lyrashield`
+    expect(urls.includes(retired), `${retired} must not appear in the sitemap`).toBe(false)
+    expect(llmsBody.includes(retired), `${retired} must not appear in llms.txt`).toBe(false)
+    // The compare page it folded into must still be advertised.
+    expect(urls.includes(`/compare/${slug}`), `/compare/${slug} must remain in the sitemap`).toBe(
+      true
+    )
   }
 })
 

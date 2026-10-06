@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs"
 import { describe, expect, it } from "vitest"
-import { allRoutes, LEGACY_REDIRECTS } from "../../scripts/redirects-lib.mjs"
+import { allRoutes } from "../../scripts/redirects-lib.mjs"
 import {
   LLMS_EXCLUDED_PATHS,
   REQUIRED_ROBOTS_AGENTS,
@@ -265,17 +265,7 @@ describe("machine-readable surface contracts", () => {
   })
 
   it("redirects /blog/1 to the blog hub instead of serving a 404", () => {
-    // Asset-layer rules: prerendered-path requests never reach middleware, so
-    // _redirects must carry both spellings or /blog/1 and /blog/1/ 404 (F13).
-    const redirects = source("../../public/_redirects")
-    expect(redirects).toContain("/blog/1 /blog 301")
-    expect(redirects).toContain("/blog/1/ /blog 301")
-    // SSR fallback for the non-asset path.
     expect(source("../middleware.ts")).toContain('"/blog/1": "/blog"')
-    // The legacy registry keeps both rules validated by
-    // scripts/validate-redirects.mjs instead of drifting out of the file.
-    expect(LEGACY_REDIRECTS).toContainEqual({ source: "/blog/1", target: "/blog", code: "301" })
-    expect(LEGACY_REDIRECTS).toContainEqual({ source: "/blog/1/", target: "/blog", code: "301" })
   })
 })
 

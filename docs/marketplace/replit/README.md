@@ -6,7 +6,7 @@
 
 Use [`install-link.txt`](./install-link.txt) after this release candidate has been reviewed, or open Replit's Integrations pane and add a custom MCP server manually with the URL in [`connection.json`](./connection.json). Select **Test & save**, complete the OAuth flow, and choose the intended LyraShield workspace. The link contains no static credential header. Leave Replit's tool confirmation behavior enabled and verify one read-only workspace/target lookup before claiming successful setup.
 
-The connection makes LyraShield's MCP tools available to Replit Agent across projects. Hosted OAuth defaults to read access. Any write requires a separately authorized delegation, current workspace permissions, and the relevant workflow authorization. Replit's security scanner may inspect or block MCP tools; such a client-side block is not proof that LyraShield accepted the operation.
+The connection makes LyraShield's MCP tools available to Replit Agent across projects. Hosted OAuth defaults to read access. Any write requires a separately authorized delegation, current workspace permissions and the relevant workflow authorization. Replit's security scanner may inspect or block MCP tools; such a client-side block is not proof that LyraShield accepted the operation.
 
 ## Install skills
 
@@ -20,4 +20,4 @@ The project-level skills in [`skills/`](./skills/) follow the Agent Skills forma
 - No local stdio path is bundled; this avoids relying on shell/runtime access in hosted Replit Agent.
 - No workspace skill was imported and no public listing/submission was made.
 
-Sources: [Replit Connect via MCP](https://docs.replit.com/build/connect-via-mcp), [Replit MCP catalog and custom-server install links](https://docs.replit.com/features/mcp/overview), and [Replit Agent Skills](https://docs.replit.com/features/agent/skills).
+Sources: [Replit Connect via MCP](https://docs.replit.com/build/connect-via-mcp), [Replit MCP catalog and custom-server install links](https://docs.replit.com/features/mcp/overview) and [Replit Agent Skills](https://docs.replit.com/features/agent/skills).

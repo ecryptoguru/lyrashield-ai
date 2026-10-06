@@ -5,7 +5,7 @@
 - Pin candidate MCP `0.2.12` and CLI `0.2.14` in prepared native artifacts; keep public install
   instructions on the latest published versions until the coordinated npm release is complete.
 - Bundle shared workflow skills for the candidate plugin and regenerate marketplace provenance.
-- This section records preparation only. Marketplace export, npm publication, and listing changes
+- This section records preparation only. Marketplace export, npm publication and listing changes
   remain separate reviewed release actions.
 
 ## 0.1.30

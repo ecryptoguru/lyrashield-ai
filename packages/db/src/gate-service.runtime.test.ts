@@ -200,8 +200,16 @@ describe.skipIf(!process.env.RLS_RUNTIME_DATABASE_URL)("automatic retest real RL
 
   it("creates exactly one scan for concurrent deliveries and resumes it after queue failure", async () => {
     const guard = vi.fn(async () => {})
+    const options = {
+      workspaceId: id,
+      branchName: branch,
+      prNumber: 1,
+      assertRetestAllowed: guard,
+      repoFullName: undefined,
+      assertRetestWorkerAvailable: async () => {},
+    }
     const outcomes = await Promise.all(
-      Array.from({ length: 5 }, () => handleFixPrMergedAndReevaluate(id, branch, 1, guard))
+      Array.from({ length: 5 }, () => handleFixPrMergedAndReevaluate(options))
     )
     expect(outcomes[0]?.retestScanId).toBeTruthy()
     expect(outcomes.every((outcome) => outcome?.retestScanId === outcomes[0]?.retestScanId)).toBe(
@@ -209,14 +217,14 @@ describe.skipIf(!process.env.RLS_RUNTIME_DATABASE_URL)("automatic retest real RL
     )
     expect(await owner.scan.count({ where: { workspaceId: id, triggerType: "retest" } })).toBe(1)
     expect(await owner.retest.count({ where: { workspaceId: id, findingId } })).toBe(1)
-    expect((await handleFixPrMergedAndReevaluate(id, branch, 1, guard))?.retestScanId).toBe(
+    expect((await handleFixPrMergedAndReevaluate(options))?.retestScanId).toBe(
       outcomes[0]?.retestScanId
     )
     await owner.scan.update({
       where: { id: outcomes[0]!.retestScanId },
       data: { status: "COMPLETED" },
     })
-    expect(await handleFixPrMergedAndReevaluate(id, branch, 1, guard)).toBeNull()
+    expect(await handleFixPrMergedAndReevaluate(options)).toBeNull()
   })
   it("persists PARTIAL elapsed minutes under RLS without charging a failed outcome", async () => {
     // Settlement resolves the sponsor from the persisted Scan.createdById —
@@ -394,14 +402,28 @@ describe.skipIf(!process.env.RLS_RUNTIME_DATABASE_URL)("automatic retest real RL
       )
     try {
       await expect(
-        handleFixPrMergedAndReevaluate(id, recoveryBranch, 2, async () => {})
+        handleFixPrMergedAndReevaluate({
+          workspaceId: id,
+          branchName: recoveryBranch,
+          prNumber: 2,
+          assertRetestAllowed: async () => {},
+          repoFullName: undefined,
+          assertRetestWorkerAvailable: async () => {},
+        })
       ).rejects.toThrow("late transaction failure")
     } finally {
       spy.mockRestore()
     }
     expect(await owner.scan.count({ where: { workspaceId: id } })).toBe(count)
     expect(await owner.retest.count({ where: { workspaceId: id, findingId: finding.id } })).toBe(0)
-    const recovered = await handleFixPrMergedAndReevaluate(id, recoveryBranch, 2, async () => {})
+    const recovered = await handleFixPrMergedAndReevaluate({
+      workspaceId: id,
+      branchName: recoveryBranch,
+      prNumber: 2,
+      assertRetestAllowed: async () => {},
+      repoFullName: undefined,
+      assertRetestWorkerAvailable: async () => {},
+    })
     expect(recovered?.retestScanId).toBeTruthy()
     expect(await owner.scan.count({ where: { workspaceId: id } })).toBe(count + 1)
     await owner.scan.update({

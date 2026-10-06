@@ -94,10 +94,16 @@ describe("stepModelForPath (v16 3.1 single source of truth)", () => {
     )
   })
 
-  it("falls back to the three-step model while the path is unset", () => {
-    // Step 2 is only reachable through the GitHub connect redirect, so the
-    // unknown-path list must still contain it (the old "Step 3 of 2" bug).
-    expect(stepModelForPath(null)).toHaveLength(3)
+  it("keeps the first chooser generic but restores the repo step after OAuth", () => {
+    expect(stepModelForPath(null, 1).map((entry) => entry.label)).toEqual([
+      "Add target",
+      "Target details",
+    ])
+    expect(stepModelForPath(null, 2).map((entry) => entry.label)).toEqual([
+      "Add target",
+      "Select repository",
+      "Target details",
+    ])
     expect(stepModelForPath("skip")).toHaveLength(3)
   })
 

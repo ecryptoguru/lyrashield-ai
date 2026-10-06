@@ -1,33 +1,25 @@
 ---
-// Contact routing: the general contact mailbox is the one actually configured in
-// wrangler.jsonc (PUBLIC_ABUSE_EMAIL — the variable name predates this page
-// using it for partnership and product questions). Security vulnerabilities are
-// routed through /security-reporting rather than a raw mailto so the disclosure
-// policy and the monitored address stay in one place.
-const abuseEmail =
-  (import.meta.env.PUBLIC_ABUSE_EMAIL as string | undefined) || "admin@lyrashieldai.com"
+// Contact routing: one rule, stated in the vocabulary lock. support@ is for
+// help and product questions; security@ is for vulnerability reports and is
+// reached through /security-reporting so the disclosure policy and the
+// monitored address stay in one place. The earlier admin@ general mailbox is
+// retired from public pages.
+const supportEmail =
+  (import.meta.env.PUBLIC_SUPPORT_EMAIL as string | undefined) || "support@lyrashieldai.com"
 // Fallback must stay in sync with DEFAULT_API_URL in packages/credentials/src/index.ts
 // (marketing deliberately has no dependency edge on that package).
 const appUrl =
   (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/\/$/, "") ||
   "https://app.lyrashieldai.com"
 import Base from "@layouts/Base.astro"
+import { CTA_LABEL } from "../lib/site-copy"
 
 const origin = Astro.site?.origin || "http://localhost:4321"
 const canonical = new URL("/about", origin).toString()
-const title = "About LyraShield AI — Release Assurance for AI-Built Apps"
+const title = "About LyraShield AI — Launch Gate for AI-Built Apps"
 const description =
   "LyraShield AI is built by Ankit Das, an AI/ML engineer with 16+ years across Web3, AI and application security. The mission and the approach."
-// One editorial review date drives the visible "Last reviewed" text, the
-// <time datetime> attribute, the page JSON-LD dateModified and the sitemap
-// lastmod (parsed in astro.config.mjs). Change this constant only.
-const updatedDate = "2026-10-05"
-const updatedDateLabel = new Date(`${updatedDate}T00:00:00Z`).toLocaleDateString("en-US", {
-  year: "numeric",
-  month: "long",
-  day: "numeric",
-  timeZone: "UTC",
-})
+const updatedDate = "2026-09-20"
 
 const founder = {
   name: "Ankit Das",
@@ -83,7 +75,7 @@ const jsonLd: unknown[] = [
     worksFor: { "@id": `${origin}/#organization` },
     knowsAbout: [
       "AI application security",
-      "release assurance",
+      "launch gate",
       "Web3 development",
       "smart contracts",
       "AI engineering",
@@ -102,12 +94,14 @@ const jsonLd: unknown[] = [
         Evidence over promises
       </h1>
       <p class="mt-6 text-lg leading-8 text-text-muted" data-reveal>
-        LyraShield AI is the evidence-backed release-assurance layer for AI-built software. We
+        LyraShield AI is the evidence-backed launch gate for AI-built software. We
         believe a security result should say what it knows — and what it does not — rather than
         turning scanner confidence into a universal verdict.
       </p>
       <p class="mt-4 text-sm text-text-muted" data-reveal="fade">
-        Last reviewed: <time datetime={updatedDate}>{updatedDateLabel}</time>
+        Last reviewed: <time datetime="2026-10-05">5 Oct 2026</time>. The evidence states and
+        coverage limits this page refers to are defined once on{" "}
+        <a href="/methodology" class="font-medium text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent">the methodology page</a>.
       </p>
     </header>
 
@@ -132,8 +126,8 @@ const jsonLd: unknown[] = [
       <h2 id="mission-heading" class="text-2xl font-semibold text-text" data-reveal>Our mission</h2>
       <p class="mt-5 leading-7 text-text-muted" data-reveal>
         We do not claim that a clean scan proves an app is secure. We do not claim universal
-        coverage. We record what was checked, what was verified and what remains uncertain —
-        then produce an immutable report that stakeholders can inspect. The Vibe Security 50
+        coverage. We record what was checked, what a fresh retest confirmed and what remains uncertain —
+        then produce a checksum-bound report that stakeholders can inspect. The Vibe Security 50
         framework defines 43 code/URL review controls and 7 that require operational or human evidence outside the scan,
         so you always know the boundary of what a scan can and cannot establish.
       </p>
@@ -144,7 +138,7 @@ const jsonLd: unknown[] = [
       <dl class="mt-8 grid gap-x-10 gap-y-8 md:grid-cols-2" data-reveal-group>
         <div data-reveal>
           <dt class="font-semibold text-text">Evidence states</dt>
-          <dd class="mt-2 leading-7 text-text-muted">Every finding carries one of three shipped states: detected candidate, retest-confirmed or inconclusive. Independently verified is a fourth defined state that is not produced today. A score never overrides these facts.</dd>
+          <dd class="mt-2 leading-7 text-text-muted">Every finding carries one of three shipped states: detected, retest-confirmed or inconclusive. The schema also defines a fourth state for a future separate verification step; no finding is in it today. A score never overrides these facts.</dd>
         </div>
         <div data-reveal>
           <dt class="font-semibold text-text">Coverage receipts</dt>
@@ -155,8 +149,8 @@ const jsonLd: unknown[] = [
           <dd class="mt-2 leading-7 text-text-muted">When a fix is applied, a server-owned deterministic retest checks whether the condition is actually absent — not just whether the scanner stopped reporting it.</dd>
         </div>
         <div data-reveal>
-          <dt class="font-semibold text-text">Immutable reports</dt>
-          <dd class="mt-2 leading-7 text-text-muted">Assurance reports are frozen at creation time with tamper-evident manifests. They can be shared with stakeholders without risk of silent modification.</dd>
+          <dt class="font-semibold text-text">Checksum-bound reports</dt>
+          <dd class="mt-2 leading-7 text-text-muted">An assurance report is a private snapshot written once per scan and report type, bound to a recorded sha256 manifest checksum. The checksum is verifiable, so a shared report can be checked against what was recorded at creation.</dd>
         </div>
       </dl>
     </section>
@@ -202,7 +196,7 @@ const jsonLd: unknown[] = [
 
     <section aria-labelledby="stats-heading" class="mt-12" data-reveal-group>
       <h3 class="text-lg font-semibold text-text" data-reveal>Building with AI, daily</h3>
-      <p class="mt-2 text-sm text-text-muted" data-reveal>From the founder's ChatGPT usage data export, counts as of mid-2026 — provider-reported personal usage figures behind the decision to build LyraShield AI, not LyraShield scan results.</p>
+      <p class="mt-2 text-sm text-text-muted" data-reveal>From ChatGPT Codex usage data — the real numbers behind the decision to build LyraShield AI.</p>
       <div class="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-4" data-reveal-group>
         {stats.map((stat) => (
           <div class="rounded-lg border border-border bg-bg-raised p-4 text-center" data-reveal>
@@ -227,11 +221,11 @@ const jsonLd: unknown[] = [
         </li>
         <li class="flex gap-4" data-reveal>
           <span class="font-mono text-sm text-accent shrink-0">03</span>
-          <p class="leading-7 text-text-muted"><strong class="text-text">Evidence states are not interchangeable.</strong> Detected candidate, retest-confirmed and inconclusive ship today; independently verified is defined for a future separate verification step. Scanner confidence alone never creates a verified state.</p>
+          <p class="leading-7 text-text-muted"><strong class="text-text">Evidence states are not interchangeable.</strong> Detected, retest-confirmed and inconclusive are separate states with distinct meanings. Scanner confidence alone never confirms a fix; only a fresh retest does.</p>
         </li>
         <li class="flex gap-4" data-reveal>
           <span class="font-mono text-sm text-accent shrink-0">04</span>
-          <p class="leading-7 text-text-muted"><strong class="text-text">Fix PRs require scoped authorization.</strong> Browser execution binds a server-generated patch to explicit approval. Connected OAuth clients can run only operations within a browser-confirmed grant, checked again at execution. Nothing auto-merges.</p>
+          <p class="leading-7 text-text-muted"><strong class="text-text">Fix PRs open only after a human approves.</strong> A Fix PR carries a server-generated patch bound to that approval. Connected OAuth clients can run only operations within a browser-confirmed grant, checked again at execution. Nothing auto-merges.</p>
         </li>
         <li class="flex gap-4" data-reveal>
           <span class="font-mono text-sm text-accent shrink-0">05</span>
@@ -245,12 +239,12 @@ const jsonLd: unknown[] = [
       <p class="mt-5 leading-7 text-text-muted" data-reveal>
         For a security vulnerability, follow the{" "}
         <a href="/security-reporting" class="text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent">coordinated disclosure process</a>{" "}
-        so the report reaches the monitored mailbox with the detail we need. For partnership or
-        product questions, email{" "}
-        <a href={`mailto:${abuseEmail}`} class="text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent">{abuseEmail}</a>.
+        so the report reaches the monitored mailbox with the detail we need. For help and product
+        questions, email{" "}
+        <a href={`mailto:${supportEmail}`} class="text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent">{supportEmail}</a>.
         Registration is open in the beta &mdash;{" "}
-        <a href={`${appUrl}/sign-up?source=about&cta=create_account`} class="text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent">create a free account</a>{" "}
-        to start a release record.
+        <a href={`${appUrl}/sign-up?source=about&cta=create_account`} class="text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent">{CTA_LABEL.signUp}</a>{" "}
+        to start a launch report.
       </p>
     </section>
 

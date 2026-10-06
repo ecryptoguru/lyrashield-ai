@@ -80,6 +80,11 @@ test("PR container job is credential-free and never runs under pull_request_targ
   assert.match(triggers, /^  pull_request:/m)
   assert.doesNotMatch(triggers, /^  pull_request_target:/m)
   const job = jobSection(workflow, "container-build")
+  assert.match(
+    job,
+    /^    if: needs\.changes\.outputs\.azure-deploy == 'true'$/m,
+    "every Azure-routed PR, including deployment-tooling-only changes, must build images"
+  )
   const permissions = job.match(/^    permissions:\n((?:      .*\n)+)/m)?.[1] ?? ""
   assert.match(permissions, /^      contents: read$/m)
   for (const scope of permissions.trim().split("\n")) {
