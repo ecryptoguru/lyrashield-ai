@@ -220,6 +220,66 @@ describe("runEngineTriageOverlay", () => {
     expect(result.triageTerminalReason).toBeNull()
   })
 
+  it.each(["exact_cache", "singleflight"])(
+    "preserves the paid scan checkpoint when triage is reused from %s",
+    async (source) => {
+      mocks.runEngineTriage.mockResolvedValueOnce({
+        source,
+        artifact: completedArtifact,
+        ...(source === "exact_cache"
+          ? {
+              reuseReceipt: {
+                version: "ai-result-reuse/1.0",
+                artifactSha256: "d".repeat(64),
+                createdAt: "2026-10-06T00:00:00.000Z",
+                expiresAt: "2026-10-07T00:00:00.000Z",
+                currentProviderRequests: 0,
+                currentProviderCostUsd: 0,
+              },
+            }
+          : {}),
+        exitCode: 0,
+        timedOut: false,
+        cancelled: false,
+      })
+      // An empty usage checkpoint invalidates the already reconciled receipt.
+      mocks.persistEngineUsageCheckpoint.mockResolvedValueOnce({
+        budgetExceeded: false,
+        billedCostUsd: null,
+        costReconciled: false,
+        reconciliationReason: "Provider usage unavailable",
+      })
+      const result = await runEngineTriageOverlay(params() as never)
+      expect(result).toMatchObject({ billedCostUsd: 0.1, costReconciled: true })
+      expect(result.triageSnapshot).toMatchObject({ status: "COMPLETED", resultCount: 1 })
+      expect(result.aiSecuritySignals[0]?.triage?.disposition).toBe("LIKELY_VALID")
+      expect(mocks.persistEngineUsageCheckpoint).not.toHaveBeenCalled()
+    }
+  )
+
+  it("preserves the paid checkpoint when a shared attempt has no usable artifact", async () => {
+    mocks.runEngineTriage.mockResolvedValueOnce({
+      source: "singleflight",
+      artifact: null,
+      exitCode: 1,
+      timedOut: false,
+      cancelled: false,
+    })
+    mocks.persistEngineUsageCheckpoint.mockResolvedValueOnce({
+      billedCostUsd: null,
+      costReconciled: false,
+      budgetExceeded: false,
+    })
+    const result = await runEngineTriageOverlay(params() as never)
+    expect(result).toMatchObject({
+      billedCostUsd: 0.1,
+      costReconciled: true,
+      triageTerminalReason: "TRIAGE_ARTIFACT_UNAVAILABLE",
+    })
+    expect(result.aiSecuritySignals).toEqual([signal])
+    expect(mocks.persistEngineUsageCheckpoint).not.toHaveBeenCalled()
+  })
+
   it.each([
     ["failed", "FAILED", "TRIAGE_COMMAND_FAILED"],
     ["budget-stopped", "BUDGET_STOPPED", "TRIAGE_BUDGET_EXHAUSTED"],

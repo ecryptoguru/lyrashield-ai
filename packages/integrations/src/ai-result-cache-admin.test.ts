@@ -5,6 +5,8 @@ const { env, redis } = vi.hoisted(() => ({
     LYRASHIELD_AI_CACHE_KEY_SECRET: "k".repeat(32),
   },
   redis: {
+    status: "ready",
+    connect: vi.fn<() => Promise<void>>(),
     smembers: vi.fn<(...args: string[]) => Promise<string[]>>(),
     del: vi.fn<(...keys: string[]) => Promise<number>>(),
   },
@@ -21,8 +23,26 @@ import {
 describe("exact AI-result cache purge", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    redis.status = "ready"
+    redis.connect.mockImplementation(async () => {
+      redis.status = "ready"
+    })
     redis.smembers.mockResolvedValue([])
     redis.del.mockResolvedValue(0)
+  })
+
+  it("connects a cold client before deleting cached target results", async () => {
+    redis.status = "wait"
+    redis.smembers.mockImplementation(async () => {
+      if (redis.status !== "ready") throw new Error("Stream isn't writeable")
+      return ["cached-entry"]
+    })
+    redis.del.mockImplementation(async (...keys) => keys.length)
+    await expect(purgeAiResultCacheWorkspaceEntries("workspace-1", ["target-1"])).resolves.toEqual({
+      available: true,
+      targetsVisited: 1,
+      entriesDeleted: 1,
+    })
   })
 
   it("uses an opaque workspace-target index and deletes in bounded batches", async () => {

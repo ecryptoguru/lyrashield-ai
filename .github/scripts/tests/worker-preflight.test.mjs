@@ -133,7 +133,7 @@ test("public scanner revision and secret store exclude GitHub App credentials", 
   assert.doesNotMatch(resultCacheSync, /--value\s+"\$LYRASHIELD_AI_CACHE/)
 
   const cacheWorkflowStep = runtimeWorkflow
-    .split("      - name: Sync isolated AI result-cache secrets to worker Key Vault\n")[1]
+    .split("      - name: Sync isolated AI result-cache secrets to worker and app Key Vaults\n")[1]
     ?.split("\n      - name:")[0]
   assert.ok(cacheWorkflowStep)
   assert.match(
@@ -155,7 +155,7 @@ test("public scanner revision and secret store exclude GitHub App credentials", 
   }
 })
 
-test("exact result-cache deployment syncs only to the worker vault and rejects shared Redis hosts", () => {
+test("exact result-cache deployment provisions isolated worker and app purge credentials", () => {
   const secretUrl = "rediss://default:cache-url-secret-sentinel@cache.example:6379"
   const secretKey = "cache-key-secret-sentinel-0123456789"
   const activeEnv = {
@@ -167,6 +167,10 @@ test("exact result-cache deployment syncs only to the worker vault and rejects s
     BULLMQ_REDIS_URL: "rediss://default:queue-secret-sentinel@queue.example:6379",
     UPSTASH_REDIS_REST_URL: "https://rate.example",
     AZURE_KEY_VAULT_NAME: "lyrashieldprodsecrets",
+    AZURE_APP_SECRET_KEY_VAULT_NAME: "app-only-vault",
+    AZURE_APP_CONTAINER_APP_NAME: "lyrashield-app",
+    AZURE_SCANNER_CONTAINER_APP_NAME: "lyrashield-scanner",
+    AZURE_RESOURCE_GROUP: "rg",
   }
   for (const [name, value, expectedMessage] of [
     [
@@ -253,7 +257,38 @@ exec "$@"
     })
     assert.equal(success.status, 0, `${success.stdout}${success.stderr}`)
     const azureArgs = readFileSync(azLog, "utf8")
-    assert.equal((azureArgs.match(/keyvault secret set/g) ?? []).length, 4)
+    assert.equal((azureArgs.match(/keyvault secret set/g) ?? []).length, 6)
+    assert.match(azureArgs, /--vault-name app-only-vault --name ai-cache-url/)
+    assert.match(azureArgs, /--vault-name app-only-vault --name ai-cache-key/)
+    assert.match(
+      azureArgs,
+      /containerapp secret set[^\n]*--name lyrashield-app[^\n]*ai-cache-url=keyvaultref:https:\/\/app-only-vault\.vault\.azure\.net\/secrets\/ai-cache-url,identityref:system/
+    )
+    assert.doesNotMatch(azureArgs, /lyrashield-scanner|role assignment create/)
+    for (const cacheUrl of [secretUrl.replace("default:", ":")]) {
+      writeFileSync(azLog, "")
+      const passwordOnly = spawnSync("bash", aiResultCacheSyncArgs, {
+        encoding: "utf8",
+        env: {
+          ...activeEnv,
+          LYRASHIELD_AI_CACHE_REDIS_URL: cacheUrl,
+          PATH: `${temp}:${process.env.PATH}`,
+          AZ_FAKE_LOG: azLog,
+        },
+      })
+      assert.equal(passwordOnly.status, 0, `${passwordOnly.stdout}${passwordOnly.stderr}`)
+    }
+    const sharedVault = spawnSync("bash", aiResultCacheSyncArgs, {
+      encoding: "utf8",
+      env: {
+        ...activeEnv,
+        AZURE_APP_SECRET_KEY_VAULT_NAME: "lyrashieldprodsecrets",
+        PATH: `${temp}:${process.env.PATH}`,
+        AZ_FAKE_LOG: azLog,
+      },
+    })
+    assert.notEqual(sharedVault.status, 0)
+    assert.match(`${sharedVault.stdout}${sharedVault.stderr}`, /app-only Key Vault distinct/)
     assert.match(azureArgs, /--name worker-ai-result-cache-mode/)
     assert.match(azureArgs, /--name worker-ai-cache-fingerprint/)
     assert.match(azureArgs, /--name worker-ai-cache-url/)

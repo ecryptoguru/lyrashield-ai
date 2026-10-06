@@ -136,7 +136,6 @@ async function attemptRepoTriageOverlay(args: {
       // An exact completed artifact makes no provider request. Preserve the
       // main scan's existing ledger and apply the same non-authoritative
       // overlay only after its provenance receipt has been validated.
-      await updateAccounting()
       aiSecuritySignals = applyEngineTriageArtifact(aiSecuritySignals, artifact)
       triageSnapshot = {
         status: artifact.status,
@@ -156,6 +155,9 @@ async function attemptRepoTriageOverlay(args: {
         currentProviderRequests: 0,
         currentProviderCostUsd: 0,
       })
+    } else if (reuseWithoutProviderRequest) {
+      // A shared attempt without an artifact still made no request for this scan.
+      // Keep its main-engine checkpoint; the terminal reason below records the gap.
     } else if (artifact) {
       await updateAccounting()
       triageSnapshot = { ...artifactSnapshot(artifact), resultCount: 0 }

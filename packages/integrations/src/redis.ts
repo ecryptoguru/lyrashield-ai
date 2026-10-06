@@ -42,7 +42,7 @@ function getAiResultCacheRedisClient(allowDisabledMode: boolean): Redis | null {
   if (!rawUrl) return null
   try {
     const parsed = new URL(rawUrl)
-    if (parsed.protocol !== "rediss:" || !parsed.hostname || !parsed.username || !parsed.password) {
+    if (parsed.protocol !== "rediss:" || !parsed.hostname || !parsed.password) {
       logger.warn("Exact AI-result reuse is disabled: cache Redis URL is invalid", {
         reason: "tls_url_required",
       })

@@ -480,7 +480,7 @@ jobs:
           AZURE_APP_SECRET_KEY_VAULT_NAME: ${{ vars.AZURE_APP_SECRET_KEY_VAULT_NAME }}
           AZURE_CONTAINER_APPS_SECRET_KEY_VAULT_NAME: ${{ vars.AZURE_CONTAINER_APPS_SECRET_KEY_VAULT_NAME }}
         run: bash .github/scripts/deploy-azure-preflight.sh sync-upstash-secrets-to-container-apps
-      - name: Sync isolated AI result-cache secrets to worker Key Vault
+      - name: Sync isolated AI result-cache secrets to worker and app Key Vaults
         id: sync-ai-result-cache
         env:
           LYRASHIELD_AI_RESULT_CACHE_MODE: ${{ vars.LYRASHIELD_AI_RESULT_CACHE_MODE || 'off' }}
@@ -490,6 +490,9 @@ jobs:
           BULLMQ_REDIS_URL: ${{ secrets.BULLMQ_REDIS_URL }}
           UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
           AZURE_KEY_VAULT_NAME: ${{ vars.AZURE_KEY_VAULT_NAME || 'lyrashieldprodsecrets' }}
+          AZURE_APP_SECRET_KEY_VAULT_NAME: ${{ vars.AZURE_APP_SECRET_KEY_VAULT_NAME }}
+          AZURE_APP_CONTAINER_APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
         run: bash .github/scripts/deploy-azure-preflight.sh sync-ai-result-cache-secrets-to-worker-key-vault
       - name: Sync BullMQ Redis secret to Container Apps
         env:
@@ -563,6 +566,7 @@ jobs:
           RAZORPAY_PLAN_IDS: ${{ vars.RAZORPAY_PLAN_IDS }}
           AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
           AZURE_APP_CONTAINER_APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
+          LYRASHIELD_AI_RESULT_CACHE_MODE: ${{ vars.LYRASHIELD_AI_RESULT_CACHE_MODE || 'off' }}
           MYRA_AZURE_OPENAI_API_KEY_CONFIGURED: ${{ secrets.MYRA_AZURE_OPENAI_API_KEY != '' }}
           TURNSTILE_SECRET_KEY_CONFIGURED: ${{ secrets.TURNSTILE_SECRET_KEY != '' }}
           MYRA_GOOGLE_CLIENT_SECRET_CONFIGURED: ${{ secrets.MYRA_GOOGLE_CLIENT_SECRET != '' }}

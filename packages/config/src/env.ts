@@ -40,9 +40,7 @@ export function validateAiResultCacheConfig(input: {
   if (redisUrl) {
     try {
       const parsed = new URL(redisUrl)
-      validRedisUrl =
-        parsed.protocol === "rediss:" &&
-        Boolean(parsed.hostname && parsed.username && parsed.password)
+      validRedisUrl = parsed.protocol === "rediss:" && Boolean(parsed.hostname && parsed.password)
       cacheHost = parsed.hostname.toLowerCase()
     } catch {
       validRedisUrl = false

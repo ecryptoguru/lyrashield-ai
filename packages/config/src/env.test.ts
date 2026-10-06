@@ -420,6 +420,24 @@ describe("Env Validation Schema", () => {
     ).toEqual([])
   })
 
+  it("accepts password-only TLS Redis credentials while rejecting unauthenticated endpoints", () => {
+    const base = {
+      mode: "observe" as const,
+      keySecret: "k".repeat(32),
+      providerFingerprint: "a".repeat(64),
+    }
+    expect(
+      validateAiResultCacheConfig({ ...base, redisUrl: "rediss://:token@cache.example:6380" })
+    ).toEqual([])
+    for (const redisUrl of [
+      "rediss://cache.example:6380",
+      "rediss://default@cache.example:6380",
+      "redis://:token@cache.example:6379",
+    ]) {
+      expect(validateAiResultCacheConfig({ ...base, redisUrl })).not.toEqual([])
+    }
+  })
+
   it("requires exact-result Redis to use a host separate from BullMQ and rate limits", () => {
     const base = {
       mode: "observe" as const,

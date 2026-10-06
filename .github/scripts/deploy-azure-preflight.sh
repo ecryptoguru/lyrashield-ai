@@ -456,7 +456,7 @@ step_sync-upstash-secrets-to-container-apps() {
   done
 }
 
-# Workflow step: Sync the dedicated exact-result cache secrets to the worker Key Vault.
+# Workflow step: Sync dedicated cache secrets to the worker and app-only purge vaults.
 # The worker loads these values through refresh-secrets.sh; the cache stays off
 # unless an operator explicitly selects observe/enforce.
 step_sync-ai-result-cache-secrets-to-worker-key-vault() {
@@ -485,7 +485,7 @@ function host(value, protocols) {
 }
 try {
   const cache = new URL(cacheRaw);
-  if (cache.protocol !== "rediss:" || !cache.hostname || !cache.username || !cache.password)
+  if (cache.protocol !== "rediss:" || !cache.hostname || !cache.password)
     throw new Error("cache endpoint must be credentialed TLS Redis");
   if (Buffer.byteLength(cacheKey, "utf8") < 32) throw new Error("cache key must contain at least 32 bytes");
   if (!/^[a-fA-F0-9]{64}$/.test(fingerprint)) throw new Error("provider fingerprint must be SHA-256");
@@ -510,8 +510,24 @@ NODE
       worker-ai-cache-key:LYRASHIELD_AI_CACHE_KEY_SECRET
     )
   fi
-  azure_keyvault_sync_env_group "$AZURE_KEY_VAULT_NAME" "${mappings[@]}"
-  echo "Exact AI-result cache configuration synced to the worker Key Vault."
+  # The helper clears its input variables; retain them in this shell for the app-only copy.
+  (azure_keyvault_sync_env_group "$AZURE_KEY_VAULT_NAME" "${mappings[@]}")
+  if [ "$mode" != "off" ] && [ -n "${AZURE_APP_CONTAINER_APP_NAME:-}" ]; then
+    if [ -z "${AZURE_APP_SECRET_KEY_VAULT_NAME:-}" ] || \
+       [ "$(printf '%s' "$AZURE_APP_SECRET_KEY_VAULT_NAME" | tr '[:upper:]' '[:lower:]')" = "$(printf '%s' "$AZURE_KEY_VAULT_NAME" | tr '[:upper:]' '[:lower:]')" ]; then
+      echo "::error::Cache purge requires an app-only Key Vault distinct from the worker vault."
+      return 1
+    fi
+    azure_keyvault_sync_env_group "$AZURE_APP_SECRET_KEY_VAULT_NAME" \
+      ai-cache-url:LYRASHIELD_AI_CACHE_REDIS_URL \
+      ai-cache-key:LYRASHIELD_AI_CACHE_KEY_SECRET
+    azure_keyvault_require_containerapp_access "$AZURE_APP_SECRET_KEY_VAULT_NAME" "$AZURE_RESOURCE_GROUP" "$AZURE_APP_CONTAINER_APP_NAME"
+    local app_vault_base="https://${AZURE_APP_SECRET_KEY_VAULT_NAME}.vault.azure.net/secrets"
+    sync_secret_group "$AZURE_APP_CONTAINER_APP_NAME" \
+      "ai-cache-url=keyvaultref:${app_vault_base}/ai-cache-url,identityref:system" \
+      "ai-cache-key=keyvaultref:${app_vault_base}/ai-cache-key,identityref:system"
+  fi
+  echo "Exact AI-result cache configuration synced to the worker and app purge stores."
 }
 
 # Workflow step: Sync BullMQ Redis secret to Container Apps

@@ -1,9 +1,11 @@
 import { createHmac } from "node:crypto"
+import type Redis from "ioredis"
 import { env } from "@lyrashield/config"
 import { getAiResultCacheRedisForPurge } from "./redis"
 
 export const AI_RESULT_CACHE_KEY_PREFIX = "lyrashield:ai-cache:v1:triage:"
 const PURGE_BATCH_SIZE = 500
+const purgeConnections = new WeakMap<Redis, Promise<unknown>>()
 
 /** Key an expiring index by owner and target without storing either identifier. */
 export function aiResultCacheTargetIndexKey(
@@ -37,6 +39,22 @@ export async function purgeAiResultCacheWorkspaceEntries(
   }
   const redis = getAiResultCacheRedisForPurge()
   if (!redis) return { available: false, targetsVisited: 0, entriesDeleted: 0 }
+
+  let connection = purgeConnections.get(redis)
+  if (!connection && redis.status === "wait") {
+    connection = redis.connect()
+    purgeConnections.set(redis, connection)
+  }
+  if (connection) {
+    try {
+      await connection
+    } finally {
+      purgeConnections.delete(redis)
+    }
+  }
+  if (redis.status !== "ready") {
+    return { available: false, targetsVisited: 0, entriesDeleted: 0 }
+  }
 
   let entriesDeleted = 0
   for (const targetId of targets) {
