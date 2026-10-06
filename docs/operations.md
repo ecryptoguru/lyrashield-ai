@@ -160,10 +160,14 @@ Flip to `public` per provider. `canary` remains available as a kill-switch.
 
 ### Durable webhook-track UTC schema cutover
 
-The first durable webhook writer upgrade uses the `Deploy to Azure` workflow
-on exact current `main`, with `webhook_claims_cutover=true` and confirmation
-`webhook-cutover:<source_sha>`. It drains existing queues, pauses app/scanner
-writers, stops the worker and checks the database before migration.
+The protected-main Azure release automatically selects the first durable
+webhook writer upgrade only after its read-only classifier verifies the exact
+allowlisted legacy writers and database schema. A manual `Deploy to Azure`
+dispatch requires exact current `main` and uses the same classifier. No cutover
+flag or typed confirmation is needed. The maintenance workflow drains existing
+queues, pauses app/scanner writers, stops the worker and checks the database
+before migration. Unknown or mixed baselines fail closed; see the
+[cutover contract](reviews/2026-09-30/webhook-production-cutover.md).
 
 Legacy `nextAttemptAt` and `leaseExpiresAt` values must both be empty after
 writers stop. The UTC migration then preserves NULLs and needs no historical

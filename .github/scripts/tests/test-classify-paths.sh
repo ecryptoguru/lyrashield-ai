@@ -126,7 +126,9 @@ for path in \
   .github/scripts/azure_secret_set.sh \
   .github/scripts/validate-worker-provenance.sh \
   .github/scripts/migration-database-identity.mjs \
-  .github/scripts/verify-webhook-cutover.mjs; do
+  .github/scripts/verify-webhook-cutover.mjs \
+  .github/scripts/verify-webhook-cutover-preflight.mjs \
+  .github/scripts/validate-webhook-deploy-dispatch.sh; do
   out=$(run_classify "$path")
   assert_eq "$path: Azure deploy" "true" "$(get_field "$out" "azure-deploy")"
   assert_eq "$path: tooling" "true" "$(get_field "$out" "tooling-only")"
@@ -254,7 +256,9 @@ for path in \
   .github/scripts/azure_secret_set.sh \
   .github/scripts/validate-worker-provenance.sh \
   .github/scripts/migration-database-identity.mjs \
-  .github/scripts/verify-webhook-cutover.mjs; do
+  .github/scripts/verify-webhook-cutover.mjs \
+  .github/scripts/verify-webhook-cutover-preflight.mjs \
+  .github/scripts/validate-webhook-deploy-dispatch.sh; do
   out=$(run_classify "$path")
   assert_eq "$path: Azure deploy" "true" "$(get_field "$out" "azure-deploy")"
 done

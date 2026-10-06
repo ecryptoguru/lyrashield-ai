@@ -27,6 +27,7 @@ vm_phase() {
     verify) grep -q '^WEBHOOK_QUIESCENCE_VERIFIED$' <<< "$result" ;;
     database) grep -q '^WEBHOOK_MIGRATION_DATABASE_VERIFIED$' <<< "$result" ;;
     recovery) grep -q '^WEBHOOK_RECOVERY_RECEIPT_VERIFIED$' <<< "$result" ;;
+    recovery-probe) grep -Eq '^WEBHOOK_RECOVERY_RECEIPT_(VERIFIED|ABSENT)$' <<< "$result" ;;
     resume) grep -q '^WEBHOOK_CUTOVER_RESUMED$' <<< "$result" ;;
   esac
 }
@@ -60,12 +61,12 @@ deactivate_writers() {
   done
 }
 case "$phase" in
-hold) vm_phase claim; deactivate_writers; assert_inactive; echo 'Maintenance failed; admission remains held. Incompatible writers were not restored.' >&2;;
+hold) vm_phase recovery; vm_phase claim; deactivate_writers; assert_inactive; echo 'Maintenance failed; admission remains held. Incompatible writers were not restored.' >&2;;
 database)
   MIGRATION_DATABASE_IDENTITY=$(node .github/scripts/migration-database-identity.mjs)
   vm_phase database
   ;;
-recovery) vm_phase recovery;;
+recovery|recovery-probe) vm_phase "$phase";;
 claim) vm_phase claim;;
 quiesce)
   : "${APP_NAME:?}" "${SCANNER_NAME:?}"

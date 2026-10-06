@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { createHash } from "node:crypto"
 import { spawnSync } from "node:child_process"
-import { chmodSync, mkdtempSync, readFileSync, writeFileSync, rmSync } from "node:fs"
+import { chmodSync, existsSync, mkdtempSync, readFileSync, writeFileSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import test from "node:test"
@@ -59,7 +59,7 @@ function setup(t, scenario = "normal") {
   const db = path.join(directory, "db.mjs")
   writeFileSync(
     db,
-    `export const getSystemPrisma=()=>({scan:{count:async()=>${scenario === "active scan" ? 1 : 0}},$queryRaw:async(sql)=>{if(${JSON.stringify(scenario)}==="legacy query unavailable")throw new Error("database unavailable");return [{count:sql[0].includes("information_schema")?${scenario === "UTC installed" ? 2 : scenario === "partial UTC schema" ? 1 : 0}:${scenario === "legacy scheduled" || scenario === "UTC installed" ? 1 : 0}}]},$disconnect:async()=>{}})`
+    `export const getSystemPrisma=()=>({scan:{count:async()=>process.env.TEST_RACE_SCAN==="1"?1:${scenario === "active scan" ? 1 : 0}},$queryRaw:async(sql)=>{if(${JSON.stringify(scenario)}==="legacy query unavailable")throw new Error("database unavailable");return [{count:sql[0].includes("WHERE status")?(process.env.TEST_RACE_TRACK==="1"?1:${scenario === "nonterminal track" ? 1 : 0}):sql[0].includes("information_schema")?${scenario === "UTC installed" ? 2 : scenario === "partial UTC schema" ? 1 : 0}:(process.env.TEST_RACE_SCHEDULE==="1"?1:${scenario === "legacy scheduled" || scenario === "UTC installed" ? 1 : 0})}]},$disconnect:async()=>{}})`
   )
   const integration = path.join(directory, "integrations.mjs")
   writeFileSync(
@@ -141,10 +141,10 @@ function setup(t, scenario = "normal") {
       ],
       { encoding: "utf8", env: { ...env, ...overrides } }
     )
-  const local = (phase) =>
+  const local = (phase, overrides = {}) =>
     spawnSync("bash", [path.join(root, ".github/scripts/webhook-claims-maintenance.sh"), phase], {
       encoding: "utf8",
-      env,
+      env: { ...env, ...overrides },
     })
   return { vm, local, env, receipt, redis, otherRedis, state, calls }
 }
@@ -175,7 +175,7 @@ for (const scenario of [
   test(`maintenance fails closed without stopping paid work: ${scenario}`, (t) => {
     const f = setup(t, scenario)
     const claimed = f.vm("claim")
-    if (scenario === "stale environment") {
+    if (["stale environment", "active scan", "retry pending"].includes(scenario)) {
       assert.notEqual(claimed.status, 0)
       assert.equal(JSON.parse(readFileSync(f.redis)), null)
       return
@@ -291,6 +291,112 @@ test("same GitHub run rerun preserves the original nonce and owner after stoppin
   assert.equal(f.vm("stop").status, 0)
 })
 
+test("retry receipt probe distinguishes verified ownership from truly absent state", (t) => {
+  const empty = setup(t)
+  const absent = empty.local("recovery-probe", { LYRASHIELD_ADMISSION_STOP_OWNER: "123:2" })
+  assert.equal(absent.status, 0, absent.stderr)
+  assert.match(absent.stdout, /WEBHOOK_RECOVERY_RECEIPT_ABSENT/)
+  assert.equal(JSON.parse(readFileSync(empty.redis)), null)
+
+  const owned = setup(t)
+  assert.equal(owned.vm("claim").status, 0)
+  const verified = owned.local("recovery-probe", { LYRASHIELD_ADMISSION_STOP_OWNER: "123:2" })
+  assert.equal(verified.status, 0, verified.stderr)
+  assert.match(verified.stdout, /WEBHOOK_RECOVERY_RECEIPT_VERIFIED/)
+
+  const intent = setup(t)
+  assert.equal(intent.vm("claim").status, 0)
+  const intentReceipt = JSON.parse(readFileSync(intent.receipt))
+  intentReceipt.phase = "intent"
+  writeFileSync(intent.receipt, JSON.stringify(intentReceipt), { mode: 0o600 })
+  writeFileSync(intent.redis, "null")
+  const intentProbe = intent.local("recovery-probe", { LYRASHIELD_ADMISSION_STOP_OWNER: "123:2" })
+  assert.equal(intentProbe.status, 0, intentProbe.stderr)
+  assert.match(intentProbe.stdout, /WEBHOOK_RECOVERY_RECEIPT_VERIFIED/)
+  assert.equal(
+    JSON.parse(readFileSync(intent.redis)),
+    null,
+    "the recovery probe must remain read-only"
+  )
+
+  const foreignStop = setup(t, "foreign stop")
+  const ambiguous = foreignStop.local("recovery-probe", {
+    LYRASHIELD_ADMISSION_STOP_OWNER: "123:2",
+  })
+  assert.notEqual(ambiguous.status, 0)
+  assert.doesNotMatch(ambiguous.stdout, /WEBHOOK_RECOVERY_RECEIPT_ABSENT/)
+})
+
+test("retry probe rejects receipts whose latest owner attempt is not earlier than this attempt", (t) => {
+  const f = setup(t)
+  assert.equal(f.vm("claim").status, 0)
+  const receipt = JSON.parse(readFileSync(f.receipt))
+  receipt.lastAttempt = 2
+  receipt.attempts = [1, 2]
+  writeFileSync(f.receipt, JSON.stringify(receipt), { mode: 0o600 })
+  const probe = f.local("recovery-probe", { LYRASHIELD_ADMISSION_STOP_OWNER: "123:2" })
+  assert.notEqual(probe.status, 0)
+  assert.doesNotMatch(probe.stdout, /WEBHOOK_RECOVERY_RECEIPT_VERIFIED/)
+})
+
+test("retry probe rejects duplicate or out-of-order attempt history", (t) => {
+  for (const attempts of [
+    [1, 1],
+    [2, 1],
+  ]) {
+    const f = setup(t)
+    assert.equal(f.vm("claim").status, 0)
+    const receipt = JSON.parse(readFileSync(f.receipt))
+    receipt.lastAttempt = Math.max(...attempts)
+    receipt.attempts = attempts
+    writeFileSync(f.receipt, JSON.stringify(receipt), { mode: 0o600 })
+    const probe = f.local("recovery-probe", { LYRASHIELD_ADMISSION_STOP_OWNER: "123:3" })
+    assert.notEqual(probe.status, 0)
+    assert.doesNotMatch(probe.stdout, /WEBHOOK_RECOVERY_RECEIPT_VERIFIED/)
+  }
+})
+
+test("failure hold only closes ingress after recovering this run's owned claim", (t) => {
+  const partial = setup(t)
+  const noReceiptHold = partial.local("hold")
+  assert.notEqual(noReceiptHold.status, 0)
+  assert.equal(JSON.parse(readFileSync(partial.state)).active, 2)
+  assert.equal(JSON.parse(readFileSync(partial.redis)), null)
+
+  const interrupted = setup(t)
+  assert.equal(interrupted.vm("claim").status, 0)
+  const receipt = JSON.parse(readFileSync(interrupted.receipt))
+  receipt.phase = "intent"
+  writeFileSync(interrupted.receipt, JSON.stringify(receipt), { mode: 0o600 })
+  writeFileSync(interrupted.redis, JSON.stringify(receipt.admissionStopValue))
+  const held = interrupted.local("hold")
+  assert.equal(held.status, 0, held.stderr)
+  assert.equal(JSON.parse(readFileSync(interrupted.state)).active, 0)
+  assert.equal(JSON.parse(readFileSync(interrupted.redis)), receipt.admissionStopValue)
+  const calls = readFileSync(interrupted.calls, "utf8")
+  assert.ok(calls.indexOf("recovery") < calls.indexOf("deactivate"))
+
+  const beforeRedisSet = setup(t)
+  assert.equal(beforeRedisSet.vm("claim").status, 0)
+  const intent = JSON.parse(readFileSync(beforeRedisSet.receipt))
+  intent.phase = "intent"
+  writeFileSync(beforeRedisSet.receipt, JSON.stringify(intent), { mode: 0o600 })
+  writeFileSync(beforeRedisSet.redis, "null")
+  const repairedAndHeld = beforeRedisSet.local("hold")
+  assert.equal(repairedAndHeld.status, 0, repairedAndHeld.stderr)
+  assert.equal(JSON.parse(readFileSync(beforeRedisSet.redis)), intent.admissionStopValue)
+  assert.equal(JSON.parse(readFileSync(beforeRedisSet.state)).active, 0)
+
+  const foreignReceipt = setup(t)
+  assert.equal(foreignReceipt.vm("claim").status, 0)
+  const tampered = JSON.parse(readFileSync(foreignReceipt.receipt))
+  tampered.owner = "999:1"
+  writeFileSync(foreignReceipt.receipt, JSON.stringify(tampered), { mode: 0o600 })
+  assert.notEqual(foreignReceipt.local("hold").status, 0)
+  assert.equal(JSON.parse(readFileSync(foreignReceipt.state)).active, 2)
+  assert.notEqual(JSON.parse(readFileSync(foreignReceipt.redis)), null)
+})
+
 test("a separate dispatch cannot adopt another run's held receipt", (t) => {
   const f = setup(t)
   assert.equal(f.vm("claim").status, 0)
@@ -342,7 +448,7 @@ test("original source recovery requires an existing immutable receipt before any
   assert.equal(f.vm("recovery", { TEST_OWNER: "123:2" }).status, 0)
   const runtime = readFileSync(".github/workflows/deploy-azure-runtime.yml", "utf8")
   assert.ok(
-    runtime.indexOf("- name: Verify existing owned receipt") <
+    runtime.indexOf("- name: Revalidate retry state for an automatic first cutover") <
       runtime.indexOf("- name: Ensure app and scanner system identities")
   )
 })
@@ -368,7 +474,16 @@ for (const [scenario, succeeds] of [
 ]) {
   test(`first UTC migration checks actual drained scheduling data: ${scenario}`, (t) => {
     const f = setup(t, scenario)
-    assert.equal(f.vm("claim").status, 0)
+    const claimed = f.vm("claim")
+    if (!succeeds) {
+      assert.notEqual(claimed.status, 0)
+      assert.equal(JSON.parse(readFileSync(f.redis)), null)
+      assert.equal(existsSync(f.receipt), false)
+      assert.equal(JSON.parse(readFileSync(f.state)).active, 2)
+      assert.equal(JSON.parse(readFileSync(f.state)).worker, "active")
+      return
+    }
+    assert.equal(claimed.status, 0, claimed.stderr)
     const quiesced = f.local("quiesce")
     const verified = quiesced.status === 0 ? f.vm("verify") : quiesced
     assert.equal(verified.status === 0, succeeds, verified.stderr)
@@ -376,5 +491,74 @@ for (const [scenario, succeeds] of [
       assert.notEqual(JSON.parse(readFileSync(f.redis)), null, "maintenance stays held")
       assert.equal(JSON.parse(readFileSync(f.state)).worker, "inactive")
     }
+  })
+}
+
+for (const scenario of [
+  "active scan",
+  "retry pending",
+  "nonterminal track",
+  "legacy scheduled",
+  "legacy query unavailable",
+  "partial UTC schema",
+]) {
+  test(`busy or unreadable baseline cannot claim or pause writers: ${scenario}`, (t) => {
+    const f = setup(t, scenario)
+    assert.notEqual(f.local("claim").status, 0)
+    assert.equal(existsSync(f.receipt), false)
+    assert.equal(JSON.parse(readFileSync(f.redis)), null)
+    assert.notEqual(f.local("hold").status, 0)
+    const state = JSON.parse(readFileSync(f.state))
+    assert.equal(state.active, 2)
+    assert.equal(state.worker, "active")
+    assert.equal(state.timer, "active")
+    assert.doesNotMatch(
+      readFileSync(f.calls, "utf8"),
+      /systemctl (stop|disable)|revision deactivate/
+    )
+  })
+}
+for (const race of ["TEST_RACE_SCAN", "TEST_RACE_TRACK", "TEST_RACE_SCHEDULE"]) {
+  test(`post-eligibility race remains fenced: ${race}`, (t) => {
+    const f = setup(t)
+    assert.equal(f.local("claim").status, 0)
+    assert.notEqual(f.local("quiesce", { [race]: "1" }).status, 0)
+    assert.notEqual(JSON.parse(readFileSync(f.redis)), null)
+    const state = JSON.parse(readFileSync(f.state))
+    assert.equal(state.worker, "active")
+    assert.equal(state.container, true)
+    assert.equal(state.timer, "active")
+    assert.doesNotMatch(readFileSync(f.calls, "utf8"), /systemctl (stop|disable)/)
+    assert.equal(f.local("hold").status, 0)
+    assert.equal(JSON.parse(readFileSync(f.state)).active, 0)
+  })
+}
+
+for (const archived of [false, true]) {
+  test(`completed cutover cannot re-enter maintenance on a reusable-job retry (archived=${archived})`, (t) => {
+    const f = setup(t)
+    assert.equal(f.vm("claim").status, 0)
+    const receipt = JSON.parse(readFileSync(f.receipt))
+    receipt.phase = "completed"
+    const file = archived
+      ? path.join(path.dirname(f.receipt), "webhook-claims-cutover-completed-123.json")
+      : f.receipt
+    writeFileSync(file, JSON.stringify(receipt), { mode: 0o600 })
+    if (archived) rmSync(f.receipt)
+    writeFileSync(f.redis, "null")
+    const before = readFileSync(f.state, "utf8")
+    for (const phase of ["recovery-probe", "recovery", "claim", "hold"]) {
+      const result = f.local(phase, { LYRASHIELD_ADMISSION_STOP_OWNER: "123:2" })
+      assert.notEqual(result.status, 0, phase)
+      assert.match(result.stderr, /Completed cutover cannot re-enter maintenance/)
+      assert.equal(JSON.parse(readFileSync(f.redis)), null)
+      assert.equal(readFileSync(f.state, "utf8"), before)
+      assert.equal(readFileSync(file, "utf8"), JSON.stringify(receipt))
+    }
+    if (archived) assert.equal(existsSync(f.receipt), false)
+    assert.doesNotMatch(
+      readFileSync(f.calls, "utf8"),
+      /systemctl (stop|disable)|revision deactivate/
+    )
   })
 }

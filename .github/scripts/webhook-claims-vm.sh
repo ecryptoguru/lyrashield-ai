@@ -58,7 +58,7 @@ assert_migration_database() {
   oneshot 'import {createHash} from "node:crypto"; const identity=(value)=>{try {const url=new URL(value);const database=decodeURIComponent(url.pathname.slice(1));if(!["postgres:","postgresql:"].includes(url.protocol)||!url.hostname||!["","5432","6432"].includes(url.port)||!database)throw new Error();return createHash("sha256").update(JSON.stringify([url.hostname.toLowerCase(),database,url.searchParams.get("schema")||"public"])).digest("hex");}catch{throw new Error("Invalid migration database identity configuration");}};const expected=process.argv[1];if(identity(process.env.DATABASE_URL)!==expected || identity(process.env.DATABASE_SYSTEM_URL||process.env.DATABASE_URL)!==expected)throw new Error("Migration host/database/schema differs from old worker; correct configuration before maintenance");' "$migration_identity"
 }
 assert_receipt_identity() {
-  oneshot 'const [saved,revision,owner,runId]=process.argv.slice(1); const receipt=JSON.parse(saved); const stop=JSON.parse(receipt.admissionStopValue); const {createHash}=await import("node:crypto"); const hash=(value)=>createHash("sha256").update(value??"").digest("hex"); if(receipt.databaseUrlSha256!==hash(process.env.DATABASE_URL) || receipt.databaseSystemUrlSha256!==hash(process.env.DATABASE_SYSTEM_URL) || receipt.redisUrlSha256!==hash(process.env.REDIS_URL) || receipt.owner!==owner || receipt.runId!==runId || receipt.productRevision!==revision || stop.owner!==owner || stop.runId!==runId || stop.productRevision!==revision || stop.reason!=="webhook-claims-cutover" || stop.operator!=="github-actions") throw new Error("Cutover receipt identity mismatch");' "$saved" "$revision" "$owner" "$run_id"
+  oneshot 'const [saved,revision,owner,runId]=process.argv.slice(1); const receipt=JSON.parse(saved); if(receipt.phase==="completed") throw new Error("Completed cutover cannot re-enter maintenance; start a current-main release"); const stop=JSON.parse(receipt.admissionStopValue); const {createHash}=await import("node:crypto"); const hash=(value)=>createHash("sha256").update(value??"").digest("hex"); if(receipt.databaseUrlSha256!==hash(process.env.DATABASE_URL) || receipt.databaseSystemUrlSha256!==hash(process.env.DATABASE_SYSTEM_URL) || receipt.redisUrlSha256!==hash(process.env.REDIS_URL) || receipt.owner!==owner || receipt.runId!==runId || receipt.productRevision!==revision || stop.owner!==owner || stop.runId!==runId || stop.productRevision!==revision || stop.reason!=="webhook-claims-cutover" || stop.operator!=="github-actions") throw new Error("Cutover receipt identity mismatch");' "$saved" "$revision" "$owner" "$run_id"
 }
 verify_retained_candidate() {
   previous=$(oneshot 'console.log(JSON.parse(process.argv[1]).previousWorkerImage);' "$saved")
@@ -75,6 +75,9 @@ assert_receipt() {
 }
 assert_empty() {
   oneshot 'const {getSystemPrisma}=await import("@lyrashield/db"); const {getScanQueue,getWebhookTrackRetryQueue,closeRedis}=await import("@lyrashield/integrations"); const prisma=getSystemPrisma(); const scan=getScanQueue(); const webhook=getWebhookTrackRetryQueue(); try { const [count,a,b]=await Promise.all([prisma.scan.count({where:{status:{in:["QUEUED","PREFLIGHT","RUNNING","VERIFYING","REQUIRES_APPROVAL"]}}}),scan.getJobCounts("wait","active","delayed","prioritized"),webhook.getJobCounts("wait","active","delayed","prioritized")]); if(count!==0 || Object.values(a).some(Boolean) || Object.values(b).some(Boolean)) throw new Error("Cutover requires drained scans and retry queue"); } finally { await Promise.allSettled([prisma.$disconnect(),scan.close(),webhook.close(),closeRedis()]); }'
+}
+assert_tracks_terminal() {
+  oneshot 'const {getSystemPrisma}=await import("@lyrashield/db"); const prisma=getSystemPrisma(); try { const [tracks]=await prisma.$queryRaw`SELECT count(*)::integer AS count FROM "WebhookEventTrack" WHERE status NOT IN (${"succeeded"},${"dead_letter"},${"reviewed"})`; if(tracks.count!==0) throw new Error("Nonterminal webhook tracks remain; complete existing work before automatic cutover"); } finally { await prisma.$disconnect(); }'
 }
 # Once all writers are stopped, require legacy scheduling values to be empty.
 # The additive UTC migration then preserves NULLs without guessing historical
@@ -102,7 +105,7 @@ persist_phase() {
 recover_stop() {
   assert_receipt_identity
   verify_retained_candidate
-  oneshot 'const receipt=JSON.parse(process.argv[1]); const {default:Redis}=await import("ioredis"); const redis=new Redis(process.env.REDIS_URL,{maxRetriesPerRequest:1}); try { const value=await redis.get("lyrashield:scan-admission:stopped"); if(value!==receipt.admissionStopValue) { if(value!==null || !["intent","resuming","completed"].includes(receipt.phase)) throw new Error("Foreign or unproven admission state"); if(await redis.set("lyrashield:scan-admission:stopped",receipt.admissionStopValue,"NX")!=="OK") throw new Error("Admission ownership changed during recovery"); } } finally { await redis.quit(); }' "$saved"
+  oneshot 'const receipt=JSON.parse(process.argv[1]); const {default:Redis}=await import("ioredis"); const redis=new Redis(process.env.REDIS_URL,{maxRetriesPerRequest:1}); try { const value=await redis.get("lyrashield:scan-admission:stopped"); if(value!==receipt.admissionStopValue) { if(value!==null || !["intent","resuming"].includes(receipt.phase)) throw new Error("Foreign or unproven admission state"); if(await redis.set("lyrashield:scan-admission:stopped",receipt.admissionStopValue,"NX")!=="OK") throw new Error("Admission ownership changed during recovery"); } } finally { await redis.quit(); }' "$saved"
 }
 emit_receipt() {
   oneshot 'const receipt=JSON.parse(process.argv[1]); console.log("ADMISSION_STOP_RECEIPT_BASE64="+Buffer.from(receipt.admissionStopValue).toString("base64")); console.log("ADMISSION_STOP_OWNER="+receipt.owner);' "$saved"
@@ -112,13 +115,24 @@ database)
   assert_migration_database
   echo WEBHOOK_MIGRATION_DATABASE_VERIFIED
   ;;
-recovery)
-  if [ ! -f "$receipt" ]; then receipt="$receipt_dir/webhook-claims-cutover-completed-${run_id}.json"; fi
+recovery|recovery-probe)
+  completed_receipt="$receipt_dir/webhook-claims-cutover-completed-${run_id}.json"
+  if [ ! -e "$receipt" ] && [ ! -L "$receipt" ]; then
+    if [ -e "$completed_receipt" ] || [ -L "$completed_receipt" ]; then
+      receipt=$completed_receipt
+    elif [ "$phase" = recovery-probe ]; then
+      oneshot 'const {default:Redis}=await import("ioredis"); const redis=new Redis(process.env.REDIS_URL,{maxRetriesPerRequest:1}); try { if(await redis.get("lyrashield:scan-admission:stopped")!==null) throw new Error("Admission stop exists without an owned cutover receipt"); } finally { await redis.quit(); }'
+      echo 'WEBHOOK_RECOVERY_RECEIPT_ABSENT'
+      exit 0
+    else
+      exit 1
+    fi
+  fi
   [ ! -L "$receipt" ] && [ "$(stat -c '%u:%a' "$receipt")" = 0:600 ] || exit 1
   saved=$(cat "$receipt")
-  owner=$(oneshot 'const [saved,revision,runId]=process.argv.slice(1); const receipt=JSON.parse(saved); if(receipt.runId!==runId || receipt.productRevision!==revision || !new RegExp("^"+runId+":[0-9]+$").test(receipt.owner)) throw new Error("Existing original cutover receipt required"); console.log(receipt.owner);' "$saved" "$revision" "$run_id")
+  owner=$(oneshot 'const [saved,revision,runId,currentAttempt,phase]=process.argv.slice(1); const receipt=JSON.parse(saved); const match=/^([0-9]+):([1-9][0-9]*)$/.exec(receipt.owner??""); const attempts=receipt.attempts; const lastAttempt=receipt.lastAttempt; const attempt=Number(currentAttempt); const ownerAttempt=Number(match?.[2]); if(receipt.runId!==runId || receipt.productRevision!==revision || !match || match[1]!==runId || !Number.isSafeInteger(attempt) || attempt<1 || !Array.isArray(attempts) || attempts.length===0 || !attempts.every((value,index)=>Number.isSafeInteger(value)&&value>0&&value<=lastAttempt&&(index===0||value>attempts[index-1])) || new Set(attempts).size!==attempts.length || attempts[0]!==ownerAttempt || !attempts.includes(lastAttempt) || Math.max(...attempts)!==lastAttempt || ownerAttempt>lastAttempt || (phase==="recovery-probe" && lastAttempt>=attempt)) throw new Error("Existing original cutover receipt or attempt history required"); console.log(receipt.owner);' "$saved" "$revision" "$run_id" "$attempt" "$phase")
   assert_receipt_identity
-  oneshot 'const receipt=JSON.parse(process.argv[1]); const {default:Redis}=await import("ioredis"); const redis=new Redis(process.env.REDIS_URL,{maxRetriesPerRequest:1}); try { const value=await redis.get("lyrashield:scan-admission:stopped"); if(value!==receipt.admissionStopValue && !(value===null && ["intent","resuming","completed"].includes(receipt.phase))) throw new Error("Unproven original cutover state"); } finally { await redis.quit(); }' "$saved"
+  oneshot 'const receipt=JSON.parse(process.argv[1]); const {default:Redis}=await import("ioredis"); const redis=new Redis(process.env.REDIS_URL,{maxRetriesPerRequest:1}); try { const value=await redis.get("lyrashield:scan-admission:stopped"); if(value!==receipt.admissionStopValue && !(value===null && ["intent","resuming"].includes(receipt.phase))) throw new Error("Unproven original cutover state"); } finally { await redis.quit(); }' "$saved"
   echo 'WEBHOOK_RECOVERY_RECEIPT_VERIFIED'
   ;;
 claim)
@@ -144,6 +158,11 @@ claim)
   systemctl is-active --quiet "$service"
   [ "$(docker inspect --format '{{.State.Running}}' "$container")" = true ]
   assert_running_environment
+  # Read-only eligibility precedes the intent receipt and admission stop.
+  # Retain post-quiescence checks: producers can race this observation.
+  assert_empty
+  assert_tracks_terminal
+  assert_legacy_schedule_drained
   umask 077
   # Persist intent before claiming the stop. A crash leaves an explicit receipt,
   # never a fabricated authorization to resume a different operator's stop.
@@ -165,6 +184,8 @@ stop)
   fi
   assert_running_environment
   assert_empty
+  assert_tracks_terminal
+  assert_legacy_schedule_drained
   systemctl disable --now "$timer"
   systemctl stop lyrashield-worker-egress-refresh.service
   systemctl disable --now "$service"
@@ -180,6 +201,7 @@ stop)
 verify)
   assert_receipt
   assert_stopped
+  assert_tracks_terminal
   assert_empty
   assert_legacy_schedule_drained
   echo 'WEBHOOK_QUIESCENCE_VERIFIED'

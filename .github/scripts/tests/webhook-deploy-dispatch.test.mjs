@@ -28,16 +28,12 @@ function dispatch(t, options) {
   chmodSync(gh, 0o755)
   const output = path.join(directory, "github-output")
   const sourceSha = options.sourceSha
-  const cutover = options.cutover ?? "true"
   const result = spawnSync("bash", [validate], {
     encoding: "utf8",
     env: {
       ...process.env,
       PATH: directory + path.delimiter + process.env.PATH,
       SOURCE_SHA: sourceSha,
-      CONFIRMATION:
-        (cutover === "false" ? "deploy" : "webhook-cutover") + ":" + sourceSha,
-      WEBHOOK_CLAIMS_CUTOVER: cutover,
       GITHUB_REPOSITORY: "ecryptoguru/lyrashield-ai",
       GITHUB_RUN_ID: "123456",
       GITHUB_RUN_ATTEMPT: options.attempt ?? "1",
@@ -54,24 +50,24 @@ function dispatch(t, options) {
   return { ...result, outputText }
 }
 
-test("fresh cutover dispatch rejects a source SHA that is no longer current main", (t) => {
+test("manual production dispatch rejects a source SHA that is no longer current main", (t) => {
   const result = dispatch(t, { sourceSha: staleSha, latestMain: currentSha })
   assert.notEqual(result.status, 0)
   assert.match(result.stdout, /may only target current main/)
 })
 
-test("same-run rerun accepts the original immutable source only after successful original validation", (t) => {
+test("manual rerun cannot reuse an old source SHA", (t) => {
   const result = dispatch(t, {
     sourceSha: staleSha,
     latestMain: currentSha,
     attempt: "2",
     original: "success",
   })
-  assert.equal(result.status, 0, result.stderr)
-  assert.match(result.outputText, /recovery_requires_receipt=true/)
+  assert.notEqual(result.status, 0)
+  assert.match(result.stdout, /may only target current main/)
 })
 
-test("same-run rerun rejects source recovery when the original dispatch was not validated", (t) => {
+test("an exact source SHA cannot bypass the current-main check", (t) => {
   const result = dispatch(t, {
     sourceSha: staleSha,
     latestMain: currentSha,
@@ -79,13 +75,13 @@ test("same-run rerun rejects source recovery when the original dispatch was not 
     original: "failure",
   })
   assert.notEqual(result.status, 0)
-  assert.match(result.stdout, /successful original dispatch validation/)
+  assert.match(result.stdout, /may only target current main/)
 })
 
-test("current-main cutover dispatch succeeds without setting recovery state", (t) => {
+test("current-main manual dispatch succeeds without an extra typed confirmation", (t) => {
   const result = dispatch(t, { sourceSha: currentSha, latestMain: currentSha })
   assert.equal(result.status, 0, result.stderr)
-  assert.match(result.outputText, /recovery_requires_receipt=false/)
+  assert.equal(result.outputText, "")
 })
 
 test("stale ordinary deployment remains rejected, including on a later run attempt", (t) => {
