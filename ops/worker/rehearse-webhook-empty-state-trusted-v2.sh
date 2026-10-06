@@ -47,14 +47,23 @@ docker cp "$tls_dir/server.key" "$database:/tmp/fixture-server.key"
 docker cp "$tls_dir/ca.crt" "$database:/tmp/fixture-ca.crt"
 docker cp "$wrong_ca" "$database:/tmp/fixture-wrong-ca.crt"
 docker start "$database" >/dev/null
+pg_host="host=${hostname} hostaddr=127.0.0.1 port=5432 user=postgres dbname=postgres sslmode=verify-full sslrootcert=/tmp/fixture-ca.crt"
 ready=false
 for ((attempt = 1; attempt <= 30; attempt++)); do
-  if docker exec "$database" pg_isready -U postgres -d postgres >/dev/null 2>&1; then ready=true; break; fi
+  # The official image briefly starts a socket-only bootstrap server while
+  # initializing a fresh data directory. Wait for the exact verified TCP/TLS
+  # path used below so that bootstrap readiness cannot race the real server.
+  tls_result="$(docker exec --env PGPASSWORD=disposable-only "$database" \
+    psql --no-psqlrc --set ON_ERROR_STOP=1 "$pg_host" -Atqc \
+    'SELECT ssl FROM pg_stat_ssl WHERE pid = pg_backend_pid()' 2>/dev/null || true)"
+  if [[ "$tls_result" == t ]]; then ready=true; break; fi
   sleep 1
 done
-[[ "$ready" == true ]]
+if [[ "$ready" != true ]]; then
+  echo "Disposable PostgreSQL did not become ready over the verified TCP/TLS path" >&2
+  exit 1
+fi
 
-pg_host="host=${hostname} hostaddr=127.0.0.1 port=5432 user=postgres dbname=postgres sslmode=verify-full sslrootcert=/tmp/fixture-ca.crt"
 tls_result="$(docker exec --env PGPASSWORD=disposable-only "$database" \
   psql --no-psqlrc --set ON_ERROR_STOP=1 "$pg_host" -Atqc \
   'SELECT ssl FROM pg_stat_ssl WHERE pid = pg_backend_pid()')"

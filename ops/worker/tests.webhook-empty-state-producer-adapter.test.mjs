@@ -101,8 +101,9 @@ test("enabled copied producer executes resume/rehold and completed workflow coll
     writeFileSync(path, code)
     const { main } = await import(pathToFileURL(path)),
       { receipt, policy } = fixture()
-    const issuedAt = new Date().toISOString(),
-      expiresAt = new Date(Date.now() + 1800000).toISOString()
+    const issuedMs = Date.now(),
+      issuedAt = new Date(issuedMs).toISOString(),
+      expiresAt = new Date(issuedMs + 1800000).toISOString()
     Object.assign(receipt.authorization, { issuedAt, expiresAt, producerSha256: sha256(code) })
     Object.assign(policy, { issuedAt, expiresAt, producerSha256: sha256(code) })
     receipt.evidence.observedAt = issuedAt
@@ -172,7 +173,10 @@ test("enabled copied producer executes resume/rehold and completed workflow coll
       } else if (phase === "release-retry") {
         assert.ok(holder.key === stop || holder.key === null)
         holder.key = null
-        if (holder.lostReleaseAck) { holder.lostReleaseAck = false; return { status: 1, stdout: "" } }
+        if (holder.lostReleaseAck) {
+          holder.lostReleaseAck = false
+          return { status: 1, stdout: "" }
+        }
       } else if (phase === "claim") {
         assert.ok(holder.key === null || holder.key === stop)
         holder.key = stop
@@ -196,7 +200,11 @@ test("enabled copied producer executes resume/rehold and completed workflow coll
     assert.ok(holder.files.has(fence))
     holder.failAfterRename = true
     await assert.rejects(main())
-    assert.equal(holder.files.get(progress).phase, "resume", "rename committed before fsync failure")
+    assert.equal(
+      holder.files.get(progress).phase,
+      "resume",
+      "rename committed before fsync failure"
+    )
     assert.equal(holder.key, stop)
     assert.ok(holder.files.has(fence))
     holder.failAfterRename = false
