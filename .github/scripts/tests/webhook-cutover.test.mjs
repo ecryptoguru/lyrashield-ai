@@ -663,6 +663,10 @@ for (const scenario of [
     if (workerPhases[scenario]) {
       assert.match(result.stderr, /Worker compatibility probe failed \(/)
       assert.ok(result.stderr.includes(`${workerPhases[scenario]})`))
+      assert.doesNotMatch(
+        result.stdout + result.stderr,
+        /(?:^|\n)(?:inactive|failed|activating|unexpected)(?:\r?\n|$)/
+      )
     }
   })
 }
