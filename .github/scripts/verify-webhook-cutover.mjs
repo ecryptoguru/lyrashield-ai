@@ -321,10 +321,14 @@ try {
 }
 `
 const script = `set -eu
-if ! systemctl is-active --quiet lyrashield-worker.service 2>/dev/null; then
-  printf 'WEBHOOK_WORKER_PROBE_ERROR=WORKER_SERVICE_INACTIVE\\n'
-  exit 0
-fi
+worker_service_state="$(systemctl is-active lyrashield-worker.service 2>/dev/null || true)"
+case "$worker_service_state" in
+  active) ;;
+  inactive) printf 'WEBHOOK_WORKER_PROBE_ERROR=WORKER_SERVICE_INACTIVE\\n'; exit 0 ;;
+  failed) printf 'WEBHOOK_WORKER_PROBE_ERROR=WORKER_SERVICE_FAILED\\n'; exit 0 ;;
+  activating|deactivating|reloading) printf 'WEBHOOK_WORKER_PROBE_ERROR=WORKER_SERVICE_TRANSITION\\n'; exit 0 ;;
+  *) printf 'WEBHOOK_WORKER_PROBE_ERROR=WORKER_SERVICE_STATE\\n'; exit 0 ;;
+esac
 worker_running="$(docker inspect --format '{{.State.Running}}' lyrashield-worker 2>/dev/null)" || {
   printf 'WEBHOOK_WORKER_PROBE_ERROR=WORKER_CONTAINER_INSPECT\\n'
   exit 0
@@ -395,6 +399,9 @@ if (probeErrors.length) {
   const allowedPhases = new Set([
     "MODULES",
     "WORKER_SERVICE_INACTIVE",
+    "WORKER_SERVICE_FAILED",
+    "WORKER_SERVICE_TRANSITION",
+    "WORKER_SERVICE_STATE",
     "WORKER_CONTAINER_INSPECT",
     "WORKER_CONTAINER_STOPPED",
     "WORKER_ROLLBACK_IMAGE",
