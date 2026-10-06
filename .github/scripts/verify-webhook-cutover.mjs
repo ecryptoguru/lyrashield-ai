@@ -8,6 +8,22 @@ const firstWriterRevision = "4822306e24f375800981bf282fd992a9c15dcde8"
 const firstEngineRevision = "9d90be5aaf92f86bb5c1ba55a8138545764fdd44"
 const firstWriterDigest = "sha256:dbc43686e11f95a03d9f163c865683e3949ade4179839ef6d268e6ea55f9b78f"
 const firstWorkerDigest = "sha256:d38f8b080ae62b88ba9c6273be76abff42adf5a86b831bde5b19f6d6fce466dc"
+// Each row binds reviewed legacy source to role-specific immutable artifacts.
+// Evidence: docs/reviews/2026-10-07/webhook-legacy-image-profile.md.
+const legacyImageProfiles = [
+  {
+    source: firstWriterRevision,
+    engine: firstEngineRevision,
+    writerDigest: firstWriterDigest,
+    workerDigest: firstWorkerDigest,
+  },
+  {
+    source: "3819345c9ccdc5e96ca7bfd389eaab8d7ea4c530",
+    engine: "9d90be5aaf92f86bb5c1ba55a8138545764fdd44",
+    writerDigest: "sha256:42186658cc92ff0b9037420cfbddb6e54d32c8b9b4e141c2f0d98ed3e1ca9b98",
+    workerDigest: "sha256:35850652712814b2549ccb3f0a878c1214f6bfca075b350e3db6fcae58382791",
+  },
+]
 const migrationChecksums = {
   "20260822140000_webhook_event_tracks":
     "5c7e395649b47940d928e9cc498794a00c6ce73416a4aa0513eff64085c7208d",
@@ -534,19 +550,27 @@ const fullyMigrated =
   columnsMatch([...fullyMigratedColumns, ...transitionColumns]) &&
   constraintsMatch() &&
   indexesMatch()
+const legacyWorkerMatches = legacyImageProfiles.some(
+  (profile) =>
+    state.product === profile.source &&
+    state.engine === profile.engine &&
+    state.digest === profile.workerDigest
+)
+const legacyWritersMatch = writerIdentities.every((identity, index) =>
+  legacyImageProfiles.some(
+    (profile) => identity === profile.source && writerDigests[index] === profile.writerDigest
+  )
+)
 const pristineLegacy =
   state.protocol === firstProtocol &&
   state.schema === "public" &&
-  state.product === firstWriterRevision &&
-  state.engine === firstEngineRevision &&
-  state.digest === firstWorkerDigest &&
+  legacyWorkerMatches &&
   migrationsMatch(firstMigrationNames) &&
   columnsMatch(firstMigrationColumns) &&
   hasNoTransitionColumns &&
   constraintsMatch() &&
   indexesMatch() &&
-  writerIdentities.every((identity) => identity === firstWriterRevision) &&
-  writerDigests.every((imageDigest) => imageDigest === firstWriterDigest)
+  legacyWritersMatch
 if (writerProtocols.length === 0) fail("No verified webhook writers were found")
 const allWritersMatchWorker = writerProtocols.every(
   (writerProtocol) => writerProtocol === state.protocol
@@ -595,11 +619,13 @@ if (
       constraints: constraintsMatch(),
       indexes: indexesMatch(),
       legacyPublicSchema: state.schema === "public",
-      legacyWorkerSource: state.product === firstWriterRevision,
-      legacyWorkerEngine: state.engine === firstEngineRevision,
-      legacyWorkerDigest: state.digest === firstWorkerDigest,
-      legacyWriterSources: writerIdentities.every((identity) => identity === firstWriterRevision),
-      legacyWriterDigests: writerDigests.every((imageDigest) => imageDigest === firstWriterDigest),
+      legacyWorkerSource: legacyImageProfiles.some((profile) => state.product === profile.source),
+      legacyWorkerEngine: legacyImageProfiles.some((profile) => state.engine === profile.engine),
+      legacyWorkerDigest: legacyWorkerMatches,
+      legacyWriterSources: writerIdentities.every((identity) =>
+        legacyImageProfiles.some((profile) => identity === profile.source)
+      ),
+      legacyWriterDigests: legacyWritersMatch,
     })}`
   )
   fail("Webhook writer, worker and database states do not match a known compatible baseline")
