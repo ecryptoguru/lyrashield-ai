@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process"
 import { appendFileSync } from "node:fs"
+import { gunzipSync } from "node:zlib"
 
 const protocol = "durable-claims/2"
 const firstProtocol = "durable-claims/1"
@@ -229,36 +230,48 @@ for (const name of [
 
 // Read the running worker only. No one-shot job, restart, queue write or secret read.
 const code = `
-const billing = await import("@lyrashield/billing");
-const { getSystemPrisma } = await import("@lyrashield/db");
-const prisma = getSystemPrisma();
+let prisma;
+let probePhase = "MODULES";
 try {
+  const billing = await import("@lyrashield/billing");
+  const { gzipSync } = await import("node:zlib");
+  const [rollbackImage, runningImage, imageProduct, imageEngine] = process.argv.slice(1);
+  const { getSystemPrisma } = await import("@lyrashield/db");
+  prisma = getSystemPrisma();
+  probePhase = "SCHEMA";
   const [{ schema }] = await prisma.$queryRawUnsafe("SELECT current_schema() AS schema");
   if (typeof schema !== "string" || !schema) throw new Error("Selected PostgreSQL schema unavailable");
   const quoteIdentifier = (value) => '"' + value.replaceAll('"', '""') + '"';
   const selectedSchema = quoteIdentifier(schema);
   const migrations = ${JSON.stringify(migrationNames)};
   const migrationPlaceholders = migrations.map((_, index) => "$" + (index + 1)).join(", ");
+  probePhase = "MIGRATIONS";
   const migrationRows = await prisma.$queryRawUnsafe(
     "SELECT migration_name, checksum, finished_at, rolled_back_at FROM " + selectedSchema + '."_prisma_migrations" WHERE migration_name IN (' + migrationPlaceholders + ")",
     ...migrations,
   );
+  probePhase = "COLUMNS";
   const columns = await prisma.$queryRawUnsafe(
     "SELECT a.attname AS name, format_type(a.atttypid, a.atttypmod) AS type, a.attnotnull AS \\\"notNull\\\", pg_get_expr(d.adbin, d.adrelid) AS \\\"defaultExpr\\\" FROM pg_attribute a JOIN pg_class c ON c.oid = a.attrelid JOIN pg_namespace n ON n.oid = c.relnamespace LEFT JOIN pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum WHERE n.nspname = $1 AND c.relname = $2 AND c.relkind = 'r' AND a.attnum > 0 AND NOT a.attisdropped ORDER BY a.attnum",
     schema,
     "WebhookEventTrack",
   );
+  probePhase = "CONSTRAINTS";
   const constraints = await prisma.$queryRawUnsafe(
     "SELECT conname AS name, contype AS type, lower(pg_get_constraintdef(oid, true)) AS definition, convalidated AS validated FROM pg_constraint WHERE conrelid = (SELECT c.oid FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = $1 AND c.relname = $2 AND c.relkind = 'r') AND contype IN ('p', 'f', 'c') ORDER BY conname",
     schema,
     "WebhookEventTrack",
   );
+  probePhase = "INDEXES";
   const indexes = await prisma.$queryRawUnsafe(
     "SELECT ic.relname AS name, ix.indisunique AS unique, ix.indisvalid AS valid, ix.indisready AS ready, (ix.indpred IS NULL) AS \\\"predicateIsNull\\\", (ix.indnatts = ix.indnkeyatts) AS \\\"noIncludeColumns\\\", (ix.indexprs IS NULL) AS \\\"noExpressions\\\", am.amname AS method, ARRAY(SELECT replace(pg_get_indexdef(ix.indexrelid, position, true), chr(34), '') FROM generate_series(1, ix.indnkeyatts) AS key_column(position) ORDER BY position) AS columns, ARRAY(SELECT NOT pg_index_column_has_property(ix.indexrelid, position, 'desc') AND NOT pg_index_column_has_property(ix.indexrelid, position, 'nulls_first') FROM generate_series(1, ix.indnkeyatts) AS key_column(position) ORDER BY position) AS \\\"defaultOrdering\\\", ARRAY(SELECT opc.opcdefault FROM unnest(ix.indclass) WITH ORDINALITY AS indexed_class(class_oid, class_position) JOIN pg_opclass opc ON opc.oid = indexed_class.class_oid WHERE indexed_class.class_position <= ix.indnkeyatts ORDER BY indexed_class.class_position) AS \\\"defaultOperatorClasses\\\", ARRAY(SELECT indexed_collation.collation_oid = attr.attcollation FROM unnest(ix.indkey) WITH ORDINALITY AS indexed_key(attribute_number, key_position) JOIN pg_attribute attr ON attr.attrelid = ix.indrelid AND attr.attnum = indexed_key.attribute_number JOIN unnest(ix.indcollation) WITH ORDINALITY AS indexed_collation(collation_oid, collation_position) ON indexed_collation.collation_position = indexed_key.key_position WHERE indexed_key.key_position <= ix.indnkeyatts ORDER BY indexed_key.key_position) AS \\\"columnCollationsMatch\\\" FROM pg_index ix JOIN pg_class tc ON tc.oid = ix.indrelid JOIN pg_namespace n ON n.oid = tc.relnamespace JOIN pg_class ic ON ic.oid = ix.indexrelid JOIN pg_am am ON am.oid = ic.relam WHERE n.nspname = $1 AND tc.relname = $2 ORDER BY ic.relname",
     schema,
     "WebhookEventTrack",
   );
-  console.log(JSON.stringify({
+  probePhase = "ENCODE";
+  const serialized = JSON.stringify({
+    version: 1,
+    readback: {WORKER_ROLLBACK_IMAGE: rollbackImage, WORKER_IMAGE: runningImage, WORKER_PRODUCT: imageProduct, WORKER_ENGINE: imageEngine},
     protocol: billing.WEBHOOK_TRACK_CLAIM_PROTOCOL,
     product: process.env.LYRASHIELD_PRODUCT_REVISION,
     digest: process.env.LYRASHIELD_WORKER_IMAGE_DIGEST,
@@ -268,19 +281,32 @@ try {
     columns,
     constraints,
     indexes,
-  }));
+  });
+  if (Buffer.byteLength(serialized) > 65536) throw new Error("Worker catalog exceeds bounded readback");
+  const line = "WEBHOOK_WORKER_STATE_GZIP_V1=" + gzipSync(serialized).toString("base64");
+  if (Buffer.byteLength(line) > 3500) throw new Error("Worker catalog exceeds Azure readback budget");
+  console.log(line);
+} catch {
+  console.error("WEBHOOK_WORKER_PROBE_ERROR=" + probePhase);
+  process.exitCode = 1;
 } finally {
-  await prisma.$disconnect();
+  if (prisma) {
+    try { await prisma.$disconnect(); } catch {
+      console.error("WEBHOOK_WORKER_PROBE_ERROR=DISCONNECT");
+      process.exitCode = 1;
+    }
+  }
 }
 `
 const script = `set -eu
 systemctl is-active --quiet lyrashield-worker.service
 test "$(docker inspect --format '{{.State.Running}}' lyrashield-worker)" = true
-printf 'WORKER_ROLLBACK_IMAGE=%s\n' "$(sed -n 's/^LYRASHIELD_WORKER_IMAGE=//p' /etc/lyrashield/worker-runtime.conf)"
-printf 'WORKER_IMAGE=%s\n' "$(docker inspect --format '{{.Config.Image}}' lyrashield-worker)"
-printf 'WORKER_PRODUCT=%s\n' "$(docker inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' lyrashield-worker)"
-printf 'WORKER_ENGINE=%s\n' "$(docker inspect --format '{{index .Config.Labels "io.lyrashield.engine.revision"}}' lyrashield-worker)"
-docker exec -w /app/apps/worker lyrashield-worker node --import tsx --input-type=module -e '${code.replaceAll("'", "'\\''")}'`
+worker_rollback_image="$(sed -n 's/^LYRASHIELD_WORKER_IMAGE=//p' /etc/lyrashield/worker-runtime.conf)"
+worker_image="$(docker inspect --format '{{.Config.Image}}' lyrashield-worker)"
+worker_product="$(docker inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' lyrashield-worker)"
+worker_engine="$(docker inspect --format '{{index .Config.Labels "io.lyrashield.engine.revision"}}' lyrashield-worker)"
+docker exec -w /app/apps/worker lyrashield-worker node --import tsx --input-type=module -e '${code.replaceAll("'", "'\\''")}' -- "$worker_rollback_image" "$worker_image" "$worker_product" "$worker_engine"`
+
 const response = run("az", [
   "vm",
   "run-command",
@@ -298,14 +324,48 @@ const response = run("az", [
   "--output",
   "tsv",
 ])
-const lines = response.split("\n").filter((line) => line.startsWith('{"protocol":'))
+// Action Run Command retains only the last 4096 output bytes. Keep all
+// catalog and independent image proof in one final bounded frame.
+const errorMarker = "WEBHOOK_WORKER_PROBE_ERROR="
+const probeErrors = response.split("\n").filter((line) => line.startsWith(errorMarker))
+if (probeErrors.length) {
+  const allowedPhases = new Set([
+    "MODULES",
+    "SCHEMA",
+    "MIGRATIONS",
+    "COLUMNS",
+    "CONSTRAINTS",
+    "INDEXES",
+    "ENCODE",
+    "DISCONNECT",
+  ])
+  const phases = [
+    ...new Set(
+      probeErrors.map((line) => {
+        const phase = line.slice(errorMarker.length)
+        return allowedPhases.has(phase) ? phase : "UNKNOWN"
+      })
+    ),
+  ]
+  fail(`Worker compatibility probe failed (${phases.join(", ")})`)
+}
+const marker = "WEBHOOK_WORKER_STATE_GZIP_V1="
+const lines = response.split("\n").filter((line) => line.startsWith(marker))
 if (lines.length !== 1) fail("Worker compatibility readback unavailable")
-const state = JSON.parse(lines[0])
-const readback = (key) =>
-  response
-    .split("\n")
-    .find((line) => line.startsWith(`${key}=`))
-    ?.slice(key.length + 1)
+let state
+try {
+  if (Buffer.byteLength(lines[0]) > 3500) throw new Error("Oversized frame")
+  const encoded = lines[0].slice(marker.length)
+  const compressed = Buffer.from(encoded, "base64")
+  if (!encoded || compressed.toString("base64") !== encoded) throw new Error("Invalid encoding")
+  state = JSON.parse(gunzipSync(compressed, { maxOutputLength: 65536 }).toString("utf8"))
+  if (!state || typeof state !== "object" || Array.isArray(state) || state.version !== 1)
+    throw new Error("Invalid state version")
+} catch {
+  fail("Worker compatibility readback invalid or oversized")
+}
+const readback = (key) => state.readback?.[key]
+
 if (
   readback("WORKER_ROLLBACK_IMAGE") !== readback("WORKER_IMAGE") ||
   !readback("WORKER_IMAGE")?.endsWith(`@${state.digest}`) ||
