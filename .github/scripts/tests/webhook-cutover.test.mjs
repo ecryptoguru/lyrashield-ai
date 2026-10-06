@@ -15,6 +15,11 @@ const legacyProduct = "4822306e24f375800981bf282fd992a9c15dcde8"
 const legacyEngine = "9d90be5aaf92f86bb5c1ba55a8138545764fdd44"
 const legacyWriterDigest = "sha256:dbc43686e11f95a03d9f163c865683e3949ade4179839ef6d268e6ea55f9b78f"
 const legacyWorkerDigest = "sha256:d38f8b080ae62b88ba9c6273be76abff42adf5a86b831bde5b19f6d6fce466dc"
+const alternateLegacyProduct = "3819345c9ccdc5e96ca7bfd389eaab8d7ea4c530"
+const alternateLegacyWriterDigest =
+  "sha256:42186658cc92ff0b9037420cfbddb6e54d32c8b9b4e141c2f0d98ed3e1ca9b98"
+const alternateLegacyWorkerDigest =
+  "sha256:35850652712814b2549ccb3f0a878c1214f6bfca075b350e3db6fcae58382791"
 const baselineMigration = "20260822140000_webhook_event_tracks"
 const migrationChecksums = {
   [baselineMigration]: "5c7e395649b47940d928e9cc498794a00c6ce73416a4aa0513eff64085c7208d",
@@ -90,14 +95,30 @@ function fixture(t, scenario, expectedMode) {
   const directory = mkdtempSync(path.join(tmpdir(), "ls-webhook-cutover-"))
   t.after(() => rmSync(directory, { recursive: true, force: true }))
   const legacy = scenario === "known legacy" || scenario.startsWith("legacy ")
+  const alternate =
+    scenario.startsWith("legacy alternate") || scenario === "legacy mixed verified revisions"
   const legacyUnapprovedProduct = "96ffe6a3b3d4b87e3686dc9f2deed1ff25296dc6"
   const workerProduct = legacy
     ? scenario === "legacy unapproved source"
       ? legacyUnapprovedProduct
-      : legacyProduct
+      : alternate
+        ? alternateLegacyProduct
+        : legacyProduct
     : product
-  const digest = legacy ? legacyWorkerDigest : defaultDigest
-  const writerDigest = legacy ? legacyWriterDigest : defaultDigest
+  const digest = !legacy
+    ? defaultDigest
+    : scenario === "legacy alternate worker paired with original digest"
+      ? legacyWorkerDigest
+      : scenario === "legacy alternate worker uses writer digest"
+        ? alternateLegacyWriterDigest
+        : alternate || scenario === "legacy original source paired with alternate digest"
+          ? alternateLegacyWorkerDigest
+          : legacyWorkerDigest
+  const writerDigest = alternate
+    ? alternateLegacyWriterDigest
+    : legacy
+      ? legacyWriterDigest
+      : defaultDigest
   const workerImage = `ghcr.io/example/worker:${workerProduct}@${digest}`
   const state = structuredClone({
     protocol: legacy ? "durable-claims/1" : protocol,
@@ -329,11 +350,21 @@ function fixture(t, scenario, expectedMode) {
           workerProduct,
           true,
           false,
-          scenario === "legacy wrong writer digest" ? defaultDigest : writerDigest
+          scenario === "legacy wrong writer digest"
+            ? defaultDigest
+            : scenario === "legacy alternate writer paired with original digest"
+              ? legacyWriterDigest
+              : scenario === "legacy alternate writer uses worker digest"
+                ? alternateLegacyWorkerDigest
+                : writerDigest
         ),
       ]
     : [revision(product)]
   const scannerRevisions = [...appRevisions]
+  if (scenario === "legacy mixed verified revisions") {
+    appRevisions.push(revision(legacyProduct, true, false, legacyWriterDigest))
+    scannerRevisions.push(revision(legacyProduct, true, false, legacyWriterDigest))
+  }
   if (scenario === "no active app")
     appRevisions[0] = revision(legacy ? legacyProduct : product, false)
   if (scenario === "image mismatch") appRevisions[0] = revision(product, true, true)
@@ -366,7 +397,7 @@ function fixture(t, scenario, expectedMode) {
   )
   executable(
     "git",
-    `if(process.argv[2]==="show") { const identity=process.argv[3].split(":")[0]; console.log([${JSON.stringify(legacyProduct)},${JSON.stringify(legacyUnapprovedProduct)}].includes(identity)?${JSON.stringify('export const WEBHOOK_TRACK_CLAIM_PROTOCOL = "durable-claims/1"')}:${JSON.stringify(scenario === "unknown writer source" ? "export const OTHER_PROTOCOL = true" : `export const WEBHOOK_TRACK_CLAIM_PROTOCOL = "${protocol}"`)}); }`
+    `if(process.argv[2]==="show") { const identity=process.argv[3].split(":")[0]; console.log([${JSON.stringify(legacyProduct)},${JSON.stringify(alternateLegacyProduct)},${JSON.stringify(legacyUnapprovedProduct)}].includes(identity)?${JSON.stringify('export const WEBHOOK_TRACK_CLAIM_PROTOCOL = "durable-claims/1"')}:${JSON.stringify(scenario === "unknown writer source" ? "export const OTHER_PROTOCOL = true" : `export const WEBHOOK_TRACK_CLAIM_PROTOCOL = "${protocol}"`)}); }`
   )
   const output = path.join(directory, "github-output")
   writeFileSync(output, "")
@@ -414,6 +445,14 @@ test("exact legacy writers and pristine legacy schema select automatic maintenan
   assert.match(result.githubOutput, /webhook_claims_cutover=true/)
 })
 
+for (const scenario of ["legacy alternate verified source", "legacy mixed verified revisions"]) {
+  test(`exact evidence-backed legacy artifact profiles select maintenance: ${scenario}`, (t) => {
+    const result = fixture(t, scenario)
+    assert.equal(result.status, 0, result.stderr)
+    assert.match(result.githubOutput, /webhook_claims_cutover=true/)
+  })
+}
+
 test("runtime rejects a legacy classification that differs from the pre-build result", (t) => {
   const result = fixture(t, "known legacy", "compatible")
   assert.notEqual(result.status, 0)
@@ -459,6 +498,11 @@ for (const scenario of [
   "legacy wrong engine",
   "legacy wrong worker digest",
   "legacy wrong writer digest",
+  "legacy alternate worker paired with original digest",
+  "legacy alternate writer paired with original digest",
+  "legacy alternate worker uses writer digest",
+  "legacy alternate writer uses worker digest",
+  "legacy original source paired with alternate digest",
   "legacy missing scanner",
   "unfinished migration",
   "rolled-back migration",

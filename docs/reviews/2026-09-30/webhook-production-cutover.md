@@ -5,19 +5,22 @@ repeats the same read-only check in the runtime job before any production
 configuration or migration mutation. A fully verified `durable-claims/2`
 baseline selects the ordinary release. The first transition is selected only
 when every active app/scanner revision and the running worker have immutable
-source/image provenance for the allowlisted `durable-claims/1` release
-`4822306e24f375800981bf282fd992a9c15dcde8` and its pinned engine
-`9d90be5aaf92f86bb5c1ba55a8138545764fdd44`, web/scanner image digest
-`sha256:dbc43686e11f95a03d9f163c865683e3949ade4179839ef6d268e6ea55f9b78f`,
-and worker digest
-`sha256:d38f8b080ae62b88ba9c6273be76abff42adf5a86b831bde5b19f6d6fce466dc`,
-the two prerequisite migration checksums match, and the selected `public`
-schema has the exact legacy column, default, index and constraint catalog.
-The four later transition migrations must have no ledger rows. Mixed writers,
-another `/1` source, unknown protocols, failed/partial migration records,
-schema drift, missing provenance or unreadable state stop the release before
-image build. All active revisions are checked, including zero-traffic
-revisions reachable through revision URLs.
+source/image provenance matching a complete role-specific tuple in the
+[reviewed legacy image profiles](../2026-10-07/webhook-legacy-image-profile.md).
+The profiles bind exact source revisions
+`4822306e24f375800981bf282fd992a9c15dcde8` and
+`3819345c9ccdc5e96ca7bfd389eaab8d7ea4c530` to their respective published
+web/scanner and worker digests, with pinned engine
+`9d90be5aaf92f86bb5c1ba55a8138545764fdd44`. Each active writer is validated
+independently; reviewed revisions may coexist when every source/digest pair
+matches. The worker must match its entire source/engine/digest tuple.
+The two prerequisite migration checksums must match and the selected `public`
+schema must have the exact legacy column, default, index and constraint catalog.
+The four later transition migrations must have no ledger rows. Mixed protocols,
+unrecognized source/digest pairs, failed/partial migration records, schema drift,
+missing provenance or unreadable state stop the release before image build.
+All active revisions are checked, including zero-traffic revisions reachable
+through revision URLs.
 
 Worker catalog and image provenance use one versioned gzip/base64 readback
 frame, capped at 3,500 bytes. Azure action Run Command returns only the
@@ -68,8 +71,8 @@ Lighthouse measurements run outside the deployment path.
 
 The protected runtime workflow implements this sequence. Reuse existing queue authority, worker environment parity, stop-provenance capture, Azure helpers and bounded deployment fixtures. Never delete queue keys, replay paid work, reverse additive schema, or infer a drained writer from an empty queue snapshot.
 
-1. Capture immutable currently running app/scanner/worker images and previous traffic. Before claiming admission, verify that the direct migration connection addresses the same logical PostgreSQL host, decoded database name and schema (`public` by default) as both actual old-worker database connections. Different credentials and the deployed direct/pooler ports `5432`/`6432` (or default PostgreSQL port) are permitted, reflecting the existing single-backend Azure topology; unrelated ports are rejected; alias-host, database or schema mismatch fails closed with an operator configuration error. Recheck immediately before migration. Save logical identity hashes alongside full connection hashes. Before claiming admission, compare SHA-256 hashes of the actual running worker's selected `DATABASE_URL`, `DATABASE_SYSTEM_URL` and `REDIS_URL` with the old-image preflight environment. Any mismatch or unreadable identity fails closed without printing credentials. Preserve those hashes in the root-owned receipt and recheck them through shutdown and candidate promotion. Claim the existing owned scan-admission stop. Drain existing nonterminal scans normally and verify zero nonterminal scans and zero wait/active/delayed/prioritized scan and webhook retry jobs using the existing worker preflight. Failure leaves work intact and aborts maintenance. Do not stop a worker that is still executing a paid scan.
-2. Block all old webhook ingress by deactivating every incompatible app/scanner revision after the approved maintenance window begins, including zero-traffic active revisions. Finish in-flight handlers. Disable and stop the old worker service gracefully, verify container absence and a fresh root-owned `0600` stop-provenance receipt. Check all old app/scanner revisions inactive immediately before migration. Read the durable track state and retain ambiguous historical/expired claims for receipt review. Do not clear or replay them merely to make preflight green.
+1. Capture immutable currently running app/scanner/worker images and previous traffic. Before claiming admission, verify that the direct migration connection addresses the same logical PostgreSQL host, decoded database name and schema (`public` by default) as both actual old-worker database connections. Different credentials and the deployed direct/pooler ports `5432`/`6432` (or default PostgreSQL port) are permitted, reflecting the existing single-backend Azure topology; unrelated ports are rejected; alias-host, database or schema mismatch fails closed with an operator configuration error. Recheck immediately before migration. Save logical identity hashes alongside full connection hashes. Before claiming admission, compare SHA-256 hashes of the actual running worker's selected `DATABASE_URL`, `DATABASE_SYSTEM_URL` and `REDIS_URL` with the old-image preflight environment. Any mismatch or unreadable identity fails closed without printing credentials. Preserve those hashes in the root-owned receipt and recheck them through shutdown and candidate promotion. Claim the existing owned scan-admission stop. Drain existing nonterminal scans normally and verify zero nonterminal scans and zero queued scan and webhook retry jobs, including paused and waiting-children states using `webhook-claims-vm.sh`'s six-state maintenance check. Failure leaves work intact and aborts maintenance. Do not stop a worker that is still executing a paid scan.
+2. Block all old webhook ingress by deactivating every incompatible app/scanner revision after owned maintenance is established, including zero-traffic active revisions. Finish in-flight handlers. Disable and stop the old worker service gracefully, verify container absence and a fresh root-owned `0600` stop-provenance receipt. Check all old app/scanner revisions inactive immediately before migration. Read the durable track state and retain ambiguous historical/expired claims for receipt review. Do not clear or replay them merely to make preflight green.
 3. Only after those checks, apply the additive migration through GitHub Actions. Build/deploy exact compatible app and worker candidates with writer ingress withheld. Verify matching image/source/engine provenance and the `durable-claims/2` implementation; preserve a tested compatible patched fallback. The old production digest is not a valid post-migration writer fallback.
 4. Start compatible consumers and promote compatible app/scanner ingress only after both identities and readiness pass. Resume only the stop owned by this run. Read all writer identities back; the ordinary guard must pass before declaring the baseline installed. Perform separately authorized webhook/accounting acceptance; no provider charge/refund is implied by this workflow.
 5. On failure after migration, retain schema, accounting/evidence and ingress/consumer maintenance. Restore only a verified compatible fallback. If none exists, remain closed and require operator action. This workflow also holds on pre-migration failures once it has claimed maintenance; it supplies no automatic legacy restoration. Do not use the existing unconditional old-digest rollback path for the first transition.
