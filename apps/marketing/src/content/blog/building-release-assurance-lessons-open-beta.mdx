@@ -59,7 +59,7 @@ Building the MCP server humbled me. I read the [model context protocol intro](ht
 
 Our MCP tool returns redacted evidence. Finding type, file, line, reachability, hint. No secret value. Ever. You can call it from Cursor or Claude Code and it does not dump a key into your agent history. That was a deliberate choice and it took an extra sprint to get right.
 
-The GitHub Action taught a different lesson: founders want a useful PR check. The local gate checks changed code for secrets and risky patterns, then fails at the configured severity threshold (High by default). These are advisory signals requiring review. An optional recorded scan submits the revision for a hosted assessment. The layering follows [MDN’s web security guidance](https://developer.mozilla.org/en-US/docs/Web/Security): enforce critical checks in the path and warn on the rest.
+The GitHub Action taught a different lesson. Founders do not want another dashboard. They want a check that fails the PR when something real is about to ship. The local Action checks changed code for secrets and risky patterns, then fails at the configured severity threshold (High by default). Those advisory signals require further review to determine whether a vulnerability exists. An optional recorded scan submits the revision to the hosted service for an evidence-producing run. I borrowed the layering idea from [MDN web security docs](https://developer.mozilla.org/en-US/docs/Web/Security): enforce the critical ones in the path, warn on the rest.
 
 Config is boring on purpose. If you have a lyrashield.yaml we read it. If not, sane defaults. No org wide secret to start. That mattered in open beta. People try it in five minutes without handing us broad tokens.
 

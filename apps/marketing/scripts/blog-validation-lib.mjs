@@ -570,12 +570,6 @@ export function validateArticle(article, programEntry, context = {}) {
   errors.push(...headingErrors(body))
 
   const isAuthority = programEntry?.index === 1 || slug === "vibe-coding-security-guide"
-  const words = markdownWordCount(body)
-  const [minimum, maximum] = isAuthority ? [2500, 3000] : [1200, 1500]
-  if (words < minimum || words > maximum) {
-    errors.push(`article word count must be between ${minimum} and ${maximum}; found ${words}`)
-  }
-
   const answerWords = markdownWordCount(firstProseParagraph(body))
   if (answerWords < 40 || answerWords > 80) {
     errors.push(`direct answer must be between 40 and 80 words; found ${answerWords}`)
