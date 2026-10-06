@@ -2,6 +2,8 @@ import { createHash, createPublicKey, verify as verifySignature } from "node:cry
 import parsePgConnectionString from "pg-connection-string"
 
 const PROJECT_REF = /^[a-z0-9]{20}$/
+const DATABASE_PRINCIPAL = /^[a-z_][a-z0-9_$]{0,62}$/
+const DATABASE_PRINCIPAL_FIELDS = Object.freeze(["app", "scanner", "worker", "system", "migration"])
 const SHA256 = /^[a-f0-9]{64}$/
 const SOURCE_SHA = /^[a-f0-9]{40}$/
 const URL_QUERY_ALLOWLIST = new Set(["schema", "sslmode"])
@@ -148,19 +150,71 @@ function parseDatabaseUrl(raw, label) {
 
   const direct = url.hostname.match(/^db\.([a-z0-9]{20})\.supabase\.co$/i)
   if (direct) {
-    if (user !== "postgres" || (port && port !== "5432")) {
-      throw new Error(`${label} direct Supabase URL must use postgres on port 5432`)
+    if (!DATABASE_PRINCIPAL.test(user) || (port && port !== "5432")) {
+      throw new Error(`${label} direct Supabase URL must use a valid principal on port 5432`)
     }
-    return { projectRef: direct[1].toLowerCase(), database, schema, kind: "direct", port: port || "5432" }
+    return {
+      projectRef: direct[1].toLowerCase(),
+      principal: user,
+      database,
+      schema,
+      kind: "direct",
+      port: port || "5432",
+    }
   }
 
   if (/\.pooler\.supabase\.com$/i.test(url.hostname)) {
-    const pooler = user.match(/^postgres\.([a-z0-9]{20})$/i)
-    if (!pooler) throw new Error(`${label} pooler username must bind the Supabase project ref`)
+    const pooler = user.match(/^([a-z_][a-z0-9_$]{0,62})\.([a-z0-9]{20})$/i)
+    if (!pooler || !DATABASE_PRINCIPAL.test(pooler[1])) {
+      throw new Error(`${label} pooler username must bind a valid principal and Supabase project ref`)
+    }
     if (port && !new Set(["5432", "6543"]).has(port)) throw new Error(`${label} uses an unsupported Supavisor port`)
-    return { projectRef: pooler[1].toLowerCase(), database, schema, kind: "pooler", port: port || "5432" }
+    return {
+      projectRef: pooler[2].toLowerCase(),
+      principal: pooler[1],
+      database,
+      schema,
+      kind: "pooler",
+      port: port || "5432",
+    }
   }
   throw new Error(`${label} host is not a recognized Supabase direct or pooler endpoint`)
+}
+
+export function parseSupabaseDatabasePrincipal(raw, label = "database URL") {
+  return parseDatabaseUrl(raw, label).principal
+}
+
+export function assertSupabaseDatabasePrincipal(raw, expectedPrincipal, label = "database URL") {
+  if (typeof expectedPrincipal !== "string" || !DATABASE_PRINCIPAL.test(expectedPrincipal)) {
+    throw new Error(`${label} approved principal is missing or invalid`)
+  }
+  const parsed = parseDatabaseUrl(raw, label)
+  if (parsed.principal !== expectedPrincipal) {
+    throw new Error(`${label} principal differs from the approved expectation`)
+  }
+  return parsed.principal
+}
+
+export function validateDatabasePrincipalPolicy(principals) {
+  if (!principals || typeof principals !== "object" || Array.isArray(principals)) {
+    throw new Error("Signed database principal expectations are missing")
+  }
+  if (Object.keys(principals).sort().join(",") !== [...DATABASE_PRINCIPAL_FIELDS].sort().join(",")) {
+    throw new Error("Signed database principal expectations are incomplete or unexpected")
+  }
+  for (const field of DATABASE_PRINCIPAL_FIELDS) {
+    if (typeof principals[field] !== "string" || !DATABASE_PRINCIPAL.test(principals[field])) {
+      throw new Error(`Signed database principal expectation is invalid: ${field}`)
+    }
+  }
+  if (principals.app !== principals.worker) {
+    throw new Error("Application DATABASE_URL must use the approved worker principal")
+  }
+  if ([principals.app, principals.scanner, principals.worker].includes(principals.system)) {
+    throw new Error("DATABASE_SYSTEM_URL must bind a separate principal")
+  }
+  return true
 }
 
 export function canonicalSupabaseDatabaseIdentity(urls) {

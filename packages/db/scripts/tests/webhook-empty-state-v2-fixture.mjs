@@ -51,11 +51,20 @@ export function fixture() {
   const credentials = Object.fromEntries(
     [...Object.keys(resources), "redis"].map((name) => [name, H])
   )
+  const databasePrincipals = {
+    app: "worker_runtime",
+    scanner: "scanner_runtime",
+    worker: "worker_runtime",
+    system: "system_admin",
+    migration: "postgres",
+  }
   const policy = {
     ...authorization,
+    schemaVersion: "webhook-empty-state-policy/v3",
     enabled: true,
     revoked: false,
     databaseIdentitySha256: H,
+    databasePrincipals,
     resources,
     credentials,
     redisIdentitySha256: H,
@@ -68,7 +77,7 @@ export function fixture() {
   }
   const observedAt = new Date(now).toISOString()
   const receipt = {
-    schemaVersion: "webhook-empty-state/v2",
+    schemaVersion: "webhook-empty-state/v3",
     mode: "empty-scheduling",
     authorization,
     evidence: {
@@ -76,7 +85,13 @@ export function fixture() {
       database: Object.fromEntries(
         Object.entries(resources).map(([name, resourceId]) => [
           name,
-          { identitySha256: H, credentialSha256: H, resourceId, observedAt },
+          {
+            identitySha256: H,
+            principalSha256: sha256(name === "backup" ? "postgres" : databasePrincipals[name]),
+            credentialSha256: H,
+            resourceId,
+            observedAt,
+          },
         ])
       ),
       redis: { identitySha256: H, credentialSha256: H, owner: "123:1", valueSha256: H },

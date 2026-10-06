@@ -27,6 +27,12 @@ test("enabled copied candidate adapter survives cold start and crash after eithe
       mkdirSync(dirname(join(root, path)), { recursive: true })
       cpSync(join(source, path), join(root, path), { recursive: true })
     }
+    mkdirSync(join(root, "node_modules"), { recursive: true })
+    cpSync(
+      realpathSync(join(source, "node_modules/pg-connection-string")),
+      join(root, "node_modules/pg-connection-string"),
+      { recursive: true }
+    )
     const store = join(root, "packages/db/scripts/webhook-empty-state-root-store.mjs")
     writeFileSync(
       store,
@@ -77,13 +83,20 @@ test("enabled copied candidate adapter survives cold start and crash after eithe
       policy.candidateRevisions = { app: "app-candidate", scanner: "scanner-candidate" }
       const env = {
         DATABASE_URL:
-          "postgresql://postgres:disposable-only@db.yejmvtgsxniatmjbwplk.supabase.co:5432/postgres",
+          "postgresql://worker_runtime:disposable-only@db.yejmvtgsxniatmjbwplk.supabase.co:5432/postgres",
         DATABASE_SYSTEM_URL:
-          "postgresql://postgres:disposable-system@db.yejmvtgsxniatmjbwplk.supabase.co:5432/postgres",
+          "postgresql://system_admin:disposable-system@db.yejmvtgsxniatmjbwplk.supabase.co:5432/postgres",
         REDIS_URL: "rediss://disposable-only@redis.invalid:6379/0",
       }
       const fingerprint = runtimeFingerprint(env)
       policy.databaseIdentitySha256 = fingerprint.database.identitySha256
+      policy.databasePrincipals = {
+        app: "worker_runtime",
+        scanner: "worker_runtime",
+        worker: "worker_runtime",
+        system: "system_admin",
+        migration: "postgres",
+      }
       policy.redisIdentitySha256 = fingerprint.redis.identitySha256
       policy.credentials.redis = fingerprint.redis.credentialSha256
       policy.candidateCredentials = {}

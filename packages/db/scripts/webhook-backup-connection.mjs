@@ -1,4 +1,5 @@
 import {
+  assertSupabaseDatabasePrincipal,
   parsePostgresConnectionTarget,
   canonicalSupabaseDatabaseIdentity,
   hashDatabaseIdentity,
@@ -16,6 +17,9 @@ export function normalizeBackupConnection(raw) {
   const sanitized = url.href
   const target = parsePostgresConnectionTarget(sanitized, "backup database URL")
   if (target.port !== "5432") throw new Error("Backup requires direct/session PostgreSQL")
+  // Preserve the pre-existing backup-only principal contract. Runtime role
+  // flexibility must not silently broaden backup authorization.
+  assertSupabaseDatabasePrincipal(sanitized, "postgres", "backup database URL")
   return {
     url: sanitized,
     identitySha256: hashDatabaseIdentity(canonicalSupabaseDatabaseIdentity([sanitized])),

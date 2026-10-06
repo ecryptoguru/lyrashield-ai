@@ -114,7 +114,19 @@ test("phase progression preserves immutable authorization and rejects skips or r
     producerSha256: H,
     workflowSha: sourceSha,
   }
-  const approved = { ...authorization, enabled: true, revoked: false }
+  const approved = {
+    ...authorization,
+    schemaVersion: "webhook-empty-state-policy/v3",
+    databasePrincipals: {
+      app: "worker_runtime",
+      scanner: "scanner_runtime",
+      worker: "worker_runtime",
+      system: "system_admin",
+      migration: "postgres",
+    },
+    enabled: true,
+    revoked: false,
+  }
   let state
   for (const phase of PHASES) {
     state = advancePhase(state, phase, authorization, approved, now)
@@ -180,20 +192,46 @@ test("fixed migration env binds both aliases without shell evaluation or transac
     `DATABASE_DIRECT_URL=${url}\nCOMMAND=anything`,
   ])
     assert.throws(() => parseFixedMigrationEnvironment(raw, identity))
+
+  const customMigration = url.replace("postgres.", "lyrashield_migrator.")
+  const customIdentity = hashDatabaseIdentity(canonicalSupabaseDatabaseIdentity([customMigration]))
+  assert.deepEqual(
+    parseFixedMigrationEnvironment(
+      `DATABASE_DIRECT_URL=${customMigration}\nMIGRATION_DATABASE_URL=${customMigration}\n`,
+      customIdentity,
+      "lyrashield_migrator"
+    ),
+    { DATABASE_DIRECT_URL: customMigration, DATABASE_URL: customMigration }
+  )
+  assert.throws(() =>
+    parseFixedMigrationEnvironment(
+      `DATABASE_DIRECT_URL=${customMigration}\n`,
+      customIdentity,
+      "postgres"
+    ),
+    /principal differs/
+  )
 })
 test("refreshed worker and candidate targets/credential continuity fail closed", async () => {
   const { runtimeFingerprint, validateConsumerFingerprint } =
     await import("./webhook-empty-state-consumer-identity.mjs")
   const env = {
     DATABASE_URL:
-      "postgresql://postgres.yejmvtgsxniatmjbwplk:placeholder@aws-1-ap-south-1.pooler.supabase.com:5432/postgres?sslmode=verify-full",
+      "postgresql://worker_runtime.yejmvtgsxniatmjbwplk:placeholder@aws-1-ap-south-1.pooler.supabase.com:5432/postgres?sslmode=verify-full",
     DATABASE_SYSTEM_URL:
-      "postgresql://postgres:placeholder@db.yejmvtgsxniatmjbwplk.supabase.co:5432/postgres",
+      "postgresql://system_admin:placeholder@db.yejmvtgsxniatmjbwplk.supabase.co:5432/postgres",
     REDIS_URL: "rediss://placeholder@example.test:6379/0",
   }
   const fingerprint = runtimeFingerprint(env)
   const policy = {
     databaseIdentitySha256: fingerprint.database.identitySha256,
+    databasePrincipals: {
+      app: "worker_runtime",
+      scanner: "scanner_runtime",
+      worker: "worker_runtime",
+      system: "system_admin",
+      migration: "postgres",
+    },
     redisIdentitySha256: fingerprint.redis.identitySha256,
     credentials: {
       worker: fingerprint.database.credentialSha256,
@@ -205,11 +243,28 @@ test("refreshed worker and candidate targets/credential continuity fail closed",
   }
   assert.equal(validateConsumerFingerprint(fingerprint, policy, "worker"), true)
   assert.equal(validateConsumerFingerprint(fingerprint, policy, "app"), true)
-  for (const role of ["worker", "app"])
+  const scannerEnv = {
+    ...env,
+    DATABASE_URL: env.DATABASE_URL.replace("worker_runtime.", "scanner_runtime."),
+  }
+  const scannerFingerprint = runtimeFingerprint(scannerEnv)
+  const scannerPolicy = {
+    ...policy,
+    credentials: { ...policy.credentials, scanner: scannerFingerprint.database.credentialSha256 },
+    candidateCredentials: {
+      ...policy.candidateCredentials,
+      scanner: { system: scannerFingerprint.system.credentialSha256 },
+    },
+  }
+  assert.equal(validateConsumerFingerprint(scannerFingerprint, scannerPolicy, "scanner"), true)
+  assert.throws(() => validateConsumerFingerprint(fingerprint, policy, "scanner"), /target differs/)
+  for (const role of ["worker", "app", "scanner"])
     for (const changed of [
       { DATABASE_URL: env.DATABASE_URL.replace("yejmvtgsxniatmjbwplk", "abcdefghijklmnopqrst") },
       { DATABASE_SYSTEM_URL: env.DATABASE_SYSTEM_URL.replace("placeholder", "rotated") },
       { REDIS_URL: "rediss://placeholder@wrong.test:6379/0" },
+      { DATABASE_URL: env.DATABASE_URL.replace("worker_runtime.", "scanner_runtime.") },
+      { DATABASE_SYSTEM_URL: env.DATABASE_SYSTEM_URL.replace("system_admin", "worker_runtime") },
     ])
       assert.throws(() =>
         validateConsumerFingerprint(runtimeFingerprint({ ...env, ...changed }), policy, role)

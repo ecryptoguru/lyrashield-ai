@@ -16,11 +16,12 @@ import {
   attestationArguments,
 } from "../webhook-empty-state-attestation.mjs"
 import { validateStartupProof } from "../../../../ops/worker/webhook-empty-state-startup-fence.mjs"
+import { validateRootPolicyIntegrity } from "../webhook-empty-state-root-store.mjs"
 const H = "a".repeat(64),
   S = "b".repeat(40),
   now = Date.parse("2026-10-05T09:01:00Z")
 import { fixture } from "./webhook-empty-state-v2-fixture.mjs"
-test("canonical receipt validates complete, fresh /2 evidence", () => {
+test("canonical receipt validates complete, fresh /3 evidence", () => {
   const { receipt, policy } = fixture()
   assert.match(validateReceipt(receipt, policy, now).receiptSha256, /^[a-f0-9]{64}$/)
   assert.equal(canonical({ z: 0, a: 1 }), '{"a":1,"z":0}')
@@ -28,6 +29,7 @@ test("canonical receipt validates complete, fresh /2 evidence", () => {
 for (const [name, mutate] of Object.entries({
   "caller verified flag": (r) => (r.evidence.verified = true),
   "missing app identity": (r) => delete r.evidence.database.app,
+  "swapped app principal": (r) => (r.evidence.database.app.principalSha256 = "c".repeat(64)),
   "foreign admission": (r) => (r.evidence.redis.owner = "999:1"),
   "latent fix queue": (r) => (r.evidence.queues.fixGenerate.counts.paused = 1),
   scheduler: (r) => (r.evidence.queues.scan.schedulers = 1),
@@ -56,6 +58,20 @@ test("expired, disabled and revoked root policy fails", () => {
   for (const changed of [{ enabled: false }, { revoked: true }])
     assert.throws(() => validateReceipt(receipt, { ...policy, ...changed }, now))
   assert.throws(() => validateReceipt(receipt, policy, now + 30 * 60_000))
+})
+test("root policy digest binds the signed principal expectations", () => {
+  const { policy } = fixture()
+  delete policy.policySha256
+  policy.policySha256 = sha256(canonical(policy))
+  assert.equal(validateRootPolicyIntegrity(policy), true)
+  const changed = structuredClone(policy)
+  changed.databasePrincipals.system = "worker_runtime"
+  assert.throws(() => validateRootPolicyIntegrity(changed), /digest mismatch/)
+  const wrongPolicy = structuredClone(policy)
+  delete wrongPolicy.policySha256
+  wrongPolicy.databasePrincipals.system = "worker_runtime"
+  wrongPolicy.policySha256 = sha256(canonical(wrongPolicy))
+  assert.throws(() => validateRootPolicyIntegrity(wrongPolicy), /separate principal/)
 })
 test("startup denies reboot before completion even for /2 candidate", () => {
   const { receipt, policy } = fixture()

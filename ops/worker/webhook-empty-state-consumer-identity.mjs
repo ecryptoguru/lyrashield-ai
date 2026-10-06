@@ -2,10 +2,11 @@ import { createHash } from "node:crypto"
 import { constants, openSync, fstatSync, readFileSync, closeSync } from "node:fs"
 import { checkParents } from "../../packages/db/scripts/webhook-empty-state-root-store.mjs"
 import { requireValue } from "../../packages/db/scripts/webhook-empty-state-receipt-v2.mjs"
+import { validateDatabasePrincipalPolicy } from "../../packages/db/scripts/webhook-empty-state-contract.mjs"
+const hash = (value) => createHash("sha256").update(value).digest("hex")
 // Self-contained so the exact image can run this probe without starting any
 // application/queue consumer or loading a caller-provided module.
 export function runtimeFingerprint(env) {
-  const hash = (value) => createHash("sha256").update(value).digest("hex")
   const database = (raw) => {
     if (typeof raw !== "string" || raw.length > 8192) throw Error("Missing connection")
     const u = new URL(raw),
@@ -22,12 +23,25 @@ export function runtimeFingerprint(env) {
     )
       throw Error("Unsupported connection")
     const user = decodeURIComponent(u.username)
-    let ref
+    let ref, principal
     const direct = u.hostname.match(/^db\.([a-z0-9]{20})\.supabase\.co$/i)
-    if (direct && user === "postgres" && ["", "5432"].includes(u.port)) ref = direct[1]
+    if (
+      direct &&
+      /^[a-z_][a-z0-9_$]{0,62}$/.test(user) &&
+      ["", "5432"].includes(u.port)
+    ) {
+      ref = direct[1]
+      principal = user
+    }
     else if (/\.pooler\.supabase\.com$/i.test(u.hostname) && ["", "5432", "6543"].includes(u.port))
-      ref = user.match(/^postgres\.([a-z0-9]{20})$/i)?.[1]
-    if (!ref) throw Error("Unbound connection")
+      {
+        const pooler = user.match(/^([a-z_][a-z0-9_$]{0,62})\.([a-z0-9]{20})$/i)
+        if (pooler && pooler[1] === pooler[1].toLowerCase()) {
+          principal = pooler[1]
+          ref = pooler[2]
+        }
+      }
+    if (!ref || !principal) throw Error("Unbound connection")
     return {
       identitySha256: hash(
         JSON.stringify({
@@ -37,6 +51,9 @@ export function runtimeFingerprint(env) {
           schema: "public",
         })
       ),
+      // Principal identity is separate from the canonical database identity;
+      // it does not attest the role's PostgreSQL privileges.
+      principalSha256: hash(principal),
       credentialSha256: hash(raw),
     }
   }
@@ -65,10 +82,16 @@ export function runtimeFingerprint(env) {
   }
 }
 export function validateConsumerFingerprint(fingerprint, policy, role) {
+  validateDatabasePrincipalPolicy(policy.databasePrincipals)
+  requireValue(["worker", "app", "scanner"].includes(role), "Unknown database consumer role")
+  const expectedDatabasePrincipal = policy.databasePrincipals[role]
+  const expectedSystemPrincipal = policy.databasePrincipals.system
   requireValue(
     fingerprint.database.identitySha256 === policy.databaseIdentitySha256 &&
       fingerprint.system.identitySha256 === policy.databaseIdentitySha256 &&
-      fingerprint.redis.identitySha256 === policy.redisIdentitySha256,
+      fingerprint.redis.identitySha256 === policy.redisIdentitySha256 &&
+      fingerprint.database.principalSha256 === hash(expectedDatabasePrincipal) &&
+      fingerprint.system.principalSha256 === hash(expectedSystemPrincipal),
     "New consumer connection target differs from approved database/Redis"
   )
   const ordinary = role === "worker" ? policy.credentials.worker : policy.credentials[role]

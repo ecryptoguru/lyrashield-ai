@@ -10,6 +10,8 @@ import {
   canonicalSupabaseDatabaseIdentity,
   EXPECTED_EMPTY_MIGRATIONS,
   hashDatabaseIdentity,
+  parseSupabaseDatabasePrincipal,
+  assertSupabaseDatabasePrincipal,
   parsePostgresConnectionTarget,
   normalizeDefault,
   validateEmptyStateAuthorization,
@@ -113,6 +115,12 @@ test("direct and project-bound Supavisor URLs canonicalize to one logical databa
   assert.deepEqual(canonicalSupabaseDatabaseIdentity([direct, pooler]), {
     provider: "supabase", projectRef, database: "postgres", schema: "public",
   })
+  const workerPooler = pooler.replace("postgres.", "worker_runtime.")
+  assert.equal(parseSupabaseDatabasePrincipal(workerPooler), "worker_runtime")
+  assert.equal(hashDatabaseIdentity(canonicalSupabaseDatabaseIdentity([direct])),
+    hashDatabaseIdentity(canonicalSupabaseDatabaseIdentity([workerPooler])))
+  assert.throws(() => assertSupabaseDatabasePrincipal(workerPooler, "postgres"), /principal differs/)
+  assert.equal(assertSupabaseDatabasePrincipal(workerPooler, "worker_runtime"), "worker_runtime")
 })
 
 test("column default normalization preserves case inside SQL string literals", () => {
@@ -132,6 +140,8 @@ test("effective node-postgres target rejects query endpoint, credential, duplica
     "options=-c%20search_path=private",
     "schema=public&schema=public",
     "sslmode=require&sslmode=verify-full",
+    "uselibpqcompat=1",
+    "%75selibpqcompat=1",
   ]
   for (const attack of attacks) {
     assert.throws(() => parsePostgresConnectionTarget(direct + "&" + attack), /unsupported|duplicate/, attack)
@@ -174,6 +184,26 @@ test("signed maintenance receipt rejects tampering and an untrusted key", () => 
 test("Supavisor identity requires project ref in its username", () => {
   const unbound = "postgresql://postgres:masked@fixture.pooler.supabase.com:5432/postgres?schema=public"
   assert.throws(() => canonicalSupabaseDatabaseIdentity([unbound]), /username must bind/)
+})
+
+test("signed principal policy names independent expected roles", async () => {
+  const { validateDatabasePrincipalPolicy } = await import("../webhook-empty-state-contract.mjs")
+  const valid = {
+    app: "worker_runtime",
+    scanner: "scanner_runtime",
+    worker: "worker_runtime",
+    system: "system_admin",
+    migration: "postgres",
+  }
+  assert.equal(validateDatabasePrincipalPolicy(valid), true)
+  for (const changed of [
+    { ...valid, worker: "system_admin" },
+    { ...valid, system: "scanner_runtime" },
+    { ...valid, migration: "invalid principal" },
+    { ...valid, backup: "postgres" },
+    { ...valid, system: valid.worker },
+  ])
+    assert.throws(() => validateDatabasePrincipalPolicy(changed))
 })
 
 test("rejects direct and pooler URLs bound to different projects", () => {
