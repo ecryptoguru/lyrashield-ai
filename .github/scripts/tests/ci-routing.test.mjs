@@ -1,6 +1,14 @@
 import assert from "node:assert/strict"
 import { execFileSync, spawnSync } from "node:child_process"
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import test from "node:test"
@@ -26,10 +34,9 @@ const admissionWorkflow = readFileSync(
   "utf8"
 )
 const steps = new Map(
-  [...workflow.matchAll(/^      - name: (.+)\n        if: (.+)$/gm)].map((match) => [
-    match[1],
-    match[2],
-  ])
+  [...workflow.matchAll(/^      - name: (.+)\n(?:        id: .+\n)?        if: (.+)$/gm)].map(
+    (match) => [match[1], match[2]]
+  )
 )
 
 function runs(name, paths) {
@@ -245,6 +252,112 @@ const runtimeSteps = [
   "Browser E2E (includes functional mobile shell at 390px)",
   "Portable browser harness",
 ]
+
+test("independent marketing projects select only their affected tests and browser artifact", () => {
+  const cases = [
+    [["apps/marketing/src/pages/index.astro"], true, false],
+    [["apps/marketing-motion/src/scene.ts"], false, true],
+    [["apps/web/src/app/page.tsx"], false, false],
+    [[".github/workflows/deploy-azure.yml"], false, false],
+    [["ops/worker/run-worker.sh"], false, false],
+    [["e2e/dashboard.spec.ts"], false, false],
+    [["pnpm-lock.yaml"], true, true],
+    [["packages/ui/src/index.ts"], false, false],
+    [["packages/security/src/index.ts"], true, false],
+    [["packages/egress-proxy/package.json"], true, false],
+    [["new-runtime-entrypoint.js"], true, true],
+    [[".github/workflows/ci.yml", "pnpm-workspace.yaml"], true, true],
+    [["apps/marketing/src/pages/index.astro", "apps/marketing-motion/src/scene.ts"], true, true],
+  ]
+  for (const [paths, marketing, motion] of cases) {
+    const output = execFileSync("bash", [".github/scripts/classify-paths.sh"], {
+      input: paths.join("\n") + "\n",
+      encoding: "utf8",
+      env: { ...process.env, GITHUB_OUTPUT: "" },
+    })
+    const fields = Object.fromEntries(
+      output
+        .trim()
+        .split("\n")
+        .map((line) => line.split("="))
+    )
+    assert.equal(fields["marketing-tests"], String(marketing), String(paths))
+    assert.equal(fields["motion-tests"], String(motion), String(paths))
+    assert.equal(runs("Marketing browser E2E", paths), marketing, String(paths))
+  }
+})
+
+test("marketing routing covers its current transitive workspace dependency graph", () => {
+  const manifests = new Map(
+    readdirSync("packages").flatMap((folder) => {
+      try {
+        const manifest = JSON.parse(readFileSync(`packages/${folder}/package.json`, "utf8"))
+        return [[manifest.name, { folder, manifest }]]
+      } catch {
+        return []
+      }
+    })
+  )
+  const seen = new Set()
+  const visit = (manifest) => {
+    for (const [name, version] of Object.entries({
+      ...manifest.dependencies,
+      ...manifest.devDependencies,
+    })) {
+      if (!version.startsWith("workspace:") || seen.has(name)) continue
+      seen.add(name)
+      const dependency = manifests.get(name)
+      assert.ok(dependency, `Unknown workspace dependency ${name}`)
+      assert.equal(
+        runs("Marketing browser E2E", [`packages/${dependency.folder}/src/index.ts`]),
+        true,
+        name
+      )
+      visit(dependency.manifest)
+    }
+  }
+  visit(JSON.parse(readFileSync("apps/marketing/package.json", "utf8")))
+  assert.ok(seen.size > 0)
+})
+
+test("ops and native service tests select their dependency closure without ordinary UI changes", () => {
+  for (const [paths, expected] of [
+    [[".github/workflows/release-tauri.yml"], true],
+    [[".github/scripts/promote-worker-vm.sh"], true],
+    [["ops/worker/run-worker.sh"], true],
+    [["packages/db/prisma/schema.prisma"], true],
+    [["apps/web/package.json"], true],
+    [["pnpm-lock.yaml"], true],
+    [["run-all-tests.mjs"], true],
+    [["apps/web/src/app/page.tsx"], false],
+    [["apps/worker/src/index.ts"], false],
+    [["apps/marketing/src/pages/index.astro"], false],
+    [["e2e/dashboard.spec.ts"], false],
+    [["README.md"], false],
+    [["apps/web/src/app/page.tsx", "unknown.sh"], true],
+  ]) {
+    assert.equal(runs("Test webhook catalog Prisma compatibility", paths), expected, String(paths))
+    assert.equal(runs("Test Azure deployment and alert operations", paths), expected, String(paths))
+  }
+  assert.match(workflow, /LYRASHIELD_OPS_RUNTIME_ALREADY_VERIFIED: "1"/)
+  const runner = readFileSync("run-all-tests.mjs", "utf8")
+  assert.match(runner, /webhook-catalog\.runtime\.test\.mjs/)
+  assert.match(runner, /webhook-queue\.runtime\.test\.mjs/)
+  assert.match(runner, /: \["\.github\/scripts\/tests\/\*\.test\.mjs"\]/)
+})
+
+test("ops owns the webhook and Lighthouse assertions without duplicate early invocations", () => {
+  const classifierJob = workflow.split("  changes:")[1].split("  lint-and-typecheck:")[0]
+  assert.doesNotMatch(
+    classifierJob,
+    /webhook-cutover-verification\.workflow\.test|webhook-deploy-dispatch\.test|lighthouse-production\.test/
+  )
+  assert.match(
+    readFileSync(new URL("../../../run-all-tests.mjs", import.meta.url), "utf8"),
+    /\.github\/scripts\/tests\/\*\.test\.mjs/
+  )
+  assert.doesNotMatch(workflow, /pnpm exec knip --no-exit-code/)
+})
 
 test("known tooling retains executable operations checks without runtime suites", () => {
   const paths = [".github/workflows/ci.yml", "run-all-tests.mjs"]

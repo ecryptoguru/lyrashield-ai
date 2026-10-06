@@ -578,6 +578,30 @@ if (
     "First-transition baseline verified: all active writers and the live worker use the recognized durable-claims/1 protocol, and the database matches its exact pre-cutover migration/schema state."
   )
 } else {
+  // Emit only fixed predicate names and booleans. Never serialize the observed
+  // state: catalog expressions, runtime environment and registry credentials
+  // are not diagnostic output. This does not change baseline admission.
+  console.log(
+    `WEBHOOK_BASELINE_MATCHES=${JSON.stringify({
+      writersMatchWorkerProtocol: allWritersMatchWorker,
+      writersShareProtocol: allWritersShareProtocol,
+      workerCurrentProtocol: state.protocol === protocol,
+      workerLegacyProtocol: state.protocol === firstProtocol,
+      currentMigrations: migrationsMatch(migrationNames),
+      currentColumns: columnsMatch([...fullyMigratedColumns, ...transitionColumns]),
+      legacyMigrations: migrationsMatch(firstMigrationNames),
+      legacyColumns: columnsMatch(firstMigrationColumns),
+      legacyNoTransitionColumns: hasNoTransitionColumns,
+      constraints: constraintsMatch(),
+      indexes: indexesMatch(),
+      legacyPublicSchema: state.schema === "public",
+      legacyWorkerSource: state.product === firstWriterRevision,
+      legacyWorkerEngine: state.engine === firstEngineRevision,
+      legacyWorkerDigest: state.digest === firstWorkerDigest,
+      legacyWriterSources: writerIdentities.every((identity) => identity === firstWriterRevision),
+      legacyWriterDigests: writerDigests.every((imageDigest) => imageDigest === firstWriterDigest),
+    })}`
+  )
   fail("Webhook writer, worker and database states do not match a known compatible baseline")
 }
 

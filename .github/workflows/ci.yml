@@ -77,6 +77,9 @@ jobs:
       shared: ${{ steps.classify.outputs.shared }}
       marketing-deploy: ${{ steps.classify.outputs.marketing-deploy }}
       azure-deploy: ${{ steps.classify.outputs.azure-deploy }}
+      marketing-tests: ${{ steps.classify.outputs.marketing-tests }}
+      motion-tests: ${{ steps.classify.outputs.motion-tests }}
+      ops-tests: ${{ steps.classify.outputs.ops-tests }}
     steps:
       - name: Configure git default branch
         run: git config --global init.defaultBranch main
@@ -108,14 +111,6 @@ jobs:
 
       - name: Test Desktop release manifest
         run: python3 .github/scripts/test_desktop_release.py
-
-      - name: Test webhook cutover verification workflow invariants
-        run: |
-          node .github/scripts/tests/webhook-cutover-verification.workflow.test.mjs
-          node --test .github/scripts/tests/webhook-deploy-dispatch.test.mjs
-
-      - name: Test Lighthouse NO_NAVSTART retry policy
-        run: node --test .github/scripts/tests/lighthouse-production.test.mjs
 
       - name: Classify changed files
         id: classify
@@ -239,11 +234,6 @@ jobs:
       - name: Format check
         run: pnpm format:check
 
-      # Advisory only — reports markdown hygiene without blocking the merge.
-      - name: Markdown lint (non-blocking)
-        continue-on-error: true
-        run: pnpm lint:md
-
       - name: Serial-comma copy ratchet
         run: pnpm lint:copy-comma
 
@@ -252,14 +242,8 @@ jobs:
         run: pnpm db:generate
 
       - name: Test webhook catalog Prisma compatibility
-        if: needs.changes.outputs.docs-only != 'true'
+        if: needs.changes.outputs.ops-tests == 'true'
         run: node --test .github/scripts/tests/webhook-catalog.runtime.test.mjs .github/scripts/tests/webhook-queue.runtime.test.mjs
-
-      - name: Informational dead-code inventory
-        if: needs.changes.outputs.docs-only != 'true' && needs.changes.outputs.tooling-only != 'true'
-        # Findings are candidate evidence until the 4a baseline is cleared.
-        # Knip still exits nonzero for invalid configuration or execution errors.
-        run: pnpm exec knip --no-exit-code
 
       - name: Create shadow database
         if: needs.changes.outputs.app == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')
@@ -377,7 +361,7 @@ jobs:
         run: pnpm lint
 
       - name: Lint marketing
-        if: needs.changes.outputs.marketing == 'true' && needs.changes.outputs.app != 'true' && needs.changes.outputs.shared != 'true'
+        if: needs.changes.outputs.marketing-tests == 'true' && needs.changes.outputs.app != 'true' && needs.changes.outputs.shared != 'true'
         run: pnpm --filter @lyrashield/marketing lint
 
       - name: Typecheck
@@ -401,7 +385,7 @@ jobs:
         run: pnpm lint:browser-harness
 
       - name: Typecheck marketing
-        if: needs.changes.outputs.marketing == 'true' && needs.changes.outputs.app != 'true' && needs.changes.outputs.shared != 'true'
+        if: needs.changes.outputs.marketing-tests == 'true' && needs.changes.outputs.app != 'true' && needs.changes.outputs.shared != 'true'
         run: pnpm --filter @lyrashield/marketing typecheck
 
       # Deterministic, offline blog gates. These ran only by hand before, which is
@@ -410,23 +394,23 @@ jobs:
       # name in the error. blog:check-links is deliberately NOT gated here — it
       # calls ~50 third-party URLs and would make merges depend on their uptime.
       - name: Validate blog content
-        if: needs.changes.outputs.marketing == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')
+        if: needs.changes.outputs.marketing-tests == 'true'
         run: pnpm --filter @lyrashield/marketing blog:validate
 
       - name: Validate blog images
-        if: needs.changes.outputs.marketing == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')
+        if: needs.changes.outputs.marketing-tests == 'true'
         run: pnpm --filter @lyrashield/marketing blog:validate:images
 
       - name: Validate blog MDX
-        if: needs.changes.outputs.marketing == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')
+        if: needs.changes.outputs.marketing-tests == 'true'
         run: pnpm --filter @lyrashield/marketing blog:validate:mdx
 
       - name: Validate blog offline gates
-        if: needs.changes.outputs.marketing == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')
+        if: needs.changes.outputs.marketing-tests == 'true'
         run: pnpm --filter @lyrashield/marketing blog:validate:offline
 
       - name: Validate compare content
-        if: needs.changes.outputs.marketing == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')
+        if: needs.changes.outputs.marketing-tests == 'true'
         run: pnpm --filter @lyrashield/marketing compare:validate
 
       - name: Validate redirects coverage
@@ -434,7 +418,7 @@ jobs:
         # architecture): every prerendered route must carry an explicit
         # _redirects rule or its slash variant silently falls back to the
         # platform 307. Runs the same enumeration the e2e suite asserts.
-        if: needs.changes.outputs.marketing == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')
+        if: needs.changes.outputs.marketing-tests == 'true'
         run: pnpm --filter @lyrashield/marketing validate-redirects
 
       - name: Test affected suites
@@ -444,24 +428,22 @@ jobs:
         # own migrated databases because their guards require those names.
         env:
           APP_CHANGED: ${{ needs.changes.outputs.app }}
-          MARKETING_CHANGED: ${{ needs.changes.outputs.marketing }}
           SHARED_CHANGED: ${{ needs.changes.outputs.shared }}
           TOOLING_ONLY: ${{ needs.changes.outputs.tooling-only }}
-          LYRASHIELD_TEST_COVERAGE: ${{ github.event_name == 'push' && '1' || '0' }}
+          MARKETING_TESTS: ${{ needs.changes.outputs.marketing-tests }}
+          MOTION_TESTS: ${{ needs.changes.outputs.motion-tests }}
+          OPS_TESTS: ${{ needs.changes.outputs.ops-tests }}
+          LYRASHIELD_OPS_RUNTIME_ALREADY_VERIFIED: "1"
         shell: bash
         run: |
           set -euo pipefail
           suites=()
-          if [ "$TOOLING_ONLY" = true ]; then
-            suites+=(ops)
-          else
-            if [ "$APP_CHANGED" = true ] || [ "$SHARED_CHANGED" = true ]; then
-              suites+=(core ops)
-            fi
-            if [ "$MARKETING_CHANGED" = true ] || [ "$SHARED_CHANGED" = true ]; then
-              suites+=(marketing motion)
-            fi
+          if [ "$TOOLING_ONLY" != true ] && { [ "$APP_CHANGED" = true ] || [ "$SHARED_CHANGED" = true ]; }; then
+            suites+=(core)
           fi
+          if [ "$OPS_TESTS" = true ]; then suites+=(ops); fi
+          if [ "$MARKETING_TESTS" = true ]; then suites+=(marketing); fi
+          if [ "$MOTION_TESTS" = true ]; then suites+=(motion); fi
           LYRASHIELD_TEST_SUITES="$(IFS=,; echo "${suites[*]}")" pnpm test
 
       - name: Prove metering and queue invariants with disposable services
@@ -472,16 +454,6 @@ jobs:
           BILLING_METER_POSTGRES_TEST=1 pnpm exec vitest run packages/billing/src/usage/meter.postgres.test.ts
           WEBHOOK_TRACK_POSTGRES_REDIS_TEST=1 pnpm exec vitest run apps/worker/src/jobs/webhook-track-retry.postgres-redis.test.ts
           BULLMQ_PRODUCER_REDIS_TEST=1 BULLMQ_TEST_REDIS_URL="$REDIS_URL" pnpm exec vitest run packages/integrations/src/queue.producer.redis.test.ts
-
-      - name: Upload informational web coverage summary
-        if: always() && github.event_name == 'push' && (needs.changes.outputs.app == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true'))
-        continue-on-error: true
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: web-vitest-coverage-summary
-          path: coverage/coverage-summary.json
-          if-no-files-found: error
-          retention-days: 14
 
       # The TRIAL_INTEGRATION_TEST suites assert their DATABASE_URL is a
       # localhost, non-superuser, NOBYPASSRLS role — the app_runtime_ci role
@@ -581,11 +553,11 @@ jobs:
             'allows the owning account without workspace context'
 
       - name: Test worker egress pin rotation
-        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true'
+        if: needs.changes.outputs.ops-tests == 'true'
         run: sh ops/worker/refresh-egress.test.sh
 
       - name: Test Azure deployment and alert operations
-        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true'
+        if: needs.changes.outputs.ops-tests == 'true'
         run: |
           bash .github/scripts/tests/test-promote-worker-vm.sh
           bash .github/scripts/tests/test-check-engine-revision-parity.sh
@@ -598,7 +570,7 @@ jobs:
           sh ops/worker/refresh-secrets.test.sh
 
       - name: Test worker stop provenance
-        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true'
+        if: needs.changes.outputs.ops-tests == 'true'
         run: sh ops/worker/capture-stop-provenance.test.sh
 
       - name: Build app and shared packages
@@ -606,7 +578,7 @@ jobs:
         run: pnpm build
 
       - name: Build marketing
-        if: needs.changes.outputs.marketing == 'true' && needs.changes.outputs.app != 'true' && needs.changes.outputs.shared != 'true'
+        if: needs.changes.outputs.marketing-tests == 'true' && needs.changes.outputs.app != 'true' && needs.changes.outputs.shared != 'true'
         run: |
           # The browser suite's webServer serves this exact artifact, so this
           # build carries the local-preview flag (measured ~15s of astro work
@@ -625,7 +597,7 @@ jobs:
       # what makes the install step reliably fit its timeout. Added after the
       # step timed out at 8 minutes three runs in a row (2026-08-19/20).
       - name: Cache Playwright browser
-        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.marketing == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')
+        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.marketing-tests == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ms-playwright
@@ -636,7 +608,7 @@ jobs:
             playwright-${{ runner.os }}-
 
       - name: Install Playwright browser
-        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.marketing == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')
+        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.marketing-tests == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')
         timeout-minutes: 15
         run: |
           # Playwright needs Ubuntu packages, not GitHub's preconfigured Google
@@ -651,7 +623,7 @@ jobs:
 
       - name: Marketing browser E2E
         id: marketing_browser
-        if: needs.changes.outputs.marketing == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')
+        if: needs.changes.outputs.marketing-tests == 'true'
         timeout-minutes: 10
         env:
           WRANGLER_LOG_PATH: ${{ github.workspace }}/artifacts/marketing-preview

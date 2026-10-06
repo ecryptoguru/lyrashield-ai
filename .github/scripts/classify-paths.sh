@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Path classifier for CI change detection.
 #
-# Reads file paths from stdin (one per line) and outputs eight boolean outputs
+# Reads file paths from stdin (one per line) and outputs boolean routing flags
 # to GITHUB_OUTPUT (or stdout when run outside a workflow):
 #   tooling-only — only known CI/deployment tooling and optional docs changed
 #   docs-only  — every changed file is a docs/config/agent-rules file
@@ -39,6 +39,14 @@ shared_pattern='^(packages/|package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|t
 # Action, and tooling changes must be checked, but do not alter a production
 # artifact. Unknown paths remain fail-closed below.
 marketing_deploy_pattern='^(\.github/workflows/deploy-marketing\.yml|apps/(marketing|marketing-motion)/|packages/|package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|turbo\.json|tsconfig\.json|tsconfig\.tsbuildinfo)'
+# Keep independent marketing projects and their browser tests out of unrelated
+# deployment-tool changes. Shared build/dependency inputs still select both.
+marketing_tests_pattern='^(apps/marketing/|packages/(agent-registry|agent-rules|auth|billing|config|db|egress-proxy|gate|integrations|licenses|logger|myra|pricing|score|security|types)/|package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|turbo\.json|tsconfig\.json|tsconfig\.tsbuildinfo|eslint\.config\.mjs|vitest\.config\.ts|playwright\.config\.ts)'
+motion_tests_pattern='^(apps/marketing-motion/|package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|turbo\.json|tsconfig\.json|tsconfig\.tsbuildinfo|eslint\.config\.mjs)'
+# Ops tests read workflow/helper sources, actual DB fixtures and package
+# manifests. Keep shared packages conservative; ordinary app UI/routes do not
+# enter these tests. Unknown paths and force-all select every suite below.
+ops_tests_pattern='^(\.github/|ops/|packages/|apps/(web|worker|marketing|marketing-motion)/package\.json|run-all-tests\.mjs|package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|turbo\.json|tsconfig\.json|tsconfig\.tsbuildinfo|eslint\.config\.mjs|vitest\.config\.ts|playwright\.config\.ts|Dockerfile|docker-compose\.yml|action\.yml|\.gitleaks\.toml|\.env\.example)'
 azure_deploy_pattern='^(apps/(web|worker)/|packages/|package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|turbo\.json|tsconfig\.json|tsconfig\.tsbuildinfo|Dockerfile|docker-compose\.yml|ops/(deployment|worker)/|\.github/scripts/(promote-worker-vm|verify-engine-revision|verify-engine-worker-contract|deploy-azure-preflight|deploy-azure-rollout|webhook-claims-maintenance|webhook-claims-vm|validate-webhook-deploy-dispatch|azure_secret_set|validate-worker-provenance)\.sh|\.github/scripts/(migration-database-identity|verify-webhook-cutover(-preflight)?)\.mjs|\.github/workflows/(deploy-azure|deploy-azure-runtime|release-production)\.yml)'
 
 # Only explicitly covered tooling can skip runtime suites. Unknown and mixed
@@ -55,6 +63,9 @@ shared=false
 unknown=false
 marketing_deploy=false
 azure_deploy=false
+marketing_tests=false
+motion_tests=false
+ops_tests=false
 
 while IFS= read -r f; do
   [ -z "$f" ] && continue
@@ -91,6 +102,9 @@ while IFS= read -r f; do
   if echo "$f" | grep -qE "$azure_deploy_pattern"; then
     azure_deploy=true
   fi
+  if echo "$f" | grep -qE "$marketing_tests_pattern"; then marketing_tests=true; fi
+  if echo "$f" | grep -qE "$motion_tests_pattern"; then motion_tests=true; fi
+  if echo "$f" | grep -qE "$ops_tests_pattern"; then ops_tests=true; fi
   if [[ "$path_classified" == "false" ]]; then
     shared=true
     unknown=true
@@ -110,6 +124,9 @@ if ! $tooling_seen || $marketing || $app || $desktop || $unknown; then tooling_o
 if [[ "$unknown" == "true" ]]; then
   marketing_deploy=true
   azure_deploy=true
+  marketing_tests=true
+  motion_tests=true
+  ops_tests=true
 fi
 
 # A missing or untrusted production baseline must run every path-selected gate
@@ -124,6 +141,9 @@ if $force_all; then
   shared=true
   marketing_deploy=true
   azure_deploy=true
+  marketing_tests=true
+  motion_tests=true
+  ops_tests=true
 fi
 
 if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
@@ -136,6 +156,9 @@ if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
     echo "shared=$shared"
     echo "marketing-deploy=$marketing_deploy"
     echo "azure-deploy=$azure_deploy"
+    echo "marketing-tests=$marketing_tests"
+    echo "motion-tests=$motion_tests"
+    echo "ops-tests=$ops_tests"
   } >> "$GITHUB_OUTPUT"
 else
   echo "docs-only=$docs_only"
@@ -146,4 +169,7 @@ else
   echo "shared=$shared"
   echo "marketing-deploy=$marketing_deploy"
   echo "azure-deploy=$azure_deploy"
+  echo "marketing-tests=$marketing_tests"
+  echo "motion-tests=$motion_tests"
+  echo "ops-tests=$ops_tests"
 fi
