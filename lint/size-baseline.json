@@ -640,15 +640,10 @@
       "totalExcess": 43,
       "maxExcess": 43
     },
-    "apps/worker/src/jobs/run-scan/triage.ts|max-lines-per-function": {
-      "count": 1,
-      "totalExcess": 2,
-      "maxExcess": 2
-    },
     "apps/worker/src/jobs/run-scan/usage.ts|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 52,
-      "maxExcess": 52
+      "totalExcess": 40,
+      "maxExcess": 40
     },
     "apps/worker/src/operations/verify-queue-orphan-fixture.ts|max-lines": {
       "count": 1,
