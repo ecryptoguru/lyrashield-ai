@@ -112,11 +112,22 @@ database)
   assert_migration_database
   echo WEBHOOK_MIGRATION_DATABASE_VERIFIED
   ;;
-recovery)
-  if [ ! -f "$receipt" ]; then receipt="$receipt_dir/webhook-claims-cutover-completed-${run_id}.json"; fi
+recovery|recovery-probe)
+  completed_receipt="$receipt_dir/webhook-claims-cutover-completed-${run_id}.json"
+  if [ ! -e "$receipt" ] && [ ! -L "$receipt" ]; then
+    if [ -e "$completed_receipt" ] || [ -L "$completed_receipt" ]; then
+      receipt=$completed_receipt
+    elif [ "$phase" = recovery-probe ]; then
+      oneshot 'const {default:Redis}=await import("ioredis"); const redis=new Redis(process.env.REDIS_URL,{maxRetriesPerRequest:1}); try { if(await redis.get("lyrashield:scan-admission:stopped")!==null) throw new Error("Admission stop exists without an owned cutover receipt"); } finally { await redis.quit(); }'
+      echo 'WEBHOOK_RECOVERY_RECEIPT_ABSENT'
+      exit 0
+    else
+      exit 1
+    fi
+  fi
   [ ! -L "$receipt" ] && [ "$(stat -c '%u:%a' "$receipt")" = 0:600 ] || exit 1
   saved=$(cat "$receipt")
-  owner=$(oneshot 'const [saved,revision,runId]=process.argv.slice(1); const receipt=JSON.parse(saved); if(receipt.runId!==runId || receipt.productRevision!==revision || !new RegExp("^"+runId+":[0-9]+$").test(receipt.owner)) throw new Error("Existing original cutover receipt required"); console.log(receipt.owner);' "$saved" "$revision" "$run_id")
+  owner=$(oneshot 'const [saved,revision,runId,currentAttempt,phase]=process.argv.slice(1); const receipt=JSON.parse(saved); const match=/^([0-9]+):([1-9][0-9]*)$/.exec(receipt.owner??""); const attempts=receipt.attempts; const lastAttempt=receipt.lastAttempt; const attempt=Number(currentAttempt); const ownerAttempt=Number(match?.[2]); if(receipt.runId!==runId || receipt.productRevision!==revision || !match || match[1]!==runId || !Number.isSafeInteger(attempt) || attempt<1 || !Array.isArray(attempts) || attempts.length===0 || !attempts.every((value,index)=>Number.isSafeInteger(value)&&value>0&&value<=lastAttempt&&(index===0||value>attempts[index-1])) || new Set(attempts).size!==attempts.length || attempts[0]!==ownerAttempt || !attempts.includes(lastAttempt) || Math.max(...attempts)!==lastAttempt || ownerAttempt>lastAttempt || (phase==="recovery-probe" && lastAttempt>=attempt)) throw new Error("Existing original cutover receipt or attempt history required"); console.log(receipt.owner);' "$saved" "$revision" "$run_id" "$attempt" "$phase")
   assert_receipt_identity
   oneshot 'const receipt=JSON.parse(process.argv[1]); const {default:Redis}=await import("ioredis"); const redis=new Redis(process.env.REDIS_URL,{maxRetriesPerRequest:1}); try { const value=await redis.get("lyrashield:scan-admission:stopped"); if(value!==receipt.admissionStopValue && !(value===null && ["intent","resuming","completed"].includes(receipt.phase))) throw new Error("Unproven original cutover state"); } finally { await redis.quit(); }' "$saved"
   echo 'WEBHOOK_RECOVERY_RECEIPT_VERIFIED'

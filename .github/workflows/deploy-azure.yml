@@ -12,16 +12,6 @@ on:
         description: Current main SHA to deploy
         required: true
         type: string
-      webhook_claims_cutover:
-        description: First webhook writer upgrade; drains queues and pauses app/worker ingress during the migration
-        required: false
-        default: false
-        type: boolean
-      confirmation:
-        description: Type deploy:<source_sha> for a normal manual deploy or webhook-cutover:<source_sha> for the approved first cutover
-        required: true
-        type: string
-
 concurrency:
   group: deploy-azure-${{ vars.AZURE_RESOURCE_GROUP || 'production' }}-${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
   cancel-in-progress: false
@@ -50,8 +40,6 @@ jobs:
     name: Validate emergency production dispatch
     if: github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
-    outputs:
-      recovery_requires_receipt: ${{ steps.dispatch.outputs.recovery_requires_receipt }}
     steps:
       - name: Checkout trusted main dispatch validator
         if: github.event_name == 'workflow_dispatch'
@@ -61,23 +49,21 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
-      - name: Require the current main SHA and exact confirmation
+      - name: Require the exact current main SHA
         if: github.event_name == 'workflow_dispatch'
-        id: dispatch
         env:
           GH_TOKEN: ${{ github.token }}
           SOURCE_SHA: ${{ inputs.source_sha }}
-          CONFIRMATION: ${{ inputs.confirmation }}
-          WEBHOOK_CLAIMS_CUTOVER: ${{ inputs.webhook_claims_cutover }}
         run: bash .github/scripts/validate-webhook-deploy-dispatch.sh
 
   preflight-compatible-baseline:
     name: Check existing webhook writers before image build
     if: >-
       github.ref == 'refs/heads/main' &&
-      (github.event_name != 'workflow_dispatch' || inputs.webhook_claims_cutover != true) &&
       vars.AZURE_RESOURCE_GROUP != '' &&
       ((vars.AZURE_APP_CONTAINER_APP_NAME != '') || (vars.AZURE_SCANNER_CONTAINER_APP_NAME != ''))
+    outputs:
+      webhook_claims_cutover: ${{ steps.verify-baseline.outputs.webhook_claims_cutover }}
     runs-on: ubuntu-24.04
     environment:
       name: azure-production
@@ -94,6 +80,7 @@ jobs:
           persist-credentials: false
 
       - name: Confirm deployment source remains current main
+        if: github.run_attempt == 1
         env:
           GH_TOKEN: ${{ github.token }}
           SOURCE_SHA: ${{ env.DEPLOY_SHA }}
@@ -117,15 +104,24 @@ jobs:
       - name: Ensure Container Apps extension
         run: az extension add --name containerapp --yes --only-show-errors
 
-      - name: Verify compatible webhook baseline before image build
+      - name: Classify webhook baseline before image build
+        id: verify-baseline
         env:
+          DEPLOY_SHA: ${{ env.DEPLOY_SHA }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
+          GH_TOKEN: ${{ github.token }}
+          RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+          WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
+          LYRASHIELD_ADMISSION_STOP_OWNER: ${{ github.run_id }}:${{ github.run_attempt }}
+          LYRASHIELD_WEBHOOK_CUTOVER_RUN_ID: ${{ github.run_id }}
           AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
           AZURE_APP_CONTAINER_APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
           AZURE_SCANNER_CONTAINER_APP_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
           AZURE_WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
           AZURE_KEY_VAULT_NAME: ${{ vars.AZURE_KEY_VAULT_NAME || 'lyrashieldprodsecrets' }}
           GHCR_USERNAME: ${{ github.repository_owner }}
-        run: node .github/scripts/verify-webhook-cutover.mjs
+        run: node .github/scripts/verify-webhook-cutover-preflight.mjs
 
       - name: Summarize blocked compatibility preflight
         if: failure()
@@ -134,9 +130,8 @@ jobs:
             echo "## Azure release stopped before image build"
             echo
             echo "The preflight is read-only. No container images were built or pushed, and no Azure runtime or database changes were made."
-            echo "Review the failed read-only step. Incompatible writers require the separately approved first-cutover maintenance window; do not deactivate a revision or retry an ordinary release as a shortcut."
-            echo "See [the cutover runbook](https://github.com/ecryptoguru/lyrashield-ai/blob/main/docs/reviews/2026-09-30/webhook-production-cutover.md) and run the protected no-deployment verifier."
-            echo "A cutover dispatch requires current main, webhook_claims_cutover=true, and confirmation webhook-cutover:<source_sha> after the founder-approved window."
+            echo "The read-only verifier selects the ordinary rollout only for a complete durable-claims/2 baseline, or the first maintenance rollout only for the recognized durable-claims/1 source and exact pre-cutover schema. Mixed, partial, unknown, or unreadable states stop before image build."
+            echo "See [the automated cutover runbook](https://github.com/ecryptoguru/lyrashield-ai/blob/main/docs/reviews/2026-09-30/webhook-production-cutover.md)."
           } >> "$GITHUB_STEP_SUMMARY"
 
   build:
@@ -410,7 +405,13 @@ jobs:
 
   deploy:
     name: Deploy Azure Container Apps
-    needs: [build, verify-built-worker-image, validate-manual-production-dispatch]
+    needs:
+      [
+        build,
+        verify-built-worker-image,
+        validate-manual-production-dispatch,
+        preflight-compatible-baseline,
+      ]
     if: >
       (vars.AZURE_RESOURCE_GROUP != '') &&
       ((vars.AZURE_APP_CONTAINER_APP_NAME != '') || (vars.AZURE_SCANNER_CONTAINER_APP_NAME != ''))
@@ -421,8 +422,7 @@ jobs:
     uses: ./.github/workflows/deploy-azure-runtime.yml
     with:
       source_sha: ${{ inputs.source_sha || github.sha }}
-      webhook_recovery_requires_receipt: ${{ needs.validate-manual-production-dispatch.outputs.recovery_requires_receipt == 'true' }}
-      webhook_claims_cutover: ${{ github.event_name == 'workflow_dispatch' && inputs.webhook_claims_cutover == true }}
+      webhook_claims_cutover: ${{ needs.preflight-compatible-baseline.outputs.webhook_claims_cutover == 'true' }}
       engine_revision: ${{ needs.build.outputs.engine_revision }}
       web_image: ${{ needs.build.outputs.web_image }}
       web_digest: ${{ needs.build.outputs.web_digest }}

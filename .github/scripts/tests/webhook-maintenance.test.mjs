@@ -141,10 +141,10 @@ function setup(t, scenario = "normal") {
       ],
       { encoding: "utf8", env: { ...env, ...overrides } }
     )
-  const local = (phase) =>
+  const local = (phase, overrides = {}) =>
     spawnSync("bash", [path.join(root, ".github/scripts/webhook-claims-maintenance.sh"), phase], {
       encoding: "utf8",
-      env,
+      env: { ...env, ...overrides },
     })
   return { vm, local, env, receipt, redis, otherRedis, state, calls }
 }
@@ -291,6 +291,112 @@ test("same GitHub run rerun preserves the original nonce and owner after stoppin
   assert.equal(f.vm("stop").status, 0)
 })
 
+test("retry receipt probe distinguishes verified ownership from truly absent state", (t) => {
+  const empty = setup(t)
+  const absent = empty.local("recovery-probe", { LYRASHIELD_ADMISSION_STOP_OWNER: "123:2" })
+  assert.equal(absent.status, 0, absent.stderr)
+  assert.match(absent.stdout, /WEBHOOK_RECOVERY_RECEIPT_ABSENT/)
+  assert.equal(JSON.parse(readFileSync(empty.redis)), null)
+
+  const owned = setup(t)
+  assert.equal(owned.vm("claim").status, 0)
+  const verified = owned.local("recovery-probe", { LYRASHIELD_ADMISSION_STOP_OWNER: "123:2" })
+  assert.equal(verified.status, 0, verified.stderr)
+  assert.match(verified.stdout, /WEBHOOK_RECOVERY_RECEIPT_VERIFIED/)
+
+  const intent = setup(t)
+  assert.equal(intent.vm("claim").status, 0)
+  const intentReceipt = JSON.parse(readFileSync(intent.receipt))
+  intentReceipt.phase = "intent"
+  writeFileSync(intent.receipt, JSON.stringify(intentReceipt), { mode: 0o600 })
+  writeFileSync(intent.redis, "null")
+  const intentProbe = intent.local("recovery-probe", { LYRASHIELD_ADMISSION_STOP_OWNER: "123:2" })
+  assert.equal(intentProbe.status, 0, intentProbe.stderr)
+  assert.match(intentProbe.stdout, /WEBHOOK_RECOVERY_RECEIPT_VERIFIED/)
+  assert.equal(
+    JSON.parse(readFileSync(intent.redis)),
+    null,
+    "the recovery probe must remain read-only"
+  )
+
+  const foreignStop = setup(t, "foreign stop")
+  const ambiguous = foreignStop.local("recovery-probe", {
+    LYRASHIELD_ADMISSION_STOP_OWNER: "123:2",
+  })
+  assert.notEqual(ambiguous.status, 0)
+  assert.doesNotMatch(ambiguous.stdout, /WEBHOOK_RECOVERY_RECEIPT_ABSENT/)
+})
+
+test("retry probe rejects receipts whose latest owner attempt is not earlier than this attempt", (t) => {
+  const f = setup(t)
+  assert.equal(f.vm("claim").status, 0)
+  const receipt = JSON.parse(readFileSync(f.receipt))
+  receipt.lastAttempt = 2
+  receipt.attempts = [1, 2]
+  writeFileSync(f.receipt, JSON.stringify(receipt), { mode: 0o600 })
+  const probe = f.local("recovery-probe", { LYRASHIELD_ADMISSION_STOP_OWNER: "123:2" })
+  assert.notEqual(probe.status, 0)
+  assert.doesNotMatch(probe.stdout, /WEBHOOK_RECOVERY_RECEIPT_VERIFIED/)
+})
+
+test("retry probe rejects duplicate or out-of-order attempt history", (t) => {
+  for (const attempts of [
+    [1, 1],
+    [2, 1],
+  ]) {
+    const f = setup(t)
+    assert.equal(f.vm("claim").status, 0)
+    const receipt = JSON.parse(readFileSync(f.receipt))
+    receipt.lastAttempt = Math.max(...attempts)
+    receipt.attempts = attempts
+    writeFileSync(f.receipt, JSON.stringify(receipt), { mode: 0o600 })
+    const probe = f.local("recovery-probe", { LYRASHIELD_ADMISSION_STOP_OWNER: "123:3" })
+    assert.notEqual(probe.status, 0)
+    assert.doesNotMatch(probe.stdout, /WEBHOOK_RECOVERY_RECEIPT_VERIFIED/)
+  }
+})
+
+test("failure hold only closes ingress after recovering this run's owned claim", (t) => {
+  const partial = setup(t)
+  const noReceiptHold = partial.local("hold")
+  assert.notEqual(noReceiptHold.status, 0)
+  assert.equal(JSON.parse(readFileSync(partial.state)).active, 2)
+  assert.equal(JSON.parse(readFileSync(partial.redis)), null)
+
+  const interrupted = setup(t)
+  assert.equal(interrupted.vm("claim").status, 0)
+  const receipt = JSON.parse(readFileSync(interrupted.receipt))
+  receipt.phase = "intent"
+  writeFileSync(interrupted.receipt, JSON.stringify(receipt), { mode: 0o600 })
+  writeFileSync(interrupted.redis, JSON.stringify(receipt.admissionStopValue))
+  const held = interrupted.local("hold")
+  assert.equal(held.status, 0, held.stderr)
+  assert.equal(JSON.parse(readFileSync(interrupted.state)).active, 0)
+  assert.equal(JSON.parse(readFileSync(interrupted.redis)), receipt.admissionStopValue)
+  const calls = readFileSync(interrupted.calls, "utf8")
+  assert.ok(calls.indexOf("recovery") < calls.indexOf("deactivate"))
+
+  const beforeRedisSet = setup(t)
+  assert.equal(beforeRedisSet.vm("claim").status, 0)
+  const intent = JSON.parse(readFileSync(beforeRedisSet.receipt))
+  intent.phase = "intent"
+  writeFileSync(beforeRedisSet.receipt, JSON.stringify(intent), { mode: 0o600 })
+  writeFileSync(beforeRedisSet.redis, "null")
+  const repairedAndHeld = beforeRedisSet.local("hold")
+  assert.equal(repairedAndHeld.status, 0, repairedAndHeld.stderr)
+  assert.equal(JSON.parse(readFileSync(beforeRedisSet.redis)), intent.admissionStopValue)
+  assert.equal(JSON.parse(readFileSync(beforeRedisSet.state)).active, 0)
+
+  const foreignReceipt = setup(t)
+  assert.equal(foreignReceipt.vm("claim").status, 0)
+  const tampered = JSON.parse(readFileSync(foreignReceipt.receipt))
+  tampered.owner = "999:1"
+  writeFileSync(foreignReceipt.receipt, JSON.stringify(tampered), { mode: 0o600 })
+  assert.notEqual(foreignReceipt.local("hold").status, 0)
+  assert.equal(JSON.parse(readFileSync(foreignReceipt.state)).active, 2)
+  assert.notEqual(JSON.parse(readFileSync(foreignReceipt.redis)), null)
+})
+
 test("a separate dispatch cannot adopt another run's held receipt", (t) => {
   const f = setup(t)
   assert.equal(f.vm("claim").status, 0)
@@ -342,7 +448,7 @@ test("original source recovery requires an existing immutable receipt before any
   assert.equal(f.vm("recovery", { TEST_OWNER: "123:2" }).status, 0)
   const runtime = readFileSync(".github/workflows/deploy-azure-runtime.yml", "utf8")
   assert.ok(
-    runtime.indexOf("- name: Verify existing owned receipt") <
+    runtime.indexOf("- name: Revalidate retry state for an automatic first cutover") <
       runtime.indexOf("- name: Ensure app and scanner system identities")
   )
 })

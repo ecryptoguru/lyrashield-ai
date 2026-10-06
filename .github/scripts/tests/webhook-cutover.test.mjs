@@ -8,32 +8,300 @@ import test from "node:test"
 const script = path.resolve(".github/scripts/verify-webhook-cutover.mjs")
 const product = "a".repeat(40)
 const engine = "b".repeat(40)
-const digest = `sha256:${"c".repeat(64)}`
-const image = `ghcr.io/example/worker:${product}@${digest}`
+const defaultDigest = `sha256:${"c".repeat(64)}`
 const protocol = "durable-claims/2"
+const legacyProduct = "4822306e24f375800981bf282fd992a9c15dcde8"
+const legacyEngine = "9d90be5aaf92f86bb5c1ba55a8138545764fdd44"
+const legacyWriterDigest = "sha256:dbc43686e11f95a03d9f163c865683e3949ade4179839ef6d268e6ea55f9b78f"
+const legacyWorkerDigest = "sha256:d38f8b080ae62b88ba9c6273be76abff42adf5a86b831bde5b19f6d6fce466dc"
+const baselineMigration = "20260822140000_webhook_event_tracks"
+const migrationChecksums = {
+  [baselineMigration]: "5c7e395649b47940d928e9cc498794a00c6ce73416a4aa0513eff64085c7208d",
+  "20260930120000_webhook_track_claims":
+    "4beec0acacf3b9ee007cfdb77ec227c5e416b89328600007d08e8b3bf43ed3a8",
+  "20261002120000_webhook_track_due_db_default":
+    "0b84609011c35ee62dd671dbf47c947156f6fc624718a98373fe6ee7ef91693f",
+  "20261002130000_webhook_track_utc_schedule":
+    "3cf195cc44af5abf48b55e93ec057142c4ca1079a2664c8602369fe816a78d97",
+  "20261002130100_webhook_track_utc_schedule_index":
+    "ebfa8c71735d3b13eafd7c9f1514f1f5e3672f42bf4fefc9710147375ae92439",
+  "20261002130200_webhook_track_operator_recovery":
+    "72cbfad72bc74f1a0201e240c26e82e735b30fceaaf675fec9b8d53af0b63d63",
+}
+const migrations = [
+  "20260930120000_webhook_track_claims",
+  "20261002120000_webhook_track_due_db_default",
+  "20261002130000_webhook_track_utc_schedule",
+  "20261002130100_webhook_track_utc_schedule_index",
+  "20261002130200_webhook_track_operator_recovery",
+]
 
-function fixture(t, scenario) {
+const legacyColumns = [
+  { name: "id", type: "text", notNull: true, default: null },
+  { name: "webhookEventId", type: "text", notNull: true, default: null },
+  { name: "workspaceId", type: "text", notNull: false, default: null },
+  { name: "track", type: "text", notNull: true, default: null },
+  { name: "status", type: "text", notNull: true, default: "'pending'::text" },
+  { name: "attempts", type: "integer", notNull: true, default: "0" },
+  { name: "lastError", type: "text", notNull: false, default: null },
+  { name: "completedAt", type: "timestamp(3) without time zone", notNull: false, default: null },
+  {
+    name: "createdAt",
+    type: "timestamp(3) without time zone",
+    notNull: true,
+    default: "CURRENT_TIMESTAMP",
+  },
+  { name: "updatedAt", type: "timestamp(3) without time zone", notNull: true, default: null },
+  { name: "generation", type: "integer", notNull: true, default: "0" },
+  { name: "nextAttemptAt", type: "timestamp(3) without time zone", notNull: false, default: null },
+  { name: "claimToken", type: "text", notNull: false, default: null },
+  { name: "leaseExpiresAt", type: "timestamp(3) without time zone", notNull: false, default: null },
+]
+const transitionedColumns = [
+  { name: "nextAttemptAtUtc", type: "timestamp(3) with time zone", notNull: false, default: null },
+  { name: "leaseExpiresAtUtc", type: "timestamp(3) with time zone", notNull: false, default: null },
+  { name: "historicalAttempts", type: "integer", notNull: true, default: "0" },
+  { name: "operatorRecoveryCount", type: "integer", notNull: true, default: "0" },
+]
+const indexFixture = (name, columns, unique = false) => ({
+  name,
+  columns,
+  unique,
+  valid: true,
+  ready: true,
+  predicateIsNull: true,
+  noIncludeColumns: true,
+  noExpressions: true,
+  method: "btree",
+  defaultOrdering: columns.map(() => true),
+  defaultOperatorClasses: columns.map(() => true),
+  columnCollationsMatch: columns.map(() => true),
+})
+const legacyIndexes = [
+  indexFixture("WebhookEventTrack_pkey", ["id"], true),
+  indexFixture("WebhookEventTrack_webhookEventId_track_key", ["webhookEventId", "track"], true),
+  indexFixture("WebhookEventTrack_status_idx", ["status"]),
+  indexFixture("WebhookEventTrack_track_status_idx", ["track", "status"]),
+  indexFixture("WebhookEventTrack_status_nextAttemptAt_idx", ["status", "nextAttemptAt"]),
+]
+
+function fixture(t, scenario, expectedMode) {
   const directory = mkdtempSync(path.join(tmpdir(), "ls-webhook-cutover-"))
   t.after(() => rmSync(directory, { recursive: true, force: true }))
-  const revisions = [
-    {
-      properties: {
-        active: true,
-        template: {
-          containers: [{ image, env: [{ name: "LYRASHIELD_PRODUCT_REVISION", value: product }] }],
-        },
+  const legacy = scenario === "known legacy" || scenario.startsWith("legacy ")
+  const legacyUnapprovedProduct = "96ffe6a3b3d4b87e3686dc9f2deed1ff25296dc6"
+  const workerProduct = legacy
+    ? scenario === "legacy unapproved source"
+      ? legacyUnapprovedProduct
+      : legacyProduct
+    : product
+  const digest = legacy ? legacyWorkerDigest : defaultDigest
+  const writerDigest = legacy ? legacyWriterDigest : defaultDigest
+  const workerImage = `ghcr.io/example/worker:${workerProduct}@${digest}`
+  const state = {
+    protocol: legacy ? "durable-claims/1" : protocol,
+    product: workerProduct,
+    engine: legacy ? legacyEngine : engine,
+    digest,
+    migrationNames: legacy
+      ? [baselineMigration, migrations[0]]
+      : [baselineMigration, ...migrations],
+    columns: legacy
+      ? legacyColumns
+      : [
+          ...legacyColumns.map((column) =>
+            column.name === "nextAttemptAt" ? { ...column, default: "CURRENT_TIMESTAMP" } : column
+          ),
+          ...transitionedColumns.map((column) =>
+            column.name === "nextAttemptAtUtc"
+              ? { ...column, default: "CURRENT_TIMESTAMP" }
+              : column
+          ),
+        ],
+    schema: "public",
+    constraints: [
+      {
+        name: "WebhookEventTrack_pkey",
+        type: "p",
+        definition: "PRIMARY KEY (id)",
+        validated: true,
+      },
+      {
+        name: "WebhookEventTrack_webhookEventId_fkey",
+        type: "f",
+        definition:
+          "FOREIGN KEY (webhookEventId) REFERENCES WebhookEvent(id) ON UPDATE CASCADE ON DELETE CASCADE",
+        validated: true,
+      },
+      {
+        name: "WebhookEventTrack_generation_nonnegative",
+        type: "c",
+        definition: "CHECK (generation >= 0)",
+        validated: true,
+      },
+    ],
+    indexes: legacy
+      ? legacyIndexes
+      : [
+          ...legacyIndexes,
+          indexFixture("WebhookEventTrack_status_nextAttemptAtUtc_idx", [
+            "status",
+            "nextAttemptAtUtc",
+          ]),
+        ],
+  }
+  if (scenario === "old worker") state.protocol = "durable-claims/1"
+  if (scenario === "unknown worker protocol") state.protocol = "durable-claims/3"
+  if (scenario === "pending migration")
+    state.migrationNames = [baselineMigration, ...migrations.slice(0, -1)]
+  if (scenario === "legacy partial migration")
+    state.migrationNames = [baselineMigration, migrations[0], migrations[1]]
+  if (scenario === "legacy partial schema")
+    state.columns = [...legacyColumns, transitionedColumns[0]]
+  if (scenario === "missing UTC columns")
+    state.columns = [...legacyColumns, ...transitionedColumns.slice(0, 3)]
+  if (scenario === "legacy wrong generation default")
+    state.columns = legacyColumns.map((column) =>
+      column.name === "generation" ? { ...column, default: null } : column
+    )
+  if (scenario === "legacy missing generation check") state.constraints = []
+  if (scenario === "legacy invalid schedule index")
+    state.indexes = state.indexes.map((index) =>
+      index.name === "WebhookEventTrack_status_nextAttemptAt_idx"
+        ? { ...index, valid: false }
+        : index
+    )
+  if (scenario === "legacy partial schedule index")
+    state.indexes = state.indexes.map((index) =>
+      index.name === "WebhookEventTrack_status_nextAttemptAt_idx"
+        ? { ...index, predicateIsNull: false }
+        : index
+    )
+  if (scenario === "legacy index with include column")
+    state.indexes = state.indexes.map((index) =>
+      index.name === "WebhookEventTrack_status_nextAttemptAt_idx"
+        ? { ...index, noIncludeColumns: false }
+        : index
+    )
+  if (scenario === "legacy expression index")
+    state.indexes = state.indexes.map((index) =>
+      index.name === "WebhookEventTrack_status_nextAttemptAt_idx"
+        ? { ...index, noExpressions: false }
+        : index
+    )
+  if (scenario === "legacy wrong index ordering")
+    state.indexes = state.indexes.map((index) =>
+      index.name === "WebhookEventTrack_status_nextAttemptAt_idx"
+        ? { ...index, defaultOrdering: [false, true] }
+        : index
+    )
+  if (scenario === "legacy nondefault operator class")
+    state.indexes = state.indexes.map((index) =>
+      index.name === "WebhookEventTrack_status_nextAttemptAt_idx"
+        ? { ...index, defaultOperatorClasses: [false, true] }
+        : index
+    )
+  if (scenario === "legacy collation mismatch")
+    state.indexes = state.indexes.map((index) =>
+      index.name === "WebhookEventTrack_status_nextAttemptAt_idx"
+        ? { ...index, columnCollationsMatch: [false, true] }
+        : index
+    )
+  if (scenario === "legacy missing operator class evidence")
+    state.indexes = state.indexes.map((index) =>
+      index.name === "WebhookEventTrack_status_nextAttemptAt_idx"
+        ? { ...index, defaultOperatorClasses: [] }
+        : index
+    )
+  if (scenario === "legacy missing collation evidence")
+    state.indexes = state.indexes.map((index) =>
+      index.name === "WebhookEventTrack_status_nextAttemptAt_idx"
+        ? { ...index, columnCollationsMatch: [] }
+        : index
+    )
+  if (scenario === "legacy index not ready")
+    state.indexes = state.indexes.map((index) =>
+      index.name === "WebhookEventTrack_status_nextAttemptAt_idx"
+        ? { ...index, ready: false }
+        : index
+    )
+  if (scenario === "legacy extra index")
+    state.indexes.push({
+      name: "WebhookEventTrack_unknown_idx",
+      columns: ["track"],
+      unique: false,
+      valid: true,
+      ready: true,
+      predicateIsNull: true,
+      noIncludeColumns: true,
+      noExpressions: true,
+      method: "btree",
+      defaultOrdering: [true],
+      defaultOperatorClasses: [true],
+      columnCollationsMatch: [true],
+    })
+  if (scenario === "legacy extra column")
+    state.columns.push({ name: "unexpected", type: "text", notNull: false, default: null })
+  if (scenario === "legacy cross-schema only") {
+    state.foreignSchemaColumns = state.columns
+    state.columns = []
+  }
+  if (scenario === "legacy nonpublic schema") state.schema = "application"
+  if (scenario === "wrong migration checksum") state.badMigrationChecksum = true
+  if (scenario === "unfinished migration") state.unfinishedMigration = migrations.at(-1)
+  if (scenario === "rolled-back migration") state.rolledBackMigration = migrations.at(-1)
+  if (scenario === "legacy wrong engine") state.engine = engine
+  if (scenario === "legacy wrong worker digest") state.digest = defaultDigest
+  if (scenario === "v2 missing UTC index")
+    state.indexes = state.indexes.filter(
+      (index) => index.name !== "WebhookEventTrack_status_nextAttemptAtUtc_idx"
+    )
+  if (scenario === "v2 invalid UTC index")
+    state.indexes = state.indexes.map((index) =>
+      index.name === "WebhookEventTrack_status_nextAttemptAtUtc_idx"
+        ? { ...index, valid: false }
+        : index
+    )
+  if (scenario === "missing provenance") state.engine = undefined
+
+  const revision = (
+    revisionProduct,
+    active = true,
+    badImage = false,
+    imageDigest = defaultDigest
+  ) => ({
+    properties: {
+      active,
+      template: {
+        containers: [
+          {
+            image: badImage
+              ? "image:latest"
+              : `ghcr.io/example/worker:${revisionProduct}@${imageDigest}`,
+            env: [{ name: "LYRASHIELD_PRODUCT_REVISION", value: revisionProduct }],
+          },
+        ],
       },
     },
-  ]
-  const state = { protocol, product, engine, digest, migrated: true, utcColumns: true }
-  if (scenario === "pending migration") state.migrated = false
-  if (scenario === "missing UTC columns") state.utcColumns = false
-  if (scenario === "old worker") state.protocol = "legacy"
-  if (scenario === "no active app") revisions[0].properties.active = false
-  if (scenario === "image mismatch")
-    revisions[0].properties.template.containers[0].image = "image:latest"
-  if (scenario === "missing provenance") state.engine = undefined
-  const message = `WORKER_ROLLBACK_IMAGE=${scenario === "rollback mismatch" ? "legacy" : image}\nWORKER_IMAGE=${image}\nWORKER_PRODUCT=${product}\nWORKER_ENGINE=${engine}\n${JSON.stringify(state)}`
+  })
+  const appRevisions = legacy
+    ? [
+        revision(
+          workerProduct,
+          true,
+          false,
+          scenario === "legacy wrong writer digest" ? defaultDigest : writerDigest
+        ),
+      ]
+    : [revision(product)]
+  const scannerRevisions = [...appRevisions]
+  if (scenario === "no active app")
+    appRevisions[0] = revision(legacy ? legacyProduct : product, false)
+  if (scenario === "image mismatch") appRevisions[0] = revision(product, true, true)
+  if (scenario === "mixed writers") scannerRevisions[0] = revision(legacyProduct)
+  if (scenario === "mixed app revisions")
+    appRevisions.splice(0, appRevisions.length, revision(legacyProduct), revision(product))
+
   const executable = (name, body) => {
     const file = path.join(directory, name)
     writeFileSync(file, `#!${process.execPath}\n${body}`)
@@ -42,21 +310,25 @@ function fixture(t, scenario) {
   executable("systemctl", "process.exit(0)")
   executable(
     "sed",
-    `console.log(${JSON.stringify(scenario === "rollback mismatch" ? "legacy" : image)})`
+    `console.log(${JSON.stringify(scenario === "rollback mismatch" ? "legacy" : workerImage)})`
   )
   executable(
     "docker",
-    `const args=process.argv.slice(2); if(args[0]==="login") process.exit(0); if(args[0]==="buildx") { console.log(JSON.stringify({config:{Labels:{"org.opencontainers.image.revision":${JSON.stringify(scenario === "OCI mismatch" ? "legacy" : product)}}}})); } else if(args[0]==="inspect") { const format=args[2]; console.log(format.includes("State.Running")?"true":format.includes("Config.Image")?${JSON.stringify(image)}:format.includes("engine.revision")?${JSON.stringify(engine)}:${JSON.stringify(product)}); } else if(args[0]==="exec") { const code=args.at(-1); const state=${JSON.stringify(state)}; process.env.LYRASHIELD_PRODUCT_REVISION=state.product; process.env.LYRASHIELD_WORKER_IMAGE_DIGEST=state.digest; if(state.engine) process.env.LYRASHIELD_ENGINE_REVISION=state.engine; else delete process.env.LYRASHIELD_ENGINE_REVISION; const prisma={$queryRawUnsafe:async(query,...parameters)=>{ if(query.includes("migration_name = $1")){ const expected=["20260930120000_webhook_track_claims","20261002120000_webhook_track_due_db_default","20261002130000_webhook_track_utc_schedule","20261002130100_webhook_track_utc_schedule_index","20261002130200_webhook_track_operator_recovery"]; if(JSON.stringify(parameters)!==JSON.stringify(expected)) throw new Error("Migration identity lost in shell transport"); return [{count:state.migrated?5:4}]; } if(query.includes("FROM pg_attribute")) return [{count:state.utcColumns?2:1}]; throw new Error("Unexpected worker schema probe"); },$disconnect:async()=>{}}; const load=async(name)=>name==="@lyrashield/billing"?{WEBHOOK_TRACK_CLAIM_PROTOCOL:state.protocol}:name==="@lyrashield/db"?{getSystemPrisma:()=>prisma}:Promise.reject(new Error("Unexpected module")); new Function("load","return (async()=>{"+code.replaceAll("import(","load(")+"})()")(load).catch(error=>{console.error(error.message);process.exit(1)}); } else process.exit(1);`
+    `const args=process.argv.slice(2); if(args[0]==="login") process.exit(0); if(args[0]==="buildx") { const inspected=args[3]; const revision=inspected.match(/:([a-f0-9]{40})@sha256:/)?.[1]; console.log(JSON.stringify({config:{Labels:{"org.opencontainers.image.revision":${JSON.stringify(scenario === "OCI mismatch" ? "legacy" : "")} || revision}}})); } else if(args[0]==="inspect") { const format=args[2]; console.log(format.includes("State.Running")?"true":format.includes("Config.Image")?${JSON.stringify(workerImage)}:format.includes("engine.revision")?${JSON.stringify(state.engine)}:${JSON.stringify(workerProduct)}); } else if(args[0]==="exec") { const code=args.at(-1); const state=${JSON.stringify(state)}; const expectedChecksums=${JSON.stringify(migrationChecksums)}; process.env.LYRASHIELD_PRODUCT_REVISION=state.product; process.env.LYRASHIELD_WORKER_IMAGE_DIGEST=state.digest; if(state.engine) process.env.LYRASHIELD_ENGINE_REVISION=state.engine; else delete process.env.LYRASHIELD_ENGINE_REVISION; const prisma={$queryRawUnsafe:async(query,...parameters)=>{ if(query.includes("current_schema()")) return [{schema:state.schema}]; if(query.includes("_prisma_migrations")) return state.migrationNames.map(migration_name=>({migration_name,checksum:state.badMigrationChecksum?"0".repeat(64):expectedChecksums[migration_name],finished_at:migration_name===state.unfinishedMigration?null:new Date(),rolled_back_at:migration_name===state.rolledBackMigration?new Date():null})); if(query.includes("FROM pg_attribute a")) return (query.includes("pg_namespace")?state.columns:[...(state.columns??[]),...(state.foreignSchemaColumns??[])]).map(column=>({...column,defaultExpr:column.default})); if(query.includes("pg_constraint")) return state.constraints; if(query.includes("pg_index")) return state.indexes; throw new Error("Unexpected worker schema probe"); },$disconnect:async()=>{}}; const load=async(name)=>name==="@lyrashield/billing"?{WEBHOOK_TRACK_CLAIM_PROTOCOL:state.protocol}:name==="@lyrashield/db"?{getSystemPrisma:()=>prisma}:Promise.reject(new Error("Unexpected module")); new Function("load","return (async()=>{"+code.replaceAll("import(","load(")+"})()")(load).catch(error=>{console.error(error.message);process.exit(1)}); } else process.exit(1);`
   )
   executable(
     "az",
-    `const {spawnSync}=require("node:child_process"); const args=process.argv.slice(2); if(args[0]==="keyvault") console.log("synthetic-registry-token"); else if(args[0]==="containerapp") console.log(${JSON.stringify(JSON.stringify(revisions))}); else { if(${JSON.stringify(scenario)}==="VM failure") process.exit(1); const result=spawnSync("sh",["-c",args[args.indexOf("--scripts")+1]],{encoding:"utf8"}); process.stdout.write(result.stdout); process.stderr.write(result.stderr); process.exit(result.status); }`
+    `const {spawnSync}=require("node:child_process"); const args=process.argv.slice(2); if(args[0]==="keyvault") console.log("synthetic-registry-token"); else if(args[0]==="containerapp") { const name=args[args.indexOf("--name")+1]; console.log(JSON.stringify(name==="app"?${JSON.stringify(appRevisions)}:${JSON.stringify(scannerRevisions)})); } else { if(${JSON.stringify(scenario)}==="VM failure") process.exit(1); const result=spawnSync("sh",["-c",args[args.indexOf("--scripts")+1]],{encoding:"utf8"}); process.stdout.write(result.stdout); process.stderr.write(result.stderr); process.exit(result.status); }`
   )
   executable(
     "git",
-    `if(process.argv[2]==="show") console.log(${JSON.stringify(scenario === "old app" ? "legacy" : `export const WEBHOOK_TRACK_CLAIM_PROTOCOL = "${protocol}"`)});`
+    `if(process.argv[2]==="show") { const identity=process.argv[3].split(":")[0]; console.log([${JSON.stringify(legacyProduct)},${JSON.stringify(legacyUnapprovedProduct)}].includes(identity)?${JSON.stringify('export const WEBHOOK_TRACK_CLAIM_PROTOCOL = "durable-claims/1"')}:${JSON.stringify(scenario === "unknown writer source" ? "export const OTHER_PROTOCOL = true" : `export const WEBHOOK_TRACK_CLAIM_PROTOCOL = "${protocol}"`)}); }`
   )
-  return spawnSync(process.execPath, [script], {
+  const output = path.join(directory, "github-output")
+  writeFileSync(output, "")
+  const args = [script, "--github-output", output]
+  if (expectedMode) args.push("--expect-mode", expectedMode)
+  const result = spawnSync(process.execPath, args, {
     encoding: "utf8",
     env: {
       ...process.env,
@@ -66,16 +338,33 @@ function fixture(t, scenario) {
       AZURE_RESOURCE_GROUP: "test",
       AZURE_WORKER_VM_NAME: "worker",
       AZURE_APP_CONTAINER_APP_NAME: "app",
-      AZURE_SCANNER_CONTAINER_APP_NAME: "scanner",
+      AZURE_SCANNER_CONTAINER_APP_NAME: scenario === "legacy missing scanner" ? "" : "scanner",
     },
   })
+  return { ...result, githubOutput: readFileSync(output, "utf8") }
 }
 
-test("compatible migration, active writers and immutable worker permit ordinary release", (t) => {
+test("fully compatible writers and migrations select ordinary release", (t) => {
   const result = fixture(t, "compatible")
   assert.equal(result.status, 0, result.stderr)
-  assert.match(result.stdout, /baseline verified/)
+  assert.match(result.stdout, /Webhook baseline verified/)
+  assert.match(result.githubOutput, /webhook_claims_cutover=false/)
 })
+
+test("exact legacy writers and pristine legacy schema select automatic maintenance release", (t) => {
+  const result = fixture(t, "known legacy")
+  assert.equal(result.status, 0, result.stderr)
+  assert.match(result.stdout, /First-transition baseline verified/)
+  assert.match(result.githubOutput, /webhook_claims_cutover=true/)
+})
+
+test("runtime rejects a legacy classification that differs from the pre-build result", (t) => {
+  const result = fixture(t, "known legacy", "compatible")
+  assert.notEqual(result.status, 0)
+  assert.match(result.stderr, /baseline changed after image build/)
+  assert.equal(result.githubOutput, "")
+})
+
 for (const scenario of [
   "pending migration",
   "missing UTC columns",
@@ -84,11 +373,46 @@ for (const scenario of [
   "image mismatch",
   "missing provenance",
   "rollback mismatch",
-  "old app",
+  "legacy partial migration",
+  "legacy partial schema",
+  "legacy wrong generation default",
+  "legacy missing generation check",
+  "legacy invalid schedule index",
+  "legacy partial schedule index",
+  "legacy index with include column",
+  "legacy expression index",
+  "legacy wrong index ordering",
+  "legacy nondefault operator class",
+  "legacy collation mismatch",
+  "legacy missing operator class evidence",
+  "legacy missing collation evidence",
+  "legacy index not ready",
+  "legacy extra index",
+  "legacy extra column",
+  "legacy cross-schema only",
+  "legacy nonpublic schema",
+  "legacy unapproved source",
+  "legacy wrong engine",
+  "legacy wrong worker digest",
+  "legacy wrong writer digest",
+  "legacy missing scanner",
+  "unfinished migration",
+  "rolled-back migration",
+  "wrong migration checksum",
+  "v2 missing UTC index",
+  "v2 invalid UTC index",
+  "mixed writers",
+  "mixed app revisions",
+  "unknown writer source",
+  "unknown worker protocol",
   "OCI mismatch",
   "VM failure",
 ]) {
-  test(`cutover fails closed: ${scenario}`, (t) => assert.notEqual(fixture(t, scenario).status, 0))
+  test(`cutover classification fails closed: ${scenario}`, (t) => {
+    const result = fixture(t, scenario)
+    assert.notEqual(result.status, 0)
+    assert.equal(result.githubOutput, "", "failed preflight must not emit a deploy mode")
+  })
 }
 
 test("guard precedes configuration and migration mutations in protected production job", () => {
@@ -107,26 +431,50 @@ test("guard precedes configuration and migration mutations in protected producti
   assert.doesNotMatch(readFileSync(script, "utf8"), /BYPASS|ALLOW_UNSAFE|CONFIRMATION/)
 })
 
-test("ordinary-release webhook guard uses the same default worker name as deployment", () => {
+test("runtime re-verifies the classifier result before any production mutation", () => {
   const workflow = readFileSync(".github/workflows/deploy-azure-runtime.yml", "utf8")
-  const start = workflow.indexOf("- name: Verify compatible webhook cutover baseline")
-  const end = workflow.indexOf("- name: Preserve live Cloud billing admission", start)
-  const guard = workflow.slice(start, end)
+  const verifier = workflow.indexOf("- name: Verify compatible webhook cutover baseline")
+  assert.match(workflow.slice(verifier), /--expect-mode/)
+  for (const mutation of [
+    "Ensure app and scanner system identities",
+    "Prepare private registry and zero-downtime rollout",
+    "Run database migrations",
+  ]) {
+    assert.ok(verifier < workflow.indexOf(`- name: ${mutation}`), mutation)
+  }
+})
+
+test("preflight classifier output gates both image build and runtime maintenance mode", () => {
+  const workflow = readFileSync(".github/workflows/deploy-azure.yml", "utf8")
+  const preflight = readFileSync(".github/scripts/verify-webhook-cutover-preflight.mjs", "utf8")
   assert.match(
-    guard,
-    /AZURE_WORKER_VM_NAME:\s*\$\{\{\s*vars\.AZURE_WORKER_VM_NAME\s*\|\|\s*'lyrashield-worker'\s*\}\}/
+    workflow,
+    /outputs:[\s\S]*webhook_claims_cutover:[\s\S]*steps\.verify-baseline\.outputs\.webhook_claims_cutover/
+  )
+  assert.match(workflow, /run: node \.github\/scripts\/verify-webhook-cutover-preflight\.mjs/)
+  assert.match(preflight, /verify-webhook-cutover\.mjs", "--github-output", outputPath/)
+  assert.match(
+    workflow,
+    /webhook_claims_cutover:\s*\$\{\{\s*needs\.preflight-compatible-baseline\.outputs\.webhook_claims_cutover == 'true'\s*\}\}/
   )
 })
 
-test("approved-cutover webhook guard uses the same default worker name as deployment", () => {
-  const workflow = readFileSync(".github/workflows/deploy-azure-runtime.yml", "utf8")
-  const start = workflow.indexOf("- name: Verify installed compatible webhook writer baseline")
-  const end = workflow.indexOf("- name: Resume only owned admission after compatible cutover", start)
-  const guard = workflow.slice(start, end)
-  assert.match(
-    guard,
-    /AZURE_WORKER_VM_NAME:\s*\$\{\{\s*vars\.AZURE_WORKER_VM_NAME\s*\|\|\s*'lyrashield-worker'\s*\}\}/
-  )
+test("ordinary and automatic-cutover guards share worker name and preserve owned recovery", () => {
+  const runtime = readFileSync(".github/workflows/deploy-azure-runtime.yml", "utf8")
+  assert.match(runtime, /bash \.github\/scripts\/webhook-claims-maintenance\.sh recovery/)
+  for (const guardName of [
+    "Verify compatible webhook cutover baseline",
+    "Verify installed compatible webhook writer baseline",
+  ]) {
+    const start = runtime.indexOf(`- name: ${guardName}`)
+    assert.ok(start >= 0)
+    const end = runtime.indexOf("run: node .github/scripts/verify-webhook-cutover.mjs", start)
+    assert.ok(end >= 0)
+    assert.match(
+      runtime.slice(start, end),
+      /AZURE_WORKER_VM_NAME:\s*\$\{\{\s*vars\.AZURE_WORKER_VM_NAME\s*\|\|\s*'lyrashield-worker'\s*\}\}/
+    )
+  }
 })
 
 test("web images bind the exact source revision into OCI provenance", () => {

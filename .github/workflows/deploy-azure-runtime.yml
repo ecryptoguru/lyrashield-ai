@@ -6,10 +6,6 @@ on:
       source_sha:
         required: true
         type: string
-      webhook_recovery_requires_receipt:
-        required: false
-        default: false
-        type: boolean
       webhook_claims_cutover:
         required: false
         default: false
@@ -218,8 +214,9 @@ jobs:
       - name: Ensure Container Apps extension
         run: az extension add --name containerapp --yes --only-show-errors
 
-      - name: Verify existing owned receipt before original-source recovery
-        if: inputs.webhook_claims_cutover == true
+      - name: Revalidate retry state for an automatic first cutover
+        if: inputs.webhook_claims_cutover == true && github.run_attempt > 1
+        id: cutover-retry
         env:
           RG: ${{ vars.AZURE_RESOURCE_GROUP }}
           WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
@@ -227,15 +224,27 @@ jobs:
         run: |
           set -euo pipefail
           latest_main=$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq .object.sha)
-          if [ "$DEPLOY_SHA" != "$latest_main" ]; then
-            [ "${GITHUB_RUN_ATTEMPT:-1}" -gt 1 ] || exit 1
-            bash .github/scripts/webhook-claims-maintenance.sh recovery
+          probe=$(bash .github/scripts/webhook-claims-maintenance.sh recovery-probe)
+          verified_count=$(grep -Fxc WEBHOOK_RECOVERY_RECEIPT_VERIFIED <<< "$probe" || true)
+          absent_count=$(grep -Fxc WEBHOOK_RECOVERY_RECEIPT_ABSENT <<< "$probe" || true)
+          if [ "$verified_count" = 1 ] && [ "$absent_count" = 0 ]; then
+            echo "receipt=present" >> "$GITHUB_OUTPUT"
+          elif [ "$verified_count" = 0 ] && [ "$absent_count" = 1 ]; then
+            if [ "$DEPLOY_SHA" != "$latest_main" ]; then
+              echo "::error::An original-source retry requires its owned cutover receipt."
+              exit 1
+            fi
+            echo "receipt=absent" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::Cutover retry receipt state is ambiguous."
+            exit 1
           fi
 
-      # Read-only guard runs before production configuration or migration mutations.
-      # First claims cutover is a separately approved maintenance operation.
+      # A retried first cutover may reuse its mode only after same-run receipt
+      # proof. If no receipt exists, reclassify the still-live first-cutover
+      # baseline; stale workflow outputs alone never authorize maintenance.
       - name: Verify compatible webhook cutover baseline
-        if: inputs.webhook_claims_cutover != true
+        if: inputs.webhook_claims_cutover != true || github.run_attempt == 1 || steps.cutover-retry.outputs.receipt == 'absent'
         env:
           AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
           AZURE_APP_CONTAINER_APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
@@ -243,7 +252,9 @@ jobs:
           AZURE_WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
           AZURE_KEY_VAULT_NAME: ${{ vars.AZURE_KEY_VAULT_NAME || 'lyrashieldprodsecrets' }}
           GHCR_USERNAME: ${{ github.repository_owner }}
-        run: node .github/scripts/verify-webhook-cutover.mjs
+        run: >-
+          node .github/scripts/verify-webhook-cutover.mjs
+          --expect-mode "${{ inputs.webhook_claims_cutover == true && 'first-cutover' || 'compatible' }}"
 
       - name: Preserve live Cloud billing admission
         if: vars.AZURE_APP_CONTAINER_APP_NAME != ''
@@ -747,7 +758,7 @@ jobs:
           WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
         run: bash .github/scripts/webhook-claims-maintenance.sh resume
       - name: Hold webhook ingress closed after failed maintenance
-        if: failure() && inputs.webhook_claims_cutover == true && steps.webhook-stop.outcome == 'success'
+        if: (failure() || cancelled()) && inputs.webhook_claims_cutover == true && steps.webhook-stop.outcome != 'skipped'
         env:
           RG: ${{ vars.AZURE_RESOURCE_GROUP }}
           WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}

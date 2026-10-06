@@ -30,13 +30,8 @@ function dispatch(
       ...process.env,
       PATH: `${directory}:${process.env.PATH}`,
       SOURCE_SHA: source,
-      CONFIRMATION: `webhook-cutover:${source}`,
-      WEBHOOK_CLAIMS_CUTOVER: "true",
-      GITHUB_RUN_ATTEMPT: String(attempt),
       GITHUB_REF: workflowRef,
-      GITHUB_RUN_ID: "123",
       GITHUB_REPOSITORY: "example/repository",
-      GITHUB_OUTPUT: output,
     },
   })
   return { ...result, output: readFileSync(output, "utf8") }
@@ -64,48 +59,80 @@ test("new dispatch must still select current main", (t) =>
   assert.notEqual(dispatch(t, 1, "success", "b".repeat(40)).status, 0))
 test("dispatch helper rejects an untrusted caller branch", (t) =>
   assert.notEqual(dispatch(t, 1, "success", source, "refs/heads/feature/untrusted").status, 0))
-test("same run preserves successfully validated original SHA after main advances but demands receipt proof", (t) => {
+test("manual reruns cannot deploy an older source after main advances", (t) => {
   const result = dispatch(t, 2, "success", "b".repeat(40))
-  assert.equal(result.status, 0, result.stderr)
-  assert.match(result.output, /recovery_requires_receipt=true/)
+  assert.notEqual(result.status, 0)
+  assert.match(result.stdout, /may only target current main/)
 })
 test("rerun cannot turn rejected first dispatch into original-source authorization", (t) =>
   assert.notEqual(dispatch(t, 2, "failure", "b".repeat(40)).status, 0))
 
-test("rerun at current main can recover a transient validation failure", (t) =>
+test("current-main manual rerun remains eligible", (t) =>
   assert.equal(dispatch(t, 2, "failure").status, 0))
-test("runtime rechecks advanced main even when failed-job rerun reused validator output false", (t) => {
+test("cutover retry requires a proven receipt or reclassifies only on current main", (t) => {
   const runtime = readFileSync(".github/workflows/deploy-azure-runtime.yml", "utf8")
   const section = runtime.slice(
-    runtime.indexOf("      - name: Verify existing owned receipt before original-source recovery"),
-    runtime.indexOf("      # Read-only guard")
+    runtime.indexOf("      - name: Revalidate retry state for an automatic first cutover"),
+    runtime.indexOf("      # A retried first cutover may reuse")
   )
-  assert.match(section, /if: inputs.webhook_claims_cutover == true\n/)
-  assert.doesNotMatch(section, /inputs.webhook_recovery_requires_receipt/)
+  assert.match(section, /if: inputs\.webhook_claims_cutover == true && github\.run_attempt > 1/)
+  assert.match(section, /recovery-probe/)
   const body = section
     .slice(section.indexOf("        run: |\n") + "        run: |\n".length)
     .split("\n")
     .map((line) => line.replace(/^ {10}/, ""))
     .join("\n")
-  const directory = mkdtempSync(path.join(tmpdir(), "ls-runtime-recovery-"))
-  t.after(() => rmSync(directory, { recursive: true, force: true }))
-  writeFileSync(path.join(directory, "gh"), `#!/bin/sh\nprintf '%s\\n' '${"b".repeat(40)}'\n`)
-  chmodSync(path.join(directory, "gh"), 0o755)
-  writeFileSync(
-    path.join(directory, "bash"),
-    "#!/bin/sh\necho receipt-proof-required >&2\nexit 23\n"
-  )
-  chmodSync(path.join(directory, "bash"), 0o755)
-  const result = spawnSync("/bin/bash", ["-c", body], {
-    encoding: "utf8",
-    env: {
-      ...process.env,
-      PATH: `${directory}:${process.env.PATH}`,
-      DEPLOY_SHA: source,
-      GITHUB_RUN_ATTEMPT: "2",
-      GITHUB_REPOSITORY: "example/repository",
-    },
+  const run = (t, currentMain, probeResult) => {
+    const directory = mkdtempSync(path.join(tmpdir(), "ls-runtime-recovery-"))
+    t.after(() => rmSync(directory, { recursive: true, force: true }))
+    writeFileSync(path.join(directory, "gh"), `#!/bin/sh\nprintf '%s\\n' '${currentMain}'\n`)
+    chmodSync(path.join(directory, "gh"), 0o755)
+    writeFileSync(
+      path.join(directory, "bash"),
+      `#!/bin/sh\nprintf '%s\\n' '${probeResult.output ?? ""}'\nexit ${probeResult.status ?? 0}\n`
+    )
+    chmodSync(path.join(directory, "bash"), 0o755)
+    const output = path.join(directory, "github-output")
+    writeFileSync(output, "")
+    const result = spawnSync("/bin/bash", ["-c", body], {
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        PATH: `${directory}:${process.env.PATH}`,
+        DEPLOY_SHA: source,
+        GITHUB_RUN_ATTEMPT: "2",
+        GITHUB_REPOSITORY: "example/repository",
+        GITHUB_OUTPUT: output,
+      },
+    })
+    return { ...result, output: readFileSync(output, "utf8") }
+  }
+  const absent = run(t, source, { output: "WEBHOOK_RECOVERY_RECEIPT_ABSENT" })
+  assert.equal(absent.status, 0, absent.stderr)
+  assert.match(absent.output, /receipt=absent/)
+
+  const advancedWithoutReceipt = run(t, "b".repeat(40), {
+    output: "WEBHOOK_RECOVERY_RECEIPT_ABSENT",
   })
-  assert.equal(result.status, 23)
-  assert.match(result.stderr, /receipt-proof-required/)
+  assert.notEqual(advancedWithoutReceipt.status, 0)
+  assert.match(advancedWithoutReceipt.stdout, /requires its owned cutover receipt/)
+
+  for (const currentMain of [source, "b".repeat(40)]) {
+    const present = run(t, currentMain, { output: "WEBHOOK_RECOVERY_RECEIPT_VERIFIED" })
+    assert.equal(present.status, 0, present.stderr)
+    assert.match(present.output, /receipt=present/)
+  }
+
+  for (const output of [
+    "WEBHOOK_RECOVERY_RECEIPT_VERIFIED\nWEBHOOK_RECOVERY_RECEIPT_ABSENT",
+    "WEBHOOK_RECOVERY_RECEIPT_VERIFIED\nWEBHOOK_RECOVERY_RECEIPT_VERIFIED",
+  ]) {
+    const ambiguous = run(t, source, { output })
+    assert.notEqual(ambiguous.status, 0)
+    assert.equal(ambiguous.output, "")
+  }
+
+  const probeFailure = run(t, source, { output: "", status: 23 })
+  assert.equal(probeFailure.status, 23)
+  assert.doesNotMatch(probeFailure.output, /receipt=/)
 })

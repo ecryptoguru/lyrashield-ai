@@ -1,12 +1,34 @@
 # Webhook claims production cutover
 
-The ordinary production workflow now refuses to migrate or change production configuration unless every active app/scanner revision and the running worker implement `durable-claims/2`, the claim migration is completed, and the worker's configured rollback image equals its verified running image. The guard runs in the protected `azure-production` job and has no confirmation-string bypass. All active revisions are checked, including zero-traffic revisions reachable through revision URLs.
+The production release classifies the baseline before building images and
+repeats the same read-only check in the runtime job before any production
+configuration or migration mutation. A fully verified `durable-claims/2`
+baseline selects the ordinary release. The first transition is selected only
+when every active app/scanner revision and the running worker have immutable
+source/image provenance for the allowlisted `durable-claims/1` release
+`4822306e24f375800981bf282fd992a9c15dcde8` and its pinned engine
+`9d90be5aaf92f86bb5c1ba55a8138545764fdd44`, web/scanner image digest
+`sha256:dbc43686e11f95a03d9f163c865683e3949ade4179839ef6d268e6ea55f9b78f`,
+and worker digest
+`sha256:d38f8b080ae62b88ba9c6273be76abff42adf5a86b831bde5b19f6d6fce466dc`,
+the two prerequisite migration checksums match, and the selected `public`
+schema has the exact legacy column, default, index and constraint catalog.
+The four later transition migrations must have no ledger rows. Mixed writers,
+another `/1` source, unknown protocols, failed/partial migration records,
+schema drift, missing provenance or unreadable state stop the release before
+image build. All active revisions are checked, including zero-traffic
+revisions reachable through revision URLs.
 
-**The first transition uses the maintenance release.** Current production has legacy writers; ordinary automatic release remains blocked. The protected `Deploy to Azure` dispatch now accepts `webhook_claims_cutover: true` only with the exact current main SHA and `confirmation: webhook-cutover:<source_sha>`. The runtime job retains the `azure-production` environment and the existing global Azure deployment concurrency group. Automatic CI releases cannot choose this mode. Manual production deployment or disabling the guard is not an approved bootstrap mechanism. Founder approval must authorize the app/worker maintenance window. The selected mode does not replace infrastructure readback proof.
+**The first transition runs automatically through the maintenance release.**
+The mode comes only from the positive read-only classifier; no dispatch input
+can choose it or skip the check. The runtime job
+retains the `azure-production` environment and global Azure deployment
+concurrency group. The selected mode does not replace infrastructure readback
+proof or the owned maintenance receipt.
 
-The first transition uses the same controlled maintenance workflow, without
-separate signing keys or historical review receipts. It checks the actual
-legacy scheduling columns after every writer is stopped. If either
+The first transition uses the existing controlled maintenance workflow,
+without a separate manual cutover flag or typed confirmation. It checks the
+actual legacy scheduling columns after every writer is stopped. If either
 `nextAttemptAt` or `leaseExpiresAt` contains a value, migration stops. Complete
 or resolve existing work through its normal receipt-aware path; do not clear
 schedules to make the check pass. If both values are NULL everywhere, UTC
@@ -14,12 +36,10 @@ conversion preserves NULLs without a historical timezone assumption. A partial
 UTC schema also stops the release; an already installed complete UTC schema
 supports same-run recovery without checking the compatibility shadow columns.
 
-```bash
-gh workflow run deploy-azure.yml --ref main \
-  -f source_sha="$REVIEWED_MAIN_SHA" \
-  -f webhook_claims_cutover=true \
-  -f confirmation="webhook-cutover:$REVIEWED_MAIN_SHA"
-```
+The normal protected-main release starts this flow automatically when the
+read-only classifier verifies the exact legacy baseline. Manual emergency
+dispatch remains limited to the exact current-main SHA; it cannot force or
+bypass first-transition mode.
 
 ## Release checks
 
@@ -68,7 +88,7 @@ Worker stop proof must be tied to the captured exact image/OCI identity and this
 
 `node --test .github/scripts/tests/webhook-cutover.test.mjs` covers compatible ordinary release, old ingress, old worker, pending migration, missing identity, mutable image, inactive baseline, mismatched rollback image and failed VM readback. Workflow ordering fixtures prove the guard precedes identity/registry changes, migrations and promotion. `node --test .github/scripts/tests/webhook-maintenance.test.mjs` executes the lifecycle shell and transmitted VM helper with synthetic Redis, queue/database, service and Azure fixtures. It checks owned claim, ingress exclusion, queue/paid-scan refusal, old replica refusal, foreign owner refusal, graceful stop stale database/Redis environment refusal and compatible resume. The existing promoter shell suite covers stopped baseline, durable owner receipt, exact candidate identity, claim protocol and post-migration failure without legacy rollback or admission resume.
 
-These local fixtures do not establish a completed production transition, alert delivery, paid provider acceptance or live sustained Redis capacity. Failed maintenance retains the owned stop and disables app/scanner ingress; it never restores incompatible old writers. A failed or interrupted run must be reviewed before retrying. Use GitHub Actions **Re-run failed jobs** or **Re-run all jobs** on the same run, preserving its original immutable source. The root-owned receipt retains the original owner and nonce, audits each run attempt, and rejects a separate dispatch or different source. A successfully validated original run can recover after main advances only when its durable receipt is proven before production configuration changes; runtime rechecks main independently even when successful validator outputs are reused. Do not delete receipts or admission keys.
+These local fixtures do not establish a completed production transition, alert delivery, paid provider acceptance or live sustained Redis capacity. Failed maintenance retains the owned stop and disables app/scanner ingress; it never restores incompatible old writers. A same-run retry first reads the root-owned receipt and admission-stop value. An existing receipt must prove this run, immutable source, owner, nonce and database/Redis continuity before the retry can reuse maintenance mode. If no receipt and no admission stop exist, the runtime repeats the read-only classifier and proceeds only if the exact first-cutover baseline is still present. A retry of an older source is allowed only with the verified receipt. The receipt retains the original owner and nonce and audits each run attempt; a separate dispatch or different source cannot adopt it. Do not delete receipts or admission keys.
 
 The lifecycle persists claim intent before Redis `SET NX`; retry repairs an absent stop only from that exact validated intent. It persists resume intent before compare-delete and completion before archiving the receipt. An uncertain resume acknowledgement is recovered by restoring the exact owned stop before withholding ingress. A compatible candidate digest and its immediately preceding compatible candidate may be retained for same-source rebuild recovery; their source, engine, protocol and database/Redis continuity must pass. Legacy images remain forensic references and are never resumed after cutover.
 
