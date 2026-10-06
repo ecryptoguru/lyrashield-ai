@@ -42,6 +42,7 @@ env:
   WEBHOOK_CLAIMS_CUTOVER: ${{ inputs.webhook_claims_cutover && 'true' || 'false' }}
   LYRASHIELD_ADMISSION_STOP_OWNER: ${{ github.run_id }}:${{ github.run_attempt }}
   LYRASHIELD_WEBHOOK_CUTOVER_RUN_ID: ${{ github.run_id }}
+  LYRASHIELD_WEBHOOK_CUTOVER_ATTEMPT: ${{ github.run_attempt }}
   ENGINE_REVISION: ${{ inputs.engine_revision }}
   REGISTRY: ghcr.io
   WEB_IMAGE: ${{ inputs.web_image }}

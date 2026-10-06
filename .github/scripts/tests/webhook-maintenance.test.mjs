@@ -127,6 +127,7 @@ function setup(t, scenario = "normal") {
     WORKER_VM_NAME: "worker",
     LYRASHIELD_ADMISSION_STOP_OWNER: owner,
     LYRASHIELD_WEBHOOK_CUTOVER_RUN_ID: "123",
+    LYRASHIELD_WEBHOOK_CUTOVER_ATTEMPT: "1",
   }
   const vm = (phase, overrides = {}) =>
     spawnSync(
@@ -138,6 +139,7 @@ function setup(t, scenario = "normal") {
         overrides.TEST_OWNER ?? owner,
         overrides.TEST_RUN_ID ?? "123",
         overrides.MIGRATION_DATABASE_IDENTITY ?? "",
+        overrides.TEST_ATTEMPT ?? overrides.LYRASHIELD_WEBHOOK_CUTOVER_ATTEMPT ?? "1",
       ],
       { encoding: "utf8", env: { ...env, ...overrides } }
     )
@@ -285,7 +287,7 @@ test("retained compatible candidate uses the image engine label during claim rec
     f.env.LYRASHIELD_WORKER_RUNTIME_CONFIG,
     readFileSync(f.env.LYRASHIELD_WORKER_RUNTIME_CONFIG, "utf8").replace(image, candidate)
   )
-  const result = f.vm("claim", { TEST_OWNER: "123:2" })
+  const result = f.vm("claim", { TEST_OWNER: "123:2", TEST_ATTEMPT: "2" })
   assert.equal(result.status, 0, result.stderr)
 })
 
@@ -294,23 +296,65 @@ test("same GitHub run rerun preserves the original nonce and owner after stoppin
   assert.equal(f.vm("claim").status, 0)
   const original = readFileSync(f.redis, "utf8")
   assert.equal(f.local("quiesce").status, 0)
-  const recovered = f.vm("claim", { TEST_OWNER: "123:2" })
+  const recovered = f.vm("claim", { TEST_OWNER: "123:2", TEST_ATTEMPT: "2" })
   assert.equal(recovered.status, 0, recovered.stderr)
   assert.match(recovered.stdout, /ADMISSION_STOP_OWNER=123:1/)
   assert.equal(readFileSync(f.redis, "utf8"), original)
   assert.equal(f.vm("stop").status, 0)
 })
 
+test("attempt 2 stays distinct from immutable receipt owner through failed-maintenance hold", (t) => {
+  const f = setup(t)
+  assert.equal(f.vm("claim").status, 0)
+  const originalStop = readFileSync(f.redis, "utf8")
+  assert.equal(f.local("quiesce").status, 0)
+
+  const retryEnv = {
+    LYRASHIELD_ADMISSION_STOP_OWNER: "123:2",
+    LYRASHIELD_WEBHOOK_CUTOVER_ATTEMPT: "2",
+  }
+  const probe = f.local("recovery-probe", retryEnv)
+  assert.equal(probe.status, 0, probe.stderr)
+  const reclaimed = f.local("claim", retryEnv)
+  assert.equal(reclaimed.status, 0, reclaimed.stderr)
+  const currentReceipt = JSON.parse(readFileSync(f.receipt))
+  assert.equal(currentReceipt.owner, "123:1")
+  assert.deepEqual(currentReceipt.attempts, [1, 2])
+  assert.equal(currentReceipt.lastAttempt, 2)
+  assert.equal(readFileSync(f.redis, "utf8"), originalStop)
+
+  // GITHUB_ENV carries the original receipt owner into later steps. The
+  // independent workflow-attempt value must stay 2 so a later hold cannot
+  // roll receipt history backward to the owner suffix 1.
+  const held = f.local("hold", {
+    LYRASHIELD_ADMISSION_STOP_OWNER: "123:1",
+    LYRASHIELD_WEBHOOK_CUTOVER_ATTEMPT: "2",
+  })
+  assert.equal(held.status, 0, held.stderr)
+  const heldReceipt = JSON.parse(readFileSync(f.receipt))
+  assert.equal(heldReceipt.owner, "123:1")
+  assert.deepEqual(heldReceipt.attempts, [1, 2])
+  assert.equal(heldReceipt.lastAttempt, 2)
+  assert.equal(readFileSync(f.redis, "utf8"), originalStop)
+  assert.equal(JSON.parse(readFileSync(f.state)).active, 0)
+})
+
 test("retry receipt probe distinguishes verified ownership from truly absent state", (t) => {
   const empty = setup(t)
-  const absent = empty.local("recovery-probe", { LYRASHIELD_ADMISSION_STOP_OWNER: "123:2" })
+  const absent = empty.local("recovery-probe", {
+    LYRASHIELD_ADMISSION_STOP_OWNER: "123:2",
+    LYRASHIELD_WEBHOOK_CUTOVER_ATTEMPT: "2",
+  })
   assert.equal(absent.status, 0, absent.stderr)
   assert.match(absent.stdout, /WEBHOOK_RECOVERY_RECEIPT_ABSENT/)
   assert.equal(JSON.parse(readFileSync(empty.redis)), null)
 
   const owned = setup(t)
   assert.equal(owned.vm("claim").status, 0)
-  const verified = owned.local("recovery-probe", { LYRASHIELD_ADMISSION_STOP_OWNER: "123:2" })
+  const verified = owned.local("recovery-probe", {
+    LYRASHIELD_ADMISSION_STOP_OWNER: "123:2",
+    LYRASHIELD_WEBHOOK_CUTOVER_ATTEMPT: "2",
+  })
   assert.equal(verified.status, 0, verified.stderr)
   assert.match(verified.stdout, /WEBHOOK_RECOVERY_RECEIPT_VERIFIED/)
 
@@ -320,7 +364,10 @@ test("retry receipt probe distinguishes verified ownership from truly absent sta
   intentReceipt.phase = "intent"
   writeFileSync(intent.receipt, JSON.stringify(intentReceipt), { mode: 0o600 })
   writeFileSync(intent.redis, "null")
-  const intentProbe = intent.local("recovery-probe", { LYRASHIELD_ADMISSION_STOP_OWNER: "123:2" })
+  const intentProbe = intent.local("recovery-probe", {
+    LYRASHIELD_ADMISSION_STOP_OWNER: "123:2",
+    LYRASHIELD_WEBHOOK_CUTOVER_ATTEMPT: "2",
+  })
   assert.equal(intentProbe.status, 0, intentProbe.stderr)
   assert.match(intentProbe.stdout, /WEBHOOK_RECOVERY_RECEIPT_VERIFIED/)
   assert.equal(
@@ -332,6 +379,7 @@ test("retry receipt probe distinguishes verified ownership from truly absent sta
   const foreignStop = setup(t, "foreign stop")
   const ambiguous = foreignStop.local("recovery-probe", {
     LYRASHIELD_ADMISSION_STOP_OWNER: "123:2",
+    LYRASHIELD_WEBHOOK_CUTOVER_ATTEMPT: "2",
   })
   assert.notEqual(ambiguous.status, 0)
   assert.doesNotMatch(ambiguous.stdout, /WEBHOOK_RECOVERY_RECEIPT_ABSENT/)
@@ -344,7 +392,10 @@ test("retry probe rejects receipts whose latest owner attempt is not earlier tha
   receipt.lastAttempt = 2
   receipt.attempts = [1, 2]
   writeFileSync(f.receipt, JSON.stringify(receipt), { mode: 0o600 })
-  const probe = f.local("recovery-probe", { LYRASHIELD_ADMISSION_STOP_OWNER: "123:2" })
+  const probe = f.local("recovery-probe", {
+    LYRASHIELD_ADMISSION_STOP_OWNER: "123:2",
+    LYRASHIELD_WEBHOOK_CUTOVER_ATTEMPT: "2",
+  })
   assert.notEqual(probe.status, 0)
   assert.doesNotMatch(probe.stdout, /WEBHOOK_RECOVERY_RECEIPT_VERIFIED/)
 })
@@ -360,7 +411,10 @@ test("retry probe rejects duplicate or out-of-order attempt history", (t) => {
     receipt.lastAttempt = Math.max(...attempts)
     receipt.attempts = attempts
     writeFileSync(f.receipt, JSON.stringify(receipt), { mode: 0o600 })
-    const probe = f.local("recovery-probe", { LYRASHIELD_ADMISSION_STOP_OWNER: "123:3" })
+    const probe = f.local("recovery-probe", {
+      LYRASHIELD_ADMISSION_STOP_OWNER: "123:3",
+      LYRASHIELD_WEBHOOK_CUTOVER_ATTEMPT: "3",
+    })
     assert.notEqual(probe.status, 0)
     assert.doesNotMatch(probe.stdout, /WEBHOOK_RECOVERY_RECEIPT_VERIFIED/)
   }
@@ -422,7 +476,7 @@ test("intent persisted before Redis SET is recoverable by the same run without a
   receipt.phase = "intent"
   writeFileSync(f.receipt, JSON.stringify(receipt), { mode: 0o600 })
   writeFileSync(f.redis, "null")
-  const recovered = f.vm("claim", { TEST_OWNER: "123:2" })
+  const recovered = f.vm("claim", { TEST_OWNER: "123:2", TEST_ATTEMPT: "2" })
   assert.equal(recovered.status, 0, recovered.stderr)
   assert.equal(JSON.parse(readFileSync(f.redis)), receipt.admissionStopValue)
   assert.deepEqual(JSON.parse(readFileSync(f.receipt)).attempts, [1, 2])
@@ -445,7 +499,11 @@ test("recovery against a changed Redis connection mutates neither deployment", (
   const f = setup(t)
   assert.equal(f.vm("claim").status, 0)
   const before = readFileSync(f.redis, "utf8")
-  const recovered = f.vm("claim", { TEST_OWNER: "123:2", REDIS_URL: "rotated-endpoint" })
+  const recovered = f.vm("claim", {
+    TEST_OWNER: "123:2",
+    TEST_ATTEMPT: "2",
+    REDIS_URL: "rotated-endpoint",
+  })
   assert.notEqual(recovered.status, 0)
   assert.equal(readFileSync(f.redis, "utf8"), before)
   assert.equal(JSON.parse(readFileSync(f.otherRedis)), null)
@@ -455,7 +513,7 @@ test("original source recovery requires an existing immutable receipt before any
   const f = setup(t)
   assert.notEqual(f.vm("recovery").status, 0)
   assert.equal(f.vm("claim").status, 0)
-  assert.equal(f.vm("recovery", { TEST_OWNER: "123:2" }).status, 0)
+  assert.equal(f.vm("recovery", { TEST_OWNER: "123:2", TEST_ATTEMPT: "2" }).status, 0)
   const runtime = readFileSync(".github/workflows/deploy-azure-runtime.yml", "utf8")
   assert.ok(
     runtime.indexOf("- name: Revalidate retry state for an automatic first cutover") <
@@ -560,7 +618,10 @@ for (const archived of [false, true]) {
     writeFileSync(f.redis, "null")
     const before = readFileSync(f.state, "utf8")
     for (const phase of ["recovery-probe", "recovery", "claim", "hold"]) {
-      const result = f.local(phase, { LYRASHIELD_ADMISSION_STOP_OWNER: "123:2" })
+      const result = f.local(phase, {
+        LYRASHIELD_ADMISSION_STOP_OWNER: "123:2",
+        LYRASHIELD_WEBHOOK_CUTOVER_ATTEMPT: "2",
+      })
       assert.notEqual(result.status, 0, phase)
       assert.match(result.stderr, /Completed cutover cannot re-enter maintenance/)
       assert.equal(JSON.parse(readFileSync(f.redis)), null)

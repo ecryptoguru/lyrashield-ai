@@ -63,6 +63,7 @@ assert.match(
   /LYRASHIELD_ADMISSION_STOP_OWNER:\s*\$\{\{\s*github\.run_id\s*\}\}:\$\{\{\s*github\.run_attempt\s*\}\}/
 )
 assert.match(baseline, /LYRASHIELD_WEBHOOK_CUTOVER_RUN_ID:\s*\$\{\{\s*github\.run_id\s*\}\}/)
+assert.match(runtime, /LYRASHIELD_WEBHOOK_CUTOVER_ATTEMPT:\s*\$\{\{\s*github\.run_attempt\s*\}\}/)
 assert.match(baseline, /No container images were built or pushed/)
 assert.ok(deploy.indexOf("preflight-compatible-baseline:") < deploy.indexOf("  build:"))
 assert.match(

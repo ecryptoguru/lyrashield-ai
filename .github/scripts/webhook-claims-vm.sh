@@ -4,6 +4,7 @@ set -eu
 # JavaScript dollar names are literal; they must not expand in the host shell.
 phase=${1:?phase}
 migration_identity=${5:-}
+attempt=${6:?workflow run attempt}
 revision=${2:?product revision}
 owner=${3:?run owner}
 run_id=${4:?run ID}
@@ -12,8 +13,8 @@ case "$revision" in *[!a-f0-9]*|'') exit 1;; esac
 case "$run_id" in *[!0-9]*|'') exit 1;; esac
 case "$owner" in "$run_id":*[!0-9:]*|*[!0-9:]*|'') exit 1;; esac
 case "$owner" in "$run_id":*) ;; *) exit 1;; esac
-attempt=${owner#*:}
 case "$attempt" in *[!0-9]*|'') exit 1;; esac
+[ "$attempt" -gt 0 ] || exit 1
 receipt=${LYRASHIELD_WEBHOOK_CUTOVER_RECEIPT_FILE:-/var/lib/lyrashield/webhook-claims-cutover.json}
 receipt_dir=$(dirname "$receipt")
 stop_receipt=${LYRASHIELD_WORKER_STOP_RECEIPT_FILE:-/run/lyrashield/worker-stop-provenance.json}
