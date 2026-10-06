@@ -258,7 +258,7 @@ try {
   );
   probePhase = "CONSTRAINTS";
   const constraints = await prisma.$queryRawUnsafe(
-    "SELECT conname AS name, contype AS type, lower(pg_get_constraintdef(oid, true)) AS definition, convalidated AS validated FROM pg_constraint WHERE conrelid = (SELECT c.oid FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = $1 AND c.relname = $2 AND c.relkind = 'r') AND contype IN ('p', 'f', 'c') ORDER BY conname",
+    "SELECT conname AS name, contype::text AS type, lower(pg_get_constraintdef(oid, true)) AS definition, convalidated AS validated FROM pg_constraint WHERE conrelid = (SELECT c.oid FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = $1 AND c.relname = $2 AND c.relkind = 'r') AND contype IN ('p', 'f', 'c') ORDER BY conname",
     schema,
     "WebhookEventTrack",
   );
