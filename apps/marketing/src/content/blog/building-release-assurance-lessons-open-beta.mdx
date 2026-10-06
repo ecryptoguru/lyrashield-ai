@@ -59,7 +59,7 @@ Building the MCP server humbled me. I read the [model context protocol intro](ht
 
 Our MCP tool returns redacted evidence. Finding type, file, line, reachability, hint. No secret value. Ever. You can call it from Cursor or Claude Code and it does not dump a key into your agent history. That was a deliberate choice and it took an extra sprint to get right.
 
-The GitHub Action taught a different lesson. Founders do not want another dashboard. They want a check that fails the PR when something real is about to ship. So we built the Action to block on evidence-backed high severity only, not on every maybe. I borrowed the layering idea from [MDN web security docs](https://developer.mozilla.org/en-US/docs/Web/Security): enforce the critical ones in the path, warn on the rest.
+The GitHub Action taught a different lesson. Founders do not want another dashboard. They want a check that fails the PR when something real is about to ship. The local Action checks changed code for secrets and risky patterns, then fails at the configured severity threshold (High by default). Those advisory signals require further review to determine whether a vulnerability exists. An optional recorded scan submits the revision to the hosted service for an evidence-producing run. I borrowed the layering idea from [MDN web security docs](https://developer.mozilla.org/en-US/docs/Web/Security): enforce the critical ones in the path, warn on the rest.
 
 Config is boring on purpose. If you have a lyrashield.yaml we read it. If not, sane defaults. No org wide secret to start. That mattered in open beta. People try it in five minutes without handing us broad tokens.
 
@@ -89,9 +89,9 @@ Here is the snapshot we share internally and externally:
 | -------- | ----------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
 | Scanning | Secret reachability, auth enforcement checks, IDOR evidence, client bundle analysis | Wider framework adapters and deeper data flow tracking                 |
 | Editor   | MCP server with redacted evidence for Cursor and Claude Code                        | Inline proposal preview inside editor                                  |
-| CI       | GitHub Action that blocks PRs on evidence-backed high severity                      | Fix proposal hints inside Action logs with safe apply in CI            |
+| CI       | Local severity-threshold Action gate; optional recorded hosted scan                 | Fix proposal hints inside Action logs with safe apply in CI            |
 | Fixes    | Proposals requiring review with evidence and minimal diff                           | One click proposal to PR branch after approval, only after your review |
-| Accounts | Open registration, individual projects, paid plans and Agency team seats             | Nothing announced                                                     |
+| Accounts | Open registration, individual projects, paid plans and Agency team seats            | Nothing announced                                                      |
 
 If this resonates, start where we started. Run our [AI app security checklist](/tools/ai-app-security-checklist) on your next build, then run LyraShield AI from [lyrashieldai.com](https://app.lyrashieldai.com/sign-up). You will get a short report of what the evidence supports and a proposal you can read before you merge.
 

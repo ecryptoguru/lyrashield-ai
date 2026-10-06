@@ -27,7 +27,7 @@
 
 AI-assisted development can shorten the path from an idea to working software. Working software still needs review: authorization boundaries, credentials, dependencies, model integrations and release identity do not become trustworthy merely because a demonstration succeeds.
 
-LyraShield AI is an evidence-backed release-assurance product for AI-built software. It reviews an authorized target, retains what was assessed, separates detected risks from independently verified evidence and retest-confirmed outcomes, supports authorized fix proposals and packages the result into reviewable reports.
+LyraShield AI is an evidence-backed release-assurance product for AI-built software. It reviews an authorized target, retains what was assessed, separates detected risks from retest-confirmed outcomes and inconclusive results, supports authorized fix proposals and packages the result into reviewable reports.
 
 Its organizing principle is that a finding, a score, a completed scan and a security guarantee are different things. Coverage gaps and inconclusive results belong in the record, not outside it. The intended outcome is a better-informed release decision and a defensible handoff—not a claim that software is universally safe.
 
@@ -76,7 +76,7 @@ The product promise is to:
 
 - connect an authorized repository, web app or API;
 - record what was tested and what could not be tested;
-- separate detected risks, retest-confirmed outcomes, independently verified findings and inconclusive results;
+- separate detected risks, retest-confirmed outcomes and inconclusive results;
 - explain risks in plain language while retaining technical evidence;
 - support authorized fix proposals, server-owned retests and shareable assurance reports;
 - keep the claim no broader than the retained evidence.
@@ -252,11 +252,13 @@ Evidence discipline is the product's organizing rule. Four different dimensions 
 
 ### 4.1 Evidence states
 
+The three shipped evidence states are `DETECTED`, `VALIDATED` and `INCONCLUSIVE`. `VERIFIED` remains defined for a future independent verification step; no finding is in it today.
+
 | State                             | Meaning                                                                                                               |
 | --------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
 | `DETECTED`                        | A scanner reported a candidate with retained provenance                                                               |
 | `VALIDATED`                       | A server-owned deterministic retest established absence of the originating condition within complete supported scope  |
-| `VERIFIED`                        | Independent trusted verification evidence exists                                                                      |
+| `VERIFIED`                        | Future independent verification step; not produced today                                                              |
 | `INCONCLUSIVE`                    | Available coverage or evidence cannot support a reliable conclusion                                                   |
 | `NOT_ASSESSED` / `NOT_APPLICABLE` | A control was not evaluated or does not apply; these are coverage-context labels, not successful finding verification |
 
@@ -298,7 +300,7 @@ Accepted risk and false-positive dispositions are human decisions with a reason 
 1. What target and release does the assessment cover?
 2. Which methodology and scanner families were used?
 3. Which controls were incomplete or evidence-required?
-4. Which findings are detected, validated, verified or inconclusive?
+4. Which findings are detected, retest-confirmed or inconclusive?
 5. Which resolutions came from a retest, and which are recorded dispositions?
 6. Is the assessment still applicable, and is the share capability live?
 7. What operational proof remains outside the scan?
@@ -475,7 +477,7 @@ Sharing is opt-in, permission-controlled, revocable and subject to eligibility. 
 | Low      |              1 |
 | Info     |              0 |
 
-Independent verification uses multiplier 1; an unverified finding uses 0.25. Accepted risk multiplies the contribution by another 0.5. The score is rounded half-up and floored at zero.
+The scoring implementation reserves multiplier 1 for independent verification, a future state not produced today; current unverified findings use 0.25. Accepted risk multiplies the contribution by another 0.5. The score is rounded half-up and floored at zero.
 
 This weighting is a prioritization heuristic. It does not assign a calibrated probability that a finding is real or that the application is safe.
 
@@ -495,7 +497,7 @@ Grade caps prevent favorable arithmetic from hiding particular conditions:
 - an open independently verified High caps it at B;
 - an active open verified secret caps it at D.
 
-The cap changes the grade, not the numeric score. Retest-validated and independently verified are distinct; a validated finding's resolved lifecycle, rather than renaming it independently verified, removes it from eligible open contributions.
+These verification-dependent caps are retained schema behavior for future or historical inputs, not evidence that current scans produce independently verified findings. The cap changes the grade, not the numeric score. Retest-validated and independently verified are distinct; a validated finding's resolved lifecycle, rather than renaming it independently verified, removes it from eligible open contributions.
 
 #### Illustrative arithmetic
 
@@ -745,7 +747,7 @@ Yes. For example, one detected High contributes only 2.5 score points before rou
 
 ### What is the difference between validated and verified?
 
-Validated describes a server-owned deterministic retest of the originating condition. Verified requires independent trusted evidence. An engine failing to repeat a finding is not either one automatically.
+Validated describes a server-owned deterministic retest of the originating condition. Verified is defined for a future independent trusted verification step and is not produced today. An engine failing to repeat a finding is not either one automatically.
 
 ### Does LyraShield merge fixes automatically?
 

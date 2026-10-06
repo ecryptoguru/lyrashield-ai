@@ -416,16 +416,16 @@ OPEN → proposal/patch ready → PR_OPENED → merged change
 
 This is not a required transition sequence. A manual fix, direct retest or recorded disposition takes a different supported path. Proposal readiness and lifecycle changes do not establish resolution by themselves.
 
-Verification tiers are separately interpreted as DETECTED, VALIDATED, VERIFIED, BLOCKED or INCONCLUSIVE. NOT_ASSESSED/NOT_APPLICABLE belong to control context rather than becoming successful finding-verification tiers.
+The three shipped evidence states are DETECTED, VALIDATED and INCONCLUSIVE. The schema also defines VERIFIED for a future independent verification step; no current scan produces it. BLOCKED is a separately interpreted control tier. NOT_ASSESSED/NOT_APPLICABLE belong to control context rather than becoming successful finding-verification tiers.
 
 ```text
 Scanner candidate → DETECTED
-  ├─ trusted independent evidence → VERIFIED
+  ├─ future independent verification step (not produced today) → VERIFIED
   ├─ complete identity-bound deterministic clean retest → VALIDATED
   └─ incomplete/engine-only absence/unsupported evidence → INCONCLUSIVE
 ```
 
-Independent verification is not a compulsory intermediate step before retest validation. Confidence never sets `verified`.
+The future independent verification step is not a compulsory intermediate step before retest validation. Confidence never sets `verified`.
 
 Human dispositions require recorded rationale and applicable policy/evidence binding. A direct historical FIXED or unbound ACCEPTED_RISK/FALSE_POSITIVE value is not sufficient resolution for the gate.
 
@@ -560,7 +560,7 @@ score = max(0, floor(100 - sum(deductions) + 0.5))
 | 50–64          | D             |
 | 0–49           | F             |
 
-Grade caps then apply: open Medium-or-higher prevents A_PLUS; open verified Critical caps at C; open verified High caps at B; open active verified secret caps at D. Caps do not alter the number.
+The verification-dependent scoring branches below support future or historical inputs; current scans do not set `verified`. Grade caps then apply: open Medium-or-higher prevents A_PLUS; open verified Critical caps at C; open verified High caps at B; open active verified secret caps at D. Caps do not alter the number.
 
 The DB input adapter retains untrusted historical FIXED values as FIXED_PENDING_RETEST unless verification is VALIDATED/VERIFIED. Retest validation does not rename a finding independently verified.
 

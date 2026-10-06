@@ -22,7 +22,7 @@ Target → Scan → Evidence State → Fix Proposal → Retest → Assurance Rep
 
 - Connect an authorized repository, web app or API.
 - Record what was tested — and what could not be.
-- Separate detected risks, retest-confirmed outcomes, independently verified findings and inconclusive results.
+- Separate detected risks, retest-confirmed outcomes and inconclusive results.
 - Explain each risk in plain language while retaining the technical evidence.
 - Produce approval-gated fix proposals, server-owned retests and shareable assurance reports.
 - Never claim broader coverage or certainty than retained evidence supports.
@@ -31,7 +31,7 @@ Target → Scan → Evidence State → Fix Proposal → Retest → Assurance Rep
 
 Most security tools answer "what did the scanner flag?" LyraShield answers "what was tested, what was proven and what remains unknown — and can you show that to a client, investor or reviewer?"
 
-1. **Evidence states, not confidence scores.** Every result carries an explicit state — `DETECTED`, `VALIDATED`, `VERIFIED` or `INCONCLUSIVE`. Confidence is triage metadata and never proof; engine-only absence is always inconclusive. A score or AI suggestion is never treated as verification.
+1. **Evidence states, not confidence scores.** Every result carries one of three shipped evidence states — `DETECTED`, `VALIDATED` or `INCONCLUSIVE`. `VERIFIED` is defined for a future independent verification step and is not produced today. Confidence is triage metadata and never proof; engine-only absence is always inconclusive. A score or AI suggestion is never treated as verification.
 2. **Purpose-built for AI-built software.** The public AI-Built Failure Taxonomy catalogs how AI-generated apps characteristically fail; eight deterministic AI App Security signals (AI-01–AI-08) map to the OWASP Top 10 for LLM Applications (2025); 14 WebMCP controls review the agent tool surface itself — agent rules, MCP configs, embedded secrets and prompt-injection exposure.
 3. **It runs where the coding agent runs.** A published CLI, an MCP server with 21 tools over stdio and remote Streamable HTTP with hosted OAuth, a portable Agent Plugin, a 51-entry install registry resolving to 48 preferred client surfaces and an account-less, diff-aware GitHub Action. Assurance without leaving the editor, terminal or CI pipeline.
 4. **An approval-gated fix loop that closes itself.** Fix pull requests are created only from a server-generated patch bound to an explicit human approval — no client-authored patches, nothing auto-merges. When a fix branch merges, the server automatically queues a fresh retest and re-evaluates the release gate.
@@ -64,13 +64,13 @@ Both modes share the same engine and the same loop. Optional Cloud Sync moves se
 
 ## 6. Honest evidence states
 
-Trust comes from not overclaiming. Every result carries an explicit state:
+Trust comes from not overclaiming. The three shipped evidence states are `DETECTED`, `VALIDATED` and `INCONCLUSIVE`. `VERIFIED` is defined for a future step; no finding is in it today:
 
 | State                             | Meaning                                                               |
 | --------------------------------- | --------------------------------------------------------------------- |
 | `DETECTED`                        | A scanner reported a candidate with retained provenance               |
 | `VALIDATED`                       | A server-owned deterministic retest confirmed the condition is absent |
-| `VERIFIED`                        | Independent trusted verification evidence exists                      |
+| `VERIFIED`                        | Future independent verification step; not produced today              |
 | `INCONCLUSIVE`                    | Coverage, evidence or verifier result is insufficient                 |
 | `NOT_ASSESSED` / `NOT_APPLICABLE` | The control was not evaluated or does not apply                       |
 
