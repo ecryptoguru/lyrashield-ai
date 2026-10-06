@@ -19,6 +19,14 @@ schema drift, missing provenance or unreadable state stop the release before
 image build. All active revisions are checked, including zero-traffic
 revisions reachable through revision URLs.
 
+Worker catalog and image provenance use one versioned gzip/base64 readback
+frame, capped at 3,500 bytes. Azure action Run Command returns only the
+[last 4,096 output bytes](https://learn.microsoft.com/en-us/azure/virtual-machines/linux/run-command#restrictions).
+The decoder caps expanded JSON at 65,536 bytes and rejects malformed or
+ambiguous frames. The probe error handler emits only a fixed phase label and omits raw database
+errors and connection values. The transport preserves all
+schema and identity checks and does not select a mode when readback fails.
+
 **The first transition runs automatically through the maintenance release.**
 The mode comes only from the positive read-only classifier; no dispatch input
 can choose it or skip the check. The runtime job

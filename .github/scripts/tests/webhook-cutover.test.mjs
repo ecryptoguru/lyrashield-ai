@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import { createHash } from "node:crypto"
 import { spawnSync } from "node:child_process"
 import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
@@ -302,6 +303,11 @@ function fixture(t, scenario, expectedMode) {
   if (scenario === "mixed app revisions")
     appRevisions.splice(0, appRevisions.length, revision(legacyProduct), revision(product))
 
+  if (scenario === "producer decoded oversized") state.columns[0].default = "x".repeat(70000)
+  if (scenario === "producer wire oversized")
+    state.columns[0].default = Array.from({ length: 300 }, (_, i) =>
+      createHash("sha256").update(String(i)).digest("hex")
+    ).join("")
   const executable = (name, body) => {
     const file = path.join(directory, name)
     writeFileSync(file, `#!${process.execPath}\n${body}`)
@@ -314,11 +320,11 @@ function fixture(t, scenario, expectedMode) {
   )
   executable(
     "docker",
-    `const args=process.argv.slice(2); if(args[0]==="login") process.exit(0); if(args[0]==="buildx") { const inspected=args[3]; const revision=inspected.match(/:([a-f0-9]{40})@sha256:/)?.[1]; console.log(JSON.stringify({config:{Labels:{"org.opencontainers.image.revision":${JSON.stringify(scenario === "OCI mismatch" ? "legacy" : "")} || revision}}})); } else if(args[0]==="inspect") { const format=args[2]; console.log(format.includes("State.Running")?"true":format.includes("Config.Image")?${JSON.stringify(workerImage)}:format.includes("engine.revision")?${JSON.stringify(state.engine)}:${JSON.stringify(workerProduct)}); } else if(args[0]==="exec") { const code=args.at(-1); const state=${JSON.stringify(state)}; const expectedChecksums=${JSON.stringify(migrationChecksums)}; process.env.LYRASHIELD_PRODUCT_REVISION=state.product; process.env.LYRASHIELD_WORKER_IMAGE_DIGEST=state.digest; if(state.engine) process.env.LYRASHIELD_ENGINE_REVISION=state.engine; else delete process.env.LYRASHIELD_ENGINE_REVISION; const prisma={$queryRawUnsafe:async(query,...parameters)=>{ if(query.includes("current_schema()")) return [{schema:state.schema}]; if(query.includes("_prisma_migrations")) return state.migrationNames.map(migration_name=>({migration_name,checksum:state.badMigrationChecksum?"0".repeat(64):expectedChecksums[migration_name],finished_at:migration_name===state.unfinishedMigration?null:new Date(),rolled_back_at:migration_name===state.rolledBackMigration?new Date():null})); if(query.includes("FROM pg_attribute a")) return (query.includes("pg_namespace")?state.columns:[...(state.columns??[]),...(state.foreignSchemaColumns??[])]).map(column=>({...column,defaultExpr:column.default})); if(query.includes("pg_constraint")) return state.constraints; if(query.includes("pg_index")) return state.indexes; throw new Error("Unexpected worker schema probe"); },$disconnect:async()=>{}}; const load=async(name)=>name==="@lyrashield/billing"?{WEBHOOK_TRACK_CLAIM_PROTOCOL:state.protocol}:name==="@lyrashield/db"?{getSystemPrisma:()=>prisma}:Promise.reject(new Error("Unexpected module")); new Function("load","return (async()=>{"+code.replaceAll("import(","load(")+"})()")(load).catch(error=>{console.error(error.message);process.exit(1)}); } else process.exit(1);`
+    `const args=process.argv.slice(2); if(args[0]==="login") process.exit(0); if(args[0]==="buildx") { const inspected=args[3]; const revision=inspected.match(/:([a-f0-9]{40})@sha256:/)?.[1]; console.log(JSON.stringify({config:{Labels:{"org.opencontainers.image.revision":${JSON.stringify(scenario === "OCI mismatch" ? "legacy" : "")} || revision}}})); } else if(args[0]==="inspect") { const format=args[2]; console.log(format.includes("State.Running")?"true":format.includes("Config.Image")?${JSON.stringify(workerImage)}:format.includes("engine.revision")?${JSON.stringify(state.engine)}:${JSON.stringify(workerProduct)}); } else if(args[0]==="exec") { const code=args[args.indexOf("-e")+1]; process.argv=[process.execPath,...args.slice(args.indexOf("-e")+3)]; const state=${JSON.stringify(state)}; const expectedChecksums=${JSON.stringify(migrationChecksums)}; process.env.LYRASHIELD_PRODUCT_REVISION=state.product; process.env.LYRASHIELD_WORKER_IMAGE_DIGEST=state.digest; if(state.engine) process.env.LYRASHIELD_ENGINE_REVISION=state.engine; else delete process.env.LYRASHIELD_ENGINE_REVISION; const prisma={$queryRawUnsafe:async(query,...parameters)=>{ if(${JSON.stringify(scenario)}==="probe error redaction") throw new Error("SYNTHETIC_CREDENTIAL_DO_NOT_LOG"); if(query.includes("current_schema()")) return [{schema:state.schema}]; if(query.includes("_prisma_migrations")) return state.migrationNames.map(migration_name=>({migration_name,checksum:state.badMigrationChecksum?"0".repeat(64):expectedChecksums[migration_name],finished_at:migration_name===state.unfinishedMigration?null:new Date(),rolled_back_at:migration_name===state.rolledBackMigration?new Date():null})); if(query.includes("FROM pg_attribute a")) return (query.includes("pg_namespace")?state.columns:[...(state.columns??[]),...(state.foreignSchemaColumns??[])]).map(column=>({...column,defaultExpr:column.default})); if(query.includes("pg_constraint")) return state.constraints; if(query.includes("pg_index")) return state.indexes; throw new Error("Unexpected worker schema probe"); },$disconnect:async()=>{if(${JSON.stringify(scenario)}==="disconnect error redaction")throw new Error("SYNTHETIC_CREDENTIAL_DO_NOT_LOG")}}; const load=async(name)=>name==="node:zlib"?import("node:zlib"):name==="@lyrashield/billing"?{WEBHOOK_TRACK_CLAIM_PROTOCOL:state.protocol}:name==="@lyrashield/db"?{getSystemPrisma:()=>prisma}:Promise.reject(new Error("Unexpected module")); new Function("load","return (async()=>{"+code.replaceAll("import(","load(")+"})()")(load).catch(error=>{console.error(error.message);process.exit(1)}); } else process.exit(1);`
   )
   executable(
     "az",
-    `const {spawnSync}=require("node:child_process"); const args=process.argv.slice(2); if(args[0]==="keyvault") console.log("synthetic-registry-token"); else if(args[0]==="containerapp") { const name=args[args.indexOf("--name")+1]; console.log(JSON.stringify(name==="app"?${JSON.stringify(appRevisions)}:${JSON.stringify(scannerRevisions)})); } else { if(${JSON.stringify(scenario)}==="VM failure") process.exit(1); const result=spawnSync("sh",["-c",args[args.indexOf("--scripts")+1]],{encoding:"utf8"}); process.stdout.write(result.stdout); process.stderr.write(result.stderr); process.exit(result.status); }`
+    `const {spawnSync}=require("node:child_process"); const args=process.argv.slice(2); if(args[0]==="keyvault") console.log("synthetic-registry-token"); else if(args[0]==="containerapp") { const name=args[args.indexOf("--name")+1]; console.log(JSON.stringify(name==="app"?${JSON.stringify(appRevisions)}:${JSON.stringify(scannerRevisions)})); } else { if(${JSON.stringify(scenario)}==="VM failure") process.exit(1); const result=spawnSync("sh",["-c",args[args.indexOf("--scripts")+1]],{encoding:"utf8"}); const {gzipSync,gunzipSync}=require("node:zlib");const marker="WEBHOOK_WORKER_STATE_GZIP_V1=";let out=result.stdout;const scenario=${JSON.stringify(scenario)};const framed=(value)=>marker+gzipSync(value).toString("base64")+"\\n";if(scenario==="missing frame")out="";if(scenario==="duplicate frame")out=framed("{}")+framed("{}");if(scenario==="malformed base64")out=marker+"!bad!\\n";if(scenario==="invalid gzip")out=marker+Buffer.from("not gzip").toString("base64")+"\\n";if(scenario==="invalid JSON")out=framed("{");if(scenario==="null state")out=framed("null");if(scenario==="decompression bomb")out=framed("x".repeat(65537));if(scenario==="wire oversized")out=marker+"A".repeat(3500)+"\\n";if(scenario==="truncated frame")out=out.slice(0,Math.floor(out.length/2))+"\\n";if(scenario==="corrupt gzip"){const bytes=Buffer.from(out.trim().slice(marker.length),"base64");bytes[bytes.length-8]^=1;out=marker+bytes.toString("base64")+"\\n";}if(scenario==="untrusted error redaction")out+="WEBHOOK_WORKER_PROBE_ERROR=SYNTHETIC_CREDENTIAL_DO_NOT_LOG\\n";if(scenario==="unknown frame version"){const encoded=out.trim().slice(marker.length);const value=JSON.parse(gunzipSync(Buffer.from(encoded,"base64")));value.version=2;out=framed(JSON.stringify(value));}process.stdout.write(Buffer.from("[stdout]\\n"+out+"\\n[stderr]\\n"+result.stderr).subarray(-4096));process.exit(0); }`
   )
   executable(
     "git",
@@ -485,3 +491,35 @@ test("web images bind the exact source revision into OCI provenance", () => {
   )
   assert.match(web, /org\.opencontainers\.image\.revision=\$\{\{ env\.DEPLOY_SHA \}\}/)
 })
+
+for (const scenario of [
+  "missing frame",
+  "duplicate frame",
+  "malformed base64",
+  "invalid gzip",
+  "invalid JSON",
+  "null state",
+  "decompression bomb",
+  "wire oversized",
+  "truncated frame",
+  "corrupt gzip",
+  "unknown frame version",
+  "producer decoded oversized",
+  "producer wire oversized",
+  "probe error redaction",
+  "disconnect error redaction",
+  "untrusted error redaction",
+]) {
+  test(`bounded worker transport fails closed without choosing a mode: ${scenario}`, (t) => {
+    const result = fixture(t, scenario)
+    assert.notEqual(result.status, 0)
+    assert.equal(result.githubOutput, "")
+    assert.doesNotMatch(result.stdout + result.stderr, /SYNTHETIC_CREDENTIAL_DO_NOT_LOG/)
+    const expected = ["missing frame", "duplicate frame"].includes(scenario)
+      ? /Worker compatibility readback unavailable/
+      : scenario.startsWith("producer ") || scenario.endsWith("error redaction")
+        ? /Worker compatibility probe failed/
+        : /Worker compatibility readback invalid or oversized/
+    assert.match(result.stderr, expected)
+  })
+}
