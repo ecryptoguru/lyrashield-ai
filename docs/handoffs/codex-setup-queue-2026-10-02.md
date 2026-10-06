@@ -1,6 +1,6 @@
 # Historical execution queue — retained 2026-10-02
 
-Moved from root AGENTS.md during the Codex setup audit. This is a dated handoff, not current deployment proof or authorization to execute operational actions. Refresh the code, release evidence and explicit user authorization before using any item. Current truth lives in [PRD §9](../PRD.md#9-release-status); supersede this queue there as gates close.
+Moved from root AGENTS.md during the Codex setup audit. This is a dated handoff, not current deployment proof or authorization to execute operational actions. Refresh the code, release evidence and explicit user authorization before using any item. Current truth lives in [PRD §9](../../PRD.md#9-release-status); supersede this queue there as gates close.
 
 ## Immediate execution queue
 
