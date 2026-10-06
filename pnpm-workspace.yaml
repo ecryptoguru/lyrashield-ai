@@ -116,6 +116,8 @@ minimumReleaseAgeExclude:
   # would deadlock the publish pipeline and buys nothing (we control the
   # artifact end-to-end). Exempt the whole scope permanently.
   - "@lyrashield/*"
+  # GHSA-68fv-2mgg-jv7q: allow only the published fix through the age gate.
+  - "source-map-js@1.2.2"
 # GHSA-ch52-4w7c-c8xp has no patched npm version as of 2026-10-03. Astro's
 # remote asset helper creates a fresh Request(src) and only asks its cache
 # policy for storable/timeToLive; it does not invoke the vulnerable
