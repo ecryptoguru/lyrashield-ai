@@ -21,9 +21,9 @@ import { candidateConnectionProbeSource } from "./webhook-empty-state-candidate-
 test("serialized candidate probe runs without module-scope bindings", () => {
   const env = {
     DATABASE_URL:
-      "postgresql://worker_runtime:disposable-only@db.yejmvtgsxniatmjbwplk.supabase.co:5432/postgres?sslmode=require",
+      "postgresql://worker_runtime:disposable-only@db.yejmvtgsxniatmjbwplk.supabase.co:5432/postgres?sslmode=verify-full",
     DATABASE_SYSTEM_URL:
-      "postgresql://system_admin:disposable-system@db.yejmvtgsxniatmjbwplk.supabase.co:5432/postgres?sslmode=require",
+      "postgresql://system_admin:disposable-system@db.yejmvtgsxniatmjbwplk.supabase.co:5432/postgres?sslmode=verify-full",
     REDIS_URL: "rediss://disposable-only@redis.invalid:6379/0",
   }
   const result = spawnSync(
@@ -87,8 +87,9 @@ test("enabled copied candidate adapter survives cold start and crash after eithe
     const { promoteCandidate } = await import(pathToFileURL(candidate))
     for (const crashAfter of [null, "app", "scanner", "rename", "unhealthy-scanner"]) {
       const { receipt, policy } = fixture()
-      const issuedAt = new Date().toISOString(),
-        expiresAt = new Date(Date.now() + 1800000).toISOString()
+      const issuedAtMs = Date.now(),
+        issuedAt = new Date(issuedAtMs).toISOString(),
+        expiresAt = new Date(issuedAtMs + 30 * 60_000).toISOString()
       Object.assign(receipt.authorization, { issuedAt, expiresAt })
       Object.assign(policy, { issuedAt, expiresAt })
       const base =
@@ -103,9 +104,9 @@ test("enabled copied candidate adapter survives cold start and crash after eithe
       policy.candidateRevisions = { app: "app-candidate", scanner: "scanner-candidate" }
       const env = {
         DATABASE_URL:
-          "postgresql://worker_runtime:disposable-only@db.yejmvtgsxniatmjbwplk.supabase.co:5432/postgres?sslmode=require",
+          "postgresql://worker_runtime:disposable-only@db.yejmvtgsxniatmjbwplk.supabase.co:5432/postgres?sslmode=verify-full",
         DATABASE_SYSTEM_URL:
-          "postgresql://system_admin:disposable-system@db.yejmvtgsxniatmjbwplk.supabase.co:5432/postgres?sslmode=require",
+          "postgresql://system_admin:disposable-system@db.yejmvtgsxniatmjbwplk.supabase.co:5432/postgres?sslmode=verify-full",
         REDIS_URL: "rediss://disposable-only@redis.invalid:6379/0",
       }
       const fingerprint = runtimeFingerprint(env)

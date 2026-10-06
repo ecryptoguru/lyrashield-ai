@@ -7,7 +7,7 @@ const DATABASE_PRINCIPAL_FIELDS = Object.freeze(["app", "scanner", "worker", "sy
 const SHA256 = /^[a-f0-9]{64}$/
 const SOURCE_SHA = /^[a-f0-9]{40}$/
 const URL_QUERY_ALLOWLIST = new Set(["schema", "sslmode"])
-const SAFE_SSL_MODES = new Set(["require", "verify-full"])
+const SAFE_SSL_MODES = new Set(["verify-full"])
 
 export function parsePostgresConnectionTarget(raw, label = "database URL") {
   if (typeof raw !== "string" || raw.length < 1 || raw.length > 8192) {
@@ -39,7 +39,7 @@ export function parsePostgresConnectionTarget(raw, label = "database URL") {
   }
   const sslmode = url.searchParams.get("sslmode")
   if (sslmode !== null && !SAFE_SSL_MODES.has(sslmode)) {
-    throw new Error(`${label} sslmode must require verified TLS`)
+    throw new Error(`${label} requires sslmode=verify-full`)
   }
 
   let user
@@ -146,7 +146,7 @@ function parseDatabaseUrl(raw, label) {
   const { url, user, database, schema, port } = parsed
   const sslmode = url.searchParams.get("sslmode")
   if (!url.searchParams.has("sslmode") || !SAFE_SSL_MODES.has(sslmode)) {
-    throw new Error(`${label} must explicitly require verified TLS`)
+    throw new Error(`${label} requires sslmode=verify-full`)
   }
   if (!database || database !== "postgres" || schema !== "public") {
     throw new Error(`${label} must target postgres/public`)

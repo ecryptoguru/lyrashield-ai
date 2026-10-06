@@ -22,7 +22,7 @@ export function runtimeFingerprint(env) {
       new Set(keys).size !== keys.length ||
       keys.some((key) => !["schema", "sslmode"].includes(key)) ||
       !u.searchParams.has("sslmode") ||
-      !["require", "verify-full"].includes(u.searchParams.get("sslmode"))
+      u.searchParams.get("sslmode") !== "verify-full"
     )
       throw Error("Unsupported connection")
     const user = decodeURIComponent(u.username)

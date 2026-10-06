@@ -28,7 +28,7 @@ test("production producer remains hard-disabled and rejects JSON, counts or path
 })
 test("runtime connection observations reject endpoint overrides and transaction migration", () => {
   const url =
-    "postgresql://postgres.yejmvtgsxniatmjbwplk:placeholder@aws-1-ap-south-1.pooler.supabase.com:5432/postgres?sslmode=require"
+    "postgresql://postgres.yejmvtgsxniatmjbwplk:placeholder@aws-1-ap-south-1.pooler.supabase.com:5432/postgres?sslmode=verify-full"
   assert.match(
     connectionObservation(url, "worker", "2026-10-05T09:00:00Z").identitySha256,
     /^[a-f0-9]{64}$/
@@ -219,7 +219,7 @@ test("refreshed worker and candidate targets/credential continuity fail closed",
     DATABASE_URL:
       "postgresql://worker_runtime.yejmvtgsxniatmjbwplk:placeholder@aws-1-ap-south-1.pooler.supabase.com:5432/postgres?sslmode=verify-full",
     DATABASE_SYSTEM_URL:
-      "postgresql://system_admin:placeholder@db.yejmvtgsxniatmjbwplk.supabase.co:5432/postgres?sslmode=require",
+      "postgresql://system_admin:placeholder@db.yejmvtgsxniatmjbwplk.supabase.co:5432/postgres?sslmode=verify-full",
     REDIS_URL: "rediss://placeholder@example.test:6379/0",
   }
   const fingerprint = runtimeFingerprint(env)
@@ -267,16 +267,17 @@ test("refreshed worker and candidate targets/credential continuity fail closed",
       { DATABASE_SYSTEM_URL: env.DATABASE_SYSTEM_URL.replace("system_admin", "worker_runtime") },
       { DATABASE_URL: env.DATABASE_URL.replace("?sslmode=verify-full", "") },
       { DATABASE_URL: env.DATABASE_URL.replace("sslmode=verify-full", "sslmode=disable") },
+      { DATABASE_URL: env.DATABASE_URL.replace("sslmode=verify-full", "sslmode=require") },
       {
         DATABASE_URL: env.DATABASE_URL.replace(
           "sslmode=verify-full",
-          "sslmode=require&sslmode=verify-full"
+          "sslmode=verify-full&sslmode=verify-full"
         ),
       },
       {
         DATABASE_URL: env.DATABASE_URL.replace(
           "sslmode=verify-full",
-          "sslmode=require&uselibpqcompat=true"
+          "sslmode=verify-full&uselibpqcompat=true"
         ),
       },
     ])
@@ -284,15 +285,16 @@ test("refreshed worker and candidate targets/credential continuity fail closed",
         validateConsumerFingerprint(runtimeFingerprint({ ...env, ...changed }), policy, role)
       )
 })
-test("backup safe compatibility normalization preserves endpoint identity and rejects overrides", async () => {
+test("backup connection rejects compatibility modes and endpoint overrides", async () => {
   const { normalizeBackupConnection } =
     await import("../../packages/db/scripts/webhook-backup-connection.mjs")
   const url =
-    "postgresql://postgres:placeholder@db.yejmvtgsxniatmjbwplk.supabase.co:5432/postgres?sslmode=require"
-  const expected = normalizeBackupConnection(url).identitySha256
-  for (const key of ["uselibpqcompat", "%75selibpqcompat"])
-    assert.equal(normalizeBackupConnection(url + `&${key}=1`).identitySha256, expected)
+    "postgresql://postgres:placeholder@db.yejmvtgsxniatmjbwplk.supabase.co:5432/postgres?sslmode=verify-full"
   for (const suffix of [
+    "&uselibpqcompat=1",
+    "&uselibpqcompat=true",
+    "&%75selibpqcompat=1",
+    "&%75selibpqcompat=true",
     "&uselibpqcompat=1&host=wrong.test",
     "&uselibpqcompat=1&user=wrong",
     "&uselibpqcompat=1&uselibpqcompat=1",
@@ -300,6 +302,7 @@ test("backup safe compatibility normalization preserves endpoint identity and re
     "&%68ost=wrong.test",
   ])
     assert.throws(() => normalizeBackupConnection(url + suffix))
+  assert.equal(normalizeBackupConnection(url).identitySha256.length, 64)
 })
 test("Azure inventory always includes inactive revisions and uses supported fixed target flags", async () => {
   const { revisionListArgs, containerAppTargetArgs } =
@@ -495,17 +498,16 @@ test("observer runtime preflight requires actual exported shared queue authoriti
   assert.throws(() => validateObserverRuntime(undefined, class {}, integrations))
 })
 
-test("backup collector normalizes logical identity while retaining raw credential binding", async () => {
+test("backup collector binds strict target identity and raw credential", async () => {
   const { backupConnectionObservation } = await import("./webhook-empty-state-observer.mjs")
   const raw =
-    "postgresql://postgres.yejmvtgsxniatmjbwplk:placeholder@aws-1-ap-south-1.pooler.supabase.com:5432/postgres?sslmode=require"
-  const a = backupConnectionObservation(raw, "2026-10-05T09:00:00Z"),
-    b = backupConnectionObservation(raw + "&uselibpqcompat=1", "2026-10-05T09:00:00Z")
-  assert.equal(a.identitySha256, b.identitySha256)
-  assert.notEqual(a.credentialSha256, b.credentialSha256)
+    "postgresql://postgres.yejmvtgsxniatmjbwplk:placeholder@aws-1-ap-south-1.pooler.supabase.com:5432/postgres?sslmode=verify-full"
+  const a = backupConnectionObservation(raw, "2026-10-05T09:00:00Z")
+  assert.equal(a.identitySha256.length, 64)
+  assert.equal(a.credentialSha256.length, 64)
   assert.throws(() =>
     backupConnectionObservation(
-      raw + "&uselibpqcompat=1&host=db.foreign.supabase.co",
+      raw + "&uselibpqcompat=1",
       "2026-10-05T09:00:00Z"
     )
   )

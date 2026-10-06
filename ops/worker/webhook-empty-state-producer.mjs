@@ -134,7 +134,7 @@ export function appConnectionProbeSource(resourceId, observedAt) {
   return `import {createHash} from 'node:crypto';
     const raw=process.env.DATABASE_URL; if(!raw||raw.length>8192)throw Error('missing');
     const u=new URL(raw), keys=[...u.searchParams.keys()];
-    if(!['postgres:','postgresql:'].includes(u.protocol)||u.hash||u.pathname!='/postgres'||(u.searchParams.get('schema')||'public')!=='public'||new Set(keys).size!==keys.length||keys.some(k=>!['schema','sslmode'].includes(k))||!u.searchParams.has('sslmode')||!['require','verify-full'].includes(u.searchParams.get('sslmode')))throw Error('unsafe');
+    if(!['postgres:','postgresql:'].includes(u.protocol)||u.hash||u.pathname!='/postgres'||(u.searchParams.get('schema')||'public')!=='public'||new Set(keys).size!==keys.length||keys.some(k=>!['schema','sslmode'].includes(k))||u.searchParams.get('sslmode')!=='verify-full')throw Error('unsafe');
     let ref,principal;const direct=u.hostname.match(/^db\\.([a-z0-9]{20})\\.supabase\\.co$/i), user=decodeURIComponent(u.username);
     if(direct&&/^[a-z_][a-z0-9_$]{0,62}$/.test(user)&&(!u.port||u.port==='5432')){ref=direct[1];principal=user;}
     else if(/\\.pooler\\.supabase\\.com$/i.test(u.hostname)&&['','5432','6543'].includes(u.port)){const p=user.match(/^([a-z_][a-z0-9_$]{0,62})\\.([a-z0-9]{20})$/i);if(p&&p[1]===p[1].toLowerCase()){principal=p[1];ref=p[2];}}

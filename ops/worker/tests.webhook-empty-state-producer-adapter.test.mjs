@@ -32,12 +32,13 @@ test("embedded producer connection probe fails closed without explicit verified 
   for (const [url, extra] of [
     [base, { PGSSLMODE: "verify-full" }],
     [`${base}?sslmode=disable`, {}],
-    [`${base}?sslmode=require&sslmode=verify-full`, {}],
-    [`${base}?sslmode=require&uselibpqcompat=true`, {}],
+    [`${base}?sslmode=require`, {}],
+    [`${base}?sslmode=verify-full&sslmode=verify-full`, {}],
+    [`${base}?sslmode=verify-full&uselibpqcompat=true`, {}],
   ]) {
     assert.notEqual(run(url, extra).status, 0)
   }
-  const result = run(`${base}?sslmode=require`)
+  const result = run(`${base}?sslmode=verify-full`)
   assert.equal(result.status, 0, result.stderr)
   assert.equal(JSON.parse(result.stdout).resourceId, "fixture-resource")
 })

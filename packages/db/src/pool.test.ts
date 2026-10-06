@@ -48,18 +48,32 @@ describe("createBoundedPgAdapter", () => {
 
   it("requires explicit verified Supabase TLS rather than PGSSLMODE fallback", () => {
     const direct = "postgresql://u:p@db.yejmvtgsxniatmjbwplk.supabase.co:5432/postgres"
+    const directWithTrailingDot = direct.replace(".supabase.co", ".supabase.co.")
+    const supabaseHost = "db.yejmvtgsxniatmjbwplk.supabase.co"
+    const foreignAuthorityOverride = `postgresql://u:p@example.invalid:5432/postgres?%68ost=${supabaseHost}`
     vi.stubEnv("PGSSLMODE", "verify-full")
-    expect(() => createBoundedPgAdapter(direct)).toThrow(/exactly one verified sslmode/)
+    expect(() => createBoundedPgAdapter(direct)).toThrow(/exactly one sslmode=verify-full/)
+    expect(() => createBoundedPgAdapter(foreignAuthorityOverride)).toThrow(/must not override/)
+    expect(() => createBoundedPgAdapter(`${direct}?host=example.invalid`)).toThrow(
+      /must not override/
+    )
+    expect(() => createBoundedPgAdapter(directWithTrailingDot)).toThrow(/trailing-dot hostname/)
+    expect(() => createBoundedPgAdapter(`${directWithTrailingDot}?sslmode=verify-full`)).toThrow(
+      /trailing-dot hostname/
+    )
     expect(() => createBoundedPgAdapter(`${direct}?sslmode=disable`)).toThrow(
+      /exactly one sslmode=verify-full/
+    )
+    expect(() => createBoundedPgAdapter(`${direct}?sslmode=require`)).toThrow(
+      /exactly one sslmode=verify-full/
+    )
+    expect(() => createBoundedPgAdapter(`${direct}?sslmode=verify-full&sslmode=verify-full`)).toThrow(
       /exactly one verified sslmode/
     )
-    expect(() => createBoundedPgAdapter(`${direct}?sslmode=require&sslmode=verify-full`)).toThrow(
-      /exactly one verified sslmode/
-    )
-    expect(() => createBoundedPgAdapter(`${direct}?sslmode=require&uselibpqcompat=true`)).toThrow(
+    expect(() => createBoundedPgAdapter(`${direct}?sslmode=verify-full&uselibpqcompat=true`)).toThrow(
       /compatibility mode is not allowed/
     )
-    expect(() => createBoundedPgAdapter(`${direct}?sslmode=require&%75selibpqcompat=true`)).toThrow(
+    expect(() => createBoundedPgAdapter(`${direct}?sslmode=verify-full&%75selibpqcompat=true`)).toThrow(
       /compatibility mode is not allowed/
     )
   })
@@ -67,7 +81,7 @@ describe("createBoundedPgAdapter", () => {
   it("uses explicit verified URL TLS when PGSSLMODE is weaker", async () => {
     vi.stubEnv("PGSSLMODE", "disable")
     const adapter = await createBoundedPgAdapter(
-      "postgresql://u:p@db.yejmvtgsxniatmjbwplk.supabase.co:5432/postgres?sslmode=require"
+      "postgresql://u:p@db.yejmvtgsxniatmjbwplk.supabase.co:5432/postgres?sslmode=verify-full"
     ).connect()
     const ssl = adapter.underlyingDriver().options.ssl
     expect(ssl).toBeTruthy()

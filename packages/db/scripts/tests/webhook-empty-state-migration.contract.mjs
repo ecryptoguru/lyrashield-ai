@@ -20,8 +20,8 @@ import {
 import { runEmptyStateMigration } from "../webhook-empty-state-migration.mjs"
 
 const projectRef = "localprojectfixture1"
-const direct = "postgresql://postgres:masked@db." + projectRef + ".supabase.co:5432/postgres?schema=public&sslmode=require"
-const pooler = "postgresql://postgres." + projectRef + ":masked@fixture.pooler.supabase.com:5432/postgres?schema=public&sslmode=require"
+const direct = "postgresql://postgres:masked@db." + projectRef + ".supabase.co:5432/postgres?schema=public&sslmode=verify-full"
+const pooler = "postgresql://postgres." + projectRef + ":masked@fixture.pooler.supabase.com:5432/postgres?schema=public&sslmode=verify-full"
 const testProjectRef = "localtestprojectref1"
 const testDatabaseUrl = "postgresql://postgres:masked@127.0.0.1:5432/postgres?schema=public"
 const now = Date.parse("2026-10-04T12:00:00.000Z")
@@ -139,7 +139,7 @@ test("effective node-postgres target rejects query endpoint, credential, duplica
     "%75ser=attacker",
     "options=-c%20search_path=private",
     "schema=public&schema=public",
-    "sslmode=require&sslmode=verify-full",
+    "sslmode=verify-full&sslmode=verify-full",
     "uselibpqcompat=1",
     "%75selibpqcompat=1",
   ]
@@ -182,16 +182,17 @@ test("signed maintenance receipt rejects tampering and an untrusted key", () => 
 })
 
 test("Supavisor identity requires project ref in its username", () => {
-  const unbound = "postgresql://postgres:masked@fixture.pooler.supabase.com:5432/postgres?schema=public&sslmode=require"
+  const unbound = "postgresql://postgres:masked@fixture.pooler.supabase.com:5432/postgres?schema=public&sslmode=verify-full"
   assert.throws(() => canonicalSupabaseDatabaseIdentity([unbound]), /username must bind/)
 })
 
 test("production Supabase identities require explicit verified TLS and reject compatibility mode", () => {
   for (const url of [
-    direct.replace("&sslmode=require", ""),
-    direct.replace("sslmode=require", "sslmode=disable"),
-    direct.replace("sslmode=require", "sslmode=require&sslmode=verify-full"),
-    direct.replace("sslmode=require", "sslmode=require&uselibpqcompat=true"),
+    direct.replace("&sslmode=verify-full", ""),
+    direct.replace("sslmode=verify-full", "sslmode=require"),
+    direct.replace("sslmode=verify-full", "sslmode=disable"),
+    direct.replace("sslmode=verify-full", "sslmode=verify-full&sslmode=verify-full"),
+    direct.replace("sslmode=verify-full", "sslmode=verify-full&uselibpqcompat=true"),
   ]) {
     assert.throws(() => canonicalSupabaseDatabaseIdentity([url]))
   }
@@ -222,7 +223,7 @@ test("signed principal policy names independent expected roles", async () => {
 })
 
 test("rejects direct and pooler URLs bound to different projects", () => {
-  const other = "postgresql://postgres.testprojectfixture99:masked@fixture.pooler.supabase.com:5432/postgres?schema=public&sslmode=require"
+  const other = "postgresql://postgres.testprojectfixture99:masked@fixture.pooler.supabase.com:5432/postgres?schema=public&sslmode=verify-full"
   assert.throws(() => canonicalSupabaseDatabaseIdentity([direct, other]), /different Supabase projects/)
 })
 
@@ -297,6 +298,13 @@ test("migration runner refuses missing explicit mode and mismatched identity bef
     }),
     ClientClass: NeverConnect,
   }), /restricted to loopback PostgreSQL/)
+  await assert.rejects(runEmptyStateMigration({
+    env: validEnvironment({
+      DATABASE_DIRECT_URL: direct.replace("sslmode=verify-full", "sslmode=require"),
+      DATABASE_URL: direct.replace("sslmode=verify-full", "sslmode=require"),
+    }),
+    ClientClass: NeverConnect,
+  }), /sslmode=verify-full/)
   assert.equal(constructed, false)
 })
 
