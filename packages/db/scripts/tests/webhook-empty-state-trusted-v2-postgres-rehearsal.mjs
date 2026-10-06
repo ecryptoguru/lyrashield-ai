@@ -67,9 +67,15 @@ try {
   await client.connect()
   await client.end()
   process.exitCode = 19
-} catch {
-  await client.end().catch(() => {})
-  process.exitCode = 0
+} catch (error) {
+  const reason = [error?.code, error?.message].filter(Boolean).join(" ")
+  if (!/(?:CERTIFICATE|CERT_|SELF_SIGNED|ISSUER|UNABLE_TO_VERIFY)/i.test(reason)) {
+    process.stderr.write("Unexpected wrong-CA probe error: " + (error?.code || "unknown") + "\\n")
+    process.exitCode = 20
+  } else {
+    await client.end().catch(() => {})
+    process.exitCode = 0
+  }
 }`,
   ],
   {
