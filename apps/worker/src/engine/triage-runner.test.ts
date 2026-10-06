@@ -13,9 +13,16 @@ vi.mock("./runner-output", () => ({ readTextFileBounded: mocks.readTextFileBound
 vi.mock("./workspace-path", () => ({ ENGINE_WORK_ROOT: "/tmp/lyrashield-triage-contract-test" }))
 vi.mock("@lyrashield/integrations", () => ({ getAiResultCacheRedis: () => null }))
 import { runEngineTriage } from "./triage-runner"
+import type { EngineProfile } from "./runner-config"
 
 describe("pinned engine triage invocation", () => {
   it("never enables the legacy local cache that replays historical provider usage", async () => {
+    const profile: EngineProfile = {
+      model: "azure_ai/gpt-6-luna",
+      reasoningEffort: "medium",
+      delegateModel: "azure_ai/gpt-6-luna",
+      delegateReasoningEffort: "medium",
+    }
     const freshUsage = { request_count: 1, input_tokens: 20, output_tokens: 2 }
     mocks.runEngineProcess.mockImplementation(async (command: { args: string[] }) => {
       // The pinned engine returns prior usage verbatim when local caching is enabled.
@@ -30,7 +37,7 @@ describe("pinned engine triage invocation", () => {
       workspaceId: "ws-1",
       targetId: "target-1",
       input: {},
-      profile: { model: "azure_ai/gpt-6-luna" } as never,
+      profile,
       maxBudgetUsd: 0.2,
       timeoutMs: 1000,
     })
