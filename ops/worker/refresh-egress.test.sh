@@ -311,39 +311,4 @@ if grep -Fq -- '--user 0:0 -i' "$docker_log"; then
   exit 1
 fi
 
-cat >>"$environment_file" <<'EOF'
-LYRASHIELD_AI_RESULT_CACHE_MODE=enforce
-LYRASHIELD_AI_CACHE_REDIS_URL=rediss://default:cache-secret@cache.test:6380
-EOF
-reset_state
-run_refresh "$output_file" "$error_file"
-grep -Fqx 'cache.test 8.8.8.8 6380' "$pin_file"
-first_rules=$(sed -n '/^CALL 1$/,/^CALL 2$/p' "$iptables_log")
-printf '%s\n' "$first_rules" | grep -q -- '-d 8.8.8.8 --dport 6380 -j ACCEPT'
-second_rules=$(sed -n '/^CALL 2$/,$p' "$iptables_log")
-printf '%s\n' "$second_rules" | grep -q -- '-d 8.8.8.8 --dport 6380 -j ACCEPT'
-
-# Turning the cache off drops the dedicated endpoint from refreshed pins and
-# the final firewall rules after the normal old/new transition window.
-cat >"$environment_file" <<'EOF'
-DATABASE_URL=postgresql://db.test:5432/lyrashield
-REDIS_URL=rediss://redis.test:6379
-AZURE_AI_API_BASE=https://ai.test
-S3_ENDPOINT=https://storage.test
-LYRASHIELD_EGRESS_PROXY_URL=https://proxy.test
-LYRASHIELD_AI_RESULT_CACHE_MODE=off
-EOF
-reset_state
-printf '%s\n' 'cache.test 8.8.8.8 6380' >>"$pin_file"
-run_refresh "$output_file" "$error_file"
-if grep -Fq 'cache.test 6380' "$pin_file"; then
-  echo "Disabled exact result cache retained its egress pin" >&2
-  exit 1
-fi
-last_rules=$(sed -n '/^CALL 2$/,$p' "$iptables_log")
-if printf '%s\n' "$last_rules" | grep -q -- '-d 8.8.8.8 --dport 6380 -j ACCEPT'; then
-  echo "Disabled exact result cache retained its firewall allowance" >&2
-  exit 1
-fi
-
 echo "refresh-egress live pin-rotation test passed"

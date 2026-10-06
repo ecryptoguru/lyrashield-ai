@@ -6,7 +6,7 @@
   "status": "completed",
   "scan_mode": "quick",
   "engine_version": "1.6.4",
-  "model": "azure_ai/gpt-6-luna",
+  "model": "azure_ai/gpt-5.6-luna",
   "reasoning_effort": "medium",
   "targets_info": [
     {

@@ -1,8 +1,14 @@
-import { resolve } from "path"
+import { rm, writeFile } from "fs/promises"
+import { join, resolve } from "path"
+import { env } from "@lyrashield/config"
 import { logger } from "@lyrashield/logger"
+import {
+  parseEngineTriageArtifact,
+  type EngineTriageArtifact,
+} from "@lyrashield/security/ai-security"
 import { buildEngineCommand, type ScanConfig } from "./command-builder"
 import { parseEngineOutput, type ParsedScanOutput } from "./output-parser"
-import { resolveEngineProfile } from "./runner-config"
+import { resolveEngineProfile, type EngineProfile } from "./runner-config"
 import { emitScanEvent } from "./runner-events"
 import {
   findRunOutputDir,
@@ -10,11 +16,13 @@ import {
   readEngineOutput,
   readEngineProgressFingerprint,
   readEngineSpendUsd,
+  readTextFileBounded,
   resolveEngineSourceCheckout,
   resolveEngineSourceRevision,
   verifySandboxRemoved,
 } from "./runner-output"
 import { ENGINE_LLM_STALL_MS, runEngineProcess } from "./runner-process"
+import { ENGINE_WORK_ROOT } from "./workspace-path"
 
 export type { EngineProfile } from "./runner-config"
 export {
@@ -50,8 +58,6 @@ export {
   flushEngineStreamTail,
   redactEngineTailLine,
 } from "./runner-tail"
-export { runEngineTriage } from "./triage-runner"
-export type { EngineTriageRunParams } from "./triage-runner"
 
 export interface EngineRunResult {
   exitCode: number
@@ -129,6 +135,7 @@ export function interpretExitCode(
     }
   )
 }
+const MAX_ENGINE_TRIAGE_ARTIFACT_BYTES = 128 * 1024
 const STRIX_RUN_TYPES: Record<string, string> = {
   REPO: "repository",
   WEB_APP: "web_application",
@@ -286,5 +293,99 @@ export async function runEngine(
     sourceCheckoutPath,
     sourceRevision,
     sandboxRemoved,
+  }
+}
+
+interface EngineTriageRunResult {
+  artifact: EngineTriageArtifact | null
+  /** Bounded private usage receipt, normalized by the worker before accounting. */
+  llmUsage?: Record<string, unknown>
+  exitCode: number
+  timedOut: boolean
+  cancelled: boolean
+}
+
+function isTriageUsage(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+/**
+ * Runs the engine-owned triage command in an existing scan workspace. The
+ * command receives only redacted candidate data and has no repository target.
+ */
+export async function runEngineTriage(params: {
+  scanId: string
+  profile: EngineProfile
+  input: Record<string, unknown>
+  maxBudgetUsd: number
+  timeoutMs: number
+  shouldCancel?: () => Promise<boolean>
+}): Promise<EngineTriageRunResult> {
+  const { scanId, profile, input, maxBudgetUsd, timeoutMs, shouldCancel } = params
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(scanId) || scanId.includes("..")) {
+    throw new Error("Invalid scan id for triage workspace")
+  }
+  if (!Number.isFinite(maxBudgetUsd) || maxBudgetUsd <= 0) {
+    throw new Error("Triage requires a positive remaining scan budget")
+  }
+
+  const absWorkDir = resolve(ENGINE_WORK_ROOT, scanId)
+  const inputPath = join(absWorkDir, "ai-security-triage-input.json")
+  const outputPath = join(absWorkDir, "ai-security-triage.json")
+  // inputPath is constrained to the worker-owned per-scan workspace above.
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
+  await writeFile(inputPath, JSON.stringify(input), { encoding: "utf8", mode: 0o600 })
+  await rm(outputPath, { force: true })
+
+  const processResult = await runEngineProcess(
+    {
+      executable: env.LYRASHIELD_ENGINE_PATH || "lyrashield",
+      args: [
+        "ai-security-triage",
+        "--input",
+        inputPath,
+        "--output",
+        outputPath,
+        "--enabled",
+        "--max-budget-usd",
+        String(maxBudgetUsd),
+      ],
+      workDir: absWorkDir,
+    },
+    absWorkDir,
+    scanId,
+    Math.min(timeoutMs, 90_000),
+    profile,
+    shouldCancel
+  )
+
+  let rawArtifact: unknown
+  try {
+    rawArtifact = JSON.parse(
+      await readTextFileBounded(outputPath, MAX_ENGINE_TRIAGE_ARTIFACT_BYTES)
+    )
+  } catch (error) {
+    logger.warn("AI security triage artifact unavailable or invalid JSON", {
+      scanId,
+      error: error instanceof Error ? error.message : String(error),
+    })
+    return { artifact: null, ...processResult }
+  }
+  const rawUsage = isTriageUsage(rawArtifact) ? rawArtifact.llmUsage : undefined
+  const artifact = parseEngineTriageArtifact(rawArtifact)
+  if (!artifact) {
+    logger.warn("AI security triage artifact violated its versioned contract", { scanId })
+    return {
+      artifact: null,
+      ...(isTriageUsage(rawUsage) ? { llmUsage: rawUsage } : {}),
+      ...processResult,
+    }
+  }
+  return {
+    artifact,
+    ...(isTriageUsage(rawUsage) ? { llmUsage: rawUsage } : {}),
+    exitCode: processResult.exitCode,
+    timedOut: processResult.timedOut,
+    cancelled: processResult.cancelled,
   }
 }

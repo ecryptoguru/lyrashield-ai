@@ -183,19 +183,19 @@ describe("ReDoS guard — Supabase JWT pattern", () => {
   })
 })
 
-describe("ReDoS guard — GPT-6 model name pattern", () => {
-  // Pattern: /(?:^|[/.-])gpt-6-(?:sol|luna)(?:$|[/.-])/
+describe("ReDoS guard — GPT-5.6 model name pattern", () => {
+  // Pattern: /(?:^|[/.-])gpt-5\.6-(?:terra|luna)(?:$|[/.-])/
   // This uses alternation, not nested quantifiers, so it is safe.
   it("does not hang on long input without the pattern", () => {
-    const pattern = /(?:^|[/.-])gpt-6-(?:sol|luna)(?:$|[/.-])/
+    const pattern = /(?:^|[/.-])gpt-5\.6-(?:terra|luna)(?:$|[/.-])/
     const adversarial = "x".repeat(50_000)
     const result = pattern.test(adversarial)
     expect(result).toBe(false)
   })
 
   it("does not hang on long input with partial match", () => {
-    const pattern = /(?:^|[/.-])gpt-6-(?:sol|luna)(?:$|[/.-])/
-    const adversarial = "gpt-6-" + "t".repeat(50_000)
+    const pattern = /(?:^|[/.-])gpt-5\.6-(?:terra|luna)(?:$|[/.-])/
+    const adversarial = "gpt-5.6-" + "t".repeat(50_000)
     const result = pattern.test(adversarial)
     expect(result).toBe(false)
   })

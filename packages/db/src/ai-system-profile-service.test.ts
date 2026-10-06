@@ -28,7 +28,7 @@ import {
 const input: AiSystemProfileInput = {
   systemName: "Support assistant",
   systemPurpose: "Help customers find documentation",
-  modelProviders: [{ provider: "Azure AI", model: "gpt-6-luna", deployment: null }],
+  modelProviders: [{ provider: "Azure AI", model: "gpt-5.6-luna", deployment: null }],
   dataClasses: ["support content"],
   dataSources: ["approved help center"],
   storageSystems: ["Postgres"],

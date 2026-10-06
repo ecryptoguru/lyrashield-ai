@@ -3,15 +3,17 @@ import { logger } from "@lyrashield/logger"
 import type { EngineRunRecord } from "../../engine/output-parser"
 import type { EngineProfile } from "../../engine/runner"
 import {
-  calculateGpt6CostUsd,
-  calculateGpt6CostUsdFromBuckets,
-  calculateGpt6CostUsdFromModelBuckets,
+  calculateGpt56CostUsd,
+  calculateGpt56CostUsdFromBuckets,
+  calculateGpt56CostUsdFromModelBuckets,
   GPT_6_PRICING_EFFECTIVE_DATE,
   GPT_6_PRICING_SOURCE,
+  GPT_56_PRICING_EFFECTIVE_DATE,
+  GPT_56_PRICING_SOURCE,
   sumUsdCosts,
   usdCostsMatch,
-  type Gpt6ModelUsageBuckets,
-} from "../../engine/gpt6-pricing"
+  type Gpt56ModelUsageBuckets,
+} from "../../engine/gpt56-pricing"
 import type { ScannerCoverageIssue } from "../../engine/scanner-coverage"
 
 export function extractActualCostUsd(usage: Record<string, unknown> | undefined): number | null {
@@ -116,7 +118,7 @@ export type UsageSummary = {
     longCacheWriteInputTokens: number | null
     longOutputTokens: number | null
   } | null
-  modelPricingBuckets: Gpt6ModelUsageBuckets[] | null
+  modelPricingBuckets: Gpt56ModelUsageBuckets[] | null
   singleModel: string | null
   engineReportedCostUsd: number | null
 }
@@ -133,10 +135,10 @@ function usageCount(usage: Record<string, unknown>, key: string): number | null 
 
 function extractModelPricingBuckets(
   usage: Record<string, unknown>
-): Gpt6ModelUsageBuckets[] | null {
+): Gpt56ModelUsageBuckets[] | null {
   const rawBuckets = usage.model_usage_buckets
   if (!Array.isArray(rawBuckets) || rawBuckets.length === 0 || rawBuckets.length > 3) return null
-  const result: Gpt6ModelUsageBuckets[] = []
+  const result: Gpt56ModelUsageBuckets[] = []
   for (const rawBucket of rawBuckets) {
     if (typeof rawBucket !== "object" || rawBucket === null || Array.isArray(rawBucket)) return null
     const bucket = rawBucket as Record<string, unknown>
@@ -152,7 +154,7 @@ function extractModelPricingBuckets(
       longOutputTokens: usageCount(bucket, "long_output_tokens"),
     }
     if (!model || Object.values(values).some((value) => value === null)) return null
-    result.push({ model, ...(values as Omit<Gpt6ModelUsageBuckets, "model">) })
+    result.push({ model, ...(values as Omit<Gpt56ModelUsageBuckets, "model">) })
   }
   return result
 }
@@ -282,7 +284,7 @@ export async function persistEngineUsageCheckpoint(params: {
     usage.cachedInputTokens !== null &&
     usage.outputTokens !== null &&
     usage.singleModel
-      ? calculateGpt6CostUsd(usage.singleModel, {
+      ? calculateGpt56CostUsd(usage.singleModel, {
           inputTokens: usage.inputTokens,
           cachedInputTokens: usage.cachedInputTokens,
           cacheWriteInputTokens: usage.cacheWriteInputTokens,
@@ -296,13 +298,13 @@ export async function persistEngineUsageCheckpoint(params: {
   let rateCardCostUsd: number | null = null
 
   if (usage.modelPricingBuckets) {
-    modelTokenCostUsd = calculateGpt6CostUsdFromModelBuckets(usage.modelPricingBuckets)
+    modelTokenCostUsd = calculateGpt56CostUsdFromModelBuckets(usage.modelPricingBuckets)
     rateCardCostUsd =
       modelTokenCostUsd === null ? null : sumUsdCosts(modelTokenCostUsd, webSearchCostUsd)
     pricingMethod = "per_request_model_buckets"
   } else if (usage.pricingBuckets) {
     if (usage.singleModel) {
-      modelTokenCostUsd = calculateGpt6CostUsdFromBuckets(usage.singleModel, usage.pricingBuckets)
+      modelTokenCostUsd = calculateGpt56CostUsdFromBuckets(usage.singleModel, usage.pricingBuckets)
       rateCardCostUsd =
         modelTokenCostUsd === null ? null : sumUsdCosts(modelTokenCostUsd, webSearchCostUsd)
       pricingMethod = "per_request_buckets"
@@ -324,13 +326,19 @@ export async function persistEngineUsageCheckpoint(params: {
   const isGpt6Usage =
     models.length > 0 &&
     models.every((model) => /(?:^|[/.-])gpt-6-(?:sol|luna)(?:$|[/.-])/.test(model.toLowerCase()))
-  const accountingComplete =
-    isGpt6Usage && llmUsage["accountingComplete"] === true && usage.modelPricingBuckets !== null
+  const hasGpt6Usage = models.some((model) =>
+    /(?:^|[/.-])gpt-6-(?:sol|luna)(?:$|[/.-])/.test(model.toLowerCase())
+  )
+  const accountingComplete = hasGpt6Usage
+    ? llmUsage["accountingComplete"] === true && usage.modelPricingBuckets !== null
+    : llmUsage["accountingComplete"] !== false
   const costsMatch =
     accountingComplete &&
     rateCardCostUsd !== null &&
     (usage.engineReportedCostUsd === null ||
-      usdCostsMatch(rateCardCostUsd, usage.engineReportedCostUsd))
+      (isGpt6Usage
+        ? usdCostsMatch(rateCardCostUsd, usage.engineReportedCostUsd)
+        : Math.abs(rateCardCostUsd - usage.engineReportedCostUsd) < 0.000001))
   // Do not attach a money value to a scan unless the recorded provider total
   // agrees with the complete, per-request rate-card calculation. A completed
   // scan remains useful when accounting needs later operator reconciliation;
@@ -339,9 +347,13 @@ export async function persistEngineUsageCheckpoint(params: {
   const billedCostUsd = billableCostUsd === null ? null : Math.min(billableCostUsd, maxBudgetUsd)
   const costSource =
     rateCardCostUsd !== null && usage.engineReportedCostUsd !== null
-      ? "azure_published_rate_card_and_engine_reported"
+      ? isGpt6Usage
+        ? "azure_published_rate_card_and_engine_reported"
+        : "rate_card_and_engine_reported"
       : rateCardCostUsd !== null
-        ? "azure_published_rate_card"
+        ? isGpt6Usage
+          ? "azure_published_rate_card"
+          : "azure_rate_card"
         : usage.engineReportedCostUsd !== null
           ? "engine_reported_unreconciled"
           : "unavailable"
@@ -370,9 +382,11 @@ export async function persistEngineUsageCheckpoint(params: {
       accountingComplete,
       ...(rateCardCostUsd !== null
         ? {
-            pricingEffectiveDate: GPT_6_PRICING_EFFECTIVE_DATE,
-            pricingSource: GPT_6_PRICING_SOURCE,
-            pricingStatus: "azure_published_rates_invoice_unverified",
+            pricingEffectiveDate: isGpt6Usage
+              ? GPT_6_PRICING_EFFECTIVE_DATE
+              : GPT_56_PRICING_EFFECTIVE_DATE,
+            pricingSource: isGpt6Usage ? GPT_6_PRICING_SOURCE : GPT_56_PRICING_SOURCE,
+            ...(isGpt6Usage ? { pricingStatus: "azure_published_rates_invoice_unverified" } : {}),
           }
         : {}),
     })

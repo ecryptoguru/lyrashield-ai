@@ -16,7 +16,7 @@ const verifyApiKeyMock = vi.fn()
 const userFindUnique = vi.fn()
 const memberFindUnique = vi.fn()
 vi.mock("@lyrashield/db", async () => ({
-  CANONICAL_OPERATIONS: (await import("../../types/src/agent-operations")).CANONICAL_OPERATIONS,
+  CANONICAL_OPERATIONS: (await import("@lyrashield/types")).CANONICAL_OPERATIONS,
   verifyApiKey: (...args: unknown[]) => verifyApiKeyMock(...args),
   setWorkspaceContext: vi.fn(),
   prisma: {

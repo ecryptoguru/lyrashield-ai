@@ -63,7 +63,7 @@ describe("mergeLlmUsage", () => {
     expect(mergeLlmUsage(phase(true), phase(false))).toMatchObject({ accountingComplete: false })
   })
 
-  it("combines only complete per-request GPT-6 accounting buckets", () => {
+  it("combines only complete per-request GPT-5.6 accounting buckets", () => {
     const usage = (input: number, output: number) => ({
       request_count: 1,
       input_tokens: input,
@@ -73,7 +73,7 @@ describe("mergeLlmUsage", () => {
       total_tokens: input + output,
       request_usage_entries: [
         {
-          model: "azure_ai/gpt-6-luna",
+          model: "azure_ai/gpt-5.6-luna",
           input_tokens: input,
           output_tokens: output,
           input_tokens_details: { cached_tokens: 0, cache_write_tokens: 0 },
@@ -87,7 +87,7 @@ describe("mergeLlmUsage", () => {
       output_tokens: 3,
       model_usage_buckets: [
         expect.objectContaining({
-          model: "azure_ai/gpt-6-luna",
+          model: "azure_ai/gpt-5.6-luna",
           standard_input_tokens: 15,
           standard_output_tokens: 3,
         }),
@@ -106,7 +106,7 @@ describe("mergeLlmUsage", () => {
       total_tokens: 12,
       model_usage_buckets: [
         {
-          model: "azure_ai/gpt-6-luna",
+          model: "azure_ai/gpt-5.6-luna",
           standard_input_tokens: 10,
           standard_cached_input_tokens: 0,
           standard_cache_write_input_tokens: 0,
@@ -129,7 +129,7 @@ describe("mergeLlmUsage", () => {
         total_tokens: 6,
         request_usage_entries: [
           {
-            model: "azure_ai/gpt-6-luna",
+            model: "azure_ai/gpt-5.6-luna",
             input_tokens: 5,
             output_tokens: 1,
             input_tokens_details: { cached_tokens: 0, cache_write_tokens: 0 },
@@ -339,9 +339,9 @@ describe("output-parser", () => {
           status: "completed",
           engine_version: "1.1.0",
           prompt_bundle_hash: "a".repeat(64),
-          model: "azure_ai/gpt-6-luna",
+          model: "azure_ai/gpt-5.6-luna",
           reasoning_effort: "medium",
-          delegate_model: "azure_ai/gpt-6-luna",
+          delegate_model: "azure_ai/gpt-5.6-luna",
           delegate_reasoning_effort: "high",
           model_routing_policy: "coordinator-terra-med-delegate-luna-high-v3",
           compaction_trigger_tokens: 96000,
@@ -356,9 +356,9 @@ describe("output-parser", () => {
       expect(result).toMatchObject({
         engine_version: "1.1.0",
         prompt_bundle_hash: "a".repeat(64),
-        model: "azure_ai/gpt-6-luna",
+        model: "azure_ai/gpt-5.6-luna",
         reasoning_effort: "medium",
-        delegate_model: "azure_ai/gpt-6-luna",
+        delegate_model: "azure_ai/gpt-5.6-luna",
         delegate_reasoning_effort: "high",
         model_routing_policy: "coordinator-terra-med-delegate-luna-high-v3",
         compaction_trigger_tokens: 96000,
@@ -369,29 +369,6 @@ describe("output-parser", () => {
         scan_mode: "quick",
       })
     })
-
-    it.each(["stable", "hybrid", "off", "implicit", "explicit"])(
-      "retains the %s prompt-cache receipt mode",
-      (mode) => {
-        const result = parseRunJson(
-          JSON.stringify({
-            run_id: `run-cache-${mode}`,
-            status: "completed",
-            prompt_cache: {
-              enabled: mode !== "off",
-              routing_enabled: mode === "stable",
-              routing: mode === "stable" ? "stable-prompt-v2" : null,
-              mode,
-              ttl: "30m",
-              ignored: "bounded away",
-            },
-          })
-        )
-
-        expect(result?.prompt_cache).toMatchObject({ mode, ttl: "30m" })
-        expect(result?.prompt_cache).not.toHaveProperty("ignored")
-      }
-    )
 
     it("returns null for empty string", () => {
       expect(parseRunJson("")).toBeNull()
@@ -556,7 +533,7 @@ describe("output-parser", () => {
       })
     })
 
-    it("retains aggregate cache reads but leaves missing cache-write receipts unpriceable", () => {
+    it("retains cache-read totals when Azure omits cache-write receipts", () => {
       const result = parseRunJson(
         JSON.stringify({
           run_id: "run-cache-read-only",
@@ -567,13 +544,13 @@ describe("output-parser", () => {
             output_tokens: 63,
             request_usage_entries: [
               {
-                model: "azure_ai/gpt-6-luna",
+                model: "azure_ai/gpt-5.6-luna",
                 input_tokens: 2_007,
                 output_tokens: 31,
                 input_tokens_details: { cached_tokens: 0 },
               },
               {
-                model: "azure_ai/gpt-6-luna",
+                model: "azure_ai/gpt-5.6-luna",
                 input_tokens: 2_007,
                 output_tokens: 32,
                 input_tokens_details: { cached_tokens: 1_792 },
@@ -585,10 +562,12 @@ describe("output-parser", () => {
 
       expect(result?.llm_usage).toMatchObject({
         cached_input_tokens: 1_792,
+        standard_input_tokens: 4_014,
+        standard_cached_input_tokens: 1_792,
+        standard_cache_write_input_tokens: 0,
+        standard_output_tokens: 63,
       })
       expect(result?.llm_usage).not.toHaveProperty("cache_write_input_tokens")
-      expect(result?.llm_usage).not.toHaveProperty("model_usage_buckets")
-      expect(result?.llm_usage).not.toHaveProperty("accountingComplete")
     })
 
     it("requires complete cache buckets to price GPT-6 requests", () => {
@@ -661,13 +640,13 @@ describe("output-parser", () => {
             output_tokens: 30,
             request_usage_entries: [
               {
-                model: "azure_ai/gpt-6-sol",
+                model: "azure_ai/gpt-5.6-terra",
                 input_tokens: 100,
                 output_tokens: 10,
                 input_tokens_details: [{ cached_tokens: 20, cache_write_tokens: 0 }],
               },
               {
-                model: "azure_ai/gpt-6-luna",
+                model: "azure_ai/gpt-5.6-luna",
                 input_tokens: 300_000,
                 output_tokens: 20,
                 input_tokens_details: [{ cached_tokens: 200_000, cache_write_tokens: 0 }],
@@ -686,11 +665,11 @@ describe("output-parser", () => {
         long_output_tokens: 20,
         model_usage_buckets: [
           expect.objectContaining({
-            model: "azure_ai/gpt-6-sol",
+            model: "azure_ai/gpt-5.6-terra",
             standard_input_tokens: 100,
           }),
           expect.objectContaining({
-            model: "azure_ai/gpt-6-luna",
+            model: "azure_ai/gpt-5.6-luna",
             long_input_tokens: 300_000,
           }),
         ],

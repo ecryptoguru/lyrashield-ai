@@ -21,7 +21,6 @@ export {
 
 export {
   ENGINE_TRIAGE_SCHEMA_VERSION,
-  ENGINE_TRIAGE_POLICY_VERSION,
   applyEngineTriageArtifact,
   parseEngineTriageArtifact,
   type EngineTriageArtifact,

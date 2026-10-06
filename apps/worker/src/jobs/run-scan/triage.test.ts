@@ -57,7 +57,7 @@ const completedArtifact: EngineTriageArtifact = {
   status: "COMPLETED",
   terminalReason: null,
   policyVersion: "ai-security-triage-policy/1.0",
-  modelRoute: "azure_ai/gpt-6-luna",
+  modelRoute: "azure_ai/gpt-5.6-luna",
   inputChecksum: checksum,
   cacheKey: "c".repeat(64),
   redactionReceipt: {
@@ -87,7 +87,7 @@ function usage(inputTokens: number, outputTokens: number): Record<string, unknow
     total_tokens: inputTokens + outputTokens,
     model_usage_buckets: [
       {
-        model: "azure_ai/gpt-6-luna",
+        model: "azure_ai/gpt-5.6-luna",
         standard_input_tokens: inputTokens,
         standard_cached_input_tokens: 0,
         standard_cache_write_input_tokens: 0,
@@ -104,8 +104,8 @@ function usage(inputTokens: number, outputTokens: number): Record<string, unknow
 function params(overrides: Record<string, unknown> = {}) {
   return {
     scanId: "scan-1",
-    scope: { workspaceId: "ws-1", targetId: "target-1", targetType: "REPO" },
     sponsorAccountId: "account-1",
+    targetType: "REPO",
     mode: "STANDARD",
     deterministicRetest: false,
     agentMinuteTerminalError: null,
@@ -147,7 +147,7 @@ describe("runEngineTriageOverlay", () => {
       timedOut: false,
       cancelled: false,
     })
-    mocks.resolveEngineProfile.mockReturnValue({ model: "azure_ai/gpt-6-luna" })
+    mocks.resolveEngineProfile.mockReturnValue({ model: "azure_ai/gpt-5.6-luna" })
     mocks.resolveScannerPhaseTimeoutMs.mockReturnValue(15_000)
     mocks.persistEngineUsageCheckpoint.mockResolvedValue({
       budgetExceeded: false,
@@ -171,7 +171,7 @@ describe("runEngineTriageOverlay", () => {
       triage: {
         disposition: "LIKELY_VALID",
         confidence: 91,
-        modelRoute: "azure_ai/gpt-6-luna",
+        modelRoute: "azure_ai/gpt-5.6-luna",
       },
     })
     expect(result.triageSnapshot).toMatchObject({ status: "COMPLETED", resultCount: 1 })
@@ -184,7 +184,7 @@ describe("runEngineTriageOverlay", () => {
     expect(mocks.runEngineTriage).toHaveBeenCalledWith(
       expect.objectContaining({
         scanId: "scan-1",
-        profile: { model: "azure_ai/gpt-6-luna" },
+        profile: { model: "azure_ai/gpt-5.6-luna" },
         maxBudgetUsd: 0.2,
         timeoutMs: 15_000,
       })
@@ -202,7 +202,7 @@ describe("runEngineTriageOverlay", () => {
           total_tokens: 150,
           model_usage_buckets: [
             expect.objectContaining({
-              model: "azure_ai/gpt-6-luna",
+              model: "azure_ai/gpt-5.6-luna",
               standard_input_tokens: 125,
               standard_output_tokens: 25,
             }),

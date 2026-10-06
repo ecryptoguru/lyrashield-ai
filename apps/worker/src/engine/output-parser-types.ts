@@ -162,7 +162,7 @@ export interface EngineRunRecord {
     enabled: boolean
     routing_enabled: boolean
     routing: "stable-prompt-v2" | null
-    mode: "stable" | "hybrid" | "off" | "explicit" | "implicit" | null
+    mode: "explicit" | "implicit" | null
     ttl: "30m" | null
   }
   model?: string

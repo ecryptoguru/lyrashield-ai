@@ -28,19 +28,6 @@ REDIS_URL=$(read_environment_value REDIS_URL)
 AZURE_AI_API_BASE=$(read_environment_value AZURE_AI_API_BASE)
 S3_ENDPOINT=$(read_environment_value S3_ENDPOINT)
 LYRASHIELD_EGRESS_PROXY_URL=$(read_environment_value LYRASHIELD_EGRESS_PROXY_URL)
-cache_mode=$(sed -n 's/^LYRASHIELD_AI_RESULT_CACHE_MODE=//p' "$environment_file")
-cache_mode=${cache_mode:-off}
-case "$cache_mode" in
-  off|observe|enforce) ;;
-  *) echo "Worker exact AI-result cache mode is invalid" >&2; exit 1 ;;
-esac
-if [ "$cache_mode" != "off" ]; then
-  LYRASHIELD_AI_CACHE_REDIS_URL=$(read_environment_value LYRASHIELD_AI_CACHE_REDIS_URL)
-  case "$LYRASHIELD_AI_CACHE_REDIS_URL" in
-    rediss://*) ;;
-    *) echo "Worker exact AI-result cache endpoint must use TLS Redis" >&2; exit 1 ;;
-  esac
-fi
 
 worker_subnet=$(docker network inspect "$worker_network" --format '{{(index .IPAM.Config 0).Subnet}}')
 worker_bridge=$(docker network inspect "$worker_network" --format '{{index .Options "com.docker.network.bridge.name"}}')
@@ -200,9 +187,6 @@ EOF
 
 register_approved_endpoint "$DATABASE_URL" 5432
 register_approved_endpoint "$REDIS_URL" 6379
-if [ "$cache_mode" != "off" ]; then
-  register_approved_endpoint "$LYRASHIELD_AI_CACHE_REDIS_URL" 6379
-fi
 register_approved_endpoint "$AZURE_AI_API_BASE" 443
 register_approved_endpoint "$S3_ENDPOINT" 443
 register_approved_endpoint "https://github.com" 443
@@ -229,9 +213,6 @@ fi
 
 append_endpoint_rules "$DATABASE_URL" 5432
 append_endpoint_rules "$REDIS_URL" 6379
-if [ "$cache_mode" != "off" ]; then
-  append_endpoint_rules "$LYRASHIELD_AI_CACHE_REDIS_URL" 6379
-fi
 append_endpoint_rules "$AZURE_AI_API_BASE" 443
 append_endpoint_rules "$S3_ENDPOINT" 443
 append_endpoint_rules "https://github.com" 443

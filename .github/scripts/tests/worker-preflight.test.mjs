@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from "node:child_process"
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync, rmSync } from "node:fs"
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import assert from "node:assert/strict"
@@ -9,10 +9,6 @@ const runtimeWorkflow = readFileSync(".github/workflows/deploy-azure-runtime.yml
 const callerWorkflow = readFileSync(".github/workflows/deploy-azure.yml", "utf8")
 const preflightScript = readFileSync(".github/scripts/deploy-azure-preflight.sh", "utf8")
 const rolloutScript = readFileSync(".github/scripts/deploy-azure-rollout.sh", "utf8")
-const aiResultCacheSyncArgs = [
-  ".github/scripts/deploy-azure-preflight.sh",
-  "sync-ai-result-cache-secrets-to-worker-key-vault",
-]
 
 const workflowStepBody = (script, slug) => {
   const marker = `step_${slug}() {\n`
@@ -40,7 +36,6 @@ test("public scanner revision and secret store exclude GitHub App credentials", 
   }
   assert.match(scannerDeploy, /REDIS_URL=secretref:bullmq-redis-url/)
   assert.match(scannerDeploy, /UPSTASH_REDIS_REST_TOKEN=secretref:upstash-redis-rest-token/)
-  assert.doesNotMatch(scannerDeploy, /LYRASHIELD_AI_(?:RESULT_CACHE|CACHE_)/)
 
   const workerRedisSync = workflowStepBody(
     preflightScript,
@@ -119,29 +114,6 @@ test("public scanner revision and secret store exclude GitHub App credentials", 
     /--secrets[^\n]*GITHUB_APP_(?:ID|SLUG|PRIVATE_KEY|CLIENT_ID|CLIENT_SECRET)/
   )
 
-  const resultCacheSync = preflightScript
-    .split("step_sync-ai-result-cache-secrets-to-worker-key-vault() {\n")[1]
-    ?.split("\n# Workflow step: Sync BullMQ Redis secret to Container Apps")[0]
-  assert.ok(resultCacheSync)
-  assert.match(resultCacheSync, /off\)[\s\S]*\n  if \[ "\$mode" != "off" \]/)
-  assert.match(resultCacheSync, /azure_keyvault_sync_env_group "\$AZURE_KEY_VAULT_NAME"/)
-  assert.match(resultCacheSync, /worker-ai-result-cache-mode:LYRASHIELD_AI_RESULT_CACHE_MODE/)
-  assert.match(resultCacheSync, /worker-ai-cache-url:LYRASHIELD_AI_CACHE_REDIS_URL/)
-  assert.match(resultCacheSync, /worker-ai-cache-key:LYRASHIELD_AI_CACHE_KEY_SECRET/)
-  assert.match(resultCacheSync, /cache Redis host must be separate from BullMQ/)
-  assert.match(resultCacheSync, /cache Redis host must be separate from rate-limit Redis/)
-  assert.doesNotMatch(resultCacheSync, /--value\s+"\$LYRASHIELD_AI_CACHE/)
-
-  const cacheWorkflowStep = runtimeWorkflow
-    .split("      - name: Sync isolated AI result-cache secrets to worker Key Vault\n")[1]
-    ?.split("\n      - name:")[0]
-  assert.ok(cacheWorkflowStep)
-  assert.match(
-    cacheWorkflowStep,
-    /LYRASHIELD_AI_RESULT_CACHE_MODE: \$\{\{ vars\.LYRASHIELD_AI_RESULT_CACHE_MODE \|\| 'off' \}\}/
-  )
-  assert.match(cacheWorkflowStep, /sync-ai-result-cache-secrets-to-worker-key-vault/)
-
   const cleanup = workflowStepBody(rolloutScript, "remove-excess-scanner-secrets")
   for (const secret of [
     "github-app-id",
@@ -152,122 +124,6 @@ test("public scanner revision and secret store exclude GitHub App credentials", 
     "github-app-client-secret",
   ]) {
     assert.match(cleanup, new RegExp(secret))
-  }
-})
-
-test("exact result-cache deployment syncs only to the worker vault and rejects shared Redis hosts", () => {
-  const secretUrl = "rediss://default:cache-url-secret-sentinel@cache.example:6379"
-  const secretKey = "cache-key-secret-sentinel-0123456789"
-  const activeEnv = {
-    ...process.env,
-    LYRASHIELD_AI_RESULT_CACHE_MODE: "observe",
-    LYRASHIELD_AI_CACHE_REDIS_URL: secretUrl,
-    LYRASHIELD_AI_CACHE_KEY_SECRET: secretKey,
-    LYRASHIELD_AI_CACHE_PROVIDER_FINGERPRINT: "a".repeat(64),
-    BULLMQ_REDIS_URL: "rediss://default:queue-secret-sentinel@queue.example:6379",
-    UPSTASH_REDIS_REST_URL: "https://rate.example",
-    AZURE_KEY_VAULT_NAME: "lyrashieldprodsecrets",
-  }
-  for (const [name, value, expectedMessage] of [
-    [
-      "BullMQ",
-      activeEnv.BULLMQ_REDIS_URL.replace("queue.example", "cache.example"),
-      "separate from BullMQ",
-    ],
-    [
-      "rate limit",
-      activeEnv.UPSTASH_REDIS_REST_URL.replace("rate.example", "cache.example"),
-      "separate from rate-limit Redis",
-    ],
-  ]) {
-    const result = spawnSync("bash", aiResultCacheSyncArgs, {
-      encoding: "utf8",
-      env: {
-        ...activeEnv,
-        BULLMQ_REDIS_URL: "rediss://default:queue-secret-sentinel@queue.example:6379",
-        ...(name === "BullMQ" ? { BULLMQ_REDIS_URL: value } : { UPSTASH_REDIS_REST_URL: value }),
-      },
-    })
-    const output = `${result.stdout}${result.stderr}`
-    assert.notEqual(result.status, 0, `${name} host collision must fail`)
-    assert.match(output, new RegExp(expectedMessage))
-    assert.doesNotMatch(
-      output,
-      /cache-url-secret-sentinel|cache-key-secret-sentinel|queue-secret-sentinel/
-    )
-  }
-
-  const temp = mkdtempSync(path.join(tmpdir(), "lyra-ai-cache-sync-"))
-  const azStub = path.join(temp, "az")
-  const timeoutStub = path.join(temp, "timeout")
-  const azLog = path.join(temp, "az-args.log")
-  writeFileSync(
-    azStub,
-    `#!/usr/bin/env bash
-set -euo pipefail
-printf '%s\\n' "$*" >> "$AZ_FAKE_LOG"
-case "$*" in
-  *"--query id --output tsv"*) printf '/subscriptions/test/resourceGroups/test/providers/Microsoft.KeyVault/vaults/shared-vault\\n' ;;
-  *"--query properties.enableRbacAuthorization --output tsv"*) printf 'true\\n' ;;
-  *"--query identity.principalId --output tsv"*) printf '00000000-0000-0000-0000-000000000001\\n' ;;
-  *roleDefinitionName*length*) printf '1\\n' ;;
-esac
-`
-  )
-  writeFileSync(
-    timeoutStub,
-    `#!/usr/bin/env bash
-set -euo pipefail
-while [ "$#" -gt 0 ] && [ "$1" != "az" ]; do shift; done
-[ "$#" -gt 0 ] || exit 2
-exec "$@"
-`
-  )
-  chmodSync(azStub, 0o700)
-  chmodSync(timeoutStub, 0o700)
-  try {
-    const off = spawnSync("bash", aiResultCacheSyncArgs, {
-      encoding: "utf8",
-      env: {
-        ...process.env,
-        LYRASHIELD_AI_RESULT_CACHE_MODE: "off",
-        AZURE_KEY_VAULT_NAME: "lyrashieldprodsecrets",
-        PATH: `${temp}:${process.env.PATH}`,
-        AZ_FAKE_LOG: azLog,
-      },
-    })
-    assert.equal(off.status, 0, `${off.stdout}${off.stderr}`)
-    const offArgs = readFileSync(azLog, "utf8")
-    assert.equal((offArgs.match(/keyvault secret set/g) ?? []).length, 1)
-    assert.match(offArgs, /--name worker-ai-result-cache-mode/)
-    assert.doesNotMatch(offArgs, /worker-ai-cache-(?:fingerprint|url|key)/)
-
-    writeFileSync(azLog, "")
-    const success = spawnSync("bash", aiResultCacheSyncArgs, {
-      encoding: "utf8",
-      env: {
-        ...activeEnv,
-        PATH: `${temp}:${process.env.PATH}`,
-        AZ_FAKE_LOG: azLog,
-      },
-    })
-    assert.equal(success.status, 0, `${success.stdout}${success.stderr}`)
-    const azureArgs = readFileSync(azLog, "utf8")
-    assert.equal((azureArgs.match(/keyvault secret set/g) ?? []).length, 4)
-    assert.match(azureArgs, /--name worker-ai-result-cache-mode/)
-    assert.match(azureArgs, /--name worker-ai-cache-fingerprint/)
-    assert.match(azureArgs, /--name worker-ai-cache-url/)
-    assert.match(azureArgs, /--name worker-ai-cache-key/)
-    assert.doesNotMatch(
-      azureArgs,
-      /cache-url-secret-sentinel|cache-key-secret-sentinel|queue-secret-sentinel/
-    )
-    assert.doesNotMatch(
-      `${success.stdout}${success.stderr}`,
-      /cache-url-secret-sentinel|cache-key-secret-sentinel/
-    )
-  } finally {
-    rmSync(temp, { recursive: true, force: true })
   }
 })
 

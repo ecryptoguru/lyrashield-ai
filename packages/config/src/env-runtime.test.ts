@@ -54,7 +54,7 @@ describe("runtime environment validation", () => {
     vi.stubEnv("MYRA_PROVIDER", "azure")
     vi.stubEnv("MYRA_AZURE_OPENAI_ENDPOINT", "https://example.openai.azure.com")
     vi.stubEnv("MYRA_AZURE_OPENAI_API_KEY", "test-key")
-    vi.stubEnv("MYRA_MODEL", "gpt-4o")
+    vi.stubEnv("MYRA_MODEL", "gpt-5.6-luna")
     await expect(import("./env")).rejects.toThrow("Invalid environment configuration")
   })
 

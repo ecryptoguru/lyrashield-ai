@@ -237,7 +237,7 @@ Authorities:
 
 - `apps/worker/src/engine/runner.ts`: `resolveEngineProfile()`.
 - `apps/worker/src/engine/command-builder.ts`: `resolveScanBudgetUsd()`.
-- `apps/worker/src/engine/gpt6-pricing.ts`: GPT-6 rate card.
+- `apps/worker/src/engine/gpt56-pricing.ts`: versioned rate card.
 
 Safe/Quick/Standard use GPT-6 Luna/medium. Deep/Custom use GPT-6 Sol/medium root plus Luna/high specialists. The fallback model remains mandatory and policy values may only lower caps. Private receipts preserve actual model, requests, token buckets, cache reads/writes, long-context usage, provider cost, billed cost and reconciliation status.
 
@@ -541,7 +541,7 @@ This is target/revision-scoped runtime and accounting proof, not a security guar
 | `apps/worker/src/jobs/run-scan/`                        | Scan lifecycle phases (authority, preparation, execution, settlement, finalization) |
 | `apps/worker/src/engine/runner.ts`                      | Bounded/cancellable engine subprocess                                               |
 | `apps/worker/src/engine/command-builder.ts`             | Engine arguments and budget policy                                                  |
-| `apps/worker/src/engine/gpt6-pricing.ts`                | GPT-6 rate cards and per-request cache usage accounting                             |
+| `apps/worker/src/engine/gpt56-pricing.ts`               | Versioned historical GPT-5.6 and active GPT-6 rate cards                            |
 | `apps/worker/src/engine/scanner-orchestrator.ts`        | Deterministic and engine result merge                                               |
 | `apps/worker/src/engine/result-integrity.ts`            | Manifest/candidate/receipt boundary                                                 |
 | `packages/db/src/api-key-service.ts`                    | Workspace API-key creation, listing, revocation, and verification                   |
