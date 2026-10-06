@@ -35,6 +35,7 @@ cat >"$tmp/bin/docker" <<'SH'
 case "$1" in
   image)
     case "$*" in
+      *'inspect ghcr.io/example/worker:fixture@sha256:'*) exit 0 ;;
       *io.lyrashield.engine.revision*) printf '%040d\n' 2 ;;
       *org.opencontainers.image.revision*) printf '%040d\n' 1 ;;
       *) exit 2 ;;
@@ -57,6 +58,7 @@ case "$1" in
     esac
     ;;
   run)
+    case "$*" in *'--pull=never'*) ;; *) exit 2;; esac
     case "$*" in *'--user 0:0'*) ;; *) exit 2;; esac
     case "$*" in *'--cap-drop ALL'*) ;; *) exit 2;; esac
     case "$*" in *'--security-opt no-new-privileges'*) ;; *) exit 2;; esac
