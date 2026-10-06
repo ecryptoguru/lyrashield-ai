@@ -297,7 +297,10 @@ test("/methodology dateModified matches its visible Last reviewed date", async (
     }
     return null
   })
-  expect(parity, "methodology must render a reviewed time and a WebPage dateModified").not.toBeNull()
+  expect(
+    parity,
+    "methodology must render a reviewed time and a WebPage dateModified"
+  ).not.toBeNull()
   expect(parity?.schema).toBe(parity?.visible)
 })
 
