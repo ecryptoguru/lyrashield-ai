@@ -38,6 +38,27 @@ assert.equal(target.username, "postgres")
 assert.equal(target.pathname, "/postgres")
 assert.equal(target.password, "disposable-only")
 assert.equal(process.env.LYRASHIELD_TRUSTED_FIXTURE_NETWORK, "isolated-docker-only")
+assert.ok(process.env.LYRASHIELD_TRUSTED_FIXTURE_WRONG_CA_PATH)
+const tlsProbe = new Client({ connectionString: trustedUrl })
+await tlsProbe.connect()
+const tlsState = await tlsProbe.query("SELECT ssl FROM pg_stat_ssl WHERE pid = pg_backend_pid()")
+assert.equal(tlsState.rows[0]?.ssl, true, "trusted Supabase-alias connection must negotiate verified TLS")
+await tlsProbe.end()
+const rejectsTls = async (connectionString, options = {}) => {
+  const client = new Client({ connectionString, ...options })
+  try {
+    await assert.rejects(client.connect())
+  } finally {
+    await client.end().catch(() => {})
+  }
+}
+await rejectsTls(trustedUrl.replace(target.hostname, "wrong.invalid"))
+await rejectsTls(trustedUrl, {
+  ssl: {
+    ca: readFileSync(process.env.LYRASHIELD_TRUSTED_FIXTURE_WRONG_CA_PATH),
+    rejectUnauthorized: true,
+  },
+})
 const root = mkdtempSync(join(tmpdir(), "trusted-v2-disposable-"))
 const db = join(root, "packages/db"),
   scripts = join(db, "scripts")

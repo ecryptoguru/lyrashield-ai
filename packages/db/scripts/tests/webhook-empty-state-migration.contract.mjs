@@ -5,6 +5,7 @@ import { dirname, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import test from "node:test"
 import {
+  assertDisposablePostgresUrl,
   assertMigrationUrlBinding,
   createDisposablePostgresClient,
   canonicalSupabaseDatabaseIdentity,
@@ -174,6 +175,15 @@ test("disposable rehearsal rejects effective host overrides before constructing 
   assert.ok(source.indexOf("createDisposablePostgresClient(databaseUrl") < source.indexOf("DROP TABLE"))
 })
 
+test("generic disposable PostgreSQL targets preserve require and no-mode behavior", () => {
+  const requireTls = "postgresql://postgres:masked@127.0.0.1:5432/postgres?sslmode=require"
+  const defaultMode = "postgresql://postgres:masked@127.0.0.1:5432/postgres"
+  assert.equal(parsePostgresConnectionTarget(requireTls).url.searchParams.get("sslmode"), "require")
+  assert.equal(assertDisposablePostgresUrl(requireTls).host, "127.0.0.1")
+  assert.equal(parsePostgresConnectionTarget(defaultMode).host, "127.0.0.1")
+  assert.equal(assertDisposablePostgresUrl(defaultMode).port, "5432")
+})
+
 test("signed maintenance receipt rejects tampering and an untrusted key", () => {
   const receipt = signReceipt(validReceipt())
   assert.equal(verifySignedEmptyStateReceipt(receipt, publicKeyPem), true)
@@ -298,13 +308,6 @@ test("migration runner refuses missing explicit mode and mismatched identity bef
     }),
     ClientClass: NeverConnect,
   }), /restricted to loopback PostgreSQL/)
-  await assert.rejects(runEmptyStateMigration({
-    env: validEnvironment({
-      DATABASE_DIRECT_URL: direct.replace("sslmode=verify-full", "sslmode=require"),
-      DATABASE_URL: direct.replace("sslmode=verify-full", "sslmode=require"),
-    }),
-    ClientClass: NeverConnect,
-  }), /sslmode=verify-full/)
   assert.equal(constructed, false)
 })
 

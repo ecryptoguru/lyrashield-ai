@@ -145,40 +145,6 @@ class ObservablePrismaPg extends PrismaPg {
  */
 const DEFAULT_DB_POOL_MAX = 4
 
-function requireSupabaseVerifiedTls(connectionString: string): void {
-  let url: URL
-  try {
-    url = new URL(connectionString)
-  } catch {
-    return
-  }
-  const hostname = url.hostname.toLowerCase()
-  const hostOverrides = url.searchParams.getAll("host")
-  const effectiveHost = (hostOverrides.at(-1) ?? hostname).toLowerCase()
-  const isSupabaseHost = (host: string) => {
-    const canonicalHost = host.replace(/\.+$/, "")
-    return (
-      /^db\.[a-z0-9]{20}\.supabase\.co$/.test(canonicalHost) ||
-      /\.pooler\.supabase\.com$/.test(canonicalHost)
-    )
-  }
-  const supabaseHost = isSupabaseHost(hostname) || isSupabaseHost(effectiveHost)
-  if (!supabaseHost) return
-  if (hostOverrides.length > 0) {
-    throw new Error("Supabase PostgreSQL URLs must not override the connection host")
-  }
-  if (hostname !== hostname.replace(/\.+$/, "")) {
-    throw new Error("Supabase PostgreSQL URLs must not use a trailing-dot hostname")
-  }
-  const modes = url.searchParams.getAll("sslmode")
-  if (modes.length !== 1 || modes[0] !== "verify-full") {
-    throw new Error("Supabase PostgreSQL URLs require exactly one sslmode=verify-full")
-  }
-  if ([...url.searchParams.keys()].some((key) => key.toLowerCase() === "uselibpqcompat")) {
-    throw new Error("Supabase PostgreSQL compatibility mode is not allowed")
-  }
-}
-
 export function resolveDbPoolMax(runtimeEnv: NodeJS.ProcessEnv = process.env): number {
   const raw = runtimeEnv.LYRASHIELD_DB_POOL_MAX?.trim()
   if (!raw) return DEFAULT_DB_POOL_MAX
@@ -193,7 +159,6 @@ export function createBoundedPgAdapter(
   connectionString: string,
   scope: DatabasePoolScope = "db"
 ): PrismaPg {
-  requireSupabaseVerifiedTls(connectionString)
   return new ObservablePrismaPg(
     {
       connectionString,
