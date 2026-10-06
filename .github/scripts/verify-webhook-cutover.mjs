@@ -309,43 +309,84 @@ try {
   if (Buffer.byteLength(line) > 3500) throw new Error("Worker catalog exceeds Azure readback budget");
   console.log(line);
 } catch {
-  console.error("WEBHOOK_WORKER_PROBE_ERROR=" + probePhase);
+  console.log("WEBHOOK_WORKER_PROBE_ERROR=" + probePhase);
   process.exitCode = 1;
 } finally {
   if (prisma) {
     try { await prisma.$disconnect(); } catch {
-      console.error("WEBHOOK_WORKER_PROBE_ERROR=DISCONNECT");
+      console.log("WEBHOOK_WORKER_PROBE_ERROR=DISCONNECT");
       process.exitCode = 1;
     }
   }
 }
 `
 const script = `set -eu
-systemctl is-active --quiet lyrashield-worker.service
-test "$(docker inspect --format '{{.State.Running}}' lyrashield-worker)" = true
-worker_rollback_image="$(sed -n 's/^LYRASHIELD_WORKER_IMAGE=//p' /etc/lyrashield/worker-runtime.conf)"
-worker_image="$(docker inspect --format '{{.Config.Image}}' lyrashield-worker)"
-worker_product="$(docker inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' lyrashield-worker)"
-worker_engine="$(docker inspect --format '{{index .Config.Labels "io.lyrashield.engine.revision"}}' lyrashield-worker)"
-docker exec -w /app/apps/worker lyrashield-worker node --import tsx --input-type=module -e '${code.replaceAll("'", "'\\''")}' -- "$worker_rollback_image" "$worker_image" "$worker_product" "$worker_engine"`
+if ! systemctl is-active --quiet lyrashield-worker.service 2>/dev/null; then
+  printf 'WEBHOOK_WORKER_PROBE_ERROR=WORKER_SERVICE_INACTIVE\\n'
+  exit 0
+fi
+worker_running="$(docker inspect --format '{{.State.Running}}' lyrashield-worker 2>/dev/null)" || {
+  printf 'WEBHOOK_WORKER_PROBE_ERROR=WORKER_CONTAINER_INSPECT\\n'
+  exit 0
+}
+if [ "$worker_running" != true ]; then
+  printf 'WEBHOOK_WORKER_PROBE_ERROR=WORKER_CONTAINER_STOPPED\\n'
+  exit 0
+fi
+worker_rollback_image="$(sed -n 's/^LYRASHIELD_WORKER_IMAGE=//p' /etc/lyrashield/worker-runtime.conf 2>/dev/null)" || {
+  printf 'WEBHOOK_WORKER_PROBE_ERROR=WORKER_ROLLBACK_IMAGE\\n'
+  exit 0
+}
+case "$worker_rollback_image" in *@sha256:????????????????????????????????????????????????????????????????) ;; *) printf 'WEBHOOK_WORKER_PROBE_ERROR=WORKER_ROLLBACK_IMAGE\\n'; exit 0;; esac
+worker_image="$(docker inspect --format '{{.Config.Image}}' lyrashield-worker 2>/dev/null)" || {
+  printf 'WEBHOOK_WORKER_PROBE_ERROR=WORKER_IMAGE_INSPECT\\n'
+  exit 0
+}
+worker_product="$(docker inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' lyrashield-worker 2>/dev/null)" || {
+  printf 'WEBHOOK_WORKER_PROBE_ERROR=WORKER_IMAGE_PROVENANCE\\n'
+  exit 0
+}
+worker_engine="$(docker inspect --format '{{index .Config.Labels "io.lyrashield.engine.revision"}}' lyrashield-worker 2>/dev/null)" || {
+  printf 'WEBHOOK_WORKER_PROBE_ERROR=WORKER_IMAGE_PROVENANCE\\n'
+  exit 0
+}
+if [ -z "$worker_image" ] || [ -z "$worker_product" ] || [ -z "$worker_engine" ]; then
+  printf 'WEBHOOK_WORKER_PROBE_ERROR=WORKER_IMAGE_PROVENANCE\\n'
+  exit 0
+fi
+probe_output=""
+probe_status=0
+probe_output="$(docker exec -w /app/apps/worker lyrashield-worker node --import tsx --input-type=module -e '${code.replaceAll("'", "'\\''")}' -- "$worker_rollback_image" "$worker_image" "$worker_product" "$worker_engine" 2>/dev/null)" || probe_status=$?
+if [ "$probe_status" -ne 0 ]; then
+  probe_phase="$(printf '%s\\n' "$probe_output" | sed -n 's/^WEBHOOK_WORKER_PROBE_ERROR=//p' | head -n 1)"
+  case "$probe_phase" in MODULES|SCHEMA|MIGRATIONS|COLUMNS|CONSTRAINTS|INDEXES|ENCODE|DISCONNECT) ;; *) probe_phase=EXECUTION;; esac
+  printf 'WEBHOOK_WORKER_PROBE_ERROR=%s\\n' "$probe_phase"
+  exit 0
+fi
+printf '%s\\n' "$probe_output" | awk '/^WEBHOOK_WORKER_STATE_GZIP_V1=/ { print } /^WEBHOOK_WORKER_PROBE_ERROR=(MODULES|SCHEMA|MIGRATIONS|COLUMNS|CONSTRAINTS|INDEXES|ENCODE|DISCONNECT)$/ { print }'`
 
-const response = run("az", [
-  "vm",
-  "run-command",
-  "invoke",
-  "--resource-group",
-  group,
-  "--name",
-  worker,
-  "--command-id",
-  "RunShellScript",
-  "--scripts",
-  script,
-  "--query",
-  "value[0].message",
-  "--output",
-  "tsv",
-])
+let response
+try {
+  response = run("az", [
+    "vm",
+    "run-command",
+    "invoke",
+    "--resource-group",
+    group,
+    "--name",
+    worker,
+    "--command-id",
+    "RunShellScript",
+    "--scripts",
+    script,
+    "--query",
+    "value[0].message",
+    "--output",
+    "tsv",
+  ])
+} catch {
+  fail("Worker compatibility probe failed (RUN_COMMAND)")
+}
 // Action Run Command retains only the last 4096 output bytes. Keep all
 // catalog and independent image proof in one final bounded frame.
 const errorMarker = "WEBHOOK_WORKER_PROBE_ERROR="
@@ -353,6 +394,13 @@ const probeErrors = response.split("\n").filter((line) => line.startsWith(errorM
 if (probeErrors.length) {
   const allowedPhases = new Set([
     "MODULES",
+    "WORKER_SERVICE_INACTIVE",
+    "WORKER_CONTAINER_INSPECT",
+    "WORKER_CONTAINER_STOPPED",
+    "WORKER_ROLLBACK_IMAGE",
+    "WORKER_IMAGE_INSPECT",
+    "WORKER_IMAGE_PROVENANCE",
+    "EXECUTION",
     "SCHEMA",
     "MIGRATIONS",
     "COLUMNS",

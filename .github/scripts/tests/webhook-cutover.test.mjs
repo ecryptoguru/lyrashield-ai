@@ -382,14 +382,14 @@ function fixture(t, scenario, expectedMode) {
     writeFileSync(file, `#!${process.execPath}\n${body}`)
     chmodSync(file, 0o755)
   }
-  executable("systemctl", "process.exit(0)")
+  executable("systemctl", `process.exit(${scenario === "worker service inactive" ? 3 : 0})`)
   executable(
     "sed",
     `console.log(${JSON.stringify(scenario === "rollback mismatch" ? "legacy" : workerImage)})`
   )
   executable(
     "docker",
-    `const args=process.argv.slice(2); if(args[0]==="login") process.exit(0); if(args[0]==="buildx") { const inspected=args[3]; const revision=inspected.match(/:([a-f0-9]{40})@sha256:/)?.[1]; console.log(JSON.stringify({config:{Labels:{"org.opencontainers.image.revision":${JSON.stringify(scenario === "OCI mismatch" ? "legacy" : "")} || revision}}})); } else if(args[0]==="inspect") { const format=args[2]; console.log(format.includes("State.Running")?"true":format.includes("Config.Image")?${JSON.stringify(workerImage)}:format.includes("engine.revision")?${JSON.stringify(state.engine)}:${JSON.stringify(workerProduct)}); } else if(args[0]==="exec") { const code=args[args.indexOf("-e")+1]; process.argv=[process.execPath,...args.slice(args.indexOf("-e")+3)]; const state=${JSON.stringify(state)}; const expectedChecksums=${JSON.stringify(migrationChecksums)}; process.env.LYRASHIELD_PRODUCT_REVISION=state.product; process.env.LYRASHIELD_WORKER_IMAGE_DIGEST=state.digest; if(state.engine) process.env.LYRASHIELD_ENGINE_REVISION=state.engine; else delete process.env.LYRASHIELD_ENGINE_REVISION; const prisma={$queryRawUnsafe:async(query,...parameters)=>{ if(${JSON.stringify(scenario)}==="probe error redaction") throw new Error("SYNTHETIC_CREDENTIAL_DO_NOT_LOG"); if(query.includes("current_schema()")) return [{schema:state.schema}]; if(query.includes("_prisma_migrations")) return state.migrationNames.map(migration_name=>({migration_name,checksum:state.badMigrationChecksum?"0".repeat(64):expectedChecksums[migration_name],finished_at:migration_name===state.unfinishedMigration?null:new Date(),rolled_back_at:migration_name===state.rolledBackMigration?new Date():null})); if(query.includes("FROM pg_attribute a")) return (query.includes("pg_namespace")?state.columns:[...(state.columns??[]),...(state.foreignSchemaColumns??[])]).map(column=>({...column,defaultExpr:column.default})); if(query.includes("pg_constraint")) {if(!query.includes("contype::text AS type")) throw new Error("UnsupportedNativeDataType: char");return state.constraints;} if(query.includes("pg_index")) return state.indexes; throw new Error("Unexpected worker schema probe"); },$disconnect:async()=>{if(${JSON.stringify(scenario)}==="disconnect error redaction")throw new Error("SYNTHETIC_CREDENTIAL_DO_NOT_LOG")}}; const load=async(name)=>name==="node:zlib"?import("node:zlib"):name==="@lyrashield/billing"?{WEBHOOK_TRACK_CLAIM_PROTOCOL:state.protocol}:name==="@lyrashield/db"?{getSystemPrisma:()=>prisma}:Promise.reject(new Error("Unexpected module")); new Function("load","return (async()=>{"+code.replaceAll("import(","load(")+"})()")(load).catch(error=>{console.error(error.message);process.exit(1)}); } else process.exit(1);`
+    `const args=process.argv.slice(2); if(args[0]==="login") process.exit(0); if(args[0]==="buildx") { const inspected=args[3]; const revision=inspected.match(/:([a-f0-9]{40})@sha256:/)?.[1]; console.log(JSON.stringify({config:{Labels:{"org.opencontainers.image.revision":${JSON.stringify(scenario === "OCI mismatch" ? "legacy" : "")} || revision}}})); } else if(args[0]==="inspect") { const format=args[2]; if(${JSON.stringify(scenario)}==="worker container inspect failed" && format.includes("State.Running")) process.exit(1); console.log(format.includes("State.Running")?${JSON.stringify(scenario === "worker container stopped" ? "false" : "true")}:format.includes("Config.Image")?${JSON.stringify(workerImage)}:format.includes("engine.revision")?${JSON.stringify(state.engine)}:${JSON.stringify(workerProduct)}); } else if(args[0]==="exec") { if(${JSON.stringify(scenario)}==="worker exec unavailable") process.exit(1); const code=args[args.indexOf("-e")+1]; process.argv=[process.execPath,...args.slice(args.indexOf("-e")+3)]; const state=${JSON.stringify(state)}; const expectedChecksums=${JSON.stringify(migrationChecksums)}; process.env.LYRASHIELD_PRODUCT_REVISION=state.product; process.env.LYRASHIELD_WORKER_IMAGE_DIGEST=state.digest; if(state.engine) process.env.LYRASHIELD_ENGINE_REVISION=state.engine; else delete process.env.LYRASHIELD_ENGINE_REVISION; const prisma={$queryRawUnsafe:async(query,...parameters)=>{ if(${JSON.stringify(scenario)}==="probe error redaction") throw new Error("SYNTHETIC_CREDENTIAL_DO_NOT_LOG"); if(query.includes("current_schema()")) return [{schema:state.schema}]; if(query.includes("_prisma_migrations")) return state.migrationNames.map(migration_name=>({migration_name,checksum:state.badMigrationChecksum?"0".repeat(64):expectedChecksums[migration_name],finished_at:migration_name===state.unfinishedMigration?null:new Date(),rolled_back_at:migration_name===state.rolledBackMigration?new Date():null})); if(query.includes("FROM pg_attribute a")) return (query.includes("pg_namespace")?state.columns:[...(state.columns??[]),...(state.foreignSchemaColumns??[])]).map(column=>({...column,defaultExpr:column.default})); if(query.includes("pg_constraint")) {if(!query.includes("contype::text AS type")) throw new Error("UnsupportedNativeDataType: char");return state.constraints;} if(query.includes("pg_index")) return state.indexes; throw new Error("Unexpected worker schema probe"); },$disconnect:async()=>{if(${JSON.stringify(scenario)}==="disconnect error redaction")throw new Error("SYNTHETIC_CREDENTIAL_DO_NOT_LOG")}}; const load=async(name)=>name==="node:zlib"?import("node:zlib"):name==="@lyrashield/billing"?{WEBHOOK_TRACK_CLAIM_PROTOCOL:state.protocol}:name==="@lyrashield/db"?{getSystemPrisma:()=>prisma}:Promise.reject(new Error("Unexpected module")); new Function("load","return (async()=>{"+code.replaceAll("import(","load(")+"})()")(load).catch(error=>{console.error(error.message);process.exit(1)}); } else process.exit(1);`
   )
   executable(
     "az",
@@ -436,6 +436,14 @@ test("fully compatible writers and migrations select ordinary release", (t) => {
   assert.equal(result.status, 0, result.stderr)
   assert.match(result.stdout, /Webhook baseline verified/)
   assert.match(result.githubOutput, /webhook_claims_cutover=false/)
+})
+
+test("worker Run Command failures are sanitized and do not select a deploy mode", (t) => {
+  const result = fixture(t, "VM failure")
+  assert.notEqual(result.status, 0)
+  assert.match(result.stderr, /Worker compatibility probe failed \(RUN_COMMAND\)/)
+  assert.doesNotMatch(result.stdout + result.stderr, /SYNTHETIC_CREDENTIAL_DO_NOT_LOG/)
+  assert.equal(result.githubOutput, "")
 })
 
 test("exact legacy writers and pristine legacy schema select automatic maintenance release", (t) => {
@@ -611,6 +619,10 @@ for (const scenario of [
   "probe error redaction",
   "disconnect error redaction",
   "untrusted error redaction",
+  "worker service inactive",
+  "worker container inspect failed",
+  "worker container stopped",
+  "worker exec unavailable",
 ]) {
   test(`bounded worker transport fails closed without choosing a mode: ${scenario}`, (t) => {
     const result = fixture(t, scenario)
@@ -619,10 +631,22 @@ for (const scenario of [
     assert.doesNotMatch(result.stdout + result.stderr, /SYNTHETIC_CREDENTIAL_DO_NOT_LOG/)
     const expected = ["missing frame", "duplicate frame"].includes(scenario)
       ? /Worker compatibility readback unavailable/
-      : scenario.startsWith("producer ") || scenario.endsWith("error redaction")
+      : scenario.startsWith("worker ")
         ? /Worker compatibility probe failed/
-        : /Worker compatibility readback invalid or oversized/
+        : scenario.startsWith("producer ") || scenario.endsWith("error redaction")
+          ? /Worker compatibility probe failed/
+          : /Worker compatibility readback invalid or oversized/
     assert.match(result.stderr, expected)
+    const workerPhases = {
+      "worker service inactive": "WORKER_SERVICE_INACTIVE",
+      "worker container inspect failed": "WORKER_CONTAINER_INSPECT",
+      "worker container stopped": "WORKER_CONTAINER_STOPPED",
+      "worker exec unavailable": "EXECUTION",
+    }
+    if (workerPhases[scenario]) {
+      assert.match(result.stderr, /Worker compatibility probe failed \(/)
+      assert.ok(result.stderr.includes(`${workerPhases[scenario]})`))
+    }
   })
 }
 
