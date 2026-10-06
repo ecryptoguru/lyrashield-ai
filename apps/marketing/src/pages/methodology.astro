@@ -1,14 +1,22 @@
 ---
 import Base from "@layouts/Base.astro"
 import ProductShot from "@components/ProductShot.astro"
-import { buildDateFor } from "../lib/build-date"
 
 const origin = Astro.site?.origin || "http://localhost:4321"
 const canonical = new URL("/methodology", origin).toString()
 const title = "AI app security evidence methodology | LyraShield AI"
-const buildDate = buildDateFor("src/pages/methodology.astro")
 const description =
-  "How LyraShield AI records authorized scan scope, coverage, finding evidence, retest outcomes and every known limitation."
+  "How LyraShield AI records authorized scan scope, coverage, finding evidence states, retest outcomes and every known limitation."
+// One editorial review date drives the visible "Last reviewed" text, the
+// <time datetime> attribute, the page JSON-LD dateModified and the sitemap
+// lastmod (parsed in astro.config.mjs). Change this constant only.
+const reviewed = "2026-10-05"
+const reviewedLabel = new Date(`${reviewed}T00:00:00Z`).toLocaleDateString("en-GB", {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+  timeZone: "UTC",
+})
 const evidenceStates = [
   {
     name: "Detected candidate",
@@ -52,7 +60,7 @@ const jsonLd = [
     name: "LyraShield AI security evidence methodology",
     description,
     url: canonical,
-    ...(buildDate ? { dateModified: buildDate } : {}),
+    dateModified: reviewed,
     reviewedBy: { "@id": `${origin}/#organization` },
     isPartOf: { "@id": `${origin}/#website` },
     about: [
@@ -121,7 +129,7 @@ const jsonLd = [
           Every finding carries one of three shipped evidence states: <strong>detected</strong> (a scanner signal that needs review), <strong>retest-confirmed</strong> (a deterministic retest found the condition absent) or <strong>inconclusive</strong> (the retained evidence cannot establish resolution). A fourth state, independently verified, is defined for a future separate verification step; no finding is in it today. A score or clean result never overrides these facts.
         </p>
       </div>
-      <p class="mt-4 text-sm text-text-muted" data-reveal="fade">Last reviewed: <time datetime="2026-10-05">5 Oct 2026</time> · Maintained by LyraShield Security + Engineering</p>
+      <p class="mt-4 text-sm text-text-muted" data-reveal="fade">Last reviewed: <time datetime={reviewed}>{reviewedLabel}</time> · Maintained by LyraShield Security + Engineering</p>
     </header>
 
     <section aria-labelledby="record-heading" class="mt-16 border-y border-border py-12">

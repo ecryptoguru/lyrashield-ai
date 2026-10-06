@@ -89,7 +89,7 @@ Tell the agent how to use LyraShield so it does not improvise. Add a short rule 
 Before proposing release, run a LyraShield scan on the changed scope.
 Treat scan output as evidence, not proof.
 Propose fixes only; do not auto apply. Retest after any fix.
-Keep detected, verified, retest-confirmed and inconclusive outcomes distinct.
+Keep detected, retest-confirmed and inconclusive outcomes distinct.
 ```
 
 A short rule prevents the agent from treating a clean scan as a release verdict or from applying a patch without review. Pair the rule with a repository convention that scan receipts land in your release record, so the evidence loop has a durable home. If your team uses a rules file that other tools also read, keep the LyraShield lines specific so a generic instruction does not dilute them. A good rule is explicit about what the agent must not do: it must not apply a fix without human approval bound to that exact patch, nor report a release as clean on a detected signal. The snippet encodes those limits in four lines, short enough to keep.

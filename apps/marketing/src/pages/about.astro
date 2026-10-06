@@ -19,7 +19,16 @@ const canonical = new URL("/about", origin).toString()
 const title = "About LyraShield AI — Launch Gate for AI-Built Apps"
 const description =
   "LyraShield AI is built by Ankit Das, an AI/ML engineer with 16+ years across Web3, AI and application security. The mission and the approach."
-const updatedDate = "2026-09-20"
+// One editorial review date drives the visible "Last reviewed" text, the
+// <time datetime> attribute, the page JSON-LD dateModified and the sitemap
+// lastmod (parsed in astro.config.mjs). Change this constant only.
+const updatedDate = "2026-10-05"
+const updatedDateLabel = new Date(`${updatedDate}T00:00:00Z`).toLocaleDateString("en-GB", {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+  timeZone: "UTC",
+})
 
 const founder = {
   name: "Ankit Das",
@@ -99,7 +108,7 @@ const jsonLd: unknown[] = [
         turning scanner confidence into a universal verdict.
       </p>
       <p class="mt-4 text-sm text-text-muted" data-reveal="fade">
-        Last reviewed: <time datetime="2026-10-05">5 Oct 2026</time>. The evidence states and
+        Last reviewed: <time datetime={updatedDate}>{updatedDateLabel}</time>. The evidence states and
         coverage limits this page refers to are defined once on{" "}
         <a href="/methodology" class="font-medium text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent">the methodology page</a>.
       </p>
@@ -196,7 +205,7 @@ const jsonLd: unknown[] = [
 
     <section aria-labelledby="stats-heading" class="mt-12" data-reveal-group>
       <h3 class="text-lg font-semibold text-text" data-reveal>Building with AI, daily</h3>
-      <p class="mt-2 text-sm text-text-muted" data-reveal>From ChatGPT Codex usage data — the real numbers behind the decision to build LyraShield AI.</p>
+      <p class="mt-2 text-sm text-text-muted" data-reveal>Founder-reported personal-workflow figures — ChatGPT usage counts plus his public GitHub repositories — behind the decision to build LyraShield AI. They are not LyraShield scan results or customer outcomes.</p>
       <div class="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-4" data-reveal-group>
         {stats.map((stat) => (
           <div class="rounded-lg border border-border bg-bg-raised p-4 text-center" data-reveal>

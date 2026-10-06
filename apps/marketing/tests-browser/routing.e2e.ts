@@ -236,7 +236,7 @@ test("redirect responses carry permanent-redirect hygiene headers", async ({ pag
   expect(res.headers()["x-robots-tag"]).toBe("noindex")
 })
 
-test("git-derived dateModified is present on the freshness pages", async ({ page }) => {
+test("dateModified is present on the freshness pages", async ({ page }) => {
   const pagesToCheck: Array<[string, string]> = [
     ["/", "WebPage"],
     ["/agents", "WebPage"],
@@ -262,9 +262,43 @@ test("git-derived dateModified is present on the freshness pages", async ({ page
       }
       return null
     }, type)
-    expect(dateModified, `${path} must carry a git-derived dateModified`).not.toBeNull()
-    expect(String(dateModified)).toMatch(/^\d{4}-\d{2}-\d{2}T/)
+    expect(dateModified, `${path} must carry a dateModified`).not.toBeNull()
+    // Git-derived values are full ISO timestamps; editorially dated pages
+    // emit the plain review day. Both are valid schema.org dateModified.
+    expect(String(dateModified)).toMatch(/^\d{4}-\d{2}-\d{2}(?:T|$)/)
   }
+})
+
+test("/methodology dateModified matches its visible Last reviewed date", async ({ page }) => {
+  // The page derives dateModified from the same editorial constant as the
+  // visible "Last reviewed" line, so machine and visible dates can never
+  // disagree — a git-derived timestamp could (the Oct 2026 drift).
+  await page.goto("/methodology")
+  const parity = await page.evaluate(() => {
+    const reviewed = Array.from(document.querySelectorAll("time")).find((time) =>
+      time.closest("p")?.textContent.includes("Last reviewed")
+    )
+    const graphs = Array.from(document.querySelectorAll('script[type="application/ld+json"]'))
+    for (const el of graphs) {
+      try {
+        const parsed = JSON.parse(el.textContent ?? "null")
+        const nodes = Array.isArray(parsed) ? parsed : [parsed]
+        for (const node of nodes) {
+          if (node?.["@type"] === "WebPage" && typeof node.dateModified === "string") {
+            return {
+              schema: String(node.dateModified).slice(0, 10),
+              visible: reviewed?.getAttribute("datetime") ?? null,
+            }
+          }
+        }
+      } catch {
+        // a non-JSON ld+json block is not ours to fail on
+      }
+    }
+    return null
+  })
+  expect(parity, "methodology must render a reviewed time and a WebPage dateModified").not.toBeNull()
+  expect(parity?.schema).toBe(parity?.visible)
 })
 
 test("the homepage sitemap entry carries lastmod", async ({ request }) => {

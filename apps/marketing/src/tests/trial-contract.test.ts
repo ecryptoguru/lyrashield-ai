@@ -28,6 +28,10 @@ describe("trial contract", () => {
       read("../pages/pricing.astro"),
       read("../pages/terms-of-sale.astro"),
       read("../pages/llms.txt.ts"),
+      // The seven tool pages share the trial CTA, and the homepage carries the
+      // audience-path cards — both must stay inside the 60-minute/3-target box.
+      read("../layouts/ToolLayout.astro"),
+      read("../pages/index.astro"),
     ]
     for (const surface of surfaces) {
       const lower = surface.toLowerCase()
@@ -37,6 +41,10 @@ describe("trial contract", () => {
       expect(lower).not.toContain("100 agent minutes")
       expect(lower).not.toContain("100 minutes")
       expect(surface).not.toMatch(/unlimited|everything you need/i)
+      // Trial coverage is plan- and target-bounded; "every review layer" is
+      // the exact overclaim the SEO audit flagged on the tool pages.
+      expect(surface).not.toMatch(/run every review layer/i)
+      expect(surface).not.toMatch(/a full review from a free/i)
     }
   })
 

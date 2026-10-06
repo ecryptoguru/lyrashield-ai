@@ -18,9 +18,10 @@ export async function getStaticPaths() {
 
 const { post } = Astro.props
 const { Content, headings = [] } = await render(post)
-const [heroImage, author] = await Promise.all([
+const [heroImage, author, reviewer] = await Promise.all([
   getEntry(post.data.heroImage),
   getEntry(post.data.author),
+  post.data.reviewer ? getEntry(post.data.reviewer) : Promise.resolve(undefined),
 ])
 
 if (!heroImage) {
@@ -28,6 +29,9 @@ if (!heroImage) {
 }
 if (!author) {
   throw new Error(`Missing author for blog post: ${post.id}`)
+}
+if (post.data.reviewer && !reviewer) {
+  throw new Error(`Missing reviewer for blog post: ${post.id}`)
 }
 
 const wordCount = markdownWordCount(post.body ?? "")
@@ -56,6 +60,8 @@ const relatedPosts = allPosts
   pubDate={post.data.pubDate}
   updatedDate={post.data.updatedDate}
   author={author}
+  reviewer={reviewer}
+  reviewedDate={post.data.reviewedDate}
   tags={post.data.tags}
   draft={post.data.draft}
   canonical={post.data.canonical}

@@ -60,6 +60,19 @@ export const LEGACY_REDIRECTS = [
     { source: `/blog/${slug}-vs-lyrashield`, target: `/compare/${slug}`, code: "301" },
     { source: `/blog/${slug}-vs-lyrashield/`, target: `/compare/${slug}`, code: "301" },
   ]),
+  // /blog/1 is not a generated route (page 1 IS /blog). The middleware
+  // redirect only fires for requests that reach the worker; asset-layer rules
+  // make both spellings a one-hop 301 regardless of which layer answers.
+  {
+    source: "/blog/1",
+    target: "/blog",
+    code: "301",
+  },
+  {
+    source: "/blog/1/",
+    target: "/blog",
+    code: "301",
+  },
 ]
 
 /** Pages excluded from trailing-slash rules. */

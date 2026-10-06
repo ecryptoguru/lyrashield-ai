@@ -7,6 +7,14 @@ const title = "MCP guard evaluation | LyraShield AI"
 const description =
   "How LyraShield AI evaluates the deterministic guard that filters MCP tool-call inputs before they reach the scan engine, and the limits of that check."
 const reviewed = "2026-10-04"
+// Derived from the constant so the visible text can never disagree with the
+// datetime attribute, the JSON-LD dateModified and the sitemap lastmod.
+const reviewedLabel = new Date(`${reviewed}T00:00:00Z`).toLocaleDateString("en-GB", {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+  timeZone: "UTC",
+})
 
 // Answers restate the prose below. They are not new claims.
 const faq = [
@@ -76,7 +84,7 @@ const jsonLd = [
         produced earlier numbers is not part of this repository.
       </p>
       <p class="mt-4 text-sm text-text-muted" data-reveal="fade">
-        Last reviewed: <time datetime={reviewed}>4 Oct 2026</time>
+        Last reviewed: <time datetime={reviewed}>{reviewedLabel}</time>
       </p>
     </header>
   </section>

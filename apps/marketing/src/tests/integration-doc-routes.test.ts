@@ -82,6 +82,18 @@ describe("integration guide routes", () => {
           target: "/docs/integrations/pi",
           code: "301",
         },
+        // /blog/1 is not a generated route (page 1 IS /blog); both spellings
+        // redirect permanently to the hub at the asset layer.
+        {
+          source: "/blog/1",
+          target: "/blog",
+          code: "301",
+        },
+        {
+          source: "/blog/1/",
+          target: "/blog",
+          code: "301",
+        },
       ])
     )
     for (const redirect of LEGACY_REDIRECTS) {
