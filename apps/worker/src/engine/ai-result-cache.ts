@@ -69,7 +69,7 @@ export interface AiResultCacheTransaction {
   ): AiResultCacheTransaction
   sadd(key: string, member: string): AiResultCacheTransaction
   expire(key: string, ttlSeconds: number): AiResultCacheTransaction
-  exec(): Promise<Array<[Error | null, unknown]> | null>
+  exec: () => Promise<Array<[Error | null, unknown]> | null>
 }
 
 export type AiResultReuseReceipt = {

@@ -12,7 +12,7 @@ import {
 
 const enabled = process.env.LYRASHIELD_AI_RESULT_CACHE_REDIS_TEST === "1"
 const redisUrl = process.env.LYRASHIELD_AI_RESULT_CACHE_TEST_REDIS_URL ?? ""
-const secret = "local-redis-test-key-material-0123456789"
+const keyMaterial = "local-redis-test-key-material-0123456789"
 const prefix = "lyrashield:ai-cache:v1:triage:"
 const modelRoute = "azure_ai/gpt-6-luna"
 const checksum = "a".repeat(64)
@@ -110,7 +110,7 @@ function usage() {
 }
 
 function entryKey(value: AiResultCacheDescriptor): string {
-  const digest = createHmac("sha256", secret).update(canonicalJson(value)).digest("hex")
+  const digest = createHmac("sha256", keyMaterial).update(canonicalJson(value)).digest("hex")
   return `${prefix}${digest}`
 }
 
@@ -129,14 +129,14 @@ describe.skipIf(!enabled)("exact AI triage cache against disposable local Redis"
       enableOfflineQueue: false,
     })
     await redis.connect()
-    cache = createAiResultCache({ redis, secret, mode: "enforce" })
+    cache = createAiResultCache({ redis, secret: keyMaterial, mode: "enforce" })
   })
 
   afterAll(async () => {
     if (redis) {
       for (const value of descriptors) {
         const key = entryKey(value)
-        const indexKey = aiResultCacheTargetIndexKey(secret, value.workspaceId, value.targetId)
+        const indexKey = aiResultCacheTargetIndexKey(keyMaterial, value.workspaceId, value.targetId)
         const indexedKeys = await redis.smembers(indexKey).catch(() => [])
         if (indexedKeys.length) await redis.del(...indexedKeys)
         await redis.del(key, indexKey)
@@ -150,7 +150,7 @@ describe.skipIf(!enabled)("exact AI triage cache against disposable local Redis"
     const value = descriptor()
     expect(await cache.store(value, artifact(), usage())).toBe(true)
     const key = entryKey(value)
-    const indexKey = aiResultCacheTargetIndexKey(secret, value.workspaceId, value.targetId)
+    const indexKey = aiResultCacheTargetIndexKey(keyMaterial, value.workspaceId, value.targetId)
     const initialTtl = await redis.pttl(key)
 
     expect(initialTtl).toBeGreaterThan(0)
