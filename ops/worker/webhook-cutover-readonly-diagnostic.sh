@@ -111,12 +111,19 @@ set -a
 . "$config"
 set +a
 env_args=$(lyrashield_worker_env_args "$config" "$environment_file")
+redis_environment_file=$diagnostic_dir/redis.env
+if ! awk '/^REDIS_URL=/ { count++; if (count == 1) print } END { exit count != 1 }' \
+  "$environment_file" >"$redis_environment_file"; then
+  printf 'receipt_present=true\nreceipt_metadata=unavailable\nreceipt_matches_expected=unavailable\nredis_admission_owner_match=unavailable\n'
+  exit 0
+fi
+chmod 600 "$redis_environment_file"
 diagnostic_code='import fs from "node:fs"; import Redis from "ioredis"; const [runId,sourceSha,expectedOwner]=process.argv.slice(1); const r=JSON.parse(fs.readFileSync("/run/cutover-receipt.json","utf8")); const clean=(v,re)=>typeof v==="string"&&re.test(v)?v:"invalid"; const attempts=Array.isArray(r.attempts)&&r.attempts.length<=10&&r.attempts.every(n=>Number.isSafeInteger(n)&&n>0)?r.attempts:[]; const phase=["intent","claimed","writers-stopped","candidate","resuming","completed"].includes(r.phase)?r.phase:"invalid"; const owner=clean(r.owner,/^[0-9]+:[1-9][0-9]*$/); const receiptRunId=clean(r.runId,/^[0-9]+$/); const revision=clean(r.productRevision,/^[a-f0-9]{40}$/); const receipt={phase,owner,runId:receiptRunId,sourceSha:revision,attempts,lastAttempt:Number.isSafeInteger(r.lastAttempt)&&r.lastAttempt>0?r.lastAttempt:"invalid"}; console.log("receipt_present=true"); console.log("receipt_metadata="+JSON.stringify(receipt)); console.log("receipt_matches_expected="+String(receipt.runId===runId&&receipt.sourceSha===sourceSha&&receipt.owner===expectedOwner)); let match="unavailable"; try { const redis=new Redis(process.env.REDIS_URL,{maxRetriesPerRequest:1,connectTimeout:5000}); try { const value=await redis.get("lyrashield:scan-admission:stopped"); const stop=typeof value==="string"?JSON.parse(value):null; match=String(value===r.admissionStopValue&&stop?.owner===r.owner&&stop?.runId===r.runId&&stop?.productRevision===r.productRevision); } finally { await redis.quit(); } } catch { match="unavailable"; } console.log("redis_admission_owner_match="+match);'
 # shellcheck disable=SC2086
 docker_diagnostic_output=$(timeout --foreground 30s docker run --rm --read-only --network bridge \
   --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m \
   --volume "$receipt:/run/cutover-receipt.json:ro" \
-  --env-file "$environment_file" $env_args \
+  --env-file "$redis_environment_file" $env_args \
   "$LYRASHIELD_WORKER_IMAGE" node --input-type=module -e "$diagnostic_code" \
   "$run_id" "$source_sha" "$expected_owner" 2>&1) || true
 printf '%s\n' "$docker_diagnostic_output" | awk '

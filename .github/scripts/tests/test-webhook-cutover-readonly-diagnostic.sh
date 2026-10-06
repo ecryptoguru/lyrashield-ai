@@ -57,6 +57,15 @@ case "$1" in
     esac
     ;;
   run)
+    env_file=''
+    previous=''
+    for arg in "$@"; do
+      if [ "$previous" = --env-file ]; then env_file=$arg; break; fi
+      previous=$arg
+    done
+    [ -n "$env_file" ] && [ -f "$env_file" ]
+    [ "$(cat "$env_file")" = 'REDIS_URL=redis://secret-sentinel' ]
+    ! rg -q 'DATABASE_URL|database-secret-sentinel|other-secret-sentinel' "$env_file"
     printf '%s\n' 'docker-error leaked-docker-sentinel=do-not-print' >&2
     printf '%s\n' 'receipt_present=true' 'receipt_metadata={"phase":"writers-stopped","owner":"37516632066:1","runId":"37516632066","sourceSha":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","attempts":[1,2],"lastAttempt":2}' 'receipt_matches_expected=true' 'redis_admission_owner_match=true'
     ;;
@@ -70,7 +79,7 @@ digest=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 config="$tmp/runtime.conf"
 printf 'LYRASHIELD_WORKER_IMAGE=ghcr.io/example/worker:fixture@sha256:%s\nLYRASHIELD_SANDBOX_IMAGE=ghcr.io/example/sandbox@sha256:%s\nLYRASHIELD_SANDBOX_NETWORK=bridge\n' "$digest" "$digest" >"$config"
 env_file="$tmp/worker.env"
-printf 'REDIS_URL=redis://secret-sentinel\n' >"$env_file"
+printf 'DATABASE_URL=postgres://database-secret-sentinel\nREDIS_URL=redis://secret-sentinel\nWORKER_TOKEN=other-secret-sentinel\n' >"$env_file"
 receipt="$tmp/receipt.json"
 printf '{"admissionStopValue":"receipt-secret-sentinel"}\n' >"$receipt"
 chmod 600 "$receipt"
@@ -99,6 +108,7 @@ fi
 source=$(<"$script")
 [[ "$source" == *'journalctl -u "$service" -n 50'* ]]
 [[ "$source" == *'redis.get("lyrashield:scan-admission:stopped")'* ]]
+[[ "$source" == *'awk '\''/^REDIS_URL=/'* ]]
 [[ "$source" != *'redis.set('* && "$source" != *'redis.del('* && "$source" != *'redis.eval('* ]]
 [[ "$source" != *'systemctl restart'* && "$source" != *'systemctl stop'* && "$source" != *'systemctl enable'* && "$source" != *'systemctl disable'* ]]
 echo 'Read-only webhook VM diagnostic redaction test passed.'
