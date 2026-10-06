@@ -28,6 +28,12 @@ proof or the owned maintenance receipt.
 
 The first transition uses the existing controlled maintenance workflow,
 without a separate manual cutover flag or typed confirmation. It checks the
+running worker's nonterminal scans, scan/retry queues, nonterminal webhook
+tracks and legacy scheduling columns before writing a maintenance intent or
+claiming admission. Busy or unreadable state aborts with writers still active.
+The checks repeat after ingress closes and after writer shutdown to catch
+work arriving between the read-only eligibility check and maintenance.
+The workflow also checks the
 actual legacy scheduling columns after every writer is stopped. If either
 `nextAttemptAt` or `leaseExpiresAt` contains a value, migration stops. Complete
 or resolve existing work through its normal receipt-aware path; do not clear
@@ -89,6 +95,8 @@ Worker stop proof must be tied to the captured exact image/OCI identity and this
 `node --test .github/scripts/tests/webhook-cutover.test.mjs` covers compatible ordinary release, old ingress, old worker, pending migration, missing identity, mutable image, inactive baseline, mismatched rollback image and failed VM readback. Workflow ordering fixtures prove the guard precedes identity/registry changes, migrations and promotion. `node --test .github/scripts/tests/webhook-maintenance.test.mjs` executes the lifecycle shell and transmitted VM helper with synthetic Redis, queue/database, service and Azure fixtures. It checks owned claim, ingress exclusion, queue/paid-scan refusal, old replica refusal, foreign owner refusal, graceful stop stale database/Redis environment refusal and compatible resume. The existing promoter shell suite covers stopped baseline, durable owner receipt, exact candidate identity, claim protocol and post-migration failure without legacy rollback or admission resume.
 
 These local fixtures do not establish a completed production transition, alert delivery, paid provider acceptance or live sustained Redis capacity. Failed maintenance retains the owned stop and disables app/scanner ingress; it never restores incompatible old writers. A same-run retry first reads the root-owned receipt and admission-stop value. An existing receipt must prove this run, immutable source, owner, nonce and database/Redis continuity before the retry can reuse maintenance mode. If no receipt and no admission stop exist, the runtime repeats the read-only classifier and proceeds only if the exact first-cutover baseline is still present. A retry of an older source is allowed only with the verified receipt. The receipt retains the original owner and nonce and audits each run attempt; a separate dispatch or different source cannot adopt it. Do not delete receipts or admission keys.
+
+A completed receipt is terminal: rerunning only the reusable Azure job cannot reclaim maintenance or redeploy its old source. Both receipt probing and claim/recovery reject completion without modifying admission or writers; start a current-main release instead.
 
 The lifecycle persists claim intent before Redis `SET NX`; retry repairs an absent stop only from that exact validated intent. It persists resume intent before compare-delete and completion before archiving the receipt. An uncertain resume acknowledgement is recovered by restoring the exact owned stop before withholding ingress. A compatible candidate digest and its immediately preceding compatible candidate may be retained for same-source rebuild recovery; their source, engine, protocol and database/Redis continuity must pass. Legacy images remain forensic references and are never resumed after cutover.
 

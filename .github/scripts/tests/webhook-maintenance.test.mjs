@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { createHash } from "node:crypto"
 import { spawnSync } from "node:child_process"
-import { chmodSync, mkdtempSync, readFileSync, writeFileSync, rmSync } from "node:fs"
+import { chmodSync, existsSync, mkdtempSync, readFileSync, writeFileSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import test from "node:test"
@@ -59,7 +59,7 @@ function setup(t, scenario = "normal") {
   const db = path.join(directory, "db.mjs")
   writeFileSync(
     db,
-    `export const getSystemPrisma=()=>({scan:{count:async()=>${scenario === "active scan" ? 1 : 0}},$queryRaw:async(sql)=>{if(${JSON.stringify(scenario)}==="legacy query unavailable")throw new Error("database unavailable");return [{count:sql[0].includes("information_schema")?${scenario === "UTC installed" ? 2 : scenario === "partial UTC schema" ? 1 : 0}:${scenario === "legacy scheduled" || scenario === "UTC installed" ? 1 : 0}}]},$disconnect:async()=>{}})`
+    `export const getSystemPrisma=()=>({scan:{count:async()=>process.env.TEST_RACE_SCAN==="1"?1:${scenario === "active scan" ? 1 : 0}},$queryRaw:async(sql)=>{if(${JSON.stringify(scenario)}==="legacy query unavailable")throw new Error("database unavailable");return [{count:sql[0].includes("WHERE status")?(process.env.TEST_RACE_TRACK==="1"?1:${scenario === "nonterminal track" ? 1 : 0}):sql[0].includes("information_schema")?${scenario === "UTC installed" ? 2 : scenario === "partial UTC schema" ? 1 : 0}:(process.env.TEST_RACE_SCHEDULE==="1"?1:${scenario === "legacy scheduled" || scenario === "UTC installed" ? 1 : 0})}]},$disconnect:async()=>{}})`
   )
   const integration = path.join(directory, "integrations.mjs")
   writeFileSync(
@@ -175,7 +175,7 @@ for (const scenario of [
   test(`maintenance fails closed without stopping paid work: ${scenario}`, (t) => {
     const f = setup(t, scenario)
     const claimed = f.vm("claim")
-    if (scenario === "stale environment") {
+    if (["stale environment", "active scan", "retry pending"].includes(scenario)) {
       assert.notEqual(claimed.status, 0)
       assert.equal(JSON.parse(readFileSync(f.redis)), null)
       return
@@ -474,7 +474,16 @@ for (const [scenario, succeeds] of [
 ]) {
   test(`first UTC migration checks actual drained scheduling data: ${scenario}`, (t) => {
     const f = setup(t, scenario)
-    assert.equal(f.vm("claim").status, 0)
+    const claimed = f.vm("claim")
+    if (!succeeds) {
+      assert.notEqual(claimed.status, 0)
+      assert.equal(JSON.parse(readFileSync(f.redis)), null)
+      assert.equal(existsSync(f.receipt), false)
+      assert.equal(JSON.parse(readFileSync(f.state)).active, 2)
+      assert.equal(JSON.parse(readFileSync(f.state)).worker, "active")
+      return
+    }
+    assert.equal(claimed.status, 0, claimed.stderr)
     const quiesced = f.local("quiesce")
     const verified = quiesced.status === 0 ? f.vm("verify") : quiesced
     assert.equal(verified.status === 0, succeeds, verified.stderr)
@@ -482,5 +491,74 @@ for (const [scenario, succeeds] of [
       assert.notEqual(JSON.parse(readFileSync(f.redis)), null, "maintenance stays held")
       assert.equal(JSON.parse(readFileSync(f.state)).worker, "inactive")
     }
+  })
+}
+
+for (const scenario of [
+  "active scan",
+  "retry pending",
+  "nonterminal track",
+  "legacy scheduled",
+  "legacy query unavailable",
+  "partial UTC schema",
+]) {
+  test(`busy or unreadable baseline cannot claim or pause writers: ${scenario}`, (t) => {
+    const f = setup(t, scenario)
+    assert.notEqual(f.local("claim").status, 0)
+    assert.equal(existsSync(f.receipt), false)
+    assert.equal(JSON.parse(readFileSync(f.redis)), null)
+    assert.notEqual(f.local("hold").status, 0)
+    const state = JSON.parse(readFileSync(f.state))
+    assert.equal(state.active, 2)
+    assert.equal(state.worker, "active")
+    assert.equal(state.timer, "active")
+    assert.doesNotMatch(
+      readFileSync(f.calls, "utf8"),
+      /systemctl (stop|disable)|revision deactivate/
+    )
+  })
+}
+for (const race of ["TEST_RACE_SCAN", "TEST_RACE_TRACK", "TEST_RACE_SCHEDULE"]) {
+  test(`post-eligibility race remains fenced: ${race}`, (t) => {
+    const f = setup(t)
+    assert.equal(f.local("claim").status, 0)
+    assert.notEqual(f.local("quiesce", { [race]: "1" }).status, 0)
+    assert.notEqual(JSON.parse(readFileSync(f.redis)), null)
+    const state = JSON.parse(readFileSync(f.state))
+    assert.equal(state.worker, "active")
+    assert.equal(state.container, true)
+    assert.equal(state.timer, "active")
+    assert.doesNotMatch(readFileSync(f.calls, "utf8"), /systemctl (stop|disable)/)
+    assert.equal(f.local("hold").status, 0)
+    assert.equal(JSON.parse(readFileSync(f.state)).active, 0)
+  })
+}
+
+for (const archived of [false, true]) {
+  test(`completed cutover cannot re-enter maintenance on a reusable-job retry (archived=${archived})`, (t) => {
+    const f = setup(t)
+    assert.equal(f.vm("claim").status, 0)
+    const receipt = JSON.parse(readFileSync(f.receipt))
+    receipt.phase = "completed"
+    const file = archived
+      ? path.join(path.dirname(f.receipt), "webhook-claims-cutover-completed-123.json")
+      : f.receipt
+    writeFileSync(file, JSON.stringify(receipt), { mode: 0o600 })
+    if (archived) rmSync(f.receipt)
+    writeFileSync(f.redis, "null")
+    const before = readFileSync(f.state, "utf8")
+    for (const phase of ["recovery-probe", "recovery", "claim", "hold"]) {
+      const result = f.local(phase, { LYRASHIELD_ADMISSION_STOP_OWNER: "123:2" })
+      assert.notEqual(result.status, 0, phase)
+      assert.match(result.stderr, /Completed cutover cannot re-enter maintenance/)
+      assert.equal(JSON.parse(readFileSync(f.redis)), null)
+      assert.equal(readFileSync(f.state, "utf8"), before)
+      assert.equal(readFileSync(file, "utf8"), JSON.stringify(receipt))
+    }
+    if (archived) assert.equal(existsSync(f.receipt), false)
+    assert.doesNotMatch(
+      readFileSync(f.calls, "utf8"),
+      /systemctl (stop|disable)|revision deactivate/
+    )
   })
 }
