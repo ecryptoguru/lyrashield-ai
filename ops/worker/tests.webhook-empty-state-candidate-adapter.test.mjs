@@ -27,10 +27,10 @@ test("enabled copied candidate adapter survives cold start and crash after eithe
       mkdirSync(dirname(join(root, path)), { recursive: true })
       cpSync(join(source, path), join(root, path), { recursive: true })
     }
-    mkdirSync(join(root, "node_modules"), { recursive: true })
+    mkdirSync(join(root, "packages/db/node_modules"), { recursive: true })
     cpSync(
-      realpathSync(join(source, "node_modules/pg-connection-string")),
-      join(root, "node_modules/pg-connection-string"),
+      realpathSync(join(source, "packages/db/node_modules/pg-connection-string")),
+      join(root, "packages/db/node_modules/pg-connection-string"),
       { recursive: true }
     )
     const store = join(root, "packages/db/scripts/webhook-empty-state-root-store.mjs")

@@ -202,6 +202,8 @@ test("signed principal policy names independent expected roles", async () => {
     { ...valid, migration: "invalid principal" },
     { ...valid, backup: "postgres" },
     { ...valid, system: valid.worker },
+    { ...valid, app: "postgres", worker: "postgres" },
+    { ...valid, scanner: "postgres" },
   ])
     assert.throws(() => validateDatabasePrincipalPolicy(changed))
 })

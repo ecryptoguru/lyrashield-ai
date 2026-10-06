@@ -211,6 +211,9 @@ export function validateDatabasePrincipalPolicy(principals) {
   if (principals.app !== principals.worker) {
     throw new Error("Application DATABASE_URL must use the approved worker principal")
   }
+  if ([principals.app, principals.scanner, principals.worker].includes("postgres")) {
+    throw new Error("Runtime database principals must not use the postgres admin role")
+  }
   if ([principals.app, principals.scanner, principals.worker].includes(principals.system)) {
     throw new Error("DATABASE_SYSTEM_URL must bind a separate principal")
   }
