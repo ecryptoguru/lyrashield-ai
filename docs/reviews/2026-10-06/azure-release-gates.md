@@ -76,9 +76,57 @@ patch. No unmeasured parallel test fanout is introduced.
 ## Limits of current proof
 
 The preceding PR verified the actual complete catalog program using generated
-Prisma Client and PostgreSQL 16, native Redis/BullMQ drain states, and mocked
-maintenance/recovery/promotion lifecycle invariants. That is not a complete live
+Prisma Client and PostgreSQL 16. It also verified native Redis/BullMQ drain states
+and mocked maintenance/recovery/promotion lifecycle invariants. That is not a complete live
 Azure rollout, nor a single end-to-end disposable execution of every Azure CLI,
 systemd and migration stage. Exact current deployed legacy OCI mappings remain
 unverified. No new live DB writes, guest commands, service stops or dispatches
 were issued for this plan.
+
+## Proposed bounded read-only inventory
+
+Repository-variable metadata identifies resource group `LyraShieldAI`, app
+`lyrashield-app` and scanner `lyrashield-scanner`. The workflow defaults the
+worker VM to `lyrashield-worker` when its variable is absent. Registry package
+metadata alone cannot establish deployment. Its authenticated versions API also
+returned HTTP 403 because the current GitHub credential lacks `read:packages`.
+Do not expand credential scopes as part of this patch.
+
+The smallest useful operational inventory has two stages:
+
+1. Control-plane reads: list only active revisions for the two named Container
+   Apps and extract their digest-pinned image references. Validate the known
+   repository prefixes, 40-hex source tags and 64-hex digest strings before
+   output. Inspect only OCI revision/engine labels for those exact manifests
+   using already authorized registry access. Existing build records can prove
+   what was published, but not what is currently deployed.
+2. If no existing captured and independently verified VM probe response is
+   available, run the existing read-only worker collector once against the named
+   VM. It reads the running container's image/labels and existing runtime image
+   reference, then executes only the five existing catalog SELECTs inside that
+   container. Emit a single sanitized report with validated source/engine/digest
+   identities, fixed protocol enums and the fixed baseline match booleans.
+   Do not emit container environment, runtime configuration, database URLs,
+   credentials, catalog expressions or raw command output.
+
+Stage 2 is a new privileged guest command despite being read-only. It requires
+explicit bounded authorization. The exact collector must be reviewed and hashed
+before invocation; an ordinary release retry is not a substitute. Existing Azure
+control-plane revision metadata cannot prove the OCI image running inside a VM.
+Neither stage authorizes maintenance, queue writes, migration, restart, promotion
+or a legacy-profile expansion.
+
+A concrete local proposal is prepared at
+`/tmp/lyrashield-webhook-inventory-proposal.mjs`, SHA-256
+`6090446a5a89175a9f3eb668cb0078e0acfd16864e6458a8a26526e9c0de921a`.
+It is the current verifier with one additional fixed-shape provenance report in
+the existing mismatch branch. The report contains only already validated
+40-hex source/engine identities, 64-hex OCI digests and fixed protocol enums.
+It retains the same fail-closed classification and never writes a deployment mode
+on mismatch. It has not been executed against production or published as a live
+workflow. Its existing registry verification reads `ghcr-token` through the
+configured Key Vault; bounded authorization must explicitly cover that in-memory
+credential use without disclosure or credential changes. An isolated ephemeral
+runner must own its Docker login configuration. The guest collector remains the
+existing running-container inspection and five catalog SELECTs; no new guest
+operation is added.

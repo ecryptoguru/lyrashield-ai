@@ -340,6 +340,10 @@ test("ops and native service tests select their dependency closure without ordin
     assert.equal(runs("Test Azure deployment and alert operations", paths), expected, String(paths))
   }
   assert.match(workflow, /LYRASHIELD_OPS_RUNTIME_ALREADY_VERIFIED: "1"/)
+  assert.ok(
+    workflow.indexOf("- name: Test webhook catalog Prisma compatibility") <
+      workflow.indexOf('LYRASHIELD_OPS_RUNTIME_ALREADY_VERIFIED: "1"')
+  )
   const runner = readFileSync("run-all-tests.mjs", "utf8")
   assert.match(runner, /webhook-catalog\.runtime\.test\.mjs/)
   assert.match(runner, /webhook-queue\.runtime\.test\.mjs/)
