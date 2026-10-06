@@ -435,7 +435,6 @@ async function runEngineTriageAttempt(
   const absWorkDir = resolve(ENGINE_WORK_ROOT, scanId)
   const inputPath = join(absWorkDir, "ai-security-triage-input.json")
   const outputPath = join(absWorkDir, "ai-security-triage.json")
-  const cacheDir = join(absWorkDir, "ai-security-triage-cache")
   // inputPath is constrained to the worker-owned per-scan workspace above.
   // eslint-disable-next-line security/detect-non-literal-fs-filename
   await writeFile(inputPath, JSON.stringify(input), { encoding: "utf8", mode: 0o600 })
@@ -461,8 +460,6 @@ async function runEngineTriageAttempt(
         inputPath,
         "--output",
         outputPath,
-        "--cache-dir",
-        cacheDir,
         "--enabled",
         "--max-budget-usd",
         String(maxBudgetUsd),
