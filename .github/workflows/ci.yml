@@ -552,7 +552,7 @@ jobs:
             'serializes simultaneous claims for two workspaces and survives membership removal' \
             'keeps trial writes inside the creator transaction after a module reload' \
             'rejects a foreign owner before execution' \
-            'issues and verifies sessions, rejects invalid or expired tokens, and slides stale expiry' \
+            'issues and verifies sessions while rejecting invalid or expired tokens and sliding stale expiry' \
             'keeps lookups isolated to the bound public session and rejects account-only context' \
             'blocks unbound and account-only reads, writes, and deletes' \
             'pins helper function search paths without changing invoker security'

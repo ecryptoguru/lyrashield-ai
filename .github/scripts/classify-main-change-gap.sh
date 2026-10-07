@@ -16,15 +16,49 @@ valid_sha() {
   [[ "${1:-}" =~ ^[0-9a-f]{40}$ ]]
 }
 
+route_decision() {
+  local current_main="$1" selected="$2"
+  if [[ "$current_main" != true ]]; then
+    printf 'held\n'
+  elif [[ "$selected" == true ]]; then
+    printf 'deploy\n'
+  else
+    printf 'skip\n'
+  fi
+}
+
+emit_route_decision() {
+  local current_main="$1" azure_base="$2" marketing_base="$3" validation_base="$4"
+  local azure_selected="$5" marketing_selected="$6" reason="$7"
+  local head_sha azure_route marketing_route
+
+  if valid_sha "$HEAD_SHA"; then head_sha="$HEAD_SHA"; else head_sha=unavailable; fi
+  if ! valid_sha "$azure_base"; then azure_base=unavailable; fi
+  if ! valid_sha "$marketing_base"; then marketing_base=unavailable; fi
+  if ! valid_sha "$validation_base"; then validation_base=unavailable; fi
+  if [[ ! "$reason" =~ ^[a-z0-9-]+$ ]]; then reason=internal-error; fi
+
+  azure_route="$(route_decision "$current_main" "$azure_selected")"
+  marketing_route="$(route_decision "$current_main" "$marketing_selected")"
+  printf 'release-routing current-main=%s head=%s azure-base=%s marketing-base=%s validation-base=%s azure=%s marketing=%s reason=%s\n' \
+    "$current_main" "$head_sha" "$azure_base" "$marketing_base" "$validation_base" \
+    "$azure_route" "$marketing_route" "$reason"
+}
+
+marketing_base=unavailable
+azure_base=unavailable
+validation_base=unavailable
+
 write_conservative_outputs() {
-  local current_main="$1"
+  local current_main="$1" reason="$2"
   GITHUB_OUTPUT="$GITHUB_OUTPUT" bash "$classifier" --force-all </dev/null
   printf 'current-main=%s\n' "$current_main" >> "$GITHUB_OUTPUT"
+  emit_route_decision "$current_main" "$azure_base" "$marketing_base" "$validation_base" true true "$reason"
 }
 
 if ! valid_sha "$HEAD_SHA" || ! git -C "$workspace" cat-file -e "${HEAD_SHA}^{commit}" 2>/dev/null; then
   echo "::warning::Main SHA is unavailable; selecting all validation and release routes."
-  write_conservative_outputs false
+  write_conservative_outputs false invalid-head
   exit 0
 fi
 
@@ -34,22 +68,22 @@ fi
 # the deployed markers after this run finishes.
 if ! latest_main_response="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" 2>/dev/null)"; then
   echo "::warning::Could not read current main; selecting all validation and release routes."
-  write_conservative_outputs false
+  write_conservative_outputs false current-main-unavailable
   exit 0
 fi
 if ! latest_main="$(jq -r '.object.sha // empty' <<<"$latest_main_response")"; then
   echo "::warning::Could not parse current main; selecting all validation and release routes."
-  write_conservative_outputs false
+  write_conservative_outputs false current-main-invalid-response
   exit 0
 fi
 if ! valid_sha "$latest_main"; then
   echo "::warning::GitHub returned an invalid main SHA; selecting all validation and release routes."
-  write_conservative_outputs false
+  write_conservative_outputs false current-main-invalid-sha
   exit 0
 fi
 if [[ "$HEAD_SHA" != "$latest_main" ]]; then
   echo "::notice::This CI run is superseded by main ${latest_main}; deployment routes are held for the current run."
-  write_conservative_outputs false
+  write_conservative_outputs false superseded-main
   exit 0
 fi
 
@@ -119,19 +153,21 @@ read_azure_sha() {
 
 if ! marketing_base="$(read_marketing_sha)" || ! valid_sha "$marketing_base"; then
   echo "::warning::Cloudflare build revision is unavailable; selecting all validation and release routes."
-  write_conservative_outputs true
+  marketing_base=unavailable
+  write_conservative_outputs true marketing-baseline-unavailable
   exit 0
 fi
 if ! azure_base="$(read_azure_sha)" || ! valid_sha "$azure_base"; then
   echo "::warning::No successful Azure code-release deployment was found; selecting all validation and release routes."
-  write_conservative_outputs true
+  azure_base=unavailable
+  write_conservative_outputs true azure-baseline-unavailable
   exit 0
 fi
 
 if ! git -C "$workspace" merge-base --is-ancestor "$marketing_base" "$HEAD_SHA" 2>/dev/null || \
   ! git -C "$workspace" merge-base --is-ancestor "$azure_base" "$HEAD_SHA" 2>/dev/null; then
   echo "::warning::A deployed revision is not an ancestor of current main; selecting all validation and release routes."
-  write_conservative_outputs true
+  write_conservative_outputs true baseline-not-ancestor
   exit 0
 fi
 
@@ -143,7 +179,7 @@ elif git -C "$workspace" merge-base --is-ancestor "$azure_base" "$marketing_base
   validation_base="$azure_base"
 else
   echo "::warning::Production baselines have diverged; selecting all validation and release routes."
-  write_conservative_outputs true
+  write_conservative_outputs true production-baselines-diverged
   exit 0
 fi
 
@@ -164,7 +200,7 @@ if ! classify_range "$validation_base" "$validation_output" || \
   ! classify_range "$azure_base" "$azure_output" || \
   ! classify_range "$marketing_base" "$marketing_output"; then
   echo "::warning::Could not classify the complete production gap; selecting all validation and release routes."
-  write_conservative_outputs true
+  write_conservative_outputs true change-gap-classification-failed
   exit 0
 fi
 
@@ -178,21 +214,25 @@ read_field() {
 for field in docs-only tooling-only marketing app desktop shared; do
   if ! value="$(read_field "$validation_output" "$field")"; then
     echo "::warning::Classifier output is incomplete; selecting all validation and release routes."
-    write_conservative_outputs true
+    write_conservative_outputs true validation-classification-incomplete
     exit 0
   fi
   printf '%s=%s\n' "$field" "$value" >> "$final_output"
 done
 if ! value="$(read_field "$marketing_output" marketing-deploy)"; then
   echo "::warning::Marketing route is incomplete; selecting all validation and release routes."
-  write_conservative_outputs true
+  write_conservative_outputs true marketing-route-incomplete
   exit 0
 fi
+marketing_route="$value"
 printf 'marketing-deploy=%s\n' "$value" >> "$final_output"
 if ! value="$(read_field "$azure_output" azure-deploy)"; then
   echo "::warning::Azure route is incomplete; selecting all validation and release routes."
-  write_conservative_outputs true
+  write_conservative_outputs true azure-route-incomplete
   exit 0
 fi
+azure_route="$value"
 printf 'azure-deploy=%s\ncurrent-main=true\n' "$value" >> "$final_output"
 cat "$final_output" >> "$GITHUB_OUTPUT"
+emit_route_decision true "$azure_base" "$marketing_base" "$validation_base" \
+  "$azure_route" "$marketing_route" classified
