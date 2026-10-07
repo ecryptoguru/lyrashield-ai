@@ -228,7 +228,7 @@ export const closeRedis=async()=>{};`
     `import fs from "node:fs";
 const file=${JSON.stringify(redisPath)};
 const log=(value)=>fs.appendFileSync(${JSON.stringify(actionLogPath)},value+"\\n");
-export default class Redis { async get(key){log("GET "+key);return JSON.parse(fs.readFileSync(file,"utf8"))} async set(){log("SET");return null} async eval(_script,count,key,expected){log("EVAL");const current=JSON.parse(fs.readFileSync(file,"utf8"));if(current!==expected)return 0;fs.writeFileSync(file,JSON.stringify(null));return 1} async quit(){return "OK"} }`
+export default class Redis { async get(key){log("GET "+key);return JSON.parse(fs.readFileSync(file,"utf8"))} async set(){log("SET");return null} async ["eval"](_script,count,key,expected){log("EVAL");const current=JSON.parse(fs.readFileSync(file,"utf8"));if(current!==expected)return 0;fs.writeFileSync(file,JSON.stringify(null));return 1} async quit(){return "OK"} }`
   )
   writeFileSync(billingModule, 'export const WEBHOOK_TRACK_CLAIM_PROTOCOL = "durable-claims/2";\n')
 
