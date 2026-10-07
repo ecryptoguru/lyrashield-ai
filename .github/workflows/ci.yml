@@ -544,15 +544,15 @@ jobs:
               packages/billing/src/trial-integration.test.ts \
               apps/web/src/app/api/workspaces/route-integration.test.ts \
               packages/myra/src/server/operations.runtime.test.ts \
-              packages/myra/src/server/session.rls.runtime.test.ts \
+              packages/myra/src/server/session.runtime.test.ts \
               --reporter=json --outputFile="$RUNNER_TEMP/trial-integration.json"
           node .github/scripts/assert-named-vitest-tests.mjs \
             "$RUNNER_TEMP/trial-integration.json" \
             'serializes simultaneous claims for two workspaces and survives membership removal' \
             'keeps trial writes inside the creator transaction after a module reload' \
             'rejects a foreign owner before execution' \
-            'denies context-free and account-only access while allowing explicit session operations' \
-            'pins helper function search paths without changing invoker security'
+            'issues and verifies sessions, rejects invalid or expired tokens, and slides stale expiry' \
+            'keeps lookups isolated to the bound public session and rejects account-only context'
 
       - name: Agent operation workspace foreign key test
         if: needs.changes.outputs.database-tests == 'true'
