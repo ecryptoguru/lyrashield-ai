@@ -397,6 +397,7 @@ jobs:
     if: ${{ !cancelled() &&
       inputs.held_recovery_original_run_id != '' &&
       needs.validate-manual-production-dispatch.result == 'success' &&
+      needs.preflight-compatible-baseline.result == 'success' &&
       needs.preflight-compatible-baseline.outputs.held_recovery_verified == 'true' }}
     runs-on: ubuntu-24.04
     permissions:
@@ -537,7 +538,7 @@ jobs:
   verify-built-worker-image:
     name: Rehearse exact release worker image on disposable services
     needs: resolve-images
-    if: needs.resolve-images.result == 'success'
+    if: ${{ !cancelled() && needs.resolve-images.result == 'success' }}
     permissions:
       contents: read
       packages: read
@@ -557,6 +558,11 @@ jobs:
         preflight-compatible-baseline,
       ]
     if: >
+      !cancelled() &&
+      needs.resolve-images.result == 'success' &&
+      needs.verify-built-worker-image.result == 'success' &&
+      needs.validate-manual-production-dispatch.result == 'success' &&
+      needs.preflight-compatible-baseline.result == 'success' &&
       (vars.AZURE_RESOURCE_GROUP != '') &&
       ((vars.AZURE_APP_CONTAINER_APP_NAME != '') || (vars.AZURE_SCANNER_CONTAINER_APP_NAME != ''))
     permissions:
@@ -579,3 +585,19 @@ jobs:
       egress_proxy_image: ${{ needs.resolve-images.outputs.egress_proxy_image }}
       egress_proxy_digest: ${{ needs.resolve-images.outputs.egress_proxy_digest }}
     secrets: inherit
+
+  verify-held-recovery-outcome:
+    name: Require completed held recovery deployment
+    needs: deploy
+    if: ${{ !cancelled() && inputs.held_recovery_original_run_id != '' }}
+    runs-on: ubuntu-24.04
+    permissions: {}
+    steps:
+      - name: Reject skipped or failed recovery deployment
+        env:
+          DEPLOY_RESULT: ${{ needs.deploy.result }}
+        run: |
+          test "$DEPLOY_RESULT" = success || {
+            echo '::error::Held recovery did not complete runtime deployment; production recovery is unverified.'
+            exit 1
+          }
