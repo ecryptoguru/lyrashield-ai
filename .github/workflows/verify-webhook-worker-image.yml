@@ -15,6 +15,10 @@ on:
         description: Full worker image reference pinned by sha256 digest
         required: true
         type: string
+    outputs:
+      rehearsal_harness_sha:
+        description: SHA-256 fingerprint of the exact-image rehearsal workflow and scripts
+        value: ${{ jobs.verify-worker-image.outputs.rehearsal_harness_sha }}
 
 permissions:
   contents: read
@@ -25,6 +29,8 @@ jobs:
     name: Exercise exact compatible worker image on disposable services
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    outputs:
+      rehearsal_harness_sha: ${{ steps.harness.outputs.sha }}
     permissions:
       contents: read
       packages: read
@@ -85,6 +91,11 @@ jobs:
         env:
           HARNESS_SHA: ${{ github.sha }}
         run: test "$(git rev-parse HEAD)" = "$HARNESS_SHA"
+
+      - name: Fingerprint exact-image rehearsal harness
+        id: harness
+        working-directory: harness
+        run: echo "sha=$(node .github/scripts/worker-image-rehearsal-harness-sha.mjs)" >> "$GITHUB_OUTPUT"
 
       - name: Validate immutable worker source and digest inputs
         env:

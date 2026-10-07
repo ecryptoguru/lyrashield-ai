@@ -84,11 +84,18 @@ assert.match(
   resolvedImages,
   /\[ "\$PREPARED_RESULT" = success \] && \[ "\$BUILD_RESULT" = skipped \]/
 )
-assert.match(imageProof, /needs:\s*resolve-images/)
+assert.match(imageProof, /needs:\s*\[resolve-images, resolve-prepared-images\]/)
 assert.match(
   imageProof,
-  /if: \$\{\{ !cancelled\(\) && needs\.resolve-images\.result == 'success' \}\}/
+  /if: >-\s*!cancelled\(\) &&\s*needs\.resolve-images\.result == 'success'/
 )
+assert.match(imageProof, /inputs\.held_recovery_original_run_id == ''/)
+assert.match(imageProof, /needs\.resolve-prepared-images\.outputs\.prepared_artifact_digest == ''/)
+assert.match(imageProof, /needs\.resolve-prepared-images\.outputs\.worker_rehearsal_harness_sha == ''/)
+assert.match(imageProof, /prepared_run_id != inputs\.held_recovery_prepared_run_id/)
+assert.match(imageProof, /worker_digest != needs\.resolve-images\.outputs\.worker_digest/)
+assert.match(imageProof, /worker_image != needs\.resolve-images\.outputs\.worker_image/)
+assert.match(imageProof, /engine_revision != needs\.resolve-images\.outputs\.engine_revision/)
 assert.match(imageProof, /verify-webhook-worker-image\.yml/)
 assert.match(
   imageProof,
@@ -96,6 +103,18 @@ assert.match(
 )
 assert.match(azureDeploy, /needs:[\s\S]*verify-built-worker-image/)
 assert.match(azureDeploy, /needs:[\s\S]*resolve-images/)
+assert.match(azureDeploy, /needs\.validate-manual-production-dispatch\.result == 'success'/)
+assert.match(azureDeploy, /needs\.preflight-compatible-baseline\.result == 'success'/)
+assert.match(azureDeploy, /needs\.verify-built-worker-image\.result == 'success'/)
+assert.match(azureDeploy, /needs\.verify-built-worker-image\.result == 'skipped'/)
+assert.match(azureDeploy, /needs\.resolve-prepared-images\.result == 'success'/)
+assert.match(azureDeploy, /needs\.resolve-prepared-images\.outputs\.prepared_artifact_digest != ''/)
+assert.match(azureDeploy, /needs\.resolve-prepared-images\.outputs\.worker_rehearsal_harness_sha != ''/)
+assert.match(azureDeploy, /prepared_run_id == inputs\.held_recovery_prepared_run_id/)
+assert.match(azureDeploy, /worker_digest == needs\.resolve-images\.outputs\.worker_digest/)
+assert.match(azureDeploy, /worker_image == needs\.resolve-images\.outputs\.worker_image/)
+assert.match(azureDeploy, /engine_revision == needs\.resolve-images\.outputs\.engine_revision/)
+assert.match(azureDeploy, /!cancelled\(\)/)
 assert.match(
   azureDeploy,
   /worker_digest: \$\{\{ needs\.resolve-images\.outputs\.worker_digest \}\}/

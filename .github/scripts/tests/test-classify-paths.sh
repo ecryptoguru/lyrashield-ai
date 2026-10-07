@@ -51,6 +51,7 @@ assert_eq "docs-only: app" "false" "$(get_field "$out" "app")"
 assert_eq "docs-only: shared" "false" "$(get_field "$out" "shared")"
 assert_eq "docs-only: marketing deploy" "false" "$(get_field "$out" "marketing-deploy")"
 assert_eq "docs-only: Azure deploy" "false" "$(get_field "$out" "azure-deploy")"
+assert_eq "docs-only: pinned worker contract" "false" "$(get_field "$out" "engine-worker-contract")"
 
 # --- Test 2: app changes trigger full CI ---
 out=$(run_classify $'apps/web/src/app/page.tsx\napps/worker/src/jobs/run-scan.job.ts')
@@ -60,6 +61,7 @@ assert_eq "app: marketing" "false" "$(get_field "$out" "marketing")"
 assert_eq "app: shared" "false" "$(get_field "$out" "shared")"
 assert_eq "app: marketing deploy" "false" "$(get_field "$out" "marketing-deploy")"
 assert_eq "app: Azure deploy" "true" "$(get_field "$out" "azure-deploy")"
+assert_eq "app: pinned worker contract" "true" "$(get_field "$out" "engine-worker-contract")"
 
 # --- Test 3: marketing changes trigger marketing deploy ---
 out=$(run_classify $'apps/marketing/src/pages/index.astro\napps/marketing-motion/src/scene.ts')
@@ -68,6 +70,10 @@ assert_eq "marketing: marketing" "true" "$(get_field "$out" "marketing")"
 assert_eq "marketing: app" "false" "$(get_field "$out" "app")"
 assert_eq "marketing: marketing deploy" "true" "$(get_field "$out" "marketing-deploy")"
 assert_eq "marketing: Azure deploy" "false" "$(get_field "$out" "azure-deploy")"
+assert_eq "marketing: pinned worker contract" "false" "$(get_field "$out" "engine-worker-contract")"
+
+out=$(run_classify $'README.md\napps/marketing/src/content/guide.mdx\napps/marketing/package.json')
+assert_eq "docs and marketing only: pinned worker contract" "false" "$(get_field "$out" "engine-worker-contract")"
 
 # --- Test 4: shared package changes trigger full CI ---
 out=$(run_classify $'packages/db/src/scan-service.ts\npackages/auth/src/auth.ts')
@@ -76,6 +82,7 @@ assert_eq "shared: shared" "true" "$(get_field "$out" "shared")"
 assert_eq "shared: app" "false" "$(get_field "$out" "app")"
 assert_eq "shared: marketing deploy" "true" "$(get_field "$out" "marketing-deploy")"
 assert_eq "shared: Azure deploy" "true" "$(get_field "$out" "azure-deploy")"
+assert_eq "shared: pinned worker contract" "true" "$(get_field "$out" "engine-worker-contract")"
 
 # --- Test 5: mixed docs + app → NOT docs-only ---
 out=$(run_classify $'AGENTS.md\napps/web/src/app/page.tsx')
@@ -88,6 +95,7 @@ assert_eq "github: docs-only" "false" "$(get_field "$out" "docs-only")"
 assert_eq "github: shared" "true" "$(get_field "$out" "shared")"
 assert_eq "github: marketing deploy" "false" "$(get_field "$out" "marketing-deploy")"
 assert_eq "github: Azure deploy" "false" "$(get_field "$out" "azure-deploy")"
+assert_eq "github: pinned worker contract" "true" "$(get_field "$out" "engine-worker-contract")"
 
 out=$(run_classify $'.github/workflows/deploy-azure.yml')
 assert_eq "Azure workflow: Azure deploy" "true" "$(get_field "$out" "azure-deploy")"
@@ -107,6 +115,23 @@ assert_eq "Release classifier: Azure deploy" "false" "$(get_field "$out" "azure-
 for path in .github/scripts/promote-worker-vm.sh .github/scripts/verify-engine-revision.sh .github/scripts/verify-engine-worker-contract.sh; do
   out=$(run_classify "$path")
   assert_eq "$path: Azure deploy" "true" "$(get_field "$out" "azure-deploy")"
+  assert_eq "$path: pinned worker contract" "true" "$(get_field "$out" "engine-worker-contract")"
+done
+
+# Worker dependencies, engine pins/parity, image inputs and root package state
+# all retain the contract gate. Unknown paths also remain fail-closed.
+for path in \
+  apps/worker/src/worker.ts \
+  packages/integrations/src/queue.ts \
+  .github/workflows/release-tauri.yml \
+  .github/workflows/verify-webhook-worker-image.yml \
+  .github/scripts/check-engine-revision-parity.sh \
+  pnpm-lock.yaml \
+  pnpm-workspace.yaml \
+  package.json \
+  Dockerfile; do
+  out=$(run_classify "$path")
+  assert_eq "$path: pinned worker contract" "true" "$(get_field "$out" "engine-worker-contract")"
 done
 
 out=$(run_classify $'.github/scripts/tests/test-promote-worker-vm.sh')
@@ -219,12 +244,14 @@ out=$(run_classify $'infra/new-runtime-input.txt')
 assert_eq "unknown: shared fallback" "true" "$(get_field "$out" "shared")"
 assert_eq "unknown: marketing deploy fail-closed" "true" "$(get_field "$out" "marketing-deploy")"
 assert_eq "unknown: Azure deploy fail-closed" "true" "$(get_field "$out" "azure-deploy")"
+assert_eq "unknown: pinned worker contract fail-closed" "true" "$(get_field "$out" "engine-worker-contract")"
 
 # --- Test 15: an unknown path remains fail-closed in a mixed change set ---
 out=$(run_classify $'apps/web/src/app/page.tsx\ninfra/new-runtime-input.txt')
 assert_eq "mixed unknown: shared fallback" "true" "$(get_field "$out" "shared")"
 assert_eq "mixed unknown: marketing deploy fail-closed" "true" "$(get_field "$out" "marketing-deploy")"
 assert_eq "mixed unknown: Azure deploy fail-closed" "true" "$(get_field "$out" "azure-deploy")"
+assert_eq "mixed unknown: pinned worker contract fail-closed" "true" "$(get_field "$out" "engine-worker-contract")"
 
 for path in apps/marketing/src/content/compare/snyk.md apps/web/README.md; do
   out=$(run_classify "$path")

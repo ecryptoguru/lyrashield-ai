@@ -195,16 +195,22 @@ jobs:
           WEB_IMAGE: ${{ needs.build.outputs.web_image }}
           WORKER_IMAGE: ${{ needs.build.outputs.worker_image }}
           EGRESS_PROXY_IMAGE: ${{ needs.build.outputs.egress_proxy_image }}
+          REHEARSAL_HARNESS_SHA: ${{ needs.rehearse.outputs.rehearsal_harness_sha }}
+          REHEARSAL_HARNESS_REVISION: ${{ github.sha }}
         run: |
           python3 - <<'PY'
           import json, os
           from pathlib import Path
           receipt = {
-              "schemaVersion": 1,
+              "schemaVersion": 2,
               "sourceSha": os.environ["SOURCE_SHA"],
               "engineRevision": os.environ["ENGINE_REVISION"],
               "runId": os.environ["GITHUB_RUN_ID"],
               "runAttempt": int(os.environ["GITHUB_RUN_ATTEMPT"]),
+              "rehearsal": {
+                  "harnessSha": os.environ["REHEARSAL_HARNESS_SHA"],
+                  "harnessRevision": os.environ["REHEARSAL_HARNESS_REVISION"],
+              },
               "images": {
                   "web": os.environ["WEB_IMAGE"],
                   "worker": os.environ["WORKER_IMAGE"],

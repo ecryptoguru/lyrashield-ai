@@ -95,12 +95,21 @@ test("worker contract verification tests the merged app even after a squash", ()
   }
 })
 
-test("engine-worker contract is not skipped on app main or pull requests", () => {
+test("required engine-worker context stays present and only unrelated paths get a success no-op", () => {
   const workflow = readFileSync(path.resolve(".github/workflows/ci.yml"), "utf8")
-  // Slice exactly one job: stop at the next two-space job key so sibling
-  // jobs appended after this one cannot leak their own fields into it.
-  const job = workflow.split("  engine-worker-contract:")[1]?.split(/\n  [a-z][a-z-]*:/)[0]
+  // Start at the job declaration rather than the same output name in changes.
+  const start = workflow.indexOf("\n  engine-worker-contract:\n")
+  const nextJob = workflow.slice(start + 1).search(/\n  [a-z][a-z-]*:/)
+  const end = nextJob < 0 ? -1 : start + 1 + nextJob
+  const job = start < 0 ? "" : workflow.slice(start, end < 0 ? undefined : end)
   assert.ok(job)
   assert.match(job, /name: Pinned Engine \/ Worker Contract/)
-  assert.doesNotMatch(job, /^    if:/m)
+  assert.match(job, /^    if: \$\{\{ always\(\) && !cancelled\(\) \}\}$/m)
+  assert.match(job, /needs\.changes\.outputs\.engine-worker-contract == 'false'/)
+  assert.match(job, /Changed-path classification did not succeed/)
+  assert.match(job, /needs\.changes\.outputs\.engine-worker-contract != 'false'/)
+  assert.match(workflow, /engine-worker-contract: \$\{\{ steps\.classify\.outputs\.engine-worker-contract \}\}/)
+  assert.match(job, /if: \$\{\{ always\(\) && !cancelled\(\) && needs\.changes\.result != 'success' \}\}/)
+  assert.match(job, /Checkout pinned engine/)
+  assert.match(job, /Verify pinned engine-worker contract/)
 })
