@@ -80,7 +80,7 @@ describe.skipIf(!disposable)("public Myra session runtime behavior", () => {
     }
   })
 
-  it("issues and verifies sessions, rejects invalid or expired tokens, and slides stale expiry", async () => {
+  it("issues and verifies sessions while rejecting invalid or expired tokens and sliding stale expiry", async () => {
     const issued = await issuePublicSession(MyraSurface.MARKETING)
     issuedHashes.push(hashPublicToken(issued.token))
     expect(issued.token).toMatch(/^[A-Za-z0-9_-]{43}$/)
