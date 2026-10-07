@@ -242,6 +242,9 @@ jobs:
             --security-opt no-new-privileges:true \
             --memory 3g --pids-limit 768 \
             --env NODE_ENV=production \
+            --env TRUSTED_PROXY_IP_HEADER=x-forwarded-for \
+            --env IP_HASH_SALT=synthetic-ci-only-ip-hash-salt-32chars \
+            --env BREVO_API_KEY=synthetic-ci-only-mail-provider-key \
             --env LYRASHIELD_WORKER_CONCURRENCY=1 \
             --env "LYRASHIELD_PRODUCT_REVISION=$EXPECTED_SOURCE_SHA" \
             --env "LYRASHIELD_ENGINE_REVISION=$EXPECTED_ENGINE_REVISION" \
