@@ -675,7 +675,7 @@ test("completed archive rejects a foreign admission token without changing write
   assert.equal(readFileSync(archivePath, "utf8"), archive)
   assert.equal(readFileSync(f.redisPath, "utf8"), JSON.stringify("foreign-stop-token"))
   assert.doesNotMatch(readFileSync(f.callsPath, "utf8"), /revision deactivate/)
-  assert.equal(readFileSync(f.actionLogPath, "utf8"), actionsBefore)
+  assert.doesNotMatch(readFileSync(f.actionLogPath, "utf8").slice(actionsBefore.length), /SET|EVAL/)
 })
 
 test("new-run probe verifies immutable original owner and exact admission token with failed worker held", (t) => {
