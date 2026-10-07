@@ -30,6 +30,28 @@ function loginIdentity(body) {
   return { action, client, tenant, subscription }
 }
 
+function foldedCondition(body) {
+  const value = body.match(/if: >\n([\s\S]*?)\n        (?:uses:|env:)/)?.[1]
+  assert.ok(value, "Expected a folded workflow condition")
+  return value.replace(/\s+/g, " ").trim()
+}
+
+function evaluateCondition(body, inputs, steps, failed) {
+  const singleLine = body.match(/^        if: (.+)$/m)?.[1]
+  const condition = singleLine === ">" ? foldedCondition(body) : singleLine
+  assert.ok(condition, "Missing workflow condition")
+  const expression = condition.replace(
+    /steps\.([a-z][a-z0-9-]*)/g,
+    (_, name) => `steps[${JSON.stringify(name)}]`
+  )
+  return Function(
+    "inputs",
+    "steps",
+    "failure",
+    `return (${expression})`
+  )(inputs, steps, () => failed)
+}
+
 test("fresh OIDC identity immediately precedes the late Key Vault verifier", () => {
   assert.match(deploy, /id-token:\s*write/)
   assert.match(deploy, /environment:\s*\n\s+name:\s*azure-production/)
@@ -62,6 +84,72 @@ test("ordinary migration renews OIDC before Key Vault secret synchronization", (
   assert.match(refresh.body, /if: inputs\.held_recovery != true/)
   assert.ok(migration.index < refresh.index)
   assert.equal(refresh.index + 1, sync.index)
+})
+
+test("ordinary worker promotion and failure cleanup renew the same OIDC identity", () => {
+  const initial = step("Log in to Azure")
+  const promoteLogin = step("Refresh Azure OIDC login before ordinary worker promotion")
+  const promote = step("Promote verified worker digest on VM")
+  const cleanupLogin = step("Refresh Azure OIDC login before ordinary failure cleanup")
+  const rollback = step("Roll back production traffic on health failure")
+  const deactivate = step("Deactivate zero-traffic candidates after failed rollout")
+
+  for (const candidate of [promoteLogin, cleanupLogin]) {
+    assert.deepEqual(loginIdentity(candidate.body), loginIdentity(initial.body))
+  }
+  assert.match(
+    promoteLogin.body,
+    /if: inputs\.held_recovery != true && inputs\.webhook_claims_cutover != true/
+  )
+  assert.equal(promoteLogin.index + 1, promote.index)
+  assert.equal(cleanupLogin.index + 1, rollback.index)
+  assert.equal(foldedCondition(cleanupLogin.body), foldedCondition(deactivate.body))
+})
+
+test("a failed ordinary worker login triggers rollback and every applicable cleanup", () => {
+  const outcomes = [
+    "deploy-app",
+    "deploy-scanner",
+    "deploy-egress-proxy",
+    "smoke-candidates",
+    "worker-preflight",
+    "promote",
+    "smoke-public",
+    "ordinary-worker-login",
+    "worker-vm",
+  ]
+  const steps = Object.fromEntries(outcomes.map((name) => [name, { outcome: "success" }]))
+  steps["ordinary-worker-login"].outcome = "failure"
+  steps["deploy-app"].outputs = { previous_client_cert_mode: "required" }
+
+  for (const name of [
+    "Refresh Azure OIDC login before ordinary failure cleanup",
+    "Roll back production traffic on health failure",
+    "Restore prior ingress mode after failed rollout",
+    "Deactivate zero-traffic candidates after failed rollout",
+  ]) {
+    const body = step(name).body
+    assert.equal(
+      evaluateCondition(body, { held_recovery: false, webhook_claims_cutover: false }, steps, true),
+      true,
+      name
+    )
+    assert.equal(
+      evaluateCondition(body, { held_recovery: true, webhook_claims_cutover: false }, steps, true),
+      false,
+      name
+    )
+    assert.equal(
+      evaluateCondition(
+        body,
+        { held_recovery: false, webhook_claims_cutover: false },
+        steps,
+        false
+      ),
+      false,
+      name
+    )
+  }
 })
 
 test("long cutover phases renew OIDC before VM boot, release, and archive", () => {

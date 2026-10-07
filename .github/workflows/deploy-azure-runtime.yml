@@ -811,6 +811,14 @@ jobs:
       #    failure here rolls traffic back (the rollback step below keys on
       #    this step's outcome) while the old worker keeps serving until a
       #    retry succeeds.
+      - name: Refresh Azure OIDC login before ordinary worker promotion
+        if: inputs.held_recovery != true && inputs.webhook_claims_cutover != true
+        id: ordinary-worker-login
+        uses: Azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ secrets.AZURE_DEPLOY_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_DEPLOY_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_DEPLOY_SUBSCRIPTION_ID }}
       - name: Promote verified worker digest on VM
         if: inputs.held_recovery != true && inputs.webhook_claims_cutover != true
         id: worker-vm
@@ -822,8 +830,21 @@ jobs:
         run: bash .github/scripts/deploy-azure-rollout.sh promote-verified-worker-digest-on-vm
       # Migrations and app-scope configuration remain forward-only. This rollback
       # changes traffic only, after every candidate had already passed readiness.
+      - name: Refresh Azure OIDC login before ordinary failure cleanup
+        if: >
+          inputs.held_recovery != true && inputs.webhook_claims_cutover != true && failure() &&
+          (steps.deploy-app.outcome == 'failure' || steps.deploy-scanner.outcome == 'failure' ||
+          steps.deploy-egress-proxy.outcome == 'failure' || steps.smoke-candidates.outcome == 'failure' ||
+          steps.worker-preflight.outcome == 'failure' ||
+          steps.promote.outcome == 'failure' || steps.smoke-public.outcome == 'failure' ||
+          steps.ordinary-worker-login.outcome == 'failure' || steps.worker-vm.outcome == 'failure')
+        uses: Azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ secrets.AZURE_DEPLOY_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_DEPLOY_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_DEPLOY_SUBSCRIPTION_ID }}
       - name: Roll back production traffic on health failure
-        if: inputs.held_recovery != true && inputs.webhook_claims_cutover != true && failure() && (steps.promote.outcome == 'failure' || steps.smoke-public.outcome == 'failure' || steps.worker-vm.outcome == 'failure')
+        if: inputs.held_recovery != true && inputs.webhook_claims_cutover != true && failure() && (steps.promote.outcome == 'failure' || steps.smoke-public.outcome == 'failure' || steps.ordinary-worker-login.outcome == 'failure' || steps.worker-vm.outcome == 'failure')
         env:
           APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
           APP_PREVIOUS: ${{ steps.rollout.outputs.app_previous }}
@@ -842,7 +863,8 @@ jobs:
           (steps.deploy-app.outcome == 'failure' || steps.deploy-scanner.outcome == 'failure' ||
           steps.deploy-egress-proxy.outcome == 'failure' || steps.smoke-candidates.outcome == 'failure' ||
           steps.worker-preflight.outcome == 'failure' ||
-          steps.promote.outcome == 'failure' || steps.smoke-public.outcome == 'failure' || steps.worker-vm.outcome == 'failure')
+          steps.promote.outcome == 'failure' || steps.smoke-public.outcome == 'failure' ||
+          steps.ordinary-worker-login.outcome == 'failure' || steps.worker-vm.outcome == 'failure')
         env:
           RG: ${{ vars.AZURE_RESOURCE_GROUP }}
           APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
@@ -854,7 +876,8 @@ jobs:
           (steps.deploy-app.outcome == 'failure' || steps.deploy-scanner.outcome == 'failure' ||
           steps.deploy-egress-proxy.outcome == 'failure' || steps.smoke-candidates.outcome == 'failure' ||
           steps.worker-preflight.outcome == 'failure' ||
-          steps.promote.outcome == 'failure' || steps.smoke-public.outcome == 'failure' || steps.worker-vm.outcome == 'failure')
+          steps.promote.outcome == 'failure' || steps.smoke-public.outcome == 'failure' ||
+          steps.ordinary-worker-login.outcome == 'failure' || steps.worker-vm.outcome == 'failure')
         env:
           RG: ${{ vars.AZURE_RESOURCE_GROUP }}
           APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}

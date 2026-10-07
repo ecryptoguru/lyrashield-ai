@@ -217,15 +217,15 @@ test("deployment step order, recovery conditions and app/scanner env key sets st
   )
   assert.equal(
     normalizedIf("Roll back production traffic on health failure"),
-    "inputs.held_recovery != true && inputs.webhook_claims_cutover != true && failure() && (steps.promote.outcome == 'failure' || steps.smoke-public.outcome == 'failure' || steps.worker-vm.outcome == 'failure')"
+    "inputs.held_recovery != true && inputs.webhook_claims_cutover != true && failure() && (steps.promote.outcome == 'failure' || steps.smoke-public.outcome == 'failure' || steps.ordinary-worker-login.outcome == 'failure' || steps.worker-vm.outcome == 'failure')"
   )
   assert.equal(
     normalizedIf("Restore prior ingress mode after failed rollout"),
-    "inputs.held_recovery != true && inputs.webhook_claims_cutover != true && failure() && steps.deploy-app.outputs.previous_client_cert_mode != '' && (steps.deploy-app.outcome == 'failure' || steps.deploy-scanner.outcome == 'failure' || steps.deploy-egress-proxy.outcome == 'failure' || steps.smoke-candidates.outcome == 'failure' || steps.worker-preflight.outcome == 'failure' || steps.promote.outcome == 'failure' || steps.smoke-public.outcome == 'failure' || steps.worker-vm.outcome == 'failure')"
+    "inputs.held_recovery != true && inputs.webhook_claims_cutover != true && failure() && steps.deploy-app.outputs.previous_client_cert_mode != '' && (steps.deploy-app.outcome == 'failure' || steps.deploy-scanner.outcome == 'failure' || steps.deploy-egress-proxy.outcome == 'failure' || steps.smoke-candidates.outcome == 'failure' || steps.worker-preflight.outcome == 'failure' || steps.promote.outcome == 'failure' || steps.smoke-public.outcome == 'failure' || steps.ordinary-worker-login.outcome == 'failure' || steps.worker-vm.outcome == 'failure')"
   )
   assert.equal(
     normalizedIf("Deactivate zero-traffic candidates after failed rollout"),
-    "inputs.held_recovery != true && inputs.webhook_claims_cutover != true && failure() && (steps.deploy-app.outcome == 'failure' || steps.deploy-scanner.outcome == 'failure' || steps.deploy-egress-proxy.outcome == 'failure' || steps.smoke-candidates.outcome == 'failure' || steps.worker-preflight.outcome == 'failure' || steps.promote.outcome == 'failure' || steps.smoke-public.outcome == 'failure' || steps.worker-vm.outcome == 'failure')"
+    "inputs.held_recovery != true && inputs.webhook_claims_cutover != true && failure() && (steps.deploy-app.outcome == 'failure' || steps.deploy-scanner.outcome == 'failure' || steps.deploy-egress-proxy.outcome == 'failure' || steps.smoke-candidates.outcome == 'failure' || steps.worker-preflight.outcome == 'failure' || steps.promote.outcome == 'failure' || steps.smoke-public.outcome == 'failure' || steps.ordinary-worker-login.outcome == 'failure' || steps.worker-vm.outcome == 'failure')"
   )
 
   const app = functionBody(rollout, "deploy-app-container-app")
@@ -339,6 +339,9 @@ test("deployment step order, recovery conditions and app/scanner env key sets st
   ])
   assert.doesNotMatch(scanner, /LYRASHIELD_AI_(?:RESULT_CACHE|CACHE_)/)
 
+  // Nine bounded federated-login renewals protect the long ordinary and
+  // maintenance paths. Keep the runtime size bound tight to those steps.
+  assert.equal((runtime.match(/^      - name: Refresh Azure OIDC login /gm) ?? []).length, 9)
   for (const file of [
     ".github/workflows/deploy-azure.yml",
     ".github/workflows/deploy-azure-runtime.yml",
@@ -347,9 +350,8 @@ test("deployment step order, recovery conditions and app/scanner env key sets st
     "ops/deployment/containerapp.sh",
   ]) {
     const lineCount = readFileSync(file, "utf8").split("\n").length - 1
-    // Held recovery and bounded OIDC renewal add guarded steps to the reusable
-    // runtime; preserve the original budget for every other deploy file.
-    const limit = file === ".github/workflows/deploy-azure-runtime.yml" ? 1000 : 900
+    // Preserve the original budget for every other deploy file.
+    const limit = file === ".github/workflows/deploy-azure-runtime.yml" ? 1025 : 900
     assert.ok(lineCount < limit, `${file} has ${lineCount} lines; expected fewer than ${limit}`)
   }
 
