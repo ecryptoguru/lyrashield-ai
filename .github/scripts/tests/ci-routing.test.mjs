@@ -534,6 +534,33 @@ test("main change routing is target-specific when Azure is current but marketing
   assert.equal(result.outputs.marketing, "true")
 })
 
+test("tooling-only changes skip both deployments when both production baselines are current", (t) => {
+  const fixture = createMainGapFixture({ pendingFile: ".github/workflows/ci.yml" })
+  t.after(() => rmSync(fixture.directory, { recursive: true, force: true }))
+  const currentRelease = azureCodeReleaseFixture(
+    1,
+    fixture.deployedSha,
+    101,
+    ".github/workflows/release-production.yml"
+  )
+  const result = runMainGap(fixture, {
+    cloudflareSha: fixture.deployedSha,
+    ...azureFixtures([currentRelease]),
+  })
+
+  assert.equal(result.status, 0, result.stderr)
+  assert.equal(result.outputs["current-main"], "true")
+  assert.equal(result.outputs["azure-deploy"], "false")
+  assert.equal(result.outputs["marketing-deploy"], "false")
+  assert.match(
+    result.stdout,
+    new RegExp(
+      `release-routing current-main=true head=${fixture.headSha} azure-base=${fixture.deployedSha} marketing-base=${fixture.deployedSha} validation-base=${fixture.deployedSha} azure=skip marketing=skip reason=classified`
+    )
+  )
+  assert.doesNotMatch(`${result.stdout}${result.stderr}`, /fixture-token-must-not-be-printed/)
+})
+
 test("main change routing fails closed when a deployed baseline cannot be proven", (t) => {
   const fixture = createMainGapFixture()
   t.after(() => rmSync(fixture.directory, { recursive: true, force: true }))
@@ -558,6 +585,7 @@ test("main change routing fails closed when a deployed baseline cannot be proven
   assert.equal(result.outputs.shared, "true")
   assert.equal(result.outputs["azure-deploy"], "true")
   assert.equal(result.outputs["marketing-deploy"], "true")
+  assert.match(result.stdout, /release-routing .*reason=azure-baseline-unavailable/)
 })
 
 test("stale main runs retain validation but cannot route a production deployment", (t) => {
@@ -575,6 +603,7 @@ test("stale main runs retain validation but cannot route a production deployment
   assert.equal(result.outputs.app, "true")
   assert.equal(result.outputs["azure-deploy"], "true")
   assert.equal(result.outputs["marketing-deploy"], "true")
+  assert.match(result.stdout, /release-routing .*reason=superseded-main/)
 })
 
 test("Azure and marketing releases route the exact current merged SHA independently", () => {
