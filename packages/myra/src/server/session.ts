@@ -7,7 +7,7 @@ import { createHash, randomBytes } from "node:crypto"
 import { prisma } from "@lyrashield/db"
 import type { MyraSurface } from "../contracts"
 import { MYRA_LIMITS } from "../contracts"
-import type { MyraDb } from "./db"
+import { MYRA_TRUSTED_INTERNAL, withTrustedScope, type MyraDb } from "./db"
 
 export const PUBLIC_SESSION_HEADER = "x-myra-session"
 
@@ -28,10 +28,15 @@ export async function issuePublicSession(
 ): Promise<{ token: string; publicSessionId: string; expiresAt: Date }> {
   const token = randomBytes(32).toString("base64url")
   const expiresAt = new Date(Date.now() + SESSION_TTL_MS)
-  const row = await db.myraPublicSession.create({
-    data: { tokenHash: hashPublicToken(token), surface, expiresAt },
-    select: { id: true },
-  })
+  const row = await withTrustedScope(
+    MYRA_TRUSTED_INTERNAL,
+    (tx) =>
+      tx.myraPublicSession.create({
+        data: { tokenHash: hashPublicToken(token), surface, expiresAt },
+        select: { id: true },
+      }),
+    db
+  )
   return { token, publicSessionId: row.id, expiresAt }
 }
 
@@ -45,19 +50,25 @@ export async function verifyPublicToken(
 ): Promise<string | null> {
   const tokenHash = hashPublicToken(token)
   const now = new Date()
-  const row = await db.myraPublicSession.findUnique({
-    where: { tokenHash },
-    select: { id: true, expiresAt: true, lastSeenAt: true },
-  })
-  if (!row || row.expiresAt <= now) return null
-  // Slide the expiry at most once an hour — the session stays valid either
-  // way; per-request UPDATEs are pure churn on the verify hot path.
-  const stale = !row.lastSeenAt || now.getTime() - row.lastSeenAt.getTime() > 60 * 60 * 1000
-  if (stale) {
-    await db.myraPublicSession.update({
-      where: { id: row.id },
-      data: { lastSeenAt: now, expiresAt: new Date(now.getTime() + SESSION_TTL_MS) },
-    })
-  }
-  return row.id
+  return withTrustedScope(
+    MYRA_TRUSTED_INTERNAL,
+    async (tx) => {
+      const row = await tx.myraPublicSession.findUnique({
+        where: { tokenHash },
+        select: { id: true, expiresAt: true, lastSeenAt: true },
+      })
+      if (!row || row.expiresAt <= now) return null
+      // Slide the expiry at most once an hour — the session stays valid either
+      // way; per-request UPDATEs are pure churn on the verify hot path.
+      const stale = !row.lastSeenAt || now.getTime() - row.lastSeenAt.getTime() > 60 * 60 * 1000
+      if (stale) {
+        await tx.myraPublicSession.update({
+          where: { id: row.id },
+          data: { lastSeenAt: now, expiresAt: new Date(now.getTime() + SESSION_TTL_MS) },
+        })
+      }
+      return row.id
+    },
+    db
+  )
 }
