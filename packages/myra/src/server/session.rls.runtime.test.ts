@@ -64,7 +64,7 @@ describe.skipIf(!disposable)("public Myra session RLS boundary", () => {
     }
   })
 
-  it("blocks unbound and account-only reads, writes, and deletes", async () => {
+  it("blocks unbound and account-only read, write and delete operations", async () => {
     expect(await prisma.myraPublicSession.findUnique({ where: { tokenHash } })).toBeNull()
     expect(
       await prisma.myraPublicSession.updateMany({
