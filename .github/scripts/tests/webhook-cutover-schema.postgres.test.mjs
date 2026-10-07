@@ -126,10 +126,28 @@ test(
           /runtime principal privileges/
         )
         await client.query("RESET ROLE")
+        // A schema earlier than pg_catalog must never spoof catalog privilege proof.
+        await client.query(
+          `CREATE TABLE ${quote(schema)}.pg_roles (rolname TEXT, rolsuper BOOLEAN, rolbypassrls BOOLEAN)`
+        )
+        await client.query(`INSERT INTO ${quote(schema)}.pg_roles VALUES ($1, false, false)`, [
+          role,
+        ])
+        await client.query(`GRANT USAGE ON SCHEMA ${quote(schema)} TO ${quote(role)}`)
+        await client.query(`GRANT SELECT ON ${quote(schema)}.pg_roles TO ${quote(role)}`)
+        await client.query(`SET search_path TO ${quote(schema)}, pg_catalog`)
         for (const flag of ["BYPASSRLS", "SUPERUSER"]) {
           await client.query(`ALTER ROLE ${quote(role)} ${flag}`)
           await client.query(`SET ROLE ${quote(role)}`)
           try {
+            const shadow = await client.query(
+              "SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = current_user"
+            )
+            assert.deepEqual(
+              shadow.rows,
+              [{ rolsuper: false, rolbypassrls: false }],
+              "unqualified lookup reproduces the spoof"
+            )
             await assert.rejects(
               contract.assertRuntimeRoleLeastPrivilege(prisma, workerUrl),
               /runtime principal privileges/

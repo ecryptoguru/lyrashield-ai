@@ -142,7 +142,7 @@ function expectedRuntimePrincipal(databaseUrl) {
 export async function assertRuntimeRoleLeastPrivilege(runtimePrisma, databaseUrl) {
   const expectedPrincipal = expectedRuntimePrincipal(databaseUrl)
   const roles = await runtimePrisma.$queryRawUnsafe(
-    "SELECT current_user AS role_name, role.rolsuper, role.rolbypassrls FROM pg_roles AS role WHERE role.rolname = current_user",
+    "SELECT current_user AS role_name, role.rolsuper, role.rolbypassrls FROM pg_catalog.pg_roles AS role WHERE role.rolname = current_user",
   )
   requireMatch(
     Array.isArray(roles) &&
@@ -157,7 +157,7 @@ export async function assertRuntimeRoleLeastPrivilege(runtimePrisma, databaseUrl
 
 export async function assertFullyMigratedWebhookSchema(prisma, claimProtocol) {
   requireMatch(claimProtocol === protocol, "protocol")
-  const [{ schema }] = await prisma.$queryRawUnsafe("SELECT current_schema() AS schema")
+  const [{ schema }] = await prisma.$queryRawUnsafe("SELECT pg_catalog.current_schema() AS schema")
   requireMatch(typeof schema === "string" && schema.length > 0, "schema")
   const quoteIdentifier = (value) => '"' + value.replaceAll('"', '""') + '"'
   const selectedSchema = quoteIdentifier(schema)
@@ -181,7 +181,7 @@ export async function assertFullyMigratedWebhookSchema(prisma, claimProtocol) {
     "migration checksums",
   )
   const observedColumns = await prisma.$queryRawUnsafe(
-    'SELECT a.attname AS name, format_type(a.atttypid, a.atttypmod) AS type, a.attnotnull AS "notNull", pg_get_expr(d.adbin, d.adrelid) AS "defaultExpr" FROM pg_attribute a JOIN pg_class c ON c.oid = a.attrelid JOIN pg_namespace n ON n.oid = c.relnamespace LEFT JOIN pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum WHERE n.nspname = $1 AND c.relname = $2 AND c.relkind = \'r\' AND a.attnum > 0 AND NOT a.attisdropped ORDER BY a.attnum',
+    'SELECT a.attname AS name, pg_catalog.format_type(a.atttypid, a.atttypmod) AS type, a.attnotnull AS "notNull", pg_catalog.pg_get_expr(d.adbin, d.adrelid) AS "defaultExpr" FROM pg_catalog.pg_attribute a JOIN pg_catalog.pg_class c ON c.oid = a.attrelid JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace LEFT JOIN pg_catalog.pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum WHERE n.nspname = $1 AND c.relname = $2 AND c.relkind = \'r\' AND a.attnum > 0 AND NOT a.attisdropped ORDER BY a.attnum',
     schema,
     "WebhookEventTrack",
   )
@@ -191,7 +191,7 @@ export async function assertFullyMigratedWebhookSchema(prisma, claimProtocol) {
     return row?.type === type && row.notNull === notNull && normalizeCatalog(row.defaultExpr) === normalizeCatalog(defaultExpr)
   }), "columns")
   const observedConstraints = await prisma.$queryRawUnsafe(
-    "SELECT conname AS name, contype::text AS type, pg_get_constraintdef(oid, true) AS definition, convalidated AS validated FROM pg_constraint WHERE conrelid = (SELECT c.oid FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = $1 AND c.relname = $2 AND c.relkind = 'r') AND contype IN ('p', 'f', 'c') ORDER BY conname",
+    "SELECT conname AS name, contype::text AS type, pg_catalog.pg_get_constraintdef(oid, true) AS definition, convalidated AS validated FROM pg_catalog.pg_constraint WHERE conrelid = (SELECT c.oid FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = $1 AND c.relname = $2 AND c.relkind = 'r') AND contype IN ('p', 'f', 'c') ORDER BY conname",
     schema,
     "WebhookEventTrack",
   )
@@ -205,7 +205,7 @@ export async function assertFullyMigratedWebhookSchema(prisma, claimProtocol) {
     "constraints",
   )
   const observedIndexes = await prisma.$queryRawUnsafe(
-    'SELECT ic.relname AS name, ix.indisunique AS unique, ix.indisvalid AS valid, ix.indisready AS ready, (ix.indpred IS NULL) AS "predicateIsNull", (ix.indnatts = ix.indnkeyatts) AS "noIncludeColumns", (ix.indexprs IS NULL) AS "noExpressions", am.amname AS method, ARRAY(SELECT replace(pg_get_indexdef(ix.indexrelid, position, true), chr(34), \'\') FROM generate_series(1, ix.indnkeyatts) AS key_column(position) ORDER BY position) AS columns, ARRAY(SELECT NOT pg_index_column_has_property(ix.indexrelid, position, \'desc\') AND NOT pg_index_column_has_property(ix.indexrelid, position, \'nulls_first\') FROM generate_series(1, ix.indnkeyatts) AS key_column(position) ORDER BY position) AS "defaultOrdering", ARRAY(SELECT opc.opcdefault FROM unnest(ix.indclass) WITH ORDINALITY AS indexed_class(class_oid, class_position) JOIN pg_opclass opc ON opc.oid = indexed_class.class_oid WHERE indexed_class.class_position <= ix.indnkeyatts ORDER BY indexed_class.class_position) AS "defaultOperatorClasses", ARRAY(SELECT indexed_collation.collation_oid = attr.attcollation FROM unnest(ix.indkey) WITH ORDINALITY AS indexed_key(attribute_number, key_position) JOIN pg_attribute attr ON attr.attrelid = ix.indrelid AND attr.attnum = indexed_key.attribute_number JOIN unnest(ix.indcollation) WITH ORDINALITY AS indexed_collation(collation_oid, collation_position) ON indexed_collation.collation_position = indexed_key.key_position WHERE indexed_key.key_position <= ix.indnkeyatts ORDER BY indexed_key.key_position) AS "columnCollationsMatch" FROM pg_index ix JOIN pg_class tc ON tc.oid = ix.indrelid JOIN pg_namespace n ON n.oid = tc.relnamespace JOIN pg_class ic ON ic.oid = ix.indexrelid JOIN pg_am am ON am.oid = ic.relam WHERE n.nspname = $1 AND tc.relname = $2 ORDER BY ic.relname',
+    'SELECT ic.relname AS name, ix.indisunique AS unique, ix.indisvalid AS valid, ix.indisready AS ready, (ix.indpred IS NULL) AS "predicateIsNull", (ix.indnatts = ix.indnkeyatts) AS "noIncludeColumns", (ix.indexprs IS NULL) AS "noExpressions", am.amname AS method, ARRAY(SELECT pg_catalog.replace(pg_catalog.pg_get_indexdef(ix.indexrelid, position, true), pg_catalog.chr(34), \'\') FROM pg_catalog.generate_series(1, ix.indnkeyatts) AS key_column(position) ORDER BY position) AS columns, ARRAY(SELECT NOT pg_catalog.pg_index_column_has_property(ix.indexrelid, position, \'desc\') AND NOT pg_catalog.pg_index_column_has_property(ix.indexrelid, position, \'nulls_first\') FROM pg_catalog.generate_series(1, ix.indnkeyatts) AS key_column(position) ORDER BY position) AS "defaultOrdering", ARRAY(SELECT opc.opcdefault FROM pg_catalog.unnest(ix.indclass) WITH ORDINALITY AS indexed_class(class_oid, class_position) JOIN pg_catalog.pg_opclass opc ON opc.oid = indexed_class.class_oid WHERE indexed_class.class_position <= ix.indnkeyatts ORDER BY indexed_class.class_position) AS "defaultOperatorClasses", ARRAY(SELECT indexed_collation.collation_oid = attr.attcollation FROM pg_catalog.unnest(ix.indkey) WITH ORDINALITY AS indexed_key(attribute_number, key_position) JOIN pg_catalog.pg_attribute attr ON attr.attrelid = ix.indrelid AND attr.attnum = indexed_key.attribute_number JOIN pg_catalog.unnest(ix.indcollation) WITH ORDINALITY AS indexed_collation(collation_oid, collation_position) ON indexed_collation.collation_position = indexed_key.key_position WHERE indexed_key.key_position <= ix.indnkeyatts ORDER BY indexed_key.key_position) AS "columnCollationsMatch" FROM pg_catalog.pg_index ix JOIN pg_catalog.pg_class tc ON tc.oid = ix.indrelid JOIN pg_catalog.pg_namespace n ON n.oid = tc.relnamespace JOIN pg_catalog.pg_class ic ON ic.oid = ix.indexrelid JOIN pg_catalog.pg_am am ON am.oid = ic.relam WHERE n.nspname = $1 AND tc.relname = $2 ORDER BY ic.relname',
     schema,
     "WebhookEventTrack",
   )

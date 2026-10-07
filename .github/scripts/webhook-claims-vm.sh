@@ -11,6 +11,11 @@ expected_original_owner=${9:-}
 recovery_run_id=${10:-}
 recovery_attempt=${11:-}
 recovery_source=${12:-}
+finalizer_run_id=${13:-}
+finalizer_attempt=${14:-}
+finalizer_source=${15:-}
+prepared_worker_image=${16:-}
+prepared_web_image=${17:-}
 revision=${2:?product revision}
 owner=${3:?run owner}
 run_id=${4:?run ID}
@@ -37,9 +42,13 @@ oneshot() {
   code=$1
   shift
   env_args=$(lyrashield_worker_env_args "$config" "$environment_file")
+  pull_policy=
+  case "$phase" in
+    postrelease-probe|complete-postrelease) pull_policy=--pull=never ;;
+  esac
   # Same bounded environment as promotion; no socket or scan files mounted.
   # shellcheck disable=SC2086
-  docker run --rm --network bridge --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m \
+  docker run ${pull_policy:+$pull_policy} --rm --network bridge --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m \
     --env-file "$environment_file" $env_args --env TMPDIR=/tmp \
     -w /app/apps/worker "$image" node --import tsx --input-type=module -e "$code" "$@"
 }
@@ -137,6 +146,25 @@ validate_recovery_context() {
   [ "$recovery_source" = "$revision" ] || exit 1
   [ "$run_id" != "$expected_original_run" ] || exit 1
 }
+validate_postrelease_finalization_context() {
+  validate_recovery_context
+  case "$finalizer_run_id" in ''|*[!0-9]*) exit 1 ;; esac
+  [ "${#finalizer_run_id}" -le 20 ] || exit 1
+  [ "$finalizer_run_id" != "$expected_original_run" ] || exit 1
+  [ "$finalizer_run_id" != "$recovery_run_id" ] || exit 1
+  case "$finalizer_attempt" in ''|*[!0-9]*) exit 1 ;; esac
+  [ "$finalizer_attempt" -gt 0 ] || exit 1
+  case "$finalizer_source" in *[!a-f0-9]*|'') exit 1 ;; esac
+  [ "${#finalizer_source}" -eq 40 ] || exit 1
+  case "$prepared_worker_image" in ghcr.io/ecryptoguru/lyrashield-ai/lyrashield-worker@sha256:*) ;; *) exit 1 ;; esac
+  digest=${prepared_worker_image##*@sha256:}
+  case "$digest" in *[!a-f0-9]*|'') exit 1 ;; esac
+  [ "${#digest}" -eq 64 ] || exit 1
+  case "$prepared_web_image" in ghcr.io/ecryptoguru/lyrashield-ai/lyrashield-web@sha256:*) ;; *) exit 1 ;; esac
+  digest=${prepared_web_image##*@sha256:}
+  case "$digest" in *[!a-f0-9]*|'') exit 1 ;; esac
+  [ "${#digest}" -eq 64 ] || exit 1
+}
 load_recovery_receipt() {
   validate_recovery_context
   recovery_archive_only=0
@@ -217,6 +245,25 @@ record_recovery_release() {
   updated=$(oneshot 'const {assertWebhookRecoveryCandidate}=await import("file:///opt/lyrashield-worker-host/webhook-cutover-recovery.mjs"); const [raw,ownerRun,ownerSource,owner,recoveryRun,attempt,source,engine,image,state]=process.argv.slice(1); const receipt=JSON.parse(raw); const expected={ownerRunId:ownerRun,ownerSourceSha:ownerSource,owner,recoveryRunId:recoveryRun,recoveryAttempt:Number(attempt),sourceRevision:source,engineRevision:engine,workerImage:image}; assertWebhookRecoveryCandidate(receipt,expected); const list=receipt.recoveryReleases??[]; if(!Array.isArray(list)||list.length>8) throw new Error("Invalid recovery release history"); const identity={runId:recoveryRun,attempt:Number(attempt),sourceRevision:source,engineRevision:engine,workerImage:image,protocol:"durable-claims/2"}; let next=[...list]; const last=next.at(-1); const same=last&&last.runId===recoveryRun&&last.attempt===Number(attempt); if(same&&Object.entries(identity).some(([key,value])=>last[key]!==value)) throw new Error("Recovery release identity changed"); if(state==="release-intent"){ if(!same){if(next.length>=8)throw new Error("Recovery release history is full");next.push({...identity,status:"release-intent",startedAt:new Date().toISOString()});} else if(last.status==="released"){} else if(last.status!=="release-intent") throw new Error("Invalid recovery release state"); } else if(state==="released"){ if(!same||! ["release-intent","released"].includes(last.status)) throw new Error("Recovery release intent is required"); if(last.status!=="released") next[next.length-1]={...last,status:"released",releasedAt:new Date().toISOString()}; } else throw new Error("Invalid recovery release state"); const nextReceipt={...receipt,recoveryReleases:next}; for(const key of ["owner","runId","productRevision","admissionStopValue","attempts","lastAttempt","databaseUrlSha256","databaseSystemUrlSha256","redisUrlSha256"]) if(JSON.stringify(nextReceipt[key])!==JSON.stringify(receipt[key])) throw new Error("Recovery changed original receipt identity"); console.log(JSON.stringify(nextReceipt));' "$saved" "$expected_original_run" "$expected_original_source" "$expected_original_owner" "$run_id" "$attempt" "$recovery_source" "$release_engine" "$release_image" "$requested_state")
   write_recovery_receipt "$updated"
 }
+verify_recovery_finalization_audit() {
+  finalization_audit=$(oneshot 'const [raw,ownerRun,ownerSource,owner,recoveryRun,recoveryAttempt,recoverySource,engine,workerImage,webImage]=process.argv.slice(1); const receipt=JSON.parse(raw); const audit=receipt.recoveryFinalization; if(audit===undefined){console.log("ABSENT");process.exit(0)}; const expected={originalRunId:ownerRun,originalOwner:owner,originalSourceSha:ownerSource,recoveryRunId:recoveryRun,recoveryAttempt:Number(recoveryAttempt),recoverySourceSha:recoverySource,engineRevision:engine,preparedWorkerImage:workerImage,preparedWebImage:webImage}; const keys=[...Object.keys(expected),"runId","attempt","operationsSourceRevision","completedAt"].sort(); const validRun=typeof audit?.runId==="string"&&/^[1-9][0-9]{0,19}$/.test(audit.runId); const validAttempt=Number.isSafeInteger(audit?.attempt)&&audit.attempt>0; const validSource=typeof audit?.operationsSourceRevision==="string"&&/^[a-f0-9]{40}$/.test(audit.operationsSourceRevision); const validTime=typeof audit?.completedAt==="string"&&Number.isFinite(Date.parse(audit.completedAt))&&new Date(audit.completedAt).toISOString()===audit.completedAt; if(!audit||typeof audit!=="object"||Array.isArray(audit)||JSON.stringify(Object.keys(audit).sort())!==JSON.stringify(keys)||Object.entries(expected).some(([key,value])=>audit[key]!==value)||!validRun||!validAttempt||!validSource||!validTime) throw new Error("Post-release finalization audit does not match the exact owner and prepared images"); console.log(JSON.stringify(audit));' "$saved" "$expected_original_run" "$expected_original_source" "$expected_original_owner" "$recovery_run_id" "$recovery_attempt" "$recovery_source" "$engine" "$prepared_worker_image" "$prepared_web_image")
+}
+emit_recovery_finalization_audit() {
+  verify_recovery_finalization_audit
+  if [ "$finalization_audit" = ABSENT ]; then
+    echo WEBHOOK_POST_RELEASE_AUDIT_STATE=absent
+    return
+  fi
+  oneshot 'const audit=JSON.parse(process.argv[1]); console.log("WEBHOOK_POST_RELEASE_AUDIT_STATE=present"); console.log("WEBHOOK_POST_RELEASE_AUDIT_FINALIZER_RUN_ID="+audit.runId); console.log("WEBHOOK_POST_RELEASE_AUDIT_FINALIZER_ATTEMPT="+audit.attempt); console.log("WEBHOOK_POST_RELEASE_AUDIT_FINALIZER_SOURCE_SHA="+audit.operationsSourceRevision);' "$finalization_audit"
+}
+record_recovery_finalization_audit() {
+  verify_recovery_finalization_audit
+  if [ "$finalization_audit" = ABSENT ]; then
+    updated=$(oneshot 'const [raw,ownerRun,ownerSource,owner,recoveryRun,recoveryAttempt,recoverySource,finalizerRun,finalizerAttempt,finalizerSource,engine,workerImage,webImage]=process.argv.slice(1); const receipt=JSON.parse(raw); if(receipt.recoveryFinalization!==undefined) throw new Error("Finalization audit was concurrently written"); const audit={runId:finalizerRun,attempt:Number(finalizerAttempt),operationsSourceRevision:finalizerSource,originalRunId:ownerRun,originalOwner:owner,originalSourceSha:ownerSource,recoveryRunId:recoveryRun,recoveryAttempt:Number(recoveryAttempt),recoverySourceSha:recoverySource,engineRevision:engine,preparedWorkerImage:workerImage,preparedWebImage:webImage,completedAt:new Date().toISOString()}; const next={...receipt,recoveryFinalization:audit}; for(const key of ["owner","runId","productRevision","admissionStopValue","attempts","lastAttempt","databaseUrlSha256","databaseSystemUrlSha256","redisUrlSha256"]) if(JSON.stringify(next[key])!==JSON.stringify(receipt[key])) throw new Error("Finalization audit changed original receipt identity"); console.log(JSON.stringify(next));' "$saved" "$expected_original_run" "$expected_original_source" "$expected_original_owner" "$recovery_run_id" "$recovery_attempt" "$recovery_source" "$finalizer_run_id" "$finalizer_attempt" "$finalizer_source" "$engine" "$prepared_worker_image" "$prepared_web_image")
+    write_recovery_receipt "$updated"
+    verify_recovery_finalization_audit
+  fi
+}
 archive_completed_recovery() {
   completed_receipt="$receipt_dir/webhook-claims-cutover-completed-${expected_original_run}.json"
   completed=$(oneshot '
@@ -242,7 +289,7 @@ const completed=JSON.parse(archived);
 const current=JSON.parse(active);
 const expected={ownerRunId:ownerRun,ownerSourceSha:ownerSource,owner,recoveryRunId:recoveryRun,recoveryAttempt:Number(attempt),sourceRevision:source,engineRevision:engine,workerImage:image};
 assertCompletedWebhookRecoveryReceipt(completed,expected);
-const stable=receipt=>({owner:receipt.owner,runId:receipt.runId,productRevision:receipt.productRevision,admissionStopValue:receipt.admissionStopValue,attempts:receipt.attempts,lastAttempt:receipt.lastAttempt,databaseUrlSha256:receipt.databaseUrlSha256,databaseSystemUrlSha256:receipt.databaseSystemUrlSha256,redisUrlSha256:receipt.redisUrlSha256,recoveryCandidates:receipt.recoveryCandidates,recoveryReleases:receipt.recoveryReleases});
+const stable=receipt=>({owner:receipt.owner,runId:receipt.runId,productRevision:receipt.productRevision,admissionStopValue:receipt.admissionStopValue,attempts:receipt.attempts,lastAttempt:receipt.lastAttempt,databaseUrlSha256:receipt.databaseUrlSha256,databaseSystemUrlSha256:receipt.databaseSystemUrlSha256,redisUrlSha256:receipt.redisUrlSha256,recoveryCandidates:receipt.recoveryCandidates,recoveryReleases:receipt.recoveryReleases,recoveryFinalization:receipt.recoveryFinalization});
 const archivedStable=stable(completed);
 for(const [key,value] of Object.entries(stable(current))) if(JSON.stringify(value)!==JSON.stringify(archivedStable[key])) throw new Error("Active and archived recovery receipts differ");
 if(!["claimed","writers-stopped"].includes(current.phase)) throw new Error("Active recovery receipt phase is invalid");' "$archived" "$saved" "$expected_original_run" "$expected_original_source" "$expected_original_owner" "$run_id" "$attempt" "$recovery_source" "$engine" "$image"
@@ -358,6 +405,74 @@ recovery-hold)
     if [ "$recovery_archive_only" -eq 0 ]; then record_recovery_release released; fi
     echo WEBHOOK_RECOVERY_HOLD_WITHOUT_ADMISSION_STOP
   fi
+  ;;
+postrelease-probe)
+  validate_postrelease_finalization_context
+  load_recovery_receipt allow-completed
+  engine=$(docker image inspect --format '{{index .Config.Labels "io.lyrashield.engine.revision"}}' "$image")
+  case "$engine" in *[!a-f0-9]*|'') exit 1 ;; esac
+  [ "${#engine}" -eq 40 ] || exit 1
+  [ "$prepared_worker_image" = "$image" ] || exit 1
+  if [ "$recovery_archive_only" -eq 1 ]; then
+    recovery_state=$(assert_recovery_identity completed)
+    receipt_state=completed
+  else
+    recovery_state=$(assert_recovery_identity release)
+    [ "$recovery_state" = WITHOUT_ADMISSION_STOP ] || exit 1
+    receipt_state=$(oneshot 'const [raw,run,attempt,source,engine,image]=process.argv.slice(1); const receipt=JSON.parse(raw); const release=receipt.recoveryReleases?.at(-1); if(!release||!["release-intent","released"].includes(release.status)||release.runId!==run||release.attempt!==Number(attempt)||release.sourceRevision!==source||release.engineRevision!==engine||release.workerImage!==image||release.protocol!=="durable-claims/2") throw new Error("Post-release receipt identity is invalid"); console.log(release.status);' "$saved" "$recovery_run_id" "$recovery_attempt" "$recovery_source" "$engine" "$image")
+  fi
+  [ "$recovery_state" = WITHOUT_ADMISSION_STOP ] || exit 1
+  verify_running_recovery_candidate
+  systemctl is-active --quiet "$timer"
+  [ "$(systemctl is-enabled "$timer" || true)" = enabled ] || exit 1
+  emit_recovery_finalization_audit
+  printf '%s\n' \
+    WEBHOOK_POST_RELEASE_FINALIZATION_VERIFIED \
+    "WEBHOOK_POST_RELEASE_ORIGINAL_OWNER=$expected_original_owner" \
+    "WEBHOOK_POST_RELEASE_RECOVERY_RUN_ID=$recovery_run_id" \
+    "WEBHOOK_POST_RELEASE_RECOVERY_ATTEMPT=$recovery_attempt" \
+    "WEBHOOK_POST_RELEASE_RECOVERY_SOURCE_SHA=$recovery_source" \
+    "WEBHOOK_POST_RELEASE_FINALIZER_RUN_ID=$finalizer_run_id" \
+    "WEBHOOK_POST_RELEASE_FINALIZER_ATTEMPT=$finalizer_attempt" \
+    "WEBHOOK_POST_RELEASE_FINALIZER_SOURCE_SHA=$finalizer_source" \
+    "WEBHOOK_POST_RELEASE_WORKER_IMAGE=$image" \
+    "WEBHOOK_POST_RELEASE_WEB_IMAGE=$prepared_web_image" \
+    "WEBHOOK_POST_RELEASE_ENGINE_REVISION=$engine" \
+    "WEBHOOK_POST_RELEASE_RECEIPT_STATE=$receipt_state"
+  ;;
+complete-postrelease)
+  validate_postrelease_finalization_context
+  load_recovery_receipt allow-completed
+  engine=$(docker image inspect --format '{{index .Config.Labels "io.lyrashield.engine.revision"}}' "$image")
+  case "$engine" in *[!a-f0-9]*|'') exit 1 ;; esac
+  [ "${#engine}" -eq 40 ] || exit 1
+  [ "$prepared_worker_image" = "$image" ] || exit 1
+  if [ "$recovery_archive_only" -eq 1 ]; then
+    recovery_state=$(assert_recovery_identity completed)
+    [ "$recovery_state" = WITHOUT_ADMISSION_STOP ] || exit 1
+    verify_running_recovery_candidate
+    systemctl is-active --quiet "$timer"
+    [ "$(systemctl is-enabled "$timer" || true)" = enabled ] || exit 1
+    emit_recovery_finalization_audit
+    echo WEBHOOK_RECOVERY_COMPLETE
+    echo WEBHOOK_POST_RELEASE_FINALIZATION_COMPLETE
+    exit 0
+  fi
+  recovery_state=$(assert_recovery_identity release)
+  [ "$recovery_state" = WITHOUT_ADMISSION_STOP ] || exit 1
+  verify_running_recovery_candidate
+  systemctl is-active --quiet "$timer"
+  [ "$(systemctl is-enabled "$timer" || true)" = enabled ] || exit 1
+  release_state=$(oneshot 'const [raw,run,attempt,source,engine,image]=process.argv.slice(1); const receipt=JSON.parse(raw); const release=receipt.recoveryReleases?.at(-1); if(!release||!["release-intent","released"].includes(release.status)||release.runId!==run||release.attempt!==Number(attempt)||release.sourceRevision!==source||release.engineRevision!==engine||release.workerImage!==image||release.protocol!=="durable-claims/2") throw new Error("Post-release receipt identity is invalid"); console.log(release.status);' "$saved" "$recovery_run_id" "$recovery_attempt" "$recovery_source" "$engine" "$image")
+  if [ "$release_state" = release-intent ]; then
+    record_recovery_release released
+  fi
+  recovery_state=$(assert_recovery_identity release)
+  [ "$recovery_state" = WITHOUT_ADMISSION_STOP ] || exit 1
+  record_recovery_finalization_audit
+  archive_completed_recovery
+  emit_recovery_finalization_audit
+  echo WEBHOOK_POST_RELEASE_FINALIZATION_COMPLETE
   ;;
 resume-recovery)
   load_recovery_receipt
