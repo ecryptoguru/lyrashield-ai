@@ -908,11 +908,14 @@ jobs:
           WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
           APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
           SCANNER_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
+          WEB_IMAGE_REFERENCE: ${{ inputs.web_image }}@${{ inputs.web_digest }}
         run: |
           set -euo pipefail
           result=$(bash .github/scripts/webhook-claims-maintenance.sh recovery-hold)
           printf '%s\n' "$result"
-          if grep -Fqx WEBHOOK_RECOVERY_HOLD_WITHOUT_ADMISSION_STOP <<< "$result"; then
+          if grep -Fqx WEBHOOK_RECOVERY_HOLD_ALREADY_COMPLETED <<< "$result"; then
+            echo 'The recovery completion and public readiness were already proved. Prepared writers remain active; no service or admission mutation was performed.' >> "$GITHUB_STEP_SUMMARY"
+          elif grep -Fqx WEBHOOK_RECOVERY_HOLD_WITHOUT_ADMISSION_STOP <<< "$result"; then
             echo 'Recovery failed after the original admission stop was released. Writers are disabled; no new stop token was created.' >> "$GITHUB_STEP_SUMMARY"
           else
             echo 'Recovery failed while the original admission stop remains held. Writers are disabled.' >> "$GITHUB_STEP_SUMMARY"

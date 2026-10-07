@@ -22,6 +22,7 @@ const recoveryRunId = "37520000000"
 const recoveryOwner = `${recoveryRunId}:1`
 const recoverySource = "b".repeat(40)
 const currentImage = `ghcr.io/ecryptoguru/lyrashield-ai/lyrashield-worker:${recoverySource}@sha256:${"c".repeat(64)}`
+const currentWebImage = `ghcr.io/ecryptoguru/lyrashield-ai/lyrashield-web@sha256:${"e".repeat(64)}`
 const databaseUrl = "postgresql://worker:fixture@db.example:6432/lyrashield?schema=public"
 const systemUrl = "postgresql://system:fixture@db.example:6432/lyrashield?schema=public"
 const redisUrl = "rediss://fixture:fixture@redis.example:6379/0"
@@ -122,6 +123,9 @@ function fixture(t, options = {}) {
       legacySchedule: options.legacySchedule ?? 0,
       queue: options.queue ?? "",
       queueState: options.queueState ?? "",
+      publicReadinessFailures: options.publicReadinessFailures ?? [],
+      failCompletedReproof: options.failCompletedReproof ?? false,
+      completedVerifyCalls: 0,
     })
   )
   writeFileSync(
@@ -263,7 +267,12 @@ export default class Redis { async get(key){log("GET "+key);return JSON.parse(fs
   executable(
     directory,
     "az",
-    `const fs=require("node:fs");const {spawnSync}=require("node:child_process");const args=process.argv.slice(2);const calls=${JSON.stringify(callsPath)};const revisionsFile=${JSON.stringify(revisionsPath)};fs.appendFileSync(calls,"az "+args.join(" ")+"\\n");if(args[0]==="vm"&&args[1]==="run-command"&&args[2]==="invoke"){const remote=args[args.indexOf("--scripts")+1].replaceAll("/var/lib/lyrashield",${JSON.stringify(directory)});const result=spawnSync("bash",["-c",remote],{cwd:${JSON.stringify(root)},encoding:"utf8",env:process.env});process.stdout.write(result.stdout??"");process.stderr.write(result.stderr??"");process.exit(result.status??1)}if(args[0]==="containerapp"&&args[1]==="revision"&&args[2]==="list"){const name=args[args.indexOf("--name")+1];const key=name===process.env.APP_NAME?"app":"scanner";const state=JSON.parse(fs.readFileSync(revisionsFile));const query=args[args.indexOf("--query")+1]??"";if(query.includes("length(@)")){console.log(state[key].filter(item=>item.active).length);process.exit(0)}if(query.includes("properties.active==")){console.log(state[key].filter(item=>item.active).map(item=>item.name).join("\\n"));process.exit(0)}console.log(state[key].map(item=>item.name).join("\\n"));process.exit(0)}if(args[0]==="containerapp"&&args[1]==="revision"&&args[2]==="deactivate"){const name=args[args.indexOf("--name")+1];const revision=args[args.indexOf("--revision")+1];const key=name===process.env.APP_NAME?"app":"scanner";const state=JSON.parse(fs.readFileSync(revisionsFile));state[key]=state[key].map(item=>item.name===revision?{...item,active:false}:item);fs.writeFileSync(revisionsFile,JSON.stringify(state));process.exit(0)}if(args[0]==="containerapp"&&args[1]==="replica"&&args[2]==="list"){const state=JSON.parse(fs.readFileSync(revisionsFile));console.log(state.residualReplicas);process.exit(0)}process.exit(2);`
+    `const fs=require("node:fs");const {spawnSync}=require("node:child_process");const args=process.argv.slice(2);const calls=${JSON.stringify(callsPath)};const revisionsFile=${JSON.stringify(revisionsPath)};const stateFile=${JSON.stringify(statePath)};fs.appendFileSync(calls,"az "+args.join(" ")+"\\n");if(args[0]==="vm"&&args[1]==="run-command"&&args[2]==="invoke"){const remote=args[args.indexOf("--scripts")+1].replaceAll("/var/lib/lyrashield",${JSON.stringify(directory)});const state=JSON.parse(fs.readFileSync(stateFile));if(remote.includes("'recovery-hold-verify'")){state.completedVerifyCalls++;if(state.failCompletedReproof&&state.completedVerifyCalls===2)state.worker="failed";fs.writeFileSync(stateFile,JSON.stringify(state))}const result=spawnSync("bash",["-c",remote],{cwd:${JSON.stringify(root)},encoding:"utf8",env:process.env});process.stdout.write(result.stdout??"");process.stderr.write(result.stderr??"");process.exit(result.status??1)}if(args[0]==="containerapp"&&args[1]==="revision"&&args[2]==="list"){const name=args[args.indexOf("--name")+1];const key=name===process.env.APP_NAME?"app":"scanner";const state=JSON.parse(fs.readFileSync(revisionsFile));const query=args[args.indexOf("--query")+1]??"";if(args.includes("--output")&&args[args.indexOf("--output")+1]==="json"){console.log(JSON.stringify(state[key].map(item=>({name:item.name,properties:{active:item.active,template:{containers:[{image:item.image}]}}}))));process.exit(0)}if(query.includes("length(@)")){console.log(state[key].filter(item=>item.active).length);process.exit(0)}if(query.includes("properties.active==")){console.log(state[key].filter(item=>item.active).map(item=>item.name).join("\\n"));process.exit(0)}console.log(state[key].map(item=>item.name).join("\\n"));process.exit(0)}if(args[0]==="containerapp"&&args[1]==="ingress"&&args[2]==="traffic"&&args[3]==="show"){const name=args[args.indexOf("--name")+1];const key=name===process.env.APP_NAME?"app":"scanner";const state=JSON.parse(fs.readFileSync(revisionsFile));state.trafficReads??={};state.trafficReads[key]=(state.trafficReads[key]??0)+1;let traffic=state.traffic?.[key]??[];if(state.trafficFailOnRead?.[key]===state.trafficReads[key])traffic=[{revisionName:"foreign-revision",weight:100}];fs.writeFileSync(revisionsFile,JSON.stringify(state));console.log(JSON.stringify(traffic));process.exit(0)}if(args[0]==="containerapp"&&args[1]==="revision"&&args[2]==="deactivate"){const name=args[args.indexOf("--name")+1];const revision=args[args.indexOf("--revision")+1];const key=name===process.env.APP_NAME?"app":"scanner";const state=JSON.parse(fs.readFileSync(revisionsFile));state[key]=state[key].map(item=>item.name===revision?{...item,active:false}:item);fs.writeFileSync(revisionsFile,JSON.stringify(state));process.exit(0)}if(args[0]==="containerapp"&&args[1]==="replica"&&args[2]==="list"){const state=JSON.parse(fs.readFileSync(revisionsFile));console.log(state.residualReplicas);process.exit(0)}process.exit(2);`
+  )
+  executable(
+    directory,
+    "curl",
+    `const fs=require("node:fs");const args=process.argv.slice(2);const url=args.at(-1)??"";const state=JSON.parse(fs.readFileSync(${JSON.stringify(statePath)},"utf8"));fs.appendFileSync(${JSON.stringify(callsPath)},"curl "+url+"\\n");process.stdout.write(state.publicReadinessFailures.includes(url)?"503":"200");process.exit(0);`
   )
   executable(
     directory,
@@ -303,6 +312,10 @@ export default class Redis { async get(key){log("GET "+key);return JSON.parse(fs
     LYRASHIELD_PRODUCT_REVISION: recoverySource,
     LYRASHIELD_ENGINE_REVISION: "d".repeat(40),
     LYRASHIELD_WORKER_IMAGE_DIGEST: `sha256:${"c".repeat(64)}`,
+    WEB_IMAGE_REFERENCE: currentWebImage,
+    ENGINE_REVISION: "d".repeat(40),
+    APP_URL: "https://app.lyrashieldai.com",
+    SCANNER_URL: "https://scanner.lyrashieldai.com",
     DATABASE_URL: databaseUrl,
     DATABASE_SYSTEM_URL: systemUrl,
     REDIS_URL: redisUrl,
@@ -399,6 +412,271 @@ function completedArchive(receipt) {
     recoveryCompleted: { ...release, completedAt: "2026-10-07T00:00:00.000Z" },
   }
 }
+
+function installPreparedWebRevisions(f, overrides = {}) {
+  const appRevision = "lyrashield-app--prepared"
+  const scannerRevision = "lyrashield-scanner--prepared"
+  const image = overrides.image ?? currentWebImage
+  const appImage = overrides.appImage ?? image
+  const scannerImage = overrides.scannerImage ?? image
+  writeFileSync(
+    f.revisionsPath,
+    JSON.stringify({
+      app: [
+        { name: appRevision, active: true, image: appImage },
+        { name: "lyrashield-app--old", active: false, image: currentWebImage },
+      ],
+      scanner: [
+        { name: scannerRevision, active: true, image: scannerImage },
+        { name: "lyrashield-scanner--old", active: false, image: currentWebImage },
+      ],
+      residualReplicas: 0,
+      traffic: {
+        app: overrides.appTraffic ?? [{ revisionName: appRevision, weight: 100 }],
+        scanner: overrides.scannerTraffic ?? [{ revisionName: scannerRevision, weight: 100 }],
+      },
+      trafficReads: {},
+      trafficFailOnRead: overrides.trafficFailOnRead,
+    })
+  )
+}
+
+function completeRecoveryFixture(f) {
+  runVerifiedCandidate(f)
+  const result = f.maintenance("complete-recovery")
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`)
+  assert.match(result.stdout, /^WEBHOOK_RECOVERY_COMPLETE$/m)
+  const archivePath = path.join(
+    path.dirname(f.receiptPath),
+    `webhook-claims-cutover-completed-${originalRunId}.json`
+  )
+  assert.equal(existsSync(archivePath), true)
+  installPreparedWebRevisions(f)
+  return { archivePath, archive: readFileSync(archivePath, "utf8") }
+}
+
+test("completed recovery hold verifies and preserves the exact ready prepared writers", (t) => {
+  const f = fixture(t)
+  const { archivePath, archive } = completeRecoveryFixture(f)
+  const callsBefore = readFileSync(f.callsPath, "utf8")
+  const actionsBefore = readFileSync(f.actionLogPath, "utf8")
+  const result = f.maintenance("recovery-hold")
+
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`)
+  assert.match(result.stdout, /^WEBHOOK_RECOVERY_HOLD_ALREADY_COMPLETED$/m)
+  assert.match(result.stdout, /^WEBHOOK_RECOVERY_HOLD_COMPLETE$/m)
+  assert.equal(existsSync(f.receiptPath), false)
+  assert.equal(readFileSync(archivePath, "utf8"), archive)
+  assert.doesNotMatch(readFileSync(f.actionLogPath, "utf8").slice(actionsBefore.length), /SET|EVAL/)
+
+  const revisions = JSON.parse(readFileSync(f.revisionsPath, "utf8"))
+  assert.equal(revisions.app.filter((item) => item.active).length, 1)
+  assert.equal(revisions.scanner.filter((item) => item.active).length, 1)
+  assert.equal(revisions.app[0].active, true)
+  assert.equal(revisions.scanner[0].active, true)
+  assert.deepEqual(revisions.traffic.app, [
+    { revisionName: "lyrashield-app--prepared", weight: 100 },
+  ])
+  assert.deepEqual(revisions.traffic.scanner, [
+    { revisionName: "lyrashield-scanner--prepared", weight: 100 },
+  ])
+
+  const newCalls = readFileSync(f.callsPath, "utf8").slice(callsBefore.length)
+  assert.equal((newCalls.match(/recovery-hold-verify/g) ?? []).length, 2)
+  assert.doesNotMatch(newCalls, /revision deactivate|systemctl disable --now|systemctl stop /)
+  const dockerRuns = newCalls.split("\n").filter((line) => line.startsWith("docker run "))
+  assert.ok(dockerRuns.length > 0)
+  assert.ok(dockerRuns.every((line) => line.includes("--pull=never")))
+  for (const endpoint of [
+    "https://app.lyrashieldai.com/api/ready",
+    "https://scanner.lyrashieldai.com/api/ready",
+    "https://app.lyrashieldai.com/api/ready/scans",
+  ])
+    assert.match(newCalls, new RegExp(`curl ${endpoint.replaceAll("/", "\\/")}`))
+  assert.equal(readFileSync(f.statePath, "utf8").includes('"worker":"active"'), true)
+  assert.equal(readFileSync(f.statePath, "utf8").includes('"timer":"active"'), true)
+  assert.equal(readFileSync(f.redisPath, "utf8"), "null")
+})
+
+test("an uncompleted release with a missing stop does not qualify for completed preservation", (t) => {
+  const f = fixture(t)
+  runVerifiedCandidate(f)
+  installPreparedWebRevisions(f)
+  const result = f.maintenance("recovery-hold")
+
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`)
+  assert.doesNotMatch(result.stdout, /^WEBHOOK_RECOVERY_HOLD_ALREADY_COMPLETED$/m)
+  assert.match(result.stdout, /^WEBHOOK_RECOVERY_HOLD_COMPLETE$/m)
+  const revisions = JSON.parse(readFileSync(f.revisionsPath, "utf8"))
+  assert.deepEqual(
+    revisions.app.map((item) => item.active),
+    [false, false]
+  )
+  assert.deepEqual(
+    revisions.scanner.map((item) => item.active),
+    [false, false]
+  )
+  assert.equal(readFileSync(f.redisPath, "utf8"), "null")
+  assert.equal(readFileSync(f.statePath, "utf8").includes('"worker":"active"'), true)
+  assert.doesNotMatch(readFileSync(f.actionLogPath, "utf8"), /SET/)
+})
+
+test("completed recovery hold closes writers when public readiness fails", (t) => {
+  const f = fixture(t, {
+    publicReadinessFailures: ["https://scanner.lyrashieldai.com/api/ready"],
+  })
+  const { archivePath, archive } = completeRecoveryFixture(f)
+  const result = f.maintenance("recovery-hold")
+
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`)
+  assert.doesNotMatch(result.stdout, /^WEBHOOK_RECOVERY_HOLD_ALREADY_COMPLETED$/m)
+  assert.match(result.stdout, /^WEBHOOK_RECOVERY_HOLD_COMPLETE$/m)
+  assert.deepEqual(
+    JSON.parse(readFileSync(f.revisionsPath, "utf8")).app.map((item) => item.active),
+    [false, false]
+  )
+  assert.deepEqual(
+    JSON.parse(readFileSync(f.revisionsPath, "utf8")).scanner.map((item) => item.active),
+    [false, false]
+  )
+  assert.equal(existsSync(f.receiptPath), false)
+  assert.equal(readFileSync(archivePath, "utf8"), archive)
+  assert.equal(readFileSync(f.redisPath, "utf8"), "null")
+  assert.equal(readFileSync(f.statePath, "utf8").includes('"worker":"active"'), true)
+  assert.doesNotMatch(readFileSync(f.actionLogPath, "utf8"), /SET/)
+})
+
+test("completed recovery hold closes writers when the prepared scanner image is wrong", (t) => {
+  const f = fixture(t)
+  const { archivePath, archive } = completeRecoveryFixture(f)
+  installPreparedWebRevisions(f, { scannerImage: currentImage })
+  const result = f.maintenance("recovery-hold")
+
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`)
+  assert.doesNotMatch(result.stdout, /^WEBHOOK_RECOVERY_HOLD_ALREADY_COMPLETED$/m)
+  assert.match(result.stdout, /^WEBHOOK_RECOVERY_HOLD_COMPLETE$/m)
+  const revisions = JSON.parse(readFileSync(f.revisionsPath, "utf8"))
+  assert.deepEqual(
+    revisions.app.map((item) => item.active),
+    [false, false]
+  )
+  assert.deepEqual(
+    revisions.scanner.map((item) => item.active),
+    [false, false]
+  )
+  assert.equal(existsSync(f.receiptPath), false)
+  assert.equal(readFileSync(archivePath, "utf8"), archive)
+  assert.equal(readFileSync(f.redisPath, "utf8"), "null")
+})
+
+test("completed recovery hold closes writers when ingress traffic has an invalid weight", (t) => {
+  const f = fixture(t)
+  const { archivePath, archive } = completeRecoveryFixture(f)
+  installPreparedWebRevisions(f, {
+    appTraffic: [{ revisionName: "lyrashield-app--prepared", weight: "100.0" }],
+  })
+  const result = f.maintenance("recovery-hold")
+
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`)
+  assert.doesNotMatch(result.stdout, /^WEBHOOK_RECOVERY_HOLD_ALREADY_COMPLETED$/m)
+  assert.match(result.stdout, /^WEBHOOK_RECOVERY_HOLD_COMPLETE$/m)
+  const revisions = JSON.parse(readFileSync(f.revisionsPath, "utf8"))
+  assert.deepEqual(
+    revisions.app.map((item) => item.active),
+    [false, false]
+  )
+  assert.deepEqual(
+    revisions.scanner.map((item) => item.active),
+    [false, false]
+  )
+  assert.equal(readFileSync(archivePath, "utf8"), archive)
+  assert.equal(readFileSync(f.redisPath, "utf8"), "null")
+})
+
+test("completed recovery hold closes writers when the public origin is not canonical", (t) => {
+  const f = fixture(t)
+  const { archivePath, archive } = completeRecoveryFixture(f)
+  const result = f.maintenance("recovery-hold", { APP_URL: "https://unexpected.example" })
+
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`)
+  assert.doesNotMatch(result.stdout, /^WEBHOOK_RECOVERY_HOLD_ALREADY_COMPLETED$/m)
+  assert.match(result.stdout, /^WEBHOOK_RECOVERY_HOLD_COMPLETE$/m)
+  const revisions = JSON.parse(readFileSync(f.revisionsPath, "utf8"))
+  assert.deepEqual(
+    revisions.app.map((item) => item.active),
+    [false, false]
+  )
+  assert.deepEqual(
+    revisions.scanner.map((item) => item.active),
+    [false, false]
+  )
+  assert.equal(readFileSync(archivePath, "utf8"), archive)
+  assert.equal(readFileSync(f.redisPath, "utf8"), "null")
+})
+
+test("completed recovery hold does not bypass proof when a final runtime recheck fails", (t) => {
+  const f = fixture(t, { failCompletedReproof: true })
+  const { archivePath, archive } = completeRecoveryFixture(f)
+  const result = f.maintenance("recovery-hold")
+
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`)
+  assert.doesNotMatch(result.stdout, /^WEBHOOK_RECOVERY_HOLD_ALREADY_COMPLETED$/m)
+  assert.match(result.stdout, /^WEBHOOK_RECOVERY_HOLD_COMPLETE$/m)
+  assert.deepEqual(
+    JSON.parse(readFileSync(f.revisionsPath, "utf8")).app.map((item) => item.active),
+    [false, false]
+  )
+  assert.deepEqual(
+    JSON.parse(readFileSync(f.revisionsPath, "utf8")).scanner.map((item) => item.active),
+    [false, false]
+  )
+  assert.equal(existsSync(f.receiptPath), false)
+  assert.equal(readFileSync(archivePath, "utf8"), archive)
+  assert.equal(readFileSync(f.redisPath, "utf8"), "null")
+  assert.doesNotMatch(readFileSync(f.callsPath, "utf8"), /systemctl disable --now|systemctl stop /)
+})
+
+test("completed recovery hold closes writers when the worker digest proof is wrong", (t) => {
+  const f = fixture(t)
+  const { archivePath, archive } = completeRecoveryFixture(f)
+  const result = f.maintenance("recovery-hold", {
+    LYRASHIELD_WORKER_IMAGE_DIGEST: `sha256:${"9".repeat(64)}`,
+  })
+
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`)
+  assert.doesNotMatch(result.stdout, /^WEBHOOK_RECOVERY_HOLD_ALREADY_COMPLETED$/m)
+  assert.match(result.stdout, /^WEBHOOK_RECOVERY_HOLD_COMPLETE$/m)
+  const revisions = JSON.parse(readFileSync(f.revisionsPath, "utf8"))
+  assert.deepEqual(
+    revisions.app.map((item) => item.active),
+    [false, false]
+  )
+  assert.deepEqual(
+    revisions.scanner.map((item) => item.active),
+    [false, false]
+  )
+  assert.equal(existsSync(f.receiptPath), false)
+  assert.equal(readFileSync(archivePath, "utf8"), archive)
+  assert.equal(readFileSync(f.redisPath, "utf8"), "null")
+})
+
+test("completed archive rejects a foreign admission token without changing writers", (t) => {
+  const f = fixture(t)
+  const { archivePath, archive } = completeRecoveryFixture(f)
+  writeFileSync(f.redisPath, JSON.stringify("foreign-stop-token"))
+  const before = readFileSync(f.revisionsPath, "utf8")
+  const actionsBefore = readFileSync(f.actionLogPath, "utf8")
+  const result = f.maintenance("recovery-hold")
+
+  assert.notEqual(result.status, 0, result.stdout)
+  assert.doesNotMatch(result.stdout, /^WEBHOOK_RECOVERY_HOLD_ALREADY_COMPLETED$/m)
+  assert.equal(readFileSync(f.revisionsPath, "utf8"), before)
+  assert.equal(existsSync(f.receiptPath), false)
+  assert.equal(readFileSync(archivePath, "utf8"), archive)
+  assert.equal(readFileSync(f.redisPath, "utf8"), JSON.stringify("foreign-stop-token"))
+  assert.doesNotMatch(readFileSync(f.callsPath, "utf8"), /revision deactivate/)
+  assert.equal(readFileSync(f.actionLogPath, "utf8"), actionsBefore)
+})
 
 test("new-run probe verifies immutable original owner and exact admission token with failed worker held", (t) => {
   const f = fixture(t)

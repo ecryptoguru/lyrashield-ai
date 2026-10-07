@@ -122,6 +122,25 @@ test("held recovery keeps migration, claim, secret rotation and old-writer rollb
   )
 })
 
+test("failed held-recovery cleanup binds the prepared web image and honors completed proof", () => {
+  const cleanup = step(runtime, "Disable webhook writers after failed held recovery")
+  assert.match(
+    cleanup,
+    /WEB_IMAGE_REFERENCE: \$\{\{ inputs\.web_image \}\}@\$\{\{ inputs\.web_digest \}\}/
+  )
+  const completedCheck = cleanup.indexOf("grep -Fqx WEBHOOK_RECOVERY_HOLD_ALREADY_COMPLETED")
+  const noStopCheck = cleanup.indexOf("grep -Fqx WEBHOOK_RECOVERY_HOLD_WITHOUT_ADMISSION_STOP")
+  assert.ok(completedCheck >= 0, "cleanup must recognize a verified completed recovery")
+  assert.ok(
+    noStopCheck > completedCheck,
+    "completed proof must be handled before the no-stop summary"
+  )
+  assert.match(
+    cleanup,
+    /The recovery completion and public readiness were already proved\. Prepared writers remain active/
+  )
+})
+
 test("exact image startup and migrated schema proof gate held worker boot before release", () => {
   assert.match(
     image,

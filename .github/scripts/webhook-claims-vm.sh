@@ -16,6 +16,8 @@ finalizer_attempt=${14:-}
 finalizer_source=${15:-}
 prepared_worker_image=${16:-}
 prepared_web_image=${17:-}
+expected_recovery_engine=${LYRASHIELD_WEBHOOK_CUTOVER_EXPECTED_ENGINE_REVISION:-}
+expected_recovery_web_image=${LYRASHIELD_WEBHOOK_CUTOVER_EXPECTED_WEB_IMAGE:-}
 revision=${2:?product revision}
 owner=${3:?run owner}
 run_id=${4:?run ID}
@@ -41,10 +43,10 @@ case "$image" in *@sha256:??????????????????????????????????????????????????????
 oneshot() {
   code=$1
   shift
-  env_args=$(lyrashield_worker_env_args "$config" "$environment_file")
+  env_args=$(lyrashield_worker_env_args "$config" "$environment_file") || return 1
   pull_policy=
   case "$phase" in
-    postrelease-probe|complete-postrelease) pull_policy=--pull=never ;;
+    recovery-hold-verify|postrelease-probe|complete-postrelease) pull_policy=--pull=never ;;
   esac
   # Same bounded environment as promotion; no socket or scan files mounted.
   # shellcheck disable=SC2086
@@ -223,15 +225,16 @@ write_recovery_receipt() {
   sync -f "$receipt_dir"
 }
 verify_running_recovery_candidate() {
-  systemctl is-active --quiet "$service"
-  [ "$(docker inspect --format '{{.State.Health.Status}}' "$container")" = healthy ] || exit 1
-  [ "$(docker inspect --format '{{.Config.Image}}' "$container")" = "$image" ] || exit 1
-  engine=$(docker image inspect --format '{{index .Config.Labels "io.lyrashield.engine.revision"}}' "$image")
-  [ "$(docker exec "$container" printenv LYRASHIELD_PRODUCT_REVISION)" = "$revision" ] || exit 1
-  [ "$(docker exec "$container" printenv LYRASHIELD_ENGINE_REVISION)" = "$engine" ] || exit 1
-  [ "$(docker exec "$container" printenv LYRASHIELD_WORKER_IMAGE_DIGEST)" = "${image##*@}" ] || exit 1
-  live_hashes=$(docker exec "$container" node --input-type=module -e 'const {createHash}=await import("node:crypto"); const hash=value=>createHash("sha256").update(value??"").digest("hex"); console.log(JSON.stringify({databaseUrlSha256:hash(process.env.DATABASE_URL),databaseSystemUrlSha256:hash(process.env.DATABASE_SYSTEM_URL),redisUrlSha256:hash(process.env.REDIS_URL)}));')
-  oneshot 'const billing=await import("@lyrashield/billing"); const db=await import("@lyrashield/db"); const {assertWebhookRecoveryCandidate,assertCompletedWebhookRecoveryReceipt,assertWebhookCutoverWorkerIdentity}=await import("file:///opt/lyrashield-worker-host/webhook-cutover-recovery.mjs"); const {assertFullyMigratedWebhookSchema,assertRuntimeRoleLeastPrivilege}=await import("file:///opt/lyrashield-worker-host/webhook-cutover-schema.mjs"); const [raw,ownerRun,ownerSource,owner,recoveryRun,recoveryAttempt,recoverySource,engine,image,live]=process.argv.slice(1); const receipt=JSON.parse(raw); const expected={ownerRunId:ownerRun,ownerSourceSha:ownerSource,owner,recoveryRunId:recoveryRun,recoveryAttempt:Number(recoveryAttempt),sourceRevision:recoverySource,engineRevision:engine,workerImage:image}; if(receipt.phase==="completed") assertCompletedWebhookRecoveryReceipt(receipt,expected); else assertWebhookRecoveryCandidate(receipt,expected); const actual=JSON.parse(live); for(const [key,value] of Object.entries(actual)) if(receipt[key]!==value) throw new Error("Running worker connection identity changed"); assertWebhookCutoverWorkerIdentity({receipt,workerImage:image,productRevision:process.env.LYRASHIELD_PRODUCT_REVISION,engineRevision:process.env.LYRASHIELD_ENGINE_REVISION,workerDigest:process.env.LYRASHIELD_WORKER_IMAGE_DIGEST,protocol:billing.WEBHOOK_TRACK_CLAIM_PROTOCOL,environment:process.env}); const system=db.getSystemPrisma(); try { await assertRuntimeRoleLeastPrivilege(db.prisma,process.env.DATABASE_URL); await assertFullyMigratedWebhookSchema(system,billing.WEBHOOK_TRACK_CLAIM_PROTOCOL); console.log("WEBHOOK_RECOVERY_RUNTIME_VERIFIED"); } finally { await Promise.allSettled([db.prisma.$disconnect(),system.$disconnect()]); }' "$saved" "$expected_original_run" "$expected_original_source" "$expected_original_owner" "$run_id" "$attempt" "$revision" "$engine" "$image" "$live_hashes" | grep -Fx 'WEBHOOK_RECOVERY_RUNTIME_VERIFIED' >/dev/null
+  systemctl is-active --quiet "$service" || return 1
+  [ "$(docker inspect --format '{{.State.Health.Status}}' "$container")" = healthy ] || return 1
+  [ "$(docker inspect --format '{{.Config.Image}}' "$container")" = "$image" ] || return 1
+  engine=$(docker image inspect --format '{{index .Config.Labels "io.lyrashield.engine.revision"}}' "$image") || return 1
+  [ "$(docker exec "$container" printenv LYRASHIELD_PRODUCT_REVISION)" = "$revision" ] || return 1
+  [ "$(docker exec "$container" printenv LYRASHIELD_ENGINE_REVISION)" = "$engine" ] || return 1
+  [ "$(docker exec "$container" printenv LYRASHIELD_WORKER_IMAGE_DIGEST)" = "${image##*@}" ] || return 1
+  live_hashes=$(docker exec "$container" node --input-type=module -e 'const {createHash}=await import("node:crypto"); const hash=value=>createHash("sha256").update(value??"").digest("hex"); console.log(JSON.stringify({databaseUrlSha256:hash(process.env.DATABASE_URL),databaseSystemUrlSha256:hash(process.env.DATABASE_SYSTEM_URL),redisUrlSha256:hash(process.env.REDIS_URL)}));') || return 1
+  runtime_proof=$(oneshot 'const billing=await import("@lyrashield/billing"); const db=await import("@lyrashield/db"); const {assertWebhookRecoveryCandidate,assertCompletedWebhookRecoveryReceipt,assertWebhookCutoverWorkerIdentity}=await import("file:///opt/lyrashield-worker-host/webhook-cutover-recovery.mjs"); const {assertFullyMigratedWebhookSchema,assertRuntimeRoleLeastPrivilege}=await import("file:///opt/lyrashield-worker-host/webhook-cutover-schema.mjs"); const [raw,ownerRun,ownerSource,owner,recoveryRun,recoveryAttempt,recoverySource,engine,image,live]=process.argv.slice(1); const receipt=JSON.parse(raw); const expected={ownerRunId:ownerRun,ownerSourceSha:ownerSource,owner,recoveryRunId:recoveryRun,recoveryAttempt:Number(recoveryAttempt),sourceRevision:recoverySource,engineRevision:engine,workerImage:image}; if(receipt.phase==="completed") assertCompletedWebhookRecoveryReceipt(receipt,expected); else assertWebhookRecoveryCandidate(receipt,expected); const actual=JSON.parse(live); for(const [key,value] of Object.entries(actual)) if(receipt[key]!==value) throw new Error("Running worker connection identity changed"); assertWebhookCutoverWorkerIdentity({receipt,workerImage:image,productRevision:process.env.LYRASHIELD_PRODUCT_REVISION,engineRevision:process.env.LYRASHIELD_ENGINE_REVISION,workerDigest:process.env.LYRASHIELD_WORKER_IMAGE_DIGEST,protocol:billing.WEBHOOK_TRACK_CLAIM_PROTOCOL,environment:process.env}); const system=db.getSystemPrisma(); try { await assertRuntimeRoleLeastPrivilege(db.prisma,process.env.DATABASE_URL); await assertFullyMigratedWebhookSchema(system,billing.WEBHOOK_TRACK_CLAIM_PROTOCOL); console.log("WEBHOOK_RECOVERY_RUNTIME_VERIFIED"); } finally { await Promise.allSettled([db.prisma.$disconnect(),system.$disconnect()]); }' "$saved" "$expected_original_run" "$expected_original_source" "$expected_original_owner" "$run_id" "$attempt" "$revision" "$engine" "$image" "$live_hashes") || return 1
+  [ "$runtime_proof" = WEBHOOK_RECOVERY_RUNTIME_VERIFIED ] || return 1
 }
 record_recovery_release() {
   requested_state=$1
@@ -387,6 +390,21 @@ recovery-hold-verify)
     echo WEBHOOK_RECOVERY_HOLD_ADMISSION_HELD
   else
     echo WEBHOOK_RECOVERY_HOLD_WITHOUT_ADMISSION_STOP
+    if receipt_phase=$(oneshot 'const receipt=JSON.parse(process.argv[1]); console.log(receipt.phase);' "$saved" 2>/dev/null) && [ "$receipt_phase" = completed ] && \
+      completed_state=$(assert_recovery_identity completed 2>/dev/null) && [ "$completed_state" = WITHOUT_ADMISSION_STOP ]; then
+      engine=$(docker image inspect --format '{{index .Config.Labels "io.lyrashield.engine.revision"}}' "$image" 2>/dev/null || true)
+      case "$expected_recovery_engine" in *[!a-f0-9]*|'') expected_recovery_engine= ;; esac
+      case "$expected_recovery_web_image" in ghcr.io/ecryptoguru/lyrashield-ai/lyrashield-web@sha256:*) ;; *) expected_recovery_web_image= ;; esac
+      web_digest=${expected_recovery_web_image##*@sha256:}
+      case "$web_digest" in *[!a-f0-9]*|'') expected_recovery_web_image= ;; esac
+      if [ "${#expected_recovery_engine}" -eq 40 ] && [ "${#web_digest}" -eq 64 ] && \
+        [ "$engine" = "$expected_recovery_engine" ] && verify_running_recovery_candidate 2>/dev/null && \
+        systemctl is-active --quiet "$timer" && [ "$(systemctl is-enabled "$timer" || true)" = enabled ]; then
+        echo WEBHOOK_RECOVERY_COMPLETED_VERIFIED
+        echo "WEBHOOK_RECOVERY_COMPLETED_ENGINE_REVISION=$engine"
+        echo "WEBHOOK_RECOVERY_COMPLETED_WEB_IMAGE=$expected_recovery_web_image"
+      fi
+    fi
   fi
   ;;
 recovery-hold)
@@ -402,7 +420,10 @@ recovery-hold)
   else
     # The exact original stop was already removed. Keep the verified recovery
     # worker intact; the caller closes and reads back app/scanner revisions.
-    if [ "$recovery_archive_only" -eq 0 ]; then record_recovery_release released; fi
+    if [ "$recovery_archive_only" -eq 0 ]; then
+      receipt_phase=$(oneshot 'const receipt=JSON.parse(process.argv[1]); console.log(receipt.phase);' "$saved")
+      if [ "$receipt_phase" != completed ]; then record_recovery_release released; fi
+    fi
     echo WEBHOOK_RECOVERY_HOLD_WITHOUT_ADMISSION_STOP
   fi
   ;;
