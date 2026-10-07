@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 import pg from "pg"
+import { X509Certificate } from "node:crypto"
+import { getCACertificates } from "node:tls"
+import { SUPABASE_ROOT_CA } from "./supabase-ca"
 import { createPgConnectionConfig } from "./connection-config"
 
 const authority =
@@ -8,6 +11,23 @@ const authority =
 afterEach(() => vi.unstubAllEnvs())
 
 describe("Supabase runtime TLS", () => {
+  it("pins the dashboard CA to Supabase TLS while preserving default trust", () => {
+    const certificate = new X509Certificate(SUPABASE_ROOT_CA)
+    expect(certificate.ca).toBe(true)
+    expect(certificate.verify(certificate.publicKey)).toBe(true)
+    expect(certificate.subject).toBe(certificate.issuer)
+    expect(certificate.fingerprint256.replaceAll(":", "").toLowerCase()).toBe(
+      "807025ad50d4ed219d2c9c7d299c004f824eb00cf7f65afef607d07b72e6cafa"
+    )
+    expect(Date.parse(certificate.validTo)).toBeGreaterThan(Date.now())
+    const defaults = getCACertificates("default")
+    const config = createPgConnectionConfig(`${authority}?sslmode=require&uselibpqcompat=true`)
+    expect(config.ssl).toEqual({ rejectUnauthorized: true, ca: [...defaults, SUPABASE_ROOT_CA] })
+    expect(getCACertificates("default")).toEqual(defaults)
+    const other = "postgres://runtime:synthetic@db.example.com:5432/postgres?sslmode=verify-full"
+    expect(createPgConnectionConfig(other)).toEqual({ connectionString: other })
+  })
+
   it("preserves deferred client construction when the database URL is absent", () => {
     expect(createPgConnectionConfig(undefined)).toEqual({ connectionString: undefined })
   })

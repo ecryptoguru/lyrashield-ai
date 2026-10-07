@@ -1,5 +1,7 @@
 import type { ClientConfig } from "pg"
 import { domainToASCII } from "node:url"
+import { getCACertificates } from "node:tls"
+import { SUPABASE_ROOT_CA } from "./supabase-ca"
 import { parse } from "pg-connection-string"
 
 const QUERY_KEYS = new Set([
@@ -138,7 +140,10 @@ export function createPgConnectionConfig(connectionString: string | undefined): 
       password,
       database,
       ...(parsed.application_name ? { application_name: parsed.application_name } : {}),
-      ssl: { rejectUnauthorized: true },
+      // Explicit ca replaces Node's default store; retain its public/system/extra
+      // roots and append only the dashboard's pinned public Supabase root.
+      // This trust applies only to this validated database target, never globally.
+      ssl: { rejectUnauthorized: true, ca: [...getCACertificates("default"), SUPABASE_ROOT_CA] },
     }
   } catch {
     return invalidConnection()
