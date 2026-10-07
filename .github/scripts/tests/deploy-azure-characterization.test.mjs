@@ -347,9 +347,9 @@ test("deployment step order, recovery conditions and app/scanner env key sets st
     "ops/deployment/containerapp.sh",
   ]) {
     const lineCount = readFileSync(file, "utf8").split("\n").length - 1
-    // The separate held-recovery branch adds guarded steps to the reusable
+    // Held recovery and bounded OIDC renewal add guarded steps to the reusable
     // runtime; preserve the original budget for every other deploy file.
-    const limit = file === ".github/workflows/deploy-azure-runtime.yml" ? 950 : 900
+    const limit = file === ".github/workflows/deploy-azure-runtime.yml" ? 1000 : 900
     assert.ok(lineCount < limit, `${file} has ${lineCount} lines; expected fewer than ${limit}`)
   }
 
