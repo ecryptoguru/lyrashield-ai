@@ -10,6 +10,9 @@ const script = path.resolve(".github/scripts/verify-webhook-cutover.mjs")
 const product = "a".repeat(40)
 const engine = "b".repeat(40)
 const defaultDigest = `sha256:${"c".repeat(64)}`
+const recoverySource = "de92b93a2bef1c44e5837b15949c453f0d8a28c6"
+const recoveryWebDigest = "sha256:e0e53a32c37b3bb84ce5832663411f59bbe542faa406c3517983c1a0b4385b9b"
+const recoveryWebRepository = "ghcr.io/ecryptoguru/lyrashield-ai/lyrashield-web"
 const protocol = "durable-claims/2"
 const legacyProduct = "4822306e24f375800981bf282fd992a9c15dcde8"
 const legacyEngine = "9d90be5aaf92f86bb5c1ba55a8138545764fdd44"
@@ -98,13 +101,16 @@ function fixture(t, scenario, expectedMode) {
   const alternate =
     scenario.startsWith("legacy alternate") || scenario === "legacy mixed verified revisions"
   const legacyUnapprovedProduct = "96ffe6a3b3d4b87e3686dc9f2deed1ff25296dc6"
+  const recoveryProduced = scenario === "digest-only recovery-produced writer"
   const workerProduct = legacy
     ? scenario === "legacy unapproved source"
       ? legacyUnapprovedProduct
       : alternate
         ? alternateLegacyProduct
         : legacyProduct
-    : product
+    : recoveryProduced
+      ? recoverySource
+      : product
   const digest = !legacy
     ? defaultDigest
     : scenario === "legacy alternate worker paired with original digest"
@@ -118,7 +124,9 @@ function fixture(t, scenario, expectedMode) {
     ? alternateLegacyWriterDigest
     : legacy
       ? legacyWriterDigest
-      : defaultDigest
+      : recoveryProduced
+        ? recoveryWebDigest
+        : defaultDigest
   const workerImage = `ghcr.io/example/worker:${workerProduct}@${digest}`
   const state = structuredClone({
     protocol: legacy ? "durable-claims/1" : protocol,
@@ -328,22 +336,39 @@ function fixture(t, scenario, expectedMode) {
     revisionProduct,
     active = true,
     badImage = false,
-    imageDigest = defaultDigest
-  ) => ({
-    properties: {
-      active,
-      template: {
-        containers: [
-          {
-            image: badImage
-              ? "image:latest"
-              : `ghcr.io/example/worker:${revisionProduct}@${imageDigest}`,
-            env: [{ name: "LYRASHIELD_PRODUCT_REVISION", value: revisionProduct }],
-          },
-        ],
-      },
-    },
-  })
+    imageDigest = writerDigest
+  ) => {
+    const digestOnly = scenario.startsWith("digest-only")
+    const tag =
+      scenario === "conflicting writer tag"
+        ? "d".repeat(40)
+        : scenario === "mutable writer tag with digest"
+          ? "latest"
+          : revisionProduct
+    const image = badImage
+      ? "image:latest"
+      : digestOnly
+        ? `${recoveryProduced ? recoveryWebRepository : "ghcr.io/example/worker"}@${scenario === "digest-only malformed digest" ? "sha256:bad" : imageDigest}`
+        : `ghcr.io/example/worker:${tag}@${imageDigest}`
+    const env =
+      scenario === "digest-only missing identity" ||
+      scenario === "tagged writer image without explicit env"
+        ? []
+        : [
+            {
+              name: "LYRASHIELD_PRODUCT_REVISION",
+              value:
+                scenario === "digest-only malformed identity"
+                  ? "invalid"
+                  : scenario === "tagged writer env mismatch"
+                    ? "d".repeat(40)
+                    : revisionProduct,
+            },
+          ]
+    if (scenario === "digest-only duplicate identity")
+      env.push({ name: "LYRASHIELD_PRODUCT_REVISION", value: "d".repeat(40) })
+    return { properties: { active, template: { containers: [{ image, env }] } } }
+  }
   const appRevisions = legacy
     ? [
         revision(
@@ -359,8 +384,12 @@ function fixture(t, scenario, expectedMode) {
                 : writerDigest
         ),
       ]
-    : [revision(product)]
+    : [revision(workerProduct)]
   const scannerRevisions = [...appRevisions]
+  if (scenario === "digest-only scanner missing identity") {
+    scannerRevisions[0] = structuredClone(appRevisions[0])
+    scannerRevisions[0].properties.template.containers[0].env = []
+  }
   if (scenario === "legacy mixed verified revisions") {
     appRevisions.push(revision(legacyProduct, true, false, legacyWriterDigest))
     scannerRevisions.push(revision(legacyProduct, true, false, legacyWriterDigest))
@@ -392,7 +421,7 @@ function fixture(t, scenario, expectedMode) {
   )
   executable(
     "docker",
-    `const args=process.argv.slice(2); if(args[0]==="login") process.exit(0); if(args[0]==="buildx") { const inspected=args[3]; const revision=inspected.match(/:([a-f0-9]{40})@sha256:/)?.[1]; console.log(JSON.stringify({config:{Labels:{"org.opencontainers.image.revision":${JSON.stringify(scenario === "OCI mismatch" ? "legacy" : "")} || revision}}})); } else if(args[0]==="inspect") { const format=args[2]; if((${JSON.stringify(scenario)}==="worker container inspect failed" && format.includes("State.Running")) || (${JSON.stringify(scenario)}==="worker image inspect failed" && format.includes("Config.Image")) || (${JSON.stringify(scenario)}==="worker image provenance inspect failed" && format.includes("engine.revision"))) process.exit(1); console.log(format.includes("State.Running")?${JSON.stringify(scenario === "worker container stopped" ? "false" : "true")}:format.includes("Config.Image")?${JSON.stringify(workerImage)}:format.includes("engine.revision")?${JSON.stringify(scenario === "worker image provenance missing" ? "" : state.engine)}:${JSON.stringify(scenario === "worker image provenance missing" ? "" : workerProduct)}); } else if(args[0]==="exec") { if(${JSON.stringify(scenario)}==="worker exec unavailable") process.exit(1); const code=args[args.indexOf("-e")+1]; process.argv=[process.execPath,...args.slice(args.indexOf("-e")+3)]; const state=${JSON.stringify(state)}; const expectedChecksums=${JSON.stringify(migrationChecksums)}; process.env.LYRASHIELD_PRODUCT_REVISION=state.product; process.env.LYRASHIELD_WORKER_IMAGE_DIGEST=state.digest; if(state.engine) process.env.LYRASHIELD_ENGINE_REVISION=state.engine; else delete process.env.LYRASHIELD_ENGINE_REVISION; const prisma={$queryRawUnsafe:async(query,...parameters)=>{ if(${JSON.stringify(scenario)}==="probe error redaction") throw new Error("SYNTHETIC_CREDENTIAL_DO_NOT_LOG"); if(query.includes("current_schema()")) return [{schema:state.schema}]; if(query.includes("_prisma_migrations")) return state.migrationNames.map(migration_name=>({migration_name,checksum:state.badMigrationChecksum?"0".repeat(64):expectedChecksums[migration_name],finished_at:migration_name===state.unfinishedMigration?null:new Date(),rolled_back_at:migration_name===state.rolledBackMigration?new Date():null})); if(query.includes("FROM pg_attribute a")) return (query.includes("pg_namespace")?state.columns:[...(state.columns??[]),...(state.foreignSchemaColumns??[])]).map(column=>({...column,defaultExpr:column.default})); if(query.includes("pg_constraint")) {if(!query.includes("contype::text AS type")) throw new Error("UnsupportedNativeDataType: char");return state.constraints;} if(query.includes("pg_index")) return state.indexes; throw new Error("Unexpected worker schema probe"); },$disconnect:async()=>{if(${JSON.stringify(scenario)}==="disconnect error redaction")throw new Error("SYNTHETIC_CREDENTIAL_DO_NOT_LOG")}}; const load=async(name)=>name==="node:zlib"?import("node:zlib"):name==="@lyrashield/billing"?{WEBHOOK_TRACK_CLAIM_PROTOCOL:state.protocol}:name==="@lyrashield/db"?{getSystemPrisma:()=>prisma}:Promise.reject(new Error("Unexpected module")); new Function("load","return (async()=>{"+code.replaceAll("import(","load(")+"})()")(load).catch(error=>{console.error(error.message);process.exit(1)}); } else process.exit(1);`
+    `const args=process.argv.slice(2); if(args[0]==="login") process.exit(0); if(args[0]==="buildx") { const inspected=args[3]; const revision=inspected.match(/:([a-f0-9]{40})@sha256:/)?.[1]??process.env.SYNTHETIC_WRITER_OCI_REVISION; console.log(JSON.stringify({config:{Labels:{"org.opencontainers.image.revision":${JSON.stringify(scenario === "OCI mismatch" ? "legacy" : "")} || revision}}})); } else if(args[0]==="inspect") { const format=args[2]; if((${JSON.stringify(scenario)}==="worker container inspect failed" && format.includes("State.Running")) || (${JSON.stringify(scenario)}==="worker image inspect failed" && format.includes("Config.Image")) || (${JSON.stringify(scenario)}==="worker image provenance inspect failed" && format.includes("engine.revision"))) process.exit(1); console.log(format.includes("State.Running")?${JSON.stringify(scenario === "worker container stopped" ? "false" : "true")}:format.includes("Config.Image")?${JSON.stringify(workerImage)}:format.includes("engine.revision")?${JSON.stringify(scenario === "worker image provenance missing" ? "" : state.engine)}:${JSON.stringify(scenario === "worker image provenance missing" ? "" : workerProduct)}); } else if(args[0]==="exec") { if(${JSON.stringify(scenario)}==="worker exec unavailable") process.exit(1); const code=args[args.indexOf("-e")+1]; process.argv=[process.execPath,...args.slice(args.indexOf("-e")+3)]; const state=${JSON.stringify(state)}; const expectedChecksums=${JSON.stringify(migrationChecksums)}; process.env.LYRASHIELD_PRODUCT_REVISION=state.product; process.env.LYRASHIELD_WORKER_IMAGE_DIGEST=state.digest; if(state.engine) process.env.LYRASHIELD_ENGINE_REVISION=state.engine; else delete process.env.LYRASHIELD_ENGINE_REVISION; const prisma={$queryRawUnsafe:async(query,...parameters)=>{ if(${JSON.stringify(scenario)}==="probe error redaction") throw new Error("SYNTHETIC_CREDENTIAL_DO_NOT_LOG"); if(query.includes("current_schema()")) return [{schema:state.schema}]; if(query.includes("_prisma_migrations")) return state.migrationNames.map(migration_name=>({migration_name,checksum:state.badMigrationChecksum?"0".repeat(64):expectedChecksums[migration_name],finished_at:migration_name===state.unfinishedMigration?null:new Date(),rolled_back_at:migration_name===state.rolledBackMigration?new Date():null})); if(query.includes("FROM pg_attribute a")) return (query.includes("pg_namespace")?state.columns:[...(state.columns??[]),...(state.foreignSchemaColumns??[])]).map(column=>({...column,defaultExpr:column.default})); if(query.includes("pg_constraint")) {if(!query.includes("contype::text AS type")) throw new Error("UnsupportedNativeDataType: char");return state.constraints;} if(query.includes("pg_index")) return state.indexes; throw new Error("Unexpected worker schema probe"); },$disconnect:async()=>{if(${JSON.stringify(scenario)}==="disconnect error redaction")throw new Error("SYNTHETIC_CREDENTIAL_DO_NOT_LOG")}}; const load=async(name)=>name==="node:zlib"?import("node:zlib"):name==="@lyrashield/billing"?{WEBHOOK_TRACK_CLAIM_PROTOCOL:state.protocol}:name==="@lyrashield/db"?{getSystemPrisma:()=>prisma}:Promise.reject(new Error("Unexpected module")); new Function("load","return (async()=>{"+code.replaceAll("import(","load(")+"})()")(load).catch(error=>{console.error(error.message);process.exit(1)}); } else process.exit(1);`
   )
   executable(
     "az",
@@ -420,6 +449,11 @@ function fixture(t, scenario, expectedMode) {
             ? "app-only"
             : "app-and-scanner",
       AZURE_RESOURCE_GROUP: "test",
+      SYNTHETIC_WRITER_OCI_REVISION: scenario.startsWith("digest-only")
+        ? scenario === "digest-only wrong OCI label"
+          ? "legacy"
+          : workerProduct
+        : "",
       AZURE_WORKER_VM_NAME: "worker",
       AZURE_APP_CONTAINER_APP_NAME: "app",
       AZURE_SCANNER_CONTAINER_APP_NAME: [
@@ -438,6 +472,30 @@ test("fully compatible writers and migrations select ordinary release", (t) => {
   const result = fixture(t, "compatible")
   assert.equal(result.status, 0, result.stderr)
   assert.match(result.stdout, /Webhook baseline verified/)
+  assert.match(result.githubOutput, /webhook_claims_cutover=false/)
+})
+
+test("digest-only writer image with explicit revision selects ordinary release", (t) => {
+  const result = fixture(t, "digest-only writer image")
+  assert.equal(result.status, 0, result.stderr)
+  assert.match(result.githubOutput, /webhook_claims_cutover=false/)
+})
+
+test("recovery-produced digest-only web reference reaches the installed-writer verifier", (t) => {
+  const runtime = readFileSync(".github/workflows/deploy-azure-runtime.yml", "utf8")
+  const prepare = readFileSync(".github/workflows/prepare-worker-recovery-candidate.yml", "utf8")
+  const rollout = readFileSync(".github/scripts/deploy-azure-rollout.sh", "utf8")
+  assert.match(runtime, /IMAGE: \$\{\{ inputs\.web_image \}\}@\$\{\{ inputs\.web_digest \}\}/)
+  assert.match(prepare, /org\.opencontainers\.image\.revision=\$\{\{ inputs\.source_sha \}\}/)
+  assert.match(rollout, /LYRASHIELD_PRODUCT_REVISION=\$\{DEPLOY_SHA\}/)
+  const result = fixture(t, "digest-only recovery-produced writer", "compatible")
+  assert.equal(result.status, 0, result.stderr)
+  assert.match(result.githubOutput, /webhook_claims_cutover=false/)
+})
+
+test("tagged immutable writer image can bind identity from its tag and OCI label", (t) => {
+  const result = fixture(t, "tagged writer image without explicit env")
+  assert.equal(result.status, 0, result.stderr)
   assert.match(result.githubOutput, /webhook_claims_cutover=false/)
 })
 
@@ -477,6 +535,15 @@ for (const scenario of [
   "old worker",
   "no active app",
   "image mismatch",
+  "digest-only missing identity",
+  "digest-only scanner missing identity",
+  "digest-only malformed identity",
+  "digest-only duplicate identity",
+  "digest-only malformed digest",
+  "digest-only wrong OCI label",
+  "conflicting writer tag",
+  "mutable writer tag with digest",
+  "tagged writer env mismatch",
   "missing provenance",
   "rollback mismatch",
   "legacy partial migration",
