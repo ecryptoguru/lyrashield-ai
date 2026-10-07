@@ -181,6 +181,12 @@ jobs:
           bash apps/worker/scripts/verify-worker-image.sh \
             "$CANONICAL_WORKER_IMAGE" "$EXPECTED_SOURCE_SHA" "$EXPECTED_ENGINE_REVISION"
 
+      - name: Verify runtime and system TLS using the exact worker image
+        working-directory: product
+        env:
+          POSTGRES_IMAGE: postgres:16-alpine
+        run: WORKER_IMAGE="$CANONICAL_WORKER_IMAGE" node .github/scripts/tests/supabase-db-tls.docker.mjs
+
       - name: Run actual retry code from the worker image against disposable Postgres and Redis
         shell: bash
         env:

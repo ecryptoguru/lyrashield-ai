@@ -57,3 +57,17 @@ test("receipt is published only after exact-digest worker rehearsal succeeds", (
   assert.match(workflow, /path: recovery-candidate-receipt\.json/)
   assert.match(workflow, /if-no-files-found: error/)
 })
+
+test("exact-image rehearsal verifies runtime TLS without a source overlay", () => {
+  const rehearsal = readFileSync(".github/workflows/verify-webhook-worker-image.yml", "utf8")
+  const step = rehearsal.indexOf(
+    "- name: Verify runtime and system TLS using the exact worker image"
+  )
+  assert(step > rehearsal.indexOf("- name: Pull and verify the exact worker image provenance"))
+  assert(step < rehearsal.indexOf("- name: Run actual retry code from the worker image"))
+  assert.match(
+    rehearsal,
+    /WORKER_IMAGE="\$CANONICAL_WORKER_IMAGE" node \.github\/scripts\/tests\/supabase-db-tls\.docker\.mjs/
+  )
+  assert.doesNotMatch(rehearsal, /--overlay-source/)
+})

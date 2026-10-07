@@ -35,6 +35,21 @@ describe("resolveDbPoolMax", () => {
 })
 
 describe("createBoundedPgAdapter", () => {
+  it.each(["db", "db:system"] as const)(
+    "enforces verified Supabase TLS in the %s pool",
+    async (scope) => {
+      const raw =
+        "postgres://runtime:synthetic@aws-0-test.pooler.supabase.com:5432/postgres?sslmode=require&uselibpqcompat=true"
+      const adapter = await createBoundedPgAdapter(raw, scope).connect()
+      const pool = adapter.underlyingDriver()
+      expect(pool.options).not.toHaveProperty("connectionString")
+      expect(pool.options.ssl).toEqual({ rejectUnauthorized: true })
+      expect(pool.options.host).toBe("aws-0-test.pooler.supabase.com")
+      expect(pool.options.max).toBe(4)
+      await adapter.dispose()
+    }
+  )
+
   it("observes the pg pool created by Prisma without opening a database connection", async () => {
     const adapter = await createBoundedPgAdapter("postgresql://u:p@127.0.0.1:5432/db").connect()
     const pool = adapter.underlyingDriver()
