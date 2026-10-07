@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import { spawnSync } from "node:child_process"
-import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import test from "node:test"
@@ -12,6 +12,7 @@ import {
 const sourceSha = "a".repeat(40)
 const advancedSha = "b".repeat(40)
 const helperPath = path.resolve(".github/scripts/verify-webhook-cutover-preflight.mjs")
+const maintenancePath = path.resolve(".github/scripts/webhook-claims-maintenance.sh")
 
 test("same-run verified receipt preserves first-cutover mode after main advances", () => {
   assert.equal(
@@ -99,6 +100,63 @@ function executable(directory, name, body) {
   writeFileSync(file, `#!${process.execPath}\n${body}`)
   chmodSync(file, 0o755)
 }
+
+test("ordinary retry binds the current attempt and real maintenance shell rejects its absence", (t) => {
+  const workflow = readFileSync(
+    new URL("../../workflows/deploy-azure.yml", import.meta.url),
+    "utf8"
+  )
+  const ordinaryStep = workflow
+    .split("- name: Classify webhook baseline before image build")[1]
+    ?.split("- name:")[0]
+  assert.ok(ordinaryStep)
+  assert.match(ordinaryStep, /LYRASHIELD_WEBHOOK_CUTOVER_ATTEMPT: \$\{\{ github\.run_attempt \}\}/)
+
+  const directory = mkdtempSync(path.join(tmpdir(), "ls-cutover-attempt-"))
+  t.after(() => rmSync(directory, { recursive: true, force: true }))
+  const capture = path.join(directory, "vm-command")
+  executable(
+    directory,
+    "timeout",
+    `const {spawnSync}=require("node:child_process"); const args=process.argv.slice(2); if(args[0]!=="--kill-after=10s" || !/^\\d+s$/.test(args[1])) process.exit(2); const result=spawnSync(args[2],args.slice(3),{encoding:"utf8",env:process.env}); process.stdout.write(result.stdout??""); process.stderr.write(result.stderr??""); process.exit(result.status??1);`
+  )
+  executable(
+    directory,
+    "az",
+    `const fs=require("node:fs"); const args=process.argv.slice(2); if(args.slice(0,3).join(" ")!=="vm run-command invoke") process.exit(2); const index=args.indexOf("--scripts"); if(index<0) process.exit(2); fs.writeFileSync(process.env.CAPTURE_PATH,args[index+1]); process.stdout.write("WEBHOOK_RECOVERY_RECEIPT_ABSENT\\n");`
+  )
+  const baseEnv = {
+    PATH: `${directory}:/usr/bin:/bin:/usr/local/bin`,
+    CAPTURE_PATH: capture,
+    DEPLOY_SHA: sourceSha,
+    RG: "fixture-rg",
+    WORKER_VM_NAME: "fixture-worker",
+    LYRASHIELD_ADMISSION_STOP_OWNER: "123:1",
+    LYRASHIELD_WEBHOOK_CUTOVER_RUN_ID: "123",
+    AZURE_VM_RUN_COMMAND_TIMEOUT_SECONDS: "5",
+  }
+  const invoke = (env) =>
+    spawnSync("/bin/bash", [maintenancePath, "recovery-probe"], {
+      cwd: path.resolve("."),
+      encoding: "utf8",
+      env,
+    })
+
+  const missing = invoke(baseEnv)
+  assert.notEqual(missing.status, 0)
+  assert.equal(existsSync(capture), false)
+  const invalid = invoke({ ...baseEnv, LYRASHIELD_WEBHOOK_CUTOVER_ATTEMPT: "0" })
+  assert.notEqual(invalid.status, 0)
+  assert.equal(existsSync(capture), false)
+
+  const current = invoke({ ...baseEnv, LYRASHIELD_WEBHOOK_CUTOVER_ATTEMPT: "2" })
+  assert.equal(current.status, 0, current.stderr)
+  assert.match(current.stdout, /WEBHOOK_RECOVERY_RECEIPT_ABSENT/)
+  assert.ok(existsSync(capture))
+  assert.ok(
+    readFileSync(capture, "utf8").includes(`'recovery-probe' '${sourceSha}' '123:1' '123' '' '2'`)
+  )
+})
 
 function fixture(
   t,

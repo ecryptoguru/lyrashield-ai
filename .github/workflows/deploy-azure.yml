@@ -141,6 +141,7 @@ jobs:
           WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
           LYRASHIELD_ADMISSION_STOP_OWNER: ${{ github.run_id }}:${{ github.run_attempt }}
           LYRASHIELD_WEBHOOK_CUTOVER_RUN_ID: ${{ github.run_id }}
+          LYRASHIELD_WEBHOOK_CUTOVER_ATTEMPT: ${{ github.run_attempt }}
           AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
           AZURE_APP_CONTAINER_APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
           AZURE_SCANNER_CONTAINER_APP_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
