@@ -71,6 +71,13 @@ describe("Supabase runtime TLS", () => {
     ).toThrow()
   })
 
+  it("rejects a percent-encoded Supabase hostname before pg can decode it", () => {
+    const encoded = authority.replace(".com:", "%2ecom:")
+    expect(() =>
+      createPgConnectionConfig(`${encoded}?sslmode=require&uselibpqcompat=true`)
+    ).toThrow("Invalid Supabase database connection configuration")
+  })
+
   it("preserves direct Supabase identity and the ordinary disposable loopback path", () => {
     const direct = createPgConnectionConfig(
       "postgres://runtime:synthetic@db.abcdefghijklmnopqrst.supabase.co:5432/postgres?sslmode=require"

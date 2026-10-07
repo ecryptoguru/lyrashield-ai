@@ -30,7 +30,16 @@ export function createPgConnectionConfig(connectionString: string): ClientConfig
   } catch {
     return { connectionString }
   }
-  const host = url.hostname.toLowerCase()
+  let host: string
+  try {
+    // pg-connection-string decodes escaped hostnames before connecting. Match
+    // against that effective host so an encoded Supabase suffix cannot skip
+    // verified TLS and then become a Supabase target in pg.
+    host = decodeURIComponent(url.hostname).toLowerCase()
+  } catch {
+    if (/supabase/i.test(url.hostname)) invalidConnection()
+    return { connectionString }
+  }
   const canonicalHost = host.replace(/\.$/, "")
   const supabase =
     /(?:^|\.)pooler\.supabase\.com$/.test(canonicalHost) ||
@@ -42,6 +51,7 @@ export function createPgConnectionConfig(connectionString: string): ClientConfig
   if (
     connectionString.length > 8192 ||
     !["postgres:", "postgresql:"].includes(url.protocol) ||
+    host !== url.hostname.toLowerCase() ||
     host !== canonicalHost ||
     url.hash ||
     !url.username ||

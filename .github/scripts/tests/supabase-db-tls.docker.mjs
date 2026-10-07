@@ -122,6 +122,9 @@ if (process.env.TEST_CASE === "positive") {
     assert.throws(() => createBoundedPgAdapter(base + suffix), /^Error: Invalid Supabase database connection configuration$/)
     passed++
   }
+  const encodedHost = base.replace(".com:5432", "%2ecom:5432")
+  assert.throws(() => createBoundedPgAdapter(encodedHost), /^Error: Invalid Supabase database connection configuration$/)
+  passed++
 }
 console.log(JSON.stringify({ suite: "supabase-db-tls", case: process.env.TEST_CASE, passed }))
 `
@@ -285,13 +288,13 @@ try {
   }
   assert.deepEqual(
     results.map((result) => result.passed),
-    [14, 6, 6]
+    [15, 6, 6]
   )
   console.log(
     JSON.stringify({
       suite: "supabase-db-tls",
       status: "PASS",
-      total: 26,
+      total: 27,
       mode: overlay ? "local-source-overlay" : "exact-candidate",
       workerImage,
     })
