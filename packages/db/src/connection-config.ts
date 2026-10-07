@@ -53,7 +53,8 @@ function invalidConnection(): never {
  * cannot safely override legacy uselibpqcompat=true&sslmode=require. Validate
  * the target, then pass discrete fields with no connectionString to reparse.
  */
-export function createPgConnectionConfig(connectionString: string): ClientConfig {
+export function createPgConnectionConfig(connectionString: string | undefined): ClientConfig {
+  if (connectionString === undefined) return { connectionString }
   const querySupabase = hasSupabaseQueryHost(connectionString)
   let url: URL
   try {

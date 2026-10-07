@@ -8,6 +8,10 @@ const authority =
 afterEach(() => vi.unstubAllEnvs())
 
 describe("Supabase runtime TLS", () => {
+  it("preserves deferred client construction when the database URL is absent", () => {
+    expect(createPgConnectionConfig(undefined)).toEqual({ connectionString: undefined })
+  })
+
   it("rejects port zero instead of allowing pg to substitute its default", () => {
     expect(() =>
       createPgConnectionConfig(`${authority.replace(":5432/", ":0/")}?sslmode=require`)
