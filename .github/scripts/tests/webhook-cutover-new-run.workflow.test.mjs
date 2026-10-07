@@ -74,6 +74,7 @@ test("held recovery selects only successful prepared digests and skips rebuild a
   assert.match(build, /inputs\.held_recovery_original_run_id == ''/)
   assert.match(prepared, /verify-webhook-recovery-candidate\.mjs/)
   assert.match(prepared, /held_recovery_prepared_run_id/)
+  assert.match(prepared, /needs\.preflight-compatible-baseline\.result == 'success'/)
   assert.match(selected, /\[ "\$PREPARED_RESULT" = success \] && \[ "\$BUILD_RESULT" = skipped \]/)
   assert.match(
     deploy,
@@ -187,4 +188,36 @@ test("exact image startup and migrated schema proof gate held worker boot before
   )
   assert.match(step(runtime, "Archive completed held recovery evidence"), /complete-recovery/)
   assert.match(step(runtime, "Disable webhook writers after failed held recovery"), /recovery-hold/)
+})
+
+test("prepared-image recovery reaches rehearsal and deploy despite the skipped build ancestor", () => {
+  const rehearsal = deploy.slice(
+    deploy.indexOf("  verify-built-worker-image:\n"),
+    deploy.indexOf("  deploy:\n")
+  )
+  assert.match(rehearsal, /if:.*!cancelled\(\).*needs\.resolve-images\.result == 'success'/)
+  const rollout = deploy.slice(
+    deploy.indexOf("  deploy:\n"),
+    deploy.indexOf("  verify-held-recovery-outcome:\n")
+  )
+  assert.match(rollout, /if: >\n\s*!cancelled\(\)/)
+  for (const prerequisite of [
+    "resolve-images",
+    "verify-built-worker-image",
+    "validate-manual-production-dispatch",
+    "preflight-compatible-baseline",
+  ]) {
+    assert.ok(
+      rollout.includes(`needs.${prerequisite}.result == 'success'`),
+      `missing success gate: ${prerequisite}`
+    )
+  }
+})
+
+test("held recovery cannot report success with runtime deployment skipped", () => {
+  const outcome = deploy.slice(deploy.indexOf("  verify-held-recovery-outcome:\n"))
+  assert.match(outcome, /needs: deploy/)
+  assert.match(outcome, /if:.*!cancelled\(\).*inputs\.held_recovery_original_run_id != ''/)
+  assert.match(outcome, /DEPLOY_RESULT: \$\{\{ needs\.deploy\.result \}\}/)
+  assert.match(outcome, /test "\$DEPLOY_RESULT" = success/)
 })

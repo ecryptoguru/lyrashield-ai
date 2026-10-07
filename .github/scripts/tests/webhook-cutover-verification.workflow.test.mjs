@@ -85,7 +85,10 @@ assert.match(
   /\[ "\$PREPARED_RESULT" = success \] && \[ "\$BUILD_RESULT" = skipped \]/
 )
 assert.match(imageProof, /needs:\s*resolve-images/)
-assert.match(imageProof, /if: needs\.resolve-images\.result == 'success'/)
+assert.match(
+  imageProof,
+  /if: \$\{\{ !cancelled\(\) && needs\.resolve-images\.result == 'success' \}\}/
+)
 assert.match(imageProof, /verify-webhook-worker-image\.yml/)
 assert.match(
   imageProof,
