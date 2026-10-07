@@ -40,6 +40,14 @@ describe("assertWorkerDbPoolCapacity", () => {
     )
   })
 
+  it("fails closed if scan concurrency rises to three with both auxiliary workers", () => {
+    const auxiliaryConcurrency =
+      WEBHOOK_TRACK_RETRY_WORKER_CONCURRENCY + FIX_GENERATE_WORKER_CONCURRENCY
+    expect(() => assertWorkerDbPoolCapacity(3, resolveDbPoolMax({}), auxiliaryConcurrency)).toThrow(
+      "Total worker concurrency (3 scan + 2 auxiliary = 5) must be lower"
+    )
+  })
+
   it("counts retry and fix-generation jobs before reserving a finalization connection", () => {
     expect(() => assertWorkerDbPoolCapacity(3, 7, 4)).toThrow(
       "Total worker concurrency (3 scan + 4 auxiliary = 7) must be lower than LYRASHIELD_DB_POOL_MAX (7)"
