@@ -126,7 +126,6 @@ const fail = (message) => {
   throw new Error(`${message}. No deployment mode was selected. See ${runbook}.`)
 }
 const sha = /^[a-f0-9]{40}$/
-const digest = /@sha256:[a-f0-9]{64}$/
 const args = process.argv.slice(2)
 let outputPath
 let expectedMode
@@ -210,17 +209,26 @@ for (const name of [
     if (!Array.isArray(containers) || containers.length !== 1)
       fail("Unexpected writer container topology")
     const container = containers[0]
-    const identity =
-      container.env?.find((entry) => entry.name === "LYRASHIELD_PRODUCT_REVISION")?.value ??
-      container.image?.match(/:([a-f0-9]{40})@sha256:/)?.[1]
+    const imageReference =
+      typeof container.image === "string"
+        ? container.image.match(
+            /^([a-z0-9][a-z0-9._/-]*)(?::([a-z0-9._-]+))?@(sha256:[a-f0-9]{64})$/
+          )
+        : null
+    const declaredIdentities = Array.isArray(container.env)
+      ? container.env.filter((entry) => entry?.name === "LYRASHIELD_PRODUCT_REVISION")
+      : []
     if (
-      !sha.test(identity ?? "") ||
-      !digest.test(container.image ?? "") ||
-      !container.image.includes(`:${identity}@`)
+      !imageReference ||
+      (container.env != null && !Array.isArray(container.env)) ||
+      declaredIdentities.length > 1
     )
       fail("Writer image and source identity mismatch")
-    const imageDigest = container.image.match(/@(sha256:[a-f0-9]{64})$/)?.[1]
-    if (!imageDigest) fail("Writer immutable image digest unavailable")
+    const imageTag = imageReference[2]
+    const identity = declaredIdentities[0]?.value ?? imageTag
+    if (!sha.test(identity ?? "") || (imageTag && imageTag !== identity))
+      fail("Writer image and source identity mismatch")
+    const imageDigest = imageReference[3]
     const imageConfig = json("docker", [
       "buildx",
       "imagetools",

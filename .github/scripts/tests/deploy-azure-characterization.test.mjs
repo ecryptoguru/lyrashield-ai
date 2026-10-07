@@ -35,6 +35,64 @@ const normalizedIf = (name) => {
   return folded[1].trim().replace(/\s+/g, " ")
 }
 
+test("scanner deployment binds the prepared digest-only web image to its exact source", (t) => {
+  const directory = mkdtempSync(path.join(tmpdir(), "lyra-scanner-source-"))
+  t.after(() => rmSync(directory, { recursive: true, force: true }))
+  const azPath = path.join(directory, "az")
+  const updateArgsPath = path.join(directory, "update-args")
+  const outputPath = path.join(directory, "github-output")
+  const source = "de92b93a2bef1c44e5837b15949c453f0d8a28c6"
+  const image =
+    "ghcr.io/ecryptoguru/lyrashield-ai/lyrashield-web@sha256:e0e53a32c37b3bb84ce5832663411f59bbe542faa406c3517983c1a0b4385b9b"
+  writeFileSync(
+    azPath,
+    `#!/usr/bin/env bash
+set -euo pipefail
+if [ "$1 $2" = "containerapp update" ]; then
+  printf '%s\\n' "$@" > "$FAKE_AZ_UPDATE_ARGS"
+elif [ "$1 $2" = "containerapp show" ]; then
+  printf 'scanner-candidate\\n'
+elif [ "$1 $2 $3" = "containerapp revision show" ]; then
+  printf 'scanner-candidate.example.test\\n'
+else
+  exit 91
+fi
+`,
+    { mode: 0o700 }
+  )
+  const env = {
+    PATH: `${directory}${path.delimiter}${process.env.PATH}`,
+    FAKE_AZ_UPDATE_ARGS: updateArgsPath,
+    GITHUB_OUTPUT: outputPath,
+    IMAGE: image,
+    DEPLOY_SHA: source,
+    AZURE_RESOURCE_GROUP: "fixture-rg",
+    AZURE_SCANNER_CONTAINER_APP_NAME: "fixture-scanner",
+    EMAIL_VERIFICATION_REQUIRED: "1",
+    REQUIRE_EMAIL_VERIFICATION: "1",
+    SCANNER_URL: "https://scanner.example.test",
+    APP_URL: "https://app.example.test",
+    MARKETING_URL: "https://example.test",
+    PLATFORM_ADMIN_EMAILS: "operator@example.test",
+    POLAR_BILLING_ADMISSION: "off",
+    POLAR_LOCAL_BILLING_ADMISSION: "off",
+    RAZORPAY_BILLING_ADMISSION: "off",
+    RAZORPAY_LOCAL_BILLING_ADMISSION: "off",
+  }
+  execFileSync(
+    "bash",
+    [".github/scripts/deploy-azure-rollout.sh", "deploy-scanner-container-app"],
+    {
+      env,
+      encoding: "utf8",
+    }
+  )
+  const args = readFileSync(updateArgsPath, "utf8").trim().split("\n")
+  assert.equal(args[args.indexOf("--image") + 1], image)
+  assert.ok(args.includes(`LYRASHIELD_PRODUCT_REVISION=${source}`))
+  assert.match(readFileSync(outputPath, "utf8"), /^revision=scanner-candidate$/m)
+})
+
 test("Azure caller passes reusable-workflow inputs through supported contexts", () => {
   const deploy = caller.slice(caller.indexOf("\n  deploy:"))
   const inputsStart = deploy.indexOf("\n    with:\n")
@@ -217,15 +275,15 @@ test("deployment step order, recovery conditions and app/scanner env key sets st
   )
   assert.equal(
     normalizedIf("Roll back production traffic on health failure"),
-    "inputs.held_recovery != true && inputs.webhook_claims_cutover != true && failure() && (steps.promote.outcome == 'failure' || steps.smoke-public.outcome == 'failure' || steps.worker-vm.outcome == 'failure')"
+    "inputs.held_recovery != true && inputs.webhook_claims_cutover != true && failure() && (steps.promote.outcome == 'failure' || steps.smoke-public.outcome == 'failure' || steps.ordinary-worker-login.outcome == 'failure' || steps.worker-vm.outcome == 'failure')"
   )
   assert.equal(
     normalizedIf("Restore prior ingress mode after failed rollout"),
-    "inputs.held_recovery != true && inputs.webhook_claims_cutover != true && failure() && steps.deploy-app.outputs.previous_client_cert_mode != '' && (steps.deploy-app.outcome == 'failure' || steps.deploy-scanner.outcome == 'failure' || steps.deploy-egress-proxy.outcome == 'failure' || steps.smoke-candidates.outcome == 'failure' || steps.worker-preflight.outcome == 'failure' || steps.promote.outcome == 'failure' || steps.smoke-public.outcome == 'failure' || steps.worker-vm.outcome == 'failure')"
+    "inputs.held_recovery != true && inputs.webhook_claims_cutover != true && failure() && steps.deploy-app.outputs.previous_client_cert_mode != '' && (steps.deploy-app.outcome == 'failure' || steps.deploy-scanner.outcome == 'failure' || steps.deploy-egress-proxy.outcome == 'failure' || steps.smoke-candidates.outcome == 'failure' || steps.worker-preflight.outcome == 'failure' || steps.promote.outcome == 'failure' || steps.smoke-public.outcome == 'failure' || steps.ordinary-worker-login.outcome == 'failure' || steps.worker-vm.outcome == 'failure')"
   )
   assert.equal(
     normalizedIf("Deactivate zero-traffic candidates after failed rollout"),
-    "inputs.held_recovery != true && inputs.webhook_claims_cutover != true && failure() && (steps.deploy-app.outcome == 'failure' || steps.deploy-scanner.outcome == 'failure' || steps.deploy-egress-proxy.outcome == 'failure' || steps.smoke-candidates.outcome == 'failure' || steps.worker-preflight.outcome == 'failure' || steps.promote.outcome == 'failure' || steps.smoke-public.outcome == 'failure' || steps.worker-vm.outcome == 'failure')"
+    "inputs.held_recovery != true && inputs.webhook_claims_cutover != true && failure() && (steps.deploy-app.outcome == 'failure' || steps.deploy-scanner.outcome == 'failure' || steps.deploy-egress-proxy.outcome == 'failure' || steps.smoke-candidates.outcome == 'failure' || steps.worker-preflight.outcome == 'failure' || steps.promote.outcome == 'failure' || steps.smoke-public.outcome == 'failure' || steps.ordinary-worker-login.outcome == 'failure' || steps.worker-vm.outcome == 'failure')"
   )
 
   const app = functionBody(rollout, "deploy-app-container-app")
@@ -325,6 +383,7 @@ test("deployment step order, recovery conditions and app/scanner env key sets st
     "PLATFORM_ADMIN_EMAILS",
     "IP_HASH_SALT",
     "LYRASHIELD_REQUIRE_EMAIL_VERIFICATION",
+    "LYRASHIELD_PRODUCT_REVISION",
     "POLAR_BILLING_ADMISSION",
     "POLAR_LOCAL_BILLING_ADMISSION",
     "RAZORPAY_BILLING_ADMISSION",
@@ -339,6 +398,9 @@ test("deployment step order, recovery conditions and app/scanner env key sets st
   ])
   assert.doesNotMatch(scanner, /LYRASHIELD_AI_(?:RESULT_CACHE|CACHE_)/)
 
+  // Nine bounded federated-login renewals protect the long ordinary and
+  // maintenance paths. Keep the runtime size bound tight to those steps.
+  assert.equal((runtime.match(/^      - name: Refresh Azure OIDC login /gm) ?? []).length, 9)
   for (const file of [
     ".github/workflows/deploy-azure.yml",
     ".github/workflows/deploy-azure-runtime.yml",
@@ -347,9 +409,8 @@ test("deployment step order, recovery conditions and app/scanner env key sets st
     "ops/deployment/containerapp.sh",
   ]) {
     const lineCount = readFileSync(file, "utf8").split("\n").length - 1
-    // The separate held-recovery branch adds guarded steps to the reusable
-    // runtime; preserve the original budget for every other deploy file.
-    const limit = file === ".github/workflows/deploy-azure-runtime.yml" ? 950 : 900
+    // Preserve the original budget for every other deploy file.
+    const limit = file === ".github/workflows/deploy-azure-runtime.yml" ? 1025 : 900
     assert.ok(lineCount < limit, `${file} has ${lineCount} lines; expected fewer than ${limit}`)
   }
 
