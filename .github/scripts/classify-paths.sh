@@ -9,6 +9,7 @@
 #   app        — at least one file is under apps/web or apps/worker
 #   desktop    — at least one file is under apps/desktop
 #   shared     — at least one file is in a shared location (packages/, root config, .github/)
+#   engine-worker-contract — worker/desktop/shared or unknown paths require the pinned contract gate
 #   marketing-deploy — marketing source or a dependency that changes its Worker artifact
 #   azure-deploy — app or shared change requiring an Azure production release
 #
@@ -66,6 +67,7 @@ azure_deploy=false
 marketing_tests=false
 motion_tests=false
 ops_tests=false
+engine_worker_contract=false
 
 while IFS= read -r f; do
   [ -z "$f" ] && continue
@@ -86,14 +88,17 @@ while IFS= read -r f; do
   fi
   if echo "$f" | grep -qE "$app_pattern"; then
     app=true
+    engine_worker_contract=true
     path_classified=true
   fi
   if echo "$f" | grep -qE "$desktop_pattern"; then
     desktop=true
+    engine_worker_contract=true
     path_classified=true
   fi
   if echo "$f" | grep -qE "$shared_pattern"; then
     shared=true
+    engine_worker_contract=true
     path_classified=true
   fi
   if echo "$f" | grep -qE "$marketing_deploy_pattern"; then
@@ -127,6 +132,7 @@ if [[ "$unknown" == "true" ]]; then
   marketing_tests=true
   motion_tests=true
   ops_tests=true
+  engine_worker_contract=true
 fi
 
 # A missing or untrusted production baseline must run every path-selected gate
@@ -144,6 +150,7 @@ if $force_all; then
   marketing_tests=true
   motion_tests=true
   ops_tests=true
+  engine_worker_contract=true
 fi
 
 if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
@@ -159,6 +166,7 @@ if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
     echo "marketing-tests=$marketing_tests"
     echo "motion-tests=$motion_tests"
     echo "ops-tests=$ops_tests"
+    echo "engine-worker-contract=$engine_worker_contract"
   } >> "$GITHUB_OUTPUT"
 else
   echo "docs-only=$docs_only"
@@ -172,4 +180,5 @@ else
   echo "marketing-tests=$marketing_tests"
   echo "motion-tests=$motion_tests"
   echo "ops-tests=$ops_tests"
+  echo "engine-worker-contract=$engine_worker_contract"
 fi

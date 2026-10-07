@@ -6,6 +6,7 @@ import { tmpdir } from "node:os"
 import path from "node:path"
 import test from "node:test"
 import { verifyCandidateReceipt, verifyPreparedRun } from "../verify-webhook-recovery-candidate.mjs"
+import { workerImageRehearsalHarnessSha } from "../worker-image-rehearsal-harness-sha.mjs"
 
 const sourceSha = "a".repeat(40)
 const engineRevision = "b".repeat(40)
@@ -14,6 +15,7 @@ const runAttempt = 2
 const repository = "ecryptoguru/lyrashield-ai"
 const sha = (char) => `sha256:${char.repeat(64)}`
 const image = (name, char) => `ghcr.io/${repository}/${name}@${sha(char)}`
+const rehearsalHarnessSha = workerImageRehearsalHarnessSha()
 const run = {
   id: Number(runId),
   run_attempt: runAttempt,
@@ -25,18 +27,30 @@ const run = {
   conclusion: "success",
 }
 const receipt = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   sourceSha,
   engineRevision,
   runId,
   runAttempt,
+  rehearsal: {
+    harnessSha: rehearsalHarnessSha,
+    harnessRevision: sourceSha,
+  },
   images: {
     web: image("lyrashield-web", "c"),
     worker: image("lyrashield-worker", "d"),
     egressProxy: image("lyrashield-egress-proxy", "e"),
   },
 }
-const expected = { repository, runId, runAttempt, sourceSha, engineRevision }
+const expected = {
+  repository,
+  runId,
+  runAttempt,
+  sourceSha,
+  engineRevision,
+  rehearsalHarnessSha,
+  rehearsalHarnessRevision: sourceSha,
+}
 
 test("prepared run is a successful manual build of the exact main source", () => {
   assert.equal(verifyPreparedRun(run, expected), runAttempt)
@@ -69,17 +83,26 @@ test("candidate receipt yields only canonical immutable image digests", () => {
     egress_proxy_image: `ghcr.io/${repository}/lyrashield-egress-proxy`,
     egress_proxy_digest: sha("e"),
     engine_revision: engineRevision,
+    prepared_source_sha: sourceSha,
+    worker_rehearsal_harness_sha: rehearsalHarnessSha,
+    worker_rehearsal_harness_revision: sourceSha,
   })
   assert.equal(
     verifyCandidateReceipt(receipt, { ...expected, engineRevision: null }).engine_revision,
     engineRevision
   )
   for (const changed of [
-    { ...receipt, schemaVersion: 2 },
+    { ...receipt, schemaVersion: 1 },
     { ...receipt, sourceSha: "f".repeat(40) },
     { ...receipt, engineRevision: "f".repeat(40) },
     { ...receipt, runId: "37555500001" },
     { ...receipt, runAttempt: 1 },
+    { ...receipt, rehearsal: { ...receipt.rehearsal, harnessSha: sha("f") } },
+    {
+      ...receipt,
+      rehearsal: { ...receipt.rehearsal, harnessRevision: "f".repeat(40) },
+    },
+    { ...receipt, rehearsal: { ...receipt.rehearsal, extra: true } },
     { ...receipt, extra: true },
     { ...receipt, images: { ...receipt.images, extra: "ref" } },
     { ...receipt, images: { ...receipt.images, worker: image("other-worker", "d") } },
@@ -99,6 +122,9 @@ test("candidate receipt yields only canonical immutable image digests", () => {
       { ...receipt, engineRevision: "mutable" },
       { ...expected, engineRevision: null }
     )
+  )
+  assert.throws(() =>
+    verifyCandidateReceipt(receipt, { ...expected, rehearsalHarnessSha: sha("f") })
   )
 })
 
@@ -159,6 +185,15 @@ test("prepared artifact is read as one bounded ZIP receipt and mismatches fail c
   const accepted = invoke()
   assert.equal(accepted.status, 0, accepted.stderr)
   assert.match(readFileSync(outputPath, "utf8"), new RegExp(`worker_digest=${sha("d")}`))
+  assert.match(
+    readFileSync(outputPath, "utf8"),
+    new RegExp(`worker_rehearsal_harness_sha=${rehearsalHarnessSha}`)
+  )
+  assert.match(readFileSync(outputPath, "utf8"), new RegExp(`prepared_run_attempt=${runAttempt}`))
+  assert.match(
+    readFileSync(outputPath, "utf8"),
+    new RegExp(`prepared_artifact_digest=${artifactDigest}`)
+  )
   const historical = invoke(
     { MOCK_MAIN: JSON.stringify({ object: { sha: "f".repeat(40) } }), ENGINE_REVISION: "" },
     ["--historical-finalization"]

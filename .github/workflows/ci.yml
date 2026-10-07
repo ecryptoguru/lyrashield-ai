@@ -80,6 +80,7 @@ jobs:
       marketing-tests: ${{ steps.classify.outputs.marketing-tests }}
       motion-tests: ${{ steps.classify.outputs.motion-tests }}
       ops-tests: ${{ steps.classify.outputs.ops-tests }}
+      engine-worker-contract: ${{ steps.classify.outputs.engine-worker-contract }}
     steps:
       - name: Configure git default branch
         run: git config --global init.defaultBranch main
@@ -679,21 +680,44 @@ jobs:
     name: Pinned Engine / Worker Contract
     needs: changes
     runs-on: ubuntu-24.04
+    # Keep this required check present. Only its expensive checkout, engine
+    # provenance fetch, install, and tests are skipped for known docs/marketing-only diffs.
+    # If classification fails or omits the new output, fail closed.
+    if: ${{ always() && !cancelled() }}
     steps:
+      - name: Preserve the required contract context for unrelated paths
+        if: needs.changes.result == 'success' && needs.changes.outputs.engine-worker-contract == 'false'
+        run: |
+          {
+            echo "## Pinned Engine / Worker Contract"
+            echo
+            echo "No worker, shared dependency/configuration, desktop, workflow/helper, or unknown path changed. The required check succeeds without checkout, dependency installation, or contract execution."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Fail closed when changed-path classification did not succeed
+        if: ${{ always() && !cancelled() && needs.changes.result != 'success' }}
+        run: |
+          echo "::error::Changed-path classification did not succeed; the worker contract cannot be skipped safely."
+          exit 1
+
       - name: Configure git default branch
+        if: needs.changes.outputs.engine-worker-contract != 'false'
         run: git config --global init.defaultBranch main
 
       - name: Checkout app
+        if: needs.changes.outputs.engine-worker-contract != 'false'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
 
       - name: Verify ENGINE_REVISION parity across release workflows
+        if: needs.changes.outputs.engine-worker-contract != 'false'
         shell: bash
         run: bash .github/scripts/check-engine-revision-parity.sh
 
       - name: Read pinned engine revision
+        if: needs.changes.outputs.engine-worker-contract != 'false'
         id: engine
         shell: bash
         run: |
@@ -705,6 +729,7 @@ jobs:
           echo "revision=$revision" >> "$GITHUB_OUTPUT"
 
       - name: Checkout pinned engine
+        if: needs.changes.outputs.engine-worker-contract != 'false'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ github.repository_owner }}/lyrashield-engine
@@ -715,6 +740,7 @@ jobs:
           persist-credentials: false
 
       - name: Verify engine revision provenance
+        if: needs.changes.outputs.engine-worker-contract != 'false'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -723,19 +749,23 @@ jobs:
             "${{ github.repository_owner }}/lyrashield-engine"
 
       - name: Setup Node.js
+        if: needs.changes.outputs.engine-worker-contract != 'false'
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
 
       - name: Set up Python
+        if: needs.changes.outputs.engine-worker-contract != 'false'
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
 
       - name: Set up uv
+        if: needs.changes.outputs.engine-worker-contract != 'false'
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
 
       - name: Verify pinned engine-worker contract
+        if: needs.changes.outputs.engine-worker-contract != 'false'
         run: bash .github/scripts/verify-engine-worker-contract.sh lyrashield-engine "$GITHUB_WORKSPACE"
 
   # PR gate: prove the production image targets build from this revision.

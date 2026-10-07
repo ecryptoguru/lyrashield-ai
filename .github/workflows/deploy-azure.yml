@@ -411,6 +411,12 @@ jobs:
       egress_proxy_image: ${{ steps.verify.outputs.egress_proxy_image }}
       egress_proxy_digest: ${{ steps.verify.outputs.egress_proxy_digest }}
       engine_revision: ${{ steps.verify.outputs.engine_revision }}
+      prepared_source_sha: ${{ steps.verify.outputs.prepared_source_sha }}
+      prepared_run_id: ${{ steps.verify.outputs.prepared_run_id }}
+      prepared_run_attempt: ${{ steps.verify.outputs.prepared_run_attempt }}
+      prepared_artifact_digest: ${{ steps.verify.outputs.prepared_artifact_digest }}
+      worker_rehearsal_harness_sha: ${{ steps.verify.outputs.worker_rehearsal_harness_sha }}
+      worker_rehearsal_harness_revision: ${{ steps.verify.outputs.worker_rehearsal_harness_revision }}
     steps:
       - name: Checkout exact current main candidate verifier
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -537,8 +543,28 @@ jobs:
 
   verify-built-worker-image:
     name: Rehearse exact release worker image on disposable services
-    needs: resolve-images
-    if: ${{ !cancelled() && needs.resolve-images.result == 'success' }}
+    needs: [resolve-images, resolve-prepared-images]
+    # Every ordinary release rehearses its exact image. Held recovery can reuse
+    # only the successful preparation proof whose receipt verifier checked the
+    # current source, engine, worker digest, harness fingerprint, run attempt,
+    # and GitHub artifact checksum.
+    if: >-
+      !cancelled() &&
+      needs.resolve-images.result == 'success' &&
+      (
+        inputs.held_recovery_original_run_id == '' ||
+        needs.resolve-prepared-images.result != 'success' ||
+        needs.resolve-prepared-images.outputs.prepared_run_id == '' ||
+        needs.resolve-prepared-images.outputs.prepared_run_id != inputs.held_recovery_prepared_run_id ||
+        needs.resolve-prepared-images.outputs.prepared_run_attempt == '' ||
+        needs.resolve-prepared-images.outputs.prepared_artifact_digest == '' ||
+        needs.resolve-prepared-images.outputs.prepared_source_sha != (inputs.source_sha || github.sha) ||
+        needs.resolve-prepared-images.outputs.engine_revision != needs.resolve-images.outputs.engine_revision ||
+        needs.resolve-prepared-images.outputs.worker_image != needs.resolve-images.outputs.worker_image ||
+        needs.resolve-prepared-images.outputs.worker_digest != needs.resolve-images.outputs.worker_digest ||
+        needs.resolve-prepared-images.outputs.worker_rehearsal_harness_sha == '' ||
+        needs.resolve-prepared-images.outputs.worker_rehearsal_harness_revision != (inputs.source_sha || github.sha)
+      )
     permissions:
       contents: read
       packages: read
@@ -553,18 +579,36 @@ jobs:
     needs:
       [
         resolve-images,
+        resolve-prepared-images,
         verify-built-worker-image,
         validate-manual-production-dispatch,
         preflight-compatible-baseline,
       ]
-    if: >
+    if: >-
       !cancelled() &&
+      (vars.AZURE_RESOURCE_GROUP != '') &&
+      ((vars.AZURE_APP_CONTAINER_APP_NAME != '') || (vars.AZURE_SCANNER_CONTAINER_APP_NAME != '')) &&
       needs.resolve-images.result == 'success' &&
-      needs.verify-built-worker-image.result == 'success' &&
       needs.validate-manual-production-dispatch.result == 'success' &&
       needs.preflight-compatible-baseline.result == 'success' &&
-      (vars.AZURE_RESOURCE_GROUP != '') &&
-      ((vars.AZURE_APP_CONTAINER_APP_NAME != '') || (vars.AZURE_SCANNER_CONTAINER_APP_NAME != ''))
+      (
+        needs.verify-built-worker-image.result == 'success' ||
+        (
+          inputs.held_recovery_original_run_id != '' &&
+          needs.resolve-prepared-images.result == 'success' &&
+          needs.resolve-prepared-images.outputs.prepared_run_id != '' &&
+          needs.resolve-prepared-images.outputs.prepared_run_id == inputs.held_recovery_prepared_run_id &&
+          needs.resolve-prepared-images.outputs.prepared_run_attempt != '' &&
+          needs.resolve-prepared-images.outputs.prepared_artifact_digest != '' &&
+          needs.resolve-prepared-images.outputs.prepared_source_sha == (inputs.source_sha || github.sha) &&
+          needs.resolve-prepared-images.outputs.engine_revision == needs.resolve-images.outputs.engine_revision &&
+          needs.resolve-prepared-images.outputs.worker_image == needs.resolve-images.outputs.worker_image &&
+          needs.resolve-prepared-images.outputs.worker_digest == needs.resolve-images.outputs.worker_digest &&
+          needs.resolve-prepared-images.outputs.worker_rehearsal_harness_sha != '' &&
+          needs.resolve-prepared-images.outputs.worker_rehearsal_harness_revision == (inputs.source_sha || github.sha) &&
+          needs.verify-built-worker-image.result == 'skipped'
+        )
+      )
     permissions:
       actions: read
       contents: read

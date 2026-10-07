@@ -195,15 +195,15 @@ test("prepared-image recovery reaches rehearsal and deploy despite the skipped b
     deploy.indexOf("  verify-built-worker-image:\n"),
     deploy.indexOf("  deploy:\n")
   )
-  assert.match(rehearsal, /if:.*!cancelled\(\).*needs\.resolve-images\.result == 'success'/)
+  assert.match(rehearsal, /if: >-\s*!cancelled\(\) &&\s*needs\.resolve-images\.result == 'success'/)
+
   const rollout = deploy.slice(
     deploy.indexOf("  deploy:\n"),
     deploy.indexOf("  verify-held-recovery-outcome:\n")
   )
-  assert.match(rollout, /if: >\n\s*!cancelled\(\)/)
+  assert.match(rollout, /if: >-\s*!cancelled\(\)/)
   for (const prerequisite of [
     "resolve-images",
-    "verify-built-worker-image",
     "validate-manual-production-dispatch",
     "preflight-compatible-baseline",
   ]) {
@@ -212,12 +212,15 @@ test("prepared-image recovery reaches rehearsal and deploy despite the skipped b
       `missing success gate: ${prerequisite}`
     )
   }
+  assert.match(rollout, /needs\.verify-built-worker-image\.result == 'success'/)
+  assert.match(rollout, /needs\.verify-built-worker-image\.result == 'skipped'/)
+  assert.match(rollout, /needs\.resolve-prepared-images\.result == 'success'/)
 })
 
 test("held recovery cannot report success with runtime deployment skipped", () => {
   const outcome = deploy.slice(deploy.indexOf("  verify-held-recovery-outcome:\n"))
   assert.match(outcome, /needs: deploy/)
-  assert.match(outcome, /if:.*!cancelled\(\).*inputs\.held_recovery_original_run_id != ''/)
+  assert.match(outcome, /if: \$\{\{ !cancelled\(\) && inputs\.held_recovery_original_run_id != '' \}\}/)
   assert.match(outcome, /DEPLOY_RESULT: \$\{\{ needs\.deploy\.result \}\}/)
   assert.match(outcome, /test "\$DEPLOY_RESULT" = success/)
 })

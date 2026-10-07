@@ -4,6 +4,7 @@ import { appendFileSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { pathToFileURL } from "node:url"
+import { workerImageRehearsalHarnessSha } from "./worker-image-rehearsal-harness-sha.mjs"
 
 const SHA = /^[a-f0-9]{40}$/
 const DIGEST = /^sha256:[a-f0-9]{64}$/
@@ -44,24 +45,48 @@ export function verifyPreparedRun(run, { runId, sourceSha }) {
 
 export function verifyCandidateReceipt(
   receipt,
-  { repository, runId, runAttempt, sourceSha, engineRevision }
+  {
+    repository,
+    runId,
+    runAttempt,
+    sourceSha,
+    engineRevision,
+    rehearsalHarnessSha,
+    rehearsalHarnessRevision,
+  }
 ) {
   requireKeys(
     receipt,
-    ["schemaVersion", "sourceSha", "engineRevision", "runId", "runAttempt", "images"],
+    [
+      "schemaVersion",
+      "sourceSha",
+      "engineRevision",
+      "runId",
+      "runAttempt",
+      "rehearsal",
+      "images",
+    ],
     "Candidate receipt"
   )
+  requireKeys(receipt.rehearsal, ["harnessSha", "harnessRevision"], "Rehearsal provenance")
   requireKeys(receipt.images, ["web", "worker", "egressProxy"], "Candidate images")
   if (
-    receipt.schemaVersion !== 1 ||
+    receipt.schemaVersion !== 2 ||
     receipt.sourceSha !== sourceSha ||
     (engineRevision
       ? receipt.engineRevision !== engineRevision
       : !SHA.test(receipt.engineRevision)) ||
     String(receipt.runId) !== runId ||
-    receipt.runAttempt !== runAttempt
+    receipt.runAttempt !== runAttempt ||
+    !DIGEST.test(receipt.rehearsal.harnessSha ?? "") ||
+    !SHA.test(receipt.rehearsal.harnessRevision ?? "") ||
+    (rehearsalHarnessSha && receipt.rehearsal.harnessSha !== rehearsalHarnessSha) ||
+    (rehearsalHarnessRevision &&
+      receipt.rehearsal.harnessRevision !== rehearsalHarnessRevision)
   ) {
-    throw new Error("Candidate receipt does not bind the requested source, engine and run")
+    throw new Error(
+      "Candidate receipt does not bind the requested source, engine, preparation run and rehearsal harness"
+    )
   }
   const outputs = {}
   for (const [key, image] of [
@@ -81,6 +106,9 @@ export function verifyCandidateReceipt(
     outputs[`${outputKey}_digest`] = digest
   }
   outputs.engine_revision = receipt.engineRevision
+  outputs.prepared_source_sha = receipt.sourceSha
+  outputs.worker_rehearsal_harness_sha = receipt.rehearsal.harnessSha
+  outputs.worker_rehearsal_harness_revision = receipt.rehearsal.harnessRevision
   return outputs
 }
 
@@ -117,6 +145,7 @@ function main() {
       throw new Error("Prepared recovery source is no longer current main")
     }
   }
+  const rehearsalHarnessSha = workerImageRehearsalHarnessSha(process.cwd())
   const run = JSON.parse(ghApi(`repos/${repository}/actions/runs/${runId}`))
   const runAttempt = verifyPreparedRun(run, { runId, sourceSha })
   const name = `webhook-recovery-candidate-${sourceSha}`
@@ -167,10 +196,15 @@ function main() {
       runAttempt,
       sourceSha,
       engineRevision: historicalFinalization ? null : engineRevision,
+      rehearsalHarnessSha: historicalFinalization ? null : rehearsalHarnessSha,
+      rehearsalHarnessRevision: historicalFinalization ? null : sourceSha,
     })
     for (const [key, value] of Object.entries(outputs)) {
       appendFileSync(outputPath, `${key}=${value}\n`)
     }
+    appendFileSync(outputPath, `prepared_run_id=${runId}\n`)
+    appendFileSync(outputPath, `prepared_run_attempt=${runAttempt}\n`)
+    appendFileSync(outputPath, `prepared_artifact_digest=${matches[0].digest}\n`)
     console.log(
       "Verified immutable prepared recovery candidate images from the successful offline run."
     )
