@@ -75,7 +75,10 @@ test("cutover retry requires a proven receipt or reclassifies only on current ma
     runtime.indexOf("      - name: Revalidate retry state for an automatic first cutover"),
     runtime.indexOf("      # A retried first cutover may reuse")
   )
-  assert.match(section, /if: inputs\.webhook_claims_cutover == true && github\.run_attempt > 1/)
+  assert.match(
+    section,
+    /if: inputs\.held_recovery != true && inputs\.webhook_claims_cutover == true && github\.run_attempt > 1/
+  )
   assert.match(section, /recovery-probe/)
   const body = section
     .slice(section.indexOf("        run: |\n") + "        run: |\n".length)

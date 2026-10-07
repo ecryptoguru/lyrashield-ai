@@ -6,12 +6,29 @@ phase=${1:?phase}
 : "${DEPLOY_SHA:?}" "${RG:?}" "${WORKER_VM_NAME:?}" "${LYRASHIELD_ADMISSION_STOP_OWNER:?}" "${LYRASHIELD_WEBHOOK_CUTOVER_RUN_ID:?}" "${LYRASHIELD_WEBHOOK_CUTOVER_ATTEMPT:?}"
 [[ "$DEPLOY_SHA" =~ ^[a-f0-9]{40}$ && "$LYRASHIELD_WEBHOOK_CUTOVER_RUN_ID" =~ ^[0-9]+$ && "$LYRASHIELD_ADMISSION_STOP_OWNER" =~ ^[0-9]+:[0-9]+$ ]] || exit 1
 [[ "$LYRASHIELD_WEBHOOK_CUTOVER_ATTEMPT" =~ ^[1-9][0-9]*$ ]] || exit 1
+validate_recovery_inputs() {
+  : "${LYRASHIELD_WEBHOOK_CUTOVER_ORIGINAL_RUN_ID:?}" \
+    "${LYRASHIELD_WEBHOOK_CUTOVER_ORIGINAL_OWNER:?}" \
+    "${LYRASHIELD_WEBHOOK_CUTOVER_OWNER_SOURCE_SHA:?}" \
+    "${LYRASHIELD_WEBHOOK_CUTOVER_RECOVERY_RUN_ID:?}" \
+    "${LYRASHIELD_WEBHOOK_CUTOVER_RECOVERY_ATTEMPT:?}" \
+    "${LYRASHIELD_WEBHOOK_CUTOVER_RECOVERY_SOURCE_SHA:?}"
+  [[ "$LYRASHIELD_WEBHOOK_CUTOVER_ORIGINAL_RUN_ID" =~ ^[0-9]{1,20}$ && \
+    "$LYRASHIELD_WEBHOOK_CUTOVER_OWNER_SOURCE_SHA" =~ ^[a-f0-9]{40}$ && \
+    "$LYRASHIELD_WEBHOOK_CUTOVER_ORIGINAL_OWNER" =~ ^[0-9]+:[1-9][0-9]*$ && \
+    "${LYRASHIELD_WEBHOOK_CUTOVER_ORIGINAL_OWNER%%:*}" = "$LYRASHIELD_WEBHOOK_CUTOVER_ORIGINAL_RUN_ID" && \
+    "$LYRASHIELD_WEBHOOK_CUTOVER_RECOVERY_RUN_ID" = "$LYRASHIELD_WEBHOOK_CUTOVER_RUN_ID" && \
+    "$LYRASHIELD_WEBHOOK_CUTOVER_RECOVERY_ATTEMPT" = "$LYRASHIELD_WEBHOOK_CUTOVER_ATTEMPT" && \
+    "$LYRASHIELD_WEBHOOK_CUTOVER_RECOVERY_SOURCE_SHA" = "$DEPLOY_SHA" && \
+    "$LYRASHIELD_WEBHOOK_CUTOVER_RECOVERY_RUN_ID" != "$LYRASHIELD_WEBHOOK_CUTOVER_ORIGINAL_RUN_ID" ]]
+  [[ "$LYRASHIELD_WEBHOOK_CUTOVER_RECOVERY_ATTEMPT" =~ ^[1-9][0-9]*$ ]]
+}
 source ops/deployment/azure-vm-run-command.sh
 vm_phase() {
   local action=$1 payload env_payload command result
   payload=$(base64 < .github/scripts/webhook-claims-vm.sh | tr -d '\n')
   env_payload=$(base64 < ops/worker/worker-env.sh | tr -d '\n')
-  command="set -eu; directory=\$(mktemp -d /var/lib/lyrashield/webhook-claims-run.XXXXXX); trap 'rm -rf \"\$directory\"' EXIT; printf '%s' '$env_payload' | base64 -d > \"\$directory/worker-env.sh\"; printf '%s' '$payload' | base64 -d > \"\$directory/cutover.sh\"; LYRASHIELD_WORKER_ENV_LIB=\"\$directory/worker-env.sh\" sh \"\$directory/cutover.sh\" '$action' '$DEPLOY_SHA' '$LYRASHIELD_ADMISSION_STOP_OWNER' '$LYRASHIELD_WEBHOOK_CUTOVER_RUN_ID' '${MIGRATION_DATABASE_IDENTITY:-}' '$LYRASHIELD_WEBHOOK_CUTOVER_ATTEMPT'"
+  command="set -eu; directory=\$(mktemp -d /var/lib/lyrashield/webhook-claims-run.XXXXXX); trap 'rm -rf \"\$directory\"' EXIT; printf '%s' '$env_payload' | base64 -d > \"\$directory/worker-env.sh\"; printf '%s' '$payload' | base64 -d > \"\$directory/cutover.sh\"; LYRASHIELD_WORKER_ENV_LIB=\"\$directory/worker-env.sh\" sh \"\$directory/cutover.sh\" '$action' '$DEPLOY_SHA' '$LYRASHIELD_ADMISSION_STOP_OWNER' '$LYRASHIELD_WEBHOOK_CUTOVER_RUN_ID' '${MIGRATION_DATABASE_IDENTITY:-}' '$LYRASHIELD_WEBHOOK_CUTOVER_ATTEMPT' '${LYRASHIELD_WEBHOOK_CUTOVER_ORIGINAL_RUN_ID:-}' '${LYRASHIELD_WEBHOOK_CUTOVER_OWNER_SOURCE_SHA:-}' '${LYRASHIELD_WEBHOOK_CUTOVER_ORIGINAL_OWNER:-}' '${LYRASHIELD_WEBHOOK_CUTOVER_RECOVERY_RUN_ID:-}' '${LYRASHIELD_WEBHOOK_CUTOVER_RECOVERY_ATTEMPT:-}' '${LYRASHIELD_WEBHOOK_CUTOVER_RECOVERY_SOURCE_SHA:-}'"
   result=$(azure_vm_run_command_with_retry --name "$WORKER_VM_NAME" --resource-group "$RG" --command-id RunShellScript --scripts "$command" --query 'value[0].message' --output tsv)
   printf '%s\n' "$result"
   case "$action" in
@@ -30,6 +47,16 @@ vm_phase() {
     recovery) grep -q '^WEBHOOK_RECOVERY_RECEIPT_VERIFIED$' <<< "$result" ;;
     recovery-probe) grep -Eq '^WEBHOOK_RECOVERY_RECEIPT_(VERIFIED|ABSENT)$' <<< "$result" ;;
     resume) grep -q '^WEBHOOK_CUTOVER_RESUMED$' <<< "$result" ;;
+    recovery-probe-new-run)
+      [[ $(grep -Fxc WEBHOOK_NEW_RUN_RECOVERY_VERIFIED <<< "$result") = 1 ]] || return 1
+      [[ $(grep -Fxc "WEBHOOK_RECOVERY_OWNER=$LYRASHIELD_WEBHOOK_CUTOVER_ORIGINAL_OWNER" <<< "$result") = 1 ]] || return 1
+      [[ $(grep -Fxc "WEBHOOK_RECOVERY_OWNER_RUN_ID=$LYRASHIELD_WEBHOOK_CUTOVER_ORIGINAL_RUN_ID" <<< "$result") = 1 ]] || return 1
+      [[ $(grep -Fxc "WEBHOOK_RECOVERY_OWNER_SOURCE_SHA=$LYRASHIELD_WEBHOOK_CUTOVER_OWNER_SOURCE_SHA" <<< "$result") = 1 ]]
+      ;;
+    recovery-hold-verify) grep -Eq '^WEBHOOK_RECOVERY_HOLD_(ADMISSION_HELD|WITHOUT_ADMISSION_STOP)$' <<< "$result" ;;
+    recovery-hold) grep -Eq '^WEBHOOK_RECOVERY_HOLD_(ADMISSION_HELD|WITHOUT_ADMISSION_STOP)$' <<< "$result" ;;
+    resume-recovery) grep -q '^WEBHOOK_CUTOVER_ADMISSION_RELEASED$' <<< "$result" ;;
+    complete-recovery) grep -q '^WEBHOOK_RECOVERY_COMPLETE$' <<< "$result" ;;
   esac
 }
 assert_inactive_once() {
@@ -68,6 +95,10 @@ database)
   vm_phase database
   ;;
 recovery|recovery-probe) vm_phase "$phase";;
+recovery-probe-new-run)
+  validate_recovery_inputs
+  vm_phase recovery-probe-new-run
+  ;;
 claim) vm_phase claim;;
 quiesce)
   : "${APP_NAME:?}" "${SCANNER_NAME:?}"
@@ -83,5 +114,26 @@ verify)
   vm_phase verify
   ;;
 resume) vm_phase resume;;
+recovery-hold)
+  validate_recovery_inputs
+  : "${APP_NAME:?}" "${SCANNER_NAME:?}"
+  initial=$(vm_phase recovery-hold-verify)
+  initial_state=$(grep -E '^WEBHOOK_RECOVERY_HOLD_(ADMISSION_HELD|WITHOUT_ADMISSION_STOP)$' <<< "$initial")
+  [[ $(grep -Fxc "$initial_state" <<< "$initial") = 1 ]] || exit 1
+  deactivate_writers
+  assert_inactive
+  final=$(vm_phase recovery-hold)
+  [[ $(grep -Fxc "$initial_state" <<< "$final") = 1 ]] || exit 1
+  echo "$initial_state"
+  echo WEBHOOK_RECOVERY_HOLD_COMPLETE
+  ;;
+resume-recovery)
+  validate_recovery_inputs
+  vm_phase resume-recovery
+  ;;
+complete-recovery)
+  validate_recovery_inputs
+  vm_phase complete-recovery
+  ;;
 *) exit 1;;
 esac

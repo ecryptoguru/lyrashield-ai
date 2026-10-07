@@ -133,6 +133,18 @@ jobs:
         working-directory: product
         run: pnpm --filter @lyrashield/db migrate:deploy
 
+      - name: Verify held-recovery schema against isolated disposable PostgreSQL
+        working-directory: product
+        env:
+          WEBHOOK_RECOVERY_SCHEMA_POSTGRES_URL: postgresql://lyrashield:lyrashield@127.0.0.1:5432/lyrashield
+        run: node --test .github/scripts/tests/webhook-cutover-schema.postgres.test.mjs
+
+      - name: Verify exact admission release Lua against disposable Redis
+        working-directory: product
+        env:
+          WEBHOOK_RECOVERY_RELEASE_REDIS_URL: redis://127.0.0.1:6379/0
+        run: node --test .github/scripts/tests/webhook-cutover-release.redis.test.mjs
+
       - name: Create restricted disposable worker role
         shell: bash
         env:
@@ -213,6 +225,65 @@ jobs:
             echo "- Engine revision: \`$EXPECTED_ENGINE_REVISION\`"
             echo "- Coverage: actual webhook retry and due-recovery code on disposable PostgreSQL and Redis."
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Boot the exact worker image to readiness with production startup checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          network="webhook-smoke-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          container="webhook-startup-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          trap 'docker rm -f "$container" >/dev/null 2>&1 || true' EXIT
+          docker run --detach \
+            --name "$container" \
+            --network "$network" \
+            --read-only \
+            --tmpfs /tmp:rw,nosuid,nodev,size=128m \
+            --cap-drop ALL \
+            --security-opt no-new-privileges:true \
+            --memory 3g --pids-limit 768 \
+            --env NODE_ENV=production \
+            --env LYRASHIELD_WORKER_CONCURRENCY=1 \
+            --env "LYRASHIELD_PRODUCT_REVISION=$EXPECTED_SOURCE_SHA" \
+            --env "LYRASHIELD_ENGINE_REVISION=$EXPECTED_ENGINE_REVISION" \
+            --env "LYRASHIELD_WORKER_IMAGE_DIGEST=${CANONICAL_WORKER_IMAGE##*@}" \
+            --env "DATABASE_URL=postgresql://app_runtime_ci:runtime-ci-only@postgres:5432/lyrashield?schema=public" \
+            --env "DATABASE_SYSTEM_URL=postgresql://lyrashield:lyrashield@postgres:5432/lyrashield?schema=public" \
+            --env REDIS_URL=redis://redis:6379 \
+            --env BETTER_AUTH_SECRET=dummy-ci-only-secret-not-a-real-credential-32chars \
+            --env BETTER_AUTH_URL=http://127.0.0.1:3100 \
+            --env NEXT_PUBLIC_APP_URL=http://127.0.0.1:3100 \
+            --env PLATFORM_ADMIN_EMAILS=ecryptoguru@gmail.com,ankit@lyrashieldai.com \
+            --env LYRASHIELD_LUNA_LLM=gpt-6-luna \
+            --env LYRASHIELD_SOL_LLM=gpt-6-sol \
+            --env AZURE_AI_API_KEY=synthetic-ci-only \
+            --env LYRASHIELD_ALLOW_LOCAL_SANDBOX_HOST=1 \
+            --env "LYRASHIELD_ENGINE_SANDBOX_NETWORK=$network" \
+            --env "LYRASHIELD_IMAGE=ghcr.io/ecryptoguru/lyrashield-sandbox@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" \
+            --env LYRASHIELD_ENGINE_WORK_ROOT=/tmp \
+            --env TMPDIR=/tmp \
+            --env S3_ENDPOINT=https://storage.example.invalid \
+            --env S3_BUCKET=synthetic-ci-bucket \
+            --env S3_ACCESS_KEY=synthetic-ci-access \
+            --env S3_SECRET_KEY=synthetic-ci-secret \
+            --env LYRASHIELD_EVIDENCE_KEK=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= \
+            --env 'LYRASHIELD_EVIDENCE_KEK_KEYRING={}' \
+            "$CANONICAL_WORKER_IMAGE" >/dev/null
+          ready=false
+          for attempt in $(seq 1 30); do
+            if docker exec "$container" test -f /tmp/lyrashield-worker-ready; then
+              ready=true
+              break
+            fi
+            [ "$(docker inspect "$container" --format '{{.State.Running}}')" = true ] || break
+            sleep 2
+          done
+          if [ "$ready" != true ]; then
+            docker logs "$container" 2>&1 | tail -40
+            echo "::error::Exact production-mode worker image did not reach readiness after ${attempt} checks on disposable services."
+            exit 1
+          fi
+          docker stop --time 15 "$container" >/dev/null
+          echo "Exact production-mode worker startup reached readiness on disposable services." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Remove disposable service network
         if: always()

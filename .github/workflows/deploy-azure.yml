@@ -6,6 +6,22 @@ on:
       source_sha:
         required: false
         type: string
+      held_recovery_original_run_id:
+        required: false
+        default: ""
+        type: string
+      held_recovery_prepared_run_id:
+        required: false
+        default: ""
+        type: string
+      held_recovery_original_owner:
+        required: false
+        default: ""
+        type: string
+      held_recovery_original_source_sha:
+        required: false
+        default: ""
+        type: string
   workflow_dispatch:
     inputs:
       source_sha:
@@ -61,6 +77,10 @@ jobs:
     if: github.ref == 'refs/heads/main'
     outputs:
       webhook_claims_cutover: ${{ steps.verify-baseline.outputs.webhook_claims_cutover }}
+      held_recovery_verified: ${{ steps.verify-held.outputs.held_recovery_verified }}
+      held_recovery_original_run_id: ${{ steps.verify-held.outputs.held_recovery_original_run_id }}
+      held_recovery_original_owner: ${{ steps.verify-held.outputs.held_recovery_original_owner }}
+      held_recovery_original_source_sha: ${{ steps.verify-held.outputs.held_recovery_original_source_sha }}
     runs-on: ubuntu-24.04
     environment:
       name: azure-production
@@ -110,6 +130,7 @@ jobs:
         run: az extension add --name containerapp --yes --only-show-errors
 
       - name: Classify webhook baseline before image build
+        if: inputs.held_recovery_original_run_id == ''
         id: verify-baseline
         env:
           DEPLOY_SHA: ${{ env.DEPLOY_SHA }}
@@ -129,14 +150,40 @@ jobs:
           GHCR_USERNAME: ${{ github.repository_owner }}
         run: node .github/scripts/verify-webhook-cutover-preflight.mjs
 
+      - name: Verify explicitly scoped held cutover before image build
+        if: inputs.held_recovery_original_run_id != ''
+        id: verify-held
+        env:
+          DEPLOY_SHA: ${{ env.DEPLOY_SHA }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+          LYRASHIELD_WEBHOOK_CUTOVER_ORIGINAL_RUN_ID: ${{ inputs.held_recovery_original_run_id }}
+          LYRASHIELD_WEBHOOK_CUTOVER_ORIGINAL_OWNER: ${{ inputs.held_recovery_original_owner }}
+          LYRASHIELD_WEBHOOK_CUTOVER_OWNER_SOURCE_SHA: ${{ inputs.held_recovery_original_source_sha }}
+          LYRASHIELD_WEBHOOK_CUTOVER_RECOVERY_RUN_ID: ${{ github.run_id }}
+          LYRASHIELD_WEBHOOK_CUTOVER_RECOVERY_ATTEMPT: ${{ github.run_attempt }}
+          LYRASHIELD_WEBHOOK_CUTOVER_RECOVERY_SOURCE_SHA: ${{ env.DEPLOY_SHA }}
+          RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+          WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
+          LYRASHIELD_ADMISSION_STOP_OWNER: ${{ github.run_id }}:${{ github.run_attempt }}
+          LYRASHIELD_WEBHOOK_CUTOVER_RUN_ID: ${{ github.run_id }}
+          LYRASHIELD_WEBHOOK_CUTOVER_ATTEMPT: ${{ github.run_attempt }}
+        run: node .github/scripts/verify-webhook-cutover-preflight.mjs --new-run-recovery
+
       - name: Summarize blocked compatibility preflight
         if: failure()
+        env:
+          HELD_RECOVERY_REQUESTED: ${{ inputs.held_recovery_original_run_id != '' }}
         run: |
           {
             echo "## Azure release stopped before image build"
             echo
             echo "The preflight is read-only. No container images were built or pushed, and no Azure runtime or database changes were made."
-            echo "The read-only verifier selects the ordinary rollout only for a complete durable-claims/2 baseline, or the first maintenance rollout only for the recognized durable-claims/1 source and exact pre-cutover schema. Mixed, partial, unknown, or unreadable states stop before image build."
+            if [ "$HELD_RECOVERY_REQUESTED" = true ]; then
+              echo "Held recovery requires the exact current main candidate, explicit original run/source/owner, matching failed GitHub run, and an unambiguous original VM receipt."
+            else
+              echo "The read-only verifier selects the ordinary rollout only for a complete durable-claims/2 baseline, or the first maintenance rollout only for the recognized durable-claims/1 source and exact pre-cutover schema. Mixed, partial, unknown, or unreadable states stop before image build."
+            fi
             echo "See [the automated cutover runbook](https://github.com/ecryptoguru/lyrashield-ai/blob/main/docs/reviews/2026-09-30/webhook-production-cutover.md)."
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -147,6 +194,7 @@ jobs:
     name: Build and push container images
     runs-on: ubuntu-24.04
     if: ${{ !cancelled() &&
+      inputs.held_recovery_original_run_id == '' &&
       github.ref == 'refs/heads/main' &&
       needs.validate-manual-production-dispatch.result == 'success' &&
       needs.preflight-compatible-baseline.result == 'success' }}
@@ -341,6 +389,96 @@ jobs:
             "${{ env.DEPLOY_SHA }}" \
             "${{ env.ENGINE_REVISION }}"
 
+  resolve-prepared-images:
+    name: Bind held recovery to previously rehearsed image digests
+    needs:
+      - validate-manual-production-dispatch
+      - preflight-compatible-baseline
+    if: ${{ !cancelled() &&
+      inputs.held_recovery_original_run_id != '' &&
+      needs.validate-manual-production-dispatch.result == 'success' &&
+      needs.preflight-compatible-baseline.outputs.held_recovery_verified == 'true' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      web_image: ${{ steps.verify.outputs.web_image }}
+      web_digest: ${{ steps.verify.outputs.web_digest }}
+      worker_image: ${{ steps.verify.outputs.worker_image }}
+      worker_digest: ${{ steps.verify.outputs.worker_digest }}
+      egress_proxy_image: ${{ steps.verify.outputs.egress_proxy_image }}
+      egress_proxy_digest: ${{ steps.verify.outputs.egress_proxy_digest }}
+      engine_revision: ${{ steps.verify.outputs.engine_revision }}
+    steps:
+      - name: Checkout exact current main candidate verifier
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.DEPLOY_SHA }}
+          persist-credentials: false
+      - name: Confirm prepared image verifier checkout
+        run: test "$(git rev-parse HEAD)" = "$DEPLOY_SHA"
+      - name: Verify prepared run and immutable image artifact
+        id: verify
+        env:
+          GH_TOKEN: ${{ github.token }}
+          LYRASHIELD_WEBHOOK_RECOVERY_PREPARED_RUN_ID: ${{ inputs.held_recovery_prepared_run_id }}
+        run: node .github/scripts/verify-webhook-recovery-candidate.mjs
+
+  resolve-images:
+    name: Select verified release image digests
+    needs: [build, resolve-prepared-images]
+    if: ${{ !cancelled() &&
+      (needs.build.result == 'success' || needs.resolve-prepared-images.result == 'success') }}
+    runs-on: ubuntu-24.04
+    outputs:
+      web_image: ${{ steps.select.outputs.web_image }}
+      web_digest: ${{ steps.select.outputs.web_digest }}
+      worker_image: ${{ steps.select.outputs.worker_image }}
+      worker_digest: ${{ steps.select.outputs.worker_digest }}
+      egress_proxy_image: ${{ steps.select.outputs.egress_proxy_image }}
+      egress_proxy_digest: ${{ steps.select.outputs.egress_proxy_digest }}
+      engine_revision: ${{ steps.select.outputs.engine_revision }}
+    steps:
+      - name: Select only the image source authorized for this release mode
+        id: select
+        env:
+          HELD_RECOVERY: ${{ inputs.held_recovery_original_run_id != '' }}
+          BUILD_RESULT: ${{ needs.build.result }}
+          PREPARED_RESULT: ${{ needs.resolve-prepared-images.result }}
+          BUILT_WEB_IMAGE: ${{ needs.build.outputs.web_image }}
+          BUILT_WEB_DIGEST: ${{ needs.build.outputs.web_digest }}
+          BUILT_WORKER_IMAGE: ${{ needs.build.outputs.worker_image }}
+          BUILT_WORKER_DIGEST: ${{ needs.build.outputs.worker_digest }}
+          BUILT_EGRESS_IMAGE: ${{ needs.build.outputs.egress_proxy_image }}
+          BUILT_EGRESS_DIGEST: ${{ needs.build.outputs.egress_proxy_digest }}
+          BUILT_ENGINE_REVISION: ${{ needs.build.outputs.engine_revision }}
+          PREPARED_WEB_IMAGE: ${{ needs.resolve-prepared-images.outputs.web_image }}
+          PREPARED_WEB_DIGEST: ${{ needs.resolve-prepared-images.outputs.web_digest }}
+          PREPARED_WORKER_IMAGE: ${{ needs.resolve-prepared-images.outputs.worker_image }}
+          PREPARED_WORKER_DIGEST: ${{ needs.resolve-prepared-images.outputs.worker_digest }}
+          PREPARED_EGRESS_IMAGE: ${{ needs.resolve-prepared-images.outputs.egress_proxy_image }}
+          PREPARED_EGRESS_DIGEST: ${{ needs.resolve-prepared-images.outputs.egress_proxy_digest }}
+          PREPARED_ENGINE_REVISION: ${{ needs.resolve-prepared-images.outputs.engine_revision }}
+        run: |
+          set -euo pipefail
+          if [ "$HELD_RECOVERY" = true ]; then
+            [ "$PREPARED_RESULT" = success ] && [ "$BUILD_RESULT" = skipped ] || exit 1
+            prefix=PREPARED
+          else
+            [ "$BUILD_RESULT" = success ] && [ "$PREPARED_RESULT" = skipped ] || exit 1
+            prefix=BUILT
+          fi
+          for name in WEB_IMAGE WEB_DIGEST WORKER_IMAGE WORKER_DIGEST EGRESS_IMAGE EGRESS_DIGEST ENGINE_REVISION; do
+            value_var="${prefix}_${name}"
+            value="${!value_var}"
+            [ -n "$value" ] || { echo "::error::Verified image output is missing: $name"; exit 1; }
+            key=$(tr '[:upper:]' '[:lower:]' <<< "$name")
+            [ "$key" != egress_image ] || key=egress_proxy_image
+            [ "$key" != egress_digest ] || key=egress_proxy_digest
+            echo "$key=$value" >> "$GITHUB_OUTPUT"
+          done
+
   # Every merge to main pushes new SHA-tagged images; web also re-points :latest, while workers
   # remain immutable and deploy by verified digest. Multi-arch buildx pushes leave untagged manifests
   # per build (per-platform layers under the tagged manifest list), so versions accumulate
@@ -355,7 +493,7 @@ jobs:
   cleanup-old-images:
     name: Clean up superseded container images
     needs: [build, deploy]
-    if: needs.build.result == 'success' && needs.deploy.result == 'success'
+    if: inputs.held_recovery_original_run_id == '' && needs.build.result == 'success' && needs.deploy.result == 'success'
     runs-on: ubuntu-24.04
     permissions:
       packages: write
@@ -398,22 +536,22 @@ jobs:
 
   verify-built-worker-image:
     name: Rehearse exact release worker image on disposable services
-    needs: build
-    if: needs.build.result == 'success'
+    needs: resolve-images
+    if: needs.resolve-images.result == 'success'
     permissions:
       contents: read
       packages: read
     uses: ./.github/workflows/verify-webhook-worker-image.yml
     with:
       product_source_sha: ${{ inputs.source_sha || github.sha }}
-      engine_revision: ${{ needs.build.outputs.engine_revision }}
-      worker_image: ${{ needs.build.outputs.worker_image }}@${{ needs.build.outputs.worker_digest }}
+      engine_revision: ${{ needs.resolve-images.outputs.engine_revision }}
+      worker_image: ${{ needs.resolve-images.outputs.worker_image }}@${{ needs.resolve-images.outputs.worker_digest }}
 
   deploy:
     name: Deploy Azure Container Apps
     needs:
       [
-        build,
+        resolve-images,
         verify-built-worker-image,
         validate-manual-production-dispatch,
         preflight-compatible-baseline,
@@ -429,11 +567,15 @@ jobs:
     with:
       source_sha: ${{ inputs.source_sha || github.sha }}
       webhook_claims_cutover: ${{ needs.preflight-compatible-baseline.outputs.webhook_claims_cutover == 'true' }}
-      engine_revision: ${{ needs.build.outputs.engine_revision }}
-      web_image: ${{ needs.build.outputs.web_image }}
-      web_digest: ${{ needs.build.outputs.web_digest }}
-      worker_image: ${{ needs.build.outputs.worker_image }}
-      worker_digest: ${{ needs.build.outputs.worker_digest }}
-      egress_proxy_image: ${{ needs.build.outputs.egress_proxy_image }}
-      egress_proxy_digest: ${{ needs.build.outputs.egress_proxy_digest }}
+      held_recovery: ${{ needs.preflight-compatible-baseline.outputs.held_recovery_verified == 'true' }}
+      held_recovery_original_run_id: ${{ needs.preflight-compatible-baseline.outputs.held_recovery_original_run_id }}
+      held_recovery_original_owner: ${{ needs.preflight-compatible-baseline.outputs.held_recovery_original_owner }}
+      held_recovery_original_source_sha: ${{ needs.preflight-compatible-baseline.outputs.held_recovery_original_source_sha }}
+      engine_revision: ${{ needs.resolve-images.outputs.engine_revision }}
+      web_image: ${{ needs.resolve-images.outputs.web_image }}
+      web_digest: ${{ needs.resolve-images.outputs.web_digest }}
+      worker_image: ${{ needs.resolve-images.outputs.worker_image }}
+      worker_digest: ${{ needs.resolve-images.outputs.worker_digest }}
+      egress_proxy_image: ${{ needs.resolve-images.outputs.egress_proxy_image }}
+      egress_proxy_digest: ${{ needs.resolve-images.outputs.egress_proxy_digest }}
     secrets: inherit

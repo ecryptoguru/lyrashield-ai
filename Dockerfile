@@ -177,6 +177,8 @@ COPY --from=worker-deps /worker-runtime ./apps/worker
 COPY --from=worker-engine /opt/lyrashield-venv /opt/lyrashield-venv
 COPY ops/worker/run-worker.sh /opt/lyrashield-worker-host/run-worker.sh
 COPY ops/worker/worker-env.sh /opt/lyrashield-worker-host/worker-env.sh
+COPY ops/worker/webhook-cutover-recovery.mjs /opt/lyrashield-worker-host/webhook-cutover-recovery.mjs
+COPY ops/worker/webhook-cutover-schema.mjs /opt/lyrashield-worker-host/webhook-cutover-schema.mjs
 COPY ops/worker/refresh-secrets.sh /opt/lyrashield-worker-host/refresh-secrets.sh
 COPY ops/worker/refresh-egress.sh /opt/lyrashield-worker-host/refresh-egress.sh
 COPY ops/worker/capture-stop-provenance.sh /opt/lyrashield-worker-host/capture-stop-provenance.sh

@@ -367,8 +367,8 @@ step_verify-worker-queues-are-empty-before-traffic-promotion() {
 step_promote-healthy-candidate-revisions() {
   source ops/deployment/containerapp.sh
   restore_previous() {
-    if [ "${WEBHOOK_CLAIMS_CUTOVER:-false}" = true ]; then
-      echo "::error::Maintenance cutover keeps incompatible previous writers disabled."
+    if [ "${WEBHOOK_CLAIMS_CUTOVER:-false}" = true ] || [ "${WEBHOOK_CUTOVER_RECOVERY:-false}" = true ]; then
+      echo "::error::Maintenance or held recovery keeps previous webhook writers disabled."
       return 0
     fi
     ca_set_traffic "$APP_NAME" "$APP_PREVIOUS" "$RG" || true
@@ -484,7 +484,30 @@ step_promote-verified-worker-digest-on-vm() {
   worker_ref="${WORKER_IMAGE%@*}@${WORKER_DIGEST}"
   promotion_prefix=""
   promotion_flag=""
-  if [ "${WEBHOOK_CLAIMS_CUTOVER:-false}" = true ]; then
+  if [ "${WEBHOOK_CUTOVER_RECOVERY:-false}" = true ]; then
+    : "${LYRASHIELD_WEBHOOK_CUTOVER_ORIGINAL_RUN_ID:?}" \
+      "${LYRASHIELD_WEBHOOK_CUTOVER_ORIGINAL_OWNER:?}" \
+      "${LYRASHIELD_WEBHOOK_CUTOVER_OWNER_SOURCE_SHA:?}" \
+      "${LYRASHIELD_WEBHOOK_CUTOVER_RECOVERY_RUN_ID:?}" \
+      "${LYRASHIELD_WEBHOOK_CUTOVER_RECOVERY_ATTEMPT:?}" \
+      "${LYRASHIELD_WEBHOOK_CUTOVER_RECOVERY_SOURCE_SHA:?}" \
+      "${GITHUB_RUN_ID:?}" "${GITHUB_RUN_ATTEMPT:?}"
+    [[ "$LYRASHIELD_WEBHOOK_CUTOVER_ORIGINAL_RUN_ID" =~ ^[0-9]{1,20}$ && \
+      "$LYRASHIELD_WEBHOOK_CUTOVER_ORIGINAL_OWNER" =~ ^[0-9]+:[1-9][0-9]*$ && \
+      "${LYRASHIELD_WEBHOOK_CUTOVER_ORIGINAL_OWNER%%:*}" = "$LYRASHIELD_WEBHOOK_CUTOVER_ORIGINAL_RUN_ID" && \
+      "$LYRASHIELD_WEBHOOK_CUTOVER_OWNER_SOURCE_SHA" =~ ^[a-f0-9]{40}$ && \
+      "$LYRASHIELD_WEBHOOK_CUTOVER_RECOVERY_RUN_ID" = "$GITHUB_RUN_ID" && \
+      "$LYRASHIELD_WEBHOOK_CUTOVER_RECOVERY_ATTEMPT" = "$GITHUB_RUN_ATTEMPT" && \
+      "$LYRASHIELD_WEBHOOK_CUTOVER_RECOVERY_SOURCE_SHA" = "$DEPLOY_SHA" && \
+      "$LYRASHIELD_WEBHOOK_CUTOVER_RECOVERY_RUN_ID" != "$LYRASHIELD_WEBHOOK_CUTOVER_ORIGINAL_RUN_ID" && \
+      "$LYRASHIELD_WEBHOOK_CUTOVER_ORIGINAL_OWNER" != "$LYRASHIELD_ADMISSION_STOP_OWNER" ]] || exit 1
+    [[ "$LYRASHIELD_WEBHOOK_CUTOVER_RECOVERY_ATTEMPT" =~ ^[1-9][0-9]*$ && \
+      "$LYRASHIELD_ADMISSION_STOP_OWNER" =~ ^[0-9]+:[0-9]+$ && \
+      "$LYRASHIELD_WEBHOOK_CUTOVER_RUN_ID" = "$GITHUB_RUN_ID" && \
+      "$LYRASHIELD_WEBHOOK_CUTOVER_ATTEMPT" = "$GITHUB_RUN_ATTEMPT" ]] || exit 1
+    promotion_prefix="WEBHOOK_CUTOVER_RECOVERY=true LYRASHIELD_WEBHOOK_CUTOVER_ORIGINAL_RUN_ID='$LYRASHIELD_WEBHOOK_CUTOVER_ORIGINAL_RUN_ID' LYRASHIELD_WEBHOOK_CUTOVER_ORIGINAL_OWNER='$LYRASHIELD_WEBHOOK_CUTOVER_ORIGINAL_OWNER' LYRASHIELD_WEBHOOK_CUTOVER_OWNER_SOURCE_SHA='$LYRASHIELD_WEBHOOK_CUTOVER_OWNER_SOURCE_SHA' LYRASHIELD_WEBHOOK_CUTOVER_RECOVERY_RUN_ID='$LYRASHIELD_WEBHOOK_CUTOVER_RECOVERY_RUN_ID' LYRASHIELD_WEBHOOK_CUTOVER_RECOVERY_ATTEMPT='$LYRASHIELD_WEBHOOK_CUTOVER_RECOVERY_ATTEMPT' LYRASHIELD_WEBHOOK_CUTOVER_RECOVERY_SOURCE_SHA='$LYRASHIELD_WEBHOOK_CUTOVER_RECOVERY_SOURCE_SHA' LYRASHIELD_ADMISSION_STOP_OWNER='$LYRASHIELD_WEBHOOK_CUTOVER_ORIGINAL_OWNER' LYRASHIELD_WEBHOOK_CUTOVER_RUN_ID='$LYRASHIELD_WEBHOOK_CUTOVER_RECOVERY_RUN_ID' LYRASHIELD_WEBHOOK_CUTOVER_ATTEMPT='$LYRASHIELD_WEBHOOK_CUTOVER_RECOVERY_ATTEMPT' "
+    promotion_flag="--webhook-cutover-recovery "
+  elif [ "${WEBHOOK_CLAIMS_CUTOVER:-false}" = true ]; then
     : "${LYRASHIELD_ADMISSION_STOP_RECEIPT:?}" "${LYRASHIELD_ADMISSION_STOP_OWNER:?}" "${LYRASHIELD_WEBHOOK_CUTOVER_RUN_ID:?}"
     [[ "$LYRASHIELD_ADMISSION_STOP_OWNER" =~ ^[0-9]+:[0-9]+$ && "$LYRASHIELD_WEBHOOK_CUTOVER_RUN_ID" =~ ^[0-9]+$ ]] || exit 1
     receipt_payload=$(printf '%s' "$LYRASHIELD_ADMISSION_STOP_RECEIPT" | base64 --wrap=0)
@@ -500,7 +523,7 @@ step_promote-verified-worker-digest-on-vm() {
     --query 'value[0].message' \
     --output tsv)
   printf '%s\n' "$result"
-  if [ "${WEBHOOK_CLAIMS_CUTOVER:-false}" = true ]; then
+  if [ "${WEBHOOK_CUTOVER_RECOVERY:-false}" = true ] || [ "${WEBHOOK_CLAIMS_CUTOVER:-false}" = true ]; then
     grep -q "Worker webhook cutover passed for ${WORKER_DIGEST}; scan admission held" <<< "$result"
   else
     grep -q "Worker promotion passed for ${WORKER_DIGEST}" <<< "$result"

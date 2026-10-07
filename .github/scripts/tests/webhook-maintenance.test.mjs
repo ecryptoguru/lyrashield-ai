@@ -78,11 +78,15 @@ function setup(t, scenario = "normal") {
   )
   executable(
     "docker",
-    `const {spawnSync}=require("node:child_process"); if(args[0]==="ps"){if(state.container)console.log("lyrashield-worker");}else if(args[0]==="image"){const format=args[args.indexOf("--format")+1];console.log(format.includes("io.lyrashield.engine.revision")?${JSON.stringify("d".repeat(40))}:format.includes("engine.revision")?"":args.at(-1).match(/:([a-f0-9]{40})@/)?.[1]??${JSON.stringify("b".repeat(40))});}else if(args[0]==="container" || args[0]==="inspect"){if(!state.container)process.exit(1);console.log(args.includes("{{.Config.Image}}")?${JSON.stringify(image)}:"true");}else if(args[0]==="run" || args[0]==="exec"){let code=args[args.indexOf("-e")+1]; if(code.includes("Cutover worker environment does not match owned receipt")){const values=args.flatMap((arg,i)=>arg==="--env" && args[i+1]?.startsWith("TMPDIR=")?[args[i+1]]:[]); if(values.at(-1)!=="TMPDIR=/tmp" || !args.includes("/tmp:rw,nosuid,nodev,noexec,size=64m"))process.exit(13);} for(const [from,to] of ${JSON.stringify(
+    `const {spawnSync}=require("node:child_process"); if(args[0]==="ps"){if(state.container)console.log("lyrashield-worker");}else if(args[0]==="image"){const format=args[args.indexOf("--format")+1];console.log(format.includes("io.lyrashield.engine.revision")?${JSON.stringify("d".repeat(40))}:format.includes("engine.revision")?"":args.at(-1).match(/:([a-f0-9]{40})@/)?.[1]??${JSON.stringify("b".repeat(40))});}else if(args[0]==="container" || args[0]==="inspect"){if(!state.container)process.exit(1);console.log(args.includes("{{.Config.Image}}")?${JSON.stringify(image)}:"true");}else if(args[0]==="run" || args[0]==="exec"){let code=args[args.indexOf("-e")+1]; if(code.includes("assertWebhookCutoverWorkerIdentity")){const values=args.flatMap((arg,i)=>arg==="--env" && args[i+1]?.startsWith("TMPDIR=")?[args[i+1]]:[]); if(values.at(-1)!=="TMPDIR=/tmp" || !args.includes("/tmp:rw,nosuid,nodev,noexec,size=64m"))process.exit(13);} for(const [from,to] of ${JSON.stringify(
       [
         ["@lyrashield/db", db],
         ["@lyrashield/integrations", integration],
         ["@lyrashield/billing", billing],
+        [
+          "file:///opt/lyrashield-worker-host/webhook-cutover-recovery.mjs",
+          path.join(root, "ops/worker/webhook-cutover-recovery.mjs"),
+        ],
         ["ioredis", redisModule],
       ]
     )}) code=code.replaceAll('"'+from+'"',JSON.stringify(to)); const result=spawnSync(process.execPath,["--input-type=module","-e",code,...args.slice(args.indexOf("-e")+2)],{encoding:"utf8",env:{...process.env,LYRASHIELD_PRODUCT_REVISION:${JSON.stringify(revision)},...(args[0]==="run" && ${JSON.stringify(scenario)}==="stale environment"?{REDIS_URL:"different"}:{})}}); process.stdout.write(result.stdout);process.stderr.write(result.stderr);process.exit(result.status);}else process.exit(1);`
@@ -249,6 +253,14 @@ test("tampered database identity cannot verify or resume the receipt", (t) => {
 test("launch checks refreshed secrets before any worker queue consumer starts", (t) => {
   const f = setup(t)
   assert.equal(f.vm("claim").status, 0)
+  const saved = JSON.parse(readFileSync(f.receipt))
+  Object.assign(saved, {
+    candidateWorkerImage: image,
+    candidateProductRevision: revision,
+    candidateEngineRevision: "d".repeat(40),
+    candidateWebhookTrackClaimProtocol: "durable-claims/2",
+  })
+  writeFileSync(f.receipt, JSON.stringify(saved), { mode: 0o600 })
   const source = readFileSync("ops/worker/run-worker.sh", "utf8")
   const start = source.indexOf("cutover_receipt=${")
   const end = source.indexOf("\nsocket_group=", start)
@@ -264,9 +276,19 @@ test("launch checks refreshed secrets before any worker queue consumer starts", 
         "-c",
         `environment_file="$LYRASHIELD_WORKER_ENV_FILE"; env_args="--env TMPDIR=/var/lib/lyrashield/worker/tmp"; ${block}`,
       ],
-      { encoding: "utf8", env: { ...f.env, LYRASHIELD_WORKER_IMAGE: image, ...overrides } }
+      {
+        encoding: "utf8",
+        env: {
+          ...f.env,
+          LYRASHIELD_WORKER_IMAGE: image,
+          LYRASHIELD_ENGINE_REVISION: "d".repeat(40),
+          LYRASHIELD_WORKER_IMAGE_DIGEST: `sha256:${"c".repeat(64)}`,
+          ...overrides,
+        },
+      }
     )
-  assert.equal(run().status, 0)
+  const launched = run()
+  assert.equal(launched.status, 0, launched.stderr)
   assert.notEqual(run({ REDIS_URL: "rotated-endpoint" }).status, 0)
 })
 
@@ -524,7 +546,8 @@ test("original source recovery requires an existing immutable receipt before any
 test("migration database identity accepts different roles and ports before claim, rejects another database without mutation", (t) => {
   const fixture = setup(t)
   const identity = hash(JSON.stringify(["db.example", "lyrashield", "public"]))
-  assert.equal(fixture.vm("database", { MIGRATION_DATABASE_IDENTITY: identity }).status, 0)
+  const verified = fixture.vm("database", { MIGRATION_DATABASE_IDENTITY: identity })
+  assert.equal(verified.status, 0, verified.stderr)
   assert.notEqual(
     fixture.vm("database", {
       MIGRATION_DATABASE_IDENTITY: hash(JSON.stringify(["other.example", "lyrashield", "public"])),

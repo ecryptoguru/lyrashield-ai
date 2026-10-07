@@ -10,6 +10,22 @@ on:
         required: false
         default: false
         type: boolean
+      held_recovery:
+        required: false
+        default: false
+        type: boolean
+      held_recovery_original_run_id:
+        required: false
+        default: ""
+        type: string
+      held_recovery_original_owner:
+        required: false
+        default: ""
+        type: string
+      held_recovery_original_source_sha:
+        required: false
+        default: ""
+        type: string
       engine_revision:
         required: true
         type: string
@@ -40,9 +56,16 @@ permissions:
 env:
   DEPLOY_SHA: ${{ inputs.source_sha }}
   WEBHOOK_CLAIMS_CUTOVER: ${{ inputs.webhook_claims_cutover && 'true' || 'false' }}
+  WEBHOOK_CUTOVER_RECOVERY: ${{ inputs.held_recovery && 'true' || 'false' }}
   LYRASHIELD_ADMISSION_STOP_OWNER: ${{ github.run_id }}:${{ github.run_attempt }}
   LYRASHIELD_WEBHOOK_CUTOVER_RUN_ID: ${{ github.run_id }}
   LYRASHIELD_WEBHOOK_CUTOVER_ATTEMPT: ${{ github.run_attempt }}
+  LYRASHIELD_WEBHOOK_CUTOVER_ORIGINAL_RUN_ID: ${{ inputs.held_recovery_original_run_id }}
+  LYRASHIELD_WEBHOOK_CUTOVER_ORIGINAL_OWNER: ${{ inputs.held_recovery_original_owner }}
+  LYRASHIELD_WEBHOOK_CUTOVER_OWNER_SOURCE_SHA: ${{ inputs.held_recovery_original_source_sha }}
+  LYRASHIELD_WEBHOOK_CUTOVER_RECOVERY_RUN_ID: ${{ github.run_id }}
+  LYRASHIELD_WEBHOOK_CUTOVER_RECOVERY_ATTEMPT: ${{ github.run_attempt }}
+  LYRASHIELD_WEBHOOK_CUTOVER_RECOVERY_SOURCE_SHA: ${{ inputs.source_sha }}
   ENGINE_REVISION: ${{ inputs.engine_revision }}
   REGISTRY: ghcr.io
   WEB_IMAGE: ${{ inputs.web_image }}
@@ -215,8 +238,26 @@ jobs:
       - name: Ensure Container Apps extension
         run: az extension add --name containerapp --yes --only-show-errors
 
+      - name: Revalidate original held cutover before recovery mutations
+        if: inputs.held_recovery == true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+          WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
+        run: node .github/scripts/verify-webhook-cutover-preflight.mjs --new-run-recovery
+
+      - name: Keep original admission held and old writers inactive
+        if: inputs.held_recovery == true
+        id: recovery-hold
+        env:
+          RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+          WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
+          APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
+          SCANNER_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
+        run: bash .github/scripts/webhook-claims-maintenance.sh recovery-hold
+
       - name: Revalidate retry state for an automatic first cutover
-        if: inputs.webhook_claims_cutover == true && github.run_attempt > 1
+        if: inputs.held_recovery != true && inputs.webhook_claims_cutover == true && github.run_attempt > 1
         id: cutover-retry
         env:
           RG: ${{ vars.AZURE_RESOURCE_GROUP }}
@@ -245,7 +286,7 @@ jobs:
       # proof. If no receipt exists, reclassify the still-live first-cutover
       # baseline; stale workflow outputs alone never authorize maintenance.
       - name: Verify compatible webhook cutover baseline
-        if: inputs.webhook_claims_cutover != true || github.run_attempt == 1 || steps.cutover-retry.outputs.receipt == 'absent'
+        if: inputs.held_recovery != true && (inputs.webhook_claims_cutover != true || github.run_attempt == 1 || steps.cutover-retry.outputs.receipt == 'absent')
         env:
           AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
           AZURE_APP_CONTAINER_APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
@@ -282,12 +323,14 @@ jobs:
         run: node .github/scripts/verify-billing-deployment-config.mjs
 
       - name: Ensure app and scanner system identities
+        if: inputs.held_recovery != true
         env:
           AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
           AZURE_APP_CONTAINER_APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
           AZURE_SCANNER_CONTAINER_APP_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
         run: bash .github/scripts/deploy-azure-preflight.sh ensure-app-and-scanner-system-identities
       - name: Prepare private registry and zero-downtime rollout
+        if: inputs.held_recovery != true
         id: rollout
         env:
           AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
@@ -301,6 +344,25 @@ jobs:
           EGRESS_PROXY_IMAGE: ${{ inputs.egress_proxy_image }}
           EGRESS_PROXY_DIGEST: ${{ inputs.egress_proxy_digest }}
         run: bash .github/scripts/deploy-azure-preflight.sh prepare-private-registry-and-zero-downtime-rollout
+      - name: Verify retained registry and revision configuration for held recovery
+        if: inputs.held_recovery == true
+        env:
+          RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+          APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
+          SCANNER_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
+          EGRESS_NAME: ${{ vars.AZURE_EGRESS_PROXY_CONTAINER_APP_NAME }}
+        run: |
+          set -euo pipefail
+          for name in "$APP_NAME" "$SCANNER_NAME" "$EGRESS_NAME"; do
+            [ -n "$name" ] || continue
+            mode=$(az containerapp show --name "$name" --resource-group "$RG" --query properties.configuration.activeRevisionsMode --output tsv)
+            identity=$(az containerapp show --name "$name" --resource-group "$RG" --query identity.type --output tsv)
+            registry=$(az containerapp registry list --name "$name" --resource-group "$RG" --query "[?server=='ghcr.io'].server | [0]" --output tsv)
+            [[ "$mode" = Multiple && "$identity" = *SystemAssigned* && "$registry" = ghcr.io ]] || {
+              echo "::error::Held recovery requires existing multiple-revision, system identity and GHCR registry configuration."
+              exit 1
+            }
+          done
       # Schema first, then code. Migrations previously ran only in CI against a throwaway
       # database and never against production, so a release needing a schema change served
       # 500s until someone remembered to run this by hand. Ordering matters: new code must
@@ -328,12 +390,14 @@ jobs:
           node-version: 24
 
       - name: Download source-bound migration dependencies
+        if: inputs.held_recovery != true
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: migration-dependencies-${{ inputs.source_sha }}
           path: ${{ runner.temp }}/migration-dependencies
 
       - name: Verify and unpack migration dependencies
+        if: inputs.held_recovery != true
         env:
           EXPECTED_SOURCE_SHA: ${{ inputs.source_sha }}
         run: |
@@ -359,7 +423,7 @@ jobs:
           tar -xzf "$archive" --no-same-owner -C "$GITHUB_WORKSPACE"
 
       - name: Verify migration database continuity before maintenance
-        if: inputs.webhook_claims_cutover == true
+        if: inputs.held_recovery != true && inputs.webhook_claims_cutover == true
         env:
           RG: ${{ vars.AZURE_RESOURCE_GROUP }}
           WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
@@ -367,14 +431,14 @@ jobs:
         run: bash .github/scripts/webhook-claims-maintenance.sh database
 
       - name: Claim webhook maintenance admission stop
-        if: inputs.webhook_claims_cutover == true
+        if: inputs.held_recovery != true && inputs.webhook_claims_cutover == true
         id: webhook-stop
         env:
           RG: ${{ vars.AZURE_RESOURCE_GROUP }}
           WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
         run: bash .github/scripts/webhook-claims-maintenance.sh claim
       - name: Quiesce every old webhook writer
-        if: inputs.webhook_claims_cutover == true
+        if: inputs.held_recovery != true && inputs.webhook_claims_cutover == true
         id: webhook-quiesce
         env:
           RG: ${{ vars.AZURE_RESOURCE_GROUP }}
@@ -383,7 +447,7 @@ jobs:
           SCANNER_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
         run: bash .github/scripts/webhook-claims-maintenance.sh quiesce
       - name: Read back excluded writers immediately before migration
-        if: inputs.webhook_claims_cutover == true
+        if: inputs.held_recovery != true && inputs.webhook_claims_cutover == true
         env:
           RG: ${{ vars.AZURE_RESOURCE_GROUP }}
           WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
@@ -394,6 +458,7 @@ jobs:
           bash .github/scripts/webhook-claims-maintenance.sh verify
           bash .github/scripts/webhook-claims-maintenance.sh database
       - name: Run database migrations
+        if: inputs.held_recovery != true
         id: database-migration
         env:
           DATABASE_URL: ${{ secrets.DATABASE_DIRECT_URL }}
@@ -411,11 +476,13 @@ jobs:
       # different secret stores. Keep the VM's Key Vault copy in lockstep so a
       # Redis rotation cannot leave the production worker on an exhausted plan.
       - name: Sync BullMQ Redis secret to worker Key Vault
+        if: inputs.held_recovery != true
         env:
           AZURE_KEY_VAULT_NAME: ${{ vars.AZURE_KEY_VAULT_NAME || 'lyrashieldprodsecrets' }}
           BULLMQ_REDIS_URL: ${{ secrets.BULLMQ_REDIS_URL }}
         run: bash .github/scripts/deploy-azure-preflight.sh sync-bullmq-redis-secret-to-worker-key-vault
       - name: Sync billing reconciliation credentials to worker Key Vault
+        if: inputs.held_recovery != true
         env:
           AZURE_KEY_VAULT_NAME: ${{ vars.AZURE_KEY_VAULT_NAME || 'lyrashieldprodsecrets' }}
           POLAR_ENVIRONMENT: ${{ vars.POLAR_ENVIRONMENT }}
@@ -431,6 +498,7 @@ jobs:
           LYRASHIELD_EVIDENCE_KEK_KEYRING: ${{ secrets.LYRASHIELD_EVIDENCE_KEK_KEYRING }}
         run: bash .github/scripts/deploy-azure-preflight.sh verify-evidence-envelope-key
       - name: Sync evidence envelope key to app Container App
+        if: inputs.held_recovery != true
         id: sync-evidence-kek
         env:
           LYRASHIELD_EVIDENCE_KEK: ${{ secrets.LYRASHIELD_EVIDENCE_KEK }}
@@ -442,13 +510,46 @@ jobs:
           AZURE_APP_SECRET_KEY_VAULT_NAME: ${{ vars.AZURE_APP_SECRET_KEY_VAULT_NAME }}
           EVIDENCE_KEK_VERSION: ${{ steps.verify-evidence-kek.outputs.version }}
         run: bash .github/scripts/deploy-azure-preflight.sh sync-evidence-envelope-key-to-app-container-app
+      - name: Read retained evidence secret references for held recovery
+        if: inputs.held_recovery == true
+        id: retained-evidence-refs
+        env:
+          RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+          APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
+          ACTIVE_REF: ${{ vars.LYRASHIELD_EVIDENCE_KEK_ACTIVE_REF }}
+          KEYRING: ${{ secrets.LYRASHIELD_EVIDENCE_KEK_KEYRING }}
+        run: |
+          set -euo pipefail
+          active_name=$(az containerapp show --name "$APP_NAME" --resource-group "$RG" --query "properties.template.containers[0].env[?name=='LYRASHIELD_EVIDENCE_KEK'] | [0].secretRef" --output tsv)
+          keyring_name=$(az containerapp show --name "$APP_NAME" --resource-group "$RG" --query "properties.template.containers[0].env[?name=='LYRASHIELD_EVIDENCE_KEK_KEYRING'] | [0].secretRef" --output tsv)
+          expected_active="ev-kek-${ACTIVE_REF##*/}"
+          expected_keyring="ev-ring-$(printf '%s' "$KEYRING" | sha256sum | cut -c1-12)"
+          [[ "$active_name" =~ ^ev-kek-v[1-9][0-9]*$ && "$keyring_name" =~ ^ev-ring-[a-f0-9]{12}$ ]] || {
+            echo "::error::Held recovery could not verify existing evidence secret reference names."
+            exit 1
+          }
+          [[ "$active_name" = "$expected_active" && "$keyring_name" = "$expected_keyring" ]] || {
+            echo "::error::Held recovery evidence references differ from the configured version and keyring."
+            exit 1
+          }
+          for name in "$active_name" "$keyring_name"; do
+            listed=$(az containerapp secret list --name "$APP_NAME" --resource-group "$RG" --query "[?name=='$name'].name | [0]" --output tsv)
+            [ "$listed" = "$name" ] || {
+              echo "::error::Held recovery evidence secret reference is absent."
+              exit 1
+            }
+          done
+          echo "active_name=$active_name" >> "$GITHUB_OUTPUT"
+          echo "keyring_name=$keyring_name" >> "$GITHUB_OUTPUT"
       - name: Sync evidence storage credentials to app Container App
+        if: inputs.held_recovery != true
         env:
           AZURE_KEY_VAULT_NAME: ${{ vars.AZURE_KEY_VAULT_NAME || 'lyrashieldprodsecrets' }}
           AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
           AZURE_APP_CONTAINER_APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
         run: bash .github/scripts/deploy-azure-preflight.sh sync-evidence-storage-credentials-to-app-container-app
       - name: Sync IP hash salt Key Vault reference
+        if: inputs.held_recovery != true
         env:
           AZURE_KEY_VAULT_NAME: ${{ vars.AZURE_KEY_VAULT_NAME || 'lyrashieldprodsecrets' }}
           AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
@@ -460,6 +561,7 @@ jobs:
       # enabling stays a vars/secrets change with no workflow edit.
       # Secret names must stay <=20 chars (Container Apps limit).
       - name: Sync Myra secrets to app Container App
+        if: inputs.held_recovery != true
         env:
           MYRA_AZURE_OPENAI_API_KEY: ${{ secrets.MYRA_AZURE_OPENAI_API_KEY }}
           TURNSTILE_SECRET_KEY: ${{ secrets.TURNSTILE_SECRET_KEY }}
@@ -471,6 +573,7 @@ jobs:
           AZURE_APP_SECRET_KEY_VAULT_NAME: ${{ vars.AZURE_APP_SECRET_KEY_VAULT_NAME }}
         run: bash .github/scripts/deploy-azure-preflight.sh sync-myra-secrets-to-app-container-app
       - name: Sync Upstash secrets to Container Apps
+        if: inputs.held_recovery != true
         id: sync-upstash
         env:
           UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
@@ -483,6 +586,7 @@ jobs:
           AZURE_CONTAINER_APPS_SECRET_KEY_VAULT_NAME: ${{ vars.AZURE_CONTAINER_APPS_SECRET_KEY_VAULT_NAME }}
         run: bash .github/scripts/deploy-azure-preflight.sh sync-upstash-secrets-to-container-apps
       - name: Sync isolated AI result-cache secrets to worker and app Key Vaults
+        if: inputs.held_recovery != true
         id: sync-ai-result-cache
         env:
           LYRASHIELD_AI_RESULT_CACHE_MODE: ${{ vars.LYRASHIELD_AI_RESULT_CACHE_MODE || 'off' }}
@@ -497,6 +601,7 @@ jobs:
           AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
         run: bash .github/scripts/deploy-azure-preflight.sh sync-ai-result-cache-secrets-to-worker-key-vault
       - name: Sync BullMQ Redis secret to Container Apps
+        if: inputs.held_recovery != true
         env:
           AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
           AZURE_APP_CONTAINER_APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
@@ -504,7 +609,7 @@ jobs:
           AZURE_KEY_VAULT_NAME: ${{ vars.AZURE_KEY_VAULT_NAME || 'lyrashieldprodsecrets' }}
         run: bash .github/scripts/deploy-azure-preflight.sh sync-bullmq-redis-secret-to-container-apps
       - name: Sync billing provider secrets to app Container App
-        if: vars.AZURE_APP_CONTAINER_APP_NAME != ''
+        if: inputs.held_recovery != true && vars.AZURE_APP_CONTAINER_APP_NAME != ''
         env:
           AZURE_KEY_VAULT_NAME: ${{ vars.AZURE_KEY_VAULT_NAME || 'lyrashieldprodsecrets' }}
           AZURE_APP_SECRET_KEY_VAULT_NAME: ${{ vars.AZURE_APP_SECRET_KEY_VAULT_NAME }}
@@ -538,6 +643,7 @@ jobs:
           GITHUB_APP_CLIENT_SECRET: ${{ secrets.LYRASHIELD_GITHUB_APP_CLIENT_SECRET }}
         run: bash .github/scripts/deploy-azure-preflight.sh verify-github-app-credentials
       - name: Sync GitHub App secrets to app Container App
+        if: inputs.held_recovery != true
         id: sync-github-app
         env:
           GITHUB_APP_ID: ${{ secrets.LYRASHIELD_GITHUB_APP_ID }}
@@ -557,8 +663,8 @@ jobs:
         env:
           IMAGE: ${{ inputs.web_image }}@${{ inputs.web_digest }}
           LYRASHIELD_EVIDENCE_KEK_ACTIVE_REF: ${{ vars.LYRASHIELD_EVIDENCE_KEK_ACTIVE_REF }}
-          LYRASHIELD_EVIDENCE_KEK_SECRET: ${{ steps.sync-evidence-kek.outputs.active_name }}
-          LYRASHIELD_EVIDENCE_KEK_KEYRING_SECRET: ${{ steps.sync-evidence-kek.outputs.keyring_name }}
+          LYRASHIELD_EVIDENCE_KEK_SECRET: ${{ inputs.held_recovery && steps.retained-evidence-refs.outputs.active_name || steps.sync-evidence-kek.outputs.active_name }}
+          LYRASHIELD_EVIDENCE_KEK_KEYRING_SECRET: ${{ inputs.held_recovery && steps.retained-evidence-refs.outputs.keyring_name || steps.sync-evidence-kek.outputs.keyring_name }}
           POLAR_ENVIRONMENT: ${{ vars.POLAR_ENVIRONMENT }}
           GITHUB_APP_CLIENT_ID_CONFIGURED: ${{ secrets.LYRASHIELD_GITHUB_APP_CLIENT_ID != '' }}
           GITHUB_APP_CLIENT_SECRET_CONFIGURED: ${{ secrets.LYRASHIELD_GITHUB_APP_CLIENT_SECRET != '' }}
@@ -576,7 +682,7 @@ jobs:
         run: bash .github/scripts/deploy-azure-rollout.sh deploy-app-container-app
       - name: Deploy scanner Container App
         id: deploy-scanner
-        if: steps.sync-upstash.outcome == 'success' && vars.AZURE_SCANNER_CONTAINER_APP_NAME != ''
+        if: (inputs.held_recovery == true || steps.sync-upstash.outcome == 'success') && vars.AZURE_SCANNER_CONTAINER_APP_NAME != ''
         env:
           IMAGE: ${{ inputs.web_image }}@${{ inputs.web_digest }}
           EMAIL_VERIFICATION_REQUIRED: ${{ env.REQUIRE_EMAIL_VERIFICATION }}
@@ -609,14 +715,14 @@ jobs:
         run: bash .github/scripts/deploy-azure-rollout.sh smoke-candidate-revisions
       - name: Verify worker queues are empty before traffic promotion
         timeout-minutes: 5
-        if: inputs.webhook_claims_cutover != true
+        if: inputs.held_recovery != true && inputs.webhook_claims_cutover != true
         id: worker-preflight
         env:
           RG: ${{ vars.AZURE_RESOURCE_GROUP }}
           WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
         run: bash .github/scripts/deploy-azure-rollout.sh verify-worker-queues-are-empty-before-traffic-promotion
       - name: Boot compatible worker before opening webhook ingress
-        if: inputs.webhook_claims_cutover == true
+        if: inputs.webhook_claims_cutover == true || inputs.held_recovery == true
         id: webhook-worker
         env:
           RG: ${{ vars.AZURE_RESOURCE_GROUP }}
@@ -646,7 +752,7 @@ jobs:
           WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
         run: bash .github/scripts/deploy-azure-rollout.sh smoke-production-traffic
       - name: Deactivate superseded Container App revisions
-        if: steps.smoke-public.outcome == 'success'
+        if: steps.smoke-public.outcome == 'success' && inputs.held_recovery != true
         env:
           RG: ${{ vars.AZURE_RESOURCE_GROUP }}
           APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
@@ -660,7 +766,7 @@ jobs:
           EGRESS_ROLLBACK: ${{ steps.rollout.outputs.egress_previous }}
         run: bash .github/scripts/deploy-azure-rollout.sh deactivate-superseded-container-app-revisions
       - name: Remove excess scanner secrets
-        if: steps.smoke-public.outcome == 'success' && vars.AZURE_SCANNER_CONTAINER_APP_NAME != ''
+        if: steps.smoke-public.outcome == 'success' && inputs.held_recovery != true && vars.AZURE_SCANNER_CONTAINER_APP_NAME != ''
         env:
           RG: ${{ vars.AZURE_RESOURCE_GROUP }}
           SCANNER_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
@@ -687,7 +793,7 @@ jobs:
       #    this step's outcome) while the old worker keeps serving until a
       #    retry succeeds.
       - name: Promote verified worker digest on VM
-        if: inputs.webhook_claims_cutover != true
+        if: inputs.held_recovery != true && inputs.webhook_claims_cutover != true
         id: worker-vm
         env:
           RG: ${{ vars.AZURE_RESOURCE_GROUP }}
@@ -698,7 +804,7 @@ jobs:
       # Migrations and app-scope configuration remain forward-only. This rollback
       # changes traffic only, after every candidate had already passed readiness.
       - name: Roll back production traffic on health failure
-        if: inputs.webhook_claims_cutover != true && failure() && (steps.promote.outcome == 'failure' || steps.smoke-public.outcome == 'failure' || steps.worker-vm.outcome == 'failure')
+        if: inputs.held_recovery != true && inputs.webhook_claims_cutover != true && failure() && (steps.promote.outcome == 'failure' || steps.smoke-public.outcome == 'failure' || steps.worker-vm.outcome == 'failure')
         env:
           APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
           APP_PREVIOUS: ${{ steps.rollout.outputs.app_previous }}
@@ -713,7 +819,7 @@ jobs:
         run: bash .github/scripts/deploy-azure-rollout.sh roll-back-production-traffic-on-health-failure
       - name: Restore prior ingress mode after failed rollout
         if: >
-          inputs.webhook_claims_cutover != true && failure() && steps.deploy-app.outputs.previous_client_cert_mode != '' &&
+          inputs.held_recovery != true && inputs.webhook_claims_cutover != true && failure() && steps.deploy-app.outputs.previous_client_cert_mode != '' &&
           (steps.deploy-app.outcome == 'failure' || steps.deploy-scanner.outcome == 'failure' ||
           steps.deploy-egress-proxy.outcome == 'failure' || steps.smoke-candidates.outcome == 'failure' ||
           steps.worker-preflight.outcome == 'failure' ||
@@ -725,7 +831,7 @@ jobs:
         run: bash .github/scripts/deploy-azure-rollout.sh restore-prior-ingress-mode-after-failed-rollout
       - name: Deactivate zero-traffic candidates after failed rollout
         if: >
-          inputs.webhook_claims_cutover != true && failure() &&
+          inputs.held_recovery != true && inputs.webhook_claims_cutover != true && failure() &&
           (steps.deploy-app.outcome == 'failure' || steps.deploy-scanner.outcome == 'failure' ||
           steps.deploy-egress-proxy.outcome == 'failure' || steps.smoke-candidates.outcome == 'failure' ||
           steps.worker-preflight.outcome == 'failure' ||
@@ -744,7 +850,7 @@ jobs:
         run: bash .github/scripts/deploy-azure-rollout.sh deactivate-zero-traffic-candidates-after-failed-rollout
 
       - name: Verify installed compatible webhook writer baseline
-        if: inputs.webhook_claims_cutover == true
+        if: inputs.webhook_claims_cutover == true || inputs.held_recovery == true
         env:
           AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
           AZURE_APP_CONTAINER_APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
@@ -760,6 +866,33 @@ jobs:
           RG: ${{ vars.AZURE_RESOURCE_GROUP }}
           WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
         run: bash .github/scripts/webhook-claims-maintenance.sh resume
+      - name: Release only original admission after verified held recovery
+        if: inputs.held_recovery == true
+        env:
+          RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+          WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
+        run: bash .github/scripts/webhook-claims-maintenance.sh resume-recovery
+      - name: Verify scan readiness after held recovery release
+        if: inputs.held_recovery == true
+        env:
+          READY_URL: ${{ env.APP_URL }}/api/ready/scans
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 12); do
+            if curl --fail --silent --show-error --max-time 10 --output /dev/null "$READY_URL"; then
+              echo "Scan readiness passed after held recovery release."
+              exit 0
+            fi
+            [ "$attempt" = 12 ] || sleep 5
+          done
+          echo "::error::Scan readiness did not recover after original admission release."
+          exit 1
+      - name: Archive completed held recovery evidence
+        if: inputs.held_recovery == true
+        env:
+          RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+          WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
+        run: bash .github/scripts/webhook-claims-maintenance.sh complete-recovery
       - name: Hold webhook ingress closed after failed maintenance
         if: (failure() || cancelled()) && inputs.webhook_claims_cutover == true && steps.webhook-stop.outcome != 'skipped'
         env:
@@ -768,3 +901,19 @@ jobs:
           APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
           SCANNER_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
         run: bash .github/scripts/webhook-claims-maintenance.sh hold
+      - name: Disable webhook writers after failed held recovery
+        if: (failure() || cancelled()) && inputs.held_recovery == true && steps.recovery-hold.outcome != 'skipped'
+        env:
+          RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+          WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
+          APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
+          SCANNER_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
+        run: |
+          set -euo pipefail
+          result=$(bash .github/scripts/webhook-claims-maintenance.sh recovery-hold)
+          printf '%s\n' "$result"
+          if grep -Fqx WEBHOOK_RECOVERY_HOLD_WITHOUT_ADMISSION_STOP <<< "$result"; then
+            echo 'Recovery failed after the original admission stop was released. Writers are disabled; no new stop token was created.' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'Recovery failed while the original admission stop remains held. Writers are disabled.' >> "$GITHUB_STEP_SUMMARY"
+          fi
