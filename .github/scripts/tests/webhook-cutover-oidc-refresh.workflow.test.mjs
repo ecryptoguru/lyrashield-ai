@@ -52,6 +52,18 @@ test("fresh OIDC identity immediately precedes the late Key Vault verifier", () 
   assert.ok(installedWriter.index < release.index && release.index < archive.index)
 })
 
+test("ordinary migration renews OIDC before Key Vault secret synchronization", () => {
+  const initial = step("Log in to Azure")
+  const migration = step("Run database migrations")
+  const refresh = step("Refresh Azure OIDC login before post-migration Key Vault sync")
+  const sync = step("Sync BullMQ Redis secret to worker Key Vault")
+
+  assert.deepEqual(loginIdentity(refresh.body), loginIdentity(initial.body))
+  assert.match(refresh.body, /if: inputs\.held_recovery != true/)
+  assert.ok(migration.index < refresh.index)
+  assert.equal(refresh.index + 1, sync.index)
+})
+
 test("long cutover phases renew OIDC before VM boot, release, and archive", () => {
   const initial = step("Log in to Azure")
   const mode = "if: inputs.webhook_claims_cutover == true || inputs.held_recovery == true"

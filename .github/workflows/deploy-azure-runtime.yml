@@ -472,6 +472,16 @@ jobs:
         env:
           BULLMQ_REDIS_URL: ${{ secrets.BULLMQ_REDIS_URL }}
         run: bash .github/scripts/deploy-azure-preflight.sh verify-bullmq-redis-credential
+      # A normal cutover can spend a long time in migration before the first
+      # post-migration Key Vault audience token exchange. Renew the existing
+      # federated login for the following non-recovery secret-sync phase.
+      - name: Refresh Azure OIDC login before post-migration Key Vault sync
+        if: inputs.held_recovery != true
+        uses: Azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ secrets.AZURE_DEPLOY_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_DEPLOY_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_DEPLOY_SUBSCRIPTION_ID }}
       # The Container Apps and worker VM consume the same BullMQ endpoint from
       # different secret stores. Keep the VM's Key Vault copy in lockstep so a
       # Redis rotation cannot leave the production worker on an exhausted plan.
