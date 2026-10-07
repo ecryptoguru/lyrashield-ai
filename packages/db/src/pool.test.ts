@@ -1,4 +1,6 @@
 import pg from "pg"
+import { getCACertificates } from "node:tls"
+import { SUPABASE_ROOT_CA } from "./supabase-ca"
 import { logger } from "@lyrashield/logger"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { createBoundedPgAdapter, observePgPoolConnections, resolveDbPoolMax } from "./pool"
@@ -43,7 +45,10 @@ describe("createBoundedPgAdapter", () => {
       const adapter = await createBoundedPgAdapter(raw, scope).connect()
       const pool = adapter.underlyingDriver()
       expect(pool.options).not.toHaveProperty("connectionString")
-      expect(pool.options.ssl).toEqual({ rejectUnauthorized: true })
+      expect(pool.options.ssl).toEqual({
+        rejectUnauthorized: true,
+        ca: [...getCACertificates("default"), SUPABASE_ROOT_CA],
+      })
       expect(pool.options.host).toBe("aws-0-test.pooler.supabase.com")
       expect(pool.options.max).toBe(4)
       await adapter.dispose()

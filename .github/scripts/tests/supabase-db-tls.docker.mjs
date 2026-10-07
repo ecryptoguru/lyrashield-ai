@@ -315,7 +315,7 @@ try {
       "process.stdout.write(require('fs').realpathSync('/app/apps/worker/node_modules/@lyrashield/db'))",
     ])
     assert(packageRoot.startsWith("/app/") && !packageRoot.includes("\n"))
-    for (const name of ["pool.ts", "connection-config.ts"])
+    for (const name of ["pool.ts", "connection-config.ts", "supabase-ca.ts"])
       mounts.push(
         "--mount",
         `type=bind,src=${path.join(root, "packages/db/src", name)},dst=${packageRoot}/src/${name},readonly`
