@@ -35,7 +35,7 @@ permissions:
 
 jobs:
   finalize:
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && inputs.operations_sha == github.sha
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     environment:
@@ -63,10 +63,20 @@ jobs:
       SCANNER_URL: ${{ vars.LYRASHIELD_SCANNER_URL || 'https://scanner.lyrashieldai.com' }}
       GH_TOKEN: ${{ github.token }}
     steps:
+      - name: Verify trusted main source before checkout
+        env:
+          OPS_SHA: ${{ inputs.operations_sha }}
+        run: |
+          case "$OPS_SHA" in
+            ''|*[!a-f0-9]*) exit 1 ;;
+          esac
+          [ "${#OPS_SHA}" -eq 40 ] || exit 1
+          [ "$GITHUB_REF" = refs/heads/main ] || exit 1
+          [ "$OPS_SHA" = "$GITHUB_SHA" ] || exit 1
       - name: Check out exact current main operations source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.operations_sha }}
+          ref: ${{ github.sha }}
           fetch-depth: 1
           persist-credentials: false
       - name: Set up Node.js
