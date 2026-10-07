@@ -1,7 +1,35 @@
 import { describe, expect, it, vi } from "vitest"
-import { assertWorkerDbPoolCapacity, observeWorkerRun } from "./worker-lifecycle"
+import { readFileSync } from "node:fs"
+import { resolveDbPoolMax } from "../../../packages/db/src/pool"
+import {
+  assertWorkerDbPoolCapacity,
+  observeWorkerRun,
+  WEBHOOK_TRACK_RETRY_WORKER_CONCURRENCY,
+  FIX_GENERATE_WORKER_CONCURRENCY,
+} from "./worker-lifecycle"
 
 describe("assertWorkerDbPoolCapacity", () => {
+  it("starts with the deployed worker concurrency and default DB pool", () => {
+    const workerEnv = readFileSync(
+      new URL("../../../ops/worker/worker-env.sh", import.meta.url),
+      "utf8"
+    )
+    const configuredScanConcurrency = workerEnv.match(/"--env LYRASHIELD_WORKER_CONCURRENCY=(\d+)"/)
+    expect(configuredScanConcurrency).not.toBeNull()
+    const scanConcurrency = Number(configuredScanConcurrency?.[1])
+    const dbPoolMax = resolveDbPoolMax({})
+    const auxiliaryConcurrency =
+      WEBHOOK_TRACK_RETRY_WORKER_CONCURRENCY + FIX_GENERATE_WORKER_CONCURRENCY
+
+    expect(scanConcurrency + auxiliaryConcurrency).toBeLessThan(dbPoolMax)
+    expect(() =>
+      assertWorkerDbPoolCapacity(scanConcurrency, dbPoolMax, auxiliaryConcurrency)
+    ).not.toThrow()
+    expect(() => assertWorkerDbPoolCapacity(scanConcurrency, dbPoolMax, 4)).toThrow(
+      "must be lower than LYRASHIELD_DB_POOL_MAX (4)"
+    )
+  })
+
   it("allows scan concurrency below the database connection pool size", () => {
     expect(() => assertWorkerDbPoolCapacity(3, 4)).not.toThrow()
   })
@@ -9,6 +37,14 @@ describe("assertWorkerDbPoolCapacity", () => {
   it("rejects scan concurrency that can occupy every database connection", () => {
     expect(() => assertWorkerDbPoolCapacity(4, 4)).toThrow(
       "Total worker concurrency (4 scan + 0 auxiliary = 4) must be lower than LYRASHIELD_DB_POOL_MAX (4)"
+    )
+  })
+
+  it("fails closed if scan concurrency rises to three with both auxiliary workers", () => {
+    const auxiliaryConcurrency =
+      WEBHOOK_TRACK_RETRY_WORKER_CONCURRENCY + FIX_GENERATE_WORKER_CONCURRENCY
+    expect(() => assertWorkerDbPoolCapacity(3, resolveDbPoolMax({}), auxiliaryConcurrency)).toThrow(
+      "Total worker concurrency (3 scan + 2 auxiliary = 5) must be lower"
     )
   })
 

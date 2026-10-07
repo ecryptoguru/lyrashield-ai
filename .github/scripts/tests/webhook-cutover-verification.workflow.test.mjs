@@ -24,6 +24,8 @@ function job(source, name) {
 
 const baseline = job(deploy, "preflight-compatible-baseline")
 const build = job(deploy, "build")
+const preparedImages = job(deploy, "resolve-prepared-images")
+const resolvedImages = job(deploy, "resolve-images")
 const imageProof = job(deploy, "verify-built-worker-image")
 const azureDeploy = job(deploy, "deploy")
 
@@ -70,10 +72,31 @@ assert.match(
   build,
   /needs:[\s\S]*validate-manual-production-dispatch[\s\S]*preflight-compatible-baseline/
 )
-assert.match(imageProof, /needs:\s*build/)
+assert.match(build, /inputs\.held_recovery_original_run_id == ''/)
+assert.match(preparedImages, /inputs\.held_recovery_original_run_id != ''/)
+assert.match(preparedImages, /verify-webhook-recovery-candidate\.mjs/)
+assert.match(resolvedImages, /needs:\s*\[build, resolve-prepared-images\]/)
+assert.match(
+  resolvedImages,
+  /\[ "\$BUILD_RESULT" = success \] && \[ "\$PREPARED_RESULT" = skipped \]/
+)
+assert.match(
+  resolvedImages,
+  /\[ "\$PREPARED_RESULT" = success \] && \[ "\$BUILD_RESULT" = skipped \]/
+)
+assert.match(imageProof, /needs:\s*resolve-images/)
+assert.match(imageProof, /if: needs\.resolve-images\.result == 'success'/)
 assert.match(imageProof, /verify-webhook-worker-image\.yml/)
-assert.match(imageProof, /worker_digest/)
+assert.match(
+  imageProof,
+  /needs\.resolve-images\.outputs\.worker_image \}\}@\$\{\{ needs\.resolve-images\.outputs\.worker_digest/
+)
 assert.match(azureDeploy, /needs:[\s\S]*verify-built-worker-image/)
+assert.match(azureDeploy, /needs:[\s\S]*resolve-images/)
+assert.match(
+  azureDeploy,
+  /worker_digest: \$\{\{ needs\.resolve-images\.outputs\.worker_digest \}\}/
+)
 assert.match(runtime, /Verify compatible webhook cutover baseline[\s\S]*Run database migrations/)
 assert.match(cutover, /webhook-production-cutover\.md/)
 assert.match(cutover, /durable-claims\/1/)

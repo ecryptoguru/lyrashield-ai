@@ -1,0 +1,132 @@
+name: Finalize held webhook recovery (incident 37516632066)
+
+on:
+  workflow_dispatch:
+    inputs:
+      operations_sha:
+        description: Exact current main commit containing the reviewed finalizer
+        required: true
+        type: string
+      recovery_run_id:
+        description: Exact failed held-recovery run that released admission
+        required: true
+        type: string
+      recovery_attempt:
+        description: Exact failed held-recovery run attempt
+        required: true
+        type: string
+      recovery_source_sha:
+        description: Exact historical recovery candidate source commit
+        required: true
+        type: string
+      prepared_run_id:
+        description: Successful build run for that historical candidate
+        required: true
+        type: string
+
+# This is the identical production lock used by deploy-azure.yml. A finalizer
+# cannot overlap another production deploy or held recovery.
+concurrency:
+  group: deploy-azure-${{ vars.AZURE_RESOURCE_GROUP || 'production' }}-${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  finalize:
+    if: github.ref == 'refs/heads/main' && inputs.operations_sha == github.sha
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment:
+      name: azure-production
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+    env:
+      DEPLOY_SHA: ${{ inputs.operations_sha }}
+      LYRASHIELD_WEBHOOK_CUTOVER_ORIGINAL_RUN_ID: "37516632066"
+      LYRASHIELD_WEBHOOK_CUTOVER_ORIGINAL_OWNER: "37516632066:1"
+      LYRASHIELD_WEBHOOK_CUTOVER_OWNER_SOURCE_SHA: af2b7a5acf34cf23a6577181de92e8d010f0beb2
+      LYRASHIELD_WEBHOOK_CUTOVER_RECOVERY_RUN_ID: ${{ inputs.recovery_run_id }}
+      LYRASHIELD_WEBHOOK_CUTOVER_RECOVERY_ATTEMPT: ${{ inputs.recovery_attempt }}
+      LYRASHIELD_WEBHOOK_CUTOVER_RECOVERY_SOURCE_SHA: ${{ inputs.recovery_source_sha }}
+      LYRASHIELD_WEBHOOK_CUTOVER_FINALIZER_RUN_ID: ${{ github.run_id }}
+      LYRASHIELD_WEBHOOK_CUTOVER_FINALIZER_ATTEMPT: ${{ github.run_attempt }}
+      LYRASHIELD_WEBHOOK_CUTOVER_FINALIZER_SOURCE_SHA: ${{ inputs.operations_sha }}
+      RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+      WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
+      APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
+      SCANNER_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
+      APP_URL: ${{ vars.LYRASHIELD_APP_URL || 'https://app.lyrashieldai.com' }}
+      SCANNER_URL: ${{ vars.LYRASHIELD_SCANNER_URL || 'https://scanner.lyrashieldai.com' }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Verify trusted main source before checkout
+        env:
+          OPS_SHA: ${{ inputs.operations_sha }}
+        run: |
+          case "$OPS_SHA" in
+            ''|*[!a-f0-9]*) exit 1 ;;
+          esac
+          [ "${#OPS_SHA}" -eq 40 ] || exit 1
+          [ "$GITHUB_REF" = refs/heads/main ] || exit 1
+          [ "$OPS_SHA" = "$GITHUB_SHA" ] || exit 1
+      - name: Check out exact current main operations source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+      - name: Verify original, recovery, and current main run identity
+        run: node .github/scripts/verify-webhook-post-release-finalization.mjs --run-metadata
+      - name: Resolve previously rehearsed historical candidate artifact
+        id: prepared
+        env:
+          DEPLOY_SHA: ${{ inputs.recovery_source_sha }}
+          LYRASHIELD_WEBHOOK_RECOVERY_PREPARED_RUN_ID: ${{ inputs.prepared_run_id }}
+        run: node .github/scripts/verify-webhook-recovery-candidate.mjs --historical-finalization
+      - name: Log in to Azure with production OIDC identity
+        uses: Azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ secrets.AZURE_DEPLOY_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_DEPLOY_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_DEPLOY_SUBSCRIPTION_ID }}
+      - name: Ensure Container Apps extension
+        run: az extension add --name containerapp --yes --only-show-errors
+      - name: Read-only finalization plan
+        env:
+          LYRASHIELD_WEBHOOK_CUTOVER_PREPARED_WORKER_IMAGE: ${{ steps.prepared.outputs.worker_image }}@${{ steps.prepared.outputs.worker_digest }}
+          LYRASHIELD_WEBHOOK_CUTOVER_PREPARED_WEB_IMAGE: ${{ steps.prepared.outputs.web_image }}@${{ steps.prepared.outputs.web_digest }}
+          LYRASHIELD_WEBHOOK_CUTOVER_PREPARED_ENGINE_REVISION: ${{ steps.prepared.outputs.engine_revision }}
+        run: node .github/scripts/finalize-held-webhook-recovery.mjs --plan
+      - name: Activate only verified historical app and scanner revisions
+        id: apply
+        timeout-minutes: 12
+        env:
+          LYRASHIELD_WEBHOOK_CUTOVER_PREPARED_WORKER_IMAGE: ${{ steps.prepared.outputs.worker_image }}@${{ steps.prepared.outputs.worker_digest }}
+          LYRASHIELD_WEBHOOK_CUTOVER_PREPARED_WEB_IMAGE: ${{ steps.prepared.outputs.web_image }}@${{ steps.prepared.outputs.web_digest }}
+          LYRASHIELD_WEBHOOK_CUTOVER_PREPARED_ENGINE_REVISION: ${{ steps.prepared.outputs.engine_revision }}
+        run: node .github/scripts/finalize-held-webhook-recovery.mjs --apply
+      - name: Authenticate for failure closure
+        if: ${{ always() && steps.prepared.outcome == 'success' && (steps.apply.outcome == 'failure' || steps.apply.outcome == 'cancelled') }}
+        uses: Azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ secrets.AZURE_DEPLOY_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_DEPLOY_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_DEPLOY_SUBSCRIPTION_ID }}
+      - name: Ensure Container Apps extension for failure closure
+        if: ${{ always() && steps.prepared.outcome == 'success' && (steps.apply.outcome == 'failure' || steps.apply.outcome == 'cancelled') }}
+        run: az extension add --name containerapp --yes --only-show-errors
+      - name: Close only exact prepared app and scanner writers
+        if: ${{ always() && steps.prepared.outcome == 'success' && (steps.apply.outcome == 'failure' || steps.apply.outcome == 'cancelled') }}
+        env:
+          LYRASHIELD_WEBHOOK_CUTOVER_PREPARED_WORKER_IMAGE: ${{ steps.prepared.outputs.worker_image }}@${{ steps.prepared.outputs.worker_digest }}
+          LYRASHIELD_WEBHOOK_CUTOVER_PREPARED_WEB_IMAGE: ${{ steps.prepared.outputs.web_image }}@${{ steps.prepared.outputs.web_digest }}
+          LYRASHIELD_WEBHOOK_CUTOVER_PREPARED_ENGINE_REVISION: ${{ steps.prepared.outputs.engine_revision }}
+        run: node .github/scripts/finalize-held-webhook-recovery.mjs --hold

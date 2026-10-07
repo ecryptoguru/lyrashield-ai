@@ -81,8 +81,44 @@ worker_oneshot() (
     node --import tsx --input-type=module -e "$code" "$@"
 )
 
+worker_candidate_oneshot() (
+  code=$1
+  shift
+  env_args=$(lyrashield_worker_env_args "$config" "$environment_file")
+  probe_dir=$(mktemp -d)
+  probe_name="lyrashield-candidate-check-$(basename "$probe_dir")"
+  cleanup_probe() {
+    status=$?
+    trap - EXIT HUP INT TERM
+    if [ -s "$probe_dir/container.id" ]; then
+      probe_id=$(cat "$probe_dir/container.id")
+      case "$probe_id" in
+        *[!0-9a-f]*|'') status=1 ;;
+        *)
+          if [ "${#probe_id}" -eq 64 ]; then
+            timeout --kill-after=5s 10s docker rm -f "$probe_id" >/dev/null 2>&1 || status=1
+          else status=1; fi ;;
+      esac
+    fi
+    rm -f "$probe_dir/container.id"
+    rmdir "$probe_dir" || status=1
+    exit "$status"
+  }
+  trap cleanup_probe EXIT
+  trap 'exit 1' HUP INT TERM
+  # Intentional splitting: the environment helper emits whitespace-free args.
+  # shellcheck disable=SC2086
+  timeout --kill-after=10s 120s docker run --name "$probe_name" \
+    --cidfile "$probe_dir/container.id" --network bridge --no-healthcheck \
+    --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m \
+    --env-file "$environment_file" $env_args --env TMPDIR=/tmp \
+    -w /app/apps/worker "$target" node --import tsx --input-type=module -e "$code" "$@"
+)
+
 queue_count='const {getSystemPrisma}=await import("@lyrashield/db"); const {getScanQueue,getWebhookTrackRetryQueue,closeRedis}=await import("@lyrashield/integrations"); const prisma=getSystemPrisma(); const scanQueue=getScanQueue(); const webhookQueue=getWebhookTrackRetryQueue(); try { const [nonterminal,scan,webhook]=await Promise.all([prisma.scan.count({where:{status:{in:["QUEUED","PREFLIGHT","RUNNING","VERIFYING","REQUIRES_APPROVAL"]}}}),scanQueue.getJobCounts("wait","active","delayed","prioritized"),webhookQueue.getJobCounts("wait","active","delayed","prioritized")]); console.log(JSON.stringify({nonterminal,scan,webhook})); } finally { const closed=await Promise.allSettled([prisma.$disconnect(),scanQueue.close(),webhookQueue.close(),closeRedis()]); for (const queue of [scanQueue,webhookQueue]) { const connection=queue.opts?.connection; if (typeof connection?.disconnect === "function") connection.disconnect(false); } const failed=closed.find(result=>result.status==="rejected"); if (failed) throw failed.reason; }'
 queue_expected='{"nonterminal":0,"scan":{"wait":0,"active":0,"delayed":0,"prioritized":0},"webhook":{"wait":0,"active":0,"delayed":0,"prioritized":0}}'
+recovery_queue_count='const {getSystemPrisma}=await import("@lyrashield/db"); const {getScanQueue,getWebhookTrackRetryQueue,closeRedis}=await import("@lyrashield/integrations"); const prisma=getSystemPrisma(); const scanQueue=getScanQueue(); const webhookQueue=getWebhookTrackRetryQueue(); try { const [nonterminal,tracks,scan,webhook]=await Promise.all([prisma.scan.count({where:{status:{in:["QUEUED","PREFLIGHT","RUNNING","VERIFYING","REQUIRES_APPROVAL"]}}}),prisma.$queryRaw`SELECT count(*)::integer AS count FROM "WebhookEventTrack" WHERE status NOT IN (${"succeeded"},${"dead_letter"},${"reviewed"})`,scanQueue.getJobCounts("wait","active","delayed","prioritized","paused","waiting-children"),webhookQueue.getJobCounts("wait","active","delayed","prioritized","paused","waiting-children")]); console.log(JSON.stringify({nonterminal,tracks:tracks[0].count,scan,webhook})); } finally { const closed=await Promise.allSettled([prisma.$disconnect(),scanQueue.close(),webhookQueue.close(),closeRedis()]); for (const queue of [scanQueue,webhookQueue]) { const connection=queue.opts?.connection; if (typeof connection?.disconnect === "function") connection.disconnect(false); } const failed=closed.find(result=>result.status==="rejected"); if (failed) throw failed.reason; }'
+recovery_queue_expected='{"nonterminal":0,"tracks":0,"scan":{"wait":0,"active":0,"delayed":0,"prioritized":0,"paused":0,"waiting-children":0},"webhook":{"wait":0,"active":0,"delayed":0,"prioritized":0,"paused":0,"waiting-children":0}}'
 
 assert_empty_queues() {
   if ! preflight=$(worker_oneshot "$queue_count"); then
@@ -93,6 +129,26 @@ assert_empty_queues() {
     echo "Worker promotion requires empty scan and webhook queues" >&2
     exit 1
   }
+}
+
+assert_recovery_empty_queues() {
+  if ! preflight=$(worker_oneshot "$recovery_queue_count"); then
+    echo "Held webhook recovery requires terminal tracks and fully drained queues" >&2
+    return 1
+  fi
+  [ "$preflight" = "$recovery_queue_expected" ] || {
+    echo "Held webhook recovery requires terminal tracks and fully drained queues" >&2
+    return 1
+  }
+}
+
+assert_recovery_schema() {
+  [ "$webhook_recovery" -eq 1 ] || return 0
+  result=$(worker_candidate_oneshot 'const billing=await import("@lyrashield/billing"); const db=await import("@lyrashield/db"); const {assertFullyMigratedWebhookSchema,assertRuntimeRoleLeastPrivilege}=await import("file:///opt/lyrashield-worker-host/webhook-cutover-schema.mjs"); const system=db.getSystemPrisma(); try { await assertRuntimeRoleLeastPrivilege(db.prisma,process.env.DATABASE_URL); await assertFullyMigratedWebhookSchema(system,billing.WEBHOOK_TRACK_CLAIM_PROTOCOL); console.log("WEBHOOK_RECOVERY_SCHEMA_VERIFIED"); } finally { await Promise.allSettled([db.prisma.$disconnect(),system.$disconnect()]); }') || {
+    echo "Recovery candidate could not verify the exact migrated schema" >&2
+    return 1
+  }
+  [ "$result" = WEBHOOK_RECOVERY_SCHEMA_VERIFIED ]
 }
 
 # Host[:port] of a URL with the scheme, credentials and path stripped. Values
@@ -159,10 +215,18 @@ if [ "${1:-}" = "--preflight" ]; then
 fi
 
 webhook_cutover=0
-if [ "${1:-}" = "--webhook-claims-cutover" ]; then
-  webhook_cutover=1
-  shift
-fi
+webhook_recovery=0
+case "${1:-}" in
+  --webhook-claims-cutover)
+    webhook_cutover=1
+    shift
+    ;;
+  --webhook-cutover-recovery)
+    webhook_cutover=1
+    webhook_recovery=1
+    shift
+    ;;
+esac
 
 target=${1:?worker image digest reference is required}
 expected_app=${2:?product revision is required}
@@ -229,6 +293,37 @@ redis_eval() {
 
 assert_cutover_receipt() {
   receipt_file=${LYRASHIELD_WEBHOOK_CUTOVER_RECEIPT_FILE:-/var/lib/lyrashield/webhook-claims-cutover.json}
+  if [ "$webhook_recovery" -eq 1 ]; then
+    : "${LYRASHIELD_WEBHOOK_CUTOVER_ORIGINAL_RUN_ID:?}" \
+      "${LYRASHIELD_WEBHOOK_CUTOVER_ORIGINAL_OWNER:?}" \
+      "${LYRASHIELD_WEBHOOK_CUTOVER_OWNER_SOURCE_SHA:?}" \
+      "${LYRASHIELD_WEBHOOK_CUTOVER_RECOVERY_RUN_ID:?}" \
+      "${LYRASHIELD_WEBHOOK_CUTOVER_RECOVERY_SOURCE_SHA:?}" \
+      "${LYRASHIELD_WEBHOOK_CUTOVER_RECOVERY_ATTEMPT:?}" \
+      "${LYRASHIELD_ADMISSION_STOP_OWNER:?}"
+    case "$LYRASHIELD_WEBHOOK_CUTOVER_ORIGINAL_RUN_ID" in ''|*[!0-9]*) return 1 ;; esac
+    case "$LYRASHIELD_WEBHOOK_CUTOVER_OWNER_SOURCE_SHA" in ''|*[!a-f0-9]*) return 1 ;; esac
+    [ "${#LYRASHIELD_WEBHOOK_CUTOVER_OWNER_SOURCE_SHA}" -eq 40 ] || return 1
+    [ "$LYRASHIELD_ADMISSION_STOP_OWNER" = "$LYRASHIELD_WEBHOOK_CUTOVER_ORIGINAL_OWNER" ] || return 1
+    case "$LYRASHIELD_WEBHOOK_CUTOVER_RECOVERY_RUN_ID" in ''|*[!0-9]*) return 1 ;; esac
+    case "$LYRASHIELD_WEBHOOK_CUTOVER_RECOVERY_ATTEMPT" in ''|*[!0-9]*) return 1 ;; esac
+    [ "$LYRASHIELD_WEBHOOK_CUTOVER_RECOVERY_ATTEMPT" -gt 0 ] || return 1
+    case "$LYRASHIELD_ADMISSION_STOP_OWNER" in *[!0-9:]*) return 1 ;; esac
+    case "$LYRASHIELD_ADMISSION_STOP_OWNER" in *:*) ;; *) return 1 ;; esac
+    [ "$LYRASHIELD_WEBHOOK_CUTOVER_RECOVERY_RUN_ID" != "$LYRASHIELD_WEBHOOK_CUTOVER_ORIGINAL_RUN_ID" ] || return 1
+    [ "$expected_app" = "$LYRASHIELD_WEBHOOK_CUTOVER_RECOVERY_SOURCE_SHA" ] || return 1
+    case "$receipt_file" in /*) ;; *) return 1 ;; esac
+    [ -f "$receipt_file" ] && [ ! -L "$receipt_file" ] &&
+      [ "$(stat -c '%u:%a' "$receipt_file")" = '0:600' ] || {
+      echo "Webhook recovery requires a root-owned 0600 durable receipt" >&2; return 1;
+    }
+    # The recovery invocation is separate from the immutable owner. Read and
+    # authenticate the receipt on the VM; never copy its stop value into CI.
+    # shellcheck disable=SC2016
+    receipt_verified=$(redis_eval 'const {default:Redis}=await import("ioredis"); const {createHash}=await import("node:crypto"); const [owner,ownerRunId,ownerSource,recoveryRunId,recoverySource,recoveryAttempt,candidateSource,currentImage,durable,live]=process.argv.slice(1); const receipt=JSON.parse(durable); const hash=(value)=>createHash("sha256").update(value??"").digest("hex"); const ownerMatch=/^([0-9]+):([1-9][0-9]*)$/.exec(receipt.owner??""); const stop=JSON.parse(receipt.admissionStopValue??"null"); const attempts=receipt.attempts; const lastAttempt=receipt.lastAttempt; if(Object.entries({databaseUrlSha256:hash(process.env.DATABASE_URL),databaseSystemUrlSha256:hash(process.env.DATABASE_SYSTEM_URL),redisUrlSha256:hash(process.env.REDIS_URL)}).some(([key,value])=>receipt[key]!==value) || (live && Object.entries(JSON.parse(live)).some(([key,value])=>receipt[key]!==value))) throw new Error("Webhook cutover connection identity changed"); if(!ownerMatch || receipt.runId!==ownerRunId || ownerMatch[1]!==ownerRunId || receipt.owner!==owner || receipt.productRevision!==ownerSource || !["claimed","writers-stopped"].includes(receipt.phase) || stop?.operator!=="github-actions" || stop.reason!=="webhook-claims-cutover" || stop.owner!==owner || stop.runId!==ownerRunId || stop.productRevision!==ownerSource || !Array.isArray(attempts) || attempts.length===0 || !Number.isSafeInteger(lastAttempt) || !attempts.every((value,index)=>Number.isSafeInteger(value)&&value>0&&value<=lastAttempt&&(index===0||value>attempts[index-1])) || new Set(attempts).size!==attempts.length || attempts[0]!==Number(ownerMatch[2]) || attempts.at(-1)!==lastAttempt || recoveryRunId===ownerRunId || !/^[0-9]+$/.test(recoveryRunId) || !/^[a-f0-9]{40}$/.test(recoverySource) || recoverySource!==candidateSource || !/^[1-9][0-9]*$/.test(recoveryAttempt)) throw new Error("Webhook recovery identity mismatch"); const candidates=receipt.recoveryCandidates??[]; if(!Array.isArray(candidates)||candidates.length>8||candidates.some(candidate=>!candidate||!/^\d+$/.test(candidate.recoveryRunId??"")||!Number.isSafeInteger(candidate.recoveryAttempt)||!/^([a-f0-9]{40})$/.test(candidate.sourceRevision??"")||!/^([a-f0-9]{40})$/.test(candidate.engineRevision??"")||!/^.+@sha256:[a-f0-9]{64}$/.test(candidate.workerImage??"")||candidate.protocol!=="durable-claims/2")) throw new Error("Webhook recovery candidate history invalid"); if(![receipt.previousWorkerImage,receipt.candidateWorkerImage,receipt.previousCandidateWorkerImage,...candidates.map(candidate=>candidate.workerImage)].filter(Boolean).includes(currentImage)) throw new Error("Configured worker image is not recorded in the held receipt"); const redis=new Redis(process.env.REDIS_URL,{maxRetriesPerRequest:1}); try { if(await redis.get("lyrashield:scan-admission:stopped")!==receipt.admissionStopValue) throw new Error("Original webhook admission stop changed"); console.log("MATCH"); } finally { await redis.quit(); }' "$LYRASHIELD_WEBHOOK_CUTOVER_ORIGINAL_OWNER" "$LYRASHIELD_WEBHOOK_CUTOVER_ORIGINAL_RUN_ID" "$LYRASHIELD_WEBHOOK_CUTOVER_OWNER_SOURCE_SHA" "$LYRASHIELD_WEBHOOK_CUTOVER_RECOVERY_RUN_ID" "$LYRASHIELD_WEBHOOK_CUTOVER_RECOVERY_SOURCE_SHA" "$LYRASHIELD_WEBHOOK_CUTOVER_RECOVERY_ATTEMPT" "$expected_app" "$old_image" "$(cat "$receipt_file")" "${1:-}")
+    [ "$receipt_verified" = MATCH ]
+    return
+  fi
   [ -n "${LYRASHIELD_ADMISSION_STOP_RECEIPT:-}" ] && [ -n "${LYRASHIELD_ADMISSION_STOP_OWNER:-}" ] && [ -n "${LYRASHIELD_WEBHOOK_CUTOVER_RUN_ID:-}" ] || {
     echo "Webhook cutover requires the current run's owned admission receipt" >&2; return 1;
   }
@@ -260,6 +355,18 @@ assert_legacy_worker_stopped() {
   [ -z "$remaining" ] || {
     echo "Webhook cutover requires the old worker container to be absent" >&2; return 1;
   }
+}
+
+assert_recovery_worker_stopped() {
+  state=$(systemctl is-active "$service" 2>/dev/null || true)
+  case "$state" in inactive|failed) ;; *) echo "Held webhook recovery requires an inactive worker service" >&2; return 1 ;; esac
+  [ "$(systemctl is-enabled "$service" 2>/dev/null || true)" = disabled ] || {
+    echo "Held webhook recovery requires the old worker service disabled" >&2; return 1;
+  }
+  remaining=$(docker ps -a --filter 'name=^/lyrashield-worker$' --format '{{.Names}}') || return 1
+  [ -z "$remaining" ] || { echo "Held webhook recovery requires no old worker container" >&2; return 1; }
+  [ "$(systemctl is-active lyrashield-worker-egress-refresh.service 2>/dev/null || true)" = inactive ] || return 1
+  assert_cutover_timer_stopped
 }
 
 resume_admission() {
@@ -294,6 +401,10 @@ wait_healthy() {
 # pointer to a journal the rollback is about to rotate away. The unit log holds
 # no secrets.
 capture_worker_restart_diagnostics() {
+  if [ "$webhook_recovery" -eq 1 ]; then
+    echo "Held webhook recovery candidate failed worker startup; original admission stop remains in place." >&2
+    return
+  fi
   systemctl status --no-pager "$service" || true
   journalctl -u "$service" -n 50 --no-pager || true
 }
@@ -401,7 +512,11 @@ promotion_step=checking-current-worker
 if [ "$webhook_cutover" -eq 1 ]; then
   systemctl disable --now "$timer"
   assert_cutover_timer_stopped
-  assert_legacy_worker_stopped
+  if [ "$webhook_recovery" -eq 1 ]; then
+    assert_recovery_worker_stopped
+  else
+    assert_legacy_worker_stopped
+  fi
 elif ! worker_is_healthy; then
   if worker_environment_is_fresh; then
     echo "Current worker is unhealthy with a fresh environment" >&2
@@ -410,13 +525,12 @@ elif ! worker_is_healthy; then
   echo "Current worker is unhealthy with a stale environment; continuing with refreshed one-shot checks" >&2
 fi
 
-# Refresh the Key Vault environment file before the admission claim and the
-# queue check so both evaluate the rotated endpoints. The live worker is not
-# restarted here: it keeps draining its old environment while the admission
-# stop and the empty-queue proof run against the new endpoint through
-# one-shot containers. The single restart later in this script is what cuts
-# the worker over.
-refresh_worker_secrets
+# Normal promotions refresh Key Vault values before read-only checks. Held
+# recovery preserves the original cutover's connection identity and must not
+# sync or rotate those values.
+if [ "$webhook_recovery" -eq 0 ]; then
+  refresh_worker_secrets
+fi
 
 # JavaScript template literal is passed verbatim to the container.
 # shellcheck disable=SC2016
@@ -441,7 +555,11 @@ else
 fi
 
 promotion_step=checking-queues
-assert_empty_queues
+if [ "$webhook_recovery" -eq 1 ]; then
+  assert_recovery_empty_queues
+else
+  assert_empty_queues
+fi
 
 # Keep the running worker image for rollback while reclaiming superseded release
 # images before Docker needs space for both compressed and extracted target layers.
@@ -513,7 +631,11 @@ if [ "$webhook_cutover" -eq 1 ]; then
   capability_config=
   [ "$capability" = durable-claims/2 ] || { echo "Candidate lacks durable webhook claim protocol" >&2; exit 1; }
   assert_cutover_receipt
-  assert_legacy_worker_stopped
+  if [ "$webhook_recovery" -eq 1 ]; then
+    assert_recovery_worker_stopped
+  else
+    assert_legacy_worker_stopped
+  fi
 fi
 
 # Host scripts and units are release assets bound to the same reviewed image
@@ -581,11 +703,34 @@ systemctl daemon-reload
 if [ "$webhook_cutover" -eq 1 ]; then
   promotion_step=recording-webhook-candidate
   assert_cutover_receipt
-  assert_empty_queues
-  assert_legacy_worker_stopped
-  # Keep the previously configured compatible candidate through the atomic
-  # config swap. A same-source rebuild can have a different immutable digest.
-  updated_receipt=$(worker_oneshot 'const [raw,current,target,product,engine]=process.argv.slice(1); const saved=JSON.parse(raw); const previousCandidateWorkerImage=current!==saved.previousWorkerImage?current:undefined; console.log(JSON.stringify({...saved,candidateWorkerImage:target,candidateProductRevision:product,candidateEngineRevision:engine,candidateWebhookTrackClaimProtocol:"durable-claims/2",previousCandidateWorkerImage}));' "$(cat "$receipt_file")" "$old_image" "$target" "$expected_app" "$expected_engine")
+  if [ "$webhook_recovery" -eq 1 ]; then
+    assert_recovery_empty_queues
+    assert_recovery_worker_stopped
+    assert_recovery_schema
+  else
+    assert_empty_queues
+    assert_legacy_worker_stopped
+  fi
+  if [ "$webhook_recovery" -eq 1 ]; then
+    promotion_step=recording-recovery-worker-candidate
+    updated_receipt=$(worker_candidate_oneshot '
+const billing=await import("@lyrashield/billing");
+const {assertHeldWebhookCutoverReceipt,appendWebhookRecoveryCandidate}=await import("file:///opt/lyrashield-worker-host/webhook-cutover-recovery.mjs");
+const {createHash}=await import("node:crypto");
+const [raw,ownerRun,ownerSource,owner,recoveryRun,attempt,source,engine,target]=process.argv.slice(1);
+const receipt=JSON.parse(raw);
+assertHeldWebhookCutoverReceipt(receipt,{ownerRunId:ownerRun,ownerSourceSha:ownerSource,owner});
+const stop=JSON.parse(receipt.admissionStopValue);
+if(stop.owner!==owner||stop.runId!==ownerRun||stop.productRevision!==ownerSource||recoveryRun===ownerRun||billing.WEBHOOK_TRACK_CLAIM_PROTOCOL!=="durable-claims/2") throw new Error("Held recovery owner or protocol mismatch");
+const hash=value=>createHash("sha256").update(value??"").digest("hex");
+if(receipt.databaseUrlSha256!==hash(process.env.DATABASE_URL)||receipt.databaseSystemUrlSha256!==hash(process.env.DATABASE_SYSTEM_URL)||receipt.redisUrlSha256!==hash(process.env.REDIS_URL)) throw new Error("Held recovery connection identity changed");
+const candidate={recoveryRunId:recoveryRun,recoveryAttempt:Number(attempt),sourceRevision:source,engineRevision:engine,workerImage:target,protocol:billing.WEBHOOK_TRACK_CLAIM_PROTOCOL};
+console.log(JSON.stringify(appendWebhookRecoveryCandidate(receipt,candidate)));' "$(cat "$receipt_file")" "$LYRASHIELD_WEBHOOK_CUTOVER_ORIGINAL_RUN_ID" "$LYRASHIELD_WEBHOOK_CUTOVER_OWNER_SOURCE_SHA" "$LYRASHIELD_WEBHOOK_CUTOVER_ORIGINAL_OWNER" "$LYRASHIELD_WEBHOOK_CUTOVER_RECOVERY_RUN_ID" "$LYRASHIELD_WEBHOOK_CUTOVER_RECOVERY_ATTEMPT" "$expected_app" "$expected_engine" "$target")
+  else
+    # Keep the previously configured compatible candidate through the atomic
+    # config swap. A same-source rebuild can have a different immutable digest.
+    updated_receipt=$(worker_oneshot 'const [raw,current,target,product,engine]=process.argv.slice(1); const saved=JSON.parse(raw); const previousCandidateWorkerImage=current!==saved.previousWorkerImage?current:undefined; console.log(JSON.stringify({...saved,candidateWorkerImage:target,candidateProductRevision:product,candidateEngineRevision:engine,candidateWebhookTrackClaimProtocol:"durable-claims/2",previousCandidateWorkerImage}));' "$(cat "$receipt_file")" "$old_image" "$target" "$expected_app" "$expected_engine")
+  fi
   receipt_temporary=$(mktemp "${receipt_file}.XXXXXX")
   printf '%s\n' "$updated_receipt" > "$receipt_temporary"
   chmod 0600 "$receipt_temporary"
