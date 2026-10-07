@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import { spawnSync } from "node:child_process"
-import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import test from "node:test"
@@ -23,6 +23,34 @@ const originalRun = {
   status: "completed",
   conclusion: "failure",
 }
+const originalJobs = [
+  {
+    name: "Deploy Azure Container Apps",
+    conclusion: "failure",
+    steps: [
+      { name: "Boot compatible worker before opening webhook ingress", conclusion: "failure" },
+    ],
+  },
+]
+const wrappedRun = {
+  ...originalRun,
+  path: ".github/workflows/release-production.yml",
+  event: "push",
+}
+const wrappedJobs = [
+  {
+    name: "deploy-azure / Check existing webhook writers before image build",
+    conclusion: "success",
+    steps: [],
+  },
+  {
+    name: "deploy-azure / Deploy Azure Container Apps / Deploy Azure Container Apps",
+    conclusion: "failure",
+    steps: [
+      { name: "Boot compatible worker before opening webhook ingress", conclusion: "failure" },
+    ],
+  },
+]
 const validProbe = [
   "WEBHOOK_NEW_RUN_RECOVERY_VERIFIED",
   `WEBHOOK_RECOVERY_OWNER=${original.owner}`,
@@ -49,12 +77,20 @@ test("new-run probe binds exact original run, owner and source", () => {
 test("original GitHub run must be the completed, failed main cutover source", () => {
   assert.doesNotThrow(() => assertOriginalCutoverRun(originalRun, original))
   assert.doesNotThrow(() =>
-    assertOriginalCutoverRun({ ...originalRun, path: `${originalRun.path}@main` }, original)
+    assertOriginalCutoverRun({ ...originalRun, conclusion: "cancelled" }, original)
+  )
+  assert.doesNotThrow(() =>
+    assertOriginalCutoverRun(
+      { ...originalRun, path: `${originalRun.path}@main` },
+      original,
+      originalJobs
+    )
   )
   assert.doesNotThrow(() =>
     assertOriginalCutoverRun(
       { ...originalRun, path: `${originalRun.path}@refs/heads/main` },
-      original
+      original,
+      originalJobs
     )
   )
   for (const change of [
@@ -66,8 +102,36 @@ test("original GitHub run must be the completed, failed main cutover source", ()
     { status: "in_progress" },
     { conclusion: "success" },
   ]) {
-    assert.throws(() => assertOriginalCutoverRun({ ...originalRun, ...change }, original))
+    assert.throws(() =>
+      assertOriginalCutoverRun({ ...originalRun, ...change }, original, originalJobs)
+    )
   }
+})
+
+test("release-production wrapper is accepted only with the failed held worker promotion", () => {
+  assert.doesNotThrow(() => assertOriginalCutoverRun(wrappedRun, original, wrappedJobs))
+  for (const change of [
+    { event: "workflow_dispatch" },
+    { conclusion: "cancelled" },
+    { path: ".github/workflows/another.yml" },
+  ]) {
+    assert.throws(() =>
+      assertOriginalCutoverRun({ ...wrappedRun, ...change }, original, wrappedJobs)
+    )
+  }
+  assert.throws(() => assertOriginalCutoverRun(wrappedRun, original, wrappedJobs.slice(0, 1)))
+  assert.throws(() =>
+    assertOriginalCutoverRun(wrappedRun, original, [
+      wrappedJobs[0],
+      { ...wrappedJobs[1], steps: [{ name: "Read-only preflight", conclusion: "failure" }] },
+    ])
+  )
+  assert.throws(() =>
+    assertOriginalCutoverRun(wrappedRun, original, [
+      { ...wrappedJobs[0], conclusion: "failure" },
+      wrappedJobs[1],
+    ])
+  )
 })
 
 function executable(directory, name, body) {
@@ -90,7 +154,7 @@ function fixture(t, overrides = {}) {
   executable(
     directory,
     "gh",
-    'const args=process.argv.slice(2); if(args[0]!=="api") process.exit(2); if(args[1].endsWith("/git/ref/heads/main")) console.log(process.env.MOCK_MAIN_SHA); else if(args[1].endsWith("/actions/runs/37516632066")) console.log(process.env.MOCK_ORIGINAL_RUN); else process.exit(2);'
+    'const args=process.argv.slice(2); if(args[0]!=="api") process.exit(2); if(args[1].endsWith("/git/ref/heads/main")) console.log(process.env.MOCK_MAIN_SHA); else if(args[1].endsWith("/actions/runs/37516632066/jobs?per_page=100")) console.log(process.env.MOCK_ORIGINAL_JOBS); else if(args[1].endsWith("/actions/runs/37516632066")) console.log(process.env.MOCK_ORIGINAL_RUN); else process.exit(2);'
   )
   executable(
     directory,
@@ -111,6 +175,7 @@ function fixture(t, overrides = {}) {
     MOCK_CHECKOUT_SHA: candidateSha,
     MOCK_MAIN_SHA: candidateSha,
     MOCK_ORIGINAL_RUN: JSON.stringify(originalRun),
+    MOCK_ORIGINAL_JOBS: JSON.stringify({ total_count: originalJobs.length, jobs: originalJobs }),
     MOCK_PROBE: validProbe,
     ...overrides,
   }
@@ -132,6 +197,34 @@ test("new-run preflight writes only the verified original identity", (t) => {
   )
 })
 
+test("release-production original is accepted only after its worker-boot failure is verified", (t) => {
+  const accepted = fixture(t, {
+    MOCK_ORIGINAL_RUN: JSON.stringify(wrappedRun),
+    MOCK_ORIGINAL_JOBS: JSON.stringify({ total_count: wrappedJobs.length, jobs: wrappedJobs }),
+  })
+  assert.equal(accepted.result.status, 0, accepted.result.stderr)
+  assert.match(readFileSync(accepted.outputPath, "utf8"), /held_recovery_verified=true/)
+
+  for (const jobs of [
+    wrappedJobs.slice(0, 1),
+    [...wrappedJobs, wrappedJobs[1]],
+    [...wrappedJobs, wrappedJobs[0]],
+    [
+      wrappedJobs[0],
+      { ...wrappedJobs[1], steps: [{ name: "Read-only preflight", conclusion: "failure" }] },
+    ],
+    [{ ...wrappedJobs[0], conclusion: "failure" }, wrappedJobs[1]],
+  ]) {
+    const rejected = fixture(t, {
+      MOCK_ORIGINAL_RUN: JSON.stringify(wrappedRun),
+      MOCK_ORIGINAL_JOBS: JSON.stringify({ total_count: jobs.length, jobs }),
+    })
+    assert.notEqual(rejected.result.status, 0)
+    assert.equal(readFileSync(rejected.outputPath, "utf8"), "")
+    assert.equal(existsSync(rejected.probeCapture), false)
+  }
+})
+
 test("stale candidate and mismatched original scope fail before recovery output", (t) => {
   for (const overrides of [
     { MOCK_MAIN_SHA: "c".repeat(40) },
@@ -144,4 +237,15 @@ test("stale candidate and mismatched original scope fail before recovery output"
     assert.notEqual(f.result.status, 0)
     assert.equal(readFileSync(f.outputPath, "utf8"), "")
   }
+})
+
+test("incomplete original job listing fails before probing the VM", (t) => {
+  const f = fixture(t, {
+    MOCK_ORIGINAL_RUN: JSON.stringify(wrappedRun),
+    MOCK_ORIGINAL_JOBS: JSON.stringify({ total_count: 101, jobs: wrappedJobs }),
+  })
+  assert.notEqual(f.result.status, 0)
+  assert.match(f.result.stderr, /jobs are incomplete or ambiguous/)
+  assert.equal(readFileSync(f.outputPath, "utf8"), "")
+  assert.equal(existsSync(f.probeCapture), false)
 })
