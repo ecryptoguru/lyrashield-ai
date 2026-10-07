@@ -62,18 +62,52 @@ export function recoveryIdentityFromProbe(probe, expected) {
   return { owner, runId, sourceSha }
 }
 
-export function assertOriginalCutoverRun(run, expected) {
+export function assertOriginalCutoverRun(run, expected, jobs) {
+  const deployAzurePaths = new Set([
+    ".github/workflows/deploy-azure.yml",
+    ".github/workflows/deploy-azure.yml@main",
+    ".github/workflows/deploy-azure.yml@refs/heads/main",
+  ])
+  const directDeploy = deployAzurePaths.has(run?.path)
+  const releaseProduction =
+    run?.path === ".github/workflows/release-production.yml" && run?.event === "push"
+  const failedWorkerJobs = Array.isArray(jobs)
+    ? jobs.filter((job) => {
+        if (
+          ![
+            "Deploy Azure Container Apps",
+            "deploy-azure / Deploy Azure Container Apps",
+            "deploy-azure / Deploy Azure Container Apps / Deploy Azure Container Apps",
+          ].includes(job?.name) ||
+          job?.conclusion !== "failure" ||
+          !Array.isArray(job.steps)
+        ) {
+          return false
+        }
+        const failedBootSteps = job.steps.filter(
+          (step) =>
+            step?.name === "Boot compatible worker before opening webhook ingress" &&
+            step?.conclusion === "failure"
+        )
+        return failedBootSteps.length === 1
+      })
+    : []
+  const preflightJobs = Array.isArray(jobs)
+    ? jobs.filter(
+        (job) =>
+          job?.name === "deploy-azure / Check existing webhook writers before image build" &&
+          job?.conclusion === "success"
+      )
+    : []
   if (
     run?.id !== Number(expected.runId) ||
     run.head_sha !== expected.sourceSha ||
     run.head_branch !== "main" ||
-    ![
-      ".github/workflows/deploy-azure.yml",
-      ".github/workflows/deploy-azure.yml@main",
-      ".github/workflows/deploy-azure.yml@refs/heads/main",
-    ].includes(run.path) ||
+    (!directDeploy && !releaseProduction) ||
     run.status !== "completed" ||
-    !["failure", "cancelled"].includes(run.conclusion)
+    !["failure", "cancelled"].includes(run.conclusion) ||
+    (releaseProduction &&
+      (run.conclusion !== "failure" || failedWorkerJobs.length !== 1 || preflightJobs.length !== 1))
   ) {
     throw new Error("Original cutover GitHub run metadata does not match the held receipt")
   }
@@ -134,7 +168,20 @@ function main() {
     const originalRun = JSON.parse(
       run("gh", ["api", `repos/${repository}/actions/runs/${expected.runId}`])
     )
-    assertOriginalCutoverRun(originalRun, expected)
+    let originalJobs
+    if (originalRun.path === ".github/workflows/release-production.yml") {
+      const originalJobResponse = JSON.parse(
+        run("gh", ["api", `repos/${repository}/actions/runs/${expected.runId}/jobs?per_page=100`])
+      )
+      if (
+        !Array.isArray(originalJobResponse.jobs) ||
+        originalJobResponse.total_count !== originalJobResponse.jobs.length
+      ) {
+        throw new Error("Original cutover GitHub run jobs are incomplete or ambiguous")
+      }
+      originalJobs = originalJobResponse.jobs
+    }
+    assertOriginalCutoverRun(originalRun, expected, originalJobs)
     const probe = run("bash", [
       ".github/scripts/webhook-claims-maintenance.sh",
       "recovery-probe-new-run",
