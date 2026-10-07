@@ -472,6 +472,16 @@ jobs:
         env:
           BULLMQ_REDIS_URL: ${{ secrets.BULLMQ_REDIS_URL }}
         run: bash .github/scripts/deploy-azure-preflight.sh verify-bullmq-redis-credential
+      # A normal cutover can spend a long time in migration before the first
+      # post-migration Key Vault audience token exchange. Renew the existing
+      # federated login for the following non-recovery secret-sync phase.
+      - name: Refresh Azure OIDC login before post-migration Key Vault sync
+        if: inputs.held_recovery != true
+        uses: Azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ secrets.AZURE_DEPLOY_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_DEPLOY_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_DEPLOY_SUBSCRIPTION_ID }}
       # The Container Apps and worker VM consume the same BullMQ endpoint from
       # different secret stores. Keep the VM's Key Vault copy in lockstep so a
       # Redis rotation cannot leave the production worker on an exhausted plan.
@@ -721,6 +731,15 @@ jobs:
           RG: ${{ vars.AZURE_RESOURCE_GROUP }}
           WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
         run: bash .github/scripts/deploy-azure-rollout.sh verify-worker-queues-are-empty-before-traffic-promotion
+      # The prepared candidate path can itself follow a long deployment
+      # preflight. Refresh before its VM promotion and subsequent Azure calls.
+      - name: Refresh Azure OIDC login before webhook worker boot
+        if: inputs.webhook_claims_cutover == true || inputs.held_recovery == true
+        uses: Azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ secrets.AZURE_DEPLOY_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_DEPLOY_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_DEPLOY_SUBSCRIPTION_ID }}
       - name: Boot compatible worker before opening webhook ingress
         if: inputs.webhook_claims_cutover == true || inputs.held_recovery == true
         id: webhook-worker
@@ -792,6 +811,14 @@ jobs:
       #    failure here rolls traffic back (the rollback step below keys on
       #    this step's outcome) while the old worker keeps serving until a
       #    retry succeeds.
+      - name: Refresh Azure OIDC login before ordinary worker promotion
+        if: inputs.held_recovery != true && inputs.webhook_claims_cutover != true
+        id: ordinary-worker-login
+        uses: Azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ secrets.AZURE_DEPLOY_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_DEPLOY_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_DEPLOY_SUBSCRIPTION_ID }}
       - name: Promote verified worker digest on VM
         if: inputs.held_recovery != true && inputs.webhook_claims_cutover != true
         id: worker-vm
@@ -803,8 +830,21 @@ jobs:
         run: bash .github/scripts/deploy-azure-rollout.sh promote-verified-worker-digest-on-vm
       # Migrations and app-scope configuration remain forward-only. This rollback
       # changes traffic only, after every candidate had already passed readiness.
+      - name: Refresh Azure OIDC login before ordinary failure cleanup
+        if: >
+          inputs.held_recovery != true && inputs.webhook_claims_cutover != true && failure() &&
+          (steps.deploy-app.outcome == 'failure' || steps.deploy-scanner.outcome == 'failure' ||
+          steps.deploy-egress-proxy.outcome == 'failure' || steps.smoke-candidates.outcome == 'failure' ||
+          steps.worker-preflight.outcome == 'failure' ||
+          steps.promote.outcome == 'failure' || steps.smoke-public.outcome == 'failure' ||
+          steps.ordinary-worker-login.outcome == 'failure' || steps.worker-vm.outcome == 'failure')
+        uses: Azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ secrets.AZURE_DEPLOY_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_DEPLOY_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_DEPLOY_SUBSCRIPTION_ID }}
       - name: Roll back production traffic on health failure
-        if: inputs.held_recovery != true && inputs.webhook_claims_cutover != true && failure() && (steps.promote.outcome == 'failure' || steps.smoke-public.outcome == 'failure' || steps.worker-vm.outcome == 'failure')
+        if: inputs.held_recovery != true && inputs.webhook_claims_cutover != true && failure() && (steps.promote.outcome == 'failure' || steps.smoke-public.outcome == 'failure' || steps.ordinary-worker-login.outcome == 'failure' || steps.worker-vm.outcome == 'failure')
         env:
           APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
           APP_PREVIOUS: ${{ steps.rollout.outputs.app_previous }}
@@ -823,7 +863,8 @@ jobs:
           (steps.deploy-app.outcome == 'failure' || steps.deploy-scanner.outcome == 'failure' ||
           steps.deploy-egress-proxy.outcome == 'failure' || steps.smoke-candidates.outcome == 'failure' ||
           steps.worker-preflight.outcome == 'failure' ||
-          steps.promote.outcome == 'failure' || steps.smoke-public.outcome == 'failure' || steps.worker-vm.outcome == 'failure')
+          steps.promote.outcome == 'failure' || steps.smoke-public.outcome == 'failure' ||
+          steps.ordinary-worker-login.outcome == 'failure' || steps.worker-vm.outcome == 'failure')
         env:
           RG: ${{ vars.AZURE_RESOURCE_GROUP }}
           APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
@@ -835,7 +876,8 @@ jobs:
           (steps.deploy-app.outcome == 'failure' || steps.deploy-scanner.outcome == 'failure' ||
           steps.deploy-egress-proxy.outcome == 'failure' || steps.smoke-candidates.outcome == 'failure' ||
           steps.worker-preflight.outcome == 'failure' ||
-          steps.promote.outcome == 'failure' || steps.smoke-public.outcome == 'failure' || steps.worker-vm.outcome == 'failure')
+          steps.promote.outcome == 'failure' || steps.smoke-public.outcome == 'failure' ||
+          steps.ordinary-worker-login.outcome == 'failure' || steps.worker-vm.outcome == 'failure')
         env:
           RG: ${{ vars.AZURE_RESOURCE_GROUP }}
           APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
@@ -849,6 +891,18 @@ jobs:
           EGRESS_PREVIOUS: ${{ steps.rollout.outputs.egress_previous }}
         run: bash .github/scripts/deploy-azure-rollout.sh deactivate-zero-traffic-candidates-after-failed-rollout
 
+      # A held recovery can spend longer than an OIDC assertion's lifetime in
+      # candidate boot and public smoke. Obtain a fresh federated assertion
+      # before the verifier's Key Vault audience token exchange and the VM
+      # release/archive calls that follow it.
+      - name: Refresh Azure OIDC login before installed writer verification
+        if: inputs.webhook_claims_cutover == true || inputs.held_recovery == true
+        uses: Azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ secrets.AZURE_DEPLOY_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_DEPLOY_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_DEPLOY_SUBSCRIPTION_ID }}
+
       - name: Verify installed compatible webhook writer baseline
         if: inputs.webhook_claims_cutover == true || inputs.held_recovery == true
         env:
@@ -860,6 +914,15 @@ jobs:
           AZURE_KEY_VAULT_NAME: ${{ vars.AZURE_KEY_VAULT_NAME || 'lyrashieldprodsecrets' }}
           GHCR_USERNAME: ${{ github.repository_owner }}
         run: node .github/scripts/verify-webhook-cutover.mjs
+      # The verifier can inspect multiple revisions and the VM. Give the
+      # admission release its own fresh federated login before any VM call.
+      - name: Refresh Azure OIDC login before webhook admission release
+        if: inputs.webhook_claims_cutover == true || inputs.held_recovery == true
+        uses: Azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ secrets.AZURE_DEPLOY_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_DEPLOY_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_DEPLOY_SUBSCRIPTION_ID }}
       - name: Resume only owned admission after compatible cutover
         if: inputs.webhook_claims_cutover == true
         env:
@@ -887,12 +950,30 @@ jobs:
           done
           echo "::error::Scan readiness did not recover after original admission release."
           exit 1
+      # Public readiness polling and the release VM call can consume the
+      # earlier login's lifetime. Renew before the archive's final VM proof.
+      - name: Refresh Azure OIDC login before held recovery archive
+        if: inputs.held_recovery == true
+        uses: Azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ secrets.AZURE_DEPLOY_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_DEPLOY_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_DEPLOY_SUBSCRIPTION_ID }}
       - name: Archive completed held recovery evidence
         if: inputs.held_recovery == true
         env:
           RG: ${{ vars.AZURE_RESOURCE_GROUP }}
           WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
         run: bash .github/scripts/webhook-claims-maintenance.sh complete-recovery
+      # The first cutover may fail before the late success-path login. Keep its
+      # writer shutdown able to authenticate after a long rollout.
+      - name: Refresh Azure OIDC login before failed first-cutover cleanup
+        if: (failure() || cancelled()) && inputs.webhook_claims_cutover == true && steps.webhook-stop.outcome != 'skipped'
+        uses: Azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ secrets.AZURE_DEPLOY_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_DEPLOY_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_DEPLOY_SUBSCRIPTION_ID }}
       - name: Hold webhook ingress closed after failed maintenance
         if: (failure() || cancelled()) && inputs.webhook_claims_cutover == true && steps.webhook-stop.outcome != 'skipped'
         env:
@@ -901,6 +982,15 @@ jobs:
           APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
           SCANNER_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
         run: bash .github/scripts/webhook-claims-maintenance.sh hold
+      # Failures before the final verifier can also occur after a long Azure
+      # rollout. Refresh the same federated identity before recovery cleanup.
+      - name: Refresh Azure OIDC login before failed held recovery cleanup
+        if: (failure() || cancelled()) && inputs.held_recovery == true && steps.recovery-hold.outcome != 'skipped'
+        uses: Azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ secrets.AZURE_DEPLOY_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_DEPLOY_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_DEPLOY_SUBSCRIPTION_ID }}
       - name: Disable webhook writers after failed held recovery
         if: (failure() || cancelled()) && inputs.held_recovery == true && steps.recovery-hold.outcome != 'skipped'
         env:
