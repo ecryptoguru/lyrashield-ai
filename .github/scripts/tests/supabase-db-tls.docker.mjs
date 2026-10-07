@@ -125,6 +125,81 @@ if (process.env.TEST_CASE === "positive") {
   const encodedHost = base.replace(".com:5432", "%2ecom:5432")
   assert.throws(() => createBoundedPgAdapter(encodedHost), /^Error: Invalid Supabase database connection configuration$/)
   passed++
+  for (const host of [settings.host, "other.invalid," + settings.host]) {
+    const hostOverride = "postgresql://" + encodeURIComponent(settings.runtimeUser) + ":" +
+      settings.password + "@db.example.com:5432/postgres?host=" + host +
+      "&sslmode=require&uselibpqcompat=true"
+    assert.throws(() => createBoundedPgAdapter(hostOverride), /^Error: Invalid Supabase database connection configuration$/)
+    passed++
+  }
+  for (const [authorityEscape, hostKey] of [
+    ["%ZZ", "host"],
+    ["%FF", "host"],
+    ["%ZZ", "%68ost"],
+  ]) {
+    const malformedAuthority = "postgresql://" + encodeURIComponent(settings.runtimeUser) + ":" +
+      settings.password + "@db." + authorityEscape + ".invalid:5432/postgres?" + hostKey + "=" +
+      settings.host + "&sslmode=require&uselibpqcompat=true"
+    assert.throws(() => createBoundedPgAdapter(malformedAuthority), /^Error: Invalid Supabase database connection configuration$/)
+    passed++
+  }
+  const malformedUrl =
+    "postgresql://" +
+    encodeURIComponent(settings.runtimeUser) +
+    ":" +
+    settings.password +
+    "@/postgres?%68ost=aws-0.fixture.pooler.%73upabase.com&sslmode=require&uselibpqcompat=true"
+  assert.throws(
+    () => createBoundedPgAdapter(malformedUrl),
+    /^Error: Invalid Supabase database connection configuration$/
+  )
+  passed++
+  for (const control of ["\t", "\n", "\r"]) {
+    const normalizedQueryKey = "h" + control + "ost"
+    const normalizedHostOverride =
+      "postgresql://" +
+      encodeURIComponent(settings.runtimeUser) +
+      ":" +
+      settings.password +
+      "@db.example.com:5432/postgres?" +
+      normalizedQueryKey +
+      "=" +
+      settings.host +
+      "&sslmode=require&uselibpqcompat=true"
+    assert.throws(
+      () => createBoundedPgAdapter(normalizedHostOverride),
+      /^Error: Invalid Supabase database connection configuration$/
+    )
+    passed++
+  }
+  for (const hostname of [
+    "aws-0.fixture.pooler.supabase\u3002com",
+    "aws-0.fixture.pooler.\uff53\uff55\uff50\uff41\uff42\uff41\uff53\uff45.com",
+  ]) {
+    const idnaAuthority =
+      "postgresql://" +
+      encodeURIComponent(settings.runtimeUser) +
+      ":" +
+      settings.password +
+      "@" +
+      hostname +
+      ":5432/postgres?sslmode=require&uselibpqcompat=true"
+    const idnaHostOverride =
+      "postgresql://" +
+      encodeURIComponent(settings.runtimeUser) +
+      ":" +
+      settings.password +
+      "@db.example.com:5432/postgres?host=" +
+      hostname +
+      "&sslmode=require&uselibpqcompat=true"
+    for (const target of [idnaAuthority, idnaHostOverride]) {
+      assert.throws(
+        () => createBoundedPgAdapter(target),
+        /^Error: Invalid Supabase database connection configuration$/
+      )
+      passed++
+    }
+  }
 }
 console.log(JSON.stringify({ suite: "supabase-db-tls", case: process.env.TEST_CASE, passed }))
 `
@@ -288,13 +363,13 @@ try {
   }
   assert.deepEqual(
     results.map((result) => result.passed),
-    [15, 6, 6]
+    [28, 6, 6]
   )
   console.log(
     JSON.stringify({
       suite: "supabase-db-tls",
       status: "PASS",
-      total: 27,
+      total: 40,
       mode: overlay ? "local-source-overlay" : "exact-candidate",
       workerImage,
     })

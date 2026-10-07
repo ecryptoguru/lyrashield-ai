@@ -50,6 +50,8 @@ describe("Supabase runtime TLS", () => {
     "",
     "sslmode=require&sslmode=verify-full",
     "sslmode=require&host=other.invalid",
+    "sslmode=require&host=aws-0-test.pooler.supabase.com",
+    "sslmode=require&host=other.invalid,aws-0-test.pooler.supabase.com",
     "sslmode=require&user=postgres",
     "sslmode=require&password=other",
     "sslmode=require&sslrootcert=/unapproved",
@@ -76,6 +78,71 @@ describe("Supabase runtime TLS", () => {
     expect(() =>
       createPgConnectionConfig(`${encoded}?sslmode=require&uselibpqcompat=true`)
     ).toThrow("Invalid Supabase database connection configuration")
+  })
+
+  it("rejects a Supabase destination smuggled through a non-Supabase host override", () => {
+    const unrelatedAuthority =
+      "postgres://worker:synthetic@db.example.com:5432/postgres?host=aws-0-test.pooler.supabase.com&sslmode=require&uselibpqcompat=true"
+    expect(() => createPgConnectionConfig(unrelatedAuthority)).toThrow(
+      "Invalid Supabase database connection configuration"
+    )
+  })
+
+  it.each(["%ZZ", "%FF"])(
+    "rejects a malformed authority with a Supabase query host (%s)",
+    (escape) => {
+      const malformedAuthority = `postgres://worker:synthetic@db.${escape}.invalid:5432/postgres?host=aws-0-test.pooler.supabase.com&sslmode=require&uselibpqcompat=true`
+      expect(() => createPgConnectionConfig(malformedAuthority)).toThrow(
+        "Invalid Supabase database connection configuration"
+      )
+    }
+  )
+
+  it("recognizes percent-encoded query host keys before malformed authorities pass through", () => {
+    const malformedAuthority =
+      "postgres://worker:synthetic@db.%ZZ.invalid:5432/postgres?%68ost=aws-0-test.pooler.supabase.com&sslmode=require&uselibpqcompat=true"
+    expect(() => createPgConnectionConfig(malformedAuthority)).toThrow(
+      "Invalid Supabase database connection configuration"
+    )
+  })
+
+  it("rejects an invalid URL authority when pg would use its encoded Supabase host query", () => {
+    const malformedUrl =
+      "postgres://worker:synthetic@/postgres?host=aws-0-test.pooler.%73upabase.com&sslmode=require&uselibpqcompat=true"
+    expect(() => createPgConnectionConfig(malformedUrl)).toThrow(
+      "Invalid Supabase database connection configuration"
+    )
+  })
+
+  it.each(["\t", "\n", "\r"])(
+    "rejects a Supabase query host whose key normalizes from a literal control character",
+    (control) => {
+      const normalizedQueryKey = `h${control}ost`
+      const url = `postgres://worker:synthetic@db.example.com:5432/postgres?${normalizedQueryKey}=aws-0-test.pooler.supabase.com&sslmode=require&uselibpqcompat=true`
+      expect(() => createPgConnectionConfig(url)).toThrow(
+        "Invalid Supabase database connection configuration"
+      )
+    }
+  )
+
+  it.each([
+    "aws-0-test.pooler.supabase\u3002com",
+    "aws-0-test.pooler.\uff53\uff55\uff50\uff41\uff42\uff41\uff53\uff45.com",
+  ])("rejects an IDNA-normalized Supabase hostname (%s)", (hostname) => {
+    const connectionString = `postgres://worker:synthetic@${hostname}:5432/postgres?sslmode=require&uselibpqcompat=true`
+    expect(() => createPgConnectionConfig(connectionString)).toThrow(
+      "Invalid Supabase database connection configuration"
+    )
+  })
+
+  it.each([
+    "aws-0-test.pooler.supabase\u3002com",
+    "aws-0-test.pooler.\uff53\uff55\uff50\uff41\uff42\uff41\uff53\uff45.com",
+  ])("rejects an IDNA-normalized Supabase query host (%s)", (hostname) => {
+    const connectionString = `postgres://worker:synthetic@db.example.com:5432/postgres?host=${hostname}&sslmode=require&uselibpqcompat=true`
+    expect(() => createPgConnectionConfig(connectionString)).toThrow(
+      "Invalid Supabase database connection configuration"
+    )
   })
 
   it("preserves direct Supabase identity and the ordinary disposable loopback path", () => {

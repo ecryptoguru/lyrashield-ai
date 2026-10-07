@@ -1,4 +1,5 @@
 import type { ClientConfig } from "pg"
+import { domainToASCII } from "node:url"
 import { parse } from "pg-connection-string"
 
 const QUERY_KEYS = new Set([
@@ -11,6 +12,35 @@ const QUERY_KEYS = new Set([
   "pool_timeout",
   "connect_timeout",
 ])
+const SUPABASE_POOLER_HOST = /(?:^|\.)pooler\.supabase\.com$/
+const SUPABASE_DIRECT_HOST = /^db\.[a-z0-9]{20}\.supabase\.co$/
+
+function isSupabaseHostname(value: string): boolean {
+  let hostname: string
+  try {
+    hostname = decodeURIComponent(value).toLowerCase().replace(/\.$/, "")
+  } catch {
+    return /supabase/i.test(value)
+  }
+  const asciiHostname = domainToASCII(hostname).toLowerCase().replace(/\.$/, "")
+  return SUPABASE_POOLER_HOST.test(asciiHostname) || SUPABASE_DIRECT_HOST.test(asciiHostname)
+}
+
+function hasSupabaseQueryHostParameters(searchParams: URLSearchParams): boolean {
+  return searchParams
+    .getAll("host")
+    .some((candidate) => candidate.split(",").some((item) => isSupabaseHostname(item.trim())))
+}
+
+function hasSupabaseQueryHost(connectionString: string): boolean {
+  const normalized = connectionString.replace(/[\t\n\r]/g, "")
+  return [connectionString, normalized].some((value) => {
+    const queryStart = value.indexOf("?")
+    if (queryStart < 0) return false
+    const query = value.slice(queryStart + 1).split("#", 1)[0]
+    return hasSupabaseQueryHostParameters(new URLSearchParams(query))
+  })
+}
 
 function invalidConnection(): never {
   // Parser errors can include URLs or credentials. Emit only this fixed message.
@@ -24,12 +54,16 @@ function invalidConnection(): never {
  * the target, then pass discrete fields with no connectionString to reparse.
  */
 export function createPgConnectionConfig(connectionString: string): ClientConfig {
+  const querySupabase = hasSupabaseQueryHost(connectionString)
   let url: URL
   try {
     url = new URL(connectionString)
   } catch {
+    if (/supabase/i.test(connectionString) || querySupabase) invalidConnection()
     return { connectionString }
   }
+  const normalizedQuerySupabase = hasSupabaseQueryHostParameters(url.searchParams)
+  const supabaseQueryHost = querySupabase || normalizedQuerySupabase
   let host: string
   try {
     // pg-connection-string decodes escaped hostnames before connecting. Match
@@ -37,13 +71,11 @@ export function createPgConnectionConfig(connectionString: string): ClientConfig
     // verified TLS and then become a Supabase target in pg.
     host = decodeURIComponent(url.hostname).toLowerCase()
   } catch {
-    if (/supabase/i.test(url.hostname)) invalidConnection()
+    if (/supabase/i.test(url.hostname) || supabaseQueryHost) invalidConnection()
     return { connectionString }
   }
   const canonicalHost = host.replace(/\.$/, "")
-  const supabase =
-    /(?:^|\.)pooler\.supabase\.com$/.test(canonicalHost) ||
-    /^db\.[a-z0-9]{20}\.supabase\.co$/.test(canonicalHost)
+  const supabase = isSupabaseHostname(host) || supabaseQueryHost
   if (!supabase) return { connectionString }
 
   if (process.env.NODE_TLS_REJECT_UNAUTHORIZED === "0") invalidConnection()
