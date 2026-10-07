@@ -1,6 +1,12 @@
 type WorkerRunTermination =
   { reason: "BULLMQ_RUN_RETURNED" } | { reason: "BULLMQ_RUN_FAILURE"; error: unknown }
 
+// The production scan worker runs alongside both auxiliary consumers. Keep
+// their combined concurrency below the default four-connection DB pool so one
+// connection remains available for scan finalization.
+export const WEBHOOK_TRACK_RETRY_WORKER_CONCURRENCY = 1
+export const FIX_GENERATE_WORKER_CONCURRENCY = 1
+
 /**
  * All BullMQ workers in this process share the Prisma pool. Count every
  * concurrently active processor and keep one connection available for scan

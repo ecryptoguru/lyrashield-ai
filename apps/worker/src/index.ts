@@ -39,7 +39,12 @@ import { assertEvidenceStorageConfigured } from "./engine/evidence-storage"
 import { drainArtifactDeletionTasks } from "@lyrashield/evidence-storage"
 import { assertEngineTempRootReady } from "./engine/workspace-path"
 import { reapStaleScanResources } from "./engine/stale-resource-reaper"
-import { assertWorkerDbPoolCapacity, observeWorkerRun } from "./worker-lifecycle"
+import {
+  assertWorkerDbPoolCapacity,
+  observeWorkerRun,
+  WEBHOOK_TRACK_RETRY_WORKER_CONCURRENCY,
+  FIX_GENERATE_WORKER_CONCURRENCY,
+} from "./worker-lifecycle"
 import { collectOperationalHealthSnapshot, evaluateOperationalHealth } from "./operational-health"
 
 let worker: Worker<ScanJobData, ScanJobResult> | null = null
@@ -64,8 +69,6 @@ export const MANAGED_REDIS_DRAIN_DELAY_SECONDS = 600
 export const MANAGED_REDIS_STALLED_INTERVAL_MS = 120_000
 export const MANAGED_REDIS_BULLMQ_WORKER_COUNT = 3
 export const MANAGED_REDIS_MONTHLY_COMMAND_BUDGET = 500_000
-const WEBHOOK_TRACK_RETRY_WORKER_CONCURRENCY = 2
-const FIX_GENERATE_WORKER_CONCURRENCY = 2
 
 function assertConfiguredWorkerDbPoolCapacity(): void {
   assertWorkerDbPoolCapacity(
