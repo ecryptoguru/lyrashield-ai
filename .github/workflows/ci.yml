@@ -311,7 +311,7 @@ jobs:
         run: pnpm db:generate
 
       - name: Test webhook catalog Prisma compatibility
-        if: needs.changes.outputs.database-services == 'true'
+        if: needs.changes.outputs.ops-tests == 'true' && needs.changes.outputs.database-services == 'true'
         run: node --test .github/scripts/tests/webhook-catalog.runtime.test.mjs .github/scripts/tests/webhook-queue.runtime.test.mjs
 
       - name: Create shadow database

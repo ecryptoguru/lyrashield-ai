@@ -107,7 +107,10 @@ done
 
 assert_step_gated "Start disposable PostgreSQL and Redis" database-services
 assert_step_gated "Generate Prisma Client" database-services
-assert_step_gated "Test webhook catalog Prisma compatibility" database-services
+if [[ "$(step_condition "Test webhook catalog Prisma compatibility")" != "needs.changes.outputs.ops-tests == 'true' && needs.changes.outputs.database-services == 'true'" ]]; then
+  echo "FAIL: webhook catalog compatibility test must require both ops selection and disposable services" >&2
+  failures=$((failures + 1))
+fi
 
 if (( failures > 0 )); then
   echo "CI database gating: $failures failure(s)" >&2
