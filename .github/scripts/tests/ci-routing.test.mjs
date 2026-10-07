@@ -349,7 +349,12 @@ test("ops and native service tests select their dependency closure without ordin
     [["README.md"], false],
     [["apps/web/src/app/page.tsx", "unknown.sh"], true],
   ]) {
-    assert.equal(runs("Test webhook catalog Prisma compatibility", paths), expected, String(paths))
+    const databaseServices = runs("Start disposable PostgreSQL and Redis", paths)
+    assert.equal(
+      runs("Test webhook catalog Prisma compatibility", paths),
+      expected && databaseServices,
+      String(paths)
+    )
     assert.equal(runs("Test Azure deployment and alert operations", paths), expected, String(paths))
   }
   assert.match(workflow, /LYRASHIELD_OPS_RUNTIME_ALREADY_VERIFIED: "1"/)

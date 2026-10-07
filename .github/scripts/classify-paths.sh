@@ -10,6 +10,8 @@
 #   desktop    — at least one file is under apps/desktop
 #   shared     — at least one file is in a shared location (packages/, root config, .github/)
 #   engine-worker-contract — worker/desktop/shared or unknown paths require the pinned contract gate
+#   database-tests — app/shared runtime changes require disposable PostgreSQL/Redis validation
+#   database-services — database-tests or a changed live DB/Redis fixture requires local services
 #   marketing-deploy — marketing source or a dependency that changes its Worker artifact
 #   azure-deploy — app or shared change requiring an Azure production release
 #
@@ -53,6 +55,7 @@ azure_deploy_pattern='^(apps/(web|worker)/|packages/|package\.json|pnpm-lock\.ya
 # Only explicitly covered tooling can skip runtime suites. Unknown and mixed
 # changes keep the existing broad classification and deployment decision.
 tooling_pattern='^(\.github/workflows/(ci|deploy-azure|deploy-azure-runtime|deploy-marketing|lighthouse-production|release-production)\.yml|\.github/scripts/(classify-paths|classify-main-change-gap)\.sh|\.github/scripts/(assert-named-vitest-tests\.mjs|migration-database-identity\.mjs|deploy-azure-(preflight|rollout)\.sh|promote-worker-vm\.sh|verify-engine-revision\.sh|verify-engine-worker-contract\.sh|validate-worker-provenance\.sh|azure_secret_set\.sh|webhook-claims-maintenance\.sh|webhook-claims-vm\.sh|validate-webhook-deploy-dispatch\.sh|verify-webhook-cutover(-preflight)?\.mjs)|\.github/scripts/tests/.*|ops/deployment/.*|ops/monitoring/.*|run-all-tests\.mjs)$'
+database_runtime_pattern='^(\.github/scripts/verify-webhook-cutover\.mjs|\.github/scripts/webhook-claims-vm\.sh|\.github/scripts/tests/webhook-(catalog|queue)\.runtime\.test\.mjs)$'
 tooling_only=true
 tooling_seen=false
 
@@ -68,6 +71,8 @@ marketing_tests=false
 motion_tests=false
 ops_tests=false
 engine_worker_contract=false
+database_tests=false
+database_runtime_seen=false
 
 while IFS= read -r f; do
   [ -z "$f" ] && continue
@@ -110,6 +115,7 @@ while IFS= read -r f; do
   if echo "$f" | grep -qE "$marketing_tests_pattern"; then marketing_tests=true; fi
   if echo "$f" | grep -qE "$motion_tests_pattern"; then motion_tests=true; fi
   if echo "$f" | grep -qE "$ops_tests_pattern"; then ops_tests=true; fi
+  if echo "$f" | grep -qE "$database_runtime_pattern"; then database_runtime_seen=true; fi
   if [[ "$path_classified" == "false" ]]; then
     shared=true
     unknown=true
@@ -153,6 +159,17 @@ if $force_all; then
   engine_worker_contract=true
 fi
 
+# Full database suites follow app/shared runtime changes. Only the webhook
+# verifier and queue-helper sources keep narrowly scoped live fixtures when
+# changed as tooling. Unknown paths fall back to shared and stay fail-closed.
+if [[ "$app" == "true" || ( "$shared" == "true" && "$tooling_only" == "false" ) ]]; then
+  database_tests=true
+fi
+database_services="$database_tests"
+if [[ "$database_runtime_seen" == "true" ]]; then
+  database_services=true
+fi
+
 if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
   {
     echo "docs-only=$docs_only"
@@ -167,6 +184,8 @@ if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
     echo "motion-tests=$motion_tests"
     echo "ops-tests=$ops_tests"
     echo "engine-worker-contract=$engine_worker_contract"
+    echo "database-tests=$database_tests"
+    echo "database-services=$database_services"
   } >> "$GITHUB_OUTPUT"
 else
   echo "docs-only=$docs_only"
@@ -181,4 +200,6 @@ else
   echo "motion-tests=$motion_tests"
   echo "ops-tests=$ops_tests"
   echo "engine-worker-contract=$engine_worker_contract"
+  echo "database-tests=$database_tests"
+  echo "database-services=$database_services"
 fi

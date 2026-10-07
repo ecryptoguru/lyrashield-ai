@@ -81,6 +81,8 @@ jobs:
       motion-tests: ${{ steps.classify.outputs.motion-tests }}
       ops-tests: ${{ steps.classify.outputs.ops-tests }}
       engine-worker-contract: ${{ steps.classify.outputs.engine-worker-contract }}
+      database-tests: ${{ steps.classify.outputs.database-tests }}
+      database-services: ${{ steps.classify.outputs.database-services }}
     steps:
       - name: Configure git default branch
         run: git config --global init.defaultBranch main
@@ -105,6 +107,10 @@ jobs:
       - name: Test path classifier
         shell: bash
         run: bash .github/scripts/tests/test-classify-paths.sh
+
+      - name: Test conditional database service gate
+        shell: bash
+        run: bash .github/scripts/tests/test-ci-database-gating.sh
 
       - name: Test Action WebMCP coverage fixture
         shell: bash
@@ -148,37 +154,16 @@ jobs:
   lint-and-typecheck:
     name: Lint, Typecheck, Test & Build
     needs: changes
+    # Keep the required aggregate context alive after failed/skipped dependencies.
+    # Early and late cancellation guards fail the aggregate instead of skipping green.
+    if: ${{ always() }}
     runs-on: ubuntu-latest
-
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_USER: lyrashield
-          POSTGRES_PASSWORD: lyrashield
-          POSTGRES_DB: lyrashield
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 5
-
-      redis:
-        image: redis:7-alpine
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 5
 
     env:
       # Vitest validates every database/Redis URL against the local disposable
-      # service before loading integration suites. Developer unit runs omit this.
-      LYRASHIELD_TEST_DB_DISPOSABLE: "1"
+      # services before loading integration suites. The marker is false when the
+      # classifier skips these services for a change set.
+      LYRASHIELD_TEST_DB_DISPOSABLE: ${{ needs.changes.outputs.database-services == 'true' && '1' || '0' }}
       DATABASE_URL: "postgresql://lyrashield:lyrashield@localhost:5432/lyrashield?schema=public"
       SHADOW_DATABASE_URL: "postgresql://lyrashield:lyrashield@localhost:5432/lyrashield_shadow?schema=public"
       # v16 2.2: getSystemPrisma() no longer silently falls back to the RLS
@@ -201,11 +186,94 @@ jobs:
       LYRASHIELD_REQUIRE_EMAIL_VERIFICATION: "0"
 
     steps:
+      - name: Fail closed when the workflow was cancelled before this gate started
+        if: ${{ cancelled() }}
+        run: |
+          echo "::error::Workflow was cancelled before the required CI aggregate could run."
+          exit 1
+
+      - name: Fail closed when changed-path classification is untrusted
+        if: ${{ always() }}
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          CLASSIFIED_DOCS_ONLY: ${{ needs.changes.outputs.docs-only }}
+          CLASSIFIED_TOOLING_ONLY: ${{ needs.changes.outputs.tooling-only }}
+          CLASSIFIED_MARKETING: ${{ needs.changes.outputs.marketing }}
+          CLASSIFIED_APP: ${{ needs.changes.outputs.app }}
+          CLASSIFIED_DESKTOP: ${{ needs.changes.outputs.desktop }}
+          CLASSIFIED_SHARED: ${{ needs.changes.outputs.shared }}
+          CLASSIFIED_MARKETING_DEPLOY: ${{ needs.changes.outputs.marketing-deploy }}
+          CLASSIFIED_AZURE_DEPLOY: ${{ needs.changes.outputs.azure-deploy }}
+          CLASSIFIED_MARKETING_TESTS: ${{ needs.changes.outputs.marketing-tests }}
+          CLASSIFIED_MOTION_TESTS: ${{ needs.changes.outputs.motion-tests }}
+          CLASSIFIED_OPS_TESTS: ${{ needs.changes.outputs.ops-tests }}
+          CLASSIFIED_ENGINE_WORKER_CONTRACT: ${{ needs.changes.outputs.engine-worker-contract }}
+          CLASSIFIED_DATABASE_TESTS: ${{ needs.changes.outputs.database-tests }}
+          CLASSIFIED_DATABASE_SERVICES: ${{ needs.changes.outputs.database-services }}
+        run: |
+          set -euo pipefail
+          if [[ "$CHANGES_RESULT" != success ]]; then
+            echo "::error::Changed-path classification did not succeed."
+            exit 1
+          fi
+          for flag in \
+            "$CLASSIFIED_DOCS_ONLY" "$CLASSIFIED_TOOLING_ONLY" "$CLASSIFIED_MARKETING" \
+            "$CLASSIFIED_APP" "$CLASSIFIED_DESKTOP" "$CLASSIFIED_SHARED" \
+            "$CLASSIFIED_MARKETING_DEPLOY" "$CLASSIFIED_AZURE_DEPLOY" \
+            "$CLASSIFIED_MARKETING_TESTS" "$CLASSIFIED_MOTION_TESTS" "$CLASSIFIED_OPS_TESTS" \
+            "$CLASSIFIED_ENGINE_WORKER_CONTRACT" "$CLASSIFIED_DATABASE_TESTS" \
+            "$CLASSIFIED_DATABASE_SERVICES"; do
+            if [[ "$flag" != true && "$flag" != false ]]; then
+              echo "::error::Changed-path classification omitted or corrupted a required routing flag."
+              exit 1
+            fi
+          done
+
       - name: Configure git default branch
         run: git config --global init.defaultBranch main
 
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Start disposable PostgreSQL and Redis
+        if: needs.changes.outputs.database-services == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --detach --name ci-postgres \
+            --env POSTGRES_USER=lyrashield \
+            --env POSTGRES_PASSWORD=lyrashield \
+            --env POSTGRES_DB=lyrashield \
+            --publish 5432:5432 \
+            --health-cmd 'pg_isready -U lyrashield -d lyrashield' \
+            --health-interval 5s --health-timeout 5s --health-retries 5 \
+            postgres:16-alpine
+          docker run --detach --name ci-redis \
+            --publish 6379:6379 \
+            --health-cmd 'redis-cli ping' \
+            --health-interval 5s --health-timeout 5s --health-retries 5 \
+            redis:7-alpine
+
+          deadline=$((SECONDS + 90))
+          for container in ci-postgres ci-redis; do
+            while true; do
+              status="$(docker inspect --format '{{.State.Health.Status}}' "$container")"
+              case "$status" in
+                healthy) break ;;
+                unhealthy)
+                  docker logs "$container"
+                  echo "::error::$container failed its health check."
+                  exit 1
+                  ;;
+              esac
+              if (( SECONDS >= deadline )); then
+                docker logs "$container"
+                echo "::error::Timed out waiting for $container health."
+                exit 1
+              fi
+              sleep 2
+            done
+          done
 
       - name: Setup pnpm
         uses: pnpm/setup@c9883cc79df532ad1a7b81bf9ab944ceb090d65c # v2.0.0
@@ -239,19 +307,19 @@ jobs:
         run: pnpm lint:copy-comma
 
       - name: Generate Prisma Client
-        if: needs.changes.outputs.docs-only != 'true'
+        if: needs.changes.outputs.database-services == 'true'
         run: pnpm db:generate
 
       - name: Test webhook catalog Prisma compatibility
-        if: needs.changes.outputs.ops-tests == 'true'
+        if: needs.changes.outputs.ops-tests == 'true' && needs.changes.outputs.database-services == 'true'
         run: node --test .github/scripts/tests/webhook-catalog.runtime.test.mjs .github/scripts/tests/webhook-queue.runtime.test.mjs
 
       - name: Create shadow database
-        if: needs.changes.outputs.app == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')
-        run: docker exec "${{ job.services.postgres.id }}" psql -U lyrashield -d postgres -c 'CREATE DATABASE lyrashield_shadow;'
+        if: needs.changes.outputs.database-tests == 'true'
+        run: docker exec "ci-postgres" psql -U lyrashield -d postgres -c 'CREATE DATABASE lyrashield_shadow;'
 
       - name: Migration drift check
-        if: needs.changes.outputs.app == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')
+        if: needs.changes.outputs.database-tests == 'true'
         run: |
           pnpm --filter @lyrashield/db exec prisma migrate diff \
             --from-migrations ./prisma/migrations \
@@ -259,18 +327,18 @@ jobs:
             --exit-code
 
       - name: Run database migrations
-        if: needs.changes.outputs.app == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')
+        if: needs.changes.outputs.database-tests == 'true'
         run: pnpm --filter @lyrashield/db migrate:deploy
 
       # These tests intentionally reject arbitrary DBs and use fixed local
       # database names as a destructive-action guard. Keep each fixture DB
       # disposable and migrate it from the checked-out schema.
       - name: Create isolated product regression databases
-        if: needs.changes.outputs.app == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')
+        if: needs.changes.outputs.database-tests == 'true'
         shell: bash
         run: |
           set -euo pipefail
-          docker exec "${{ job.services.postgres.id }}" psql -U lyrashield -d postgres -v ON_ERROR_STOP=1 \
+          docker exec "ci-postgres" psql -U lyrashield -d postgres -v ON_ERROR_STOP=1 \
             -c 'CREATE DATABASE v15_product' \
             -c 'CREATE DATABASE lyra_v18_ci' \
             -c 'CREATE DATABASE v22_agent_fk_ci'
@@ -286,10 +354,10 @@ jobs:
       # named constraint, while NULL, zero, and a positive decimal remain valid.
       # All rows are created inside one transaction and rolled back.
       - name: Assert policy budgets are nonnegative
-        if: needs.changes.outputs.app == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')
+        if: needs.changes.outputs.database-tests == 'true'
         shell: bash
         run: |
-          docker exec "${{ job.services.postgres.id }}" psql -U lyrashield -d lyrashield -v ON_ERROR_STOP=1 \
+          docker exec "ci-postgres" psql -U lyrashield -d lyrashield -v ON_ERROR_STOP=1 \
             -c "BEGIN" \
             -c "INSERT INTO \"Workspace\" (id, name, slug, \"updatedAt\") VALUES ('ws-budget-assert-ci', 'Budget Assert CI', 'budget-assert-ci', NOW())" \
             -c "INSERT INTO \"Policy\" (id, \"workspaceId\", name, \"maxBudgetUsd\", \"updatedAt\") VALUES ('policy-null-ci', 'ws-budget-assert-ci', 'null budget', NULL, NOW())" \
@@ -299,10 +367,10 @@ jobs:
             -c "ROLLBACK"
 
       - name: Use a restricted RLS runtime role
-        if: needs.changes.outputs.app == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')
+        if: needs.changes.outputs.database-tests == 'true'
         shell: bash
         run: |
-          docker exec "${{ job.services.postgres.id }}" psql -U lyrashield -d lyrashield -v ON_ERROR_STOP=1 \
+          docker exec "ci-postgres" psql -U lyrashield -d lyrashield -v ON_ERROR_STOP=1 \
             -c "CREATE ROLE app_runtime_ci LOGIN PASSWORD 'runtime-ci-only' NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS" \
             -c "GRANT CONNECT ON DATABASE lyrashield TO app_runtime_ci" \
             -c "GRANT USAGE ON SCHEMA public, app TO app_runtime_ci" \
@@ -312,14 +380,14 @@ jobs:
           echo 'RLS_RUNTIME_DATABASE_URL=postgresql://app_runtime_ci:runtime-ci-only@localhost:5432/lyrashield?schema=public' >> "$GITHUB_ENV"
 
       - name: Grant restricted runtime access to regression databases
-        if: needs.changes.outputs.app == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')
+        if: needs.changes.outputs.database-tests == 'true'
         shell: bash
         run: |
           set -euo pipefail
           for database in v15_product lyra_v18_ci v22_agent_fk_ci; do
-            docker exec "${{ job.services.postgres.id }}" psql -U lyrashield -d postgres -v ON_ERROR_STOP=1 \
+            docker exec "ci-postgres" psql -U lyrashield -d postgres -v ON_ERROR_STOP=1 \
               -c "GRANT CONNECT ON DATABASE ${database} TO app_runtime_ci"
-            docker exec "${{ job.services.postgres.id }}" psql -U lyrashield -d "$database" -v ON_ERROR_STOP=1 \
+            docker exec "ci-postgres" psql -U lyrashield -d "$database" -v ON_ERROR_STOP=1 \
               -c "GRANT USAGE ON SCHEMA public, app TO app_runtime_ci" \
               -c "DO \$\$ DECLARE item record; BEGIN FOR item IN SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename NOT IN ('PlatformAdminElevation', 'PlatformAdminChallengeLimit', 'PlatformAdminAudit', 'billing_reconciliation_state') LOOP EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.%I TO app_runtime_ci', item.tablename); END LOOP; FOR item IN SELECT sequencename FROM pg_sequences WHERE schemaname = 'public' LOOP EXECUTE format('GRANT USAGE, SELECT ON SEQUENCE public.%I TO app_runtime_ci', item.sequencename); END LOOP; END \$\$;" \
               -c "GRANT EXECUTE ON FUNCTION app.enqueue_artifact_deletion_task(text, text, text) TO app_runtime_ci" \
@@ -327,18 +395,18 @@ jobs:
           done
 
       - name: Size lint ratchet
-        if: needs.changes.outputs.app == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true') || needs.changes.outputs.marketing == 'true'
+        if: needs.changes.outputs.database-tests == 'true' || needs.changes.outputs.marketing == 'true'
         run: pnpm lint:size
 
       - name: Smoke-test production-equivalent account and workspace grants
-        if: needs.changes.outputs.app == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')
+        if: needs.changes.outputs.database-tests == 'true'
         shell: bash
         run: |
           set -euo pipefail
-          docker exec -e PGPASSWORD=runtime-ci-only "${{ job.services.postgres.id }}" \
+          docker exec -e PGPASSWORD=runtime-ci-only "ci-postgres" \
             psql -h 127.0.0.1 -U app_runtime_ci -d lyrashield -v ON_ERROR_STOP=1 \
             -c "DO \$\$ DECLARE item record; BEGIN FOR item IN SELECT DISTINCT c.table_name FROM information_schema.columns c JOIN information_schema.tables t ON t.table_schema = c.table_schema AND t.table_name = c.table_name WHERE c.table_schema = 'public' AND t.table_type = 'BASE TABLE' AND c.column_name IN ('workspaceId', 'accountId') LOOP EXECUTE format('SELECT 1 FROM public.%I LIMIT 0', item.table_name); RAISE NOTICE 'runtime SELECT smoke passed for %', item.table_name; END LOOP; END \$\$;"
-          docker exec -e PGPASSWORD=runtime-ci-only "${{ job.services.postgres.id }}" \
+          docker exec -e PGPASSWORD=runtime-ci-only "ci-postgres" \
             psql -h 127.0.0.1 -U app_runtime_ci -d lyrashield -v ON_ERROR_STOP=1 \
             -c "DO \$\$ BEGIN IF has_table_privilege(current_user, 'public.billing_reconciliation_state', 'SELECT') OR has_table_privilege(current_user, 'public.billing_reconciliation_state', 'INSERT') OR has_table_privilege(current_user, 'public.billing_reconciliation_state', 'UPDATE') OR has_table_privilege(current_user, 'public.billing_reconciliation_state', 'DELETE') THEN RAISE EXCEPTION 'app_runtime_ci must not access billing_reconciliation_state'; END IF; END \$\$;"
 
@@ -358,7 +426,7 @@ jobs:
           pnpm lint:ratchet-baselines
 
       - name: Lint
-        if: needs.changes.outputs.app == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')
+        if: needs.changes.outputs.database-tests == 'true'
         run: pnpm lint
 
       - name: Lint marketing
@@ -370,23 +438,23 @@ jobs:
         run: pnpm --filter @lyrashield/marketing-motion lint
 
       - name: Typecheck
-        if: needs.changes.outputs.app == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')
+        if: needs.changes.outputs.database-tests == 'true'
         run: pnpm typecheck
 
       - name: Typecheck web tests
-        if: needs.changes.outputs.app == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')
+        if: needs.changes.outputs.database-tests == 'true'
         run: pnpm typecheck:web-tests
 
       - name: Typecheck browser fixtures
-        if: needs.changes.outputs.app == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')
+        if: needs.changes.outputs.database-tests == 'true'
         run: pnpm typecheck:e2e
 
       - name: Typecheck portable browser harness
-        if: needs.changes.outputs.app == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')
+        if: needs.changes.outputs.database-tests == 'true'
         run: pnpm typecheck:browser-harness
 
       - name: Lint portable browser harness
-        if: needs.changes.outputs.app == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')
+        if: needs.changes.outputs.database-tests == 'true'
         run: pnpm lint:browser-harness
 
       - name: Typecheck marketing
@@ -436,9 +504,7 @@ jobs:
         # the disposable main database. Fixed-name regressions below use their
         # own migrated databases because their guards require those names.
         env:
-          APP_CHANGED: ${{ needs.changes.outputs.app }}
-          SHARED_CHANGED: ${{ needs.changes.outputs.shared }}
-          TOOLING_ONLY: ${{ needs.changes.outputs.tooling-only }}
+          DATABASE_TESTS: ${{ needs.changes.outputs.database-tests }}
           MARKETING_TESTS: ${{ needs.changes.outputs.marketing-tests }}
           MOTION_TESTS: ${{ needs.changes.outputs.motion-tests }}
           OPS_TESTS: ${{ needs.changes.outputs.ops-tests }}
@@ -447,7 +513,7 @@ jobs:
         run: |
           set -euo pipefail
           suites=()
-          if [ "$TOOLING_ONLY" != true ] && { [ "$APP_CHANGED" = true ] || [ "$SHARED_CHANGED" = true ]; }; then
+          if [ "$DATABASE_TESTS" = true ]; then
             suites+=(core)
           fi
           if [ "$OPS_TESTS" = true ]; then suites+=(ops); fi
@@ -456,7 +522,7 @@ jobs:
           LYRASHIELD_TEST_SUITES="$(IFS=,; echo "${suites[*]}")" pnpm test
 
       - name: Prove metering and queue invariants with disposable services
-        if: needs.changes.outputs.app == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')
+        if: needs.changes.outputs.database-tests == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -469,7 +535,7 @@ jobs:
       # provisioned above is exactly that. They run in a dedicated invocation
       # because the suite-wide DATABASE_URL is the owner role.
       - name: Trial integration tests (restricted runtime role)
-        if: needs.changes.outputs.app == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')
+        if: needs.changes.outputs.database-tests == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -486,7 +552,7 @@ jobs:
             'rejects a foreign owner before execution'
 
       - name: Agent operation workspace foreign key test
-        if: needs.changes.outputs.app == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')
+        if: needs.changes.outputs.database-tests == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -505,7 +571,7 @@ jobs:
       # still reject non-local databases; report checks make an accidental
       # Vitest skip fail the job instead of looking green.
       - name: Run required PostgreSQL regression tests
-        if: needs.changes.outputs.app == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')
+        if: needs.changes.outputs.database-tests == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -583,7 +649,7 @@ jobs:
         run: sh ops/worker/capture-stop-provenance.test.sh
 
       - name: Build app and shared packages
-        if: needs.changes.outputs.app == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')
+        if: needs.changes.outputs.database-tests == 'true'
         run: pnpm build
 
       - name: Build marketing
@@ -654,7 +720,7 @@ jobs:
           if-no-files-found: warn
 
       - name: Browser E2E (includes functional mobile shell at 390px)
-        if: needs.changes.outputs.app == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')
+        if: needs.changes.outputs.database-tests == 'true'
         timeout-minutes: 15
         # DATABASE_URL: the NOBYPASSRLS runtime role — the app under test runs
         # with RLS enforced, so e2e exercises the real RLS posture.
@@ -672,9 +738,19 @@ jobs:
             pnpm exec playwright test
 
       - name: Portable browser harness
-        if: needs.changes.outputs.app == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')
+        if: needs.changes.outputs.database-tests == 'true'
         timeout-minutes: 10
         run: pnpm test:browser-harness
+
+      - name: Remove disposable database containers
+        if: ${{ always() }}
+        run: docker rm --force ci-postgres ci-redis >/dev/null 2>&1 || true
+
+      - name: Fail closed when cancelled during required CI checks
+        if: ${{ cancelled() }}
+        run: |
+          echo "::error::Workflow was cancelled while required CI checks were running."
+          exit 1
 
   engine-worker-contract:
     name: Pinned Engine / Worker Contract
