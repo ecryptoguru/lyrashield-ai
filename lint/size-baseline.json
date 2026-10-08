@@ -427,18 +427,13 @@
     },
     "apps/web/src/app/onboarding/onboarding-wizard.tsx|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 61,
-      "maxExcess": 61
-    },
-    "apps/web/src/app/onboarding/use-onboarding-scan.ts|max-lines": {
-      "count": 1,
-      "totalExcess": 31,
-      "maxExcess": 31
+      "totalExcess": 58,
+      "maxExcess": 58
     },
     "apps/web/src/app/onboarding/use-onboarding-scan.ts|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 24,
-      "maxExcess": 24
+      "totalExcess": 10,
+      "maxExcess": 10
     },
     "apps/web/src/app/reports/shared/[id]/launch-report-view.tsx|max-lines-per-function": {
       "count": 1,

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { z } from "zod"
-import { apiGet, apiPost, ApiError } from "@/lib/api-client"
+import { apiPost, ApiError } from "@/lib/api-client"
 import { track } from "@/lib/analytics"
 import { idSchema } from "@/lib/api-schemas"
 import { presentOperationFailure } from "@/lib/operation-failure"
@@ -11,12 +11,14 @@ import {
   readPendingScanSubmission,
   recordAcceptedScan,
   runScanSubmission,
-  scanOperationStatusSchema,
-  scanRequestIdentity,
   type PendingScanSubmission,
   type ScanOperationStatus,
   type ScanSubmissionScope,
 } from "@/lib/scan-submission"
+import {
+  checkPendingScanOperation,
+  deriveOnboardingScanRecovery,
+} from "./onboarding-scan-recovery-state"
 import { resolveScanSubmissionFailure } from "../(dashboard)/dashboard/scans/scan-submission-failure"
 import {
   ensureOnboardingTrialStarted,
@@ -101,70 +103,10 @@ function presentFailure(
 }
 
 /**
- * Reconcile a pending agent operation. `workspaceId` is passed in rather than
- * read from `ctx.data`, because the start action may have created the workspace
- * in this same call and the render's `data` is not updated yet (P1-1).
+ * Persist onboarding completion and hand the user off to their started scan.
+ * Called only after a scan has been accepted, so the wizard's last durable
+ * write is the one that closes the flow.
  */
-async function checkPendingScanOperation(
-  ctx: ScanFlowContext,
-  submission: PendingScanSubmission,
-  workspaceId = ctx.data.workspaceId
-) {
-  if (!submission.operationId || !workspaceId) return
-  const scope = {
-    principalId: ctx.principalId,
-    workspaceId,
-    surface: "onboarding" as const,
-  }
-  ctx.setCheckingScanOperation(true)
-  ctx.setScanRecoveryError(null)
-  try {
-    const status = await apiGet(
-      `/api/agent-operations/${encodeURIComponent(submission.operationId)}?workspaceId=${encodeURIComponent(workspaceId)}`,
-      { schema: scanOperationStatusSchema }
-    )
-    ctx.setScanOperationStatus(status)
-    if (status.status === "COMPLETED" && status.resultLocation) {
-      const accepted = {
-        ...submission,
-        state: "accepted" as const,
-        scanId: status.resultLocation,
-        operationId: status.operationId,
-      }
-      ctx.setPendingScanSubmission(accepted)
-      try {
-        recordAcceptedScan(
-          scope,
-          submission.idempotencyKey,
-          status.resultLocation,
-          status.operationId
-        )
-      } catch (cause) {
-        ctx.setScanRecoveryUnavailable(true)
-        ctx.setScanRecoveryError(
-          cause instanceof Error
-            ? cause.message
-            : "Scan accepted; recovery details could not be saved."
-        )
-      }
-    } else if (status.recovery === "retry_new_key") {
-      ctx.setScanRecoveryError(
-        "The previous attempt was not submitted. You can start a new attempt."
-      )
-    } else {
-      ctx.setScanRecoveryError(
-        "The previous scan start is still unresolved. Check its status again."
-      )
-    }
-  } catch (cause) {
-    ctx.setScanRecoveryError(
-      cause instanceof Error ? cause.message : "Could not check the scan status."
-    )
-  } finally {
-    ctx.setCheckingScanOperation(false)
-  }
-}
-
 async function finishAcceptedOnboarding(ctx: ScanFlowContext, scanId: string, goal: string) {
   ctx.setLoading(true)
   ctx.setError(null)
@@ -652,31 +594,14 @@ export function useOnboardingScan({
     }
   }, [principalId, data.workspaceId])
 
-  const scanSubmissionScope: ScanSubmissionScope | null = data.workspaceId
-    ? { principalId, workspaceId: data.workspaceId, surface: "onboarding" }
-    : null
-  const currentScanRequest =
-    scanSubmissionScope && data.targetId && selectedReview
-      ? {
-          workspaceId: data.workspaceId,
-          targetId: data.targetId,
-          goal: selectedReview.goal,
-          mode: selectedReview.mode,
-        }
-      : null
-  const pendingScanMatchesCurrent = Boolean(
-    pendingScanSubmission &&
-    pendingScanSubmission.principalId === principalId &&
-    pendingScanSubmission.workspaceId === data.workspaceId &&
-    currentScanRequest &&
-    pendingScanSubmission.requestIdentity === scanRequestIdentity(currentScanRequest)
-  )
-  const selectedEligibilityKey =
-    data.targetId && selectedReview
-      ? JSON.stringify([data.targetId, selectedReview.goal, selectedReview.mode])
-      : null
-  const visibleEligibility =
-    checkedEligibilityKey === selectedEligibilityKey ? scanEligibility : { status: "idle" as const }
+  const { pendingScanMatchesCurrent, visibleEligibility } = deriveOnboardingScanRecovery({
+    principalId,
+    data,
+    selectedReview,
+    pendingScanSubmission,
+    checkedEligibilityKey,
+    scanEligibility,
+  })
 
   const createTargetAndStart = (
     startNewScan = false,
