@@ -6,8 +6,7 @@
     "baseUrl": ".",
     "paths": {
       "@components/*": ["src/components/*"],
-      "@layouts/*": ["src/layouts/*"],
-      "@utils/*": ["src/utils/*"]
+      "@layouts/*": ["src/layouts/*"]
     }
   },
   "include": ["src", ".astro/types.d.ts", "worker-configuration.d.ts"],

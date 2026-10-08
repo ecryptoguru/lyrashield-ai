@@ -36,7 +36,6 @@ tokio = { version = "1", features = ["process", "io-util", "rt-multi-thread", "m
 
 # Utilities
 which = "7"
-semver = "1"
 thiserror = "2"
 chrono = { version = "0.4", features = ["serde"] }
 dirs = "5"

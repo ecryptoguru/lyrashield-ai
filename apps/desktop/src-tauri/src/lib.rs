@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 mod api;
 mod byok;
 #[macro_use]

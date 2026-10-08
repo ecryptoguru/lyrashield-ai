@@ -431,12 +431,6 @@ pub fn resolve_byok_env() -> Result<HashMap<String, String>, String> {
     resolve_provider_env(selection, &chatgpt, azure.as_ref())
 }
 
-/// Ensure the selected BYOK provider actually resolves — used to fail before
-/// scan creation.
-pub fn require_byok_ready() -> Result<(), String> {
-    resolve_byok_env().map(|_| ())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

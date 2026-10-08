@@ -891,7 +891,7 @@ jobs:
 
       - name: Clippy
         working-directory: apps/desktop/src-tauri
-        run: cargo clippy -- -D warnings
+        run: cargo clippy --locked --all-targets -- -D warnings
 
       - name: Test (includes golden-vector parity)
         working-directory: apps/desktop/src-tauri
