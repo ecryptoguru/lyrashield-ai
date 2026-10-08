@@ -1033,10 +1033,17 @@ it("reports an invalid URL without creating a workspace (P1-1)", async () => {
   tree().find((element) => element.props.id === "url-input")!.props.onChange!({
     target: { value: "https://example.com" },
   })
+  // W2-02 prefills the name from the URL host on URL change, so the name must
+  // be cleared afterwards — otherwise the form really is submittable and this
+  // test would be asserting on a valid submit. Cleared last, the prefill does
+  // not fire again and the form is genuinely incomplete.
+  tree().find((element) => element.props.id === "url-name")!.props.onChange!({
+    target: { value: "" },
+  })
   tree().find((element) => element.props.id === "ownership-check")!.props.onChange!({
     target: { checked: true },
   })
-  // No name entered: the form is not submittable and no workspace is created.
+  // The name is empty: the form is not submittable and no workspace is created.
   await tree().find((element) => element.type === "form")!.props.onSubmit!({
     preventDefault: vi.fn(),
   })

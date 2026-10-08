@@ -25,12 +25,11 @@ import {
   readScanEligibility,
   type OnboardingTrialStartState,
 } from "./onboarding-scan-eligibility"
-import { TARGET_SINGULAR } from "@/lib/terminology"
 import type { ManualScanOption } from "@/lib/scan-presets"
+import { preflightScanStart } from "./onboarding-scan-preflight"
 import {
   buildUrlTargetPayload,
   ensureOnboardingTargetId,
-  pathNeedsRepo,
   type OnboardingPath,
 } from "./onboarding-flow.utils"
 import {
@@ -113,7 +112,16 @@ async function finishAcceptedOnboarding(ctx: ScanFlowContext, scanId: string, go
   ctx.setFailure(null)
   ctx.setScanRecoveryError(null)
   try {
-    await ctx.persist({ currentStep: 4, completed: true, skipped: false, selectedGoal: goal })
+    // Carry the workspace the scan just ran against. The onboarding PATCH
+    // response is the wizard's single source of truth for `data`, and a
+    // workspace-less completion write would drop an id the user just created.
+    await ctx.persist({
+      workspaceId: ctx.data.workspaceId ?? undefined,
+      currentStep: 4,
+      completed: true,
+      skipped: false,
+      selectedGoal: goal,
+    })
   } catch {
     ctx.setScanRecoveryError("Your scan started; onboarding could not be saved.")
     ctx.setLoading(false)
@@ -314,53 +322,17 @@ async function runCreateTargetAndStart(
   skipEligibilityCheck = false,
   startTrial = false
 ) {
-  // The workspace is normally created when the URL/API form is submitted, but
-  // a user can reach this action without that having happened — a restored
-  // session, a stale persisted step or a direct start. Create it here rather
-  // than dead-ending on "Workspace is required." (P1-1). The duplicate-submit
-  // lock below covers a double tap.
-  let workspaceId = ctx.data.workspaceId
-  if (!workspaceId) {
-    try {
-      workspaceId = await ctx.ensureWorkspace()
-    } catch (cause) {
-      ctx.setError(cause instanceof Error ? cause.message : "Could not prepare your workspace.")
-      return
-    }
-  }
-  // A retry after scan admission fails reuses the target persisted by the
-  // first attempt — but only while it still describes the source the wizard
-  // shows. New flows create it here so Back -> Continue cannot orphan
-  // a duplicate before the final action, and an edited URL / different repo
-  // / different path must never silently scan the previously stored target.
-  const hasExistingTarget = ctx.persistedTargetReusable
-  // A selected repo can only come from the repo-select step — treat it as
-  // GitHub evidence even when the chooser path was lost across the OAuth
-  // install redirect (OnboardingState persists the step, not the path).
-  const needsRepo = pathNeedsRepo(ctx.path) || Boolean(ctx.selectedRepo)
-  if (!hasExistingTarget && needsRepo && !ctx.selectedRepo) {
-    ctx.setError("Workspace and repository are required.")
+  // Validate everything the user can see before creating anything, then resolve
+  // the workspace. The order is the fix (P1-1): an invalid submit must report
+  // its own problem, not provision a workspace first. A retry that reuses the
+  // persisted target skips the source checks — that target already exists, so
+  // there is nothing left to validate.
+  const preflight = await preflightScanStart(ctx)
+  if (!preflight.ok) {
+    ctx.setError(preflight.error)
     return
   }
-  if (
-    !hasExistingTarget &&
-    !needsRepo &&
-    !buildUrlTargetPayload({
-      workspaceId,
-      path: ctx.path,
-      name: ctx.productName,
-      url: ctx.urlForm.url,
-      environment: ctx.environment,
-      ownershipAttested: ctx.urlForm.ownershipAttested,
-    })
-  ) {
-    ctx.setError("Add a valid target and confirm ownership to continue.")
-    return
-  }
-  if (!hasExistingTarget && !ctx.productName.trim()) {
-    ctx.setError(`Name your ${TARGET_SINGULAR.toLowerCase()} to continue.`)
-    return
-  }
+  const { workspaceId, hasExistingTarget, needsRepo } = preflight
   if (!ctx.selectedReview) {
     ctx.setError("Choose a goal for this review.")
     return
@@ -376,8 +348,13 @@ async function runCreateTargetAndStart(
     try {
       const targetId = await ensureTargetId(ctx, workspaceId, needsRepo, hasExistingTarget)
       ctx.onTargetBound(needsRepo)
-      if (ctx.data.targetId !== targetId || ctx.data.selectedGoal !== selectedReview.goal) {
+      if (
+        ctx.data.targetId !== targetId ||
+        ctx.data.selectedGoal !== selectedReview.goal ||
+        ctx.data.workspaceId !== workspaceId
+      ) {
         await ctx.persist({
+          workspaceId,
           targetId,
           selectedGoal: selectedReview.goal,
           currentStep: 3,

@@ -2,7 +2,9 @@ import { useRef } from "react"
 import { track } from "@/lib/analytics"
 import {
   buildUrlTargetPayload,
+  isUrlTargetPath,
   nextStepForPath,
+  urlTargetFieldError,
   type OnboardingPath,
 } from "./onboarding-flow.utils"
 import type { OnboardingFailureState } from "./onboarding-wizard-model"
@@ -54,16 +56,18 @@ export function useOnboardingStepActions({
     if (submitting.current) return
     // The visible input is validated before the workspace call, so an
     // incomplete form reports its own problem and never creates a workspace
-    // the user did not get past the first step for. Message selection keeps the
-    // original precedence: an unattested form always asks for attestation.
-    if (path !== "url" && path !== "api") return
-    const missingSource = !productName.trim() || !urlForm.url.trim()
-    if (missingSource || !urlForm.ownershipAttested) {
-      setError(
-        urlForm.ownershipAttested
-          ? "Enter a name and a valid URL to continue."
-          : "Confirm you own or are authorized to scan this target."
-      )
+    // the user did not get past the first step for. The rules and their
+    // precedence live in onboarding-scan-preflight, the same ones the start
+    // action applies, so the two surfaces cannot drift (P1-1).
+    if (!isUrlTargetPath(path)) return
+    const fieldError = urlTargetFieldError({
+      path,
+      name: productName,
+      url: urlForm.url,
+      ownershipAttested: urlForm.ownershipAttested,
+    })
+    if (fieldError) {
+      setError(fieldError)
       return
     }
     submitting.current = true

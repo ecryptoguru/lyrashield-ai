@@ -179,6 +179,40 @@ export function buildUrlTargetPayload(input: {
   }
 }
 
+/**
+ * Which onboarding paths take their source from the URL / API form. The GitHub
+ * path names a repository instead, so the field rules below abstain for it.
+ */
+export function isUrlTargetPath(path: OnboardingPath): boolean {
+  return path === "url" || path === "api"
+}
+
+/**
+ * The URL / API form's own input rules, answered without a workspace.
+ *
+ * `buildUrlTargetPayload` needs a workspace id, so it can never answer "is what
+ * the user typed submittable?" before the workspace exists. That question lives
+ * here instead. Both surfaces that gate on this form — the Continue button on
+ * the entry step and the start action on the details step — read their message
+ * from here, so the two cannot drift (P1-1). Precedence matches
+ * `buildUrlTargetPayload`: a missing name or URL outranks missing attestation.
+ */
+export function urlTargetFieldError(input: {
+  path: OnboardingPath
+  name: string
+  url: string
+  ownershipAttested: boolean
+}): string | null {
+  if (!isUrlTargetPath(input.path)) return null
+  if (!input.name.trim() || !input.url.trim()) {
+    return "Enter a name and a valid URL to continue."
+  }
+  if (!input.ownershipAttested) {
+    return "Confirm you own or are authorized to scan this target."
+  }
+  return null
+}
+
 /** Human label for the chosen path, used in the step-3 heading and hints. */
 export function pathLabel(path: OnboardingPath): string {
   switch (path) {
