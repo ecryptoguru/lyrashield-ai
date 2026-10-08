@@ -1,10 +1,11 @@
 import { renderToStaticMarkup } from "react-dom/server"
+import type { ReactNode } from "react"
 import { describe, expect, it, vi } from "vitest"
 
 vi.mock("next/link", async () => {
   const React = await vi.importActual<typeof import("react")>("react")
   return {
-    default: ({ href, children }: { href: string; children: React.ReactNode }) =>
+    default: ({ href, children }: { href: string; children: ReactNode }) =>
       React.createElement("a", { href }, children),
   }
 })

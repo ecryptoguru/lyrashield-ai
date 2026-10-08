@@ -304,9 +304,12 @@ export function useScanDetailPolling(initialScan: ScanData, initialFindings: Fin
   /**
    * Apply the authoritative result of a cancellation. Only the status and end
    * time the server returned are written; nothing is inferred from the click.
-   * The poll loop sees a terminal status and stops on its own.
+   * Any poll already in flight is aborted first, so a response that was issued
+   * before the cancel cannot write the previous status back over it. The poll
+   * loop sees a terminal status and stops on its own.
    */
   function applyCancelledScan(status: string, endedAt: string | null) {
+    activeRequestRef.current?.controller.abort()
     setScan((current) => ({ ...current, status, endedAt }))
   }
 
