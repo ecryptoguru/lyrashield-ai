@@ -320,11 +320,6 @@
       "totalExcess": 100,
       "maxExcess": 100
     },
-    "apps/web/src/app/affiliates/apply/apply-form.tsx|max-lines-per-function": {
-      "count": 1,
-      "totalExcess": 89,
-      "maxExcess": 89
-    },
     "apps/web/src/app/affiliates/page.tsx|max-lines-per-function": {
       "count": 1,
       "totalExcess": 17,
