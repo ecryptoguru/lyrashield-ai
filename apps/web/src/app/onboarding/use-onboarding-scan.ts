@@ -100,18 +100,27 @@ function presentFailure(
   ctx.setError(friendlyTargetError(cause))
 }
 
-async function checkPendingScanOperation(ctx: ScanFlowContext, submission: PendingScanSubmission) {
-  if (!submission.operationId || !ctx.data.workspaceId) return
+/**
+ * Reconcile a pending agent operation. `workspaceId` is passed in rather than
+ * read from `ctx.data`, because the start action may have created the workspace
+ * in this same call and the render's `data` is not updated yet (P1-1).
+ */
+async function checkPendingScanOperation(
+  ctx: ScanFlowContext,
+  submission: PendingScanSubmission,
+  workspaceId = ctx.data.workspaceId
+) {
+  if (!submission.operationId || !workspaceId) return
   const scope = {
     principalId: ctx.principalId,
-    workspaceId: ctx.data.workspaceId,
+    workspaceId,
     surface: "onboarding" as const,
   }
   ctx.setCheckingScanOperation(true)
   ctx.setScanRecoveryError(null)
   try {
     const status = await apiGet(
-      `/api/agent-operations/${encodeURIComponent(submission.operationId)}?workspaceId=${encodeURIComponent(ctx.data.workspaceId)}`,
+      `/api/agent-operations/${encodeURIComponent(submission.operationId)}?workspaceId=${encodeURIComponent(workspaceId)}`,
       { schema: scanOperationStatusSchema }
     )
     ctx.setScanOperationStatus(status)
@@ -481,7 +490,7 @@ async function runCreateTargetAndStart(
         return
       }
       if (submission.operationId) {
-        await checkPendingScanOperation(ctx, submission)
+        await checkPendingScanOperation(ctx, submission, workspaceId)
         return
       }
 
