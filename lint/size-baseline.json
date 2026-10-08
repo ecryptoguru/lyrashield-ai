@@ -327,8 +327,8 @@
     },
     "apps/web/src/app/affiliates/page.tsx|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 18,
-      "maxExcess": 18
+      "totalExcess": 17,
+      "maxExcess": 17
     },
     "apps/web/src/app/affiliates/payouts/page.tsx|max-lines-per-function": {
       "count": 1,
@@ -399,11 +399,6 @@
       "count": 1,
       "totalExcess": 50,
       "maxExcess": 50
-    },
-    "apps/web/src/app/billing/checkout/route.ts|max-lines-per-function": {
-      "count": 1,
-      "totalExcess": 11,
-      "maxExcess": 11
     },
     "apps/web/src/app/billing/webhook/route.ts|max-lines-per-function": {
       "count": 1,
@@ -517,8 +512,8 @@
     },
     "apps/web/src/proxy.ts|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 17,
-      "maxExcess": 17
+      "totalExcess": 12,
+      "maxExcess": 12
     },
     "apps/worker/src/engine/deterministic-retest.ts|max-lines-per-function": {
       "count": 1,

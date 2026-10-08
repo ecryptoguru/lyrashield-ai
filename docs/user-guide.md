@@ -436,7 +436,15 @@ LyraShield Cloud offers a 7-day free trial: 60 agent-minutes, Safe, Quick and St
 
 ### 20.3 Affiliate program
 
-- Apply at `/affiliates/apply` (requires a LyraShield account).
+New affiliate applications are not open yet. The program is frozen for launch while the review and
+payout controls are finished. `/affiliates/apply` says so and the apply route accepts no new
+application, so no new Affiliate row is created.
+
+Existing affiliates and existing applications are unaffected. An approved affiliate keeps the
+dashboard, the referral links and the promo code. Commission, refund and clawback handling continue
+to run.
+
+- Apply at `/affiliates/apply` once the program opens (requires a LyraShield account).
 - Manual approval by the LyraShield team.
 - Approved affiliates receive a referral link and a promo code.
 
@@ -446,7 +454,8 @@ Commission:
 - 20% one-time on Local licenses.
 - No commission on minute packs, trials or self-referrals.
 
-Attribution uses a last-click cookie (60 days), with a promo code override.
+Attribution for existing referrals uses the stored last-click record (60 days), with a promo code
+override. New referral clicks are not recorded while applications are frozen.
 
 Dashboard at `/affiliates/dashboard` shows clicks, signups, conversions, commissions and payouts.
 

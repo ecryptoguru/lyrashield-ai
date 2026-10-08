@@ -2,11 +2,10 @@ import Link from "next/link"
 import { redirect } from "next/navigation"
 import { getCachedSession } from "@/lib/cache"
 import { prisma } from "@lyrashield/db"
-import { AffiliateApplyForm } from "./apply-form"
 import { humanizeToken } from "@/lib/labels"
 
 export const metadata = {
-  title: "Apply — Affiliate Program — LyraShield AI",
+  title: "Affiliate Program — Applications Open Soon — LyraShield AI",
 }
 
 export default async function AffiliateApplyPage() {
@@ -39,13 +38,20 @@ export default async function AffiliateApplyPage() {
     )
   }
 
+  // New admission is frozen for launch. The page stays reachable so an existing
+  // applicant or an approved affiliate still resolves above. It says plainly
+  // that applications are not open instead of collecting a form nothing can act on.
   return (
     <div className="mx-auto max-w-2xl px-4 py-16">
-      <h1 className="mb-2 text-3xl font-bold">Affiliate Application</h1>
-      <p className="mb-8 text-muted-foreground">
-        Tell us about your audience and how you plan to promote LyraShield AI.
+      <h1 className="mb-2 text-3xl font-bold">Affiliate applications open soon</h1>
+      <p className="text-muted-foreground">
+        The LyraShield AI affiliate program is not accepting new applications yet. We are finishing
+        the review and payout controls that have to be in place before the program opens. Check back
+        here for the opening date.
       </p>
-      <AffiliateApplyForm userId={session.userId} />
+      <Link href="/" className="mt-6 inline-block text-primary hover:underline">
+        Back to home
+      </Link>
     </div>
   )
 }
