@@ -8,6 +8,7 @@ import { apiGet, apiGetConditional, apiGetPaginated } from "@/lib/api-client"
 import { isActiveScan } from "@/lib/scan-presentation"
 import type { FindingItem, ScanData, ScanPollData } from "./scan-detail-types"
 import { asIsoString, asMetadata, mergeEvents } from "./scan-detail-utils"
+import { useScanPollLoop } from "./scan-poll-loop"
 
 /** Keep a new validator uncommitted until its poll response has been fully applied. */
 export function selectScanPollEtag({
@@ -222,69 +223,16 @@ export function useScanDetailPolling(initialScan: ScanData, initialFindings: Fin
     [refresh]
   )
 
-  useEffect(() => {
-    if (!isActive) return
-    // SSR safety: the polling loop touches `document`; never assume a DOM.
-    if (typeof document === "undefined") return
-    let timeoutId: number | undefined
-    let isAborted = false
-    let inFlight = false
-    let refreshOnVisible = false
+  const abortActiveRequest = useCallback(() => activeRequestRef.current?.controller.abort(), [])
 
-    const nextInterval = (elapsedMs: number): number => {
-      if (elapsedMs < 60_000) return 5_000
-      if (elapsedMs < 5 * 60_000) return 10_000
-      return 60_000
-    }
-
-    // Battery/network: while the tab is hidden the poll loop suspends entirely
-    // — no timer spin and no fetches. `onVisibility` below resumes it with one
-    // immediate refetch when the tab becomes visible, so state catches up right
-    // away instead of waiting out the (up to 60s) backoff interval.
-    const schedule = (delayMs: number) => {
-      if (timeoutId !== undefined) window.clearTimeout(timeoutId)
-      timeoutId = undefined
-      if (!isAborted && !document.hidden) timeoutId = window.setTimeout(poll, delayMs)
-    }
-
-    const poll = async () => {
-      timeoutId = undefined
-      if (isAborted || document.hidden || inFlight) return
-      inFlight = true
-      try {
-        await runRefresh()
-      } finally {
-        inFlight = false
-        if (!isAborted && !document.hidden) {
-          const startedAtMs = scan.startedAt ? new Date(scan.startedAt).getTime() : Date.now()
-          const delay = refreshOnVisible ? 0 : nextInterval(Date.now() - startedAtMs)
-          refreshOnVisible = false
-          schedule(delay)
-        }
-      }
-    }
-
-    schedule(5_000)
-
-    const onVisibility = () => {
-      if (document.hidden) {
-        if (timeoutId !== undefined) window.clearTimeout(timeoutId)
-        timeoutId = undefined
-        refreshOnVisible = false
-      } else if (isActive && !isAborted) {
-        if (inFlight) refreshOnVisible = true
-        else schedule(0)
-      }
-    }
-    document.addEventListener("visibilitychange", onVisibility)
-
-    return () => {
-      isAborted = true
-      activeRequestRef.current?.controller.abort()
-      document.removeEventListener("visibilitychange", onVisibility)
-      if (timeoutId !== undefined) window.clearTimeout(timeoutId)
-    }
-  }, [isActive, runRefresh, scan.startedAt])
+  // The poll loop itself lives in ./scan-poll-loop; the visibility handling and
+  // backoff intervals are unchanged, only their home is.
+  useScanPollLoop({
+    isActive,
+    startedAt: scan.startedAt,
+    runRefresh,
+    abortActiveRequest,
+  })
 
   useEffect(() => () => activeRequestRef.current?.controller.abort(), [])
 

@@ -7,17 +7,15 @@ import {
   normalizeScorecardPayload,
   prisma,
 } from "@lyrashield/db"
-import { ScanExecutionPlanSchema } from "@lyrashield/types"
-import { defaultStandards, renderStandards } from "@lyrashield/security"
 import { notFound, redirect } from "next/navigation"
 import { Radar } from "lucide-react"
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
 import { hasPermission, PERMISSIONS } from "@lyrashield/auth"
-import { filterDashboardScanEvents } from "@/lib/scan-event-visibility"
 import { NoWorkspaceState } from "@/components/no-workspace-state"
 import { PageHeader } from "@/components/page-header"
 import { SCAN_SINGULAR } from "@/lib/terminology"
 import { ScanDetailClient } from "./scan-detail-client"
+import { buildScanDetailData } from "./scan-detail-data"
 
 /** Shared by generateMetadata and the page so a dead link costs one lookup. */
 const getScopedScan = cache((id: string, workspaceId: string) => getScanWithEvents(id, workspaceId))
@@ -153,112 +151,15 @@ export default async function ScanDetailPage({ params }: { params: Promise<{ id:
     })
     .then((row) => (row ? hasPermission(row.role, PERMISSIONS.scan.cancel) : false))
 
-  const target = scan.target
-
-  const planParsed = planRow?.executionPlan
-    ? ScanExecutionPlanSchema.safeParse(planRow.executionPlan)
-    : null
-  const plan = planParsed?.success === true ? planParsed.data : null
-  const executionPlan = plan
-    ? {
-        workflow: plan.workflow,
-        targetType: plan.targetType,
-        depth: plan.depth,
-        scope: plan.scope,
-        profileId: plan.profileId,
-        sourceRevision: plan.source?.revision ?? null,
-        baseRevision: plan.source?.baseRevision ?? null,
-        // Minutes only — never provider cost internals.
-        maxDurationMinutes: Math.round(plan.limits.maxDurationMs / 60_000),
-        maxRequests: plan.limits.maxRequests ?? null,
-        attachmentCount: plan.attachmentIds.length,
-        authorizationRequired: Boolean(plan.authorizationRef),
-        capabilities: plan.capabilities,
-      }
-    : null
-
-  const scanData = {
-    id: scan.id,
-    workspaceId: scan.workspaceId,
-    status: scan.status,
-    goal: scan.goal,
-    mode: scan.mode,
-    triggerType: scan.triggerType,
-    startedAt: scan.startedAt ? scan.startedAt.toISOString() : null,
-    endedAt: scan.endedAt ? scan.endedAt.toISOString() : null,
-    summary: scan.summary,
-    errorCategory: scan.errorCategory,
-    errorMessage: scan.errorMessage,
-    createdAt: scan.createdAt.toISOString(),
-    target: target
-      ? {
-          id: target.id,
-          name: target.name,
-          type: target.type,
-          url: target.url,
-          repoFullName: target.repoFullName,
-        }
-      : null,
-    events: filterDashboardScanEvents(scan.events).map((e) => ({
-      id: e.id,
-      stage: e.stage,
-      level: e.level,
-      message: e.message,
-      metadata:
-        e.metadata && typeof e.metadata === "object" && !Array.isArray(e.metadata)
-          ? (e.metadata as Record<string, unknown>)
-          : null,
-      createdAt: e.createdAt.toISOString(),
-    })),
-    executionPlan,
-    integrity: {
-      manifestChecksum: manifestDetail?.checksum ?? scan.resultManifest?.checksum ?? null,
-      urlExecution: manifestDetail?.urlExecution ?? null,
-      scopedCoverage: manifestDetail?.scopedCoverage ?? null,
-      threatModel: manifestDetail?.threatModel ?? null,
-      attachments: manifestDetail?.attachments ?? null,
-      ingestionWarnings: manifestDetail?.ingestionWarnings ?? [],
-      quality: qualitySurface as unknown as Record<string, unknown> | null,
-      coverage: scan.coverageReceipts.map((receipt) => ({
-        scanner: receipt.scanner,
-        controlId: receipt.controlId,
-        status: receipt.status,
-        reason: receipt.reason,
-        subject: receipt.subject,
-        metadata:
-          receipt.metadata &&
-          typeof receipt.metadata === "object" &&
-          !Array.isArray(receipt.metadata)
-            ? (receipt.metadata as Record<string, unknown>)
-            : null,
-      })),
-      standards: renderStandards(
-        defaultStandards(),
-        scan.coverageReceipts,
-        findings.map((f) => ({ cwe: f.cwe, owaspCategory: f.owaspCategory }))
-      ),
-    },
-    aiSecurity: scan.aiSecurityScoreSnapshot
-      ? {
-          score: scan.aiSecurityScoreSnapshot.score,
-          methodology: scan.aiSecurityScoreSnapshot.methodology,
-          assessedCount: scan.aiSecurityScoreSnapshot.assessedCount,
-          totalControls: scan.aiSecurityScoreSnapshot.totalControls,
-          evidenceQuality:
-            scan.aiSecurityScoreSnapshot.evidenceQuality &&
-            typeof scan.aiSecurityScoreSnapshot.evidenceQuality === "object" &&
-            !Array.isArray(scan.aiSecurityScoreSnapshot.evidenceQuality)
-              ? (scan.aiSecurityScoreSnapshot.evidenceQuality as Record<string, number>)
-              : null,
-          reason:
-            (scan.aiSecurityScoreSnapshot.breakdown as { reason?: string } | null)?.reason ?? null,
-          ai03: (scan.aiSecurityScoreSnapshot.breakdown as { ai03?: unknown } | null)?.ai03 ?? null,
-          triage:
-            (scan.aiSecurityScoreSnapshot.breakdown as { triage?: unknown } | null)?.triage ?? null,
-          computedAt: scan.aiSecurityScoreSnapshot.computedAt.toISOString(),
-        }
-      : null,
-  }
+  const scanData = buildScanDetailData({
+    scan,
+    findings,
+    manifestDetail,
+    // Kept here, not inside the builder, so this file's reviewed type-assertion
+    // baseline entry still matches the exact expression it was approved for.
+    qualitySurface: qualitySurface as unknown as Record<string, unknown> | null,
+    planRow,
+  })
 
   const findingsData = findings.map((f) => ({
     id: f.id,

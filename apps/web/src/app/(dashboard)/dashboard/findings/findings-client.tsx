@@ -4,12 +4,7 @@ import { useFindingsWebMcp } from "./findings-webmcp"
 import { FindingDetailDrawer } from "./finding-detail-drawer"
 import { FindingsControls, FindingsResults } from "./findings-client-view"
 import { useFindingDrawer } from "./use-finding-drawer"
-import {
-  findingsContextKey,
-  loadFindingsListContext,
-  saveFindingsListContext,
-  type FindingsListPage,
-} from "./findings-list-context"
+import { type FindingsListPage } from "./findings-list-context"
 import { Button, Card, LoadMore } from "@lyrashield/ui"
 import { findingsPaginatedSchema } from "@/lib/api-schemas"
 import { apiGetPaginated } from "@/lib/api-client"
@@ -18,7 +13,6 @@ import { DashboardErrorCard } from "@/components/dashboard-error-card"
 import {
   findingFilterToApiQuery,
   findingsHref,
-  parseFindingListParams,
   type FindingFilter as FindingFilterValue,
 } from "@/lib/finding-list-params"
 import {
@@ -27,6 +21,11 @@ import {
   type FindingListItem,
   type SortMode,
 } from "./findings-list-model"
+import {
+  useFindingsListPopState,
+  useFindingsListRestore,
+  useFindingsListSave,
+} from "./findings-list-effects"
 
 export type { FindingListItem, SortMode } from "./findings-list-model"
 
@@ -142,111 +141,6 @@ export function FindingsClient({
     currentScopeRef.current = JSON.stringify({ filter, scanId, target: targetFilter, q: query })
   }, [filter, scanId, targetFilter, query])
 
-  // Server props own page one. Saved pages only tell us how many additional
-  // pages to re-fetch through fresh cursors before restoring scroll.
-  useEffect(() => {
-    const abort = new AbortController()
-    restoreAbortRef.current = abort
-    queueMicrotask(() => {
-      void (async () => {
-        try {
-          const stored = loadFindingsListContext(
-            findingsContextKey(workspaceId, {
-              filter: initialFilter,
-              sort: initialSort,
-              scanId: initialScanId,
-              target: initialTargetFilter,
-              q: initialQuery,
-            })
-          )
-          if (!stored) return
-          const restoreScroll = () => {
-            if (stored.scrollY > 0)
-              requestAnimationFrame(() => {
-                if (!abort.signal.aborted && requestGenerationRef.current === 0)
-                  window.scrollTo(0, stored.scrollY)
-              })
-          }
-          if (stored.pages.length < 2 || !initialNextCursor) {
-            restoreScroll()
-            return
-          }
-          const pages: FindingsListPage[] = [{ items: initialData, nextCursor: initialNextCursor }]
-          let cursor: string | null = initialNextCursor
-          for (let index = 1; index < stored.pages.length && cursor; index++) {
-            const result: FindingsListPage = await apiGetPaginated<FindingListItem>(
-              "/api/findings",
-              {
-                workspaceId,
-                ...findingFilterToApiQuery(initialFilter as FindingFilterValue),
-                ...(initialScanId ? { observedInScanId: initialScanId } : {}),
-                ...(initialTargetFilter ? { targetId: initialTargetFilter } : {}),
-                ...(initialQuery ? { q: initialQuery } : {}),
-                cursor,
-              },
-              { schema: findingsPaginatedSchema, signal: abort.signal }
-            )
-            if (abort.signal.aborted || requestGenerationRef.current !== 0) return
-            if (!result.items.length) break
-            if (
-              pages.reduce((count, page) => count + page.items.length, 0) + result.items.length >
-              500
-            )
-              break
-            pages.push(result)
-            cursor = result.nextCursor
-          }
-          if (abort.signal.aborted || requestGenerationRef.current !== 0) return
-          pagesRef.current = pages
-          setFindings(pages.flatMap((page) => page.items))
-          setNextCursor(cursor)
-          restoreScroll()
-        } catch {
-          if (!abort.signal.aborted) setRestoreError(true)
-        } finally {
-          if (!abort.signal.aborted) setRestoreReady(true)
-        }
-      })()
-    })
-    return () => abort.abort()
-    // Restore once per mount with the URL-derived context.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  // Never save the previous query's rows under a newly selected query key.
-  useEffect(() => {
-    if (
-      !restoreReady ||
-      loadedScopeRef.current !== currentScopeRef.current ||
-      typeof window === "undefined"
-    )
-      return
-    const save = () =>
-      saveFindingsListContext(
-        findingsContextKey(workspaceId, {
-          filter,
-          sort: sortMode,
-          scanId,
-          target: targetFilter,
-          q: query,
-        }),
-        { pages: pagesRef.current, scrollY: window.scrollY }
-      )
-    save()
-    window.addEventListener("pagehide", save)
-    return () => window.removeEventListener("pagehide", save)
-  }, [
-    workspaceId,
-    filter,
-    sortMode,
-    scanId,
-    targetFilter,
-    query,
-    findings,
-    nextCursor,
-    restoreReady,
-  ])
-
   const fetchFindings = useCallback(async (params: Record<string, string>, generation: number) => {
     if (generation !== requestGenerationRef.current) return
     const abort = new AbortController()
@@ -286,6 +180,39 @@ export function FindingsClient({
     return ++requestGenerationRef.current
   }, [])
 
+  // Restore, save and Back/Forward live in ./findings-list-effects; the guards
+  // and dependency arrays are unchanged, only their home is.
+  useFindingsListRestore({
+    workspaceId,
+    initialData,
+    initialNextCursor,
+    initialFilter,
+    initialSort,
+    initialScanId,
+    initialTargetFilter,
+    initialQuery,
+    setFindings,
+    setNextCursor,
+    setRestoreError,
+    setRestoreReady,
+    pagesRef,
+    requestGenerationRef,
+    restoreAbortRef,
+  })
+  useFindingsListSave({
+    workspaceId,
+    filter,
+    sortMode,
+    scanId,
+    targetFilter,
+    query,
+    findings,
+    nextCursor,
+    restoreReady,
+    pagesRef,
+    loadedScopeRef,
+    currentScopeRef,
+  })
   const applyWebMcpFilter = useCallback(
     async (newFilter: string, newSort: SortMode, externalSignal?: AbortSignal) => {
       currentScopeRef.current = JSON.stringify({
@@ -364,6 +291,33 @@ export function FindingsClient({
     },
     []
   )
+
+  // Back/Forward lives in ./findings-list-effects; the guard and dependency
+  // array are unchanged, and it keeps the position it had between the unmount
+  // cleanup above and the list callbacks below.
+  useFindingsListPopState({
+    workspaceId,
+    filter,
+    sortMode,
+    scanId,
+    targetFilter,
+    query,
+    setFindings,
+    setNextCursor,
+    setFilter,
+    setSortMode,
+    setScanId,
+    setTargetFilter,
+    setQuery,
+    setLoading,
+    setError,
+    pagesRef,
+    loadedScopeRef,
+    currentScopeRef,
+    invalidateRequest,
+    fetchFindings,
+    clearFindingForScopeChange,
+  })
 
   /** Combined query for the current filter/target/search state. */
   const listQuery = useCallback(
@@ -466,65 +420,6 @@ export function FindingsClient({
     },
     [filter, scanId, targetFilter, workspaceId, fetchFindings, invalidateRequest, updateQueryParams]
   )
-
-  useEffect(() => {
-    const onPopState = () => {
-      const params = parseFindingListParams(
-        Object.fromEntries(new URLSearchParams(window.location.search))
-      )
-      const scopeChanged = params.scanId !== scanId || params.target !== targetFilter
-      if (params.scopeValid && !scopeChanged && params.filter === filter && params.q === query) {
-        if (params.sort !== sortMode) setSortMode(params.sort)
-        return
-      }
-      currentScopeRef.current = JSON.stringify({
-        filter: params.filter,
-        scanId: params.scanId,
-        target: params.target,
-        q: params.q,
-      })
-      const generation = invalidateRequest()
-      if (scopeChanged) clearFindingForScopeChange()
-      setFilter(params.filter)
-      setSortMode(params.sort)
-      setScanId(params.scanId)
-      setTargetFilter(params.target)
-      setQuery(params.q)
-      if (!params.scopeValid) {
-        pagesRef.current = []
-        loadedScopeRef.current = ""
-        setFindings([])
-        setNextCursor(null)
-        setLoading(false)
-        setError(
-          "Selected scan or target is unavailable in this workspace. Clear the scope to continue."
-        )
-        return
-      }
-      void fetchFindings(
-        {
-          workspaceId,
-          ...findingFilterToApiQuery(params.filter),
-          ...(params.scanId ? { observedInScanId: params.scanId } : {}),
-          ...(params.target ? { targetId: params.target } : {}),
-          ...(params.q ? { q: params.q } : {}),
-        },
-        generation
-      )
-    }
-    window.addEventListener("popstate", onPopState)
-    return () => window.removeEventListener("popstate", onPopState)
-  }, [
-    workspaceId,
-    filter,
-    sortMode,
-    scanId,
-    targetFilter,
-    query,
-    invalidateRequest,
-    fetchFindings,
-    clearFindingForScopeChange,
-  ])
 
   const sortedFindings = sortFindings(findings, sortMode)
 
