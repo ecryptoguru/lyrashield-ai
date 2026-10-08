@@ -308,8 +308,12 @@ describe("scan detail — approval and cancellation (W1/P2-5)", () => {
   it("offers a confirm-gated cancel for an active scan when permitted", () => {
     const html = renderDetail({ scan: activeScan(), findings: [], canCancel: true })
 
-    expect(html).toContain("Cancel this scan")
-    expect(html).toContain("Stop scan")
+    // InlineConfirm renders only its trigger until the first click; the
+    // confirmation row is created on demand and so is absent from this markup.
+    // The click behaviour is covered in inline-confirm.test.tsx.
+    expect(html).toContain('aria-label="Cancel this scan"')
+    expect(html).toContain(">Cancel</button>")
+    expect(html).not.toContain("Stop scan")
   })
 
   it("offers no cancel control for a scan that already ended", () => {

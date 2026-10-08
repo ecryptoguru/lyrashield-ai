@@ -109,6 +109,19 @@ function elements(node: ReactNode): Element[] {
       : element.props.children
   return [element, ...elements(inner)]
 }
+
+/**
+ * Visible text of a subtree. The primary action carries a decorative icon
+ * before its label, so `props.children` is `[<icon/>, "Start release check"]`
+ * and `String(children)` reads "[object Object],Start release check". Assert on
+ * the text the user reads instead of on the child array's stringification.
+ */
+function textOf(node: ReactNode): string {
+  if (typeof node === "string" || typeof node === "number") return String(node)
+  if (Array.isArray(node)) return node.map(textOf).join("")
+  if (!node || typeof node !== "object" || !("props" in node)) return ""
+  return textOf((node as Element).props.children)
+}
 function render(
   targetType: string | null,
   overrides: {
@@ -206,7 +219,7 @@ it("continues through a failed eligibility preflight without passing the click e
 
   primary?.props.onClick?.({ preventDefault: vi.fn() })
 
-  expect(String(primary?.props.children)).toContain("Continue to start")
+  expect(textOf(primary?.props.children)).toContain("Continue to start")
   expect(onStart).toHaveBeenCalledWith(true)
   expect(onStartTrial).not.toHaveBeenCalled()
 })
@@ -233,11 +246,7 @@ it("names the primary action from the first render for every eligibility state",
       onStart: vi.fn(),
       onStartTrial: vi.fn(),
     })
-    return String(
-      elements(tree)
-        .filter((element) => element.type === Button)
-        .at(-1)?.props.children
-    )
+    return textOf(elements(tree).filter((element) => element.type === Button).at(-1)?.props.children)
   }
 
   expect(label({ status: "idle" })).toBe("Start release check")
@@ -309,7 +318,7 @@ it("shows and invokes the start-trial action for TRIAL_AVAILABLE", () => {
 
   primary?.props.onClick?.({ preventDefault: vi.fn() })
 
-  expect(String(primary?.props.children)).toContain("Start your free trial")
+  expect(textOf(primary?.props.children)).toContain("Start your free trial")
   expect(onStartTrial).toHaveBeenCalledOnce()
   expect(onStart).not.toHaveBeenCalled()
 })
@@ -376,7 +385,7 @@ it("reuses a created target when the onboarding save fails", async () => {
   }
   const startScan = () =>
     render("API", initialState).find((element) =>
-      String(element.props.children).includes(START_LABEL.api)
+      element.type === Button && textOf(element.props.children).includes(START_LABEL.api)
     )!.props.onClick!()
 
   setupApiTarget()
@@ -444,7 +453,7 @@ it("creates a repository target after a GitHub install return (path restored)", 
 
   const startScan = () =>
     render(null, initialState).find((element) =>
-      String(element.props.children).includes("Start release check")
+      element.type === Button && textOf(element.props.children).includes("Start release check")
     )!.props.onClick!()
 
   await startScan()
@@ -499,7 +508,7 @@ it("creates a fresh target instead of reusing a stale targetId after the URL cha
 
   const startScan = () =>
     render("WEB_APP", initialState).find((element) =>
-      String(element.props.children).includes(START_LABEL.url)
+      element.type === Button && textOf(element.props.children).includes(START_LABEL.url)
     )!.props.onClick!()
 
   await startScan()
@@ -552,7 +561,7 @@ it("does not reuse a WEB_APP target when the path switched to API", async () => 
 
   const startScan = () =>
     render("WEB_APP", initialState).find((element) =>
-      String(element.props.children).includes(START_LABEL.api)
+      element.type === Button && textOf(element.props.children).includes(START_LABEL.api)
     )!.props.onClick!()
 
   await startScan()
@@ -592,7 +601,7 @@ it("keeps an accepted scan and retries only the onboarding save after its PATCH 
 
   const startScan = () =>
     render("REPO", initialState).find((element) =>
-      String(element.props.children).includes("Start release check")
+      element.type === Button && textOf(element.props.children).includes("Start release check")
     )!.props.onClick!()
 
   await startScan()
@@ -651,7 +660,7 @@ it("retries an uncertain scan start with the same idempotency key", async () => 
 
   const startScan = () =>
     render("REPO", initialState).find((element) =>
-      String(element.props.children).includes("Start release check")
+      element.type === Button && textOf(element.props.children).includes("Start release check")
     )!.props.onClick!()
 
   // W1/P2-2: one click reads eligibility and posts the scan. The first post is
@@ -703,7 +712,7 @@ it("uses a fresh key after the server proves the previous scan was not submitted
 
   const startScan = () =>
     render("REPO", initialState).find((element) =>
-      String(element.props.children).includes("Start release check")
+      element.type === Button && textOf(element.props.children).includes("Start release check")
     )!.props.onClick!()
 
   // W1/P2-2: one click reads eligibility and posts the scan. The server proved
@@ -767,7 +776,7 @@ it("does not start the trial again after trial activation succeeded but scan adm
 
   const click = async (label: string) => {
     const button = render("REPO", initialState).find(
-      (element) => element.type === Button && String(element.props.children).includes(label)
+      (element) => element.type === Button && textOf(element.props.children).includes(label)
     )
     expect(button, `expected button containing ${label}`).toBeDefined()
     await button!.props.onClick!()
@@ -831,7 +840,7 @@ it("rechecks eligibility after an unknown trial-start response before deciding t
 
   const click = async (label: string) => {
     const button = render("REPO", initialState).find(
-      (element) => element.type === Button && String(element.props.children).includes(label)
+      (element) => element.type === Button && textOf(element.props.children).includes(label)
     )
     expect(button, `expected button containing ${label}`).toBeDefined()
     await button!.props.onClick!()
@@ -846,7 +855,7 @@ it("rechecks eligibility after an unknown trial-start response before deciding t
   expect(
     render("REPO", initialState).some(
       (element) =>
-        element.type === Button && String(element.props.children).includes("Start release check")
+        element.type === Button && textOf(element.props.children).includes("Start release check")
     )
   ).toBe(true)
   await click("Start release check")
@@ -896,7 +905,7 @@ it("retries trial activation only when refreshed eligibility still says it is av
 
   const click = async (label: string) => {
     const button = render("REPO", initialState).find(
-      (element) => element.type === Button && String(element.props.children).includes(label)
+      (element) => element.type === Button && textOf(element.props.children).includes(label)
     )
     expect(button, `expected button containing ${label}`).toBeDefined()
     await button!.props.onClick!()
