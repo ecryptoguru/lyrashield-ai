@@ -176,7 +176,6 @@ describe("preflightScanStart (P1-1: validate before creating a workspace)", () =
       context({
         path: null,
         selectedRepo: repo,
-        productName: "",
         url: "",
         ownershipAttested: false,
       })
@@ -188,6 +187,20 @@ describe("preflightScanStart (P1-1: validate before creating a workspace)", () =
       hasExistingTarget: false,
       needsRepo: true,
     })
+  })
+
+  it("asks for the target name when a repository is selected without one", async () => {
+    const result = await preflightScanStart(
+      context({
+        path: null,
+        selectedRepo: repo,
+        productName: "",
+        url: "",
+        ownershipAttested: false,
+      })
+    )
+
+    expect(result).toEqual({ ok: false, error: "Name your target to continue." })
   })
 
   it("reports the workspace failure instead of throwing", async () => {
