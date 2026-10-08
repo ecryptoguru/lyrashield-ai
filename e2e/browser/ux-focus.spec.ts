@@ -21,12 +21,17 @@ for (const width of [390, 768, 1440]) {
     await expect(alert).toBeVisible()
     await expect(alert).toBeFocused()
     // The button the user pressed is far below the alert; without the scroll
-    // the user sees the spinner stop and nothing else.
-    const inViewport = await alert.evaluate((element) => {
-      const box = element.getBoundingClientRect()
-      return box.top >= 0 && box.top < window.innerHeight
-    })
-    expect(inViewport).toBe(true)
+    // the user sees the spinner stop and nothing else. The component scrolls
+    // with behavior:"smooth", so the position settles after focus is set —
+    // poll rather than sampling once, or the assertion races the animation.
+    await expect
+      .poll(async () =>
+        alert.evaluate((element) => {
+          const box = element.getBoundingClientRect()
+          return box.top >= 0 && box.top < window.innerHeight
+        })
+      )
+      .toBe(true)
     expect(errors).toEqual([])
   })
 }
@@ -98,11 +103,16 @@ test("Upgrade Now focuses the plan picker without navigating", async ({ page }) 
   await expect(
     picker.getByRole("button", { name: /^Choose Starter, monthly billing/ })
   ).toBeFocused()
-  expect(
-    await picker.evaluate((element) => {
-      const box = element.getBoundingClientRect()
-      return box.top < window.innerHeight && box.bottom > 0
-    })
-  ).toBe(true)
+  // The picker is scrolled into view with behavior:"smooth", so the position
+  // settles after the click returns. A single getBoundingClientRect sample
+  // races the animation; poll until the picker has actually arrived.
+  await expect
+    .poll(async () =>
+      picker.evaluate((element) => {
+        const box = element.getBoundingClientRect()
+        return box.top < window.innerHeight && box.bottom > 0
+      })
+    )
+    .toBe(true)
   expect(errors).toEqual([])
 })
