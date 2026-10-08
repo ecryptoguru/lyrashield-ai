@@ -164,8 +164,18 @@ describe("Cloud checkout admission", () => {
     mocks.provider = "razorpay"
     expect((await POST(request({ promoCode: "AFFCODE1" }))).status).toBe(200)
 
-    const metadata = mocks.createRazorpay.mock.calls[0]![0].metadata as Record<string, unknown>
-    expect(metadata).not.toHaveProperty("affiliate_id")
-    expect(metadata).not.toHaveProperty("click_id")
+    // The Razorpay client takes `notes`, not `metadata`. The old assertion read
+    // `metadata` back as undefined and vitest's property matcher threw on it.
+    // Read the payload the client really receives, guard the absent case so it
+    // cannot throw, then assert no affiliate key is present.
+    const razorpayCall = mocks.createRazorpay.mock.calls[0]![0] as Record<string, unknown>
+    const notes: Record<string, unknown> =
+      (razorpayCall.notes as Record<string, unknown> | undefined) ?? {}
+    expect(notes).not.toHaveProperty("affiliate_id")
+    expect(notes).not.toHaveProperty("click_id")
+    expect(notes).not.toHaveProperty("promo_code")
+    // The promo code keeps its published checkout meaning, which also proves
+    // this reads the real payload rather than an empty fallback.
+    expect(notes.promoCode).toBe("AFFCODE1")
   })
 })

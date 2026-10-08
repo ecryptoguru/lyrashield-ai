@@ -95,7 +95,9 @@ describe("POST /api/billing/local-checkout", () => {
         }),
       })
     )
-    const metadata = mocks.createPolar.mock.calls[0]![0].metadata as Record<string, unknown>
+    const polarCall = mocks.createPolar.mock.calls[0]![0] as Record<string, unknown>
+    const metadata: Record<string, unknown> =
+      (polarCall.metadata as Record<string, unknown> | undefined) ?? {}
     // The affiliate cookie on the request must not reach the provider metadata.
     expect(metadata).not.toHaveProperty("affiliate_id")
     expect(metadata).not.toHaveProperty("click_id")
@@ -119,6 +121,14 @@ describe("POST /api/billing/local-checkout", () => {
         }),
       })
     )
+    // The Razorpay rail takes `notes`. The affiliate cookie on the request must
+    // not reach it — pre-freeze this payload carried affiliate_id and click_id.
+    const razorpayCall = mocks.createRazorpay.mock.calls[0]![0] as Record<string, unknown>
+    const notes: Record<string, unknown> =
+      (razorpayCall.notes as Record<string, unknown> | undefined) ?? {}
+    expect(notes).not.toHaveProperty("affiliate_id")
+    expect(notes).not.toHaveProperty("click_id")
+    expect(JSON.stringify(mocks.createRazorpay.mock.calls)).not.toContain("opaque-cookie-token")
   })
 
   it("rate-limits by trusted client IP before provider calls", async () => {
