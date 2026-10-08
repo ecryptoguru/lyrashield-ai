@@ -523,7 +523,12 @@ describe("exportMarketplace", () => {
     const dead: string[] = []
     for (const file of markdownFiles) {
       const text = await readFile(file, "utf8")
-      for (const match of text.matchAll(/!?\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g)) {
+      // The optional title is spelled as an empty alternative rather than a
+      // quantifier around the group: a `?` there would put a repeat inside a
+      // repeat, which `security/detect-unsafe-regex` flags. The language is
+      // unchanged — a target, then either a title and the closing paren or just
+      // the closing paren.
+      for (const match of text.matchAll(/!?\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*"|)\)/g)) {
         const target = match[1]
         if (/^(?:[a-z][a-z0-9+.-]*:|\/\/|#)/i.test(target)) continue
         const clean = target.split("#")[0].split("?")[0]
