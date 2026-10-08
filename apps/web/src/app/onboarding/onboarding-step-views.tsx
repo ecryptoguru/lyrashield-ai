@@ -439,9 +439,9 @@ export function TargetDetailsView({
       {eligibilitySection({ targetId, eligibility })}
 
       <p className="border-warning bg-warning/10 border-l-2 p-3 text-sm">
-        This {TARGET_SINGULAR.toLowerCase()} is saved as a{" "}
-        <span className="font-medium">{getEnvironmentKindLabel(ONBOARDING_ENVIRONMENT)}</span>{" "}
-        target. Change its environment in target settings after setup if it is something else.
+        The default {TARGET_SINGULAR.toLowerCase()} environment is{" "}
+        <span className="font-medium">{getEnvironmentKindLabel(ONBOARDING_ENVIRONMENT)}</span>. You
+        can change it in target settings after setup.
       </p>
 
       <p className="text-muted-foreground text-xs">

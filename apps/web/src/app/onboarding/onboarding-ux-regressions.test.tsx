@@ -185,7 +185,7 @@ it("keeps target-detail copy specific to repository and URL setup", () => {
  * W1/P3 — every onboarding target was stored as STAGING and no copy said so, so
  * a production site was labelled Staging until the user found the setting.
  */
-it("discloses the environment every onboarding target is saved with", () => {
+it("discloses the default environment without claiming an unsaved target is persisted", () => {
   const reviewOptions = getOnboardingReviewOptions("url")
   const view = TargetDetailsView({
     eyebrow: "Step 2 of 2 · Target details",
@@ -207,8 +207,9 @@ it("discloses the environment every onboarding target is saved with", () => {
   const copy = textContent(view)
 
   expect(ONBOARDING_ENVIRONMENT).toBe("STAGING")
-  expect(copy).toContain("is saved as a Staging target")
-  expect(copy).toContain("Change its environment in target settings after setup")
+  expect(copy).toContain("The default target environment is Staging")
+  expect(copy).toContain("You can change it in target settings after setup")
+  expect(copy).not.toContain("is saved")
   expect(copy).not.toContain("STAGING")
 })
 
