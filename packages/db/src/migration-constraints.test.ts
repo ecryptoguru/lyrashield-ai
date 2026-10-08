@@ -134,7 +134,7 @@ describe("P2-16 migration structure", () => {
 
   it("carries the audited minute-pack index in its own migration", () => {
     expect(auditedSql).toContain(
-      'CREATE INDEX CONCURRENTLY IF NOT EXISTS "MinutePack_expiresAt_active_partial_idx"'
+      'CREATE INDEX CONCURRENTLY "MinutePack_expiresAt_active_partial_idx"'
     )
     expect(auditedSql).toContain('WHERE "remainingMinutes" > 0 AND "deletedAt" IS NULL')
     // The dropped index must never be smuggled into the audited migration.
@@ -145,7 +145,7 @@ describe("P2-16 migration structure", () => {
     const statements = executableStatements(auditedSql)
     expect(statements).toHaveLength(1)
     const executable = statements[0] ?? ""
-    expect(executable).toMatch(/^\s*CREATE INDEX CONCURRENTLY IF NOT EXISTS\b/)
+    expect(executable).toMatch(/^\s*CREATE INDEX CONCURRENTLY\b/)
     // Additive only: no drops, renames, column changes or data changes.
     expect(executable).not.toMatch(
       /\bDROP\b|\bRENAME\b|\bALTER\b|\bDELETE\b|\bUPDATE\b|\bINSERT\b/i

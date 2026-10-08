@@ -1,7 +1,7 @@
--- P2-16 migration A of 2 — AUDITED: MinutePack cross-tenant expiry sweep.
+-- P2-16: MinutePack cross-tenant expiry sweep.
 --
 -- One index, backed by EXPLAIN evidence on a disposable PostgreSQL 16.14
--- instance seeded with 200,000 synthetic rows. Plain additive `CREATE INDEX`.
+-- instance seeded with 200,000 synthetic rows. Additive `CREATE INDEX CONCURRENTLY`.
 -- No column, constraint or data change, no drops, no renames.
 --
 -- This is the index the v24 audit carried forward on measured evidence. It is
@@ -26,14 +26,15 @@
 --   WHERE "deletedAt" IS NULL AND "expiresAt" < now() AND "remainingMinutes" > 0
 -- Every existing MinutePack index leads with workspaceId or accountId
 -- (MinutePack_workspaceId_expiresAt_idx, MinutePack_workspaceId_expiresAt_remainingMinutes_idx,
--- MinutePack_accountId_idx), so none of them can serve the expiresAt bound on
--- its own. Before this index the planner used a sequential scan.
+-- MinutePack_accountId_idx). Their usefulness depends on selectivity and the
+-- planner; a separate audit fixture used an existing bitmap index scan. The
+-- sequential scan below describes this synthetic fixture, not production.
 --
 -- Measured on the disposable instance, 200,000 rows, 30 percent already expired:
 --   before  30.484 ms  Seq Scan, 140,000 rows removed by filter
 --   after   15.885 ms  Bitmap Index Scan on this index
--- At 1 percent expired (2,000 of 200,000 rows, the shape an hourly sweep
--- actually sees) the same index took the query from 31.952 ms to 0.513 ms.
+-- At 1 percent expired (2,000 of 200,000 rows, a selective synthetic
+-- workload) the same index took the query from 31.952 ms to 0.513 ms.
 -- Index size at 200,000 rows is 1336 kB.
 --
 -- The predicate matches the query exactly, so the index holds only rows the
@@ -42,6 +43,11 @@
 --   @@index([expiresAt], where: raw("\"remainingMinutes\" > 0 AND \"deletedAt\" IS NULL"))
 -- and this statement creates exactly that index.
 
-CREATE INDEX CONCURRENTLY IF NOT EXISTS "MinutePack_expiresAt_active_partial_idx"
+-- Do not skip a same-named index: a failed concurrent build can leave an
+-- invalid index behind. A collision must fail the migration, not record success.
+-- After diagnosis, remove only this failed new index concurrently, mark this
+-- failed migration rolled back with Prisma resolve, then retry migrate deploy.
+-- Verify pg_index.indisvalid and the index definition before accepting it.
+CREATE INDEX CONCURRENTLY "MinutePack_expiresAt_active_partial_idx"
   ON "MinutePack" ("expiresAt")
   WHERE "remainingMinutes" > 0 AND "deletedAt" IS NULL;
