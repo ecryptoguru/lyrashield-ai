@@ -5,8 +5,6 @@ import Link from "next/link"
 import {
   ArrowLeft,
   ChevronDown,
-  ChevronRight,
-  Shield,
   ShieldAlert,
   ShieldCheck,
   ArrowRight,
@@ -15,28 +13,28 @@ import {
   XCircle,
   RefreshCw,
   Radar,
+  X,
 } from "lucide-react"
-import { Badge, Button, Card, EmptyState, buttonVariants } from "@lyrashield/ui"
+import { Badge, Button, Card, EmptyState, Spinner, buttonVariants } from "@lyrashield/ui"
 import {
   getScanGoalLabel,
   getScanModeLabel,
   getScanTriggerLabel,
   getTargetTypeLabel,
-  getVerificationStatusLabel,
 } from "@/lib/enum-labels"
 import { formatDateTimeUtc, formatDuration, formatTimeUtc } from "@/lib/date-format"
 import type { getScanPresentation } from "@/lib/scan-presentation"
-import { severityLabel, humanizeToken } from "@/lib/labels"
+import { humanizeToken } from "@/lib/labels"
 import { reportsHref } from "@/lib/finding-list-params"
+import { InlineConfirm } from "@/components/ui/inline-confirm"
 import { ScorecardControls } from "../../targets/[id]/scorecard-controls"
 import { ScanEvidenceSections } from "./scan-evidence-sections"
+import { ScanControlCoverageDetail } from "./scan-control-coverage-detail"
+import { ScanFindingCard, ScanSeveritySummary } from "./scan-findings-list"
 import { AiSecurityScoreCard } from "./ai-score-card"
 import {
   EVENT_LEVEL_COLOR,
   SCANNER_LABELS,
-  SEVERITY_COLOR,
-  SEVERITY_ICON,
-  SEVERITY_ORDER,
   type ScanDetailView,
   type ScanNextAction,
 } from "./scan-detail-presentation"
@@ -167,83 +165,10 @@ export function ScanCoverageDetail({
               </div>
             </details>
           )}
-          {controlCoverage.length > 0 && (
-            <div className="mt-5 border-t pt-5">
-              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
-                {[
-                  ["Findings mapped", controlOutcomeCounts.DETECTED ?? 0, "danger"],
-                  ["No finding returned", controlOutcomeCounts.NO_FINDING ?? 0, "muted"],
-                  ["Evidence required", controlOutcomeCounts.EVIDENCE_REQUIRED ?? 0, "warning"],
-                  ["Inconclusive", controlOutcomeCounts.INCONCLUSIVE ?? 0, "warning"],
-                  ["Not applicable", controlOutcomeCounts.NOT_APPLICABLE ?? 0, "muted"],
-                ].map(([label, count, variant]) => (
-                  <div key={String(label)} className="rounded-md border p-3">
-                    <p className="text-muted-foreground text-xs">{label}</p>
-                    <div className="mt-1 flex items-center justify-between gap-2">
-                      <span className="text-lg font-semibold">{count}</span>
-                      <Badge variant={variant as "danger" | "success" | "warning" | "muted"}>
-                        {count}
-                      </Badge>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <p className="text-muted-foreground mt-3 text-xs">
-                “No finding returned” means an applicable scanner completed without reporting this
-                issue. It is not an independent verification or a security guarantee.
-              </p>
-              <p className="text-muted-foreground mt-2 text-xs">
-                “Inconclusive” means the available evidence cannot establish a control outcome. It
-                can follow an unfinished scan, an unassessed check, or a missing engine control
-                mapping; it must not be read as a clean result.
-              </p>
-              <details className="mt-4 rounded-md border">
-                <summary className="hover:bg-muted/50 flex min-h-11 cursor-pointer items-center justify-between gap-3 px-4 py-3 text-sm font-medium">
-                  Review all 50 control receipts
-                  <ChevronDown className="size-4 shrink-0" aria-hidden="true" />
-                </summary>
-                <div className="divide-y border-t">
-                  {controlCoverage.map((receipt) => {
-                    const rank =
-                      typeof receipt.metadata?.rank === "number" ? receipt.metadata.rank : null
-                    const title =
-                      typeof receipt.metadata?.title === "string"
-                        ? receipt.metadata.title
-                        : receipt.controlId
-                    const outcome =
-                      typeof receipt.metadata?.outcome === "string"
-                        ? receipt.metadata.outcome
-                        : receipt.status
-                    const badgeVariant =
-                      outcome === "DETECTED"
-                        ? "danger"
-                        : outcome === "NO_FINDING"
-                          ? "muted"
-                          : outcome === "NOT_APPLICABLE"
-                            ? "muted"
-                            : "warning"
-                    return (
-                      <div
-                        key={receipt.controlId}
-                        className="grid gap-2 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
-                      >
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium">
-                            {rank ? `${rank}. ` : ""}
-                            {title}
-                          </p>
-                          {receipt.reason && (
-                            <p className="text-muted-foreground mt-1 text-xs">{receipt.reason}</p>
-                          )}
-                        </div>
-                        <Badge variant={badgeVariant}>{humanizeToken(outcome)}</Badge>
-                      </div>
-                    )
-                  })}
-                </div>
-              </details>
-            </div>
-          )}
+          <ScanControlCoverageDetail
+            controlCoverage={controlCoverage}
+            controlOutcomeCounts={controlOutcomeCounts}
+          />
         </Card>
       )}
     </>
@@ -271,14 +196,6 @@ export function ScanFindingsSection({
   expandedFindings: Set<string>
   onToggleFinding: (id: string) => void
 }) {
-  const severityCounts = currentFindings.reduce(
-    (counts, finding) => {
-      counts[finding.severity] = (counts[finding.severity] ?? 0) + 1
-      return counts
-    },
-    {} as Record<string, number>
-  )
-
   return (
     <>
       {currentFindings.length > 0 && (
@@ -290,77 +207,16 @@ export function ScanFindingsSection({
             Retained after scanner layers and deduplication. Detection is not verification. A
             finding is verified only with an independent verification receipt.
           </p>
-          {Object.entries(severityCounts)
-            .sort(([a], [b]) => (SEVERITY_ORDER[a] ?? 99) - (SEVERITY_ORDER[b] ?? 99))
-            .map(([sev, count]) => {
-              const Icon = SEVERITY_ICON[sev] ?? Shield
-              return (
-                <span
-                  key={sev}
-                  className={`mr-3 inline-flex items-center gap-1 text-sm font-medium ${SEVERITY_COLOR[sev] ?? ""}`}
-                >
-                  <Icon className="h-4 w-4" aria-hidden="true" />
-                  {count} {sev}
-                </span>
-              )
-            })}
+          <ScanSeveritySummary findings={currentFindings} />
           <div className="mt-3 space-y-2">
-            {sortedFindings.map((finding) => {
-              const Icon = SEVERITY_ICON[finding.severity] ?? Shield
-              const isExpanded = expandedFindings.has(finding.id)
-              return (
-                <Card key={finding.id} className="p-4">
-                  <button
-                    type="button"
-                    onClick={() => onToggleFinding(finding.id)}
-                    className="flex w-full items-start justify-between gap-3 text-left"
-                    aria-expanded={isExpanded}
-                    aria-controls={`finding-${finding.id}-detail`}
-                  >
-                    <div className="flex items-start gap-3">
-                      <Icon
-                        className={`mt-0.5 h-5 w-5 shrink-0 ${SEVERITY_COLOR[finding.severity] ?? ""}`}
-                        aria-hidden="true"
-                      />
-                      <div className="min-w-0">
-                        <p className="font-medium">{finding.title}</p>
-                        <div className="text-muted-foreground mt-1 flex flex-wrap items-center gap-2 text-xs">
-                          <Badge variant="muted">{severityLabel(finding.severity)}</Badge>
-                          {finding.cwe && <span>CWE: {finding.cwe}</span>}
-                          {finding.cvssScore !== null && <span>CVSS: {finding.cvssScore}</span>}
-                          {finding.verified && <span className="text-emerald-600">Verified</span>}
-                          {!finding.verified && (
-                            <span>{getVerificationStatusLabel(finding.verificationStatus)}</span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                    {isExpanded ? (
-                      <ChevronDown
-                        className="text-muted-foreground h-5 w-5 shrink-0"
-                        aria-hidden="true"
-                      />
-                    ) : (
-                      <ChevronRight
-                        className="text-muted-foreground h-5 w-5 shrink-0"
-                        aria-hidden="true"
-                      />
-                    )}
-                  </button>
-                  {isExpanded && (finding.summary || finding.verificationReason) && (
-                    <div
-                      id={`finding-${finding.id}-detail`}
-                      className="text-muted-foreground mt-3 border-t pt-3 text-sm"
-                    >
-                      {finding.summary && <p>{finding.summary}</p>}
-                      {finding.verificationReason && (
-                        <p className="mt-2 text-xs">{finding.verificationReason}</p>
-                      )}
-                    </div>
-                  )}
-                </Card>
-              )
-            })}
+            {sortedFindings.map((finding) => (
+              <ScanFindingCard
+                key={finding.id}
+                finding={finding}
+                isExpanded={expandedFindings.has(finding.id)}
+                onToggleFinding={onToggleFinding}
+              />
+            ))}
           </div>
         </div>
       )}
@@ -430,11 +286,24 @@ export function ScanDetailHeader({
   presentation,
   isActive,
   refreshError,
+  canCancel = false,
+  cancelling = false,
+  cancelError = null,
+  onCancel,
 }: {
   scan: ScanData
   presentation: ScanPresentationResult
   isActive: boolean
   refreshError: boolean
+  /**
+   * True only when the signed-in member holds scan:cancel in this workspace.
+   * The API re-checks permission and the scan's own state, so this only decides
+   * whether the control is offered.
+   */
+  canCancel?: boolean
+  cancelling?: boolean
+  cancelError?: string | null
+  onCancel?: () => void
 }) {
   return (
     <div className="mb-6">
@@ -458,7 +327,7 @@ export function ScanDetailHeader({
             {scan.endedAt ? ` · completed ${formatDateTimeUtc(scan.endedAt)}` : ""}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {isActive && !refreshError && (
             <span className="text-muted-foreground flex items-center gap-1.5 text-xs">
               <span className="relative flex h-2 w-2">
@@ -479,8 +348,35 @@ export function ScanDetailHeader({
           >
             {scan.integrity.manifestChecksum ? "Sealed" : isActive ? "Sealing…" : "Not sealed"}
           </Badge>
+          {/* The list has always offered Cancel for an active scan; the detail
+              page did not, so a user watching a long scan here could not stop
+              it. Same control, same permission gate, same API result. */}
+          {isActive &&
+            canCancel &&
+            onCancel &&
+            (cancelling ? (
+              <Button variant="outline" size="sm" disabled aria-label="Cancelling scan">
+                <Spinner className="h-4 w-4" />
+                <span className="ml-1">Cancelling…</span>
+              </Button>
+            ) : (
+              <InlineConfirm
+                triggerLabel="Cancel"
+                triggerIcon={<X className="mr-1 h-4 w-4" aria-hidden="true" />}
+                triggerVariant="outline"
+                confirmLabel="Stop scan"
+                message="Stop this scan?"
+                aria-label="Cancel this scan"
+                onConfirm={onCancel}
+              />
+            ))}
         </div>
       </div>
+      {cancelError && (
+        <p role="alert" className="text-destructive mt-2 text-sm">
+          {cancelError}
+        </p>
+      )}
     </div>
   )
 }

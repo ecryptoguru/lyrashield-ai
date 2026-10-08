@@ -69,6 +69,7 @@ function renderDetail(props: {
   scan: ScanData
   findings: FindingItem[]
   scorecard?: React.ComponentProps<typeof ScanDetailClient>["scorecard"]
+  canCancel?: boolean
 }) {
   // The dashboard layout guarantees the WebMCP receipt provider — render
   // inside it, matching the component's real runtime contract.
@@ -78,6 +79,7 @@ function renderDetail(props: {
         scan={props.scan}
         findings={props.findings}
         scorecard={props.scorecard ?? null}
+        canCancel={props.canCancel ?? false}
       />
     </WebMcpReceiptProvider>
   ).replaceAll("<!-- -->", "")
@@ -263,6 +265,65 @@ describe("scan detail guided states", () => {
     expect(html).toContain("Review account usage")
     expect(html).toContain("/dashboard/billing")
     expect(html).not.toContain("Start a new scan")
+  })
+})
+
+/**
+ * W1/P2-5 — a scan waiting for approval rendered the animated in-progress card
+ * with an estimate and a "most scans finish sooner" promise, and no way to
+ * reach the queue it was waiting in. No scan detail page offered Cancel.
+ */
+describe("scan detail — approval and cancellation (W1/P2-5)", () => {
+  const activeScan = (overrides: Partial<ScanData> = {}): ScanData => ({
+    ...scan,
+    status: "REQUIRES_APPROVAL",
+    endedAt: null,
+    target: null,
+    integrity: { ...scan.integrity, coverage: [] },
+    ...overrides,
+  })
+
+  it("does not describe a scan waiting on a human as scanning", () => {
+    const html = renderDetail({ scan: activeScan(), findings: [] })
+
+    expect(html).toContain("Scan needs approval")
+    expect(html).not.toContain("Most scans finish sooner")
+    expect(html).not.toContain("Estimated time")
+    expect(html).toContain("Scan work has not started.")
+  })
+
+  it("links to the approval queue", () => {
+    const html = renderDetail({ scan: activeScan(), findings: [] })
+
+    expect(html).toContain('href="/dashboard/approvals"')
+    expect(html).toContain("Open the approval queue")
+  })
+
+  it("offers no cancel control without the cancel permission", () => {
+    const html = renderDetail({ scan: activeScan(), findings: [] })
+
+    expect(html).not.toContain("Cancel this scan")
+  })
+
+  it("offers a confirm-gated cancel for an active scan when permitted", () => {
+    const html = renderDetail({ scan: activeScan(), findings: [], canCancel: true })
+
+    // InlineConfirm renders only its trigger until the first click; the
+    // confirmation row is created on demand and so is absent from this markup.
+    // The click behaviour is covered in inline-confirm.test.tsx.
+    expect(html).toContain('aria-label="Cancel this scan"')
+    expect(html).toContain(">Cancel</button>")
+    expect(html).not.toContain("Stop scan")
+  })
+
+  it("offers no cancel control for a scan that already ended", () => {
+    const html = renderDetail({
+      scan: activeScan({ status: "COMPLETED", endedAt: "2026-01-01T00:05:00.000Z" }),
+      findings: [],
+      canCancel: true,
+    })
+
+    expect(html).not.toContain("Cancel this scan")
   })
 })
 

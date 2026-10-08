@@ -8,7 +8,11 @@ import { apiGet, apiGetConditional, apiGetPaginated } from "@/lib/api-client"
 import { isActiveScan } from "@/lib/scan-presentation"
 import type { FindingItem, ScanData, ScanPollData } from "./scan-detail-types"
 import { asIsoString, asMetadata, mergeEvents } from "./scan-detail-utils"
-import { scanDetailPollDelay } from "./scan-detail-poll-schedule"
+import { useScanPollLoop } from "./scan-poll-loop"
+
+// Re-exported so importers keep a single entry point; the arithmetic itself
+// lives in a React-free module so it can be tested against a stable clock.
+export { nextScanDetailPollInterval, scanDetailPollDelay } from "./scan-detail-poll-schedule"
 
 /** Keep a new validator uncommitted until its poll response has been fully applied. */
 export function selectScanPollEtag({
@@ -28,10 +32,6 @@ export function selectScanPollEtag({
 }
 
 type PollResponse = { etag: string | undefined; status: number; processed: boolean }
-
-// Re-exported so importers keep a single entry point; the arithmetic itself
-// lives in a React-free module so it can be tested against a stable clock.
-export { nextScanDetailPollInterval, scanDetailPollDelay } from "./scan-detail-poll-schedule"
 
 function commitPollEtag(ref: { current: string | undefined }, response: PollResponse): void {
   ref.current = selectScanPollEtag({
@@ -227,71 +227,16 @@ export function useScanDetailPolling(initialScan: ScanData, initialFindings: Fin
     [refresh]
   )
 
-  useEffect(() => {
-    if (!isActive) return
-    // SSR safety: the polling loop touches `document`; never assume a DOM.
-    if (typeof document === "undefined") return
-    let timeoutId: number | undefined
-    let isAborted = false
-    let inFlight = false
-    let refreshOnVisible = false
-    // P2-14: the back-off clock's fallback. Seeded once when this loop starts —
-    // for a scan with no startedAt (QUEUED or REQUIRES_APPROVAL) — so elapsed
-    // time advances instead of being recomputed as ~0 on every tick.
-    const pollAnchorMs = Date.now()
+  const abortActiveRequest = useCallback(() => activeRequestRef.current?.controller.abort(), [])
 
-    // Battery/network: while the tab is hidden the poll loop suspends entirely
-    // — no timer spin and no fetches. `onVisibility` below resumes it with one
-    // immediate refetch when the tab becomes visible, so state catches up right
-    // away instead of waiting out the (up to 60s) backoff interval.
-    const schedule = (delayMs: number) => {
-      if (timeoutId !== undefined) window.clearTimeout(timeoutId)
-      timeoutId = undefined
-      if (!isAborted && !document.hidden) timeoutId = window.setTimeout(poll, delayMs)
-    }
-
-    const poll = async () => {
-      timeoutId = undefined
-      if (isAborted || document.hidden || inFlight) return
-      inFlight = true
-      try {
-        await runRefresh()
-      } finally {
-        inFlight = false
-        if (!isAborted && !document.hidden) {
-          const delay = scanDetailPollDelay({
-            startedAt: scan.startedAt,
-            anchorMs: pollAnchorMs,
-            nowMs: Date.now(),
-            refreshOnVisible,
-          })
-          refreshOnVisible = false
-          schedule(delay)
-        }
-      }
-    }
-
-    schedule(5_000)
-
-    const onVisibility = () => {
-      if (document.hidden) {
-        if (timeoutId !== undefined) window.clearTimeout(timeoutId)
-        timeoutId = undefined
-        refreshOnVisible = false
-      } else if (isActive && !isAborted) {
-        if (inFlight) refreshOnVisible = true
-        else schedule(0)
-      }
-    }
-    document.addEventListener("visibilitychange", onVisibility)
-
-    return () => {
-      isAborted = true
-      activeRequestRef.current?.controller.abort()
-      document.removeEventListener("visibilitychange", onVisibility)
-      if (timeoutId !== undefined) window.clearTimeout(timeoutId)
-    }
-  }, [isActive, runRefresh, scan.startedAt])
+  // The poll loop itself lives in ./scan-poll-loop; the visibility handling and
+  // backoff intervals are unchanged, only their home is.
+  useScanPollLoop({
+    isActive,
+    startedAt: scan.startedAt,
+    runRefresh,
+    abortActiveRequest,
+  })
 
   useEffect(() => () => activeRequestRef.current?.controller.abort(), [])
 
@@ -308,5 +253,25 @@ export function useScanDetailPolling(initialScan: ScanData, initialFindings: Fin
     }
   }
 
-  return { scan, currentFindings, isActive, refreshing, refreshError, handleManualRefresh }
+  /**
+   * Apply the authoritative result of a cancellation. Only the status and end
+   * time the server returned are written; nothing is inferred from the click.
+   * Any poll already in flight is aborted first, so a response that was issued
+   * before the cancel cannot write the previous status back over it. The poll
+   * loop sees a terminal status and stops on its own.
+   */
+  function applyCancelledScan(status: string, endedAt: string | null) {
+    activeRequestRef.current?.controller.abort()
+    setScan((current) => ({ ...current, status, endedAt }))
+  }
+
+  return {
+    scan,
+    currentFindings,
+    isActive,
+    refreshing,
+    refreshError,
+    handleManualRefresh,
+    applyCancelledScan,
+  }
 }
