@@ -253,9 +253,15 @@ const SERVER_MESSAGE_REJECTIONS: readonly RegExp[] = [
 
 export function sanitizeServerMessage(message: unknown): string | null {
   if (typeof message !== "string") return null
-  // Control and format characters (including bidi overrides) never reach copy.
+  // A format character — a bidi override, an invisible separator, a
+  // zero-width joiner — can reorder or hide the words a reader sees, so a
+  // sentence that carries one is rejected outright instead of repaired.
+  // Collapsing it would display a different sentence from the one the server
+  // sent, which is exactly the substitution an override is used for.
+  if (/\p{Cf}/u.test(message)) return null
+  // Control characters carry no display meaning, so those are collapsed.
   const collapsed = message
-    .replace(/[\p{Cc}\p{Cf}]+/gu, " ")
+    .replace(/[\p{Cc}]+/gu, " ")
     .replace(/\s+/g, " ")
     .trim()
   if (!collapsed) return null

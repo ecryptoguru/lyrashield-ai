@@ -29,17 +29,28 @@ const buttonVariants = cva(
 )
 
 export interface ButtonProps
-  extends React.ButtonHTMLAttributes<HTMLButtonElement>, VariantProps<typeof buttonVariants> {}
+  extends React.ButtonHTMLAttributes<HTMLButtonElement>, VariantProps<typeof buttonVariants> {
+  /**
+   * A decorative leading icon. It renders before the label and stays outside
+   * `children`, so the label a caller passes is the plain string rather than an
+   * element array. A button whose children are an array renders the same pixels
+   * but stringifies to "[object Object],Label", which is not a label.
+   */
+  icon?: React.ReactNode
+}
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant, size, type = "button", ...props }, ref) => {
+  ({ className, variant, size, type = "button", icon, children, ...props }, ref) => {
     return (
       <button
         ref={ref}
         type={type}
         className={cn(buttonVariants({ variant, size }), className)}
         {...props}
-      />
+      >
+        {icon}
+        {children}
+      </button>
     )
   }
 )

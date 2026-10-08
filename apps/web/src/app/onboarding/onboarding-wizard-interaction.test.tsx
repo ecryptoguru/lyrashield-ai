@@ -85,6 +85,20 @@ const VIEW_COMPONENTS = new Set<unknown>([
   UrlTargetView,
 ])
 
+/**
+ * W1/P2-2 names the primary action for the review it starts, so the label is
+ * path-specific: "Start release check" on the repo path, "Start endpoint
+ * review" on the API path and "Start surface review" on the web-app path. The
+ * three target-reuse cases below previously looked for the repo path's label
+ * while driving the API and web-app paths, so they searched for a button that
+ * was never on screen. The label is asserted per path instead.
+ */
+const START_LABEL = {
+  github: "Start release check",
+  url: "Start surface review",
+  api: "Start endpoint review",
+} as const
+
 function elements(node: ReactNode): Element[] {
   if (Array.isArray(node)) return node.flatMap(elements)
   if (!node || typeof node !== "object" || !("props" in node)) return []
@@ -362,7 +376,7 @@ it("reuses a created target when the onboarding save fails", async () => {
   }
   const startScan = () =>
     render("API", initialState).find((element) =>
-      String(element.props.children).includes("Start release check")
+      String(element.props.children).includes(START_LABEL.api)
     )!.props.onClick!()
 
   setupApiTarget()
@@ -485,7 +499,7 @@ it("creates a fresh target instead of reusing a stale targetId after the URL cha
 
   const startScan = () =>
     render("WEB_APP", initialState).find((element) =>
-      String(element.props.children).includes("Start release check")
+      String(element.props.children).includes(START_LABEL.url)
     )!.props.onClick!()
 
   await startScan()
@@ -538,7 +552,7 @@ it("does not reuse a WEB_APP target when the path switched to API", async () => 
 
   const startScan = () =>
     render("WEB_APP", initialState).find((element) =>
-      String(element.props.children).includes("Start release check")
+      String(element.props.children).includes(START_LABEL.api)
     )!.props.onClick!()
 
   await startScan()

@@ -581,8 +581,8 @@ export function TargetDetailsView({
                 : onStart()
           }
           disabled={loading || eligibility.status === "checking"}
+          icon={<ShieldCheck className="size-4" aria-hidden="true" />}
         >
-          <ShieldCheck className="size-4" aria-hidden="true" />
           {/* One action, named from the first render: the click checks
               eligibility and starts the scan when the server allows it. The
               previous "Check availability" / "Check eligibility again" labels
