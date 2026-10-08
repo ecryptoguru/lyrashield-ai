@@ -1745,7 +1745,8 @@ model WebhookEvent {
   @@index([processed])
   // Settlement-receipt integrity probes (apps/worker/src/jobs/billing-reconciliation.job.ts:644)
   // all filter provider + eventType + a createdAt window. Created by migration
-  // 20261008120000_p2_16_additive_query_indexes.
+  // 20261008130000_p2_16_webhook_event_integrity_index, which is the OPTIONAL
+  // half of P2-16: outside the audited scope, and droppable on its own.
   @@index([provider, eventType, createdAt])
 }
 
@@ -2167,7 +2168,8 @@ model MinutePack {
   // Cross-tenant expiry sweep (packages/billing/src/usage/expiry.ts:33-40):
   //   WHERE "deletedAt" IS NULL AND "expiresAt" < now() AND "remainingMinutes" > 0
   // Every index above leads with workspaceId or accountId, so none can serve the
-  // expiresAt bound alone. Created by migration 20261008120000_p2_16_additive_query_indexes.
+  // expiresAt bound alone. Created by migration 20261008120000_p2_16_minute_pack_expiry_index,
+  // which is the AUDITED half of P2-16.
   @@index([expiresAt], where: raw("\"remainingMinutes\" > 0 AND \"deletedAt\" IS NULL"), map: "MinutePack_expiresAt_active_partial_idx")
 }
 

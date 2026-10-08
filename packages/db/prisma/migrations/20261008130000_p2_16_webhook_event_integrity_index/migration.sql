@@ -1,0 +1,48 @@
+-- P2-16 migration B of 2 — OPTIONAL, outside the audited scope:
+-- WebhookEvent settlement-receipt integrity probe.
+--
+-- This migration is the whole of the optional half of P2-16. Dropping it —
+-- this directory and the matching @@index([provider, eventType, createdAt])
+-- declaration in schema.prisma — leaves migration
+-- 20261008120000_p2_16_minute_pack_expiry_index (the audited index) intact and
+-- the drift check green. Nothing here depends on that migration and it depends
+-- on nothing here.
+--
+-- The audit did NOT carry a webhook integrity index forward. It said the
+-- settlement-receipt integrity query still needed a matching plan before an
+-- index could be justified. The EXPLAIN evidence in the PR body supplies that
+-- plan. The index is an addition the reviewer may drop.
+--
+-- WRITE COST, because WebhookEvent sits in the billing zone and every payment
+-- webhook writes to it: one extra b-tree insert per webhook row on
+-- (provider, eventType, createdAt). No column is added and no existing index
+-- changes, so read paths other than the integrity probe are unaffected.
+-- createdAt is monotonic in practice, so the insert lands at the right edge of
+-- the index and page splits are rare. The index only pays off if the
+-- settlement-receipt integrity probe runs regularly; if it runs rarely, the
+-- insert cost is not repaid and this migration should be dropped.
+--
+-- Plain additive `CREATE INDEX`. No column, constraint or data change, no
+-- drops, no renames. CONCURRENTLY for the same reason as migration A.
+--
+-- FORWARD-ONLY. There is no down migration.
+
+-- ── WebhookEvent settlement-receipt integrity ───────────────────────────────
+-- checkSettlementReceiptIntegrity (apps/worker/src/jobs/billing-reconciliation.job.ts:644)
+-- filters on provider, eventType and a createdAt window in all three of its
+-- probes. WebhookEvent carries only WebhookEvent_provider_externalId_key,
+-- WebhookEvent_workspaceId_idx and WebhookEvent_processed_idx, plus the two
+-- payload expression indexes from 20260928140000, so the createdAt bound could
+-- not be served by an index and every probe re-read the window from the heap.
+--
+-- Measured on the disposable instance, 200,000 rows over 400 days, 30-day
+-- window:
+--   duplicate settlement groups  76.318 ms -> 10.663 ms
+--   polar refund orphans         36.838 ms ->  0.244 ms
+--   razorpay refund orphans      29.213 ms ->  0.268 ms
+-- The two orphan probes change from a parallel sequential scan over the whole
+-- table to an Index Scan that stops after the 25-row LIMIT.
+-- Index size at 200,000 rows is 1456 kB.
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS "WebhookEvent_provider_eventType_createdAt_idx"
+  ON "WebhookEvent" ("provider", "eventType", "createdAt");

@@ -1,8 +1,17 @@
-import { readFileSync } from "node:fs"
+import { readFileSync, readdirSync } from "node:fs"
 import { describe, expect, it } from "vitest"
 
 function migration(path: string): string {
   return readFileSync(new URL(path, import.meta.url), "utf8")
+}
+
+const migrationsDir = new URL("../prisma/migrations/", import.meta.url)
+
+function migrationDirectoryNames(): string[] {
+  return readdirSync(migrationsDir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .sort()
 }
 
 describe("forward database constraints", () => {
@@ -93,5 +102,96 @@ describe("forward database constraints", () => {
     expect(sql).toContain(
       "app.current_account_id() IS NULL AND app.myra_public_session_id() IS NULL"
     )
+  })
+})
+
+// P2-16 ships two indexes the founder reviews separately: the AUDITED minute-pack
+// partial index and the OPTIONAL WebhookEvent composite. They live in two
+// migrations so the optional one can be dropped on its own. These assertions pin
+// that structure: one index per file, and the optional migration strictly later
+// than the audited one. Both sort after every migration that already exists.
+//
+// The audited half is asserted unconditionally. The optional half is asserted
+// only when its migration is present, so the reviewer can delete
+// 20261008130000_p2_16_webhook_event_integrity_index and its schema.prisma
+// declaration and leave a green suite, exactly as the PR body promises.
+describe("P2-16 split migration structure", () => {
+  const auditedDir = "20261008120000_p2_16_minute_pack_expiry_index"
+  const optionalDir = "20261008130000_p2_16_webhook_event_integrity_index"
+  const all = migrationDirectoryNames()
+  const auditedSql = migration(`../prisma/migrations/${auditedDir}/migration.sql`)
+  const optionalPresent = all.includes(optionalDir)
+  const optionalSql = optionalPresent
+    ? migration(`../prisma/migrations/${optionalDir}/migration.sql`)
+    : null
+
+  function executableStatements(sql: string): string[] {
+    // Comments carry the reasoning; only the executable statements are asserted on.
+    return sql
+      .replace(/--[^\n]*/g, "")
+      .split(";")
+      .filter((statement) => statement.trim())
+  }
+
+  it("carries the audited minute-pack index in its own migration", () => {
+    expect(auditedSql).toContain(
+      'CREATE INDEX CONCURRENTLY IF NOT EXISTS "MinutePack_expiresAt_active_partial_idx"'
+    )
+    expect(auditedSql).toContain('WHERE "remainingMinutes" > 0 AND "deletedAt" IS NULL')
+    // The optional index must not be smuggled into the audited migration, or the
+    // reviewer could not approve the audited change on its own.
+    expect(auditedSql).not.toContain("WebhookEvent_provider_eventType_createdAt_idx")
+  })
+
+  it("creates exactly one index in the audited migration and nothing else", () => {
+    const statements = executableStatements(auditedSql)
+    expect(statements).toHaveLength(1)
+    const executable = statements[0] ?? ""
+    expect(executable).toMatch(/^\s*CREATE INDEX CONCURRENTLY IF NOT EXISTS\b/)
+    // Additive only: no drops, renames, column changes or data changes.
+    expect(executable).not.toMatch(
+      /\bDROP\b|\bRENAME\b|\bALTER\b|\bDELETE\b|\bUPDATE\b|\bINSERT\b/i
+    )
+    // Forward-only: no down step to run.
+    expect(auditedSql).not.toMatch(/\bDROP INDEX\b/i)
+    expect(auditedDir).toMatch(/^[0-9]{14}_[a-z0-9_]+$/)
+  })
+
+  it("places the audited migration after every migration that already exists", () => {
+    const preexisting = all.filter((name) => name !== auditedDir && name !== optionalDir)
+    const highestPreexisting = preexisting[preexisting.length - 1] ?? ""
+    expect(auditedDir > highestPreexisting).toBe(true)
+    // PR #964 owns this one. The audited migration must sort after it so the
+    // Myra RLS boundary always applies first.
+    expect(auditedDir > "20261007170000_myra_public_session_rls_boundary").toBe(true)
+  })
+
+  it("carries the optional webhook index in a separate, strictly later migration", () => {
+    if (!optionalSql) {
+      // The optional half was dropped, which this PR explicitly allows.
+      expect(all).not.toContain(optionalDir)
+      return
+    }
+    expect(optionalSql).toContain(
+      'CREATE INDEX CONCURRENTLY IF NOT EXISTS "WebhookEvent_provider_eventType_createdAt_idx"'
+    )
+    expect(optionalSql).toContain('ON "WebhookEvent" ("provider", "eventType", "createdAt")')
+    expect(optionalSql).not.toContain("MinutePack_expiresAt_active_partial_idx")
+
+    const statements = executableStatements(optionalSql)
+    expect(statements).toHaveLength(1)
+    expect(statements[0] ?? "").toMatch(/^\s*CREATE INDEX CONCURRENTLY IF NOT EXISTS\b/)
+    expect(statements[0] ?? "").not.toMatch(
+      /\bDROP\b|\bRENAME\b|\bALTER\b|\bDELETE\b|\bUPDATE\b|\bINSERT\b/i
+    )
+    expect(optionalSql).not.toMatch(/\bDROP INDEX\b/i)
+
+    // Ordering is unambiguous: the optional migration sorts strictly later, so it
+    // can never be mistaken for the audited change.
+    expect(optionalDir > auditedDir).toBe(true)
+    const preexisting = all.filter((name) => name !== auditedDir && name !== optionalDir)
+    const highestPreexisting = preexisting[preexisting.length - 1] ?? ""
+    expect(optionalDir > highestPreexisting).toBe(true)
+    expect(optionalDir > "20261007170000_myra_public_session_rls_boundary").toBe(true)
   })
 })
