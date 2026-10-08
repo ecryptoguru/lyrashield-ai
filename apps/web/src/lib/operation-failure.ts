@@ -269,7 +269,8 @@ export function sanitizeServerMessage(message: unknown): string | null {
  * into rendered copy, so it is accepted only when it looks like the record name
  * the scan route builds (`_lyrashield.<domain>`) and fits the DNS length limit.
  */
-const DNS_RECORD_NAME = /^_?[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)*\.?$/
+const DNS_RECORD_NAME =
+  /^_?[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)*\.?$/
 const MAX_DNS_NAME_LENGTH = 253
 
 function sanitizeDnsRecordName(value: unknown): string | null {
@@ -286,10 +287,10 @@ function sanitizeDnsRecordName(value: unknown): string | null {
  * Onboarding previously discarded both, so the user was told to verify a
  * domain without being told which record to publish.
  */
-function remediationFromDetails(context: {
-  details?: unknown
-  targetId?: string | null
-}): { txtName: string | null; verifyPath: string | null } {
+function remediationFromDetails(context: { details?: unknown; targetId?: string | null }): {
+  txtName: string | null
+  verifyPath: string | null
+} {
   const details = context.details
   if (typeof details !== "object" || details === null) return { txtName: null, verifyPath: null }
   const remediation = (details as { remediation?: unknown }).remediation
@@ -300,7 +301,8 @@ function remediationFromDetails(context: {
   const txtName = sanitizeDnsRecordName(record.txtName)
   // Only a workspace-relative dashboard path is ever rendered as a link.
   const verifyPath =
-    typeof record.verifyPath === "string" && /^\/dashboard\/[A-Za-z0-9/_-]*$/.test(record.verifyPath)
+    typeof record.verifyPath === "string" &&
+    /^\/dashboard\/[A-Za-z0-9/_-]*$/.test(record.verifyPath)
       ? record.verifyPath
       : null
   return { txtName, verifyPath }

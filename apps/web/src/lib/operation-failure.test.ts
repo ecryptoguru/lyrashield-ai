@@ -234,7 +234,10 @@ describe("sanitized server messages (W1/P2-1)", () => {
   })
 
   it.each([
-    ["a stack frame", "Error: boom\n    at handler (/app/apps/web/src/app/api/scans/route.ts:42:11)"],
+    [
+      "a stack frame",
+      "Error: boom\n    at handler (/app/apps/web/src/app/api/scans/route.ts:42:11)",
+    ],
     ["a provider body", '{"error":{"message":"upstream refused"}}'],
     ["a bearer token", "Authorization: Bearer sk-live-abcdefghijklmnop failed"],
     ["an internal URL", "Fetch failed for https://internal.svc.cluster.local:8080/scans"],

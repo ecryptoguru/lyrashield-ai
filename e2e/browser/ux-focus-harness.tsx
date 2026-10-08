@@ -28,12 +28,7 @@ function AlertHarness() {
 
   return (
     <main>
-      <OnboardingAlerts
-        failure={failure}
-        error={error}
-        loading={false}
-        onRetryFailure={() => {}}
-      />
+      <OnboardingAlerts failure={failure} error={error} loading={false} onRetryFailure={() => {}} />
       {/* The step the alert renders above is tall enough that the button the
           user pressed is off-screen on a phone. */}
       <section
@@ -85,7 +80,11 @@ function AlertHarness() {
 function BillingHarness() {
   return (
     <main>
-      <section aria-label="Trial status" className="rounded-xl border p-6" style={{ height: "900px" }}>
+      <section
+        aria-label="Trial status"
+        className="rounded-xl border p-6"
+        style={{ height: "900px" }}
+      >
         <h1>Trial status</h1>
         <p>Days left, minutes left, targets.</p>
         <UpgradeNowButton />

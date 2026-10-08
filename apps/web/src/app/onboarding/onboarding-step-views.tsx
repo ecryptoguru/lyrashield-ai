@@ -6,11 +6,7 @@ import { Braces, Check, ChevronLeft, ChevronRight, Globe, ShieldCheck } from "lu
 import { Button, FormField, Input, Spinner, Badge, GithubIcon } from "@lyrashield/ui"
 import type { OperationFailurePresentation } from "@/lib/operation-failure"
 import type { ManualScanOption } from "@/lib/scan-presets"
-import {
-  getEnvironmentKindLabel,
-  getScanModeLabel,
-  getWorkspacePlanLabel,
-} from "@/lib/enum-labels"
+import { getEnvironmentKindLabel, getScanModeLabel, getWorkspacePlanLabel } from "@/lib/enum-labels"
 import { SCAN_SINGULAR, TARGET_DETAILS_LABEL, TARGET_NAME_LABEL } from "@/lib/terminology"
 import {
   ONBOARDING_ENVIRONMENT,

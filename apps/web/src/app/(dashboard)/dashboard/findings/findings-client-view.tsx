@@ -2,7 +2,16 @@
 import type { ReactNode, RefObject } from "react"
 import Link from "next/link"
 import { Bug, Shield, ChevronRight, CheckCircle2, XCircle, Calendar, SortDesc } from "lucide-react"
-import { Badge, Button, Card, EmptyState, Select, Spinner, buttonVariants, cn } from "@lyrashield/ui"
+import {
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Select,
+  Spinner,
+  buttonVariants,
+  cn,
+} from "@lyrashield/ui"
 import { Skeleton } from "@/components/ui/skeleton"
 import { severityLabel, humanizeToken } from "@/lib/labels"
 import { SEVERITY_BADGE } from "@/lib/severity-badge"

@@ -21,9 +21,7 @@ import { PAGE_LOAD_FAILURE_MESSAGE } from "@/components/api-error-card"
  */
 describe("findings route boundary", () => {
   it("offers a retry and a way back to the unscoped list", () => {
-    const html = renderToStaticMarkup(
-      <FindingsError error={new Error("Boom")} reset={() => {}} />
-    )
+    const html = renderToStaticMarkup(<FindingsError error={new Error("Boom")} reset={() => {}} />)
 
     expect(html).toContain(PAGE_LOAD_FAILURE_MESSAGE)
     expect(html).toContain("Try again")

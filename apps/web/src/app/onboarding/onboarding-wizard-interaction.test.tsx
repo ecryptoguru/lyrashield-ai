@@ -380,9 +380,7 @@ it("reuses a created target when the onboarding save fails", async () => {
   await startScan()
   await new Promise<void>((resolve) => setTimeout(resolve, 0))
 
-  const targetCreates = vi
-    .mocked(api.post)
-    .mock.calls.filter(([url]) => url === "/api/targets")
+  const targetCreates = vi.mocked(api.post).mock.calls.filter(([url]) => url === "/api/targets")
   expect(targetCreates).toHaveLength(1)
   expect(api.patch).toHaveBeenCalledTimes(2)
   expect(api.patch).toHaveBeenLastCalledWith(

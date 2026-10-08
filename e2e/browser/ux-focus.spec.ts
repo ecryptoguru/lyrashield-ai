@@ -39,7 +39,9 @@ test("a plain onboarding error also takes focus", async ({ page }) => {
   await trigger.scrollIntoViewIfNeeded()
   await trigger.click()
 
-  const alert = page.getByRole("alert").filter({ hasText: "Workspace and repository are required." })
+  const alert = page
+    .getByRole("alert")
+    .filter({ hasText: "Workspace and repository are required." })
   await expect(alert).toBeFocused()
 })
 

@@ -106,9 +106,7 @@ function presentFailure(
     ctx.setError(null)
     ctx.setFailure({
       presentation,
-      retry: presentation.requiresReconciliation
-        ? reconciliationRetry(ctx) ?? null
-        : retry,
+      retry: presentation.requiresReconciliation ? (reconciliationRetry(ctx) ?? null) : retry,
     })
     return
   }
