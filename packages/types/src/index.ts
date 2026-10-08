@@ -670,8 +670,15 @@ export const FINDING_SEARCH_MESSAGE = `Too big: expected string to have <=${FIND
  * applied after the trim would reject inputs the route accepts (P2-8). The
  * pattern is exactly `value.trim().length <= 120` — leading and trailing
  * whitespace is free, the trimmed core is bounded.
+ *
+ * The bound is one flat span between two whitespace runs. "The trimmed core is
+ * at most 120 characters" and "whitespace, then at most 120 characters, then
+ * whitespace" accept exactly the same strings, and the flat form has no
+ * quantifier inside a quantifier, so `security/detect-unsafe-regex` leaves it
+ * alone. The previous form nested a bounded repeat over an overlapping class
+ * and was flagged.
  */
-export const FINDING_SEARCH_PATTERN = /^\s*(?:\S[\s\S]{0,118}\S|\S)?\s*$/
+export const FINDING_SEARCH_PATTERN = /^\s*[\s\S]{0,120}\s*$/
 
 export const FindingQuerySchema = z.object({
   workspaceId: z.string().min(1),
