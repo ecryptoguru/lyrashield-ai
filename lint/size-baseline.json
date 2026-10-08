@@ -397,8 +397,8 @@
     },
     "apps/web/src/app/onboarding/onboarding-step-views.tsx|max-lines": {
       "count": 1,
-      "totalExcess": 132,
-      "maxExcess": 132
+      "totalExcess": 23,
+      "maxExcess": 23
     },
     "apps/web/src/app/onboarding/onboarding-wizard.tsx|max-lines-per-function": {
       "count": 1,

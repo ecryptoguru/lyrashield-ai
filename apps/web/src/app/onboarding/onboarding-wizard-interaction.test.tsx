@@ -60,6 +60,7 @@ type Element = ReactElement<{
   children?: ReactNode
   id?: string
   href?: string
+  disabled?: boolean
   value?: string
   onChange?: (event: { target: { value?: string; checked?: boolean } }) => void
   onSubmit?: (event: { preventDefault: () => void }) => void
@@ -1090,11 +1091,24 @@ it("does not create a second workspace or target when Continue is double-tapped 
   // Two taps before the first workspace call resolves.
   const first = submit({ preventDefault: vi.fn() })
   const second = submit({ preventDefault: vi.fn() })
+  const waiting = tree()
+  expect(waiting.find((element) => element.type === UrlTargetView)?.props).toMatchObject({
+    loading: true,
+  })
+  expect(
+    waiting.find(
+      (element) => element.type === Button && textOf(element.props.children).includes("Back")
+    )?.props.disabled
+  ).toBe(true)
+  expect(waiting.find((element) => element.props.id === "url-input")?.props.disabled).toBe(true)
   releaseWorkspace()
   await Promise.all([first, second])
   await new Promise<void>((resolve) => setTimeout(resolve, 0))
 
   expect(workspaceCalls).toBe(1)
+  expect(tree().find((element) => element.type === TargetDetailsView)?.props).toMatchObject({
+    loading: false,
+  })
 })
 
 it("reports an invalid URL without creating a workspace (P1-1)", async () => {

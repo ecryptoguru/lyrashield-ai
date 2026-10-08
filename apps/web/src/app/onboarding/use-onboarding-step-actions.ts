@@ -27,6 +27,7 @@ export function useOnboardingStepActions({
   environment,
   selectedRepo,
   ensureWorkspace,
+  setLoading,
   setError,
   setFailure,
   setPath,
@@ -40,6 +41,7 @@ export function useOnboardingStepActions({
   environment: string
   selectedRepo: Repo | null
   ensureWorkspace: () => Promise<string>
+  setLoading: (loading: boolean) => void
   setError: (message: string | null) => void
   setFailure: (failure: OnboardingFailureState) => void
   setPath: (path: OnboardingPath) => void
@@ -71,34 +73,31 @@ export function useOnboardingStepActions({
       return
     }
     submitting.current = true
+    setLoading(true)
     setError(null)
     setFailure(null)
-    let resolvedWorkspaceId = workspaceId
-    if (!resolvedWorkspaceId) {
-      try {
-        resolvedWorkspaceId = await ensureWorkspace()
-      } catch (cause) {
-        setError(cause instanceof Error ? cause.message : "Could not prepare your workspace.")
-        submitting.current = false
+    try {
+      const resolvedWorkspaceId = workspaceId || (await ensureWorkspace())
+      const payload = buildUrlTargetPayload({
+        workspaceId: resolvedWorkspaceId,
+        path,
+        name: productName,
+        url: urlForm.url,
+        environment,
+        ownershipAttested: urlForm.ownershipAttested,
+      })
+      if (!payload) {
+        setError("Enter a name and a valid URL to continue.")
         return
       }
-    }
-    const payload = buildUrlTargetPayload({
-      workspaceId: resolvedWorkspaceId,
-      path,
-      name: productName,
-      url: urlForm.url,
-      environment,
-      ownershipAttested: urlForm.ownershipAttested,
-    })
-    if (!payload) {
-      setError("Enter a name and a valid URL to continue.")
+      const next = nextStepForPath(payload.type === "API" ? "api" : "url")
+      if (next !== null) setStep(next)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not prepare your workspace.")
+    } finally {
       submitting.current = false
-      return
+      setLoading(false)
     }
-    const next = nextStepForPath(payload.type === "API" ? "api" : "url")
-    if (next !== null) setStep(next)
-    submitting.current = false
   }
 
   function confirmRepoAndContinue() {

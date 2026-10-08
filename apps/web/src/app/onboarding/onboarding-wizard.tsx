@@ -136,8 +136,6 @@ export function OnboardingWizard({
     onTargetBound,
   })
 
-  const retryingExistingTarget = persistedTargetReusable
-
   const { choosePath, skipOnboarding } = useOnboardingNavigation({
     data,
     completionPath,
@@ -158,6 +156,7 @@ export function OnboardingWizard({
     environment,
     selectedRepo,
     ensureWorkspace,
+    setLoading,
     setError,
     setFailure,
     setPath,
@@ -247,7 +246,7 @@ export function OnboardingWizard({
         onReconnect={connectGitHub}
         onRepoBack={() => setStep(1)}
         onRepoContinue={confirmRepoAndContinue}
-        retryingExistingTarget={retryingExistingTarget}
+        retryingExistingTarget={persistedTargetReusable}
         hasFailedScanAttempt={Boolean(error) || failure !== null}
         reviewOptions={reviewOptions}
         selectedReview={selectedReview}
