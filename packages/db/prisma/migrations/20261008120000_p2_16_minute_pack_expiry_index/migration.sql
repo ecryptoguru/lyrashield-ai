@@ -4,10 +4,10 @@
 -- instance seeded with 200,000 synthetic rows. Plain additive `CREATE INDEX`.
 -- No column, constraint or data change, no drops, no renames.
 --
--- This is the index the v24 audit carried forward on measured evidence. The
--- companion migration 20261008130000_p2_16_webhook_event_integrity_index is
--- outside the audited scope and can be dropped on its own without touching
--- this file.
+-- This is the index the v24 audit carried forward on measured evidence. It is
+-- now the whole of P2-16: the optional WebhookEvent companion migration was
+-- dropped by founder decision on 2026-10-09 and never landed. Nothing here
+-- depended on it.
 --
 -- Prisma Migrate 7.4.0 and later split a migration script on statement
 -- boundaries and runs each statement outside the wrapping transaction, so

@@ -1743,11 +1743,6 @@ model WebhookEvent {
   @@unique([provider, externalId])
   @@index([workspaceId])
   @@index([processed])
-  // Settlement-receipt integrity probes (apps/worker/src/jobs/billing-reconciliation.job.ts:644)
-  // all filter provider + eventType + a createdAt window. Created by migration
-  // 20261008130000_p2_16_webhook_event_integrity_index, which is the OPTIONAL
-  // half of P2-16: outside the audited scope, and droppable on its own.
-  @@index([provider, eventType, createdAt])
 }
 
 /// Durable per-track processing state for a WebhookEvent (billing/license/
