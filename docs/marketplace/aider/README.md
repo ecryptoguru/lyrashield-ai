@@ -20,4 +20,4 @@ lyrashield pr-scan --target <targetId> --workspace <workspaceId> --mode QUICK --
 
 Keep the returned scan ID and resume with `lyrashield status <scanId> --watch` if the session ends before a terminal result. Do not use automatic target detection in this guide. No hook is installed by this bundle.
 
-Sources: [Aider conventions](https://aider.chat/docs/usage/conventions.html), [Aider config](https://aider.chat/docs/config/aider_conf.html), [LyraShield CLI reference](../../../packages/cli/README.md).
+Sources: [Aider conventions](https://aider.chat/docs/usage/conventions.html), [Aider config](https://aider.chat/docs/config/aider_conf.html), [LyraShield CLI reference](https://github.com/ecryptoguru/lyrashield-ai/blob/main/packages/cli/README.md).

@@ -1,4 +1,4 @@
-import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
+import { access, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises"
 import { createHash } from "node:crypto"
 import { tmpdir } from "node:os"
 import path from "node:path"
@@ -503,6 +503,54 @@ describe("exportMarketplace", () => {
       openclaw: "0.1.31",
     })
   })
+
+  it("ships no dead relative links and no self-referential status in the exported markdown tree", async () => {
+    const output = await mkdtemp(path.join(tmpdir(), "lyrashield-marketplace-"))
+    outputs.push(output)
+    await exportMarketplace(output)
+
+    const markdownFiles: string[] = []
+    async function collect(directory: string): Promise<void> {
+      for (const entry of await readdir(directory, { withFileTypes: true })) {
+        const full = path.join(directory, entry.name)
+        if (entry.isDirectory()) await collect(full)
+        else if (entry.name.endsWith(".md")) markdownFiles.push(full)
+      }
+    }
+    await collect(output)
+    expect(markdownFiles.length).toBeGreaterThan(0)
+
+    const dead: string[] = []
+    for (const file of markdownFiles) {
+      const text = await readFile(file, "utf8")
+      for (const match of text.matchAll(/!?\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g)) {
+        const target = match[1]
+        if (/^(?:[a-z][a-z0-9+.-]*:|\/\/|#)/i.test(target)) continue
+        const clean = target.split("#")[0].split("?")[0]
+        if (clean.length === 0) continue
+        const resolved = path.resolve(path.dirname(file), clean)
+        // A relative link that leaves the export root is broken for the
+        // published repository even when the file exists in the product repo.
+        if (resolved !== output && !resolved.startsWith(`${output}${path.sep}`)) {
+          dead.push(`${path.relative(output, file)} -> ${target} (escapes export root)`)
+          continue
+        }
+        try {
+          await access(resolved)
+        } catch {
+          dead.push(`${path.relative(output, file)} -> ${target} (missing target)`)
+        }
+      }
+    }
+    expect(dead).toEqual([])
+
+    // The generated README must not embed a revision or a readback section: it
+    // would name its own parent commit and go stale the moment it merges.
+    // Point-in-time status lives in manifest.json instead.
+    const readme = await readFile(path.join(output, "README.md"), "utf8")
+    expect(readme).not.toMatch(/\b[a-f0-9]{40}\b/)
+    expect(readme).not.toContain("Source and publication readback")
+  }, 60000)
 })
 
 describe("exported validator", () => {
