@@ -183,6 +183,10 @@ export function useFindingsListSave({
     save()
     window.addEventListener("pagehide", save)
     return () => window.removeEventListener("pagehide", save)
+    // The scope refs are stable identities that never change, so they are not
+    // dependencies: the query identity alone decides when this effect re-runs.
+    // They arrive as hook parameters, which the rule cannot recognise as refs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     workspaceId,
     filter,
@@ -291,6 +295,11 @@ export function useFindingsListPopState({
     }
     window.addEventListener("popstate", onPopState)
     return () => window.removeEventListener("popstate", onPopState)
+    // Follow Back/Forward with the state the listener closes over. The scope
+    // refs and the state setters are stable, so the parsed query identity alone
+    // decides when the listener is rebuilt. Same documented exception the
+    // inline effect carried in FindingsClient.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     workspaceId,
     filter,

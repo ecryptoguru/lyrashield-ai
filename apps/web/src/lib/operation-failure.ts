@@ -243,7 +243,10 @@ const SERVER_MESSAGE_REJECTIONS: readonly RegExp[] = [
   /\b(?:Bearer|Basic)\s+[A-Za-z0-9._-]{8,}/,
   // Hosts, addresses and paths that are not part of a sentence a user needs.
   /https?:\/\//i,
-  /\b\d{1,3}(?:\.\d{1,3}){3}\b/,
+  // Dotted quad: the four octets are spelled out rather than wrapped in a
+  // repeated group, so the pattern has no nested repetition. It still rejects
+  // any four dot-separated runs of one to three digits.
+  /\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/,
   // Raw tokens: long unbroken strings that are not words.
   /[A-Za-z0-9_-]{40,}/,
 ]
@@ -268,16 +271,30 @@ export function sanitizeServerMessage(message: unknown): string | null {
  * A DNS record name, or nothing. The remediation value crosses an API boundary
  * into rendered copy, so it is accepted only when it looks like the record name
  * the scan route builds (`_lyrashield.<domain>`) and fits the DNS length limit.
+ *
+ * Each label is validated on its own and the name is split on the dots, rather
+ * than repeating a label group inside one pattern. The accepted set is
+ * unchanged: an optional leading underscore on the first label, an optional
+ * trailing dot, and labels of alphanumerics and hyphens that begin and end with
+ * an alphanumeric. The 253-character cap is enforced separately below.
  */
-const DNS_RECORD_NAME =
-  /^_?[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)*\.?$/
+const DNS_LABEL = /^(?:[A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9-]*[A-Za-z0-9])$/
 const MAX_DNS_NAME_LENGTH = 253
+
+function isDnsRecordName(value: string): boolean {
+  const body = value.endsWith(".") ? value.slice(0, -1) : value
+  if (!body) return false
+  return body.split(".").every((label, index) => {
+    const candidate = index === 0 && label.startsWith("_") ? label.slice(1) : label
+    return DNS_LABEL.test(candidate)
+  })
+}
 
 function sanitizeDnsRecordName(value: unknown): string | null {
   if (typeof value !== "string") return null
   const trimmed = value.trim()
   if (!trimmed || trimmed.length > MAX_DNS_NAME_LENGTH) return null
-  if (!DNS_RECORD_NAME.test(trimmed)) return null
+  if (!isDnsRecordName(trimmed)) return null
   return trimmed
 }
 

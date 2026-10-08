@@ -39,7 +39,9 @@ describe("deterministic date formatting", () => {
     const previousTimezone = process.env.TZ
     process.env.TZ = "America/New_York"
     try {
-      const zoneSuffix = /(UTC|GMT[+-]\d{1,2}(?::\d{2})?|GMT|[A-Z]{2,5})$/
+      // Flattened alternation: the minute-bearing offset is its own branch, so
+      // the pattern has no nested repetition. Same accepted set as before.
+      const zoneSuffix = /(UTC|GMT[+-]\d{1,2}:\d{2}|GMT[+-]\d{1,2}|GMT|[A-Z]{2,5})$/
       expect(formatDate(value)).toMatch(zoneSuffix)
       expect(formatDateTime(value)).toMatch(zoneSuffix)
       expect(formatLocalDate(value)).toMatch(zoneSuffix)

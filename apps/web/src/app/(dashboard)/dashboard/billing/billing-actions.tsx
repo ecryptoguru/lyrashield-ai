@@ -25,6 +25,27 @@ interface BillingActionsProps {
   billingRegion?: "usd" | "inr"
 }
 
+/**
+ * Single-flight guard for the billing actions. The ref lives inside this hook,
+ * so the component never hands a ref to a function while it renders. It only
+ * ever receives the plain claim/release pair. `claim` reads and sets the ref in
+ * the same tick, which is what blocks a second click before React has
+ * re-rendered with the new loading state.
+ */
+function useSingleFlight() {
+  const pending = useRef(false)
+  return {
+    claim: () => {
+      if (pending.current) return false
+      pending.current = true
+      return true
+    },
+    release: () => {
+      pending.current = false
+    },
+  }
+}
+
 export function BillingActions({
   plan,
   isComplimentary,
@@ -35,15 +56,14 @@ export function BillingActions({
   billingRegion = "usd",
 }: BillingActionsProps) {
   const router = useRouter()
-  const pending = useRef(false)
+  const { claim, release } = useSingleFlight()
   const [loading, setLoading] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const intent = parsePlanIntent(selectedPlan)
   const canStartSubscription = plan === "FREE" && purchasesAvailable
 
   async function act(action: string, work: () => Promise<void>) {
-    if (pending.current) return
-    pending.current = true
+    if (!claim()) return
     setLoading(action)
     setError(null)
     try {
@@ -55,7 +75,7 @@ export function BillingActions({
           : "Could not complete this request. Please try again."
       )
     } finally {
-      pending.current = false
+      release()
       setLoading(null)
     }
   }
