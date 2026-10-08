@@ -8,6 +8,7 @@ import { apiGet, apiGetConditional, apiGetPaginated } from "@/lib/api-client"
 import { isActiveScan } from "@/lib/scan-presentation"
 import type { FindingItem, ScanData, ScanPollData } from "./scan-detail-types"
 import { asIsoString, asMetadata, mergeEvents } from "./scan-detail-utils"
+import { scanDetailPollDelay } from "./scan-detail-poll-schedule"
 
 /** Keep a new validator uncommitted until its poll response has been fully applied. */
 export function selectScanPollEtag({
@@ -27,6 +28,10 @@ export function selectScanPollEtag({
 }
 
 type PollResponse = { etag: string | undefined; status: number; processed: boolean }
+
+// Re-exported so importers keep a single entry point; the arithmetic itself
+// lives in a React-free module so it can be tested against a stable clock.
+export { nextScanDetailPollInterval, scanDetailPollDelay } from "./scan-detail-poll-schedule"
 
 function commitPollEtag(ref: { current: string | undefined }, response: PollResponse): void {
   ref.current = selectScanPollEtag({
@@ -230,12 +235,10 @@ export function useScanDetailPolling(initialScan: ScanData, initialFindings: Fin
     let isAborted = false
     let inFlight = false
     let refreshOnVisible = false
-
-    const nextInterval = (elapsedMs: number): number => {
-      if (elapsedMs < 60_000) return 5_000
-      if (elapsedMs < 5 * 60_000) return 10_000
-      return 60_000
-    }
+    // P2-14: the back-off clock's fallback. Seeded once when this loop starts —
+    // for a scan with no startedAt (QUEUED or REQUIRES_APPROVAL) — so elapsed
+    // time advances instead of being recomputed as ~0 on every tick.
+    const pollAnchorMs = Date.now()
 
     // Battery/network: while the tab is hidden the poll loop suspends entirely
     // — no timer spin and no fetches. `onVisibility` below resumes it with one
@@ -256,8 +259,12 @@ export function useScanDetailPolling(initialScan: ScanData, initialFindings: Fin
       } finally {
         inFlight = false
         if (!isAborted && !document.hidden) {
-          const startedAtMs = scan.startedAt ? new Date(scan.startedAt).getTime() : Date.now()
-          const delay = refreshOnVisible ? 0 : nextInterval(Date.now() - startedAtMs)
+          const delay = scanDetailPollDelay({
+            startedAt: scan.startedAt,
+            anchorMs: pollAnchorMs,
+            nowMs: Date.now(),
+            refreshOnVisible,
+          })
           refreshOnVisible = false
           schedule(delay)
         }

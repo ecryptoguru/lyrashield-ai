@@ -1,3 +1,4 @@
+import { useRef } from "react"
 import { track } from "@/lib/analytics"
 import {
   buildUrlTargetPayload,
@@ -10,6 +11,11 @@ import type { Repo } from "./onboarding-step-views"
 /**
  * Owns the transitions from URL/API target entry and repository selection to
  * target details. Target creation remains deferred to the scan action.
+ *
+ * The workspace is created here too. The URL/API forms are the first step a
+ * user reaches and a hinted Lite Check user arrives on them directly, so this
+ * is the last point before the details step where a workspace can be created
+ * without asking (P1-1).
  */
 export function useOnboardingStepActions({
   workspaceId,
@@ -18,6 +24,7 @@ export function useOnboardingStepActions({
   urlForm,
   environment,
   selectedRepo,
+  ensureWorkspace,
   setError,
   setFailure,
   setPath,
@@ -30,22 +37,28 @@ export function useOnboardingStepActions({
   urlForm: { url: string; ownershipAttested: boolean }
   environment: string
   selectedRepo: Repo | null
+  ensureWorkspace: () => Promise<string>
   setError: (message: string | null) => void
   setFailure: (failure: OnboardingFailureState) => void
   setPath: (path: OnboardingPath) => void
   setProductName: (name: string) => void
   setStep: (step: number) => void
 }) {
-  function continueWithUrlTarget() {
-    const payload = buildUrlTargetPayload({
-      workspaceId,
-      path,
-      name: productName,
-      url: urlForm.url,
-      environment,
-      ownershipAttested: urlForm.ownershipAttested,
-    })
-    if (!payload) {
+  // Duplicate-submit protection: a double tap must not create a second
+  // workspace or advance twice. A ref, not a closure variable, because
+  // `ensureWorkspace` re-renders the wizard and would otherwise hand the second
+  // tap a fresh closure with the flag already reset (P1-1).
+  const submitting = useRef(false)
+
+  async function continueWithUrlTarget() {
+    if (submitting.current) return
+    // The visible input is validated before the workspace call, so an
+    // incomplete form reports its own problem and never creates a workspace
+    // the user did not get past the first step for. Message selection keeps the
+    // original precedence: an unattested form always asks for attestation.
+    if (path !== "url" && path !== "api") return
+    const missingSource = !productName.trim() || !urlForm.url.trim()
+    if (missingSource || !urlForm.ownershipAttested) {
       setError(
         urlForm.ownershipAttested
           ? "Enter a name and a valid URL to continue."
@@ -53,10 +66,35 @@ export function useOnboardingStepActions({
       )
       return
     }
+    submitting.current = true
     setError(null)
     setFailure(null)
+    let resolvedWorkspaceId = workspaceId
+    if (!resolvedWorkspaceId) {
+      try {
+        resolvedWorkspaceId = await ensureWorkspace()
+      } catch (cause) {
+        setError(cause instanceof Error ? cause.message : "Could not prepare your workspace.")
+        submitting.current = false
+        return
+      }
+    }
+    const payload = buildUrlTargetPayload({
+      workspaceId: resolvedWorkspaceId,
+      path,
+      name: productName,
+      url: urlForm.url,
+      environment,
+      ownershipAttested: urlForm.ownershipAttested,
+    })
+    if (!payload) {
+      setError("Enter a name and a valid URL to continue.")
+      submitting.current = false
+      return
+    }
     const next = nextStepForPath(payload.type === "API" ? "api" : "url")
     if (next !== null) setStep(next)
+    submitting.current = false
   }
 
   function confirmRepoAndContinue() {

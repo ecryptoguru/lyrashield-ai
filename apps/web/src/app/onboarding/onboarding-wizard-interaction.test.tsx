@@ -103,7 +103,8 @@ function render(
     targetId?: string | null
     selectedGoal?: string | null
     targetName?: string | null
-  } = {}
+  } = {},
+  targetTypeHint: "url" | "api" | null = null
 ) {
   hooks.cursor = 0
   return elements(
@@ -120,6 +121,7 @@ function render(
         targetName: "Staging Site",
         ...overrides,
       },
+      targetTypeHint,
     })
   )
 }
@@ -849,4 +851,199 @@ it("retries trial activation only when refreshed eligibility still says it is av
   const scanStarts = vi.mocked(apiPost).mock.calls.filter(([url]) => url === "/api/scans")
   expect(trialStarts).toHaveLength(2)
   expect(scanStarts).toHaveLength(1)
+})
+
+/**
+ * P1-1 — the Lite Check onboarding dead-end.
+ *
+ * A user who arrives from the Lite Check handoff carries a target-type hint
+ * and has no workspace. Before the fix the hint sent them straight to the
+ * details step, where the only workspace-creating call (`choosePath`) never
+ * runs, so the start action stopped with "Workspace is required." Pressing
+ * Back reached the URL form, but the target payload builder returns null while
+ * workspaceId is null, so Continue reported "Enter a name and a valid URL to
+ * continue." for a perfectly valid URL. Skip was the only way out and the user
+ * never reached a first scan.
+ *
+ * The acceptance path below is the whole funnel: land on the hinted form,
+ * submit a valid URL and reach a STARTED scan.
+ */
+it("takes a hinted, workspace-less user from the URL form to a started scan (P1-1)", async () => {
+  const storage = new Map<string, string>()
+  vi.stubGlobal("window", {
+    sessionStorage: {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => storage.set(key, value),
+      removeItem: (key: string) => storage.delete(key),
+    },
+  })
+  // The fresh account: no workspace, no target, nothing progressed.
+  const freshAccount = {
+    currentStep: 1,
+    completed: false,
+    skipped: false,
+    workspaceId: null,
+    targetId: null,
+    selectedGoal: null,
+    targetType: null,
+    targetName: null,
+    updatedAt: "2026-09-27T00:00:00.000Z",
+  }
+  api.post.mockImplementation(async (url: string) => {
+    if (url === "/api/workspaces") return { id: "ws-new", trialStarted: true }
+    if (url === "/api/targets") return { id: "target-new" }
+    if (url === "/api/scans") return { id: "scan-new" }
+    throw new Error(`unexpected POST ${url}`)
+  })
+  api.patch.mockImplementation(async (_url: string, body: Record<string, unknown>) => ({
+    ...freshAccount,
+    ...body,
+  }))
+
+  const tree = () => render(null, freshAccount, "url")
+
+  // 1. The hinted user lands on the URL form (step 1), not the details step.
+  expect(tree().find((element) => element.type === UrlTargetView)).toBeDefined()
+  expect(tree().find((element) => element.type === TargetDetailsView)).toBeUndefined()
+
+  // 2. They fill the form in and submit it.
+  tree().find((element) => element.props.id === "url-name")!.props.onChange!({
+    target: { value: "example.com" },
+  })
+  tree().find((element) => element.props.id === "url-input")!.props.onChange!({
+    target: { value: "https://example.com" },
+  })
+  tree().find((element) => element.props.id === "ownership-check")!.props.onChange!({
+    target: { checked: true },
+  })
+  await tree().find((element) => element.type === "form")!.props.onSubmit!({
+    preventDefault: vi.fn(),
+  })
+  await new Promise<void>((resolve) => setTimeout(resolve, 0))
+
+  // The workspace was created on submit — not merely by visiting onboarding.
+  expect(api.post).toHaveBeenCalledWith("/api/workspaces", expect.any(Object), expect.any(Object))
+  // ...and the user reached the details step rather than an error card.
+  const details = tree()
+  expect(details.find((element) => element.type === TargetDetailsView)).toBeDefined()
+  expect(details.some((element) => element.props.children === "Workspace is required.")).toBe(false)
+
+  // 3. Starting the scan reaches a STARTED scan. The existing two-click
+  //    contract (check, then start) is preserved — collapsing it is P2-2 and
+  //    is not part of this fix.
+  const checkAvailability = () =>
+    tree().find((element) => String(element.props.children).includes("Check availability"))
+  expect(checkAvailability()).toBeDefined()
+  await checkAvailability()!.props.onClick!()
+  await new Promise<void>((resolve) => setTimeout(resolve, 0))
+
+  const start = tree().find((element) =>
+    String(element.props.children).includes("Start surface review")
+  )
+  expect(start, "expected the start button after eligibility was confirmed").toBeDefined()
+  await start!.props.onClick!()
+  await new Promise<void>((resolve) => setTimeout(resolve, 0))
+  await new Promise<void>((resolve) => setTimeout(resolve, 0))
+
+  const scanStarts = vi.mocked(apiPost).mock.calls.filter(([url]) => url === "/api/scans")
+  expect(scanStarts).toHaveLength(1)
+  expect(scanStarts[0]?.[1]).toMatchObject({
+    workspaceId: "ws-new",
+    targetId: "target-new",
+  })
+  const started = tree()
+  expect(started.some((element) => element.props.href === "/dashboard/scans/scan-new")).toBe(true)
+})
+
+it("does not create a second workspace or target when Continue is double-tapped (P1-1)", async () => {
+  const storage = new Map<string, string>()
+  vi.stubGlobal("window", {
+    sessionStorage: {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => storage.set(key, value),
+      removeItem: (key: string) => storage.delete(key),
+    },
+  })
+  const freshAccount = {
+    currentStep: 1,
+    completed: false,
+    skipped: false,
+    workspaceId: null,
+    targetId: null,
+    selectedGoal: null,
+    targetType: null,
+    targetName: null,
+    updatedAt: "2026-09-27T00:00:00.000Z",
+  }
+  let releaseWorkspace!: () => void
+  const workspaceHeld = new Promise<void>((resolve) => {
+    releaseWorkspace = resolve
+  })
+  let workspaceCalls = 0
+  api.post.mockImplementation(async (url: string) => {
+    if (url === "/api/workspaces") {
+      workspaceCalls++
+      await workspaceHeld
+      return { id: "ws-new" }
+    }
+    if (url === "/api/targets") return { id: "target-new" }
+    throw new Error(`unexpected POST ${url}`)
+  })
+  api.patch.mockImplementation(async (_url: string, body: Record<string, unknown>) => ({
+    ...freshAccount,
+    ...body,
+  }))
+
+  const tree = () => render(null, freshAccount, "url")
+  tree().find((element) => element.props.id === "url-name")!.props.onChange!({
+    target: { value: "example.com" },
+  })
+  tree().find((element) => element.props.id === "url-input")!.props.onChange!({
+    target: { value: "https://example.com" },
+  })
+  tree().find((element) => element.props.id === "ownership-check")!.props.onChange!({
+    target: { checked: true },
+  })
+
+  const submit = tree().find((element) => element.type === "form")!.props.onSubmit!
+  // Two taps before the first workspace call resolves.
+  const first = submit({ preventDefault: vi.fn() })
+  const second = submit({ preventDefault: vi.fn() })
+  releaseWorkspace()
+  await Promise.all([first, second])
+  await new Promise<void>((resolve) => setTimeout(resolve, 0))
+
+  expect(workspaceCalls).toBe(1)
+})
+
+it("reports an invalid URL without creating a workspace (P1-1)", async () => {
+  const freshAccount = {
+    currentStep: 1,
+    completed: false,
+    skipped: false,
+    workspaceId: null,
+    targetId: null,
+    selectedGoal: null,
+    targetType: null,
+    targetName: null,
+  }
+  api.post.mockResolvedValue({ id: "ws-new" })
+
+  const tree = () => render(null, freshAccount, "url")
+  tree().find((element) => element.props.id === "url-input")!.props.onChange!({
+    target: { value: "https://example.com" },
+  })
+  tree().find((element) => element.props.id === "ownership-check")!.props.onChange!({
+    target: { checked: true },
+  })
+  // No name entered: the form is not submittable and no workspace is created.
+  await tree().find((element) => element.type === "form")!.props.onSubmit!({
+    preventDefault: vi.fn(),
+  })
+  await new Promise<void>((resolve) => setTimeout(resolve, 0))
+
+  expect(api.post).not.toHaveBeenCalled()
+  expect(
+    tree().some((element) => element.props.children === "Enter a name and a valid URL to continue.")
+  ).toBe(true)
 })

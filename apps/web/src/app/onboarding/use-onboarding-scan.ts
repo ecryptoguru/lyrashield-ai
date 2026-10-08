@@ -52,6 +52,8 @@ interface ScanFlowContext {
   oauthReturnQuery: string | null | undefined
   router: ReturnType<typeof useRouter>
   persist: OnboardingPersist
+  // P1-1: the start action creates the workspace when the URL/API form did not.
+  ensureWorkspace: () => Promise<string>
   setLoading: (loading: boolean) => void
   setError: (message: string | null) => void
   setFailure: (failure: OnboardingFailureState) => void
@@ -227,7 +229,7 @@ async function ensureTargetId(
           const target = await apiPost(
             "/api/targets",
             {
-              workspaceId: ctx.data.workspaceId,
+              workspaceId,
               name: ctx.productName.trim(),
               type: "REPO",
               repoProvider: "github",
@@ -242,7 +244,7 @@ async function ensureTargetId(
           targetId = target.id
         } else {
           const target = buildUrlTargetPayload({
-            workspaceId: ctx.data.workspaceId,
+            workspaceId,
             path: ctx.path,
             name: ctx.productName,
             url: ctx.urlForm.url,
@@ -361,11 +363,20 @@ async function runCreateTargetAndStart(
   skipEligibilityCheck = false,
   startTrial = false
 ) {
-  if (!ctx.data.workspaceId) {
-    ctx.setError("Workspace is required.")
-    return
+  // The workspace is normally created when the URL/API form is submitted, but
+  // a user can reach this action without that having happened — a restored
+  // session, a stale persisted step or a direct start. Create it here rather
+  // than dead-ending on "Workspace is required." (P1-1). The duplicate-submit
+  // lock below covers a double tap.
+  let workspaceId = ctx.data.workspaceId
+  if (!workspaceId) {
+    try {
+      workspaceId = await ctx.ensureWorkspace()
+    } catch (cause) {
+      ctx.setError(cause instanceof Error ? cause.message : "Could not prepare your workspace.")
+      return
+    }
   }
-  const workspaceId = ctx.data.workspaceId
   // A retry after scan admission fails reuses the target persisted by the
   // first attempt — but only while it still describes the source the wizard
   // shows. New flows create it here so Back -> Continue cannot orphan
@@ -384,7 +395,7 @@ async function runCreateTargetAndStart(
     !hasExistingTarget &&
     !needsRepo &&
     !buildUrlTargetPayload({
-      workspaceId: ctx.data.workspaceId,
+      workspaceId,
       path: ctx.path,
       name: ctx.productName,
       url: ctx.urlForm.url,
@@ -529,6 +540,7 @@ export function useOnboardingScan({
   completionPath,
   oauthReturnQuery,
   persist,
+  ensureWorkspace,
   setLoading,
   setError,
   setFailure,
@@ -546,6 +558,7 @@ export function useOnboardingScan({
   completionPath: string
   oauthReturnQuery: string | null | undefined
   persist: OnboardingPersist
+  ensureWorkspace: () => Promise<string>
   setLoading: (loading: boolean) => void
   setError: (message: string | null) => void
   setFailure: (failure: OnboardingFailureState) => void
@@ -582,6 +595,7 @@ export function useOnboardingScan({
     oauthReturnQuery,
     router,
     persist,
+    ensureWorkspace,
     setLoading,
     setError,
     setFailure,
