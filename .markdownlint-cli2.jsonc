@@ -1,5 +1,6 @@
-// Markdown hygiene for hand-written docs. Runs as a non-blocking CI check —
-// generated/vendor trees are excluded by glob, not by disabling rules.
+// Markdown hygiene for hand-written docs. Run by hand with `pnpm lint:md`; no
+// CI job invokes it. Generated/vendor trees are excluded by glob, not by
+// disabling rules.
 {
   "globs": ["**/*.md"],
   "ignores": [

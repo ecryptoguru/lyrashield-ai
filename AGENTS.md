@@ -84,7 +84,7 @@ Decided on 2026-09-22: retain and publish the existing Cloud and minute-pack pri
 - Findings list pages carry a deterministic, page-local Priority heuristic (severity, status, verified, confidence, target environment, business-impact/exploitability context). It is triage context, never a claim of exploitability or reachability, and does not change cursor pagination.
 - Result manifests bind worker execution provenance (`LYRASHIELD_PRODUCT_REVISION`, `LYRASHIELD_WORKER_IMAGE_DIGEST`, `LYRASHIELD_ENGINE_REVISION`) into the checksum; the production worker fails closed before readiness without them, and `run-worker.sh` derives them only from the digest-pinned image and its OCI labels. New rows store the exact JSON checksum input and hash those bytes. `verifyStoredManifestChecksum` verifies SHA-256 and structural equality with JSONB; duplicate persistence and pending finalization reject mismatches. Null legacy input remains `UNAVAILABLE`, with no backfill or historical-hash rewrite.
 - `provision-alerts.sh` readback-fails unless every rule is enabled, auto-mitigates, and binds the operator action group; `scan_worker_lease_expired` is never provisioned until a durable counter exists.
-- `verify:launch-assurance` is dry-run-first and read-only by default; mutation requires exact scan/workspace IDs, the production confirmation phrase, authenticated cancellation, and shared queue recovery only.
+- `pnpm --filter @lyrashield/worker verify:launch-assurance` is dry-run-first and read-only by default; mutation requires exact scan/workspace IDs, the production confirmation phrase, authenticated cancellation, and shared queue recovery only. The script is defined only in `apps/worker/package.json`, so it must be run through the filter.
 - Direct updates must not set `FIXED`; retain `FIXED_PENDING_RETEST` until trusted retest receipt.
 
 ### Queue, worker, and network
@@ -130,7 +130,8 @@ Decided on 2026-09-22: retain and publish the existing Cloud and minute-pack pri
 Local gates — run the ones a change touches before opening a PR:
 
 - `pnpm install`, `pnpm lint`, `pnpm typecheck`, `pnpm typecheck:e2e`, `pnpm format:check`.
-- `pnpm lint:md` — advisory markdownlint pass (`.markdownlint-cli2.jsonc`); wired non-blocking in CI.
+- `pnpm lint:md` — advisory markdownlint pass (`.markdownlint-cli2.jsonc`). No CI job runs it; invoke it by hand before a docs-heavy PR.
+- `pnpm lint:knip` — advisory dead-code report (`knip.json`). CI runs it non-blocking after the copy ratchet; it never fails a build, so treat findings as unreviewed candidates.
 - `pnpm test:core` (vitest unit suite), `pnpm test:marketing`, `pnpm test:motion`, `pnpm test` (full runner), `pnpm test:e2e` (Playwright; needs the test database).
 - `pnpm db:generate`, `pnpm db:migrate`, `pnpm prisma:migrate:check` (migration drift).
 - `pnpm verify:worker-image` — worker image contract on the checked-out Dockerfile and host assets.
@@ -138,7 +139,7 @@ Local gates — run the ones a change touches before opening a PR:
 
 Release pipeline — GitHub Actions only; qualifying main merges can trigger production automatically:
 
-- `ci.yml` gates PRs targeting main: SCA/secret scan, path classification, lint/typecheck/test/build, pinned engine-worker contract and desktop jobs. CI runs on pull requests; protected main requires those checks with an up-to-date base. Main merges start deployment without repeating the PR pipeline.
+- `ci.yml` gates PRs targeting main: SCA/secret scan, path classification, lint/typecheck/test/build, pinned engine-worker contract and desktop jobs. CI runs on pull requests; protected main requires those checks with an up-to-date base. Main merges start deployment without repeating the PR pipeline. Every job declares its own `timeout-minutes`. The `security` job owns the only per-PR gitleaks run; the reusable `lyrashield-scan.yml` diff gate skips its duplicate secret scan for this repository's pull requests but keeps it for `workflow_call` consumers. `container-build` builds the web, worker and egress-proxy release targets with `push: false` when the Azure deploy paths change; it is not a required check.
 - `release-production.yml` runs on protected main pushes, compares the exact merge with successful deployed baselines and calls `deploy-azure.yml` and `deploy-marketing.yml` independently. Container images are built once in the Azure release. Production Lighthouse sampling runs nightly or on demand in `lighthouse-production.yml` and never delays deployments. The runtime workflow deploys and promotes app, scanner and egress-proxy revisions before promoting the digest-pinned worker through `.github/scripts/promote-worker-vm.sh` (admission stop → secrets refresh → empty-queue preflight → restart → readiness). Manual emergency dispatch separately requires the current main SHA and exact confirmation; a merge must be authorized with its automatic deployment effects in mind.
 - `promote-worker-vm.sh --preflight` runs only the queue check against the refreshed environment file; it never restarts the live worker.
 - `production-scan-readiness.yml` probes `https://app.lyrashieldai.com/api/ready/scans` and writes the probe status/body to the step summary on failure.

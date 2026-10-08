@@ -378,7 +378,28 @@ test("ops owns the webhook and Lighthouse assertions without duplicate early inv
     readFileSync(new URL("../../../run-all-tests.mjs", import.meta.url), "utf8"),
     /\.github\/scripts\/tests\/\*\.test\.mjs/
   )
+  // The dead-code report is advisory: it runs with --no-exit-code and
+  // continue-on-error so a knip finding or config error cannot fail the
+  // required aggregate. See the dedicated assertion below.
   assert.doesNotMatch(workflow, /pnpm exec knip --no-exit-code/)
+})
+
+test("the dead-code report stays advisory and cannot fail the required aggregate", () => {
+  const block = workflow.match(
+    /\n      - name: Dead-code report \(knip, non-blocking\)\n([\s\S]*?)(?=\n      - name: )/
+  )
+  assert.ok(block, "ci.yml must carry the knip report step")
+  assert.match(block[0], /^ {8}continue-on-error: true$/m)
+  assert.match(block[0], /^ {8}if: needs\.changes\.outputs\.docs-only != 'true'$/m)
+  assert.match(block[0], /^ {8}run: pnpm lint:knip$/m)
+  assert.match(block[0], /^ {8}timeout-minutes: 10$/m)
+  const root = JSON.parse(readFileSync(new URL("../../../package.json", import.meta.url), "utf8"))
+  assert.equal(root.scripts["lint:knip"], "knip --no-exit-code")
+  assert.ok(root.devDependencies.knip, "knip must stay a declared devDependency")
+  // The step lives in the required aggregate, so its non-blocking shape is what
+  // keeps it from gating a merge.
+  const aggregate = workflow.split("\n  lint-and-typecheck:\n")[1]
+  assert.ok(aggregate.includes("- name: Dead-code report (knip, non-blocking)"))
 })
 
 test("known tooling retains executable operations checks without runtime suites", () => {
@@ -401,10 +422,15 @@ test("runtime, mixed, dependency and unknown paths retain production regression 
 })
 
 test("PR CI cancels superseded work and releases run independently from protected main", () => {
-  assert.match(workflow, /  pull_request:/)
-  assert.doesNotMatch(workflow, /  push:/)
+  const triggers = workflow.match(/^on:\n([\s\S]*?)(?=^permissions:)/m)?.[1] ?? ""
+  assert.match(triggers, /^  pull_request:\n    branches: \[main\]$/m)
+  // ci.yml is pull_request only: it must never gain a push or
+  // pull_request_target trigger. The container-build job's `push: false` build
+  // input is not a trigger, so scope the assertion to the trigger block.
+  assert.doesNotMatch(triggers, /^  push:/m)
+  assert.doesNotMatch(triggers, /^  pull_request_target:/m)
   assert.match(workflow, /^  cancel-in-progress: true$/m)
-  assert.doesNotMatch(workflow, /deploy-marketing:|container-build:|ci-routing/)
+  assert.doesNotMatch(workflow, /deploy-marketing:|ci-routing:/)
   const classifyStep = workflow
     .split("- name: Classify changed files\n")[1]
     ?.split("\n      - name:")[0]
@@ -412,6 +438,26 @@ test("PR CI cancels superseded work and releases run independently from protecte
   assert.match(classifyStep, /github\.event\.pull_request\.base\.sha/)
   assert.match(classifyStep, /github\.event\.pull_request\.head\.sha/)
   assert.match(classifyStep, /git diff --no-renames --name-only/)
+})
+
+test("the PR image-build gate never pushes and never becomes a required check", () => {
+  const start = workflow.indexOf("\n  container-build:\n")
+  assert.notEqual(start, -1, "ci.yml must carry the PR image-build job")
+  const nextJob = workflow.slice(start + 1).search(/\n  [a-z][a-z-]*:\n/)
+  const job = workflow.slice(start, start + 1 + nextJob)
+  assert.match(job, /^    name: Container image build \(no push\)$/m)
+  assert.match(job, /^    if: needs\.changes\.outputs\.azure-deploy == 'true'$/m)
+  assert.match(job, /^    permissions:\n      contents: read$/m)
+  assert.doesNotMatch(job, /id-token|environment:|secrets\.(?!GITHUB_TOKEN)/)
+  // Every build step is a no-push build of a release target.
+  const targets = [...job.matchAll(/^ {10}target: (.+)$/gm)].map((match) => match[1])
+  assert.deepEqual(targets.sort(), ["egress-proxy", "runner", "worker"])
+  assert.equal([...job.matchAll(/^ {10}push: false$/gm)].length, 3)
+  assert.doesNotMatch(job, /^ {10}push: true$/m)
+  // Required-check preservation: nothing depends on this job, and it is not a
+  // dependency of the aggregate, so it cannot gate a merge while it proves out.
+  assert.doesNotMatch(workflow, /needs:[^\n]*container-build/)
+  assert.doesNotMatch(workflow, /- container-build/)
 })
 
 test("production Lighthouse remains a real quality gate outside the deployment path", () => {
