@@ -246,7 +246,11 @@ it("names the primary action from the first render for every eligibility state",
       onStart: vi.fn(),
       onStartTrial: vi.fn(),
     })
-    return textOf(elements(tree).filter((element) => element.type === Button).at(-1)?.props.children)
+    return textOf(
+      elements(tree)
+        .filter((element) => element.type === Button)
+        .at(-1)?.props.children
+    )
   }
 
   expect(label({ status: "idle" })).toBe("Start release check")
@@ -384,8 +388,9 @@ it("reuses a created target when the onboarding save fails", async () => {
     })
   }
   const startScan = () =>
-    render("API", initialState).find((element) =>
-      element.type === Button && textOf(element.props.children).includes(START_LABEL.api)
+    render("API", initialState).find(
+      (element) =>
+        element.type === Button && textOf(element.props.children).includes(START_LABEL.api)
     )!.props.onClick!()
 
   setupApiTarget()
@@ -452,8 +457,9 @@ it("creates a repository target after a GitHub install return (path restored)", 
   await repoSelect()!.props.onContinue!()
 
   const startScan = () =>
-    render(null, initialState).find((element) =>
-      element.type === Button && textOf(element.props.children).includes("Start release check")
+    render(null, initialState).find(
+      (element) =>
+        element.type === Button && textOf(element.props.children).includes("Start release check")
     )!.props.onClick!()
 
   await startScan()
@@ -507,8 +513,9 @@ it("creates a fresh target instead of reusing a stale targetId after the URL cha
   })
 
   const startScan = () =>
-    render("WEB_APP", initialState).find((element) =>
-      element.type === Button && textOf(element.props.children).includes(START_LABEL.url)
+    render("WEB_APP", initialState).find(
+      (element) =>
+        element.type === Button && textOf(element.props.children).includes(START_LABEL.url)
     )!.props.onClick!()
 
   await startScan()
@@ -560,8 +567,9 @@ it("does not reuse a WEB_APP target when the path switched to API", async () => 
   })
 
   const startScan = () =>
-    render("WEB_APP", initialState).find((element) =>
-      element.type === Button && textOf(element.props.children).includes(START_LABEL.api)
+    render("WEB_APP", initialState).find(
+      (element) =>
+        element.type === Button && textOf(element.props.children).includes(START_LABEL.api)
     )!.props.onClick!()
 
   await startScan()
@@ -600,8 +608,9 @@ it("keeps an accepted scan and retries only the onboarding save after its PATCH 
   api.post.mockResolvedValueOnce({ id: "scan-1", operationId: "operation-1" })
 
   const startScan = () =>
-    render("REPO", initialState).find((element) =>
-      element.type === Button && textOf(element.props.children).includes("Start release check")
+    render("REPO", initialState).find(
+      (element) =>
+        element.type === Button && textOf(element.props.children).includes("Start release check")
     )!.props.onClick!()
 
   await startScan()
@@ -659,8 +668,9 @@ it("retries an uncertain scan start with the same idempotency key", async () => 
     .mockResolvedValueOnce({ id: "scan-2", operationId: "operation-2" })
 
   const startScan = () =>
-    render("REPO", initialState).find((element) =>
-      element.type === Button && textOf(element.props.children).includes("Start release check")
+    render("REPO", initialState).find(
+      (element) =>
+        element.type === Button && textOf(element.props.children).includes("Start release check")
     )!.props.onClick!()
 
   // W1/P2-2: one click reads eligibility and posts the scan. The first post is
@@ -711,8 +721,9 @@ it("uses a fresh key after the server proves the previous scan was not submitted
   api.post.mockRejectedValueOnce(refusal).mockResolvedValueOnce({ id: "scan-2" })
 
   const startScan = () =>
-    render("REPO", initialState).find((element) =>
-      element.type === Button && textOf(element.props.children).includes("Start release check")
+    render("REPO", initialState).find(
+      (element) =>
+        element.type === Button && textOf(element.props.children).includes("Start release check")
     )!.props.onClick!()
 
   // W1/P2-2: one click reads eligibility and posts the scan. The server proved
