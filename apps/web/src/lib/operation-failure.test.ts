@@ -70,9 +70,10 @@ describe("operation failure presentation (W1-07)", () => {
   })
 
   it("reserves no-charge claims for known admission rejections", () => {
-    expect(presentOperationFailure("TARGET_TYPE_UNSUPPORTED").effect).toBe(
-      "Nothing was started and nothing was charged."
-    )
+    // A refusal that is known to precede any accepted work states exactly that.
+    // It does not state what was charged: no refusal response carries a billing
+    // field, so a no-charge sentence would be an inference, not a fact.
+    expect(presentOperationFailure("TARGET_TYPE_UNSUPPORTED").effect).toBe("Nothing was started.")
 
     for (const code of [
       "QUEUE",
@@ -87,6 +88,44 @@ describe("operation failure presentation (W1-07)", () => {
       const copy = `${presentation.cause} ${presentation.effect} ${presentation.recovery}`
       expect(copy, code).not.toMatch(/no billable work|nothing was charged|nothing was started/i)
       expect(copy, code).toMatch(/check|review/i)
+    }
+  })
+
+  it("never infers what was charged, because no refusal response reports billing", () => {
+    // The scan POST attaches no billing field to a refusal, so "nothing was
+    // charged" is unknowable from the response. Every refusal may claim only
+    // that the work was not started.
+    const refusalCodes = [
+      ...Object.keys({
+        SCAN_RATE_LIMITED: 0,
+        SCAN_CONCURRENCY_LIMIT: 0,
+        SCAN_IN_PROGRESS: 0,
+        SCAN_SERVICE_UNAVAILABLE: 0,
+        SCAN_SOURCE_UNAVAILABLE: 0,
+        SCAN_AUTHORIZATION_REQUIRED: 0,
+        SCAN_PLAN_INVALID: 0,
+        SCAN_PLAN_DENIED: 0,
+        SCAN_WORKFLOW_UNAVAILABLE: 0,
+        SCAN_NO_MERGE_BASE: 0,
+        SCAN_REF_UNRESOLVED: 0,
+        FREE_URL_SCAN_RATE_LIMITED: 0,
+      }),
+      "DOMAIN_VERIFICATION_REQUIRED",
+      "DEEP_NOT_ALLOWED",
+      "TARGET_TYPE_UNSUPPORTED",
+      "TARGET_AUTHORIZATION_FAILED",
+      "VERIFICATION_REQUIRED",
+    ]
+
+    for (const code of refusalCodes) {
+      const presentation = presentOperationFailure(code)
+      const copy = `${presentation.cause} ${presentation.effect} ${presentation.recovery}`
+      expect(copy, code).not.toMatch(/charged|no cost|not billed|no billable work/i)
+      // The claim that survives is the one the response supports: the work did
+      // not start, or stays unavailable.
+      expect(presentation.effect, code).toMatch(
+        /not started|not be started|stays unauthorized|stay unavailable|nothing was started/i
+      )
     }
   })
 

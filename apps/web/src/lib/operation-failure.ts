@@ -36,21 +36,21 @@ export interface OperationFailurePresentation {
 const SCAN_ADMISSION_CODES: Record<string, OperationFailurePresentation> = {
   SCAN_RATE_LIMITED: {
     cause: "Too many scans were started from this workspace in the last minute.",
-    effect: "This scan was not started and nothing was charged.",
+    effect: "This scan was not started.",
     recovery: "Wait a moment, then start the scan again.",
     recoveryHref: "/dashboard/scans",
     retryLabel: "Try again",
   },
   SCAN_CONCURRENCY_LIMIT: {
     cause: "This workspace already has its maximum number of scans running.",
-    effect: "This scan was not started and nothing was charged.",
+    effect: "This scan was not started.",
     recovery: "Wait for a running scan to finish, then start this one.",
     recoveryHref: "/dashboard/scans",
     retryLabel: "Try again",
   },
   SCAN_IN_PROGRESS: {
     cause: "This target already has an active scan.",
-    effect: "The second scan was not started and nothing was charged.",
+    effect: "The second scan was not started.",
     recovery: "Open the active scan, or cancel it before starting another.",
     recoveryHref: "/dashboard/scans",
   },
@@ -63,49 +63,49 @@ const SCAN_ADMISSION_CODES: Record<string, OperationFailurePresentation> = {
   },
   SCAN_SOURCE_UNAVAILABLE: {
     cause: "This review needs a source that is not connected.",
-    effect: "This scan was not started and nothing was charged.",
+    effect: "This scan was not started.",
     recovery: "Reconnect the repository or choose a review that fits this target.",
     recoveryHref: "/dashboard/connections",
   },
   SCAN_AUTHORIZATION_REQUIRED: {
     cause: "This review needs a recorded, scoped authorization for the target.",
-    effect: "This scan was not started and nothing was charged.",
+    effect: "This scan was not started.",
     recovery: "Record the authorization for this target, then start the scan again.",
     recoveryHref: "/dashboard/targets",
   },
   SCAN_PLAN_INVALID: {
     cause: "This review cannot run against the selected target.",
-    effect: "This scan was not started and nothing was charged.",
+    effect: "This scan was not started.",
     recovery: "Choose a review that fits this target.",
     recoveryHref: "/dashboard/scans?new=1",
   },
   SCAN_PLAN_DENIED: {
     cause: "The current plan does not allow this review.",
-    effect: "This scan was not started and nothing was charged.",
+    effect: "This scan was not started.",
     recovery: "Choose an included review or review your plan.",
     recoveryHref: "/dashboard/billing",
   },
   SCAN_WORKFLOW_UNAVAILABLE: {
     cause: "This review is not available for the selected target.",
-    effect: "This scan was not started and nothing was charged.",
+    effect: "This scan was not started.",
     recovery: "Choose an available review and start again.",
     recoveryHref: "/dashboard/scans?new=1",
   },
   SCAN_NO_MERGE_BASE: {
     cause: "No merge base could be resolved between the two revisions.",
-    effect: "This scan was not started and nothing was charged.",
+    effect: "This scan was not started.",
     recovery: "Fetch the branches on the provider, then start the review again.",
     recoveryHref: "/dashboard/targets",
   },
   SCAN_REF_UNRESOLVED: {
     cause: "A requested branch or revision could not be resolved.",
-    effect: "This scan was not started and nothing was charged.",
+    effect: "This scan was not started.",
     recovery: "Check the branch name on the provider, then start the review again.",
     recoveryHref: "/dashboard/targets",
   },
   FREE_URL_SCAN_RATE_LIMITED: {
     cause: "Free-plan remote URL reviews are temporarily limited for your network.",
-    effect: "This scan was not started and nothing was charged.",
+    effect: "This scan was not started.",
     recovery: "Wait for the limit to reset, or verify the domain to lift it.",
     recoveryHref: "/dashboard/billing",
   },
@@ -158,7 +158,7 @@ const ENTITLEMENT_CODES: Record<string, OperationFailurePresentation> = {
   },
   DEEP_NOT_ALLOWED: {
     cause: "The current plan does not include deep reviews.",
-    effect: "Deeper profiles stay unavailable; nothing was charged.",
+    effect: "Deeper profiles stay unavailable.",
     recovery: "Choose an included review or upgrade if you need deeper coverage.",
     recoveryHref: "/dashboard/scans?new=1",
   },
@@ -192,7 +192,7 @@ const SCAN_CODES: Record<string, OperationFailurePresentation> = {
   },
   TARGET_TYPE_UNSUPPORTED: {
     cause: "This target type is not supported by the selected review.",
-    effect: "Nothing was started and nothing was charged.",
+    effect: "Nothing was started.",
     recovery: "Choose a review that supports this target type.",
     recoveryHref: "/dashboard/scans?new=1",
   },
@@ -385,7 +385,7 @@ export function presentOperationFailure(
       const txtName = domainVerificationTxtName(context)
       return {
         cause: "This domain is not verified for engine-backed reviews.",
-        effect: "This scan was not started and nothing was charged.",
+        effect: "This scan was not started.",
         recovery: txtName
           ? `Publish the DNS TXT record ${txtName}, then verify the domain.`
           : "Publish the domain's DNS TXT record, then verify the domain.",
@@ -413,7 +413,7 @@ export function presentOperationFailure(
     case "VERIFICATION_REQUIRED":
       return {
         cause: `Source ownership could not be confirmed${target}.`,
-        effect: "The target stays unauthorized; scans are not started and nothing is charged.",
+        effect: "The target stays unauthorized and scans are not started.",
         recovery:
           "Approve the provider's authorization prompt from the Connect button — that approval is what proves ownership.",
         recoveryHref: "/dashboard/connections",
