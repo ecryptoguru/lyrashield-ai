@@ -12,6 +12,7 @@ import { defaultStandards, renderStandards } from "@lyrashield/security"
 import { notFound, redirect } from "next/navigation"
 import { Radar } from "lucide-react"
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
+import { hasPermission, PERMISSIONS } from "@lyrashield/auth"
 import { filterDashboardScanEvents } from "@/lib/scan-event-visibility"
 import { NoWorkspaceState } from "@/components/no-workspace-state"
 import { PageHeader } from "@/components/page-header"
@@ -141,6 +142,16 @@ export default async function ScanDetailPage({ params }: { params: Promise<{ id:
         select: { executionPlan: true },
       }),
     ])
+
+  // The detail page offers Cancel for an active scan, which the list has always
+  // done. The permission is read fresh for this request; the API re-checks
+  // scan:cancel and the scan's own state before it changes anything.
+  const canCancelScan = await prisma.workspaceMember
+    .findFirst({
+      where: { workspaceId, userId: session.userId, status: "active" },
+      select: { role: true },
+    })
+    .then((row) => (row ? hasPermission(row.role, PERMISSIONS.scan.cancel) : false))
 
   const target = scan.target
 
@@ -290,5 +301,12 @@ export default async function ScanDetailPage({ params }: { params: Promise<{ id:
         }
       : null
 
-  return <ScanDetailClient scan={scanData} findings={findingsData} scorecard={scorecard} />
+  return (
+    <ScanDetailClient
+      scan={scanData}
+      findings={findingsData}
+      scorecard={scorecard}
+      canCancel={canCancelScan}
+    />
+  )
 }

@@ -17,6 +17,14 @@ import { TARGET_SINGULAR } from "@/lib/terminology"
 
 export type OnboardingPath = "github" | "url" | "api" | "skip" | null
 
+/**
+ * The environment every onboarding target is stored with. It is metadata on the
+ * target — it never changes scanner eligibility, authorization or execution —
+ * and the details step states it plainly so a production site is not silently
+ * labelled Staging. The user changes it in target settings.
+ */
+export const ONBOARDING_ENVIRONMENT = "STAGING"
+
 export function onboardingPathForTargetType(targetType: string | null): OnboardingPath {
   if (targetType === "REPO") return "github"
   if (targetType === "WEB_APP") return "url"

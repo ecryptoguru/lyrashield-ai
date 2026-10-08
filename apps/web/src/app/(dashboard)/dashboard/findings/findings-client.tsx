@@ -17,6 +17,7 @@ import { FINDING_PLURAL } from "@/lib/terminology"
 import { DashboardErrorCard } from "@/components/dashboard-error-card"
 import {
   findingFilterToApiQuery,
+  findingsHref,
   parseFindingListParams,
   type FindingFilter as FindingFilterValue,
 } from "@/lib/finding-list-params"
@@ -527,6 +528,36 @@ export function FindingsClient({
 
   const sortedFindings = sortFindings(findings, sortMode)
 
+  // The default filter is Open, so only a non-default filter counts as a
+  // narrowing the user chose. A scan scope or target scope always narrows.
+  const narrowed = filter !== "OPEN" || Boolean(scanId) || Boolean(targetFilter) || Boolean(query)
+  /**
+   * Reset every narrowing in one request. Clearing each control separately
+   * would fire three fetches whose closures still hold the previous values.
+   * A scan scope is fixed by the URL, so that case renders a link instead.
+   */
+  const clearFindingsFilters = useCallback(() => {
+    if (scanId) return
+    currentScopeRef.current = JSON.stringify({ filter: "OPEN", scanId: "", target: "", q: "" })
+    const generation = invalidateRequest()
+    clearFindingForScopeChange()
+    setFilter("OPEN")
+    setTargetFilter("")
+    setQuery("")
+    updateQueryParams({ filter: "OPEN", target: "", q: "" })
+    void fetchFindings(
+      { workspaceId, ...findingFilterToApiQuery("OPEN" as FindingFilterValue) },
+      generation
+    )
+  }, [
+    scanId,
+    invalidateRequest,
+    clearFindingForScopeChange,
+    updateQueryParams,
+    fetchFindings,
+    workspaceId,
+  ])
+
   return (
     <div>
       <FindingsControls
@@ -570,6 +601,9 @@ export function FindingsClient({
         findings={findings}
         sortedFindings={sortedFindings}
         rowRefs={rowRefs}
+        narrowed={narrowed}
+        onClearFilters={clearFindingsFilters}
+        clearHref={scanId ? findingsHref({ tab: "issues" }) : undefined}
         onOpenFinding={(finding, button) => {
           openerRef.current = button
           openFinding(finding)

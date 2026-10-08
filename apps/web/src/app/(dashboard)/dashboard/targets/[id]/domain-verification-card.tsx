@@ -115,7 +115,7 @@ function DomainVerificationContent({
         setProof(result.verification)
         setDns(result.dns)
         setMessage(
-          "New proof issued. Replace any previous TXT value; the previous proof is invalid."
+          "New TXT record issued. Replace any previous record with these values; the previous proof is invalid."
         )
       } else if (proof) {
         const result = await apiPut(
@@ -174,15 +174,39 @@ function DomainVerificationContent({
       ) : (
         <>
           <p className="mt-2 break-all text-sm">Domain: {domain}</p>
-          <p className="text-muted-foreground mt-2 text-sm">
+          {/* The card used to name two buttons and a policy sentence without
+              saying what to do at the DNS provider. The steps are the task. */}
+          <ol className="mt-4 space-y-2 text-sm">
+            <li>
+              <span className="font-medium">1. Get the TXT record.</span> Select{" "}
+              <span className="font-medium">Get TXT record</span> below. That issues the proof and
+              shows the record name and value.
+            </li>
+            <li>
+              <span className="font-medium">2. Publish it at your DNS provider.</span> Add a TXT
+              record with the exact name and value shown, then save it.
+            </li>
+            <li>
+              <span className="font-medium">3. Wait for the record to appear.</span> DNS changes
+              usually propagate within minutes, but can take longer.
+            </li>
+            <li>
+              <span className="font-medium">4. Verify.</span> Select{" "}
+              <span className="font-medium">Verify domain</span>. LyraShield reads the record from
+              public DNS.
+            </li>
+          </ol>
+          <p className="text-muted-foreground mt-3 text-sm">
             Issuing a new proof invalidates the previous token and verified status. The TXT value is
-            shown only when issued; after reloading, reissue if you did not save it.
+            shown in this browser session only and is never returned by a later read, so keep it
+            somewhere safe: if you reload before verifying, issue a new record and replace the old
+            one.
           </p>
           {dns && (
             <dl className="mt-4 space-y-3 text-sm">
               {(
                 [
-                  ["DNS host", dns.host],
+                  ["DNS record name", dns.host],
                   ["TXT value", dns.value],
                 ] as const
               ).map(([label, value]) => (
@@ -214,7 +238,7 @@ function DomainVerificationContent({
           )}
           <div className="mt-4 flex flex-wrap gap-2">
             <Button type="button" disabled={busy} onClick={() => void mutate(true)}>
-              Issue proof
+              {proof ? "Get a new TXT record" : "Get TXT record"}
             </Button>
             <Button
               type="button"
@@ -227,7 +251,7 @@ function DomainVerificationContent({
               }
               onClick={() => void mutate(false)}
             >
-              Verify now
+              Verify domain
             </Button>
             {error && (
               <Button
@@ -244,6 +268,14 @@ function DomainVerificationContent({
               </Button>
             )}
           </div>
+          {/* A disabled primary control with no stated reason reads as broken. */}
+          {(!proof || expired) && !busy && (
+            <p className="text-muted-foreground mt-2 text-sm">
+              {expired
+                ? "The challenge expired. Get a new TXT record, publish it, then verify."
+                : "Verification is available once a TXT record has been issued and published."}
+            </p>
+          )}
         </>
       )}
       {error && (

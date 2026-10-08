@@ -301,5 +301,22 @@ export function useScanDetailPolling(initialScan: ScanData, initialFindings: Fin
     }
   }
 
-  return { scan, currentFindings, isActive, refreshing, refreshError, handleManualRefresh }
+  /**
+   * Apply the authoritative result of a cancellation. Only the status and end
+   * time the server returned are written; nothing is inferred from the click.
+   * The poll loop sees a terminal status and stops on its own.
+   */
+  function applyCancelledScan(status: string, endedAt: string | null) {
+    setScan((current) => ({ ...current, status, endedAt }))
+  }
+
+  return {
+    scan,
+    currentFindings,
+    isActive,
+    refreshing,
+    refreshError,
+    handleManualRefresh,
+    applyCancelledScan,
+  }
 }

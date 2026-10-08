@@ -1,13 +1,23 @@
 "use client"
 
+import { useEffect, useRef } from "react"
 import Link from "next/link"
 import { Braces, Check, ChevronLeft, ChevronRight, Globe, ShieldCheck } from "lucide-react"
 import { Button, FormField, Input, Spinner, Badge, GithubIcon } from "@lyrashield/ui"
 import type { OperationFailurePresentation } from "@/lib/operation-failure"
 import type { ManualScanOption } from "@/lib/scan-presets"
-import { getWorkspacePlanLabel } from "@/lib/enum-labels"
+import {
+  getEnvironmentKindLabel,
+  getScanModeLabel,
+  getWorkspacePlanLabel,
+} from "@/lib/enum-labels"
 import { SCAN_SINGULAR, TARGET_DETAILS_LABEL, TARGET_NAME_LABEL } from "@/lib/terminology"
-import { pathLabel, stepModelForPath, type OnboardingPath } from "./onboarding-flow.utils"
+import {
+  ONBOARDING_ENVIRONMENT,
+  pathLabel,
+  stepModelForPath,
+  type OnboardingPath,
+} from "./onboarding-flow.utils"
 import { detailsCopy } from "./onboarding-step-copy"
 import { TargetNameSection } from "./onboarding-target-name-section"
 
@@ -109,12 +119,33 @@ export function OnboardingAlerts({
   loading: boolean
   onRetryFailure: (retry: () => void) => void
 }) {
+  const alertRef = useRef<HTMLDivElement | null>(null)
+  const failureKey = failure
+    ? `${failure.presentation.cause}|${failure.presentation.recovery}`
+    : null
+  // The alert renders above a step that stacks the review card, the checks
+  // list, the eligibility panel and the warning. On a phone the button the user
+  // pressed is off-screen when the alert appears, so the spinner stops and
+  // nothing else happens. Move focus and scroll the alert into view, exactly as
+  // the scan sheet does for its footer error (scan-submission-feedback).
+  useEffect(() => {
+    if (!failureKey && !error) return
+    const element = alertRef.current
+    if (!element) return
+    element.focus({ preventScroll: true })
+    element.scrollIntoView({ block: "center", behavior: "smooth" })
+  }, [failureKey, error])
+
   return (
     <>
       {failure && (
         <div
+          ref={alertRef}
+          tabIndex={-1}
           role="alert"
-          className="border-destructive bg-destructive/10 mb-4 space-y-2 border-l-2 p-4 text-sm"
+          aria-live="assertive"
+          aria-atomic="true"
+          className="border-destructive bg-destructive/10 mb-4 space-y-2 border-l-2 p-4 text-sm focus:outline-none"
         >
           <p className="font-medium">{failure.presentation.cause}</p>
           <p className="text-muted-foreground">{failure.presentation.effect}</p>
@@ -128,7 +159,7 @@ export function OnboardingAlerts({
                 disabled={loading}
                 onClick={() => onRetryFailure(failure.retry!)}
               >
-                Try again
+                {failure.presentation.retryLabel ?? "Try again"}
               </Button>
             )}
             {failure.presentation.recoveryHref && (
@@ -150,8 +181,12 @@ export function OnboardingAlerts({
       )}
       {error && !failure && (
         <p
+          ref={alertRef}
+          tabIndex={-1}
           role="alert"
-          className="border-destructive bg-destructive/10 mb-4 border-l-2 p-3 text-sm"
+          aria-live="assertive"
+          aria-atomic="true"
+          className="border-destructive bg-destructive/10 mb-4 border-l-2 p-3 text-sm focus:outline-none"
         >
           {error}
         </p>
@@ -181,7 +216,7 @@ export function PathChooserView({
         <p className="text-primary text-xs font-semibold tracking-[0.14em] uppercase">{eyebrow}</p>
         <h2 className="mt-1 text-2xl font-bold tracking-tight">Add your first target</h2>
         <p className="text-muted-foreground mt-2 text-sm">
-          Choose what LyraShield reviews first. You can connect GitHub, point at a live app or API,
+          Choose what LyraShield reviews first. You can connect GitHub or point at a live app or API
           or set this up later.
         </p>
       </div>
@@ -517,7 +552,7 @@ export function TargetDetailsView({
           <div className="border-primary bg-primary/8 rounded-lg border p-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="font-medium">{selectedReview.label}</span>
-              <Badge variant="info">{selectedReview.mode.toLowerCase()}</Badge>
+              <Badge variant="info">{getScanModeLabel(selectedReview.mode)}</Badge>
             </div>
             <p className="text-muted-foreground mt-1 text-sm">{selectedReview.description}</p>
             <p className="text-muted-foreground mt-1 text-xs">
@@ -561,7 +596,7 @@ export function TargetDetailsView({
                 <span className="block font-medium">{option.label}</span>
                 <span className="text-muted-foreground text-xs">{option.description}</span>
                 <span className="text-muted-foreground mt-1 block text-xs">
-                  {option.limitsSummary} · {option.mode.toLowerCase()}
+                  {option.limitsSummary} · {getScanModeLabel(option.mode)}
                 </span>
               </button>
             ))}
@@ -580,8 +615,8 @@ export function TargetDetailsView({
         </h3>
         {!targetId && eligibility.status === "idle" && (
           <p className="text-muted-foreground mt-1 text-sm">
-            Check your current account allowance and setup before starting. The server checks again
-            when the scan is submitted.
+            One click checks your account allowance and starts the scan when the server allows it.
+            The server makes the final admission decision when the scan is submitted.
           </p>
         )}
         {eligibility.status === "checking" && (
@@ -660,6 +695,12 @@ export function TargetDetailsView({
       </section>
 
       <p className="border-warning bg-warning/10 border-l-2 p-3 text-sm">
+        This {TARGET_SINGULAR.toLowerCase()} is saved as a{" "}
+        <span className="font-medium">{getEnvironmentKindLabel(ONBOARDING_ENVIRONMENT)}</span>{" "}
+        target. Change its environment in target settings after setup if it is something else.
+      </p>
+
+      <p className="text-muted-foreground text-xs">
         A {SCAN_SINGULAR.toLowerCase()} reports evidence and limitations. A clean result is not a
         universal security guarantee.
       </p>
@@ -684,19 +725,21 @@ export function TargetDetailsView({
           disabled={loading || eligibility.status === "checking"}
         >
           <ShieldCheck className="size-4" aria-hidden="true" />
+          {/* One action, named from the first render: the click checks
+              eligibility and starts the scan when the server allows it. The
+              previous "Check availability" / "Check eligibility again" labels
+              described the internal step and asked for a second click. */}
           {loading
             ? eligibility.status === "checking"
               ? "Checking eligibility…"
               : "Starting…"
-            : eligibility.status === "ready" && eligibility.eligibility.allowed
-              ? `Start ${selectedReview?.label.toLowerCase() ?? "review"}`
-              : eligibility.status === "error"
-                ? `Continue to start ${selectedReview?.label.toLowerCase() ?? "review"}`
-                : eligibility.status === "ready" && !eligibility.eligibility.allowed
-                  ? eligibility.eligibility.code === "TRIAL_AVAILABLE"
-                    ? "Start your free trial"
-                    : "Check eligibility again"
-                  : "Check availability"}
+            : eligibility.status === "error"
+              ? `Continue to start ${selectedReview?.label.toLowerCase() ?? "review"}`
+              : eligibility.status === "ready" &&
+                  !eligibility.eligibility.allowed &&
+                  eligibility.eligibility.code === "TRIAL_AVAILABLE"
+                ? "Start your free trial"
+                : `Start ${selectedReview?.label.toLowerCase() ?? "review"}`}
         </Button>
       </div>
     </div>

@@ -82,6 +82,13 @@ function createIdleScanEligibility(): OnboardingEligibilityState {
  * Structured failure boundary (W1-07): a mappable reason code renders as
  * cause/effect/recovery with a one-click retry; anything else falls back to
  * the plain message. Nothing here auto-retries or creates approvals.
+ *
+ * W1/P2-1: an unmapped code keeps the server's own sanitized sentence as the
+ * cause, so onboarding and the scan sheet describe the same failure the same
+ * way. A code whose outcome is unknown (a lost connection or a timeout) never
+ * offers a retry that starts new work — the retry reconciles the existing
+ * submission instead, because starting a second attempt can create a duplicate
+ * paid scan.
  */
 function presentFailure(
   ctx: ScanFlowContext,
@@ -90,12 +97,48 @@ function presentFailure(
   targetName?: string
 ) {
   if (cause instanceof ApiError && cause.code) {
+    const presentation = presentOperationFailure(cause.code, {
+      targetName,
+      serverMessage: cause.message,
+      details: cause.details,
+      targetId: ctx.data.targetId,
+    })
     ctx.setError(null)
-    ctx.setFailure({ presentation: presentOperationFailure(cause.code, { targetName }), retry })
+    ctx.setFailure({
+      presentation,
+      retry: presentation.requiresReconciliation
+        ? reconciliationRetry(ctx) ?? null
+        : retry,
+    })
     return
   }
   ctx.setFailure(null)
   ctx.setError(friendlyTargetError(cause))
+}
+
+/**
+ * The only retry an unknown outcome may offer: read the status of the attempt
+ * that may already be running. Returns null when no operation identity was
+ * recorded, so the recovery surface (which explains the uncertainty) owns the
+ * next step instead of a bare retry button.
+ */
+function reconciliationRetry(ctx: ScanFlowContext): (() => void) | null {
+  const workspaceId = ctx.data.workspaceId
+  if (!workspaceId) return null
+  const scope: ScanSubmissionScope = {
+    principalId: ctx.principalId,
+    workspaceId,
+    surface: "onboarding",
+  }
+  let pending: PendingScanSubmission | null = null
+  try {
+    pending = readPendingScanSubmission(scope)
+  } catch {
+    return null
+  }
+  const submission = pending
+  if (!submission?.operationId) return null
+  return () => void checkPendingScanOperation(ctx, submission)
 }
 
 async function checkPendingScanOperation(ctx: ScanFlowContext, submission: PendingScanSubmission) {
@@ -265,9 +308,18 @@ async function ensureTargetId(
 }
 
 /**
- * Read-only advisory preflight — the scan-create endpoint still makes the
- * authoritative decision on the explicit second click. Returns true when the
- * flow must stop so the user can confirm.
+ * Advisory preflight that the scan-create endpoint still overrides. One click
+ * reads eligibility and continues straight into the POST when the server says
+ * the scan is allowed, so the user is not asked to click twice for one action.
+ *
+ * Returns true when the flow must stop. It stops only when the check read a
+ * definite refusal, or when the check itself could not be read (the user then
+ * confirms explicitly with "Continue to start …", because no advisory pass was
+ * observed). Starting the trial stays its own labelled action: claiming a trial
+ * is a billing decision, not part of the scan start.
+ *
+ * The idempotency machinery is untouched: whatever this returns, the POST is
+ * still gated by the submission ledger and its Idempotency-Key.
  */
 async function gateOnEligibility(
   ctx: ScanFlowContext,
@@ -285,8 +337,14 @@ async function gateOnEligibility(
   ) {
     return false
   }
-  await readScanEligibility(ctx, workspaceId, targetId, scanRequest)
-  return true
+  const state = await readScanEligibility(ctx, workspaceId, targetId, scanRequest)
+  if (state.status !== "ready") {
+    // No advisory answer: the user confirms before the authoritative POST.
+    return true
+  }
+  // Allowed continues into the POST. A definite refusal, including a trial that
+  // has not been claimed yet, stops so its own labelled action owns the next step.
+  return !state.eligibility.allowed
 }
 
 /**

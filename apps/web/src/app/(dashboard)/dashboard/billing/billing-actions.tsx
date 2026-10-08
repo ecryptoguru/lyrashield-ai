@@ -8,6 +8,7 @@ import { openRazorpaySubscriptionCheckout } from "@/lib/razorpay-checkout"
 import { apiPost, ApiError } from "@/lib/api-client"
 import { parsePlanIntent } from "@/lib/plan-intent"
 import { track } from "@/lib/analytics"
+import { PLAN_PICKER_ID } from "./plan-picker"
 
 interface BillingActionsProps {
   plan: string
@@ -150,7 +151,11 @@ export function BillingActions({
         </p>
       )}
       {canStartSubscription && (
-        <div className="grid gap-3 sm:grid-cols-3" aria-label="Choose a plan">
+        <div
+          id={PLAN_PICKER_ID}
+          className="grid scroll-mt-6 gap-3 sm:grid-cols-3"
+          aria-label="Choose a plan"
+        >
           {PLANS.map(([targetPlan, label]) => {
             const definition = getPlan(targetPlan)
             const catalog = definition?.price[billingRegion]

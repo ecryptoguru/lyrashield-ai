@@ -15,6 +15,7 @@ import {
   displayStepForPath,
   getOnboardingReviewOptions,
   onboardingStepEyebrow,
+  ONBOARDING_ENVIRONMENT,
   pathNeedsRepo,
   stepModelForPath,
   targetNameFromUrl,
@@ -59,8 +60,9 @@ export function OnboardingWizard({
   const [productName, setProductName] = useState(initialState.targetName ?? "")
   // W2-03: environment classification left the critical path. The safe default
   // is metadata on the target and stays editable in target settings; it never
-  // changes scanner eligibility, authorization, or execution here.
-  const environment = "STAGING"
+  // changes scanner eligibility, authorization, or execution here. The details
+  // step states which value is saved, because the value is not obvious.
+  const environment = ONBOARDING_ENVIRONMENT
   const [selectedGoal, setSelectedGoal] = useState<string>(
     initialState.selectedGoal ?? "LAUNCH_REVIEW"
   )

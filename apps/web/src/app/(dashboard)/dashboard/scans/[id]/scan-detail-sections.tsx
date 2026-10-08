@@ -15,8 +15,9 @@ import {
   XCircle,
   RefreshCw,
   Radar,
+  X,
 } from "lucide-react"
-import { Badge, Button, Card, EmptyState, buttonVariants } from "@lyrashield/ui"
+import { Badge, Button, Card, EmptyState, Spinner, buttonVariants } from "@lyrashield/ui"
 import {
   getScanGoalLabel,
   getScanModeLabel,
@@ -28,6 +29,7 @@ import { formatDateTimeUtc, formatDuration, formatTimeUtc } from "@/lib/date-for
 import type { getScanPresentation } from "@/lib/scan-presentation"
 import { severityLabel, humanizeToken } from "@/lib/labels"
 import { reportsHref } from "@/lib/finding-list-params"
+import { InlineConfirm } from "@/components/ui/inline-confirm"
 import { ScorecardControls } from "../../targets/[id]/scorecard-controls"
 import { ScanEvidenceSections } from "./scan-evidence-sections"
 import { AiSecurityScoreCard } from "./ai-score-card"
@@ -194,7 +196,7 @@ export function ScanCoverageDetail({
               </p>
               <p className="text-muted-foreground mt-2 text-xs">
                 “Inconclusive” means the available evidence cannot establish a control outcome. It
-                can follow an unfinished scan, an unassessed check, or a missing engine control
+                can follow an unfinished scan or an unassessed check or a missing engine control
                 mapping; it must not be read as a clean result.
               </p>
               <details className="mt-4 rounded-md border">
@@ -300,7 +302,7 @@ export function ScanFindingsSection({
                   className={`mr-3 inline-flex items-center gap-1 text-sm font-medium ${SEVERITY_COLOR[sev] ?? ""}`}
                 >
                   <Icon className="h-4 w-4" aria-hidden="true" />
-                  {count} {sev}
+                  {count} {severityLabel(sev)}
                 </span>
               )
             })}
@@ -430,11 +432,24 @@ export function ScanDetailHeader({
   presentation,
   isActive,
   refreshError,
+  canCancel = false,
+  cancelling = false,
+  cancelError = null,
+  onCancel,
 }: {
   scan: ScanData
   presentation: ScanPresentationResult
   isActive: boolean
   refreshError: boolean
+  /**
+   * True only when the signed-in member holds scan:cancel in this workspace.
+   * The API re-checks permission and the scan's own state, so this only decides
+   * whether the control is offered.
+   */
+  canCancel?: boolean
+  cancelling?: boolean
+  cancelError?: string | null
+  onCancel?: () => void
 }) {
   return (
     <div className="mb-6">
@@ -458,7 +473,7 @@ export function ScanDetailHeader({
             {scan.endedAt ? ` · completed ${formatDateTimeUtc(scan.endedAt)}` : ""}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {isActive && !refreshError && (
             <span className="text-muted-foreground flex items-center gap-1.5 text-xs">
               <span className="relative flex h-2 w-2">
@@ -479,8 +494,35 @@ export function ScanDetailHeader({
           >
             {scan.integrity.manifestChecksum ? "Sealed" : isActive ? "Sealing…" : "Not sealed"}
           </Badge>
+          {/* The list has always offered Cancel for an active scan; the detail
+              page did not, so a user watching a long scan here could not stop
+              it. Same control, same permission gate, same API result. */}
+          {isActive &&
+            canCancel &&
+            onCancel &&
+            (cancelling ? (
+              <Button variant="outline" size="sm" disabled aria-label="Cancelling scan">
+                <Spinner className="h-4 w-4" />
+                <span className="ml-1">Cancelling…</span>
+              </Button>
+            ) : (
+              <InlineConfirm
+                triggerLabel="Cancel"
+                triggerIcon={<X className="mr-1 h-4 w-4" aria-hidden="true" />}
+                triggerVariant="outline"
+                confirmLabel="Stop scan"
+                message="Stop this scan?"
+                aria-label="Cancel this scan"
+                onConfirm={onCancel}
+              />
+            ))}
         </div>
       </div>
+      {cancelError && (
+        <p role="alert" className="text-destructive mt-2 text-sm">
+          {cancelError}
+        </p>
+      )}
     </div>
   )
 }
