@@ -1743,6 +1743,10 @@ model WebhookEvent {
   @@unique([provider, externalId])
   @@index([workspaceId])
   @@index([processed])
+  // Settlement-receipt integrity probes (apps/worker/src/jobs/billing-reconciliation.job.ts:644)
+  // all filter provider + eventType + a createdAt window. Created by migration
+  // 20261008120000_p2_16_additive_query_indexes.
+  @@index([provider, eventType, createdAt])
 }
 
 /// Durable per-track processing state for a WebhookEvent (billing/license/
@@ -2160,6 +2164,11 @@ model MinutePack {
   @@index([accountId])
   @@index([workspaceId, expiresAt])
   @@index([workspaceId, expiresAt, remainingMinutes])
+  // Cross-tenant expiry sweep (packages/billing/src/usage/expiry.ts:33-40):
+  //   WHERE "deletedAt" IS NULL AND "expiresAt" < now() AND "remainingMinutes" > 0
+  // Every index above leads with workspaceId or accountId, so none can serve the
+  // expiresAt bound alone. Created by migration 20261008120000_p2_16_additive_query_indexes.
+  @@index([expiresAt], where: raw("\"remainingMinutes\" > 0 AND \"deletedAt\" IS NULL"), map: "MinutePack_expiresAt_active_partial_idx")
 }
 
 // ─── Sprint 10 / Track B: Local / Self-Hosted Licensing ─────────────────────
