@@ -33,8 +33,8 @@ jobs:
       # The Zed WASI build is the only expensive step in this job. Skip it when
       # nothing under zed-extension/ changed. Every other step stays
       # unconditional: manifest.json hashes every exported file, so any content
-      # change still needs validation, and the required `validate` check keeps
-      # reporting on every pull request instead of being skipped away by a
+      # change still needs validation. The required `validate` check therefore
+      # keeps reporting on every pull request instead of being skipped away by a
       # trigger-level path filter.
       - name: Detect Zed extension changes
         id: zed
