@@ -2160,6 +2160,12 @@ model MinutePack {
   @@index([accountId])
   @@index([workspaceId, expiresAt])
   @@index([workspaceId, expiresAt, remainingMinutes])
+  // Cross-tenant expiry sweep (packages/billing/src/usage/expiry.ts:33-40):
+  //   WHERE "deletedAt" IS NULL AND "expiresAt" < now() AND "remainingMinutes" > 0
+  // Existing indexes lead with workspaceId or accountId; planner usefulness
+  // depends on selectivity. This expiry-leading partial index is created by
+  // migration 20261008120000_p2_16_minute_pack_expiry_index (the retained P2-16 change).
+  @@index([expiresAt], where: raw("\"remainingMinutes\" > 0 AND \"deletedAt\" IS NULL"), map: "MinutePack_expiresAt_active_partial_idx")
 }
 
 // ─── Sprint 10 / Track B: Local / Self-Hosted Licensing ─────────────────────
