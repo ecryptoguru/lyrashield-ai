@@ -31,7 +31,9 @@ jobs:
       - run: node scripts/validate.mjs --release-ready
 
       # The Zed WASI build is the only expensive step in this job. Skip it when
-      # nothing under zed-extension/ changed. Every other step stays
+      # neither the extension nor either workflow that gates its build changed.
+      # This workflow is exported to the marketplace repo root, so these paths
+      # are relative to that exported checkout. Every other step stays
       # unconditional: manifest.json hashes every exported file, so any content
       # change still needs validation. The required `validate` check therefore
       # keeps reporting on every pull request instead of being skipped away by a
@@ -52,8 +54,8 @@ jobs:
           fi
           if git diff --quiet "$base" HEAD -- \
             zed-extension \
-            docs/marketplace/.github/workflows/validate.yml \
-            docs/marketplace/.github/workflows/release.yml; then
+            .github/workflows/validate.yml \
+            .github/workflows/release.yml; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
           else
             echo "changed=true" >> "$GITHUB_OUTPUT"
