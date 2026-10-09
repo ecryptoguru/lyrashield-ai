@@ -213,6 +213,39 @@ describe("scanSecrets", () => {
     expect(findings[0]!.id).toMatch(/^bearer-token-/)
   })
 
+  it("filters exact credential-isolation sentinels without skipping script files", async () => {
+    const dir = await setupRepo({
+      "scripts/validate.mjs": `const env = { LYRASHIELD_API_KEY: "inherited-credential" }`,
+      "scripts/tests/verify-published-mcp.fixtures.mjs": `process.env.OPENAI_API_KEY = "sentinel-private-provider"`,
+    })
+    const findings = await scanSecrets({ repoPath: dir, workspaceDir: dir })
+
+    expect(findings).toEqual([])
+  })
+
+  it("reports opaque and extended generic credentials in the same script paths", async () => {
+    const dir = await setupRepo({
+      "scripts/validate.mjs": [
+        `const env = { LYRASHIELD_API_KEY: "inherited-credential-Ab3D9f7K" }`,
+        `const api_key = "Ab3D9f7K2n5R8s6V4x1Z0q"`,
+      ].join("\n"),
+      "scripts/tests/verify-published-mcp.fixtures.mjs": [
+        `process.env.OPENAI_API_KEY = "sentinel-private-provider-live"`,
+        `process.env.OPENAI_API_KEY = "sentinel-private-provider-Ab3D9f7K"`,
+      ].join("\n"),
+    })
+    const findings = await scanSecrets({ repoPath: dir, workspaceDir: dir })
+
+    expect(findings).toHaveLength(4)
+    expect(findings.every((finding) => finding.id.startsWith("generic-api-key-"))).toBe(true)
+    expect(findings.map((finding) => finding.title).sort()).toEqual([
+      "Generic API Key Assignment in scripts/tests/verify-published-mcp.fixtures.mjs:1",
+      "Generic API Key Assignment in scripts/tests/verify-published-mcp.fixtures.mjs:2",
+      "Generic API Key Assignment in scripts/validate.mjs:1",
+      "Generic API Key Assignment in scripts/validate.mjs:2",
+    ])
+  })
+
   it("skips test-only credential fixtures while preserving production-source detection", async () => {
     const dir = await setupRepo({
       "src/config.ts": `const token = "ghp_1234567890abcdefghijklmnopqrstuvwxyzABCD"`,

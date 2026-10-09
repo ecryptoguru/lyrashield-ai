@@ -1,7 +1,12 @@
 import { createRoot } from "react-dom/client"
 
 const root = createRoot(document.getElementById("root")!)
-if (new URLSearchParams(location.search).has("dashboard-ux")) {
+if (new URLSearchParams(location.search).has("notification-integrations")) {
+  await import("../../apps/web/src/app/globals.css")
+  const { default: NotificationIntegrationsHarness } =
+    await import("./notification-integrations-harness")
+  root.render(<NotificationIntegrationsHarness />)
+} else if (new URLSearchParams(location.search).has("dashboard-ux")) {
   await import("../../apps/web/src/app/globals.css")
   const { default: DashboardUxHarness } = await import("./dashboard-ux-harness")
   root.render(<DashboardUxHarness />)

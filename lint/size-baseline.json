@@ -672,8 +672,8 @@
     },
     "packages/db/src/connector-service.ts|max-lines": {
       "count": 1,
-      "totalExcess": 51,
-      "maxExcess": 51
+      "totalExcess": 44,
+      "maxExcess": 44
     },
     "packages/db/src/connector-service.ts|max-lines-per-function": {
       "count": 1,
@@ -702,8 +702,8 @@
     },
     "packages/db/src/notification-service.ts|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 11,
-      "maxExcess": 11
+      "totalExcess": 7,
+      "maxExcess": 7
     },
     "packages/db/src/osv-client.ts|max-lines-per-function": {
       "count": 1,

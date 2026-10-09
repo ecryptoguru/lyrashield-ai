@@ -30,6 +30,12 @@ export {
 } from "./notifications"
 
 export {
+  sendWorkspaceNotification,
+  validateNotificationWebhookUrl,
+  type WorkspaceNotificationChannel,
+} from "./workspace-notifications"
+
+export {
   CONNECTOR_PROVIDERS,
   capConnectorOutput,
   ConnectorOutputError,

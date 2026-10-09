@@ -537,3 +537,13 @@ export {
   type UpsertConnectorConnectionParams,
 } from "./connector-service"
 export { getScanQualitySurface } from "./scan-quality-service"
+
+export {
+  listNotificationIntegrations,
+  getWorkspaceNotificationChannels,
+  withActiveWorkspaceNotificationDestination,
+  saveNotificationIntegration,
+  disableNotificationIntegration,
+  type WorkspaceNotificationChannel,
+  type NotificationIntegrationSummary,
+} from "./notification-integration-service"

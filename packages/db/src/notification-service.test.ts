@@ -1,6 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
 const rlsMock = vi.hoisted(() => ({ withWorkspaceRLS: vi.fn() }))
+const envMock = vi.hoisted(() => ({ SLACK_WEBHOOK_URL: "", DISCORD_WEBHOOK_URL: "" }))
+
+vi.mock("@lyrashield/config", () => ({ env: envMock }))
 
 vi.mock("./client", () => ({
   prisma: {
@@ -65,6 +68,8 @@ const baseNotification = {
 describe("notification-service", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    envMock.SLACK_WEBHOOK_URL = ""
+    envMock.DISCORD_WEBHOOK_URL = ""
     mockPrisma.$executeRaw.mockResolvedValue(1)
     mockPrisma.$transaction.mockImplementation(
       async (callback: (tx: typeof mockPrisma) => unknown) => callback(mockPrisma)
@@ -300,6 +305,24 @@ describe("notification-service", () => {
   })
 
   describe("createAndSendNotification", () => {
+    it("defaults to in-app notifications even when deployment webhooks are configured", async () => {
+      envMock.SLACK_WEBHOOK_URL = "https://slack.invalid/hook"
+      envMock.DISCORD_WEBHOOK_URL = "https://discord.invalid/hook"
+      const sendFn = vi.fn().mockResolvedValue(true)
+      await createAndSendNotification({
+        workspaceId: "ws-1",
+        type: "scan.failed",
+        title: "Scan Failed",
+        body: "Engine stopped",
+        sendFn,
+      })
+      expect(
+        mockPrisma.notification.createMany.mock.calls.map(([call]) => call.data.channel)
+      ).toEqual(["in_app"])
+      expect(sendFn).toHaveBeenCalledTimes(1)
+      expect(sendFn).toHaveBeenCalledWith("in_app", expect.any(Object))
+    })
+
     it("uses conflict-safe insertion so expected deduplication does not throw", async () => {
       const sendFn = vi.fn().mockResolvedValue(true)
 
@@ -330,6 +353,7 @@ describe("notification-service", () => {
         title: "Scan Done",
         body: "All good",
         workspaceName: "Acme",
+        channels: ["in_app", "slack", "discord"],
         sendFn,
       })
 
@@ -343,6 +367,43 @@ describe("notification-service", () => {
         expect(call[0].data.status).toBe("sent")
         expect(call[0].data.sentAt).toBeInstanceOf(Date)
       }
+    })
+
+    it("records a concurrently disabled channel as skipped without claiming delivery or failing", async () => {
+      const sendFn = vi.fn().mockResolvedValue("skipped")
+      await expect(
+        createAndSendNotification({
+          workspaceId: "ws-1",
+          type: "scan.failed",
+          title: "Scan Failed",
+          body: "Bad",
+          channels: ["slack"],
+          sendFn,
+        })
+      ).resolves.toBeUndefined()
+      expect(mockPrisma.notification.updateMany).toHaveBeenLastCalledWith({
+        where: { id: "notif-1", status: "sending" },
+        data: { status: "skipped", deliveryLeaseExpiresAt: null },
+      })
+      expect(
+        mockPrisma.notification.updateMany.mock.calls.map(([call]) => call.data.status)
+      ).toEqual(["sending", "skipped"])
+    })
+
+    it("fails closed if the skipped status cannot be durably recorded", async () => {
+      mockPrisma.notification.updateMany
+        .mockResolvedValueOnce({ count: 1 })
+        .mockResolvedValueOnce({ count: 0 })
+      await expect(
+        createAndSendNotification({
+          workspaceId: "ws-1",
+          type: "scan.failed",
+          title: "Scan Failed",
+          body: "Bad",
+          channels: ["slack"],
+          sendFn: vi.fn().mockResolvedValue("skipped"),
+        })
+      ).rejects.toThrow("Skipped notification status was not persisted")
     })
 
     it("persists failed delivery before surfacing sendFn false", async () => {

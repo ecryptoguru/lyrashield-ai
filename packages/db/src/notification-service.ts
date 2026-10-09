@@ -212,8 +212,24 @@ export async function updateNotificationStatus(
   })
 }
 
-const DEFAULT_CHANNELS = ["in_app", "slack", "discord"] as const
+// External channels require an explicit workspace-owned integration selection.
+const DEFAULT_CHANNELS = ["in_app"] as const
 const DELIVERY_LEASE_MS = 5 * 60 * 1000
+
+async function persistUndeliveredNotification(
+  notificationId: string,
+  channel: string,
+  status: "failed" | "skipped"
+): Promise<void> {
+  const updated = await prisma.notification.updateMany({
+    where: { id: notificationId, status: "sending" },
+    data: { status, deliveryLeaseExpiresAt: null },
+  })
+  if (updated.count !== 1) {
+    const label = status === "skipped" ? "Skipped" : "Failed"
+    throw new Error(`${label} notification status was not persisted for channel ${channel}`)
+  }
+}
 
 export async function createAndSendNotification(params: {
   workspaceId: string
@@ -232,7 +248,7 @@ export async function createAndSendNotification(params: {
   sendFn: (
     channel: string,
     payload: { type: string; title: string; body: string; workspaceName?: string }
-  ) => Promise<boolean>
+  ) => Promise<boolean | "skipped">
 }): Promise<void> {
   const channels = params.channels ?? DEFAULT_CHANNELS
   const deliveryFailures: Array<{ channel: string; failure: Error }> = []
@@ -345,7 +361,7 @@ export async function createAndSendNotification(params: {
       continue
     }
 
-    let sent = false
+    let sent: boolean | "skipped" = false
     let deliveryError: unknown
     try {
       sent = await params.sendFn(channel, {
@@ -364,19 +380,15 @@ export async function createAndSendNotification(params: {
       })
     }
 
-    if (sent) {
+    if (sent === "skipped") {
+      await persistUndeliveredNotification(notification.id, channel, "skipped")
+    } else if (sent) {
       await prisma.notification.updateMany({
         where: { id: notification.id, status: "sending" },
         data: { status: "sent", sentAt: new Date(), deliveryLeaseExpiresAt: null },
       })
     } else {
-      const failed = await prisma.notification.updateMany({
-        where: { id: notification.id, status: "sending" },
-        data: { status: "failed", deliveryLeaseExpiresAt: null },
-      })
-      if (failed.count !== 1) {
-        throw new Error(`Failed notification status was not persisted for channel ${channel}`)
-      }
+      await persistUndeliveredNotification(notification.id, channel, "failed")
       deliveryFailures.push({
         channel,
         failure: new Error(`Notification delivery failed for channel ${channel}`, {

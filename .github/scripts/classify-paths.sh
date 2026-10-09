@@ -44,7 +44,7 @@ shared_pattern='^(packages/|package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|t
 marketing_deploy_pattern='^(\.github/workflows/deploy-marketing\.yml|apps/(marketing|marketing-motion)/|packages/|package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|turbo\.json|tsconfig\.json|tsconfig\.tsbuildinfo)'
 # Keep independent marketing projects and their browser tests out of unrelated
 # deployment-tool changes. Shared build/dependency inputs still select both.
-marketing_tests_pattern='^(apps/marketing/|packages/(agent-registry|agent-rules|auth|billing|config|db|egress-proxy|gate|integrations|licenses|logger|myra|pricing|score|security|types)/|package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|turbo\.json|tsconfig\.json|tsconfig\.tsbuildinfo|eslint\.config\.mjs|vitest\.config\.ts|playwright\.config\.ts)'
+marketing_tests_pattern='^(apps/marketing/|packages/(agent-registry|agent-rules|auth|billing|config|db|egress-proxy|evidence-storage|gate|integrations|licenses|logger|myra|pricing|score|security|types)/|package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|turbo\.json|tsconfig\.json|tsconfig\.tsbuildinfo|eslint\.config\.mjs|vitest\.config\.ts|playwright\.config\.ts)'
 motion_tests_pattern='^(apps/marketing-motion/|package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|turbo\.json|tsconfig\.json|tsconfig\.tsbuildinfo|eslint\.config\.mjs)'
 # Ops tests read workflow/helper sources, actual DB fixtures and package
 # manifests. Keep shared packages conservative; ordinary app UI/routes do not
