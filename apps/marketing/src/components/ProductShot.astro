@@ -15,6 +15,8 @@
 
 interface Props {
   src: string
+  /** Paired capture of the same content in the app's light theme. */
+  lightSrc?: string
   alt: string
   width: number
   height: number
@@ -24,16 +26,16 @@ interface Props {
   class?: string
 }
 
-const { src, alt, width, height, chrome, class: className } = Astro.props
+const { src, lightSrc, alt, width, height, chrome, class: className } = Astro.props
 ---
 
-<figure class:list={["product-shot", className]} data-reveal="scale">
+<figure class:list={["product-shot", className, { "product-shot--paired": lightSrc }]} data-reveal="scale">
   <div class="product-shot__chrome" aria-hidden="true">
     <span></span><span></span><span></span>
     <p>{chrome}</p>
   </div>
   <img
-    class="product-shot__img"
+    class="product-shot__img product-shot__img--dark"
     src={src}
     alt={alt}
     width={width}
@@ -41,6 +43,7 @@ const { src, alt, width, height, chrome, class: className } = Astro.props
     loading="lazy"
     decoding="async"
   />
+  {lightSrc && <img class="product-shot__img product-shot__img--light" src={lightSrc} alt={`${alt} Light theme.`} width={width} height={height} loading="lazy" decoding="async" />}
   <figcaption class="product-shot__caption">
     <slot />
   </figcaption>
@@ -57,11 +60,8 @@ const { src, alt, width, height, chrome, class: className } = Astro.props
     text-align: left;
   }
 
-  /* Deliberate: this card stays dark in BOTH themes, including its caption. It
-     frames a capture of a dark application, so a dark window on a light page is
-     the correct "app screenshot" treatment — re-theming the chrome to white, or
-     fading the image to blend in, makes a real screenshot look broken. Only the
-     shadow softens for the lighter surface. */
+  /* Legacy single captures keep their dark chrome in both themes. Paired
+     captures swap image and chrome together in the overrides below. */
   :global(:root[data-theme="light"]) .product-shot {
     border-color: rgba(16, 34, 53, 0.14);
     box-shadow: 0 1.5rem 4rem rgba(39, 75, 94, 0.2);
@@ -97,6 +97,14 @@ const { src, alt, width, height, chrome, class: className } = Astro.props
     width: 100%;
     height: auto;
   }
+  .product-shot__img--light { display: none; }
+  :global(:root[data-theme="light"]) .product-shot--paired { background: var(--bg-raised); }
+  :global(:root[data-theme="light"]) .product-shot--paired .product-shot__img--dark { display: none; }
+  :global(:root[data-theme="light"]) .product-shot--paired .product-shot__img--light { display: block; }
+  :global(:root[data-theme="light"]) .product-shot--paired .product-shot__chrome { background: var(--bg-raised); border-color: var(--border); }
+  :global(:root[data-theme="light"]) .product-shot--paired .product-shot__chrome p,
+  :global(:root[data-theme="light"]) .product-shot--paired .product-shot__caption { color: var(--text-muted); border-color: var(--border); }
+  :global(:root[data-theme="light"]) .product-shot--paired .product-shot__caption :global(b) { color: var(--text); }
 
   .product-shot__caption {
     border-top: 1px solid rgba(32, 50, 70, 0.9);

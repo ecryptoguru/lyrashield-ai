@@ -3,6 +3,27 @@ const image = preview?.querySelector<HTMLImageElement>("[data-product-image]")
 let trigger: HTMLButtonElement | undefined
 let scrollLock: string | undefined
 
+const views = document.querySelector<HTMLElement>(".hero-frame__views")
+const panels = document.querySelectorAll<HTMLElement>("[data-product-panel]")
+const selectors = document.querySelectorAll<HTMLButtonElement>("[data-product-select]")
+
+function selectView(id: string) {
+  panels.forEach((panel) => {
+    panel.hidden = panel.dataset.productPanel !== id
+  })
+  selectors.forEach((button) => {
+    button.setAttribute("aria-pressed", String(button.dataset.productSelect === id))
+  })
+}
+
+if (views && panels.length && selectors.length) {
+  selectors.forEach((button) => {
+    button.addEventListener("click", () => selectView(button.dataset.productSelect!))
+  })
+  selectView("overview")
+  views.hidden = false
+}
+
 function restorePreview() {
   if (scrollLock !== undefined) document.documentElement.style.overflow = scrollLock
   scrollLock = undefined

@@ -161,7 +161,7 @@ test("product captures retain their full aspect ratios and phone previews explai
   await page.goto("/")
   await page.locator("#product-preview").scrollIntoViewIfNeeded()
   const images = page.locator(".hero-frame__img:visible")
-  await expect(images).toHaveCount(3)
+  await expect(images).toHaveCount(1)
   for (const image of await images.all()) {
     await expect
       .poll(() => image.evaluate((node: HTMLImageElement) => node.naturalWidth))
@@ -173,6 +173,7 @@ test("product captures retain their full aspect ratios and phone previews explai
     expect(Math.abs(proportions.rendered - proportions.source)).toBeLessThan(0.03)
   }
   await page.setViewportSize({ width: 320, height: 844 })
+  await page.getByRole("button", { name: "Findings", exact: true }).click()
   await page.getByRole("button", { name: "Expand Findings preview" }).click()
   await expect(page.getByRole("heading", { name: "Findings preview", exact: true })).toBeVisible()
   await expect(page.locator("#product-preview-hint")).toBeVisible()
@@ -193,6 +194,27 @@ test("mobile sticky signup yields to the visible final signup action", async ({ 
   await expect(page.locator("[data-sticky-cta]")).toBeHidden()
   await page.evaluate(() => scrollTo({ top: innerHeight + 200, behavior: "instant" }))
   await expect(page.locator("[data-sticky-cta]")).toBeVisible()
+})
+
+test("methodology uses the supplied scan and finding captures in both themes", async ({ page }) => {
+  await page.goto("/methodology")
+  for (const theme of ["dark", "light"]) {
+    await page.evaluate((value) => {
+      document.documentElement.dataset.theme = value
+    }, theme)
+    const images = page.locator(".product-shot--paired .product-shot__img:visible")
+    await expect(images).toHaveCount(2)
+    for (const image of await images.all()) {
+      await image.scrollIntoViewIfNeeded()
+      await expect(image).toHaveAttribute(
+        "src",
+        new RegExp(`current-(scan|findings)-${theme}\\.webp$`)
+      )
+      await expect
+        .poll(() => image.evaluate((el: HTMLImageElement) => el.naturalWidth))
+        .toBeGreaterThan(0)
+    }
+  }
 })
 
 test("translucent supporting bands preserve text contrast against any film brightness", async ({

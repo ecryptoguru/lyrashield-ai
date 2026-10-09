@@ -53,6 +53,9 @@ for (const theme of ["dark", "light"] as const) {
     await page.goto("/")
     const triggers = page.locator("[data-product-expand]")
     for (const trigger of await triggers.all()) {
+      await page
+        .locator(`[data-product-select="${await trigger.getAttribute("data-product-view")}"]`)
+        .click()
       await trigger.click()
       const dialog = page.getByRole("dialog", {
         name: `${await trigger.getAttribute("data-product-title")} preview`,

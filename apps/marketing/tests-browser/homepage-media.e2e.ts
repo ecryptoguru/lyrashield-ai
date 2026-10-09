@@ -1,15 +1,20 @@
 import { expect, test } from "@playwright/test"
 
-const productImage = /\/product\/current-(?:posture|findings|agents)-(?:dark|light)\.webp$/
+const productImage =
+  /\/product\/current-(?:posture|findings|agents|readiness|scan)-(?:dark|light)\.webp$/
 const heroImage = /assurance-world\/v3\/[^/]+\/posters\/gateway-(?:desktop|portrait)\.webp$/
 const motionVideo = /assurance-world\.(?:mp4|webm)$/
 const productImageDimensions = new Map([
-  ["/product/current-posture-dark.webp", [1312, 544]],
-  ["/product/current-posture-light.webp", [1312, 544]],
-  ["/product/current-findings-dark.webp", [1312, 410]],
-  ["/product/current-findings-light.webp", [1312, 410]],
-  ["/product/current-agents-dark.webp", [1312, 720]],
-  ["/product/current-agents-light.webp", [1312, 720]],
+  ["/product/current-posture-dark.webp", [1600, 597]],
+  ["/product/current-posture-light.webp", [1600, 597]],
+  ["/product/current-findings-dark.webp", [960, 834]],
+  ["/product/current-findings-light.webp", [960, 834]],
+  ["/product/current-agents-dark.webp", [1600, 690]],
+  ["/product/current-agents-light.webp", [1600, 690]],
+  ["/product/current-readiness-dark.webp", [1600, 604]],
+  ["/product/current-readiness-light.webp", [1600, 604]],
+  ["/product/current-scan-dark.webp", [1600, 640]],
+  ["/product/current-scan-light.webp", [1600, 640]],
 ])
 
 test("homepage loads only the selected lazy product screenshots for either saved theme", async ({
@@ -60,7 +65,7 @@ test("homepage loads only the selected lazy product screenshots for either saved
         loading: image.getAttribute("loading"),
       }))
     )
-    expect(screenshotContract).toHaveLength(6)
+    expect(screenshotContract).toHaveLength(10)
     expect(
       screenshotContract.every(({ src, alt, width, height, loading }) => {
         const dimensions = productImageDimensions.get(src)
@@ -73,15 +78,11 @@ test("homepage loads only the selected lazy product screenshots for either saved
       })
     ).toBe(true)
 
-    // The collage is block 5 now, so it sits below the fold and the browser may
-    // defer it past this point. Lazy loading is asserted on the attributes
-    // above; here the point is that nothing eager was fetched and that the
-    // theme selects exactly one file per frame, which is checked after the
-    // scroll below where the images are guaranteed to have loaded.
+    // Unselected views and the opposite theme stay lazy even when the gallery
+    // enters the viewport.
     await page.waitForTimeout(500)
     const initialProductRequests = requests.filter((path) => productImage.test(path))
-    expect(initialProductRequests.length).toBeLessThanOrEqual(3)
-    // Nothing from the collage may be fetched eagerly at either theme.
+    expect(initialProductRequests.length).toBeLessThanOrEqual(1)
     await expect(
       page.locator(".hero-frame__img[loading='eager'], .hero-frame__img[fetchpriority='high']")
     ).toHaveCount(0)
@@ -104,13 +105,27 @@ test("homepage loads only the selected lazy product screenshots for either saved
               images.filter((image) => (image as HTMLImageElement).naturalWidth > 0).length
           )
       )
-      .toBe(3)
+      .toBe(1)
 
-    // After the scroll the collage is loaded, so the theme contract is asserted
-    // here: exactly one file per frame, and the right variant for the theme.
     const expectedSuffix = "-" + theme + ".webp"
-    const loaded = requests.filter((path) => productImage.test(path))
-    for (const imageName of ["current-posture", "current-findings", "current-agents"]) {
+    expect(requests.filter((path) => productImage.test(path))).toEqual([
+      "/product/current-posture" + expectedSuffix,
+    ])
+    for (const [view, asset] of [
+      ["overview", "posture"],
+      ["findings", "findings"],
+      ["scan", "scan"],
+      ["readiness", "readiness"],
+      ["agents", "agents"],
+    ]) {
+      await page.locator(`[data-product-select="${view}"]`).click()
+      const image = page.locator(".hero-frame__img:visible")
+      await expect(image).toHaveCount(1)
+      await expect
+        .poll(() => image.evaluate((el: HTMLImageElement) => el.naturalWidth))
+        .toBeGreaterThan(0)
+      const imageName = "current-" + asset
+      const loaded = requests.filter((path) => productImage.test(path))
       const paths = loaded.filter((path) => path.includes(`/${imageName}`))
       expect(paths.length, `${imageName} must load exactly once`).toBe(1)
       expect(paths[0].endsWith(expectedSuffix), `${imageName} must match the theme`).toBe(true)
@@ -155,7 +170,8 @@ test("hero copy and product-image caption remain available without JavaScript", 
   expect(response?.status()).toBe(200)
   await expect(page.locator("#premium-hero-title")).toBeVisible()
   await expect(page.locator(".premium-hero__primary")).toBeVisible()
-  await expect(page.locator(".hero-frame__caption")).toBeVisible()
+  await expect(page.locator(".hero-frame__caption").first()).toBeVisible()
+  await expect(page.locator("[data-product-panel]:visible")).toHaveCount(5)
   await page.locator("#assurance-world").scrollIntoViewIfNeeded()
   await expect(page.locator(".journey__chapter h3").first()).toBeVisible()
   await expect(page.locator(".journey__report")).toBeVisible()

@@ -1,171 +1,66 @@
 # Product screenshots
 
-The homepage now uses `current-*.webp`: captures of the **current dashboard
-components with illustrative data**, generated on 2026-10-09. They are rendered
-from the actual React components, not generated artwork or live account results.
-No real identities, repositories or finding details are present.
+The current marketing previews use the founder-supplied dashboard captures from
+October 9, 2026. These are actual captures of the demo workspace, with matching
+dark and light views. They replace the earlier synthetic component fixtures.
+Counts and evidence states describe the captured example, not product-wide
+performance or a claim of readiness.
 
-| Files (dark/light pairs)             | Source component                     | Dimensions |
-| ------------------------------------ | ------------------------------------ | ---------- |
-| `current-posture-{dark,light}.webp`  | `TrustCommandCenter`                 | 1312 × 544 |
-| `current-findings-{dark,light}.webp` | `FindingsClient`                     | 1312 × 410 |
-| `current-agents-{dark,light}.webp`   | `AgentsGrid` through `AgentsHarness` | 1312 × 720 |
+The homepage presents one readable view at a time: Overview, Findings, Scan
+record, Launch readiness and Coding agents. The selected view follows the page
+theme; Expand preview opens the same image at a readable size. Without
+JavaScript, all five captioned views remain available. Methodology uses the
+same paired scan and finding captures.
 
-The capture entry is `e2e/browser/marketing-product-preview.html`; its fixture
-imports the current dashboard components and stylesheet. Run the existing
-`e2e/browser/server.mjs` locally, open that entry with `?view=posture`, `findings`
-or `agents` and `&theme=dark` or `light`. Capture at 1600 × 820, taking the content
-region at x=288, y=0, width=1312, with the height in the table. Wait for fonts
-before capture. The Inter font uses the already installed marketing font package.
-Encode as WebP at quality 82. Regenerate both themes together after component changes.
-The homepage caption and preview dialog disclose illustrative data.
+## Sources and preparation
 
-The `console-*.webp` files below are **older live captures**, redacted at the file
-level before they entered the repository. They remain for their existing docs and
-methodology consumers; they are no longer the homepage previews.
+Original files remain outside the repository. Filenames below are relative to
+the founder's screenshot directory; none of the original screenshots are
+published. Image coordinates are in the original 3024 × 1964 capture.
 
-- `console-home.webp` — captured at `/dashboard` (dark theme), retained as a historical full-width capture.
-- `console-home-light.webp` — the same page, same scroll content, captured in
-  the app's light theme. retained alongside `console-home.webp` as its historical theme pair.
-- `console-trust-runs.webp` — captured at `/trust-runs`, used full-width by
-  `pages/methodology.astro` under "What every new scan record preserves".
-- `console-issues.webp` — captured at `/issues`, used full-width by
-  `pages/methodology.astro` under "Evidence states are not interchangeable".
-- `console-issues-thumb.webp`, `console-coding-agents-thumb.webp` — the
-  matching captures with the app sidebar cropped off (see "Thumbnail crop"
-  below). Used only by `HeroProductFrame.astro`, as the two small frames
-  stacked beside the dashboard view in the hero collage. There is
-  deliberately no `console-trust-runs-thumb.webp`: Trust Runs was cut from the
-  collage so the remaining two frames could run taller. If it comes back,
-  regenerate its thumb from `console-trust-runs.webp` rather than assuming a
-  stale copy is lying around.
-- `console-issues-thumb-light.webp`, `console-coding-agents-thumb-light.webp`
-  — light-theme counterparts of the two thumbs above, same sidebar-cropped
-  treatment, same redaction rule. Also `HeroProductFrame.astro`-only, paired
-  with their dark twin via the same theme toggle as the dashboard image.
+| Asset pair        | Dark source time | Light source time | Crop: x, y, width, height | Export     |
+| ----------------- | ---------------- | ----------------- | ------------------------- | ---------- |
+| current-posture   | 11.28.28 PM      | 11.34.17 PM       | 600, 100, 2424, 905       | 1600 × 597 |
+| current-findings  | 11.30.50 PM      | 11.33.40 PM       | 2000, 66, 1024, 890       | 960 × 834  |
+| current-scan      | 11.34.07 PM      | 11.34.00 PM       | 600, 130, 2424, 970       | 1600 × 640 |
+| current-readiness | 11.31.31 PM      | 11.33.15 PM       | 600, 100, 2424, 915       | 1600 × 604 |
+| current-agents    | 11.31.57 PM      | 11.33.06 PM       | 600, 100, 2424, 1045      | 1600 × 690 |
 
-The hero uses its own frame component; everything else goes through
-`components/ProductShot.astro`, which supplies the browser chrome and caption.
+Source names use the format Screenshot 2026-10-09 at TIME.png. Export WebP at
+quality 82. Both themes use identical crop coordinates and export dimensions.
+Preserve actual screenshot pixels and UI text; do not generate or reconstruct
+the dashboard through an image model.
 
-## Theme-paired hero images
+The two Technical-tab captures (11.30.57 PM and 11.33.47 PM) are deliberately
+not published: their dense issue-specific details add disclosure risk while
+contributing less to an overview than the finding's evidence state and action.
 
-`HeroProductFrame.astro` is the one component on the site that needs to show
-the app UI in whichever theme the page is currently in — every other
-product shot on the site is a fixed dark capture regardless of page theme.
-For each of its three frames it renders both a dark and a light `<img>` and
-lets CSS pick one via `:root[data-theme="light"]`, matching the same
-data-attribute the rest of the site already uses for light/dark. This is
-CSS-only (no JS): both images ship in the page, so the hero's image payload
-is roughly double what a single-theme collage would cost, in exchange for the
-screenshots never mismatching the page's theme. If you regenerate one theme's
-set, regenerate the other alongside it — a stale dark image paired with a
-freshly-recaptured light one will drift out of sync (different data,
-different scroll position, different redaction boxes).
+## Privacy at the file level
 
-`console-home.webp` / `console-home-light.webp` are each a **stitch of two
-captures at different scroll positions**, not a single screenshot — see
-"Stitching a tall dashboard capture" below before touching either one.
+Crop away the sidebar, account name, email and browser framing. The captures
+keep the demo-workspace label, UI controls, semantic states and counts.
 
-## Thumbnail crop
+Before cropping and resizing, destroy these source-coordinate regions by
+downsampling each to 6 × 2 pixels, scaling back with nearest-neighbor sampling
+and applying a 15px Gaussian blur:
 
-The `*-thumb.webp` files are cropped from the corresponding full capture: the
-app's left sidebar (0 to x=267 in the original 1400px-wide export) is removed,
-leaving a 1133×883 image of just the content pane. At hero-thumbnail size the
-sidebar was mostly wasted width; the content is what makes each frame's point.
+| Asset            | Regions: x, y, width, height                                                  |
+| ---------------- | ----------------------------------------------------------------------------- |
+| current-posture  | 2170, 935, 760, 58 — private evaluated-review identity                        |
+| current-findings | 2165, 100, 760, 52; 2040, 166, 940, 57 — private finding title and breadcrumb |
+| current-scan     | 636, 308, 230, 48; 790, 614, 225, 48 — private target identity                |
 
-**This is a separate file, not an edit of the shared original.** The full
-1400×883 captures stay untouched because `pages/methodology.astro` and
-`pages/docs/integrations/index.astro` render them full-width, sidebar
-included, at a size where the sidebar reads fine. If you need to redo a crop,
-verify the sidebar/content border position first — do not assume x=267 holds
-for a differently-styled future capture:
+The other crops contain no account identity, repository coordinates or finding
+specifics. Never ship an original and rely on CSS, an overlay or a flat fill to
+conceal its contents. Public image URLs must be safe to open directly.
 
-```python
-from PIL import Image
-im = Image.open("console-x.webp").convert("RGB")
-prev = None
-for x in range(200, 320):
-    px = im.getpixel((x, 400))
-    if prev and sum(abs(a - b) for a, b in zip(px, prev)) > 15:
-        print(x, prev, "->", px)
-    prev = px
-```
+Each exported WebP has a companion JSON record with its source and preparation provenance. After
+regeneration, inspect both themes at full size and verify their dimensions,
+redaction and UI readability. Keep factual alt text and captions aligned with
+the content actually included in the crop.
 
-Look for a consistent edge across several `y` values before picking the crop
-`x`; a single sampled row can catch a card border instead of the sidebar edge.
+## Legacy assets
 
-## Stitching a tall dashboard capture
-
-`console-home.webp` and `console-home-light.webp` each cover more vertical
-content than fits in one screenshot, so each is built from **two captures of
-the same page at different scroll positions**, joined into one file:
-
-1. Capture the page at the top of scroll and again scrolled down to where
-   the first capture left off — with some overlap so you can find a shared
-   landmark.
-2. The app sidebar is fixed/sticky — it does **not** scroll with the page. So
-   the second (scrolled-down) capture shows the ENTIRE sidebar a second time,
-   identical to the first capture's. Naively concatenating the two images
-   duplicates the logo, nav and account footer mid-image. Before joining,
-   flat-fill the second capture's sidebar column with the sidebar's own
-   background colour — measure the sidebar/content x-boundary directly on
-   that capture rather than assuming a prior value still holds.
-3. Pick the join point on a **card border** shared by both captures (e.g. the
-   top edge of a stats card), not an arbitrary pixel row — arbitrary rows
-   rarely land cleanly between two unrelated screenshots.
-4. Apply the redaction rule (below) to the bottom capture's sensitive regions
-   — e.g. private target names in "Recent scan activity" — before the join,
-   not after; it's easier to verify against the un-joined image.
-5. Scale both pieces to the same target width, then paste the top piece and
-   the (sidebar-filled) bottom piece into one canvas, top first.
-6. **Check the seam at 2x zoom.** A cut point chosen for the main content
-   column can still slice a sidebar icon or nav-item fragment in half right
-   at the join; patch any such fragment with the same sidebar fill colour.
-
-The flat-fill used here is erasing a **duplicate, contentless UI region**
-(the second sidebar), not redacting live information — it is a different
-technique from and not an exception to, the "never redact with a flat fill"
-rule below, which is about hiding content that is otherwise still present in
-the file.
-
-## The redaction rule
-
-Anything below is destroyed in the image itself — pixelated down and then
-blurred, so the original glyphs are gone from the bytes we ship:
-
-- Account identity: real names, email addresses, avatars.
-- Repository coordinates: `owner/repo` strings and target display names that
-  match a private repo.
-- Source file paths and line numbers.
-- Finding titles, endpoint names, mutation names and any other text describing
-  how to exploit a specific unfixed issue.
-
-What deliberately stays visible: severity pills, evidence states, CWE and CVSS
-references, run types, timestamps, counts and every piece of product chrome.
-That is the shape worth showing; the specifics are what we owe discretion.
-
-**Never redact with CSS, an overlay box or a flat fill.** A `filter: blur()` is
-undone by disabling a stylesheet and a solid box over selectable text still
-ships the text. These files are directly reachable at `/product/*.webp`.
-
-## Method
-
-Per region: crop it, downsample to a handful of pixels, upsample with
-nearest-neighbour, Gaussian-blur the result, paste it back. Export WebP at
-quality 82 — 1600px wide for the hero, 1400px for in-page shots.
-
-## Before adding a new shot
-
-1. Capture from a workspace whose targets you are willing to name publicly. A
-   demo workspace beats redaction.
-2. Redact per the rule above, then **open the exported file and read it** at full
-   size. Half-blurred sentences are worse than none — they read as careless.
-3. Keep `width`/`height` accurate on the `<img>`; these pages are tuned for zero
-   layout shift.
-4. Write a caption that says what the frame proves and disclose what was blurred.
-
-## Guardrail
-
-Captions must not imply a capture shows more than it does and must not present
-demo data as production metrics. If a frame shows an unfixed issue in one of our
-own products, blur the specifics — a marketing page is not a disclosure channel.
+The console-*.webp files predate these captures. They are retained as historical
+assets and are no longer referenced by the homepage or methodology. Do not
+reuse them as current dashboard UI or copy their old route names into captions.
