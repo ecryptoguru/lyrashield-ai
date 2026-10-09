@@ -86,8 +86,8 @@ const primary = shots[0]!
   .hero-frame__views button[aria-pressed="true"] { background: var(--accent); color: var(--bg); border-color: var(--accent); }
   .hero-frame__views button:hover, .hero-frame__expand:hover, .product-preview button:hover { border-color: var(--accent); }
   button:focus-visible, .product-preview__scroll:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
-  .hero-frame__gallery { display: grid; gap: 2rem; }
-  .hero-frame__panel { margin: 0; }
+  .hero-frame__gallery { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2rem; min-width: 0; }
+  .hero-frame__panel { min-width: 0; margin: 0; }
   .hero-frame__window { position: relative; overflow: hidden; border: 1px solid var(--border); border-radius: .75rem; background: var(--bg-raised); }
   .hero-frame__chrome { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .85rem 1rem; border-bottom: 1px solid var(--border); color: var(--text-muted); font-size: .75rem; }
   .hero-frame__chrome p { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

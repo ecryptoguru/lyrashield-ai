@@ -308,6 +308,12 @@ test("homepage reflows at common widths and with 200 percent root text sizing", 
         overflowX: getComputedStyle(hero).overflowX,
       }
     })(),
+    journeyNav: (() => {
+      const nav = document.querySelector(".journey__nav")
+      if (!nav) return undefined
+      const rect = nav.getBoundingClientRect()
+      return { left: rect.left, right: rect.right, width: rect.width }
+    })(),
     menuTargets: Array.from(
       document.querySelectorAll<HTMLButtonElement>("#menu-toggle, #theme-toggle")
     ).map((button) => {
@@ -345,6 +351,10 @@ test("homepage reflows at common widths and with 200 percent root text sizing", 
     zoomedLayout.heroClip!.right,
     "hero clip box ends inside the viewport"
   ).toBeLessThanOrEqual(320)
+  expect(zoomedLayout.journeyNav).toBeDefined()
+  expect(zoomedLayout.journeyNav!.left).toBeGreaterThanOrEqual(0)
+  expect(zoomedLayout.journeyNav!.right).toBeLessThanOrEqual(320)
+  expect(zoomedLayout.journeyNav!.width).toBeGreaterThan(200)
   expect(zoomedLayout.menuTargets).toHaveLength(2)
   for (const target of zoomedLayout.menuTargets) {
     expect(target.label).toBeTruthy()

@@ -50,6 +50,7 @@ const opening = manifest.chapters[0]!
     .scroll-world__stage img, .scroll-world__stage video { object-fit: cover; }
     .scroll-world__scrim { background: linear-gradient(180deg, rgba(8,17,28,.06) 30%, rgba(8,17,28,.24) 70%, rgba(8,17,28,.48)); }
     :global(scroll-world[data-world-state] .journey__layout) { display: block; }
+    :global(scroll-world[data-world-state] .journey__nav) { width: 100%; box-shadow: none; }
     :global(scroll-world[data-world-state] .journey__intro) { padding: 1.25rem 1rem; background: rgba(8,17,28,.9); border-radius: 1rem; }
     :global(scroll-world[data-world-state] .journey__chapter) { min-height: max(520px, 95svh); max-width: 40rem; margin-inline: auto; justify-content: end; padding: 3rem 1rem; background: linear-gradient(180deg, transparent 45%, rgba(8,17,28,.88) 58%, rgba(8,17,28,.9)); }
   }
