@@ -46,9 +46,12 @@ test("cycles and synchronizes the rendered marketing theme", async ({ page }) =>
   await expect(toggle).toHaveAttribute("aria-label", "System theme active. Change color theme")
   await expect(toggle).toHaveAttribute("title", "System theme")
   await expect(themeColor).toHaveAttribute("content", "#f5f9fc")
-  await expect(page.locator(".premium-hero")).toHaveCSS("background-color", "rgb(238, 246, 250)")
+  // The cinematic hero and chapters reveal their shared film; the reading
+  // veil and ordinary product surfaces still respond to the selected theme.
+  await expect(page.locator(".premium-hero")).toHaveCSS("background-color", "rgba(0, 0, 0, 0)")
+  await expect(page.locator(".premium-hero")).toHaveCSS("color", "rgb(16, 34, 53)")
   await expect(page.locator(".hero-frame")).toHaveCSS("background-color", "rgb(245, 249, 252)")
-  await expect(page.locator("evidence-world")).toHaveCSS("background-color", "rgb(8, 17, 28)")
+  await expect(page.locator("evidence-journey")).toHaveCSS("background-color", "rgba(0, 0, 0, 0)")
 
   await toggle.click()
   await expect(root).toHaveAttribute("data-theme-preference", "light")
@@ -62,9 +65,9 @@ test("cycles and synchronizes the rendered marketing theme", async ({ page }) =>
   await expect(root).toHaveAttribute("data-theme", "dark")
   await expect(activeIcon("dark")).toBeVisible()
   await expect(themeColor).toHaveAttribute("content", "#08111c")
-  await expect(page.locator(".premium-hero")).toHaveCSS("background-color", "rgb(8, 17, 28)")
+  await expect(page.locator(".premium-hero")).toHaveCSS("background-color", "rgba(0, 0, 0, 0)")
   await expect(page.locator(".hero-frame")).toHaveCSS("background-color", "rgb(8, 17, 28)")
-  await expect(page.locator("evidence-world")).toHaveCSS("background-color", "rgb(8, 17, 28)")
+  await expect(page.locator("evidence-journey")).toHaveCSS("background-color", "rgba(0, 0, 0, 0)")
 
   await toggle.click()
   await page.emulateMedia({ colorScheme: "dark" })
@@ -86,10 +89,10 @@ test("disconnects an incomplete motion world without a page error", async ({ pag
   const errors: Error[] = []
   page.on("pageerror", (error) => errors.push(error))
   await page.goto("/")
-  await page.locator("evidence-world").scrollIntoViewIfNeeded()
+  await page.locator("evidence-journey").scrollIntoViewIfNeeded()
   await page.evaluate(async () => {
-    await customElements.whenDefined("evidence-world")
-    const world = document.createElement("evidence-world")
+    await customElements.whenDefined("evidence-journey")
+    const world = document.createElement("evidence-journey")
     document.body.append(world)
     world.remove()
   })
@@ -97,123 +100,43 @@ test("disconnects an incomplete motion world without a page error", async ({ pag
 })
 
 for (const viewport of [
-  { name: "mobile", width: 390, height: 844 },
-  { name: "desktop", width: 1440, height: 900 },
+  { width: 320, height: 568 },
+  { width: 390, height: 844 },
+  { width: 844, height: 390 },
+  { width: 1440, height: 900 },
 ]) {
-  test(`cross-fades story cards without horizontal overflow on ${viewport.name}`, async ({
+  test(`evidence chapters remain readable at ${viewport.width}x${viewport.height}`, async ({
     page,
   }) => {
     await page.setViewportSize(viewport)
     await page.goto("/")
-    const expectedChapterHeight = viewport.name === "mobile" ? 1055 : 1035
-    expect(
-      await page.locator('[data-chapter-index="0"]').evaluate((el) => el.clientHeight)
-    ).toBeGreaterThanOrEqual(expectedChapterHeight)
-
-    const gateway = page.locator('[data-chapter-index="0"]')
-    const scrollToChapterProgress = async (progress: number) =>
-      gateway.evaluate((chapter, chapterProgress) => {
-        const top = chapter.getBoundingClientRect().top + scrollY
-        scrollTo(
-          0,
-          top +
-            chapter.clientHeight * chapterProgress -
-            innerHeight * (innerWidth < 768 ? 0.68 : 0.5)
-        )
-      }, progress)
-
-    // The world spans the whole story. Scrolling its tall parent into view may
-    // land on any middle chapter; position the first chapter's scroll anchor
-    // deliberately so this test starts on card 0 before checking its transition.
-    await scrollToChapterProgress(0.2)
-    await page.evaluate(() => customElements.whenDefined("evidence-world"))
-    await expect(gateway.locator('[data-story-card-index="0"]')).toHaveClass(/is-card-active/)
-    await scrollToChapterProgress(0.7)
-    await expect(gateway.locator('[data-story-card-index="1"]')).toHaveClass(/is-card-active/)
+    const chapter = page.locator('[data-journey-chapter="0"]')
+    await chapter.scrollIntoViewIfNeeded()
+    await expect(chapter.getByRole("heading")).toBeVisible()
+    await expect(chapter.getByRole("heading")).toBeInViewport()
+    // Phone chapters reserve a scene-sized opening but stay within one viewport.
+    expect(await chapter.evaluate((el) => el.clientHeight)).toBeLessThanOrEqual(
+      Math.max(750, viewport.height)
+    )
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
       viewport.width
     )
+    if (viewport.width <= 900)
+      await expect(page.locator(".journey__scene")).toHaveCSS("position", "relative")
   })
 }
 
-test("shows every story card in reduced-motion mode", async ({ page }) => {
+test("reduced motion keeps the complete example and chapter explanations", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" })
   await page.goto("/")
-  await page.locator("evidence-world").scrollIntoViewIfNeeded()
-  await expect(page.locator("[data-story-card-index]")).toHaveCount(12)
-  for (const card of await page.locator("[data-story-card-index]").all())
-    await expect(card).toBeVisible()
-})
-
-test("keeps the mobile story card anchored below the header without flashing the video", async ({
-  page,
-}) => {
-  await page.setViewportSize({ width: 390, height: 844 })
-  await page.goto("/")
-
-  const world = page.locator("evidence-world")
-  await world.scrollIntoViewIfNeeded()
-  await page.evaluate(() => customElements.whenDefined("evidence-world"))
-  const firstChapter = page.locator('[data-chapter-index="0"]')
-  await firstChapter.evaluate((chapter) => {
-    const top = chapter.getBoundingClientRect().top + scrollY
-    scrollTo(0, top + 200)
-  })
-
-  await expect(world).toHaveClass(/is-pinned/)
-  const activeCard = firstChapter.locator(".is-card-active")
-  await expect(activeCard).toBeVisible()
-  await expect
-    .poll(() => activeCard.evaluate((card) => getComputedStyle(card).transform))
-    .toBe("none")
-  expect(
-    await activeCard.evaluate((card) => innerHeight - card.getBoundingClientRect().bottom)
-  ).toBe(16)
-
-  const headerBottom = await page
-    .locator("header.sticky")
-    .evaluate((header) => header.getBoundingClientRect().bottom)
-  const progressTop = await page
-    .locator(".evidence-world__chrome")
-    .evaluate((chrome) => chrome.getBoundingClientRect().top)
-  expect(progressTop).toBeGreaterThan(headerBottom)
-
-  const video = page.locator(".evidence-world__video")
-  await expect(video).toHaveClass(/is-front/, { timeout: 15_000 })
-  await page.locator('[data-chapter-index="1"]').evaluate((chapter) => {
-    const top = chapter.getBoundingClientRect().top + scrollY
-    scrollTo(0, top + 200)
-  })
-  await expect(video).toHaveClass(/is-front/)
-})
-
-test("retains the motion layout on a short portrait phone", async ({ page }) => {
-  await page.setViewportSize({ width: 320, height: 568 })
-  await page.goto("/")
-  const world = page.locator("evidence-world")
-  await world.scrollIntoViewIfNeeded()
-  await page.evaluate(() => customElements.whenDefined("evidence-world"))
-  await world.evaluate((element) => {
-    const top = element.getBoundingClientRect().top + scrollY
-    scrollTo(0, top + 200)
-  })
-
-  await expect(world).toHaveClass(/is-motion-layout/)
-  await expect(world).toHaveClass(/is-pinned/)
-  await expect(page.locator(".evidence-world__stage")).toHaveCSS("position", "sticky")
-  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320)
-})
-
-test("keeps a short landscape phone in the stable document flow", async ({ page }) => {
-  await page.setViewportSize({ width: 844, height: 390 })
-  await page.goto("/")
-  const world = page.locator("evidence-world")
-  await world.scrollIntoViewIfNeeded()
-  await page.evaluate(() => customElements.whenDefined("evidence-world"))
-
-  await expect(page.locator(".evidence-world__stage")).toHaveCSS("position", "relative")
-  await expect(page.locator(".evidence-world__chapters")).toHaveCSS("margin-top", "0px")
-  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(844)
+  await expect(page.locator("evidence-journey")).not.toHaveClass(/is-enhanced/)
+  await expect(page.locator("[data-journey-chapter]")).toHaveCount(7)
+  await expect(page.locator("[data-receipt-stage]")).toHaveCount(5)
+  await expect(page.locator(".journey__report")).toBeVisible()
+  for (const details of await page.locator(".journey__chapter details").all()) {
+    await details.locator("summary").click()
+    await expect(details.locator("p").first()).toBeVisible()
+  }
 })
 
 // Item 2.2: the sheet scrolls inside the viewport and exposes every
@@ -373,26 +296,16 @@ test("keeps desktop navigation labels on one line at the compact desktop width",
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(1159)
 })
 
-test("left-aligns story-card bullet lists inside left-aligned chapters", async ({ page }) => {
+test("chapter detail lists follow the reading order and remain available", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 })
   await page.goto("/")
-  await page.locator("evidence-world").scrollIntoViewIfNeeded()
-
-  // The bullet lists live on the supporting cards (index 1). Chapter 0
-  // (gateway) is a left card and chapter 3 (evidence-state) is a right card.
-  const leftRows = await page
-    .locator('[data-chapter-index="0"] [data-story-card-index="1"] .evidence-world__points li')
-    .evaluateAll((nodes) => nodes.map((node) => getComputedStyle(node).justifyContent))
-  expect(leftRows.length).toBeGreaterThan(0)
-  for (const justification of leftRows) {
-    expect(justification).toBe("flex-start")
-  }
-
-  const rightRows = await page
-    .locator('[data-chapter-index="3"] [data-story-card-index="1"] .evidence-world__points li')
-    .evaluateAll((nodes) => nodes.map((node) => getComputedStyle(node).justifyContent))
-  expect(rightRows.length).toBeGreaterThan(0)
-  for (const justification of rightRows) {
-    expect(justification).toBe("flex-end")
+  for (const index of [0, 3]) {
+    const detail = page.locator('[data-journey-chapter="' + index + '"] details')
+    await detail.locator("summary").click()
+    expect(await detail.locator("li").count()).toBeGreaterThan(0)
+    for (const item of await detail.locator("li").all()) {
+      await expect(item).toBeVisible()
+      await expect(item).toHaveCSS("text-align", "start")
+    }
   }
 })

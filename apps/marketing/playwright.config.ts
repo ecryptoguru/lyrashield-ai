@@ -4,6 +4,9 @@ export default defineConfig({
   testDir: "./tests-browser",
   testMatch: "**/*.e2e.ts",
   fullyParallel: false,
+  // Keep synthetic CPU-throttling measurements stable on high-core developer
+  // machines as well as on the two-core CI runner.
+  workers: 2,
   retries: process.env.CI ? 2 : 0,
   use: {
     baseURL: "http://127.0.0.1:8787",
@@ -35,7 +38,7 @@ export default defineConfig({
   webServer: {
     // `pnpm preview` reuses the flagged artifact CI already built (see
     // scripts/preview-build.mjs) and builds it locally from a clean tree.
-    command: "pnpm preview",
+    command: "pnpm preview:motion",
     // Ensure local-preview builds ignore a configured production scanner URL.
     env: { PUBLIC_SCANNER_URL: "https://scanner.example.test" },
     url: "http://127.0.0.1:8787/",

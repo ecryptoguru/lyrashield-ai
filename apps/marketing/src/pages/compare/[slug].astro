@@ -89,6 +89,7 @@ const jsonLd: unknown[] = [
       class="compare-body prose mt-16 max-w-none border-t border-border pt-12 prose-a:text-accent prose-headings:tracking-tight prose-headings:text-text prose-li:marker:text-accent"
       data-reveal-group
     >
+      <p class="mb-4 text-sm text-text-muted md:hidden">Swipe comparison tables horizontally to read every column.</p>
       <Content />
     </div>
 
@@ -123,3 +124,10 @@ const jsonLd: unknown[] = [
     </section>
   </section>
 </Base>
+
+<script>
+  for (const table of document.querySelectorAll<HTMLTableElement>(".compare-body table")) {
+    table.tabIndex = 0
+    table.setAttribute("aria-label", "Comparison table; scroll horizontally for more columns")
+  }
+</script>

@@ -114,9 +114,9 @@ node apps/marketing/scripts/crawl-built-blog.mjs --origin http://localhost:8787
 
 The crawler validates local blog URLs and sitemap membership, 200 responses, unique canonicals, titles and descriptions, one H1 and main landmark, internal anchors, images, parseable JSON-LD, draft exclusion, RSS membership, and tag-archive membership. Error reports strip query strings and fragments. Every subsequent release still requires the complete release gate, local approval, focused PR, green CI, guarded deployment, and live verification.
 
-The deployed motion media is immutable R2 content at `https://media.lyrashieldai.com/assurance-world/v2/65fc3ecb6416b366/`. The bucket permits only `GET`/`HEAD` CORS from `https://lyrashieldai.com`, serves range requests, and uses `public, max-age=31536000, immutable` object caching.
+The Motion V3 release media is immutable R2 content at `https://media.lyrashieldai.com/assurance-world/v3/74787c7fe35196b2/`. The bucket permits only `GET`/`HEAD` CORS from `https://lyrashieldai.com`, serves range requests, and uses `public, max-age=31536000, immutable` object caching.
 
-Motion V2 serves one continuous H.264 track per aspect ratio. The runtime coalesces and serializes direct range seeks, reveals only decoded frames, ignores height-only mobile viewport changes, and falls back to chapter posters for reduced motion, Save-Data, or media errors. Desktop and portrait browser QA must cover rapid and reverse scrolling, width/orientation changes, fallbacks, no JavaScript, cinematic exit, console errors, and horizontal overflow. The approved creative pipeline remains Codex-generated source artwork plus HyperFrames/Three.js; Higgsfield is not used.
+Motion V2 serves one continuous H.264 track per aspect ratio. The runtime coalesces and serializes direct range seeks, reveals only decoded frames, ignores height-only mobile browser-chrome changes while the selected media variant remains unchanged, and falls back to chapter posters for reduced motion, Save-Data, or media errors. Desktop and portrait browser QA must cover rapid and reverse scrolling, width/orientation changes, fallbacks, no JavaScript, cinematic exit, console errors, and horizontal overflow. The approved creative pipeline remains Codex-generated source artwork plus HyperFrames/Three.js; Higgsfield is not used.
 
 ## Manual deploy (Cloudflare Workers)
 

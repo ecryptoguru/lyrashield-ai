@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test"
 /**
  * Journey block fallback (redesign spec section 8 block 4, item 3.3).
  *
- * The journey is a scroll-scrubbed six-chapter story. With JavaScript off, with
+ * The journey follows one illustrative finding. With JavaScript off, with
  * reduced motion, or on a Save-Data connection it must degrade to the six steps
  * as a plain static list rather than an empty scene.
  *
@@ -27,36 +27,28 @@ test("shows all six journey steps with JavaScript disabled", async ({ browser })
   await expect(page.locator("#journey-heading")).toHaveText("From target to verdict.")
 
   // Every chapter renders as a static step, and all of them are visible.
-  const steps = page.locator(".evidence-world__chapter")
+  const steps = page.locator(".journey__chapter")
   await expect(steps).toHaveCount(CHAPTERS)
   for (let index = 0; index < CHAPTERS; index += 1) {
     await expect(steps.nth(index)).toBeVisible()
   }
 
-  // The chapters carry the loop's six stages, in order, so the story survives
-  // without JavaScript. The eyebrow labels are exact, which avoids matching the
-  // word "review" inside a chapter title.
-  const eyebrows = await page
-    .locator(".evidence-world__chapter")
-    .evaluateAll((chapters) =>
-      chapters.map((chapter) => chapter.querySelector("p")?.textContent?.trim() ?? "")
-    )
-  expect(eyebrows).toHaveLength(CHAPTERS)
-  // The numbered steps are the loop, in order. The gateway intro carries no
-  // number, so it is asserted separately rather than being counted as a step.
-  expect(eyebrows.filter((label) => /^\d\d \/ /.test(label))).toEqual([
-    "01 / Target",
-    "02 / Review",
-    "03 / Evidence",
-    "04 / Fix",
-    "05 / Retest",
-    "06 / Report",
+  const destinations = await page
+    .getByRole("navigation", { name: "Evidence journey chapters" })
+    .getByRole("link")
+    .allTextContents()
+  expect(destinations.map((text) => text.replace(/^\d+/, "").trim())).toEqual([
+    "Overview",
+    "Target",
+    "Review",
+    "Evidence",
+    "Approval",
+    "Retest",
+    "Report",
   ])
-  expect(eyebrows.filter((label) => /^\d\d \/ /.test(label))).toHaveLength(LOOP_STEPS)
-
-  // No video is fetched when the controller cannot run.
-  const video = page.locator("evidence-world video")
-  await expect(video).toHaveAttribute("preload", "none")
+  expect(destinations.slice(1)).toHaveLength(LOOP_STEPS)
+  await expect(page.locator("evidence-journey video")).toHaveCount(0)
+  await expect(page.locator(".journey__report")).toBeVisible()
   await context.close()
 })
 
@@ -66,9 +58,9 @@ test("shows the static list under reduced motion", async ({ browser }) => {
   await page.setViewportSize({ width: 1280, height: 900 })
   await page.goto("/")
 
-  await expect(page.locator(".evidence-world__chapter")).toHaveCount(CHAPTERS)
+  await expect(page.locator(".journey__chapter")).toHaveCount(CHAPTERS)
   // The controller must not switch the block into its pinned motion layout.
-  await expect(page.locator("evidence-world")).not.toHaveClass(/is-motion-layout/)
+  await expect(page.locator("evidence-journey")).not.toHaveClass(/is-enhanced/)
   await context.close()
 })
 
@@ -77,7 +69,7 @@ test("keeps the journey heading and the six steps on a phone", async ({ page }) 
   await page.goto("/")
 
   await expect(page.locator("#journey-heading")).toBeVisible()
-  await expect(page.locator(".evidence-world__chapter")).toHaveCount(CHAPTERS)
+  await expect(page.locator(".journey__chapter")).toHaveCount(CHAPTERS)
 
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth - document.documentElement.clientWidth

@@ -78,39 +78,70 @@ function stripSqlCommentsAndStrings(sql: string): string {
     .toLowerCase()
 }
 
-export function checkRlsSql(sql: string): string[] {
-  if (!sql.trim()) return ["Paste policy SQL to review."]
+export interface ToolObservation {
+  intent: "attention" | "review" | "info"
+  message: string
+}
+
+export function reviewRlsSql(sql: string): ToolObservation[] {
+  if (!sql.trim()) return [{ intent: "info", message: "Paste policy SQL to review." }]
   const normalized = stripSqlCommentsAndStrings(sql)
-  const items: string[] = []
+  const items: ToolObservation[] = []
 
   if (!/enable\s+row\s+level\s+security/.test(normalized)) {
-    items.push("No ENABLE ROW LEVEL SECURITY statement found outside comments or strings.")
+    items.push({
+      intent: "review",
+      message: "No ENABLE ROW LEVEL SECURITY statement found outside comments or strings.",
+    })
   }
   if (!/force\s+row\s+level\s+security/.test(normalized)) {
-    items.push(
-      "No FORCE ROW LEVEL SECURITY statement found; verify whether table-owner bypass is acceptable."
-    )
+    items.push({
+      intent: "review",
+      message:
+        "No FORCE ROW LEVEL SECURITY statement found; verify whether table-owner bypass is acceptable.",
+    })
   }
   if (/(?:using|with\s+check)\s*\(\s*true\s*\)/.test(normalized)) {
-    items.push("A policy appears to allow every row with USING (true) or WITH CHECK (true).")
+    items.push({
+      intent: "attention",
+      message: "A policy appears to allow every row with USING (true) or WITH CHECK (true).",
+    })
   }
   if (/security\s+definer/.test(normalized)) {
-    items.push("SECURITY DEFINER needs an explicit search_path and authorization review.")
+    items.push({
+      intent: "review",
+      message: "SECURITY DEFINER needs an explicit search_path and authorization review.",
+    })
   }
   if (/\bservice_role\b/.test(normalized)) {
-    items.push("A service_role reference bypasses RLS; keep it in trusted server-only code.")
+    items.push({
+      intent: "review",
+      message: "A service_role reference bypasses RLS; keep it in trusted server-only code.",
+    })
   }
   if (
     !/(auth\.uid\(\)|auth\.jwt\(\)|organization_id|workspace_id|tenant_id|user_id)/.test(normalized)
   ) {
-    items.push(
-      "No obvious ownership or tenant predicate was found; verify behavior with two accounts."
-    )
+    items.push({
+      intent: "review",
+      message:
+        "No obvious ownership or tenant predicate was found; verify behavior with two accounts.",
+    })
   }
 
   return items.length
     ? items
-    : ["No simple risky pattern found. Confirm behavior with a real two-account test."]
+    : [
+        {
+          intent: "info",
+          message: "No simple risky pattern found. Confirm behavior with a real two-account test.",
+        },
+      ]
+}
+
+/** Retain the string interface for existing consumers and exports. */
+export function checkRlsSql(sql: string): string[] {
+  return reviewRlsSql(sql).map((item) => item.message)
 }
 
 function parseHeaders(raw: string): Map<string, string[]> {

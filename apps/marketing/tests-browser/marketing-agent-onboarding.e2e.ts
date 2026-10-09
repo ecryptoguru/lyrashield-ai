@@ -19,9 +19,10 @@ test("agent onboarding distinguishes local setup and scoped hosted writes", asyn
   await expect(
     page.locator("#setup").getByText(/browser-confirmed grant and execution-time checks/i)
   ).toBeVisible()
-  await expect(
-    page.getByRole("link", { name: /Set up LyraShield for your agent/i })
-  ).toHaveAttribute("href", "/docs/integrations/agent-plugins")
+  await expect(page.getByRole("link", { name: "Find your coding client" })).toHaveAttribute(
+    "href",
+    "#clients"
+  )
 })
 
 test("mobile navigation reaches agent onboarding", async ({ page }) => {
@@ -36,10 +37,10 @@ test("mobile navigation reaches agent onboarding", async ({ page }) => {
   ).toBeVisible()
 })
 
-test("local preview keeps both Lite Check entry points disabled", async ({ page }) => {
+test("local preview keeps the single Lite Check input disabled", async ({ page }) => {
   await page.goto("/")
-  await expect(page.locator("#home-scan-url")).toBeDisabled()
-  await expect(page.getByRole("button", { name: "Scanner unavailable" })).toBeDisabled()
+  await expect(page.locator("#home-scan-url")).toHaveCount(0)
+  await expect(page.locator("#hero-lite-form button[type=submit]")).toBeDisabled()
 
   await page.goto("/scan")
   await expect(page.locator("#scan-url")).toBeDisabled()

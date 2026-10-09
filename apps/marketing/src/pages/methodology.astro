@@ -143,15 +143,16 @@ const jsonLd = [
 
       <ProductShot
         class="mt-10"
-        src="/product/console-trust-runs.webp"
-        alt="The Scans list in the LyraShield console. Five completed scans are listed — release checks, a code review and a deep security review — each showing the engine status, the start and end timestamps and a retained finding count."
-        width={1400}
-        height={883}
-        chrome="app.lyrashieldai.com/scans"
+        src="/product/current-scan-dark.webp"
+        lightSrc="/product/current-scan-light.webp"
+        alt="A completed, sealed scan record in the current dashboard, with retained findings, a zero-count reserved verification column, coverage state and an assurance-report action. The private target name is redacted."
+        width={1600}
+        height={640}
+        chrome="app.lyrashieldai.com/dashboard/scans"
       >
-        <b>Records accumulate; they are not overwritten.</b> Each run keeps what ran, when it started
-        and ended and two counts held separately: what the engine reported and what was retained
-        after review. Target and repository names are blurred.
+        <b>A completed scan keeps its scope and evidence state.</b> This demo-workspace capture
+        shows duration, retained findings and coverage separately. The reserved verification count is zero.
+        Completion is not a guarantee of security. The private target name is redacted.
       </ProductShot>
     </section>
 
@@ -168,16 +169,17 @@ const jsonLd = [
       </div>
 
       <ProductShot
-        class="mt-10"
-        src="/product/console-issues.webp"
-        alt="The Findings view in the LyraShield console. Findings are listed with a severity, an evidence state, an open status and a CWE and CVSS reference. A side drawer for the selected finding shows tabs for what to do, technical detail and history, a plain-language explanation and a button to create a fix proposal."
-        width={1400}
-        height={883}
-        chrome="app.lyrashieldai.com/findings"
+        class="mt-10 mx-auto max-w-[48rem]"
+        src="/product/current-findings-dark.webp"
+        lightSrc="/product/current-findings-light.webp"
+        alt="The current finding detail panel separates severity from status and evidence state. Actions lead to retained evidence or a fix proposal. Private finding details are redacted."
+        width={960}
+        height={834}
+        chrome="app.lyrashieldai.com/dashboard/findings"
       >
-        <b>The states, carried on real findings.</b> Severity and evidence state are separate columns —{" "}
-        <i>detected</i> and <i>inconclusive</i> both appear here — and the drawer opens on what to do
-        next rather than raw scanner output. A fix proposal is something you create and review;
+        <b>Severity and evidence state remain distinct.</b> This captured finding is critical,
+        open and inconclusive. The detail panel leads to retained evidence and a fix proposal.
+        A fix proposal is something you create and review;
         nothing auto-merges. Finding titles, file paths and target names are blurred.
       </ProductShot>
     </section>

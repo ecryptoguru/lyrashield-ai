@@ -333,7 +333,7 @@ describe("marketing SEO metadata", () => {
     // from the homepage, so assert that rather than dropping the guarantee.
     expect(premiumHero).toContain('href="#free-scan" data-cta-id="premium-hero-lite-check"')
     expect(source("../components/landing/HomeLiteScan.astro")).toContain('href="/scan"')
-    expect(source("../components/landing/HomeLiteScan.astro")).toContain('action="/scan"')
+    expect(premiumHero).toContain('action="/scan"')
     // The closing CTA is the single closer now and carries no methodology
     // button, so the guarantee is asserted where the homepage actually offers
     // it: block 2's evidence-states card.

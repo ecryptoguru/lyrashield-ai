@@ -34,9 +34,9 @@ const learnItems = [
   { label: "Guides", href: "/blog" },
   { label: "Docs", href: "/docs/integrations" },
   { label: "API reference", href: "/docs/integrations/rest-api" },
-  // #913 renamed this label to "MCP guard evaluation". The restructure moved
+  // #913 renamed this label to "MCP guard behavior and limits". The restructure moved
   // the destination out of the header, so it is kept here rather than dropped.
-  { label: "MCP guard evaluation", href: "/ai-safety" },
+  { label: "MCP guard behavior and limits", href: "/ai-safety" },
   { label: "Support", href: "/support" },
 ]
 ---
@@ -240,11 +240,17 @@ const learnItems = [
     button?.setAttribute("title", label)
   }
 
+  let requestedTheme = document.documentElement.dataset.themePreference || "system"
+  let themeTransition: ViewTransition | undefined
   button?.addEventListener("click", () => {
-    const current = document.documentElement.dataset.themePreference || "system"
+    const current = requestedTheme
     const next = preferences[(preferences.indexOf(current as ThemePreference) + 1) % preferences.length] ?? "system"
+    requestedTheme = next
     persistTheme(next)
-    applyTheme(next)
+    themeTransition?.skipTransition()
+    if (document.startViewTransition && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      themeTransition = document.startViewTransition(() => applyTheme(requestedTheme as ThemePreference))
+    } else applyTheme(next)
   })
   systemTheme.addEventListener("change", () => {
     if (document.documentElement.dataset.themePreference === "system") applyTheme("system")
@@ -254,6 +260,7 @@ const learnItems = [
     const next = preferences.includes(event.newValue as ThemePreference)
       ? (event.newValue as ThemePreference)
       : "system"
+    requestedTheme = next
     applyTheme(next)
   })
   applyTheme(
@@ -329,6 +336,13 @@ const learnItems = [
 </script>
 
 <style is:global>
+  /* Container em units follow enlarged text; viewport breakpoints do not. */
+  #site-header { container-type: inline-size; }
+  @container (width < 64em) {
+    #site-header nav[aria-label="Main"] > ul { display: none; }
+    #menu-toggle { display: inline-flex; }
+  }
+
   @media (max-width: 359px) {
     #site-header .header-beta-badge {
       display: none;

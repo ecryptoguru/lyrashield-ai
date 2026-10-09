@@ -589,6 +589,14 @@ export default defineConfig({
     define: {
       __MARKETING_INDEXABLE__: JSON.stringify(indexable),
       __MARKETING_LOCAL_PREVIEW__: JSON.stringify(localPreview),
+      // Keep preview client requests on the explicitly selected app origin;
+      // Cloudflare's local .dev.vars otherwise overrides Vite's public value.
+      ...(localPreview && configuredAppUrl
+        ? { "import.meta.env.PUBLIC_APP_URL": JSON.stringify(configuredAppUrl) }
+        : {}),
+      ...(localPreview
+        ? { "import.meta.env.PUBLIC_TURNSTILE_SITE_KEY": JSON.stringify(turnstileSiteKey) }
+        : {}),
       __MARKETING_SCANNER_URL__: JSON.stringify(scannerUrlForBuild),
       __MARKETING_X_URL__: JSON.stringify(xUrl),
       __MARKETING_MYRA_ENABLED__: JSON.stringify(myraMarketingEnabled),

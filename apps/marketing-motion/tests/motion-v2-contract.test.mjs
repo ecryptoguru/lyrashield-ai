@@ -14,11 +14,11 @@ import {
 } from "../scripts/motion-media-contract.mjs"
 
 test("defines one continuous H.264 track per aspect ratio", () => {
-  assert.equal(MOTION_VERSION, "2")
-  assert.equal(MOTION_DURATION, 42)
+  assert.equal(MOTION_VERSION, "3")
+  assert.equal(MOTION_DURATION, 56)
   assert.equal(MOTION_FPS, 30)
-  assert.equal(MOTION_GOP, 6)
-  assert.equal(MOTION_CHAPTER_DURATION, 6)
+  assert.equal(MOTION_GOP, 2)
+  assert.equal(MOTION_CHAPTER_DURATION, 8)
   assert.deepEqual(
     Object.entries(MOTION_VARIANTS).map(
       ([variant, { width, height, budgetBytes, masterWidth, masterHeight }]) => [
@@ -31,8 +31,8 @@ test("defines one continuous H.264 track per aspect ratio", () => {
       ]
     ),
     [
-      ["desktop", 1600, 900, 8 * 1024 * 1024, 1920, 1080],
-      ["portrait", 720, 1280, 5 * 1024 * 1024, 1080, 1920],
+      ["desktop", 1440, 810, 16 * 1024 * 1024, 1920, 1080],
+      ["portrait", 720, 1280, 10 * 1024 * 1024, 1080, 1920],
     ]
   )
   assert.equal(motionTrackRelativePath("desktop"), "desktop/assurance-world.mp4")
@@ -41,7 +41,7 @@ test("defines one continuous H.264 track per aspect ratio", () => {
   assert.throws(() => motionPosterRelativePath("intro", "desktop"), /Unknown motion chapter/)
 })
 
-test("keeps seven chapter posters and immutable v2 publication paths", () => {
+test("keeps seven chapter posters and immutable v3 publication paths", () => {
   assert.deepEqual(MOTION_CHAPTERS, [
     "gateway",
     "target",
@@ -55,6 +55,6 @@ test("keeps seven chapter posters and immutable v2 publication paths", () => {
     motionPosterRelativePath("evidence-state", "portrait"),
     "posters/evidence-state-portrait.webp"
   )
-  assert.equal(motionPublishRoot("0123456789abcdef"), "assurance-world/v2/0123456789abcdef")
+  assert.equal(motionPublishRoot("0123456789abcdef"), "assurance-world/v3/0123456789abcdef")
   assert.throws(() => motionPublishRoot("latest"), /16 lowercase hex/)
 })

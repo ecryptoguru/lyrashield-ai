@@ -402,8 +402,8 @@
     },
     "apps/web/src/app/sign-up/page.tsx|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 259,
-      "maxExcess": 259
+      "totalExcess": 249,
+      "maxExcess": 249
     },
     "apps/web/src/components/myra/myra-panel.tsx|max-lines-per-function": {
       "count": 1,

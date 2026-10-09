@@ -1,0 +1,83 @@
+---
+import type { CollectionEntry } from "astro:content"
+
+interface Props {
+  posts: CollectionEntry<"blog">[]
+  showAll?: boolean
+}
+const { posts, showAll = false } = Astro.props
+---
+
+<section data-guide-search data-show-all={String(showAll)} class="guide-search">
+  <form role="search">
+    <label for="guide-query">{showAll ? "Search this category" : "Search all published guides"}</label>
+    <div class="guide-search__controls">
+      <input id="guide-query" type="search" name="q" placeholder="Search by title or topic" autocomplete="off" aria-controls="guide-results" />
+      <button type="reset">Clear search</button>
+    </div>
+  </form>
+  <p data-guide-count role="status">{showAll ? `${posts.length} published articles` : "Search across the full article library."}</p>
+  <div id="guide-results" hidden={!showAll}>
+    <h2>{showAll ? "Articles in this category" : "Search results"}</h2>
+    <p data-guide-empty hidden>No guides match your search. Try a broader topic or clear the search to browse.</p>
+    <ul>
+      {posts.map((post) => (
+        <li data-guide-entry data-search={`${post.data.title} ${post.data.description} ${post.data.tags.join(" ")}`.toLowerCase()}>
+          <a href={`/blog/${post.id}`}>
+            <h3>{post.data.title}</h3>
+            <p>{post.data.description}</p>
+            <span>{post.data.pubDate.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric", timeZone: "UTC" })} <span aria-hidden="true">→</span></span>
+          </a>
+        </li>
+      ))}
+    </ul>
+  </div>
+</section>
+
+<script>
+  for (const root of document.querySelectorAll<HTMLElement>("[data-guide-search]")) {
+    const form = root.querySelector<HTMLFormElement>("form")!
+    const input = root.querySelector<HTMLInputElement>("input")!
+    const results = root.querySelector<HTMLElement>("#guide-results")!
+    const count = root.querySelector<HTMLElement>("[data-guide-count]")!
+    const empty = root.querySelector<HTMLElement>("[data-guide-empty]")!
+    const entries = Array.from(root.querySelectorAll<HTMLElement>("[data-guide-entry]"))
+    const showAll = root.dataset.showAll === "true"
+    const apply = () => {
+      const query = input.value.trim().toLowerCase()
+      let matches = 0
+      for (const entry of entries) {
+        const match = query.split(/\s+/).every((term) => entry.dataset.search?.includes(term))
+        entry.hidden = !match
+        if (match) matches++
+      }
+      results.hidden = !showAll && !query
+      empty.hidden = matches > 0
+      count.textContent = query ? `${matches} ${matches === 1 ? "guide" : "guides"} match “${input.value.trim()}”.` : showAll ? `${entries.length} published articles` : "Search across the full article library."
+      document.querySelector<HTMLElement>("[data-blog-browse]")?.toggleAttribute("hidden", Boolean(query))
+    }
+    input.addEventListener("input", apply)
+    form.addEventListener("submit", (event) => event.preventDefault())
+    form.addEventListener("reset", () => { input.value = ""; apply(); input.focus() })
+  }
+</script>
+
+<style>
+  .guide-search { margin-block: 2.5rem; }
+  label { display: block; font-weight: 700; }
+  .guide-search__controls { display: flex; flex-wrap: wrap; gap: .75rem; margin-top: .75rem; }
+  input { min-width: 0; width: min(100%, 32rem); min-height: 3rem; border: 1px solid var(--color-border); border-radius: .75rem; padding: .75rem 1rem; background: var(--color-bg-raised); color: var(--color-text); font-size: 1rem; }
+  input::placeholder { color: var(--color-text-muted); }
+  button { min-height: 2.75rem; padding-inline: .75rem; color: var(--color-accent); font-weight: 600; cursor: pointer; }
+  [data-guide-count], [data-guide-empty] { color: var(--color-text-muted); margin-block: 1rem; }
+  h2 { font-size: 1.6rem; margin-block: 2rem 1rem; }
+  ul { padding: 0; list-style: none; }
+  li { border-bottom: 1px solid var(--color-border); }
+  a { display: block; padding-block: 1.25rem; text-decoration: none; color: var(--color-text); }
+  a:hover h3 { color: var(--color-accent); }
+  h3 { margin: 0; font-size: 1.2rem; line-height: 1.4; }
+  a p { max-width: 70ch; margin-block: .5rem; color: var(--color-text-muted); line-height: 1.65; }
+  a span { color: var(--color-text-muted); font-size: .85rem; }
+  :is(input, button, a):focus-visible { outline: 2px solid var(--color-accent); outline-offset: 4px; }
+  [hidden] { display: none !important; }
+</style>

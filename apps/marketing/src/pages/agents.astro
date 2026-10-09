@@ -21,7 +21,7 @@ const appUrl =
   "https://app.lyrashieldai.com"
 
 const answerFirst =
-  `LyraShield documents ${agentOnboarding.clients.length} coding-agent workflows. Most connect through MCP; Aider uses the standalone CLI or CI path, while Pi has built-in MCP and OAuth support. Availability and setup differ by client and the integration labels below show the evidence behind each claim; LyraShield runtime acceptance remains client-specific. Read-only tools can retrieve recorded findings; hosted writes run only within a browser-confirmed connection grant and are checked again at execution.`
+  `Choose your coding client to see its supported setup and evidence label. LyraShield documents ${agentOnboarding.clients.length} workflows; a recorded setup does not prove runtime acceptance. Read-only tools retrieve findings. Hosted writes require a browser-confirmed connection grant and checks at execution.`
 
 const howToSteps = [
   {
@@ -29,7 +29,7 @@ const howToSteps = [
     position: 1,
     name: "Choose a client workflow",
     text: "Use the matching integration guide and check its support tier, transport and activation steps.",
-    url: `${pageUrl}#setup`,
+    url: `${pageUrl}#clients`,
   },
   {
     "@type": "HowToStep" as const,
@@ -124,13 +124,67 @@ const jsonLd = [
         {answerFirst}
       </p>
       <a
-        href="/docs/integrations/agent-plugins"
+        href="#clients"
         data-cta-id="agents-start-setup"
         class="lift mt-7 inline-flex min-h-12 items-center rounded-lg bg-accent px-6 text-sm font-semibold text-bg transition-colors hover:bg-accent/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
         data-reveal
       >
-        Set up LyraShield for your agent
+        Find your coding client
       </a>
+    </div>
+  </section>
+
+  <section class="px-4 py-12 sm:px-6 lg:px-8" id="clients">
+    <div class="mx-auto max-w-5xl">
+      <h2 class="font-mono text-sm uppercase tracking-[0.12em] text-text-muted" data-reveal>
+        Documented client workflows ({agentOnboarding.clients.length})
+      </h2>
+      <p class="mt-3 max-w-2xl leading-7 text-text-muted" data-reveal>
+        Search by client name. Use the pinned CLI installer only when the guide provides one;
+        otherwise follow its manual setup. Restart the client and verify an authenticated
+        read-only call. Marketplace listing and runtime acceptance remain separate evidence.
+        Aider uses the standalone CLI or CI path; Pi uses its native MCP and OAuth setup.
+      </p>
+      <label class="mt-6 block max-w-md">
+        <span class="text-sm font-semibold text-text">Find your client</span>
+        <input
+          type="search"
+          id="agent-client-filter"
+          data-agent-client-filter
+          placeholder="Search clients by name"
+          autocomplete="off"
+          class="mt-2 min-h-12 w-full rounded-lg border border-border bg-bg-raised px-4 text-base text-text placeholder:text-text-muted focus:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        />
+      </label>
+      <p id="agent-client-empty" class="mt-4 hidden text-sm text-text-muted" role="status">
+        No documented client matches that search. Clear the field to see all clients.
+      </p>
+      {
+        agentOnboarding.clientGroups.map((group) => (
+          <div class="mt-10" data-reveal-group>
+            <h3 class="font-mono text-xs tracking-[0.12em] text-accent uppercase" data-reveal>
+              {group.label} · {group.clients.length}
+            </h3>
+            <ul
+              class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3"
+              aria-label={`Coding agents: ${group.label}`}
+            >
+              {group.clients.map((client) => (
+                <li data-reveal data-agent-client={client.name.toLowerCase()}>
+                  <a
+                    href={client.href}
+                    class="flex min-h-[4.5rem] flex-col justify-center gap-1 rounded-xl border border-border bg-bg-raised p-4 transition-colors hover:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                  >
+                    <span class="font-semibold text-text">{client.name}</span>
+                    <span class="text-xs text-text-muted">{client.strategyLabel}</span>
+                    <span class="text-xs text-text-muted">{client.supportTier} · {client.evidence.replaceAll("_", " ").toLowerCase()} evidence</span>
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))
+      }
     </div>
   </section>
 
@@ -210,60 +264,7 @@ const jsonLd = [
     </div>
   </section>
 
-  <section class="px-4 py-12 sm:px-6 lg:px-8" id="clients">
-    <div class="mx-auto max-w-5xl">
-      <h2 class="font-mono text-sm uppercase tracking-[0.12em] text-text-muted" data-reveal>
-        Documented client workflows ({agentOnboarding.clients.length})
-      </h2>
-      <p class="mt-4 max-w-2xl leading-7 text-text-muted" data-reveal>
-        Use the pinned CLI installer where a client guide provides an exact supported command;
-        otherwise follow its manual MCP or native setup. The CLI installs shared skills only where
-        the client has one documented skill path. Preserve existing settings, comments where
-        supported and symlinks; restart the client, confirm discovery and complete an authenticated
-        read-only call. Marketplace listing and runtime acceptance remain separate evidence.
-      </p>
-      <label class="mt-6 block max-w-md">
-        <span class="text-sm font-semibold text-text">Find your client</span>
-        <input
-          type="search"
-          id="agent-client-filter"
-          data-agent-client-filter
-          placeholder="Search clients by name"
-          autocomplete="off"
-          class="mt-2 min-h-12 w-full rounded-lg border border-border bg-bg-raised px-4 text-base text-text placeholder:text-text-muted focus:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-        />
-      </label>
-      <p id="agent-client-empty" class="mt-4 hidden text-sm text-text-muted" role="status">
-        No documented client matches that search. Clear the field to see all clients.
-      </p>
-      {
-        agentOnboarding.clientGroups.map((group) => (
-          <div class="mt-10" data-reveal-group>
-            <h3 class="font-mono text-xs tracking-[0.12em] text-accent uppercase" data-reveal>
-              {group.label} · {group.clients.length}
-            </h3>
-            <ul
-              class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3"
-              aria-label={`Coding agents: ${group.label}`}
-            >
-              {group.clients.map((client) => (
-                <li data-reveal data-agent-client={client.name.toLowerCase()}>
-                  <a
-                    href={client.href}
-                    class="flex min-h-[4.5rem] flex-col justify-center gap-1 rounded-xl border border-border bg-bg-raised p-4 transition-colors hover:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-                  >
-                    <span class="font-semibold text-text">{client.name}</span>
-                    <span class="text-xs text-text-muted">{client.strategyLabel}</span>
-                    <span class="text-xs text-text-muted">{client.supportTier} · {client.evidence.replaceAll("_", " ").toLowerCase()} evidence</span>
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ))
-      }
-    </div>
-  </section>
+
 
   <script>
     // Client picker: a plain substring filter over the rendered client list. It

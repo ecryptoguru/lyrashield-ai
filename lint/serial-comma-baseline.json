@@ -17,9 +17,6 @@
     "packages/types/src/openapi"
   ],
   "files": {
-    "apps/marketing/src/components/landing/EvidenceWorld.astro": {
-      "3ee9f096149c0e6862368a493068ab35427b839c2ec6b21d439d4db26ed4aee0": 1
-    },
     "apps/marketing/src/content/blog/copilot-cli-mcp-security-workflow.mdx": {
       "7a79c4b28cf23a2083af993d8e1277da2530a68bc1271804d1d24caf682bca46": 1
     },

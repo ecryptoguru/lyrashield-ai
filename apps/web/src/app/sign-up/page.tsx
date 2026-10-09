@@ -29,11 +29,92 @@ import {
 } from "@/lib/analytics"
 import { storePendingInvitation } from "@/lib/pending-invitation"
 import { parsePlanIntent, planIntentPath, rememberPlanIntent } from "@/lib/plan-intent"
+import { SignupReassurance } from "@/components/signup-reassurance"
+import { resendSignupVerificationEmail } from "@/lib/signup-verification"
 
 const marketingUrl = (process.env.NEXT_PUBLIC_MARKETING_URL || "https://lyrashieldai.com").replace(
   /\/$/,
   ""
 )
+
+function EmailVerificationPanel({
+  email,
+  resendLoading,
+  resendCooldown,
+  resendStatus,
+  onResend,
+}: {
+  email: string
+  resendLoading: boolean
+  resendCooldown: number
+  resendStatus: "idle" | "success" | "error"
+  onResend: () => void
+}) {
+  return (
+    <main className="relative flex min-h-screen items-center justify-center px-4">
+      <ThemeToggle className="fixed top-4 right-4 z-10" />
+      <div className="gradient-hero pointer-events-none absolute inset-0" aria-hidden="true" />
+      <div className="relative w-full max-w-md">
+        <div className="bg-card rounded-xl border p-6 text-center shadow-lg sm:p-8">
+          <h2 className="text-xl font-semibold tracking-tight">Check your email</h2>
+          <p className="text-muted-foreground mt-2 text-sm">
+            We sent a verification link to {email}. Click it to verify your account and continue.
+          </p>
+          <div className="mt-4 flex flex-col items-center gap-2">
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              disabled={resendLoading || resendCooldown > 0}
+              onClick={onResend}
+            >
+              {resendLoading
+                ? "Sending…"
+                : resendCooldown > 0
+                  ? `Resend in ${resendCooldown}s`
+                  : "Resend verification email"}
+            </Button>
+            {resendStatus === "success" && (
+              <p className="text-sm text-emerald-600" role="status">
+                Verification email resent.
+              </p>
+            )}
+            {resendStatus === "error" && (
+              <p className="text-destructive text-sm" role="alert">
+                Could not resend. Please try again.
+              </p>
+            )}
+          </div>
+          <p className="text-muted-foreground mt-4 text-sm">
+            Already verified?{" "}
+            <Link href="/sign-in" className="text-primary font-medium hover:underline">
+              Sign in
+            </Link>
+          </p>
+        </div>
+      </div>
+    </main>
+  )
+}
+
+function SignUpFooter({ invited }: { invited: boolean }) {
+  return (
+    <div className="mt-6 text-center text-sm md:text-left">
+      {invited && (
+        <div role="status" className="mb-4 rounded-lg border border-primary/40 bg-primary/5 p-3">
+          You have a pending team invitation — it will be accepted automatically once you create
+          your account and sign in.
+        </div>
+      )}
+      <p className="text-muted-foreground">
+        Already have an account?{" "}
+        <Link href="/sign-in" className="text-primary font-medium hover:underline">
+          Sign in
+        </Link>
+      </p>
+    </div>
+  )
+}
 
 export default function SignUpPage() {
   const router = useRouter()
@@ -56,6 +137,9 @@ export default function SignUpPage() {
   // "no OAuth configured" from "still loading" — rendering nothing makes the
   // page look like a bare credentials form. Show a skeleton instead.
   const [providersLoading, setProvidersLoading] = useState(true)
+  const [providersError, setProvidersError] = useState(false)
+  const [providersRetryKey, setProvidersRetryKey] = useState(0)
+  const [planIntent, setPlanIntent] = useState<ReturnType<typeof parsePlanIntent>>(null)
   const attribution = useRef<SignupAttribution>({})
   const selectedPlan = useRef<string | null>(null)
   const [invited, setInvited] = useState(false)
@@ -64,6 +148,10 @@ export default function SignUpPage() {
     const params = new URLSearchParams(window.location.search)
     selectedPlan.current = parsePlanIntent(params.get("plan"))
     rememberPlanIntent(selectedPlan.current)
+    const planTimer = window.setTimeout(
+      () => setPlanIntent(selectedPlan.current as ReturnType<typeof parsePlanIntent>),
+      0
+    )
     // Team invitation link: stash the token for the post-auth bridge and
     // strip it from the URL so it cannot leak into redirects or analytics.
     const inviteToken = params.get("invite")
@@ -92,8 +180,21 @@ export default function SignUpPage() {
       window.history.replaceState(null, "", signupErrorUrl(nextAttribution, selectedPlan.current))
     }
 
+    return () => {
+      window.clearTimeout(planTimer)
+      if (oauthErrorTimer !== undefined) window.clearTimeout(oauthErrorTimer)
+      if (inviteTimer !== undefined) window.clearTimeout(inviteTimer)
+    }
+  }, [])
+
+  useEffect(() => {
+    void providersRetryKey
+    let active = true
     void fetch("/api/auth/providers", { signal: AbortSignal.timeout(5_000) })
-      .then((response) => (response.ok ? response.json() : null))
+      .then((response) => {
+        if (!response.ok) throw new Error("Sign-up options unavailable")
+        return response.json()
+      })
       .then(
         (
           data: {
@@ -103,7 +204,8 @@ export default function SignUpPage() {
             emailVerification?: boolean
           } | null
         ) => {
-          if (data) {
+          if (!data) throw new Error("Sign-up options unavailable")
+          if (active) {
             setProviders({
               github: Boolean(data.github),
               google: Boolean(data.google),
@@ -113,14 +215,17 @@ export default function SignUpPage() {
           }
         }
       )
-      .catch(() => {})
-      .finally(() => setProvidersLoading(false))
+      .catch(() => {
+        if (active) setProvidersError(true)
+      })
+      .finally(() => {
+        if (active) setProvidersLoading(false)
+      })
 
     return () => {
-      if (oauthErrorTimer !== undefined) window.clearTimeout(oauthErrorTimer)
-      if (inviteTimer !== undefined) window.clearTimeout(inviteTimer)
+      active = false
     }
-  }, [])
+  }, [providersRetryKey])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -238,10 +343,10 @@ export default function SignUpPage() {
     setResendLoading(true)
     setResendStatus("idle")
     try {
-      await authClient.sendVerificationEmail({
+      await resendSignupVerificationEmail(
         email,
-        callbackURL: planIntentPath("/onboarding", selectedPlan.current),
-      })
+        planIntentPath("/onboarding", selectedPlan.current)
+      )
       setResendStatus("success")
       setResendCooldown(30)
       const tick = () => {
@@ -261,49 +366,13 @@ export default function SignUpPage() {
 
   if (emailSent) {
     return (
-      <main className="relative flex min-h-screen items-center justify-center px-4">
-        <ThemeToggle className="fixed top-4 right-4 z-10" />
-        <div className="gradient-hero pointer-events-none absolute inset-0" aria-hidden="true" />
-        <div className="relative w-full max-w-md">
-          <div className="bg-card rounded-xl border p-6 text-center shadow-lg sm:p-8">
-            <h2 className="text-xl font-semibold tracking-tight">Check your email</h2>
-            <p className="text-muted-foreground mt-2 text-sm">
-              We sent a verification link to {email}. Click it to verify your account and continue.
-            </p>
-            <div className="mt-4 flex flex-col items-center gap-2">
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                disabled={resendLoading || resendCooldown > 0}
-                onClick={() => void handleResend()}
-              >
-                {resendLoading
-                  ? "Sending…"
-                  : resendCooldown > 0
-                    ? `Resend in ${resendCooldown}s`
-                    : "Resend verification email"}
-              </Button>
-              {resendStatus === "success" && (
-                <p className="text-sm text-emerald-600" role="status">
-                  Verification email resent.
-                </p>
-              )}
-              {resendStatus === "error" && (
-                <p className="text-destructive text-sm" role="alert">
-                  Could not resend. Please try again.
-                </p>
-              )}
-            </div>
-            <p className="text-muted-foreground mt-4 text-sm">
-              Already verified?{" "}
-              <Link href="/sign-in" className="text-primary font-medium hover:underline">
-                Sign in
-              </Link>
-            </p>
-          </div>
-        </div>
-      </main>
+      <EmailVerificationPanel
+        email={email}
+        resendLoading={resendLoading}
+        resendCooldown={resendCooldown}
+        resendStatus={resendStatus}
+        onResend={() => void handleResend()}
+      />
     )
   }
 
@@ -313,25 +382,10 @@ export default function SignUpPage() {
       <AuthSplitLayout
         heading="Create your account"
         subheading="Start your evidence-backed release workflow."
-        footer={
-          <p className="text-muted-foreground mt-6 text-center text-sm md:text-left">
-            {invited ? (
-              <div
-                role="status"
-                className="mb-4 rounded-lg border border-primary/40 bg-primary/5 p-3 text-sm"
-              >
-                You have a pending team invitation — it will be accepted automatically once you
-                create your account and sign in.
-              </div>
-            ) : null}
-            Already have an account?{" "}
-            <Link href="/sign-in" className="text-primary font-medium hover:underline">
-              Sign in
-            </Link>
-          </p>
-        }
+        footer={<SignUpFooter invited={invited} />}
       >
         <div className="bg-card rounded-xl border p-6 shadow-lg sm:p-8">
+          <SignupReassurance plan={planIntent} />
           <form onSubmit={handleSubmit} className="space-y-4">
             <FormField label="Name" htmlFor="name">
               <Input
@@ -408,20 +462,39 @@ export default function SignUpPage() {
           </form>
 
           {providersLoading && (
-            <div aria-hidden="true" data-testid="oauth-skeleton">
-              <div className="my-6 flex items-center gap-3">
-                <div className="bg-border h-px flex-1" />
-                <span className="text-muted-foreground text-xs font-medium">OR</span>
-                <div className="bg-border h-px flex-1" />
-              </div>
-              <div className="space-y-3">
-                <Skeleton className="h-10 w-full" />
-                <Skeleton className="h-10 w-full" />
+            <>
+              <div aria-hidden="true" data-testid="oauth-skeleton">
+                <div className="my-6 flex items-center gap-3">
+                  <div className="bg-border h-px flex-1" />
+                  <span className="text-muted-foreground text-xs font-medium">OR</span>
+                  <div className="bg-border h-px flex-1" />
+                </div>
+                <div className="space-y-3">
+                  <Skeleton className="h-10 w-full" />
+                  <Skeleton className="h-10 w-full" />
+                </div>
               </div>
               <span className="sr-only" role="status">
                 Loading sign-up options
               </span>
-            </div>
+            </>
+          )}
+
+          {!providersLoading && providersError && (
+            <p className="text-muted-foreground mt-6 text-sm" role="alert">
+              Sign-up options could not be loaded.{" "}
+              <button
+                type="button"
+                className="text-primary underline underline-offset-2"
+                onClick={() => {
+                  setProvidersError(false)
+                  setProvidersLoading(true)
+                  setProvidersRetryKey((key) => key + 1)
+                }}
+              >
+                Retry
+              </button>
+            </p>
           )}
 
           {!providersLoading && (providers.github || providers.google || providers.microsoft) && (
