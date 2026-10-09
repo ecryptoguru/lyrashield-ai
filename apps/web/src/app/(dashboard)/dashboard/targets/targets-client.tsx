@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, type Dispatch, type SetStateAction } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { z } from "zod"
@@ -76,6 +76,165 @@ function TargetsPageHeader({
           {showForm ? "Close form" : `Add ${TARGET_SINGULAR.toLowerCase()}`}
         </Button>
       )}
+    </div>
+  )
+}
+
+function createTargetScanHandlers(args: {
+  scanSetup: boolean
+  workspaceId: string
+  router: ReturnType<typeof useRouter>
+  repoForm: RepoFormState
+  urlForm: UrlFormState
+  fetchTargets: () => Promise<void>
+  setCreating: Dispatch<SetStateAction<boolean>>
+  setConnecting: Dispatch<SetStateAction<boolean>>
+  setError: Dispatch<SetStateAction<string | null>>
+  setShowForm: Dispatch<SetStateAction<boolean>>
+  setRepoForm: Dispatch<SetStateAction<RepoFormState>>
+  setUrlForm: Dispatch<SetStateAction<UrlFormState>>
+  setCreatedTarget: Dispatch<SetStateAction<{ id: string; name: string } | null>>
+  selectedRepoId: string
+}) {
+  const { scanSetup, workspaceId, router, repoForm, urlForm } = args
+  async function save(body: Record<string, unknown>) {
+    try {
+      return await apiPost("/api/targets", body, {
+        schema: z.object({ id: z.string().min(1), name: z.string() }).passthrough(),
+      })
+    } catch (cause) {
+      if (!scanSetup || !(cause instanceof ApiError) || cause.code !== "TARGET_EXISTS") throw cause
+      const existing = z.object({ existingTargetId: z.string().min(1) }).safeParse(cause.details)
+      if (!existing.success) throw cause
+      return {
+        id: existing.data.existingTargetId,
+        name: typeof body.name === "string" ? body.name : "Selected target",
+      }
+    }
+  }
+  async function connectForScan() {
+    args.setConnecting(true)
+    args.setError(null)
+    try {
+      const data = await apiPost(
+        "/api/integrations/github/install",
+        { workspaceId, returnTo: "scan" },
+        { schema: installUrlSchema }
+      )
+      window.location.href = data.installUrl
+    } catch (cause) {
+      args.setError(cause instanceof Error ? cause.message : "Could not connect GitHub. Try again.")
+      args.setConnecting(false)
+    }
+  }
+  async function create(kind: "REPO" | "URL") {
+    args.setCreating(true)
+    args.setError(null)
+    try {
+      const body =
+        kind === "REPO"
+          ? {
+              workspaceId,
+              type: kind,
+              name: repoForm.name,
+              repoOwner: repoForm.repoOwner,
+              repoName: repoForm.repoName,
+              ...(repoForm.installationId ? { installationId: repoForm.installationId } : {}),
+              ...(repoForm.branch.trim() ? { branch: repoForm.branch.trim() } : {}),
+            }
+          : {
+              workspaceId,
+              type: urlForm.urlType,
+              name: urlForm.name,
+              url: urlForm.url,
+              apiSpecUrl: urlForm.urlType === "API" ? urlForm.apiSpecUrl || undefined : undefined,
+              ownershipAttested: urlForm.ownershipAttested,
+            }
+      const saved = await save(body)
+      args.setCreatedTarget(saved)
+      if (scanSetup)
+        return router.replace(`/dashboard/scans?new=1&target=${encodeURIComponent(saved.id)}`)
+      args.setShowForm(false)
+      if (kind === "REPO") args.setRepoForm(EMPTY_REPO_FORM)
+      else args.setUrlForm(EMPTY_URL_FORM)
+      await args.fetchTargets()
+      router.refresh()
+    } catch (error) {
+      args.setError(
+        error instanceof Error ? error.message : `Failed to create ${TARGET_SINGULAR.toLowerCase()}`
+      )
+    } finally {
+      args.setCreating(false)
+    }
+  }
+  return {
+    connectForScan,
+    handleCreateRepo: () => create("REPO"),
+    handleCreateUrl: () => create("URL"),
+    selectedRepoId: args.selectedRepoId,
+  }
+}
+
+function ScanSetupHeading() {
+  return (
+    <div className="mb-6 space-y-2">
+      <h1 className="text-2xl font-bold tracking-tight">Configure a scan</h1>
+      <p className="text-muted-foreground text-sm">
+        Add the app, API, or repository you want to review. Next, confirm the scan scope and profile
+        before starting.
+      </p>
+    </div>
+  )
+}
+
+function CreatedTargetNotice({ target }: { target: { id: string; name: string } }) {
+  return (
+    <div
+      role="status"
+      className="mb-5 flex flex-col gap-3 rounded-lg border bg-card p-4 sm:flex-row sm:items-center sm:justify-between"
+    >
+      <p className="text-sm">
+        <span className="font-medium">{target.name}</span> is ready for scan setup.
+      </p>
+      <Link
+        href={`/dashboard/scans?new=1&target=${encodeURIComponent(target.id)}`}
+        className="bg-primary text-primary-foreground inline-flex min-h-11 items-center justify-center rounded-md px-4 text-sm font-medium hover:bg-primary/90"
+      >
+        Configure scan
+      </Link>
+    </div>
+  )
+}
+
+function GithubScanConnection({
+  connecting,
+  onConnect,
+  showWarning,
+}: {
+  connecting: boolean
+  onConnect: () => void
+  showWarning: boolean
+}) {
+  return (
+    <div className="mb-4 space-y-2">
+      <p className="text-muted-foreground text-sm">
+        Connect GitHub to choose an accessible repository. You can also enter a public repository
+        below.
+      </p>
+      {showWarning && (
+        <p role="status" className="text-sm">
+          GitHub access could not be confirmed. Retry the connection or use a public repository.
+        </p>
+      )}
+      <Button
+        type="button"
+        variant="outline"
+        disabled={connecting}
+        aria-busy={connecting}
+        onClick={onConnect}
+      >
+        {connecting ? "Connecting…" : "Connect GitHub"}
+      </Button>
     </div>
   )
 }
@@ -222,97 +381,22 @@ export function TargetsClient({
     }
   }
 
-  async function connectForScan() {
-    if (connecting) return
-    setConnecting(true)
-    setError(null)
-    try {
-      const data = await apiPost(
-        "/api/integrations/github/install",
-        { workspaceId, returnTo: "scan" },
-        { schema: installUrlSchema }
-      )
-      window.location.href = data.installUrl
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not connect GitHub. Try again.")
-      setConnecting(false)
-    }
-  }
-
-  async function saveTargetForScan(body: Record<string, unknown>) {
-    try {
-      return await apiPost("/api/targets", body, {
-        schema: z.object({ id: z.string().min(1), name: z.string() }).passthrough(),
-      })
-    } catch (cause) {
-      // Only the server's compatible, workspace-scoped conflict may be reused.
-      // Incompatible settings, access failures, and uncertain responses stay errors.
-      if (!scanSetup || !(cause instanceof ApiError) || cause.code !== "TARGET_EXISTS") throw cause
-      const existing = z.object({ existingTargetId: z.string().min(1) }).safeParse(cause.details)
-      if (!existing.success) throw cause
-      return {
-        id: existing.data.existingTargetId,
-        name: typeof body.name === "string" ? body.name : "Selected target",
-      }
-    }
-  }
-
-  async function handleCreateRepo() {
-    setCreating(true)
-    setError(null)
-    try {
-      const saved = await saveTargetForScan({
-        workspaceId,
-        type: "REPO",
-        name: repoForm.name,
-        repoOwner: repoForm.repoOwner,
-        repoName: repoForm.repoName,
-        ...(repoForm.installationId ? { installationId: repoForm.installationId } : {}),
-        ...(repoForm.branch.trim() ? { branch: repoForm.branch.trim() } : {}),
-      })
-      setCreatedTarget(saved)
-      if (scanSetup) {
-        router.replace(`/dashboard/scans?new=1&target=${encodeURIComponent(saved.id)}`)
-        return
-      }
-      setShowForm(false)
-      setRepoForm(EMPTY_REPO_FORM)
-      await fetchTargets()
-      router.refresh()
-    } catch (e) {
-      setError(e instanceof Error ? e.message : `Failed to create ${TARGET_SINGULAR.toLowerCase()}`)
-    } finally {
-      setCreating(false)
-    }
-  }
-
-  async function handleCreateUrl() {
-    setCreating(true)
-    setError(null)
-    try {
-      const saved = await saveTargetForScan({
-        workspaceId,
-        type: urlForm.urlType,
-        name: urlForm.name,
-        url: urlForm.url,
-        apiSpecUrl: urlForm.urlType === "API" ? urlForm.apiSpecUrl || undefined : undefined,
-        ownershipAttested: urlForm.ownershipAttested,
-      })
-      setCreatedTarget(saved)
-      if (scanSetup) {
-        router.replace(`/dashboard/scans?new=1&target=${encodeURIComponent(saved.id)}`)
-        return
-      }
-      setShowForm(false)
-      setUrlForm(EMPTY_URL_FORM)
-      await fetchTargets()
-      router.refresh()
-    } catch (e) {
-      setError(e instanceof Error ? e.message : `Failed to create ${TARGET_SINGULAR.toLowerCase()}`)
-    } finally {
-      setCreating(false)
-    }
-  }
+  const { connectForScan, handleCreateRepo, handleCreateUrl } = createTargetScanHandlers({
+    scanSetup,
+    workspaceId,
+    router,
+    repoForm,
+    urlForm,
+    fetchTargets,
+    setCreating,
+    setConnecting,
+    setError,
+    setShowForm,
+    setRepoForm,
+    setUrlForm,
+    setCreatedTarget,
+    selectedRepoId,
+  })
 
   const loadMore = useCallback(
     async (cursor: string) => {
@@ -349,13 +433,7 @@ export function TargetsClient({
         </p>
       )}
       {scanSetup ? (
-        <div className="mb-6 space-y-2">
-          <h1 className="text-2xl font-bold tracking-tight">Configure a scan</h1>
-          <p className="text-muted-foreground text-sm">
-            Add the app, API, or repository you want to review. Next, confirm the scan scope and
-            profile before starting.
-          </p>
-        </div>
+        <ScanSetupHeading />
       ) : (
         <>
           {" "}
@@ -372,47 +450,16 @@ export function TargetsClient({
           />
         </>
       )}
-      {createdTarget && !scanSetup && (
-        <div
-          role="status"
-          className="mb-5 flex flex-col gap-3 rounded-lg border bg-card p-4 sm:flex-row sm:items-center sm:justify-between"
-        >
-          <p className="text-sm">
-            <span className="font-medium">{createdTarget.name}</span> is ready for scan setup.
-          </p>
-          <Link
-            href={`/dashboard/scans?new=1&target=${encodeURIComponent(createdTarget.id)}`}
-            className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex min-h-11 items-center justify-center rounded-md px-4 text-sm font-medium"
-          >
-            Configure scan
-          </Link>
-        </div>
-      )}
+      {createdTarget && !scanSetup && <CreatedTargetNotice target={createdTarget} />}
 
       {showForm && (
         <TargetCreatePanel formType={formType} onFormTypeChange={setFormType} error={error}>
           {scanSetup && formType === "REPO" && !githubConnected && (
-            <div className="mb-4 space-y-2">
-              <p className="text-muted-foreground text-sm">
-                Connect GitHub to choose an accessible repository. You can also enter a public
-                repository below.
-              </p>
-              {searchParams.get("github") && (
-                <p role="status" className="text-sm">
-                  GitHub access could not be confirmed. Retry the connection or use a public
-                  repository.
-                </p>
-              )}
-              <Button
-                type="button"
-                variant="outline"
-                disabled={connecting}
-                aria-busy={connecting}
-                onClick={() => void connectForScan()}
-              >
-                {connecting ? "Connecting…" : "Connect GitHub"}
-              </Button>
-            </div>
+            <GithubScanConnection
+              connecting={connecting}
+              onConnect={() => void connectForScan()}
+              showWarning={Boolean(searchParams.get("github"))}
+            />
           )}
           {formType === "REPO" ? (
             <RepoTargetForm

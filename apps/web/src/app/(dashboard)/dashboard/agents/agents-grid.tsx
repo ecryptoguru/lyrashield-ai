@@ -92,6 +92,104 @@ function locationText(locations: AgentLocation[]) {
   return locations.map((location) => `${location.scope}: ${location.path}`)
 }
 
+function AgentSetupDetails({
+  selected,
+  manualPlugin,
+  configLocations,
+  pluginProvidesSkills,
+  ruleFiles,
+}: {
+  selected: AgentCardData
+  manualPlugin: boolean
+  configLocations: AgentLocation[]
+  pluginProvidesSkills: boolean
+  ruleFiles: string[]
+}) {
+  return (
+    <details key={selected.id} className="group border-t pt-3 text-xs leading-5">
+      <summary className="flex min-h-11 cursor-pointer items-center font-medium focus-visible:outline-2 focus-visible:outline-offset-2">
+        Setup details
+        <ChevronDown
+          aria-hidden="true"
+          className="ml-auto size-4 transition-transform group-open:rotate-180"
+        />
+      </summary>
+      <div className="space-y-3 pt-2">
+        <div className="mt-2 flex min-w-0 items-center gap-1.5">
+          <CircleDashed className="text-muted-foreground size-3.5 shrink-0" aria-hidden="true" />
+          <span className="text-muted-foreground min-w-0 text-xs leading-5 font-medium">
+            {manualPlugin || selected.surface === "cloud" || selected.surface === "web"
+              ? "After activation, confirm the hosted connection and available LyraShield tools."
+              : "Verify after activation with LyraShield doctor."}
+          </span>
+        </div>
+        {configLocations.length ? (
+          <div className="text-muted-foreground mt-2 space-y-0.5 font-mono text-xs leading-5 break-all">
+            {locationText(configLocations).map((location) => (
+              <p key={location}>{location}</p>
+            ))}
+          </div>
+        ) : (
+          <p className="text-muted-foreground mt-2 text-xs leading-5">
+            Managed inside the agent UI
+          </p>
+        )}
+        <div className="space-y-3">
+          {pluginProvidesSkills ? (
+            <div className="space-y-1">
+              <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
+                Skills
+              </p>
+              <p className="text-muted-foreground text-xs leading-5">
+                {manualPlugin
+                  ? "After manual installation, confirm the client discovered the plugin skills separately from MCP authentication."
+                  : "Workflow skills ship with the Agent Plugin; no separate skills install is needed."}
+              </p>
+            </div>
+          ) : selected.skillLocations?.length ? (
+            <div className="space-y-1">
+              <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
+                Skills
+              </p>
+              {locationText(selected.skillLocations).map((location) => (
+                <p
+                  key={location}
+                  className="text-muted-foreground font-mono text-xs leading-5 break-all"
+                >
+                  {location}
+                </p>
+              ))}
+            </div>
+          ) : null}
+          {ruleFiles.length > 0 && (
+            <div className="space-y-1">
+              <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
+                Rules
+              </p>
+              {ruleFiles.map((file) => (
+                <p
+                  key={file}
+                  className="text-muted-foreground font-mono text-xs leading-5 break-all"
+                >
+                  {file}
+                </p>
+              ))}
+            </div>
+          )}
+        </div>
+        {selected.manualInstructions && (
+          <details className="bg-muted/40 rounded-md border px-3 py-2 text-xs leading-5">
+            <summary className="cursor-pointer font-medium focus-visible:outline-2 focus-visible:outline-offset-2">
+              Manual setup notes
+            </summary>
+            <p className="text-muted-foreground mt-2 break-words">{selected.manualInstructions}</p>
+          </details>
+        )}
+      </div>
+    </details>
+  )
+}
+
 function AgentCard({
   family,
   visibleAgents,
@@ -252,94 +350,13 @@ function AgentCard({
             Docs
           </a>
         </div>
-        <details key={selected.id} className="group border-t pt-3 text-xs leading-5">
-          <summary className="flex min-h-11 cursor-pointer items-center font-medium focus-visible:outline-2 focus-visible:outline-offset-2">
-            Setup details
-            <ChevronDown
-              aria-hidden="true"
-              className="ml-auto size-4 transition-transform group-open:rotate-180"
-            />
-          </summary>
-          <div className="space-y-3 pt-2">
-            {" "}
-            <div className="mt-2 flex min-w-0 items-center gap-1.5">
-              <CircleDashed
-                className="text-muted-foreground size-3.5 shrink-0"
-                aria-hidden="true"
-              />
-              <span className="text-muted-foreground min-w-0 text-xs leading-5 font-medium">
-                {manualPlugin || selected.surface === "cloud" || selected.surface === "web"
-                  ? "After activation, confirm the hosted connection and available LyraShield tools."
-                  : "Verify after activation with LyraShield doctor."}
-              </span>
-            </div>
-            {configLocations.length > 0 ? (
-              <div className="text-muted-foreground mt-2 space-y-0.5 font-mono text-xs leading-5 break-all">
-                {locationText(configLocations).map((location) => (
-                  <p key={location}>{location}</p>
-                ))}
-              </div>
-            ) : (
-              <p className="text-muted-foreground mt-2 text-xs leading-5">
-                Managed inside the agent UI
-              </p>
-            )}{" "}
-            <div className="space-y-3">
-              {pluginProvidesSkills ? (
-                <div className="space-y-1">
-                  <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
-                    Skills
-                  </p>
-                  <p className="text-muted-foreground text-xs leading-5">
-                    {manualPlugin
-                      ? "After manual installation, confirm the client discovered the plugin skills separately from MCP authentication."
-                      : "Workflow skills ship with the Agent Plugin; no separate skills install is needed."}
-                  </p>
-                </div>
-              ) : selected.skillLocations?.length ? (
-                <div className="space-y-1">
-                  <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
-                    Skills
-                  </p>
-                  {locationText(selected.skillLocations).map((location) => (
-                    <p
-                      key={location}
-                      className="text-muted-foreground font-mono text-xs leading-5 break-all"
-                    >
-                      {location}
-                    </p>
-                  ))}
-                </div>
-              ) : null}
-
-              {ruleFiles.length > 0 ? (
-                <div className="space-y-1">
-                  <p className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
-                    Rules
-                  </p>
-                  {ruleFiles.map((file) => (
-                    <p
-                      key={file}
-                      className="text-muted-foreground font-mono text-xs leading-5 break-all"
-                    >
-                      {file}
-                    </p>
-                  ))}
-                </div>
-              ) : null}
-            </div>{" "}
-            {selected.manualInstructions ? (
-              <details className="bg-muted/40 rounded-md border px-3 py-2 text-xs leading-5">
-                <summary className="cursor-pointer font-medium focus-visible:outline-2 focus-visible:outline-offset-2">
-                  Manual setup notes
-                </summary>
-                <p className="text-muted-foreground mt-2 break-words">
-                  {selected.manualInstructions}
-                </p>
-              </details>
-            ) : null}
-          </div>
-        </details>
+        <AgentSetupDetails
+          selected={selected}
+          manualPlugin={manualPlugin}
+          configLocations={configLocations}
+          pluginProvidesSkills={pluginProvidesSkills}
+          ruleFiles={ruleFiles}
+        />
       </CardContent>
     </Card>
   )

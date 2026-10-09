@@ -58,23 +58,9 @@ function AffiliatePages({
   )
 }
 
-export default async function AffiliateAdminPage({
-  searchParams,
-}: {
-  searchParams: Promise<Partial<Record<CursorKey, string>>>
-}) {
-  const session = await getCachedSession()
-  if (!session) return null
-
-  // Global affiliate administration is platform-operator authority — it never
-  // derives from workspace membership or tenant roles.
-  if (!(await isPlatformOperator(session.userId))) {
-    redirect("/dashboard")
-  }
-
-  const params = await searchParams
+async function getAffiliateAdminData(searchParams: Partial<Record<CursorKey, string>>) {
   const cursors: Cursors = {}
-  for (const key of CURSOR_KEYS) cursors[key] = parseAdminCursor(params[key])
+  for (const key of CURSOR_KEYS) cursors[key] = parseAdminCursor(searchParams[key])
   const pagination = (name: CursorKey) => ({
     take: PAGE_SIZE + 1,
     ...(cursors[name] ? { cursor: { id: cursors[name] }, skip: 1 } : {}),
@@ -93,9 +79,7 @@ export default async function AffiliateAdminPage({
       where: { status: "PENDING" },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       ...pagination("pending"),
-      include: {
-        user: { select: { email: true, name: true } },
-      },
+      include: { user: { select: { email: true, name: true } } },
     }),
     prisma.affiliate.findMany({
       where: { status: "APPROVED" },
@@ -103,42 +87,61 @@ export default async function AffiliateAdminPage({
       ...pagination("approved"),
       include: {
         user: { select: { email: true, name: true } },
-        _count: {
-          select: { commissions: true, payouts: true, clicks: true },
-        },
+        _count: { select: { commissions: true, payouts: true, clicks: true } },
       },
     }),
     prisma.affiliate.findMany({
       where: { status: "SUSPENDED" },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       ...pagination("suspended"),
-      include: {
-        user: { select: { email: true, name: true } },
-      },
+      include: { user: { select: { email: true, name: true } } },
     }),
     prisma.payout.findMany({
-      // C-M10: Query both PENDING and PROCESSING — requestPayout creates as
-      // PROCESSING, so querying only PENDING made all payouts invisible.
       where: { status: { in: ["PENDING", "PROCESSING"] } },
       orderBy: [{ requestedAt: "desc" }, { id: "desc" }],
       ...pagination("payouts"),
-      include: {
-        affiliate: {
-          include: {
-            user: { select: { email: true, name: true } },
-          },
-        },
-      },
+      include: { affiliate: { include: { user: { select: { email: true, name: true } } } } },
     }),
     prisma.affiliate.count({ where: { status: "PENDING" } }),
     prisma.affiliate.count({ where: { status: "APPROVED" } }),
     prisma.affiliate.count({ where: { status: "SUSPENDED" } }),
     prisma.payout.count({ where: { status: { in: ["PENDING", "PROCESSING"] } } }),
   ])
-  const pendingPage = listPage(pendingRows)
-  const approvedPage = listPage(approvedRows)
-  const suspendedPage = listPage(suspendedRows)
-  const payoutPage = listPage(payoutRows)
+  return {
+    cursors,
+    pending: listPage(pendingRows),
+    approved: listPage(approvedRows),
+    suspended: listPage(suspendedRows),
+    payouts: listPage(payoutRows),
+    pendingCount,
+    approvedCount,
+    suspendedCount,
+    payoutCount,
+  }
+}
+
+export default async function AffiliateAdminPage({
+  searchParams,
+}: {
+  searchParams: Promise<Partial<Record<CursorKey, string>>>
+}) {
+  const session = await getCachedSession()
+  if (!session) return null
+
+  // Global affiliate administration is platform-operator authority — it never
+  // derives from workspace membership or tenant roles.
+  if (!(await isPlatformOperator(session.userId))) {
+    redirect("/dashboard")
+  }
+
+  const data = await getAffiliateAdminData(await searchParams)
+  const { cursors, pendingCount, approvedCount, suspendedCount, payoutCount } = data
+  const {
+    pending: pendingPage,
+    approved: approvedPage,
+    suspended: suspendedPage,
+    payouts: payoutPage,
+  } = data
   const pending = pendingPage.items
   const approved = approvedPage.items
   const suspended = suspendedPage.items

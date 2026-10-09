@@ -25,6 +25,39 @@ function normalizeTab(value: string | undefined): "runs" | "monitoring" {
   return value === "monitoring" ? "monitoring" : "runs"
 }
 
+async function getScanSetupTargetProps(workspaceId: string) {
+  const integration = await prisma.integration.findFirst({
+    where: { workspaceId, type: "GITHUB", status: "active", deletedAt: null },
+  })
+  return {
+    scanSetup: true,
+    workspaceId,
+    initialData: [],
+    initialNextCursor: null,
+    githubConnected: Boolean(integration),
+    githubAccountLogin:
+      (integration?.metadata as { accountLogin?: string } | null)?.accountLogin ?? null,
+  }
+}
+
+function toScanClientItems(items: Awaited<ReturnType<typeof listScans>>["items"]) {
+  return items.map((scan) => ({
+    id: scan.id,
+    status: scan.status,
+    goal: scan.goal,
+    mode: scan.mode,
+    triggerType: scan.triggerType,
+    startedAt: scan.startedAt?.toISOString() ?? null,
+    endedAt: scan.endedAt?.toISOString() ?? null,
+    summary: scan.summary,
+    errorCategory: scan.errorCategory,
+    errorMessage: scan.errorMessage,
+    findingCount: scan.findingCount,
+    target: scan.target,
+    createdAt: scan.createdAt.toISOString(),
+  }))
+}
+
 export const metadata: Metadata = {
   title: "Scans",
 }
@@ -146,21 +179,7 @@ export default async function ScansPage({
     effectiveNextCursor = unscoped.nextCursor
   }
 
-  const initialData = effectiveItems.map((s) => ({
-    id: s.id,
-    status: s.status,
-    goal: s.goal,
-    mode: s.mode,
-    triggerType: s.triggerType,
-    startedAt: s.startedAt ? s.startedAt.toISOString() : null,
-    endedAt: s.endedAt ? s.endedAt.toISOString() : null,
-    summary: s.summary,
-    errorCategory: s.errorCategory,
-    errorMessage: s.errorMessage,
-    findingCount: s.findingCount,
-    target: s.target,
-    createdAt: s.createdAt.toISOString(),
-  }))
+  const initialData = toScanClientItems(effectiveItems)
 
   const autoOpen = params.new === "1"
   if (
@@ -168,22 +187,7 @@ export default async function ScansPage({
     (targets.length === 0 || params.source === "repo" || params.source === "url") &&
     !params.target
   ) {
-    const integration = await prisma.integration.findFirst({
-      where: { workspaceId, type: "GITHUB", status: "active", deletedAt: null },
-    })
-    return (
-      <TargetsClient
-        key={workspaceId}
-        scanSetup
-        workspaceId={workspaceId}
-        initialData={[]}
-        initialNextCursor={null}
-        githubConnected={Boolean(integration)}
-        githubAccountLogin={
-          (integration?.metadata as { accountLogin?: string } | null)?.accountLogin ?? null
-        }
-      />
-    )
+    return <TargetsClient key={workspaceId} {...await getScanSetupTargetProps(workspaceId)} />
   }
   const recoveryTarget = targets.find((target) => target.id === params.target)
   const activeRole = workspaceContext.workspaces.find((w) => w.id === workspaceId)?.role

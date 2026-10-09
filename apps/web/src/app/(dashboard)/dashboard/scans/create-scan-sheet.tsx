@@ -21,6 +21,30 @@ import { ScanSubmissionFooter, useScanSheetErrorVisibility } from "./scan-submis
 import type { ScanEligibilityState, TargetItem } from "./scan-types"
 import type { ScanAttachmentItem } from "@/lib/api-schemas"
 
+function AddTargetLink() {
+  return (
+    <Link
+      href="/dashboard/scans?new=1&source=url"
+      className="text-primary inline-flex min-h-11 items-center text-sm font-medium underline underline-offset-4"
+    >
+      Add a new target
+    </Link>
+  )
+}
+
+function CreateScanHeader() {
+  return (
+    <SheetHeader className="border-b px-6 py-4 text-left">
+      <SheetTitle>Start a {SCAN_SINGULAR.toLowerCase()}</SheetTitle>
+      <SheetDescription>
+        Choose a {TARGET_SINGULAR.toLowerCase()} and how thorough the review should be. Starting a{" "}
+        {SCAN_SINGULAR.toLowerCase()} begins durable server-side work that may use the sponsoring
+        account&apos;s agent-minute allowance.
+      </SheetDescription>
+    </SheetHeader>
+  )
+}
+
 function modeBadgeVariant(mode: string): "default" | "success" | "info" | "warning" | "muted" {
   switch (mode) {
     case "SAFE":
@@ -110,7 +134,6 @@ export function CreateScanSheet({
     open,
     errorMessage
   )
-
   // Roving tabindex for the review-type radiogroup: exactly one radio is
   // tabbable — the selected option, or the first enabled option when nothing
   // is selected yet. With no selection, `isSelected ? 0 : -1` left the whole
@@ -137,15 +160,7 @@ export function CreateScanSheet({
             : "h-[92vh] max-h-[92vh] rounded-t-2xl pb-[env(safe-area-inset-bottom)]"
         )}
       >
-        <SheetHeader className="border-b px-6 py-4 text-left">
-          <SheetTitle>Start a {SCAN_SINGULAR.toLowerCase()}</SheetTitle>
-          <SheetDescription>
-            Choose a {TARGET_SINGULAR.toLowerCase()} and how thorough the review should be. Starting
-            a {SCAN_SINGULAR.toLowerCase()} begins durable server-side work that may use the
-            sponsoring account&apos;s agent-minute allowance.
-          </SheetDescription>
-        </SheetHeader>
-
+        <CreateScanHeader />
         <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
           <div className="space-y-5">
             {errorCode === "DOMAIN_VERIFICATION_REQUIRED" &&
@@ -174,12 +189,7 @@ export function CreateScanSheet({
                   </option>
                 ))}
               </Select>
-              <Link
-                href="/dashboard/scans?new=1&source=url"
-                className="text-primary inline-flex min-h-11 items-center text-sm font-medium underline underline-offset-4"
-              >
-                Add a new target
-              </Link>
+              <AddTargetLink />
             </FormField>
 
             <div>

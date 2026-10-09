@@ -1,5 +1,45 @@
 import type { SortMode } from "@/app/(dashboard)/dashboard/findings/findings-client"
 
+export function updateFindingListUrl(updates: {
+  filter?: string
+  sort?: SortMode
+  target?: string
+  q?: string
+}) {
+  if (typeof window === "undefined") return
+  const params = new URLSearchParams(window.location.search)
+  if (updates.filter !== undefined) {
+    const selection = decodeFindingFilters(updates.filter)
+    params.delete("filter")
+    params.set("status", selection.status)
+    if (selection.severity === "ALL") params.delete("severity")
+    else params.set("severity", selection.severity)
+    if (selection.evidence === "ALL") params.delete("evidence")
+    else params.set("evidence", selection.evidence)
+  }
+  if (updates.sort !== undefined) {
+    if (updates.sort !== "priority") params.set("sort", updates.sort)
+    else params.delete("sort")
+  }
+  if (updates.target !== undefined) {
+    params.delete("targetId")
+    if (updates.target) params.set("target", updates.target)
+    else params.delete("target")
+  }
+  if (updates.q !== undefined) {
+    if (updates.q) params.set("q", updates.q)
+    else params.delete("q")
+  }
+  const search = params.toString()
+  const nextUrl = `${window.location.pathname}${search ? `?${search}` : ""}`
+  if (nextUrl === `${window.location.pathname}${window.location.search}`) return
+  const method =
+    updates.filter !== undefined || updates.target !== undefined || updates.sort !== undefined
+      ? "pushState"
+      : "replaceState"
+  window.history[method](null, "", nextUrl)
+}
+
 /**
  * Server-parsed findings-list state.
  *

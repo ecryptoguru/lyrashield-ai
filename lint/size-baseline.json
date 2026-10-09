@@ -62,8 +62,8 @@
     },
     "apps/web/src/app/(dashboard)/dashboard/admin/affiliates/page.tsx|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 35,
-      "maxExcess": 35
+      "totalExcess": 27,
+      "maxExcess": 27
     },
     "apps/web/src/app/(dashboard)/dashboard/admin/page.tsx|max-lines-per-function": {
       "count": 1,
@@ -82,18 +82,18 @@
     },
     "apps/web/src/app/(dashboard)/dashboard/agents/[agentId]/agent-wizard.tsx|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 26,
-      "maxExcess": 26
+      "totalExcess": 16,
+      "maxExcess": 16
     },
     "apps/web/src/app/(dashboard)/dashboard/agents/agents-grid.tsx|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 78,
-      "maxExcess": 78
+      "totalExcess": 15,
+      "maxExcess": 15
     },
     "apps/web/src/app/(dashboard)/dashboard/ai-assurance/ai-assurance-client.tsx|max-lines-per-function": {
       "count": 2,
-      "totalExcess": 355,
-      "maxExcess": 302
+      "totalExcess": 349,
+      "maxExcess": 296
     },
     "apps/web/src/app/(dashboard)/dashboard/ai-assurance/assurance-inventory.tsx|max-lines-per-function": {
       "count": 1,
@@ -132,8 +132,8 @@
     },
     "apps/web/src/app/(dashboard)/dashboard/findings/findings-client.tsx|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 344,
-      "maxExcess": 344
+      "totalExcess": 327,
+      "maxExcess": 327
     },
     "apps/web/src/app/(dashboard)/dashboard/findings/fixes-client.tsx|max-lines-per-function": {
       "count": 1,
@@ -162,13 +162,13 @@
     },
     "apps/web/src/app/(dashboard)/dashboard/launch-readiness/launch-readiness-client.tsx|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 269,
-      "maxExcess": 269
+      "totalExcess": 252,
+      "maxExcess": 252
     },
     "apps/web/src/app/(dashboard)/dashboard/licenses/licenses-client.tsx|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 42,
-      "maxExcess": 42
+      "totalExcess": 41,
+      "maxExcess": 41
     },
     "apps/web/src/app/(dashboard)/dashboard/notifications/notifications-client.tsx|max-lines-per-function": {
       "count": 1,
@@ -222,13 +222,8 @@
     },
     "apps/web/src/app/(dashboard)/dashboard/scans/create-scan-sheet.tsx|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 387,
-      "maxExcess": 387
-    },
-    "apps/web/src/app/(dashboard)/dashboard/scans/page.tsx|max-lines-per-function": {
-      "count": 1,
-      "totalExcess": 5,
-      "maxExcess": 5
+      "totalExcess": 381,
+      "maxExcess": 381
     },
     "apps/web/src/app/(dashboard)/dashboard/scans/scan-list.tsx|max-lines-per-function": {
       "count": 1,
@@ -242,13 +237,13 @@
     },
     "apps/web/src/app/(dashboard)/dashboard/scans/scans-client.tsx|max-lines": {
       "count": 1,
-      "totalExcess": 183,
-      "maxExcess": 183
+      "totalExcess": 172,
+      "maxExcess": 172
     },
     "apps/web/src/app/(dashboard)/dashboard/scans/scans-client.tsx|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 564,
-      "maxExcess": 564
+      "totalExcess": 551,
+      "maxExcess": 551
     },
     "apps/web/src/app/(dashboard)/dashboard/scans/use-scan-list-state.ts|max-lines-per-function": {
       "count": 1,
@@ -257,8 +252,8 @@
     },
     "apps/web/src/app/(dashboard)/dashboard/schedules/schedules-client.tsx|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 234,
-      "maxExcess": 234
+      "totalExcess": 196,
+      "maxExcess": 196
     },
     "apps/web/src/app/(dashboard)/dashboard/settings/api-keys.tsx|max-lines-per-function": {
       "count": 1,
@@ -282,13 +277,8 @@
     },
     "apps/web/src/app/(dashboard)/dashboard/targets/targets-client.tsx|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 110,
-      "maxExcess": 110
-    },
-    "apps/web/src/app/(dashboard)/dashboard/targets/targets-form.tsx|max-lines-per-function": {
-      "count": 1,
-      "totalExcess": 1,
-      "maxExcess": 1
+      "totalExcess": 107,
+      "maxExcess": 107
     },
     "apps/web/src/app/(dashboard)/dashboard/team/team-client.tsx|max-lines-per-function": {
       "count": 1,

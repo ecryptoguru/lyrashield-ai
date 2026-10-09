@@ -224,6 +224,30 @@ type FindingsResultsProps = {
   children?: ReactNode
 }
 
+export function findingsResultUiState({
+  query,
+  filter,
+  scanId,
+  targetFilter,
+  error,
+}: {
+  query: string
+  filter: string
+  scanId: string | null
+  targetFilter: string
+  error: string | null
+}) {
+  return {
+    hasConstraints: Boolean(query || filter !== "ALL"),
+    reviewScanHref: scanId
+      ? `/dashboard/scans/${encodeURIComponent(scanId)}`
+      : targetFilter
+        ? `/dashboard/scans?target=${encodeURIComponent(targetFilter)}`
+        : "/dashboard/scans",
+    error: Boolean(error),
+  }
+}
+
 export function FindingsResults({
   loading,
   hasConstraints = false,

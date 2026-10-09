@@ -179,10 +179,9 @@ export function CliIntegration({ docsUrl }: { docsUrl: string }) {
         ) : null}
 
         <p className="text-muted-foreground bg-muted/40 rounded-md border border-dashed px-3 py-2 text-xs leading-relaxed">
-          For API-key-only clients or CI, create an <code>lsk_</code> key in Workspace settings →
-          API keys and run <code>lyrashield login</code>. Follow each client&apos;s activation steps
-          and make a read-only call to verify it loaded the connection; a configured file alone is
-          not proof.
+          For API-key clients or CI, create an <code>lsk_</code> key in Workspace settings → API
+          keys, then run <code>lyrashield login</code>. Verify with a read-only call; a configured
+          file alone does not prove the client loaded the connection.
         </p>
 
         <p className="text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">

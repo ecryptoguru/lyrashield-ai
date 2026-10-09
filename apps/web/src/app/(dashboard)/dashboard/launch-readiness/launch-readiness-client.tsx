@@ -10,17 +10,15 @@ import {
   ShieldCheck,
   ShieldAlert,
   ShieldX,
-  TrendingUp,
   AlertTriangle,
-  CheckCircle2,
   Info,
 } from "lucide-react"
-import { Card, Badge, Button, Spinner, EmptyState } from "@lyrashield/ui"
+import { Card, Button, Spinner, EmptyState } from "@lyrashield/ui"
 import { PageHeader } from "@/components/page-header"
 import { z } from "zod"
 import { apiGet } from "@/lib/api-client"
 import { launchReadinessReportSchema } from "@/lib/api-schemas"
-import { ScoreGauge } from "@/components/security-visuals"
+import { LaunchReadinessDetails, LaunchVerdictCard } from "./launch-readiness-summary"
 import {
   gateReasonSentence,
   parseReleaseReference,
@@ -291,7 +289,6 @@ export function LaunchReadinessClient({
         ? "The retained assessment covers a different release. Review the reference and assessment below before making a launch decision."
         : "The retained assessment does not establish current readiness for this release. Review the reasons below."
     : report.summary
-  const VerdictIcon = config.icon
 
   function submitCheck(event: React.FormEvent) {
     event.preventDefault()
@@ -389,57 +386,15 @@ export function LaunchReadinessClient({
     <div className="space-y-6">
       <PageHeader title="Launch Readiness" icon={Rocket} />
 
-      {/* Verdict Card */}
-      <Card className={`p-6 ${config.bg} ${config.border}`}>
-        <div className="flex flex-col items-start gap-4 sm:flex-row">
-          <div className="min-w-0 flex-1">
-            <div className="mb-2 flex items-center gap-2">
-              <VerdictIcon className={`h-7 w-7 ${config.color}`} aria-hidden="true" />
-              <h2 className={`text-2xl font-bold ${config.color}`}>{config.label}</h2>
-            </div>
-            <p className="text-muted-foreground mb-2 text-xs">
-              Assessment scope:{" "}
-              {targets.find((target) => target.targetId === initialTargetId)?.targetName ??
-                "All workspace targets"}
-            </p>
-            <p className="text-muted-foreground mb-4 text-sm">{verdictSummary}</p>
-            <Link
-              href={nextAction.href}
-              className="bg-primary text-primary-foreground hover:bg-primary/90 mb-4 inline-flex min-h-11 items-center justify-center rounded-md px-4 text-sm font-medium"
-            >
-              {nextAction.label}
-            </Link>
-            <p className="text-muted-foreground mb-4 text-xs">
-              Triage counts open findings; it is not the launch verdict.
-            </p>
-            <div className="flex flex-wrap gap-2">
-              <Badge variant={config.badgeVariant}>
-                Triage only — not a readiness score ·{" "}
-                {report.triageScore === null
-                  ? "Triage score pending"
-                  : `Triage score: ${report.triageScore}/100`}
-              </Badge>
-              <Badge variant="muted">{report.totalFindings} total findings</Badge>
-              <Badge variant="muted">{report.blockingFindings} blocking</Badge>
-              <Badge variant="muted">{report.verifiedFindings} independently verified</Badge>
-            </div>
-          </div>
-          <div className="hidden shrink-0 sm:block">
-            {" "}
-            <ScoreGauge
-              score={report.triageScore}
-              grade="Triage"
-              neutral={
-                releaseNeedsAttention ||
-                report.verdict === "INCONCLUSIVE" ||
-                report.verdict === "NOT_EVALUATED"
-              }
-            />
-          </div>
-        </div>
-      </Card>
+      <LaunchVerdictCard
+        report={report}
+        config={config}
+        summary={verdictSummary}
+        scope={scopedTarget?.targetName ?? "All workspace targets"}
+        releaseNeedsAttention={releaseNeedsAttention}
+        action={nextAction}
+      />
 
-      {/* Release check — an identity-checked read, not a deployment gate */}
       <details
         open={checkActive || checkNeedsTarget}
         className="group bg-card rounded-xl border p-5"
@@ -613,49 +568,7 @@ export function LaunchReadinessClient({
         </Card>
       )}
 
-      {/* Conditions & Recommendations */}
-      <div className="grid gap-4 md:grid-cols-2">
-        {report.conditions.length > 0 && (
-          <Card className="p-5">
-            <div className="mb-3 flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-amber-500" aria-hidden="true" />
-              <h3 className="font-semibold">Conditions</h3>
-            </div>
-            <ul className="space-y-2">
-              {report.conditions.map((cond, i) => (
-                <li key={i} className="text-foreground/80 flex items-start gap-2 text-sm">
-                  <span className="mt-0.5 text-amber-500" aria-hidden="true">
-                    •
-                  </span>
-                  {cond}
-                </li>
-              ))}
-            </ul>
-          </Card>
-        )}
-
-        {report.recommendations.length > 0 && (
-          <Card className="p-5">
-            <div className="mb-3 flex items-center gap-2">
-              <TrendingUp className="h-5 w-5 text-sky-500" aria-hidden="true" />
-              <h3 className="font-semibold">Recommendations</h3>
-            </div>
-            <ul className="space-y-2">
-              {report.recommendations.map((rec, i) => (
-                <li key={i} className="text-foreground/80 flex items-start gap-2 text-sm">
-                  <span className="mt-0.5 text-sky-500" aria-hidden="true">
-                    •
-                  </span>
-                  {rec}
-                </li>
-              ))}
-            </ul>
-          </Card>
-        )}
-      </div>
-
-      {/* Severity Breakdown */}
-      {report.totalFindings > 0 && (
+      <LaunchReadinessDetails report={report}>
         <Card className="p-5">
           <div className="mb-4 flex items-center gap-2">
             <Info className="text-muted-foreground h-5 w-5" aria-hidden="true" />
@@ -663,19 +576,7 @@ export function LaunchReadinessClient({
           </div>
           <SeverityBreakdown bySeverity={report.bySeverity} />
         </Card>
-      )}
-
-      {/* Completed scope */}
-      {report.verdict === "GO" && report.totalFindings === 0 && (
-        <Card className="p-6 text-center">
-          <CheckCircle2 className="mx-auto mb-3 h-12 w-12 text-emerald-500" aria-hidden="true" />
-          <h3 className="mb-1 text-lg font-semibold">No blocking findings in completed scope</h3>
-          <p className="text-muted-foreground text-sm">
-            No findings were reported within completed scan coverage. Review the retained coverage
-            and limitations before making your launch decision.
-          </p>
-        </Card>
-      )}
+      </LaunchReadinessDetails>
     </div>
   )
 }

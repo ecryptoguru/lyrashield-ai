@@ -19,6 +19,27 @@ export interface RepoPickerState {
   onSelectRepo: (repoId: string) => void
 }
 
+function TargetFormActions({
+  disabled,
+  onCancel,
+  label,
+}: {
+  disabled: boolean
+  onCancel: () => void
+  label: string
+}) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      <Button type="submit" disabled={disabled}>
+        {label}
+      </Button>
+      <Button type="button" variant="secondary" disabled={disabled} onClick={onCancel}>
+        Cancel
+      </Button>
+    </div>
+  )
+}
+
 export function TargetCreatePanel({
   formType,
   onFormTypeChange,
@@ -198,23 +219,17 @@ export function RepoTargetForm({
           )}
         </>
       )}
-      <div className="flex flex-wrap gap-2">
-        <Button
-          type="submit"
-          disabled={
-            creating ||
-            (!repoForm.name && !picker.selectedRepoId) ||
-            (!picker.connected || picker.mode === "manual"
-              ? !repoForm.repoOwner || !repoForm.repoName
-              : false)
-          }
-        >
-          {creating ? "Saving target…" : (submitLabel ?? `Create ${TARGET_SINGULAR}`)}
-        </Button>
-        <Button type="button" variant="secondary" disabled={creating} onClick={onCancel}>
-          Cancel
-        </Button>
-      </div>
+      <TargetFormActions
+        disabled={
+          creating ||
+          (!repoForm.name && !picker.selectedRepoId) ||
+          (!picker.connected || picker.mode === "manual"
+            ? !repoForm.repoOwner || !repoForm.repoName
+            : false)
+        }
+        onCancel={onCancel}
+        label={creating ? "Saving target…" : (submitLabel ?? `Create ${TARGET_SINGULAR}`)}
+      />
     </form>
   )
 }

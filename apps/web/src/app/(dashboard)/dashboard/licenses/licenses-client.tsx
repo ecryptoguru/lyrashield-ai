@@ -25,6 +25,39 @@ interface LicenseRow {
   hasLicenseKey: boolean
 }
 
+function LicensePagination({
+  cursor,
+  nextCursor,
+  href,
+}: {
+  cursor: string | null
+  nextCursor: string | null
+  href: (cursor: string | null) => string
+}) {
+  if (!cursor && !nextCursor) return null
+  return (
+    <nav aria-label="License pages" className="flex flex-wrap gap-2">
+      {cursor && (
+        <Link href={href(null)} className={buttonVariants({ variant: "secondary" })}>
+          First page
+        </Link>
+      )}
+      {nextCursor && (
+        <Link href={href(nextCursor)} className={buttonVariants({ variant: "secondary" })}>
+          Next page
+        </Link>
+      )}
+    </nav>
+  )
+}
+
+function licensePageHref(next: string | null, query: string, status: "active" | "revoked") {
+  const params = new URLSearchParams({ status })
+  if (query) params.set("q", query)
+  if (next) params.set("cursor", next)
+  return `/dashboard/licenses?${params.toString()}`
+}
+
 export function LicensesClient({
   initialData,
   query,
@@ -42,13 +75,7 @@ export function LicensesClient({
   const [filter, setFilter] = useState<"active" | "revoked">(statusFilter)
   const [isPending, startTransition] = useTransition()
   const router = useRouter()
-
-  function pageHref(next: string | null) {
-    const params = new URLSearchParams({ status: statusFilter })
-    if (query) params.set("q", query)
-    if (next) params.set("cursor", next)
-    return `/dashboard/licenses?${params.toString()}`
-  }
+  const currentPageHref = (next: string | null) => licensePageHref(next, query, statusFilter)
 
   function navigate(nextSearch: string, nextFilter: "active" | "revoked") {
     startTransition(() => {
@@ -223,20 +250,7 @@ export function LicensesClient({
           Showing {initialData.length} license{initialData.length !== 1 ? "s" : ""} on this page.
         </p>
       )}
-      {(cursor || nextCursor) && (
-        <nav aria-label="License pages" className="flex flex-wrap gap-2">
-          {cursor && (
-            <Link href={pageHref(null)} className={buttonVariants({ variant: "secondary" })}>
-              First page
-            </Link>
-          )}
-          {nextCursor && (
-            <Link href={pageHref(nextCursor)} className={buttonVariants({ variant: "secondary" })}>
-              Next page
-            </Link>
-          )}
-        </nav>
-      )}
+      <LicensePagination cursor={cursor} nextCursor={nextCursor} href={currentPageHref} />
     </div>
   )
 }
