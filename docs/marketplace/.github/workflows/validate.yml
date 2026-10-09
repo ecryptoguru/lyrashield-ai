@@ -50,7 +50,10 @@ jobs:
           else
             base="HEAD~1"
           fi
-          if git diff --quiet "$base" HEAD -- zed-extension; then
+          if git diff --quiet "$base" HEAD -- \
+            zed-extension \
+            docs/marketplace/.github/workflows/validate.yml \
+            docs/marketplace/.github/workflows/release.yml; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
           else
             echo "changed=true" >> "$GITHUB_OUTPUT"
