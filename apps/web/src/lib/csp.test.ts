@@ -1,8 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { NextRequest } from "next/server"
 
-const affiliate = vi.hoisted(() => ({ detectAttribution: vi.fn() }))
-
 // Mock rate-limit so we don't need Redis in tests
 vi.mock("@/lib/rate-limit", () => ({
   checkAuthRateLimit: vi.fn().mockResolvedValue({ limited: false, remaining: 10, retryAfter: 0 }),
@@ -14,10 +12,6 @@ vi.mock("@/lib/rate-limit", () => ({
   checkLiteScanRateLimit: vi
     .fn()
     .mockResolvedValue({ limited: false, remaining: 10, retryAfter: 0 }),
-}))
-vi.mock("@lyrashield/affiliate", () => ({
-  detectAttribution: affiliate.detectAttribution,
-  parseAffiliateCookie: vi.fn().mockReturnValue(null),
 }))
 
 // Import after mock
@@ -338,7 +332,6 @@ describe("CSP nonce proxy", () => {
 
     expect(response.status).toBe(200)
     expect(response.headers.get("Set-Cookie")).toBeNull()
-    expect(affiliate.detectAttribution).not.toHaveBeenCalled()
   })
 
   it("preserves short-link navigation without tracking when GPC is enabled", async () => {
@@ -351,7 +344,6 @@ describe("CSP nonce proxy", () => {
     expect(response.status).toBe(307)
     expect(response.headers.get("location")).toBe("https://app.example.com/")
     expect(response.headers.get("Set-Cookie")).toBeNull()
-    expect(affiliate.detectAttribution).not.toHaveBeenCalled()
   })
 
   it("pins worker-src, media-src and manifest-src instead of relying on default-src alone", async () => {

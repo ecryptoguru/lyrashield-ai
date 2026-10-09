@@ -11,14 +11,9 @@ const rateLimit = vi.hoisted(() => ({
 }))
 
 vi.mock("@lyrashield/config", () => ({ isDev: false }))
-vi.mock("@lyrashield/affiliate", () => ({
-  detectAttribution: vi.fn(),
-  parseAffiliateCookie: vi.fn(),
-}))
-vi.mock("@/lib/scorecard-sharing", () => ({ scorecardTrackingAllowed: () => false }))
 vi.mock("@/lib/rate-limit", () => rateLimit)
 
-import { proxy, getAffiliateIpHash } from "./proxy"
+import { proxy } from "./proxy"
 
 const certificate = "-----BEGIN CERTIFICATE-----\nAQIDBA==\n-----END CERTIFICATE-----"
 const fingerprint = createHash("sha256")
@@ -41,20 +36,6 @@ afterEach(() => {
 })
 
 describe("app origin proxy boundary", () => {
-  it("hashes only the trusted last hop for affiliate attribution", async () => {
-    process.env.TRUSTED_PROXY_IP_HEADER = "x-forwarded-for"
-    process.env.IP_HASH_SALT = "t".repeat(32)
-    const request = new NextRequest("https://app.lyrashieldai.com/?ref=test", {
-      headers: { "x-forwarded-for": "spoofed, 203.0.113.4", "cf-connecting-ip": "spoofed-too" },
-    })
-    expect(await getAffiliateIpHash(request)).toBe(
-      createHash("sha256")
-        .update(`203.0.113.4${"t".repeat(32)}`)
-        .digest("hex")
-    )
-    delete process.env.TRUSTED_PROXY_IP_HEADER
-    expect(await getAffiliateIpHash(request)).toBeUndefined()
-  })
   it("rejects a direct or spoofed app request before Redis-backed limiting", async () => {
     process.env.CLOUDFLARE_ORIGIN_MTLS = "required"
     process.env.CLOUDFLARE_AOP_CERT_SHA256 = fingerprint
@@ -137,5 +118,45 @@ describe("app origin proxy boundary", () => {
 
     expect(response.status).toBe(200)
     expect(response.headers.get("x-middleware-request-x-lyrashield-trusted-country")).toBe("US")
+  })
+})
+
+describe("affiliate referral routing with new admission frozen", () => {
+  it("does not set an attribution cookie for a ?ref= landing", async () => {
+    const response = await proxy(new NextRequest("https://app.lyrashieldai.com/?ref=CODE1234"))
+
+    expect(response.headers.get("Set-Cookie")).toBeNull()
+    expect(response.headers.get("Content-Security-Policy")).toContain("default-src 'self'")
+  })
+
+  it("does not set an attribution cookie when consent and tracking are both allowed", async () => {
+    // Consent cookie present and no DNT/GPC signal: the previous behaviour set
+    // __ls_aff on exactly this request.
+    const response = await proxy(
+      new NextRequest("https://app.lyrashieldai.com/score/example?ref=CODE1234", {
+        headers: { cookie: "__ls_consent=true", "user-agent": "Mozilla/5.0" },
+      })
+    )
+
+    expect(response.headers.get("Set-Cookie")).toBeNull()
+  })
+
+  it("still redirects a /r/:code short link to the homepage without attribution", async () => {
+    const response = await proxy(new NextRequest("https://app.lyrashieldai.com/r/CODE1234"))
+
+    expect(response.status).toBe(307)
+    expect(response.headers.get("location")).toBe("https://app.lyrashieldai.com/")
+    expect(response.headers.get("Set-Cookie")).toBeNull()
+  })
+
+  it("still rewrites the affiliates subdomain to /affiliates", async () => {
+    const response = await proxy(
+      new NextRequest("https://affiliates.lyrashieldai.com/program", {
+        headers: { host: "affiliates.lyrashieldai.com" },
+      })
+    )
+
+    expect(response.headers.get("Content-Security-Policy")).toContain("default-src 'self'")
+    expect(response.headers.get("Set-Cookie")).toBeNull()
   })
 })

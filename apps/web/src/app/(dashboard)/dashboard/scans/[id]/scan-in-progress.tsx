@@ -1,18 +1,12 @@
 "use client"
 
 import { useEffect, useRef } from "react"
-import {
-  Activity,
-  CheckCircle2,
-  Circle,
-  Clock,
-  Loader2,
-  RefreshCw,
-  ShieldAlert,
-} from "lucide-react"
-import { Badge, Button, Card } from "@lyrashield/ui"
+import Link from "next/link"
+import { Activity, ChevronRight, Clock, RefreshCw, ShieldAlert } from "lucide-react"
+import { Button, Card } from "@lyrashield/ui"
 import { formatTimeUtc } from "@/lib/date-format"
 import { estimateRunMinutes, formatEstimate } from "@/lib/estimator"
+import { ScanPhaseChecklist } from "./scan-phase-checklist"
 import {
   deriveCurrentStage,
   derivePhases,
@@ -69,6 +63,10 @@ export function ScanInProgress({
   const phases = derivePhases(status, events)
   const estimatedTime = formatEstimate(estimateRunMinutes(mode))
   const feedRef = useRef<HTMLUListElement>(null)
+  // A scan waiting on a human is not scanning. Saying it is, with an estimate
+  // and a "most scans finish sooner" promise, describes work that is not
+  // happening — and the queue it is waiting in is somewhere else in the app.
+  const awaitingApproval = status === "REQUIRES_APPROVAL"
 
   // Auto-scroll the feed to show newest events
   useEffect(() => {
@@ -137,11 +135,16 @@ export function ScanInProgress({
                   <span className="flex items-center gap-1.5">
                     <Clock className="h-4 w-4 shrink-0" aria-hidden="true" />
                     <span>
-                      Elapsed: <span className="font-medium tabular-nums">{elapsedTime}</span>
+                      {awaitingApproval ? "Waiting for: " : "Elapsed: "}
+                      <span className="font-medium tabular-nums">{elapsedTime}</span>
                     </span>
                   </span>
                 )}
-                <span className="font-medium">Estimated time: {estimatedTime}</span>
+                {/* An estimate for work that has not been admitted describes
+                    nothing the user can rely on. */}
+                {!awaitingApproval && (
+                  <span className="font-medium">Estimated time: {estimatedTime}</span>
+                )}
                 {onRefresh && (
                   <Button
                     type="button"
@@ -170,55 +173,23 @@ export function ScanInProgress({
               </div>
 
               <p className="text-muted-foreground mt-3 max-w-prose text-sm">
-                Most scans finish sooner; large repositories can use the full selected review limit.
-                This page updates automatically.
+                {awaitingApproval
+                  ? "Scan work has not started. It continues once the requested scope is approved."
+                  : "Most scans finish sooner; large repositories can use the full selected review limit. This page updates automatically."}
               </p>
+              {awaitingApproval && (
+                <Link
+                  href="/dashboard/approvals"
+                  className="text-primary mt-2 inline-flex min-h-11 items-center gap-1 text-sm font-medium underline underline-offset-4"
+                >
+                  Open the approval queue
+                  <ChevronRight className="size-4" aria-hidden="true" />
+                </Link>
+              )}
             </div>
 
             {/* Right: stage checklist */}
-            {phases.length > 0 && (
-              <ol className="flex shrink-0 flex-col gap-2.5 sm:items-end" aria-label="Scan phases">
-                {phases.map((phase) => (
-                  <li key={phase.key} className="flex items-center gap-2 text-sm">
-                    {phase.state === "done" && (
-                      <>
-                        <CheckCircle2
-                          className="h-4 w-4 shrink-0 text-teal-600 dark:text-teal-400"
-                          aria-hidden="true"
-                        />
-                        <span className="text-teal-600 dark:text-teal-400">{phase.label}</span>
-                        <Badge variant="success" className="text-xs">
-                          Done
-                        </Badge>
-                      </>
-                    )}
-                    {phase.state === "active" && (
-                      <>
-                        <Loader2
-                          className="h-4 w-4 shrink-0 animate-spin text-amber-600 dark:text-amber-400"
-                          aria-hidden="true"
-                        />
-                        <span className="font-medium text-amber-600 dark:text-amber-400">
-                          {phase.label}
-                        </span>
-                        <Badge variant="warning" className="text-xs">
-                          Active
-                        </Badge>
-                      </>
-                    )}
-                    {phase.state === "pending" && (
-                      <>
-                        <Circle
-                          className="text-muted-foreground h-4 w-4 shrink-0"
-                          aria-hidden="true"
-                        />
-                        <span className="text-muted-foreground">{phase.label}</span>
-                      </>
-                    )}
-                  </li>
-                ))}
-              </ol>
-            )}
+            <ScanPhaseChecklist phases={phases} />
           </div>
         </div>
       </Card>

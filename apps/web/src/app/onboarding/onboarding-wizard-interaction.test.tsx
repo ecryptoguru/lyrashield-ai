@@ -60,6 +60,7 @@ type Element = ReactElement<{
   children?: ReactNode
   id?: string
   href?: string
+  disabled?: boolean
   value?: string
   onChange?: (event: { target: { value?: string; checked?: boolean } }) => void
   onSubmit?: (event: { preventDefault: () => void }) => void
@@ -85,6 +86,20 @@ const VIEW_COMPONENTS = new Set<unknown>([
   UrlTargetView,
 ])
 
+/**
+ * W1/P2-2 names the primary action for the review it starts, so the label is
+ * path-specific: "Start release check" on the repo path, "Start endpoint
+ * review" on the API path and "Start surface review" on the web-app path. The
+ * three target-reuse cases below previously looked for the repo path's label
+ * while driving the API and web-app paths, so they searched for a button that
+ * was never on screen. The label is asserted per path instead.
+ */
+const START_LABEL = {
+  github: "Start release check",
+  url: "Start surface review",
+  api: "Start endpoint review",
+} as const
+
 function elements(node: ReactNode): Element[] {
   if (Array.isArray(node)) return node.flatMap(elements)
   if (!node || typeof node !== "object" || !("props" in node)) return []
@@ -95,6 +110,19 @@ function elements(node: ReactNode): Element[] {
       : element.props.children
   return [element, ...elements(inner)]
 }
+
+/**
+ * Visible text of a subtree. The primary action carries a decorative icon
+ * before its label, so `props.children` is `[<icon/>, "Start release check"]`
+ * and `String(children)` reads "[object Object],Start release check". Assert on
+ * the text the user reads instead of on the child array's stringification.
+ */
+function textOf(node: ReactNode): string {
+  if (typeof node === "string" || typeof node === "number") return String(node)
+  if (Array.isArray(node)) return node.map(textOf).join("")
+  if (!node || typeof node !== "object" || !("props" in node)) return ""
+  return textOf((node as Element).props.children)
+}
 function render(
   targetType: string | null,
   overrides: {
@@ -103,7 +131,8 @@ function render(
     targetId?: string | null
     selectedGoal?: string | null
     targetName?: string | null
-  } = {}
+  } = {},
+  targetTypeHint: "url" | "api" | null = null
 ) {
   hooks.cursor = 0
   return elements(
@@ -120,6 +149,7 @@ function render(
         targetName: "Staging Site",
         ...overrides,
       },
+      targetTypeHint,
     })
   )
 }
@@ -192,9 +222,70 @@ it("continues through a failed eligibility preflight without passing the click e
 
   primary?.props.onClick?.({ preventDefault: vi.fn() })
 
-  expect(String(primary?.props.children)).toContain("Continue to start")
+  expect(textOf(primary?.props.children)).toContain("Continue to start")
   expect(onStart).toHaveBeenCalledWith(true)
   expect(onStartTrial).not.toHaveBeenCalled()
+})
+
+// W1/P2-2: the button is named for the action from the first render. It used
+// to read "Check availability" and needed a second click to start the scan.
+it("names the primary action from the first render for every eligibility state", () => {
+  const reviewOptions = getOnboardingReviewOptions("github")
+  const label = (eligibility: Parameters<typeof TargetDetailsView>[0]["eligibility"]) => {
+    const tree = TargetDetailsView({
+      eyebrow: "Step 3",
+      path: "github",
+      productName: "Project",
+      onProductNameChange: vi.fn(),
+      retryingExistingTarget: false,
+      hasFailedScanAttempt: false,
+      reviewOptions,
+      selectedReview: reviewOptions[0],
+      eligibility,
+      targetId: null,
+      onSelectGoal: vi.fn(),
+      loading: false,
+      onBack: vi.fn(),
+      onStart: vi.fn(),
+      onStartTrial: vi.fn(),
+    })
+    return textOf(
+      elements(tree)
+        .filter((element) => element.type === Button)
+        .at(-1)?.props.children
+    )
+  }
+
+  expect(label({ status: "idle" })).toBe("Start release check")
+  expect(label({ status: "checking" })).toBe("Start release check")
+  expect(
+    label({
+      status: "ready",
+      eligibility: {
+        allowed: true,
+        code: null,
+        message: null,
+        plan: "TRIAL",
+        isTrial: true,
+        remainingMinutes: 60,
+      },
+    })
+  ).toBe("Start release check")
+  // A refusal keeps the scan named: the button still starts it, and the server
+  // is the authority. Only a claimable trial gets its own label.
+  expect(
+    label({
+      status: "ready",
+      eligibility: {
+        allowed: false,
+        code: "NO_MINUTES_REMAINING",
+        message: "No minutes remain.",
+        plan: "FREE",
+        isTrial: false,
+        remainingMinutes: 0,
+      },
+    })
+  ).toBe("Start release check")
 })
 
 it("shows and invokes the start-trial action for TRIAL_AVAILABLE", () => {
@@ -234,7 +325,7 @@ it("shows and invokes the start-trial action for TRIAL_AVAILABLE", () => {
 
   primary?.props.onClick?.({ preventDefault: vi.fn() })
 
-  expect(String(primary?.props.children)).toContain("Start your free trial")
+  expect(textOf(primary?.props.children)).toContain("Start your free trial")
   expect(onStartTrial).toHaveBeenCalledOnce()
   expect(onStart).not.toHaveBeenCalled()
 })
@@ -299,15 +390,15 @@ it("reuses a created target when the onboarding save fails", async () => {
       preventDefault: vi.fn(),
     })
   }
-  const checkAvailability = () =>
-    render("API", initialState).find((element) =>
-      String(element.props.children).includes("Check availability")
+  const startScan = () =>
+    render("API", initialState).find(
+      (element) =>
+        element.type === Button && textOf(element.props.children).includes(START_LABEL.api)
     )!.props.onClick!()
 
   setupApiTarget()
-  await checkAvailability()
+  await startScan()
   await new Promise<void>((resolve) => setTimeout(resolve, 0))
-  expect(api.post).toHaveBeenCalledOnce()
   expect(api.post).toHaveBeenCalledWith(
     "/api/targets",
     expect.objectContaining({ workspaceId: "ws-1", url: "https://api.example.test" }),
@@ -315,10 +406,13 @@ it("reuses a created target when the onboarding save fails", async () => {
   )
   expect(api.patch).toHaveBeenCalledOnce()
 
-  await checkAvailability()
+  // W1/P2-2: the second click continues the same one-click action. It must
+  // reuse the target the first attempt created, not create a second one.
+  await startScan()
   await new Promise<void>((resolve) => setTimeout(resolve, 0))
 
-  expect(api.post).toHaveBeenCalledOnce()
+  const targetCreates = vi.mocked(api.post).mock.calls.filter(([url]) => url === "/api/targets")
+  expect(targetCreates).toHaveLength(1)
   expect(api.patch).toHaveBeenCalledTimes(2)
   expect(api.patch).toHaveBeenLastCalledWith(
     "/api/onboarding",
@@ -365,12 +459,13 @@ it("creates a repository target after a GitHub install return (path restored)", 
   repoSelect()!.props.onSelectRepo!(repo)
   await repoSelect()!.props.onContinue!()
 
-  const checkAvailability = () =>
-    render(null, initialState).find((element) =>
-      String(element.props.children).includes("Check availability")
+  const startScan = () =>
+    render(null, initialState).find(
+      (element) =>
+        element.type === Button && textOf(element.props.children).includes("Start release check")
     )!.props.onClick!()
 
-  await checkAvailability()
+  await startScan()
   await new Promise<void>((resolve) => setTimeout(resolve, 0))
 
   expect(api.post).toHaveBeenCalledWith(
@@ -420,12 +515,13 @@ it("creates a fresh target instead of reusing a stale targetId after the URL cha
     preventDefault: vi.fn(),
   })
 
-  const checkAvailability = () =>
-    render("WEB_APP", initialState).find((element) =>
-      String(element.props.children).includes("Check availability")
+  const startScan = () =>
+    render("WEB_APP", initialState).find(
+      (element) =>
+        element.type === Button && textOf(element.props.children).includes(START_LABEL.url)
     )!.props.onClick!()
 
-  await checkAvailability()
+  await startScan()
   await new Promise<void>((resolve) => setTimeout(resolve, 0))
 
   expect(api.post).toHaveBeenCalledWith(
@@ -473,12 +569,13 @@ it("does not reuse a WEB_APP target when the path switched to API", async () => 
     preventDefault: vi.fn(),
   })
 
-  const checkAvailability = () =>
-    render("WEB_APP", initialState).find((element) =>
-      String(element.props.children).includes("Check availability")
+  const startScan = () =>
+    render("WEB_APP", initialState).find(
+      (element) =>
+        element.type === Button && textOf(element.props.children).includes(START_LABEL.api)
     )!.props.onClick!()
 
-  await checkAvailability()
+  await startScan()
   await new Promise<void>((resolve) => setTimeout(resolve, 0))
 
   expect(api.post).toHaveBeenCalledWith(
@@ -513,21 +610,17 @@ it("keeps an accepted scan and retries only the onboarding save after its PATCH 
     .mockResolvedValueOnce({ ...initialState, currentStep: 4, completed: true })
   api.post.mockResolvedValueOnce({ id: "scan-1", operationId: "operation-1" })
 
-  const checkAvailability = () =>
-    render("REPO", initialState).find((element) =>
-      String(element.props.children).includes("Check availability")
+  const startScan = () =>
+    render("REPO", initialState).find(
+      (element) =>
+        element.type === Button && textOf(element.props.children).includes("Start release check")
     )!.props.onClick!()
 
-  await checkAvailability()
+  await startScan()
   await new Promise<void>((resolve) => setTimeout(resolve, 0))
+  // W1/P2-2: one click reads eligibility and posts the scan in the same action.
   expect(api.get).toHaveBeenCalledOnce()
-  expect(api.post).not.toHaveBeenCalled()
-  const start = () =>
-    render("REPO", initialState).find((element) =>
-      String(element.props.children).includes("Start release check")
-    )!.props.onClick!()
-  await start()
-  await new Promise<void>((resolve) => setTimeout(resolve, 0))
+  expect(apiPost).toHaveBeenCalledOnce()
   const accepted = render("REPO", initialState)
   expect(
     accepted.some(
@@ -577,17 +670,15 @@ it("retries an uncertain scan start with the same idempotency key", async () => 
     .mockRejectedValueOnce(new Error("connection lost after submission"))
     .mockResolvedValueOnce({ id: "scan-2", operationId: "operation-2" })
 
-  const checkAvailability = () =>
-    render("REPO", initialState).find((element) =>
-      String(element.props.children).includes("Check availability")
+  const startScan = () =>
+    render("REPO", initialState).find(
+      (element) =>
+        element.type === Button && textOf(element.props.children).includes("Start release check")
     )!.props.onClick!()
 
-  await checkAvailability()
-  await new Promise<void>((resolve) => setTimeout(resolve, 0))
-  const start = render("REPO", initialState).find((element) =>
-    String(element.props.children).includes("Start release check")
-  )!.props.onClick!
-  await start()
+  // W1/P2-2: one click reads eligibility and posts the scan. The first post is
+  // lost; the recovery surface then retries the SAME submission.
+  await startScan()
   await new Promise<void>((resolve) => setTimeout(resolve, 0))
   const unresolved = render("REPO", initialState)
   expect(unresolved.some((element) => element.props.children === "Retry same details")).toBe(true)
@@ -632,18 +723,15 @@ it("uses a fresh key after the server proves the previous scan was not submitted
   refusal.details = { operationOutcome: "OPERATION_NOT_SUBMITTED" }
   api.post.mockRejectedValueOnce(refusal).mockResolvedValueOnce({ id: "scan-2" })
 
-  const checkAvailability = () =>
-    render("REPO", initialState).find((element) =>
-      String(element.props.children).includes("Check availability")
-    )!.props.onClick!()
-  const start = () =>
-    render("REPO", initialState).find((element) =>
-      String(element.props.children).includes("Start release check")
+  const startScan = () =>
+    render("REPO", initialState).find(
+      (element) =>
+        element.type === Button && textOf(element.props.children).includes("Start release check")
     )!.props.onClick!()
 
-  await checkAvailability()
-  await new Promise<void>((resolve) => setTimeout(resolve, 0))
-  await start()
+  // W1/P2-2: one click reads eligibility and posts the scan. The server proved
+  // this one was not submitted, so the next click takes a fresh key.
+  await startScan()
   await new Promise<void>((resolve) => setTimeout(resolve, 0))
 
   expect(storage.size).toBe(0)
@@ -651,7 +739,7 @@ it("uses a fresh key after the server proves the previous scan was not submitted
     render("REPO", initialState).some((element) => element.props.children === "Retry same details")
   ).toBe(false)
 
-  await start()
+  await startScan()
   await new Promise<void>((resolve) => setTimeout(resolve, 0))
 
   expect(apiPost).toHaveBeenCalledTimes(2)
@@ -702,14 +790,14 @@ it("does not start the trial again after trial activation succeeded but scan adm
 
   const click = async (label: string) => {
     const button = render("REPO", initialState).find(
-      (element) => element.type === Button && String(element.props.children).includes(label)
+      (element) => element.type === Button && textOf(element.props.children).includes(label)
     )
     expect(button, `expected button containing ${label}`).toBeDefined()
     await button!.props.onClick!()
     await new Promise<void>((resolve) => setTimeout(resolve, 0))
   }
 
-  await click("Check availability")
+  await click("Start release check")
   await click("Start your free trial")
   await click("Start your free trial")
 
@@ -766,14 +854,14 @@ it("rechecks eligibility after an unknown trial-start response before deciding t
 
   const click = async (label: string) => {
     const button = render("REPO", initialState).find(
-      (element) => element.type === Button && String(element.props.children).includes(label)
+      (element) => element.type === Button && textOf(element.props.children).includes(label)
     )
     expect(button, `expected button containing ${label}`).toBeDefined()
     await button!.props.onClick!()
     await new Promise<void>((resolve) => setTimeout(resolve, 0))
   }
 
-  await click("Check availability")
+  await click("Start release check")
   await click("Start your free trial")
   await click("Start your free trial")
 
@@ -781,7 +869,7 @@ it("rechecks eligibility after an unknown trial-start response before deciding t
   expect(
     render("REPO", initialState).some(
       (element) =>
-        element.type === Button && String(element.props.children).includes("Start release check")
+        element.type === Button && textOf(element.props.children).includes("Start release check")
     )
   ).toBe(true)
   await click("Start release check")
@@ -831,14 +919,14 @@ it("retries trial activation only when refreshed eligibility still says it is av
 
   const click = async (label: string) => {
     const button = render("REPO", initialState).find(
-      (element) => element.type === Button && String(element.props.children).includes(label)
+      (element) => element.type === Button && textOf(element.props.children).includes(label)
     )
     expect(button, `expected button containing ${label}`).toBeDefined()
     await button!.props.onClick!()
     await new Promise<void>((resolve) => setTimeout(resolve, 0))
   }
 
-  await click("Check availability")
+  await click("Start release check")
   await click("Start your free trial")
   await click("Start your free trial")
 
@@ -849,4 +937,215 @@ it("retries trial activation only when refreshed eligibility still says it is av
   const scanStarts = vi.mocked(apiPost).mock.calls.filter(([url]) => url === "/api/scans")
   expect(trialStarts).toHaveLength(2)
   expect(scanStarts).toHaveLength(1)
+})
+
+/**
+ * P1-1 — the Lite Check onboarding dead-end.
+ *
+ * A user who arrives from the Lite Check handoff carries a target-type hint
+ * and has no workspace. Before the fix the hint sent them straight to the
+ * details step, where the only workspace-creating call (`choosePath`) never
+ * runs, so the start action stopped with "Workspace is required." Pressing
+ * Back reached the URL form, but the target payload builder returns null while
+ * workspaceId is null, so Continue reported "Enter a name and a valid URL to
+ * continue." for a perfectly valid URL. Skip was the only way out and the user
+ * never reached a first scan.
+ *
+ * The acceptance path below is the whole funnel: land on the hinted form,
+ * submit a valid URL and reach a STARTED scan.
+ */
+it("takes a hinted, workspace-less user from the URL form to a started scan (P1-1)", async () => {
+  const storage = new Map<string, string>()
+  vi.stubGlobal("window", {
+    sessionStorage: {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => storage.set(key, value),
+      removeItem: (key: string) => storage.delete(key),
+    },
+  })
+  // The fresh account: no workspace, no target, nothing progressed.
+  const freshAccount = {
+    currentStep: 1,
+    completed: false,
+    skipped: false,
+    workspaceId: null,
+    targetId: null,
+    selectedGoal: null,
+    targetType: null,
+    targetName: null,
+    updatedAt: "2026-09-27T00:00:00.000Z",
+  }
+  api.post.mockImplementation(async (url: string) => {
+    if (url === "/api/workspaces") return { id: "ws-new", trialStarted: true }
+    if (url === "/api/targets") return { id: "target-new" }
+    if (url === "/api/scans") return { id: "scan-new" }
+    throw new Error(`unexpected POST ${url}`)
+  })
+  api.patch.mockImplementation(async (_url: string, body: Record<string, unknown>) => ({
+    ...freshAccount,
+    ...body,
+  }))
+
+  const tree = () => render(null, freshAccount, "url")
+
+  // 1. The hinted user lands on the URL form (step 1), not the details step.
+  expect(tree().find((element) => element.type === UrlTargetView)).toBeDefined()
+  expect(tree().find((element) => element.type === TargetDetailsView)).toBeUndefined()
+
+  // 2. They fill the form in and submit it.
+  tree().find((element) => element.props.id === "url-name")!.props.onChange!({
+    target: { value: "example.com" },
+  })
+  tree().find((element) => element.props.id === "url-input")!.props.onChange!({
+    target: { value: "https://example.com" },
+  })
+  tree().find((element) => element.props.id === "ownership-check")!.props.onChange!({
+    target: { checked: true },
+  })
+  await tree().find((element) => element.type === "form")!.props.onSubmit!({
+    preventDefault: vi.fn(),
+  })
+  await new Promise<void>((resolve) => setTimeout(resolve, 0))
+
+  // The workspace was created on submit — not merely by visiting onboarding.
+  expect(api.post).toHaveBeenCalledWith("/api/workspaces", expect.any(Object), expect.any(Object))
+  // ...and the user reached the details step rather than an error card.
+  const details = tree()
+  expect(details.find((element) => element.type === TargetDetailsView)).toBeDefined()
+  expect(details.some((element) => element.props.children === "Workspace is required.")).toBe(false)
+
+  // 3. Starting the scan reaches a STARTED scan. The action is named for what it
+  //    does from the first render and the one click checks eligibility and
+  //    starts the scan (P2-2). P1-1 is the workspace this click had to create
+  //    for a hinted, workspace-less user, so this case asserts the scan is
+  //    started against the workspace and target the action just resolved.
+  const start = tree().find((element) =>
+    String(element.props.children).includes("Start surface review")
+  )
+  expect(start, "expected the start action on the first render").toBeDefined()
+  await start!.props.onClick!()
+  await new Promise<void>((resolve) => setTimeout(resolve, 0))
+  await new Promise<void>((resolve) => setTimeout(resolve, 0))
+
+  const scanStarts = vi.mocked(apiPost).mock.calls.filter(([url]) => url === "/api/scans")
+  expect(scanStarts).toHaveLength(1)
+  expect(scanStarts[0]?.[1]).toMatchObject({
+    workspaceId: "ws-new",
+    targetId: "target-new",
+  })
+  const started = tree()
+  expect(started.some((element) => element.props.href === "/dashboard/scans/scan-new")).toBe(true)
+})
+
+it("does not create a second workspace or target when Continue is double-tapped (P1-1)", async () => {
+  const storage = new Map<string, string>()
+  vi.stubGlobal("window", {
+    sessionStorage: {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => storage.set(key, value),
+      removeItem: (key: string) => storage.delete(key),
+    },
+  })
+  const freshAccount = {
+    currentStep: 1,
+    completed: false,
+    skipped: false,
+    workspaceId: null,
+    targetId: null,
+    selectedGoal: null,
+    targetType: null,
+    targetName: null,
+    updatedAt: "2026-09-27T00:00:00.000Z",
+  }
+  let releaseWorkspace!: () => void
+  const workspaceHeld = new Promise<void>((resolve) => {
+    releaseWorkspace = resolve
+  })
+  let workspaceCalls = 0
+  api.post.mockImplementation(async (url: string) => {
+    if (url === "/api/workspaces") {
+      workspaceCalls++
+      await workspaceHeld
+      return { id: "ws-new" }
+    }
+    if (url === "/api/targets") return { id: "target-new" }
+    throw new Error(`unexpected POST ${url}`)
+  })
+  api.patch.mockImplementation(async (_url: string, body: Record<string, unknown>) => ({
+    ...freshAccount,
+    ...body,
+  }))
+
+  const tree = () => render(null, freshAccount, "url")
+  tree().find((element) => element.props.id === "url-name")!.props.onChange!({
+    target: { value: "example.com" },
+  })
+  tree().find((element) => element.props.id === "url-input")!.props.onChange!({
+    target: { value: "https://example.com" },
+  })
+  tree().find((element) => element.props.id === "ownership-check")!.props.onChange!({
+    target: { checked: true },
+  })
+
+  const submit = tree().find((element) => element.type === "form")!.props.onSubmit!
+  // Two taps before the first workspace call resolves.
+  const first = submit({ preventDefault: vi.fn() })
+  const second = submit({ preventDefault: vi.fn() })
+  const waiting = tree()
+  expect(waiting.find((element) => element.type === UrlTargetView)?.props).toMatchObject({
+    loading: true,
+  })
+  expect(
+    waiting.find(
+      (element) => element.type === Button && textOf(element.props.children).includes("Back")
+    )?.props.disabled
+  ).toBe(true)
+  expect(waiting.find((element) => element.props.id === "url-input")?.props.disabled).toBe(true)
+  releaseWorkspace()
+  await Promise.all([first, second])
+  await new Promise<void>((resolve) => setTimeout(resolve, 0))
+
+  expect(workspaceCalls).toBe(1)
+  expect(tree().find((element) => element.type === TargetDetailsView)?.props).toMatchObject({
+    loading: false,
+  })
+})
+
+it("reports an invalid URL without creating a workspace (P1-1)", async () => {
+  const freshAccount = {
+    currentStep: 1,
+    completed: false,
+    skipped: false,
+    workspaceId: null,
+    targetId: null,
+    selectedGoal: null,
+    targetType: null,
+    targetName: null,
+  }
+  api.post.mockResolvedValue({ id: "ws-new" })
+
+  const tree = () => render(null, freshAccount, "url")
+  tree().find((element) => element.props.id === "url-input")!.props.onChange!({
+    target: { value: "https://example.com" },
+  })
+  // W2-02 prefills the name from the URL host on URL change, so the name must
+  // be cleared afterwards — otherwise the form really is submittable and this
+  // test would be asserting on a valid submit. Cleared last, the prefill does
+  // not fire again and the form is genuinely incomplete.
+  tree().find((element) => element.props.id === "url-name")!.props.onChange!({
+    target: { value: "" },
+  })
+  tree().find((element) => element.props.id === "ownership-check")!.props.onChange!({
+    target: { checked: true },
+  })
+  // The name is empty: the form is not submittable and no workspace is created.
+  await tree().find((element) => element.type === "form")!.props.onSubmit!({
+    preventDefault: vi.fn(),
+  })
+  await new Promise<void>((resolve) => setTimeout(resolve, 0))
+
+  expect(api.post).not.toHaveBeenCalled()
+  expect(
+    tree().some((element) => element.props.children === "Enter a name and a valid URL to continue.")
+  ).toBe(true)
 })

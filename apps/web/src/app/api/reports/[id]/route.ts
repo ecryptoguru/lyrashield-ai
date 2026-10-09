@@ -12,12 +12,7 @@ import { logger } from "@lyrashield/logger"
 import { authErrorResponse } from "../../../../lib/api-auth"
 import { apiError, apiSuccess } from "../../../../lib/api-response"
 import { jsonWithEtag } from "../../../../lib/http-etag"
-import { z } from "zod"
-
-const ReportActionSchema = z.object({
-  workspaceId: z.string().min(1),
-  action: z.enum(["share", "revoke"]),
-})
+import { ReportActionSchema } from "@lyrashield/types"
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params

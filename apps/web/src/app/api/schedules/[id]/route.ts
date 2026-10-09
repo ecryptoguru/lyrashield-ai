@@ -1,12 +1,11 @@
 import { withCookieMutation } from "../../../../lib/api-auth"
-import { getSchedule, updateSchedule, deleteSchedule, getNextRunAt, prisma } from "@lyrashield/db"
-import { resolveTargetScanMode } from "@lyrashield/types"
+import { getSchedule, updateSchedule, deleteSchedule, prisma } from "@lyrashield/db"
+import { PatchScheduleSchema, resolveTargetScanMode } from "@lyrashield/types"
 import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
 import { authErrorResponse } from "../../../../lib/api-auth"
 import { apiError, apiSuccess } from "../../../../lib/api-response"
-import { z } from "zod"
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -34,30 +33,6 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     return apiError("INTERNAL_ERROR", "Failed to get schedule", 500)
   }
 }
-
-const PatchScheduleSchema = z.object({
-  workspaceId: z.string().min(1),
-  cron: z
-    .string()
-    .min(1)
-    .refine(
-      (c) => getNextRunAt(c.trim()) !== null,
-      "Use a five-field schedule like '0 0 * * 0' or '30 8 * * *'"
-    )
-    .optional(),
-  goal: z
-    .enum([
-      "CHECK_PR",
-      "TEST_APP",
-      "LAUNCH_REVIEW",
-      "WEEKLY_MONITOR",
-      "FULL_PENTEST",
-      "COMPLIANCE_REVIEW",
-    ])
-    .optional(),
-  mode: z.enum(["SAFE", "QUICK", "STANDARD", "DEEP"]).optional(),
-  enabled: z.boolean().optional(),
-})
 
 async function patch(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
