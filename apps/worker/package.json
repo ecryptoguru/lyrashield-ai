@@ -16,7 +16,7 @@
     "comp:grant": "node --env-file-if-exists=../../.env --import tsx src/operations/complimentary-grant.ts"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.1113.0",
+    "@aws-sdk/client-s3": "^3.1146.0",
     "@lyrashield/affiliate": "workspace:*",
     "@lyrashield/auth": "workspace:*",
     "@lyrashield/billing": "workspace:*",

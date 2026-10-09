@@ -63,10 +63,10 @@
   "dependencies": {
     "@lyrashield/logger": "workspace:*",
     "@lyrashield/types": "workspace:*",
-    "@noble/hashes": "2.2.0",
+    "@noble/hashes": "2.4.0",
     "parse5": "^8.0.1",
     "typescript": "catalog:",
-    "undici": "8.10.2",
+    "undici": "8.11.2",
     "zod": "catalog:"
   },
   "devDependencies": {

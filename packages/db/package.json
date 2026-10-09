@@ -20,7 +20,7 @@
     "@prisma/adapter-pg": "7.9.1",
     "@prisma/client-runtime-utils": "7.9.1",
     "pg": "^8.23.0",
-    "pg-connection-string": "2.14.0",
+    "pg-connection-string": "2.14.1",
     "@lyrashield/logger": "workspace:*",
     "@lyrashield/config": "workspace:*",
     "@lyrashield/score": "workspace:*",

@@ -18,7 +18,7 @@
     "razorpay": "^2.9.6",
     "@lyrashield/licenses": "workspace:*",
     "@azure/keyvault-secrets": "^4.9.0",
-    "@azure/identity": "^4.13.0",
+    "@azure/identity": "^4.13.3",
     "zod": "catalog:"
   },
   "devDependencies": {
