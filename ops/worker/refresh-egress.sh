@@ -7,6 +7,11 @@ worker_network="${LYRASHIELD_WORKER_NETWORK:-bridge}"
 sandbox_network="${LYRASHIELD_SANDBOX_NETWORK:-lyrashield-sandbox}"
 pin_file="${LYRASHIELD_EGRESS_PIN_FILE:-/run/lyrashield-egress-hosts}"
 refresh_pins="${LYRASHIELD_REFRESH_PINNED_HOSTS:-0}"
+require_sandbox_control="${LYRASHIELD_REQUIRE_SANDBOX_CONTROL:-0}"
+case "$require_sandbox_control" in
+  0|1) ;;
+  *) echo "Invalid required sandbox control policy setting" >&2; exit 1 ;;
+esac
 
 if [ ! -r "$environment_file" ]; then
   echo "Worker environment file is unavailable: $environment_file" >&2
@@ -45,9 +50,39 @@ fi
 worker_subnet=$(docker network inspect "$worker_network" --format '{{(index .IPAM.Config 0).Subnet}}')
 worker_bridge=$(docker network inspect "$worker_network" --format '{{index .Options "com.docker.network.bridge.name"}}')
 sandbox_subnet=$(docker network inspect "$sandbox_network" --format '{{(index .IPAM.Config 0).Subnet}}')
+sandbox_bridge=$(docker network inspect "$sandbox_network" --format '{{index .Options "com.docker.network.bridge.name"}}')
 
 if [ -z "$worker_bridge" ] && [ "$worker_network" = "bridge" ]; then
   worker_bridge="docker0"
+fi
+if [ -z "$sandbox_bridge" ]; then
+  sandbox_network_id=$(docker network inspect "$sandbox_network" --format '{{.Id}}')
+  case "$sandbox_network_id" in
+    ''|*[!0-9a-f]*) echo "Invalid sandbox network identity" >&2; exit 1 ;;
+  esac
+  [ "${#sandbox_network_id}" -ge 12 ] || exit 1
+  sandbox_bridge="br-$(printf '%s' "$sandbox_network_id" | cut -c1-12)"
+fi
+case "$sandbox_bridge" in
+  ''|*[!A-Za-z0-9_.-]*) echo "Invalid sandbox bridge interface" >&2; exit 1 ;;
+esac
+if [ "${#sandbox_bridge}" -gt 15 ] || [ "$sandbox_bridge" = "$worker_bridge" ]; then
+  echo "Invalid sandbox bridge boundary" >&2
+  exit 1
+fi
+if [ "$require_sandbox_control" = "1" ]; then
+  sandbox_topology=$(docker network inspect "$sandbox_network" --format '{{.Driver}}|{{.Internal}}|{{index .Options "com.docker.network.bridge.enable_icc"}}')
+  if [ "$sandbox_topology" != 'bridge|true|false' ]; then
+    echo "Sandbox control requires an internal bridge network with ICC disabled" >&2
+    exit 1
+  fi
+  worker_networks=$(docker inspect --type container --format \
+    '{{range $name, $_ := .NetworkSettings.Networks}}{{printf "%s\n" $name}}{{end}}' \
+    lyrashield-worker)
+  if [ "$worker_networks" != 'bridge' ] || [ "$worker_network" != 'bridge' ]; then
+    echo "Worker must use only the default bridge, separate from the isolated sandbox network" >&2
+    exit 1
+  fi
 fi
 if [ -z "$worker_subnet" ] || [ -z "$worker_bridge" ] || [ -z "$sandbox_subnet" ]; then
   echo "Could not resolve the worker and sandbox Docker network boundaries" >&2
@@ -173,12 +208,14 @@ append_endpoint_rules() {
   done
 }
 
+# Control requests cross from the trusted worker bridge. A sandbox cannot spoof
+# this ingress interface, even when its process has NET_RAW/NET_ADMIN.
 cat >"$temporary_rules" <<EOF
 *filter
 :${chain_name} - [0:0]
 -F ${chain_name}
 -A ${chain_name} -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
--A ${chain_name} -d ${sandbox_subnet} -j ACCEPT
+-A ${chain_name} -i ${worker_bridge} -o ${sandbox_bridge} -d ${sandbox_subnet} -p tcp --dport 48080 -j ACCEPT
 -A ${chain_name} -p udp -d 168.63.129.16 --dport 53 -j ACCEPT
 -A ${chain_name} -p tcp -d 168.63.129.16 --dport 53 -j ACCEPT
 -A ${chain_name} -d 0.0.0.0/8 -j REJECT --reject-with icmp-admin-prohibited
@@ -211,6 +248,10 @@ register_approved_endpoint "https://api.osv.dev" 443
 register_approved_endpoint "https://api.first.org" 443
 register_approved_endpoint "https://api.polar.sh" 443
 register_approved_endpoint "https://api.razorpay.com" 443
+# Workspace notification credentials live in the database; only these exact
+# transport-approved HTTPS destinations receive worker egress pins.
+register_approved_endpoint "https://hooks.slack.com" 443
+register_approved_endpoint "https://discord.com" 443
 register_approved_endpoint "$LYRASHIELD_EGRESS_PROXY_URL" 443
 register_approved_endpoint "https://api.parallel.ai" 443
 # Staged rollout only: an already-running pre-proxy worker may still depend on
@@ -240,6 +281,8 @@ append_endpoint_rules "https://api.osv.dev" 443
 append_endpoint_rules "https://api.first.org" 443
 append_endpoint_rules "https://api.polar.sh" 443
 append_endpoint_rules "https://api.razorpay.com" 443
+append_endpoint_rules "https://hooks.slack.com" 443
+append_endpoint_rules "https://discord.com" 443
 append_endpoint_rules "$LYRASHIELD_EGRESS_PROXY_URL" 443
 append_endpoint_rules "https://api.parallel.ai" 443
 

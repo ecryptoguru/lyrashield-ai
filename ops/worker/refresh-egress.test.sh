@@ -34,6 +34,7 @@ container_approved="$test_dir/container-approved"
 docker_log="$test_dir/docker.log"
 iptables_log="$test_dir/iptables.log"
 iptables_count="$test_dir/iptables-count"
+iptables_commands="$test_dir/iptables-commands"
 verify_log="$test_dir/verify.log"
 worker_running="$test_dir/worker-running"
 
@@ -47,15 +48,18 @@ EOF
 
 cat >"$fake_bin/getent" <<'EOF'
 #!/bin/sh
-if [ "$2" = "proxy.test" ]; then
-  echo "8.8.4.4 STREAM proxy.test"
-else
-  echo "8.8.8.8 STREAM $2"
-fi
+case "$2" in
+  "${NOTIFICATION_PRIVATE_HOST:-}") echo "10.0.0.8 STREAM $2" ;;
+  proxy.test) echo "8.8.4.4 STREAM proxy.test" ;;
+  hooks.slack.com) echo "1.1.1.1 STREAM hooks.slack.com" ;;
+  discord.com) echo "1.0.0.1 STREAM discord.com" ;;
+  *) echo "8.8.8.8 STREAM $2" ;;
+esac
 EOF
 
 cat >"$fake_bin/iptables" <<'EOF'
 #!/bin/sh
+printf '%s\n' "$*" >>"$IPTABLES_COMMANDS"
 case "$1" in
   -N | -C) exit 1 ;;
   *) exit 0 ;;
@@ -90,12 +94,22 @@ printf '%s\n' "$*" >>"$DOCKER_LOG"
 
 if [ "$1" = "network" ]; then
   case "$5" in
+    *'.Driver'*) echo "${SANDBOX_TOPOLOGY:-bridge|true|false}" ;;
+    *'.Id'*) echo '0123456789abcdef0123456789abcdef' ;;
     *Subnet*)
       if [ "$3" = "bridge" ]; then echo "172.17.0.0/16"; else echo "172.18.0.0/16"; fi
       ;;
-    *bridge.name*) echo "docker0" ;;
+    *bridge.name*)
+      if [ "$3" = "bridge" ]; then echo "docker0"; else echo "${SANDBOX_BRIDGE-br-sandbox}"; fi
+      ;;
     *) exit 1 ;;
   esac
+  exit
+fi
+
+if [ "$1" = "inspect" ]; then
+  [ "${WORKER_INSPECT_EXISTS:-1}" = "1" ] || exit 1
+  printf '%s\n' "${WORKER_NETWORKS:-bridge}"
   exit
 fi
 
@@ -169,6 +183,7 @@ EOF
   : >"$docker_log"
   : >"$iptables_log"
   : >"$iptables_count"
+  : >"$iptables_commands"
   : >"$container_hosts_backup"
   : >"$verify_log"
   printf '%s\n' running >"$worker_running"
@@ -186,13 +201,20 @@ run_refresh() {
   DOCKER_LOG="$docker_log" \
   IPTABLES_LOG="$iptables_log" \
   IPTABLES_COUNT="$iptables_count" \
+  IPTABLES_COMMANDS="$iptables_commands" \
   VERIFY_LOG="$verify_log" \
   HOST_UPDATE_FAIL="${HOST_UPDATE_FAIL:-0}" \
   HOST_VERIFY_FAIL="${HOST_VERIFY_FAIL:-0}" \
   IPTABLES_FAIL_CALL="${IPTABLES_FAIL_CALL:-0}" \
+  NOTIFICATION_PRIVATE_HOST="${NOTIFICATION_PRIVATE_HOST:-}" \
+  SANDBOX_BRIDGE="${SANDBOX_BRIDGE-br-sandbox}" \
+  SANDBOX_TOPOLOGY="${SANDBOX_TOPOLOGY:-bridge|true|false}" \
+  WORKER_NETWORKS="${WORKER_NETWORKS:-bridge}" \
+  WORKER_INSPECT_EXISTS="${WORKER_INSPECT_EXISTS:-1}" \
+  LYRASHIELD_REQUIRE_SANDBOX_CONTROL="${REQUIRE_SANDBOX_CONTROL:-0}" \
   LYRASHIELD_WORKER_ENV_FILE="$environment_file" \
   LYRASHIELD_EGRESS_PIN_FILE="$pin_file" \
-  LYRASHIELD_REFRESH_PINNED_HOSTS=1 \
+  LYRASHIELD_REFRESH_PINNED_HOSTS="${REFRESH_PINNED_HOSTS:-1}" \
   sh "$repo_root/ops/worker/refresh-egress.sh" >"$output_file" 2>"$error_file"
 }
 
@@ -217,6 +239,13 @@ fi
 grep -Fqx 'proxy.test 8.8.4.4 443' "$pin_file"
 grep -Fqx 'api.polar.sh 8.8.8.8 443' "$pin_file"
 grep -Fqx 'api.razorpay.com 8.8.8.8 443' "$pin_file"
+if ! grep -Fqx 'hooks.slack.com 1.1.1.1 443' "$pin_file" || \
+   ! grep -Fqx 'discord.com 1.0.0.1 443' "$pin_file"; then
+  echo "Notification destinations are missing HTTPS egress pins" >&2
+  exit 1
+fi
+grep -Fqx '1.1.1.1 hooks.slack.com' "$container_hosts"
+grep -Fqx '1.0.0.1 discord.com' "$container_hosts"
 grep -q '^CALL 1$' "$iptables_log"
 grep -q '^CALL 2$' "$iptables_log"
 first_rules=$(sed -n '/^CALL 1$/,/^CALL 2$/p' "$iptables_log")
@@ -225,11 +254,156 @@ printf '%s\n' "$first_rules" | grep -q -- '-d 8.8.8.8 --dport 443 -j ACCEPT'
 printf '%s\n' "$first_rules" | grep -q -- '-d 9.9.9.9 --dport 443 -j ACCEPT'
 second_rules=$(sed -n '/^CALL 2$/,$p' "$iptables_log")
 printf '%s\n' "$second_rules" | grep -q -- '-d 8.8.4.4 --dport 443 -j ACCEPT'
+printf '%s\n' "$second_rules" | grep -Fqx -- '-A LYRASHIELD-EGRESS -p tcp -d 1.1.1.1 --dport 443 -j ACCEPT'
+printf '%s\n' "$second_rules" | grep -Fqx -- '-A LYRASHIELD-EGRESS -p tcp -d 1.0.0.1 --dport 443 -j ACCEPT'
+printf '%s\n' "$second_rules" | grep -Fqx -- '-A LYRASHIELD-EGRESS -j REJECT --reject-with icmp-admin-prohibited'
+if printf '%s\n' "$second_rules" | grep -Eq -- '-d (1\.1\.1\.1|1\.0\.0\.1) --dport (80|[0-9]+:[0-9]+) -j ACCEPT'; then
+  echo "Notification destinations have a non-HTTPS firewall allowance" >&2
+  exit 1
+fi
 if printf '%s\n' "$second_rules" | grep -q -- '-d 9.9.9.9 --dport 443 -j ACCEPT'; then
   echo "Successful refresh retained an obsolete firewall pin" >&2
   exit 1
 fi
 grep -Fq 'Worker egress pins changed; hosts:' "$output_file"
+
+# Worker traffic enters from docker0. Sandboxes arrive from their isolated
+# bridge, so even a sandbox spoofing the worker IP cannot enter this chain.
+# Evaluate the script's emitted USER jump and managed chain for TCP/UDP packets;
+# unmatched traffic remains subject to Docker's internal-network/ICC denial.
+sandbox_verdict() {
+  awk -v source="$1" -v destination="$2" -v destination_port="$3" \
+    -v state="$4" -v inbound="$5" -v outbound="$6" -v protocol="$7" '
+    function address_number(address, octets) {
+      split(address, octets, ".")
+      return ((octets[1] * 256 + octets[2]) * 256 + octets[3]) * 256 + octets[4]
+    }
+    function matches(address, network, parts, size) {
+      split(network, parts, "/")
+      if (parts[2] == "") return address == network
+      size = 2 ^ (32 - parts[2])
+      return int(address_number(address) / size) == int(address_number(parts[1]) / size)
+    }
+    function packet_matches( field, matched) {
+      matched = 1
+      for (field = 1; field <= NF; field++) {
+        if ($field == "-s" && !matches(source, $(field + 1))) matched = 0
+        if ($field == "-d" && !matches(destination, $(field + 1))) matched = 0
+        if ($field == "--dport" && destination_port != $(field + 1)) matched = 0
+        if ($field == "--ctstate" && index("," $(field + 1) ",", "," state ",") == 0) matched = 0
+        if ($field == "-i" && inbound != $(field + 1)) matched = 0
+        if ($field == "-o" && outbound != $(field + 1)) matched = 0
+        if ($field == "-p" && protocol != $(field + 1)) matched = 0
+      }
+      return matched
+    }
+    NR == FNR {
+      if ($1 == "-I" && $2 == "DOCKER-USER" && $NF == "LYRASHIELD-EGRESS" && packet_matches()) admitted = 1
+      next
+    }
+    /^CALL / { verdict = "DENY"; decided = 0 }
+    $1 == "-A" && $2 == "LYRASHIELD-EGRESS" && admitted && !decided && packet_matches() {
+      for (field = 3; field <= NF; field++) if ($field == "-j") action = $(field + 1)
+      verdict = action == "ACCEPT" ? "ACCEPT" : "DENY"
+      decided = 1
+    }
+    END { print verdict }
+  ' "$iptables_commands" "$iptables_log"
+}
+
+test "$(sandbox_verdict 172.17.0.2 172.18.0.3 48080 NEW docker0 br-sandbox tcp)" = ACCEPT
+if [ "$(sandbox_verdict 172.17.0.2 172.18.0.3 80 NEW docker0 br-sandbox tcp)" != DENY ]; then
+  echo "Worker sandbox access is broader than the TCP 48080 control server" >&2
+  exit 1
+fi
+test "$(sandbox_verdict 172.17.0.2 172.18.0.3 48080 NEW docker0 br-sandbox udp)" = DENY
+test "$(sandbox_verdict 172.17.0.2 172.18.0.3 48080 NEW docker0 docker0 tcp)" = DENY
+test "$(sandbox_verdict 172.18.0.4 172.18.0.3 48080 NEW br-sandbox br-sandbox tcp)" = DENY
+test "$(sandbox_verdict 172.17.0.2 172.18.0.3 48080 NEW br-sandbox br-sandbox tcp)" = DENY
+test "$(sandbox_verdict 172.17.0.2 172.19.0.3 48080 NEW docker0 br-sandbox tcp)" = DENY
+
+# Docker derives br-<first 12 ID chars> when the bridge is not explicitly named.
+reset_state
+export SANDBOX_BRIDGE=''
+run_refresh "$output_file" "$error_file"
+unset SANDBOX_BRIDGE
+test "$(sandbox_verdict 172.17.0.2 172.18.0.3 48080 NEW docker0 br-0123456789ab tcp)" = ACCEPT
+reset_state
+export SANDBOX_BRIDGE='bridge;injected'
+if run_refresh "$output_file" "$error_file"; then
+  echo "Egress accepted an invalid sandbox bridge interface" >&2
+  exit 1
+fi
+unset SANDBOX_BRIDGE
+test ! -s "$iptables_log"
+
+# Launch-time policy does not need an allocated IP from a stopped container.
+# Its required mode checks an exact bridge-only attachment before consumer start.
+reset_state
+: >"$worker_running"
+export REQUIRE_SANDBOX_CONTROL=1
+run_refresh "$output_file" "$error_file"
+test "$(sandbox_verdict 172.17.0.2 172.18.0.3 48080 NEW docker0 br-sandbox tcp)" = ACCEPT
+for invalid_networks in 'bridge lyrashield-sandbox' 'lyrashield-sandbox' 'host'; do
+  reset_state
+  export WORKER_NETWORKS="$invalid_networks"
+  if run_refresh "$output_file" "$error_file"; then
+    echo "Required control policy accepted worker network drift" >&2
+    exit 1
+  fi
+  test ! -s "$iptables_log"
+done
+unset WORKER_NETWORKS
+reset_state
+export WORKER_INSPECT_EXISTS=0
+if run_refresh "$output_file" "$error_file"; then
+  echo "Required control policy accepted a missing worker container" >&2
+  exit 1
+fi
+unset WORKER_INSPECT_EXISTS
+test ! -s "$iptables_log"
+
+for unsafe_topology in 'bridge|false|false' 'bridge|true|true' 'overlay|true|false'; do
+  reset_state
+  export SANDBOX_TOPOLOGY="$unsafe_topology"
+  if run_refresh "$output_file" "$error_file"; then
+    echo "Required control policy accepted an unsafe sandbox network" >&2
+    exit 1
+  fi
+  test ! -s "$iptables_log"
+done
+unset SANDBOX_TOPOLOGY REQUIRE_SANDBOX_CONTROL
+
+# Notification DNS must remain public. Reject either host before mutating the
+# firewall, persisted pins, or running-container hosts.
+for notification_host in hooks.slack.com discord.com; do
+  reset_state
+  export NOTIFICATION_PRIVATE_HOST="$notification_host"
+  if run_refresh "$output_file" "$error_file"; then
+    echo "Refresh accepted a private notification destination: $notification_host" >&2
+    exit 1
+  fi
+  unset NOTIFICATION_PRIVATE_HOST
+  grep -Fq "non-public IPv4 address: $notification_host" "$error_file"
+  test ! -s "$iptables_log"
+  test ! -s "$verify_log"
+  grep -Fqx 'proxy.test 9.9.9.9 443' "$pin_file"
+  grep -Fqx '9.9.9.9 proxy.test' "$container_hosts"
+done
+
+# Enabling known notification destinations must not make unknown persisted
+# endpoints valid outside an explicit old/new pin rotation.
+reset_state
+printf '%s\n' 'webhook.attacker.test 9.9.9.8 443' >>"$pin_file"
+export REFRESH_PINNED_HOSTS=0
+if run_refresh "$output_file" "$error_file"; then
+  echo "Refresh accepted an unapproved webhook host" >&2
+  exit 1
+fi
+unset REFRESH_PINNED_HOSTS
+grep -Fq 'unapproved host or port' "$error_file"
+test ! -s "$iptables_log"
+test ! -s "$verify_log"
 
 # Update failure: old hosts and pin file survive; union remains active.
 reset_state
@@ -300,7 +474,9 @@ printf '%s\n' \
   'api.parallel.ai 8.8.8.8 443' \
   'api.razorpay.com 8.8.8.8 443' \
   'db.test 8.8.8.8 5432' \
+  'discord.com 1.0.0.1 443' \
   'github.com 8.8.8.8 443' \
+  'hooks.slack.com 1.1.1.1 443' \
   'proxy.test 8.8.4.4 443' \
   'redis.test 8.8.8.8 6379' \
   'storage.test 8.8.8.8 443' >"$pin_file"
@@ -310,6 +486,25 @@ if grep -Fq -- '--user 0:0 -i' "$docker_log"; then
   echo "Stable refresh rewrote running-container hosts" >&2
   exit 1
 fi
+# Previously pinned notification hosts remain approved without a DNS rotation.
+export REFRESH_PINNED_HOSTS=0
+run_refresh "$output_file" "$error_file"
+unset REFRESH_PINNED_HOSTS
+test ! -s "$output_file"
+
+# The notification allowlist grants HTTPS only, including when loading pins.
+for notification_host in hooks.slack.com discord.com; do
+  reset_state
+  printf '%s 1.1.1.1 80\n' "$notification_host" >>"$pin_file"
+  export REFRESH_PINNED_HOSTS=0
+  if run_refresh "$output_file" "$error_file"; then
+    echo "Refresh accepted a non-HTTPS notification pin: $notification_host" >&2
+    exit 1
+  fi
+  unset REFRESH_PINNED_HOSTS
+  grep -Fq 'unapproved host or port' "$error_file"
+  test ! -s "$iptables_log"
+done
 
 cat >>"$environment_file" <<'EOF'
 LYRASHIELD_AI_RESULT_CACHE_MODE=enforce
