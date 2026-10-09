@@ -556,6 +556,27 @@ describe("exportMarketplace", () => {
     expect(readme).not.toMatch(/\b[a-f0-9]{40}\b/)
     expect(readme).not.toContain("Source and publication readback")
   }, 60000)
+
+  it("runs the Zed WASI checks when either exported workflow changes", async () => {
+    const output = await mkdtemp(path.join(tmpdir(), "lyrashield-marketplace-"))
+    outputs.push(output)
+    await exportMarketplace(output)
+
+    const validateWorkflow = await readFile(
+      path.join(output, ".github", "workflows", "validate.yml"),
+      "utf8"
+    )
+    const guardedPaths = validateWorkflow
+      .match(/git diff --quiet "\$base" HEAD -- \\\n([\s\S]*?); then/)?.[1]
+      ?.split("\n")
+      .map((line) => line.replace(/\\$/, "").replace(/;$/, "").trim())
+      .filter(Boolean)
+    expect(guardedPaths).toEqual([
+      "zed-extension",
+      ".github/workflows/validate.yml",
+      ".github/workflows/release.yml",
+    ])
+  })
 })
 
 describe("exported validator", () => {
