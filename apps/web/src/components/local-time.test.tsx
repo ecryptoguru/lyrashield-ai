@@ -16,4 +16,13 @@ describe("LocalTime", () => {
     const html = renderToStaticMarkup(createElement(LocalTime, { value, withTime: true }))
     expect(html).toContain(formatDateTime(value))
   })
+
+  // The zone swap after mount must not change which instant is shown, so the
+  // exact UTC form stays reachable from the rendered element.
+  it("carries the UTC instant as a title on both forms", () => {
+    for (const withTime of [false, true]) {
+      const html = renderToStaticMarkup(createElement(LocalTime, { value, withTime }))
+      expect(html).toContain(`title="${formatDateTime(value)}"`)
+    }
+  })
 })

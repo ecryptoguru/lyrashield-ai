@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react"
 import { getScanPresentation, isActiveScan } from "@/lib/scan-presentation"
+import { apiPost, ApiError } from "@/lib/api-client"
+import { scanCancelSchema } from "@/lib/api-schemas"
 import { ScanInProgress } from "./scan-in-progress"
 import {
   ScanDetailHeader,
@@ -21,13 +23,27 @@ export function ScanDetailClient({
   scan: initialScan,
   findings,
   scorecard,
+  canCancel = false,
 }: {
   scan: ScanData
   findings: FindingItem[]
   scorecard: CleanResultScorecard | null
+  /**
+   * Whether the signed-in member holds scan:cancel in this workspace. The API
+   * re-checks permission and the scan's state, and its authoritative result is
+   * what this page renders after a cancellation.
+   */
+  canCancel?: boolean
 }) {
-  const { scan, currentFindings, isActive, refreshing, refreshError, handleManualRefresh } =
-    useScanDetailPolling(initialScan, findings)
+  const {
+    scan,
+    currentFindings,
+    isActive,
+    refreshing,
+    refreshError,
+    handleManualRefresh,
+    applyCancelledScan,
+  } = useScanDetailPolling(initialScan, findings)
   const elapsedTime = useElapsedTime(isActive ? scan.startedAt : null)
   const presentation = getScanPresentation(scan.status, {
     errorCategory: scan.errorCategory,
@@ -35,6 +51,35 @@ export function ScanDetailClient({
   })
   const [completionNotice, dismissCompletionNotice] = useCompletionNotice(initialScan.status, scan)
   const [expandedFindings, setExpandedFindings] = useState<Set<string>>(new Set())
+  const [cancelling, setCancelling] = useState(false)
+  const [cancelError, setCancelError] = useState<string | null>(null)
+
+  /**
+   * Cancel through the same endpoint the scan list uses. Only a successful
+   * response changes the rendered status, and the status rendered is the one
+   * the server returned — never an optimistic guess. A failure says the scan
+   * may still be running instead of claiming it stopped.
+   */
+  async function handleCancelScan() {
+    setCancelling(true)
+    setCancelError(null)
+    try {
+      const result = await apiPost(
+        `/api/scans/${scan.id}`,
+        { workspaceId: scan.workspaceId },
+        { schema: scanCancelSchema }
+      )
+      applyCancelledScan(result.status, result.endedAt)
+    } catch (cause) {
+      setCancelError(
+        cause instanceof ApiError && cause.status < 500
+          ? cause.message
+          : "The scan could not be cancelled. It may still be running; refresh before trying again."
+      )
+    } finally {
+      setCancelling(false)
+    }
+  }
 
   // Page-scoped agent read: `review_scan_progress` can only ever resolve the
   // scan this page displays; workspace/scan identity is bound at registration.
@@ -76,6 +121,10 @@ export function ScanDetailClient({
         presentation={presentation}
         isActive={isActive}
         refreshError={refreshError}
+        canCancel={canCancel}
+        cancelling={cancelling}
+        cancelError={cancelError}
+        onCancel={() => void handleCancelScan()}
       />
 
       <ScanEvidenceSummary
