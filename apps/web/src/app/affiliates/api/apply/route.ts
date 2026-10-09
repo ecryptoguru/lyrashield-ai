@@ -1,44 +1,24 @@
 import { withCookieMutation } from "../../../../lib/api-auth"
 import { NextResponse } from "next/server"
-import { z } from "zod"
-import { prisma } from "@lyrashield/db"
-import { logger } from "@lyrashield/logger"
 import { getCachedSession } from "@/lib/cache"
-import { detectFraudSignals, AFFILIATE_TERMS_VERSION } from "@lyrashield/affiliate"
-import { clientIpFromRequest } from "@/lib/rate-limit"
-import { hashPrivacyValue } from "@/lib/privacy-hash"
 
-// C-M10: IP / user-agent hashing for fraud-signal signup counts. Mirrors the
-// salted SHA-256 used by the click route so the hashes match across routes.
-function getClientIp(request: Request): string | undefined {
-  const ip = clientIpFromRequest(request)
-  return ip === "unknown" ? undefined : ip
-}
-
-const ApplySchema = z.object({
-  userId: z.string().min(1),
-  name: z.string().min(1).max(100),
-  website: z.string().url().max(500),
-  audienceSize: z.enum(["<1k", "1k-10k", "10k-50k", "50k-100k", "100k+"]),
-  audienceType: z.enum(["developers", "security", "devops", "founders", "mixed"]),
-  promotionMethods: z.string().min(10).max(2000),
-  payoutMethod: z.preprocess(
-    (value) => (value === "" ? undefined : value),
-    z.enum(["razorpayx"]).optional()
-  ),
-  // C-L10: Binding terms acceptance — the affiliate must affirmatively accept
-  // the program terms (FTC/ASA disclosure, no-FUD, no "only-we"/benchmark
-  // claims, no brand bidding). Approval is gated on this being true. A truthy
-  // string ("true", "on", "1") is accepted because unchecked HTML checkboxes
-  // submit nothing, so we require the checkbox to be explicitly checked.
-  acceptTerms: z
-    .union([z.boolean(), z.string()])
-    .transform((v) => v === true || v === "true" || v === "on" || v === "1")
-    .refine((v) => v === true, "You must accept the affiliate program terms to apply"),
-  taxFormStatus: z.enum(["will_complete", "have_w9", "have_w8ben", "have_w8ben_e", "have_gstin"]),
-})
-
-async function post(request: Request) {
+/**
+ * Affiliate applications are not open yet.
+ *
+ * New affiliate admission is frozen for launch. The route stays in place and
+ * keeps accepting the same POST shape because `/affiliates/api/apply` is part
+ * of the published additive-only surface (docs/policies.md). It no longer
+ * parses the form, runs fraud signals or creates an Affiliate row: it answers
+ * with a "not open yet" response and writes nothing.
+ *
+ * Existing Affiliate rows are untouched. Historical commissions, refunds and
+ * clawbacks keep running through the billing webhook affiliate track, which
+ * this route never wrote to.
+ *
+ * The browser-session boundary is checked before the closed response so a
+ * workspace API key or OAuth credential still cannot act on this route.
+ */
+async function post() {
   const session = await getCachedSession()
   if (!session) {
     return NextResponse.json({ success: false, error: "Authentication required" }, { status: 401 })
@@ -47,112 +27,10 @@ async function post(request: Request) {
     return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 })
   }
 
-  const formData = await request.formData().catch(() => null)
-  if (!formData) {
-    return NextResponse.json({ success: false, error: "Invalid form data" }, { status: 400 })
-  }
-
-  const data = Object.fromEntries(formData.entries())
-  const parsed = ApplySchema.safeParse({
-    ...data,
-    userId: session.userId, // Always use session userId, not form
-  })
-
-  if (!parsed.success) {
-    return NextResponse.json(
-      { success: false, error: "Invalid application data", details: parsed.error.issues },
-      { status: 400 }
-    )
-  }
-
-  // Check if already applied
-  const existing = await prisma.affiliate.findUnique({
-    where: { userId: session.userId },
-    select: { id: true },
-  })
-
-  if (existing) {
-    return NextResponse.json({ success: false, error: "You have already applied" }, { status: 409 })
-  }
-
-  // S9: Fraud signal detection — reject applications with high-severity signals
-  const user = await prisma.user.findUnique({
-    where: { id: session.userId },
-    select: { email: true },
-  })
-
-  if (user) {
-    // C-M10: Populate signupCountByIp / signupCountByDevice so the RATE_LIMIT_IP and
-    // RATE_LIMIT_DEVICE signals actually evaluate (previously only the disposable-
-    // email check ran). Hash the applicant's IP the same way the click route
-    // does (salted SHA-256) and count prior Clicks from that IP / user-agent hash.
-    const clientIp = getClientIp(request)
-    const ipHash = clientIp ? await hashPrivacyValue(clientIp) : undefined
-    const userAgent = request.headers.get("user-agent")
-    const userAgentHash = userAgent ? await hashPrivacyValue(userAgent) : undefined
-    const [signupCountByIp, signupCountByDevice] = await Promise.all([
-      ipHash ? prisma.click.count({ where: { ipHash } }) : Promise.resolve(0),
-      userAgentHash
-        ? prisma.click.count({ where: { userAgent: userAgentHash } })
-        : Promise.resolve(0),
-    ])
-
-    const fraudResult = detectFraudSignals({
-      email: user.email,
-      ipHash,
-      userAgent: userAgentHash,
-      signupCountByIp,
-      signupCountByDevice,
-    })
-
-    if (fraudResult.block) {
-      logger.warn("Affiliate application blocked by fraud signals", {
-        userId: session.userId,
-        signals: fraudResult.signals.map((s) => s.type),
-      })
-      return NextResponse.json(
-        { success: false, error: "Application rejected due to risk signals" },
-        { status: 403 }
-      )
-    }
-  }
-
-  // Create the affiliate application
-  const submittedTaxForm = parsed.data.taxFormStatus.startsWith("have_")
-  const taxFormType = submittedTaxForm ? parsed.data.taxFormStatus.replace("have_", "") : undefined
-  const affiliate = await prisma.affiliate.create({
-    data: {
-      userId: session.userId,
-      status: "PENDING",
-      // C-L10: Record binding terms acceptance (versioned) at application time.
-      acceptedTermsAt: new Date(),
-      termsVersion: AFFILIATE_TERMS_VERSION,
-      ...(parsed.data.payoutMethod
-        ? {
-            payoutMethod: {
-              type: parsed.data.payoutMethod,
-              valid: false,
-              application: {
-                name: parsed.data.name,
-                website: parsed.data.website,
-                audienceSize: parsed.data.audienceSize,
-                audienceType: parsed.data.audienceType,
-                promotionMethods: parsed.data.promotionMethods,
-              },
-            },
-          }
-        : {}),
-      taxFormType,
-      taxFormStatus: submittedTaxForm ? "PENDING_REVIEW" : "NOT_SUBMITTED",
-    },
-  })
-
-  logger.info("Affiliate application submitted", {
-    affiliateId: affiliate.id,
-    userId: session.userId,
-  })
-
-  return NextResponse.json({ success: true, affiliateId: affiliate.id }, { status: 201 })
+  return NextResponse.json(
+    { success: false, error: "Affiliate applications are not open yet." },
+    { status: 503, headers: { "Cache-Control": "private, no-store" } }
+  )
 }
 
 export const POST = withCookieMutation(post)

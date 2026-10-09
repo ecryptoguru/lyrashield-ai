@@ -12,7 +12,6 @@ import {
   CLOUD_PLAN_MAP,
   type CloudPlanId,
 } from "@lyrashield/billing"
-import { resolveAttribution } from "@lyrashield/affiliate"
 import { apiSuccess, apiError } from "@/lib/api-response"
 import { authErrorResponse, withCookieMutation } from "@/lib/api-auth"
 import { checkBillingCheckoutRateLimit, claimBillingCheckoutCreation } from "@/lib/rate-limit"
@@ -96,34 +95,10 @@ async function post(request: Request) {
       )
     }
 
-    // Track C integration: resolve affiliate promo code → attach affiliate metadata.
-    // No commission created at checkout — only on the paid webhook (per affiliate brief).
-    let affiliateMetadata: Record<string, string> = {}
-    if (promoCode) {
-      try {
-        const attribution = await resolveAttribution({ promoCode })
-        if (attribution && attribution.affiliateId) {
-          affiliateMetadata = {
-            affiliate_id: attribution.affiliateId,
-            ...(attribution.clickId ? { click_id: attribution.clickId } : {}),
-            promo_code: promoCode,
-          }
-          logger.info("Affiliate promo code resolved at checkout", {
-            promoCode,
-            affiliateId: attribution.affiliateId,
-          })
-        } else {
-          logger.info("Promo code not recognized as affiliate code", { promoCode })
-        }
-      } catch (err) {
-        // Non-blocking — affiliate resolution failure should not block checkout
-        logger.error("Affiliate promo code resolution failed (non-blocking)", {
-          promoCode,
-          error: err instanceof Error ? err.message : String(err),
-        })
-      }
-    }
-
+    // Affiliate promo-code attribution is closed while new admission is frozen.
+    // No affiliate_id, click_id or promo_code is attached to checkout metadata.
+    // A promoCode sent by an older client is still recorded as a promo code so
+    // the field keeps its published meaning; it never resolves to an affiliate.
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
     const successUrl = `${appUrl}/dashboard/billing?checkout=success`
     const metadata = {
@@ -132,7 +107,6 @@ async function post(request: Request) {
       plan,
       interval,
       ...(promoCode ? { promoCode } : {}),
-      ...affiliateMetadata,
     }
 
     if (provider === "polar") {

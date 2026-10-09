@@ -1,4 +1,3 @@
-import Link from "next/link"
 import { loadActiveProgram } from "@lyrashield/affiliate"
 
 export const metadata = {
@@ -93,7 +92,8 @@ export default async function AffiliateLandingPage() {
             <div>
               <h3 className="font-semibold">Apply</h3>
               <p className="text-sm text-muted-foreground">
-                Submit your application with details about your audience and promotion methods.
+                Applications are not open yet. We are finishing the review and payout controls the
+                program needs before it opens.
               </p>
             </div>
           </li>
@@ -173,12 +173,10 @@ export default async function AffiliateLandingPage() {
       </section>
 
       <div className="text-center">
-        <Link
-          href="/affiliates/apply"
-          className="inline-flex items-center justify-center rounded-lg bg-primary px-8 py-3 text-primary-foreground font-semibold hover:bg-primary/90"
-        >
-          Apply Now
-        </Link>
+        <p className="text-sm text-muted-foreground">
+          Applications are not open yet. The program is frozen while the review and payout controls
+          are finished.
+        </p>
       </div>
     </main>
   )

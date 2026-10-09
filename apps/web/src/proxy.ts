@@ -7,9 +7,6 @@ import {
   checkHealthRateLimit,
   checkLiteScanRateLimit,
 } from "@/lib/rate-limit"
-import { detectAttribution, parseAffiliateCookie } from "@lyrashield/affiliate"
-import { scorecardTrackingAllowed } from "@/lib/scorecard-sharing"
-import { hashPrivacyValue } from "@/lib/privacy-hash"
 import { assessAppOrigin, isAppHost, isDirectAppOrigin, trustedAppCountry } from "@/lib/app-origin"
 import { isOAuthProtocolPath, OAUTH_RATE_LIMIT_ERROR } from "@/lib/oauth-registration"
 
@@ -17,10 +14,10 @@ import { isOAuthProtocolPath, OAUTH_RATE_LIMIT_ERROR } from "@/lib/oauth-registr
 // proxy/middleware file; do not create a separate `middleware.ts` or the build
 // will fail with the `middleware-to-proxy` error.
 //
-// Affiliate attribution (S3/S4/S8) was merged from the former middleware.ts:
-// ?ref= param and /r/:code short links are detected here, the IP is salted
-// and SHA-256 hashed before storage, the user-agent is hashed, and the
-// __ls_consent cookie is checked before setting the affiliate cookie.
+// Affiliate referral routing lives here: the affiliates.lyrashieldai.com
+// subdomain rewrite and the /r/:code short link. New affiliate admission is
+// frozen for launch, so no click is recorded and no __ls_aff attribution
+// cookie is set on any path.
 // Note: proxy.ts always runs on the Node.js runtime in Next.js 16.
 
 let warnedUnknownIp = false
@@ -128,34 +125,26 @@ function warnUnknownIp(): "unknown" {
 }
 
 /**
- * S3: Hash a value (IP or user-agent) with a server-side salt using Web Crypto.
- * Raw IPs and plaintext UAs are never persisted to the affiliate click store.
- */
-/**
- * S3: Extract and hash the client IP for affiliate click storage.
- * Uses the same configured trusted last hop as rate limiting.
- * Unknown addresses are omitted rather than conflated into one affiliate visitor.
- */
-export async function getAffiliateIpHash(request: NextRequest): Promise<string | undefined> {
-  const ip = getClientIP(request)
-  return ip === "unknown" ? undefined : hashPrivacyValue(ip)
-}
-
-/**
- * Handle affiliate attribution for non-API requests.
- * Detects ?ref= param or /r/:code short link, records the click, and
- * sets the __ls_aff cookie (subject to consent).
+ * Handle affiliate referral routing for non-API requests.
  *
- * Returns a NextResponse if the request should be redirected or short-circuited
- * (e.g. /r/:code redirect), or null to continue with normal proxy processing.
+ * New affiliate admission is frozen for launch, so this no longer detects
+ * ?ref=, records a Click, creates an AttributionToken or sets the __ls_aff
+ * cookie. What remains is the routing that must keep working:
+ *
+ *  - the affiliates.lyrashieldai.com subdomain rewrite, so the affiliate pages
+ *    stay reachable;
+ *  - the /r/:code short link redirect, so previously shared links do not 404.
+ *    The redirect target is the homepage and it carries no attribution.
+ *
+ * Returns a NextResponse when the request was rewritten or redirected, or null
+ * to continue with normal proxy processing.
  */
-async function handleAffiliateAttribution(
+async function handleAffiliateRouting(
   request: NextRequest,
-  requestHeaders: Headers,
   csp: string,
   isLocalPreview: boolean
 ): Promise<NextResponse | null> {
-  const { pathname, searchParams } = request.nextUrl
+  const { pathname } = request.nextUrl
   const host = request.headers.get("host") ?? ""
 
   // Subdomain rewrite: affiliates.lyrashieldai.com → /affiliates
@@ -167,74 +156,10 @@ async function handleAffiliateAttribution(
     return response
   }
 
-  // Check for ref= param or /r/:code path
-  const hasRef = searchParams.has("ref")
-  const isShortLink = /^\/r\/[A-Za-z0-9_-]+$/.test(pathname)
-
-  if (!hasRef && !isShortLink) {
-    return null
-  }
-
-  const trackingAllowed = scorecardTrackingAllowed({
-    doNotTrack: request.headers.get("dnt"),
-    globalPrivacyControl: request.headers.get("sec-gpc") === "1",
-  })
-  if (!trackingAllowed) {
-    if (!isShortLink) return null
+  // /r/:code short link: redirect to the homepage without attribution.
+  if (/^\/r\/[A-Za-z0-9_-]+$/.test(pathname)) {
     const response = NextResponse.redirect(new URL("/", request.url))
     applySecurityHeaders(response, csp, isLocalPreview)
-    return response
-  }
-
-  // Detect attribution
-  const cookieToken = parseAffiliateCookie(request.headers.get("cookie"))
-  const ipHash = await getAffiliateIpHash(request)
-  const rawUserAgent = request.headers.get("user-agent") ?? undefined
-  // S4: Hash the user-agent before storing — never store plaintext UA
-  const userAgent = rawUserAgent ? await hashPrivacyValue(rawUserAgent) : undefined
-
-  // S8: Check consent cookie — GDPR-compliant
-  const consentCookie = request.cookies.get("__ls_consent")?.value
-  const consentGiven = consentCookie === "true"
-
-  const result = await detectAttribution({
-    pathname,
-    searchParams,
-    landingUrl: request.url,
-    referrer: request.headers.get("referer") ?? undefined,
-    ipHash,
-    userAgent,
-    cookieToken,
-    consentGiven,
-  })
-
-  // Handle redirect for /r/:code
-  if (result.redirectUrl) {
-    const redirectUrl = new URL(result.redirectUrl, request.url)
-    const response = NextResponse.redirect(redirectUrl)
-    if (result.setCookie) {
-      response.headers.set("Set-Cookie", result.setCookie)
-    }
-    applySecurityHeaders(response, csp, isLocalPreview)
-    return response
-  }
-
-  // For ?ref= on a page — continue to the page but set cookie
-  if (result.setCookie) {
-    const response = NextResponse.next({
-      request: { headers: requestHeaders },
-    })
-    response.headers.set("Set-Cookie", result.setCookie)
-    applySecurityHeaders(response, csp, isLocalPreview)
-    if (
-      pathname.startsWith("/score/") ||
-      pathname.startsWith("/lite-check/") ||
-      pathname.startsWith("/reports/shared/") ||
-      pathname === "/licenses/retrieve"
-    )
-      response.headers.set("Referrer-Policy", "no-referrer")
-    if (pathname === "/licenses/retrieve")
-      response.headers.set("Cache-Control", "private, no-store")
     return response
   }
 
@@ -310,15 +235,10 @@ export async function proxy(request: NextRequest) {
   }
 
   if (!pathname.startsWith("/api/")) {
-    // Affiliate attribution: detect ?ref= or /r/:code, record click, set cookie.
-    // Returns a response if the request is redirected or has an affiliate cookie;
-    // returns null to continue with normal CSP/HSTS response.
-    const affiliateResponse = await handleAffiliateAttribution(
-      request,
-      requestHeaders,
-      csp,
-      isLocalPreview
-    )
+    // Affiliate referral routing: the affiliates subdomain rewrite and the
+    // /r/:code short link. No click is recorded and no attribution cookie is
+    // set while new admission is frozen.
+    const affiliateResponse = await handleAffiliateRouting(request, csp, isLocalPreview)
     if (affiliateResponse) {
       return affiliateResponse
     }
