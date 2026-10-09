@@ -48,10 +48,6 @@ export {
   type AttributionMethod,
 } from "./attribution/resolve"
 
-export { attributeSignup, type SignupAttributionInput } from "./attribution/signup"
-
-export { persistCrossDeviceAttribution } from "./attribution/cross-device"
-
 export { onOrderPaid, type OrderPaidPayload, type OrderPaidResult } from "./commission/engine"
 
 export { onRefund, type RefundPayload, type ClawbackReason } from "./commission/clawback"
