@@ -8,6 +8,7 @@ import {
   validateFindingScope,
 } from "@lyrashield/db"
 import { prisma } from "@lyrashield/db"
+import { PatchFindingSchema } from "@lyrashield/types"
 import { readEncryptedArtifact } from "@lyrashield/evidence-storage"
 import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS, type Permission } from "@lyrashield/auth"
@@ -17,34 +18,6 @@ import { apiError, apiSuccess } from "../../../../lib/api-response"
 import { explainFinding } from "@/lib/plain-language"
 import { z } from "zod"
 import { revalidateDashboardAggregates } from "../../../../lib/cache"
-
-const VALID_STATUSES = [
-  "OPEN",
-  "FIX_READY",
-  "PR_OPENED",
-  "FIXED",
-  "FIXED_PENDING_RETEST",
-  "ACCEPTED_RISK",
-  "FALSE_POSITIVE",
-  "DUPLICATE",
-] as const
-
-const PatchFindingSchema = z
-  .object({
-    workspaceId: z.string().min(1),
-    action: z.enum(["false_positive", "accept_risk", "update_status"]),
-    status: z.enum(VALID_STATUSES).optional(),
-    reason: z.string().max(1000).optional(),
-    canonicalFindingId: z.string().min(1).optional(),
-  })
-  .superRefine((value, context) => {
-    if (
-      (value.action === "false_positive" || value.action === "accept_risk") &&
-      !value.reason?.trim()
-    ) {
-      context.addIssue({ code: "custom", path: ["reason"], message: "reason is required" })
-    }
-  })
 
 const AdvisoryCvssSchema = z
   .object({

@@ -38,6 +38,6 @@ Only an authenticated `mcp-publisher publish` and public Registry API readback c
 1. Authenticate with GitHub as the namespace owner using the official publisher flow.
 2. Reconfirm both server.json version fields match `@lyrashield/mcp@0.2.12` and rerun both validators.
 3. Publish the reviewed package using the authenticated official CLI.
-4. Read back the exact public version and URL from the Registry API; record it in [../channels.md](../channels.md).
+4. Read back the exact public version and URL from the Registry API; record it in the [distribution channel ledger](https://github.com/ecryptoguru/lyrashield-ai/blob/main/docs/marketplace/channels.md).
 
 Official references: [Registry quickstart](https://github.com/modelcontextprotocol/registry/blob/main/docs/modelcontextprotocol-io/quickstart.mdx), [generic server.json format](https://github.com/modelcontextprotocol/registry/blob/main/docs/reference/server-json/generic-server-json.md) and [Registry package ownership rules](https://github.com/modelcontextprotocol/registry/blob/main/docs/modelcontextprotocol-io/package-types.mdx).

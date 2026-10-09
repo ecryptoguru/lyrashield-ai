@@ -1,11 +1,7 @@
 import { ApiError } from "@/lib/api-client"
 import { planIntentPath } from "@/lib/plan-intent"
 import type { OperationFailurePresentation } from "@/lib/operation-failure"
-import {
-  nextStepForPath,
-  onboardingPathForTargetType,
-  type OnboardingPath,
-} from "./onboarding-flow.utils"
+import { onboardingPathForTargetType, type OnboardingPath } from "./onboarding-flow.utils"
 
 /** Structured operation failure surfaced to the wizard's alert area (W1-07). */
 export type OnboardingFailureState = {
@@ -55,21 +51,20 @@ export interface OnboardingWizardProps {
   oauthReturnQuery?: string | null
 }
 
-// Workspace naming is outside the critical path. An arriving target hint
-// starts at its details only before the user has progressed or made a target.
+// An arriving target hint preselects the chooser path and nothing else. It
+// must never skip a step: the URL/API forms are step 1, and the workspace is
+// created when those forms are submitted (P1-1). Jumping a hinted user
+// straight to the details step left them with no workspace and no source, so
+// the start action could only ever answer "Workspace is required."
 export function initialOnboardingSelection(
   initialState: OnboardingData,
   targetTypeHint?: "url" | "api" | null
 ): { path: OnboardingPath; step: number } {
   const hintedPath: OnboardingPath =
     targetTypeHint && !initialState.targetId && !initialState.targetType ? targetTypeHint : null
-  const persistedStep = Math.max(initialState.currentStep ?? 1, 1)
   return {
     path: onboardingPathForTargetType(initialState.targetType ?? null) ?? hintedPath,
-    step:
-      hintedPath && persistedStep <= 1
-        ? (nextStepForPath(hintedPath) ?? persistedStep)
-        : persistedStep,
+    step: Math.max(initialState.currentStep ?? 1, 1),
   }
 }
 

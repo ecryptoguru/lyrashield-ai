@@ -7,16 +7,8 @@ import { logger } from "@lyrashield/logger"
 import { authErrorResponse } from "../../../lib/api-auth"
 import { apiError, apiSuccess, parsePaginationParams } from "../../../lib/api-response"
 import { jsonWithEtag } from "../../../lib/http-etag"
-import { z } from "zod"
+import { CreateReportSchema } from "@lyrashield/types"
 import { revalidateDashboardAggregates } from "../../../lib/cache"
-
-const CreateReportSchema = z.object({
-  workspaceId: z.string().min(1),
-  scanId: z.string().optional(),
-  targetId: z.string().optional(),
-  type: z.enum(["developer", "executive", "compliance"]).optional(),
-  title: z.string().min(1).max(200),
-})
 
 export async function GET(request: Request) {
   try {

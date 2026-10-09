@@ -28,6 +28,14 @@ describe("marketplace fixtures", () => {
     expect(validation.stdout).toContain("PREPARATION ONLY")
   })
 
+  it("describes the regenerated export through its manifest", async () => {
+    const readme = await readFile(path.join(marketplaceRoot, "README.md"), "utf8")
+    expect(readme).toContain("exact product revision recorded in `manifest.json`")
+    expect(readme).toContain("untagged release candidate")
+    expect(readme).toContain("No matching immutable marketplace release has been verified")
+    expect(readme).not.toContain("has not yet been regenerated")
+  })
+
   it("keeps Codebuff's curated MCP allowlist read-only", async () => {
     const { default: agent } =
       await import("../../../../docs/marketplace/codebuff/lyrashield-review")

@@ -42,7 +42,7 @@ export default function ScoreMethodologyPage() {
           <p className="text-muted-foreground mt-5 leading-7">
             {SCORE_MODEL_VERSION} starts at 100 and deducts for current findings: verified critical
             −25, high −10, medium −4, low −1; unverified findings count at 25% weight and accepted
-            risk at 50% weight. Verified critical findings cap the grade at C, verified highs at B,
+            risk at 50% weight. Verified critical findings cap the grade at C, verified highs at B
             and active verified secrets at D. A+ additionally requires no open findings of medium
             severity or higher.
           </p>

@@ -1,4 +1,5 @@
 import { listFindings, getFindingStats, validateFindingScope } from "@lyrashield/db"
+import { FindingQuerySchema } from "@lyrashield/types"
 import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
@@ -9,42 +10,8 @@ import {
   apiPaginated,
   parsePaginationParams,
 } from "../../../lib/api-response"
-import { z } from "zod"
 import { calculateFindingPriority } from "../../../lib/finding-priority"
 import { SEVERITY_ORDER } from "../../../lib/severity-presentation"
-
-const FindingQuerySchema = z.object({
-  workspaceId: z.string().min(1),
-  targetId: z.string().min(1).optional(),
-  observedInScanId: z.string().min(1).optional(),
-  scanId: z.string().min(1).optional(),
-  severity: z.enum(["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"]).optional(),
-  status: z
-    .enum([
-      "OPEN",
-      "FIX_READY",
-      "PR_OPENED",
-      "TICKET_CREATED",
-      "FIXED",
-      "FIXED_PENDING_RETEST",
-      "ACCEPTED_RISK",
-      "FALSE_POSITIVE",
-      "DUPLICATE",
-    ])
-    .optional(),
-  verified: z.enum(["true", "false"]).optional(),
-  category: z.string().optional(),
-  // Bounded search: trimmed, at most 120 characters, matched against title,
-  // summary, and CWE inside the caller's workspace only.
-  q: z
-    .string()
-    .transform((value) => value.trim())
-    .pipe(z.string().max(120))
-    .optional(),
-  stats: z.enum(["true"]).optional(),
-  cursor: z.string().optional(),
-  limit: z.string().optional(),
-})
 
 export async function GET(request: Request) {
   try {
