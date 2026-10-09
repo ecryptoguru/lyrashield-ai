@@ -8,6 +8,12 @@ on:
 permissions:
   contents: read
 
+# Supersede an in-flight run for the same ref so a rapid push does not queue
+# duplicate validation behind the previous revision.
+concurrency:
+  group: marketplace-validate-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   validate:
     runs-on: ubuntu-latest
@@ -23,10 +29,52 @@ jobs:
           node-version: 24
       - run: node --test scripts/tests/verify-published-mcp.fixtures.mjs
       - run: node scripts/validate.mjs --release-ready
-      - run: cargo fmt --check
+
+      # The Zed WASI build is the only expensive step in this job. Skip it when
+      # nothing under zed-extension/ changed. Every other step stays
+      # unconditional: manifest.json hashes every exported file, so any content
+      # change still needs validation. The required `validate` check therefore
+      # keeps reporting on every pull request instead of being skipped away by a
+      # trigger-level path filter.
+      - name: Detect Zed extension changes
+        id: zed
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          base="${BASE_SHA:-${BEFORE_SHA:-}}"
+          if [ -n "$base" ] && [ "$base" != "0000000000000000000000000000000000000000" ] && git cat-file -e "${base}^{commit}" 2>/dev/null; then
+            base="$(git merge-base "$base" HEAD)"
+          else
+            base="HEAD~1"
+          fi
+          if git diff --quiet "$base" HEAD -- \
+            zed-extension \
+            docs/marketplace/.github/workflows/validate.yml \
+            docs/marketplace/.github/workflows/release.yml; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Cache Zed WASI build
+        if: steps.zed.outputs.changed == 'true'
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          # A stable shared key, not the per-job default, so release.yml restores
+          # the build this job already paid for instead of compiling it again.
+          shared-key: zed-extension-wasm
+          workspaces: zed-extension
+
+      - if: steps.zed.outputs.changed == 'true'
+        run: cargo fmt --check
         working-directory: zed-extension
-      - run: cargo build --locked --release --target wasm32-wasip2
+      - if: steps.zed.outputs.changed == 'true'
+        run: cargo build --locked --release --target wasm32-wasip2
         working-directory: zed-extension
+
       - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
