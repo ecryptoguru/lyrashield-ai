@@ -22,6 +22,55 @@ import {
   type ScanFlowContext,
 } from "./onboarding-scan-flow"
 
+function usePendingScanRecovery(principalId: string, workspaceId: string | null | undefined) {
+  const [pendingScanSubmission, setPendingScanSubmission] = useState<PendingScanSubmission | null>(
+    null
+  )
+  const [scanOperationStatus, setScanOperationStatus] = useState<ScanOperationStatus | null>(null)
+  const [checkingScanOperation, setCheckingScanOperation] = useState(false)
+  const [scanRecoveryError, setScanRecoveryError] = useState<string | null>(null)
+  const [scanRecoveryUnavailable, setScanRecoveryUnavailable] = useState(false)
+
+  useEffect(() => {
+    // Browser session storage is external state and is only available after hydration.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setScanOperationStatus(null)
+    setScanRecoveryUnavailable(false)
+    setScanRecoveryError(null)
+    if (!workspaceId) {
+      setPendingScanSubmission(null)
+      return
+    }
+    try {
+      const pending = readPendingScanSubmission({
+        principalId,
+        workspaceId,
+        surface: "onboarding",
+      })
+      setPendingScanSubmission(pending)
+    } catch (cause) {
+      setPendingScanSubmission(null)
+      setScanRecoveryUnavailable(true)
+      setScanRecoveryError(
+        cause instanceof Error ? cause.message : "Saved scan recovery data could not be read."
+      )
+    }
+  }, [principalId, workspaceId])
+
+  return {
+    pendingScanSubmission,
+    setPendingScanSubmission,
+    scanOperationStatus,
+    setScanOperationStatus,
+    checkingScanOperation,
+    setCheckingScanOperation,
+    scanRecoveryError,
+    setScanRecoveryError,
+    scanRecoveryUnavailable,
+    setScanRecoveryUnavailable,
+  }
+}
+
 /**
  * Owns the scan-start flow: pending-submission recovery state, the advisory
  * eligibility gate, target create-or-recover, and the idempotent POST. The
@@ -73,13 +122,18 @@ export function useOnboardingScan({
 }) {
   const router = useRouter()
   const scanSubmissionLock = useRef(false)
-  const [pendingScanSubmission, setPendingScanSubmission] = useState<PendingScanSubmission | null>(
-    null
-  )
-  const [scanOperationStatus, setScanOperationStatus] = useState<ScanOperationStatus | null>(null)
-  const [checkingScanOperation, setCheckingScanOperation] = useState(false)
-  const [scanRecoveryError, setScanRecoveryError] = useState<string | null>(null)
-  const [scanRecoveryUnavailable, setScanRecoveryUnavailable] = useState(false)
+  const {
+    pendingScanSubmission,
+    setPendingScanSubmission,
+    scanOperationStatus,
+    setScanOperationStatus,
+    checkingScanOperation,
+    setCheckingScanOperation,
+    scanRecoveryError,
+    setScanRecoveryError,
+    scanRecoveryUnavailable,
+    setScanRecoveryUnavailable,
+  } = usePendingScanRecovery(principalId, data.workspaceId)
   const [scanEligibility, setScanEligibility] = useState(createIdleScanEligibility)
   const [checkedEligibilityKey, setCheckedEligibilityKey] = useState<string | null>(null)
   const startNewScanAfterPreflight = useRef(false)
@@ -119,33 +173,6 @@ export function useOnboardingScan({
     persistedTargetReusable,
     onTargetBound,
   }
-
-  useEffect(() => {
-    // Browser session storage is external state and is only available after hydration.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setScanOperationStatus(null)
-    setScanRecoveryUnavailable(false)
-    setScanRecoveryError(null)
-    const workspaceId = data.workspaceId
-    if (!workspaceId) {
-      setPendingScanSubmission(null)
-      return
-    }
-    try {
-      const pending = readPendingScanSubmission({
-        principalId,
-        workspaceId,
-        surface: "onboarding",
-      })
-      setPendingScanSubmission(pending)
-    } catch (cause) {
-      setPendingScanSubmission(null)
-      setScanRecoveryUnavailable(true)
-      setScanRecoveryError(
-        cause instanceof Error ? cause.message : "Saved scan recovery data could not be read."
-      )
-    }
-  }, [principalId, data.workspaceId])
 
   const { pendingScanMatchesCurrent, visibleEligibility } = deriveOnboardingScanView({
     principalId,
