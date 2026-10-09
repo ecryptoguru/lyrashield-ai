@@ -11,6 +11,7 @@
     "lint:copy-comma": "node lint/serial-comma-ratchet.mjs",
     "lint:ratchet-baselines": "node lint/ratchet-baseline-shrink.mjs",
     "lint:md": "markdownlint-cli2",
+    "lint:knip": "knip --no-exit-code",
     "typecheck": "turbo typecheck",
     "typecheck:web-tests": "pnpm --filter @lyrashield/web exec tsc --noEmit -p tsconfig.tests.json",
     "typecheck:e2e": "pnpm --filter @lyrashield/db exec tsc --noEmit -p ../../e2e/tsconfig.json",

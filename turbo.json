@@ -178,7 +178,6 @@
         "NEXT_PUBLIC_POSTHOG_HOST",
         "NEXT_PUBLIC_SENTRY_DSN",
         "NEXT_PUBLIC_SENTRY_RELEASE",
-        "MYRA_WRITES_ENABLED",
         "MYRA_WRITES_ENABLED"
       ]
     },
@@ -238,7 +237,6 @@
         "NEXT_PUBLIC_POSTHOG_HOST",
         "NEXT_PUBLIC_SENTRY_DSN",
         "NEXT_PUBLIC_SENTRY_RELEASE",
-        "MYRA_WRITES_ENABLED",
         "MYRA_WRITES_ENABLED"
       ]
     },

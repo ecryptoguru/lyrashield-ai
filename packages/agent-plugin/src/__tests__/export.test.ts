@@ -566,10 +566,18 @@ describe("exportMarketplace", () => {
       path.join(output, ".github", "workflows", "validate.yml"),
       "utf8"
     )
+    expect(validateWorkflow).toContain("changed=true")
+    expect(validateWorkflow).toContain('if merge_base="$(git merge-base "$base" HEAD)"; then')
+    expect(validateWorkflow).toContain('echo "changed=$changed" >> "$GITHUB_OUTPUT"')
+    const diffCommand = 'git diff --quiet "$merge_base" HEAD --'
+    const diffStart = validateWorkflow.indexOf(diffCommand)
+    expect(diffStart).not.toBe(-1)
+    const pathsStart = validateWorkflow.indexOf("\n", diffStart) + 1
+    const pathsEnd = validateWorkflow.indexOf("; then", pathsStart)
     const guardedPaths = validateWorkflow
-      .match(/git diff --quiet "\$base" HEAD -- \\\n([\s\S]*?); then/)?.[1]
-      ?.split("\n")
-      .map((line) => line.replace(/\\$/, "").replace(/;$/, "").trim())
+      .slice(pathsStart, pathsEnd)
+      .split("\n")
+      .map((line) => line.replace(/\\$/, "").trim())
       .filter(Boolean)
     expect(guardedPaths).toEqual([
       "zed-extension",

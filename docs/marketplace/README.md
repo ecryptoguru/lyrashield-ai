@@ -1,10 +1,10 @@
 # LyraShield AI marketplace release source
 
 PREPARATION ONLY: npm Agent Plugin `0.1.31`, MCP `0.2.12` and CLI `0.2.14` are published.
-This source export has not yet been regenerated from the final merged product revision and tagged
-as a matching immutable marketplace release. Do not treat a package publication or mutable branch
-as proof of a marketplace listing or authenticated client acceptance. Channel-specific listing
-versions and review states may lag this source.
+This export was regenerated from the exact product revision recorded in `manifest.json` and remains
+an untagged release candidate. No matching immutable marketplace release has been verified. Do not
+treat package publication or this mutable branch as proof of a marketplace listing or authenticated
+client acceptance. Channel-specific listing versions and review states may lag this source.
 
 Point-in-time export status belongs in `manifest.json`, which records the exact source
 commit and publication state for the revision actually shipped. Do not add a dated

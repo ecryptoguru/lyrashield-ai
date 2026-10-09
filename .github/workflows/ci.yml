@@ -16,6 +16,9 @@ jobs:
     name: SCA & Secret Scan
     needs: changes
     runs-on: ubuntu-latest
+    # Bound the job so a hung audit or scanner fails the required check instead
+    # of burning the 360-minute default on a runner.
+    timeout-minutes: 20
     permissions:
       contents: read
       pull-requests: read
@@ -64,6 +67,7 @@ jobs:
   changes:
     name: Detect changed paths
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       actions: read
       contents: read
@@ -158,6 +162,13 @@ jobs:
     # Early and late cancellation guards fail the aggregate instead of skipping green.
     if: ${{ always() }}
     runs-on: ubuntu-latest
+    # This job is the single required aggregate and runs the full serial chain:
+    # install, format, ratchets, typechecks, lint, suites, build and the browser
+    # harnesses. Steps carry their own tighter limits; this bound keeps a hang
+    # outside those steps from burning the 360-minute runner default. PR #850
+    # failed on the 15-minute "Install Playwright browser" step timeout, so the
+    # realistic failure is one stuck step, not a day-long run.
+    timeout-minutes: 120
 
     env:
       # Vitest validates every database/Redis URL against the local disposable
@@ -305,6 +316,18 @@ jobs:
 
       - name: Serial-comma copy ratchet
         run: pnpm lint:copy-comma
+
+      # Advisory only: knip is installed and configured but was never run in CI.
+      # `--no-exit-code` makes findings non-fatal, and `continue-on-error` keeps
+      # a knip config or execution error from failing the required aggregate.
+      # The report is a maintenance signal, not a merge gate: standard mode
+      # reports 37 issues and production mode 105, and none of them have been
+      # reviewed for deletion yet.
+      - name: Dead-code report (knip, non-blocking)
+        if: needs.changes.outputs.docs-only != 'true'
+        continue-on-error: true
+        timeout-minutes: 10
+        run: pnpm lint:knip
 
       - name: Generate Prisma Client
         if: needs.changes.outputs.database-services == 'true'
@@ -766,6 +789,7 @@ jobs:
     # provenance fetch, install, and tests are skipped for known docs/marketing-only diffs.
     # If classification fails or omits the new output, fail closed.
     if: ${{ always() && !cancelled() }}
+    timeout-minutes: 45
     steps:
       - name: Preserve the required contract context for unrelated paths
         if: needs.changes.result == 'success' && needs.changes.outputs.engine-worker-contract == 'false'
@@ -858,11 +882,103 @@ jobs:
   # distinct from the production scopes so PR layers cannot poison release
   # cache entries. Build args are dummy values; production URLs/keys come only
   # from the deploy workflow.
+  #
+  # This job is deliberately NOT part of the required aggregate and not a
+  # required status check: it is new coverage and has to prove stable first.
+  # It reuses the release targets but is otherwise independent of
+  # deploy-azure.yml, which keeps owning every pushed release image.
+  container-build:
+    name: Container image build (no push)
+    needs: changes
+    if: needs.changes.outputs.azure-deploy == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      # The same immutable engine pin the release build consumes, read from
+      # deploy-azure.yml so the PR gate cannot drift from production. Do not
+      # bump the pin here.
+      - name: Read pinned engine revision
+        id: engine
+        shell: bash
+        run: |
+          revision="$(sed -nE 's/^  ENGINE_REVISION: ([0-9a-f]{40})$/\1/p' .github/workflows/deploy-azure.yml)"
+          if ! [[ "$revision" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::deploy-azure.yml must contain one immutable ENGINE_REVISION"
+            exit 1
+          fi
+          echo "revision=$revision" >> "$GITHUB_OUTPUT"
+
+      # The worker target embeds the engine source, so it needs the named
+      # `engine` build context. The web and egress-proxy targets do not.
+      - name: Checkout pinned engine
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.repository_owner }}/lyrashield-engine
+          ref: ${{ steps.engine.outputs.revision }}
+          fetch-depth: 0
+          path: lyrashield-engine
+          token: ${{ secrets.GITHUB_TOKEN }}
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Build web image (no push)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          target: runner
+          push: false
+          build-args: |
+            BUILD_APP_URL=https://app.example.invalid
+            BUILD_PUBLIC_APP_URL=https://scanner.example.invalid
+            BUILD_PUBLIC_MARKETING_URL=https://marketing.example.invalid
+            BUILD_TRUSTED_PROXY_IP_HEADER=x-forwarded-for
+            BUILD_LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=1
+            BUILD_NEXT_PUBLIC_POSTHOG_KEY=
+            BUILD_NEXT_PUBLIC_SENTRY_DSN=
+            BUILD_NEXT_PUBLIC_SENTRY_RELEASE=pr-gate-${{ github.sha }}
+          cache-from: type=gha,scope=container-build-web
+          cache-to: type=gha,mode=max,scope=container-build-web
+
+      - name: Build worker image (no push)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          target: worker
+          push: false
+          build-contexts: |
+            engine=lyrashield-engine
+          build-args: |
+            BUILD_TRUSTED_PROXY_IP_HEADER=x-forwarded-for
+          cache-from: type=gha,scope=container-build-worker
+          cache-to: type=gha,mode=max,scope=container-build-worker
+
+      - name: Build egress-proxy image (no push)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          target: egress-proxy
+          push: false
+          cache-from: type=gha,scope=container-build-egress-proxy
+          cache-to: type=gha,mode=max,scope=container-build-egress-proxy
+
   desktop-rust:
     name: Desktop Rust (cargo)
     needs: [changes]
     if: needs.changes.outputs.desktop == 'true'
     runs-on: macos-14
+    # macOS runners bill at a 10x multiplier, so a hung cargo step is the most
+    # expensive way to burn the 360-minute default.
+    timeout-minutes: 60
     permissions:
       contents: read
     steps:
@@ -913,6 +1029,7 @@ jobs:
     needs: [changes]
     if: needs.changes.outputs.desktop == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read
     steps:
