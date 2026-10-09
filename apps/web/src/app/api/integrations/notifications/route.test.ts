@@ -245,9 +245,12 @@ describe("workspace notification settings API", () => {
     })
     expect(mocks.disable).toHaveBeenCalledWith("ws-1", "slack")
     expect(mocks.remove).toHaveBeenCalledWith("s3://private/retired", "ws-1")
-    expect(mocks.disable.mock.invocationCallOrder[0]).toBeLessThan(
-      mocks.remove.mock.invocationCallOrder[0]
-    )
+    const disableOrder = mocks.disable.mock.invocationCallOrder[0]
+    const cleanupOrder = mocks.remove.mock.invocationCallOrder[0]
+    if (disableOrder === undefined || cleanupOrder === undefined) {
+      throw new Error("Disconnect and credential cleanup must both run")
+    }
+    expect(disableOrder).toBeLessThan(cleanupOrder)
     expect(JSON.stringify(mocks.audit.mock.calls)).not.toContain("s3:")
     expect(mocks.send).not.toHaveBeenCalled()
   })
