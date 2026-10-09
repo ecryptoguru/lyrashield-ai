@@ -34,7 +34,7 @@ jobs:
 
       - name: Setup pnpm
         if: needs.changes.outputs.docs-only != 'true'
-        uses: pnpm/setup@c9883cc79df532ad1a7b81bf9ab944ceb090d65c # v2.0.0
+        uses: pnpm/setup@fbda4c85fc2e1e08721cd8763afea8f48d60f024 # v3.0.0
         with:
           # Every workflow runs pnpm install as an explicit step; the
           # successor action's install default is true, so opt out.
@@ -287,7 +287,7 @@ jobs:
           done
 
       - name: Setup pnpm
-        uses: pnpm/setup@c9883cc79df532ad1a7b81bf9ab944ceb090d65c # v2.0.0
+        uses: pnpm/setup@fbda4c85fc2e1e08721cd8763afea8f48d60f024 # v3.0.0
         with:
           # Every workflow runs pnpm install as an explicit step; the
           # successor action's install default is true, so opt out.
@@ -1048,7 +1048,7 @@ jobs:
           persist-credentials: false
 
       - name: Setup pnpm
-        uses: pnpm/setup@c9883cc79df532ad1a7b81bf9ab944ceb090d65c # v2.0.0
+        uses: pnpm/setup@fbda4c85fc2e1e08721cd8763afea8f48d60f024 # v3.0.0
         with:
           # Every workflow runs pnpm install as an explicit step; the
           # successor action's install default is true, so opt out.
