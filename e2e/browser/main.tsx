@@ -41,6 +41,14 @@ if (new URLSearchParams(location.search).has("forms")) {
   await import("../../apps/web/src/app/globals.css")
   const { default: FindingsHarness } = await import("./findings-harness")
   root.render(<FindingsHarness />)
+} else if (new URLSearchParams(location.search).has("onboarding")) {
+  await import("../../apps/web/src/app/globals.css")
+  const { default: OnboardingHarness } = await import("./onboarding-harness")
+  root.render(<OnboardingHarness />)
+} else if (new URLSearchParams(location.search).has("ux")) {
+  await import("../../apps/web/src/app/globals.css")
+  const { default: UxFocusHarness } = await import("./ux-focus-harness")
+  root.render(<UxFocusHarness />)
 } else if (
   location.pathname === "/dashboard/reports" ||
   new URLSearchParams(location.search).get("tab") === "reports"

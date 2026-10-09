@@ -1,28 +1,27 @@
 import { renderToStaticMarkup } from "react-dom/server"
-import type { ReactNode } from "react"
-import { expect, it, vi } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 
-vi.mock("next/link", async () => {
-  const React = await vi.importActual<typeof import("react")>("react")
-  return {
-    default: ({
-      href,
-      children,
-      className,
-    }: {
-      href: string
-      children: ReactNode
-      className: string
-    }) => React.createElement("a", { href, className }, children),
-  }
-})
+const hoisted = vi.hoisted(() => ({ rememberPlanIntent: vi.fn() }))
+vi.mock("@/lib/plan-intent", () => ({ rememberPlanIntent: hoisted.rememberPlanIntent }))
 
 import { UpgradeNowButton } from "./upgrade-now-button"
+import { PLAN_PICKER_ID } from "./plan-picker"
 
-it("routes Upgrade Now to the existing Pro plan picker", () => {
-  const html = renderToStaticMarkup(<UpgradeNowButton />)
+describe("UpgradeNowButton", () => {
+  it("points at the plan picker on this page instead of linking back to it", () => {
+    const html = renderToStaticMarkup(<UpgradeNowButton />)
 
-  expect(html).toContain('href="/dashboard/billing?plan=PRO"')
-  expect(html).toContain("Upgrade Now")
-  expect(html).not.toContain("<button")
+    // W1/P2-4: this was a Link to /dashboard/billing?plan=PRO rendered inside
+    // /dashboard/billing, so the only visible effect was a reload.
+    expect(html).not.toContain("href=")
+    expect(html).not.toContain("/dashboard/billing?plan=PRO")
+    expect(html).toContain("<button")
+    expect(html).toContain(`aria-controls="${PLAN_PICKER_ID}"`)
+    expect(html).toContain("Upgrade Now")
+  })
+
+  it("records no plan preference merely by rendering", () => {
+    renderToStaticMarkup(<UpgradeNowButton />)
+    expect(hoisted.rememberPlanIntent).not.toHaveBeenCalled()
+  })
 })

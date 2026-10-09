@@ -2,7 +2,16 @@
 import type { ReactNode, RefObject } from "react"
 import Link from "next/link"
 import { Bug, Shield, ChevronRight, CheckCircle2, XCircle, Calendar, SortDesc } from "lucide-react"
-import { Badge, Card, EmptyState, Select, Spinner, buttonVariants, cn } from "@lyrashield/ui"
+import {
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Select,
+  Spinner,
+  buttonVariants,
+  cn,
+} from "@lyrashield/ui"
 import { Skeleton } from "@/components/ui/skeleton"
 import { severityLabel, humanizeToken } from "@/lib/labels"
 import { SEVERITY_BADGE } from "@/lib/severity-badge"
@@ -165,6 +174,16 @@ type FindingsResultsProps = {
   sortedFindings: FindingListItem[]
   rowRefs: RefObject<Map<string, HTMLButtonElement | null>>
   onOpenFinding: (finding: FindingListItem, button: HTMLButtonElement) => void
+  /**
+   * True when the current list is narrowed by anything the user can undo: a
+   * status filter other than the default, a target, a scan scope or a search.
+   * A narrowed empty result is not an empty workspace, and telling a user who
+   * just fixed everything to "start a scan" is wrong.
+   */
+  narrowed?: boolean
+  onClearFilters?: () => void
+  /** When the empty result is caused by a scan scope, the way out is a link. */
+  clearHref?: string
   children?: ReactNode
 }
 
@@ -174,6 +193,9 @@ export function FindingsResults({
   sortedFindings,
   rowRefs,
   onOpenFinding,
+  narrowed = false,
+  onClearFilters,
+  clearHref,
   children,
 }: FindingsResultsProps) {
   return (
@@ -191,12 +213,32 @@ export function FindingsResults({
       ) : findings.length === 0 ? (
         <EmptyState
           icon={Bug}
-          title={`No ${FINDING_PLURAL.toLowerCase()} yet`}
-          description={`Security ${FINDING_PLURAL.toLowerCase()} detected by ${SCAN_PLURAL.toLowerCase()} will appear here. Start a ${SCAN_SINGULAR.toLowerCase()} to get started.`}
+          title={
+            narrowed
+              ? `No ${FINDING_PLURAL.toLowerCase()} match these filters`
+              : `No ${FINDING_PLURAL.toLowerCase()} yet`
+          }
+          description={
+            narrowed
+              ? "Nothing in this workspace matches the current filter, target or search. Clear them to see everything."
+              : `Security ${FINDING_PLURAL.toLowerCase()} detected by ${SCAN_PLURAL.toLowerCase()} will appear here. Start a ${SCAN_SINGULAR.toLowerCase()} to get started.`
+          }
           action={
-            <Link href="/dashboard/scans" className={buttonVariants()}>
-              Start a {SCAN_SINGULAR.toLowerCase()}
-            </Link>
+            narrowed ? (
+              clearHref ? (
+                <Link href={clearHref} className={buttonVariants({ variant: "outline" })}>
+                  Clear filters
+                </Link>
+              ) : onClearFilters ? (
+                <Button variant="outline" onClick={onClearFilters}>
+                  Clear filters
+                </Button>
+              ) : null
+            ) : (
+              <Link href="/dashboard/scans" className={buttonVariants()}>
+                Start a {SCAN_SINGULAR.toLowerCase()}
+              </Link>
+            )
           }
         />
       ) : (

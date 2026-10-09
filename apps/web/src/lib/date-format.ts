@@ -27,17 +27,30 @@ const timeFormatter = new Intl.DateTimeFormat("en-US", {
   timeZone: "UTC",
 })
 
+/**
+ * Every absolute timestamp in the product names its zone.
+ *
+ * There is one convention: the deterministic surfaces print `<date> UTC` or
+ * `<date>, <time> UTC`, and `LocalTime` prints the viewer's own zone, also
+ * named. This module previously carried three conventions — labelled UTC,
+ * unlabelled UTC and unlabelled local — so a reader outside UTC could not tell
+ * which clock a "Created" or a "Renews on" line used, and one of them changed
+ * day after hydration.
+ *
+ * The evidence exports (SARIF, manifests, reports) already print UTC in their
+ * own formats; these formatters are the UI's.
+ */
 export function formatDate(value: DateInput) {
-  return dateFormatter.format(parseDate(value))
+  return `${dateFormatter.format(parseDate(value))} UTC`
 }
 
 export function formatDateTime(value: DateInput) {
-  return `${formatDate(value)}, ${formatTime(value)}`
+  return `${dateFormatter.format(parseDate(value))}, ${formatTime(value)} UTC`
 }
 
-/** Format a timestamp in the fixed UTC timezone and name that zone for readers. */
+/** Alias kept for call sites that read better with the zone spelled out. */
 export function formatDateTimeUtc(value: DateInput) {
-  return `${formatDateTime(value)} UTC`
+  return formatDateTime(value)
 }
 
 export function formatTime(value: DateInput) {
@@ -60,8 +73,21 @@ const localTimeFormatter = new Intl.DateTimeFormat("en-US", {
   hour12: false,
 })
 
+/** The viewer's own zone name (for example "GMT-4" or "IST"), or "local" when
+ * the browser cannot name it. Never empty, so the zone is always stated. */
+export function localZoneName(): string {
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", { timeZoneName: "short" }).formatToParts(
+      new Date()
+    )
+    return parts.find((part) => part.type === "timeZoneName")?.value ?? "local"
+  } catch {
+    return "local"
+  }
+}
+
 export function formatLocalDate(value: DateInput) {
-  return localDateFormatter.format(parseDate(value))
+  return `${localDateFormatter.format(parseDate(value))} ${localZoneName()}`
 }
 
 function formatLocalTime(value: DateInput) {
@@ -69,7 +95,7 @@ function formatLocalTime(value: DateInput) {
 }
 
 export function formatLocalDateTime(value: DateInput) {
-  return `${formatLocalDate(value)}, ${formatLocalTime(value)}`
+  return `${localDateFormatter.format(parseDate(value))}, ${formatLocalTime(value)} ${localZoneName()}`
 }
 
 export function formatDuration(start: string | null, end: string | null): string {

@@ -196,7 +196,7 @@ export function buildAgentWizard(agentId: string, apiUrl: string): AgentWizardDa
       summary: manualPlugin
         ? "The CLI installer returns MANUAL_REQUIRED: it prints instructions and does not install or register the plugin. Complete client activation after the matching immutable marketplace release is available, then confirm discovery, authentication and a read-only call."
         : agent.id === "picode"
-          ? `Pi has a built-in MCP client. Add the hosted server at ${apiUrl}/api/mcp, complete Pi's OAuth login, and use ${CLI_PACKAGE_SPEC} for standalone CLI workflows.`
+          ? `Pi has a built-in MCP client. Add the hosted server at ${apiUrl}/api/mcp, complete Pi's OAuth login and use ${CLI_PACKAGE_SPEC} for standalone CLI workflows.`
           : augmentWorkflowInPreparation
             ? "Use Augment's MCP settings to add the pinned local stdio server for direct tool access. Its native marketplace plugin remains under preparation."
             : !cliInstallCommand

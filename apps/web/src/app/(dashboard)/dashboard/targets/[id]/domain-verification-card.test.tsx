@@ -111,15 +111,48 @@ describe("domain verification card", () => {
     expect(harness.buttons.size).toBe(0)
     expect(harness.get).not.toHaveBeenCalled()
   })
-  it("loads scoped proof metadata and explains missing token recovery", async () => {
+  it("loads scoped proof metadata and states the reload limitation", async () => {
     const html = await load([proof])
     expect(harness.get).toHaveBeenCalledWith(
       "/api/target-domain-verifications?workspaceId=ws1",
       expect.objectContaining({ cache: "no-store" })
     )
-    expect(html).toContain("reissue if you did not save it")
+    expect(html).toContain("is never returned by a later read")
     expect(html).not.toContain("TXT value</")
-    expect(harness.buttons.get("Verify now")?.disabled).toBe(false)
+    expect(harness.buttons.get("Verify domain")?.disabled).toBe(false)
+  })
+
+  // W1/P2-6: the card used to name two buttons and a policy sentence without
+  // saying what to do at the DNS provider.
+  it("gives the DNS steps in order before the controls", async () => {
+    const html = await load([proof])
+
+    const steps = [
+      "1. Get the TXT record.",
+      "2. Publish it at your DNS provider.",
+      "3. Wait for the record to appear.",
+      "4. Verify.",
+    ]
+    let cursor = -1
+    for (const step of steps) {
+      const index = html.indexOf(step)
+      expect(index, step).toBeGreaterThan(cursor)
+      cursor = index
+    }
+    expect(html).toContain("Get a new TXT record")
+    expect(html).toContain("Verify domain")
+    // Jargon the button labels used to carry.
+    expect(html).not.toContain("Issue proof")
+    expect(html).not.toContain("Verify now")
+  })
+
+  it("explains why verification is unavailable without an issued record", async () => {
+    const html = await load()
+    expect(html).toContain("Get TXT record")
+    expect(html).toContain(
+      "Verification is available once a TXT record has been issued and published."
+    )
+    expect(harness.buttons.get("Verify domain")?.disabled).toBe(true)
   })
   it("does not show the raw ISO expiry in the initial domain status", () => {
     const html = render({
@@ -148,7 +181,7 @@ describe("domain verification card", () => {
       verification: proof,
       dns: { host: "_lyrashield.app.example.com", value: "fixture-token" },
     })
-    harness.buttons.get("Issue proof")!.onClick!()
+    harness.buttons.get("Get a new TXT record")!.onClick!()
     await settle()
     let html = render()
     expect(html).toContain("Self-attested")
@@ -159,13 +192,13 @@ describe("domain verification card", () => {
       { workspaceId: "ws1", domain: "app.example.com" },
       expect.any(Object)
     )
-    harness.buttons.get("Copy DNS host")!.onClick!()
+    harness.buttons.get("Copy DNS record name")!.onClick!()
     await settle()
     harness.buttons.get("Copy TXT value")!.onClick!()
     await settle()
     expect(harness.copy.mock.calls).toEqual([["_lyrashield.app.example.com"], ["fixture-token"]])
     harness.put.mockResolvedValueOnce({ ...proof, status: "VERIFIED" })
-    harness.buttons.get("Verify now")!.onClick!()
+    harness.buttons.get("Verify domain")!.onClick!()
     await settle()
     html = render()
     expect(harness.put).toHaveBeenCalledWith(
@@ -179,12 +212,12 @@ describe("domain verification card", () => {
   it("does not show an expired proof as verified or checkable", async () => {
     const html = await load([{ ...proof, status: "VERIFIED", expiresAt: "2000-01-01T00:00:00Z" }])
     expect(html).toContain("Not verified (expired)")
-    expect(harness.buttons.get("Verify now")?.disabled).toBe(true)
+    expect(harness.buttons.get("Verify domain")?.disabled).toBe(true)
   })
   it("shows API failures accessibly", async () => {
     await load([proof])
     harness.put.mockRejectedValueOnce(new Error("DNS record not found"))
-    harness.buttons.get("Verify now")!.onClick!()
+    harness.buttons.get("Verify domain")!.onClick!()
     await settle()
     const html = render()
     expect(html).toContain('role="alert"')
@@ -197,7 +230,7 @@ describe("domain verification card", () => {
       verification: proof,
       dns: { host: "_lyrashield.app.example.com", value: "fixture-token" },
     })
-    harness.buttons.get("Issue proof")!.onClick!()
+    harness.buttons.get("Get TXT record")!.onClick!()
     await settle()
     render()
     harness.copy.mockRejectedValueOnce(new Error("denied"))

@@ -2,6 +2,7 @@ import { expect, it, vi } from "vitest"
 import { Button } from "@lyrashield/ui"
 import {
   onboardingStepEyebrow,
+  ONBOARDING_ENVIRONMENT,
   stepModelForPath,
   type OnboardingPath,
 } from "./onboarding-flow.utils"
@@ -178,6 +179,38 @@ it("keeps target-detail copy specific to repository and URL setup", () => {
   expect(textContent(url)).toContain(
     "Reviewing your web app. Confirm the details and choose what you need from this scan."
   )
+})
+
+/**
+ * W1/P3 — every onboarding target was stored as STAGING and no copy said so, so
+ * a production site was labelled Staging until the user found the setting.
+ */
+it("discloses the default environment without claiming an unsaved target is persisted", () => {
+  const reviewOptions = getOnboardingReviewOptions("url")
+  const view = TargetDetailsView({
+    eyebrow: "Step 2 of 2 · Target details",
+    path: "url",
+    productName: "Production Site",
+    onProductNameChange: vi.fn(),
+    retryingExistingTarget: false,
+    hasFailedScanAttempt: false,
+    reviewOptions,
+    selectedReview: reviewOptions[0],
+    eligibility: { status: "idle" },
+    targetId: null,
+    onSelectGoal: vi.fn(),
+    loading: false,
+    onBack: vi.fn(),
+    onStart: vi.fn(),
+    onStartTrial: vi.fn(),
+  })
+  const copy = textContent(view)
+
+  expect(ONBOARDING_ENVIRONMENT).toBe("STAGING")
+  expect(copy).toContain("The default target environment is Staging")
+  expect(copy).toContain("You can change it in target settings after setup")
+  expect(copy).not.toContain("is saved")
+  expect(copy).not.toContain("STAGING")
 })
 
 it("keeps new repository names editable and persisted target names locked", () => {

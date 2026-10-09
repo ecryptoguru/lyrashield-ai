@@ -540,16 +540,8 @@ step_roll-back-production-traffic-on-health-failure() {
     local revision="$2"
     local smoke_url="$3"
     if [ -z "$name" ]; then return 0; fi
-    az containerapp revision activate \
-      --name "$name" \
-      --resource-group "$RG" \
-      --revision "$revision" \
-      --output none
-    az containerapp ingress traffic set \
-      --name "$name" \
-      --resource-group "$RG" \
-      --revision-weight "$revision=100" \
-      --output none
+    ca_activate_revision "$name" "$revision" "$RG" || return
+    ca_set_traffic "$name" "$revision" "$RG" || return
     local result
     result=$(azure_vm_run_command_with_retry \
       --name "$WORKER_VM_NAME" \
