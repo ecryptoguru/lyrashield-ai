@@ -4,6 +4,9 @@ export default defineConfig({
   testDir: "./tests-browser",
   testMatch: "**/*.e2e.ts",
   fullyParallel: false,
+  // Keep synthetic CPU-throttling measurements stable on high-core developer
+  // machines as well as on the two-core CI runner.
+  workers: 2,
   retries: process.env.CI ? 2 : 0,
   use: {
     baseURL: "http://127.0.0.1:8787",
