@@ -81,25 +81,52 @@ ca_retry_update() {
 }
 
 ca_set_traffic() {
-  local name="$1" revision="$2" resource_group="$3"
+  local name="$1" revision="$2" resource_group="$3" set_output actual
   [ -n "$name" ] || return 0
   [ -n "$revision" ] || { echo "::error::Cannot set traffic to an empty revision for ${name}." >&2; return 1; }
-  az containerapp ingress traffic set \
+  if set_output=$(az containerapp ingress traffic set \
     --name "$name" \
     --resource-group "$resource_group" \
     --revision-weight "$revision=100" \
-    --output none
+    --output none 2>&1); then
+    [ -z "$set_output" ] || printf '%s\n' "$set_output"
+    return 0
+  fi
+  if actual=$(az containerapp ingress traffic show \
+    --name "$name" \
+    --resource-group "$resource_group" \
+    --query "[?revisionName == '${revision}'].weight | [0]" \
+    --output tsv 2>/dev/null) && [ "$actual" = "100" ]; then
+    echo "::notice::${name} traffic readback confirms ${revision}=100 after Azure returned an error."
+    return 0
+  fi
+  printf '%s\n' "$set_output" >&2
+  return 1
 }
 
 ca_activate_revision() {
-  local name="$1" revision="$2" resource_group="$3"
+  local name="$1" revision="$2" resource_group="$3" activation_output active
   [ -n "$name" ] || return 0
   [ -n "$revision" ] || { echo "::error::Cannot activate an empty revision for ${name}." >&2; return 1; }
-  az containerapp revision activate \
+  if activation_output=$(az containerapp revision activate \
     --name "$name" \
     --resource-group "$resource_group" \
     --revision "$revision" \
-    --output none
+    --output none 2>&1); then
+    [ -z "$activation_output" ] || printf '%s\n' "$activation_output"
+    return 0
+  fi
+  if active=$(az containerapp revision show \
+    --name "$name" \
+    --resource-group "$resource_group" \
+    --revision "$revision" \
+    --query properties.active \
+    --output tsv 2>/dev/null) && [ "$active" = "true" ]; then
+    echo "${name} revision ${revision} is already active; continuing rollback."
+    return 0
+  fi
+  printf '%s\n' "$activation_output" >&2
+  return 1
 }
 
 ca_rollback_revision() {
