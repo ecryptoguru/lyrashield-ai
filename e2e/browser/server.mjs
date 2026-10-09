@@ -14,6 +14,10 @@ const server = await createServer({
   plugins: [tailwindcss()],
   configFile: false,
   root: fileURLToPath(new URL("../../", import.meta.url)),
+  // Scan every harness branch before interaction and keep its dependency cache
+  // separate from Vitest. Late dependency discovery can reload an open page.
+  cacheDir: "node_modules/.vite-browser-harness",
+  optimizeDeps: { entries: ["e2e/browser/main.tsx"] },
   resolve: {
     alias: {
       "@tauri-apps/api/core": fileURLToPath(new URL("./desktop-native.ts", import.meta.url)),

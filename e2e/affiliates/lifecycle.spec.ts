@@ -70,38 +70,22 @@ test.describe("Affiliate lifecycle", () => {
     })
     await expect(skipOnboarding).toBeOK()
 
-    // 2. Apply to the affiliate program
+    // 2. The apply page is closed for new admission (freeze) and the apply route
+    //    writes no Affiliate row, so the historical record this lifecycle needs is
+    //    seeded directly. The rest of the spec — approval, attribution, commission,
+    //    hold, release and the dashboard — is unchanged and still exercises the
+    //    money path.
     await page.goto("/affiliates/apply")
-    await page.getByLabel("Your Name").fill("E2E Affiliate")
-    await page.getByLabel("Website / Channel URL").fill("https://example.com/blog")
-    await page.getByLabel("Audience Size").selectOption("1k-10k")
-    await page.getByLabel("Audience Type").selectOption("developers")
-    await page
-      .getByLabel("Promotion Methods")
-      .fill("Blog posts and newsletter about AI security tools")
-    await page.getByLabel("Preferred Payout Method").selectOption("razorpayx")
-    await page.getByLabel("Tax Form Status").selectOption("will_complete")
-    // C-L10: the binding terms checkbox is required — check it before submitting.
-    await page.locator("#acceptTerms").check()
-    await page.getByRole("button", { name: "Submit Application" }).click()
-
-    // Verify application was created
-    // Verify application was created.
-    // RISK-C3/e2e fix: expect.poll(...).not.toBeNull() returns an ExpectResult,
-    // not the polled value — assigning it to `affiliate` then reading
-    // affiliate.status throws TypeError. Split into a poll-for-existence check,
-    // then a separate fetch to read the actual record.
-    await expect
-      .poll(async () => {
-        const u = await prisma.user.findUnique({ where: { email: affiliateEmail } })
-        if (!u) return null
-        return prisma.affiliate.findUnique({ where: { userId: u.id } })
-      })
-      .not.toBeNull()
+    await expect(page.getByRole("heading", { name: /open soon/i })).toBeVisible()
 
     const user = await prisma.user.findUniqueOrThrow({ where: { email: affiliateEmail } })
-    const affiliate = await prisma.affiliate.findUniqueOrThrow({
-      where: { userId: user.id },
+    const affiliate = await prisma.affiliate.create({
+      data: {
+        userId: user.id,
+        status: "PENDING",
+        acceptedTermsAt: new Date(),
+        termsVersion: "2026-08-18-v1",
+      },
     })
 
     expect(affiliate.status).toBe("PENDING")
@@ -129,21 +113,18 @@ test.describe("Affiliate lifecycle", () => {
       },
     })
 
-    // 4. Click the referral link (as a new visitor)
+    // 4. A referral landing must record no click while admission is frozen.
     const clickResponse = await page.request.get(`/?ref=${linkCode}`)
     expect(clickResponse.status()).toBe(200)
 
-    // Verify click was recorded
-    await expect
-      .poll(async () => {
-        const clicks = await prisma.click.count({
-          where: { affiliateId: affiliate.id },
-        })
-        return clicks
-      })
-      .toBeGreaterThanOrEqual(1)
+    const clicksAfterLanding = await prisma.click.count({
+      where: { affiliateId: affiliate.id },
+    })
+    expect(clicksAfterLanding).toBe(0)
 
-    // 5. Sign up as the referred user (with cookie from the click)
+    // 5. Sign up as the referred user. The referral landing above set no
+    // attribution cookie, so attribution for this order comes from the promo
+    // code alone — the same resolution path a cookie would have used.
     // First sign out
     const referredSignOut = await page.request.post("/api/auth/sign-out", {
       data: {},
@@ -168,8 +149,7 @@ test.describe("Affiliate lifecycle", () => {
     // No User.affiliate connect here: the unique FK lives on
     // Affiliate.userId, so `connect` would REASSIGN the affiliate record to
     // the referred user and break the affiliate's own dashboard. Commission
-    // attribution below resolves through the promo code — the same path the
-    // middleware cookie takes in production.
+    // attribution below resolves through the promo code.
 
     // 6. Simulate a paid webhook (Polar sandbox order.paid).
     // Attribution: pass the affiliate's promo code so resolveAttribution
