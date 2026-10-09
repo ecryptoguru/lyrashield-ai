@@ -47,19 +47,19 @@ jobs:
         run: |
           set -euo pipefail
           base="${BASE_SHA:-${BEFORE_SHA:-}}"
+          # Fail closed: an unavailable base or failed Git query must run the expensive check.
+          changed=true
           if [ -n "$base" ] && [ "$base" != "0000000000000000000000000000000000000000" ] && git cat-file -e "${base}^{commit}" 2>/dev/null; then
-            base="$(git merge-base "$base" HEAD)"
-          else
-            base="HEAD~1"
+            if merge_base="$(git merge-base "$base" HEAD)"; then
+              if git diff --quiet "$merge_base" HEAD -- \
+                zed-extension \
+                .github/workflows/validate.yml \
+                .github/workflows/release.yml; then
+                changed=false
+              fi
+            fi
           fi
-          if git diff --quiet "$base" HEAD -- \
-            zed-extension \
-            .github/workflows/validate.yml \
-            .github/workflows/release.yml; then
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "changed=true" >> "$GITHUB_OUTPUT"
-          fi
+          echo "changed=$changed" >> "$GITHUB_OUTPUT"
 
       - name: Cache Zed WASI build
         if: steps.zed.outputs.changed == 'true'
