@@ -239,6 +239,18 @@ test("preference and orientation changes release the old decoder and recover", a
   expect(
     await video.evaluate((element: HTMLVideoElement) => element.videoHeight > element.videoWidth)
   ).toBe(true)
+  await page.setViewportSize({ width: 844, height: 390 })
+  // Native page reflow can move the chapter outside the viewport after rotation.
+  await page.locator("#journey-retest").scrollIntoViewIfNeeded()
+  await expect(video).toHaveAttribute("src", /desktop\/assurance-world.mp4/)
+  await expect(world).toHaveAttribute("data-world-painted", "true")
+  expect(
+    await video.evaluate((element: HTMLVideoElement) => element.videoWidth > element.videoHeight)
+  ).toBe(true)
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.locator("#journey-retest").scrollIntoViewIfNeeded()
+  await expect(video).toHaveAttribute("src", /portrait\/assurance-world.mp4/)
+  await expect(world).toHaveAttribute("data-world-painted", "true")
   await page.emulateMedia({ reducedMotion: "reduce" })
   await expect(world).toHaveAttribute("data-world-state", "static")
   await expect(video).not.toHaveAttribute("src", /.+/)
@@ -246,6 +258,29 @@ test("preference and orientation changes release the old decoder and recover", a
   await expect(world).toHaveAttribute("data-world-state", "ready")
   await expect(world).toHaveAttribute("data-world-painted", "true")
   expect(await video.count()).toBe(1)
+})
+
+test("mobile hero exposes the scene while keeping signup in the first viewport", async ({
+  page,
+}) => {
+  for (const viewport of [
+    { width: 390, height: 844 },
+    { width: 360, height: 800 },
+    { width: 320, height: 568 },
+  ]) {
+    await page.setViewportSize(viewport)
+    await page.goto("/")
+    const world = page.locator("scroll-world")
+    await expect(world).toHaveAttribute("data-world-painted", "true")
+    const stage = await page.locator(".scroll-world__stage").boundingBox()
+    const title = await page.locator("#premium-hero-title").boundingBox()
+    const action = await page.locator(".premium-hero__primary").boundingBox()
+    expect(stage && title && title.y - stage.y >= Math.floor(viewport.height * 0.2)).toBe(true)
+    expect(action && action.y + action.height <= viewport.height).toBe(true)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+      viewport.width
+    )
+  }
 })
 
 test("Save-Data requests no film and retains interactive chapter content", async ({ page }) => {

@@ -29,9 +29,6 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
   </picture>}
   <div class="premium-hero__veil" aria-hidden="true"></div>
   <div class="premium-hero__content">
-    <p class="premium-hero__eyebrow">
-      Open beta · Security review for AI-built apps
-    </p>
     <h1 id="premium-hero-title">The launch gate for AI-built apps.</h1>
     <p class="premium-hero__lede">
       Point LyraShield at a repository, URL or API you are authorized to test. It reviews what
@@ -117,6 +114,7 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
       Set up LyraShield in your coding agent →
     </a>
     <p class="premium-hero__boundary">
+      Open beta · Security review for AI-built apps.
       Evidence is limited to the authorized scope and the checks that ran. No security guarantee.
     </p>
   </div>
@@ -222,19 +220,10 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
     }
   }
 
-  .premium-hero__eyebrow,
   .premium-hero__boundary {
     font-family: "JetBrains Mono Variable", monospace;
     text-transform: uppercase;
     letter-spacing: 0.1em;
-  }
-
-  .premium-hero__eyebrow {
-    margin: 0 0 0.85rem;
-    color: var(--hero-cyan);
-    font-size: clamp(0.78rem, 1vw, 0.95rem);
-    font-weight: 650;
-    overflow-wrap: anywhere;
   }
 
   h1 {
@@ -493,11 +482,6 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
       padding-block: clamp(3rem, 8vh, 4rem) clamp(1.75rem, 5vh, 2.5rem);
     }
 
-    .premium-hero__eyebrow {
-      order: 0;
-      font-size: 0.68rem;
-    }
-
     h1 {
       order: 1;
       font-size: clamp(2.35rem, 10.5vw, 2.9rem);
@@ -728,9 +712,32 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
   :global(:root[data-theme="light"]) .premium-hero.premium-hero--cinematic { background: transparent; }
   :global(:root[data-theme="light"]) .premium-hero--cinematic .premium-hero__veil { background: linear-gradient(90deg, #f3f9fc, rgba(243,249,252,.97) 42%, rgba(243,249,252,.1) 70%, transparent); }
   @media (max-width: 1023px) {
-    .premium-hero--cinematic .premium-hero__content { padding-block: 11rem 2rem; }
-    .premium-hero--cinematic .premium-hero__veil { background: linear-gradient(180deg, transparent, rgba(8,17,28,.95) 11rem, #08111c 22rem); }
-    :global(:root[data-theme="light"]) .premium-hero--cinematic .premium-hero__veil { background: linear-gradient(180deg, transparent, rgba(243,249,252,.98) 11rem, #f3f9fc 22rem); }
+    .premium-hero--cinematic { --mobile-scene: clamp(10rem, 36svh, 21rem); }
+    .premium-hero--cinematic .premium-hero__content {
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      padding: var(--mobile-scene) 1rem 2rem;
+      background: linear-gradient(180deg, transparent calc(var(--mobile-scene) - 2.5rem), rgba(8,17,28,.88) var(--mobile-scene), rgba(8,17,28,.88));
+    }
+    .premium-hero--cinematic h1 { order: 1; }
+    .premium-hero--cinematic .premium-hero__lede { order: 2; }
+    .premium-hero--cinematic .premium-hero__actions { order: 3; }
+    .premium-hero--cinematic .premium-hero__proof { order: 4; }
+    .premium-hero--cinematic .premium-hero__field { order: 5; }
+    .premium-hero--cinematic .premium-hero__trial-note { order: 6; }
+    .premium-hero--cinematic .premium-hero__agent-link { order: 7; }
+    .premium-hero--cinematic .premium-hero__boundary { order: 8; }
+    .premium-hero--cinematic .premium-hero__veil { background: none; }
+    :global(:root[data-theme="light"]) .premium-hero--cinematic .premium-hero__veil { background: none; }
+    :global(:root[data-theme="light"]) .premium-hero--cinematic .premium-hero__content {
+      background: linear-gradient(180deg, transparent calc(var(--mobile-scene) - 2.5rem), rgba(243,249,252,.94) var(--mobile-scene), rgba(243,249,252,.94));
+    }
+  }
+  @media (max-width: 1023px) and (max-height: 700px) {
+    .premium-hero--cinematic { --mobile-scene: clamp(7rem, 20svh, 10rem); }
+    .premium-hero--cinematic .premium-hero__actions { order: 2; }
+    .premium-hero--cinematic .premium-hero__lede { order: 3; }
   }
 </style>
 

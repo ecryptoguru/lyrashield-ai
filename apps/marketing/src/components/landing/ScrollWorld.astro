@@ -7,7 +7,7 @@ const opening = manifest.chapters[0]!
 <scroll-world data-world-manifest={JSON.stringify(manifest)} data-world-state="poster">
   <div class="scroll-world__stage" aria-hidden="true">
     <picture data-world-poster>
-      <source media="(max-width: 1023px)" srcset={opening.portraitPoster} />
+      <source media="(max-width: 1023px) and (orientation: portrait)" srcset={opening.portraitPoster} />
       <img src={opening.desktopPoster} width={manifest.desktop.width} height={manifest.desktop.height} alt="" loading="eager" fetchpriority="high" decoding="async" />
     </picture>
     <video data-world-video muted playsinline preload="none" aria-hidden="true" tabindex="-1"></video>
@@ -47,10 +47,11 @@ const opening = manifest.chapters[0]!
   :global(scroll-world[data-world-state] .journey__nav a[data-journey-link][aria-current]) { color: #11333b; background: #bde9ec; }
   :global(scroll-world[data-world-state] .journey__nav a[aria-current] .journey__node) { color: inherit; }
   @media (max-width: 1023px) {
-    .scroll-world__stage img, .scroll-world__stage video { object-fit: contain; }
-    .scroll-world__scrim { background: linear-gradient(180deg, rgba(8,17,28,.15), rgba(8,17,28,.88) 60%, #08111c); }
+    .scroll-world__stage img, .scroll-world__stage video { object-fit: cover; }
+    .scroll-world__scrim { background: linear-gradient(180deg, rgba(8,17,28,.06) 30%, rgba(8,17,28,.24) 70%, rgba(8,17,28,.48)); }
     :global(scroll-world[data-world-state] .journey__layout) { display: block; }
-    :global(scroll-world[data-world-state] .journey__chapter) { max-width: 40rem; margin-inline: auto; justify-content: end; padding: 3rem 1rem; background: linear-gradient(180deg, transparent, rgba(8,17,28,.95) 45%); }
+    :global(scroll-world[data-world-state] .journey__intro) { padding: 1.25rem 1rem; background: rgba(8,17,28,.9); border-radius: 1rem; }
+    :global(scroll-world[data-world-state] .journey__chapter) { min-height: max(520px, 95svh); max-width: 40rem; margin-inline: auto; justify-content: end; padding: 3rem 1rem; background: linear-gradient(180deg, transparent 45%, rgba(8,17,28,.88) 58%, rgba(8,17,28,.9)); }
   }
   @media (prefers-reduced-motion: reduce) { .scroll-world__stage { position: absolute; top: 0; } }
 </style>

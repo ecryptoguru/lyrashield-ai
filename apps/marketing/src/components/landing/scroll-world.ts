@@ -37,6 +37,10 @@ class ScrollWorld extends HTMLElement {
   private anchor = 0
   private fps = 30
 
+  private mediaVariant() {
+    return innerWidth < 1024 && innerHeight > innerWidth ? "portrait" : "desktop"
+  }
+
   connectedCallback() {
     try {
       this.manifest = JSON.parse(this.dataset.worldManifest ?? "")
@@ -134,8 +138,8 @@ class ScrollWorld extends HTMLElement {
   }
 
   private geometry = () => {
-    // Mobile browser chrome changes height while scrolling; width changes own recomposition.
-    if (this.width === innerWidth) return
+    // Browser-chrome height changes only recompose when the selected media variant changes.
+    if (this.width === innerWidth && (!this.variant || this.variant === this.mediaVariant())) return
     this.measure()
   }
 
@@ -166,7 +170,7 @@ class ScrollWorld extends HTMLElement {
       this.fail()
       return
     }
-    const next = innerWidth < 1024 ? "portrait" : "desktop"
+    const next = this.mediaVariant()
     if (this.variant && next !== this.variant) {
       this.release()
       this.variant = ""
@@ -180,7 +184,7 @@ class ScrollWorld extends HTMLElement {
       this.fail()
       return
     }
-    this.variant = innerWidth < 1024 ? "portrait" : "desktop"
+    this.variant = this.mediaVariant()
     const track = this.variant === "portrait" ? this.manifest.portrait : this.manifest.desktop
     this.dataset.worldState = "loading"
     // readyState can change before loadedmetadata is dispatched. Block scroll

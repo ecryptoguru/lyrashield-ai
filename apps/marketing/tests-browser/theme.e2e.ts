@@ -113,7 +113,11 @@ for (const viewport of [
     const chapter = page.locator('[data-journey-chapter="0"]')
     await chapter.scrollIntoViewIfNeeded()
     await expect(chapter.getByRole("heading")).toBeVisible()
-    expect(await chapter.evaluate((el) => el.clientHeight)).toBeLessThan(750)
+    await expect(chapter.getByRole("heading")).toBeInViewport()
+    // Phone chapters reserve a scene-sized opening but stay within one viewport.
+    expect(await chapter.evaluate((el) => el.clientHeight)).toBeLessThanOrEqual(
+      Math.max(750, viewport.height)
+    )
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
       viewport.width
     )
