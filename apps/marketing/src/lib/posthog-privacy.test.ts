@@ -189,12 +189,17 @@ describe("Lite Check analytics source", () => {
       "../pages/scan.astro",
       "../layouts/Base.astro",
       "../components/WaitlistForm.astro",
-      "../components/landing/evidence-world.ts",
     ]) {
       expect(source(path), `${path} must sanitize captured properties`).toContain(
         "sanitizeMarketingProperties"
       )
     }
+  })
+
+  it("keeps the illustrative journey free of analytics", () => {
+    const journey = source("../components/landing/evidence-journey.ts")
+    expect(journey).not.toContain("posthog")
+    expect(journey).not.toContain(".capture(")
   })
 
   it("does not import or capture PostHog until the account and browser preferences allow it", () => {

@@ -12,7 +12,7 @@ const world = readFileSync(
   "utf8"
 )
 const worldModule = readFileSync(
-  new URL("../components/landing/evidence-world.ts", import.meta.url),
+  new URL("../components/landing/evidence-journey.ts", import.meta.url),
   "utf8"
 )
 const motionManifest = readFileSync(new URL("../lib/motion-manifest.ts", import.meta.url), "utf8")
@@ -38,7 +38,9 @@ describe("premium assurance-world homepage", () => {
     expect(homepage).toContain("<EvidenceWorld manifest={motionManifest} />")
     // Nine-block order (spec section 8): hero, what is different, Lite Check,
     // journey, surfaces, coverage, pricing, FAQ, closing CTA.
-    expect(homepage.indexOf("<PremiumHero />")).toBeLessThan(homepage.indexOf('id="different"'))
+    expect(homepage.indexOf("<PremiumHero cinematic />")).toBeLessThan(
+      homepage.indexOf('id="different"')
+    )
     expect(homepage.indexOf('id="different"')).toBeLessThan(homepage.indexOf("<HomeLiteScan"))
     expect(homepage.indexOf("<HomeLiteScan")).toBeLessThan(homepage.indexOf("<EvidenceWorld"))
     expect(homepage.indexOf("<EvidenceWorld")).toBeLessThan(
@@ -79,7 +81,7 @@ describe("premium assurance-world homepage", () => {
     expect(hero).toContain("TRIAL_LINE")
     expect(hero).toContain('data-cta-id="premium-hero-primary"')
     expect(hero).toContain("premium-hero__secondary")
-    expect(hero).toContain("Run the free Lite Check")
+    expect(hero).toContain("See a sample Lite result")
     expect(hero).not.toContain("Create account")
 
     // The artifact is a synthetic sample labelled as one, so it must never show
@@ -135,18 +137,18 @@ describe("premium assurance-world homepage", () => {
   it("builds one immutable desktop and portrait track with seven timed chapters", () => {
     const manifest = createMotionMediaManifest("/media-local/", "test-render")
     const ids = manifest.chapters.map((chapter) => chapter.id)
-    expect(manifest.version).toBe("2")
+    expect(manifest.version).toBe("3")
     expect(manifest.desktop).toEqual({
-      src: "/media-local/assurance-world/v2/test-render/desktop/assurance-world.mp4",
-      width: 1600,
-      height: 900,
-      duration: 42,
+      src: "/media-local/assurance-world/v3/test-render/desktop/assurance-world.mp4",
+      width: 1440,
+      height: 810,
+      duration: 56,
     })
     expect(manifest.portrait).toEqual({
-      src: "/media-local/assurance-world/v2/test-render/portrait/assurance-world.mp4",
+      src: "/media-local/assurance-world/v3/test-render/portrait/assurance-world.mp4",
       width: 720,
       height: 1280,
-      duration: 42,
+      duration: 56,
     })
     expect(ids).toHaveLength(7)
     expect(manifest.chapters.filter((chapter) => chapter.supportingCard)).toHaveLength(5)
@@ -161,13 +163,13 @@ describe("premium assurance-world homepage", () => {
       "report",
     ])
     expect(manifest.chapters.map(({ start, end }) => [start, end])).toEqual([
-      [0, 6],
-      [6, 12],
-      [12, 18],
-      [18, 24],
-      [24, 30],
-      [30, 36],
-      [36, 42],
+      [0, 8],
+      [8, 16],
+      [16, 24],
+      [24, 32],
+      [32, 40],
+      [40, 48],
+      [48, 56],
     ])
     for (const chapter of manifest.chapters) {
       expect(chapter.desktopPoster).toMatch(/-desktop\.webp$/)
@@ -175,75 +177,25 @@ describe("premium assurance-world homepage", () => {
     }
   })
 
-  it("lazy-loads the evidence-world module as an island", () => {
-    expect(world).toContain('import("./evidence-world.ts")')
-    expect(world).toContain("IntersectionObserver")
-    expect(world).toContain("bootstrapEvidenceWorld")
-    expect(world).toContain("min-height: max(840px, 115svh)")
-    expect(world).toContain("min-height: max(840px, 125svh)")
-    expect(world).toContain("font-size: clamp(1.6rem, 7.4vw, 2.5rem)")
-  })
-
-  it("warms the scrubbed timeline on approach, but only when wanted", () => {
-    // The story is scroll-scrubbed, so arriving with an empty buffer stutters on
-    // the first pass. The element upgrades early and fetches ahead of arrival.
-    expect(worldModule).toContain('this.video.preload = "auto"')
-    expect(worldModule).not.toContain('this.video.preload = "metadata"')
-    // Only the fetch moves early; per-frame scroll work still waits for the
-    // observer, so the module must still assign the source before observing.
-    expect(worldModule.indexOf("this.assignSource()")).toBeLessThan(
-      worldModule.indexOf("this.observer = new IntersectionObserver")
-    )
-
-    // Warm ahead of activation, with no unconditional idle-after-load fetch.
-    expect(world).toContain("rootMargin: `${innerHeight}px 0px`")
-    expect(world).toContain("warmObserver.observe(el)")
-    expect(world).toContain('removeEventListener("resize", observeApproach)')
-    expect(world).not.toContain("requestIdleCallback")
-
-    // A multi-megabyte prefetch has to stay opt-out-able.
-    expect(world).toContain("if (!reduced && !saveData && !slowNetwork)")
-    expect(world).toContain('connection?.effectiveType === "slow-2g"')
-
-    // The markup itself must stay preload="none" so a no-JS or reduced-motion
-    // visit fetches no video at all.
-    expect(world).toContain('preload="none"')
-  })
-
-  it("keeps telemetry privacy-bounded and includes resilient media fallbacks", () => {
-    expect(worldModule).toContain('"cinematic_chapter_view"')
-    expect(worldModule).toContain("{ chapter_id: chapterId, mode }")
-    expect(worldModule).toContain('"cinematic_media_error"')
-    expect(worldModule).toContain("chapter_id: chapterId")
-    expect(worldModule).toContain("asset_type: assetType")
-    expect(worldModule).not.toContain("exception")
-    expect(worldModule).not.toContain("userAgent")
+  it("ships the evidence journey without a video download or motion dependency", () => {
+    expect(world).not.toContain("<video")
+    expect(world).toContain('import "./evidence-journey"')
+    expect(worldModule).toContain("IntersectionObserver")
+    expect(worldModule).toContain("document.hidden")
     expect(worldModule).toContain('matchMedia("(prefers-reduced-motion: reduce)")')
-    expect(worldModule).toContain("connection?.saveData")
-    expect(worldModule.indexOf("if (!this.motionEnabled)")).toBeLessThan(
-      worldModule.indexOf('this.classList.add("is-enhanced")')
-    )
-    expect(worldModule).toContain('rootMargin: "50% 0px"')
-    expect(worldModule).not.toContain("URL.createObjectURL")
+    expect(worldModule).toContain("saveData")
+    expect(worldModule).toContain("disconnectedCallback")
   })
 
-  it("coalesces scroll seeks and keeps exactly one decoded video layer in front", () => {
-    expect(world.match(/<video/g)).toHaveLength(1)
-    expect(worldModule).toContain("if (video.seeking) return")
-    expect(worldModule).toContain("requestVideoFrameCallback")
-    expect(worldModule).toContain("setTimeout(painted, 120)")
-    expect(worldModule).toContain('addEventListener("loadeddata", this.queueUpdate)')
-    expect(worldModule).toContain("HTMLMediaElement.HAVE_CURRENT_DATA")
-    expect(worldModule).toContain("this.showPoster()")
-    expect(worldModule).toContain("this.showVideo()")
-    expect(worldModule).toContain("Math.max(this.targetTime, 0)")
-    expect(worldModule).not.toContain("video.currentTime + delta *")
-    expect(worldModule).not.toContain("response.blob()")
-    expect(worldModule).not.toContain("URL.createObjectURL")
-    expect(worldModule).not.toContain("loadPair")
-    expect(worldModule).toContain("if (innerWidth === this.viewportWidth)")
-    expect(worldModule).toContain('chapter.classList.toggle("is-active", chapterIndex === index)')
-    expect(worldModule).toContain("chapterProgress >= 0.58")
-    expect(worldModule).toContain('"is-card-active"')
+  it("keeps the same illustrative finding and its limitations through the report", () => {
+    expect(world).toContain("Finding EX-014")
+    expect(world).toContain("Example EX-014 remains on record")
+    expect(world).toContain("Incomplete coverage · inconclusive")
+    expect(world).toContain("Insufficient evidence")
+    expect(world).toContain("Approval required")
+    expect(world).toContain("Retest coverage incomplete")
+    expect(world).not.toContain("state-verified")
+    expect(world).toContain('aria-label="Evidence journey chapters"')
+    expect(world).toContain('href="#product-preview"')
   })
 })

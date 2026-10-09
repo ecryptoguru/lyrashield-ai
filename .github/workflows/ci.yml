@@ -729,6 +729,10 @@ jobs:
           done
           pnpm exec playwright install --with-deps chromium
 
+      - name: Install FFmpeg for synthetic motion controller fixtures
+        if: needs.changes.outputs.marketing == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
       - name: Marketing browser E2E
         id: marketing_browser
         if: needs.changes.outputs.marketing-tests == 'true'

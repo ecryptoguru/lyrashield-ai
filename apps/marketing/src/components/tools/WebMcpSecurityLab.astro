@@ -155,6 +155,7 @@ const copyButtonClass =
 </style>
 
 <script>
+  import { partitionControlSignals } from "../../lib/tool-result-presentation"
   import {
     buildSummary,
     exportWebMcpJson,
@@ -366,18 +367,27 @@ const copyButtonClass =
       section.appendChild(title)
 
       const controlSignals = toUiSignals({ signals: state.signals }).filter((s) => s.controlId === control.id)
-      if (controlSignals.length > 0) {
+      const presentation = partitionControlSignals(controlSignals)
+      const observations = [...presentation.findings, ...presentation.coverage]
+      if (observations.length > 0) {
         const list = document.createElement("ul")
         list.className = "mt-3 space-y-3"
-        for (const signal of controlSignals) {
+        for (const signal of observations) {
           const item = document.createElement("li")
           item.className = "text-sm text-text-muted"
           const fileLine = signal.file && signal.line ? `<span class="font-mono text-xs text-text-muted">${escapeHtml(signal.file)}:${signal.line}</span>` : ""
           const snippet = signal.snippet ? `<pre tabindex="0" class="mt-1 overflow-x-auto rounded border border-border bg-bg-raised p-2 font-mono text-xs text-text">${escapeHtml(signal.snippet)}</pre>` : ""
-          item.innerHTML = `${renderBadge(signal.state)} <span class="ml-1 font-medium text-text">${escapeHtml(signal.severity)}</span>${fileLine ? ` · ${fileLine}` : ""}<p class="mt-1 text-text">${escapeHtml(signal.remediation)}</p>${snippet}`
+          item.innerHTML = `${renderBadge(signal.state)}${signal.state === "DETECTED" ? ` <span class="ml-1 font-medium text-text">${escapeHtml(signal.severity)}</span>` : ""}${fileLine ? ` · ${fileLine}` : ""}<p class="mt-1 text-text"><strong>${signal.state === "DETECTED" ? "Finding action:" : "Coverage follow-up:"}</strong> ${escapeHtml(signal.remediation)}</p>${snippet}`
           list.appendChild(item)
         }
         section.appendChild(list)
+      }
+
+      if (presentation.guidance.length > 0) {
+        const guidance = document.createElement("details")
+        guidance.className = "mt-3 text-sm text-text-muted"
+        guidance.innerHTML = `<summary class="cursor-pointer font-medium">Control guidance (not a finding)</summary><p class="mt-2">${presentation.guidance.map(escapeHtml).join(" ")}</p>`
+        section.appendChild(guidance)
       }
 
       wrap.appendChild(section)

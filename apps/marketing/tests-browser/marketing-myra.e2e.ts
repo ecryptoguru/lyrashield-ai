@@ -115,6 +115,18 @@ async function mockMyra(
   )
 }
 
+async function expectNoHorizontalOverflow(
+  page: import("@playwright/test").Page,
+  expectedViewportWidth: number
+) {
+  const dimensions = await page.evaluate(() => ({
+    viewportWidth: window.innerWidth,
+    documentWidth: document.documentElement.scrollWidth,
+  }))
+  expect(dimensions.viewportWidth).toBe(expectedViewportWidth)
+  expect(dimensions.documentWidth).toBeLessThanOrEqual(dimensions.viewportWidth)
+}
+
 test("closing Myra during a stream clears composer and streaming state on reopen", async ({
   page,
 }) => {
@@ -152,7 +164,7 @@ test("mobile Myra contains focus and restores page interaction after close and r
   await page.emulateMedia({ reducedMotion: "reduce" })
   await mockMyra(page)
   await page.goto("/")
-  await expect(page.locator("html")).toHaveJSProperty("scrollWidth", 390)
+  await expectNoHorizontalOverflow(page, 390)
   const launcher = page.getByRole("button", { name: "Ask Myra" })
   await launcher.click()
   const dialog = page.getByRole("dialog", { name: "Myra support" })
@@ -172,9 +184,9 @@ test("mobile Myra contains focus and restores page interaction after close and r
   await expect(dialog).toHaveAttribute("aria-modal", "false")
   await expect(page.locator("main")).not.toHaveAttribute("inert", "")
   await expect(page.locator("body")).not.toHaveCSS("overflow", "hidden")
-  await expect(page.locator("html")).toHaveJSProperty("scrollWidth", 768)
+  await expectNoHorizontalOverflow(page, 768)
   await page.setViewportSize({ width: 1440, height: 900 })
-  await expect(page.locator("html")).toHaveJSProperty("scrollWidth", 1440)
+  await expectNoHorizontalOverflow(page, 1440)
   expect(pageErrors).toEqual([])
 })
 

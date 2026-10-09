@@ -32,7 +32,8 @@ describe("sticky mobile CTA bar", () => {
   it("hides while a form control is focused so it cannot cover a field", () => {
     // The reveal condition requires both past-first-screen AND no focused field.
     expect(component).toContain('["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)')
-    expect(component).toContain('bar.classList.toggle("hidden", !pastFirstScreen || fieldFocused)')
+    expect(component).toContain("const next = pastFirstScreen && !fieldFocused")
+    expect(component).toContain('bar.classList.toggle("hidden", !shown)')
     // Focus handling is bound and unbound so the bar returns after blur.
     expect(component).toContain('document.addEventListener(\n          "focusin"')
     expect(component).toContain('document.addEventListener(\n          "focusout"')

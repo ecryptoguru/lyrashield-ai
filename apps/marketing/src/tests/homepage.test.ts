@@ -9,7 +9,7 @@ describe("homepage journey and plan summary", () => {
     // The nine-block order from spec section 8: hero, what is different, Lite
     // Check, journey, surfaces, coverage and fit, pricing, FAQ, closing CTA.
     const stages = [
-      page.indexOf("<PremiumHero />"),
+      page.indexOf("<PremiumHero cinematic />"),
       page.indexOf('id="different"'),
       page.indexOf("<HomeLiteScan />"),
       page.indexOf("<EvidenceWorld"),

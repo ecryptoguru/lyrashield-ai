@@ -1,7 +1,7 @@
 ---
 import Base from "@layouts/Base.astro"
-import BlogCard from "@components/BlogCard.astro"
-import { getCollection, getEntry } from "astro:content"
+import BlogSearch from "@components/BlogSearch.astro"
+import { getCollection } from "astro:content"
 import {
   BLOG_CATEGORIES,
   categoryHref,
@@ -28,10 +28,6 @@ export async function getStaticPaths() {
 
 const { category, posts } = Astro.props
 const sortedPosts = posts.sort((a, b) => b.data.pubDate.getTime() - a.data.pubDate.getTime())
-const imageEntries = await Promise.all(
-  sortedPosts.map(async (post) => [post.id, await getEntry(post.data.heroImage)] as const)
-)
-const imagesByPost = new Map(imageEntries)
 const otherCategories = (await getCategoriesWithCounts()).filter(
   (entry) => entry.id !== category.id
 )
@@ -58,9 +54,6 @@ const jsonLd = [
         position: index + 1,
         url: new URL(`/blog/${post.id}`, origin).toString(),
         name: post.data.title,
-        ...(imagesByPost.get(post.id)
-          ? { image: new URL(imagesByPost.get(post.id)!.data.og, origin).toString() }
-          : {}),
       })),
     },
   },
@@ -93,9 +86,7 @@ const jsonLd = [
       <p class="tag-index__empty">No published posts for this category yet. New guidance lands here as soon as it clears editorial review.</p>
     )}
 
-    <div class="tag-index__posts" data-reveal-group>
-      {sortedPosts.map((post) => <BlogCard post={post} heroImage={imagesByPost.get(post.id)} />)}
-    </div>
+    <BlogSearch posts={sortedPosts} showAll />
 
     <nav class="tag-index__more" aria-label="Other categories" data-reveal="fade">
       <p>More categories</p>
@@ -122,7 +113,6 @@ const jsonLd = [
   .tag-index__description { max-width: 45rem; margin: 1.5rem 0 0; color: var(--color-text-muted); font-size: 1.08rem; line-height: 1.7; }
   .tag-index__count { display: inline-flex; align-items: baseline; gap: .5rem; margin: 1.75rem 0 0; color: var(--color-text-muted); font-family: "JetBrains Mono Variable", monospace; font-size: .74rem; letter-spacing: .06em; text-transform: uppercase; }
   .tag-index__count > span { color: var(--color-text); font-size: 1.2rem; font-weight: 700; }
-  .tag-index__posts { margin-top: 1rem; }
   .tag-index__empty { margin-top: 3rem; color: var(--color-text-muted); }
   .tag-index a:focus-visible { border-radius: .25rem; outline: 2px solid var(--color-accent); outline-offset: 4px; }
   .tag-index__more { border-top: 1px solid var(--color-border); padding-top: clamp(2rem, 5vw, 3.5rem); margin-top: clamp(3rem, 7vw, 5rem); }

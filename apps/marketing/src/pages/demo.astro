@@ -9,7 +9,9 @@ const description =
 const title = "Book a demo | LyraShield AI"
 // Last content change to this page — the explicit freshness input for the
 // WebPage dateModified (same convention as about.astro's updatedDate).
-const updatedDate = "2026-09-20"
+const updatedDate = "2026-10-09"
+const supportEmail = (import.meta.env.PUBLIC_SUPPORT_EMAIL as string | undefined) || "support@lyrashieldai.com"
+const demoRequestHref = `mailto:${supportEmail}?subject=LyraShield%20demo%20request`
 const jsonLd: unknown[] = [
   {
     "@context": "https://schema.org",
@@ -58,6 +60,7 @@ const jsonLd: unknown[] = [
     <dl class="mt-8 grid gap-x-6 gap-y-3 text-sm sm:grid-cols-[10rem_1fr]">
       <dt class="font-medium text-text">Length</dt>
       <dd class="text-text-muted">{MYRA_LIMITS.demo.durationMinutes} minutes, over Google Meet.</dd>
+      <div id="demo-online-details" hidden class="contents">
       <dt class="font-medium text-text">Availability</dt>
       <dd class="text-text-muted">
         The next {MYRA_LIMITS.demo.horizonDays} days, shown in your timezone (host timezone{" "}
@@ -68,6 +71,7 @@ const jsonLd: unknown[] = [
         A one-time code verifies the email address before the booking is created; the manage link is
         the only copy, so save it to reschedule or cancel.
       </dd>
+      </div>
       <dt class="font-medium text-text">Who you talk to</dt>
       <dd class="text-text-muted">
         Ankit Das, the founder. No sales sequence — bring what you are shipping and where a review
@@ -84,10 +88,10 @@ const jsonLd: unknown[] = [
           Request a demo time
         </h2>
         <p class="mt-2 text-sm leading-6 text-text-muted">
-          Online times may be unavailable. Request a time and we follow up by email.
+          Online booking is unavailable. Email your timezone and a few suitable times; we will follow up to arrange the walkthrough.
         </p>
         <a
-          href="/support"
+          href={demoRequestHref}
           class="mt-4 inline-flex min-h-11 items-center rounded-lg bg-accent px-5 text-sm font-semibold text-bg hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-raised"
           >Request a time</a
         >
@@ -131,7 +135,7 @@ const jsonLd: unknown[] = [
               Try again
             </button>
             <a
-              href="/support"
+              href={demoRequestHref}
               class="inline-flex min-h-11 items-center rounded-lg border border-border px-4 text-sm font-medium text-text hover:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
               >Request a time instead</a
             >
@@ -140,7 +144,7 @@ const jsonLd: unknown[] = [
         <div id="demo-no-slots" hidden class="mt-4 flex flex-wrap items-center gap-3">
           <p class="text-sm text-text">{MYRA_COPY.demoNoSlots}</p>
           <a
-            href="/support"
+            href={demoRequestHref}
             class="inline-flex min-h-11 items-center rounded-lg border border-border px-4 text-sm font-medium text-text hover:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
             >Request a time instead</a
           >
@@ -355,7 +359,7 @@ const jsonLd: unknown[] = [
       <noscript>
         <p class="mt-4 text-sm text-text-muted">
           Booking needs JavaScript. You can also reach us through the{" "}
-          <a href="/support" class="text-accent underline underline-offset-4">support page</a>.
+          <a href={demoRequestHref} class="text-accent underline underline-offset-4">support page</a>.
         </p>
       </noscript>
     </div>
@@ -430,6 +434,7 @@ const jsonLd: unknown[] = [
   const manageReslots = $("demo-manage-reslots")
   const manageSlotsEl = $("demo-manage-slots")
   const bookingClosed = $("demo-booking-closed")
+  const onlineDetails = $("demo-online-details")
 
   /** Fragment keeps the credential out of HTTP requests; query remains backward-compatible. */
   const manageToken =
@@ -1059,9 +1064,16 @@ const jsonLd: unknown[] = [
     // and no booking request is ever fired.
     void fetchMyraStatus(apiBase).then((status) => {
       if (!status.booking) return
+      if (onlineDetails) onlineDetails.hidden = false
       showStep(stepSlot)
       void ensureMyraSession(apiBase).catch(() => {})
       void fetchSlots()
     })
   }
 </script>
+
+<style>
+  #demo-online-details[hidden] {
+    display: none;
+  }
+</style>

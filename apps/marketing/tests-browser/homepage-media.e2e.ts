@@ -1,16 +1,15 @@
 import { expect, test } from "@playwright/test"
 
-const productImage =
-  /\/product\/console-(?:home|issues-thumb|coding-agents-thumb)(?:-light)?\.webp$/
-const heroImage = /\/_astro\/premium-hero\.[^/]+\.(?:avif|webp|jpg)$/
+const productImage = /\/product\/current-(?:posture|findings|agents)-(?:dark|light)\.webp$/
+const heroImage = /assurance-world\/v3\/[^/]+\/posters\/gateway-(?:desktop|portrait)\.webp$/
 const motionVideo = /assurance-world\.(?:mp4|webm)$/
 const productImageDimensions = new Map([
-  ["/product/console-home.webp", [1600, 1587]],
-  ["/product/console-home-light.webp", [1600, 1584]],
-  ["/product/console-issues-thumb.webp", [1133, 883]],
-  ["/product/console-issues-thumb-light.webp", [1133, 878]],
-  ["/product/console-coding-agents-thumb.webp", [1133, 883]],
-  ["/product/console-coding-agents-thumb-light.webp", [1133, 878]],
+  ["/product/current-posture-dark.webp", [1312, 544]],
+  ["/product/current-posture-light.webp", [1312, 544]],
+  ["/product/current-findings-dark.webp", [1312, 410]],
+  ["/product/current-findings-light.webp", [1312, 410]],
+  ["/product/current-agents-dark.webp", [1312, 720]],
+  ["/product/current-agents-light.webp", [1312, 720]],
 ])
 
 test("homepage loads only the selected lazy product screenshots for either saved theme", async ({
@@ -45,7 +44,7 @@ test("homepage loads only the selected lazy product screenshots for either saved
       width: Number(image.getAttribute("width")),
       height: Number(image.getAttribute("height")),
     }))
-    expect(heroPoster.alt).toContain("hero headline")
+    expect(heroPoster.alt).toBe("") // Decorative world; the real headline and story are HTML.
     expect(heroPoster.width).toBeGreaterThan(0)
     expect(heroPoster.height).toBeGreaterThan(0)
     await expect(
@@ -109,13 +108,9 @@ test("homepage loads only the selected lazy product screenshots for either saved
 
     // After the scroll the collage is loaded, so the theme contract is asserted
     // here: exactly one file per frame, and the right variant for the theme.
-    const expectedSuffix = theme === "light" ? "-light.webp" : ".webp"
+    const expectedSuffix = "-" + theme + ".webp"
     const loaded = requests.filter((path) => productImage.test(path))
-    for (const imageName of [
-      "console-home",
-      "console-issues-thumb",
-      "console-coding-agents-thumb",
-    ]) {
+    for (const imageName of ["current-posture", "current-findings", "current-agents"]) {
       const paths = loaded.filter((path) => path.includes(`/${imageName}`))
       expect(paths.length, `${imageName} must load exactly once`).toBe(1)
       expect(paths[0].endsWith(expectedSuffix), `${imageName} must match the theme`).toBe(true)
@@ -124,109 +119,25 @@ test("homepage loads only the selected lazy product screenshots for either saved
   }
 })
 
-test("motion video waits for approach and buffers before the story enters view", async ({
+test("the evidence artifact adds no second decoder and reduced motion downloads no film", async ({
   browser,
 }) => {
-  for (const viewport of [
-    { width: 390, height: 844 },
-    { width: 1440, height: 900 },
-  ]) {
-    const context = await browser.newContext({ viewport, reducedMotion: "no-preference" })
+  for (const reducedMotion of ["reduce", "no-preference"] as const) {
+    const context = await browser.newContext({ reducedMotion })
     const page = await context.newPage()
-    const motionRequests: string[] = []
+    const videos: string[] = []
     page.on("request", (request) => {
-      if (motionVideo.test(new URL(request.url()).pathname)) motionRequests.push(request.url())
+      if (motionVideo.test(request.url())) videos.push(request.url())
     })
-    await page.goto("/", { waitUntil: "load" })
-    // Give the former idle-after-load warm path time to run.
-    await page.waitForTimeout(3000)
-    expect(motionRequests).toEqual([])
-    expect(await page.locator("#assurance-world video").getAttribute("src")).toBeNull()
-    await page.evaluate(() => {
-      const story = document.getElementById("assurance-world")!
-      scrollTo(0, story.getBoundingClientRect().top + scrollY - innerHeight * 1.75)
-    })
-    await expect.poll(() => motionRequests.length).toBeGreaterThan(0)
-    expect(
-      await page.locator("#assurance-world").evaluate((story) => story.getBoundingClientRect().top)
-    ).toBeGreaterThan(viewport.height)
+    await page.goto("/")
     await page.locator("#assurance-world").scrollIntoViewIfNeeded()
-    await expect(page.locator("#assurance-world")).toHaveClass(/is-enhanced/)
-    await expect
-      .poll(
-        () =>
-          page
-            .locator("#assurance-world video")
-            .evaluate((video) => (video as HTMLVideoElement).readyState),
-        { timeout: 30_000 }
-      )
-      .toBeGreaterThanOrEqual(2)
-    await expect
-      .poll(
-        () =>
-          page
-            .locator("#assurance-world video")
-            .evaluate((video) => (video as HTMLVideoElement).buffered.length),
-        { timeout: 30_000 }
-      )
-      .toBeGreaterThan(0)
-    await page.locator('[data-chapter-index="0"]').evaluate((chapter) => {
-      const top = chapter.getBoundingClientRect().top + scrollY
-      scrollTo(0, top + chapter.clientHeight * 0.5 - innerHeight * 0.5)
-    })
-    await expect(page.locator("#assurance-world video")).toHaveClass(/is-front/, {
-      timeout: 30_000,
-    })
-    await expect
-      .poll(
-        () =>
-          page.locator("#assurance-world video").evaluate((video) => {
-            const media = video as HTMLVideoElement
-            return media.currentTime > 0 && !media.seeking && media.videoWidth > 0
-          }),
-        { timeout: 30_000 }
-      )
-      .toBe(true)
-    await context.close()
-  }
-})
-
-test("reduced motion and Save-Data keep the static evidence world without loading video", async ({
-  browser,
-}) => {
-  for (const mode of ["reduced-motion", "save-data"] as const) {
-    const context = await browser.newContext({
-      viewport: { width: 1440, height: 900 },
-      reducedMotion: mode === "reduced-motion" ? "reduce" : "no-preference",
-    })
-    const page = await context.newPage()
-    if (mode === "save-data") {
-      await page.addInitScript(() => {
-        Object.defineProperty(navigator, "connection", {
-          configurable: true,
-          value: { saveData: true, effectiveType: "4g" },
-        })
-      })
-    }
-    const motionRequests: string[] = []
-    page.on("request", (request) => {
-      const path = new URL(request.url()).pathname
-      if (motionVideo.test(path)) motionRequests.push(path)
-    })
-
-    const response = await page.goto("/", { waitUntil: "load" })
-    expect(response?.status()).toBe(200)
-    await page.waitForTimeout(1200)
-    expect(motionRequests).toEqual([])
-    await expect(page.locator("#assurance-world .evidence-world__poster.is-active")).toBeVisible()
-    expect(await page.locator("#assurance-world video").getAttribute("src")).toBeNull()
-    if (mode === "save-data") {
-      expect(
-        await page.evaluate(
-          () =>
-            (navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData
-        )
-      ).toBe(true)
+    await expect(page.locator("#assurance-world video")).toHaveCount(0)
+    await expect(page.locator(".journey__artifact")).toContainText("Finding EX-014")
+    if (reducedMotion === "reduce") expect(videos).toEqual([])
+    else {
+      await expect(page.locator("scroll-world")).toHaveAttribute("data-world-state", "ready")
+      expect(videos.length).toBeGreaterThan(0)
+      expect(new Set(videos).size).toBe(1)
     }
     await context.close()
   }
@@ -246,11 +157,10 @@ test("hero copy and product-image caption remain available without JavaScript", 
   await expect(page.locator(".premium-hero__primary")).toBeVisible()
   await expect(page.locator(".hero-frame__caption")).toBeVisible()
   await page.locator("#assurance-world").scrollIntoViewIfNeeded()
-  await expect(page.locator("#assurance-world .evidence-world__poster.is-active")).toBeVisible()
-  await expect(
-    page.locator('#assurance-world [data-story-card-index="0"] h2').first()
-  ).toBeVisible()
-  expect(await page.locator("#assurance-world video").getAttribute("src")).toBeNull()
+  await expect(page.locator(".journey__chapter h3").first()).toBeVisible()
+  await expect(page.locator(".journey__report")).toBeVisible()
+  await expect(page.locator("[data-product-expand]:visible")).toHaveCount(0)
+  await expect(page.locator("#assurance-world video")).toHaveCount(0)
   await context.close()
 })
 

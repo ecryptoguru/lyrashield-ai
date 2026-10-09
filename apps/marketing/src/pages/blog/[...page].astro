@@ -1,6 +1,7 @@
 ---
 import Base from "@layouts/Base.astro"
 import BlogCard from "@components/BlogCard.astro"
+import BlogSearch from "@components/BlogSearch.astro"
 import { getCollection, getEntry } from "astro:content"
 import type { GetStaticPathsOptions } from "astro"
 import { categoryHref, getCategoriesWithCounts } from "../../lib/blog-categories"
@@ -81,6 +82,8 @@ const jsonLd = [
       </div>
     </header>
 
+    <BlogSearch posts={[...allPublished].sort((a, b) => b.data.pubDate.getTime() - a.data.pubDate.getTime())} />
+    <div data-blog-browse>
     {featuredPost && (
       <section aria-labelledby="featured-heading" class="blog-index__featured" data-reveal>
         <p id="featured-heading">Latest resource</p>
@@ -105,21 +108,6 @@ const jsonLd = [
           ))}
         </ol>
       </section>
-    )}
-
-    {page.currentPage === 1 && (
-      <form class="blog-index__search" role="search" data-blog-search data-reveal="fade">
-        <label for="blog-search-input" class="text-sm font-semibold text-text">Search the guides</label>
-        <input
-          type="search"
-          id="blog-search-input"
-          name="q"
-          placeholder="Search by title or topic"
-          autocomplete="off"
-          class="mt-2 min-h-11 w-full max-w-md rounded-lg border border-border bg-bg-raised px-4 text-base text-text placeholder:text-text-muted focus:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-        />
-        <p class="mt-2 text-sm text-text-muted" data-blog-search-count aria-live="polite"></p>
-      </form>
     )}
 
     <section class="blog-index__categories" aria-labelledby="categories-heading">
@@ -181,35 +169,8 @@ const jsonLd = [
         ) : <span aria-hidden="true" />}
       </nav>
     )}
+    </div>
   </section>
-
-  <script>
-    // Client-side filter over the rendered cards (Spec item 6.3). It reads only
-    // the visitor's own query and touches no network surface.
-    const search = document.querySelector<HTMLFormElement>("[data-blog-search]")
-    const input = document.querySelector<HTMLInputElement>("#blog-search-input")
-    const count = document.querySelector<HTMLElement>("[data-blog-search-count]")
-    if (search && input) {
-      search.addEventListener("submit", (event) => event.preventDefault())
-      const cards = Array.from(document.querySelectorAll<HTMLElement>(".blog-index__latest article, .blog-index__featured article"))
-      const apply = () => {
-        const term = input.value.trim().toLowerCase()
-        if (term.length === 0) {
-          for (const card of cards) card.hidden = false
-          if (count) count.textContent = ""
-          return
-        }
-        let visible = 0
-        for (const card of cards) {
-          const match = card.textContent?.toLowerCase().includes(term) ?? false
-          card.hidden = !match
-          if (match) visible += 1
-        }
-        if (count) count.textContent = `${visible} ${visible === 1 ? "guide" : "guides"} match "${input.value.trim()}".`
-      }
-      input.addEventListener("input", apply)
-    }
-  </script>
 </Base>
 
 <style>
@@ -231,9 +192,7 @@ const jsonLd = [
   .blog-index__start-here-list a { display: flex; min-height: 2.75rem; align-items: center; justify-content: space-between; gap: 1rem; border: 1px solid var(--color-border); border-radius: .75rem; background: var(--color-bg-raised); padding: .85rem 1.1rem; color: var(--color-text); font-weight: 600; text-decoration: none; }
   .blog-index__start-here-list a::before { content: counter(start-here, decimal-leading-zero); margin-right: .9rem; color: var(--color-accent); font-family: "JetBrains Mono Variable", monospace; font-size: .75rem; font-weight: 600; }
   .blog-index__start-here-list a:hover { border-color: var(--color-accent); }
-  .blog-index__search { margin-top: clamp(2.5rem, 6vw, 4rem); }
-  .blog-index__search label { display: block; }
-  .blog-index__search a:focus-visible, .blog-index__start-here-list a:focus-visible { border-radius: .25rem; outline: 2px solid var(--color-accent); outline-offset: 4px; }
+  .blog-index__start-here-list a:focus-visible { border-radius: .25rem; outline: 2px solid var(--color-accent); outline-offset: 4px; }
   .blog-index__category-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; margin: 0; padding: 0; list-style: none; }
   .blog-index__category-grid > li { display: grid; }
   .category-card { display: grid; align-content: start; gap: .8rem; min-height: 13rem; border: 1px solid var(--color-border); border-radius: 1rem; padding: clamp(1.35rem, 2.5vw, 1.85rem); background: linear-gradient(160deg, var(--color-bg-raised), var(--color-bg)); color: var(--color-text); text-decoration: none; }

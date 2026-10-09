@@ -1,4 +1,8 @@
 import { expect, test } from "@playwright/test"
+import { createRequire } from "node:module"
+const sharp = createRequire(new URL("../../marketing-motion/package.json", import.meta.url))(
+  "sharp"
+)
 
 /**
  * Hero URL field (handoff item 3.1b).
@@ -25,9 +29,9 @@ test("renders the hero field with its own ids and a consent box", async ({ page 
   await expect(page.locator(CONSENT)).toBeAttached()
   await expect(page.locator("#hero-scan-error")).toBeAttached()
 
-  // The field's ids must not collide with the Lite Check section lower down.
+  // The lower section explains results without repeating the URL form.
   for (const id of ["home-lite-scan-form", "home-scan-url", "home-scan-authorized"]) {
-    await expect(page.locator(`#${id}`)).toHaveCount(1)
+    await expect(page.locator(`#${id}`)).toHaveCount(0)
   }
 
   // No horizontal overflow at 390px with the field present.
@@ -134,30 +138,60 @@ test("keeps the hero field and sample card readable in the light theme", async (
 
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light")
 
-  // Each target is measured against the surface it renders on: the hero itself
-  // for the field, and the artifact card for the finding rows.
+  // Transparent cinematic surfaces need their composited pixel background,
+  // rather than treating transparent CSS as opaque black.
   const measured = await page.evaluate(() => {
     const hero = document.querySelector(".premium-hero") as HTMLElement
     const card = document.querySelector(".premium-hero__artifact-card") as HTMLElement
-    const rows: { selector: string; color: string; background: string }[] = []
+    const rows: {
+      selector: string
+      color: string
+      background: string
+      sample?: { left: number; top: number }
+    }[] = []
     const pick = (selector: string, background: HTMLElement) => {
       const node = document.querySelector(selector) as HTMLElement | null
       // The status line only renders while the scanner is unconnected, so a
       // connected build has nothing to measure there.
       if (!node) return
+      const rect = node.getBoundingClientRect()
       rows.push({
         selector,
         color: getComputedStyle(node).color,
         background: getComputedStyle(background).backgroundColor,
+        ...(getComputedStyle(background).backgroundColor.startsWith("rgba(")
+          ? {
+              sample: {
+                left: Math.max(0, Math.floor(rect.left - 2)),
+                top: Math.floor(rect.top + rect.height / 2),
+              },
+            }
+          : {}),
       })
     }
+    const button = document.querySelector(".premium-hero__field-button") as HTMLElement
+    pick(".premium-hero__field-button", button)
     pick(".premium-hero__field-label", hero)
-    pick(".premium-hero__field-input", hero)
+    pick(
+      ".premium-hero__field-input",
+      document.querySelector(".premium-hero__field-input") as HTMLElement
+    )
     pick(".premium-hero__field-consent", hero)
     pick(".premium-hero__field-status", hero)
     pick(".premium-hero__artifact-findings li", card)
     return rows
   })
+
+  const pixels = await page.screenshot()
+  for (const row of measured) {
+    if (!row.sample) continue
+    const pixel = await sharp(pixels)
+      .extract({ ...row.sample, width: 1, height: 1 })
+      .removeAlpha()
+      .raw()
+      .toBuffer()
+    row.background = `rgb(${pixel[0]}, ${pixel[1]}, ${pixel[2]})`
+  }
 
   for (const { selector, color, background } of measured) {
     const ratio = contrastRatio(color, background)
@@ -176,8 +210,23 @@ test("keeps the hero field and sample card readable in the light theme", async (
     return {
       color: getComputedStyle(node).color,
       background: getComputedStyle(hero).backgroundColor,
+      sample: (() => {
+        const rect = document.querySelector(".premium-hero__field-label")!.getBoundingClientRect()
+        return {
+          left: Math.max(0, Math.floor(rect.left - 2)),
+          top: Math.floor(rect.top + rect.height / 2),
+        }
+      })(),
     }
   })
+  if (errorRatio.background.startsWith("rgba(")) {
+    const pixel = await sharp(pixels)
+      .extract({ ...errorRatio.sample, width: 1, height: 1 })
+      .removeAlpha()
+      .raw()
+      .toBuffer()
+    errorRatio.background = `rgb(${pixel[0]}, ${pixel[1]}, ${pixel[2]})`
+  }
   expect(
     contrastRatio(errorRatio.color, errorRatio.background),
     `field error (${errorRatio.color} on ${errorRatio.background})`
