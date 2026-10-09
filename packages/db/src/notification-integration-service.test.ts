@@ -26,7 +26,7 @@ const row = {
 
 describe("workspace notification integrations", () => {
   beforeEach(() => {
-    vi.clearAllMocks()
+    vi.resetAllMocks()
     rls.withWorkspaceRLS.mockImplementation(async (_id, fn) => fn(tx))
     tx.integration.findMany.mockResolvedValue([row])
     tx.integration.findFirst.mockResolvedValue(row)
@@ -98,9 +98,14 @@ describe("workspace notification integrations", () => {
     )
   })
 
-  it("disables without deleting the row or secret so reconnect preserves identity", async () => {
-    tx.integration.findFirst.mockResolvedValue({ ...row, status: "disabled" })
-    expect((await disableNotificationIntegration("ws-1", "slack"))?.status).toBe("disabled")
+  it("retires the sealed credential while preserving identity for reconnect", async () => {
+    tx.integration.findFirst
+      .mockResolvedValueOnce(row)
+      .mockResolvedValueOnce({ ...row, status: "disabled", configRef: null })
+    const result = await disableNotificationIntegration("ws-1", "slack")
+    expect(result?.integration.status).toBe("disabled")
+    expect(result?.previousConfigRef).toBe(row.configRef)
+    expect(JSON.stringify(result?.integration)).not.toContain("s3:")
     expect(tx.integration.updateMany).toHaveBeenCalledWith({
       where: {
         workspaceId: "ws-1",
@@ -108,15 +113,21 @@ describe("workspace notification integrations", () => {
         externalId: "notifications:ws-1:slack",
         deletedAt: null,
       },
-      data: { status: "disabled" },
+      data: { status: "disabled", configRef: null },
     })
   })
 
   it("does not manufacture a disabled integration for an unconfigured workspace", async () => {
-    tx.integration.updateMany.mockResolvedValue({ count: 0 })
+    tx.integration.findFirst.mockResolvedValue(null)
     expect(await disableNotificationIntegration("ws-2", "discord")).toBeNull()
-    expect(tx.integration.findFirst).not.toHaveBeenCalled()
+    expect(tx.integration.updateMany).not.toHaveBeenCalled()
   })
+
+  it("repeated disconnect has no credential to retire", async () => {
+    tx.integration.findFirst.mockResolvedValue({ ...row, status: "disabled", configRef: null })
+    expect((await disableNotificationIntegration("ws-1", "slack"))?.previousConfigRef).toBeNull()
+  })
+
   it("locks before resolving active credentials and holds the lock until delivery finishes", async () => {
     const send = vi.fn().mockResolvedValue(true)
     await expect(withActiveWorkspaceNotificationDestination("ws-1", "slack", send)).resolves.toBe(
@@ -151,7 +162,7 @@ describe("workspace notification integrations", () => {
   })
 
   it("serializes rotation and disable against a started delivery through the same purpose lock", async () => {
-    let current = { ...row }
+    let current: Omit<typeof row, "configRef"> & { configRef: string | null } = { ...row }
     let lockTail = Promise.resolve()
     rls.withWorkspaceRLS.mockImplementation(async (_id, fn) => {
       let release: (() => void) | undefined
@@ -180,8 +191,8 @@ describe("workspace notification integrations", () => {
       current = { ...current, ...args.update }
       return { ...current }
     })
-    tx.integration.updateMany.mockImplementation(async () => {
-      current.status = "disabled"
+    tx.integration.updateMany.mockImplementation(async (args) => {
+      current = { ...current, ...args.data }
       return { count: 1 }
     })
     let finishSend!: () => void
@@ -214,9 +225,21 @@ describe("workspace notification integrations", () => {
     finishSend()
     expect(await sending).toBe(true)
     expect((await rotating).previousConfigRef).toBe(row.configRef)
-    expect((await disabling)?.status).toBe("disabled")
+    const disabled = await disabling
+    expect(disabled?.integration.status).toBe("disabled")
+    expect(disabled?.previousConfigRef).toBe("s3://private/new")
+    expect(current.configRef).toBeNull()
     const lateSend = vi.fn()
     expect(await withActiveWorkspaceNotificationDestination("ws-1", "slack", lateSend)).toBeNull()
     expect(lateSend).not.toHaveBeenCalled()
+    const reconnected = await saveNotificationIntegration({
+      workspaceId: "ws-1",
+      channel: "slack",
+      configRef: "s3://private/reconnected",
+    })
+    expect(reconnected.previousConfigRef).toBeNull()
+    expect(reconnected.integration.id).toBe(row.id)
+    expect(current.status).toBe("active")
+    expect(current.configRef).toBe("s3://private/reconnected")
   })
 })

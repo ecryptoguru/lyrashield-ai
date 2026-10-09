@@ -87,7 +87,10 @@ describe("workspace notification settings API", () => {
     mocks.list.mockResolvedValue([summary])
     mocks.upload.mockResolvedValue({ storageUri: "s3://private/new" })
     mocks.save.mockResolvedValue({ integration: summary, previousConfigRef: null })
-    mocks.disable.mockResolvedValue({ ...summary, status: "disabled" })
+    mocks.disable.mockResolvedValue({
+      integration: { ...summary, status: "disabled" },
+      previousConfigRef: "s3://private/retired",
+    })
     mocks.channels.mockResolvedValue([{ channel: "slack", configRef: "s3://private/current" }])
     mocks.activeDestination.mockImplementation(async (_workspaceId, _channel, send) =>
       send("s3://private/current")
@@ -233,13 +236,66 @@ describe("workspace notification settings API", () => {
     expect(mocks.remove).toHaveBeenCalledWith("s3://private/old", "ws-1")
   })
 
-  it("disables a workspace channel without sending or deleting its credential", async () => {
+  it("disconnects then retires its workspace-bound sealed credential without exposing its reference", async () => {
+    const response = await DELETE(request("DELETE", { workspaceId: "ws-1", channel: "slack" }))
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({
+      success: true,
+      data: { ...summary, status: "disabled" },
+    })
+    expect(mocks.disable).toHaveBeenCalledWith("ws-1", "slack")
+    expect(mocks.remove).toHaveBeenCalledWith("s3://private/retired", "ws-1")
+    expect(mocks.disable.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.remove.mock.invocationCallOrder[0]
+    )
+    expect(JSON.stringify(mocks.audit.mock.calls)).not.toContain("s3:")
+    expect(mocks.send).not.toHaveBeenCalled()
+  })
+
+  it("waits for disconnect commit before artifact cleanup or its separate audit", async () => {
+    let commit!: () => void
+    let reachedDisable!: () => void
+    const reached = new Promise<void>((resolve) => {
+      reachedDisable = resolve
+    })
+    mocks.disable.mockImplementation(async () => {
+      reachedDisable()
+      await new Promise<void>((resolve) => {
+        commit = resolve
+      })
+      return {
+        integration: { ...summary, status: "disabled" },
+        previousConfigRef: "s3://private/retired",
+      }
+    })
+    const pending = DELETE(request("DELETE", { workspaceId: "ws-1", channel: "slack" }))
+    await reached
+    expect(mocks.remove).not.toHaveBeenCalled()
+    expect(mocks.audit).not.toHaveBeenCalled()
+    commit()
+    expect((await pending).status).toBe(200)
+    expect(mocks.remove).toHaveBeenCalledWith("s3://private/retired", "ws-1")
+    expect(mocks.audit).toHaveBeenCalled()
+  })
+
+  it("does not retire an artifact if disconnect persistence fails", async () => {
+    mocks.disable.mockRejectedValue(new Error("transaction failed"))
+    expect(
+      (await DELETE(request("DELETE", { workspaceId: "ws-1", channel: "slack" }))).status
+    ).toBe(500)
+    expect(mocks.remove).not.toHaveBeenCalled()
+    expect(mocks.audit).not.toHaveBeenCalled()
+  })
+
+  it("does not attempt artifact deletion for an already retired credential", async () => {
+    mocks.disable.mockResolvedValue({
+      integration: { ...summary, status: "disabled" },
+      previousConfigRef: null,
+    })
     expect(
       (await DELETE(request("DELETE", { workspaceId: "ws-1", channel: "slack" }))).status
     ).toBe(200)
-    expect(mocks.disable).toHaveBeenCalledWith("ws-1", "slack")
     expect(mocks.remove).not.toHaveBeenCalled()
-    expect(mocks.send).not.toHaveBeenCalled()
   })
 
   it("denies rate-limited tests before resolving credentials, audit, or send", async () => {

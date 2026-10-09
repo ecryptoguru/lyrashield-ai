@@ -124,8 +124,11 @@ async function remove(request: Request) {
       return apiError("VALIDATION_ERROR", "Provide a workspace and notification channel", 400)
     const { workspaceId, channel } = parsed.data
     await requirePermission(workspaceId, PERMISSIONS.integration.manage)
-    const integration = await disableNotificationIntegration(workspaceId, channel)
-    if (!integration) return apiError("NOT_FOUND", "Notification integration not found", 404)
+    const disabled = await disableNotificationIntegration(workspaceId, channel)
+    if (!disabled) return apiError("NOT_FOUND", "Notification integration not found", 404)
+    // The shared delivery lock has drained old sends and the reference is cleared at commit.
+    if (disabled.previousConfigRef) await cleanup(disabled.previousConfigRef, workspaceId)
+    const integration = disabled.integration
     await prisma.auditLog.create({
       data: {
         workspaceId,

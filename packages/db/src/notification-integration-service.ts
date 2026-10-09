@@ -129,19 +129,27 @@ export async function saveNotificationIntegration(params: {
 export async function disableNotificationIntegration(
   workspaceId: string,
   channel: WorkspaceNotificationChannel
-): Promise<NotificationIntegrationSummary | null> {
+): Promise<{
+  integration: NotificationIntegrationSummary
+  previousConfigRef: string | null
+} | null> {
   const key = identity(workspaceId, channel)
   return withWorkspaceRLS(
     workspaceId,
     async (tx) => {
       await lockDestination(tx, key.externalId)
+      const prior = await tx.integration.findFirst({
+        where: { ...key, deletedAt: null },
+        select: { configRef: true },
+      })
+      if (!prior) return null
       const updated = await tx.integration.updateMany({
         where: { ...key, deletedAt: null },
-        data: { status: "disabled" },
+        data: { status: "disabled", configRef: null },
       })
       if (updated.count === 0) return null
       const row = await tx.integration.findFirst({ where: { ...key, deletedAt: null } })
-      return row ? summary(row) : null
+      return row ? { integration: summary(row), previousConfigRef: prior.configRef } : null
     },
     LOCK_TRANSACTION_OPTIONS
   )
