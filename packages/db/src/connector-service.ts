@@ -40,6 +40,10 @@ const PROVIDER_TO_INTEGRATION_TYPE = {
   slack: "SLACK",
 } as const satisfies Record<ConnectorProviderId, string>
 
+const OAUTH_CONNECTION_SCOPE: Prisma.IntegrationWhereInput = {
+  OR: [{ externalId: null }, { externalId: { not: { startsWith: "notifications:" } } }],
+}
+
 export function isConnectorProvider(value: string): value is ConnectorProviderId {
   return (CONNECTOR_PROVIDERS as readonly string[]).includes(value)
 }
@@ -172,27 +176,17 @@ export async function resolveConnectorConnection(
         workspaceId,
         type: PROVIDER_TO_INTEGRATION_TYPE[provider] as Integration["type"],
         deletedAt: null,
+        ...OAUTH_CONNECTION_SCOPE,
       },
     })
   )
 }
 
 /** Safe list projection — never exposes configRef or credential material. */
-export async function listConnectorConnections(workspaceId: string): Promise<
-  Array<{
-    id: string
-    type: string
-    name: string
-    status: string
-    externalId: string | null
-    capabilities: unknown
-    createdAt: Date
-    updatedAt: Date
-  }>
-> {
+export async function listConnectorConnections(workspaceId: string) {
   return withWorkspaceRLS(workspaceId, (tx) =>
     tx.integration.findMany({
-      where: { workspaceId, deletedAt: null },
+      where: { workspaceId, deletedAt: null, ...OAUTH_CONNECTION_SCOPE },
       select: {
         id: true,
         type: true,
@@ -800,7 +794,7 @@ export async function setConnectorConnectionStatus(params: {
   const { workspaceId, integrationId, status, reason } = params
   return withWorkspaceRLS(workspaceId, async (tx) => {
     const existing = await tx.integration.findFirst({
-      where: { id: integrationId, workspaceId, deletedAt: null },
+      where: { id: integrationId, workspaceId, deletedAt: null, ...OAUTH_CONNECTION_SCOPE },
     })
     if (!existing) return null
     const priorMetadata =

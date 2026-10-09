@@ -664,6 +664,8 @@ jobs:
         if: needs.changes.outputs.ops-tests == 'true'
         run: |
           bash .github/scripts/tests/test-promote-worker-vm.sh
+          bash .github/scripts/tests/test-run-worker-sandbox-network.sh
+          bash .github/scripts/tests/test-run-worker-sandbox-control.sh
           bash .github/scripts/tests/test-check-engine-revision-parity.sh
           bash .github/scripts/tests/test-configure-cloud-billing-admission.sh
           bash .github/scripts/tests/test-azure-secret-set.sh

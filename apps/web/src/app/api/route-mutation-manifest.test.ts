@@ -104,6 +104,17 @@ const BOUNDARY_GROUPS = {
       "workspaces/active#POST",
     ],
   },
+  browserWorkspaceNotificationSettings: {
+    description:
+      "Notification webhooks require a browser session and workspace integration management; credential and hosted OAuth mutations are denied.",
+    marker: "session.apiKey",
+    additionalMarkers: ["session.oauth", "requirePermission"],
+    routes: [
+      "integrations/notifications#POST",
+      "integrations/notifications#DELETE",
+      "integrations/notifications/test#POST",
+    ],
+  },
   accountSession: {
     description:
       "The handler uses the signed-in user's session to change account-owned state or create the user's workspace.",
@@ -512,7 +523,7 @@ describe("API mutation route boundary manifest", () => {
       []
     )
     expect(stale, "Remove or correct classifications for deleted/renamed mutations").toEqual([])
-    expect(boundaries.size + Object.keys(VERSIONED_ROUTE_ALIASES).length).toBe(128)
+    expect(boundaries.size + Object.keys(VERSIONED_ROUTE_ALIASES).length).toBe(131)
     expect(
       [...Object.values(BOUNDARY_GROUPS)].every((group) => group.description.trim().length > 0)
     ).toBe(true)

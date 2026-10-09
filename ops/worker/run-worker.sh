@@ -79,6 +79,17 @@ is_64_hex "${worker_digest#sha256:}" || {
   echo "Worker image digest must be sha256:<64 hex>" >&2
   exit 1
 }
+
+# The engine rejects unsafe sandbox topology at scan admission. Check the same
+# host contract before registry traffic or starting a queue consumer so a drifted
+# network cannot advertise readiness and accept work that will inevitably fail.
+if ! sandbox_network_state=$(docker network inspect --format '{{.Driver}}|{{.Internal}}|{{index .Options "com.docker.network.bridge.enable_icc"}}' "$LYRASHIELD_SANDBOX_NETWORK" 2>/dev/null) ||
+  [ "$sandbox_network_state" != 'bridge|true|false' ]; then
+  echo "Sandbox network '$LYRASHIELD_SANDBOX_NETWORK' must exist with Driver=bridge, Internal=true and com.docker.network.bridge.enable_icc=false." >&2
+  echo "Stop scan admission, drain active work and repair the network through the guarded maintenance procedure before restarting the worker." >&2
+  exit 1
+fi
+
 extract_env_value() {
   var="$1"
   file="$2"
@@ -234,5 +245,13 @@ docker create \
   --log-opt=max-file=5 \
   "$LYRASHIELD_WORKER_IMAGE" >/dev/null
 
-docker network connect "$LYRASHIELD_SANDBOX_NETWORK" lyrashield-worker
+# Keep the worker on its outbound bridge only. Joining the untrusted sandbox
+# bridge would let a raw-socket sandbox spoof a worker-only same-bridge rule.
+# Install the bounded cross-bridge control policy before starting any consumer.
+worker_egress_script="${LYRASHIELD_WORKER_EGRESS_SCRIPT:-/usr/local/libexec/lyrashield-refresh-egress}"
+if [ ! -x "$worker_egress_script" ]; then
+  echo "Worker egress policy helper is unavailable: $worker_egress_script" >&2
+  exit 1
+fi
+LYRASHIELD_REQUIRE_SANDBOX_CONTROL=1 "$worker_egress_script"
 exec docker start --attach lyrashield-worker

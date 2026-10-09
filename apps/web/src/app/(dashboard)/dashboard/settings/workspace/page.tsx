@@ -7,6 +7,7 @@ import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
 import { ApiKeysSection } from "../api-keys"
 import { NoWorkspaceState } from "@/components/no-workspace-state"
 import { PageHeader } from "@/components/page-header"
+import { NotificationIntegrations } from "./notification-integrations"
 
 /**
  * User-facing plan label. A FREE workspace with a trial claim is on the trial
@@ -107,6 +108,14 @@ export default async function WorkspaceSettingsPage() {
 
       <section id="api-keys" className="scroll-mt-24" aria-label="Workspace API keys">
         <ApiKeysSection workspaceId={workspaceId} canManage={canManageApiKeys} />
+      </section>
+
+      <section
+        id="notification-channels"
+        className="scroll-mt-24"
+        aria-label="Workspace notification channels"
+      >
+        <NotificationIntegrations workspaceId={workspaceId} canManage={canManageApiKeys} />
       </section>
 
       <Card className="border-primary/30 bg-primary/5">

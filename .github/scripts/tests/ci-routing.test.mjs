@@ -264,6 +264,7 @@ test("independent marketing projects select only their affected tests and browse
     [["pnpm-lock.yaml"], true, true],
     [["packages/ui/src/index.ts"], false, false],
     [["packages/security/src/index.ts"], true, false],
+    [["packages/evidence-storage/src/index.ts"], true, false],
     [["packages/egress-proxy/package.json"], true, false],
     [["new-runtime-entrypoint.js"], true, true],
     [[".github/workflows/ci.yml", "pnpm-workspace.yaml"], true, true],

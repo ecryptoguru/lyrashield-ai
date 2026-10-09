@@ -63,6 +63,8 @@ import {
   defaultConnectorAdmission,
   invokeConnectorTool,
   setConnectorConnectionStatus,
+  resolveConnectorConnection,
+  listConnectorConnections,
   upsertConnectorConnection,
   type ConnectorToolSpec,
 } from "./connector-service"
@@ -468,5 +470,56 @@ describe("connectorPrincipal", () => {
   it("binds to the integration row id", () => {
     expect(connectorPrincipal("github", "int-1")).toBe("connector:github:int-1")
     expect(connectorPrincipal("slack")).toBe("connector:slack:unbound")
+  })
+})
+
+describe("notification-purpose separation", () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it("excludes webhook notification identities when resolving Slack OAuth", async () => {
+    integrationFindFirst.mockResolvedValue(null)
+    await resolveConnectorConnection(WORKSPACE, "slack")
+    expect(integrationFindFirst).toHaveBeenCalledWith({
+      where: {
+        workspaceId: WORKSPACE,
+        type: "SLACK",
+        deletedAt: null,
+        OR: [{ externalId: null }, { externalId: { not: { startsWith: "notifications:" } } }],
+      },
+    })
+  })
+
+  it("keeps webhook notification identities out of the read connector listing", async () => {
+    integrationFindMany.mockResolvedValue([])
+    await listConnectorConnections(WORKSPACE)
+    expect(integrationFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          workspaceId: WORKSPACE,
+          deletedAt: null,
+          OR: [{ externalId: null }, { externalId: { not: { startsWith: "notifications:" } } }],
+        },
+      })
+    )
+  })
+
+  it("does not disable notification identities through the OAuth connector endpoint", async () => {
+    integrationFindFirst.mockResolvedValue(null)
+    expect(
+      await setConnectorConnectionStatus({
+        workspaceId: WORKSPACE,
+        integrationId: "notification-1",
+        status: "disabled",
+      })
+    ).toBeNull()
+    expect(integrationFindFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          workspaceId: WORKSPACE,
+          OR: [{ externalId: null }, { externalId: { not: { startsWith: "notifications:" } } }],
+        }),
+      })
+    )
+    expect(integrationUpdate).not.toHaveBeenCalled()
   })
 })

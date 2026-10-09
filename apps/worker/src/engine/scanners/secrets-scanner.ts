@@ -303,6 +303,14 @@ function isFalsePositive(match: string, pattern: SecretPattern): boolean {
     return true
   }
 
+  if (pattern.id === "generic-api-key") {
+    // Fixed credential-isolation sentinels contain no provider-issued material.
+    // Match the entire literal so opaque credentials sharing a prefix still report.
+    return /["'](?:inherited-(?:credential|token)|sentinel-private-(?:provider|token))["']$/.test(
+      match
+    )
+  }
+
   if (pattern.id === "bearer-token") {
     const token = match.replace(/^Bearer\s+/i, "")
     // Human-readable kebab-case placeholders are documentation, not opaque
