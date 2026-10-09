@@ -183,12 +183,13 @@ export function ScoreTrend({ points }: { points: Array<{ label: string; score: n
   }
 
   return (
-    <div role="img" aria-label={`Security score trend across ${points.length} completed scans`}>
+    <div>
       <svg
         className="h-44 w-full"
         viewBox={`0 0 ${width} ${height}`}
         preserveAspectRatio="none"
-        aria-hidden="true"
+        role="img"
+        aria-label={`Security score trend across ${points.length} completed ${points.length === 1 ? "scan" : "scans"}, from ${points[0]?.score}/100 on ${points[0]?.label} to ${points.at(-1)?.score}/100 on ${points.at(-1)?.label}.`}
       >
         {[0, 25, 50, 75, 100].map((tick) => {
           const y = inset + ((100 - tick) / 100) * usableHeight
@@ -227,6 +228,32 @@ export function ScoreTrend({ points }: { points: Array<{ label: string; score: n
         <span>{points[0]?.label}</span>
         <span>Latest {points.at(-1)?.score}/100</span>
       </div>
+      <details className="mt-2 text-sm">
+        <summary className="focus-visible:ring-ring min-h-11 cursor-pointer rounded-md px-2 py-3 focus-visible:ring-2">
+          View score history
+        </summary>
+        <table className="mt-2 w-full text-left text-xs">
+          <caption className="sr-only">Security score for each completed scan</caption>
+          <thead>
+            <tr>
+              <th scope="col" className="py-2">
+                Scan date
+              </th>
+              <th scope="col" className="py-2">
+                Score out of 100
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {points.map((point, index) => (
+              <tr key={`${point.label}-${index}`} className="border-t">
+                <td className="py-2">{point.label}</td>
+                <td className="py-2">{point.score}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </details>
     </div>
   )
 }

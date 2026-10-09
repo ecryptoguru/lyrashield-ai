@@ -103,7 +103,7 @@ describe("AiAssuranceClient", () => {
     expect(html).not.toContain("encryptionKeyRef")
   })
 
-  it("shows a fallback when no target is selected", () => {
+  it("offers target setup when no target is selected", () => {
     const html = renderToString(
       <AiAssuranceClient
         workspaceId="ws-1"
@@ -117,7 +117,9 @@ describe("AiAssuranceClient", () => {
       />
     )
 
-    expect(html).toContain("No targets available")
+    expect(html).toContain("Choose a target for AI assurance")
+    expect(html).toContain('href="/dashboard/targets?add=1"')
+    expect(html).toContain("Manage targets")
   })
 
   it("does not render mutation controls for a view-only member", () => {

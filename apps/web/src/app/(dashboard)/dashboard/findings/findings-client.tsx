@@ -13,6 +13,7 @@ import { DashboardErrorCard } from "@/components/dashboard-error-card"
 import {
   findingFilterToApiQuery,
   findingsHref,
+  decodeFindingFilters,
   type FindingFilter as FindingFilterValue,
 } from "@/lib/finding-list-params"
 import {
@@ -68,9 +69,13 @@ export function FindingsClient({
       if (typeof window === "undefined") return
       const params = new URLSearchParams(window.location.search)
       if (updates.filter !== undefined) {
-        // No filter parameter means Open, so All must be written explicitly.
-        if (updates.filter !== "OPEN") params.set("filter", updates.filter)
-        else params.delete("filter")
+        const selection = decodeFindingFilters(updates.filter)
+        params.delete("filter")
+        params.set("status", selection.status)
+        if (selection.severity === "ALL") params.delete("severity")
+        else params.set("severity", selection.severity)
+        if (selection.evidence === "ALL") params.delete("evidence")
+        else params.set("evidence", selection.evidence)
       }
       if (updates.sort !== undefined) {
         if (updates.sort !== "priority") params.set("sort", updates.sort)
@@ -333,23 +338,24 @@ export function FindingsClient({
   )
 
   const handleFilterChange = useCallback(
-    async (newFilter: string) => {
+    async (newFilter: string, newQuery = query) => {
       currentScopeRef.current = JSON.stringify({
         filter: newFilter,
         scanId,
         target: targetFilter,
-        q: query,
+        q: newQuery,
       })
       const generation = invalidateRequest()
       setFilter(newFilter)
-      updateQueryParams({ filter: newFilter, sort: sortMode })
+      setQuery(newQuery)
+      updateQueryParams({ filter: newFilter, sort: sortMode, q: newQuery })
       await fetchFindings(
         {
           workspaceId,
           ...findingFilterToApiQuery(newFilter as FindingFilterValue),
           ...(scanId ? { observedInScanId: scanId } : {}),
           ...(targetFilter ? { targetId: targetFilter } : {}),
-          ...(query ? { q: query } : {}),
+          ...(newQuery ? { q: newQuery } : {}),
         },
         generation
       )
@@ -492,6 +498,19 @@ export function FindingsClient({
       )}
 
       <FindingsResults
+        hasConstraints={Boolean(query || filter !== "ALL")}
+        onReset={() => {
+          setQuery("")
+          void handleFilterChange("ALL", "")
+        }}
+        reviewScanHref={
+          scanId
+            ? `/dashboard/scans/${encodeURIComponent(scanId)}`
+            : targetFilter
+              ? `/dashboard/scans?target=${encodeURIComponent(targetFilter)}`
+              : "/dashboard/scans"
+        }
+        error={Boolean(error)}
         loading={loading}
         findings={findings}
         sortedFindings={sortedFindings}

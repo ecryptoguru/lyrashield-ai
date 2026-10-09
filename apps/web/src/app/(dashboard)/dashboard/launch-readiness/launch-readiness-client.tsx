@@ -6,6 +6,7 @@ import Link from "next/link"
 import { useLaunchReadinessWebMcp } from "./launch-readiness-webmcp"
 import {
   Rocket,
+  ChevronDown,
   ShieldCheck,
   ShieldAlert,
   ShieldX,
@@ -268,7 +269,28 @@ export function LaunchReadinessClient({
     )
   }
 
-  const config = VERDICT_CONFIG[report.verdict] ?? VERDICT_CONFIG.NO_GO
+  const releaseRequested = Boolean(initialReleaseRef) || Boolean(releaseCheck?.requested)
+  const releaseNeedsAttention =
+    releaseRequested &&
+    (draftDirty ||
+      !releaseCheck ||
+      releaseCheck.match !== "match" ||
+      !releaseCheck.applicable ||
+      releaseCheck.state !== "READY")
+  const config = releaseNeedsAttention
+    ? releaseCheck?.match === "match" &&
+      releaseCheck.applicable &&
+      releaseCheck.state === "NOT_READY"
+      ? VERDICT_CONFIG.NO_GO
+      : VERDICT_CONFIG.INCONCLUSIVE
+    : (VERDICT_CONFIG[report.verdict] ?? VERDICT_CONFIG.NO_GO)
+  const verdictSummary = releaseNeedsAttention
+    ? draftDirty || !releaseCheck
+      ? "Check this release with the current selection to confirm applicability."
+      : releaseCheck.match === "mismatch"
+        ? "The retained assessment covers a different release. Review the reference and assessment below before making a launch decision."
+        : "The retained assessment does not establish current readiness for this release. Review the reasons below."
+    : report.summary
   const VerdictIcon = config.icon
 
   function submitCheck(event: React.FormEvent) {
@@ -316,6 +338,35 @@ export function LaunchReadinessClient({
     router.push(destination)
   }
 
+  const scopedTarget = targets.find((target) => target.targetId === initialTargetId)
+  const scopeQuery = scopedTarget ? `&target=${encodeURIComponent(scopedTarget.targetId)}` : ""
+  const nextAction =
+    targets.length === 0
+      ? { href: "/dashboard/scans?new=1", label: "Start your first scan" }
+      : releaseRequested && draftDirty
+        ? { href: "#release-check-reference", label: "Check this release" }
+        : releaseNeedsAttention && !(releaseCheck?.targetId || initialTargetId)
+          ? { href: "#release-check-target", label: "Choose a target for this release" }
+          : releaseNeedsAttention
+            ? {
+                href: `/dashboard/scans?target=${encodeURIComponent(releaseCheck?.targetId ?? initialTargetId)}`,
+                label: "Review target assessments",
+              }
+            : report.blockingFindings > 0
+              ? {
+                  href: `/dashboard/findings?status=ALL${scopeQuery}`,
+                  label: "Review findings",
+                }
+              : report.verdict === "INCONCLUSIVE" || report.verdict === "NOT_EVALUATED"
+                ? {
+                    href: `/dashboard/scans?new=1${scopeQuery}`,
+                    label: scopedTarget ? "Scan this target" : "Choose a target to scan",
+                  }
+                : {
+                    href: `/dashboard/reports${scopedTarget ? `?targetId=${encodeURIComponent(scopedTarget.targetId)}` : ""}`,
+                    label: "Review assurance report",
+                  }
+
   const checkActive = Boolean(releaseRef) || Boolean(releaseCheck?.requested) || Boolean(formError)
 
   function changeTarget(value: string) {
@@ -338,8 +389,68 @@ export function LaunchReadinessClient({
     <div className="space-y-6">
       <PageHeader title="Launch Readiness" icon={Rocket} />
 
+      {/* Verdict Card */}
+      <Card className={`p-6 ${config.bg} ${config.border}`}>
+        <div className="flex flex-col items-start gap-4 sm:flex-row">
+          <div className="min-w-0 flex-1">
+            <div className="mb-2 flex items-center gap-2">
+              <VerdictIcon className={`h-7 w-7 ${config.color}`} aria-hidden="true" />
+              <h2 className={`text-2xl font-bold ${config.color}`}>{config.label}</h2>
+            </div>
+            <p className="text-muted-foreground mb-2 text-xs">
+              Assessment scope:{" "}
+              {targets.find((target) => target.targetId === initialTargetId)?.targetName ??
+                "All workspace targets"}
+            </p>
+            <p className="text-muted-foreground mb-4 text-sm">{verdictSummary}</p>
+            <Link
+              href={nextAction.href}
+              className="bg-primary text-primary-foreground hover:bg-primary/90 mb-4 inline-flex min-h-11 items-center justify-center rounded-md px-4 text-sm font-medium"
+            >
+              {nextAction.label}
+            </Link>
+            <p className="text-muted-foreground mb-4 text-xs">
+              Triage counts open findings; it is not the launch verdict.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Badge variant={config.badgeVariant}>
+                Triage only — not a readiness score ·{" "}
+                {report.triageScore === null
+                  ? "Triage score pending"
+                  : `Triage score: ${report.triageScore}/100`}
+              </Badge>
+              <Badge variant="muted">{report.totalFindings} total findings</Badge>
+              <Badge variant="muted">{report.blockingFindings} blocking</Badge>
+              <Badge variant="muted">{report.verifiedFindings} independently verified</Badge>
+            </div>
+          </div>
+          <div className="hidden shrink-0 sm:block">
+            {" "}
+            <ScoreGauge
+              score={report.triageScore}
+              grade="Triage"
+              neutral={
+                releaseNeedsAttention ||
+                report.verdict === "INCONCLUSIVE" ||
+                report.verdict === "NOT_EVALUATED"
+              }
+            />
+          </div>
+        </div>
+      </Card>
+
       {/* Release check — an identity-checked read, not a deployment gate */}
-      <Card className="p-5">
+      <details
+        open={checkActive || checkNeedsTarget}
+        className="group bg-card rounded-xl border p-5"
+      >
+        <summary className="flex min-h-11 cursor-pointer items-center text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2">
+          Check a specific release (optional)
+          <ChevronDown
+            aria-hidden="true"
+            className="ml-auto size-4 shrink-0 transition-transform group-open:rotate-180"
+          />
+        </summary>
         <form onSubmit={submitCheck} noValidate>
           <label htmlFor="release-check-reference" className="text-sm font-medium">
             Check a specific release (optional)
@@ -356,7 +467,7 @@ export function LaunchReadinessClient({
               id="release-check-target"
               value={selectedTargetId}
               onChange={(event) => changeTarget(event.target.value)}
-              className="border-border bg-background text-foreground rounded-md border px-3 py-2 text-base md:text-sm sm:w-56"
+              className="border-border bg-background text-foreground min-h-11 rounded-md border px-3 py-2 text-base md:text-sm sm:w-56"
             >
               <option value="">Select a target</option>
               {targets.map((target) => (
@@ -376,7 +487,7 @@ export function LaunchReadinessClient({
               className="border-border bg-background text-foreground min-w-0 flex-1 rounded-md border px-3 py-2 font-mono text-base md:text-sm"
             />
             <div className="flex gap-2">
-              <Button type="submit" size="sm" className="h-9">
+              <Button type="submit" size="sm" className="min-h-11">
                 Check release
               </Button>
               {checkActive && (
@@ -384,7 +495,7 @@ export function LaunchReadinessClient({
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="h-9"
+                  className="min-h-11"
                   onClick={clearCheck}
                 >
                   Clear
@@ -409,7 +520,7 @@ export function LaunchReadinessClient({
             Choose the target this release belongs to, then check again.
           </p>
         )}
-      </Card>
+      </details>
 
       {/* Release check result — match state, identities, and applicability */}
       {releaseCheck?.requested && (
@@ -501,38 +612,6 @@ export function LaunchReadinessClient({
           </div>
         </Card>
       )}
-
-      {/* Verdict Card */}
-      <Card className={`p-6 ${config.bg} ${config.border}`}>
-        <div className="flex flex-col items-center gap-6 sm:flex-row">
-          <ScoreGauge
-            score={report.triageScore}
-            grade="Triage"
-            neutral={report.verdict === "INCONCLUSIVE" || report.verdict === "NOT_EVALUATED"}
-          />
-          <div className="flex-1 text-center sm:text-left">
-            <div className="mb-2 flex items-center justify-center gap-2 sm:justify-start">
-              <VerdictIcon className={`h-7 w-7 ${config.color}`} aria-hidden="true" />
-              <h2 className={`text-2xl font-bold ${config.color}`}>{config.label}</h2>
-            </div>
-            <p className="text-muted-foreground mb-4 text-sm">{report.summary}</p>
-            <p className="text-muted-foreground mb-4 text-xs">
-              Triage counts open findings; it is not the launch verdict.
-            </p>
-            <div className="flex flex-wrap justify-center gap-2 sm:justify-start">
-              <Badge variant={config.badgeVariant}>
-                Triage only — not a readiness score ·{" "}
-                {report.triageScore === null
-                  ? "Triage score pending"
-                  : `Triage score: ${report.triageScore}/100`}
-              </Badge>
-              <Badge variant="muted">{report.totalFindings} total findings</Badge>
-              <Badge variant="muted">{report.blockingFindings} blocking</Badge>
-              <Badge variant="muted">{report.verifiedFindings} independently verified</Badge>
-            </div>
-          </div>
-        </div>
-      </Card>
 
       {/* Conditions & Recommendations */}
       <div className="grid gap-4 md:grid-cols-2">

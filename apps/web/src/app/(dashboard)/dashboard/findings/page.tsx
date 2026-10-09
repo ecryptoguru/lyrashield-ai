@@ -56,6 +56,9 @@ type FindingsSearchParams = {
   scanId?: string
   targetId?: string
   filter?: string
+  status?: string
+  severity?: string
+  evidence?: string
   sort?: string
   target?: string
   q?: string

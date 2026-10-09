@@ -86,13 +86,16 @@ export function deriveHomeDecision(input: HomeDecisionInput): HomeDecision {
   if (input.targets.total === 0) {
     const action: HomeNextAction = {
       eyebrow: "Get started",
-      title: "Add your first target",
+      title: "Start your first scan",
       description:
-        "Point LyraShield at a repository, app URL or API. Targets are where every scan starts.",
-      href: "/dashboard/targets",
-      cta: "Add a target",
+        "Choose your repository, app URL or API, then confirm the scan scope and profile.",
+      href: "/dashboard/scans?new=1",
+      cta: "Start your first scan",
     }
-    return { action, primaryAction: { href: "/dashboard/targets", label: "Add a target" } }
+    return {
+      action,
+      primaryAction: { href: "/dashboard/scans?new=1", label: "Start your first scan" },
+    }
   }
 
   if (!input.lastEvaluatedAssessment) {

@@ -88,8 +88,8 @@ export function ScanList({
                 New {SCAN_SINGULAR}
               </Button>
             ) : (
-              <Link href="/dashboard/targets?add=1" className={buttonVariants()}>
-                Add a {TARGET_SINGULAR.toLowerCase()}
+              <Link href="/dashboard/scans?new=1" className={buttonVariants()}>
+                Start your first scan
               </Link>
             )
           }

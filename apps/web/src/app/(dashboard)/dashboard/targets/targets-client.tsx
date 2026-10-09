@@ -2,10 +2,12 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
+import Link from "next/link"
+import { z } from "zod"
 import { Plus, ArrowLeft } from "lucide-react"
 import { Button, Spinner, LoadMore } from "@lyrashield/ui"
-import { githubReposSchema } from "@/lib/api-schemas"
-import { apiGet, apiGetPaginated, apiPost, apiDelete } from "@/lib/api-client"
+import { githubReposSchema, installUrlSchema } from "@/lib/api-schemas"
+import { ApiError, apiGet, apiGetPaginated, apiPost, apiDelete } from "@/lib/api-client"
 import { TARGET_PLURAL, TARGET_SINGULAR } from "@/lib/terminology"
 import { DashboardErrorCard } from "@/components/dashboard-error-card"
 import {
@@ -85,6 +87,7 @@ export function TargetsClient({
   initialNextCursor,
   githubConnected = false,
   githubAccountLogin = null,
+  scanSetup = false,
 }: {
   workspaceId: string
   initialProjectId?: string
@@ -92,6 +95,7 @@ export function TargetsClient({
   initialNextCursor?: string | null
   githubConnected?: boolean
   githubAccountLogin?: string | null
+  scanSetup?: boolean
 }) {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -100,10 +104,18 @@ export function TargetsClient({
   const [targets, setTargets] = useState<Target[]>(initialData ?? [])
   const [nextCursor, setNextCursor] = useState<string | null>(initialNextCursor ?? null)
   const [loading, setLoading] = useState(!initialData)
-  const [showForm, setShowForm] = useState(searchParams.get("add") === "1")
-  const [formType, setFormType] = useState<"REPO" | "URL">("REPO")
+  const [showForm, setShowForm] = useState(scanSetup || searchParams.get("add") === "1")
+  const [formType, setFormType] = useState<"REPO" | "URL">(
+    scanSetup &&
+      (searchParams.get("source") === "url" ||
+        (!githubConnected && searchParams.get("source") !== "repo"))
+      ? "URL"
+      : "REPO"
+  )
+  const [connecting, setConnecting] = useState(false)
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [createdTarget, setCreatedTarget] = useState<{ id: string; name: string } | null>(null)
   const [fetchError, setFetchError] = useState<string | null>(null)
   const [filterProjectId, setFilterProjectId] = useState<string | null>(initialProjectId ?? null)
 
@@ -116,20 +128,17 @@ export function TargetsClient({
   const [selectedRepoId, setSelectedRepoId] = useState<string>("")
 
   useEffect(() => {
-    if (
-      !githubConnected ||
-      formType !== "REPO" ||
-      !showForm ||
-      githubRepos.length > 0 ||
-      reposLoading
-    )
-      return
+    if (!githubConnected || formType !== "REPO" || !showForm) return
+    // Loading and results are outputs of this request, not effect dependencies.
+    // Otherwise setting loading cancels the very request that should clear it.
     let cancelled = false
+    const abort = new AbortController()
     void (async () => {
       try {
         setReposLoading(true)
         const repos = await apiGet(`/api/integrations/github/repos?workspaceId=${workspaceId}`, {
           schema: githubReposSchema,
+          signal: abort.signal,
         })
         if (cancelled) return
         setGithubRepos(repos)
@@ -143,8 +152,9 @@ export function TargetsClient({
     })()
     return () => {
       cancelled = true
+      abort.abort()
     }
-  }, [githubConnected, formType, showForm, githubRepos.length, reposLoading, workspaceId])
+  }, [githubConnected, formType, showForm, workspaceId])
 
   function handleSelectRepo(repoId: string) {
     setSelectedRepoId(repoId)
@@ -204,6 +214,7 @@ export function TargetsClient({
         `/api/targets/${encodeURIComponent(target.id)}?workspaceId=${encodeURIComponent(workspaceId)}`
       )
       setTargets((prev) => prev.filter((t) => t.id !== target.id))
+      setCreatedTarget((current) => (current?.id === target.id ? null : current))
     } catch (err) {
       setDeleteError(
         err instanceof Error ? err.message : `Failed to delete ${TARGET_SINGULAR.toLowerCase()}`
@@ -211,11 +222,46 @@ export function TargetsClient({
     }
   }
 
+  async function connectForScan() {
+    if (connecting) return
+    setConnecting(true)
+    setError(null)
+    try {
+      const data = await apiPost(
+        "/api/integrations/github/install",
+        { workspaceId, returnTo: "scan" },
+        { schema: installUrlSchema }
+      )
+      window.location.href = data.installUrl
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not connect GitHub. Try again.")
+      setConnecting(false)
+    }
+  }
+
+  async function saveTargetForScan(body: Record<string, unknown>) {
+    try {
+      return await apiPost("/api/targets", body, {
+        schema: z.object({ id: z.string().min(1), name: z.string() }).passthrough(),
+      })
+    } catch (cause) {
+      // Only the server's compatible, workspace-scoped conflict may be reused.
+      // Incompatible settings, access failures, and uncertain responses stay errors.
+      if (!scanSetup || !(cause instanceof ApiError) || cause.code !== "TARGET_EXISTS") throw cause
+      const existing = z.object({ existingTargetId: z.string().min(1) }).safeParse(cause.details)
+      if (!existing.success) throw cause
+      return {
+        id: existing.data.existingTargetId,
+        name: typeof body.name === "string" ? body.name : "Selected target",
+      }
+    }
+  }
+
   async function handleCreateRepo() {
     setCreating(true)
     setError(null)
     try {
-      await apiPost("/api/targets", {
+      const saved = await saveTargetForScan({
         workspaceId,
         type: "REPO",
         name: repoForm.name,
@@ -224,6 +270,11 @@ export function TargetsClient({
         ...(repoForm.installationId ? { installationId: repoForm.installationId } : {}),
         ...(repoForm.branch.trim() ? { branch: repoForm.branch.trim() } : {}),
       })
+      setCreatedTarget(saved)
+      if (scanSetup) {
+        router.replace(`/dashboard/scans?new=1&target=${encodeURIComponent(saved.id)}`)
+        return
+      }
       setShowForm(false)
       setRepoForm(EMPTY_REPO_FORM)
       await fetchTargets()
@@ -239,7 +290,7 @@ export function TargetsClient({
     setCreating(true)
     setError(null)
     try {
-      await apiPost("/api/targets", {
+      const saved = await saveTargetForScan({
         workspaceId,
         type: urlForm.urlType,
         name: urlForm.name,
@@ -247,6 +298,11 @@ export function TargetsClient({
         apiSpecUrl: urlForm.urlType === "API" ? urlForm.apiSpecUrl || undefined : undefined,
         ownershipAttested: urlForm.ownershipAttested,
       })
+      setCreatedTarget(saved)
+      if (scanSetup) {
+        router.replace(`/dashboard/scans?new=1&target=${encodeURIComponent(saved.id)}`)
+        return
+      }
       setShowForm(false)
       setUrlForm(EMPTY_URL_FORM)
       await fetchTargets()
@@ -292,20 +348,72 @@ export function TargetsClient({
           {deleteError}
         </p>
       )}
-      <TargetAddRouteSync router={router} searchParams={searchParams} />
-      <TargetsPageHeader
-        filterProjectId={filterProjectId}
-        showForm={showForm}
-        hasTargets={targets.length > 0}
-        onClearProjectFilter={() => {
-          setFilterProjectId(null)
-          router.push("/dashboard/targets")
-        }}
-        onToggleForm={() => setShowForm(!showForm)}
-      />
+      {scanSetup ? (
+        <div className="mb-6 space-y-2">
+          <h1 className="text-2xl font-bold tracking-tight">Configure a scan</h1>
+          <p className="text-muted-foreground text-sm">
+            Add the app, API, or repository you want to review. Next, confirm the scan scope and
+            profile before starting.
+          </p>
+        </div>
+      ) : (
+        <>
+          {" "}
+          <TargetAddRouteSync router={router} searchParams={searchParams} />
+          <TargetsPageHeader
+            filterProjectId={filterProjectId}
+            showForm={showForm}
+            hasTargets={targets.length > 0}
+            onClearProjectFilter={() => {
+              setFilterProjectId(null)
+              router.push("/dashboard/targets")
+            }}
+            onToggleForm={() => setShowForm(!showForm)}
+          />
+        </>
+      )}
+      {createdTarget && !scanSetup && (
+        <div
+          role="status"
+          className="mb-5 flex flex-col gap-3 rounded-lg border bg-card p-4 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <p className="text-sm">
+            <span className="font-medium">{createdTarget.name}</span> is ready for scan setup.
+          </p>
+          <Link
+            href={`/dashboard/scans?new=1&target=${encodeURIComponent(createdTarget.id)}`}
+            className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex min-h-11 items-center justify-center rounded-md px-4 text-sm font-medium"
+          >
+            Configure scan
+          </Link>
+        </div>
+      )}
 
       {showForm && (
         <TargetCreatePanel formType={formType} onFormTypeChange={setFormType} error={error}>
+          {scanSetup && formType === "REPO" && !githubConnected && (
+            <div className="mb-4 space-y-2">
+              <p className="text-muted-foreground text-sm">
+                Connect GitHub to choose an accessible repository. You can also enter a public
+                repository below.
+              </p>
+              {searchParams.get("github") && (
+                <p role="status" className="text-sm">
+                  GitHub access could not be confirmed. Retry the connection or use a public
+                  repository.
+                </p>
+              )}
+              <Button
+                type="button"
+                variant="outline"
+                disabled={connecting}
+                aria-busy={connecting}
+                onClick={() => void connectForScan()}
+              >
+                {connecting ? "Connecting…" : "Connect GitHub"}
+              </Button>
+            </div>
+          )}
           {formType === "REPO" ? (
             <RepoTargetForm
               picker={{
@@ -318,23 +426,27 @@ export function TargetsClient({
                 selectedRepoId,
                 onSelectRepo: handleSelectRepo,
               }}
+              submitLabel={scanSetup ? "Continue to scan setup" : undefined}
               repoForm={repoForm}
               onRepoFormChange={(patch) => setRepoForm({ ...repoForm, ...patch })}
               creating={creating}
               onSubmit={handleCreateRepo}
               onCancel={() => {
-                setShowForm(false)
+                if (scanSetup) router.push("/dashboard/scans")
+                else setShowForm(false)
                 setError(null)
               }}
             />
           ) : (
             <UrlTargetForm
+              submitLabel={scanSetup ? "Continue to scan setup" : undefined}
               urlForm={urlForm}
               onUrlFormChange={(patch) => setUrlForm({ ...urlForm, ...patch })}
               creating={creating}
               onSubmit={handleCreateUrl}
               onCancel={() => {
-                setShowForm(false)
+                if (scanSetup) router.push("/dashboard/scans")
+                else setShowForm(false)
                 setError(null)
               }}
             />
@@ -342,9 +454,9 @@ export function TargetsClient({
         </TargetCreatePanel>
       )}
 
-      {targets.length === 0 && !showForm ? (
+      {!scanSetup && targets.length === 0 && !showForm ? (
         <TargetsEmptyState onAdd={() => setShowForm(true)} />
-      ) : targets.length > 0 ? (
+      ) : !scanSetup && targets.length > 0 ? (
         <TargetsTable targets={targets} onDelete={(t) => void handleDeleteTarget(t)} />
       ) : null}
 

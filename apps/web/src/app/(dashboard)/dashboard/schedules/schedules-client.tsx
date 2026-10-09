@@ -1,7 +1,8 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { z } from "zod"
+import Link from "next/link"
 import { Calendar, Plus, Trash2, Power, ChevronDown } from "lucide-react"
 import {
   Button,
@@ -13,6 +14,7 @@ import {
   Input,
   Select,
   FormField,
+  buttonVariants,
 } from "@lyrashield/ui"
 import { apiGetPaginated, apiPost, apiPatch, apiDelete } from "@/lib/api-client"
 import { paginatedResponseSchema } from "@/lib/api-schemas"
@@ -97,6 +99,10 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
   const [error, setError] = useState<string | null>(null)
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [targets, setTargets] = useState<TargetOption[]>([])
+  const [targetsLoading, setTargetsLoading] = useState(true)
+  const [targetsError, setTargetsError] = useState(false)
+  const [targetsRetry, setTargetsRetry] = useState(0)
+  const formTriggerRef = useRef<HTMLButtonElement>(null)
   const [selectedTargetId, setSelectedTargetId] = useState("")
   const [cron, setCron] = useState("0 0 * * 0")
   const [presetId, setPresetId] = useState("")
@@ -121,12 +127,17 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
       setModeResetNotice(null)
       return
     }
-    const currentStillAvailable = enabledOptions.find((o) => o.id === presetId)
+    const nextTarget = targets.find((target) => target.id === targetId)
+    const nextOptions = getManualScanOptions({
+      type: nextTarget?.type ?? "",
+      hasApiSpec: Boolean(nextTarget?.apiSpecUrl),
+    }).filter((option) => option.available)
+    const currentStillAvailable = nextOptions.find((o) => o.id === presetId)
     if (currentStillAvailable) {
       setModeResetNotice(null)
       return
     }
-    const firstAvailable = enabledOptions[0]
+    const firstAvailable = nextOptions[0]
     if (firstAvailable) {
       setPresetId(firstAvailable.id)
       setModeResetNotice(
@@ -177,19 +188,30 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
         setLoading(false)
       })
 
+    return () => {
+      cancelled = true
+    }
+  }, [workspaceId])
+
+  useEffect(() => {
+    let cancelled = false
     apiGetPaginated(`/api/targets`, { workspaceId }, { schema: targetOptionsPaginatedSchema })
       .then((res) => {
         if (cancelled) return
         setTargets(res.items)
       })
       .catch(() => {
-        // targets optional
+        if (cancelled) return
+        setTargetsError(true)
+      })
+      .finally(() => {
+        if (!cancelled) setTargetsLoading(false)
       })
 
     return () => {
       cancelled = true
     }
-  }, [workspaceId])
+  }, [workspaceId, targetsRetry])
 
   const handleCreate = async () => {
     setCreating(true)
@@ -213,6 +235,7 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
       setFrequency("WEEKLY")
       setShowAdvanced(false)
       await loadSchedules()
+      requestAnimationFrame(() => formTriggerRef.current?.focus())
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create schedule.")
     } finally {
@@ -245,21 +268,30 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
 
   return (
     <div>
-      <div className="mb-4 flex justify-end">
-        <Button size="sm" onClick={() => setShowCreateForm(!showCreateForm)}>
-          <Plus className="mr-1 h-4 w-4" aria-hidden="true" />
-          New Schedule
-        </Button>
-      </div>
+      {schedules.length > 0 && targets.length > 0 && (
+        <div className="mb-4 flex justify-end">
+          <Button
+            ref={formTriggerRef}
+            size="sm"
+            aria-expanded={showCreateForm}
+            aria-controls="schedule-create-form"
+            onClick={() => setShowCreateForm(!showCreateForm)}
+          >
+            <Plus className="mr-1 h-4 w-4" aria-hidden="true" />
+            New Schedule
+          </Button>
+        </div>
+      )}
 
-      {showCreateForm && (
-        <Card className="mb-4 p-4">
+      {showCreateForm && targets.length > 0 && (
+        <Card id="schedule-create-form" className="mb-4 p-4">
           <div className="space-y-3">
             <h3 className="text-sm font-medium">New scheduled scan</h3>
             {targets.length > 0 ? (
               <FormField label="Target" htmlFor="schedule-target">
                 <Select
                   id="schedule-target"
+                  autoFocus
                   value={selectedTargetId}
                   onChange={(e) => handleSelectTarget(e.target.value)}
                 >
@@ -303,7 +335,9 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
               <button
                 type="button"
                 onClick={() => setShowAdvanced(!showAdvanced)}
-                className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs font-medium"
+                aria-expanded={showAdvanced}
+                aria-controls="schedule-advanced"
+                className="text-muted-foreground hover:text-foreground focus-visible:ring-ring flex min-h-11 items-center gap-1 rounded-md text-xs font-medium focus-visible:ring-2"
               >
                 <ChevronDown
                   className={`size-4 transition-transform duration-(--duration-fast) ease-out ${showAdvanced ? "rotate-180" : ""}`}
@@ -312,7 +346,7 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
                 Advanced
               </button>
               {showAdvanced && (
-                <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div id="schedule-advanced" className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <FormField label="Cron Expression" htmlFor="cron-expr">
                     <Input
                       id="cron-expr"
@@ -357,7 +391,7 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
               )}
             </div>
             {modeResetNotice && (
-              <p className="text-amber-600 text-xs" role="status" aria-live="polite">
+              <p className="text-foreground text-xs" role="status" aria-live="polite">
                 {modeResetNotice}
               </p>
             )}
@@ -376,11 +410,21 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
               <Button
                 size="sm"
                 disabled={creating || !selectedTargetId}
+                aria-busy={creating}
                 onClick={() => void handleCreate()}
               >
-                {creating ? <Spinner /> : "Create"}
+                {creating && <Spinner />}
+                {creating ? "Creating schedule…" : "Create"}
               </Button>
-              <Button size="sm" variant="ghost" onClick={() => setShowCreateForm(false)}>
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={creating}
+                onClick={() => {
+                  setShowCreateForm(false)
+                  requestAnimationFrame(() => formTriggerRef.current?.focus())
+                }}
+              >
                 Cancel
               </Button>
             </div>
@@ -398,7 +442,18 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
         />
       )}
 
-      {loading && schedules.length === 0 ? (
+      {targetsError && (
+        <DashboardErrorCard
+          message="Could not load targets for scheduling."
+          onRetry={() => {
+            setTargetsLoading(true)
+            setTargetsError(false)
+            setTargetsRetry((value) => value + 1)
+          }}
+        />
+      )}
+
+      {(loading || targetsLoading) && schedules.length === 0 ? (
         <div
           className="space-y-3"
           role="status"
@@ -410,13 +465,30 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
             <Skeleton key={item} className="h-28 w-full" />
           ))}
         </div>
-      ) : schedules.length === 0 ? (
+      ) : (targetsError || error) && schedules.length === 0 ? null : schedules.length === 0 &&
+        targets.length === 0 ? (
+        <EmptyState
+          icon={Calendar}
+          title="Add a target to schedule scans"
+          description="Scheduled scans need a target. Open Targets to add one, then return here to choose a schedule."
+          action={
+            <Link href="/dashboard/targets?add=1" className={buttonVariants()}>
+              Manage targets
+            </Link>
+          }
+        />
+      ) : schedules.length === 0 && !showCreateForm ? (
         <EmptyState
           icon={Calendar}
           title="No scheduled scans"
           description="Set up recurring scans to monitor your targets on a schedule."
           action={
-            <Button onClick={() => setShowCreateForm(true)}>
+            <Button
+              ref={formTriggerRef}
+              aria-expanded={showCreateForm}
+              aria-controls="schedule-create-form"
+              onClick={() => setShowCreateForm(true)}
+            >
               <Plus className="mr-1 h-4 w-4" aria-hidden="true" />
               New Schedule
             </Button>
@@ -431,7 +503,7 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
             >
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0 flex-1">
-                  <div className="mb-1 flex items-center gap-2">
+                  <div className="mb-1 flex flex-wrap items-center gap-2">
                     <h3 className="truncate font-medium">{schedule.target.name}</h3>
                     <Badge variant="info">{getGoalLabel(schedule.goal)}</Badge>
                     <Badge variant="muted">{modeLabel(schedule.mode)}</Badge>

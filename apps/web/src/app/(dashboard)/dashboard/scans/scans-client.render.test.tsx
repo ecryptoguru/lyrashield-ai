@@ -1,6 +1,8 @@
 import { renderToStaticMarkup } from "react-dom/server"
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import { WebMcpReceiptProvider } from "@/components/webmcp/webmcp-receipt-provider"
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }))
+
 import { ScansClient } from "./scans-client"
 
 describe("ScansClient initial render", () => {

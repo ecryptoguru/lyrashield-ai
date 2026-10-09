@@ -21,11 +21,15 @@ import { z } from "zod"
 const InstallRequestSchema = z.object({
   workspaceId: z.string().min(1),
   oauthReturnState: z.string().max(8192).optional(),
-  returnTo: z.enum(["onboarding", "integrations"]).default("integrations"),
+  returnTo: z.enum(["onboarding", "integrations", "scan"]).default("integrations"),
 })
 
-function installReturnPath(returnTo: "onboarding" | "integrations"): string {
-  return returnTo === "onboarding" ? "/onboarding" : "/dashboard/integrations"
+function installReturnPath(returnTo: "onboarding" | "integrations" | "scan"): string {
+  return returnTo === "onboarding"
+    ? "/onboarding"
+    : returnTo === "scan"
+      ? "/dashboard/scans?new=1&source=repo"
+      : "/dashboard/integrations"
 }
 
 /**

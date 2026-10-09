@@ -22,7 +22,7 @@ describe("findings list context preservation contract", () => {
   const drawer = readFileSync(new URL("./use-finding-drawer.ts", import.meta.url), "utf8")
 
   it("keeps filter/sort/target/query in the URL", () => {
-    expect(client).toContain('params.set("filter", updates.filter)')
+    expect(client).toContain('params.set("status", selection.status)')
     expect(client).toContain('params.set("target", updates.target)')
     expect(drawer).toContain('url.searchParams.set("finding", finding.id)')
   })

@@ -47,11 +47,11 @@ export default async function AffiliateDashboardPage({
     prisma.click.count({
       where: { affiliateId: affiliate.id, clickedAt: { gte: since } },
     }),
-    prisma.click.findMany({
-      where: { affiliateId: affiliate.id, clickedAt: { gte: since } },
-      select: { visitorId: true },
-      distinct: ["visitorId"],
-    }),
+    prisma.$queryRaw<Array<{ count: bigint }>>(Prisma.sql`
+      SELECT COUNT(DISTINCT "visitorId") AS "count"
+      FROM "Click"
+      WHERE "affiliateId" = ${affiliate.id} AND "clickedAt" >= ${since}
+    `),
     prisma.user.count({
       where: { affiliate: { id: affiliate.id }, createdAt: { gte: since } },
     }),
@@ -90,7 +90,7 @@ export default async function AffiliateDashboardPage({
     }),
   ])
 
-  const uniqueClicks = uniqueClicksAgg.filter((c) => c.visitorId !== null).length
+  const uniqueClicks = Number(uniqueClicksAgg[0]?.count ?? 0)
   const conversionRate = clicksAgg > 0 ? ((conversions / clicksAgg) * 100).toFixed(2) : "0"
   const epc =
     clicksAgg > 0

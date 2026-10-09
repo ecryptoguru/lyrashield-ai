@@ -105,7 +105,9 @@ export default async function WorkspaceSettingsPage() {
         </CardContent>
       </Card>
 
-      <ApiKeysSection workspaceId={workspaceId} canManage={canManageApiKeys} />
+      <section id="api-keys" className="scroll-mt-24" aria-label="Workspace API keys">
+        <ApiKeysSection workspaceId={workspaceId} canManage={canManageApiKeys} />
+      </section>
 
       <Card className="border-primary/30 bg-primary/5">
         <CardHeader>

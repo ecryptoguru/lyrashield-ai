@@ -1,7 +1,11 @@
 import { createRoot } from "react-dom/client"
 
 const root = createRoot(document.getElementById("root")!)
-if (new URLSearchParams(location.search).has("forms")) {
+if (new URLSearchParams(location.search).has("dashboard-ux")) {
+  await import("../../apps/web/src/app/globals.css")
+  const { default: DashboardUxHarness } = await import("./dashboard-ux-harness")
+  root.render(<DashboardUxHarness />)
+} else if (new URLSearchParams(location.search).has("forms")) {
   await import("../../apps/web/src/app/globals.css")
   const { default: FormsHarness } = await import("./forms-harness")
   root.render(<FormsHarness />)
