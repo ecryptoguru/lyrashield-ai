@@ -5,6 +5,8 @@ import { EmailText } from "@/components/email-text"
 import { useRouter } from "next/navigation"
 import { Search, ShieldX, CheckCircle2, AlertTriangle } from "lucide-react"
 import { LocalTime } from "@/components/local-time"
+import Link from "next/link"
+import { buttonVariants } from "@lyrashield/ui"
 
 interface LicenseRow {
   id: string
@@ -23,19 +25,57 @@ interface LicenseRow {
   hasLicenseKey: boolean
 }
 
+function LicensePagination({
+  cursor,
+  nextCursor,
+  href,
+}: {
+  cursor: string | null
+  nextCursor: string | null
+  href: (cursor: string | null) => string
+}) {
+  if (!cursor && !nextCursor) return null
+  return (
+    <nav aria-label="License pages" className="flex flex-wrap gap-2">
+      {cursor && (
+        <Link href={href(null)} className={buttonVariants({ variant: "secondary" })}>
+          First page
+        </Link>
+      )}
+      {nextCursor && (
+        <Link href={href(nextCursor)} className={buttonVariants({ variant: "secondary" })}>
+          Next page
+        </Link>
+      )}
+    </nav>
+  )
+}
+
+function licensePageHref(next: string | null, query: string, status: "active" | "revoked") {
+  const params = new URLSearchParams({ status })
+  if (query) params.set("q", query)
+  if (next) params.set("cursor", next)
+  return `/dashboard/licenses?${params.toString()}`
+}
+
 export function LicensesClient({
   initialData,
   query,
   statusFilter,
+  cursor = null,
+  nextCursor = null,
 }: {
   initialData: LicenseRow[]
   query: string
   statusFilter: "active" | "revoked"
+  cursor?: string | null
+  nextCursor?: string | null
 }) {
   const [search, setSearch] = useState(query)
   const [filter, setFilter] = useState<"active" | "revoked">(statusFilter)
   const [isPending, startTransition] = useTransition()
   const router = useRouter()
+  const currentPageHref = (next: string | null) => licensePageHref(next, query, statusFilter)
 
   function navigate(nextSearch: string, nextFilter: "active" | "revoked") {
     startTransition(() => {
@@ -70,17 +110,14 @@ export function LicensesClient({
             />
             <input
               type="search"
+              maxLength={320}
               placeholder="Search by owner email..."
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              className="border-input bg-background w-full rounded-md border py-2 pl-9 pr-3 text-base outline-none focus:ring-2 focus:ring-ring md:text-sm"
+              className="border-input bg-background min-h-11 w-full rounded-md border py-2 pl-9 pr-3 text-base outline-none focus:ring-2 focus:ring-ring md:text-sm"
             />
           </label>
-          <button
-            type="submit"
-            disabled={isPending}
-            className="bg-primary text-primary-foreground rounded-md px-3 py-2 text-sm font-medium disabled:opacity-50"
-          >
+          <button type="submit" disabled={isPending} className={buttonVariants()}>
             Search
           </button>
         </form>
@@ -90,7 +127,7 @@ export function LicensesClient({
             onClick={() => updateFilter("active")}
             disabled={isPending}
             aria-pressed={filter === "active"}
-            className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+            className={`focus-visible:ring-ring min-h-11 rounded-md px-3 py-1.5 text-sm font-medium transition-colors focus-visible:ring-2 ${
               filter === "active"
                 ? "bg-primary text-primary-foreground"
                 : "bg-muted text-muted-foreground hover:bg-muted/80"
@@ -103,7 +140,7 @@ export function LicensesClient({
             onClick={() => updateFilter("revoked")}
             disabled={isPending}
             aria-pressed={filter === "revoked"}
-            className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+            className={`focus-visible:ring-ring min-h-11 rounded-md px-3 py-1.5 text-sm font-medium transition-colors focus-visible:ring-2 ${
               filter === "revoked"
                 ? "bg-primary text-primary-foreground"
                 : "bg-muted text-muted-foreground hover:bg-muted/80"
@@ -178,12 +215,9 @@ export function LicensesClient({
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1.5">
                         {eligible ? (
-                          <CheckCircle2 className="h-3.5 w-3.5 text-green-600" aria-hidden="true" />
+                          <CheckCircle2 className="text-success h-3.5 w-3.5" aria-hidden="true" />
                         ) : (
-                          <AlertTriangle
-                            className="h-3.5 w-3.5 text-amber-600"
-                            aria-hidden="true"
-                          />
+                          <AlertTriangle className="text-warning h-3.5 w-3.5" aria-hidden="true" />
                         )}
                         <span className={eligible ? "" : "text-muted-foreground"}>
                           <LocalTime value={license.updateEligibleUntil} />
@@ -213,10 +247,10 @@ export function LicensesClient({
 
       {initialData.length > 0 && (
         <p className="text-muted-foreground text-xs">
-          Showing {initialData.length} license{initialData.length !== 1 ? "s" : ""}. Max 100
-          results.
+          Showing {initialData.length} license{initialData.length !== 1 ? "s" : ""} on this page.
         </p>
       )}
+      <LicensePagination cursor={cursor} nextCursor={nextCursor} href={currentPageHref} />
     </div>
   )
 }

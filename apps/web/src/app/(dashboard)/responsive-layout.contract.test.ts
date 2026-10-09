@@ -8,6 +8,15 @@ const scorecardPage = readFileSync(
 )
 
 describe("narrow viewport layout", () => {
+  it("places the keyboard bypass before both sidebar and mobile navigation", () => {
+    const skipLink = dashboardLayout.indexOf('href="#main-content"')
+    expect(skipLink).toBeGreaterThan(-1)
+    expect(skipLink).toBeLessThan(dashboardLayout.indexOf("<V2Sidebar"))
+    expect(skipLink).toBeLessThan(dashboardLayout.indexOf("<MobilePageHeader"))
+    expect(dashboardLayout).toContain('id="main-content"')
+    expect(dashboardLayout).toContain("tabIndex={-1}")
+  })
+
   it("keeps dashboard content above the fixed mobile navigation", () => {
     // UF-27: the fixed mobile chrome (bottom bar + page header) is the shell
     // below `lg`, because the sidebar no longer appears at tablet widths.

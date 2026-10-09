@@ -42,7 +42,8 @@ describe("findings list view", () => {
 
     expect(html).toContain("Target: API")
     expect(html).toContain("Scan: scan-1")
-    expect(html).toMatch(/aria-pressed="true"[^>]*>High<\/button>/)
+    expect(html).toContain('value="HIGH" selected=""')
+    expect(html).toContain('aria-label="Filter by evidence"')
     expect(html).toContain('value="secret"')
     expect(html).toContain('aria-label="Sort loaded results"')
     expect(html).toContain('value="severity" selected=""')
@@ -63,8 +64,8 @@ describe("findings list view", () => {
     expect(loading).not.toContain("Load more")
 
     const empty = renderToStaticMarkup(<FindingsResults {...props} findings={[]} loading={false} />)
-    expect(empty).toContain("No findings yet")
-    expect(empty).toContain("Start a scan")
+    expect(empty).toContain("No findings in this scope")
+    expect(empty).toContain("Review scans")
 
     const populated = renderToStaticMarkup(
       <FindingsResults {...props} findings={[finding]} sortedFindings={[finding]} loading={false}>
@@ -76,10 +77,7 @@ describe("findings list view", () => {
     expect(populated).toContain('aria-haspopup="dialog"')
     expect(populated).toContain("Load more")
   })
-
-  // W1/P2-7: a filter that matched nothing is not an empty workspace, and
-  // telling the user to start a scan hides the filter that emptied the list.
-  it("separates a filtered-empty result from a truly-empty one", () => {
+  it("separates scope-only empty results from filter-empty results and suppresses emptiness on errors", () => {
     const rowRefs = { current: new Map<string, HTMLButtonElement | null>() }
     const props = { rowRefs, onOpenFinding: vi.fn(), sortedFindings: [] as FindingListItem[] }
     const onClearFilters = vi.fn()
@@ -93,16 +91,22 @@ describe("findings list view", () => {
         onClearFilters={onClearFilters}
       />
     )
-    expect(narrowed).toContain("No findings match these filters")
+    expect(narrowed).toContain("No matching findings")
     expect(narrowed).toContain("Clear filters")
-    expect(narrowed).not.toContain("No findings yet")
     expect(narrowed).not.toContain("Start a scan")
 
-    const unfiltered = renderToStaticMarkup(
-      <FindingsResults {...props} findings={[]} loading={false} narrowed={false} />
+    const filtered = renderToStaticMarkup(
+      <FindingsResults {...props} findings={[]} loading={false} hasConstraints onReset={vi.fn()} />
     )
-    expect(unfiltered).toContain("No findings yet")
-    expect(unfiltered).toContain("Start a scan")
-    expect(unfiltered).not.toContain("Clear filters")
+    expect(filtered).toContain("Reset filters and search")
+
+    const unfiltered = renderToStaticMarkup(
+      <FindingsResults {...props} findings={[]} loading={false} />
+    )
+    expect(unfiltered).toContain("No findings in this scope")
+    expect(unfiltered).toContain("Review scans")
+    expect(
+      renderToStaticMarkup(<FindingsResults {...props} findings={[]} loading={false} error />)
+    ).not.toContain("No findings")
   })
 })

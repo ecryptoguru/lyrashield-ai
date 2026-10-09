@@ -168,7 +168,7 @@ export function V2Sidebar({
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <span className="block text-[15px] font-bold tracking-tight">LyraShield AI</span>
-              <span className="border-primary/50 bg-primary/10 text-primary rounded border px-1 py-0.5 text-[9px] font-semibold tracking-[0.12em] uppercase">
+              <span className="border-primary/50 bg-primary/10 text-primary rounded border px-1 py-0.5 text-xs font-semibold tracking-[0.12em] uppercase">
                 Open beta
               </span>
             </div>

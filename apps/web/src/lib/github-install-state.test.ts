@@ -89,3 +89,17 @@ it("retains each signed OAuth return independently across an install round trip"
   })
   expect(verifyInstallState(first, 1000000).valid).toBe(false)
 })
+
+it("binds the first-scan return destination to the signed install state", () => {
+  const now = Date.now()
+  const token = createInstallState("workspace-scan", "scan", now)
+  expect(verifyInstallState(token, now)).toEqual({
+    valid: true,
+    workspaceId: "workspace-scan",
+    returnTo: "scan",
+  })
+  expect(verifyInstallState(token.replace(".scan.", ".integrations."), now)).toEqual({
+    valid: false,
+    reason: "bad_signature",
+  })
+})

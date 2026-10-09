@@ -259,4 +259,17 @@ describe("review_findings registration", () => {
     expect(fetchMock).not.toHaveBeenCalled()
     cleanup()
   })
+  it("keeps a combinable selection when a browser agent changes only the sort", async () => {
+    const deps = makeDeps({ getFilter: () => "OPEN:HIGH:VERIFIED" })
+    const { tool } = register(createReviewFindingsTool(deps))
+    const result = (await tool.execute({ sort: "newest" }, { signal: abortSignal })) as {
+      ok: boolean
+    }
+    expect(result.ok).toBe(true)
+    expect(deps.applyFilter).not.toHaveBeenCalled()
+    expect(deps.updateQueryParams).toHaveBeenCalledWith({
+      filter: "OPEN:HIGH:VERIFIED",
+      sort: "newest",
+    })
+  })
 })

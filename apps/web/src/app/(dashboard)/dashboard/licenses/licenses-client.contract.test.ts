@@ -15,7 +15,7 @@ describe("platform licenses filters", () => {
 
   it("keeps filters reachable when the selected result set is empty", () => {
     expect(page).toContain("<LicensesClient")
-    expect(page).toContain("key={`${statusFilter}:${query}`}")
+    expect(page).toContain('key={`${statusFilter}:${query}:${cursor ?? ""}`}')
     expect(page).not.toContain("<NoWorkspaceState")
     expect(client).toContain("No {filter} licenses found")
   })

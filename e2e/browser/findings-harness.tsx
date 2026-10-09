@@ -3,7 +3,10 @@ import {
   FindingsClient,
   type FindingListItem,
 } from "../../apps/web/src/app/(dashboard)/dashboard/findings/findings-client"
-import { parseFindingListParams } from "../../apps/web/src/lib/finding-list-params"
+import {
+  decodeFindingFilters,
+  parseFindingListParams,
+} from "../../apps/web/src/lib/finding-list-params"
 
 export const initialFinding: FindingListItem = {
   id: "initial",
@@ -20,11 +23,27 @@ export const initialFinding: FindingListItem = {
 
 export default function FindingsHarness() {
   const searchParams = new URLSearchParams(location.search)
+  document.documentElement.classList.toggle("dark", searchParams.get("theme") === "dark")
   const params = parseFindingListParams(Object.fromEntries(searchParams))
+  const selection = decodeFindingFilters(params.filter)
+  const selectedFixture: FindingListItem = {
+    ...initialFinding,
+    status: selection.status === "ALL" ? "OPEN" : selection.status,
+    severity: selection.severity === "ALL" ? "HIGH" : selection.severity,
+    verified: selection.evidence === "VERIFIED",
+    verificationStatus: selection.evidence === "VERIFIED" ? "VALIDATED" : "NOT_VERIFIED",
+  }
   const hasPages = searchParams.has("hasPages")
   const initialData = searchParams.has("withPassingRetest")
     ? [{ ...initialFinding, title: "Fixed scoped finding", status: "FIXED" }]
-    : [initialFinding]
+    : searchParams.has("severities")
+      ? ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"].map((severity) => ({
+          ...initialFinding,
+          id: severity,
+          title: `${severity} fixture finding`,
+          severity: severity as FindingListItem["severity"],
+        }))
+      : [selectedFixture]
   return (
     <WebMcpReceiptProvider>
       <main>

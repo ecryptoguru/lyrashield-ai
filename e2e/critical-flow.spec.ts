@@ -151,10 +151,10 @@ test("tenant boundaries deny another user", async ({ page, browser }, testInfo) 
   createdWorkspaceId = workspaceId
 
   await page.goto("/dashboard")
-  await expect(page.getByRole("heading", { name: "Add your first target" })).toBeVisible()
-  await expect(page.getByRole("link", { name: "Add a target" }).first()).toHaveAttribute(
+  await expect(page.getByRole("heading", { name: "Start your first scan" })).toBeVisible()
+  await expect(page.getByRole("link", { name: "Start your first scan" })).toHaveAttribute(
     "href",
-    "/dashboard/targets"
+    "/dashboard/scans?new=1"
   )
 
   const targetResponse = await page.request.post("/api/targets", {

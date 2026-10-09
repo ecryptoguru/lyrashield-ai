@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { useEffect, useRef, useState } from "react"
 import { Check, Copy, ExternalLink } from "lucide-react"
 import { Button } from "@lyrashield/ui"
@@ -281,19 +282,62 @@ export function AgentWizard({ data, docsUrl }: { data: AgentWizardData; docsUrl:
             </div>
           </details>
         ))}
+      <AgentScanNextStep />
 
-      <p className="text-muted-foreground text-sm">
-        Full guide for {data.displayName}:{" "}
-        <a
-          href={docsUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-foreground inline-flex max-w-full items-center gap-1 break-all underline underline-offset-2 hover:no-underline"
-        >
-          /docs/integrations/{data.docsSlug}
-          <ExternalLink className="size-3.5" aria-hidden="true" />
-        </a>
-      </p>
+      <AgentGuideLink displayName={data.displayName} docsSlug={data.docsSlug} docsUrl={docsUrl} />
     </div>
+  )
+}
+
+function AgentGuideLink({
+  displayName,
+  docsSlug,
+  docsUrl,
+}: {
+  displayName: string
+  docsSlug: string
+  docsUrl: string
+}) {
+  return (
+    <p className="text-muted-foreground text-sm">
+      Full guide for {displayName}:{" "}
+      <a
+        href={docsUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-foreground inline-flex max-w-full items-center gap-1 break-all underline underline-offset-2 hover:no-underline"
+      >
+        /docs/integrations/{docsSlug}
+        <ExternalLink className="size-3.5" aria-hidden="true" />
+      </a>
+    </p>
+  )
+}
+
+function AgentScanNextStep() {
+  return (
+    <section className="space-y-3 rounded-xl border bg-card p-5" aria-labelledby="agent-next-step">
+      <h2 id="agent-next-step" className="text-sm font-semibold">
+        Continue with a scan
+      </h2>
+      <p className="text-muted-foreground text-sm">
+        After verifying the connection in your client, choose a target and confirm a scan. You can
+        also scan from the dashboard without installing a coding agent.
+      </p>
+      <div className="flex flex-wrap gap-3">
+        <Link
+          href="/dashboard/scans?new=1"
+          className="bg-primary text-primary-foreground inline-flex min-h-11 items-center rounded-md px-4 text-sm font-medium hover:bg-primary/90"
+        >
+          Configure a scan
+        </Link>
+        <Link
+          href="/dashboard/connections"
+          className="inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
+        >
+          Review connections
+        </Link>
+      </div>
+    </section>
   )
 }

@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback, useRef } from "react"
 import { useFindingsWebMcp } from "./findings-webmcp"
 import { FindingDetailDrawer } from "./finding-detail-drawer"
-import { FindingsControls, FindingsResults } from "./findings-client-view"
+import { FindingsControls, FindingsResults, findingsResultUiState } from "./findings-client-view"
 import { useFindingDrawer } from "./use-finding-drawer"
 import { type FindingsListPage } from "./findings-list-context"
 import { Button, Card, LoadMore } from "@lyrashield/ui"
@@ -13,6 +13,7 @@ import { DashboardErrorCard } from "@/components/dashboard-error-card"
 import {
   findingFilterToApiQuery,
   findingsHref,
+  updateFindingListUrl,
   type FindingFilter as FindingFilterValue,
 } from "@/lib/finding-list-params"
 import {
@@ -65,34 +66,7 @@ export function FindingsClient({
 }) {
   const updateQueryParams = useCallback(
     (updates: { filter?: string; sort?: SortMode; target?: string; q?: string }) => {
-      if (typeof window === "undefined") return
-      const params = new URLSearchParams(window.location.search)
-      if (updates.filter !== undefined) {
-        // No filter parameter means Open, so All must be written explicitly.
-        if (updates.filter !== "OPEN") params.set("filter", updates.filter)
-        else params.delete("filter")
-      }
-      if (updates.sort !== undefined) {
-        if (updates.sort !== "priority") params.set("sort", updates.sort)
-        else params.delete("sort")
-      }
-      if (updates.target !== undefined) {
-        params.delete("targetId")
-        if (updates.target) params.set("target", updates.target)
-        else params.delete("target")
-      }
-      if (updates.q !== undefined) {
-        if (updates.q) params.set("q", updates.q)
-        else params.delete("q")
-      }
-      const search = params.toString()
-      const nextUrl = `${window.location.pathname}${search ? `?${search}` : ""}`
-      if (nextUrl === `${window.location.pathname}${window.location.search}`) return
-      const method =
-        updates.filter !== undefined || updates.target !== undefined || updates.sort !== undefined
-          ? "pushState"
-          : "replaceState"
-      window.history[method](null, "", nextUrl)
+      updateFindingListUrl(updates)
     },
     []
   )
@@ -333,23 +307,24 @@ export function FindingsClient({
   )
 
   const handleFilterChange = useCallback(
-    async (newFilter: string) => {
+    async (newFilter: string, newQuery = query) => {
       currentScopeRef.current = JSON.stringify({
         filter: newFilter,
         scanId,
         target: targetFilter,
-        q: query,
+        q: newQuery,
       })
       const generation = invalidateRequest()
       setFilter(newFilter)
-      updateQueryParams({ filter: newFilter, sort: sortMode })
+      setQuery(newQuery)
+      updateQueryParams({ filter: newFilter, sort: sortMode, q: newQuery })
       await fetchFindings(
         {
           workspaceId,
           ...findingFilterToApiQuery(newFilter as FindingFilterValue),
           ...(scanId ? { observedInScanId: scanId } : {}),
           ...(targetFilter ? { targetId: targetFilter } : {}),
-          ...(query ? { q: query } : {}),
+          ...(newQuery ? { q: newQuery } : {}),
         },
         generation
       )
@@ -492,6 +467,14 @@ export function FindingsClient({
       )}
 
       <FindingsResults
+        {...findingsResultUiState({
+          query,
+          filter,
+          scanId,
+          targetFilter,
+          error,
+        })}
+        onReset={() => void handleFilterChange("ALL", "")}
         loading={loading}
         findings={findings}
         sortedFindings={sortedFindings}

@@ -1,5 +1,6 @@
 "use client"
 
+import { useRouter } from "next/navigation"
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react"
 import { useScansWebMcp } from "./scans-webmcp"
 import { useScanListState } from "./use-scan-list-state"
@@ -19,7 +20,8 @@ import {
 } from "@/lib/api-schemas"
 import { ApiError, apiPost, apiGet } from "@/lib/api-client"
 import { SCAN_SINGULAR, TARGET_PLURAL, TARGET_SINGULAR } from "@/lib/terminology"
-import { findRecoveryPreset, getReviewSetupGuidance, scanRecoveryHref } from "./scans-client.utils"
+import { findRecoveryPreset, getReviewSetupGuidance } from "./scans-client.utils"
+import { prepareScanRetry } from "./prepare-scan-retry"
 import {
   SCAN_STATE_FILTERS,
   scanStateStatusLabel,
@@ -95,10 +97,9 @@ export function ScansClient({
   initialFilterUnavailable = false,
   canManageBilling = false,
 }: ScansClientProps) {
+  const router = useRouter()
   const [showCreate, setShowCreate] = useState(initialShowCreate)
   const reviewChoiceVersion = useRef(0)
-  // One active target and no explicit selection: preselect it. Choosing among
-  // several is the user's call, but being asked to pick the only option is not.
   const initialSelectedTarget = initialTargetId || (targets.length === 1 ? targets[0]!.id : "")
   const [selectedTarget, setSelectedTarget] = useState(initialSelectedTarget)
   const [selectedFocus, setSelectedFocus] = useState<string | null>(null)
@@ -110,7 +111,6 @@ export function ScansClient({
     })
     return findRecoveryPreset(options, initialGoal, initialMode) || getDefaultScanOptionId(options)
   })
-  // Review Changes revision inputs — resolved to immutable SHAs server-side.
   const [baseRef, setBaseRef] = useState("")
   const [headRef, setHeadRef] = useState("")
   const [attachments, setAttachments] = useState<ScanAttachmentItem[]>([])
@@ -169,9 +169,7 @@ export function ScansClient({
   const [scanRecoveryError, setScanRecoveryError] = useState<string | null>(null)
   const [scanRecoveryUnavailable, setScanRecoveryUnavailable] = useState(false)
   const [forceNewAfterRecovery, setForceNewAfterRecovery] = useState(false)
-
   const isDesktop = useMediaQuery("(min-width: 768px)")
-
   useScansWebMcp({
     workspaceId,
     targets,
@@ -201,7 +199,6 @@ export function ScansClient({
       setError("No review option is available for this target")
       return
     }
-
     await runScanSubmission(scanSubmissionLock.current, async () => {
       setCreating(true)
       if (startNewScan) setForceNewAfterRecovery(false)
@@ -231,10 +228,10 @@ export function ScansClient({
           clearPendingScanSubmission(scanSubmissionScope, begun.submission.idempotencyKey)
           begun = beginScanSubmission(scanSubmissionScope, createScanRequest)
         }
-
         let submission = begun.submission
         setPendingScanSubmission(submission)
         if (submission.state === "accepted" && submission.scanId) {
+          router.push(`/dashboard/scans/${encodeURIComponent(submission.scanId)}`)
           setShowCreate(false)
           return
         }
@@ -299,6 +296,7 @@ export function ScansClient({
           )
         }
         setShowCreate(false)
+        router.push(`/dashboard/scans/${encodeURIComponent(result.id)}`)
         setSelectedFocus(null)
         setBaseRef("")
         setHeadRef("")
@@ -494,7 +492,6 @@ export function ScansClient({
   }
 
   // ─── Eligibility preflight (advisory; POST re-checks authoritatively) ────
-
   useEffect(() => {
     if (!showCreate || !selectedTarget || !selectedOption) {
       // Deferred so the reset lands inside a callback, not the synchronous
@@ -567,11 +564,7 @@ export function ScansClient({
     selectedOption?.mode,
     eligibilityAttempt,
   ])
-
-  // ─── Supporting files: workspace-scoped attachments for this review ────
-  // Loaded lazily when the sheet opens; only ACTIVE, workspace-owned artifacts
-  // are listed by the API. Selection is inert — ids are validated again
-  // server-side at creation and staged read-only by the worker.
+  // Attachment ids are validated again server-side before use.
   useEffect(() => {
     if (!showCreate) return
     const controller = new AbortController()
@@ -587,13 +580,11 @@ export function ScansClient({
       })
     return () => controller.abort()
   }, [showCreate, workspaceId])
-
   function toggleAttachment(id: string) {
     setSelectedAttachments((prev) =>
       prev.includes(id) ? prev.filter((v) => v !== id) : [...prev, id]
     )
   }
-
   const eligibilityBlocked = eligibility.status === "ready" && !eligibility.eligibility.allowed
   const startDisabled =
     creating ||
@@ -660,35 +651,19 @@ export function ScansClient({
     }
   }
 
-  function handleRetryScan(scan: ScanItem) {
-    const target = targets.find((item) => item.id === scan.target?.id)
-    if (!target) {
-      if (scan.target) {
-        window.location.assign(
-          scanRecoveryHref({ targetId: scan.target.id, goal: scan.goal, mode: scan.mode })
-        )
-      } else {
-        setError("This target is no longer available. Choose another target to run a new scan.")
-      }
-      return
-    }
-    const options = getManualScanOptions({
-      type: target.type,
-      hasApiSpec: Boolean(target.apiSpecUrl),
+  const handleRetryScan = (scan: ScanItem) =>
+    prepareScanRetry(scan, {
+      targets,
+      setSelectedTarget,
+      choosePreset,
+      setBaseRef,
+      setHeadRef,
+      setSelectedFocus,
+      setSelectedAttachments,
+      setError,
+      setModeResetNotice,
+      setShowCreate,
     })
-    const previousPreset = findRecoveryPreset(options, scan.goal, scan.mode)
-    setSelectedTarget(target.id)
-    choosePreset(previousPreset || getDefaultScanOptionId(options))
-    setBaseRef("")
-    setHeadRef("")
-    setSelectedFocus(null)
-    setSelectedAttachments([])
-    setError(null)
-    setModeResetNotice(
-      previousPreset ? null : "The previous review type is unavailable. Choose an available option."
-    )
-    setShowCreate(true)
-  }
 
   return (
     <div>
@@ -698,7 +673,7 @@ export function ScansClient({
             aria-label={`Filter by ${TARGET_SINGULAR.toLowerCase()}`}
             value={targetFilter}
             onChange={(e) => handleTargetFilterChange(e.target.value)}
-            className="h-9 w-44"
+            className="h-11 w-full sm:w-44"
           >
             <option value="">All {TARGET_PLURAL.toLowerCase()}</option>
             {targets.map((t) => (
@@ -711,7 +686,7 @@ export function ScansClient({
             aria-label="Filter by state"
             value={stateFilter}
             onChange={(e) => handleStateFilterChange(e.target.value)}
-            className="h-9 w-40"
+            className="h-11 w-full sm:w-40"
           >
             {SCAN_STATE_FILTERS.map((state) => (
               <option key={state} value={state}>

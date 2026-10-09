@@ -19,6 +19,27 @@ export interface RepoPickerState {
   onSelectRepo: (repoId: string) => void
 }
 
+function TargetFormActions({
+  disabled,
+  onCancel,
+  label,
+}: {
+  disabled: boolean
+  onCancel: () => void
+  label: string
+}) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      <Button type="submit" disabled={disabled}>
+        {label}
+      </Button>
+      <Button type="button" variant="secondary" disabled={disabled} onClick={onCancel}>
+        Cancel
+      </Button>
+    </div>
+  )
+}
+
 export function TargetCreatePanel({
   formType,
   onFormTypeChange,
@@ -72,6 +93,7 @@ export function RepoTargetForm({
   creating,
   onSubmit,
   onCancel,
+  submitLabel,
 }: {
   picker: RepoPickerState
   repoForm: RepoFormState
@@ -79,6 +101,7 @@ export function RepoTargetForm({
   creating: boolean
   onSubmit: () => void
   onCancel: () => void
+  submitLabel?: string
 }) {
   return (
     <form
@@ -196,23 +219,17 @@ export function RepoTargetForm({
           )}
         </>
       )}
-      <div className="flex gap-2">
-        <Button
-          type="submit"
-          disabled={
-            creating ||
-            (!repoForm.name && !picker.selectedRepoId) ||
-            (!picker.connected || picker.mode === "manual"
-              ? !repoForm.repoOwner || !repoForm.repoName
-              : false)
-          }
-        >
-          {creating ? "Creating..." : `Create ${TARGET_SINGULAR}`}
-        </Button>
-        <Button type="button" variant="secondary" onClick={onCancel}>
-          Cancel
-        </Button>
-      </div>
+      <TargetFormActions
+        disabled={
+          creating ||
+          (!repoForm.name && !picker.selectedRepoId) ||
+          (!picker.connected || picker.mode === "manual"
+            ? !repoForm.repoOwner || !repoForm.repoName
+            : false)
+        }
+        onCancel={onCancel}
+        label={creating ? "Saving target…" : (submitLabel ?? `Create ${TARGET_SINGULAR}`)}
+      />
     </form>
   )
 }
@@ -223,12 +240,14 @@ export function UrlTargetForm({
   creating,
   onSubmit,
   onCancel,
+  submitLabel,
 }: {
   urlForm: UrlFormState
   onUrlFormChange: (patch: Partial<UrlFormState>) => void
   creating: boolean
   onSubmit: () => void
   onCancel: () => void
+  submitLabel?: string
 }) {
   return (
     <form
@@ -259,6 +278,27 @@ export function UrlTargetForm({
           </Button>
         </div>
       </FormField>
+      <FormField label="URL" htmlFor="url-input">
+        <Input
+          id="url-input"
+          autoFocus
+          type="url"
+          value={urlForm.url}
+          onChange={(e) => onUrlFormChange({ url: e.target.value })}
+          onBlur={() => {
+            if (urlForm.name.trim()) return
+            try {
+              onUrlFormChange({ name: new URL(urlForm.url).hostname.slice(0, 100) })
+            } catch {
+              /* Native URL validation handles invalid input. */
+            }
+          }}
+          required
+          placeholder={
+            urlForm.urlType === "API" ? "https://api.example.com" : "https://staging.example.com"
+          }
+        />
+      </FormField>
       <FormField label={`${TARGET_SINGULAR} name`} htmlFor="url-name">
         <Input
           id="url-name"
@@ -267,22 +307,10 @@ export function UrlTargetForm({
           onChange={(e) => onUrlFormChange({ name: e.target.value })}
           required
           maxLength={100}
-          autoFocus
           placeholder={urlForm.urlType === "API" ? "Production API" : "Staging Site"}
         />
       </FormField>
-      <FormField label="URL" htmlFor="url-input">
-        <Input
-          id="url-input"
-          type="url"
-          value={urlForm.url}
-          onChange={(e) => onUrlFormChange({ url: e.target.value })}
-          required
-          placeholder={
-            urlForm.urlType === "API" ? "https://api.example.com" : "https://staging.example.com"
-          }
-        />
-      </FormField>
+
       {urlForm.urlType === "API" && (
         <FormField label="OpenAPI / Swagger URL" htmlFor="api-spec-url">
           <p className="text-muted-foreground mb-1 text-xs">
@@ -322,11 +350,11 @@ export function UrlTargetForm({
           </TooltipContent>
         </Tooltip>
       </label>
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         <Button type="submit" disabled={creating || !urlForm.ownershipAttested}>
-          {creating ? "Creating..." : `Create ${TARGET_SINGULAR}`}
+          {creating ? "Saving target…" : (submitLabel ?? `Create ${TARGET_SINGULAR}`)}
         </Button>
-        <Button type="button" variant="secondary" onClick={onCancel}>
+        <Button type="button" variant="secondary" disabled={creating} onClick={onCancel}>
           Cancel
         </Button>
       </div>
