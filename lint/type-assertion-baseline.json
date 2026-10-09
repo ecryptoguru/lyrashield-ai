@@ -44,13 +44,6 @@
       "count": 1
     }
   ],
-  "apps/worker/src/engine/connector-context.ts": [
-    {
-      "kind": "never",
-      "sha256": "a6772f7c3d22b34b82ec6ba1c0f7b41565f3cdee0f7a095936b13ce2590c0a39",
-      "count": 1
-    }
-  ],
   "apps/worker/src/operations/verify-queue-orphan-fixture.ts": [
     {
       "kind": "double-unknown",

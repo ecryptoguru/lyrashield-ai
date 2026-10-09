@@ -14,8 +14,6 @@ the file level** before they enter the repo.
   `pages/methodology.astro` under "What every new scan record preserves".
 - `console-issues.webp` — captured at `/issues`, used full-width by
   `pages/methodology.astro` under "Evidence states are not interchangeable".
-- `console-coding-agents.webp` — captured at `/coding-agents`, used full-width
-  by `pages/docs/integrations/index.astro` under "Fastest path: the CLI".
 - `console-issues-thumb.webp`, `console-coding-agents-thumb.webp` — the
   matching captures with the app sidebar cropped off (see "Thumbnail crop"
   below). Used only by `HeroProductFrame.astro`, as the two small frames

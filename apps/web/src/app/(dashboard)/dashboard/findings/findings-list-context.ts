@@ -37,19 +37,6 @@ export function findingsContextKey(
   return `${FINDINGS_LIST_CONTEXT_STORAGE_PREFIX}${workspaceId}:${context.filter}:${context.sort}:${context.scanId}:${context.target}:${context.q}`
 }
 
-export function sameListContext(
-  a: { filter: string; sort: string; scanId: string; target: string; q: string },
-  b: { filter: string; sort: string; scanId: string; target: string; q: string }
-): boolean {
-  return (
-    a.filter === b.filter &&
-    a.sort === b.sort &&
-    a.scanId === b.scanId &&
-    a.target === b.target &&
-    a.q === b.q
-  )
-}
-
 export function saveFindingsListContext(key: string, context: FindingsListContext): void {
   if (typeof window === "undefined") return
   try {

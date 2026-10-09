@@ -346,7 +346,13 @@ pub struct SequencedEvent {
 }
 
 /// Terminal crash codes for durable terminal state mapping.
+///
+/// `SpawnFailed` and `PersistenceFailed` are reserved members of the persisted
+/// exit-code contract. They are not constructed by this revision, but the
+/// numeric values are part of the stored history the desktop reads back, so the
+/// set is kept complete rather than renumbered.
 #[derive(Debug, Clone, Copy)]
+#[allow(dead_code)]
 pub enum CrashCode {
     SpawnFailed = 100,
     PersistenceFailed = 101,
