@@ -1,9 +1,8 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { ACQUISITION_COOKIE, track } from "@/lib/analytics"
-import { rememberPlanIntent } from "@/lib/plan-intent"
+import { track } from "@/lib/analytics"
 import { OnboardingScanRecovery } from "./onboarding-scan-recovery"
 import {
   initialOnboardingSelection,
@@ -28,6 +27,7 @@ import { useOnboardingScan } from "./use-onboarding-scan"
 import { useOnboardingTargetBinding } from "./use-onboarding-target-binding"
 import { useOnboardingNavigation } from "./use-onboarding-navigation"
 import { useOnboardingStepActions } from "./use-onboarding-step-actions"
+import { useOnboardingEntryEffects } from "./use-onboarding-entry-effects"
 
 export function OnboardingWizard({
   principalId,
@@ -40,14 +40,7 @@ export function OnboardingWizard({
   targetTypeHint,
 }: OnboardingWizardProps) {
   const router = useRouter()
-  useEffect(() => {
-    rememberPlanIntent(selectedPlan)
-    // The acquisition snapshot is already in durable account state server-side;
-    // the cookie has done its job.
-    if (acquisitionCookiePresent) {
-      document.cookie = `${ACQUISITION_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax`
-    }
-  }, [selectedPlan, acquisitionCookiePresent])
+  useOnboardingEntryEffects({ selectedPlan, acquisitionCookiePresent })
   const completionPath = onboardingCompletionPath(oauthReturnQuery, selectedPlan)
   const initialSelection = initialOnboardingSelection(initialState, targetTypeHint)
   const [step, setStep] = useState(initialSelection.step)
@@ -135,14 +128,13 @@ export function OnboardingWizard({
     completionPath,
     oauthReturnQuery,
     persist,
+    ensureWorkspace,
     setLoading,
     setError,
     setFailure,
     persistedTargetReusable,
     onTargetBound,
   })
-
-  const retryingExistingTarget = persistedTargetReusable
 
   const { choosePath, skipOnboarding } = useOnboardingNavigation({
     data,
@@ -163,6 +155,8 @@ export function OnboardingWizard({
     urlForm,
     environment,
     selectedRepo,
+    ensureWorkspace,
+    setLoading,
     setError,
     setFailure,
     setPath,
@@ -252,7 +246,7 @@ export function OnboardingWizard({
         onReconnect={connectGitHub}
         onRepoBack={() => setStep(1)}
         onRepoContinue={confirmRepoAndContinue}
-        retryingExistingTarget={retryingExistingTarget}
+        retryingExistingTarget={persistedTargetReusable}
         hasFailedScanAttempt={Boolean(error) || failure !== null}
         reviewOptions={reviewOptions}
         selectedReview={selectedReview}

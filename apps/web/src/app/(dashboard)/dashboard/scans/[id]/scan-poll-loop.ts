@@ -1,13 +1,7 @@
 "use client"
 
 import { useEffect } from "react"
-
-/** Under a minute poll every 5s, under five minutes every 10s, then every 60s. */
-function nextInterval(elapsedMs: number): number {
-  if (elapsedMs < 60_000) return 5_000
-  if (elapsedMs < 5 * 60_000) return 10_000
-  return 60_000
-}
+import { scanDetailPollDelay } from "./scan-detail-poll-schedule"
 
 /**
  * The visibility-aware poll loop of the scan detail page. It was inline in
@@ -35,6 +29,10 @@ export function useScanPollLoop({
     let isAborted = false
     let inFlight = false
     let refreshOnVisible = false
+    // P2-14: the back-off clock's fallback. Seeded once when this loop starts —
+    // for a scan with no startedAt (QUEUED or REQUIRES_APPROVAL) — so elapsed
+    // time advances instead of being recomputed as ~0 on every tick.
+    const pollAnchorMs = Date.now()
 
     const schedule = (delayMs: number) => {
       if (timeoutId !== undefined) window.clearTimeout(timeoutId)
@@ -51,8 +49,12 @@ export function useScanPollLoop({
       } finally {
         inFlight = false
         if (!isAborted && !document.hidden) {
-          const startedAtMs = startedAt ? new Date(startedAt).getTime() : Date.now()
-          const delay = refreshOnVisible ? 0 : nextInterval(Date.now() - startedAtMs)
+          const delay = scanDetailPollDelay({
+            startedAt,
+            anchorMs: pollAnchorMs,
+            nowMs: Date.now(),
+            refreshOnVisible,
+          })
           refreshOnVisible = false
           schedule(delay)
         }

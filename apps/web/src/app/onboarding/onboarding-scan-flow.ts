@@ -18,15 +18,14 @@ import {
 import { resolveScanSubmissionFailure } from "../(dashboard)/dashboard/scans/scan-submission-failure"
 import { ensureOnboardingTrialStarted, readScanEligibility } from "./onboarding-scan-eligibility"
 import type { OnboardingTrialStartState } from "./onboarding-scan-eligibility"
-import { TARGET_SINGULAR } from "@/lib/terminology"
 import type { ManualScanOption } from "@/lib/scan-presets"
 import {
   buildUrlTargetPayload,
   ensureOnboardingTargetId,
-  pathNeedsRepo,
   type OnboardingPath,
 } from "./onboarding-flow.utils"
 import { friendlyTargetError } from "./onboarding-wizard-model"
+import { preflightScanStart } from "./onboarding-scan-preflight"
 import type { OnboardingData, OnboardingFailureState } from "./onboarding-wizard-model"
 import type { OnboardingEligibilityState, Repo } from "./onboarding-step-views"
 import type { OnboardingPersist } from "./use-onboarding-persistence"
@@ -45,6 +44,8 @@ export interface ScanFlowContext {
   oauthReturnQuery: string | null | undefined
   router: ReturnType<typeof useRouter>
   persist: OnboardingPersist
+  // P1-1: the start action creates the workspace when the URL/API form did not.
+  ensureWorkspace: () => Promise<string>
   setLoading: (loading: boolean) => void
   setError: (message: string | null) => void
   setFailure: (failure: OnboardingFailureState) => void
@@ -134,19 +135,20 @@ function reconciliationRetry(ctx: ScanFlowContext): (() => void) | null {
 
 export async function checkPendingScanOperation(
   ctx: ScanFlowContext,
-  submission: PendingScanSubmission
+  submission: PendingScanSubmission,
+  workspaceId = ctx.data.workspaceId
 ) {
-  if (!submission.operationId || !ctx.data.workspaceId) return
+  if (!submission.operationId || !workspaceId) return
   const scope = {
     principalId: ctx.principalId,
-    workspaceId: ctx.data.workspaceId,
+    workspaceId,
     surface: "onboarding" as const,
   }
   ctx.setCheckingScanOperation(true)
   ctx.setScanRecoveryError(null)
   try {
     const status = await apiGet(
-      `/api/agent-operations/${encodeURIComponent(submission.operationId)}?workspaceId=${encodeURIComponent(ctx.data.workspaceId)}`,
+      `/api/agent-operations/${encodeURIComponent(submission.operationId)}?workspaceId=${encodeURIComponent(workspaceId)}`,
       { schema: scanOperationStatusSchema }
     )
     ctx.setScanOperationStatus(status)
@@ -197,7 +199,16 @@ export async function finishAcceptedOnboarding(ctx: ScanFlowContext, scanId: str
   ctx.setFailure(null)
   ctx.setScanRecoveryError(null)
   try {
-    await ctx.persist({ currentStep: 4, completed: true, skipped: false, selectedGoal: goal })
+    // Carry the workspace the scan just ran against. The onboarding PATCH
+    // response is the wizard's single source of truth for `data`, and a
+    // workspace-less completion write would drop an id the user just created.
+    await ctx.persist({
+      workspaceId: ctx.data.workspaceId ?? undefined,
+      currentStep: 4,
+      completed: true,
+      skipped: false,
+      selectedGoal: goal,
+    })
   } catch {
     ctx.setScanRecoveryError("Your scan started; onboarding could not be saved.")
     ctx.setLoading(false)
@@ -264,7 +275,7 @@ async function ensureTargetId(
           const target = await apiPost(
             "/api/targets",
             {
-              workspaceId: ctx.data.workspaceId,
+              workspaceId,
               name: ctx.productName.trim(),
               type: "REPO",
               repoProvider: "github",
@@ -279,7 +290,7 @@ async function ensureTargetId(
           targetId = target.id
         } else {
           const target = buildUrlTargetPayload({
-            workspaceId: ctx.data.workspaceId,
+            workspaceId,
             path: ctx.path,
             name: ctx.productName,
             url: ctx.urlForm.url,
@@ -413,44 +424,17 @@ export async function runCreateTargetAndStart(
   skipEligibilityCheck = false,
   startTrial = false
 ) {
-  if (!ctx.data.workspaceId) {
-    ctx.setError("Workspace is required.")
+  // Validate everything the user can see before creating anything, then resolve
+  // the workspace. The order is the fix (P1-1): an invalid submit must report
+  // its own problem, not provision a workspace first. A retry that reuses the
+  // persisted target skips the source checks — that target already exists, so
+  // there is nothing left to validate.
+  const preflight = await preflightScanStart(ctx)
+  if (!preflight.ok) {
+    ctx.setError(preflight.error)
     return
   }
-  const workspaceId = ctx.data.workspaceId
-  // A retry after scan admission fails reuses the target persisted by the
-  // first attempt — but only while it still describes the source the wizard
-  // shows. New flows create it here so Back -> Continue cannot orphan
-  // a duplicate before the final action, and an edited URL / different repo
-  // / different path must never silently scan the previously stored target.
-  const hasExistingTarget = ctx.persistedTargetReusable
-  // A selected repo can only come from the repo-select step — treat it as
-  // GitHub evidence even when the chooser path was lost across the OAuth
-  // install redirect (OnboardingState persists the step, not the path).
-  const needsRepo = pathNeedsRepo(ctx.path) || Boolean(ctx.selectedRepo)
-  if (!hasExistingTarget && needsRepo && !ctx.selectedRepo) {
-    ctx.setError("Workspace and repository are required.")
-    return
-  }
-  if (
-    !hasExistingTarget &&
-    !needsRepo &&
-    !buildUrlTargetPayload({
-      workspaceId: ctx.data.workspaceId,
-      path: ctx.path,
-      name: ctx.productName,
-      url: ctx.urlForm.url,
-      environment: ctx.environment,
-      ownershipAttested: ctx.urlForm.ownershipAttested,
-    })
-  ) {
-    ctx.setError("Add a valid target and confirm ownership to continue.")
-    return
-  }
-  if (!hasExistingTarget && !ctx.productName.trim()) {
-    ctx.setError(`Name your ${TARGET_SINGULAR.toLowerCase()} to continue.`)
-    return
-  }
+  const { workspaceId, hasExistingTarget, needsRepo } = preflight
   if (!ctx.selectedReview) {
     ctx.setError("Choose a goal for this review.")
     return
@@ -466,8 +450,13 @@ export async function runCreateTargetAndStart(
     try {
       const targetId = await ensureTargetId(ctx, workspaceId, needsRepo, hasExistingTarget)
       ctx.onTargetBound(needsRepo)
-      if (ctx.data.targetId !== targetId || ctx.data.selectedGoal !== selectedReview.goal) {
+      if (
+        ctx.data.targetId !== targetId ||
+        ctx.data.selectedGoal !== selectedReview.goal ||
+        ctx.data.workspaceId !== workspaceId
+      ) {
         await ctx.persist({
+          workspaceId,
           targetId,
           selectedGoal: selectedReview.goal,
           currentStep: 3,
@@ -522,7 +511,7 @@ export async function runCreateTargetAndStart(
         return
       }
       if (submission.operationId) {
-        await checkPendingScanOperation(ctx, submission)
+        await checkPendingScanOperation(ctx, submission, workspaceId)
         return
       }
 

@@ -10,6 +10,10 @@ import type { FindingItem, ScanData, ScanPollData } from "./scan-detail-types"
 import { asIsoString, asMetadata, mergeEvents } from "./scan-detail-utils"
 import { useScanPollLoop } from "./scan-poll-loop"
 
+// Re-exported so importers keep a single entry point; the arithmetic itself
+// lives in a React-free module so it can be tested against a stable clock.
+export { nextScanDetailPollInterval, scanDetailPollDelay } from "./scan-detail-poll-schedule"
+
 /** Keep a new validator uncommitted until its poll response has been fully applied. */
 export function selectScanPollEtag({
   currentEtag,

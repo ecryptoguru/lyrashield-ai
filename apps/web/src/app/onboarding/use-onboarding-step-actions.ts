@@ -1,7 +1,10 @@
+import { useRef } from "react"
 import { track } from "@/lib/analytics"
 import {
   buildUrlTargetPayload,
+  isUrlTargetPath,
   nextStepForPath,
+  urlTargetFieldError,
   type OnboardingPath,
 } from "./onboarding-flow.utils"
 import type { OnboardingFailureState } from "./onboarding-wizard-model"
@@ -10,6 +13,11 @@ import type { Repo } from "./onboarding-step-views"
 /**
  * Owns the transitions from URL/API target entry and repository selection to
  * target details. Target creation remains deferred to the scan action.
+ *
+ * The workspace is created here too. The URL/API forms are the first step a
+ * user reaches and a hinted Lite Check user arrives on them directly, so this
+ * is the last point before the details step where a workspace can be created
+ * without asking (P1-1).
  */
 export function useOnboardingStepActions({
   workspaceId,
@@ -18,6 +26,8 @@ export function useOnboardingStepActions({
   urlForm,
   environment,
   selectedRepo,
+  ensureWorkspace,
+  setLoading,
   setError,
   setFailure,
   setPath,
@@ -30,33 +40,64 @@ export function useOnboardingStepActions({
   urlForm: { url: string; ownershipAttested: boolean }
   environment: string
   selectedRepo: Repo | null
+  ensureWorkspace: () => Promise<string>
+  setLoading: (loading: boolean) => void
   setError: (message: string | null) => void
   setFailure: (failure: OnboardingFailureState) => void
   setPath: (path: OnboardingPath) => void
   setProductName: (name: string) => void
   setStep: (step: number) => void
 }) {
-  function continueWithUrlTarget() {
-    const payload = buildUrlTargetPayload({
-      workspaceId,
+  // Duplicate-submit protection: a double tap must not create a second
+  // workspace or advance twice. A ref, not a closure variable, because
+  // `ensureWorkspace` re-renders the wizard and would otherwise hand the second
+  // tap a fresh closure with the flag already reset (P1-1).
+  const submitting = useRef(false)
+
+  async function continueWithUrlTarget() {
+    if (submitting.current) return
+    // The visible input is validated before the workspace call, so an
+    // incomplete form reports its own problem and never creates a workspace
+    // the user did not get past the first step for. The rules and their
+    // precedence live in onboarding-scan-preflight, the same ones the start
+    // action applies, so the two surfaces cannot drift (P1-1).
+    if (!isUrlTargetPath(path)) return
+    const fieldError = urlTargetFieldError({
       path,
       name: productName,
       url: urlForm.url,
-      environment,
       ownershipAttested: urlForm.ownershipAttested,
     })
-    if (!payload) {
-      setError(
-        urlForm.ownershipAttested
-          ? "Enter a name and a valid URL to continue."
-          : "Confirm you own or are authorized to scan this target."
-      )
+    if (fieldError) {
+      setError(fieldError)
       return
     }
+    submitting.current = true
+    setLoading(true)
     setError(null)
     setFailure(null)
-    const next = nextStepForPath(payload.type === "API" ? "api" : "url")
-    if (next !== null) setStep(next)
+    try {
+      const resolvedWorkspaceId = workspaceId || (await ensureWorkspace())
+      const payload = buildUrlTargetPayload({
+        workspaceId: resolvedWorkspaceId,
+        path,
+        name: productName,
+        url: urlForm.url,
+        environment,
+        ownershipAttested: urlForm.ownershipAttested,
+      })
+      if (!payload) {
+        setError("Enter a name and a valid URL to continue.")
+        return
+      }
+      const next = nextStepForPath(payload.type === "API" ? "api" : "url")
+      if (next !== null) setStep(next)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not prepare your workspace.")
+    } finally {
+      submitting.current = false
+      setLoading(false)
+    }
   }
 
   function confirmRepoAndContinue() {
