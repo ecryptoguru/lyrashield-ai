@@ -4,13 +4,21 @@ import {
   claimDueSchedule,
   getDueSchedules,
   getNextRunAt,
+  findCurrentDomainProof,
   prisma,
+  runWithAccountContext,
   runWithWorkspaceContext,
   updateScanStatus,
 } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
-import { MAX_CONCURRENT_WORKSPACE_SCANS, resolveTargetScanMode } from "@lyrashield/types"
+import {
+  MAX_CONCURRENT_WORKSPACE_SCANS,
+  resolveScanProfile,
+  resolveTargetScanMode,
+} from "@lyrashield/types"
+import { evaluateScanEntitlement } from "@lyrashield/billing"
 import { assertScanWorkerAvailable, enqueueScan } from "./queue"
+import { notifyScheduleBlocked } from "./notifications"
 
 export async function processDueSchedules(now = new Date()): Promise<number> {
   const schedules = await getDueSchedules(now)
@@ -46,6 +54,48 @@ export async function processDueSchedules(now = new Date()): Promise<number> {
         }
 
         if (!(await claimDueSchedule(schedule.id, now, nextRunAt))) {
+          return
+        }
+
+        let entitlement: Awaited<ReturnType<typeof evaluateScanEntitlement>> | null = null
+        let entitlementReadFailed = false
+        if (schedule.createdById) {
+          try {
+            entitlement = await runWithAccountContext(schedule.createdById, () =>
+              evaluateScanEntitlement({
+                workspaceId: schedule.workspaceId,
+                mode: schedule.mode,
+                sponsorAccountId: schedule.createdById,
+                mutateOnTrialExpiry: true,
+              })
+            )
+          } catch (error) {
+            entitlementReadFailed = true
+            logger.warn("Scheduled scan eligibility could not be confirmed", {
+              scheduleId: schedule.id,
+              workspaceId: schedule.workspaceId,
+              error: error instanceof Error ? error.message : String(error),
+            })
+          }
+        }
+        if (!entitlement?.allowed) {
+          const reason = entitlementReadFailed
+            ? "SCAN_ELIGIBILITY_UNAVAILABLE"
+            : "SCAN_ELIGIBILITY_REQUIRED"
+          logger.warn("Skipped scheduled scan because its creator is not currently eligible", {
+            scheduleId: schedule.id,
+            workspaceId: schedule.workspaceId,
+            reason:
+              entitlement?.code ??
+              (schedule.createdById ? "ENTITLEMENT_DENIED" : "CREATOR_MISSING"),
+          })
+          await notifyScheduleBlocked(
+            schedule.workspaceId,
+            schedule.id,
+            schedule.target.name,
+            reason,
+            now.toISOString().slice(0, 10)
+          )
           return
         }
 
@@ -108,6 +158,30 @@ export async function processDueSchedules(now = new Date()): Promise<number> {
               code: resolved.code,
             })
             return
+          }
+          if (
+            resolved.profile &&
+            resolveScanProfile({
+              targetType: schedule.target.type,
+              mode: schedule.mode,
+            }).usesAi
+          ) {
+            const proof = await findCurrentDomainProof(schedule.workspaceId, schedule.target.url)
+            if (!proof.verified) {
+              logger.warn("Skipped scheduled engine-backed URL review without domain proof", {
+                scheduleId: schedule.id,
+                workspaceId: schedule.workspaceId,
+                targetId: schedule.targetId,
+              })
+              await notifyScheduleBlocked(
+                schedule.workspaceId,
+                schedule.id,
+                schedule.target.name,
+                "DOMAIN_VERIFICATION_REQUIRED",
+                now.toISOString().slice(0, 10)
+              )
+              return
+            }
           }
         }
 

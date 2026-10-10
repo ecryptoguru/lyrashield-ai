@@ -1,6 +1,11 @@
 import { withCookieMutation } from "../../../lib/api-auth"
 import { NextResponse } from "next/server"
-import { prisma } from "@lyrashield/db"
+import {
+  lockWorkspaceScanAdmission,
+  prisma,
+  withWorkspaceRLS,
+  type ScopedTransaction,
+} from "@lyrashield/db"
 import { requirePermission, requireWorkspaceAccess } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { CreateRepoTargetSchema, CreateUrlTargetSchema } from "@lyrashield/types"
@@ -33,8 +38,8 @@ const conflictTargetSelect = {
   apiSpecUrl: true,
 } as const
 
-async function findExistingTarget(data: TargetInput) {
-  return prisma.target.findFirst({
+async function findExistingTarget(data: TargetInput, tx?: ScopedTransaction) {
+  return (tx ?? prisma).target.findFirst({
     where: {
       workspaceId: data.workspaceId,
       deletedAt: null,
@@ -172,22 +177,6 @@ async function post(request: Request) {
       }
     }
 
-    // The target cap comes from the ACTING account's plan — subscriptions are
-    // account-owned, so a member's limits travel with them across workspaces.
-    const entitlement = await assertTargetAllowed(workspaceId, session.userId)
-    if (!entitlement.allowed) {
-      const existing = await findExistingTarget(data)
-      if (existing) return targetExistsResponse(existing, isCompatibleTarget(data, existing))
-
-      return apiError(
-        entitlement.code ?? "TARGET_NOT_ALLOWED",
-        entitlement.message ?? "Target not allowed",
-        403,
-        undefined,
-        { targetsUsed: entitlement.targetsUsed, targetCap: entitlement.targetCap }
-      )
-    }
-
     // A caller-supplied installationId must belong to an active GitHub
     // integration in THIS workspace. Without this check a client could tag a
     // target with a foreign or invented installation id, which would then never
@@ -264,13 +253,37 @@ async function post(request: Request) {
             environment: data.environment,
           }
 
-    let target
+    let admission
     try {
-      target = await prisma.target.create({ data: targetData })
+      admission = await withWorkspaceRLS(
+        workspaceId,
+        async (tx) => {
+          await lockWorkspaceScanAdmission(tx, workspaceId)
+
+          // Adoption happens inside the admission lock so retries of an
+          // existing source continue to work even when the workspace is full.
+          const existing = await findExistingTarget(data, tx)
+          if (existing) {
+            return {
+              kind: "existing" as const,
+              target: existing,
+              compatible: isCompatibleTarget(data, existing),
+            }
+          }
+
+          // Recheck sponsor, entitlement and count after acquiring the same
+          // lock used by scan admission and target deletion.
+          const entitlement = await assertTargetAllowed(workspaceId, session.userId, tx)
+          if (!entitlement.allowed) return { kind: "denied" as const, entitlement }
+
+          const target = await tx.target.create({ data: targetData })
+          return { kind: "created" as const, target }
+        },
+        { accountId: session.userId }
+      )
     } catch (error) {
-      // W2-02: same-source retries adopt the existing target instead of
-      // creating a second one. The unique constraints on (workspaceId,
-      // repoFullName) and (workspaceId, url) are the identity rules.
+      // A unique-create race aborts the transaction. Re-read only after the
+      // transaction has rolled back so PostgreSQL is usable again.
       if (
         typeof error === "object" &&
         error !== null &&
@@ -278,13 +291,27 @@ async function post(request: Request) {
         error.code === "P2002"
       ) {
         const existing = await findExistingTarget(data)
-        return targetExistsResponse(
-          existing,
-          Boolean(existing && isCompatibleTarget(data, existing))
-        )
+        if (existing) return targetExistsResponse(existing, isCompatibleTarget(data, existing))
       }
       throw error
     }
+
+    if (admission.kind === "existing") {
+      return targetExistsResponse(admission.target, admission.compatible)
+    }
+    if (admission.kind === "denied") {
+      return apiError(
+        admission.entitlement.code ?? "TARGET_NOT_ALLOWED",
+        admission.entitlement.message ?? "Target not allowed",
+        403,
+        undefined,
+        {
+          targetsUsed: admission.entitlement.targetsUsed,
+          targetCap: admission.entitlement.targetCap,
+        }
+      )
+    }
+    const target = admission.target
 
     await prisma.auditLog.create({
       data: {

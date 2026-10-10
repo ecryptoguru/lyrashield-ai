@@ -236,7 +236,7 @@ async function post(request: Request) {
           })
         }
       }
-      if (sponsorPlan !== "FREE" && urlEngineBacked) {
+      if (urlEngineBacked) {
         const { domain, verified } = await findCurrentDomainProof(workspaceId, target.url)
         if (!verified) {
           return refuseScan({

@@ -22,6 +22,7 @@ vi.mock("./rls", () => ({
 import { prisma } from "./client"
 import {
   createLiveAiSafetyPlan,
+  findCurrentDomainProof,
   issueDnsDomainVerification,
   LiveAiSafetyError,
   resolveAuthenticatedAssessmentAuthorization,
@@ -51,6 +52,44 @@ const plan = {
 
 describe("live AI safety service", () => {
   beforeEach(() => vi.clearAllMocks())
+
+  it("finds only a current verified proof in the requested workspace", async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(now)
+    mockPrisma.targetDomainVerification.findFirst.mockResolvedValue({ id: "proof-1" })
+
+    await expect(
+      findCurrentDomainProof("ws-1", "https://Staging.Example.com/path")
+    ).resolves.toEqual({
+      domain: "staging.example.com",
+      verified: true,
+    })
+    expect(mockPrisma.targetDomainVerification.findFirst).toHaveBeenCalledWith({
+      where: {
+        workspaceId: "ws-1",
+        domain: "staging.example.com",
+        status: "VERIFIED",
+        expiresAt: { gt: now },
+      },
+      select: { id: true },
+    })
+    vi.useRealTimers()
+  })
+
+  it("does not query for an invalid or absent URL and reports missing or expired proof as false", async () => {
+    await expect(findCurrentDomainProof("ws-1", null)).resolves.toEqual({
+      domain: null,
+      verified: false,
+    })
+    mockPrisma.targetDomainVerification.findFirst.mockResolvedValue(null)
+    await expect(findCurrentDomainProof("ws-2", "https://expired.example.com")).resolves.toEqual({
+      domain: "expired.example.com",
+      verified: false,
+    })
+    expect(mockPrisma.targetDomainVerification.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ workspaceId: "ws-2" }) })
+    )
+  })
 
   it("issues a DNS proof without putting the proof token in the audit log", async () => {
     mockPrisma.targetDomainVerification.findFirst.mockResolvedValue(null)

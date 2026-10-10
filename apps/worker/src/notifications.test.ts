@@ -22,7 +22,12 @@ vi.mock("@lyrashield/integrations", () => ({
 }))
 vi.mock("@lyrashield/logger", () => ({ logger: mocks.logger }))
 
-import { notifyCriticalFinding, notifyScanCompleted, notifyScanFailed } from "./notifications"
+import {
+  notifyCriticalFinding,
+  notifyScanCompleted,
+  notifyScanFailed,
+  notifyScheduleBlocked,
+} from "./notifications"
 
 describe("completion notifications", () => {
   beforeEach(() => {
@@ -126,6 +131,27 @@ describe("completion notifications", () => {
       params.sendFn("discord", { type: "scan.failed", title: "Failure", body: "Failure" })
     ).resolves.toBe(false)
     expect(mocks.sendWorkspaceNotification).not.toHaveBeenCalled()
+  })
+
+  it("deduplicates scheduled eligibility notices by schedule, reason, and day", async () => {
+    await notifyScheduleBlocked(
+      "ws-1",
+      "schedule-7",
+      "Production API",
+      "DOMAIN_VERIFICATION_REQUIRED",
+      "2026-10-10"
+    )
+
+    expect(mocks.createAndSendNotification).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceId: "ws-1",
+        type: "schedule.blocked",
+        title: "Scheduled review needs attention",
+        body: expect.stringContaining("Production API"),
+        dedupeKey: "schedule-blocked:schedule-7:DOMAIN_VERIFICATION_REQUIRED:2026-10-10",
+        channels: ["in_app"],
+      })
+    )
   })
 
   it("preserves in-app delivery when optional destination resolution fails", async () => {

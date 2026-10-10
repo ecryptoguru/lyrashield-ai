@@ -173,6 +173,7 @@ export {
 } from "./scan-attachment-service"
 export {
   ACTIVE_SCAN_STATUSES,
+  lockWorkspaceScanAdmission,
   createScan,
   updateScanStatus,
   addScanEvent,
@@ -459,6 +460,7 @@ export {
   type AddControlEvidenceArtifactsInput,
 } from "./ai-assurance-service"
 export {
+  findCurrentDomainProof,
   issueDnsDomainVerification,
   verifyDnsDomainVerification,
   upsertLiveAiSafetySettings,
@@ -544,6 +546,7 @@ export {
   withActiveWorkspaceNotificationDestination,
   saveNotificationIntegration,
   disableNotificationIntegration,
+  lockNotificationDestinationsForDeletion,
   type WorkspaceNotificationChannel,
   type NotificationIntegrationSummary,
 } from "./notification-integration-service"

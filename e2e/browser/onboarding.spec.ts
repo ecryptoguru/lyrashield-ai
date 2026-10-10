@@ -23,7 +23,9 @@ for (const width of [390, 1440]) {
       }
       await page.route("**/api/**", async (route) => {
         const path = new URL(route.request().url()).pathname
-        if (path === "/api/workspaces") {
+        if (path === "/api/workspaces" && route.request().method() === "GET") {
+          await route.fulfill({ json: { success: true, data: [] } })
+        } else if (path === "/api/workspaces" && route.request().method() === "POST") {
           workspaceCalls++
           await workspaceHeld
           await route.fulfill({

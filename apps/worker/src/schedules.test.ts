@@ -1,11 +1,20 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
+const schedulerMocks = vi.hoisted(() => ({
+  findCurrentDomainProof: vi.fn(),
+  runWithAccountContext: vi.fn(),
+  evaluateScanEntitlement: vi.fn(),
+  notifyScheduleBlocked: vi.fn(),
+}))
+
 vi.mock("@lyrashield/db", () => ({
   ACTIVE_SCAN_STATUSES: ["QUEUED", "PREFLIGHT", "RUNNING", "VERIFYING", "REQUIRES_APPROVAL"],
   createScan: vi.fn(),
   claimDueSchedule: vi.fn(),
   getDueSchedules: vi.fn(),
   getNextRunAt: vi.fn(),
+  findCurrentDomainProof: schedulerMocks.findCurrentDomainProof,
+  runWithAccountContext: schedulerMocks.runWithAccountContext,
   runWithWorkspaceContext: <T>(_wsId: string, fn: () => T): T => fn(),
   updateScanStatus: vi.fn(),
   prisma: {
@@ -16,6 +25,9 @@ vi.mock("@lyrashield/db", () => ({
       update: vi.fn(),
     },
   },
+}))
+vi.mock("@lyrashield/billing", () => ({
+  evaluateScanEntitlement: schedulerMocks.evaluateScanEntitlement,
 }))
 
 vi.mock("@lyrashield/logger", () => ({
@@ -30,6 +42,9 @@ vi.mock("./queue", () => ({
   enqueueScan: vi.fn(),
   assertScanWorkerAvailable: vi.fn(),
 }))
+vi.mock("./notifications", () => ({
+  notifyScheduleBlocked: schedulerMocks.notifyScheduleBlocked,
+}))
 
 import {
   createScan,
@@ -40,6 +55,12 @@ import {
   updateScanStatus,
 } from "@lyrashield/db"
 import { assertScanWorkerAvailable, enqueueScan } from "./queue"
+import { evaluateScanEntitlement as evaluateEntitlement } from "@lyrashield/billing"
+import {
+  findCurrentDomainProof as lookupDomainProof,
+  runWithAccountContext as withAccountContext,
+} from "@lyrashield/db"
+import { notifyScheduleBlocked as sendScheduleBlockedNotice } from "./notifications"
 import { processDueSchedules } from "./schedules"
 
 const schedule = {
@@ -80,6 +101,10 @@ describe("processDueSchedules", () => {
     vi.mocked(assertScanWorkerAvailable).mockResolvedValue(undefined)
     vi.mocked(updateScanStatus).mockResolvedValue({ id: "scan-1" } as never)
     vi.mocked(claimDueSchedule).mockResolvedValue(true)
+    vi.mocked(lookupDomainProof).mockResolvedValue({ domain: "example.com", verified: true })
+    vi.mocked(withAccountContext).mockImplementation(async (_accountId, fn) => fn())
+    vi.mocked(evaluateEntitlement).mockResolvedValue({ allowed: true } as never)
+    vi.mocked(sendScheduleBlockedNotice).mockResolvedValue(undefined)
     mockPrisma.scan.count.mockResolvedValue(0)
     mockPrisma.schedule.update.mockResolvedValue(schedule)
   })
@@ -110,6 +135,68 @@ describe("processDueSchedules", () => {
       goal: "WEEKLY_MONITOR",
       mode: "SAFE",
     })
+    expect(withAccountContext).toHaveBeenCalledWith("user-1", expect.any(Function))
+    expect(evaluateEntitlement).toHaveBeenCalledWith({
+      workspaceId: "workspace-1",
+      mode: "SAFE",
+      sponsorAccountId: "user-1",
+      mutateOnTrialExpiry: true,
+    })
+  })
+
+  it("keeps an expired-trial schedule enabled and sends one workspace notice", async () => {
+    vi.mocked(evaluateEntitlement).mockResolvedValue({
+      allowed: false,
+      code: "TRIAL_EXPIRED",
+    } as never)
+
+    expect(await processDueSchedules(new Date("2026-01-01T12:00:00Z"))).toBe(0)
+
+    expect(claimDueSchedule).toHaveBeenCalled()
+    expect(createScan).not.toHaveBeenCalled()
+    expect(enqueueScan).not.toHaveBeenCalled()
+    expect(mockPrisma.schedule.update).not.toHaveBeenCalled()
+    expect(sendScheduleBlockedNotice).toHaveBeenCalledWith(
+      "workspace-1",
+      "schedule-1",
+      "Example",
+      "SCAN_ELIGIBILITY_REQUIRED",
+      "2026-01-01"
+    )
+  })
+
+  it("fails closed when a scheduled URL review has no current domain proof", async () => {
+    vi.mocked(getDueSchedules).mockResolvedValue([
+      { ...schedule, mode: "STANDARD", target: { ...schedule.target, type: "WEB_APP" } },
+    ] as never)
+    vi.mocked(lookupDomainProof).mockResolvedValue({ domain: "example.com", verified: false })
+
+    expect(await processDueSchedules(new Date("2026-01-01T12:00:00Z"))).toBe(0)
+
+    expect(lookupDomainProof).toHaveBeenCalledWith("workspace-1", "https://example.com")
+    expect(createScan).not.toHaveBeenCalled()
+    expect(sendScheduleBlockedNotice).toHaveBeenCalledWith(
+      "workspace-1",
+      "schedule-1",
+      "Example",
+      "DOMAIN_VERIFICATION_REQUIRED",
+      "2026-01-01"
+    )
+  })
+
+  it("fails closed without a persisted schedule creator", async () => {
+    vi.mocked(getDueSchedules).mockResolvedValue([{ ...schedule, createdById: null }] as never)
+
+    expect(await processDueSchedules()).toBe(0)
+    expect(withAccountContext).not.toHaveBeenCalled()
+    expect(createScan).not.toHaveBeenCalled()
+    expect(sendScheduleBlockedNotice).toHaveBeenCalledWith(
+      "workspace-1",
+      "schedule-1",
+      "Example",
+      "SCAN_ELIGIBILITY_REQUIRED",
+      expect.any(String)
+    )
   })
 
   it("skips queueing when the target already has an active scan", async () => {

@@ -33,39 +33,51 @@ vi.mock("@lyrashield/config", async (importOriginal) => {
   }
 })
 
-vi.mock("@lyrashield/db", () => ({
-  WorkspaceScanConcurrencyLimitError: class WorkspaceScanConcurrencyLimitError extends Error {},
-  prisma: {
+vi.mock("@lyrashield/db", () => {
+  const prisma = {
     target: { findFirst: vi.fn() },
     workspace: { findUnique: vi.fn() },
     targetDomainVerification: { findFirst: vi.fn() },
     policy: { findFirst: vi.fn() },
     scan: { count: vi.fn(), update: vi.fn() },
     auditLog: { create: vi.fn() },
-  },
-  createScan: vi.fn(),
-  listScans: vi.fn(),
-  updateScanStatus: vi.fn(),
-  claimOrGetAgentOperation: vi.fn(),
-  completeAgentOperation: vi.fn(),
-  failAgentOperation: vi.fn(),
-  resolveScanAttachments: vi.fn().mockResolvedValue([]),
-  resolveAuthenticatedAssessmentAuthorization: vi.fn(),
-  LiveAiSafetyError: class LiveAiSafetyError extends Error {
-    readonly code: string
-    constructor(code: string) {
-      super(code)
-      this.code = code
-    }
-  },
-  ScanAttachmentError: class ScanAttachmentError extends Error {
-    code: string
-    constructor(code: string, message: string) {
-      super(message)
-      this.code = code
-    }
-  },
-}))
+  }
+  return {
+    findCurrentDomainProof: vi.fn(async (workspaceId: string, url: string | null | undefined) => {
+      const domain = url ? new URL(url).hostname.toLowerCase() : null
+      if (!domain) return { domain, verified: false }
+      const proof = await prisma.targetDomainVerification.findFirst({
+        where: { workspaceId, domain, status: "VERIFIED", expiresAt: { gt: new Date() } },
+        select: { id: true },
+      })
+      return { domain, verified: Boolean(proof) }
+    }),
+    WorkspaceScanConcurrencyLimitError: class WorkspaceScanConcurrencyLimitError extends Error {},
+    prisma,
+    createScan: vi.fn(),
+    listScans: vi.fn(),
+    updateScanStatus: vi.fn(),
+    claimOrGetAgentOperation: vi.fn(),
+    completeAgentOperation: vi.fn(),
+    failAgentOperation: vi.fn(),
+    resolveScanAttachments: vi.fn().mockResolvedValue([]),
+    resolveAuthenticatedAssessmentAuthorization: vi.fn(),
+    LiveAiSafetyError: class LiveAiSafetyError extends Error {
+      readonly code: string
+      constructor(code: string) {
+        super(code)
+        this.code = code
+      }
+    },
+    ScanAttachmentError: class ScanAttachmentError extends Error {
+      code: string
+      constructor(code: string, message: string) {
+        super(message)
+        this.code = code
+      }
+    },
+  }
+})
 
 vi.mock("@lyrashield/auth/server", () => ({
   assertOAuthDelegatedScope: vi.fn(),
@@ -124,7 +136,11 @@ vi.mock("@lyrashield/billing", () => ({
 
 import { prisma, createScan } from "@lyrashield/db"
 import { requirePermission } from "@lyrashield/auth/server"
-import { assertScanAllowed, evaluateScanEntitlement } from "@lyrashield/billing"
+import {
+  assertScanAllowed,
+  evaluateScanEntitlement,
+  resolveAccountBilling,
+} from "@lyrashield/billing"
 import { GET as eligibilityGET } from "./eligibility/route"
 import { POST as scansPOST } from "./route"
 
@@ -247,6 +263,30 @@ describe("preflight → POST parity", () => {
     expect(preflightBody.data.code).toBe("DOMAIN_VERIFICATION_REQUIRED")
     expect(post.status).toBe(403)
     expect(postBody.error.code).toBe("DOMAIN_VERIFICATION_REQUIRED")
+  })
+
+  it("keeps engine-backed proof requirements consistent for an expired-trial FREE account", async () => {
+    vi.mocked(resolveAccountBilling).mockResolvedValue({
+      effectivePlan: "FREE",
+      currentPlan: "FREE",
+    } as never)
+    vi.mocked(prisma.target.findFirst).mockResolvedValue({
+      id: "target-1",
+      type: "WEB_APP",
+      url: "https://trial.example.com",
+    } as never)
+    vi.mocked(prisma.targetDomainVerification.findFirst).mockResolvedValue(null as never)
+
+    const preflight = await eligibilityGET(eligibilityRequest(query))
+    const post = await scansPOST(postRequest(query))
+
+    expect((await preflight.json()).data).toMatchObject({
+      allowed: false,
+      code: "DOMAIN_VERIFICATION_REQUIRED",
+    })
+    expect(post.status).toBe(403)
+    expect((await post.json()).error.code).toBe("DOMAIN_VERIFICATION_REQUIRED")
+    expect(createScan).not.toHaveBeenCalled()
   })
 
   it("repeated preflights invoke no mutation code paths", async () => {
