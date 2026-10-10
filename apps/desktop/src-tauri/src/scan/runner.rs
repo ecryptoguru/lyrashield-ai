@@ -1214,7 +1214,10 @@ fn has_bound_threat_model(run_dir: &std::path::Path, run: &serde_json::Value) ->
     let Ok(bytes) = std::fs::read(&path) else {
         return false;
     };
-    let digest = format!("{:x}", Sha256::digest(&bytes));
+    let digest = Sha256::digest(&bytes)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
     if bytes.len() as u64 != expected_bytes || entry["sha256"].as_str() != Some(digest.as_str()) {
         return false;
     }
@@ -1880,7 +1883,7 @@ mod tests {
             "result_manifest": {"artifacts": {"threat_model.json": {
                 "path": "threat_model.json",
                 "bytes": bytes.len(),
-                "sha256": format!("{:x}", sha2::Sha256::digest(bytes))
+                "sha256": sha2::Sha256::digest(bytes).iter().map(|byte| format!("{byte:02x}")).collect::<String>()
             }}}
         });
         assert!(super::has_bound_threat_model(run_dir.path(), &run));
@@ -1894,7 +1897,10 @@ mod tests {
         run["result_manifest"]["artifacts"]["threat_model.json"]["bytes"] =
             serde_json::json!(large_bytes.len());
         run["result_manifest"]["artifacts"]["threat_model.json"]["sha256"] =
-            serde_json::json!(format!("{:x}", sha2::Sha256::digest(&large_bytes)));
+            serde_json::json!(sha2::Sha256::digest(&large_bytes)
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect::<String>());
         assert!(super::has_bound_threat_model(run_dir.path(), &run));
         let mut errored: serde_json::Value = serde_json::from_slice(bytes).unwrap();
         errored["models"] = serde_json::json!([]);
@@ -1904,7 +1910,10 @@ mod tests {
         run["result_manifest"]["artifacts"]["threat_model.json"]["bytes"] =
             serde_json::json!(errored_bytes.len());
         run["result_manifest"]["artifacts"]["threat_model.json"]["sha256"] =
-            serde_json::json!(format!("{:x}", sha2::Sha256::digest(&errored_bytes)));
+            serde_json::json!(sha2::Sha256::digest(&errored_bytes)
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect::<String>());
         assert!(!super::has_bound_threat_model(run_dir.path(), &run));
         let mut blank: serde_json::Value = serde_json::from_slice(bytes).unwrap();
         blank["models"][0]["content"] = serde_json::json!("  \n  ");
@@ -1913,7 +1922,10 @@ mod tests {
         run["result_manifest"]["artifacts"]["threat_model.json"]["bytes"] =
             serde_json::json!(blank_bytes.len());
         run["result_manifest"]["artifacts"]["threat_model.json"]["sha256"] =
-            serde_json::json!(format!("{:x}", sha2::Sha256::digest(&blank_bytes)));
+            serde_json::json!(sha2::Sha256::digest(&blank_bytes)
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect::<String>());
         assert!(!super::has_bound_threat_model(run_dir.path(), &run));
         std::fs::write(run_dir.path().join("threat_model.json"), b"changed").unwrap();
         assert!(!super::has_bound_threat_model(run_dir.path(), &run));
