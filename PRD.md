@@ -1,6 +1,6 @@
 # LyraShield AI — Product Requirements and Release Plan
 
-> Current source of truth: 2026-09-25 (post Deep Review v20 and the connectors, Myra and GPT-6 routing waves). This file owns product strategy, accepted scope, release gates, and ordered backlog. [codebase.md](./codebase.md) owns implementation mapping; [AGENTS.md](./AGENTS.md) owns operating rules and the immediate handoff. Running code, schema, CI, and live evidence override prose.
+> Current source of truth: 2026-10-11 (current deployed product revision `41462a3ff45f77e996823faf6d10f56053dec9e8`, released by run `38082773161`). This file owns product strategy, accepted scope, release gates, and ordered backlog. [codebase.md](./codebase.md) owns implementation mapping; [AGENTS.md](./AGENTS.md) owns operating rules and the immediate handoff. Running code, schema, CI, and live evidence override prose.
 
 ## 1. Product definition
 
@@ -30,7 +30,7 @@ The eight commitments that separate LyraShield from point scanners and generic S
 3. Agent-native distribution — CLI, MCP (21 tools), portable Agent Plugin, 51-entry registry / 48 preferred client surfaces, account-less GitHub Action (§2).
 4. Approval-gated fix loop with automatic retest and gate re-evaluation on merge (§4 Remediation).
 5. Versioned Launch Gate verdicts plus signed, publicly verifiable reports and release-identity confirmation (§4 Launch gate).
-6. Honest coverage ledger — Vibe Security 50 (`vibe-security-50/1.2.0`) per-control receipts; "no finding" never reads as "passed" (§3).
+6. Honest coverage ledger — Vibe Security 50 (`vibe-security-50/1.2.0`) per-control outcomes; "no finding" never reads as "passed" (§3).
 7. Two modes, one loop — Cloud subscription and BYOK Local/Desktop with perpetual fallback (§1 Product modes).
 8. Fail-closed trust architecture — RLS tenancy, untrusted bounded engine output, execution provenance bound into manifest checksums (§6).
 
@@ -88,7 +88,7 @@ Implemented:
 - One adaptive authenticated dashboard for every role: a state-derived next action, current posture with exact evidence scope, compact metrics, recent activity, and progressive disclosure for technical depth. Presentation never changes permissions, scan behavior, or evidence semantics.
 - A hidden platform-operator console for bounded cross-workspace overview, user/workspace/scan lists, platform audit, and affiliate review. It is not a tenant-admin role and is not discoverable by ordinary users.
 - Polar/Razorpay billing, plans, trials, entitlements, usage metering, minute packs, grace, overage logic, checkout, portal, and webhook processing.
-- Affiliate applications, attribution, commission ledger, fraud controls, payout ledger, dashboard, clawbacks, and reserves.
+- Affiliate services and existing-partner operations include attribution, commission ledger, fraud controls, payout ledger, dashboard, clawbacks and reserves. New application intake is currently paused.
 - A fixed, non-destructive private-beta AI safety test catalog with exact host, credential, request, duration, response, and storage bounds. It is not arbitrary fuzzing or proof of adversarial robustness.
 - Myra, the AI support agent, on marketing and dashboard surfaces behind explicit default-off `MYRA_*` feature flags: reviewed knowledge base, premium chat generation, feedback capture, session/daily caps and hardened production launch gates.
 - Delegated outbound connectors (GitHub, Slack) with fail-closed admission (`off`/`canary`/`public` plus a workspace allowlist), Agency-tier plan gating, workspace connector APIs and bounded output caps; no dashboard tab yet.
@@ -271,7 +271,7 @@ Two product lines (publishable schedule reaffirmed 2026-09-22; code authority is
 - Repository MCP/WebMCP scanner findings are available on every plan. Starter and Pro allow one workspace member; Pro adds Deep/Custom scans. Agency sponsors one team workspace with up to five members including the buyer, sharing the buyer's 4,500 monthly minutes, plus higher limits and capped overage.
 - Failed scans are never billed; cancelled scans bill elapsed time only (no 1-minute floor).
 
-Minute packs: 100/$15, 250/$35, 500/$65; 180-day validity. A FREE account with an expired trial must subscribe before purchasing a pack; active-trial and no-trial FREE accounts and paid accounts retain eligibility.
+Minute packs: 100/$15, 250/$35, 500/$65; 180-day validity. Purchase availability depends on billing permission and a supported checkout provider for the account's region.
 
 Usage draw order: current monthly pool, oldest valid pack, then allowed overage. Every grant/debit/refund has an idempotency key. A scan that crosses zero may use at most 15 minutes of non-bankable mid-scan grace; a scan starting at zero is rejected.
 

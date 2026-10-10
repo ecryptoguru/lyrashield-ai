@@ -1,6 +1,6 @@
 # LyraShield AI User Guide
 
-Last checked against the application code: 2026-09-19. Client-specific runtime and published-package acceptance remain separate checks.
+Last checked against the application code: 2026-10-11. Client-specific runtime and published-package acceptance remain separate checks.
 
 LyraShield AI helps builders review an application before release and retain an evidence-backed record of what was checked.
 
@@ -381,7 +381,7 @@ Open **More → Notifications** to review scan alerts, critical-finding warnings
 - mark all notifications as read;
 - open the linked resource when a notification provides one.
 
-Scan updates remain in the dashboard notification feed, and personal notifications are visible only to their intended user. Workspace-wide notifications are visible within the workspace; Owners and Admins can configure Slack or Discord in **Workspace settings → Notification channels**. Personal email and in-app preference controls are currently unavailable, though saved choices are retained for a future release. Push preferences are unavailable. These personal controls do not change the dashboard feed or workspace delivery.
+Scan updates remain in the dashboard notification feed, and personal notifications are visible only to their intended user. Workspace Owners and Admins can configure Slack or Discord alerts for completed scans, failed scans and critical findings in **Workspace settings → Notification channels**. Personal email and in-app controls are disabled because they do not change delivery; stored choices are retained for future implementation. Push preferences are unavailable. These personal controls do not change the dashboard feed or workspace alerts.
 
 ## 19. Team and roles
 
@@ -427,7 +427,7 @@ LyraShield Cloud offers a 7-day free trial: 60 agent-minutes, Safe, Quick and St
 
 - **Annual billing:** 15–30% discount, prepaid.
 - **Payment rails:** India uses Razorpay (INR pricing, UPI, GST invoices); Global uses Polar (USD).
-- **Minute packs:** 100/$15, 250/$35, 500/$65 — valid 180 days. A FREE account with an expired trial must subscribe before buying a pack; FREE accounts with an active or unclaimed trial and paid accounts remain eligible.
+- **Minute packs:** 100/$15, 250/$35, 500/$65 — valid 180 days. Purchases require billing permission and an available checkout provider for your region.
 - **Overage:** $0.15/min — Agency opt-in with a configurable spend limit.
 - **Deep/Custom scans:** 3× agent-minute multiplier, PRO+ only.
 - **Grace period:** 15 min free grace if minutes run out mid-scan.
@@ -464,7 +464,7 @@ Payouts:
 - $100 minimum, monthly net-30 on the 15th, with a 30-day hold.
 - Tax form required (W-9 or W-8BEN).
 - New affiliates carry a 25% reserve for the first 90 days. See [affiliate terms](../PRD.md#affiliate-terms).
-- Payouts are disabled pending provider and tax operations. RazorpayX is the only implemented rail (India); non-India applicants can apply without selecting a payout method while a provider is unapproved.
+- Payouts are disabled pending provider and tax operations. RazorpayX has an India provider implementation but is not enabled for payouts; Payoneer is not approved for production.
 
 ### 20.4 LyraShield Local/Desktop (BYOK)
 
@@ -590,7 +590,7 @@ The 2026-10-10 production release deployed product revision `41462a3ff45f77e9968
 
 The historical Standard scan `cmt9el7p7000001hdjnjo90wk` completed on 2026-08-26 with Luna/medium-only routing, reconciled accounting, exact source identity, complete repository scanner-family receipts, 217/217 eligible AI App Security files scanned and a sealed manifest. Its 25 retained findings remain unverified. This target- and revision-scoped result is bounded runtime proof, not a security guarantee or universal coverage proof; an approved Deep/Sol run remains a separate gate.
 
-The production application has an authenticated origin, TLS Redis queue, sandbox-capable worker compute, and DNS-pinned deny-by-default egress. The worker runs an explicitly promoted, CI-verified immutable digest; the 2026-10-10 release checked the digest, OCI labels, Docker health and scan readiness, with the prior digest retained for rollback. Azure alert rules are declared in source, but post-release live rule and receiver-delivery readback remains open. Azure Foundry repository scans use direct JSON function tools; optional programmatic tool calling remains capability-gated for the exact provider route. A scheduled pin change defers restart without removing readiness when the single worker already has an active scan. If a claim races after preflight, new admission may temporarily fail closed while the in-flight scan finishes; the scan is not cancelled or replayed. Production private-evidence round-trip/fail-closed, operator notification acknowledgment and controlled queue-orphan recovery passed on 2026-08-26. Longer-window capacity evidence and separate proof for each additional review profile remain required. No recovery or RPO/RTO claim is made.
+The production application has an authenticated origin, TLS Redis queue, sandbox-capable worker compute and DNS-pinned deny-by-default egress. The worker runs an explicitly promoted, CI-verified immutable digest; the 2026-10-10 release checked the digest, OCI labels, Docker health and scan readiness, with the prior digest retained for rollback. Azure alert rules are declared in source, but post-release live rule and receiver-delivery readback remains open. Azure Foundry repository scans use direct JSON function tools; optional programmatic tool calling remains capability-gated for the exact provider route. A scheduled pin change defers restart without removing readiness when the single worker already has an active scan. If a claim races after preflight, new admission may temporarily fail closed while the in-flight scan finishes; the scan is not cancelled or replayed. Production private-evidence round-trip/fail-closed, operator notification acknowledgment and controlled queue-orphan recovery passed on 2026-08-26. Longer-window capacity evidence and separate proof for each additional review profile remain required. No recovery or RPO/RTO claim is made.
 
 Billing, Local/Desktop licensing and the affiliate application/ledger are implemented. Razorpay Live is activated with the matching INR Cloud catalog and an enabled production webhook; Polar Live has its private Cloud/pack/Local catalog and lifecycle webhook. Historical Polar Sandbox and Razorpay Test Mode provider receipts are retained and their isolated deployment has been removed. No live checkout or payment was exercised. Production desktop distribution proof, payout API provisioning and the public affiliate opening remain controlled release gates.
 

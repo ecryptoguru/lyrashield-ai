@@ -32,7 +32,7 @@ Current release and runtime evidence lives in [PRD §8](./PRD.md#8-current-produ
 
 ## Operational handoff
 
-Consult the [dated execution queue](./docs/handoffs/codex-setup-queue-2026-10-02.md) only for relevant follow-up work; refresh its deployment, scan and financial evidence before acting. Do not enumerate or create production scorecards, perform live financial actions, or run paid acceptance scans without explicit authorization. Keep unverified findings `DETECTED` or `INCONCLUSIVE`; require independent verification where warranted.
+The current deployed product is `41462a3ff45f77e996823faf6d10f56053dec9e8` (production run `38082773161`); recheck runtime state before operational action. Consult the [dated execution queue](./docs/handoffs/codex-setup-queue-2026-10-02.md) only for relevant follow-up work; refresh its deployment, scan and financial evidence before acting. Do not enumerate or create production scorecards, perform live financial actions, or run paid acceptance scans without explicit authorization. Keep unverified findings `DETECTED` or `INCONCLUSIVE`; require independent verification where warranted.
 
 ## Founder decisions
 

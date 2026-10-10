@@ -330,9 +330,9 @@ Cloud Sync connects through `/api/sync/connect`; the raw license key stays in th
 - `packages/affiliate/src/commission`: Cloud/Local commissions and clawback.
 - `packages/affiliate/src/fraud`: disposable email, velocity, device, self-referral.
 - `packages/affiliate/src/payout`: eligibility, reservations, provider routing, reserve release.
-- `apps/web/src/app/affiliates`: public application, partner dashboard, admin surfaces.
+- `apps/web/src/app/affiliates`: closed public application route, partner dashboard and admin surfaces.
 
-The affiliate service owns commission and exclusion rules; see [PRD affiliate terms](./PRD.md#affiliate-terms) for current commercial wording.
+The affiliate service owns commission and exclusion rules; new public application intake is paused while existing affiliate records and their recorded commission/refund handling remain intact. See [PRD affiliate terms](./PRD.md#affiliate-terms) for current commercial wording.
 
 ### Agent, MCP, CLI, and plugin
 
@@ -528,7 +528,7 @@ This is target/revision-scoped runtime and accounting proof, not a security guar
 
 - `ai-app-source-discovery.ts` ranks production/config sources ahead of tests and fixtures, excludes generated artifacts, and applies explicit mode caps: Quick/Safe 200, Standard 500, Deep/Custom 1,000.
 - Discovery produces structured eligible/scanned/skipped/byte counts, skip reasons, limit codes, and a bounded representative skipped-path sample.
-- `scanner-orchestrator.ts` merges discovery limits into AI scoring and provenance. `result-integrity.ts` persists the `ai_app_security` family receipt in manifest v5 and later, preventing bounded AI coverage from becoming a complete clean claim. Current manifest v6 also binds the intended terminal outcome so crash recovery preserves partial, failed, budget-stopped, and timed-out results; historical v5 manifests remain readable.
+- `scanner-orchestrator.ts` merges discovery limits into AI scoring and provenance. `result-integrity.ts` persists the `ai_app_security` family receipt in manifest v5 and later, preventing bounded AI coverage from becoming a complete clean claim. Manifest v6 added the intended terminal outcome so crash recovery preserves partial, failed, budget-stopped, and timed-out results; current source writes manifest v7, while historical v5/v6 manifests remain readable.
 - The scan-detail UI shows coverage counts and skipped-path samples instead of only the legacy one-line warning.
 - Regression coverage uses an exact 217-file repository: Quick scans 200 and reports 17 skipped while retaining vulnerable production code; Standard scans all 217. Generated directories are excluded.
 - PR #386's coverage remediation and PR #450's secure source-checkout recovery are deployed. Scan `cmt9el7p7000001hdjnjo90wk` runtime-proved complete 217-file Standard discovery and immutable source identity for one target/revision. Historical scan `cmt35aj1s000001hck9fmguzk` remains bounded and unchanged.
