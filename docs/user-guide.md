@@ -254,7 +254,7 @@ The Vibe Security 50 ledger contains one receipt for each control. Read `NO_FIND
 
 ## 11. Findings
 
-Open **Findings** to review all retained findings in the active workspace. Available list filters are All, Critical, High, Medium, Low, Open, Fixed and Verified. Findings are ranked by a page-local **Priority** heuristic by default; switch to severity or newest ordering with the sort control. Priority combines severity, status, verification state, confidence, target environment and available business-impact/exploitability context. It is triage context for review order — not proof that a finding is reachable or exploitable — and the reason and limitations behind each rank are shown in an expandable note on every finding card.
+Open **Findings** to review all retained findings in the active workspace. Available list filters are All, Critical, High, Medium, Low, Open, Fixed and Verified. The Verified filter uses the separate independent-verification flag; current scans do not produce the reserved `VERIFIED` status, so new scan results will not appear there. Findings are ranked by a page-local **Priority** heuristic by default; switch to severity or newest ordering with the sort control. Priority combines severity, status, verification state, confidence, target environment and available business-impact/exploitability context. It is triage context for review order — not proof that a finding is reachable or exploitable — and the reason and limitations behind each rank are shown in an expandable note on every finding card.
 
 A finding may contain:
 
@@ -316,7 +316,7 @@ Open **Home** or **Launch Readiness** to see:
 - `INSUFFICIENT_EVIDENCE` when no completed scan or required coverage exists;
 - `READY` or `NOT_READY` based on retained findings;
 - current score when available;
-- blocking and verified finding counts;
+- blocking and independently verified finding counts (current scans do not produce the reserved `VERIFIED` status);
 - severity distribution;
 - conditions and recommendations.
 
@@ -381,7 +381,7 @@ Open **More → Notifications** to review scan alerts, critical-finding warnings
 - mark all notifications as read;
 - open the linked resource when a notification provides one.
 
-Personal notifications are visible only to their intended user; workspace-wide notifications are visible within the workspace.
+Scan updates remain in the dashboard notification feed, and personal notifications are visible only to their intended user. Workspace-wide notifications are visible within the workspace; Owners and Admins can configure Slack or Discord in **Workspace settings → Notification channels**. Personal email and in-app preference controls are currently unavailable, though saved choices are retained for a future release. Push preferences are unavailable. These personal controls do not change the dashboard feed or workspace delivery.
 
 ## 19. Team and roles
 
@@ -427,7 +427,7 @@ LyraShield Cloud offers a 7-day free trial: 60 agent-minutes, Safe, Quick and St
 
 - **Annual billing:** 15–30% discount, prepaid.
 - **Payment rails:** India uses Razorpay (INR pricing, UPI, GST invoices); Global uses Polar (USD).
-- **Minute packs:** 100/$15, 250/$35, 500/$65 — valid 180 days.
+- **Minute packs:** 100/$15, 250/$35, 500/$65 — valid 180 days. A FREE account with an expired trial must subscribe before buying a pack; FREE accounts with an active or unclaimed trial and paid accounts remain eligible.
 - **Overage:** $0.15/min — Agency opt-in with a configurable spend limit.
 - **Deep/Custom scans:** 3× agent-minute multiplier, PRO+ only.
 - **Grace period:** 15 min free grace if minutes run out mid-scan.

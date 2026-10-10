@@ -6,13 +6,13 @@ LyraShield AI turns a target into a release-assurance loop:
 
 `Target → Scan → Evidence State → Fix Proposal → Retest → Assurance Report`
 
-It keeps detected findings, independently verified evidence, retest-confirmed results, and inconclusive checks distinct. A score or AI suggestion is never treated as proof by itself.
+It keeps detected findings, retest-confirmed results and inconclusive checks distinct. A score or AI suggestion is never treated as proof by itself.
 
 ## Why LyraShield
 
 A scanner tells you what it flagged. LyraShield tells you what was tested, what was proven, what remains unknown — and hands you a record you can show to a client, investor or reviewer. Eight design choices carry that difference:
 
-1. **Evidence states, not confidence scores.** Every result is `DETECTED`, `VALIDATED`, `VERIFIED` or `INCONCLUSIVE`. Confidence is triage metadata; engine-only absence is always inconclusive; a clean retest is retest-confirmed, never silently "verified".
+1. **Evidence states, not confidence scores.** The three shipped states are `DETECTED`, `VALIDATED` and `INCONCLUSIVE`. `VERIFIED` is a future-only status and is not produced today. Confidence is triage metadata; engine-only absence remains inconclusive.
 2. **Built for how AI-built apps actually fail.** The public AI-Built Failure Taxonomy, eight AI App Security signals (AI-01–AI-08) mapped to the OWASP Top 10 for LLM Applications (2025), and 14 WebMCP controls that review the agent tool surface itself — agent rules, MCP configs, embedded secrets, prompt-injection exposure.
 3. **Agent-native.** Assurance runs where the coding agent already works: published CLI, MCP server (21 tools, stdio + remote Streamable HTTP with hosted OAuth), portable Agent Plugin, a 51-entry install registry resolving to 48 preferred client surfaces, and an account-less GitHub Action.
 4. **An approval-gated fix loop that closes itself.** Fix PRs come only from a server-generated patch bound to an explicit human approval — no client-authored patches, nothing auto-merges. A merged fix branch automatically queues a retest and re-evaluates the gate.
@@ -185,7 +185,7 @@ LyraShield owns the product-critical execution contract: GPT-6 model policy, bou
 
 Upgrades are deliberately review-gated: the engine records its incorporated Strix base, compares stable releases, prepares a review PR, and requires human approval plus its read-only CI gate. It never auto-resolves conflicts, force-pushes history, or deploys from the sync workflow. The [engine verification and upgrade guidance](https://github.com/ecryptoguru/lyrashield-engine#verification) describes the checks; they prove implementation compatibility, not scan accuracy or universal coverage.
 
-The application pins an exact engine commit in `.github/workflows/deploy-azure.yml`, executes the engine-owned worker contract against that checkout, builds the worker with it, and verifies the exact pushed worker digest before deployment can succeed. A separate operator promotion reconciles that immutable digest on the dedicated worker VM; it never follows `latest` or another mutable tag. A new engine release is not active until that pin is deliberately advanced, the cross-repository gate passes, and the resulting worker digest is explicitly promoted.
+The application pins an exact engine commit in `.github/workflows/deploy-azure.yml`, executes the engine-owned worker contract against that checkout, builds the worker with it, and verifies the exact pushed worker digest before deployment can proceed. The production workflow carries that digest into the guarded worker-VM promotion, which checks idle work and queues, OCI labels, health, and runtime provenance; it never follows `latest` or another mutable tag. A new engine release is not active until that pin is deliberately advanced, the cross-repository gate passes, and the resulting worker digest is promoted by the release workflow.
 
 ## Security and release boundaries
 
@@ -196,7 +196,7 @@ The application pins an exact engine commit in `.github/workflows/deploy-azure.y
 - Public scorecard payloads are allowlisted and sharing is revocable.
 - The MCP server's mutating tools (start a scan, record a fix, queue a retest) run within the connection grant for a connected OAuth client — their authorized operations execute automatically without a per-action approval. A caller without a connected client receives one structured `connect_required` response pointing at OAuth connect. The PENDING/approvalId cycle is retired on the remote path; historical approval records remain viewable and resolvable through the REST routes.
 - The public marketing surface and the authenticated workspace have separate deployment boundaries.
-- Worker image provenance is verified end-to-end: PR CI proves the pinned engine commit is merged, its engine checks passed, and the worker contract is compatible; the main deployment repeats provenance/contract checks, builds the SHA-only worker candidate, pulls its exact digest, and verifies app and engine OCI labels before any deploy. Operator promotion of that digest on the worker VM remains a separate manual action.
+- Worker image provenance is verified end-to-end: PR CI proves the pinned engine commit is merged, its engine checks passed, and the worker contract is compatible; the main deployment repeats provenance/contract checks, builds the SHA-only worker candidate, pulls its exact digest, and verifies app and engine OCI labels before deployment. The same production workflow then promotes that digest through the guarded VM maintenance path and checks runtime health and provenance.
 
 See [PRD release status](PRD.md#9-release-status) for the current deployment and verification gates. Do not treat this repository, the Lite Check, the CLI, or a local run as proof of an authenticated provider-backed production scan.
 

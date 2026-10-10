@@ -4,7 +4,7 @@ description: "How LyraShield AI compares to Horizon3.ai for autonomous infra pen
 competitor: "Horizon3.ai"
 heading: "LyraShield AI vs Horizon3.ai"
 disclaimer: 'Factual comparison. <a href="https://www.horizon3.ai/nodezero/">Horizon3.ai''s NodeZero</a> is an autonomous, production-safe pentest platform that runs real attack techniques across web apps, infrastructure, cloud, data and identity — chaining weaknesses into attack paths and verifying fixes, with no agents. <a href="https://lyrashieldai.com/">LyraShield AI</a> is release assurance for AI-built apps: a target → review → evidence → fix → retest → report loop with evidence states, checksum-bound assurance reports and reviewed fix proposals. NodeZero validates production resilience across the whole environment; LyraShield AI gates AI-generated-code releases. Neither replaces the other.'
-updatedDate: 2026-10-04
+updatedDate: 2026-10-11
 draft: false
 pricingLadder: true
 competitorClaims: true
@@ -31,20 +31,20 @@ faq:
 
 ## Capability comparison
 
-| Capability                          | LyraShield AI                                                                                 | Horizon3 NodeZero                                               |
-| ----------------------------------- | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
-| Agentic / AI-driven pentest         | Yes (app-layer)                                                                               | Yes (cross-environment)                                         |
-| Independent finding verification    | No. Fixes are confirmed by deterministic retest; independent verification is a reserved state | Yes (proven attack paths with impact)                           |
-| SCA (dependency scanning)           | Yes (engine)                                                                                  | Not a primary focus                                             |
-| Secret scanning                     | Yes (engine + GitHub Action)                                                                  | Detects exposed credentials/secret-related weaknesses           |
-| Evidence states (4-state lifecycle) | Yes                                                                                           | Findings carry exploit proof; no explicit multi-state lifecycle |
-| Deterministic retest                | Yes                                                                                           | Quick Verify re-test after fix                                  |
-| Coverage receipts                   | Yes (per-control)                                                                             | No (attack-path + impact diagrams instead)                      |
-| Assurance reports (checksum-bound)  | Yes                                                                                           | Executive/auditor reporting; CTEM-aligned evidence              |
-| MCP server integration              | Yes (inside AI coding agents)                                                                 | Yes (MCP server to accelerate remediation / find-fix-verify)    |
-| Permission-gated Fix PR requests    | Fix PR requests require permission and a server-generated patch                               | No (remediation guidance + verify)                              |
-| Production-safe execution           | App-layer scope                                                                               | Yes (zero-downtime claim across production tests)               |
-| AI-generated-code focus             | Built for AI-built apps                                                                       | No AI-generated-code positioning found                          |
+| Capability                                            | LyraShield AI                                                                                 | Horizon3 NodeZero                                               |
+| ----------------------------------------------------- | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| Agentic / AI-driven pentest                           | Yes (app-layer)                                                                               | Yes (cross-environment)                                         |
+| Independent finding verification                      | No. Fixes are confirmed by deterministic retest; independent verification is a reserved state | Yes (proven attack paths with impact)                           |
+| SCA (dependency scanning)                             | Yes (engine)                                                                                  | Not a primary focus                                             |
+| Secret scanning                                       | Yes (engine + GitHub Action)                                                                  | Detects exposed credentials/secret-related weaknesses           |
+| Evidence states (DETECTED / VALIDATED / INCONCLUSIVE) | Yes; `VERIFIED` is future-only and not produced today                                         | Findings carry exploit proof; no explicit multi-state lifecycle |
+| Deterministic retest                                  | Yes                                                                                           | Quick Verify re-test after fix                                  |
+| Coverage receipts                                     | Yes (per-control)                                                                             | No (attack-path + impact diagrams instead)                      |
+| Assurance reports (checksum-bound)                    | Yes                                                                                           | Executive/auditor reporting; CTEM-aligned evidence              |
+| MCP server integration                                | Yes (inside AI coding agents)                                                                 | Yes (MCP server to accelerate remediation / find-fix-verify)    |
+| Permission-gated Fix PR requests                      | Fix PR requests require permission and a server-generated patch                               | No (remediation guidance + verify)                              |
+| Production-safe execution                             | App-layer scope                                                                               | Yes (zero-downtime claim across production tests)               |
+| AI-generated-code focus                               | Built for AI-built apps                                                                       | No AI-generated-code positioning found                          |
 
 ## Deployment and pricing
 

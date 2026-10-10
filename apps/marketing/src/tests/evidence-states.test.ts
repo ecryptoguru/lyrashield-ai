@@ -1,6 +1,7 @@
 import { readFileSync, readdirSync, statSync } from "node:fs"
 import { join } from "node:path"
 import { describe, expect, it } from "vitest"
+import { EVIDENCE_STATES, SHIPPED_EVIDENCE_STATES } from "../lib/evidence-states"
 
 const src = new URL("..", import.meta.url).pathname.replace(/\/$/, "")
 
@@ -16,8 +17,8 @@ const src = new URL("..", import.meta.url).pathname.replace(/\/$/, "")
  */
 const ALLOWLIST: Array<{ file: string; text: string }> = [
   {
-    file: "pages/methodology.astro",
-    text: 'name: "Independently verified (future step)"',
+    file: "lib/evidence-states.ts",
+    text: 'label: "Independently verified (future step)"',
   },
   {
     file: "pages/methodology.astro",
@@ -111,6 +112,29 @@ describe("public evidence-state copy", () => {
     expect(list).not.toContain("state-verified")
     // The three-state list must not repeat a state chip.
     expect(list.match(/class="state-/g)).toHaveLength(3)
+  })
+
+  it("publishes only the three shipped state codes in methodology structured data", () => {
+    const methodology = readFileSync(join(src, "pages/methodology.astro"), "utf8")
+    expect(SHIPPED_EVIDENCE_STATES.map((state) => state.code)).toEqual([
+      "DETECTED",
+      "VALIDATED",
+      "INCONCLUSIVE",
+    ])
+    expect(EVIDENCE_STATES.find((state) => state.code === "VERIFIED")?.shipped).toBe(false)
+    expect(methodology).toContain("hasDefinedTerm: SHIPPED_EVIDENCE_STATES.map")
+    expect(methodology).toContain("name: state.code")
+    expect(methodology).toContain("The three shipped evidence states")
+  })
+
+  it("keeps top-level public copy aligned with shipped evidence states", () => {
+    for (const path of ["../../../README.md", "../../../apps/marketing/README.md"]) {
+      const readme = readFileSync(join(src, path), "utf8")
+      expect(readme).toContain("DETECTED")
+      expect(readme).toContain("VALIDATED")
+      expect(readme).toContain("INCONCLUSIVE")
+      expect(readme).not.toMatch(/DETECTED[^\n]*VERIFIED[^\n]*INCONCLUSIVE/)
+    }
   })
 
   it("never calls a report immutable and describes what it actually is", () => {

@@ -1,6 +1,7 @@
 ---
 import Base from "@layouts/Base.astro"
 import ProductShot from "@components/ProductShot.astro"
+import { EVIDENCE_STATES, SHIPPED_EVIDENCE_STATES } from "../lib/evidence-states"
 
 const origin = Astro.site?.origin || "http://localhost:4321"
 const canonical = new URL("/methodology", origin).toString()
@@ -10,31 +11,13 @@ const description =
 // One editorial review date drives the visible "Last reviewed" text, the
 // <time datetime> attribute, the page JSON-LD dateModified and the sitemap
 // lastmod (parsed in astro.config.mjs). Change this constant only.
-const reviewed = "2026-10-05"
+const reviewed = "2026-10-11"
 const reviewedLabel = new Date(`${reviewed}T00:00:00Z`).toLocaleDateString("en-GB", {
   day: "numeric",
   month: "short",
   year: "numeric",
   timeZone: "UTC",
 })
-const evidenceStates = [
-  {
-    name: "Detected candidate",
-    meaning: "A scanner found a signal worth reviewing. Confidence can help prioritize it, but does not prove exploitability.",
-  },
-  {
-    name: "Independently verified (future step)",
-    meaning: "Defined for a future separate verification step: a separate receipt would have to support the finding. No shipped path produces this state today, so no finding is in it. Engine confidence alone never creates it.",
-  },
-  {
-    name: "Retest-confirmed",
-    meaning: "A server-owned deterministic retest found the relevant condition absent after a fix, with complete applicable coverage.",
-  },
-  {
-    name: "Inconclusive",
-    meaning: "The available retest evidence cannot establish that the condition is gone. The uncertainty remains visible.",
-  },
-]
 const faq = [
   {
     q: "What is an evidence state?",
@@ -93,10 +76,10 @@ const jsonLd = [
     "@type": "DefinedTermSet",
     name: "LyraShield AI Evidence States",
     description:
-      "The four evidence states LyraShield AI assigns to security findings, from initial detection to retest-confirmed resolution.",
-    hasDefinedTerm: evidenceStates.map((state) => ({
+      "The three shipped evidence states LyraShield AI assigns to security findings: DETECTED, VALIDATED and INCONCLUSIVE.",
+    hasDefinedTerm: SHIPPED_EVIDENCE_STATES.map((state) => ({
       "@type": "DefinedTerm",
-      name: state.name,
+      name: state.code,
       description: state.meaning,
     })),
   },
@@ -159,10 +142,10 @@ const jsonLd = [
     <section aria-labelledby="states-heading" class="py-16">
       <h2 id="states-heading" class="text-2xl font-semibold text-text" data-reveal>Evidence states are not interchangeable</h2>
       <div class="mt-8 divide-y divide-border border-y border-border" data-reveal-group>
-        {evidenceStates.map((state, index) => (
+        {EVIDENCE_STATES.map((state, index) => (
           <article class="grid gap-3 py-7 md:grid-cols-[3rem_13rem_1fr] md:gap-6" data-reveal>
             <span class="font-mono text-xs text-text-muted" aria-hidden="true" data-countup={index + 1}>0{index + 1}</span>
-            <h3 class="font-semibold text-text">{state.name}</h3>
+            <h3 class="font-semibold text-text">{state.label}</h3>
             <p class="leading-7 text-text-muted">{state.meaning}</p>
           </article>
         ))}

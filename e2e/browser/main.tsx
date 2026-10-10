@@ -6,6 +6,10 @@ if (new URLSearchParams(location.search).has("notification-integrations")) {
   const { default: NotificationIntegrationsHarness } =
     await import("./notification-integrations-harness")
   root.render(<NotificationIntegrationsHarness />)
+} else if (new URLSearchParams(location.search).has("notification-preferences")) {
+  await import("../../apps/web/src/app/globals.css")
+  const { NotificationPreferencesHarness } = await import("./notification-preferences-harness")
+  root.render(<NotificationPreferencesHarness />)
 } else if (new URLSearchParams(location.search).has("dashboard-ux")) {
   await import("../../apps/web/src/app/globals.css")
   const { default: DashboardUxHarness } = await import("./dashboard-ux-harness")

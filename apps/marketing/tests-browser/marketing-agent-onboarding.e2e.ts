@@ -45,6 +45,11 @@ test("local preview keeps the single Lite Check input disabled", async ({ page }
   await page.goto("/scan")
   await expect(page.locator("#scan-url")).toBeDisabled()
   await expect(page.getByRole("button", { name: "Scanner API not connected" })).toBeDisabled()
+  await expect(page.locator("#verification-status")).toBeHidden()
+  await expect(
+    page.locator('script[src^="https://challenges.cloudflare.com/turnstile/"]')
+  ).toHaveCount(0)
+  await expect(page.locator("#turnstile-container iframe")).toHaveCount(0)
 })
 
 // /agents.md and /llms.txt handler coverage lives in src/tests/agent-onboarding.test.ts.

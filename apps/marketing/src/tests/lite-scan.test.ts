@@ -61,6 +61,19 @@ describe("Lite Check marketing surface", () => {
     expect(page).toContain("canonical={canonical}")
   })
 
+  it("does not load or announce Turnstile when the scanner API is unavailable", () => {
+    expect(page).toContain(
+      "const challengeAvailable = scannerAvailable && Boolean(turnstileSiteKey)"
+    )
+    expect(page).toContain('data-turnstile-site-key={challengeAvailable ? turnstileSiteKey : ""}')
+    expect(page).toContain(
+      'class={`mt-3 text-sm leading-6 text-text-muted${challengeAvailable ? "" : " hidden"}`}'
+    )
+    expect(page).toContain(
+      '{challengeAvailable && <script src="https://challenges.cloudflare.com/turnstile/v0/api.js'
+    )
+  })
+
   it("fails closed when the separately deployed app API has no public origin", () => {
     expect(page).toContain("const scannerAvailable = Boolean(appOrigin)")
     expect(page).toContain("disabled={!scannerAvailable}")

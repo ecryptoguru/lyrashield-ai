@@ -181,6 +181,10 @@ export async function proxy(request: NextRequest) {
 
   const requestHeaders = new Headers(request.headers)
   requestHeaders.set("x-nonce", nonce)
+  // Never forward a client-provided internal billing hint. The only trusted
+  // value is re-injected below after the authenticated Cloudflare app-host
+  // boundary has been established.
+  requestHeaders.delete("x-lyrashield-trusted-country")
 
   // Only Cloudflare's app hostname is configured with per-host Authenticated
   // Origin Pulls. A direct candidate may pass only with this deployment's
@@ -205,7 +209,6 @@ export async function proxy(request: NextRequest) {
     requestHeaders.delete("cf-ipcountry")
     requestHeaders.delete("x-forwarded-client-cert")
     requestHeaders.delete("x-lyrashield-country")
-    requestHeaders.delete("x-lyrashield-trusted-country")
     if (country) requestHeaders.set("x-lyrashield-trusted-country", country)
   }
 

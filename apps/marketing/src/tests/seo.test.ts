@@ -102,6 +102,8 @@ describe("marketing SEO metadata", () => {
     const home = source("../pages/index.astro")
     const methodology = source("../pages/methodology.astro")
     const llms = source("../pages/llms.txt.ts")
+    const hero = source("../components/landing/PremiumHero.astro")
+    const kiloGuide = source("../content/blog/kilo-code-mcp-security-workflow.mdx")
 
     expect(home).toContain('"@type": "WebPage"')
     expect(home).toContain('"@id": `${pageUrl}#application`')
@@ -113,6 +115,13 @@ describe("marketing SEO metadata", () => {
     // date the page displays (the Oct 2026 drift).
     expect(methodology).toContain('const reviewed = "')
     expect(methodology).toContain("dateModified: reviewed")
+    expect(methodology).toContain('const reviewed = "2026-10-11"')
+    expect(hero).toContain("A fresh retest checks each fix.")
+    expect(hero).not.toContain("A fresh retest confirms each fix")
+    expect(kiloGuide).toContain("staging-web")
+    expect(kiloGuide).not.toContain("staging-lyrafin-web")
+    expect(kiloGuide).toContain("updatedDate: 2026-10-11")
+    expect(llms).toContain('const LLMS_TXT_DATE_FLOOR = "2026-10-11"')
     // The 43/7 split is derived from the same control registry
     // vibe-security-50.astro builds its own counts from, not a hardcoded
     // literal here — hardcoding it as separate prose would let this file

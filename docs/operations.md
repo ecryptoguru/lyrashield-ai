@@ -2,7 +2,13 @@
 
 Founder- and operator-run procedures consolidated from standalone runbooks. Each section is founder-controlled; nothing here runs unattended.
 
-## Current production readback — 2026-10-01
+## Current production readback — 2026-10-10
+
+Product revision `41462a3ff45f77e996823faf6d10f56053dec9e8` was released by [production run 38082773161](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/38082773161), which completed successfully. The run promoted the application revisions and production traffic, then promoted worker digest `sha256:91203cb94795cc8ae143e4a07da86a2fc3eac5e38ed1ebc862e46c1333d55007` for engine revision `3001517530300ca5f602536bfadcbd3c95ad3039` through the guarded VM maintenance path. The successful promotion checked the configured image reference, OCI labels, runtime provenance, Docker health and scan readiness.
+
+A fresh public `GET https://app.lyrashieldai.com/api/ready/scans` at `2026-10-10T20:53:34Z` returned HTTP 200 with `{"status":"ready","checks":{"worker":true}}`. This is scan-admission readiness only; it does not prove billing reconciliation, payment settlement, paid-scan acceptance, authenticated client use or commercial readiness. Recheck the exact run and current live state before relying on this dated receipt.
+
+## Historical production readback — 2026-10-01
 
 Product `4822306e24f375800981bf282fd992a9c15dcde8` passed [main CI](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/36905268255), [production release](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/36908006265), and [scan-readiness workflow](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/36912801887). Azure readback found the app, scanner, and egress proxy at 100% traffic on that revision, and the worker promotion check passed for its immutable image. A fresh public `GET https://app.lyrashieldai.com/api/ready/scans` at `2026-10-01T20:15:18Z` returned HTTP 200 with `{"status":"ready","checks":{"worker":true}}` and `Cache-Control: no-store`.
 
@@ -10,7 +16,7 @@ This establishes scan-admission readiness for that deployment. It does not estab
 
 The latest report-only reconciliation failed Polar with HTTP 403 `insufficient_scope` on `2026-10-01T19:08:19Z`. Its receipt has `completed=false`, `polarChecked=0`, `razorpayChecked=0`, `packCreditsVerified=0`, and a coverage start of `2026-09-04T08:03:51Z`. The worker calls the providers sequentially, but does not retain response row counts. Do not call this complete reconciliation or reset the baseline. The app-to-worker release sync copies the app Polar credential into worker Key Vault, so a worker-only replacement will be overwritten on the next release. Correct the source-of-truth grant or approve a distinct worker binding, then use the guarded refresh/promotion path and rerun report-only reconciliation. No credentials were read or changed for this documentation update.
 
-The 2026-10-01 production rule readback found a live `reconciliation_drift` rule but no separate runtime rules for emitted `reconciliation_backlog` and `reconciliation_duplicates`; alert receiver delivery is unverified. F4 source candidate `70a60aa7fd685aeaa42095703045a51b0fbbbb50` adds declarations for both alert rules, but it was not included in deployed product `4822306e24f375800981bf282fd992a9c15dcde8` and has not been deployed. Treat runtime rule readback as authoritative. The latest recorded isolated restore predates the migrations in the 2026-10-01 release, so a post-release backup and restore drill remains pending.
+The 2026-10-01 production rule readback found a live `reconciliation_drift` rule but no separate runtime rules for emitted `reconciliation_backlog` and `reconciliation_duplicates`; alert receiver delivery was unverified. Current source declares both rules, and product revision `41462a3ff45f77e996823faf6d10f56053dec9e8` was released on 2026-10-10. No post-release runtime rule or receiver-delivery readback is recorded here, so treat the live state as unverified. The latest recorded isolated restore predates the migrations in the 2026-10-01 release, so a post-release backup and restore drill remains pending.
 
 ## Live checkout verification
 
@@ -63,7 +69,7 @@ forward-monitoring start: the job does not backfill provider payments older
 than that point. Complete any separate historical payment review before
 enabling production credentials.
 
-The 2026-10-01 receipt was incomplete because Polar returned `insufficient_scope`; see the current production readback above. Razorpay is invoked sequentially even when Polar fails, but the stored receipt does not retain provider response counts. Treat the recorded zero counters as insufficient to prove full provider coverage.
+The 2026-10-01 receipt was incomplete because Polar returned `insufficient_scope`; see the dated production readback above. Razorpay is invoked sequentially even when Polar fails, but the stored receipt does not retain provider response counts. Treat the recorded zero counters as insufficient to prove full provider coverage.
 
 ### Pending read-only evidence audits
 

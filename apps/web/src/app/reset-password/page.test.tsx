@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import ResetPasswordPage from "./page"
+import { cleanResetTokenFromUrl } from "./reset-password-url"
 
 const query = vi.hoisted(() => ({ token: null as string | null }))
 vi.mock("next/navigation", () => ({
@@ -33,5 +34,16 @@ describe("reset-link arrival state", () => {
     expect(html).toContain('id="password"')
     expect(html).toContain('autoComplete="new-password"')
     expect(html).toContain('minLength="8"')
+  })
+
+  it("cleans the one-time token while retaining unrelated query values and the fragment", () => {
+    expect(
+      cleanResetTokenFromUrl(
+        "https://app.example.test/reset-password?token=secret&continue=%2Fsettings#security"
+      )
+    ).toBe("/reset-password?continue=%2Fsettings#security")
+    expect(
+      cleanResetTokenFromUrl("https://app.example.test/reset-password?token=secret&token=second")
+    ).toBe("/reset-password")
   })
 })

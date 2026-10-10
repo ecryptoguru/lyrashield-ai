@@ -92,6 +92,7 @@ class SlackChannel implements NotificationChannelSender {
       const response = await fetch(env.SLACK_WEBHOOK_URL!, {
         method: "POST",
         signal: AbortSignal.timeout(10_000),
+        redirect: "error",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           attachments: [
@@ -107,10 +108,10 @@ class SlackChannel implements NotificationChannelSender {
           ],
         }),
       })
+      void response.body?.cancel().catch(() => {})
 
       if (!response.ok) {
-        const text = await response.text()
-        logger.error("Slack webhook send failed", { status: response.status, error: text })
+        logger.error("Slack webhook send failed", { status: response.status })
         return false
       }
 
@@ -141,6 +142,7 @@ class DiscordChannel implements NotificationChannelSender {
       const response = await fetch(env.DISCORD_WEBHOOK_URL!, {
         method: "POST",
         signal: AbortSignal.timeout(10_000),
+        redirect: "error",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           embeds: [
@@ -158,10 +160,10 @@ class DiscordChannel implements NotificationChannelSender {
           ],
         }),
       })
+      void response.body?.cancel().catch(() => {})
 
       if (!response.ok) {
-        const text = await response.text()
-        logger.error("Discord webhook send failed", { status: response.status, error: text })
+        logger.error("Discord webhook send failed", { status: response.status })
         return false
       }
 

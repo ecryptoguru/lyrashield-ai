@@ -16,7 +16,7 @@ Product promise:
 
 - Connect an authorized repository, web app, or API.
 - Record what was tested and what could not be tested.
-- Separate detected risks, retest-confirmed outcomes, independently verified findings, and inconclusive results.
+- Separate detected risks, deterministic retest outcomes, and inconclusive results. `VERIFIED` is reserved for future independent verification and is not produced by current scans.
 - Explain risks in plain language while retaining technical evidence.
 - Produce approval-gated fix proposals, server-owned retests, and shareable assurance reports.
 - Never claim broader coverage or certainty than retained evidence supports.
@@ -81,6 +81,7 @@ Implemented:
 - Host-visible worker/engine temporary paths for Docker sandbox source mounts; pre-provider
   sandbox failures remain non-billable.
 - Findings, normalization, CWE/OWASP metadata, SCA, secrets, deterministic URL/API checks, AI App Security checks, evidence states, candidates, receipts, manifests, retests, reports, notifications, and launch readiness.
+- Notification delivery: the dashboard scan feed and workspace-configured Slack/Discord delivery remain supported. Personal email and in-app preference controls are disabled because they have no effect; stored preference rows are preserved for possible future implementation. Push preferences are unavailable.
 - LyraShield Score, private snapshots, public scorecards, cards, badges, privacy-bounded analytics, referrals, and social sharing.
 - Agent actions, connection-bound delegated workflows, MCP over stdio and Streamable HTTP, hosted OAuth, CLI login/connect/install/doctor flows, SDK, agent registry, and portable agent plugin.
 - Workspace API-key management is implemented in the current source: Owners and Admins can create, list, and revoke workspace keys. Keys have read/write scopes, are bound to a workspace and their creator, reveal the raw value once, and persist only its SHA-256 hash. This source status does not establish a production release revision.
@@ -180,7 +181,7 @@ Rules:
 | --------------------------------- | -------------------------------------------------------------------------------------------------------- |
 | `DETECTED`                        | Scanner reported a candidate with retained provenance.                                                   |
 | `VALIDATED`                       | Server-owned deterministic retest confirmed the originating condition is absent under complete coverage. |
-| `VERIFIED`                        | Independent trusted verification evidence exists.                                                        |
+| `VERIFIED`                        | Future independent verification state; no current finding receives it.                                   |
 | `INCONCLUSIVE`                    | Coverage, evidence, or verifier result is insufficient.                                                  |
 | `NOT_ASSESSED` / `NOT_APPLICABLE` | Control was not evaluated or does not apply.                                                             |
 
@@ -270,7 +271,7 @@ Two product lines (publishable schedule reaffirmed 2026-09-22; code authority is
 - Repository MCP/WebMCP scanner findings are available on every plan. Starter and Pro allow one workspace member; Pro adds Deep/Custom scans. Agency sponsors one team workspace with up to five members including the buyer, sharing the buyer's 4,500 monthly minutes, plus higher limits and capped overage.
 - Failed scans are never billed; cancelled scans bill elapsed time only (no 1-minute floor).
 
-Minute packs: 100/$15, 250/$35, 500/$65; 180-day validity.
+Minute packs: 100/$15, 250/$35, 500/$65; 180-day validity. A FREE account with an expired trial must subscribe before purchasing a pack; active-trial and no-trial FREE accounts and paid accounts retain eligibility.
 
 Usage draw order: current monthly pool, oldest valid pack, then allowed overage. Every grant/debit/refund has an idempotency key. A scan that crosses zero may use at most 15 minutes of non-bankable mid-scan grace; a scan starting at zero is rejected.
 
@@ -373,7 +374,18 @@ Detailed file and package mapping: [codebase.md](./codebase.md).
 
 ## 8. Current production evidence
 
-### Production release — 2026-10-01
+### Production release — 2026-10-10
+
+PR #992 merged as product revision `41462a3ff45f77e996823faf6d10f56053dec9e8`. Its automatic [production release run 38082773161](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/38082773161) completed successfully. The run built and pushed the images, selected the verified release digests, rehearsed the exact worker image against disposable services, promoted healthy Container Apps revisions and production traffic, then promoted the worker on its VM.
+
+- Worker image digest: `sha256:91203cb94795cc8ae143e4a07da86a2fc3eac5e38ed1ebc862e46c1333d55007`.
+- Engine revision: `3001517530300ca5f602536bfadcbd3c95ad3039`.
+- The successful VM promotion step checked the configured Docker image reference, OCI product and engine labels, runtime product revision, runtime engine revision, runtime worker digest, Docker health and scan readiness against the release inputs.
+- A fresh public `GET https://app.lyrashieldai.com/api/ready/scans` at `2026-10-10T20:53:34Z` returned HTTP 200 with `{"status":"ready","checks":{"worker":true}}`.
+
+This establishes the release and scan-admission readiness for the deployed revision. It does not establish billing reconciliation, provider settlement, a paid scan on this revision, authenticated client use or commercial readiness. Recheck live state before operational action.
+
+### Historical production release — 2026-10-01
 
 The exact product revision `4822306e24f375800981bf282fd992a9c15dcde8` passed [main CI run 36905268255](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/36905268255) and [production release run 36908006265](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/36908006265). The release completed migrations, candidate and production smoke, queue preflight, Container Apps traffic promotion, and immutable worker digest promotion. It applied migrations `20261002000000_webhook_rejection_receipts` and `20261003000000_scan_delegated_authorization`.
 
@@ -386,13 +398,13 @@ The exact product revision `4822306e24f375800981bf282fd992a9c15dcde8` passed [ma
 
 This proves release and scan-admission readiness for that deployment. It does not prove billing reconciliation, provider settlement, a paid scan on the deployed revision, authenticated client use, or commercial readiness. The public OAuth metadata endpoints returned HTTP 200 and unauthenticated MCP returned HTTP 401 with the protected-resource challenge; no authenticated OAuth workspace call or client-runtime acceptance was performed.
 
-### Current operational blockers and evidence limits
+### Operational blockers last verified 2026-10-01
 
-- The report-only billing reconciliation failed its Polar order-list request on `2026-10-01T19:08:19Z` with HTTP 403 `insufficient_scope`. The operator alert recorded `reconciliation_drift`; the receipt is `completed=false`, with zero Polar orders checked and coverage from `2026-09-04T08:03:51Z` through `2026-10-01T19:08:18Z`. The receipt also shows zero Razorpay payments checked and no Razorpay provider failure. The worker runs the two providers sequentially, but the provider response count is not retained; do not treat this as complete reconciliation or infer missing coverage from the zero count alone.
-- The current sync copies the app's Polar credential into the worker Key Vault entry. A worker-only replacement would be overwritten by the next release. Verify the provider's current read contract, correct the source-of-truth grant or approved worker binding, then use the guarded refresh/promotion procedure and rerun report-only reconciliation. Do not replay billing events, clear exceptions, or reset the coverage baseline to make the receipt green.
-- The 2026-10-01 production rule readback found a live rule for `reconciliation_drift`, but no dedicated runtime rules for emitted `reconciliation_backlog` or `reconciliation_duplicates`. F4 source candidate `70a60aa7fd685aeaa42095703045a51b0fbbbb50` adds declarations for those two alerts; that source change was not in deployed product `4822306e24f375800981bf282fd992a9c15dcde8` and has not been deployed. Do not equate source declarations with live rules. Alert receiver delivery has not been verified.
+- The report-only billing reconciliation failed its Polar order-list request on `2026-10-01T19:08:19Z` with HTTP 403 `insufficient_scope`. The operator alert recorded `reconciliation_drift`; the receipt is `completed=false`, with zero Polar orders checked and coverage from `2026-09-04T08:03:51Z` through `2026-10-01T19:08:18Z`. The receipt also shows zero Razorpay payments checked and no Razorpay provider failure. The worker runs the two providers sequentially, but the provider response count is not retained; do not treat this dated receipt as complete reconciliation or infer missing coverage from the zero count alone. No newer completed receipt is recorded here.
+- At the 2026-10-01 readback, the release sync copied the app's Polar credential into worker Key Vault. Confirm the current grant and sync contract before changing credentials; do not assume a worker-only replacement will persist through a release. Use the guarded refresh/promotion procedure and rerun report-only reconciliation. Do not replay billing events, clear exceptions, or reset the coverage baseline to make the receipt green.
+- The 2026-10-01 production rule readback found a live rule for `reconciliation_drift`, but no dedicated runtime rules for emitted `reconciliation_backlog` or `reconciliation_duplicates`. Current source `ops/monitoring/provision-alerts.sh` declares both rules and the 2026-10-10 release includes that source. No post-release runtime rule or receiver-delivery readback is recorded here; do not equate source declarations with live provisioning.
 - The latest recorded backup and isolated restore predate the migrations applied by this release; a post-release backup and restore drill remain open.
-- A source audit found the deployed retest finalizer does not require checksum `MATCH` for both the original and retest manifests. The audit did not read production finding records or prove an incorrect validation. The F1 source fix is not in this deployment; see §9.
+- At the time of the 2026-10-01 deployment, the retest finalizer did not require checksum `MATCH` for both original and retest manifests. The audit did not read production finding records or prove an incorrect validation. Product revision `41462a3ff45f77e996823faf6d10f56053dec9e8` includes the source fix and was released on 2026-10-10; see the current receipt above and §9.
 
 ### Standard/Luna acceptance — 2026-08-26
 
@@ -440,7 +452,7 @@ The 2026-08-21 acceptance scan `cmt35aj1s000001hck9fmguzk` remains historical ev
 
 ## 9. Release status
 
-Product revision `4822306e24f375800981bf282fd992a9c15dcde8` has passed the required main CI and production release, and the public scan-readiness check returned 200 with the worker check true (evidence in §8). That is deployment/readiness evidence only. The Desktop app has no signed release in this record, and LyraShield is not operationally or commercially ready while provider reconciliation is incomplete and the remaining gates below are open.
+Product revision `41462a3ff45f77e996823faf6d10f56053dec9e8` passed the production release and its public scan-readiness check returned HTTP 200 with the worker check true (evidence in §8). That is deployment/readiness evidence only. The Desktop app has no signed release in this record. Billing reconciliation, provider settlement, authenticated client use and the other dated operational gates remain separate; refresh their evidence before treating them as current.
 
 ### Delivered features and bounded proofs
 
@@ -458,13 +470,13 @@ These are implementation or revision-scoped milestones, not a claim of universal
 - The single adaptive dashboard and the bounded platform-admin console are implemented. Exact-two preflight/apply passed, and both named administrators completed fresh independent Google-plus-TOTP browser proof across every admin destination; bearer-only and workspace-only access remained denied.
 - Production evidence-storage round-trip/fail-closed, actionable notification acknowledgment, terminal-cost disposition, queue-orphan recovery, and Key Vault managed-identity signing proofs passed.
 - SEO/AEO/GEO foundations include canonical/schema metadata, sitemap and robots controls, dated `llms.txt`, `agents.md`, answer-engine crawler stanzas, integration guides, comparison/research pages, and content validation.
-- Assurance hardening (PRs #428–#430) delivered nonnegative policy-budget enforcement, explainable deterministic finding priority, finding-detail evidence-URI redaction, worker execution provenance bound into manifests, fail-closed worker readiness, Azure alert provisioning, and a bounded host-side launch-assurance orchestrator. The deployed retest finalizer still has the checksum-match gap described below; do not characterize retest results as checksum-qualified until F1 is merged and deployed.
+- Assurance hardening (PRs #428–#430) delivered nonnegative policy-budget enforcement, explainable deterministic finding priority, finding-detail evidence-URI redaction, worker execution provenance bound into manifests, fail-closed worker readiness, Azure alert provisioning, and a bounded host-side launch-assurance orchestrator. The current released source requires checksum `MATCH` for both stored manifests before deterministic retest validation. The separate alert-provisioning script declares the reconciliation backlog and duplicate rules; current runtime installation and receiver delivery still need a fresh readback.
 - The 2026-09-19 to 09-25 product waves are merged: delegated outbound connectors, scan attachments, the review-changes workflow with client parity, release-identity confirmation, the scan-quality surface, the authenticated-assessment staging beta, GPT-6 routing/accounting hardening and the Myra support launch behind feature flags. See the `codebase.md` ledger for the commit-level record.
 
 ### Remaining before broader paid/untrusted exposure
 
-1. Resolve Polar `insufficient_scope` for the worker's read-only reconciliation contract, restore completed report-only coverage with the existing guarded procedure, and retain the completed receipt/checkpoint without replay or baseline reset. Cloud billing flags being `public` is configuration evidence, not proof of live checkout, settlement, refunds, or commercial readiness.
-2. Merge, review, deploy, and verify the separate source-fix candidates: F1 `a18753a77ad04d5291a07f0ed1b95f94867baa72` (require checksum `MATCH` for both baseline and retest manifests), F2 `c6fda848228f3fd329e6df43c3f20ec82e2837c0` (preserve delegated-operation outcomes, terminalize stale claims after grant rotation, and retain late scan references without replay), and F4 `70a60aa7fd685aeaa42095703045a51b0fbbbb50` (provision reconciliation alerts). None is in product `main` `4822306e` or in the audited production release. Do not imply source-branch changes are deployed.
+1. Refresh the report-only Polar/Razorpay reconciliation after the incomplete 2026-10-01 receipt, and retain a completed receipt/checkpoint without replay or baseline reset. Cloud billing flags being `public` is configuration evidence, not proof of live checkout, settlement, refunds, or commercial readiness.
+2. Re-read production alert rules and receiver delivery after the 2026-10-10 release. Current source includes F1's checksum-qualified deterministic retest validation, F2's durable delegated-operation outcome handling, and F4's reconciliation-alert declarations. These source fixes are in released product revision `41462a3ff45f77e996823faf6d10f56053dec9e8`; the old separate candidate SHAs are historical references, not pending source PRs. The Oct 1 runtime alert gap remains unverified after release.
 3. Read back the public scorecard canonical URL and OG image URL on the deployed revision. The canonical-origin code fix is already included in the deployed revision; the current evidence set does not include the page-specific live readback.
 4. Retain longer-window Redis command/capacity evidence, verify RazorpayX and Payoneer payout access, and complete payout/tax operations before paid scale. A post-release backup and isolated restore are also pending.
 5. Triage the 25 findings from Standard scan `cmt9el7p7000001hdjnjo90wk` and obtain independent verification where warranted; keep unverified results `DETECTED` or `INCONCLUSIVE`.
@@ -486,9 +498,9 @@ These are implementation or revision-scoped milestones, not a claim of universal
 - GitHub installation ownership still needs provider-backed proof before binding a fresh installation; Fix PR execution still needs a server-generated immutable patch/evidence artifact bound to exact approval.
 - Replace provider-managed object-encryption key references with an explicit KMS/Vault design when the evidence-storage provider is finalized.
 - Complete AI-03 lockfile/advisory coverage, production triage provenance/accounting, private-score disposition carry-forward, report UX, and live calibration proof.
-- New result manifests retain and hash their exact JSON checksum input; duplicate persistence and pending finalization compare that input with the stored JSONB. Historical rows with a null checksum input remain `UNAVAILABLE` and are not backfilled. Source and database-test evidence does not establish deployment of this change or upgrade dated production records.
-- Retest finalization in deployed product `4822306e` does not require checksum `MATCH` for both the original and retest manifests before producing a validated outcome. No production receipt was audited to show an incorrect result. F1 commit `a18753a77ad04d5291a07f0ed1b95f94867baa72` is a source candidate outside `main` and the deployment; require review, merge, release, and exact-SHA verification before claiming this gate is closed. Keep legacy `UNAVAILABLE` evidence inconclusive and do not backfill or rewrite historical hashes.
-- F2 delegated-operation outcome changes (`c6fda848228f3fd329e6df43c3f20ec82e2837c0`) and F4 reconciliation alert configuration (`70a60aa7fd685aeaa42095703045a51b0fbbbb50`) remain source candidates outside product `main` and production. Release and verify each separately; their branch presence is not runtime acceptance.
+- New result manifests retain and hash their exact JSON checksum input; duplicate persistence, pending finalization and deterministic retest validation check stored integrity. These changes are included in released product revision `41462a3ff45f77e996823faf6d10f56053dec9e8` and worker digest `sha256:91203cb94795cc8ae143e4a07da86a2fc3eac5e38ed1ebc862e46c1333d55007`. Historical rows with a null checksum input remain `UNAVAILABLE` and are not backfilled; no historical records were rewritten.
+- The 2026-10-01 deployed retest finalizer did not require checksum `MATCH` for both the original and retest manifests before producing a validated outcome. No production receipt was audited to show an incorrect result. The released product revision `41462a3ff45f77e996823faf6d10f56053dec9e8` requires both checksums to match; keep legacy `UNAVAILABLE` evidence inconclusive and do not backfill or rewrite historical hashes.
+- Current source and the 2026-10-10 release include durable delegated-operation outcome handling across grant rotation and reconciliation alert declarations. The October 1 runtime alert gap still needs a current rules and receiver-delivery readback; code presence alone is not runtime acceptance.
 - Restore or replace the removed historical AI-safety evaluation runner before claiming the recorded benchmark can be rerun from a clean checkout.
 
 ## 10. Founder decisions

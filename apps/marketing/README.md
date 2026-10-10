@@ -14,7 +14,7 @@ Astro 7 marketing site for LyraShield AI. Lives at `apps/marketing` in the monor
 
 The eight approved USPs (owner: `docs/whitepaper.md` §2.0; keep the three lists in step when one changes):
 
-1. Evidence states, not confidence scores — every result is DETECTED / VALIDATED / VERIFIED / INCONCLUSIVE.
+1. Evidence states, not confidence scores — the three shipped states are DETECTED / VALIDATED / INCONCLUSIVE. VERIFIED is a future-only status and is not produced today.
 2. Built for AI-built software — AI-Built Failure Taxonomy, AI App Security (AI-01–AI-08, OWASP LLM Top 10 2025), WebMCP controls on the agent tool surface.
 3. Agent-native — CLI, MCP server (21 tools, hosted OAuth), Agent Plugin, 51-entry registry / 48 preferred client surfaces, account-less GitHub Action.
 4. Approval-gated fix loop that closes itself — server-generated patch, explicit human approval, never auto-merges, automatic retest on merge.
@@ -213,7 +213,7 @@ plaintext in production regardless.
 
 ## Automatic production deploy (GitHub Actions)
 
-The `deploy-marketing` job in `.github/workflows/ci.yml` runs only for a push to `main` that changes `apps/marketing` or a root dependency/build input. It waits for the repository security and release gates, builds the Worker, applies remote D1 migrations, deploys Astro's generated `dist/server/wrangler.json`, and then smoke-checks the canonical routes, API 404 boundary, and `www` redirect. A failed gate, migration, deployment, or smoke check fails the job.
+Protected-main pull requests pass the repository's security and release checks before merge. On a main push, `.github/workflows/release-production.yml` classifies the unshipped change gap and calls the reusable `.github/workflows/deploy-marketing.yml` workflow when marketing changes are pending. The deploy workflow checks that its source SHA is still current `main`, builds the Worker, applies remote D1 migrations, deploys Astro's generated `dist/server/wrangler.json`, and smoke-checks canonical routes, the API 404 boundary, and the `www` redirect. A failed route, migration, deployment, or smoke check fails the release job; `ci.yml` remains the pull-request gate and does not deploy marketing.
 
 Configure these GitHub Actions secrets for `ecryptoguru/lyrashield-ai`:
 

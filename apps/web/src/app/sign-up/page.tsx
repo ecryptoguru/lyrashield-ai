@@ -127,6 +127,14 @@ export default function SignUpPage() {
   const [resendLoading, setResendLoading] = useState(false)
   const [resendCooldown, setResendCooldown] = useState(0)
   const [resendStatus, setResendStatus] = useState<"idle" | "success" | "error">("idle")
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return
+    const timer = window.setTimeout(() => {
+      setResendCooldown((previous) => Math.max(0, previous - 1))
+    }, 1000)
+    return () => window.clearTimeout(timer)
+  }, [resendCooldown])
   const [providers, setProviders] = useState({
     github: false,
     google: false,
@@ -349,14 +357,6 @@ export default function SignUpPage() {
       )
       setResendStatus("success")
       setResendCooldown(30)
-      const tick = () => {
-        setResendCooldown((prev) => {
-          if (prev <= 1) return 0
-          window.setTimeout(tick, 1000)
-          return prev - 1
-        })
-      }
-      window.setTimeout(tick, 1000)
     } catch {
       setResendStatus("error")
     } finally {

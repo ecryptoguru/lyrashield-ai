@@ -6,13 +6,14 @@
 export const dynamic = "force-dynamic"
 
 import Link from "next/link"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { ShieldCheck } from "lucide-react"
 import { authClient, getAuthErrorMessage } from "@lyrashield/auth"
 import { Button, FormField, Spinner } from "@lyrashield/ui"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { PasswordInput } from "@/components/password-input"
+import { cleanResetTokenFromUrl } from "./reset-password-url"
 
 export default function ResetPasswordPage() {
   const router = useRouter()
@@ -20,7 +21,17 @@ export default function ResetPasswordPage() {
   const [password, setPassword] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const token = searchParams.get("token")
+  const [token] = useState(() => searchParams.get("token"))
+
+  useEffect(() => {
+    if (!token) return
+    if (!new URL(window.location.href).searchParams.has("token")) return
+    window.history.replaceState(
+      window.history.state,
+      "",
+      cleanResetTokenFromUrl(window.location.href)
+    )
+  }, [token])
 
   async function submit(event: React.FormEvent) {
     event.preventDefault()
