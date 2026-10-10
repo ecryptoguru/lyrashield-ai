@@ -1,5 +1,5 @@
 # ─── Stage 1: Install deps ─────────────────────────────────────────────────────
-FROM node:24-alpine@sha256:d32cdf619f63fe0471182d08996dd516c6275bb5fd31ae06e55a570bd9e1ad43 AS deps
+FROM node:25-alpine@sha256:bdf2cca6fe3dabd014ea60163eca3f0f7015fbd5c7ee1b0e9ccb4ced6eb02ef4 AS deps
 RUN corepack enable && corepack prepare pnpm@12.2.0 --activate
 ENV PUPPETEER_SKIP_DOWNLOAD=true
 
@@ -30,7 +30,7 @@ COPY apps/worker/package.json ./apps/worker/
 RUN pnpm install --frozen-lockfile
 
 # ─── Stage 2: Build ────────────────────────────────────────────────────────────
-FROM node:24-alpine@sha256:d32cdf619f63fe0471182d08996dd516c6275bb5fd31ae06e55a570bd9e1ad43 AS workspace-builder
+FROM node:25-alpine@sha256:bdf2cca6fe3dabd014ea60163eca3f0f7015fbd5c7ee1b0e9ccb4ced6eb02ef4 AS workspace-builder
 RUN corepack enable && corepack prepare pnpm@12.2.0 --activate
 
 WORKDIR /app
@@ -84,7 +84,7 @@ RUN DATABASE_URL="$BUILD_DATABASE_URL" \
     pnpm exec turbo run build --filter=@lyrashield/web
 
 # ─── Stage 3: Runner ───────────────────────────────────────────────────────────
-FROM node:24-alpine@sha256:d32cdf619f63fe0471182d08996dd516c6275bb5fd31ae06e55a570bd9e1ad43 AS runner
+FROM node:25-alpine@sha256:bdf2cca6fe3dabd014ea60163eca3f0f7015fbd5c7ee1b0e9ccb4ced6eb02ef4 AS runner
 RUN addgroup --system lyrashield && \
     adduser --system --ingroup lyrashield --home /app lyrashield
 
@@ -116,7 +116,7 @@ FROM workspace-builder AS egress-proxy-deps
 RUN pnpm --filter @lyrashield/egress-proxy build && \
     pnpm --filter @lyrashield/egress-proxy deploy --prod --legacy /egress-proxy-runtime
 
-FROM node:24-alpine@sha256:d32cdf619f63fe0471182d08996dd516c6275bb5fd31ae06e55a570bd9e1ad43 AS egress-proxy
+FROM node:25-alpine@sha256:bdf2cca6fe3dabd014ea60163eca3f0f7015fbd5c7ee1b0e9ccb4ced6eb02ef4 AS egress-proxy
 
 RUN addgroup --system lyrashield && \
     adduser --system --ingroup lyrashield --home /app lyrashield
@@ -139,7 +139,7 @@ CMD ["node", "dist/index.js"]
 # The `engine` named build context is supplied only by the worker service in
 # docker-compose.yml, so web/migration builds remain independent of the sibling
 # engine repository.
-FROM node:24-alpine@sha256:d32cdf619f63fe0471182d08996dd516c6275bb5fd31ae06e55a570bd9e1ad43 AS worker-engine
+FROM node:25-alpine@sha256:bdf2cca6fe3dabd014ea60163eca3f0f7015fbd5c7ee1b0e9ccb4ced6eb02ef4 AS worker-engine
 
 RUN apk add --no-cache python3 py3-pip build-base python3-dev git
 
@@ -161,7 +161,7 @@ RUN python3 -m venv /opt/uv-bootstrap && \
 # worker image to be needlessly large. The worker needs only workspace runtime
 # packages, its TypeScript entry point, the generated Prisma client, and the
 # isolated engine virtual environment.
-FROM node:24-alpine@sha256:d32cdf619f63fe0471182d08996dd516c6275bb5fd31ae06e55a570bd9e1ad43 AS worker
+FROM node:25-alpine@sha256:bdf2cca6fe3dabd014ea60163eca3f0f7015fbd5c7ee1b0e9ccb4ced6eb02ef4 AS worker
 
 RUN apk add --no-cache docker-cli git python3 && \
     addgroup --system lyrashield && \
