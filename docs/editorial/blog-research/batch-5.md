@@ -231,7 +231,7 @@ Source count: 3 authoritative external sources, including NIST and two versioned
 | CWE describes weakness classes, while a vulnerability is a specific exploitable instance in a product.                            | B5-S46         | Use to stop broad weakness labels becoming proof of a product vulnerability. |
 | CVSS base score measures technical severity and should not alone determine environmental risk or proof.                           | B5-S45         | Keep severity, confidence, exploitability and risk separate.                 |
 | Independent validation should use evidence or a method not identical to the original assertion.                                   | B5-S18, B5-S47 | Editorial synthesis. A second model restatement is not independent evidence. |
-| LyraShield keeps confidence as triage metadata and requires a separate verification receipt for independently verified state.     | B5-P05         | Exact product terminology only.                                              |
+| Future `VERIFIED` requires a separate receipt; current scans do not produce it.                                                   | B5-P05         | Future-only; do not imply that this step is shipped.                         |
 
 Source count: 6 authoritative sources, including NIST, OWASP, FIRST and MITRE, plus first-party product truth.
 
