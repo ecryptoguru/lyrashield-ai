@@ -36,7 +36,7 @@ Most security tools answer "what did the scanner flag?" LyraShield answers "what
 3. **It runs where the coding agent runs.** A published CLI, an MCP server with 21 tools over stdio and remote Streamable HTTP with hosted OAuth, a portable Agent Plugin, a 51-entry install registry resolving to 48 preferred client surfaces and an account-less, diff-aware GitHub Action. Assurance without leaving the editor, terminal or CI pipeline.
 4. **An approval-gated fix loop that closes itself.** Fix pull requests are created only from a server-generated patch bound to an explicit human approval — no client-authored patches, nothing auto-merges. When a fix branch merges, the server automatically queues a fresh retest and re-evaluates the release gate.
 5. **A launch verdict you can verify yourself.** The Launch Gate is a named, versioned standard producing `READY` / `NOT_READY` / `INSUFFICIENT_EVIDENCE` per target. Launch Readiness Reports are ed25519-signed with a public verify endpoint, and release-identity confirmation answers only `MATCH`, `MISMATCH` or `UNAVAILABLE` for a caller-supplied commit or artifact digest.
-6. **Honest coverage accounting.** The Vibe Security 50 contract records one immutable receipt per control; "no finding" is never presented as "passed", and seven operational controls are explicitly marked evidence-required because no scan can prove them.
+6. **Honest coverage accounting.** The Vibe Security 50 contract binds one coverage receipt per control into the checksummed result manifest; "no finding" is never presented as "passed", and seven operational controls are explicitly marked evidence-required because no scan can prove them.
 7. **Two modes, one loop.** Cloud (hosted subscription; LyraShield pays model cost) and Local/Desktop (one-year BYOK license with perpetual fallback; scans run on your machine and nothing syncs by default).
 8. **Fail-closed trust architecture.** Tenant isolation by Postgres row-level security, engine output treated as untrusted and bounded and every result manifest binding the exact product revision, worker image digest and engine revision into its checksum.
 
@@ -53,7 +53,7 @@ Both modes share the same engine and the same loop. Optional Cloud Sync moves se
 
 ## 5. What's covered
 
-- **Vibe Security 50** — a versioned 50-control coverage contract across code, URL and operational risk families. Every scan produces an immutable per-control receipt; an unreported control is never presented as passed.
+- **Vibe Security 50** — a versioned 50-control coverage contract across code, URL and operational risk families. Every scan binds a per-control receipt into its checksummed result manifest; an unreported control is never presented as passed.
 - **Launch Gate** — a named, versioned readiness standard producing `READY` / `NOT_READY` / `INSUFFICIENT_EVIDENCE` verdicts, persisted append-only per target.
 - **Launch Readiness Report** — a signed, shareable, publicly verifiable artifact bound to a frozen evidence payload.
 - **AI-Built Failure Taxonomy** — a public, citable catalog of how AI-built apps characteristically fail, every class traced to live controls.
