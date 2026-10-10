@@ -6,9 +6,11 @@ Single implementation handoff for Myra across marketing and dashboard: product j
 
 ## Myra: support that helps users finish the task
 
-**Status:** consolidated specification, 15 September 2026. Ankit approved consolidation and quality review. Myra is implemented behind default-off `MYRA_*` flags. This specification records remaining release gates; verify deployed flags, credentials, calendar integration and live acceptance before claiming availability.
+**Status:** consolidated specification, 15 September 2026; product evidence-state explanation refreshed 11 October 2026. Ankit approved consolidation and quality review. Myra is implemented behind default-off `MYRA_*` flags. This specification records remaining release gates; verify deployed flags, credentials, calendar integration and live acceptance before claiming availability.
 
 **Change note v1.1, 15 September 2026:** section 13 adds the advanced-agent capability layer — bounded task loop, resumable guided workflows with closed-loop verification, context-aware starters, instant-answer suggestions, scoped memory, expanded component/tool contracts and the DX harness. Source: founder directive to build a support agent, not a chatbot. The independent QA PASS in section 12 covers v1.0 only; v1.1 requires the added acceptance tests in sections 13.7 and 13.8 plus re-review before release sign-off. No v1.0 requirement is weakened; all additions ship behind the same default-off flags and confirmation rules.
+
+**Change note v1.2, 11 October 2026:** refreshed the evidence-state explanation against current product truth. Current scans produce detected, deterministic retest-validated and inconclusive states; the separate `VERIFIED` state remains future-only. No Myra runtime scope or release gate changed.
 
 **Single handoff:** this document supersedes the three earlier Myra/booking briefs for future implementation. Their source history is retained in section 12. It resolves their conflicting summaries, stale product facts and scattered decisions.
 

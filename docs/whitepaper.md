@@ -1,8 +1,8 @@
 # LyraShield AI — Whitepaper
 
-## Version 1.1.0 — 2026-10-06
+## Version 1.1.1 — 2026-10-11
 
-> The public product explanation for LyraShield AI: who it serves, what makes it different, how the assurance loop works and what its evidence can establish. The [litepaper](./litepaper.md) is the executive overview; the [yellowpaper](./yellowpaper.md) specifies the technical contracts. Executable source governs implementation; dated release evidence in [PRD.md](../PRD.md#8-current-production-evidence) governs deployment claims. This revision is a documentation review, not a new production acceptance.
+> The public product explanation for LyraShield AI: who it serves, what makes it different, how the assurance loop works and what its evidence can establish. The [litepaper](./litepaper.md) is the executive overview; the [yellowpaper](./yellowpaper.md) specifies the technical contracts. Executable source governs implementation; dated release evidence in [PRD.md](../PRD.md#8-current-production-evidence) governs deployment claims. This revision reflects the 2026-10-10 release and clarifies the historical checksum-gate audit; it does not claim new customer-flow acceptance.
 
 ## Contents
 
