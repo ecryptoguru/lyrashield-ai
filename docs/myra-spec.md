@@ -53,7 +53,7 @@ The dedicated Developer Agent inspected ecryptoguru/lyrashield-ai at main **010d
 
 Commercial snapshot for source reconciliation only: Starter $29/month with 210 minutes and 5 targets; Pro $99/month with 850 minutes and 15 targets; Agency $499/month with 4,500 minutes, 50 targets and 5 seats; Enterprise from $1,500/month contact-led. Current packs are $15/$35/$65. **Runtime answers must use structured current data, never this snapshot as a permanent prompt.**
 
-Durable explanation: LyraShield reviews authorized apps that AI built or helped build and the agent surfaces those apps expose. Its workflow covers target, review, evidence, fix proposal, retest and report. Detected, independently verified, retest-confirmed and inconclusive remain distinct. Missing evidence does not become a pass. A report is not a certification or a security guarantee.
+Durable explanation: LyraShield reviews authorized apps that AI built or helped build and the agent surfaces those apps expose. Its workflow covers target, review, evidence, fix proposal, retest and report. The shipped finding states are detected, deterministic retest-validated and inconclusive. The separate `VERIFIED` state is reserved for a future capability and is not produced by current scans. Missing evidence does not become a pass. A report is not a certification or a security guarantee.
 
 Lite Check uses a server-side passive public-surface service. Browser-local tools process their inputs on-device. Myra messages are a separate server-side support flow. Local execution does not mean an external AI provider never receives data. Never blur these privacy boundaries.
 
@@ -103,7 +103,7 @@ Create a reviewed source inventory for every LyraShield offering and workflow. T
 | Plans, trial, packs and usage | Structured catalog from canonical pricing/billing definitions | Eligibility, duration, currencies, caps, depth, overage and missing data      |
 | Cloud/Local availability      | Released status and approved public documentation             | Available versus coming, entitlements, provider/privacy limits                |
 | Setup and integrations        | docs/user-guide.md and current released integration docs      | Target setup, GitHub, CLI/MCP, connections and role restrictions              |
-| Evidence and reports          | Current public methodology plus permitted status tools        | Detected versus verified, inconclusive, retest limits and sharing             |
+| Evidence and reports          | Current public methodology plus permitted status tools        | Shipped states; future-only `VERIFIED`; retest limits and sharing             |
 | Free tools/WebMCP             | Released tool pages and versioned control registry            | Local versus server processing, input scope, exports and limitations          |
 | Billing/support policy        | Current approved policy and support pages                     | Refund policy, human exceptions, cancellation guidance and security reporting |
 | Troubleshooting               | Reviewed sanitized runbooks with audience labels              | Observed error codes, safe steps, escalation and unknown causes               |

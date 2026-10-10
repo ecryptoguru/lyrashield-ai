@@ -22,7 +22,7 @@ Contain credible active exploitation and exposed credentials first. For the rema
 
 A scanner queue sorted by severity is a useful starting view, not a remediation plan. The first question is whether any result requires immediate containment. Look for observed exploitation, an exposed live credential, unauthorized access, public data exposure or a weakness on a critical path with credible imminent abuse.
 
-The [LyraShield AI guide to security for vibe-coded applications](/blog/vibe-coding-security-guide) distinguishes detected candidates from verified, retest-confirmed and inconclusive states. Use that distinction before assigning work. A critical alert against an absent package should not displace a verified access-control flaw on a live customer route.
+The [LyraShield AI guide to security for vibe-coded applications](/blog/vibe-coding-security-guide) distinguishes detected candidates, deterministic retest-validated and inconclusive states. The separate `VERIFIED` state is reserved for a future capability and is not produced by current scans. Use that distinction before assigning work. A critical alert against an absent package should not displace a separately confirmed access-control flaw on a live customer route.
 
 [CISA's Stakeholder-Specific Vulnerability Categorization guide](https://www.cisa.gov/sites/default/files/publications/cisa-ssvc-guide%20508c.pdf) models vulnerability decisions with context such as exploitation status, technical impact, mission prevalence and public or safety impact. The important operational lesson is that priority is a decision, not an automatic restatement of scanner severity.
 

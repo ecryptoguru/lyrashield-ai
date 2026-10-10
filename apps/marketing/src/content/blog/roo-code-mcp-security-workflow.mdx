@@ -60,7 +60,7 @@ The `alwaysAllow` array lists tool names the agent may call without an approval 
 
 ## 4. Verify the connection and run an inline check
 
-After config, reload the VS Code window so Roo Code picks up the file, then run `npx -y lyrashield@0.2.14 doctor` to confirm the server reports connected. In the Roo Code pane, ask the agent to run a LyraShield scan against the current target. The agent targets the release scope, reviews the real config and code and returns evidence with detected, verified, retest confirmed and inconclusive outcomes kept distinct. This mirrors the [vibe coding security guide](/blog/vibe-coding-security-guide) evidence loop. Scan the changed scope, not the whole repo, to keep feedback fast.
+After config, reload the VS Code window so Roo Code picks up the file, then run `npx -y lyrashield@0.2.14 doctor` to confirm the server reports connected. In the Roo Code pane, ask the agent to run a LyraShield scan against the current target. The agent targets the release scope and returns findings in the shipped `DETECTED`, `VALIDATED` and `INCONCLUSIVE` states. The separate `VERIFIED` state is reserved for a future capability and is not produced by current scans. Keep those evidence states distinct as described in the [vibe coding security guide](/blog/vibe-coding-security-guide). Scan the changed scope, not the whole repo, to keep feedback fast.
 
 If the server shows as loaded but no scan tools appear, the usual cause is a `streamable-http` typo (a bare `http` or camelCase `streamableHttp`), a mixed stdio and url field set or a `disabled: true` flag. The doctor command and the Roo Code MCP pane surface each. When you read scan results, keep detection and retest separate: a detected candidate is a signal worth review and a clean deterministic retest is the only state that shows the condition is gone. Keep the output in your release record so a reviewer can trace each finding to its evidence.
 
@@ -100,7 +100,7 @@ Tell the agent how to use LyraShield so it does not improvise. Add a short rule 
 Before proposing release, run a LyraShield scan on the changed scope.
 Treat scan output as evidence, not proof.
 Propose fixes only; do not auto apply. Retest after any fix.
-Keep detected, verified, retest-confirmed and inconclusive outcomes distinct.
+Keep detected candidates, deterministic retest validations and inconclusive results distinct. Do not describe a LyraShield scan result as `VERIFIED`; current scans do not produce that reserved state.
 ```
 
 A short rule prevents the agent from treating a clean scan as a release verdict or from applying a patch without review. Pair the rule with a repository convention that scan receipts land in your release record, so the evidence loop has a durable home. If your team shares the `.roo/mcp.json` across workspaces, keep the LyraShield lines in a project rules file that travels with the repo rather than only in your global settings.
