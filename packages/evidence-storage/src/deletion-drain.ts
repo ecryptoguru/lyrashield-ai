@@ -18,7 +18,7 @@ export interface ArtifactDeletionDrainResult {
  * table's own CHECK constraint is the boundary for new kinds; anything the
  * drain does not recognize stays retryable instead of being silently dropped.
  */
-const SUPPORTED_DELETION_KINDS = new Set(["EVIDENCE", "SCAN_ATTACHMENT"])
+const SUPPORTED_DELETION_KINDS = new Set(["EVIDENCE", "SCAN_ATTACHMENT", "INTEGRATION_CONFIG"])
 
 export async function drainArtifactDeletionTasksWith(
   deleteArtifact: (storageUri: string, workspaceId: string) => Promise<void>,
