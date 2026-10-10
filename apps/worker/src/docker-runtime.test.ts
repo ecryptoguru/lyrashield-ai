@@ -175,17 +175,18 @@ describe("worker Docker runtime", () => {
     expect(desktopReleaseWorkflow).toContain(`ENGINE_REVISION: ${reviewedEngineRevision}`)
     expect(deployWorkflow).toContain("ref: ${{ env.ENGINE_REVISION }}")
     expect(deployWorkflow).toContain("io.lyrashield.engine.revision=${{ env.ENGINE_REVISION }}")
-    const bestEffortSteps = deployRuntimeWorkflow
+    const housekeepingStep = deployRuntimeWorkflow
       .split(/^      - name: /m)
       .slice(1)
-      .filter((step) => step.includes("continue-on-error: true"))
-      .map((step) => step.split("\n", 1)[0])
-    expect(bestEffortSteps).toEqual([
-      "Deactivate superseded Container App revisions",
-      "Remove excess scanner secrets",
-    ])
-    expect(deployRuntimeWorkflow).toContain("Warn when superseded revision cleanup fails")
-    expect(deployRuntimeWorkflow).toContain("Warn when scanner secret cleanup fails")
+      .find((step) => step.startsWith("Deactivate superseded Container App revisions\n"))
+    expect(housekeepingStep).toBeDefined()
+    expect(housekeepingStep).toContain(
+      'bash .github/scripts/deploy-azure-rollout.sh deactivate-superseded-container-app-revisions || echo "::warning::Deactivate superseded Container App revisions failed; production traffic remains active."'
+    )
+    expect(housekeepingStep).toContain(
+      'bash .github/scripts/deploy-azure-rollout.sh remove-excess-scanner-secrets || echo "::warning::Remove excess scanner secrets failed; the promoted scanner revision remains active."'
+    )
+    expect(housekeepingStep).not.toContain("continue-on-error: true")
     const runtimeCheckouts = deployRuntimeWorkflow.match(/uses: actions\/checkout@/g) ?? []
     const runtimeCheckoutsWithoutPersistedCredentials =
       deployRuntimeWorkflow.match(/persist-credentials: false/g) ?? []
