@@ -4,16 +4,10 @@ import { prisma } from "@lyrashield/db"
 import { getSession } from "@lyrashield/auth/server"
 import { CreateWorkspaceSchema } from "@lyrashield/types"
 import { logger } from "@lyrashield/logger"
-import { createWorkspaceWithTrial } from "../../../lib/workspace-creation"
-
-function isPrismaUniqueError(error: unknown): error is { code: string } {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    (error as { code: unknown }).code === "P2002"
-  )
-}
+import {
+  createWorkspaceWithTrial,
+  isWorkspaceSlugUniqueError,
+} from "../../../lib/workspace-creation"
 
 async function post(request: Request) {
   try {
@@ -86,7 +80,7 @@ async function post(request: Request) {
       },
     })
   } catch (error) {
-    if (isPrismaUniqueError(error)) {
+    if (isWorkspaceSlugUniqueError(error)) {
       return NextResponse.json(
         { success: false, error: { code: "SLUG_TAKEN", message: "Workspace slug already exists" } },
         { status: 409 }
@@ -131,6 +125,7 @@ export async function GET() {
           : {}),
         workspace: { deletedAt: null },
       },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
       include: { workspace: true },
     })
 

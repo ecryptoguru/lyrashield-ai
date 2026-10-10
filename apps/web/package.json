@@ -29,6 +29,7 @@
     "@lyrashield/security": "workspace:*",
     "@lyrashield/types": "workspace:*",
     "@lyrashield/ui": "workspace:*",
+    "@paralleldrive/cuid2": "^3.3.0",
     "@radix-ui/react-dialog": "^1.1.23",
     "@radix-ui/react-tabs": "^1.1.21",
     "@radix-ui/react-tooltip": "^1.2.16",
