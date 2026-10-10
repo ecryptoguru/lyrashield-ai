@@ -20,6 +20,12 @@ export interface ArtifactDeletionDrainResult {
  */
 const SUPPORTED_DELETION_KINDS = new Set(["EVIDENCE", "SCAN_ATTACHMENT", "INTEGRATION_CONFIG"])
 
+/**
+ * Claims and processes a bounded batch of pending artifact deletions.
+ *
+ * The injected deleter receives the storage URI and workspace ID. Failed
+ * removals follow the shared deletion service's retry and dead-letter policy.
+ */
 export async function drainArtifactDeletionTasksWith(
   deleteArtifact: (storageUri: string, workspaceId: string) => Promise<void>,
   options?: { taskIds?: readonly string[]; limit?: number }
