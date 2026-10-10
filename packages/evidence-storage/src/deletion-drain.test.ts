@@ -75,6 +75,23 @@ describe("artifact deletion drain", () => {
     expect(mocks.complete).toHaveBeenCalledWith("task-7", "lease-7")
   })
 
+  it("dispatches integration config tasks to the existing encrypted-artifact deleter", async () => {
+    mocks.claim.mockResolvedValueOnce(task(8, 1, "INTEGRATION_CONFIG")).mockResolvedValueOnce(null)
+    const deleteArtifact = vi.fn().mockResolvedValue(undefined)
+
+    await expect(drainArtifactDeletionTasksWith(deleteArtifact)).resolves.toEqual({
+      claimed: 1,
+      deleted: 1,
+      retrying: 0,
+      deadLettered: 0,
+    })
+    expect(deleteArtifact).toHaveBeenCalledWith(
+      "s3://evidence/evidence/workspace-1/8.enc",
+      "workspace-1"
+    )
+    expect(mocks.complete).toHaveBeenCalledWith("task-8", "lease-8")
+  })
+
   it("keeps unknown kinds retryable instead of dispatching them", async () => {
     mocks.claim.mockResolvedValueOnce(task(9, 1, "REPORT")).mockResolvedValueOnce(null)
     const deleteArtifact = vi.fn().mockResolvedValue(undefined)
