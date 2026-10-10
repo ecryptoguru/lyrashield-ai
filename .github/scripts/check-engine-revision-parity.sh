@@ -5,7 +5,7 @@
 # proves the workflows agree on which revision that pin names.
 #
 # Usage: check-engine-revision-parity.sh [workflow ...]
-# Defaults to deploy-azure.yml and release-tauri.yml.
+# Defaults to all three workflows that build or deploy a worker image.
 set -euo pipefail
 
 repo_root="${LYRASHIELD_REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
@@ -13,7 +13,7 @@ repo_root="${LYRASHIELD_REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." &
 if [ "$#" -gt 0 ]; then
   workflows=("$@")
 else
-  workflows=(.github/workflows/deploy-azure.yml .github/workflows/release-tauri.yml)
+  workflows=(.github/workflows/deploy-azure.yml .github/workflows/release-tauri.yml .github/workflows/prepare-worker-recovery-candidate.yml)
 fi
 
 read_revision() {

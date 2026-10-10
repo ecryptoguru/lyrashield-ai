@@ -175,7 +175,17 @@ describe("worker Docker runtime", () => {
     expect(desktopReleaseWorkflow).toContain(`ENGINE_REVISION: ${reviewedEngineRevision}`)
     expect(deployWorkflow).toContain("ref: ${{ env.ENGINE_REVISION }}")
     expect(deployWorkflow).toContain("io.lyrashield.engine.revision=${{ env.ENGINE_REVISION }}")
-    expect(deployWorkflow).not.toContain("continue-on-error: true")
+    const bestEffortSteps = deployRuntimeWorkflow
+      .split(/^      - name: /m)
+      .slice(1)
+      .filter((step) => step.includes("continue-on-error: true"))
+      .map((step) => step.split("\n", 1)[0])
+    expect(bestEffortSteps).toEqual([
+      "Deactivate superseded Container App revisions",
+      "Remove excess scanner secrets",
+    ])
+    expect(deployRuntimeWorkflow).toContain("Warn when superseded revision cleanup fails")
+    expect(deployRuntimeWorkflow).toContain("Warn when scanner secret cleanup fails")
     const runtimeCheckouts = deployRuntimeWorkflow.match(/uses: actions\/checkout@/g) ?? []
     const runtimeCheckoutsWithoutPersistedCredentials =
       deployRuntimeWorkflow.match(/persist-credentials: false/g) ?? []

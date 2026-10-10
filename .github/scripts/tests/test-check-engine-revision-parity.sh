@@ -8,6 +8,7 @@ trap 'rm -rf "$tmp"' EXIT
 
 revision=1b98b8f7fb1e84913e34c23a898429481df01570
 other=2c8fccc9d1b0b1f0e3e0c9a0b1c2d3e4f5a6b7c8
+third=3d9add24e9a61fadd997de36f9a82806631e7b75
 
 write_workflow() {
   local path=$1 pinned=$2
@@ -21,13 +22,27 @@ bash "$script" .github/workflows/deploy-azure.yml .github/workflows/release-taur
 mkdir -p "$tmp/case/.github/workflows"
 write_workflow "$tmp/case/.github/workflows/deploy-azure.yml" "$revision"
 write_workflow "$tmp/case/.github/workflows/release-tauri.yml" "$other"
-if mismatch_output=$(LYRASHIELD_REPO_ROOT="$tmp/case" bash "$script" .github/workflows/deploy-azure.yml .github/workflows/release-tauri.yml 2>&1); then
+write_workflow "$tmp/case/.github/workflows/prepare-worker-recovery-candidate.yml" "$revision"
+if mismatch_output=$(LYRASHIELD_REPO_ROOT="$tmp/case" bash "$script" .github/workflows/deploy-azure.yml .github/workflows/release-tauri.yml .github/workflows/prepare-worker-recovery-candidate.yml 2>&1); then
   echo "expected mismatched ENGINE_REVISION to fail" >&2
   exit 1
 fi
 grep -Fq "ENGINE_REVISION mismatch" <<< "$mismatch_output"
 grep -Fq "$revision" <<< "$mismatch_output"
 grep -Fq "$other" <<< "$mismatch_output"
+
+write_workflow "$tmp/case/.github/workflows/deploy-azure.yml" "$revision"
+write_workflow "$tmp/case/.github/workflows/release-tauri.yml" "$revision"
+write_workflow "$tmp/case/.github/workflows/prepare-worker-recovery-candidate.yml" "$third"
+if mismatch_output=$(LYRASHIELD_REPO_ROOT="$tmp/case" bash "$script" 2>&1); then
+  echo "expected the default parity set to detect a recovery-candidate pin mismatch" >&2
+  exit 1
+fi
+grep -Fq ".github/workflows/prepare-worker-recovery-candidate.yml" <<< "$mismatch_output"
+grep -Fq "$third" <<< "$mismatch_output"
+
+# The live workflows agree on the pin, including the recovery-candidate builder.
+bash "$script"
 
 # A missing pin in one workflow fails rather than silently agreeing.
 printf 'env:\n' > "$tmp/case/.github/workflows/release-tauri.yml"

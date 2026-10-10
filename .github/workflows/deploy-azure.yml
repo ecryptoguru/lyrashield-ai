@@ -97,19 +97,10 @@ jobs:
           persist-credentials: false
 
       - name: Confirm deployment source remains current main
-        if: github.run_attempt == 1
         env:
           GH_TOKEN: ${{ github.token }}
           SOURCE_SHA: ${{ env.DEPLOY_SHA }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
-          latest_main="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq .object.sha)"
-          if [ "$SOURCE_SHA" != "$latest_main" ]; then
-            echo "::error::Release source is no longer current main; the queued current-main release must perform the deployment."
-            exit 1
-          fi
+        run: bash .github/scripts/assert-current-main.sh
 
       - name: Validate required Azure writer configuration
         env:
@@ -217,6 +208,12 @@ jobs:
           ref: ${{ env.DEPLOY_SHA }}
           fetch-depth: 0
           persist-credentials: false
+
+      - name: Confirm build source remains current main
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ env.DEPLOY_SHA }}
+        run: bash .github/scripts/assert-current-main.sh
 
       # A production worker is reproducible only when its engine input is immutable.
       # Upgrade this pin deliberately after the cross-repository contract gate passes.
