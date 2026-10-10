@@ -906,7 +906,7 @@ The historical prompt-injection artifact records 42 OWASP cases and 85.7% expect
 
 The live safety catalog, source unit tests and that historical evaluation are distinct. None is a universal assessment of customer AI behavior.
 
-Production release/readiness, paid scan acceptance, signing/distribution, reconciliation, provider settlement and client-runtime acceptance require exact dated receipts. The current retest checksum-gap record and source fix must remain separately labeled until deployment evidence closes the gate.
+Production release/readiness, paid scan acceptance, signing/distribution, reconciliation, provider settlement and client-runtime acceptance require exact dated receipts. The retest checksum gap was found in the 2026-10-01 deployment; its source fix shipped in product revision `41462a3ff45f77e996823faf6d10f56053dec9e8` on 2026-10-10. The source audit did not inspect historical production finding rows or establish an incorrect validation. Legacy manifests without checksum input remain `UNAVAILABLE` and were not backfilled; see [PRD release status](../PRD.md#9-release-status) for current open gates.
 
 Use [PRD release status](../PRD.md#9-release-status), the [claims policy](./policies.md#public-claims-policy) and [distribution receipts](./marketplace/CLIENT-CONTRACTS.md) before making availability or operational assertions.
 
