@@ -19,7 +19,7 @@ import { PageHeader } from "@/components/page-header"
 import { LocalTime } from "@/components/local-time"
 import { BillingActions } from "./billing-actions"
 import { BuyPackButton } from "./buy-pack-button"
-import { UpgradeNowButton } from "./upgrade-now-button"
+import { TrialStatusCard } from "./trial-status-card"
 import { SpendLimitForm } from "./spend-limit-form"
 import { hasPermission, PERMISSIONS } from "@lyrashield/auth"
 import Link from "next/link"
@@ -222,51 +222,14 @@ export default async function BillingPage({
           </CardContent>
         </Card>
 
-        {/* Keep an expired-trial upgrade prompt on FREE accounts, but never
-            contradict an active paid or complimentary plan. */}
-        {(isTrial || (trialState.isExpired && effectivePlan === "FREE")) && (
-          <Card>
-            <CardHeader>
-              <CardTitle as="h2">Trial Status</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                <div>
-                  <p className="text-sm text-muted-foreground">Days Left</p>
-                  <p className="text-xl font-semibold">
-                    {NUMBER_FORMAT.format(trialState.daysLeft)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Minutes Left</p>
-                  <p className="text-xl font-semibold">
-                    {NUMBER_FORMAT.format(displayedTrialMinutesLeft)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Targets</p>
-                  <p className="text-xl font-semibold">
-                    {NUMBER_FORMAT.format(workspaceTargetCount)} /{" "}
-                    {NUMBER_FORMAT.format(trialState.targetCap)}
-                  </p>
-                </div>
-              </div>
-              {trialState.isExpired && (
-                <div className="flex items-center gap-2 rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-                  <AlertCircle className="h-4 w-4" />
-                  <span>
-                    {purchasesAvailable
-                      ? "Your trial has expired. Unused trial minutes were forfeited. Upgrade to continue scanning."
-                      : "Your trial has expired. New purchases are temporarily unavailable."}
-                  </span>
-                </div>
-              )}
-              {canManageBilling && !trialState.isExpired && purchasesAvailable && (
-                <UpgradeNowButton />
-              )}
-            </CardContent>
-          </Card>
-        )}
+        <TrialStatusCard
+          trial={trialState}
+          effectivePlan={effectivePlan}
+          displayedMinutesLeft={displayedTrialMinutesLeft}
+          workspaceTargetCount={workspaceTargetCount}
+          purchasesAvailable={purchasesAvailable}
+          canManageBilling={Boolean(canManageBilling)}
+        />
 
         {/* Usage */}
         <Card>
