@@ -1,6 +1,6 @@
 # Continuous walkthrough — production storyboard
 
-> Superseded for implementation by [the local HyperFrames + Three.js plan](../../docs/superpowers/plans/2026-10-09-premium-scroll-world.md). The founder selected local production; provider authentication, paid render budgets and AI clip chaining below are historical proposal details, not current prerequisites.
+> Superseded for implementation. The founder selected local production; provider authentication, paid render budgets and AI clip chaining below are historical proposal details, not current prerequisites. The superseded planning artifact was retired; the repository retains its history in Git.
 
 Camera: selected by founder. Seven connected legs; forward drift at every seam.
 Art direction proposed from existing LyraShield brand. Founder selected desktop
