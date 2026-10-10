@@ -207,19 +207,14 @@ jobs:
           ref: ${{ env.DEPLOY_SHA }}
           persist-credentials: false
 
-      - name: Confirm runtime source remains current main
+      - name: Revalidate runtime source and retry eligibility
         env:
           GH_TOKEN: ${{ github.token }}
           SOURCE_SHA: ${{ env.DEPLOY_SHA }}
-        run: bash .github/scripts/assert-current-main.sh
-
-      - name: Refuse retry after a prior runtime promotion attempt
-        env:
-          GH_TOKEN: ${{ github.token }}
           GITHUB_RUN_ID: ${{ github.run_id }}
           GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-        run: node .github/scripts/assert-no-prior-runtime-promotion.mjs
+        run: bash .github/scripts/assert-current-main.sh && node .github/scripts/assert-no-prior-runtime-promotion.mjs
 
       # Myra fail-closed check (Deep Review v18): confirmed writes require the
       # Google calendar provider and usable credentials; the mock adapter and
@@ -792,8 +787,6 @@ jobs:
         run: bash .github/scripts/deploy-azure-rollout.sh smoke-production-traffic
       - name: Deactivate superseded Container App revisions
         if: steps.smoke-public.outcome == 'success' && inputs.held_recovery != true
-        id: deactivate-superseded
-        continue-on-error: true
         env:
           RG: ${{ vars.AZURE_RESOURCE_GROUP }}
           APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
@@ -805,21 +798,10 @@ jobs:
           EGRESS_NAME: ${{ vars.AZURE_EGRESS_PROXY_CONTAINER_APP_NAME }}
           EGRESS_CURRENT: ${{ steps.deploy-egress-proxy.outputs.revision }}
           EGRESS_ROLLBACK: ${{ steps.rollout.outputs.egress_previous }}
-        run: bash .github/scripts/deploy-azure-rollout.sh deactivate-superseded-container-app-revisions
-      - name: Warn when superseded revision cleanup fails
-        if: steps.deactivate-superseded.outcome == 'failure'
-        run: echo "::warning::Deactivate superseded Container App revisions failed; traffic promotion and smoke remain successful."
-      - name: Remove excess scanner secrets
-        if: steps.smoke-public.outcome == 'success' && inputs.held_recovery != true && vars.AZURE_SCANNER_CONTAINER_APP_NAME != ''
-        id: remove-excess-scanner-secrets
-        continue-on-error: true
-        env:
-          RG: ${{ vars.AZURE_RESOURCE_GROUP }}
           SCANNER_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
-        run: bash .github/scripts/deploy-azure-rollout.sh remove-excess-scanner-secrets
-      - name: Warn when scanner secret cleanup fails
-        if: steps.remove-excess-scanner-secrets.outcome == 'failure'
-        run: echo "::warning::Remove excess scanner secrets failed; the promoted scanner revision remains active."
+        run: |
+          bash .github/scripts/deploy-azure-rollout.sh deactivate-superseded-container-app-revisions || echo "::warning::Deactivate superseded Container App revisions failed; production traffic remains active."
+          if [ -n "$SCANNER_NAME" ]; then bash .github/scripts/deploy-azure-rollout.sh remove-excess-scanner-secrets || echo "::warning::Remove excess scanner secrets failed; the promoted scanner revision remains active."; fi
       # v16 4.3 — why worker-VM promotion may run AFTER the app traffic
       # cutover (deliberate ordering, not an oversight):
       #
