@@ -1,7 +1,4 @@
 import { createId } from "@paralleldrive/cuid2"
-import { join, resolve } from "node:path"
-import { env } from "@lyrashield/config"
-import { isEvidenceStorageUriForWorkspace } from "@lyrashield/security"
 import { prisma } from "./client"
 import { computeAuditHash } from "./audit-hash"
 import type { AuditLog } from "./generated/prisma"
@@ -9,7 +6,10 @@ import { ACTIVE_SCAN_STATUSES, lockWorkspaceScanAdmission } from "./scan-service
 import { runWithDatabaseRLSContext } from "./scoping"
 import { getSystemPrisma } from "./system-client"
 import { lockWorkspaceMembership } from "./workspace-membership-lock"
-import { lockNotificationDestinationsForDeletion } from "./notification-integration-service"
+import {
+  stageIntegrations,
+  enqueueIntegrationConfigDeletionTasks,
+} from "./account-deletion-integration-artifacts"
 
 const DELETED_USER = "deleted-user"
 
@@ -51,6 +51,26 @@ export interface AccountDeletionPlan {
   blocked: AccountDeletionBlockedWorkspace[]
   /** Workspaces that survive with anonymized attribution. */
   retained: AccountDeletionWorkspace[]
+}
+
+function getAffectedAndRetainedWorkspaceIds(
+  memberships: Array<{ workspaceId: string }>,
+  actorWorkspaces: Array<{ workspaceId: string }>,
+  deletableWorkspaces: AccountDeletionWorkspace[]
+): { affectedWorkspaceIds: string[]; retainedWorkspaceIds: string[] } {
+  const affectedWorkspaceIds = [
+    ...new Set([
+      ...memberships.map((membership) => membership.workspaceId),
+      ...actorWorkspaces.map((entry) => entry.workspaceId),
+    ]),
+  ]
+
+  return {
+    affectedWorkspaceIds,
+    retainedWorkspaceIds: affectedWorkspaceIds.filter(
+      (id) => !deletableWorkspaces.some((workspace) => workspace.id === id)
+    ),
+  }
 }
 
 export class AccountDeletionBlockedError extends Error {
@@ -289,15 +309,12 @@ export async function deleteUserAccount(
     where: { actorUserId: userId },
     select: { workspaceId: true },
   })
-  const affectedWorkspaceIds = [
-    ...new Set([
-      ...memberships.map((membership) => membership.workspaceId),
-      ...actorWorkspaces.map((entry) => entry.workspaceId),
-    ]),
-  ]
-  const retainedWorkspaceIds = affectedWorkspaceIds.filter(
-    (id) => !plan.deletable.some((workspace) => workspace.id === id)
+  const { affectedWorkspaceIds, retainedWorkspaceIds } = getAffectedAndRetainedWorkspaceIds(
+    memberships,
+    actorWorkspaces,
+    plan.deletable
   )
+  const integrationUris: Array<{ workspaceId: string; storageUri: string }> = []
 
   const deletionResult = await prisma.$transaction(
     async (tx) => {
@@ -360,19 +377,13 @@ export async function deleteUserAccount(
       const unsupportedArtifactWorkspaces: AccountDeletionWorkspace[] = []
       const evidenceUris: Array<{ workspaceId: string; storageUri: string }> = []
       const attachmentUris: Array<{ workspaceId: string; storageUri: string }> = []
-      const integrationUris: Array<{ workspaceId: string; storageUri: string }> = []
-      const localEvidenceRoot = resolve(
-        env.LYRASHIELD_LOCAL_EVIDENCE_DIR || join(process.cwd(), ".lyrashield", "evidence")
-      )
 
       // Use the exact scan-admission lock used by createScan(). This closes the
       // deletion/admission race without consulting or mutating BullMQ/Redis.
       for (const workspace of deletableWorkspaces) {
         await lockWorkspaceScanAdmission(tx, workspace.id)
         await tx.$executeRaw`SELECT set_config('app.current_workspace_id', ${workspace.id}, true)`
-        await lockNotificationDestinationsForDeletion(tx, workspace.id)
-
-        const [activeScans, evidence, legacyReports, legacySarifScans, attachments, integrations] =
+        const [activeScans, evidence, legacyReports, legacySarifScans, attachments] =
           await Promise.all([
             tx.scan.count({
               where: {
@@ -396,12 +407,6 @@ export async function deleteUserAccount(
             // soft-deleted row's object still exists until the outbox removes it.
             tx.$queryRaw<Array<{ storageUri: string }>>`
               SELECT "storageUri" FROM "ScanAttachment" WHERE "workspaceId" = ${workspace.id}`,
-            // Include disabled and soft-deleted integrations: their encrypted
-            // config object remains until this durable task removes it.
-            tx.$queryRaw<Array<{ configRef: string }>>`
-              SELECT "configRef" FROM "Integration"
-              WHERE "workspaceId" = ${workspace.id} AND "configRef" IS NOT NULL
-              FOR UPDATE`,
           ])
 
         if (activeScans > 0) activeScanWorkspaces.push(workspace)
@@ -415,21 +420,7 @@ export async function deleteUserAccount(
         for (const row of attachments) {
           attachmentUris.push({ workspaceId: workspace.id, storageUri: row.storageUri })
         }
-        for (const row of integrations) {
-          if (!row.configRef) continue
-          if (
-            !isEvidenceStorageUriForWorkspace({
-              storageUri: row.configRef,
-              workspaceId: workspace.id,
-              s3Bucket: env.S3_BUCKET ?? "",
-              localEvidenceRoot,
-            })
-          ) {
-            unsupportedArtifactWorkspaces.push(workspace)
-            continue
-          }
-          integrationUris.push({ workspaceId: workspace.id, storageUri: row.configRef })
-        }
+        await stageIntegrations(tx, workspace, integrationUris, unsupportedArtifactWorkspaces)
       }
 
       if (activeScanWorkspaces.length > 0) {
@@ -445,10 +436,7 @@ export async function deleteUserAccount(
       const uniqueAttachments = [
         ...new Map(attachmentUris.map((artifact) => [artifact.storageUri, artifact])).values(),
       ]
-      const uniqueIntegrations = [
-        ...new Map(integrationUris.map((artifact) => [artifact.storageUri, artifact])).values(),
-      ]
-      const taskIds: string[] = []
+      const taskIds = await enqueueIntegrationConfigDeletionTasks(tx, integrationUris)
       for (const artifact of uniqueEvidence) {
         await tx.$executeRaw`SELECT set_config('app.current_workspace_id', ${artifact.workspaceId}, true)`
         const rows = await tx.$queryRaw<Array<{ id: string }>>`
@@ -472,20 +460,6 @@ export async function deleteUserAccount(
         if (!taskId) throw new Error("Artifact deletion task was not persisted")
         taskIds.push(taskId)
       }
-      // Integration credentials share the encrypted workspace evidence store.
-      // The destination locks above ensure reconnect/disconnect and delivery
-      // finish before the final current configRef is captured here.
-      for (const artifact of uniqueIntegrations) {
-        await tx.$executeRaw`SELECT set_config('app.current_workspace_id', ${artifact.workspaceId}, true)`
-        const rows = await tx.$queryRaw<Array<{ id: string }>>`
-        SELECT app.enqueue_integration_config_deletion_task(
-          ${createId()}, ${artifact.workspaceId}, ${artifact.storageUri}
-        ) AS id`
-        const taskId = rows[0]?.id
-        if (!taskId) throw new Error("Integration config deletion task was not persisted")
-        taskIds.push(taskId)
-      }
-
       // These models are deliberately not workspace-RLS scoped. Keep their user
       // attribution cleanup outside the per-workspace context loop below.
       await Promise.all([

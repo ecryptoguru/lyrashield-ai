@@ -12,6 +12,7 @@ import {
   saveNotificationIntegration,
   disableNotificationIntegration,
   withActiveWorkspaceNotificationDestination,
+  lockNotificationDestinationsForDeletion,
 } from "./notification-integration-service"
 
 const row = {
@@ -152,6 +153,14 @@ describe("workspace notification integrations", () => {
       maxWait: 5000,
       timeout: 60000,
     })
+  })
+
+  it("locks both workspace notification destinations before account deletion", async () => {
+    await lockNotificationDestinationsForDeletion(tx, "ws-1")
+
+    expect(tx.$executeRaw).toHaveBeenCalledTimes(4)
+    expect(tx.$executeRaw.mock.calls[1]?.[1]).toBe("notifications:ws-1:slack")
+    expect(tx.$executeRaw.mock.calls[3]?.[1]).toBe("notifications:ws-1:discord")
   })
 
   it("skips a disabled destination without reading or sending its secret", async () => {

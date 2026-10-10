@@ -15,8 +15,9 @@ const TYPES = { slack: "SLACK", discord: "DISCORD" } as const
 
 // Lock acquisition (30s) + credential read (15s) + provider POST (10s) fit this cap.
 const LOCK_TRANSACTION_OPTIONS = { maxWait: 5_000, timeout: 60_000 }
+type DestinationLockTransaction = Pick<ScopedTransaction, "$executeRaw">
 
-async function lockDestination(tx: ScopedTransaction, externalId: string) {
+async function lockDestination(tx: DestinationLockTransaction, externalId: string) {
   await tx.$executeRaw`SET LOCAL lock_timeout = '30s'`
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${externalId}, 0))`
 }
@@ -33,6 +34,16 @@ function notificationIdentities(workspaceId: string) {
   return [identity(workspaceId, "slack"), identity(workspaceId, "discord")].map(
     ({ type, externalId }) => ({ type, externalId })
   )
+}
+
+/** Locks both workspace notification destinations in delivery's stable channel order. */
+export async function lockNotificationDestinationsForDeletion(
+  tx: DestinationLockTransaction,
+  workspaceId: string
+): Promise<void> {
+  for (const { externalId } of notificationIdentities(workspaceId)) {
+    await lockDestination(tx, externalId)
+  }
 }
 
 function summary(

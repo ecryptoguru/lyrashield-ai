@@ -12,8 +12,8 @@ jobs have been submitted.
 A continuous architectural evidence workspace for LyraShield AI: precise machined
 navy surfaces, translucent structured evidence panels, restrained cyan routing,
 soft directional studio light, clear depth and generous negative space for real
-HTML interface overlays. Palette: #08111c, #0e1a28, #203246, #edf6fb, #00bae6,
-#f3b95f. Premium product cinematography, controlled reflections, coherent scale
+HTML interface overlays. Palette: `#08111c`, `#0e1a28`, `#203246`, `#edf6fb`, `#00bae6`,
+`#f3b95f`. Premium product cinematography, controlled reflections, coherent scale
 and materials, no people, no lettering, no logos, no invented interface text.
 Amber represents incomplete evidence, never successful verification. Each space
 opens naturally into the next along the same forward axis.
