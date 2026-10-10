@@ -20,6 +20,122 @@ import { evaluateScanEntitlement } from "@lyrashield/billing"
 import { assertScanWorkerAvailable, enqueueScan } from "./queue"
 import { notifyScheduleBlocked } from "./notifications"
 
+type DueSchedule = Awaited<ReturnType<typeof getDueSchedules>>[number]
+
+async function isScheduledScanEligible(schedule: DueSchedule, now: Date): Promise<boolean> {
+  let entitlement: Awaited<ReturnType<typeof evaluateScanEntitlement>> | null = null
+  let entitlementReadFailed = false
+  if (schedule.createdById) {
+    try {
+      entitlement = await runWithAccountContext(schedule.createdById, () =>
+        evaluateScanEntitlement({
+          workspaceId: schedule.workspaceId,
+          mode: schedule.mode,
+          sponsorAccountId: schedule.createdById,
+          mutateOnTrialExpiry: true,
+        })
+      )
+    } catch (error) {
+      entitlementReadFailed = true
+      logger.warn("Scheduled scan eligibility could not be confirmed", {
+        scheduleId: schedule.id,
+        workspaceId: schedule.workspaceId,
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
+  }
+  if (!entitlement?.allowed) {
+    const reason = entitlementReadFailed
+      ? "SCAN_ELIGIBILITY_UNAVAILABLE"
+      : "SCAN_ELIGIBILITY_REQUIRED"
+    logger.warn("Skipped scheduled scan because its creator is not currently eligible", {
+      scheduleId: schedule.id,
+      workspaceId: schedule.workspaceId,
+      reason:
+        entitlement?.code ?? (schedule.createdById ? "ENTITLEMENT_DENIED" : "CREATOR_MISSING"),
+    })
+    await notifyScheduleBlocked(
+      schedule.workspaceId,
+      schedule.id,
+      schedule.target.name,
+      reason,
+      now.toISOString().slice(0, 10)
+    )
+    return false
+  }
+
+  const activeScans = await prisma.scan.count({
+    where: {
+      workspaceId: schedule.workspaceId,
+      targetId: schedule.targetId,
+      status: { in: [...ACTIVE_SCAN_STATUSES] },
+    },
+  })
+  if (activeScans > 0) {
+    logger.info("Skipping scheduled scan because target already has an active scan", {
+      scheduleId: schedule.id,
+      targetId: schedule.targetId,
+    })
+    return false
+  }
+
+  const activeWorkspaceScans = await prisma.scan.count({
+    where: { workspaceId: schedule.workspaceId, status: { in: [...ACTIVE_SCAN_STATUSES] } },
+  })
+  if (activeWorkspaceScans >= MAX_CONCURRENT_WORKSPACE_SCANS) {
+    logger.info("Skipping scheduled scan because workspace is at its concurrent scan cap", {
+      scheduleId: schedule.id,
+      workspaceId: schedule.workspaceId,
+      activeWorkspaceScans,
+      cap: MAX_CONCURRENT_WORKSPACE_SCANS,
+    })
+    return false
+  }
+
+  if (schedule.target.type !== "WEB_APP" && schedule.target.type !== "API") return true
+
+  const resolved = resolveTargetScanMode({
+    targetType: schedule.target.type,
+    mode: schedule.mode,
+    hasApiSpec: Boolean(schedule.target.apiSpecUrl),
+  })
+  if (!resolved.ok) {
+    await prisma.schedule.update({ where: { id: schedule.id }, data: { enabled: false } })
+    logger.warn("Disabled schedule with unavailable mode", {
+      scheduleId: schedule.id,
+      targetId: schedule.targetId,
+      targetType: schedule.target.type,
+      mode: schedule.mode,
+      reason: resolved.reason,
+      code: resolved.code,
+    })
+    return false
+  }
+
+  if (
+    resolved.profile &&
+    resolveScanProfile({ targetType: schedule.target.type, mode: schedule.mode }).usesAi
+  ) {
+    const proof = await findCurrentDomainProof(schedule.workspaceId, schedule.target.url)
+    if (!proof.verified) {
+      logger.warn("Skipped scheduled engine-backed URL review without domain proof", {
+        scheduleId: schedule.id,
+        workspaceId: schedule.workspaceId,
+        targetId: schedule.targetId,
+      })
+      await notifyScheduleBlocked(
+        schedule.workspaceId,
+        schedule.id,
+        schedule.target.name,
+        "DOMAIN_VERIFICATION_REQUIRED",
+        now.toISOString().slice(0, 10)
+      )
+      return false
+    }
+  }
+  return true
+}
+
 export async function processDueSchedules(now = new Date()): Promise<number> {
   const schedules = await getDueSchedules(now)
   let enqueued = 0
@@ -57,133 +173,7 @@ export async function processDueSchedules(now = new Date()): Promise<number> {
           return
         }
 
-        let entitlement: Awaited<ReturnType<typeof evaluateScanEntitlement>> | null = null
-        let entitlementReadFailed = false
-        if (schedule.createdById) {
-          try {
-            entitlement = await runWithAccountContext(schedule.createdById, () =>
-              evaluateScanEntitlement({
-                workspaceId: schedule.workspaceId,
-                mode: schedule.mode,
-                sponsorAccountId: schedule.createdById,
-                mutateOnTrialExpiry: true,
-              })
-            )
-          } catch (error) {
-            entitlementReadFailed = true
-            logger.warn("Scheduled scan eligibility could not be confirmed", {
-              scheduleId: schedule.id,
-              workspaceId: schedule.workspaceId,
-              error: error instanceof Error ? error.message : String(error),
-            })
-          }
-        }
-        if (!entitlement?.allowed) {
-          const reason = entitlementReadFailed
-            ? "SCAN_ELIGIBILITY_UNAVAILABLE"
-            : "SCAN_ELIGIBILITY_REQUIRED"
-          logger.warn("Skipped scheduled scan because its creator is not currently eligible", {
-            scheduleId: schedule.id,
-            workspaceId: schedule.workspaceId,
-            reason:
-              entitlement?.code ??
-              (schedule.createdById ? "ENTITLEMENT_DENIED" : "CREATOR_MISSING"),
-          })
-          await notifyScheduleBlocked(
-            schedule.workspaceId,
-            schedule.id,
-            schedule.target.name,
-            reason,
-            now.toISOString().slice(0, 10)
-          )
-          return
-        }
-
-        // P1-8 (v16): workspaceId is passed EXPLICITLY so the guard never
-        // depends on ambient context propagation — a scheduled scan starting
-        // on top of a running one double-spends the customer's agent-minutes.
-        // The extension binds the RLS transaction from the explicit arg.
-        const activeScans = await prisma.scan.count({
-          where: {
-            workspaceId: schedule.workspaceId,
-            targetId: schedule.targetId,
-            status: { in: [...ACTIVE_SCAN_STATUSES] },
-          },
-        })
-
-        if (activeScans > 0) {
-          logger.info("Skipping scheduled scan because target already has an active scan", {
-            scheduleId: schedule.id,
-            targetId: schedule.targetId,
-          })
-          return
-        }
-
-        // Schedules must not bypass the workspace concurrency cap that the
-        // scan-create API enforces: N schedules on N targets due in the same
-        // minute would otherwise launch N concurrent billable scans at once.
-        const activeWorkspaceScans = await prisma.scan.count({
-          where: {
-            workspaceId: schedule.workspaceId,
-            status: { in: [...ACTIVE_SCAN_STATUSES] },
-          },
-        })
-        if (activeWorkspaceScans >= MAX_CONCURRENT_WORKSPACE_SCANS) {
-          logger.info("Skipping scheduled scan because workspace is at its concurrent scan cap", {
-            scheduleId: schedule.id,
-            workspaceId: schedule.workspaceId,
-            activeWorkspaceScans,
-            cap: MAX_CONCURRENT_WORKSPACE_SCANS,
-          })
-          return
-        }
-
-        if (schedule.target.type === "WEB_APP" || schedule.target.type === "API") {
-          const resolved = resolveTargetScanMode({
-            targetType: schedule.target.type,
-            mode: schedule.mode,
-            hasApiSpec: Boolean(schedule.target.apiSpecUrl),
-          })
-          if (!resolved.ok) {
-            await prisma.schedule.update({
-              where: { id: schedule.id },
-              data: { enabled: false },
-            })
-            logger.warn("Disabled schedule with unavailable mode", {
-              scheduleId: schedule.id,
-              targetId: schedule.targetId,
-              targetType: schedule.target.type,
-              mode: schedule.mode,
-              reason: resolved.reason,
-              code: resolved.code,
-            })
-            return
-          }
-          if (
-            resolved.profile &&
-            resolveScanProfile({
-              targetType: schedule.target.type,
-              mode: schedule.mode,
-            }).usesAi
-          ) {
-            const proof = await findCurrentDomainProof(schedule.workspaceId, schedule.target.url)
-            if (!proof.verified) {
-              logger.warn("Skipped scheduled engine-backed URL review without domain proof", {
-                scheduleId: schedule.id,
-                workspaceId: schedule.workspaceId,
-                targetId: schedule.targetId,
-              })
-              await notifyScheduleBlocked(
-                schedule.workspaceId,
-                schedule.id,
-                schedule.target.name,
-                "DOMAIN_VERIFICATION_REQUIRED",
-                now.toISOString().slice(0, 10)
-              )
-              return
-            }
-          }
-        }
+        if (!(await isScheduledScanEligible(schedule, now))) return
 
         const scan = await createScan({
           workspaceId: schedule.workspaceId,

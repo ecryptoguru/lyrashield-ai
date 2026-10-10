@@ -96,6 +96,63 @@ function targetExistsResponse(
   )
 }
 
+type TargetAdmission =
+  | {
+      kind: "existing"
+      target: NonNullable<Awaited<ReturnType<typeof findExistingTarget>>>
+      compatible: boolean
+    }
+  | { kind: "denied"; entitlement: Awaited<ReturnType<typeof assertTargetAllowed>> }
+  | { kind: "created"; target: { id: string; name: string; type: string; workspaceId: string } }
+
+async function createOrResolveTarget({
+  workspaceId,
+  userId,
+  data,
+  targetData,
+}: {
+  workspaceId: string
+  userId: string
+  data: TargetInput
+  targetData: Parameters<ScopedTransaction["target"]["create"]>[0]["data"]
+}): Promise<TargetAdmission> {
+  try {
+    return await withWorkspaceRLS(
+      workspaceId,
+      async (tx) => {
+        await lockWorkspaceScanAdmission(tx, workspaceId)
+        const existing = await findExistingTarget(data, tx)
+        if (existing) {
+          return {
+            kind: "existing",
+            target: existing,
+            compatible: isCompatibleTarget(data, existing),
+          }
+        }
+
+        const entitlement = await assertTargetAllowed(workspaceId, userId, tx)
+        if (!entitlement.allowed) return { kind: "denied", entitlement }
+
+        const target = await tx.target.create({ data: targetData })
+        return { kind: "created", target }
+      },
+      { accountId: userId }
+    )
+  } catch (error) {
+    if (typeof error === "object" && error !== null && "code" in error && error.code === "P2002") {
+      const existing = await findExistingTarget(data)
+      if (existing) {
+        return {
+          kind: "existing",
+          target: existing,
+          compatible: isCompatibleTarget(data, existing),
+        }
+      }
+    }
+    throw error
+  }
+}
+
 async function post(request: Request) {
   let body: unknown
   try {
@@ -253,48 +310,12 @@ async function post(request: Request) {
             environment: data.environment,
           }
 
-    let admission
-    try {
-      admission = await withWorkspaceRLS(
-        workspaceId,
-        async (tx) => {
-          await lockWorkspaceScanAdmission(tx, workspaceId)
-
-          // Adoption happens inside the admission lock so retries of an
-          // existing source continue to work even when the workspace is full.
-          const existing = await findExistingTarget(data, tx)
-          if (existing) {
-            return {
-              kind: "existing" as const,
-              target: existing,
-              compatible: isCompatibleTarget(data, existing),
-            }
-          }
-
-          // Recheck sponsor, entitlement and count after acquiring the same
-          // lock used by scan admission and target deletion.
-          const entitlement = await assertTargetAllowed(workspaceId, session.userId, tx)
-          if (!entitlement.allowed) return { kind: "denied" as const, entitlement }
-
-          const target = await tx.target.create({ data: targetData })
-          return { kind: "created" as const, target }
-        },
-        { accountId: session.userId }
-      )
-    } catch (error) {
-      // A unique-create race aborts the transaction. Re-read only after the
-      // transaction has rolled back so PostgreSQL is usable again.
-      if (
-        typeof error === "object" &&
-        error !== null &&
-        "code" in error &&
-        error.code === "P2002"
-      ) {
-        const existing = await findExistingTarget(data)
-        if (existing) return targetExistsResponse(existing, isCompatibleTarget(data, existing))
-      }
-      throw error
-    }
+    const admission = await createOrResolveTarget({
+      workspaceId,
+      userId: session.userId,
+      data,
+      targetData,
+    })
 
     if (admission.kind === "existing") {
       return targetExistsResponse(admission.target, admission.compatible)
