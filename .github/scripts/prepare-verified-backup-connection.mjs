@@ -1,5 +1,34 @@
+import { X509Certificate } from "node:crypto"
+import { readFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 import { normalizeBackupConnection } from "../../packages/db/scripts/webhook-backup-connection.mjs"
+
+// Public Supabase project root CA provided from Database Settings → SSL
+// Configuration; pin the DER fingerprint so only this reviewed trust anchor
+// can authorize the verified-full backup connection.
+const BACKUP_ROOT_CA_PATH = fileURLToPath(
+  new URL("../certs/supabase-root-2021-ca.crt", import.meta.url)
+)
+const BACKUP_ROOT_CA_CONTAINER_PATH = "/tmp/supabase-root-2021-ca.crt"
+const BACKUP_ROOT_CA_SHA256 = "807025ad50d4ed219d2c9c7d299c004f824eb00cf7f65afef607d07b72e6cafa"
+
+function verifiedBackupRootCaContainerPath() {
+  let certificate
+  try {
+    certificate = new X509Certificate(readFileSync(BACKUP_ROOT_CA_PATH))
+  } catch {
+    throw new Error("Backup TLS trust anchor is unavailable or invalid")
+  }
+  if (
+    !certificate.ca ||
+    certificate.subject !== certificate.issuer ||
+    !certificate.verify(certificate.publicKey) ||
+    certificate.fingerprint256.replaceAll(":", "").toLowerCase() !== BACKUP_ROOT_CA_SHA256
+  ) {
+    throw new Error("Backup TLS trust anchor does not match the reviewed Supabase root")
+  }
+  return BACKUP_ROOT_CA_CONTAINER_PATH
+}
 
 // The backup client strengthens legacy encryption-only URLs before connecting.
 // Stored credentials and the shared runtime/maintenance parser remain unchanged.
@@ -21,9 +50,10 @@ export function prepareVerifiedBackupConnection(raw) {
   // Prisma's schema selection is already constrained to public. pg_dump's
   // explicit public/app flags own selection; libpq does not accept schema.
   libpq.searchParams.delete("schema")
-  // Fixed trusted system roots, never a URL-supplied trust path or CA fetched
-  // from an unverified server. libpq rejects weaker modes with this setting.
-  libpq.searchParams.set("sslrootcert", "system")
+  // Pin the user-supplied Supabase root by DER fingerprint and mount only this
+  // certificate read-only into the backup container. No URL-supplied CA or CA
+  // learned from the database connection can change this trust anchor.
+  libpq.searchParams.set("sslrootcert", verifiedBackupRootCaContainerPath())
   // GSS encryption must not take precedence over the verified TLS contract.
   libpq.searchParams.set("gssencmode", "disable")
   return { ...verified, libpqUrl: libpq.href }
