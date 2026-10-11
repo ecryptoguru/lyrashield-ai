@@ -2,7 +2,7 @@
 title: Codex app security workflow for trusted releases
 description: Lock down Codex config and MCP servers, gate dependencies and secrets and capture SARIF evidence for every AI assisted release.
 pubDate: "2026-07-30"
-updatedDate: 2026-10-02
+updatedDate: 2026-10-11
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification, supply-chain]
 draft: false
@@ -112,7 +112,7 @@ That file plus SARIF provides a repeatable proof point for internal review and f
 
 LyraShield AI at https://lyrashieldai.com is release assurance for AI built apps. The loop is target, review, evidence, fix, retest, report: detection stays separate from proof, recorded scans contribute to an assurance record and fix proposals are approval gated so PR execution is blocked until a server generated patch is bound to the exact approval.
 
-MCP integration fits Codex config.toml design. Stdio via npx -y @lyrashield/mcp@0.2.12 runs locally with env var secrets, remote at https://app.lyrashieldai.com/api/mcp accepts bearer_token_env_var for team use. The GitHub Action is diff aware, so it scans what changed and posts verified findings with a proposed fix path. SARIF output targets GitHub code scanning so results appear in your pull request.
+MCP integration fits Codex config.toml design. Stdio via npx -y @lyrashield/mcp@0.2.12 runs locally with env var secrets, remote at https://app.lyrashieldai.com/api/mcp accepts bearer_token_env_var for team use. The GitHub Action is diff-aware and emits SARIF candidate findings for changed files; it does not mark them as confirmed results or create a fix. SARIF output targets GitHub code scanning so results appear in your pull request.
 
 Build honesty: LyraShield is live in open beta with open registration. The scan pipeline, findings and evidence, approval-gated fix proposals, retests, reports, billing and Local/Desktop flows are implemented. The runner-local Action provides an advisory diff gate with SARIF; production availability remains bounded by retained evidence and release gates. Automatic server-generated Fix PR execution is not enabled and self-serve checkout is live.
 

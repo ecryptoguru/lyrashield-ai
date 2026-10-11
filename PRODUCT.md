@@ -39,10 +39,10 @@ evidence.
 ## Positioning
 
 The product joins assessment, retained evidence, approval-gated fix proposals,
-retests, and assurance reports in one workflow. It distinguishes detected risks,
-retest-confirmed outcomes, independently verified findings, and inconclusive
-results. Scores and model confidence provide context; they are never proof by
-themselves.
+retests, and assurance reports in one workflow. Current scans distinguish
+detected risks, deterministic retest outcomes, and inconclusive results.
+Independent verification is a reserved future state and is not produced today.
+Scores and model confidence provide context; they are never proof by themselves.
 
 ## Operating Context
 
@@ -59,11 +59,11 @@ themselves.
 
 ## Capabilities and Constraints
 
-- Preserve `DETECTED`, `VALIDATED`, `VERIFIED`, and `INCONCLUSIVE` as distinct
-  evidence states. `VALIDATED` means a trusted deterministic retest confirmed
-  absence under complete coverage; `VERIFIED` requires independent trusted
-  verification evidence. Missing coverage or engine-only absence stays
-  inconclusive.
+- Preserve the shipped `DETECTED`, `VALIDATED`, and `INCONCLUSIVE` evidence
+  states. The schema reserves `VERIFIED` for future independent trusted
+  verification; current scans do not produce it. `VALIDATED` means a trusted
+  deterministic retest confirmed absence under complete coverage. Missing
+  coverage or engine-only absence stays inconclusive.
 - Record assessed scope, evidence provenance, coverage limits, and unassessed
   checks. Never turn a missing result into a clean bill of health.
 - Fix proposals require approval. A proposed or applied change does not establish

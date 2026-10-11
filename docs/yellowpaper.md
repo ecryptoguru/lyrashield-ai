@@ -906,7 +906,7 @@ The historical prompt-injection artifact records 42 OWASP cases and 85.7% expect
 
 The live safety catalog, source unit tests and that historical evaluation are distinct. None is a universal assessment of customer AI behavior.
 
-Production release/readiness, paid scan acceptance, signing/distribution, reconciliation, provider settlement and client-runtime acceptance require exact dated receipts. The current retest checksum-gap record and source fix must remain separately labeled until deployment evidence closes the gate.
+Production release/readiness, paid scan acceptance, signing/distribution, reconciliation, provider settlement and client-runtime acceptance require exact dated receipts. See [PRD release status](../PRD.md#9-release-status) for dated release evidence and current open gates.
 
 Use [PRD release status](../PRD.md#9-release-status), the [claims policy](./policies.md#public-claims-policy) and [distribution receipts](./marketplace/CLIENT-CONTRACTS.md) before making availability or operational assertions.
 

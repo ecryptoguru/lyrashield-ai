@@ -15,8 +15,9 @@ const TYPES = { slack: "SLACK", discord: "DISCORD" } as const
 
 // Lock acquisition (30s) + credential read (15s) + provider POST (10s) fit this cap.
 const LOCK_TRANSACTION_OPTIONS = { maxWait: 5_000, timeout: 60_000 }
+type DestinationLockTransaction = Pick<ScopedTransaction, "$executeRaw">
 
-async function lockDestination(tx: ScopedTransaction, externalId: string) {
+async function lockDestination(tx: DestinationLockTransaction, externalId: string) {
   await tx.$executeRaw`SET LOCAL lock_timeout = '30s'`
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${externalId}, 0))`
 }
@@ -30,24 +31,23 @@ function identity(workspaceId: string, channel: WorkspaceNotificationChannel) {
 }
 
 function notificationIdentities(workspaceId: string) {
-  return [identity(workspaceId, "slack"), identity(workspaceId, "discord")].map(
-    ({ type, externalId }) => ({ type, externalId })
-  )
+  return (["discord", "slack"] as const)
+    .map((channel) => identity(workspaceId, channel))
+    .map(({ type, externalId }) => ({ type, externalId }))
 }
 
 /**
- * Account deletion takes both existing notification destination locks in a
- * deterministic order before it reads configRefs. Saves, disconnects and
- * deliveries use these same transaction-scoped locks.
+ * Account deletion locks both configured destinations in a stable order before
+ * reading configRefs. notificationIdentities keeps lock order aligned with the
+ * destination set used by notification queries.
  */
 export async function lockNotificationDestinationsForDeletion(
-  tx: ScopedTransaction,
+  tx: DestinationLockTransaction,
   workspaceId: string
 ): Promise<void> {
-  const destinations = (["discord", "slack"] as const)
-    .map((channel) => identity(workspaceId, channel).externalId)
-    .sort()
-  for (const destination of destinations) await lockDestination(tx, destination)
+  for (const { externalId } of notificationIdentities(workspaceId)) {
+    await lockDestination(tx, externalId)
+  }
 }
 
 function summary(

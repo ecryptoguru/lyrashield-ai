@@ -399,7 +399,8 @@ jobs:
             -c "GRANT USAGE ON SCHEMA public, app TO app_runtime_ci" \
             -c "DO \$\$ DECLARE item record; BEGIN FOR item IN SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename NOT IN ('PlatformAdminElevation', 'PlatformAdminChallengeLimit', 'PlatformAdminAudit', 'billing_reconciliation_state') LOOP EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.%I TO app_runtime_ci', item.tablename); END LOOP; FOR item IN SELECT sequencename FROM pg_sequences WHERE schemaname = 'public' LOOP EXECUTE format('GRANT USAGE, SELECT ON SEQUENCE public.%I TO app_runtime_ci', item.sequencename); END LOOP; END \$\$;" \
             -c "GRANT EXECUTE ON FUNCTION app.enqueue_artifact_deletion_task(text, text, text) TO app_runtime_ci" \
-            -c "GRANT EXECUTE ON FUNCTION app.enqueue_scan_attachment_deletion_task(text, text, text) TO app_runtime_ci"
+            -c "GRANT EXECUTE ON FUNCTION app.enqueue_scan_attachment_deletion_task(text, text, text) TO app_runtime_ci" \
+            -c "GRANT EXECUTE ON FUNCTION app.enqueue_integration_config_deletion_task(text, text, text) TO app_runtime_ci"
           echo 'RLS_RUNTIME_DATABASE_URL=postgresql://app_runtime_ci:runtime-ci-only@localhost:5432/lyrashield?schema=public' >> "$GITHUB_ENV"
 
       - name: Grant restricted runtime access to regression databases
@@ -414,7 +415,8 @@ jobs:
               -c "GRANT USAGE ON SCHEMA public, app TO app_runtime_ci" \
               -c "DO \$\$ DECLARE item record; BEGIN FOR item IN SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename NOT IN ('PlatformAdminElevation', 'PlatformAdminChallengeLimit', 'PlatformAdminAudit', 'billing_reconciliation_state') LOOP EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.%I TO app_runtime_ci', item.tablename); END LOOP; FOR item IN SELECT sequencename FROM pg_sequences WHERE schemaname = 'public' LOOP EXECUTE format('GRANT USAGE, SELECT ON SEQUENCE public.%I TO app_runtime_ci', item.sequencename); END LOOP; END \$\$;" \
               -c "GRANT EXECUTE ON FUNCTION app.enqueue_artifact_deletion_task(text, text, text) TO app_runtime_ci" \
-              -c "GRANT EXECUTE ON FUNCTION app.enqueue_scan_attachment_deletion_task(text, text, text) TO app_runtime_ci"
+              -c "GRANT EXECUTE ON FUNCTION app.enqueue_scan_attachment_deletion_task(text, text, text) TO app_runtime_ci" \
+              -c "GRANT EXECUTE ON FUNCTION app.enqueue_integration_config_deletion_task(text, text, text) TO app_runtime_ci"
           done
 
       - name: Size lint ratchet
@@ -629,6 +631,13 @@ jobs:
             --reporter=json --outputFile="$RUNNER_TEMP/team-mutation-runtime.json"
           assert_named_tests_passed "$RUNNER_TEMP/team-mutation-runtime.json" \
             'serializes concurrent owner removals under the restricted database role'
+
+          INTEGRATION_CONFIG_DELETION_RUNTIME_TEST=1 DATABASE_URL="$team_owner_database_url" \
+            RLS_RUNTIME_DATABASE_URL="$team_runtime_database_url" \
+            pnpm exec vitest run packages/db/src/integration-config-deletion.runtime.test.ts \
+            --reporter=json --outputFile="$RUNNER_TEMP/integration-config-deletion-runtime.json"
+          assert_named_tests_passed "$RUNNER_TEMP/integration-config-deletion-runtime.json" \
+            'enqueues only the referenced URI under its bound workspace for the restricted runtime role'
 
           GROWTH_METRICS_DB_TEST=1 DATABASE_URL="$growth_database_url" DATABASE_SYSTEM_URL="$growth_database_url" \
             pnpm exec vitest run apps/web/src/lib/growth-metrics.test.ts \

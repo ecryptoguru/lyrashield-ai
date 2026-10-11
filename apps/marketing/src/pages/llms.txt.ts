@@ -48,7 +48,7 @@ const evidenceControlCount = VIBE_SECURITY_CONTROLS.filter(
 // and the tools registry. `new Date()` would print "today" per build and
 // teach crawlers the timestamp is meaningless; a floor keeps the date honest
 // even when a copy-only edit ships without touching a collection.
-const LLMS_TXT_DATE_FLOOR = "2026-10-06"
+const LLMS_TXT_DATE_FLOOR = "2026-10-11"
 
 function isoDay(date: Date): string {
   return date.toISOString().slice(0, 10)

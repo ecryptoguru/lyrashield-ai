@@ -1,6 +1,6 @@
 # LyraShield AI User Guide
 
-Last checked against the application code: 2026-09-19. Client-specific runtime and published-package acceptance remain separate checks.
+Last checked against the application code: 2026-10-11. Client-specific runtime and published-package acceptance remain separate checks.
 
 LyraShield AI helps builders review an application before release and retain an evidence-backed record of what was checked.
 
@@ -254,7 +254,7 @@ The Vibe Security 50 ledger contains one receipt for each control. Read `NO_FIND
 
 ## 11. Findings
 
-Open **Findings** to review all retained findings in the active workspace. Available list filters are All, Critical, High, Medium, Low, Open, Fixed and Verified. Findings are ranked by a page-local **Priority** heuristic by default; switch to severity or newest ordering with the sort control. Priority combines severity, status, verification state, confidence, target environment and available business-impact/exploitability context. It is triage context for review order — not proof that a finding is reachable or exploitable — and the reason and limitations behind each rank are shown in an expandable note on every finding card.
+Open **Findings** to review all retained findings in the active workspace. Available list filters are All, Critical, High, Medium, Low, Open, Fixed and Verified. The Verified filter uses the separate independent-verification flag; current scans do not produce the reserved `VERIFIED` status, so new scan results will not appear there. Findings are ranked by a page-local **Priority** heuristic by default; switch to severity or newest ordering with the sort control. Priority combines severity, status, verification state, confidence, target environment and available business-impact/exploitability context. It is triage context for review order — not proof that a finding is reachable or exploitable — and the reason and limitations behind each rank are shown in an expandable note on every finding card.
 
 A finding may contain:
 
@@ -316,7 +316,7 @@ Open **Home** or **Launch Readiness** to see:
 - `INSUFFICIENT_EVIDENCE` when no completed scan or required coverage exists;
 - `READY` or `NOT_READY` based on retained findings;
 - current score when available;
-- blocking and verified finding counts;
+- blocking and independently verified finding counts (current scans do not produce the reserved `VERIFIED` status);
 - severity distribution;
 - conditions and recommendations.
 
@@ -381,7 +381,7 @@ Open **More → Notifications** to review scan alerts, critical-finding warnings
 - mark all notifications as read;
 - open the linked resource when a notification provides one.
 
-Personal notifications are visible only to their intended user; workspace-wide notifications are visible within the workspace.
+Scan updates remain in the dashboard notification feed, and personal notifications are visible only to their intended user. Workspace Owners and Admins can configure Slack or Discord alerts for completed scans, failed scans and critical findings in **Workspace settings → Notification channels**. Personal email and in-app controls are disabled because they do not change delivery; stored choices are retained for future implementation. Push preferences are unavailable. These personal controls do not change the dashboard feed or workspace alerts.
 
 ## 19. Team and roles
 
@@ -427,7 +427,7 @@ LyraShield Cloud offers a 7-day free trial: 60 agent-minutes, Safe, Quick and St
 
 - **Annual billing:** 15–30% discount, prepaid.
 - **Payment rails:** India uses Razorpay (INR pricing, UPI, GST invoices); Global uses Polar (USD).
-- **Minute packs:** 100/$15, 250/$35, 500/$65 — valid 180 days.
+- **Minute packs:** 100/$15, 250/$35, 500/$65 — valid 180 days. Purchases require billing permission and an available checkout provider for your region.
 - **Overage:** $0.15/min — Agency opt-in with a configurable spend limit.
 - **Deep/Custom scans:** 3× agent-minute multiplier, PRO+ only.
 - **Grace period:** 15 min free grace if minutes run out mid-scan.
@@ -464,7 +464,7 @@ Payouts:
 - $100 minimum, monthly net-30 on the 15th, with a 30-day hold.
 - Tax form required (W-9 or W-8BEN).
 - New affiliates carry a 25% reserve for the first 90 days. See [affiliate terms](../PRD.md#affiliate-terms).
-- Payouts are disabled pending provider and tax operations. RazorpayX is the only implemented rail (India); non-India applicants can apply without selecting a payout method while a provider is unapproved.
+- Payouts are disabled pending provider and tax operations. RazorpayX has an India provider implementation but is not enabled for payouts; Payoneer is not approved for production.
 
 ### 20.4 LyraShield Local/Desktop (BYOK)
 
@@ -586,9 +586,11 @@ For CI pipelines that don't need an AI editor at all, `ecryptoguru/lyrashield-ai
 
 ## 23. Current availability
 
-The public marketing site, Lite Check, browser-local tools, methodology and content are live. The authenticated dashboard is open for registration; its dedicated BullMQ/engine worker remains a separate controlled full-scan boundary. Ordinary web requests use a restricted `NOBYPASSRLS` database role and repository scan admission fails closed when the worker heartbeat is absent. Production Standard scan `cmt9el7p7000001hdjnjo90wk` completed with Luna/medium-only routing, reconciled accounting, exact source identity, complete repository scanner-family receipts, 217/217 eligible AI App Security files scanned and a sealed manifest. Its 25 retained findings remain unverified. This target- and revision-scoped result is bounded runtime proof, not a security guarantee or universal coverage proof; an approved Deep/Sol run remains a separate gate.
+The 2026-10-10 production release deployed product revision `41462a3ff45f77e996823faf6d10f56053dec9e8` with worker digest `sha256:91203cb94795cc8ae143e4a07da86a2fc3eac5e38ed1ebc862e46c1333d55007`. A public scan-readiness check returned HTTP 200 with the worker ready. This proves scan admission only; it does not prove authenticated client use, paid-scan acceptance, billing reconciliation or commercial readiness. See [PRD §8–9](../PRD.md#8-current-production-evidence) for the dated release receipt and remaining gates.
 
-The production application has an authenticated application origin, TLS Redis queue, sandbox-capable worker compute, authorized GPT-6 Luna/Sol deployments, actionable Azure alerts and DNS-pinned deny-by-default egress. The worker runs an explicitly promoted, CI-verified immutable digest rather than a mutable tag; each future release repeats VM digest, OCI-label, Docker-health and scan-readiness reconciliation with the prior digest retained for rollback. Azure Foundry repository scans use direct JSON function tools; optional programmatic tool calling remains capability-gated for the exact provider route. A scheduled pin change defers restart without removing readiness when the single worker already has an active scan. If a claim races after preflight, new admission may temporarily fail closed while the in-flight scan finishes; the scan is not cancelled or replayed. Production private-evidence round-trip/fail-closed, operator notification acknowledgment and controlled queue-orphan recovery passed on 2026-08-26. Longer-window capacity evidence and separate proof for each additional review profile remain required. No recovery or RPO/RTO claim is made.
+The historical Standard scan `cmt9el7p7000001hdjnjo90wk` completed on 2026-08-26 with Luna/medium-only routing, reconciled accounting, exact source identity, complete repository scanner-family receipts, 217/217 eligible AI App Security files scanned and a sealed manifest. Its 25 retained findings remain unverified. This target- and revision-scoped result is bounded runtime proof, not a security guarantee or universal coverage proof; an approved Deep/Sol run remains a separate gate.
+
+The production application has an authenticated origin, TLS Redis queue, sandbox-capable worker compute and DNS-pinned deny-by-default egress. The worker runs an explicitly promoted, CI-verified immutable digest; the 2026-10-10 release checked the digest, OCI labels, Docker health and scan readiness, with the prior digest retained for rollback. Azure alert rules are declared in source, but post-release live rule and receiver-delivery readback remains open. Azure Foundry repository scans use direct JSON function tools; optional programmatic tool calling remains capability-gated for the exact provider route. A scheduled pin change defers restart without removing readiness when the single worker already has an active scan. If a claim races after preflight, new admission may temporarily fail closed while the in-flight scan finishes; the scan is not cancelled or replayed. Production private-evidence round-trip/fail-closed, operator notification acknowledgment and controlled queue-orphan recovery passed on 2026-08-26. Longer-window capacity evidence and separate proof for each additional review profile remain required. No recovery or RPO/RTO claim is made.
 
 Billing, Local/Desktop licensing and the affiliate application/ledger are implemented. Razorpay Live is activated with the matching INR Cloud catalog and an enabled production webhook; Polar Live has its private Cloud/pack/Local catalog and lifecycle webhook. Historical Polar Sandbox and Razorpay Test Mode provider receipts are retained and their isolated deployment has been removed. No live checkout or payment was exercised. Production desktop distribution proof, payout API provisioning and the public affiliate opening remain controlled release gates.
 

@@ -156,9 +156,13 @@ describe("P2-16 migration structure", () => {
   })
 
   it("places the audited migration after every migration that already exists", () => {
-    const preexisting = all.filter((name) => name !== auditedDir)
+    const integrationConfigOutboxDir = "20261011000000_integration_config_deletion_outbox"
+    const preexisting = all.filter(
+      (name) => name !== auditedDir && name !== integrationConfigOutboxDir
+    )
     const highestPreexisting = preexisting[preexisting.length - 1] ?? ""
     expect(auditedDir > highestPreexisting).toBe(true)
+    expect(integrationConfigOutboxDir > auditedDir).toBe(true)
     // PR #964 owns this one. The audited migration must sort after it so the
     // Myra RLS boundary always applies first.
     expect(auditedDir > "20261007170000_myra_public_session_rls_boundary").toBe(true)

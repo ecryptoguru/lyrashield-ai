@@ -247,3 +247,4 @@ export {
   type ConnectorAdmissionMode,
   type ConnectorAdmissionReason,
 } from "./connector-admission"
+export { isEvidenceStorageUriForWorkspace } from "./evidence-storage-uri"

@@ -35,6 +35,11 @@
       "import": "./src/domain-proof.ts",
       "default": "./src/domain-proof.ts"
     },
+    "./evidence-storage-uri": {
+      "types": "./src/evidence-storage-uri.ts",
+      "import": "./src/evidence-storage-uri.ts",
+      "default": "./src/evidence-storage-uri.ts"
+    },
     "./diff-advisory": {
       "types": "./src/diff-advisory.ts",
       "import": "./src/diff-advisory.ts",

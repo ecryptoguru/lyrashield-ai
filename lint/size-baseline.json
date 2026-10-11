@@ -402,8 +402,8 @@
     },
     "apps/web/src/app/sign-up/page.tsx|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 249,
-      "maxExcess": 249
+      "totalExcess": 248,
+      "maxExcess": 248
     },
     "apps/web/src/components/myra/myra-panel.tsx|max-lines-per-function": {
       "count": 1,
@@ -662,8 +662,8 @@
     },
     "packages/db/src/account-deletion.ts|max-lines-per-function": {
       "count": 2,
-      "totalExcess": 471,
-      "maxExcess": 271
+      "totalExcess": 470,
+      "maxExcess": 269
     },
     "packages/db/src/ai-assurance-service.ts|max-lines": {
       "count": 1,

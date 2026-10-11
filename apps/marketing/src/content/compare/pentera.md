@@ -4,7 +4,7 @@ description: "How LyraShield AI compares to Pentera for enterprise security vali
 competitor: "Pentera"
 heading: "LyraShield AI vs Pentera"
 disclaimer: 'Factual comparison. <a href="https://pentera.io/platform/">Pentera</a> is an AI-powered automated security validation platform that emulates real attacks across internal networks, external surface, cloud and web applications in live production to reveal what is actually exploitable, then automates remediation and re-testing (Pentera Core, Surface, Cloud, Resolve). <a href="https://lyrashieldai.com/">LyraShield AI</a> is release assurance for AI-built apps: a target → review → evidence → fix → retest → report loop with evidence states, checksum-bound assurance reports and reviewed fix proposals. Pentera validates enterprise exposure across environments; LyraShield AI gates AI-generated-code releases. Neither replaces the other.'
-updatedDate: 2026-10-04
+updatedDate: 2026-10-11
 draft: false
 pricingLadder: true
 competitorClaims: true
@@ -31,20 +31,20 @@ faq:
 
 ## Capability comparison
 
-| Capability                          | LyraShield AI                                                                                 | Pentera                                                                            |
-| ----------------------------------- | --------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| Agentic / AI-driven pentest         | Yes (app-layer)                                                                               | Yes (agentic AI coordinates attack paths across Core/Surface/Cloud)                |
-| Independent finding verification    | No. Fixes are confirmed by deterministic retest; independent verification is a reserved state | Yes (proven exploitability in live production)                                     |
-| SCA (dependency scanning)           | Yes (engine)                                                                                  | Not a primary focus                                                                |
-| Secret scanning                     | Yes (engine + GitHub Action)                                                                  | Not a primary focus (exposure validation focus)                                    |
-| Evidence states (4-state lifecycle) | Yes                                                                                           | Findings carry exploit proof; no explicit multi-state lifecycle                    |
-| Deterministic retest                | Yes                                                                                           | Re-test to confirm measurable exposure reduction                                   |
-| Coverage receipts                   | Yes (per-control)                                                                             | No (validated attack-path aggregation instead)                                     |
-| Assurance reports (checksum-bound)  | Yes                                                                                           | Audit-ready proof of risk reduction; CTEM evidence                                 |
-| MCP server integration              | Yes (runs checks and records evidence inside AI coding agents)                                | Yes (Pentera MCP server to start tests and query results from an LLM client)       |
-| Permission-gated Fix PR requests    | Fix PR requests require permission and a server-generated patch                               | No (automated remediation routing + revalidation, not approval-gated PR execution) |
-| Live production testing             | App-layer scope                                                                               | Yes (production with customer-controlled guardrails, throttling, emergency stop)   |
-| AI-generated-code focus             | Built for AI-built apps                                                                       | Not specific to AI-generated code                                                  |
+| Capability                                            | LyraShield AI                                                                                 | Pentera                                                                            |
+| ----------------------------------------------------- | --------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| Agentic / AI-driven pentest                           | Yes (app-layer)                                                                               | Yes (agentic AI coordinates attack paths across Core/Surface/Cloud)                |
+| Independent finding verification                      | No. Fixes are confirmed by deterministic retest; independent verification is a reserved state | Yes (proven exploitability in live production)                                     |
+| SCA (dependency scanning)                             | Yes (engine)                                                                                  | Not a primary focus                                                                |
+| Secret scanning                                       | Yes (engine + GitHub Action)                                                                  | Not a primary focus (exposure validation focus)                                    |
+| Evidence states (DETECTED / VALIDATED / INCONCLUSIVE) | Yes; `VERIFIED` is future-only and not produced today                                         | Findings carry exploit proof; no explicit multi-state lifecycle                    |
+| Deterministic retest                                  | Yes                                                                                           | Re-test to confirm measurable exposure reduction                                   |
+| Coverage receipts                                     | Yes (per-control)                                                                             | No (validated attack-path aggregation instead)                                     |
+| Assurance reports (checksum-bound)                    | Yes                                                                                           | Audit-ready proof of risk reduction; CTEM evidence                                 |
+| MCP server integration                                | Yes (runs checks and records evidence inside AI coding agents)                                | Yes (Pentera MCP server to start tests and query results from an LLM client)       |
+| Permission-gated Fix PR requests                      | Fix PR requests require permission and a server-generated patch                               | No (automated remediation routing + revalidation, not approval-gated PR execution) |
+| Live production testing                               | App-layer scope                                                                               | Yes (production with customer-controlled guardrails, throttling, emergency stop)   |
+| AI-generated-code focus                               | Built for AI-built apps                                                                       | Not specific to AI-generated code                                                  |
 
 ## Deployment and pricing
 

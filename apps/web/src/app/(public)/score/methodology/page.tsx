@@ -8,11 +8,11 @@ import { ThemeToggle } from "@/components/theme-toggle"
 export const metadata: Metadata = {
   title: "LyraShield Score methodology | LyraShield AI",
   description:
-    "How the LyraShield Score is computed from verified findings, retest-confirmed fixes and accepted risk. Not a security guarantee.",
+    "How the LyraShield Score uses finding severity, retest outcomes and accepted-risk adjustments. Not a security guarantee.",
   openGraph: {
     title: "LyraShield Score methodology",
     description:
-      "How the LyraShield Score is computed from verified findings, retest-confirmed fixes and accepted risk.",
+      "How the LyraShield Score uses finding severity, retest outcomes and accepted-risk adjustments.",
     type: "website",
     siteName: "LyraShield AI",
   },
@@ -40,11 +40,12 @@ export default function ScoreMethodologyPage() {
             LyraShield Score methodology
           </h1>
           <p className="text-muted-foreground mt-5 leading-7">
-            {SCORE_MODEL_VERSION} starts at 100 and deducts for current findings: verified critical
-            −25, high −10, medium −4, low −1; unverified findings count at 25% weight and accepted
-            risk at 50% weight. Verified critical findings cap the grade at C, verified highs at B
-            and active verified secrets at D. A+ additionally requires no open findings of medium
-            severity or higher.
+            {SCORE_MODEL_VERSION} starts at 100 and deducts for current findings: critical −25, high
+            −10, medium −4 and low −1. Findings with an independent verification receipt use full
+            weight; unverified findings count at 25% weight and accepted risk at 50% weight. An
+            independently verified critical finding caps the grade at C, a high at B and an active
+            verified secret at D. Current scans do not produce independently verified findings. A+
+            additionally requires no open findings of medium severity or higher.
           </p>
           <p className="text-muted-foreground mt-4 leading-7">
             Scores are deterministic, versioned and limited to the stated scan scope. They are not a

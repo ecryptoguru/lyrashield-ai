@@ -2,7 +2,7 @@
 title: VS Code AI app security checklist for MCP builds
 description: Secure VS Code with GitHub Copilot and MCP, covering mcp dot json hardening, agent permissions, secret gating and SARIF evidence.
 pubDate: "2026-07-30"
-updatedDate: 2026-10-02
+updatedDate: 2026-10-11
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification, supply-chain]
 draft: false
@@ -116,7 +116,7 @@ Per release steps:
 4. Write docs slash security evidence entry with date, commit hash, active MCP servers, tools run and reviewers.
 5. Attach logs and SARIF to release tag.
 
-SARIF upload pattern is at [SARIF artifact upload](https://docs.github.com/en/code-security/code-scanning/integrating-with-code-scanning/uploading-a-sarif-file-to-github) and overview at [GitHub code scanning](https://docs.github.com/en/code-security/code-scanning). Web header review guidance at [Next.js security](https://nextjs.org/docs/app/guides/data-security) and [MDN security](https://developer.mozilla.org/en-US/docs/Web/Security) helps frame app checks while your verified findings stay in SARIF.
+SARIF upload pattern is at [SARIF artifact upload](https://docs.github.com/en/code-security/code-scanning/integrating-with-code-scanning/uploading-a-sarif-file-to-github) and overview at [GitHub code scanning](https://docs.github.com/en/code-security/code-scanning). Web header review guidance at [Next.js security](https://nextjs.org/docs/app/guides/data-security) and [MDN security](https://developer.mozilla.org/en-US/docs/Web/Security) helps frame app checks while your reported scan findings stay in SARIF.
 
 Keep a short changelog for MCP additions and dependency exceptions to speed future reviews and show when temporary risks closed.
 

@@ -1,6 +1,6 @@
 # Continuous walkthrough — production storyboard
 
-> Superseded for implementation by [the local HyperFrames + Three.js plan](../../docs/superpowers/plans/2026-10-09-premium-scroll-world.md). The founder selected local production; provider authentication, paid render budgets and AI clip chaining below are historical proposal details, not current prerequisites.
+> Superseded for implementation. The founder selected local production; provider authentication, paid render budgets and AI clip chaining below are historical proposal details, not current prerequisites. The superseded planning artifact was retired; the repository retains its history in Git.
 
 Camera: selected by founder. Seven connected legs; forward drift at every seam.
 Art direction proposed from existing LyraShield brand. Founder selected desktop
@@ -12,8 +12,8 @@ jobs have been submitted.
 A continuous architectural evidence workspace for LyraShield AI: precise machined
 navy surfaces, translucent structured evidence panels, restrained cyan routing,
 soft directional studio light, clear depth and generous negative space for real
-HTML interface overlays. Palette: #08111c, #0e1a28, #203246, #edf6fb, #00bae6,
-#f3b95f. Premium product cinematography, controlled reflections, coherent scale
+HTML interface overlays. Palette: `#08111c`, `#0e1a28`, `#203246`, `#edf6fb`, `#00bae6`,
+`#f3b95f`. Premium product cinematography, controlled reflections, coherent scale
 and materials, no people, no lettering, no logos, no invented interface text.
 Amber represents incomplete evidence, never successful verification. Each space
 opens naturally into the next along the same forward axis.

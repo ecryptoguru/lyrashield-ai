@@ -881,6 +881,9 @@ importers:
       '@lyrashield/logger':
         specifier: workspace:*
         version: link:../logger
+      '@lyrashield/security':
+        specifier: workspace:*
+        version: link:../security
     devDependencies:
       '@types/node':
         specifier: 'catalog:'

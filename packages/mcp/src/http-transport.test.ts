@@ -317,7 +317,8 @@ describe("handleRemoteMcpRequest (Streamable HTTP, stateless)", () => {
     const body = await readJson(res)
     const result = body.result as { isError?: boolean; content?: Array<{ text: string }> }
     expect(result?.isError).toBe(true)
-    expect(result?.content?.[0]?.text).toContain("no interactive approval channel")
+    expect(result?.content?.[0]?.text).toContain("locally configured credentials")
+    expect(result?.content?.[0]?.text).toContain("trusted automation")
     expect(fetchFn).not.toHaveBeenCalled()
   })
 

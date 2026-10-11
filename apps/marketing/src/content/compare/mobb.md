@@ -4,7 +4,7 @@ description: "How LyraShield AI compares to Mobb for remediation-first auto-fix.
 competitor: "Mobb"
 heading: "LyraShield AI vs Mobb"
 disclaimer: "Factual comparison. Mobb is an AI-powered remediation platform that takes SAST scanner results as input and generates fix PRs, with a newer IDE layer (Mobb Vibe Shield) for AI-coding security. LyraShield AI is release assurance for AI-built apps with its own agentic pentest, SCA and secrets scanning, producing checksum-bound evidence reports and gating fixes behind approvals. The two target different parts of the workflow; neither replaces the other."
-updatedDate: 2026-10-04
+updatedDate: 2026-10-11
 draft: false
 pricingLadder: true
 competitorClaims: true
@@ -38,7 +38,7 @@ faq:
 | SCA (dependency scanning) | Yes (native)                                                                                          | Not a core capability                                                                                                           |
 | Secret scanning           | Yes (engine + GitHub Action)                                                                          | Not a core capability                                                                                                           |
 | Agentic pentest           | Yes (core)                                                                                            | No                                                                                                                              |
-| Evidence states           | Yes (4 states)                                                                                        | No documented evidence-state model                                                                                              |
+| Evidence states           | Three shipped states; `VERIFIED` is future-only and not produced today                                | No documented evidence-state model                                                                                              |
 | Deterministic retest      | Yes                                                                                                   | Re-scan to confirm finding cleared                                                                                              |
 | Coverage receipts         | Yes (per-control)                                                                                     | No documented equivalent                                                                                                        |
 | Assurance reports         | Yes (checksum-bound snapshots)                                                                        | ROI dashboard metrics; fix reports expire by default after two weeks                                                            |

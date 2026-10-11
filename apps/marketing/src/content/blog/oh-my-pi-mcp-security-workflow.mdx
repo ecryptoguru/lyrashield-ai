@@ -2,7 +2,7 @@
 title: Oh My Pi MCP security workflow
 description: "Set up LyraShield MCP in Oh My Pi step by step: CLI setup, manual config, verification, inline scan, GitHub Action diff gate and agent rules."
 pubDate: "2026-08-07"
-updatedDate: 2026-10-02
+updatedDate: 2026-10-11
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, supply-chain]
 draft: false
@@ -53,7 +53,7 @@ Never commit a real token. Keep the literal in the user level file or environmen
 
 ## 4. Verify the connection and run an inline check
 
-After config, run `npx -y lyrashield@0.2.14 doctor` to confirm the server reports connected. Inside an Oh My Pi session, ask the agent to run a LyraShield scan against the current target. The agent targets the release scope, reviews the real config and code and returns evidence with detected, verified, retest confirmed and inconclusive outcomes kept distinct. This mirrors the [vibe coding security guide](/blog/vibe-coding-security-guide) evidence loop. Scan the changed scope, not the whole repo, to keep feedback fast.
+After config, run `npx -y lyrashield@0.2.14 doctor` to confirm the server reports connected. Inside an Oh My Pi session, ask the agent to run a LyraShield scan against the current target. The agent targets the release scope and returns findings in the shipped `DETECTED`, `VALIDATED` and `INCONCLUSIVE` states. The separate `VERIFIED` state is reserved for a future capability and is not produced by current scans. Keep those evidence states distinct as described in the [vibe coding security guide](/blog/vibe-coding-security-guide). Scan the changed scope, not the whole repo, to keep feedback fast.
 
 If the server shows as loaded but no scan tools appear, the usual cause is a config path mistake (the older `~/.omp/mcp.json` instead of the `agent` subdirectory), a server name collision shadowed by a higher priority discovery source or a `disabledServers` entry that suppresses it. The doctor command surfaces the first; review your discovery sources and denylist for the others. When you read scan results, keep detection and retest separate: a detected candidate is a signal worth review and a clean deterministic retest is the only state that shows the condition is gone. Keep the output in your release record so a reviewer can trace each finding to its evidence.
 
@@ -91,7 +91,7 @@ Tell the agent how to use LyraShield so it does not improvise. Add a short rule 
 Before proposing release, run a LyraShield scan on the changed scope.
 Treat scan output as evidence, not proof.
 Propose fixes only; do not auto apply. Retest after any fix.
-Keep detected, verified, retest-confirmed and inconclusive outcomes distinct.
+Keep detected candidates, deterministic retest validations and inconclusive results distinct. Do not describe a LyraShield scan result as `VERIFIED`; current scans do not produce that reserved state.
 ```
 
 A short rule prevents the agent from treating a clean scan as a release verdict or from applying a patch without review. Pair the rule with a repository convention that scan receipts land in your release record, so the evidence loop has a durable home. If your team uses named OMP profiles, keep the LyraShield rule in a profile independent location like the project `.omp` directory so it applies under every profile rather than only the one where you authored it.

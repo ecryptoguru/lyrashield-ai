@@ -45,6 +45,83 @@ test("local preview keeps the single Lite Check input disabled", async ({ page }
   await page.goto("/scan")
   await expect(page.locator("#scan-url")).toBeDisabled()
   await expect(page.getByRole("button", { name: "Scanner API not connected" })).toBeDisabled()
+  await expect(page.locator("#verification-status")).toBeHidden()
+  await expect(
+    page.locator('script[src^="https://challenges.cloudflare.com/turnstile/"]')
+  ).toHaveCount(0)
+  await expect(page.locator("#turnstile-container iframe")).toHaveCount(0)
+})
+
+test("Lite Check obtains a fresh single-use challenge before each scan", async ({ page }) => {
+  const submittedTokens: string[] = []
+
+  await page.addInitScript(() => {
+    let callback: ((token: string) => void) | undefined
+    let response = ""
+    let sequence = 0
+    const issueChallenge = () => {
+      response = `challenge-${++sequence}`
+      callback?.(response)
+    }
+    Object.defineProperty(window, "turnstile", {
+      configurable: true,
+      value: {
+        render: (_selector: string, options: { callback?: (token: string) => void }) => {
+          callback = options.callback
+          window.setTimeout(issueChallenge, 0)
+          return "test-widget"
+        },
+        reset: () => window.setTimeout(issueChallenge, 0),
+        getResponse: () => response,
+      },
+    })
+  })
+
+  await page.route(/\/scan\/?(?:\?.*)?$/, async (route) => {
+    const response = await route.fetch()
+    const html = await response.text()
+    const testHtml = html
+      .replace(/data-api-origin(?:="[^"]*")?/, 'data-api-origin="http://127.0.0.1:8787"')
+      .replace(/data-turnstile-site-key(?:="[^"]*")?/, 'data-turnstile-site-key="test-site-key"')
+      .replace(/<input\b[^>]*>/g, (input) => {
+        if (!input.includes('id="scan-url"') && !input.includes('id="authorized"')) return input
+        return input.replace(/\sdisabled(?:="")?/, "")
+      })
+    await route.fulfill({ response, body: testHtml })
+  })
+
+  await page.route("**/api/lite-scan", async (route) => {
+    const payload = route.request().postDataJSON() as { url: string; turnstileToken?: string }
+    submittedTokens.push(payload.turnstileToken || "")
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        result: {
+          target: payload.url,
+          scannedAt: new Date().toISOString(),
+          checks: [],
+          liteResultSummary: { needsAttention: 0, worthReviewing: 0, looksOk: 0, findingCount: 0 },
+          disclaimers: [],
+        },
+        durationMs: 1,
+      }),
+    })
+  })
+
+  await page.goto("/scan")
+  await page.locator("#scan-url").fill("https://example.com")
+  await page.locator("#authorized").check()
+  await expect(page.locator("#scan-button")).toBeEnabled()
+  await page.locator("#scan-button").click()
+  await expect(page.locator("#result-heading")).toHaveText("No surface issues found")
+  await expect.poll(() => submittedTokens).toEqual(["challenge-1"])
+
+  await page.locator("#scan-url").fill("https://example.org")
+  await expect(page.locator("#scan-button")).toBeEnabled()
+  await page.locator("#scan-button").click()
+  await expect(page.locator("#result-target")).toContainText("https://example.org")
+  await expect.poll(() => submittedTokens).toEqual(["challenge-1", "challenge-2"])
 })
 
 // /agents.md and /llms.txt handler coverage lives in src/tests/agent-onboarding.test.ts.
