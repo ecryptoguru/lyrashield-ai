@@ -31,11 +31,89 @@ test("allows a completed runtime attempt only when healthy-revision promotion wa
             name: "Deploy Azure Container Apps",
             status: "completed",
             conclusion: "failure",
-            steps: [{ name: "Promote healthy candidate revisions", status: "completed", conclusion: "skipped" }],
+            steps: [
+              {
+                name: "Promote healthy candidate revisions",
+                status: "completed",
+                conclusion: "skipped",
+              },
+            ],
           },
         ],
       }),
     })
+  )
+})
+
+test("ignores reusable-workflow dependency jobs when checking the runtime promotion step", () => {
+  assert.doesNotThrow(() =>
+    assertNoPriorRuntimePromotion({
+      ...context,
+      getAttemptJobs: () => ({
+        jobs: [
+          {
+            name: "deploy-azure / Deploy Azure Container Apps / Prepare migration dependencies without production credentials",
+            status: "completed",
+            conclusion: "success",
+            steps: [],
+          },
+          {
+            name: "deploy-azure / Deploy Azure Container Apps / Deploy Azure Container Apps",
+            status: "completed",
+            conclusion: "cancelled",
+            steps: [
+              {
+                name: "Promote healthy candidate revisions",
+                status: "completed",
+                conclusion: "skipped",
+              },
+            ],
+          },
+        ],
+      }),
+    })
+  )
+
+  assert.throws(
+    () =>
+      assertNoPriorRuntimePromotion({
+        ...context,
+        getAttemptJobs: () => ({
+          jobs: [
+            {
+              name: "deploy-azure / Deploy Azure Container Apps / Prepare migration dependencies without production credentials",
+              status: "completed",
+              conclusion: "success",
+              steps: [],
+            },
+          ],
+        }),
+      }),
+    /no verifiable Azure runtime job record/
+  )
+
+  assert.throws(
+    () =>
+      assertNoPriorRuntimePromotion({
+        ...context,
+        getAttemptJobs: () => ({
+          jobs: [
+            {
+              name: "deploy-azure / Post-deployment verification",
+              status: "completed",
+              conclusion: "success",
+              steps: [
+                {
+                  name: "Promote healthy candidate revisions",
+                  status: "completed",
+                  conclusion: "skipped",
+                },
+              ],
+            },
+          ],
+        }),
+      }),
+    /no verifiable Azure runtime job record/
   )
 })
 
