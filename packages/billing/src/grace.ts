@@ -110,6 +110,7 @@ export async function enterGrace(
       .updateMany({
         where: {
           id: billing.id,
+          accountId,
           graceUsedMs: { lt: GRACE_CAP_MS },
         },
         data: {
@@ -126,7 +127,7 @@ export async function enterGrace(
     }
 
     const updated = await db.billingAccount.findUnique({
-      where: { id: billing.id },
+      where: { id: billing.id, accountId },
       select: { graceUsedMs: true, graceCycleStart: true, workspaceId: true },
     })
     if (!updated) return { shouldContinue: false, remainingMs: 0 }
@@ -134,7 +135,7 @@ export async function enterGrace(
     // Ensure graceCycleStart is set if it was null (first grace entry).
     if (!updated.graceCycleStart) {
       await db.billingAccount.updateMany({
-        where: { id: billing.id, graceCycleStart: null },
+        where: { id: billing.id, accountId, graceCycleStart: null },
         data: { graceCycleStart: new Date() },
       })
     }
@@ -143,7 +144,7 @@ export async function enterGrace(
     if (newUsedMs >= GRACE_CAP_MS) {
       await db.billingAccount
         .update({
-          where: { id: billing.id },
+          where: { id: billing.id, accountId },
           data: { graceUsedMs: GRACE_CAP_MS },
         })
         .catch((error) => {
@@ -192,7 +193,11 @@ export async function enterGrace(
  *
  * Called when the account's subscription renews into a new term.
  */
-export async function resetGrace(accountId: string, transaction?: DbTx): Promise<void> {
+export async function resetGrace(
+  accountId: string,
+  transaction?: DbTx,
+  cycleStart?: Date
+): Promise<void> {
   const db = transaction ?? prisma
   const billing = await resolveAccountBilling(accountId, db)
   if (!billing) return
@@ -200,7 +205,18 @@ export async function resetGrace(accountId: string, transaction?: DbTx): Promise
   // runs outside a bound transaction — the extension binds the account RLS
   // context from the explicit filter.
   await db.billingAccount.updateMany({
-    where: { id: billing.id, accountId },
+    where: {
+      id: billing.id,
+      accountId,
+      ...(cycleStart
+        ? {
+            OR: [
+              { graceCycleStart: { lt: cycleStart } },
+              { graceCycleStart: null, graceUsedMs: 0 },
+            ],
+          }
+        : {}),
+    },
     data: { graceUsedMs: 0, graceCycleStart: null },
   })
 

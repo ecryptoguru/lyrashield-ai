@@ -26,6 +26,7 @@ import {
 import { logger } from "@lyrashield/logger"
 import { env } from "@lyrashield/config"
 import { z } from "zod"
+import { publicScanToolResult } from "../../../lib/scan-tool-provenance"
 
 const operationPermissions: Partial<Record<string, Permission>> = {
   "scan.create": PERMISSIONS.scan.create,
@@ -99,6 +100,7 @@ function stripControlArgs(args: Record<string, unknown>): Record<string, unknown
  * in-progress — so the binding is identical however the result was produced.
  */
 function withOperationId(result: McpToolResult, operationId: string): McpToolResult {
+  result = publicScanToolResult(result)
   const structuredContent = { ...(result.structuredContent ?? {}), operationId }
   const content = result.content.map((item) => {
     if (item.type !== "text") return item

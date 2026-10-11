@@ -95,13 +95,21 @@ export async function createPolarOneTimeCheckout(params: {
 /**
  * Get the Polar customer portal URL for subscription management.
  */
-export async function getPolarPortalUrl(params: { customerId: string }): Promise<string | null> {
+export async function getPolarPortalUrl(params: {
+  subscriptionId: string
+}): Promise<string | null> {
   const client = getPolarClient()
   if (!client) return null
 
   try {
+    // BillingAccount.externalId identifies the subscription contract. Polar
+    // portal sessions require its distinct customer, resolved by the provider.
+    const subscription = await client.subscriptions.get({ id: params.subscriptionId })
+    if (subscription.id !== params.subscriptionId || !subscription.customerId) {
+      throw new Error("Polar subscription customer could not be resolved")
+    }
     const session = await client.customerSessions.create({
-      customerId: params.customerId,
+      customerId: subscription.customerId,
     })
 
     return session.customerPortalUrl

@@ -22,7 +22,7 @@ import {
   FindingQuerySchema,
   CreatePRSchema,
 } from ".."
-import { ScanExecutionPlanSchema } from "../scan-execution-plan"
+import { PublicScanExecutionPlanSchema } from "../scan-execution-plan"
 import {
   securitySchemes,
   workspaceIdParam,
@@ -136,14 +136,14 @@ export function buildOpenApiSpec(): Record<string, unknown> {
     FindingStatus: toJsonSchema(FindingStatusSchema),
     FindingVerificationStatus: toJsonSchema(FindingVerificationStatusSchema),
     ScanExecutionPlan: {
-      ...toJsonSchema(ScanExecutionPlanSchema),
+      ...toJsonSchema(PublicScanExecutionPlanSchema),
       description:
-        "Server-owned immutable execution plan recorded on each scan (lyrashield-scan-plan/1.0.0): workflow, target type, explicit depth, scope, resolved immutable source revisions, limits, capabilities and attachment references. Never client-supplied; absent only on legacy pre-plan scans.",
+        "Public view of the server-owned immutable execution plan (lyrashield-scan-plan/1.0.0): workflow, depth, scope, immutable source revisions, nonfinancial limits, capabilities and attachment references. Internal budget and authorization handles are omitted. A null view means legacy or unavailable provenance.",
     },
     Scan: {
       type: "object",
       description:
-        "Scan result. `executionPlan` carries the recorded workflow, scope and resolved immutable provenance; `executionPlanHash` is its content digest. A null plan means not recorded (legacy row), never an inferred plan.",
+        "Scan result. `executionPlan` is the public provenance view; `executionPlanHash` is SHA-256 of the canonical public plan and excludes private limits and authorization handles. Null provenance is never an inferred plan.",
       additionalProperties: true,
       properties: {
         id: { type: "string" },

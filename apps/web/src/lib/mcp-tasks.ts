@@ -37,6 +37,8 @@ import { requireOAuthPermission, type OAuthAuthContext } from "@lyrashield/auth/
 import { PERMISSIONS, type Permission } from "@lyrashield/auth"
 import { CANONICAL_OPERATIONS } from "@lyrashield/db"
 
+import { publicScanToolResult } from "./scan-tool-provenance"
+
 const MCP_TASK_CANCEL_RETRY_AFTER_MS = 2 * 60 * 1000
 
 /**
@@ -252,7 +254,7 @@ export function makeHostedMcpTaskBackend(options: HostedMcpTaskOptions): McpTask
       if (operation.result) {
         try {
           const result = storedResultToCallToolResult(operation.result)
-          if (result.isError) return result
+          if (result.isError) return publicScanToolResult(result)
         } catch {
           // fall through to the bounded generic result
         }

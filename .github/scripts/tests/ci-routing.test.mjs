@@ -793,3 +793,25 @@ for (const current of [true, false]) {
     assert.match(workflow, /if: needs\.source\.outputs\.current == 'true'/)
   })
 }
+
+test("cargo-only desktop harness generates its database client before typechecking", () => {
+  const desktop = workflow.slice(workflow.indexOf("  desktop-frontend:"))
+  assert.ok(
+    desktop.indexOf("Generate Prisma Client for portable Desktop harness") <
+      desktop.indexOf("Typecheck portable browser harness")
+  )
+  assert.match(
+    desktop,
+    /name: Generate Prisma Client for portable Desktop harness\n        if: needs.changes.outputs.app != 'true' && needs.changes.outputs.shared != 'true'\n        run: pnpm db:generate/
+  )
+  assert.equal(
+    runs("Generate Prisma Client for portable Desktop harness", [
+      "apps/desktop/src-tauri/Cargo.lock",
+    ]),
+    true
+  )
+  assert.equal(
+    runs("Generate Prisma Client for portable Desktop harness", ["packages/db/src/client.ts"]),
+    false
+  )
+})

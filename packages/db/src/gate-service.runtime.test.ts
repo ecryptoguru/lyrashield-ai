@@ -246,6 +246,7 @@ describe.skipIf(!process.env.RLS_RUNTIME_DATABASE_URL)("automatic retest real RL
         workspaceId: id,
         accountId: id,
         currentPlan: "LAUNCH_ASSURANCE",
+        status: "active",
         currentPeriodStart: new Date(0),
         spendLimitCents: 15,
       },

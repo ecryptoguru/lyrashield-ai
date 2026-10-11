@@ -230,6 +230,50 @@ export const ScanExecutionPlanSchema = z
 
 export type ScanExecutionPlan = z.infer<typeof ScanExecutionPlanSchema>
 
+/** Read-only provenance view. Budgets and authorization handles stay server-side. */
+export const PublicScanExecutionPlanSchema = z
+  .object({
+    version: ScanExecutionPlanSchema.shape.version,
+    workflow: ScanWorkflowSchema,
+    targetType: ScanPlanTargetTypeSchema,
+    depth: ScanPlanDepthSchema,
+    profileId: ScanExecutionPlanSchema.shape.profileId,
+    scope: ScanPlanScopeSchema,
+    source: ScanExecutionPlanSchema.shape.source,
+    limits: ScanPlanLimitsSchema.omit({ maxBudgetUsd: true }),
+    capabilities: ScanExecutionPlanSchema.shape.capabilities,
+    attachmentIds: ScanExecutionPlanSchema.shape.attachmentIds,
+    authorizationRequired: z.boolean(),
+  })
+  .strict()
+
+export function buildPublicScanExecutionPlan(raw: unknown) {
+  const parsed = ScanExecutionPlanSchema.safeParse(raw)
+  if (!parsed.success) return null
+  const plan = parsed.data
+  return PublicScanExecutionPlanSchema.parse({
+    version: plan.version,
+    workflow: plan.workflow,
+    targetType: plan.targetType,
+    depth: plan.depth,
+    profileId: plan.profileId,
+    scope: plan.scope,
+    source: plan.source,
+    limits: {
+      maxDurationMs: plan.limits.maxDurationMs,
+      maxEngineMs: plan.limits.maxEngineMs,
+      scannerReserveMs: plan.limits.scannerReserveMs,
+      ...(plan.limits.maxRequests !== undefined ? { maxRequests: plan.limits.maxRequests } : {}),
+      ...(plan.limits.maxResponseBytes !== undefined
+        ? { maxResponseBytes: plan.limits.maxResponseBytes }
+        : {}),
+    },
+    capabilities: plan.capabilities,
+    attachmentIds: plan.attachmentIds,
+    authorizationRequired: Boolean(plan.authorizationRef),
+  })
+}
+
 /** Error thrown when server-side inputs cannot produce a valid plan. The API
  * layer maps this to a 400 rather than a generic 500. */
 export class ScanExecutionPlanInputError extends Error {

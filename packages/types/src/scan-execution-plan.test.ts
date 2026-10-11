@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import {
   AUTHENTICATED_ASSESSMENT_BETA_LIMITS,
   buildScanExecutionPlan,
+  buildPublicScanExecutionPlan,
   normalizePlanDepth,
   ScanExecutionPlanSchema,
 } from "./scan-execution-plan"
@@ -27,6 +28,43 @@ const REPO_SNAPSHOT_PLAN = {
   capabilities: ["engine", "sca", "secrets"],
   attachmentIds: [],
 }
+
+describe("public scan provenance", () => {
+  it("preserves workflow/source and execution limits without internal budget or authorization handles", () => {
+    const plan = buildScanExecutionPlan({
+      workflow: "AUTHENTICATED_ASSESSMENT",
+      targetType: "WEB_APP",
+      mode: "DEEP",
+      authorizationRef: "private-authorization-fixture",
+    })
+    const publicPlan = buildPublicScanExecutionPlan(plan)
+    expect(publicPlan).toMatchObject({
+      workflow: plan.workflow,
+      scope: plan.scope,
+      authorizationRequired: true,
+      limits: { maxDurationMs: plan.limits.maxDurationMs, maxRequests: plan.limits.maxRequests },
+    })
+    expect(publicPlan).not.toHaveProperty("limits.maxBudgetUsd")
+    expect(publicPlan).not.toHaveProperty("authorizationRef")
+    expect(JSON.stringify(publicPlan)).not.toContain("private-authorization-fixture")
+    expect(plan.authorizationRef).toBe("private-authorization-fixture")
+    expect(plan.limits.maxBudgetUsd).toBe(5)
+    const repo = buildScanExecutionPlan({
+      workflow: "REVIEW_CHANGES",
+      targetType: "REPO",
+      mode: "STANDARD",
+      source: { revision: HEAD, baseRevision: BASE, mergeBaseRevision: MERGE_BASE },
+    })
+    expect(buildPublicScanExecutionPlan(repo)?.source).toEqual(repo.source)
+  })
+
+  it.each([null, {}, { ...REPO_SNAPSHOT_PLAN, unknownPrivateField: "private" }])(
+    "returns unavailable for legacy or invalid stored plans: %j",
+    (raw) => {
+      expect(buildPublicScanExecutionPlan(raw)).toBeNull()
+    }
+  )
+})
 
 const LIVE_PLAN = {
   version: "lyrashield-scan-plan/1.0.0",

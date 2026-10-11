@@ -59,7 +59,7 @@ vi.mock("@lyrashield/db", async () => {
   const manifestModule = await vi.importActual<
     typeof import("@lyrashield/db/src/manifest-checksum")
   >("@lyrashield/db/src/manifest-checksum")
-  return {
+  const db = {
     verifyStoredScanExecutionPlan: planModule.verifyStoredScanExecutionPlan,
     verifyStoredManifestChecksum: manifestModule.verifyStoredManifestChecksum,
     resolveAuthenticatedAssessmentAuthorization: vi.fn(),
@@ -116,6 +116,11 @@ vi.mock("@lyrashield/db", async () => {
     ),
     runWithWorkspaceContext: <T>(_wsId: string | null, fn: () => T): T => fn(),
     runWithAccountContext: <T>(_accountId: string | null, fn: () => T): T => fn(),
+  }
+  return {
+    ...db,
+    withWorkspaceRLS: async (_id: string, fn: (tx: typeof db.prisma) => Promise<unknown>) =>
+      fn(db.prisma),
   }
 })
 
@@ -873,8 +878,28 @@ describe("processScanJob", () => {
         status: "failed",
         errorCategory: "RELAY_SCOPE_UNAVAILABLE",
       })
+      expect(updateScanStatus).toHaveBeenCalledWith("scan-1", "FAILED", {
+        errorCategory: "RELAY_SCOPE_UNAVAILABLE",
+        errorMessage: expect.stringContaining("verified domain"),
+      })
       expect(runEngine).not.toHaveBeenCalled()
       expect(recordAgentMinutes).not.toHaveBeenCalled()
+    })
+
+    it("preserves racing cancellation when an asynchronous execution-denial write rejects", async () => {
+      vi.mocked(prisma.target.findFirst).mockResolvedValue(mockUrlTarget as never)
+      vi.mocked(prisma.targetDomainVerification.findFirst).mockResolvedValue(null as never)
+      vi.mocked(updateScanStatus).mockResolvedValueOnce({ id: "scan-1" } as never)
+      vi.mocked(updateScanStatus).mockImplementationOnce(async () => {
+        await Promise.resolve()
+        vi.mocked(prisma.scan.findUnique).mockResolvedValue({ status: "CANCELLED" } as never)
+        throw new Error("Scan status changed concurrently to CANCELLED")
+      })
+      await expect(processScanJob(standardUrlJob)).resolves.toMatchObject({
+        errorCategory: "CANCELLED",
+      })
+      expect(runEngine).not.toHaveBeenCalled()
+      expect(failTerminalRetestsForScan).toHaveBeenCalledWith("scan-1")
     })
 
     it("fails closed when the relay is not configured for an engine-backed tier", async () => {
@@ -2410,31 +2435,37 @@ describe("processScanJob", () => {
     expect(updateScanStatus).not.toHaveBeenCalledWith("scan-1", "FAILED", expect.anything())
   })
 
-  it("does not cross the billable boundary when cancellation already won", async () => {
-    vi.mocked(prisma.scan.findUnique).mockImplementation((async (args: unknown) => {
-      const query = args as { select?: Record<string, unknown> | null }
-      if (query?.select && Object.keys(query.select).length === 1 && query.select.status === true) {
-        const cancelled = { status: "CANCELLED" }
-        return cancelled as never
-      }
-      const running = { status: "RUNNING", events: [] }
-      return running as never
-    }) as never)
+  it.each([{ status: "CANCELLED" }, null])(
+    "does not cross the billable boundary when cancellation or removal already won: %j",
+    async (current) => {
+      vi.mocked(prisma.scan.findUnique).mockImplementation((async (args: unknown) => {
+        const query = args as { select?: Record<string, unknown> | null }
+        if (
+          query?.select &&
+          Object.keys(query.select).length === 1 &&
+          query.select.status === true
+        ) {
+          return current as never
+        }
+        const running = { status: "RUNNING", events: [] }
+        return running as never
+      }) as never)
 
-    await expect(processScanJob(mockJob)).resolves.toMatchObject({
-      status: "failed",
-      errorCategory: "CANCELLED",
-    })
+      await expect(processScanJob(mockJob)).resolves.toMatchObject({
+        status: "failed",
+        errorCategory: "CANCELLED",
+      })
 
-    expect(addScanEvent).not.toHaveBeenCalledWith(
-      "scan-1",
-      "billable_boundary",
-      expect.anything(),
-      expect.anything(),
-      expect.anything()
-    )
-    expect(runEngine).not.toHaveBeenCalled()
-  })
+      expect(addScanEvent).not.toHaveBeenCalledWith(
+        "scan-1",
+        "billable_boundary",
+        expect.anything(),
+        expect.anything(),
+        expect.anything()
+      )
+      expect(runEngine).not.toHaveBeenCalled()
+    }
+  )
 
   it("reports a distinct TIMEOUT category when the engine times out", async () => {
     vi.mocked(runEngine).mockResolvedValue({
@@ -3166,6 +3197,21 @@ describe("processScanJob", () => {
     )
   })
 
+  it("settles elapsed usage if cancellation wins while deterministic scanners throw", async () => {
+    vi.mocked(runScannerOrchestrator).mockImplementationOnce(async () => {
+      vi.mocked(prisma.scan.findUnique).mockResolvedValue({ status: "CANCELLED" } as never)
+      throw new Error("scanner interrupted")
+    })
+    await expect(processScanJob(mockJob)).resolves.toMatchObject({ errorCategory: "CANCELLED" })
+    expect(recordAgentMinutes).toHaveBeenCalledWith(
+      "ws-1",
+      "scan-1",
+      expect.any(Number),
+      expect.objectContaining({ outcome: "cancelled" })
+    )
+    expect(persistFindings).not.toHaveBeenCalled()
+  })
+
   it("does not persist results when cancellation wins finalization", async () => {
     vi.mocked(prisma.scan.findUnique).mockImplementation((async (args: unknown) => {
       const query = args as { select?: Record<string, unknown> | null }
@@ -3188,6 +3234,12 @@ describe("processScanJob", () => {
     expect(persistFindings).not.toHaveBeenCalled()
     expect(completeRetestsForScan).not.toHaveBeenCalled()
     expect(notifyScanCompleted).not.toHaveBeenCalled()
+    expect(recordAgentMinutes).toHaveBeenCalledWith(
+      "ws-1",
+      "scan-1",
+      expect.any(Number),
+      expect.objectContaining({ outcome: "cancelled" })
+    )
   })
 
   it("fails INVALID_JOB when the job workspaceId does not match the scan record", async () => {

@@ -1,4 +1,4 @@
-import { withCookieMutation } from "../../../lib/api-auth"
+import { withCookieMutation, authErrorResponse } from "../../../lib/api-auth"
 import { createHash } from "crypto"
 import {
   prisma,
@@ -38,7 +38,7 @@ import {
   resolveUrlReviewMode,
 } from "../../../lib/scan-admission"
 import { revalidateDashboardAggregates } from "../../../lib/cache"
-import { authErrorResponse } from "../../../lib/api-auth"
+import { publicScanProvenance, publicScanResult } from "../../../lib/scan-provenance"
 import { apiError, apiSuccess, parsePaginationParams } from "../../../lib/api-response"
 import {
   assertScanWorkerAvailable,
@@ -352,7 +352,7 @@ async function post(request: Request) {
         }
         return apiSuccess(
           {
-            ...(claim.operation.result as Record<string, unknown>),
+            ...publicScanResult(claim.operation.result as Record<string, unknown>),
             operationId: claim.operation.id,
           },
           200
@@ -733,12 +733,7 @@ async function post(request: Request) {
           repoFullName: target.repoFullName,
         },
       }),
-      // The server-owned immutable plan recorded at creation and its content
-      // digest — the provenance contract every client (SDK/CLI/MCP/Action/
-      // Desktop) reads on a recorded scan. GET /api/scans/[id] returns the
-      // same fields from the stored row.
-      executionPlan: scan.executionPlan ?? null,
-      executionPlanHash: scan.executionPlanHash ?? null,
+      ...publicScanProvenance(scan.executionPlan),
     }
     if (operationClaim?.status === "NEW") {
       await completeAgentOperation(operationClaim.operation.id, workspaceId, {

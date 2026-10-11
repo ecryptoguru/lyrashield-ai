@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 const mocks = vi.hoisted(() => ({
   construct: vi.fn(),
   createCustomerSession: vi.fn(),
+  getSubscription: vi.fn(),
   env: {
     POLAR_ACCESS_TOKEN: "polar-sandbox-token",
     POLAR_ENVIRONMENT: "sandbox" as "production" | "sandbox",
@@ -12,6 +13,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@polar-sh/sdk", () => ({
   Polar: class {
     customerSessions = { create: mocks.createCustomerSession }
+    subscriptions = { get: mocks.getSubscription }
 
     constructor(options: unknown) {
       mocks.construct(options)
@@ -40,20 +42,38 @@ describe("getPolarClient", () => {
 describe("getPolarPortalUrl", () => {
   beforeEach(() => vi.clearAllMocks())
 
-  it("creates a customer session and returns its portal URL", async () => {
+  it("resolves the stored subscription to its distinct customer before creating a portal session", async () => {
+    mocks.getSubscription.mockResolvedValueOnce({ id: "sub_1", customerId: "cust_1" })
     mocks.createCustomerSession.mockResolvedValueOnce({
       customerPortalUrl: "https://sandbox.polar.sh/customer-portal/session",
     })
 
-    await expect(getPolarPortalUrl({ customerId: "cust_1" })).resolves.toBe(
+    await expect(getPolarPortalUrl({ subscriptionId: "sub_1" })).resolves.toBe(
       "https://sandbox.polar.sh/customer-portal/session"
     )
     expect(mocks.createCustomerSession).toHaveBeenCalledWith({ customerId: "cust_1" })
+    expect(mocks.getSubscription).toHaveBeenCalledWith({ id: "sub_1" })
   })
 
   it("fails closed when Polar refuses the customer session", async () => {
+    mocks.getSubscription.mockResolvedValueOnce({ id: "sub_1", customerId: "cust_1" })
     mocks.createCustomerSession.mockRejectedValueOnce(new Error("forbidden"))
 
-    await expect(getPolarPortalUrl({ customerId: "cust_1" })).resolves.toBeNull()
+    await expect(getPolarPortalUrl({ subscriptionId: "sub_1" })).resolves.toBeNull()
+  })
+
+  it.each([
+    { id: "other", customerId: "cust_1" },
+    { id: "sub_1", customerId: "" },
+  ])("fails closed for a mismatched subscription or missing customer: %j", async (subscription) => {
+    mocks.getSubscription.mockResolvedValueOnce(subscription)
+    await expect(getPolarPortalUrl({ subscriptionId: "sub_1" })).resolves.toBeNull()
+    expect(mocks.createCustomerSession).not.toHaveBeenCalled()
+  })
+
+  it("does not create a session when subscription lookup fails", async () => {
+    mocks.getSubscription.mockRejectedValueOnce(new Error("not found"))
+    await expect(getPolarPortalUrl({ subscriptionId: "sub_1" })).resolves.toBeNull()
+    expect(mocks.createCustomerSession).not.toHaveBeenCalled()
   })
 })

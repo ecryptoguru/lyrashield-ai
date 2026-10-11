@@ -48,6 +48,8 @@ import {
 } from "@lyrashield/db"
 import { assertOAuthDelegatedScope, requirePermission } from "@lyrashield/auth/server"
 import { getScanQueuePosition } from "@lyrashield/integrations"
+import { publicScanProvenance } from "../../../../lib/scan-provenance"
+import { buildScanExecutionPlan } from "@lyrashield/types"
 import { expectPermissionDenied } from "@/__tests__/route-permission-manifest"
 
 const routeParams = { params: Promise.resolve({ id: "scan-1" }) }
@@ -138,6 +140,57 @@ describe("/api/scans/[id] workspace boundary", () => {
     expect(response.status).toBe(403)
     expect(assertOAuthDelegatedScope).toHaveBeenCalledWith(narrowSession, "target-2")
     expect(getScanQueuePosition).not.toHaveBeenCalled()
+  })
+
+  it("returns allowlisted recorded provenance and binds it into the ETag", async () => {
+    const executionPlan = buildScanExecutionPlan({
+      targetType: "REPO",
+      mode: "STANDARD",
+      source: { revision: "a".repeat(40) },
+    })
+    const scan = {
+      id: "scan-1",
+      workspaceId: "ws-1",
+      executionPlan,
+      executionPlanHash: "b".repeat(64),
+    }
+    vi.mocked(getScanWithEvents).mockResolvedValue(scan as never)
+    const request = new Request("http://localhost/api/scans/scan-1?workspaceId=ws-1")
+    const response = await GET(request, routeParams)
+    const body = await response.json()
+    expect(body.data.executionPlan).toMatchObject({
+      workflow: "REVIEW_TARGET",
+      source: { revision: "a".repeat(40) },
+    })
+    expect(body.data.executionPlan).not.toHaveProperty("limits.maxBudgetUsd")
+    expect(body.data.executionPlanHash).toBe(publicScanProvenance(executionPlan).executionPlanHash)
+    vi.mocked(getScanWithEvents).mockResolvedValue({
+      ...scan,
+      executionPlan: { ...executionPlan, source: { revision: "c".repeat(40) } },
+    } as never)
+    const changed = await GET(
+      new Request(request, { headers: { "if-none-match": response.headers.get("etag")! } }),
+      routeParams
+    )
+    expect(changed.status).toBe(200)
+    expect(changed.headers.get("etag")).not.toBe(response.headers.get("etag"))
+  })
+
+  it("returns unavailable provenance for legacy scans", async () => {
+    vi.mocked(getScanWithEvents).mockResolvedValue({
+      id: "scan-1",
+      workspaceId: "ws-1",
+      executionPlan: null,
+      executionPlanHash: null,
+    } as never)
+    const response = await GET(
+      new Request("http://localhost/api/scans/scan-1?workspaceId=ws-1"),
+      routeParams
+    )
+    expect((await response.json()).data).toMatchObject({
+      executionPlan: null,
+      executionPlanHash: null,
+    })
   })
 
   it("allows a connection when the persisted scan target is in its grant", async () => {
