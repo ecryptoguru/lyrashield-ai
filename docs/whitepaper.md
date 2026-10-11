@@ -270,7 +270,7 @@ Engine output is untrusted and bounded. Candidates, coverage receipts, findings 
 
 Manifest integrity binds the result to execution identity. New-format rows retain the exact checksum input; legacy rows without it remain integrity-unavailable rather than being rewritten to appear verifiable.
 
-Retest validation requires stored original and retest evidence, supported identity and complete deterministic coverage. Repository revisions can differ after a fix; missing identity remains inconclusive. Both stored manifest checksums must match before a deterministic retest can validate a finding. Legacy rows without their original checksum input remain unavailable and are not rewritten. The dated source audit and release receipt are recorded in the [PRD production evidence](../PRD.md#8-current-production-evidence); the audit did not inspect production finding records or establish that an incorrect historical validation occurred.
+Retest validation requires stored original and retest evidence, supported identity and complete deterministic coverage. Repository revisions can differ after a fix; missing identity remains inconclusive. Both stored manifest checksums must match before a deterministic retest can validate a finding. Legacy rows without their original checksum input remain unavailable and are not rewritten. Deployed-release status and the historical audit scope are recorded in the [PRD production evidence](../PRD.md#8-current-production-evidence).
 
 Evidence uploads require checksum and encryption metadata. Direct status changes cannot manufacture a trusted terminal fix; `FIXED_PENDING_RETEST` preserves the need for new evidence.
 
