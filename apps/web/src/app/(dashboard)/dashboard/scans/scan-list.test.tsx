@@ -3,6 +3,28 @@ import { describe, expect, it } from "vitest"
 import { ScanList } from "./scan-list"
 import type { ScanItem } from "./scan-types"
 
+function renderScanList(scans: ScanItem[]) {
+  return renderToStaticMarkup(
+    <ScanList
+      scans={scans}
+      refreshing={false}
+      nextCursor={null}
+      loadingMore={false}
+      targetFilter=""
+      stateFilter="ALL"
+      hasTargets
+      onClearFilters={() => {}}
+      onShowCreate={() => {}}
+      onRetryScan={() => {}}
+      cancelling={null}
+      removing={null}
+      onCancelScan={async () => {}}
+      onRemoveScan={async () => {}}
+      onLoadMore={async () => {}}
+    />
+  )
+}
+
 describe("scan retry setup", () => {
   it("uses an in-page action so a retry opens the current composer", () => {
     const scan: ScanItem = {
@@ -63,6 +85,40 @@ describe("scan retry setup", () => {
     expect(html).not.toContain("/dashboard/scans?new=1")
     expect(html).toContain("Sep 23, 2026, 00:00 UTC")
     expect(html).toContain("completed Sep 23, 2026, 00:05 UTC")
+  })
+
+  it("summarizes retained findings when the engine runtime limit is reached", () => {
+    const originalDiagnostic = "Engine reached its runtime limit before filing any findings"
+    const scan: ScanItem = {
+      id: "scan-runtime-limit",
+      status: "FAILED",
+      goal: "SECURITY_REVIEW",
+      mode: "QUICK",
+      triggerType: "MANUAL",
+      startedAt: "2026-09-28T15:40:00.000Z",
+      endedAt: "2026-09-28T15:52:00.000Z",
+      summary: null,
+      errorCategory: "ENGINE_RUNTIME_DEADLINE",
+      errorMessage: originalDiagnostic,
+      findingCount: 16,
+      target: {
+        id: "target-1",
+        name: "OnboardingAI2",
+        type: "REPO",
+        url: null,
+        repoFullName: "owner/example",
+      },
+      createdAt: "2026-09-28T15:40:00.000Z",
+    }
+
+    const html = renderScanList([scan])
+
+    expect(html).toContain(">Failed</span>")
+    expect(html).toContain("Runtime limit reached · 16 findings retained")
+    expect(html).not.toContain(originalDiagnostic)
+    expect(renderScanList([{ ...scan, findingCount: 0 }])).toContain(originalDiagnostic)
+    expect(scan.errorMessage).toBe(originalDiagnostic)
+    expect(scan.status).toBe("FAILED")
   })
 
   it("links the empty scans state directly to guided scan setup", () => {
