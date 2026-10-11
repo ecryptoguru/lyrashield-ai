@@ -2,7 +2,7 @@
 // gates succeed. The public artifact contains digests/provenance only.
 import { readFileSync, writeFileSync, writeSync } from "node:fs"
 import { join } from "node:path"
-import { normalizeBackupConnection } from "../../packages/db/scripts/webhook-backup-connection.mjs"
+import { prepareVerifiedBackupConnection } from "./prepare-verified-backup-connection.mjs"
 import {
   canonical,
   sha256,
@@ -11,7 +11,11 @@ import {
 const env = process.env
 let stage = "backup-digests"
 try {
-  for (const key of ["BACKUP_ENCRYPTED_SHA256", "BACKUP_DUMP_SHA256"])
+  for (const key of [
+    "BACKUP_ENCRYPTED_SHA256",
+    "BACKUP_DUMP_SHA256",
+    "BACKUP_DATABASE_IDENTITY_SHA256",
+  ])
     requireValue(/^[a-f0-9]{64}$/.test(env[key] || ""), "Missing exact backup digest")
   stage = "backup-provenance"
   requireValue(
@@ -23,9 +27,13 @@ try {
   const directory = env.RUNNER_TEMP
   const objectKey = `daily/lyrashield-${env.BACKUP_DAY}-${env.GITHUB_RUN_ID}.dump.gpg`
   stage = "database-identity"
-  const backupIdentitySha256 = normalizeBackupConnection(
+  const backupIdentitySha256 = prepareVerifiedBackupConnection(
     env.PRODUCTION_DATABASE_DIRECT_URL
   ).identitySha256
+  requireValue(
+    backupIdentitySha256 === env.BACKUP_DATABASE_IDENTITY_SHA256,
+    "Backup producer database identity differs from proof"
+  )
   stage = "restore-evidence"
   const proof = {
     schemaVersion: "webhook-empty-state-restore-evidence/v2",
@@ -51,6 +59,8 @@ try {
   // path, provider response, exception stack or restored row context.
   const reasons = new Map([
     ["Unsupported backup compatibility option", "unsupported-compatibility"],
+    ["backup database URL requires one explicit supported TLS mode", "tls-verification-required"],
+    ["Backup producer database identity differs from proof", "producer-identity-mismatch"],
     ["backup database URL requires sslmode=verify-full", "tls-verification-required"],
     ["Backup requires direct/session PostgreSQL", "direct-session-required"],
     ["backup database URL contains a duplicate query parameter", "duplicate-parameter"],
