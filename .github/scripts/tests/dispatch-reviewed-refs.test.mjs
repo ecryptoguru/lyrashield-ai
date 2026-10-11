@@ -33,13 +33,10 @@ test("backup jobs hold production secrets only on reviewed main", () => {
   const workflow = read("production-backup.yml")
   const backup = jobSection(workflow, "backup")
   const restore = jobSection(workflow, "restore")
-  // Ordinary backups run no repository code. The opt-in private manual mode
-  // checks out only the source guarded before any credential-bearing step.
+  // Every backup validates its connection using reviewed main helpers.
+  // Opt-in private dispatch adds exact-source binding before checkout.
   assert.match(backup, /^    if: github\.ref == 'refs\/heads\/main'$/m)
-  assert.match(
-    backup,
-    /name: Checkout isolated restore helpers\n        if: inputs\.isolated_restore\n        uses: actions\/checkout@/
-  )
+  assert.match(backup, /name: Checkout reviewed backup helpers\n        uses: actions\/checkout@/)
   assert.match(backup, /ref: \$\{\{ github\.sha \}\}/)
   assert.ok(
     backup.indexOf("Bind isolated restore to the reviewed source") <

@@ -431,4 +431,21 @@ describe("scan detail — truthful scope and declared coverage", () => {
     expect(failedHtml).toContain("Supporting file unavailable")
     expect(failedHtml).not.toContain("Clean")
   })
+
+  it("keeps the original runtime-limit diagnostic in scan failure details", () => {
+    const originalDiagnostic = "Engine reached its runtime limit before filing any findings"
+    const failedHtml = renderDetail({
+      scan: {
+        ...scan,
+        status: "FAILED",
+        errorCategory: "ENGINE_RUNTIME_DEADLINE",
+        errorMessage: originalDiagnostic,
+      },
+      findings: [finding],
+    })
+
+    expect(failedHtml).toContain("Failure details")
+    expect(failedHtml).toContain(originalDiagnostic)
+    expect(failedHtml).toContain("Example finding")
+  })
 })

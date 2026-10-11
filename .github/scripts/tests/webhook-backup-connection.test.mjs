@@ -68,7 +68,9 @@ test("public restore proof accepts backup compatibility without publishing conne
         env: {
           ...process.env,
           RUNNER_TEMP: directory,
-          PRODUCTION_DATABASE_DIRECT_URL: direct + "&uselibpqcompat=1",
+          PRODUCTION_DATABASE_DIRECT_URL:
+            direct.replace("verify-full", "require") + "&uselibpqcompat=1",
+          BACKUP_DATABASE_IDENTITY_SHA256: normalizeBackupConnection(direct).identitySha256,
           BACKUP_ENCRYPTED_SHA256: "a".repeat(64),
           BACKUP_DUMP_SHA256: "b".repeat(64),
           BACKUP_DAY: "2026-10-11",
@@ -103,7 +105,7 @@ test("public restore proof accepts backup compatibility without publishing conne
 for (const [name, change, diagnostic] of [
   [
     "TLS downgrade",
-    { PRODUCTION_DATABASE_DIRECT_URL: direct.replace("verify-full", "require") },
+    { PRODUCTION_DATABASE_DIRECT_URL: direct.replace("verify-full", "disable") },
     "database-identity/tls-verification-required",
   ],
   [
@@ -115,6 +117,21 @@ for (const [name, change, diagnostic] of [
     "ambiguous flag",
     { PRODUCTION_DATABASE_DIRECT_URL: direct + "&uselibpqcompat=private-rejected-value" },
     "database-identity/unsupported-compatibility",
+  ],
+  [
+    "missing producer identity",
+    { BACKUP_DATABASE_IDENTITY_SHA256: "" },
+    "backup-digests/validation-or-io-failure",
+  ],
+  [
+    "invalid producer identity",
+    { BACKUP_DATABASE_IDENTITY_SHA256: "private-rejected-value" },
+    "backup-digests/validation-or-io-failure",
+  ],
+  [
+    "mismatched producer identity",
+    { BACKUP_DATABASE_IDENTITY_SHA256: "d".repeat(64) },
+    "database-identity/producer-identity-mismatch",
   ],
   [
     "invalid digest",
@@ -147,6 +164,7 @@ for (const [name, change, diagnostic] of [
               ...process.env,
               RUNNER_TEMP: directory,
               PRODUCTION_DATABASE_DIRECT_URL: direct + "&uselibpqcompat=1",
+              BACKUP_DATABASE_IDENTITY_SHA256: normalizeBackupConnection(direct).identitySha256,
               BACKUP_ENCRYPTED_SHA256: "a".repeat(64),
               BACKUP_DUMP_SHA256: "b".repeat(64),
               BACKUP_DAY: "2026-10-11",
@@ -167,20 +185,7 @@ for (const [name, change, diagnostic] of [
         const expected = `Restore proof failed (${diagnostic}).\n`
         if (diagnosticFd === "3") assert.equal(result.stderr.includes(expected), false)
         else assert.equal(result.stderr.split(expected).length, 2)
-        // pg-connection-string schedules this fixed warning after parsing the
-        // rejected require mode. It stays on private stderr in the workflow.
-        const privateStderr = result.stderr.replace(expected, "").replace(/^\(node:\d+\) /, "")
-        const sslWarning = `Warning: SECURITY WARNING: The SSL modes 'prefer', 'require', and 'verify-ca' are treated as aliases for 'verify-full'.
-In the next major version (pg-connection-string v3.0.0 and pg v9.0.0), these modes will adopt standard libpq semantics, which have weaker security guarantees.
-
-To prepare for this change:
-- If you want the current behavior, explicitly use 'sslmode=verify-full'
-- If you want libpq compatibility now, use 'uselibpqcompat=true&sslmode=require'
-
-See https://www.postgresql.org/docs/current/libpq-ssl.html for libpq SSL mode definitions.
-(Use \`node --trace-warnings ...\` to show where the warning was created)
-`
-        assert.equal(privateStderr, name === "TLS downgrade" ? sslWarning : "")
+        assert.equal(result.stderr.replace(expected, ""), "")
         assert.equal(result.output[3], diagnosticFd === "3" ? expected : "")
         const output = result.output.join("")
         for (const privateValue of [
@@ -200,3 +205,57 @@ See https://www.postgresql.org/docs/current/libpq-ssl.html for libpq SSL mode de
     }
   })
 }
+
+test("the backup client upgrades legacy TLS before connecting without changing logical identity", async () => {
+  const { prepareVerifiedBackupConnection } =
+    await import("../prepare-verified-backup-connection.mjs")
+  const expected = normalizeBackupConnection(direct)
+  for (const mode of ["require", "verify-full"]) {
+    const raw = direct.replace("verify-full", mode) + "&uselibpqcompat=1"
+    const prepared = prepareVerifiedBackupConnection(raw)
+    assert.equal(prepared.url, expected.url)
+    assert.equal(prepared.identitySha256, expected.identitySha256)
+    const transport = new URL(prepared.libpqUrl)
+    assert.equal(transport.searchParams.get("sslmode"), "verify-full")
+    assert.equal(transport.searchParams.get("sslrootcert"), "system")
+    assert.equal(transport.searchParams.get("gssencmode"), "disable")
+    assert.equal(transport.searchParams.has("schema"), false)
+    assert.equal(transport.searchParams.has("uselibpqcompat"), false)
+    assert.equal(transport.hostname, new URL(direct).hostname)
+    assert.equal(transport.username, new URL(direct).username)
+    assert.equal(transport.password, new URL(direct).password)
+    assert.equal(transport.pathname, new URL(direct).pathname)
+  }
+  assert.throws(() => normalizeBackupConnection(direct.replace("verify-full", "require")))
+})
+
+test("verified backup preparation preserves the raw parameter, TLS and identity rejection boundary", async () => {
+  const { prepareVerifiedBackupConnection } =
+    await import("../prepare-verified-backup-connection.mjs")
+  for (const raw of [
+    null,
+    "x".repeat(8193),
+    "not-a-url",
+    direct.replace("verify-full", "disable"),
+    direct.replace("verify-full", "prefer"),
+    direct.replace("&sslmode=verify-full", ""),
+    direct + "&%73slmode=require",
+    direct + "&sslmode=verify-full",
+    direct + "&uselibpqcompat=0",
+    direct + "&uselibpqcompat=1&%75selibpqcompat=1",
+    direct + "&sslrootcert=system",
+    direct + "&sslrootcert=/untrusted/path",
+    direct + "&gssencmode=require",
+    direct + "&host=evil.invalid",
+    direct + "&hostaddr=127.0.0.1",
+    direct + "&%75ser=attacker",
+    direct + "&password=other",
+    direct + "&options=-c%20search_path%3Devil",
+    direct.replace(":5432/", ":6543/"),
+    direct.replace("postgres:fixture-only", "worker_runtime:fixture-only"),
+    direct.replace("schema=public", "schema=private"),
+    direct.replace("/postgres?", "/other?"),
+    direct + "#fragment",
+  ])
+    assert.throws(() => prepareVerifiedBackupConnection(raw))
+})

@@ -227,8 +227,8 @@
     },
     "apps/web/src/app/(dashboard)/dashboard/scans/scan-list.tsx|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 46,
-      "maxExcess": 46
+      "totalExcess": 43,
+      "maxExcess": 43
     },
     "apps/web/src/app/(dashboard)/dashboard/scans/scan-status-notices.tsx|max-lines-per-function": {
       "count": 1,
