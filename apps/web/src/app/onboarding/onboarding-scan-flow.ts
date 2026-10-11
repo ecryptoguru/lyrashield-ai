@@ -152,7 +152,7 @@ export async function checkPendingScanOperation(
       { schema: scanOperationStatusSchema }
     )
     ctx.setScanOperationStatus(status)
-    if (status.status === "COMPLETED" && status.resultLocation) {
+    if (status.resultLocation) {
       const accepted = {
         ...submission,
         state: "accepted" as const,
@@ -160,6 +160,11 @@ export async function checkPendingScanOperation(
         operationId: status.operationId,
       }
       ctx.setPendingScanSubmission(accepted)
+      if (status.status === "FAILED") {
+        ctx.setScanRecoveryError(
+          "This scan ended with an error. View its status and details before starting another."
+        )
+      }
       try {
         recordAcceptedScan(
           scope,

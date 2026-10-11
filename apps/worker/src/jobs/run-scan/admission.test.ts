@@ -198,11 +198,25 @@ describe("verifyScanAdmission", () => {
     expect(mocks.refreshGate).not.toHaveBeenCalled()
   })
 
-  it("skips the entitlement check for deterministic retests", async () => {
-    await expect(verifyScanAdmission(params({ deterministicRetest: true }))).resolves.toEqual({
-      ok: true,
+  it("rechecks entitlement for deterministic retests after queueing", async () => {
+    mocks.evaluateScanEntitlement.mockResolvedValue({
+      allowed: false,
+      code: "TRIAL_EXPIRED",
+      message: "Trial expired after queueing",
     })
-    expect(mocks.evaluateScanEntitlement).not.toHaveBeenCalled()
+
+    await expect(
+      verifyScanAdmission(params({ deterministicRetest: true, engineBacked: false }))
+    ).resolves.toMatchObject({
+      ok: false,
+      result: { errorCategory: "TRIAL_EXPIRED" },
+    })
+    expect(mocks.runWithAccountContext).toHaveBeenCalledWith("user-1", expect.any(Function))
+    expect(mocks.evaluateScanEntitlement).toHaveBeenCalledWith({
+      workspaceId: "ws-1",
+      mode: "DEEP",
+      sponsorAccountId: "user-1",
+    })
   })
 
   describe("execution-plan admission", () => {

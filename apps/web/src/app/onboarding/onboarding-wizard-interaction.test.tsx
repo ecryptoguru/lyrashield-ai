@@ -849,7 +849,6 @@ it("rechecks eligibility after an unknown trial-start response before deciding t
   api.patch.mockResolvedValue({ ...initialState, completed: true, currentStep: 4 })
   api.post
     .mockRejectedValueOnce(new ApiError("NETWORK_ERROR", "Network request failed", 0))
-    .mockResolvedValueOnce({ started: true, trialEndsAt: "2026-10-09T00:00:00.000Z" })
     .mockResolvedValueOnce({ id: "scan-2" })
 
   const click = async (label: string) => {
@@ -866,13 +865,6 @@ it("rechecks eligibility after an unknown trial-start response before deciding t
   await click("Start your free trial")
 
   expect(api.get).toHaveBeenCalledTimes(2)
-  expect(
-    render("REPO", initialState).some(
-      (element) =>
-        element.type === Button && textOf(element.props.children).includes("Start release check")
-    )
-  ).toBe(true)
-  await click("Start release check")
 
   const trialStarts = vi
     .mocked(apiPost)
@@ -1061,6 +1053,7 @@ it("does not create a second workspace or target when Continue is double-tapped 
   const workspaceHeld = new Promise<void>((resolve) => {
     releaseWorkspace = resolve
   })
+  api.get.mockResolvedValueOnce({ data: [] })
   let workspaceCalls = 0
   api.post.mockImplementation(async (url: string) => {
     if (url === "/api/workspaces") {

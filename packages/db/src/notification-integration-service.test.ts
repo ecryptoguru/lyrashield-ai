@@ -11,6 +11,7 @@ import {
   getWorkspaceNotificationChannels,
   saveNotificationIntegration,
   disableNotificationIntegration,
+  lockNotificationDestinationsForDeletion,
   withActiveWorkspaceNotificationDestination,
 } from "./notification-integration-service"
 
@@ -159,6 +160,14 @@ describe("workspace notification integrations", () => {
     const send = vi.fn()
     expect(await withActiveWorkspaceNotificationDestination("ws-1", "slack", send)).toBeNull()
     expect(send).not.toHaveBeenCalled()
+  })
+
+  it("locks both notification destinations in stable order for deletion", async () => {
+    await lockNotificationDestinationsForDeletion(tx as never, "ws-1")
+    const lockedDestinations = tx.$executeRaw.mock.calls
+      .filter(([strings]) => String(strings?.[0]).includes("pg_advisory_xact_lock"))
+      .map(([, externalId]) => externalId)
+    expect(lockedDestinations).toEqual(["notifications:ws-1:discord", "notifications:ws-1:slack"])
   })
 
   it("serializes rotation and disable against a started delivery through the same purpose lock", async () => {

@@ -35,6 +35,21 @@ function notificationIdentities(workspaceId: string) {
   )
 }
 
+/**
+ * Account deletion takes both existing notification destination locks in a
+ * deterministic order before it reads configRefs. Saves, disconnects and
+ * deliveries use these same transaction-scoped locks.
+ */
+export async function lockNotificationDestinationsForDeletion(
+  tx: ScopedTransaction,
+  workspaceId: string
+): Promise<void> {
+  const destinations = (["discord", "slack"] as const)
+    .map((channel) => identity(workspaceId, channel).externalId)
+    .sort()
+  for (const destination of destinations) await lockDestination(tx, destination)
+}
+
 function summary(
   row: Pick<Integration, "id" | "type" | "name" | "status" | "updatedAt">
 ): NotificationIntegrationSummary {

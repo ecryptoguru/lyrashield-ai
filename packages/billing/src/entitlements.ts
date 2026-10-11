@@ -12,7 +12,13 @@ import { CLOUD_PLAN_MAP, STANDARD_OVERAGE_PER_MINUTE_USD } from "@lyrashield/pri
 import type { ScanMode } from "@lyrashield/types"
 import { resolveAccountBilling, type ResolvedAccountBilling } from "./account"
 import { getUsageBalance, getUsageBalanceForTx, resolveBalanceCycleStart } from "./usage/balance"
-import { getAccountTrialState, blockOnExpiry, TRIAL_DURATION_DAYS, type TrialState } from "./trial"
+import {
+  getAccountTrialState,
+  blockOnExpiry,
+  TRIAL_DURATION_DAYS,
+  TRIAL_TARGET_CAP,
+  type TrialState,
+} from "./trial"
 import { resolveWorkspaceScanSponsor } from "./agency-sponsor"
 
 export type ScanModeAllowed = "SAFE" | "QUICK" | "STANDARD" | "DEEP" | "CUSTOM"
@@ -119,7 +125,7 @@ async function accountTrialStateFrom(
       daysLeft: 0,
       minutesLeft: 0,
       targetsUsed: 0,
-      targetCap: 3,
+      targetCap: TRIAL_TARGET_CAP,
     }
   }
   const billing = await resolveAccountBilling(accountId, tx)
@@ -136,7 +142,7 @@ async function accountTrialStateFrom(
     daysLeft: Math.max(0, Math.ceil(((endsAt?.getTime() ?? 0) - now.getTime()) / 86_400_000)),
     minutesLeft: balance.poolRemaining,
     targetsUsed: 0,
-    targetCap: 3,
+    targetCap: TRIAL_TARGET_CAP,
   }
 }
 
@@ -346,9 +352,10 @@ export interface TargetAllowedResult {
  */
 export async function assertTargetAllowed(
   workspaceId: string,
-  actingAccountId: string
+  actingAccountId: string,
+  tx?: DbTx
 ): Promise<TargetAllowedResult> {
-  const sponsor = await resolveWorkspaceScanSponsor(workspaceId, actingAccountId)
+  const sponsor = await resolveWorkspaceScanSponsor(workspaceId, actingAccountId, tx)
   if (
     !sponsor ||
     (sponsor.agency && !sponsor.agencyActive && actingAccountId !== sponsor.accountId)
@@ -361,7 +368,7 @@ export async function assertTargetAllowed(
       targetCap: 0,
     }
   }
-  const { billing, trial } = await loadSponsorContext(sponsor.accountId, undefined, actingAccountId)
+  const { billing, trial } = await loadSponsorContext(sponsor.accountId, tx, actingAccountId)
 
   const plan = billing?.effectivePlan ?? "FREE"
   const isTrial = trial.isActive
@@ -369,10 +376,10 @@ export async function assertTargetAllowed(
   // FREE has no CLOUD_PLAN_MAP entry — accounts with no active plan or trial
   // get the same three-target allowance as a trial. Any other unmapped plan
   // fails closed to the same cap (0 would read as "no limit" below).
-  const FREE_TARGET_CAP = 3
-  const targetCap = isTrial ? 3 : (cloudPlan?.targetCaps ?? FREE_TARGET_CAP)
+  const FREE_TARGET_CAP = TRIAL_TARGET_CAP
+  const targetCap = isTrial ? TRIAL_TARGET_CAP : (cloudPlan?.targetCaps ?? FREE_TARGET_CAP)
 
-  const targetCount = await prisma.target.count({
+  const targetCount = await (tx ?? prisma).target.count({
     where: { workspaceId, deletedAt: null },
   })
 

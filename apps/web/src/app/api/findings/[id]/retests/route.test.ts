@@ -15,6 +15,11 @@ const requirePermission = vi.fn()
 const enqueueScanJob = vi.fn()
 const assertScanWorkerAvailable = vi.fn()
 const updateScanStatus = vi.fn()
+const assertScanAllowed = vi.fn()
+const findCurrentDomainProof = vi.fn()
+const checkFreeUrlScanRateLimit = vi.fn()
+const checkScanCreateRateLimit = vi.fn()
+const clientIpFromRequest = vi.fn()
 class ScanWorkerUnavailableError extends Error {}
 class WorkspaceScanConcurrencyLimitError extends Error {}
 const prisma = {
@@ -26,11 +31,21 @@ const prisma = {
 }
 
 vi.mock("@lyrashield/db", () => ({
+  findCurrentDomainProof,
   getFindingReference,
   createScan,
   updateScanStatus,
   WorkspaceScanConcurrencyLimitError,
   prisma,
+}))
+vi.mock("@lyrashield/billing", () => ({
+  assertScanAllowed,
+  resolveWorkspaceScanSponsor: vi.fn(async (_workspaceId: string, actorId: string) => ({
+    accountId: actorId,
+    agency: false,
+    agencyActive: false,
+  })),
+  resolveAccountBilling: vi.fn(async () => ({ effectivePlan: "FREE", currentPlan: "FREE" })),
 }))
 vi.mock("@lyrashield/auth/server", () => ({
   assertOAuthDelegatedScope: vi.fn(),
@@ -42,6 +57,11 @@ vi.mock("../../../../../lib/queue", () => ({
   enqueueScanJob,
   assertScanWorkerAvailable,
   ScanWorkerUnavailableError,
+}))
+vi.mock("../../../../../lib/rate-limit", () => ({
+  checkFreeUrlScanRateLimit,
+  checkScanCreateRateLimit,
+  clientIpFromRequest,
 }))
 
 const { POST } = await import("./route")
@@ -72,6 +92,16 @@ describe("POST /api/findings/[id]/retests", () => {
     })
     enqueueScanJob.mockResolvedValue("job-1")
     assertScanWorkerAvailable.mockResolvedValue(undefined)
+    assertScanAllowed.mockResolvedValue({
+      allowed: true,
+      plan: "FREE",
+      isTrial: false,
+      remainingMinutes: 10,
+    })
+    findCurrentDomainProof.mockResolvedValue({ domain: "api.example.com", verified: false })
+    checkFreeUrlScanRateLimit.mockResolvedValue({ limited: false, retryAfter: 0 })
+    checkScanCreateRateLimit.mockResolvedValue({ limited: false, retryAfter: 0 })
+    clientIpFromRequest.mockReturnValue("203.0.113.8")
     prisma.target.findFirst.mockResolvedValue({
       id: "target-1",
       type: "REPO",
@@ -145,6 +175,115 @@ describe("POST /api/findings/[id]/retests", () => {
     expect(response.status).toBe(503)
     expect((await response.json()).error.code).toBe("SCAN_SERVICE_UNAVAILABLE")
     expect(createScan).not.toHaveBeenCalled()
+  })
+
+  it("refuses an expired-trial deterministic retest before creating any records", async () => {
+    prisma.findingCandidate.findMany.mockResolvedValue([{ scannerSource: "url" }])
+    prisma.target.findFirst.mockResolvedValue({
+      id: "target-1",
+      type: "WEB_APP",
+      url: "https://api.example.com",
+      apiSpecUrl: null,
+    })
+    assertScanAllowed.mockResolvedValue({
+      allowed: false,
+      code: "TRIAL_EXPIRED",
+      message: "Your trial has expired. Upgrade to continue scanning.",
+      plan: "FREE",
+      isTrial: false,
+      remainingMinutes: 0,
+    })
+
+    const response = await POST(
+      new Request("http://localhost/api/findings/finding-1/retests", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ workspaceId: "workspace-1" }),
+      }),
+      { params: Promise.resolve({ id: "finding-1" }) }
+    )
+
+    expect(response.status).toBe(403)
+    expect((await response.json()).error.code).toBe("TRIAL_EXPIRED")
+    expect(createScan).not.toHaveBeenCalled()
+    expect(prisma.retest.create).not.toHaveBeenCalled()
+    expect(enqueueScanJob).not.toHaveBeenCalled()
+  })
+
+  it("requires current domain proof for an engine-backed URL retest", async () => {
+    prisma.scan.findFirst.mockResolvedValue({
+      id: "source-scan",
+      targetId: "target-1",
+      goal: "TEST_APP",
+      mode: "STANDARD",
+      policyId: null,
+    })
+    prisma.findingCandidate.findMany.mockResolvedValue([{ scannerSource: "engine" }])
+    prisma.target.findFirst.mockResolvedValue({
+      id: "target-1",
+      type: "WEB_APP",
+      url: "https://api.example.com",
+      apiSpecUrl: null,
+    })
+
+    const response = await POST(
+      new Request("http://localhost/api/findings/finding-1/retests", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ workspaceId: "workspace-1" }),
+      }),
+      { params: Promise.resolve({ id: "finding-1" }) }
+    )
+
+    expect(response.status).toBe(403)
+    expect((await response.json()).error.code).toBe("DOMAIN_VERIFICATION_REQUIRED")
+    expect(createScan).not.toHaveBeenCalled()
+    expect(findCurrentDomainProof).toHaveBeenCalledWith("workspace-1", "https://api.example.com")
+  })
+
+  it("applies the existing free deterministic URL limit and Retry-After", async () => {
+    prisma.findingCandidate.findMany.mockResolvedValue([{ scannerSource: "url" }])
+    prisma.target.findFirst.mockResolvedValue({
+      id: "target-1",
+      type: "WEB_APP",
+      url: "https://api.example.com",
+      apiSpecUrl: null,
+    })
+    checkFreeUrlScanRateLimit.mockResolvedValue({ limited: true, retryAfter: 23 })
+
+    const response = await POST(
+      new Request("http://localhost/api/findings/finding-1/retests", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ workspaceId: "workspace-1" }),
+      }),
+      { params: Promise.resolve({ id: "finding-1" }) }
+    )
+
+    expect(response.status).toBe(429)
+    expect(response.headers.get("Retry-After")).toBe("23")
+    expect((await response.json()).error.code).toBe("FREE_URL_SCAN_RATE_LIMITED")
+    expect(clientIpFromRequest).toHaveBeenCalledWith(expect.any(Request))
+    expect(createScan).not.toHaveBeenCalled()
+  })
+
+  it("applies the shared workspace create limit before retest persistence", async () => {
+    checkScanCreateRateLimit.mockResolvedValue({ limited: true, retryAfter: 7 })
+
+    const response = await POST(
+      new Request("http://localhost/api/findings/finding-1/retests", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ workspaceId: "workspace-1" }),
+      }),
+      { params: Promise.resolve({ id: "finding-1" }) }
+    )
+
+    expect(response.status).toBe(429)
+    expect(response.headers.get("Retry-After")).toBe("7")
+    expect((await response.json()).error.code).toBe("SCAN_RATE_LIMITED")
+    expect(createScan).not.toHaveBeenCalled()
+    expect(prisma.retest.create).not.toHaveBeenCalled()
   })
 
   it("returns API_SPEC_REQUIRED when the target no longer supports the source mode", async () => {

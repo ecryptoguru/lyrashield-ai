@@ -1,6 +1,11 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
 import { getOnboardingReviewOptions } from "./onboarding-flow.utils"
-import { runCreateTargetAndStart, type ScanFlowContext } from "./onboarding-scan-flow"
+import {
+  checkPendingScanOperation,
+  runCreateTargetAndStart,
+  type ScanFlowContext,
+} from "./onboarding-scan-flow"
+import type { PendingScanSubmission } from "@/lib/scan-submission"
 
 const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }))
 vi.mock("@/lib/analytics", () => ({ track: vi.fn() }))
@@ -137,4 +142,37 @@ it("releases the Start lock after workspace preparation fails so the user can re
   expect(api.post).not.toHaveBeenCalled()
   await runCreateTargetAndStart(ctx)
   expect(ctx.router.push).toHaveBeenCalledWith("/dashboard/scans/scan-new")
+})
+
+it("retains a known failed scan ID and lets the user view its status", async () => {
+  const ctx = context()
+  ctx.data.workspaceId = "ws-1"
+  const submission: PendingScanSubmission = {
+    version: 1,
+    principalId: "user-1",
+    workspaceId: "ws-1",
+    surface: "onboarding",
+    requestIdentity: "{}",
+    idempotencyKey: "00000000-0000-4000-8000-000000000001",
+    state: "pending",
+    operationId: "operation-1",
+  }
+  api.get.mockResolvedValueOnce({
+    operationId: "operation-1",
+    status: "FAILED",
+    reasonCode: "SCAN_FAILED",
+    resultLocation: "scan-failed-1",
+    recovery: "retry_new_key",
+    createdAt: "2026-10-10T00:00:00.000Z",
+    updatedAt: "2026-10-10T00:01:00.000Z",
+  })
+
+  await checkPendingScanOperation(ctx, submission)
+
+  expect(ctx.setPendingScanSubmission).toHaveBeenCalledWith(
+    expect.objectContaining({ state: "accepted", scanId: "scan-failed-1" })
+  )
+  expect(ctx.setScanRecoveryError).toHaveBeenCalledWith(
+    "This scan ended with an error. View its status and details before starting another."
+  )
 })
