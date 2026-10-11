@@ -14,14 +14,16 @@ import { CLOUD_PLAN_MAP } from "@lyrashield/pricing"
 import { resolveAccountBilling } from "./account"
 import { getUsageBalance } from "./usage/balance"
 
+const TRIAL_PLAN = CLOUD_PLAN_MAP.TRIAL
+
 /** Trial duration in days. */
-export const TRIAL_DURATION_DAYS = 7
+export const TRIAL_DURATION_DAYS = TRIAL_PLAN.trialDays ?? 7
 
 /** Trial agent-minutes (one-time grant). */
-export const TRIAL_AGENT_MINUTES = 60
+export const TRIAL_AGENT_MINUTES = TRIAL_PLAN.agentMinutes
 
 /** Trial target cap. */
-export const TRIAL_TARGET_CAP = 3
+export const TRIAL_TARGET_CAP = TRIAL_PLAN.targetCaps
 
 /** Provider label for account-owned trial marker rows (not a real provider). */
 const TRIAL_PROVIDER = "trial"

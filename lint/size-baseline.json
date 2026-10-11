@@ -107,8 +107,8 @@
     },
     "apps/web/src/app/(dashboard)/dashboard/billing/page.tsx|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 214,
-      "maxExcess": 214
+      "totalExcess": 196,
+      "maxExcess": 196
     },
     "apps/web/src/app/(dashboard)/dashboard/findings/finding-action-tab.tsx|max-lines-per-function": {
       "count": 1,
@@ -307,8 +307,8 @@
     },
     "apps/web/src/app/api/findings/[id]/retests/route.ts|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 49,
-      "maxExcess": 49
+      "totalExcess": 37,
+      "maxExcess": 37
     },
     "apps/web/src/app/api/integrations/github/install/route.ts|max-lines-per-function": {
       "count": 1,
@@ -352,8 +352,8 @@
     },
     "apps/web/src/app/api/targets/route.ts|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 59,
-      "maxExcess": 59
+      "totalExcess": 51,
+      "maxExcess": 51
     },
     "apps/web/src/app/api/team/invitations/accept/route.ts|max-lines-per-function": {
       "count": 1,

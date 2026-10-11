@@ -80,15 +80,17 @@ export function OnboardingScanRecovery({
               {pendingScanSubmission.state === "accepted" && pendingScanSubmission.scanId ? (
                 <>
                   <p className="font-medium">
-                    {completed
-                      ? "Your scan started."
-                      : "Your scan started; onboarding could not be saved."}
+                    {scanOperationStatus?.status === "FAILED"
+                      ? "A scan exists for this request and needs review."
+                      : completed
+                        ? "Your scan started."
+                        : "Your scan started; onboarding could not be saved."}
                   </p>
                   <Link
                     className="text-primary underline underline-offset-4"
                     href={`/dashboard/scans/${encodeURIComponent(pendingScanSubmission.scanId)}`}
                   >
-                    Open scan
+                    View scan status
                   </Link>
                 </>
               ) : (

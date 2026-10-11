@@ -9,10 +9,9 @@
  * ref resolution, queue submission or audit write belongs here; side effects
  * stay on POST.
  */
-import { prisma } from "@lyrashield/db"
+import { findCurrentDomainProof, prisma } from "@lyrashield/db"
 import type { ScanMode } from "@lyrashield/db"
 import { resolveScanProfile, resolveTargetScanMode } from "@lyrashield/types"
-import { normalizeDomainForProof } from "@lyrashield/security"
 import { resolveAccountBilling, resolveWorkspaceScanSponsor } from "@lyrashield/billing"
 import { env, evaluateAuthAssessmentAdmission } from "@lyrashield/config"
 import { getManualScanOptions, type ManualScanOption } from "./scan-presets"
@@ -21,6 +20,8 @@ const URL_TARGET_TYPES = new Set(["WEB_APP", "API"])
 
 export type UrlReviewMode =
   { ok: true; engineBacked: boolean } | { ok: false; code: string; reason: string }
+
+export { findCurrentDomainProof }
 
 /**
  * Whether a URL/API review tier is engine-backed — the fact that decides the
@@ -98,24 +99,6 @@ export async function resolveSponsorScanPlan(workspaceId: string, userId: string
  * target's normalized domain. Returns the normalized domain alongside so the
  * caller can build remediation hints without re-deriving it. Read-only.
  */
-export async function findCurrentDomainProof(
-  workspaceId: string,
-  url: string | null | undefined
-): Promise<{ domain: string | null; verified: boolean }> {
-  const domain = url ? normalizeDomainForProof(url) : null
-  if (!domain) return { domain, verified: false }
-  const proof = await prisma.targetDomainVerification.findFirst({
-    where: {
-      workspaceId,
-      domain,
-      status: "VERIFIED",
-      expiresAt: { gt: new Date() },
-    },
-    select: { id: true },
-  })
-  return { domain, verified: Boolean(proof) }
-}
-
 /**
  * The policy row a scan admission would consult: the explicit policyId when
  * given, else the workspace's default policy. Read-only.

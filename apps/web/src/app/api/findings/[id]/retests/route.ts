@@ -2,6 +2,7 @@ import { recordedOperation } from "@/lib/recorded-operation"
 import { withCookieMutation } from "../../../../../lib/api-auth"
 import {
   createScan,
+  findCurrentDomainProof,
   getFindingReference,
   prisma,
   updateScanStatus,
@@ -10,6 +11,7 @@ import {
 import { type ScanMode, resolveTargetScanMode } from "@lyrashield/types"
 import { assertOAuthDelegatedScope, requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
+import { assertScanAllowed } from "@lyrashield/billing"
 import { logger } from "@lyrashield/logger"
 import { authErrorResponse } from "../../../../../lib/api-auth"
 import { apiError, apiSuccess } from "../../../../../lib/api-response"
@@ -21,6 +23,12 @@ import {
 } from "../../../../../lib/queue"
 import { resolveRetestProfile } from "../../../../../lib/retest-profile"
 import { revalidateDashboardAggregates } from "../../../../../lib/cache"
+import {
+  checkFreeUrlScanRateLimit,
+  checkScanCreateRateLimit,
+  clientIpFromRequest,
+} from "../../../../../lib/rate-limit"
+import { resolveSponsorScanPlan, resolveUrlReviewMode } from "../../../../../lib/scan-admission"
 
 const CreateRetestSchema = z.object({
   workspaceId: z.string().min(1),
@@ -28,6 +36,125 @@ const CreateRetestSchema = z.object({
   // this optional only for backwards-compatible clients; it is never trusted.
   scanId: z.string().optional(),
 })
+
+async function checkRetestAdmission({
+  request,
+  workspaceId,
+  userId,
+  target,
+  mode,
+  confirmNotSubmitted,
+}: {
+  request: Request
+  workspaceId: string
+  userId: string
+  target: Pick<
+    NonNullable<Awaited<ReturnType<typeof prisma.target.findFirst>>>,
+    "id" | "type" | "apiSpecUrl" | "url"
+  >
+  mode: ScanMode
+  confirmNotSubmitted: () => void
+}) {
+  const urlAdmission = resolveUrlReviewMode({
+    targetType: target.type,
+    mode,
+    hasApiSpec: Boolean(target.apiSpecUrl),
+  })
+  if (!urlAdmission.ok) {
+    confirmNotSubmitted()
+    return apiError(urlAdmission.code, "This retest profile is not available for the target.", 400)
+  }
+
+  const isRemoteUrlTarget = target.type === "WEB_APP" || target.type === "API"
+  const sponsorPlan = isRemoteUrlTarget ? await resolveSponsorScanPlan(workspaceId, userId) : null
+  if (isRemoteUrlTarget && urlAdmission.engineBacked) {
+    const { domain, verified } = await findCurrentDomainProof(workspaceId, target.url)
+    if (!verified) {
+      confirmNotSubmitted()
+      return apiError(
+        "DOMAIN_VERIFICATION_REQUIRED",
+        "Verify control of this domain once to enable engine-backed reviews.",
+        403,
+        undefined,
+        {
+          remediation: {
+            txtName: domain ? `_lyrashield.${domain}` : null,
+            verifyPath: `/dashboard/targets/${target.id}`,
+          },
+        }
+      )
+    }
+  }
+
+  const entitlement = await assertScanAllowed(workspaceId, mode, userId)
+  if (!entitlement.allowed) {
+    confirmNotSubmitted()
+    return apiError(
+      entitlement.code ?? "SCAN_NOT_ALLOWED",
+      entitlement.message ?? "This account is not currently eligible to run the retest.",
+      403,
+      undefined,
+      {
+        plan: entitlement.plan,
+        isTrial: entitlement.isTrial,
+        remainingMinutes: entitlement.remainingMinutes,
+      }
+    )
+  }
+
+  if (isRemoteUrlTarget && sponsorPlan === "FREE" && !urlAdmission.engineBacked) {
+    const freeUrlLimit = await checkFreeUrlScanRateLimit(clientIpFromRequest(request))
+    if (freeUrlLimit.limited) {
+      confirmNotSubmitted()
+      return apiError(
+        "FREE_URL_SCAN_RATE_LIMITED",
+        "Free-plan remote URL reviews are temporarily limited for your network. Verify the domain or upgrade for unrestricted reviews.",
+        429,
+        { "Retry-After": String(Math.max(freeUrlLimit.retryAfter, 1)) }
+      )
+    }
+  }
+
+  const scanRate = await checkScanCreateRateLimit(workspaceId)
+  if (scanRate.limited) {
+    confirmNotSubmitted()
+    return apiError(
+      "SCAN_RATE_LIMITED",
+      "Too many reviews started in the last minute. Please wait a moment and try again.",
+      429,
+      { "Retry-After": String(Math.max(scanRate.retryAfter, 1)) }
+    )
+  }
+  return null
+}
+
+async function checkRetestAvailability(
+  findingId: string,
+  workspaceId: string,
+  confirmNotSubmitted: () => void
+) {
+  const existingPending = await prisma.retest.findFirst({
+    where: { findingId, workspaceId, status: { in: ["pending", "running"] } },
+  })
+  if (existingPending) {
+    return apiError("RETEST_IN_PROGRESS", "A retest is already in progress for this finding", 409)
+  }
+
+  try {
+    await assertScanWorkerAvailable()
+  } catch (error) {
+    if (error instanceof ScanWorkerUnavailableError) {
+      confirmNotSubmitted()
+      return apiError(
+        "SCAN_SERVICE_UNAVAILABLE",
+        "Retesting is temporarily unavailable. Please try again shortly.",
+        503
+      )
+    }
+    throw error
+  }
+  return null
+}
 
 async function post(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -108,34 +235,22 @@ async function post(request: Request, { params }: { params: Promise<{ id: string
       },
       async ({ confirmNotSubmitted }) => {
         assertOAuthDelegatedScope(session, finding.targetId, retestProfile.mode)
-        const existingPending = await prisma.retest.findFirst({
-          where: {
-            findingId: id,
-            workspaceId,
-            status: { in: ["pending", "running"] },
-          },
+        const admissionError = await checkRetestAdmission({
+          request,
+          workspaceId,
+          userId: session.userId,
+          target,
+          mode: retestProfile.mode,
+          confirmNotSubmitted,
         })
-        if (existingPending) {
-          return apiError(
-            "RETEST_IN_PROGRESS",
-            "A retest is already in progress for this finding",
-            409
-          )
-        }
+        if (admissionError) return admissionError
 
-        try {
-          await assertScanWorkerAvailable()
-        } catch (error) {
-          if (error instanceof ScanWorkerUnavailableError) {
-            confirmNotSubmitted()
-            return apiError(
-              "SCAN_SERVICE_UNAVAILABLE",
-              "Retesting is temporarily unavailable. Please try again shortly.",
-              503
-            )
-          }
-          throw error
-        }
+        const availabilityError = await checkRetestAvailability(
+          id,
+          workspaceId,
+          confirmNotSubmitted
+        )
+        if (availabilityError) return availabilityError
 
         let scan: Awaited<ReturnType<typeof createScan>>
         try {

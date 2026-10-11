@@ -41,6 +41,8 @@ vi.mock("./usage/balance", () => ({
 vi.mock("./trial", () => ({
   getAccountTrialState: vi.fn().mockResolvedValue({ isExpired: false, isActive: false }),
   blockOnExpiry: vi.fn().mockResolvedValue(undefined),
+  TRIAL_DURATION_DAYS: 7,
+  TRIAL_TARGET_CAP: 3,
 }))
 
 vi.mock("./grace", () => ({
@@ -406,5 +408,21 @@ describe("entitlements — protected-target cap on the acting account's plan", (
     expect(result.allowed).toBe(false)
     expect(result.code).toBe("TARGET_LIMIT_REACHED")
     expect(result.targetCap).toBe(3)
+  })
+
+  it("uses the supplied transaction for sponsor and target-cap reads", async () => {
+    vi.mocked(resolveAccountBilling).mockResolvedValue(billing("FREE") as never)
+    const tx = {
+      user: { findUnique: vi.fn().mockResolvedValue({ trialStartedAt: null }) },
+      target: { count: vi.fn().mockResolvedValue(2) },
+    }
+
+    const result = await assertTargetAllowed("ws-atomic", "acct_1", tx as never)
+
+    expect(result).toMatchObject({ allowed: true, targetsUsed: 2, targetCap: 3 })
+    expect(resolveWorkspaceScanSponsor).toHaveBeenCalledWith("ws-atomic", "acct_1", tx)
+    expect(tx.target.count).toHaveBeenCalledWith({
+      where: { workspaceId: "ws-atomic", deletedAt: null },
+    })
   })
 })

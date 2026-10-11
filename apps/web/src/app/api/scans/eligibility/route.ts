@@ -384,7 +384,7 @@ export async function GET(request: Request) {
           })
         }
       }
-      if (sponsorPlan !== "FREE" && urlAdmission.engineBacked) {
+      if (urlAdmission.engineBacked) {
         const { domain, verified } = await findCurrentDomainProof(workspaceId, target.url)
         if (!verified) {
           return eligibilityResponse({

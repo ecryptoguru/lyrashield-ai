@@ -11,8 +11,8 @@ import {
   getWorkspaceNotificationChannels,
   saveNotificationIntegration,
   disableNotificationIntegration,
-  withActiveWorkspaceNotificationDestination,
   lockNotificationDestinationsForDeletion,
+  withActiveWorkspaceNotificationDestination,
 } from "./notification-integration-service"
 
 const row = {
@@ -47,8 +47,8 @@ describe("workspace notification integrations", () => {
           workspaceId: "ws-1",
           deletedAt: null,
           OR: [
-            { type: "SLACK", externalId: "notifications:ws-1:slack" },
             { type: "DISCORD", externalId: "notifications:ws-1:discord" },
+            { type: "SLACK", externalId: "notifications:ws-1:slack" },
           ],
         }),
       })
@@ -155,19 +155,19 @@ describe("workspace notification integrations", () => {
     })
   })
 
-  it("locks both workspace notification destinations before account deletion", async () => {
-    await lockNotificationDestinationsForDeletion(tx, "ws-1")
-
-    expect(tx.$executeRaw).toHaveBeenCalledTimes(4)
-    expect(tx.$executeRaw.mock.calls[1]?.[1]).toBe("notifications:ws-1:slack")
-    expect(tx.$executeRaw.mock.calls[3]?.[1]).toBe("notifications:ws-1:discord")
-  })
-
   it("skips a disabled destination without reading or sending its secret", async () => {
     tx.integration.findFirst.mockResolvedValue(null)
     const send = vi.fn()
     expect(await withActiveWorkspaceNotificationDestination("ws-1", "slack", send)).toBeNull()
     expect(send).not.toHaveBeenCalled()
+  })
+
+  it("locks both workspace notification destinations in stable order before account deletion", async () => {
+    await lockNotificationDestinationsForDeletion(tx, "ws-1")
+    const lockedDestinations = tx.$executeRaw.mock.calls
+      .filter(([strings]) => String(strings?.[0]).includes("pg_advisory_xact_lock"))
+      .map(([, externalId]) => externalId)
+    expect(lockedDestinations).toEqual(["notifications:ws-1:discord", "notifications:ws-1:slack"])
   })
 
   it("serializes rotation and disable against a started delivery through the same purpose lock", async () => {

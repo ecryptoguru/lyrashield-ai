@@ -102,6 +102,32 @@ export async function notifyScanFailed(
   }
 }
 
+export async function notifyScheduleBlocked(
+  workspaceId: string,
+  scheduleId: string,
+  targetName: string,
+  reason:
+    "DOMAIN_VERIFICATION_REQUIRED" | "SCAN_ELIGIBILITY_REQUIRED" | "SCAN_ELIGIBILITY_UNAVAILABLE",
+  day = new Date().toISOString().slice(0, 10)
+): Promise<void> {
+  const safeTargetName = targetName.trim().slice(0, 120) || "your target"
+  const detail =
+    reason === "DOMAIN_VERIFICATION_REQUIRED"
+      ? `Verify domain control for ${safeTargetName} in target settings to resume engine-backed reviews.`
+      : reason === "SCAN_ELIGIBILITY_UNAVAILABLE"
+        ? `LyraShield could not confirm eligibility for the scheduled review of ${safeTargetName}. Check workspace access and try again later.`
+        : `The workspace is not currently eligible for the scheduled review of ${safeTargetName}. Restore billing or workspace access to resume it.`
+
+  await createAndSendNotification({
+    workspaceId,
+    type: "schedule.blocked",
+    title: "Scheduled review needs attention",
+    body: detail,
+    dedupeKey: `schedule-blocked:${scheduleId}:${reason}:${day}`,
+    ...(await workspaceDelivery(workspaceId)),
+  })
+}
+
 export async function notifyCriticalFinding(
   workspaceId: string,
   findingId: string,

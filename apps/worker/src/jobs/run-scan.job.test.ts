@@ -790,12 +790,16 @@ describe("processScanJob", () => {
       delete process.env.LYRASHIELD_EGRESS_PROXY_SECRET
     })
 
-    it("keeps deterministic URL reviews non-billable without requiring a paid balance", async () => {
+    it("rechecks entitlement but keeps deterministic URL reviews non-billable", async () => {
       mockStoredScanAuthority({ mode: "SAFE" })
       vi.mocked(prisma.target.findFirst).mockResolvedValue(mockUrlTarget as never)
       const result = await processScanJob(mockJob)
       expect(result.status).toBe("completed")
-      expect(evaluateScanEntitlement).not.toHaveBeenCalled()
+      expect(evaluateScanEntitlement).toHaveBeenCalledWith({
+        workspaceId: "ws-1",
+        mode: "SAFE",
+        sponsorAccountId: "user-1",
+      })
       expect(runEngine).not.toHaveBeenCalled()
       expect(recordAgentMinutes).not.toHaveBeenCalled()
     })

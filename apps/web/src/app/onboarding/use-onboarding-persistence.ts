@@ -54,34 +54,41 @@ export function useOnboardingPersistence({
    */
   async function ensureWorkspace(): Promise<string> {
     if (data.workspaceId) return data.workspaceId
+
+    const existing = await apiGet("/api/workspaces", {
+      schema: z.array(z.object({ id: z.string().min(1) })),
+    })
+    const adoptWorkspace = async (workspaceId: string) => {
+      await persist({ workspaceId, currentStep: Math.max(step, 1), skipped: false })
+      return workspaceId
+    }
+    const available = existing[0]
+    if (available) return adoptWorkspace(available.id)
+
+    let workspace: { id: string; trialStarted?: boolean }
     try {
-      const workspace = await apiPost(
+      workspace = await apiPost(
         "/api/workspaces",
         { name: suggestedWorkspaceName?.trim() || "My workspace", mode: "VIBE" },
         { schema: z.object({ id: z.string(), trialStarted: z.boolean().optional() }) }
       )
-      // The trial grant lands inside the workspace-creation transaction —
-      // only fire when the account actually claimed it (never on re-use).
-      if (workspace.trialStarted) track("trial_started", { surface: "onboarding" })
-      await persist({ workspaceId: workspace.id, currentStep: Math.max(step, 1), skipped: false })
-      return workspace.id
     } catch (cause) {
       if (cause instanceof ApiError && cause.code === "SLUG_TAKEN") {
         // A concurrent tab created the default workspace first: adopt it.
         const existing = await apiGet("/api/workspaces", {
-          schema: z.object({ data: z.array(z.object({ id: z.string().min(1) })).min(1) }),
+          schema: z.array(z.object({ id: z.string().min(1) })),
         })
-        const adopted = existing.data[0]
+        const adopted = existing[0]
         if (!adopted) throw cause
-        await persist({
-          workspaceId: adopted.id,
-          currentStep: Math.max(step, 1),
-          skipped: false,
-        })
-        return adopted.id
+        return adoptWorkspace(adopted.id)
       }
       throw cause
     }
+
+    // The trial grant lands inside the workspace-creation transaction —
+    // only fire when the account actually claimed it (never on re-use).
+    if (workspace.trialStarted) track("trial_started", { surface: "onboarding" })
+    return adoptWorkspace(workspace.id)
   }
 
   return { data, persist, ensureWorkspace }

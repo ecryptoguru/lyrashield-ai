@@ -33,36 +33,48 @@ vi.mock("@lyrashield/config", async (importOriginal) => {
   }
 })
 
-vi.mock("@lyrashield/db", () => ({
-  WorkspaceScanConcurrencyLimitError: class WorkspaceScanConcurrencyLimitError extends Error {},
-  prisma: {
+vi.mock("@lyrashield/db", () => {
+  const prisma = {
     target: { findFirst: vi.fn() },
     workspace: { findUnique: vi.fn() },
     targetDomainVerification: { findFirst: vi.fn() },
     policy: { findFirst: vi.fn() },
     scan: { count: vi.fn(), update: vi.fn() },
     auditLog: { create: vi.fn() },
-  },
-  createScan: vi.fn(),
-  listScans: vi.fn(),
-  updateScanStatus: vi.fn(),
-  resolveScanAttachments: vi.fn().mockResolvedValue([]),
-  resolveAuthenticatedAssessmentAuthorization: vi.fn(),
-  LiveAiSafetyError: class LiveAiSafetyError extends Error {
-    readonly code: string
-    constructor(code: string) {
-      super(code)
-      this.code = code
-    }
-  },
-  ScanAttachmentError: class ScanAttachmentError extends Error {
-    code: string
-    constructor(code: string, message: string) {
-      super(message)
-      this.code = code
-    }
-  },
-}))
+  }
+  return {
+    findCurrentDomainProof: vi.fn(async (workspaceId: string, url: string | null | undefined) => {
+      const domain = url ? new URL(url).hostname.toLowerCase() : null
+      if (!domain) return { domain, verified: false }
+      const proof = await prisma.targetDomainVerification.findFirst({
+        where: { workspaceId, domain, status: "VERIFIED", expiresAt: { gt: new Date() } },
+        select: { id: true },
+      })
+      return { domain, verified: Boolean(proof) }
+    }),
+    WorkspaceScanConcurrencyLimitError: class WorkspaceScanConcurrencyLimitError extends Error {},
+    prisma,
+    createScan: vi.fn(),
+    listScans: vi.fn(),
+    updateScanStatus: vi.fn(),
+    resolveScanAttachments: vi.fn().mockResolvedValue([]),
+    resolveAuthenticatedAssessmentAuthorization: vi.fn(),
+    LiveAiSafetyError: class LiveAiSafetyError extends Error {
+      readonly code: string
+      constructor(code: string) {
+        super(code)
+        this.code = code
+      }
+    },
+    ScanAttachmentError: class ScanAttachmentError extends Error {
+      code: string
+      constructor(code: string, message: string) {
+        super(message)
+        this.code = code
+      }
+    },
+  }
+})
 
 vi.mock("@lyrashield/auth/server", () => ({
   assertOAuthDelegatedScope: vi.fn(),
@@ -424,6 +436,39 @@ describe("POST /api/scans", () => {
     )
   })
 
+  it("requires domain proof for a FREE engine-backed URL review while leaving SAFE available", async () => {
+    vi.mocked(prisma.workspace.findUnique).mockResolvedValue({ plan: "FREE" } as never)
+    vi.mocked(prisma.targetDomainVerification.findFirst).mockResolvedValue(null as never)
+    vi.mocked(prisma.target.findFirst).mockResolvedValue({
+      id: "web-free-proof",
+      type: "WEB_APP",
+      url: "https://trial.example.com",
+      apiSpecUrl: null,
+    } as never)
+
+    const blocked = await POST(
+      makeRequest({
+        workspaceId: "ws-free-proof",
+        targetId: "web-free-proof",
+        goal: "TEST_APP",
+        mode: "STANDARD",
+      })
+    )
+    expect(blocked.status).toBe(403)
+    expect((await blocked.json()).error.code).toBe("DOMAIN_VERIFICATION_REQUIRED")
+    expect(createScan).not.toHaveBeenCalled()
+
+    const safe = await POST(
+      makeRequest({
+        workspaceId: "ws-free-proof",
+        targetId: "web-free-proof",
+        goal: "TEST_APP",
+        mode: "SAFE",
+      })
+    )
+    expect(safe.status).toBe(201)
+  })
+
   it("allows a paid deterministic surface review without domain proof", async () => {
     vi.mocked(prisma.workspace.findUnique).mockResolvedValue({ plan: "PRO" } as never)
     vi.mocked(prisma.targetDomainVerification.findFirst).mockResolvedValue(null as never)
@@ -455,21 +500,14 @@ describe("POST /api/scans", () => {
     expect(prisma.targetDomainVerification.findFirst).not.toHaveBeenCalled()
   })
 
-  it("skips domain verification for the free plan on an engine-backed tier", async () => {
-    // FREE never reaches the verification gate for STANDARD/DEEP — the
-    // entitlement gate (minutes/DEEP plan) is the denial path instead.
+  it("requires current domain verification for the free plan on an engine-backed tier", async () => {
+    vi.mocked(prisma.targetDomainVerification.findFirst).mockResolvedValue(null as never)
     vi.mocked(prisma.target.findFirst).mockResolvedValue({
       id: "web-free-std",
       type: "WEB_APP",
       url: "https://free.example.com",
       apiSpecUrl: null,
     } as never)
-    vi.mocked(assertScanAllowed).mockResolvedValue({
-      allowed: false,
-      code: "DEEP_NOT_ALLOWED",
-      message: "Upgrade required",
-    } as never)
-
     const res = await POST(
       makeRequest({
         workspaceId: "ws-free-std",
@@ -479,8 +517,13 @@ describe("POST /api/scans", () => {
       })
     )
 
-    expect(prisma.targetDomainVerification.findFirst).not.toHaveBeenCalled()
-    expect((await res.json()).error.code).toBe("DEEP_NOT_ALLOWED")
+    expect(res.status).toBe(403)
+    expect(prisma.targetDomainVerification.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ workspaceId: "ws-free-std", domain: "free.example.com" }),
+      })
+    )
+    expect((await res.json()).error.code).toBe("DOMAIN_VERIFICATION_REQUIRED")
   })
 
   /**

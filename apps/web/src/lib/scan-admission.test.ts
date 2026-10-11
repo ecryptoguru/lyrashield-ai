@@ -23,6 +23,7 @@ vi.mock("@lyrashield/config", async (importOriginal) => {
 })
 
 vi.mock("@lyrashield/db", () => ({
+  findCurrentDomainProof: vi.fn(),
   prisma: {
     targetDomainVerification: { findFirst: vi.fn() },
     policy: { findFirst: vi.fn() },
@@ -38,7 +39,6 @@ import { prisma } from "@lyrashield/db"
 import { resolveAccountBilling, resolveWorkspaceScanSponsor } from "@lyrashield/billing"
 import {
   authAssessmentAdmission,
-  findCurrentDomainProof,
   findScanPolicy,
   listAdmissibleReviewOptions,
   matchReviewOption,
@@ -138,41 +138,6 @@ describe("resolveSponsorScanPlan", () => {
     vi.mocked(resolveAccountBilling).mockResolvedValue(null as never)
 
     await expect(resolveSponsorScanPlan("ws-1", "user-1")).resolves.toBe("FREE")
-  })
-})
-
-describe("findCurrentDomainProof", () => {
-  beforeEach(() => vi.clearAllMocks())
-
-  it("normalizes the target URL and reports a current proof only", async () => {
-    vi.mocked(prisma.targetDomainVerification.findFirst).mockResolvedValue({
-      id: "proof-1",
-    } as never)
-
-    const result = await findCurrentDomainProof("ws-1", "https://App.Example.com/path?q=1")
-    expect(result).toEqual({ domain: "app.example.com", verified: true })
-    expect(prisma.targetDomainVerification.findFirst).toHaveBeenCalledWith({
-      where: {
-        workspaceId: "ws-1",
-        domain: "app.example.com",
-        status: "VERIFIED",
-        expiresAt: { gt: expect.any(Date) },
-      },
-      select: { id: true },
-    })
-  })
-
-  it("reports unverified for absent URLs or missing proofs", async () => {
-    vi.mocked(prisma.targetDomainVerification.findFirst).mockResolvedValue(null as never)
-
-    expect(await findCurrentDomainProof("ws-1", null)).toEqual({
-      domain: null,
-      verified: false,
-    })
-    expect(await findCurrentDomainProof("ws-1", "https://a.example.com")).toEqual({
-      domain: "a.example.com",
-      verified: false,
-    })
   })
 })
 

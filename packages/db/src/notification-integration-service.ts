@@ -31,12 +31,16 @@ function identity(workspaceId: string, channel: WorkspaceNotificationChannel) {
 }
 
 function notificationIdentities(workspaceId: string) {
-  return [identity(workspaceId, "slack"), identity(workspaceId, "discord")].map(
-    ({ type, externalId }) => ({ type, externalId })
-  )
+  return (["discord", "slack"] as const)
+    .map((channel) => identity(workspaceId, channel))
+    .map(({ type, externalId }) => ({ type, externalId }))
 }
 
-/** Locks both workspace notification destinations in delivery's stable channel order. */
+/**
+ * Account deletion locks both configured destinations in a stable order before
+ * reading configRefs. notificationIdentities keeps lock order aligned with the
+ * destination set used by notification queries.
+ */
 export async function lockNotificationDestinationsForDeletion(
   tx: DestinationLockTransaction,
   workspaceId: string
