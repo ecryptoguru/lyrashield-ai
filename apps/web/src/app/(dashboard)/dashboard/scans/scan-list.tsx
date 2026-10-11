@@ -12,6 +12,19 @@ import { SCAN_PLURAL, SCAN_SINGULAR, TARGET_SINGULAR } from "@/lib/terminology"
 import { safeApiErrorMessage } from "@/components/api-error-card"
 import type { ScanItem } from "./scan-types"
 
+function getFindingSummary(scan: ScanItem): { text: string; runtimeLimited: boolean } | null {
+  const count = scan.findingCount ?? 0
+  if (count <= 0) return null
+  const runtimeLimited = scan.errorCategory === "ENGINE_RUNTIME_DEADLINE"
+  const findings = `${count} finding${count !== 1 ? "s" : ""}`
+  return {
+    text: runtimeLimited
+      ? `Runtime limit reached · ${findings} retained`
+      : `${findings} from this scan`,
+    runtimeLimited,
+  }
+}
+
 export function ScanList({
   scans,
   refreshing,
@@ -74,12 +87,7 @@ export function ScanList({
           }
           action={
             targetFilter || stateFilter !== "ALL" ? (
-              <Button
-                variant="outline"
-                onClick={() => {
-                  onClearFilters()
-                }}
-              >
+              <Button variant="outline" onClick={onClearFilters}>
                 Clear filters
               </Button>
             ) : hasTargets ? (
@@ -103,8 +111,7 @@ export function ScanList({
             })
             const active = isActiveScan(scan.status)
             const needsAttention = ["FAILED", "STOPPED_BUDGET", "TIMED_OUT"].includes(scan.status)
-            const runtimeLimitedWithRetainedFindings =
-              scan.errorCategory === "ENGINE_RUNTIME_DEADLINE" && (scan.findingCount ?? 0) > 0
+            const findingSummary = getFindingSummary(scan)
             return (
               <Card key={scan.id} className="p-4">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -128,17 +135,15 @@ export function ScanList({
                           · completed {formatDateTimeUtc(scan.endedAt)}
                         </span>
                       )}
-                      {scan.findingCount !== undefined && scan.findingCount > 0 && (
+                      {findingSummary && (
                         <span className="text-foreground font-medium whitespace-nowrap">
-                          {runtimeLimitedWithRetainedFindings
-                            ? `Runtime limit reached · ${scan.findingCount} finding${scan.findingCount !== 1 ? "s" : ""} retained`
-                            : `${scan.findingCount} finding${scan.findingCount !== 1 ? "s" : ""} from this scan`}
+                          {findingSummary.text}
                         </span>
                       )}
                     </div>
                     {scan.errorMessage &&
                       presentation.showFailureDetails &&
-                      !runtimeLimitedWithRetainedFindings && (
+                      !findingSummary?.runtimeLimited && (
                         <p className="text-destructive line-clamp-1 text-xs wrap-break-word">
                           {safeApiErrorMessage(scan.errorMessage)}
                         </p>
