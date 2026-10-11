@@ -1,12 +1,13 @@
 import type { Metadata } from "next"
 import { CreditCard, Clock, Zap, AlertCircle } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, Badge, buttonVariants } from "@lyrashield/ui"
-import { prisma } from "@lyrashield/db"
+import { prisma, withWorkspaceRLS } from "@lyrashield/db"
 import {
   getUsageBalance,
   getAccountTrialState,
   getGraceState,
   isTrialAvailable,
+  canPurchaseMinutePack,
   resolveAccountBilling,
   resolveWorkspaceScanSponsor,
   CLOUD_PLAN_MAP,
@@ -18,7 +19,7 @@ import { PageHeader } from "@/components/page-header"
 import { LocalTime } from "@/components/local-time"
 import { BillingActions } from "./billing-actions"
 import { BuyPackButton } from "./buy-pack-button"
-import { UpgradeNowButton } from "./upgrade-now-button"
+import { TrialStatusCard } from "./trial-status-card"
 import { SpendLimitForm } from "./spend-limit-form"
 import { hasPermission, PERMISSIONS } from "@lyrashield/auth"
 import Link from "next/link"
@@ -87,10 +88,13 @@ export default async function BillingPage({
   ])
   const teamSponsor = await resolveWorkspaceScanSponsor(workspaceId, session.userId)
 
-  const [balance, trialState, graceState] = await Promise.all([
+  const [balance, trialState, graceState, workspaceTargetCount] = await Promise.all([
     getUsageBalance(session.userId, { billing: billingAccount }),
     getAccountTrialState(session.userId),
     getGraceState(session.userId, billingAccount),
+    withWorkspaceRLS(workspaceId, (tx) =>
+      tx.target.count({ where: { workspaceId, deletedAt: null } })
+    ),
   ])
 
   const plan = billingAccount?.currentPlan ?? "FREE"
@@ -99,6 +103,7 @@ export default async function BillingPage({
     CLOUD_PLAN_MAP[(trialState.isActive ? "TRIAL" : plan) as keyof typeof CLOUD_PLAN_MAP]
   const isTrial = trialState.isActive
   const isExpiredFreeTrial = effectivePlan === "FREE" && trialState.isExpired
+  const canBuyMinutePack = canPurchaseMinutePack({ effectivePlan, trialState })
   const displayedTrialMinutesLeft = isExpiredFreeTrial ? 0 : trialState.minutesLeft
   const displayedAccountMinutesRemaining = isExpiredFreeTrial ? 0 : balance.totalRemaining
   const displayedPoolMinutes = isExpiredFreeTrial ? TRIAL_AGENT_MINUTES : balance.poolMinutes
@@ -172,16 +177,18 @@ export default async function BillingPage({
                 )}
               </div>
               {canManageBilling && (
-                <BillingActions
-                  plan={plan}
-                  isLaunchAssurance={isLaunchAssurance}
-                  isComplimentary={isComplimentary}
-                  workspaceId={workspaceId}
-                  purchasesAvailable={purchasesAvailable}
-                  trialAvailable={trialAvailable}
-                  selectedPlan={selectedPlan}
-                  billingRegion={checkoutRegion}
-                />
+                <div id="billing-plan-picker">
+                  <BillingActions
+                    plan={plan}
+                    isLaunchAssurance={isLaunchAssurance}
+                    isComplimentary={isComplimentary}
+                    workspaceId={workspaceId}
+                    purchasesAvailable={purchasesAvailable}
+                    trialAvailable={trialAvailable}
+                    selectedPlan={selectedPlan}
+                    billingRegion={checkoutRegion}
+                  />
+                </div>
               )}
               <div className="rounded-md border p-3 text-sm">
                 <p className="font-medium">
@@ -215,51 +222,14 @@ export default async function BillingPage({
           </CardContent>
         </Card>
 
-        {/* Keep an expired-trial upgrade prompt on FREE accounts, but never
-            contradict an active paid or complimentary plan. */}
-        {(isTrial || (trialState.isExpired && effectivePlan === "FREE")) && (
-          <Card>
-            <CardHeader>
-              <CardTitle as="h2">Trial Status</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                <div>
-                  <p className="text-sm text-muted-foreground">Days Left</p>
-                  <p className="text-xl font-semibold">
-                    {NUMBER_FORMAT.format(trialState.daysLeft)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Minutes Left</p>
-                  <p className="text-xl font-semibold">
-                    {NUMBER_FORMAT.format(displayedTrialMinutesLeft)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Targets</p>
-                  <p className="text-xl font-semibold">
-                    {NUMBER_FORMAT.format(trialState.targetsUsed)} /{" "}
-                    {NUMBER_FORMAT.format(trialState.targetCap)}
-                  </p>
-                </div>
-              </div>
-              {trialState.isExpired && (
-                <div className="flex items-center gap-2 rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-                  <AlertCircle className="h-4 w-4" />
-                  <span>
-                    {purchasesAvailable
-                      ? "Your trial has expired. Unused trial minutes were forfeited. Upgrade to continue scanning."
-                      : "Your trial has expired. New purchases are temporarily unavailable."}
-                  </span>
-                </div>
-              )}
-              {canManageBilling && !trialState.isExpired && purchasesAvailable && (
-                <UpgradeNowButton />
-              )}
-            </CardContent>
-          </Card>
-        )}
+        <TrialStatusCard
+          trial={trialState}
+          effectivePlan={effectivePlan}
+          displayedMinutesLeft={displayedTrialMinutesLeft}
+          workspaceTargetCount={workspaceTargetCount}
+          purchasesAvailable={purchasesAvailable}
+          canManageBilling={Boolean(canManageBilling)}
+        />
 
         {/* Usage */}
         <Card>
@@ -345,7 +315,7 @@ export default async function BillingPage({
           <CardContent className="space-y-3">
             {balance.packs.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                {purchasesAvailable
+                {purchasesAvailable && canBuyMinutePack
                   ? "No active minute packs. Buy a pack to add agent-minutes to your account."
                   : "No active minute packs."}
               </p>
@@ -374,7 +344,20 @@ export default async function BillingPage({
                 ))}
               </div>
             )}
-            {canManageBilling && purchasesAvailable && <BuyPackButton workspaceId={workspaceId} />}
+            {canManageBilling && purchasesAvailable && !canBuyMinutePack && (
+              <div className="rounded-md border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
+                <p>Minute packs are available after you subscribe.</p>
+                <Link
+                  href="#billing-plan-picker"
+                  className="mt-2 inline-flex min-h-11 items-center font-medium underline underline-offset-4"
+                >
+                  Choose a plan
+                </Link>
+              </div>
+            )}
+            {canManageBilling && purchasesAvailable && canBuyMinutePack && (
+              <BuyPackButton workspaceId={workspaceId} />
+            )}
           </CardContent>
         </Card>
 
