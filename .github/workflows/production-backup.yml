@@ -514,6 +514,7 @@ jobs:
 
       - name: Emit public-safe exact-object restore proof
         env:
+          RESTORE_PROOF_DIAGNOSTIC_FD: "3"
           PRODUCTION_DATABASE_DIRECT_URL: ${{ secrets.PRODUCTION_DATABASE_DIRECT_URL }}
           R2_BACKUP_BUCKET: ${{ secrets.R2_BACKUP_BUCKET }}
           R2_S3_ENDPOINT: ${{ secrets.R2_S3_ENDPOINT }}
@@ -523,6 +524,7 @@ jobs:
           BACKUP_ETAG: ${{ needs.backup.outputs.object_etag }}
         run: |
           set -euo pipefail
+          exec 3>&1 # Only the proof writer's fixed diagnostic bypasses private logs.
           public_temp="$RUNNER_TEMP"
           if [ "$ISOLATED_RESTORE" = true ]; then source .github/scripts/isolated-restore-private.sh; fi
           node .github/scripts/write-webhook-empty-state-restore-proof.mjs
