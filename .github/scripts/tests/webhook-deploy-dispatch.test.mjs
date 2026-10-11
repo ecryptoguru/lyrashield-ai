@@ -14,6 +14,7 @@ function dispatch(t, options) {
   const directory = mkdtempSync(path.join(tmpdir(), "ls-webhook-dispatch-"))
   t.after(() => rmSync(directory, { recursive: true, force: true }))
   const gh = path.join(directory, "gh")
+  const git = path.join(directory, "git")
   const source =
     "#!/usr/bin/env node\n" +
     "const target = process.argv[3] || '';\n" +
@@ -26,6 +27,11 @@ function dispatch(t, options) {
     "else process.exit(2);\n"
   writeFileSync(gh, source)
   chmodSync(gh, 0o755)
+  writeFileSync(
+    git,
+    "#!/usr/bin/env node\nif (process.argv.slice(2).join(' ') === 'rev-parse HEAD') console.log(process.env.SOURCE_SHA); else process.exit(2);\n"
+  )
+  chmodSync(git, 0o755)
   const output = path.join(directory, "github-output")
   const sourceSha = options.sourceSha
   const result = spawnSync("bash", [validate], {
