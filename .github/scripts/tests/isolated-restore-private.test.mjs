@@ -364,7 +364,15 @@ test("sensitive phases capture logs before work; exact-object linkage and digest
     const lines = run.split("\n")
     assert.ok(
       lines
-        .slice(0, name === "Emit public-safe exact-object restore proof" ? 4 : 3)
+        .slice(
+          0,
+          [
+            "Emit public-safe exact-object restore proof",
+            "Create, encrypt, and upload backup",
+          ].includes(name)
+            ? 4
+            : 3
+        )
         .some((line) => line.includes("source .github/scripts/isolated-restore-private.sh")),
       name
     )
