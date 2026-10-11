@@ -4,7 +4,7 @@
 
 ## Planning overlay — 2026-09-25
 
-This overlay records the current Phase 2 direction as of 2026-09-25 and supersedes the 2026-08-26 overlay below, which is retained in condensed form, as is the archive beneath it. `PRD.md`, `AGENTS.md`, `docs/whitepaper.md` §10 and running code remain authoritative for current implementation and release status.
+This overlay records the Phase 2 direction and open-gate snapshot as of 2026-09-25 and supersedes the 2026-08-26 overlay below, which is retained in condensed form, as is the archive beneath it. The release IDs and gate list below are historical snapshots. `PRD.md`, `AGENTS.md`, `docs/whitepaper.md` §10 and running code remain authoritative for current implementation and release status.
 
 ### What changed since the 2026-08-26 overlay
 

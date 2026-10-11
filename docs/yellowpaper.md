@@ -446,7 +446,7 @@ Repository revisions may differ after a fix; equality is not required. Matching 
 
 If requirements are missing or legacy-unavailable, the source emits an inconclusive receipt with missing-evidence reasons. Engine-only absence never establishes deterministic validation.
 
-**Deployment caveat:** the dated production audit records a deployed checksum-match gap. Current source checks do not prove its promotion or retrospectively validate historical receipts. This paper performs no production-row audit; [PRD release status](../PRD.md#9-release-status) owns that gate.
+Deployed-release status and historical-row audit scope are recorded in the [PRD production evidence](../PRD.md#8-current-production-evidence). This paper specifies the source-level validation contract; it does not audit production rows or retrospectively validate legacy receipts.
 
 ### 4.6 Fix-PR pipeline and scope policy
 
