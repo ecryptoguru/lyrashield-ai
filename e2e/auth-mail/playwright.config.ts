@@ -53,6 +53,11 @@ export default defineConfig({
       NEXT_PUBLIC_APP_URL: baseURL,
       ADDITIONAL_TRUSTED_ORIGINS: baseURL,
       BREVO_API_KEY: "",
+      // Explicitly forward the validated fixture target and its safety marker
+      // to the separately spawned Next process.
+      DATABASE_URL: process.env.DATABASE_URL!,
+      DATABASE_SYSTEM_URL: process.env.DATABASE_SYSTEM_URL!,
+      LYRASHIELD_TEST_DB_DISPOSABLE: "1",
       LYRASHIELD_REQUIRE_EMAIL_VERIFICATION: "0",
       LYRASHIELD_TEST_AUTH_MAIL_DIR: authMailDirectory,
       LYRASHIELD_TEST_AUTH_MAIL_OWNED_DIR: authMailDirectory,
