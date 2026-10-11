@@ -41,7 +41,11 @@ import { notifyScanFailed } from "../notifications"
 import { type ScanJobData, type ScanJobResult } from "../types"
 import { verifyScanJobAuthority } from "./run-scan/authority"
 import { verifyScanAdmission } from "./run-scan/admission"
-import { createScanCancellationPoller, finalizeExecutionDenial } from "./run-scan/lifecycle-guards"
+import {
+  createScanCancellationPoller,
+  finalizeExecutionDenial,
+  readScanTerminalState,
+} from "./run-scan/lifecycle-guards"
 import { resumePendingScanFinalization } from "./run-scan/pending-finalization"
 import {
   imageDigest,
@@ -637,12 +641,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         errorType: error instanceof Error ? error.name : "UNKNOWN",
       })
 
-      const currentScan = await prisma.scan
-        .findUnique({
-          where: { id: scanId },
-          select: { status: true, summary: true, errorCategory: true, errorMessage: true },
-        })
-        .catch(() => null)
+      const currentScan = await readScanTerminalState(scanId, workspaceId).catch(() => null)
       if (durableFinalizationResult) {
         log.error("billing.scan_settlement_commit_uncertain", {
           scanId,

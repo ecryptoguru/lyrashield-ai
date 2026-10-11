@@ -1,4 +1,4 @@
-import { withWorkspaceRLS, updateScanStatus } from "@lyrashield/db"
+import { withWorkspaceRLS, updateScanStatus, type ScanStatus } from "@lyrashield/db"
 import type { ScanJobResult } from "../../types"
 import { refreshGateVerdictAfterTerminalScan } from "./lifecycle-utils"
 
@@ -20,6 +20,30 @@ export function createScanCancellationPoller(scanId: string, workspaceId: string
     checkedAt = now
     return cancelled
   }
+}
+
+/** Private recovery recognizes a retained cancelled scan without making it public. */
+export async function readScanTerminalState(scanId: string, workspaceId: string) {
+  return withWorkspaceRLS(workspaceId, async (tx) => {
+    const visible = await tx.scan.findUnique({
+      where: { id: scanId, workspaceId },
+      select: { status: true, summary: true, errorCategory: true, errorMessage: true },
+    })
+    if (visible) return visible
+    const rows = await tx.$queryRaw<
+      Array<{
+        status: ScanStatus
+        summary: string | null
+        errorCategory: string | null
+        errorMessage: string | null
+      }>
+    >`
+      SELECT "status", "summary", "errorCategory", "errorMessage" FROM "Scan"
+      WHERE "id" = ${scanId} AND "workspaceId" = ${workspaceId}
+        AND "deletedAt" IS NOT NULL AND "status" = 'CANCELLED'
+      LIMIT 1`
+    return rows[0] ?? null
+  })
 }
 
 /** Execution denial occurs after RUNNING, so persist its actual terminal cause. */

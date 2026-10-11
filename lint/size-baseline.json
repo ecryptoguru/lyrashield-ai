@@ -552,13 +552,13 @@
     },
     "apps/worker/src/jobs/run-scan.job.ts|max-lines": {
       "count": 1,
-      "totalExcess": 91,
-      "maxExcess": 91
+      "totalExcess": 90,
+      "maxExcess": 90
     },
     "apps/worker/src/jobs/run-scan.job.ts|max-lines-per-function": {
       "count": 2,
-      "totalExcess": 942,
-      "maxExcess": 475
+      "totalExcess": 932,
+      "maxExcess": 470
     },
     "apps/worker/src/jobs/run-scan/admission.ts|max-lines-per-function": {
       "count": 1,

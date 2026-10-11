@@ -21,6 +21,7 @@ import { DEEP_SCAN_MULTIPLIER } from "@lyrashield/pricing"
 import type { ScanMode } from "@lyrashield/types"
 import { resolveAccountBilling } from "../account"
 import { resolveBalanceCycleStart } from "./balance"
+import { readRetainedScanAccounting } from "./retained-scan"
 
 export interface RecordAgentMinutesOptions {
   /** Scan mode — Deep/Custom applies a 3× multiplier. */
@@ -77,7 +78,7 @@ export async function hasUnsettledScanIntent(
   scanId: string
 ): Promise<boolean> {
   return withWorkspaceRLS(workspaceId, async (tx) => {
-    const scan = await tx.scan.findFirst({
+    const visibleScan = await tx.scan.findFirst({
       where: { id: scanId, workspaceId },
       select: {
         createdById: true,
@@ -85,6 +86,7 @@ export async function hasUnsettledScanIntent(
         events: { where: { stage: "billing_settlement_intent" }, select: { metadata: true } },
       },
     })
+    const scan = visibleScan ?? (await readRetainedScanAccounting(tx, workspaceId, scanId))
     const keys = [
       ...new Set(
         (scan?.events ?? []).flatMap(({ metadata }) => {
@@ -200,10 +202,11 @@ async function readAgentMinuteReceipt(
  * trusted identity bound at admission — job payloads are untrusted.
  */
 async function resolveScanSponsor(tx: MeterTransaction, workspaceId: string, scanId: string) {
-  const scan = await tx.scan.findFirst({
+  const visibleScan = await tx.scan.findFirst({
     where: { id: scanId, workspaceId },
     select: { createdById: true, sponsorAccountId: true },
   })
+  const scan = visibleScan ?? (await readRetainedScanAccounting(tx, workspaceId, scanId))
   if (!scan) throw new Error("settlement_scan_not_found")
   return scan.sponsorAccountId ?? scan.createdById
 }
@@ -277,7 +280,9 @@ export async function recordAgentMinutes(
   // the atomic settlement receipt; missing receipts remain queryable after death.
   if (opts.beforeCommit) {
     await withWorkspaceRLS(workspaceId, async (tx) => {
-      const scan = await tx.scan.findFirst({ where: { id: scanId, workspaceId } })
+      const scan =
+        (await tx.scan.findFirst({ where: { id: scanId, workspaceId } })) ??
+        (await readRetainedScanAccounting(tx, workspaceId, scanId))
       if (!scan) throw new Error("settlement_scan_not_found")
       await tx.scanEvent.create({
         data: {

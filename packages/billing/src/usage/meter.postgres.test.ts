@@ -516,6 +516,76 @@ describe.skipIf(!enabled)("agent-minute metering against disposable PostgreSQL",
     expect((await ledger(f)).packs[0]?.remainingMinutes).toBe(4)
   })
 
+  it("settles a removed cancellation against its stored sponsor exactly once", async () => {
+    const f = await fixture(0, 10)
+    const actor = await fixture()
+    await owner.scan.update({
+      where: { id: f.scanId },
+      data: { createdById: actor.accountId, sponsorAccountId: f.accountId },
+    })
+    await db.cancelScan(f.scanId, f.workspaceId)
+    await db.removeScan(f.scanId, f.workspaceId)
+    const settle = () =>
+      recordAgentMinutes(f.workspaceId, f.scanId, 120_000, {
+        phase: "engine_run",
+        cycleStart,
+        outcome: "cancelled",
+      })
+    expect(await settle()).toMatchObject({ created: true, minutes: 2, accountId: f.accountId })
+    expect(await settle()).toMatchObject({ created: false, minutes: 0, accountId: f.accountId })
+    const state = await ledger(f)
+    expect(state.usage).toHaveLength(1)
+    expect(state.usage[0]).toMatchObject({ accountId: f.accountId, quantity: 2 })
+    expect(state.packs[0]?.remainingMinutes).toBe(8)
+    expect((await ledger(actor)).usage).toHaveLength(0)
+    expect(
+      await db.withWorkspaceRLS(f.workspaceId, (tx) =>
+        tx.scan.findUnique({ where: { id: f.scanId } })
+      )
+    ).toBeNull()
+  })
+
+  it("recovers a retained settlement intent after cancellation removal", async () => {
+    const f = await fixture(0, 10)
+    await owner.scanEvent.create({
+      data: {
+        scanId: f.scanId,
+        stage: "billing_settlement_intent",
+        message: "disposable settlement fixture",
+        metadata: {
+          idempotencyKey: f.idempotencyKey,
+          accountId: f.accountId,
+          workspaceId: f.workspaceId,
+        },
+      },
+    })
+    await db.cancelScan(f.scanId, f.workspaceId)
+    await db.removeScan(f.scanId, f.workspaceId)
+    expect(await hasUnsettledScanIntent(f.workspaceId, f.scanId)).toBe(true)
+    await recordAgentMinutes(f.workspaceId, f.scanId, 120_000, {
+      phase: "engine_run",
+      cycleStart,
+      outcome: "cancelled",
+    })
+    expect(await hasUnsettledScanIntent(f.workspaceId, f.scanId)).toBe(false)
+  })
+
+  it("rejects cross-workspace settlement of a removed cancellation", async () => {
+    const f = await fixture(0, 10)
+    await db.cancelScan(f.scanId, f.workspaceId)
+    await db.removeScan(f.scanId, f.workspaceId)
+    await expect(
+      recordAgentMinutes(f.workspaceIds[1]!, f.scanId, 120_000, {
+        phase: "engine_run",
+        cycleStart,
+        outcome: "cancelled",
+      })
+    ).rejects.toThrow("settlement_scan_not_found")
+    expect(await hasUnsettledScanIntent(f.workspaceIds[1]!, f.scanId)).toBe(false)
+    expect((await ledger(f)).usage).toHaveLength(0)
+    expect((await ledger(f)).packs[0]?.remainingMinutes).toBe(10)
+  })
+
   it("does not expose another account's receipt through bound runtime reads", async () => {
     const f = await fixture()
     const other = await fixture()

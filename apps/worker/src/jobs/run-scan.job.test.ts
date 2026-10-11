@@ -71,6 +71,7 @@ vi.mock("@lyrashield/db", async () => {
       }
     },
     prisma: {
+      $queryRaw: vi.fn().mockResolvedValue([]),
       auditLog: { create: vi.fn().mockResolvedValue({}) },
       workspaceMember: { findFirst: vi.fn().mockResolvedValue({ role: "OWNER" }) },
       workspace: { findFirst: vi.fn().mockResolvedValue({ name: "Workspace One" }) },
@@ -3210,6 +3211,25 @@ describe("processScanJob", () => {
       expect.objectContaining({ outcome: "cancelled" })
     )
     expect(persistFindings).not.toHaveBeenCalled()
+  })
+
+  it("settles interrupted provider work after a cancelled scan is removed", async () => {
+    vi.mocked(runScannerOrchestrator).mockImplementationOnce(async () => {
+      vi.mocked(prisma.scan.findUnique).mockResolvedValue(null)
+      vi.mocked(prisma.$queryRaw).mockResolvedValueOnce([
+        { status: "CANCELLED", summary: null, errorCategory: null, errorMessage: null },
+      ])
+      throw new Error("scanner interrupted after removal")
+    })
+    await expect(processScanJob(mockJob)).resolves.toMatchObject({ errorCategory: "CANCELLED" })
+    expect(recordAgentMinutes).toHaveBeenCalledWith(
+      "ws-1",
+      "scan-1",
+      expect.any(Number),
+      expect.objectContaining({ outcome: "cancelled" })
+    )
+    expect(persistFindings).not.toHaveBeenCalled()
+    expect(completeScanWithScore).not.toHaveBeenCalled()
   })
 
   it("does not persist results when cancellation wins finalization", async () => {
