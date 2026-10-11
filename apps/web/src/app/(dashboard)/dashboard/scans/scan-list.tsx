@@ -103,6 +103,8 @@ export function ScanList({
             })
             const active = isActiveScan(scan.status)
             const needsAttention = ["FAILED", "STOPPED_BUDGET", "TIMED_OUT"].includes(scan.status)
+            const runtimeLimitedWithRetainedFindings =
+              scan.errorCategory === "ENGINE_RUNTIME_DEADLINE" && (scan.findingCount ?? 0) > 0
             return (
               <Card key={scan.id} className="p-4">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -128,16 +130,19 @@ export function ScanList({
                       )}
                       {scan.findingCount !== undefined && scan.findingCount > 0 && (
                         <span className="text-foreground font-medium whitespace-nowrap">
-                          {scan.findingCount} finding{scan.findingCount !== 1 ? "s" : ""} from this
-                          scan
+                          {runtimeLimitedWithRetainedFindings
+                            ? `Runtime limit reached · ${scan.findingCount} finding${scan.findingCount !== 1 ? "s" : ""} retained`
+                            : `${scan.findingCount} finding${scan.findingCount !== 1 ? "s" : ""} from this scan`}
                         </span>
                       )}
                     </div>
-                    {scan.errorMessage && presentation.showFailureDetails && (
-                      <p className="text-destructive line-clamp-1 text-xs wrap-break-word">
-                        {safeApiErrorMessage(scan.errorMessage)}
-                      </p>
-                    )}
+                    {scan.errorMessage &&
+                      presentation.showFailureDetails &&
+                      !runtimeLimitedWithRetainedFindings && (
+                        <p className="text-destructive line-clamp-1 text-xs wrap-break-word">
+                          {safeApiErrorMessage(scan.errorMessage)}
+                        </p>
+                      )}
                   </div>
                   <div className="flex shrink-0 items-center gap-1.5">
                     {active &&
