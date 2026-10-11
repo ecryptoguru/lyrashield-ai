@@ -1,4 +1,4 @@
-import { X509Certificate } from "node:crypto"
+import { createHash, X509Certificate } from "node:crypto"
 import { readFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 import { normalizeBackupConnection } from "../../packages/db/scripts/webhook-backup-connection.mjs"
@@ -11,11 +11,19 @@ const BACKUP_ROOT_CA_PATH = fileURLToPath(
 )
 const BACKUP_ROOT_CA_CONTAINER_PATH = "/tmp/supabase-root-2021-ca.crt"
 const BACKUP_ROOT_CA_SHA256 = "807025ad50d4ed219d2c9c7d299c004f824eb00cf7f65afef607d07b72e6cafa"
+const BACKUP_ROOT_CA_FILE_SHA256 =
+  "700723581420dd1ac98fd7e9ac529f0ef210eadcaf87fc868a3ad7d114c2f3b7"
 
-function verifiedBackupRootCaContainerPath() {
+export function verifiedBackupRootCaContainerPath(certificatePath = BACKUP_ROOT_CA_PATH) {
+  let certificateContents
+  try {
+    certificateContents = readFileSync(certificatePath)
+  } catch {
+    throw new Error("Backup TLS trust anchor is unavailable or invalid")
+  }
   let certificate
   try {
-    certificate = new X509Certificate(readFileSync(BACKUP_ROOT_CA_PATH))
+    certificate = new X509Certificate(certificateContents)
   } catch {
     throw new Error("Backup TLS trust anchor is unavailable or invalid")
   }
@@ -26,6 +34,11 @@ function verifiedBackupRootCaContainerPath() {
     certificate.fingerprint256.replaceAll(":", "").toLowerCase() !== BACKUP_ROOT_CA_SHA256
   ) {
     throw new Error("Backup TLS trust anchor does not match the reviewed Supabase root")
+  }
+  if (
+    createHash("sha256").update(certificateContents).digest("hex") !== BACKUP_ROOT_CA_FILE_SHA256
+  ) {
+    throw new Error("Backup TLS trust anchor file does not match the reviewed certificate")
   }
   return BACKUP_ROOT_CA_CONTAINER_PATH
 }

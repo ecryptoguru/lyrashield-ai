@@ -15,7 +15,10 @@ import { join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { spawnSync } from "node:child_process"
 import { createHash, X509Certificate } from "node:crypto"
-import { prepareVerifiedBackupConnection } from "../prepare-verified-backup-connection.mjs"
+import {
+  prepareVerifiedBackupConnection,
+  verifiedBackupRootCaContainerPath,
+} from "../prepare-verified-backup-connection.mjs"
 
 const repository = fileURLToPath(new URL("../../../", import.meta.url))
 const workflow = readFileSync(
@@ -47,6 +50,61 @@ test("backup trust anchor is a self-signed CA matching the reviewed certificate 
   assert.equal(
     certificate.fingerprint256.replaceAll(":", "").toLowerCase(),
     expectedRootCaFingerprint
+  )
+  assert.equal(verifiedBackupRootCaContainerPath(rootCaPath), "/tmp/supabase-root-2021-ca.crt")
+})
+
+test("backup trust-anchor validation rejects missing, malformed, replaced and appended CA files", (t) => {
+  const directory = realpathSync(mkdtempSync(join(tmpdir(), "backup-root-ca-validation-")))
+  t.after(() => rmSync(directory, { recursive: true, force: true }))
+  const keyPath = join(directory, "untrusted-root.key")
+  const certificatePath = join(directory, "untrusted-root.crt")
+  const generated = spawnSync(
+    "openssl",
+    [
+      "req",
+      "-x509",
+      "-newkey",
+      "rsa:2048",
+      "-nodes",
+      "-keyout",
+      keyPath,
+      "-out",
+      certificatePath,
+      "-days",
+      "2",
+      "-subj",
+      "/CN=Untrusted Fixture Root",
+      "-addext",
+      "basicConstraints=critical,CA:TRUE",
+      "-addext",
+      "keyUsage=critical,keyCertSign,cRLSign",
+    ],
+    { encoding: "utf8" }
+  )
+  assert.equal(generated.status, 0, generated.stderr)
+  const otherRoot = readFileSync(certificatePath)
+  assert.equal(new X509Certificate(otherRoot).ca, true)
+
+  assert.throws(
+    () => verifiedBackupRootCaContainerPath(join(directory, "missing.crt")),
+    /unavailable or invalid/
+  )
+
+  const malformedPath = join(directory, "malformed.crt")
+  writeFileSync(malformedPath, "not a certificate")
+  assert.throws(() => verifiedBackupRootCaContainerPath(malformedPath), /unavailable or invalid/)
+
+  assert.throws(
+    () => verifiedBackupRootCaContainerPath(certificatePath),
+    /does not match the reviewed Supabase root/
+  )
+
+  const appendedPath = join(directory, "appended.crt")
+  writeFileSync(appendedPath, Buffer.concat([readFileSync(rootCaPath), otherRoot]))
+  assert.throws(
+    () => verifiedBackupRootCaContainerPath(appendedPath),
+    /file does not match the reviewed certificate/
   )
 })
 
