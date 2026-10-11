@@ -3,7 +3,12 @@ import { resolve } from "node:path"
 import { pathToFileURL } from "node:url"
 
 const PROMOTION_STEP = "Promote healthy candidate revisions"
-const RUNTIME_JOB_FRAGMENT = "deploy azure container apps"
+const RUNTIME_JOB_NAME = "deploy azure container apps"
+
+function hasRuntimeJobName(jobName) {
+  const segments = String(jobName ?? "").split("/")
+  return segments.at(-1)?.trim().toLowerCase() === RUNTIME_JOB_NAME
+}
 
 export function assertNoPriorRuntimePromotion({ repository, runId, attempt, getAttemptJobs }) {
   if (!Number.isSafeInteger(attempt) || attempt < 1) {
@@ -20,10 +25,7 @@ export function assertNoPriorRuntimePromotion({ repository, runId, attempt, getA
       throw new Error(`Attempt ${priorAttempt} job evidence is unreadable`)
     }
 
-    const runtimeJobs = response.jobs.filter((job) => {
-      const hasPromotionStep = Array.isArray(job.steps) && job.steps.some((step) => step.name === PROMOTION_STEP)
-      return hasPromotionStep || String(job.name ?? "").toLowerCase().includes(RUNTIME_JOB_FRAGMENT)
-    })
+    const runtimeJobs = response.jobs.filter((job) => hasRuntimeJobName(job.name))
     if (runtimeJobs.length === 0) {
       throw new Error(`Attempt ${priorAttempt} has no verifiable Azure runtime job record`)
     }

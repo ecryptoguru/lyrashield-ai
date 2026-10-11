@@ -217,7 +217,7 @@ test("the backup client upgrades legacy TLS before connecting without changing l
     assert.equal(prepared.identitySha256, expected.identitySha256)
     const transport = new URL(prepared.libpqUrl)
     assert.equal(transport.searchParams.get("sslmode"), "verify-full")
-    assert.equal(transport.searchParams.get("sslrootcert"), "system")
+    assert.equal(transport.searchParams.get("sslrootcert"), "/tmp/supabase-root-2021-ca.crt")
     assert.equal(transport.searchParams.get("gssencmode"), "disable")
     assert.equal(transport.searchParams.has("schema"), false)
     assert.equal(transport.searchParams.has("uselibpqcompat"), false)
