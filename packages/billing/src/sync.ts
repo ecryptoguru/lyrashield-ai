@@ -23,9 +23,8 @@ import {
 import { logger } from "@lyrashield/logger"
 import { CLOUD_PLAN_MAP, type CloudPlanId } from "@lyrashield/pricing"
 import type { WorkspacePlan } from "@lyrashield/types"
-import { grantMonthlyPool } from "./usage/grants"
-import { resetGrace } from "./grace"
-import { resolveAllowanceCycle } from "./usage/allowance-cycle"
+import { applySubscriptionAllowance } from "./subscription-allowance"
+import { shouldApplySubscriptionEvent } from "./subscription-event-order"
 
 export type SubscriptionProvider = "polar" | "razorpay"
 export type SubscriptionStatus =
@@ -186,21 +185,12 @@ export async function syncSubscription(params: SyncSubscriptionParams): Promise<
     // stale event from resurrecting a prior cycle's balance window or
     // flipping canceled -> active.
     const persisted = await tx.billingAccount.findUnique({
-      where: { provider_externalId: { provider, externalId } },
-      select: { currentPeriodStart: true, lastEventAt: true },
+      where: { provider_externalId: { provider, externalId }, accountId },
+      select: { currentPeriodStart: true, currentPeriodEnd: true, lastEventAt: true, status: true },
     })
-    const stale =
-      (eventOccurredAt !== undefined &&
-        persisted?.lastEventAt !== undefined &&
-        persisted.lastEventAt !== null &&
-        eventOccurredAt < persisted.lastEventAt) ||
-      (currentPeriodStart !== undefined &&
-        persisted?.currentPeriodStart !== undefined &&
-        persisted.currentPeriodStart !== null &&
-        currentPeriodStart < persisted.currentPeriodStart)
-    if (stale) return false
+    if (!shouldApplySubscriptionEvent(params, persisted)) return false
 
-    await tx.billingAccount.upsert({
+    const billing = await tx.billingAccount.upsert({
       where: { provider_externalId: { provider, externalId } },
       create: {
         ...writeData,
@@ -227,6 +217,7 @@ export async function syncSubscription(params: SyncSubscriptionParams): Promise<
         data: { plan: effectivePlan, deepAllowed },
       })
     }
+    await applySubscriptionAllowance(params, accountId, attributedWorkspaceId, tx, billing.id)
     return true
   }
 
@@ -307,38 +298,6 @@ export async function syncSubscription(params: SyncSubscriptionParams): Promise<
         action: "billing.subscription_synced",
         error: error instanceof Error ? error.message : String(error),
       })
-    }
-  }
-
-  // Grant the CURRENT allowance cycle's pool on active subscriptions.
-  // For annual plans the provider period spans the term — the cycle is the
-  // monthly anniversary containing now, not the term start. The
-  // replenishment job owns later cycles; this covers activation/renewal.
-  // A-L10: Log failures at error level so monitoring can alert.
-  if (status === "active" && currentPeriodStart && cloudPlan.agentMinutes > 0 && accountId) {
-    const cycle = resolveAllowanceCycle({
-      interval,
-      periodStart: currentPeriodStart,
-      periodEnd: currentPeriodEnd ?? null,
-    })
-    const source = interval === "annual" ? "annual_monthly" : "subscription"
-    const grantWorkspaceId = attributedWorkspaceId ?? null
-    try {
-      await grantMonthlyPool({
-        accountId,
-        workspaceId: grantWorkspaceId,
-        plan,
-        cycleStart: cycle.cycleStart,
-        source,
-      })
-      await resetGrace(accountId)
-    } catch (grantError) {
-      logger.error("Monthly pool grant or grace reset failed after subscription sync", {
-        accountId,
-        plan,
-        error: grantError instanceof Error ? grantError.message : String(grantError),
-      })
-      throw grantError
     }
   }
 

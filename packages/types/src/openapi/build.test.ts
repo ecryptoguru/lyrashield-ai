@@ -37,6 +37,8 @@ describe("openapi workflow/provenance contract", () => {
     )
     const scope = props.scope as { enum?: string[] }
     expect(scope.enum).toEqual(["SNAPSHOT", "DIFF", "LIVE"])
+    expect(props).not.toHaveProperty("authorizationRef")
+    expect((props.limits as { properties: object }).properties).not.toHaveProperty("maxBudgetUsd")
   })
 
   it("exposes distinct verification tiers on the Finding component", () => {

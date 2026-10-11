@@ -567,6 +567,7 @@ jobs:
           DATABASE_URL="$RLS_RUNTIME_DATABASE_URL" TRIAL_INTEGRATION_TEST=1 \
             pnpm exec vitest run \
               packages/billing/src/trial-integration.test.ts \
+              packages/billing/src/subscription-atomicity.runtime.test.ts \
               apps/web/src/app/api/workspaces/route-integration.test.ts \
               packages/myra/src/server/operations.runtime.test.ts \
               packages/myra/src/server/session.runtime.test.ts \
@@ -576,6 +577,8 @@ jobs:
             "$RUNNER_TEMP/trial-integration.json" \
             'serializes simultaneous claims for two workspaces and survives membership removal' \
             'keeps trial writes inside the creator transaction after a module reload' \
+            'rolls back after a real grant failure and commits a retry exactly once' \
+            'does not let a stale replenishment snapshot replace the newer plan pool' \
             'rejects a foreign owner before execution' \
             'issues and verifies sessions while rejecting invalid or expired tokens and sliding stale expiry' \
             'keeps lookups isolated to the bound public session and rejects account-only context' \
@@ -1087,6 +1090,10 @@ jobs:
 
       - name: Build
         run: pnpm --filter @lyrashield/desktop-frontend build
+
+      - name: Generate Prisma Client for portable Desktop harness
+        if: needs.changes.outputs.app != 'true' && needs.changes.outputs.shared != 'true'
+        run: pnpm db:generate
 
       - name: Typecheck portable browser harness
         if: needs.changes.outputs.app != 'true' && needs.changes.outputs.shared != 'true'

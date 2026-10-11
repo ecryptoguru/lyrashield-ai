@@ -63,6 +63,7 @@ export const ScanExecutionPlanResultSchema = z
     capabilities: z.array(z.string()).optional(),
     attachmentIds: z.array(z.string()).optional(),
     authorizationRef: z.string().optional(),
+    authorizationRequired: z.boolean().optional(),
   })
   .passthrough()
 

@@ -41,6 +41,11 @@ import { notifyScanFailed } from "../notifications"
 import { type ScanJobData, type ScanJobResult } from "../types"
 import { verifyScanJobAuthority } from "./run-scan/authority"
 import { verifyScanAdmission } from "./run-scan/admission"
+import {
+  createScanCancellationPoller,
+  finalizeExecutionDenial,
+  readScanTerminalState,
+} from "./run-scan/lifecycle-guards"
 import { resumePendingScanFinalization } from "./run-scan/pending-finalization"
 import {
   imageDigest,
@@ -89,6 +94,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
     let urlProfile: UrlScanProfile | undefined
     let engineProfile: ReturnType<typeof resolveEngineProfile> | undefined
     let engineModel: string | undefined
+    let settleCancellation: (() => Promise<void>) | undefined
     let durableFinalizationResult: ScanJobResult | null = null
     let deterministicCheckout: Awaited<ReturnType<typeof checkoutDeterministicRetest>> | undefined
     try {
@@ -145,25 +151,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         return false
       }
 
-      // Cancellation is polled frequently (the scanner orchestrator checks on a
-      // ~1s interval), so memoize the CANCELLED lookup for a short window to
-      // avoid a DB query every second per active scan. A cancel is still
-      // detected within CANCEL_CACHE_MS; correctness only requires timely
-      // detection, not instantaneous.
-      const CANCEL_CACHE_MS = 2000
-      let cancelCacheAt = 0
-      let cancelCacheValue = false
-      const isScanCancelled = async (force = false): Promise<boolean> => {
-        const now = Date.now()
-        if (!force && now - cancelCacheAt < CANCEL_CACHE_MS) return cancelCacheValue
-        const current = await prisma.scan.findUnique({
-          where: { id: scanId },
-          select: { status: true },
-        })
-        cancelCacheValue = current?.status === "CANCELLED"
-        cancelCacheAt = now
-        return cancelCacheValue
-      }
+      const isScanCancelled = createScanCancellationPoller(scanId, workspaceId)
 
       const isCancelledOrTimedOut = async () => {
         if (target.type !== "REPO" && hasGlobalScanTimeout()) return true
@@ -258,7 +246,9 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         scanProfile,
         executionPlan,
       })
-      if (!execution.ok) return execution.result
+      if (!execution.ok) {
+        return await finalizeExecutionDenial(scanId, workspaceId, targetId, execution.result)
+      }
       engineResult = execution.engineResult
       deterministicCheckout = execution.deterministicCheckout
       engineProfile = execution.engineProfile
@@ -319,6 +309,8 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
           agentMinuteTerminalError = error
         },
       })
+
+      settleCancellation = () => meterEngineRun("cancelled")
 
       // Persist usage before deterministic scanners or finding persistence can
       // fail, so provider spend is never lost behind a downstream error.
@@ -580,6 +572,10 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       })
 
       if (finalization.status === "cancelled") {
+        // The engine already returned its scan-bound usage receipt. Retain
+        // cancellation's elapsed-time settlement when cancellation wins the
+        // later evidence claim, without persisting results after cancellation.
+        await meterEngineRun("cancelled")
         return {
           status: "failed",
           errorCategory: "CANCELLED",
@@ -645,12 +641,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         errorType: error instanceof Error ? error.name : "UNKNOWN",
       })
 
-      const currentScan = await prisma.scan
-        .findUnique({
-          where: { id: scanId },
-          select: { status: true, summary: true, errorCategory: true, errorMessage: true },
-        })
-        .catch(() => null)
+      const currentScan = await readScanTerminalState(scanId, workspaceId).catch(() => null)
       if (durableFinalizationResult) {
         log.error("billing.scan_settlement_commit_uncertain", {
           scanId,
@@ -665,6 +656,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       // Do not overwrite an unknown durable outcome during a DB outage.
       if (!currentScan) throw error
       if (currentScan?.status === "CANCELLED") {
+        await settleCancellation?.()
         if (globalScanTimeoutReached) {
           return {
             status: "failed",

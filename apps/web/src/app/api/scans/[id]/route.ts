@@ -12,6 +12,7 @@ import { z } from "zod"
 import { ScanIdSchema } from "@lyrashield/types"
 import { revalidateDashboardAggregates } from "../../../../lib/cache"
 import { recordedOperation } from "../../../../lib/recorded-operation"
+import { publicScanProvenance } from "../../../../lib/scan-provenance"
 import { filterDashboardScanEvents } from "@/lib/scan-event-visibility"
 
 function scanEtag(
@@ -24,6 +25,7 @@ function scanEtag(
     id: scan.id,
     status: scan.status,
     updatedAt: scan.updatedAt,
+    executionPlanHash: publicScanProvenance(scan.executionPlan).executionPlanHash,
     queuePosition,
     eventsCount: events.length,
     lastEventAt: lastEvent?.createdAt,
@@ -89,6 +91,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
           goal: scan.goal,
           mode: scan.mode,
           triggerType: scan.triggerType,
+          ...publicScanProvenance(scan.executionPlan),
           startedAt: scan.startedAt,
           endedAt: scan.endedAt,
           summary: scan.summary,

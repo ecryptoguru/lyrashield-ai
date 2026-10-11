@@ -7,6 +7,8 @@ const nextConfig = nextVitals.find((config) => config.name === "next")
 export default [
   {
     ignores: [
+      "**/.next/**",
+      "**/dist/**",
       "**/*.test.{ts,tsx,mts,cts}",
       "**/__tests__/**",
       "**/*.d.ts",

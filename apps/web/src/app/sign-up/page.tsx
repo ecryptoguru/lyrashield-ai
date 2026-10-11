@@ -267,7 +267,9 @@ export default function SignUpPage() {
         return
       }
 
-      if (providers.emailVerification) {
+      // The successful signup response is authoritative even when the
+      // independent provider-options probe is delayed or unavailable.
+      if (data?.token === null && data.user?.emailVerified === false) {
         setEmailSent(true)
       } else {
         setError(

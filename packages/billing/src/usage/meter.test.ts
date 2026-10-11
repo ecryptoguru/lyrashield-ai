@@ -107,6 +107,7 @@ function configureDatabase(
     },
     scanEvent: { create: intentCreateMock },
     $executeRaw: executeRawMock,
+    $queryRaw: vi.fn().mockResolvedValue([]),
     user: {
       findUnique: vi.fn().mockResolvedValue({ trialStartedAt: opts?.trial?.startedAt ?? null }),
     },

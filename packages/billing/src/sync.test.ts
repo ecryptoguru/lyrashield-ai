@@ -92,6 +92,59 @@ describe("syncSubscription paid-event durability", () => {
   })
 })
 
+describe("subscription allowance atomicity", () => {
+  it("grants and resets grace inside the same state-write transaction before audit", async () => {
+    await syncSubscription(activeSubscription)
+    const tx = transactionMock.mock.calls.length && grantMonthlyPoolMock.mock.calls[0]?.[0].tx
+    expect(tx).toBeTruthy()
+    expect(resetGraceMock).toHaveBeenCalledWith("acct_1", tx, activeSubscription.currentPeriodStart)
+    expect(grantMonthlyPoolMock.mock.invocationCallOrder[0]).toBeLessThan(
+      auditCreateMock.mock.invocationCallOrder[0]!
+    )
+  })
+  it("does not reset spent grace when replaying an existing allowance", async () => {
+    grantMonthlyPoolMock.mockResolvedValue({ created: false })
+    await syncSubscription(activeSubscription)
+    expect(resetGraceMock).not.toHaveBeenCalled()
+  })
+  it.each(["active", "canceled"] as const)(
+    "cannot grant after a newer %s event completes while older audit is delayed",
+    async (newStatus) => {
+      let release!: () => void
+      let entered!: () => void
+      const started = new Promise<void>((resolve) => {
+        entered = resolve
+      })
+      const gate = new Promise<void>((resolve) => {
+        release = resolve
+      })
+      auditCreateMock.mockImplementationOnce(async () => {
+        entered()
+        await gate
+      })
+      const older = syncSubscription({
+        ...activeSubscription,
+        provider: "polar",
+        eventOccurredAt: new Date("2026-08-02"),
+      })
+      await started
+      await syncSubscription({
+        ...activeSubscription,
+        provider: "polar",
+        status: newStatus,
+        currentPeriodEnd:
+          newStatus === "canceled" ? new Date("2026-08-03") : activeSubscription.currentPeriodEnd,
+        eventOccurredAt: new Date("2026-08-03"),
+      })
+      const grantsBeforeRelease = grantMonthlyPoolMock.mock.calls.length
+      release()
+      await older
+      expect(grantMonthlyPoolMock).toHaveBeenCalledTimes(grantsBeforeRelease)
+      expect(grantsBeforeRelease).toBe(newStatus === "active" ? 2 : 1)
+    }
+  )
+})
+
 describe("syncSubscription — out-of-order signed events (VERIFY-C-001)", () => {
   it("skips a delivery older than the last applied provider event", async () => {
     // Row already advanced to the September period at 2026-09-05.
@@ -168,5 +221,43 @@ describe("syncSubscription — out-of-order signed events (VERIFY-C-001)", () =>
       })
     )
     expect(grantMonthlyPoolMock).toHaveBeenCalled()
+  })
+
+  it.each(["2026-08-05T00:00:00Z", "2026-08-06T00:00:00Z"])(
+    "never revives an ended Polar contract on a same/newer clock: %s",
+    async (clock) => {
+      txBillingFindUnique.mockResolvedValue({
+        status: "canceled",
+        currentPeriodStart: activeSubscription.currentPeriodStart,
+        currentPeriodEnd: new Date("2026-08-05T00:00:00Z"),
+        lastEventAt: new Date("2026-08-05T00:00:00Z"),
+      })
+      await syncSubscription({
+        ...activeSubscription,
+        provider: "polar",
+        eventOccurredAt: new Date(clock),
+      })
+      expect(txBillingUpsert).not.toHaveBeenCalled()
+      expect(grantMonthlyPoolMock).not.toHaveBeenCalled()
+    }
+  )
+
+  it("replays an ended Polar contract without extending its term", async () => {
+    const end = new Date("2026-08-05T00:00:00Z")
+    txBillingFindUnique.mockResolvedValue({
+      status: "canceled",
+      currentPeriodStart: activeSubscription.currentPeriodStart,
+      currentPeriodEnd: end,
+      lastEventAt: end,
+    })
+    await syncSubscription({
+      ...activeSubscription,
+      provider: "polar",
+      status: "canceled",
+      currentPeriodEnd: end,
+      eventOccurredAt: end,
+    })
+    expect(txBillingUpsert).toHaveBeenCalled()
+    expect(grantMonthlyPoolMock).not.toHaveBeenCalled()
   })
 })

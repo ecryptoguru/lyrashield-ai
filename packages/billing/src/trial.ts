@@ -213,7 +213,7 @@ export async function getAccountTrialState(accountId: string): Promise<TrialStat
   const billing = await resolveAccountBilling(accountId)
   const trialPlan = CLOUD_PLAN_MAP.TRIAL
   return {
-    isActive: !isExpired && (billing?.currentPlan ?? "FREE") === "FREE",
+    isActive: !isExpired && (billing?.effectivePlan ?? "FREE") === "FREE",
     isExpired,
     startedAt: user.trialStartedAt,
     endsAt,
