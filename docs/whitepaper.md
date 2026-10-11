@@ -2,7 +2,7 @@
 
 ## Version 1.1.1 — 2026-10-11
 
-> The public product explanation for LyraShield AI: who it serves, what makes it different, how the assurance loop works and what its evidence can establish. The [litepaper](./litepaper.md) is the executive overview; the [yellowpaper](./yellowpaper.md) specifies the technical contracts. Executable source governs implementation; dated release evidence in [PRD.md](../PRD.md#8-current-production-evidence) governs deployment claims. This revision reflects the 2026-10-10 release and clarifies the historical checksum-gate audit; it does not claim new customer-flow acceptance.
+> The public product explanation for LyraShield AI: who it serves, what makes it different, how the assurance loop works and what its evidence can establish. The [litepaper](./litepaper.md) is the executive overview; the [yellowpaper](./yellowpaper.md) specifies the technical contracts. Executable source governs implementation; dated release evidence in [PRD.md](../PRD.md#8-current-production-evidence) governs deployment claims. Release and operational evidence changes over time, so consult the PRD before relying on a deployment claim; this paper does not claim customer-flow acceptance.
 
 ## Contents
 
@@ -270,7 +270,7 @@ Engine output is untrusted and bounded. Candidates, coverage receipts, findings 
 
 Manifest integrity binds the result to execution identity. New-format rows retain the exact checksum input; legacy rows without it remain integrity-unavailable rather than being rewritten to appear verifiable.
 
-Retest validation requires stored original and retest evidence, supported identity and complete deterministic coverage. Repository revisions can differ after a fix; missing identity remains inconclusive. The 2026-10-01 production audit found that the then-deployed finalizer did not require checksum `MATCH` for both manifests. Product revision `41462a3ff45f77e996823faf6d10f56053dec9e8` shipped the source fix on 2026-10-10. The audit did not inspect production finding records or establish that an incorrect historical validation occurred. Legacy rows without their original checksum input remain unavailable and were not rewritten; see §9.3 and the current [PRD release status](../PRD.md#9-release-status).
+Retest validation requires stored original and retest evidence, supported identity and complete deterministic coverage. Repository revisions can differ after a fix; missing identity remains inconclusive. Both stored manifest checksums must match before a deterministic retest can validate a finding. Legacy rows without their original checksum input remain unavailable and are not rewritten. The dated source audit and release receipt are recorded in the [PRD production evidence](../PRD.md#8-current-production-evidence); the audit did not inspect production finding records or establish that an incorrect historical validation occurred.
 
 Evidence uploads require checksum and encryption metadata. Direct status changes cannot manufacture a trusted terminal fix; `FIXED_PENDING_RETEST` preserves the need for new evidence.
 
@@ -694,7 +694,7 @@ The retained Standard acceptance is target- and revision-scoped, with zero indep
 
 Recorded open gates include billing reconciliation/provider operations, exact-release scan/client acceptance, signed Desktop distribution and broader operational capacity/recovery evidence.
 
-The 2026-10-01 audit identified missing checksum-`MATCH` enforcement for the original and retest manifests on the then-deployed revision. The source fix shipped in product revision `41462a3ff45f77e996823faf6d10f56053dec9e8` on 2026-10-10, and the release verified the deployed worker image and readiness. The audit did not inspect production finding records, so it established neither an incorrect historical result nor a need to rewrite one. Legacy checksum inputs remain unavailable and were not backfilled.
+For dated findings about the historical manifest-checksum audit and its bounded conclusion, consult the [PRD release evidence](../PRD.md#8-current-production-evidence). Current implementation requires matching checksums for both stored manifests before deterministic retest validation; legacy checksum inputs remain unavailable and are not rewritten. A production release or readiness response does not establish authenticated client use or paid-scan acceptance.
 
 Consult [PRD release status](../PRD.md#9-release-status) before reusing operational claims. This documentation revision performs no live scan or financial action.
 

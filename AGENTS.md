@@ -32,7 +32,7 @@ Current release and runtime evidence lives in [PRD §8](./PRD.md#8-current-produ
 
 ## Operational handoff
 
-The current deployed product is `41462a3ff45f77e996823faf6d10f56053dec9e8` (production run `38082773161`); recheck runtime state before operational action. Consult the [dated execution queue](./docs/handoffs/codex-setup-queue-2026-10-02.md) only for relevant follow-up work; refresh its deployment, scan and financial evidence before acting. Do not enumerate or create production scorecards, perform live financial actions, or run paid acceptance scans without explicit authorization. Keep unverified findings `DETECTED` or `INCONCLUSIVE`; require independent verification where warranted.
+The current deployed product is `851c16f2bdb0558cd5cff62b3d8de4cd5a70d437` (production run [38107334377](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/38107334377)); the worker is `sha256:22982fccfe6a72fbd50d669653451e44cf358454e2672e31e1c0861ba430b4f7` on engine `3001517530300ca5f602536bfadcbd3c95ad3039`. Fresh readiness at `2026-10-11T03:44:51Z` returned HTTP 200 for the app and scan-admission endpoints. Recheck runtime state before operational action. Consult the [dated execution queue](./docs/handoffs/codex-setup-queue-2026-10-02.md) only for relevant follow-up work; refresh its deployment, scan and financial evidence before acting. Do not enumerate or create production scorecards, perform live financial actions, or run paid acceptance scans without explicit authorization. Keep unverified findings `DETECTED` or `INCONCLUSIVE`; require independent verification where warranted.
 
 ## Founder decisions
 

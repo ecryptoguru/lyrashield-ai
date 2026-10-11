@@ -1,5 +1,7 @@
 # Cross-repository implementation and Docker test results
 
+> Historical local evidence snapshot from 2026-09-30. The merge, deployment and acceptance states in this ledger are frozen at that date; consult [current PRD release status](../../../PRD.md#8-current-production-evidence) and [current runtime evidence](../../../codebase.md#11-production-topology-and-accepted-evidence) before operational use.
+
 Implementation uses isolated branches based on the fetched main revisions in the plan. User-owned recovery changes remain preserved. This document records local evidence; it does not declare production release readiness.
 
 | Task | Source and local evidence                                                                                                                                                                                                                                                                                            | Remaining gate                                                                                                                                                                                                                                                         |
