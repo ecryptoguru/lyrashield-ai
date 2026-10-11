@@ -29,7 +29,7 @@ for (const width of [390, 1440]) {
           workspaceCalls++
           await workspaceHeld
           await route.fulfill({
-            json: { success: true, data: { id: "ws-browser", trialStarted: false } },
+            json: { success: true, data: [{ id: "ws-browser" }] },
           })
         } else if (path === "/api/onboarding") {
           Object.assign(state, route.request().postDataJSON())

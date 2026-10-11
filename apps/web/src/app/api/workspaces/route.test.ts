@@ -120,6 +120,107 @@ describe("POST /api/workspaces", () => {
     expect(response.status).toBe(500)
     expect(prisma.auditLog.create).not.toHaveBeenCalled()
   })
+
+  it("retries a workspace slug conflict from the PostgreSQL adapter", async () => {
+    tx.workspace.create.mockRejectedValueOnce({
+      code: "P2002",
+      meta: {
+        modelName: "Workspace",
+        driverAdapterError: {
+          cause: {
+            kind: "UniqueConstraintViolation",
+            constraint: { fields: ["slug"] },
+          },
+        },
+      },
+    })
+
+    const response = await POST(
+      new Request("http://localhost/api/workspaces", {
+        method: "POST",
+        body: JSON.stringify({ name: "First workspace", mode: "VIBE" }),
+      })
+    )
+
+    expect(response.status).toBe(200)
+    expect(tx.workspace.create).toHaveBeenCalledTimes(2)
+    const first = tx.workspace.create.mock.calls[0]?.[0].data
+    const second = tx.workspace.create.mock.calls[1]?.[0].data
+    expect(first?.slug).toBe("first-workspace")
+    expect(second?.slug).toMatch(/^first-workspace-[a-f0-9]{6}$/)
+    expect(second?.id).not.toBe(first?.id)
+    expect(prisma.auditLog.create).toHaveBeenCalledTimes(1)
+  })
+
+  it("retries a legacy Prisma slug target", async () => {
+    tx.workspace.create.mockRejectedValueOnce({
+      code: "P2002",
+      meta: { modelName: "Workspace", target: ["slug"] },
+    })
+
+    const response = await POST(
+      new Request("http://localhost/api/workspaces", {
+        method: "POST",
+        body: JSON.stringify({ name: "First workspace", mode: "VIBE" }),
+      })
+    )
+
+    expect(response.status).toBe(200)
+    expect(tx.workspace.create).toHaveBeenCalledTimes(2)
+  })
+
+  it("stops after five slug conflicts and returns a readable conflict", async () => {
+    tx.workspace.create.mockRejectedValue({
+      code: "P2002",
+      meta: { modelName: "Workspace", target: "Workspace_slug_key" },
+    })
+
+    const response = await POST(
+      new Request("http://localhost/api/workspaces", {
+        method: "POST",
+        body: JSON.stringify({ name: "First workspace", mode: "VIBE" }),
+      })
+    )
+
+    expect(response.status).toBe(409)
+    expect((await response.json()).error).toMatchObject({
+      code: "SLUG_TAKEN",
+      message: "Workspace slug already exists",
+    })
+    expect(tx.workspace.create).toHaveBeenCalledTimes(5)
+    expect(prisma.auditLog.create).not.toHaveBeenCalled()
+  })
+
+  it("returns an internal error for an unrelated workspace unique conflict", async () => {
+    tx.workspace.create.mockRejectedValueOnce({
+      code: "P2002",
+      meta: { modelName: "Workspace", target: ["name"] },
+    })
+
+    const response = await POST(
+      new Request("http://localhost/api/workspaces", {
+        method: "POST",
+        body: JSON.stringify({ name: "First workspace", mode: "VIBE" }),
+      })
+    )
+
+    expect(response.status).toBe(500)
+    expect((await response.json()).error.code).toBe("INTERNAL_ERROR")
+    expect(tx.workspace.create).toHaveBeenCalledTimes(1)
+    expect(prisma.auditLog.create).not.toHaveBeenCalled()
+  })
+
+  it("creates a safe slug for names without ASCII letters or digits", async () => {
+    const response = await POST(
+      new Request("http://localhost/api/workspaces", {
+        method: "POST",
+        body: JSON.stringify({ name: "東京", mode: "VIBE" }),
+      })
+    )
+
+    expect(response.status).toBe(200)
+    expect((await response.json()).data.slug).toBe("workspace")
+  })
 })
 
 describe("workspace-bound bearer discovery", () => {
@@ -137,6 +238,7 @@ describe("workspace-bound bearer discovery", () => {
           workspaceId: "ws-bound",
           workspace: { deletedAt: null },
         },
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
       })
     )
   })

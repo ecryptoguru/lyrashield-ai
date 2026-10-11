@@ -18,7 +18,7 @@ const description =
   "Cloud plans from $29 a month with a free trial of 60 agent-minutes and no card. Prepaid minute packs and annual billing are available; Local launches later."
 // Last content change to this page — the explicit freshness input for the
 // WebPage dateModified (same convention as about.astro's updatedDate).
-const updatedDate = "2026-09-20"
+const updatedDate = "2026-10-11"
 
 const cloudPlans = CLOUD_PLANS.filter((plan) => plan.selfServe)
 const enterprisePlan = getPlan("ENTERPRISE")
@@ -34,7 +34,7 @@ const pricingFaqs = [
   },
   {
     q: "What happens if I run out of agent-minutes?",
-    a: `You can add a prepaid minute pack at any time. Packs are valid for ${PACK_VALIDITY_DAYS} days and are consumed after your monthly pool. Overage billing at $0.15/min with a spend limit is available on Agency.`,
+    a: `Eligible accounts can add a prepaid minute pack. A FREE account with an expired trial must subscribe first. FREE accounts with an active or unclaimed trial remain eligible along with paid accounts. Packs are valid for ${PACK_VALIDITY_DAYS} days and are consumed after your monthly pool. Overage billing at $0.15/min with a spend limit is available on Agency.`,
   },
   {
     q: "Can I trial Agency?",
@@ -338,7 +338,7 @@ const appUrl =
           </table>
         </div>
         <p class="mt-3 text-xs text-text-muted">
-          Deep and Custom scans use agent-minutes at 3× the standard rate. Prepaid minute packs are available on every plan.
+          Deep and Custom scans use agent-minutes at 3× the standard rate. Eligible accounts can buy prepaid minute packs. Accounts with an expired free trial must subscribe first.
         </p>
       </div>
 

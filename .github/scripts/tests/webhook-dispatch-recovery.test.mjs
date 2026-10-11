@@ -17,11 +17,17 @@ function dispatch(
   const directory = mkdtempSync(path.join(tmpdir(), "ls-cutover-dispatch-"))
   t.after(() => rmSync(directory, { recursive: true, force: true }))
   const gh = path.join(directory, "gh")
+  const git = path.join(directory, "git")
   writeFileSync(
     gh,
     `#!${process.execPath}\nconsole.log(process.argv.join(' ').includes('/attempts/1/jobs')?${JSON.stringify(originalStatus)}:${JSON.stringify(currentMain)})`
   )
   chmodSync(gh, 0o755)
+  writeFileSync(
+    git,
+    "#!/bin/sh\nif [ \"$1 $2\" = 'rev-parse HEAD' ]; then printf '%s\\n' \"$SOURCE_SHA\"; else exit 2; fi\n"
+  )
+  chmodSync(git, 0o755)
   const output = path.join(directory, "output")
   writeFileSync(output, "")
   const result = spawnSync("bash", [".github/scripts/validate-webhook-deploy-dispatch.sh"], {
