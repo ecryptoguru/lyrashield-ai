@@ -86,18 +86,6 @@ async function post(request: Request) {
         { status: 409 }
       )
     }
-    if (error instanceof Error && error.message === "INVALID_NAME") {
-      return NextResponse.json(
-        {
-          success: false,
-          error: {
-            code: "INVALID_NAME",
-            message: "Workspace name must contain at least one alphanumeric character",
-          },
-        },
-        { status: 400 }
-      )
-    }
     logger.error("Failed to create workspace", { error: String(error) })
     return NextResponse.json(
       { success: false, error: { code: "INTERNAL_ERROR", message: "Failed to create workspace" } },
