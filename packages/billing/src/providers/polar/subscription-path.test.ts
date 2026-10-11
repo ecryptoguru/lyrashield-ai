@@ -64,6 +64,51 @@ describe("Polar subscription events", () => {
     ).resolves.toMatchObject({ action: "subscription.past_due" })
   })
 
+  it.each(
+    [
+      "current_period_start",
+      "currentPeriodStart",
+      "current_period_end",
+      "currentPeriodEnd",
+      "canceled_at",
+      "canceledAt",
+    ].flatMap((field) => ["invalid", "", 0, false, {}].map((value) => [field, value] as const))
+  )("rejects malformed %s before subscription sync: %j", async (field, value) => {
+    await expect(
+      processPolarEvent({
+        type: "subscription.revoked",
+        data: {
+          id: "sub_invalid_period",
+          [field]: value,
+          modified_at: "2026-08-20T12:00:01Z",
+          metadata: { accountId: "account_1" },
+        },
+      })
+    ).rejects.toThrow("polar_subscription_time_invalid")
+    expect(syncSubscription).not.toHaveBeenCalled()
+  })
+
+  it("preserves valid camelCase periods and nullable cancellation", async () => {
+    await processPolarEvent({
+      type: "subscription.active",
+      data: {
+        id: "sub_camel",
+        currentPeriodStart: "2026-08-01T00:00:00Z",
+        currentPeriodEnd: "2026-09-01T00:00:00Z",
+        canceledAt: null,
+        modified_at: "2026-08-20T12:00:01Z",
+        metadata: { accountId: "account_1" },
+      },
+    })
+    expect(syncSubscription).toHaveBeenCalledWith(
+      expect.objectContaining({
+        currentPeriodStart: new Date("2026-08-01T00:00:00Z"),
+        currentPeriodEnd: new Date("2026-09-01T00:00:00Z"),
+        canceledAt: undefined,
+      })
+    )
+  })
+
   it("fails closed when the provider event clock is missing", async () => {
     await expect(
       processPolarEvent({

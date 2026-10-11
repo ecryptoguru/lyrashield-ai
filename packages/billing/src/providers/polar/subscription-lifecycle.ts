@@ -12,9 +12,9 @@ export function resolvePolarSubscriptionLifecycle(
   const canceledAtValue = data.canceled_at ?? data.canceledAt
   const endedAtValue = data.ended_at ?? data.endedAt
   const modifiedAtValue = data.modified_at ?? data.modifiedAt
-  const periodStart = currentPeriodStart ? new Date(currentPeriodStart as string) : undefined
-  let periodEnd = currentPeriodEnd ? new Date(currentPeriodEnd as string) : undefined
-  const canceledAt = canceledAtValue ? new Date(canceledAtValue as string) : undefined
+  const periodStart = parseOptionalTime(currentPeriodStart)
+  let periodEnd = parseOptionalTime(currentPeriodEnd)
+  const canceledAt = parseOptionalTime(canceledAtValue)
   const eventOccurredAt = new Date(String(modifiedAtValue ?? ""))
   if (Number.isNaN(eventOccurredAt.getTime())) {
     throw new Error("polar_subscription_event_time_invalid")
@@ -47,6 +47,16 @@ export function resolvePolarSubscriptionLifecycle(
     canceledAt,
     eventOccurredAt,
   }
+}
+
+function parseOptionalTime(value: unknown): Date | undefined {
+  if (value == null) return undefined
+  if (typeof value !== "string" || !value.trim()) {
+    throw new Error("polar_subscription_time_invalid")
+  }
+  const date = new Date(value)
+  if (!Number.isFinite(date.getTime())) throw new Error("polar_subscription_time_invalid")
+  return date
 }
 
 function mapPolarSubscriptionStatus(
