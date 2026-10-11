@@ -6,7 +6,8 @@
   "workspaces": {
     ".": {
       "entry": ["e2e/**/*.{js,mjs,ts,tsx}"],
-      "project": ["e2e/**/*.{js,mjs,ts,tsx}"]
+      "project": ["e2e/**/*.{js,mjs,ts,tsx}"],
+      "playwright": false
     },
     "apps/desktop": {
       "entry": [],

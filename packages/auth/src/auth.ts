@@ -35,6 +35,7 @@ export const OAUTH_AUTH_VERSION_CLAIM = "https://lyrashieldai.com/auth_version"
 import { OAUTH_SCOPE_READ, OAUTH_SCOPE_WRITE } from "./oauth-scopes"
 import { oauthConsentReferenceId, selectedOAuthWorkspaceId } from "./oauth-consent-reference"
 import { validateSessionFieldWrite } from "./session-field-guard"
+import { capturePasswordResetForTest } from "./password-reset-capture"
 export { OAUTH_SCOPE_READ, OAUTH_SCOPE_WRITE }
 export const OAUTH_RESOURCE = new URL("/api/mcp", env.NEXT_PUBLIC_APP_URL).toString()
 export const OAUTH_ISSUER = new URL("/api/auth", env.BETTER_AUTH_URL).toString().replace(/\/$/, "")
@@ -272,6 +273,7 @@ async function sendResetPasswordEmail({
   user: { email: string; name: string }
   url: string
 }) {
+  if (await capturePasswordResetForTest(user, url)) return
   if (isProd && env.BREVO_API_KEY) {
     const apiKey = env.BREVO_API_KEY as string
     void (async () => {

@@ -26,6 +26,12 @@ const nextConfig: NextConfig = {
   turbopack: { root: workspaceRoot },
   reactStrictMode: true,
   poweredByHeader: false,
+  // A development fixture traverses bearer reset URLs; keep them out of server logs.
+  ...(process.env.NODE_ENV !== "production" && process.env.LYRASHIELD_TEST_AUTH_MAIL_DIR
+    ? {
+        logging: { incomingRequests: false, browserToTerminal: false, serverFunctions: false },
+      }
+    : {}),
   experimental: {
     optimizePackageImports: ["lucide-react"],
   },

@@ -36,6 +36,16 @@ describe("runtime environment validation", () => {
     await expect(import("./env")).resolves.toBeDefined()
   })
 
+  it.each([undefined, "phase-production-build"])(
+    "rejects local reset mail capture in production, including build phase %s",
+    async (phase) => {
+      vi.stubEnv("NEXT_PHASE", phase)
+      vi.stubEnv("LYRASHIELD_TEST_AUTH_MAIL_DIR", "/tmp/lyrashield-auth-mail-fixture")
+      vi.stubEnv("LYRASHIELD_TEST_DB_DISPOSABLE", "1")
+      await expect(import("./env")).rejects.toThrow("Invalid environment configuration")
+    }
+  )
+
   it("requires a strong IP hash salt in production", async () => {
     vi.stubEnv("IP_HASH_SALT", "")
     await expect(import("./env")).rejects.toThrow("Invalid environment configuration")

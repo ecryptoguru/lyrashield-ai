@@ -789,6 +789,14 @@ jobs:
         timeout-minutes: 10
         run: pnpm test:browser-harness
 
+      - name: Disposable reset mail browser proof
+        if: needs.changes.outputs.database-tests == 'true'
+        timeout-minutes: 5
+        run: |
+          DATABASE_URL="$RLS_RUNTIME_DATABASE_URL" \
+            DATABASE_SYSTEM_URL="postgresql://lyrashield:lyrashield@localhost:5432/lyrashield?schema=public" \
+            pnpm exec playwright test -c e2e/auth-mail/playwright.config.ts
+
       - name: Remove disposable database containers
         if: ${{ always() }}
         run: docker rm --force ci-postgres ci-redis >/dev/null 2>&1 || true
