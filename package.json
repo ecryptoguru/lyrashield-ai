@@ -30,6 +30,7 @@
     "test:motion": "node --test apps/marketing-motion/tests/*.test.mjs",
     "test": "node run-all-tests.mjs",
     "test:e2e": "playwright test",
+    "test:auth-mail-browser": "node --experimental-strip-types .github/scripts/run-auth-mail-browser-proof.mjs",
     "test:browser-harness": "playwright test -c e2e/browser/playwright.config.ts",
     "test:watch": "vitest --exclude '**/dist/**'",
     "verify:worker-image": "sh apps/worker/scripts/verify-worker-image.sh",

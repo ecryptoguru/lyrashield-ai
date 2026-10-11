@@ -1,7 +1,7 @@
 import { defineConfig, devices } from "@playwright/test"
 import { fileURLToPath } from "node:url"
 import { isSafeDisposableDatabaseUrl } from "../../packages/config/src/auth-test-mail"
-import { createOwnedAuthTestMailDirectory } from "../../packages/auth/src/auth-test-mail-directory"
+import { isOwnedAuthTestMailDirectory } from "../../packages/auth/src/auth-test-mail-directory"
 
 // This suite starts its own development server. Never reuse a production-mode app.
 const baseURL = "http://127.0.0.1:3102"
@@ -22,7 +22,15 @@ process.env.NEXT_PUBLIC_APP_URL = baseURL
 process.env.BREVO_API_KEY = ""
 // Failed-test page snapshots can retain bearer links even with tracing disabled.
 process.env.PLAYWRIGHT_NO_COPY_PROMPT = "1"
-const authMailDirectory = createOwnedAuthTestMailDirectory()
+const authMailDirectory = process.env.LYRASHIELD_TEST_AUTH_MAIL_DIR
+const ownedAuthMailDirectory = process.env.LYRASHIELD_TEST_AUTH_MAIL_OWNED_DIR
+if (
+  !authMailDirectory ||
+  !ownedAuthMailDirectory ||
+  !isOwnedAuthTestMailDirectory(authMailDirectory, ownedAuthMailDirectory)
+) {
+  throw new Error("Run the auth mail browser proof through its private fixture runner")
+}
 
 export default defineConfig({
   testDir: ".",
@@ -60,7 +68,7 @@ export default defineConfig({
       LYRASHIELD_TEST_DB_DISPOSABLE: "1",
       LYRASHIELD_REQUIRE_EMAIL_VERIFICATION: "0",
       LYRASHIELD_TEST_AUTH_MAIL_DIR: authMailDirectory,
-      LYRASHIELD_TEST_AUTH_MAIL_OWNED_DIR: authMailDirectory,
+      LYRASHIELD_TEST_AUTH_MAIL_OWNED_DIR: ownedAuthMailDirectory,
       RATE_LIMIT_AUTH_MAX: "1000",
       RATE_LIMIT_API_MAX: "1000",
       NEXT_PUBLIC_POSTHOG_KEY: "",

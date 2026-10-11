@@ -1,5 +1,5 @@
 /* eslint-disable security/detect-non-literal-fs-filename -- This module creates and removes only its own private temporary mail directory. */
-import { chmodSync, mkdtempSync, rmSync } from "node:fs"
+import { chmodSync, lstatSync, mkdtempSync, realpathSync, rmSync } from "node:fs"
 import { lstat, realpath, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { basename, dirname, join } from "node:path"
@@ -19,6 +19,26 @@ export function createOwnedAuthTestMailDirectory(environment: NodeJS.ProcessEnv 
   } catch {
     rmSync(directory, { recursive: true, force: true })
     throw new Error("Unable to create private auth mail fixture directory")
+  }
+}
+
+/** Validate the exact private temp directory created for this runner. */
+export function isOwnedAuthTestMailDirectory(
+  captureDirectory: string | undefined,
+  ownedDirectory: string | undefined
+): boolean {
+  if (!captureDirectory || captureDirectory !== ownedDirectory) return false
+  try {
+    const stat = lstatSync(captureDirectory)
+    return (
+      stat.isDirectory() &&
+      (stat.mode & 0o077) === 0 &&
+      (!process.getuid || stat.uid === process.getuid()) &&
+      new RegExp(`^${PREFIX}[\\w-]+$`).test(basename(captureDirectory)) &&
+      realpathSync(dirname(captureDirectory)) === realpathSync(tmpdir())
+    )
+  } catch {
+    return false
   }
 }
 

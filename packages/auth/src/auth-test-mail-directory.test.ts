@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest"
 import {
   cleanupOwnedAuthTestMailDirectory,
   createOwnedAuthTestMailDirectory,
+  isOwnedAuthTestMailDirectory,
 } from "./auth-test-mail-directory"
 
 const createdDirectories: string[] = []
@@ -36,6 +37,12 @@ describe("owned auth mail fixture directory", () => {
     expect(ownedDirectory).not.toBe(callerDirectory)
     expect(environment.LYRASHIELD_TEST_AUTH_MAIL_DIR).toBe(ownedDirectory)
     expect(environment.LYRASHIELD_TEST_AUTH_MAIL_OWNED_DIR).toBe(ownedDirectory)
+    expect(
+      isOwnedAuthTestMailDirectory(
+        environment.LYRASHIELD_TEST_AUTH_MAIL_DIR,
+        environment.LYRASHIELD_TEST_AUTH_MAIL_OWNED_DIR
+      )
+    ).toBe(true)
 
     await cleanupOwnedAuthTestMailDirectory(
       environment.LYRASHIELD_TEST_AUTH_MAIL_DIR,
@@ -54,6 +61,7 @@ describe("owned auth mail fixture directory", () => {
     await expect(cleanupOwnedAuthTestMailDirectory(callerDirectory, undefined)).rejects.toThrow(
       "Refusing to remove an unowned mail fixture directory"
     )
+    expect(isOwnedAuthTestMailDirectory(callerDirectory, undefined)).toBe(false)
     expect(await readFile(sentinel, "utf8")).toBe("preserve")
   })
 })
