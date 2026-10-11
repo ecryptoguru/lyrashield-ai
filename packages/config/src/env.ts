@@ -1,6 +1,7 @@
 import { z } from "zod"
 import { APPROVED_PLATFORM_ADMIN_EMAILS, normalizePlatformAdminEmails } from "./platform-admin"
 import { parseAuthAssessmentAllowlist } from "./auth-assessment"
+import { authTestMailConfigAllowed } from "./auth-test-mail"
 
 /**
  * Literal-loopback http check for bearer-grant URLs: the host must be exactly
@@ -346,6 +347,7 @@ const envSchema = z
     LYRASHIELD_REQUIRE_EMAIL_VERIFICATION: z.enum(["0", "1"]).optional().default("1"),
     BREVO_API_KEY: z.string().optional().or(z.literal("")),
     EMAIL_FROM: z.string().optional().or(z.literal("")),
+    LYRASHIELD_TEST_AUTH_MAIL_DIR: z.string().optional().or(z.literal("")),
 
     // Notifications — Slack & Discord webhooks
     SLACK_WEBHOOK_URL: z.string().optional().or(z.literal("")),
@@ -724,6 +726,26 @@ const envSchema = z
         "accept unverified open registration as a deliberate choice.",
     }
   )
+  .superRefine((val, ctx) => {
+    if (
+      !authTestMailConfigAllowed({
+        directory: val.LYRASHIELD_TEST_AUTH_MAIL_DIR,
+        nodeEnv: val.NODE_ENV,
+        authUrl: val.BETTER_AUTH_URL,
+        appUrl: val.NEXT_PUBLIC_APP_URL,
+        databaseUrl: val.DATABASE_URL,
+        brevoApiKey: val.BREVO_API_KEY,
+        disposable: process.env.LYRASHIELD_TEST_DB_DISPOSABLE,
+      })
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["LYRASHIELD_TEST_AUTH_MAIL_DIR"],
+        message:
+          "Reset mail capture requires a disposable local development/test app without Brevo",
+      })
+    }
+  })
   .superRefine((val, ctx) => {
     // Enabling the authenticated beta without an explicit allowlist is a
     // production misconfiguration — the allowlist is the second required gate,
