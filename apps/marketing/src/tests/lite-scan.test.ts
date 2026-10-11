@@ -70,7 +70,7 @@ describe("Lite Check marketing surface", () => {
       'class={`mt-3 text-sm leading-6 text-text-muted${challengeAvailable ? "" : " hidden"}`}'
     )
     expect(page).toContain(
-      '{challengeAvailable && <script src="https://challenges.cloudflare.com/turnstile/v0/api.js'
+      '{challengeAvailable && <script id="turnstile-api" src="https://challenges.cloudflare.com/turnstile/v0/api.js'
     )
   })
 

@@ -301,7 +301,7 @@ const jsonLd = [
 
   <section class="mx-auto max-w-4xl px-4 py-16 sm:px-6 lg:px-8"><h2 class="text-3xl font-semibold tracking-tight text-text" data-reveal>Questions about the free Lite Check</h2><div class="mt-8 divide-y divide-border border-y border-border" data-reveal="fade">{faqs.map((faq, index) => (<details data-question-id={`lite-${index + 1}`} class="group py-5"><summary class="flex min-h-11 cursor-pointer list-none items-center justify-between gap-4 font-semibold text-text"><span>{faq.question}</span><span class="text-accent group-open:rotate-45" aria-hidden="true">+</span></summary><p class="max-w-3xl pb-2 pr-8 leading-7 text-text-muted">{faq.answer}</p></details>))}</div></section>
 
-  {challengeAvailable && <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer is:inline></script>}
+  {challengeAvailable && <script id="turnstile-api" src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer is:inline></script>}
   <script>
     import { normalizePublicHttpUrl } from "../lib/public-url"
     import { sanitizeMarketingProperties, type MarketingEventName } from "../lib/posthog-privacy"
@@ -523,6 +523,19 @@ const jsonLd = [
       if (retryChallengeButton) retryChallengeButton.hidden = !canRetry
     }
 
+    function reloadTurnstileScript() {
+      const currentScript = document.querySelector<HTMLScriptElement>("#turnstile-api")
+      if (!currentScript) return
+
+      const retryScript = document.createElement("script")
+      retryScript.id = currentScript.id
+      retryScript.src = currentScript.src
+      retryScript.async = true
+      retryScript.defer = true
+      currentScript.remove()
+      document.head.appendChild(retryScript)
+    }
+
     function retryChallenge() {
       turnstileToken = ""
       updateScanReadiness()
@@ -532,6 +545,7 @@ const jsonLd = [
         turnstile.reset(turnstileWidget)
         return
       }
+      if (!turnstile) reloadTurnstileScript()
       turnstileAttempts = 0
       setChallengeStatus("Preparing verification…")
       bootTurnstile()
@@ -639,6 +653,11 @@ const jsonLd = [
         const { result } = await runLiteScan(url, token)
         await progress.finished
         renderResult(result)
+        const turnstile = (window as TurnstileWindow).turnstile
+        if (turnstile && turnstileWidget) {
+          setChallengeStatus("Scan complete. Preparing verification for another check…")
+          turnstile.reset(turnstileWidget)
+        }
       } catch (cause) {
         handleScanError(cause as Error & { reason?: string })
       } finally {

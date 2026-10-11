@@ -35,7 +35,7 @@ faq:
 
 | Capability                                            | LyraShield AI                                                                                  | Aikido                                                         |
 | ----------------------------------------------------- | ---------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
-| Static analysis (SAST)                                | Agentic plus a deterministic pattern scanner plus a deterministic pattern scanner              | Yes (pattern + context)                                        |
+| Static analysis (SAST)                                | Agentic plus a deterministic pattern scanner                                                   | Yes (pattern + context)                                        |
 | SCA (dependency scanning)                             | Yes (engine)                                                                                   | Yes (with malware detection)                                   |
 | Secret scanning                                       | Yes (engine + GitHub Action)                                                                   | Yes                                                            |
 | IaC / container scanning                              | Deterministic Terraform, Kubernetes, Compose and Dockerfile checks; no container image scanner | Yes                                                            |
