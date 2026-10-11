@@ -14,8 +14,11 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { spawnSync } from "node:child_process"
-import { createHash } from "node:crypto"
-import { prepareVerifiedBackupConnection } from "../prepare-verified-backup-connection.mjs"
+import { createHash, X509Certificate } from "node:crypto"
+import {
+  prepareVerifiedBackupConnection,
+  verifiedBackupRootCaContainerPath,
+} from "../prepare-verified-backup-connection.mjs"
 
 const repository = fileURLToPath(new URL("../../../", import.meta.url))
 const workflow = readFileSync(
@@ -34,6 +37,76 @@ const shell = step
 const direct =
   "postgresql://postgres:synthetic-only@db.localprojectfixture1.supabase.co:5432/postgres?schema=public&sslmode=require&uselibpqcompat=1"
 const digest = (bytes) => createHash("sha256").update(bytes).digest("hex")
+const rootCaPath = join(repository, ".github/certs/supabase-root-2021-ca.crt")
+const expectedRootCaFingerprint = "807025ad50d4ed219d2c9c7d299c004f824eb00cf7f65afef607d07b72e6cafa"
+
+test("backup trust anchor is a self-signed CA matching the reviewed certificate fingerprint", () => {
+  const certificate = new X509Certificate(readFileSync(rootCaPath))
+  assert.equal(certificate.ca, true)
+  assert.equal(certificate.subject, certificate.issuer)
+  assert.equal(certificate.verify(certificate.publicKey), true)
+  assert.ok(Date.parse(certificate.validFrom) <= Date.now())
+  assert.ok(Date.parse(certificate.validTo) > Date.now())
+  assert.equal(
+    certificate.fingerprint256.replaceAll(":", "").toLowerCase(),
+    expectedRootCaFingerprint
+  )
+  assert.equal(verifiedBackupRootCaContainerPath(rootCaPath), "/tmp/supabase-root-2021-ca.crt")
+})
+
+test("backup trust-anchor validation rejects missing, malformed, replaced and appended CA files", (t) => {
+  const directory = realpathSync(mkdtempSync(join(tmpdir(), "backup-root-ca-validation-")))
+  t.after(() => rmSync(directory, { recursive: true, force: true }))
+  const keyPath = join(directory, "untrusted-root.key")
+  const certificatePath = join(directory, "untrusted-root.crt")
+  const generated = spawnSync(
+    "openssl",
+    [
+      "req",
+      "-x509",
+      "-newkey",
+      "rsa:2048",
+      "-nodes",
+      "-keyout",
+      keyPath,
+      "-out",
+      certificatePath,
+      "-days",
+      "2",
+      "-subj",
+      "/CN=Untrusted Fixture Root",
+      "-addext",
+      "basicConstraints=critical,CA:TRUE",
+      "-addext",
+      "keyUsage=critical,keyCertSign,cRLSign",
+    ],
+    { encoding: "utf8" }
+  )
+  assert.equal(generated.status, 0, generated.stderr)
+  const otherRoot = readFileSync(certificatePath)
+  assert.equal(new X509Certificate(otherRoot).ca, true)
+
+  assert.throws(
+    () => verifiedBackupRootCaContainerPath(join(directory, "missing.crt")),
+    /unavailable or invalid/
+  )
+
+  const malformedPath = join(directory, "malformed.crt")
+  writeFileSync(malformedPath, "not a certificate")
+  assert.throws(() => verifiedBackupRootCaContainerPath(malformedPath), /unavailable or invalid/)
+
+  assert.throws(
+    () => verifiedBackupRootCaContainerPath(certificatePath),
+    /does not match the reviewed Supabase root/
+  )
+
+  const appendedPath = join(directory, "appended.crt")
+  writeFileSync(appendedPath, Buffer.concat([readFileSync(rootCaPath), otherRoot]))
+  assert.throws(
+    () => verifiedBackupRootCaContainerPath(appendedPath),
+    /file does not match the reviewed certificate/
+  )
+})
 
 function fixture(t) {
   const root = realpathSync(mkdtempSync(join(tmpdir(), "verified-backup-client-")))
@@ -54,12 +127,17 @@ function fixture(t) {
     "docker",
     `
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),args=process.argv.slice(2);
+const {X509Certificate}=require('node:crypto');
 assert.equal(fs.fstatSync(2).mode&511,384);
 fs.appendFileSync(process.env.MOCK_CALLS,'docker\\n');
+const mount=args[args.indexOf('--mount')+1];
+assert.equal(mount,'type=bind,source='+process.env.EXPECTED_ROOT_CA_PATH+',target=/tmp/supabase-root-2021-ca.crt,readonly');
+const ca=new X509Certificate(fs.readFileSync(process.env.EXPECTED_ROOT_CA_PATH));
+assert.equal(ca.fingerprint256.replaceAll(':','').toLowerCase(),process.env.EXPECTED_ROOT_CA_FINGERPRINT);
 const url=new URL(args[args.indexOf('--env')+1].slice('PG_URL='.length));
 assert.equal(url.href,process.env.EXPECTED_LIBPQ_URL);
 assert.equal(url.searchParams.get('sslmode'),'verify-full');
-assert.equal(url.searchParams.get('sslrootcert'),'system');
+assert.equal(url.searchParams.get('sslrootcert'),'/tmp/supabase-root-2021-ca.crt');
 assert.equal(url.searchParams.get('gssencmode'),'disable');
 assert.equal(url.searchParams.has('uselibpqcompat'),false);
 assert.equal(url.searchParams.has('schema'),false);
@@ -93,6 +171,7 @@ fs.writeFileSync(path.join(process.env.RUNNER_TEMP,name),'SYNTHETIC_DUMP');
         RUNNER_TEMP: runner,
         ISOLATED_RESTORE: "false",
         GITHUB_RUN_ID: "1234",
+        GITHUB_WORKSPACE: repository,
         GITHUB_OUTPUT: join(root, "output"),
         GITHUB_ENV: join(root, "github-env"),
         DATABASE_DIRECT_URL: direct,
@@ -101,6 +180,8 @@ fs.writeFileSync(path.join(process.env.RUNNER_TEMP,name),'SYNTHETIC_DUMP');
         R2_S3_ENDPOINT: "https://synthetic.invalid",
         MOCK_CALLS: calls,
         EXPECTED_DUMP_SHA256: digest("SYNTHETIC_DUMP"),
+        EXPECTED_ROOT_CA_PATH: rootCaPath,
+        EXPECTED_ROOT_CA_FINGERPRINT: expectedRootCaFingerprint,
         EXPECTED_LIBPQ_URL: prepareVerifiedBackupConnection(direct).libpqUrl,
         ...extra,
       }

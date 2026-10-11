@@ -145,8 +145,10 @@ jobs:
 
           backup_container_args=()
           if [ "$ISOLATED_RESTORE" = true ]; then backup_container_args=(--name "lyrashield-isolated-backup-$GITHUB_RUN_ID"); fi
+          supabase_root_ca="${GITHUB_WORKSPACE%/}/.github/certs/supabase-root-2021-ca.crt"
           backup_client_error="$(mktemp "$RUNNER_TEMP/backup-client.XXXXXX")"
           if docker run --rm ${backup_container_args[@]+"${backup_container_args[@]}"} \
+            --mount "type=bind,source=$supabase_root_ca,target=/tmp/supabase-root-2021-ca.crt,readonly" \
             --env PG_URL="$pg_dump_url" \
             --volume "$RUNNER_TEMP:/backup" \
             postgres@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73 \
