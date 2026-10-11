@@ -129,6 +129,7 @@ jobs:
           R2_S3_ENDPOINT: ${{ secrets.R2_S3_ENDPOINT }}
         run: |
           set -euo pipefail
+          exec 3>&1
           if [ "$ISOLATED_RESTORE" = true ]; then source .github/scripts/isolated-restore-private.sh; fi
           backup_day="$(date -u +%F)"
           backup_name="lyrashield-${backup_day}-${GITHUB_RUN_ID}.dump"
@@ -144,11 +145,29 @@ jobs:
 
           backup_container_args=()
           if [ "$ISOLATED_RESTORE" = true ]; then backup_container_args=(--name "lyrashield-isolated-backup-$GITHUB_RUN_ID"); fi
-          docker run --rm ${backup_container_args[@]+"${backup_container_args[@]}"} \
+          backup_client_error="$(mktemp "$RUNNER_TEMP/backup-client.XXXXXX")"
+          if docker run --rm ${backup_container_args[@]+"${backup_container_args[@]}"} \
             --env PG_URL="$pg_dump_url" \
             --volume "$RUNNER_TEMP:/backup" \
             postgres@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73 \
-            sh -ceu 'pg_dump --format=custom --schema=public --schema=app --no-owner --no-acl --file="/backup/'"$backup_name"'" "$PG_URL"'
+            sh -ceu 'pg_dump --format=custom --schema=public --schema=app --no-owner --no-acl --file="/backup/'"$backup_name"'" "$PG_URL"' 2> "$backup_client_error"; then
+            if [ "$ISOLATED_RESTORE" = true ]; then cat "$backup_client_error" >&2; fi
+            rm -f "$backup_client_error"
+          else
+            backup_client_status="$?"
+            backup_client_reason=connection-or-dump-failed
+            if grep -Fq 'certificate verify failed' "$backup_client_error"; then
+              backup_client_reason=certificate-untrusted
+            elif grep -Fq 'does not match host name' "$backup_client_error"; then
+              backup_client_reason=hostname-mismatch
+            elif grep -Fq 'server does not support SSL' "$backup_client_error"; then
+              backup_client_reason=tls-unavailable
+            fi
+            if [ "$ISOLATED_RESTORE" = true ]; then cat "$backup_client_error" >&2; fi
+            rm -f "$backup_client_error"
+            printf 'Backup failed (verified-client/%s).\n' "$backup_client_reason" >&3
+            exit "$backup_client_status"
+          fi
 
           dump_sha256="$(sha256sum "$dump_path" | awk '{print $1}')"
           printf '%s' "$BACKUP_ENCRYPTION_PASSPHRASE" | \
