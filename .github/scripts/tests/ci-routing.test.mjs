@@ -608,6 +608,32 @@ test("tooling-only changes skip both deployments when both production baselines 
   assert.doesNotMatch(`${result.stdout}${result.stderr}`, /fixture-token-must-not-be-printed/)
 })
 
+test("serial-comma baseline changes skip both production deployments", (t) => {
+  const fixture = createMainGapFixture({ pendingFile: "lint/serial-comma-baseline.json" })
+  t.after(() => rmSync(fixture.directory, { recursive: true, force: true }))
+  const currentRelease = azureCodeReleaseFixture(
+    1,
+    fixture.deployedSha,
+    101,
+    ".github/workflows/release-production.yml"
+  )
+  const result = runMainGap(fixture, {
+    cloudflareSha: fixture.deployedSha,
+    ...azureFixtures([currentRelease]),
+  })
+
+  assert.equal(result.status, 0, result.stderr)
+  assert.equal(result.outputs["current-main"], "true")
+  assert.equal(result.outputs["azure-deploy"], "false")
+  assert.equal(result.outputs["marketing-deploy"], "false")
+  assert.match(
+    result.stdout,
+    new RegExp(
+      `release-routing current-main=true head=${fixture.headSha} azure-base=${fixture.deployedSha} marketing-base=${fixture.deployedSha} validation-base=${fixture.deployedSha} azure=skip marketing=skip reason=classified`
+    )
+  )
+})
+
 test("main change routing fails closed when a deployed baseline cannot be proven", (t) => {
   const fixture = createMainGapFixture()
   t.after(() => rmSync(fixture.directory, { recursive: true, force: true }))

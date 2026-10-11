@@ -37,7 +37,7 @@ docs_pattern='^(\.gitignore|\.prettierignore|\.prettierrc\.json|\.editorconfig|\
 marketing_pattern='^apps/(marketing|marketing-motion)/'
 app_pattern='^apps/(web|worker)/'
 desktop_pattern='^apps/desktop/'
-shared_pattern='^(packages/|package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|turbo\.json|tsconfig\.json|tsconfig\.tsbuildinfo|eslint\.config\.mjs|vitest\.config\.ts|playwright\.config\.ts|docker-compose\.yml|Dockerfile|action\.yml|\.gitleaks\.toml|\.env\.example|ops/|e2e/|run-all-tests\.mjs|\.github/)'
+shared_pattern='^(packages/|package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|turbo\.json|tsconfig\.json|tsconfig\.tsbuildinfo|eslint\.config\.mjs|vitest\.config\.ts|playwright\.config\.ts|docker-compose\.yml|Dockerfile|action\.yml|\.gitleaks\.toml|\.env\.example|ops/|e2e/|lint/serial-comma-baseline\.json|run-all-tests\.mjs|\.github/)'
 # CI validation is deliberately broader than release routing. Workflow, test,
 # Action, and tooling changes must be checked, but do not alter a production
 # artifact. Unknown paths remain fail-closed below.
@@ -54,7 +54,7 @@ azure_deploy_pattern='^(apps/(web|worker)/|packages/|package\.json|pnpm-lock\.ya
 
 # Only explicitly covered tooling can skip runtime suites. Unknown and mixed
 # changes keep the existing broad classification and deployment decision.
-tooling_pattern='^(\.github/workflows/(ci|deploy-azure|deploy-azure-runtime|deploy-marketing|lighthouse-production|release-production)\.yml|\.github/scripts/(classify-paths|classify-main-change-gap)\.sh|\.github/scripts/(assert-named-vitest-tests\.mjs|migration-database-identity\.mjs|deploy-azure-(preflight|rollout)\.sh|promote-worker-vm\.sh|verify-engine-revision\.sh|verify-engine-worker-contract\.sh|validate-worker-provenance\.sh|azure_secret_set\.sh|webhook-claims-maintenance\.sh|webhook-claims-vm\.sh|validate-webhook-deploy-dispatch\.sh|verify-webhook-cutover(-preflight)?\.mjs)|\.github/scripts/tests/.*|ops/deployment/.*|ops/monitoring/.*|run-all-tests\.mjs)$'
+tooling_pattern='^(\.github/workflows/(ci|deploy-azure|deploy-azure-runtime|deploy-marketing|lighthouse-production|release-production)\.yml|\.github/scripts/(classify-paths|classify-main-change-gap)\.sh|\.github/scripts/(assert-named-vitest-tests\.mjs|migration-database-identity\.mjs|deploy-azure-(preflight|rollout)\.sh|promote-worker-vm\.sh|verify-engine-revision\.sh|verify-engine-worker-contract\.sh|validate-worker-provenance\.sh|azure_secret_set\.sh|webhook-claims-maintenance\.sh|webhook-claims-vm\.sh|validate-webhook-deploy-dispatch\.sh|verify-webhook-cutover(-preflight)?\.mjs)|\.github/scripts/tests/.*|ops/deployment/.*|ops/monitoring/.*|lint/serial-comma-baseline\.json|run-all-tests\.mjs)$'
 database_runtime_pattern='^(\.github/scripts/verify-webhook-cutover\.mjs|\.github/scripts/webhook-claims-vm\.sh|\.github/scripts/tests/webhook-(catalog|queue)\.runtime\.test\.mjs)$'
 tooling_only=true
 tooling_seen=false
