@@ -55,6 +55,7 @@ jobs:
       encrypted_sha256: ${{ steps.upload.outputs.encrypted_sha256 }}
       dump_sha256: ${{ steps.upload.outputs.dump_sha256 }}
       object_etag: ${{ steps.upload.outputs.object_etag }}
+      database_identity_sha256: ${{ steps.upload.outputs.database_identity_sha256 }}
     steps:
       - name: Bind isolated restore to the reviewed source
         if: inputs.isolated_restore
@@ -68,11 +69,25 @@ jobs:
           test "$GITHUB_RUN_ATTEMPT" = 1
           test "$RESTORE_REQUESTED" = true
 
-      - name: Checkout isolated restore helpers
-        if: inputs.isolated_restore
+      - name: Checkout reviewed backup helpers
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Setup backup pnpm
+        uses: pnpm/setup@c9883cc79df532ad1a7b81bf9ab944ceb090d65c
+        with:
+          install: false
+
+      - name: Setup backup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install backup validation dependencies without production credentials
+        run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Prepare private isolated backup files
         if: inputs.isolated_restore
@@ -121,20 +136,15 @@ jobs:
           encrypted_path="$dump_path.gpg"
           object_key="daily/${backup_name}.gpg"
 
-          # Supabase connection strings include ?uselibpqcompat=1 for the Node
-          # driver, but pg_dump inside postgres:17-alpine uses libpq and rejects
-          # that param. Strip only uselibpqcompat, keep everything else (sslmode,
-          # application_name, etc.) that pg_dump understands.
-          pg_dump_url="$DATABASE_DIRECT_URL"
-          # Supabase connection strings may include uselibpqcompat=1 (or the
-          # URL-encoded equivalent) for the Node driver, but pg_dump uses libpq
-          # and rejects it. Remove the parameter in any position and clean up
-          # any dangling or duplicated ?/& that remain.
-          pg_dump_url="$(sed -E 's/([?&])uselibpqcompat[^&]*(&|$)/\1/; s/&&/\&/g; s/\?&/?/g; s/[?&]$//' <<< "$pg_dump_url")"
+          # Validate identity/parameters and enforce certificate + hostname
+          # verification BEFORE pg_dump. No stored credential is changed.
+          pg_dump_url="$(node .github/scripts/prepare-verified-backup-connection.mjs libpq-url)"
+          database_identity_sha256="$(node .github/scripts/prepare-verified-backup-connection.mjs identity)"
+          [[ "$database_identity_sha256" =~ ^[a-f0-9]{64}$ ]]
 
           backup_container_args=()
           if [ "$ISOLATED_RESTORE" = true ]; then backup_container_args=(--name "lyrashield-isolated-backup-$GITHUB_RUN_ID"); fi
-          docker run --rm "${backup_container_args[@]}" \
+          docker run --rm ${backup_container_args[@]+"${backup_container_args[@]}"} \
             --env PG_URL="$pg_dump_url" \
             --volume "$RUNNER_TEMP:/backup" \
             postgres@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73 \
@@ -165,6 +175,7 @@ jobs:
             echo "encrypted_sha256=$encrypted_sha256"
             echo "dump_sha256=$dump_sha256"
             echo "object_etag=$object_etag"
+            echo "database_identity_sha256=$database_identity_sha256"
           } >> "$GITHUB_OUTPUT"
           rm -f "$dump_path" "$encrypted_path"
 
@@ -515,6 +526,7 @@ jobs:
       - name: Emit public-safe exact-object restore proof
         env:
           RESTORE_PROOF_DIAGNOSTIC_FD: "3"
+          BACKUP_DATABASE_IDENTITY_SHA256: ${{ needs.backup.outputs.database_identity_sha256 }}
           PRODUCTION_DATABASE_DIRECT_URL: ${{ secrets.PRODUCTION_DATABASE_DIRECT_URL }}
           R2_BACKUP_BUCKET: ${{ secrets.R2_BACKUP_BUCKET }}
           R2_S3_ENDPOINT: ${{ secrets.R2_S3_ENDPOINT }}
