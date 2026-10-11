@@ -5,10 +5,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 const config = vi.hoisted(() => ({
   LYRASHIELD_TEST_AUTH_MAIL_DIR: "",
+  LYRASHIELD_TEST_AUTH_MAIL_OWNED_DIR: "",
   NODE_ENV: "test",
   BETTER_AUTH_URL: "http://127.0.0.1:3102",
   NEXT_PUBLIC_APP_URL: "http://127.0.0.1:3102",
   DATABASE_URL: "postgresql://fixture:fixture@127.0.0.1:5432/lyrashield_test",
+  DATABASE_SYSTEM_URL: "postgresql://fixture:fixture@127.0.0.1:5432/lyrashield_test",
   BREVO_API_KEY: "",
 }))
 vi.mock("@lyrashield/config", async (importOriginal) => ({
@@ -26,9 +28,12 @@ describe("private password-reset mail capture", () => {
   beforeEach(async () => {
     directory = await mkdtemp(join(tmpdir(), "lyrashield-auth-mail-"))
     config.LYRASHIELD_TEST_AUTH_MAIL_DIR = directory
+    config.LYRASHIELD_TEST_AUTH_MAIL_OWNED_DIR = directory
     config.NODE_ENV = "test"
     config.BREVO_API_KEY = ""
     config.BETTER_AUTH_URL = "http://127.0.0.1:3102"
+    config.DATABASE_URL = "postgresql://fixture:fixture@127.0.0.1:5432/lyrashield_test"
+    config.DATABASE_SYSTEM_URL = "postgresql://fixture:fixture@127.0.0.1:5432/lyrashield_test"
     vi.stubEnv("LYRASHIELD_TEST_DB_DISPOSABLE", "1")
   })
   afterEach(async () => {
@@ -72,6 +77,31 @@ describe("private password-reset mail capture", () => {
     expect(await readdir(directory)).toEqual([])
   })
 
+  it("refuses a capture directory that is not owned by this browser-proof run", async () => {
+    config.LYRASHIELD_TEST_AUTH_MAIL_OWNED_DIR = `${directory}-caller-owned`
+    await expect(capturePasswordResetForTest(user, url)).rejects.toThrow(
+      "auth_test_mail_capture_forbidden"
+    )
+    expect(await readdir(directory)).toEqual([])
+  })
+
+  it.each([
+    [
+      "DATABASE_URL",
+      "postgresql://fixture:fixture@127.0.0.1:5432/lyrashield_test?host=remote.example",
+    ],
+    [
+      "DATABASE_SYSTEM_URL",
+      "postgresql://fixture:fixture@127.0.0.1:5432/lyrashield_test?hostaddr=198.51.100.8",
+    ],
+  ] as const)("refuses capture when %s can resolve to a remote host", async (name, value) => {
+    config[name] = value
+    await expect(capturePasswordResetForTest(user, url)).rejects.toThrow(
+      "auth_test_mail_capture_forbidden"
+    )
+    expect(await readdir(directory)).toEqual([])
+  })
+
   it.each([
     [{ email: "real@example.com" }, url],
     [user, "https://remote.example/api/auth/reset-password/synthetic-token"],
@@ -96,6 +126,7 @@ describe("private password-reset mail capture", () => {
     const link = `${directory}-link`
     await symlink(directory, link)
     config.LYRASHIELD_TEST_AUTH_MAIL_DIR = link
+    config.LYRASHIELD_TEST_AUTH_MAIL_OWNED_DIR = link
     try {
       await expect(capturePasswordResetForTest(user, url)).rejects.toThrow(
         "auth_test_mail_capture_directory_unsafe"

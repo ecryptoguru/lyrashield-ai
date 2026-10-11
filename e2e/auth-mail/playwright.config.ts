@@ -1,8 +1,7 @@
 import { defineConfig, devices } from "@playwright/test"
-import { mkdtempSync } from "node:fs"
-import { tmpdir } from "node:os"
-import { join } from "node:path"
 import { fileURLToPath } from "node:url"
+import { isSafeDisposableDatabaseUrl } from "../../packages/config/src/auth-test-mail"
+import { createOwnedAuthTestMailDirectory } from "../../packages/auth/src/auth-test-mail-directory"
 
 // This suite starts its own development server. Never reuse a production-mode app.
 const baseURL = "http://127.0.0.1:3102"
@@ -14,15 +13,7 @@ if (process.env.LYRASHIELD_TEST_DB_DISPOSABLE !== "1") {
 }
 for (const name of ["DATABASE_URL", "DATABASE_SYSTEM_URL"]) {
   const value = process.env[name]
-  if (!value) throw new Error(`${name} is required for disposable auth mail proof`)
-  const url = new URL(value)
-  const databaseName = decodeURIComponent(url.pathname.slice(1))
-  if (
-    !["postgres:", "postgresql:"].includes(url.protocol) ||
-    !["localhost", "127.0.0.1", "[::1]"].includes(url.hostname) ||
-    (databaseName !== "lyrashield" &&
-      !/(?:^|[_-])(?:test|ci|disposable)(?:$|[_-])/i.test(databaseName))
-  ) {
+  if (!isSafeDisposableDatabaseUrl(value)) {
     throw new Error("Auth mail browser proof requires named loopback test databases")
   }
 }
@@ -31,7 +22,7 @@ process.env.NEXT_PUBLIC_APP_URL = baseURL
 process.env.BREVO_API_KEY = ""
 // Failed-test page snapshots can retain bearer links even with tracing disabled.
 process.env.PLAYWRIGHT_NO_COPY_PROMPT = "1"
-process.env.LYRASHIELD_TEST_AUTH_MAIL_DIR ??= mkdtempSync(join(tmpdir(), "lyrashield-auth-mail-"))
+const authMailDirectory = createOwnedAuthTestMailDirectory()
 
 export default defineConfig({
   testDir: ".",
@@ -63,7 +54,8 @@ export default defineConfig({
       ADDITIONAL_TRUSTED_ORIGINS: baseURL,
       BREVO_API_KEY: "",
       LYRASHIELD_REQUIRE_EMAIL_VERIFICATION: "0",
-      LYRASHIELD_TEST_AUTH_MAIL_DIR: process.env.LYRASHIELD_TEST_AUTH_MAIL_DIR,
+      LYRASHIELD_TEST_AUTH_MAIL_DIR: authMailDirectory,
+      LYRASHIELD_TEST_AUTH_MAIL_OWNED_DIR: authMailDirectory,
       RATE_LIMIT_AUTH_MAX: "1000",
       RATE_LIMIT_API_MAX: "1000",
       NEXT_PUBLIC_POSTHOG_KEY: "",

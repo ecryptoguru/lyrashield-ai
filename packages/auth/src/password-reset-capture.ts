@@ -16,10 +16,12 @@ export async function capturePasswordResetForTest(
     process.env.NODE_ENV === "production" ||
     !authTestMailConfigAllowed({
       directory,
+      ownedDirectory: env.LYRASHIELD_TEST_AUTH_MAIL_OWNED_DIR,
       nodeEnv: env.NODE_ENV,
       authUrl: env.BETTER_AUTH_URL,
       appUrl: env.NEXT_PUBLIC_APP_URL,
       databaseUrl: env.DATABASE_URL,
+      databaseSystemUrl: env.DATABASE_SYSTEM_URL,
       brevoApiKey: env.BREVO_API_KEY,
       disposable: process.env.LYRASHIELD_TEST_DB_DISPOSABLE,
     })

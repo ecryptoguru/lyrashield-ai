@@ -348,6 +348,7 @@ const envSchema = z
     BREVO_API_KEY: z.string().optional().or(z.literal("")),
     EMAIL_FROM: z.string().optional().or(z.literal("")),
     LYRASHIELD_TEST_AUTH_MAIL_DIR: z.string().optional().or(z.literal("")),
+    LYRASHIELD_TEST_AUTH_MAIL_OWNED_DIR: z.string().optional().or(z.literal("")),
 
     // Notifications — Slack & Discord webhooks
     SLACK_WEBHOOK_URL: z.string().optional().or(z.literal("")),
@@ -730,10 +731,12 @@ const envSchema = z
     if (
       !authTestMailConfigAllowed({
         directory: val.LYRASHIELD_TEST_AUTH_MAIL_DIR,
+        ownedDirectory: val.LYRASHIELD_TEST_AUTH_MAIL_OWNED_DIR,
         nodeEnv: val.NODE_ENV,
         authUrl: val.BETTER_AUTH_URL,
         appUrl: val.NEXT_PUBLIC_APP_URL,
         databaseUrl: val.DATABASE_URL,
+        databaseSystemUrl: val.DATABASE_SYSTEM_URL,
         brevoApiKey: val.BREVO_API_KEY,
         disposable: process.env.LYRASHIELD_TEST_DB_DISPOSABLE,
       })
