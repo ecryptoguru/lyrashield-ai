@@ -203,12 +203,13 @@ test("fixed migration env binds both aliases without shell evaluation or transac
     ),
     { DATABASE_DIRECT_URL: customMigration, DATABASE_URL: customMigration }
   )
-  assert.throws(() =>
-    parseFixedMigrationEnvironment(
-      `DATABASE_DIRECT_URL=${customMigration}\n`,
-      customIdentity,
-      "postgres"
-    ),
+  assert.throws(
+    () =>
+      parseFixedMigrationEnvironment(
+        `DATABASE_DIRECT_URL=${customMigration}\n`,
+        customIdentity,
+        "postgres"
+      ),
     /principal differs/
   )
 })
@@ -285,16 +286,24 @@ test("refreshed worker and candidate targets/credential continuity fail closed",
         validateConsumerFingerprint(runtimeFingerprint({ ...env, ...changed }), policy, role)
       )
 })
-test("backup connection rejects compatibility modes and endpoint overrides", async () => {
+test("backup connection accepts verified compatibility flags and rejects endpoint overrides", async () => {
   const { normalizeBackupConnection } =
     await import("../../packages/db/scripts/webhook-backup-connection.mjs")
   const url =
     "postgresql://postgres:placeholder@db.yejmvtgsxniatmjbwplk.supabase.co:5432/postgres?sslmode=verify-full"
+  const baseline = normalizeBackupConnection(url)
   for (const suffix of [
     "&uselibpqcompat=1",
     "&uselibpqcompat=true",
     "&%75selibpqcompat=1",
     "&%75selibpqcompat=true",
+  ]) {
+    const normalized = normalizeBackupConnection(url + suffix)
+    assert.equal(normalized.url, baseline.url)
+    assert.equal(normalized.identitySha256, baseline.identitySha256)
+    assert.throws(() => normalizeBackupConnection(url.replace("verify-full", "require") + suffix))
+  }
+  for (const suffix of [
     "&uselibpqcompat=1&host=wrong.test",
     "&uselibpqcompat=1&user=wrong",
     "&uselibpqcompat=1&uselibpqcompat=1",
@@ -505,12 +514,14 @@ test("backup collector binds strict target identity and raw credential", async (
   const a = backupConnectionObservation(raw, "2026-10-05T09:00:00Z")
   assert.equal(a.identitySha256.length, 64)
   assert.equal(a.credentialSha256.length, 64)
-  assert.throws(() =>
-    backupConnectionObservation(
-      raw + "&uselibpqcompat=1",
-      "2026-10-05T09:00:00Z"
-    )
+  const compatibility = backupConnectionObservation(
+    raw + "&uselibpqcompat=1",
+    "2026-10-05T09:00:00Z"
   )
+  assert.equal(compatibility.identitySha256, a.identitySha256)
+  assert.equal(compatibility.principalSha256, a.principalSha256)
+  assert.notEqual(compatibility.credentialSha256, a.credentialSha256)
+  assert.equal(compatibility.observedAt, a.observedAt)
 })
 
 test("cold worker startup polls boundedly and fails on wrong image, unhealthy or timeout", async () => {
