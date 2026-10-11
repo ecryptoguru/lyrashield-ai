@@ -280,13 +280,22 @@ assert_eq "browser harness: marketing deploy" "false" "$(get_field "$out" "marke
 assert_eq "browser harness: Azure deploy" "false" "$(get_field "$out" "azure-deploy")"
 
 # Tooling-only keeps legacy shared/release routing, but narrows validation.
-for path in .github/scripts/promote-worker-vm.sh .github/scripts/classify-main-change-gap.sh .github/workflows/ci.yml ops/deployment/azure-vm-run-command.sh run-all-tests.mjs; do
+for path in .github/scripts/promote-worker-vm.sh .github/scripts/classify-main-change-gap.sh .github/workflows/ci.yml ops/deployment/azure-vm-run-command.sh run-all-tests.mjs lint/serial-comma-baseline.json; do
   out=$(run_classify "$path")
   assert_eq "$path: tooling-only" "true" "$(get_field "$out" "tooling-only")"
   assert_eq "$path: shared retained" "true" "$(get_field "$out" "shared")"
   assert_eq "$path: database services skipped" "false" "$(get_field "$out" "database-tests")"
   assert_eq "$path: DB startup skipped" "false" "$(get_field "$out" "database-services")"
 done
+
+# Copy-ratchet baselines affect the existing lint gate but are not production
+# inputs. Keep them on focused tooling validation without routing deployments.
+out=$(run_classify $'lint/serial-comma-baseline.json')
+assert_eq "serial-comma baseline: docs-only" "false" "$(get_field "$out" "docs-only")"
+assert_eq "serial-comma baseline: tooling-only" "true" "$(get_field "$out" "tooling-only")"
+assert_eq "serial-comma baseline: shared" "true" "$(get_field "$out" "shared")"
+assert_eq "serial-comma baseline: marketing deploy" "false" "$(get_field "$out" "marketing-deploy")"
+assert_eq "serial-comma baseline: Azure deploy" "false" "$(get_field "$out" "azure-deploy")"
 
 # Runtime workflow and rollout tooling changes must schedule an Azure release,
 # even when the files do not live under apps/ or packages/.
