@@ -153,6 +153,17 @@ export async function emitOperationalHealthAlerts(
   }
 }
 
+async function startOperationalHealthMonitoring(
+  reconciliation: QueueReconciliationResult
+): Promise<void> {
+  terminalCostHealthTimer = startTerminalCostHealthSampler()
+  await emitOperationalHealthAlerts(reconciliation).catch((error) => {
+    logger.warn("Operational health collection failed", {
+      error: error instanceof Error ? error.message : String(error),
+    })
+  })
+}
+
 export async function refreshWorkerReadiness(): Promise<void> {
   await writeFile(readinessPath, new Date().toISOString(), { mode: 0o600 })
 }
@@ -538,13 +549,8 @@ async function main(): Promise<void> {
       })
     })
   const startupReconciliation = await reconcileScanQueue()
-  terminalCostHealthTimer = startTerminalCostHealthSampler()
   let lastReconciliationAtMs = Date.now()
-  await emitOperationalHealthAlerts(startupReconciliation).catch((error) => {
-    logger.warn("Operational health collection failed", {
-      error: error instanceof Error ? error.message : String(error),
-    })
-  })
+  await startOperationalHealthMonitoring(startupReconciliation)
   reconciliationTimer = setInterval(() => {
     const now = new Date()
     void drainArtifactDeletionTasks()
