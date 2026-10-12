@@ -4,146 +4,20 @@ import { parseArgs } from "node:util"
 import { pathToFileURL } from "node:url"
 import { APPROVED_PLATFORM_ADMIN_EMAILS } from "@lyrashield/config"
 import { getSystemPrisma, type ScanStatus } from "@lyrashield/db"
-import { z } from "zod"
+import {
+  AZURE_RESOURCE_ID,
+  evidenceFileSchema,
+  failedExpenseEvidenceFileSchema,
+  receiptSchema,
+  type TerminalCostDispositionReceipt,
+} from "./terminal-cost-disposition-schema"
 import {
   TERMINAL_COST_DISPOSITION_RECEIPT_TYPE,
   TERMINAL_COST_DISPOSITION_STAGE,
+  TERMINAL_FAILED_COST_DISPOSITION_RECEIPT_TYPE,
 } from "../operational-health"
 
-const HISTORICAL_SCAN_IDS = ["cmsxsrbmb000001m00cc7e6dx", "cmsxuqxpb000001fhcrr6emat"] as const
 const CONFIRMATION_PHRASE = "I AUTHORIZE LYRASHIELD TERMINAL COST DISPOSITION"
-const SHA256 = /^[0-9a-f]{64}$/
-const AZURE_RESOURCE_ID =
-  /^\/subscriptions\/[0-9a-f-]{36}\/resourceGroups\/[^/]+\/providers\/Microsoft\.(?:OperationalInsights\/workspaces|App\/containerApps|CognitiveServices\/accounts)\/[^/]+$/i
-const MAX_EVIDENCE_BUFFER_MS = 5 * 60_000
-const terminalStatusSchema = z.enum([
-  "COMPLETED",
-  "PARTIAL",
-  "FAILED",
-  "CANCELLED",
-  "STOPPED_BUDGET",
-  "TIMED_OUT",
-])
-
-const expectedStateSchema = z.object({
-  workspaceId: z.string().min(1),
-  targetType: z.literal("REPO"),
-  status: terminalStatusSchema,
-  startedAt: z.iso.datetime(),
-  endedAt: z.iso.datetime(),
-  deletedAt: z.null(),
-  providerCostUsd: z.null(),
-  billedCostUsd: z.null(),
-  llmUsageUnavailableEventCount: z.number().int().nonnegative(),
-})
-
-const reviewedScanBaseSchema = z.object({
-  scanId: z.enum(HISTORICAL_SCAN_IDS),
-  expectedState: expectedStateSchema,
-  conclusion: z.object({
-    providerCostUsd: z.literal("0.000000"),
-    basis: z.string().min(1).max(2_000),
-  }),
-  azureEvidence: z.object({
-    resourceId: z.string().regex(AZURE_RESOURCE_ID),
-    timeWindowStart: z.iso.datetime(),
-    timeWindowEnd: z.iso.datetime(),
-    queryTimestamp: z.iso.datetime(),
-    metricTotals: z
-      .object({
-        providerRequestCount: z.literal(0),
-        providerCostUsd: z.literal(0),
-      })
-      .strict(),
-    evidenceSha256: z.string().regex(SHA256),
-  }),
-})
-
-const evidenceFileSchema = z
-  .object({
-    version: z.literal(1),
-    scanId: z.enum(HISTORICAL_SCAN_IDS),
-    resourceId: z.string().regex(AZURE_RESOURCE_ID),
-    timeWindowStart: z.iso.datetime(),
-    timeWindowEnd: z.iso.datetime(),
-    queryTimestamp: z.iso.datetime(),
-    metricTotals: z
-      .object({
-        providerRequestCount: z.literal(0),
-        providerCostUsd: z.literal(0),
-      })
-      .strict(),
-  })
-  .strict()
-
-const reviewedScanSchema = reviewedScanBaseSchema.superRefine((scan, context) => {
-  const startedAt = Date.parse(scan.expectedState.startedAt)
-  const endedAt = Date.parse(scan.expectedState.endedAt)
-  const windowStart = Date.parse(scan.azureEvidence.timeWindowStart)
-  const windowEnd = Date.parse(scan.azureEvidence.timeWindowEnd)
-  if (scan.expectedState.llmUsageUnavailableEventCount === 0) {
-    context.addIssue({
-      code: "custom",
-      path: ["expectedState", "llmUsageUnavailableEventCount"],
-      message: "USD 0 disposition requires an llm_usage_unavailable event",
-    })
-  }
-  if (startedAt > endedAt) {
-    context.addIssue({ code: "custom", path: ["expectedState"], message: "scan times invalid" })
-  }
-  if (windowStart > startedAt || windowEnd < endedAt) {
-    context.addIssue({
-      code: "custom",
-      path: ["azureEvidence"],
-      message: "Azure evidence window must cover the exact scan execution window",
-    })
-  }
-  if (
-    startedAt - windowStart > MAX_EVIDENCE_BUFFER_MS ||
-    windowEnd - endedAt > MAX_EVIDENCE_BUFFER_MS
-  ) {
-    context.addIssue({
-      code: "custom",
-      path: ["azureEvidence"],
-      message: "Azure evidence window buffer must not exceed five minutes per side",
-    })
-  }
-  if (Date.parse(scan.azureEvidence.queryTimestamp) < windowEnd) {
-    context.addIssue({
-      code: "custom",
-      path: ["azureEvidence", "queryTimestamp"],
-      message: "query timestamp must be at or after the evidence window",
-    })
-  }
-})
-
-const receiptSchema = z
-  .object({
-    version: z.literal(1),
-    environment: z.literal("production"),
-    operator: z.object({
-      userId: z.string().min(1).max(128),
-      email: z.email().max(320).optional(),
-    }),
-    scans: z.array(reviewedScanSchema).length(HISTORICAL_SCAN_IDS.length),
-  })
-  .superRefine((receipt, context) => {
-    const scanIds = receipt.scans.map((scan) => scan.scanId)
-    if (new Set(scanIds).size !== HISTORICAL_SCAN_IDS.length) {
-      context.addIssue({ code: "custom", path: ["scans"], message: "scan IDs must be unique" })
-    }
-    for (const scanId of HISTORICAL_SCAN_IDS) {
-      if (!scanIds.includes(scanId)) {
-        context.addIssue({
-          code: "custom",
-          path: ["scans"],
-          message: `missing exact historical scan ${scanId}`,
-        })
-      }
-    }
-  })
-
-type TerminalCostDispositionReceipt = z.infer<typeof receiptSchema>
 
 interface TerminalCostScanState {
   workspaceId: string
@@ -155,6 +29,7 @@ interface TerminalCostScanState {
   providerCostUsd: string | null
   billedCostUsd: string | null
   llmUsageUnavailableEventCount: number
+  updatedAt: string | null
 }
 
 interface TerminalCostOperatorState {
@@ -292,6 +167,7 @@ function normalizeScanState(scan: {
   providerCostUsd: { toFixed(digits: number): string } | null
   billedCostUsd: { toFixed(digits: number): string } | null
   _count: { events: number }
+  updatedAt: Date
 }): TerminalCostScanState {
   return {
     workspaceId: scan.workspaceId,
@@ -300,9 +176,10 @@ function normalizeScanState(scan: {
     startedAt: scan.startedAt?.toISOString() ?? null,
     endedAt: scan.endedAt?.toISOString() ?? null,
     deletedAt: scan.deletedAt?.toISOString() ?? null,
-    providerCostUsd: scan.providerCostUsd?.toFixed(6) ?? null,
-    billedCostUsd: scan.billedCostUsd?.toFixed(6) ?? null,
+    providerCostUsd: scan.providerCostUsd?.toFixed(10) ?? null,
+    billedCostUsd: scan.billedCostUsd?.toFixed(10) ?? null,
     llmUsageUnavailableEventCount: scan._count.events,
+    updatedAt: scan.updatedAt?.toISOString() ?? null,
   }
 }
 
@@ -315,6 +192,7 @@ const scanStateSelect = {
   deletedAt: true,
   providerCostUsd: true,
   billedCostUsd: true,
+  updatedAt: true,
   _count: {
     select: {
       events: { where: { stage: "llm_usage_unavailable", deletedAt: null } },
@@ -376,13 +254,28 @@ export function createTerminalCostDispositionDbDeps(
             scanReceipt.scanId,
             receipt.receiptHash
           )
+          const metadata = {
+            receiptType:
+              receipt.reviewed.version === 1
+                ? TERMINAL_COST_DISPOSITION_RECEIPT_TYPE
+                : TERMINAL_FAILED_COST_DISPOSITION_RECEIPT_TYPE,
+            receiptHash: receipt.receiptHash,
+            operator: receipt.reviewed.operator,
+            azureEvidence: scanReceipt.azureEvidence,
+            expectedState: scanReceipt.expectedState,
+            conclusion: scanReceipt.conclusion,
+          }
           const existing = await tx.scanEvent.findUnique({
             where: { id: eventId },
-            select: { metadata: true },
+            select: { metadata: true, stage: true, scanId: true, deletedAt: true },
           })
           if (existing) {
-            const metadata = existing.metadata as { receiptHash?: string } | null
-            if (metadata?.receiptHash !== receipt.receiptHash) {
+            if (
+              existing.stage !== TERMINAL_COST_DISPOSITION_STAGE ||
+              existing.scanId !== scanReceipt.scanId ||
+              existing.deletedAt !== null ||
+              canonicalJson(existing.metadata) !== canonicalJson(metadata)
+            ) {
               throw new Error(`conflicting disposition event for ${scanReceipt.scanId}`)
             }
             const audit = await tx.platformAdminAudit.findUnique({
@@ -396,7 +289,6 @@ export function createTerminalCostDispositionDbDeps(
                 metadata: true,
               },
             })
-            const auditMetadata = audit?.metadata as { receiptHash?: string } | null
             if (
               !audit ||
               audit.actorUserId !== receipt.reviewed.operator.userId ||
@@ -404,7 +296,7 @@ export function createTerminalCostDispositionDbDeps(
               audit.action !== "terminal_cost.operator_disposition_recorded" ||
               audit.resourceType !== "scan" ||
               audit.resourceId !== scanReceipt.scanId ||
-              auditMetadata?.receiptHash !== receipt.receiptHash
+              canonicalJson(audit.metadata) !== canonicalJson(metadata)
             ) {
               throw new Error(
                 `disposition event has mismatched atomic audit for ${scanReceipt.scanId}`
@@ -414,14 +306,6 @@ export function createTerminalCostDispositionDbDeps(
             continue
           }
 
-          const metadata = {
-            receiptType: TERMINAL_COST_DISPOSITION_RECEIPT_TYPE,
-            receiptHash: receipt.receiptHash,
-            operator: receipt.reviewed.operator,
-            azureEvidence: scanReceipt.azureEvidence,
-            expectedState: scanReceipt.expectedState,
-            conclusion: scanReceipt.conclusion,
-          }
           await tx.platformAdminAudit.create({
             data: {
               id: auditId,
@@ -439,7 +323,10 @@ export function createTerminalCostDispositionDbDeps(
               scanId: scanReceipt.scanId,
               stage: TERMINAL_COST_DISPOSITION_STAGE,
               level: "info",
-              message: "Operator reviewed terminal provider cost as USD 0",
+              message:
+                receipt.reviewed.version === 1
+                  ? "Operator reviewed terminal provider cost as USD 0"
+                  : "Operator reviewed failed-scan provider expense; customer remains non-billable",
               metadata,
             },
           })
@@ -461,18 +348,14 @@ export async function verifyTerminalCostEvidenceFiles(
     const separator = entry.indexOf("=")
     const scanId = entry.slice(0, separator)
     const path = entry.slice(separator + 1)
-    if (
-      separator < 1 ||
-      !path ||
-      !HISTORICAL_SCAN_IDS.includes(scanId as (typeof HISTORICAL_SCAN_IDS)[number])
-    ) {
+    if (separator < 1 || !path || !receipt.scans.some((scan) => scan.scanId === scanId)) {
       throw new Error("--evidence-file must use exact <scan-id>=<path> mapping")
     }
     if (paths.has(scanId)) throw new Error(`duplicate evidence file mapping for ${scanId}`)
     paths.set(scanId, path)
   }
-  if (paths.size !== HISTORICAL_SCAN_IDS.length) {
-    throw new Error("one evidence file mapping is required for each historical scan")
+  if (paths.size !== receipt.scans.length) {
+    throw new Error("one evidence file mapping is required for each reviewed scan")
   }
   for (const scan of receipt.scans) {
     const path = paths.get(scan.scanId)
@@ -488,9 +371,12 @@ export async function verifyTerminalCostEvidenceFiles(
     } catch {
       throw new Error(`evidence file is not valid JSON for ${scan.scanId}`)
     }
-    const evidence = evidenceFileSchema.parse(rawEvidence)
+    const evidence =
+      receipt.version === 1
+        ? evidenceFileSchema.parse(rawEvidence)
+        : failedExpenseEvidenceFileSchema.parse(rawEvidence)
     const expected = {
-      version: 1,
+      version: receipt.version,
       scanId: scan.scanId,
       resourceId: scan.azureEvidence.resourceId,
       timeWindowStart: scan.azureEvidence.timeWindowStart,

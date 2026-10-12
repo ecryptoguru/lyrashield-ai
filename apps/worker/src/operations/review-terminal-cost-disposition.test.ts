@@ -103,6 +103,237 @@ function deps(overrides: Partial<TerminalCostDispositionDeps> = {}): TerminalCos
   }
 }
 
+function failedExpenseReceipt() {
+  const scan = receipt().scans[0]
+  return {
+    ...receipt(),
+    version: 2,
+    scans: [
+      {
+        ...scan,
+        scanId: "caaaaaaaaaaaaaaaaaaaaaaaa",
+        expectedState: {
+          ...scan.expectedState,
+          providerCostUsd: "0.1234560000",
+          updatedAt: "2026-09-23T13:00:00.000Z",
+          llmUsageUnavailableEventCount: 0,
+        },
+        conclusion: {
+          providerCostUsd: "0.1234560000",
+          customerBilling: "non_billable_failed_scan",
+          basis: "Provider expense reviewed; failed scan remains non-billable.",
+        },
+        azureEvidence: {
+          ...scan.azureEvidence,
+          metricTotals: { providerRequestCount: 428, providerCostUsd: "0.1234560000" },
+        },
+      },
+    ],
+  }
+}
+
+describe("failed scan provider expense disposition", () => {
+  it("accepts a reviewed positive provider expense without inventing a billed cost", async () => {
+    const input = failedExpenseReceipt()
+    const reviewDeps = deps({
+      inspect: vi.fn().mockResolvedValue({ ...input.scans[0].expectedState }),
+    })
+    expect(parseTerminalCostDispositionReceipt(input).scans[0].conclusion.providerCostUsd).toBe(
+      "0.1234560000"
+    )
+    await expect(reviewTerminalCostDisposition(input, false, reviewDeps)).resolves.toMatchObject({
+      overall: "preflight_passed",
+    })
+    expect(reviewDeps.append).not.toHaveBeenCalled()
+  })
+
+  it("rejects zero, successful scans, customer billing, and mismatched provider expense", () => {
+    const input = failedExpenseReceipt()
+    for (const change of [
+      { expectedState: { ...input.scans[0].expectedState, status: "COMPLETED" } },
+      { expectedState: { ...input.scans[0].expectedState, billedCostUsd: "0.1000000000" } },
+      { conclusion: { ...input.scans[0].conclusion, providerCostUsd: "0.0000000000" } },
+      { conclusion: { ...input.scans[0].conclusion, providerCostUsd: "0.6000000000" } },
+      { conclusion: { ...input.scans[0].conclusion, customerBilling: "bill_customer" } },
+      {
+        azureEvidence: {
+          ...input.scans[0].azureEvidence,
+          metricTotals: { providerRequestCount: 428, providerCostUsd: "0.6000000000" },
+        },
+      },
+    ]) {
+      expect(() =>
+        parseTerminalCostDispositionReceipt({ ...input, scans: [{ ...input.scans[0], ...change }] })
+      ).toThrow()
+    }
+  })
+
+  it("fails closed when the reviewed scan version changed", async () => {
+    const input = failedExpenseReceipt()
+    const reviewDeps = deps({
+      inspect: vi.fn().mockResolvedValue({
+        ...input.scans[0].expectedState,
+        updatedAt: "2026-09-23T13:00:01.000Z",
+      }),
+    })
+    await expect(reviewTerminalCostDisposition(input, true, reviewDeps)).rejects.toThrow(
+      "changed at updatedAt"
+    )
+    expect(reviewDeps.append).not.toHaveBeenCalled()
+  })
+
+  it("binds positive expense evidence bytes and rejects changed execution bounds", async () => {
+    const input = failedExpenseReceipt()
+    const scan = input.scans[0]
+    const evidence = Buffer.from(
+      JSON.stringify({
+        version: 2,
+        scanId: scan.scanId,
+        resourceId: scan.azureEvidence.resourceId,
+        timeWindowStart: scan.azureEvidence.timeWindowStart,
+        timeWindowEnd: scan.azureEvidence.timeWindowEnd,
+        queryTimestamp: scan.azureEvidence.queryTimestamp,
+        metricTotals: scan.azureEvidence.metricTotals,
+      })
+    )
+    const parsed = parseTerminalCostDispositionReceipt({
+      ...input,
+      scans: [
+        {
+          ...scan,
+          azureEvidence: {
+            ...scan.azureEvidence,
+            evidenceSha256: createHash("sha256").update(evidence).digest("hex"),
+          },
+        },
+      ],
+    })
+    await expect(
+      verifyTerminalCostEvidenceFiles(
+        parsed,
+        [`${scan.scanId}=/provider-evidence`],
+        async () => evidence
+      )
+    ).resolves.toBeUndefined()
+    await expect(
+      verifyTerminalCostEvidenceFiles(parsed, [`${scan.scanId}=/provider-evidence`], async () =>
+        Buffer.from("changed")
+      )
+    ).rejects.toThrow("does not match receipt")
+    expect(() =>
+      parseTerminalCostDispositionReceipt({
+        ...input,
+        scans: [
+          {
+            ...scan,
+            azureEvidence: { ...scan.azureEvidence, timeWindowStart: "2026-08-17T12:01:00.000Z" },
+          },
+        ],
+      })
+    ).toThrow()
+  })
+
+  it("appends only an atomic event and audit, preserving provider expense and non-billable treatment", async () => {
+    const parsed = parseTerminalCostDispositionReceipt(failedExpenseReceipt())
+    const state = parsed.scans[0].expectedState
+    const tx = {
+      $executeRaw: vi.fn().mockResolvedValue(1),
+      user: {
+        findUnique: vi.fn().mockResolvedValue({
+          id: parsed.operator.userId,
+          email: parsed.operator.email,
+          emailVerified: true,
+          twoFactorEnabled: true,
+          platformRole: "PLATFORM_OPERATOR",
+        }),
+      },
+      scan: {
+        findUnique: vi.fn().mockResolvedValue({
+          ...state,
+          target: { type: "REPO" },
+          startedAt: new Date(state.startedAt),
+          endedAt: new Date(state.endedAt),
+          updatedAt: new Date("2026-09-23T13:00:00.000Z"),
+          providerCostUsd: { toFixed: () => "0.1234560000" },
+          _count: { events: 0 },
+        }),
+      },
+      scanEvent: { findUnique: vi.fn().mockResolvedValue(null), create: vi.fn() },
+      platformAdminAudit: { create: vi.fn(), findUnique: vi.fn() },
+    }
+    const dbDeps = createTerminalCostDispositionDbDeps({
+      $transaction: async (callback: (client: typeof tx) => Promise<unknown>) => callback(tx),
+    } as never)
+    await expect(
+      dbDeps.append(parsed.scans, {
+        reviewed: parsed,
+        receiptHash: terminalCostDispositionReceiptHash(parsed),
+      })
+    ).resolves.toMatchObject([{ result: "created" }])
+    expect(tx.scanEvent.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          metadata: expect.objectContaining({
+            receiptType: "terminal_failed_provider_expense_disposition_v2",
+            conclusion: expect.objectContaining({
+              providerCostUsd: "0.1234560000",
+              customerBilling: "non_billable_failed_scan",
+            }),
+          }),
+        }),
+      })
+    )
+    expect(tx.platformAdminAudit.create).toHaveBeenCalledTimes(1)
+    const storedMetadata = tx.scanEvent.create.mock.calls[0][0].data.metadata
+    tx.scanEvent.findUnique.mockResolvedValue({
+      metadata: storedMetadata,
+      scanId: parsed.scans[0].scanId,
+      stage: "terminal_cost_operator_reconciled",
+      deletedAt: null,
+    })
+    tx.platformAdminAudit.findUnique.mockResolvedValue({
+      actorUserId: parsed.operator.userId,
+      sessionId: "offline-terminal-cost-review",
+      action: "terminal_cost.operator_disposition_recorded",
+      resourceType: "scan",
+      resourceId: parsed.scans[0].scanId,
+      metadata: storedMetadata,
+    })
+    await expect(
+      dbDeps.append(parsed.scans, {
+        reviewed: parsed,
+        receiptHash: terminalCostDispositionReceiptHash(parsed),
+      })
+    ).resolves.toMatchObject([{ result: "existing" }])
+    expect(tx.scanEvent.create).toHaveBeenCalledTimes(1)
+    tx.scanEvent.findUnique.mockResolvedValue({
+      metadata: storedMetadata,
+      scanId: parsed.scans[0].scanId,
+      stage: "terminal_cost_operator_reconciled",
+      deletedAt: new Date(),
+    })
+    await expect(
+      dbDeps.append(parsed.scans, {
+        reviewed: parsed,
+        receiptHash: terminalCostDispositionReceiptHash(parsed),
+      })
+    ).rejects.toThrow("conflicting disposition event")
+    tx.user.findUnique.mockResolvedValue({
+      id: parsed.operator.userId,
+      email: parsed.operator.email,
+      emailVerified: true,
+      twoFactorEnabled: false,
+      platformRole: "PLATFORM_OPERATOR",
+    })
+    await expect(
+      dbDeps.append(parsed.scans, {
+        reviewed: parsed,
+        receiptHash: terminalCostDispositionReceiptHash(parsed),
+      })
+    ).rejects.toThrow("MFA-enabled")
+  })
+})
+
 describe("terminal cost operator disposition", () => {
   it("requires the exact two historical scans and complete Azure evidence bounds", () => {
     expect(parseTerminalCostDispositionReceipt(receipt()).scans.map((scan) => scan.scanId)).toEqual(
@@ -299,7 +530,17 @@ describe("terminal cost operator disposition", () => {
       scan: { findUnique: vi.fn().mockResolvedValue(current) },
       scanEvent: {
         findUnique: vi.fn().mockResolvedValue({
-          metadata: { receiptHash: terminalCostDispositionReceiptHash(parsed) },
+          metadata: {
+            receiptType: "terminal_cost_operator_disposition_v1",
+            receiptHash: terminalCostDispositionReceiptHash(parsed),
+            operator: parsed.operator,
+            azureEvidence: parsed.scans[0].azureEvidence,
+            expectedState: parsed.scans[0].expectedState,
+            conclusion: parsed.scans[0].conclusion,
+          },
+          stage: "terminal_cost_operator_reconciled",
+          scanId: scanIds[0],
+          deletedAt: null,
         }),
       },
       platformAdminAudit: {

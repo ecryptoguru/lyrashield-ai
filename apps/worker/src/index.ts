@@ -46,6 +46,7 @@ import {
   FIX_GENERATE_WORKER_CONCURRENCY,
 } from "./worker-lifecycle"
 import { collectOperationalHealthSnapshot, evaluateOperationalHealth } from "./operational-health"
+import { startTerminalCostHealthSampler } from "./terminal-cost-health"
 
 let worker: Worker<ScanJobData, ScanJobResult> | null = null
 let webhookTrackRetryWorker: Worker<WebhookTrackRetryJobData, void> | null = null
@@ -54,6 +55,7 @@ let scheduleRunner: NodeJS.Timeout | null = null
 let heartbeatTimer: NodeJS.Timeout | null = null
 let workerHeartbeatController: WorkerHeartbeatController | null = null
 let reconciliationTimer: NodeJS.Timeout | null = null
+let terminalCostHealthTimer: NodeJS.Timeout | null = null
 let staleResourceReaperTimer: NodeJS.Timeout | null = null
 let billingJobsTimers: NodeJS.Timeout[] | null = null
 let approvalExpiryTimer: NodeJS.Timeout | null = null
@@ -151,6 +153,17 @@ export async function emitOperationalHealthAlerts(
   }
 }
 
+async function startOperationalHealthMonitoring(
+  reconciliation: QueueReconciliationResult
+): Promise<void> {
+  terminalCostHealthTimer = startTerminalCostHealthSampler()
+  await emitOperationalHealthAlerts(reconciliation).catch((error) => {
+    logger.warn("Operational health collection failed", {
+      error: error instanceof Error ? error.message : String(error),
+    })
+  })
+}
+
 export async function refreshWorkerReadiness(): Promise<void> {
   await writeFile(readinessPath, new Date().toISOString(), { mode: 0o600 })
 }
@@ -228,6 +241,10 @@ async function shutdown(signal: string, exitCode = 0): Promise<void> {
   if (reconciliationTimer) {
     clearInterval(reconciliationTimer)
     reconciliationTimer = null
+  }
+  if (terminalCostHealthTimer) {
+    clearInterval(terminalCostHealthTimer)
+    terminalCostHealthTimer = null
   }
   if (staleResourceReaperTimer) {
     clearInterval(staleResourceReaperTimer)
@@ -533,11 +550,7 @@ async function main(): Promise<void> {
     })
   const startupReconciliation = await reconcileScanQueue()
   let lastReconciliationAtMs = Date.now()
-  await emitOperationalHealthAlerts(startupReconciliation).catch((error) => {
-    logger.warn("Operational health collection failed", {
-      error: error instanceof Error ? error.message : String(error),
-    })
-  })
+  await startOperationalHealthMonitoring(startupReconciliation)
   reconciliationTimer = setInterval(() => {
     const now = new Date()
     void drainArtifactDeletionTasks()

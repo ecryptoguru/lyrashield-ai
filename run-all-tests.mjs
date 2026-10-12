@@ -48,6 +48,7 @@ const allSuites = [
             .sort()
             .map((file) => `.github/scripts/tests/${file}`)
         : [".github/scripts/tests/*.test.mjs"]),
+      "ops/monitoring/*.test.mjs",
     ],
   },
 ]

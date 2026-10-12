@@ -73,6 +73,47 @@ enabling production credentials.
 
 The 2026-10-01 receipt was incomplete because Polar returned `insufficient_scope`; see the dated production readback above. Razorpay is invoked sequentially even when Polar fails, but the stored receipt does not retain provider response counts. Treat the recorded zero counters as insufficient to prove full provider coverage.
 
+### Monitoring noise and terminal provider expense
+
+The 2026-10-12 corrective Azure readback verified the enabled operator action group
+with Ankit as its sole common-schema email receiver. The three additional rules
+`reconciliation-backlog`, `reconciliation-duplicates` and `webhook-catalog-rejection`
+are disabled with their definitions retained. This stops their future enabled-rule
+evaluation; it does not establish a refund or prove email delivery. The source
+provisioner excludes these additions and rejects a different primary inbox.
+
+The worker samples terminal cost health every five minutes independently of the
+hourly idle queue reconciliation. Each observation is explicitly `healthy`,
+`unhealthy` or `unknown`; only a successful empty read is healthy. Logs contain
+the safe scan ID and age for an unhealthy observation, never target content or
+raw database errors. The cost query uses the latest observation time, treats
+duplicates conservatively and keeps missing, failed or stale observations
+unhealthy. Recovery needs a recent positive healthy observation. This source
+behavior needs deployment plus the scoped cost-query update before it is live.
+
+`node ops/monitoring/reduce-noise.mjs --subscription <id> --resource-group <group>`
+prints a bounded diff without applying it. It preserves individual-error detection
+while removing its email action, retains the sustained `>5` errors in five minutes
+rule and updates the existing cost query. `--apply` requires unchanged preflight
+state and verifies readback. It never creates alerts or edits replica thresholds.
+Do not use the full provisioner for an existing notification correction.
+
+`pnpm --filter @lyrashield/worker review:terminal-cost-disposition` remains read-only
+unless its existing production apply confirmation is supplied. Version 1 retains
+the exact two historical zero-cost reviews and their evidence requirements.
+Version 2 accepts one ordinary `FAILED` REPO scan with a preserved positive provider
+cost, null billed cost and the exact `updatedAt`. Its conclusion must state
+`customerBilling: "non_billable_failed_scan"`; the conclusion, persisted provider
+cost and digest-bound provider evidence must agree at ten decimal places.
+The provider evidence file uses version 2, the exact scan/resource ID and execution
+window, query timestamp, positive request count and decimal-string provider cost.
+An approved verified MFA-enabled platform operator is rechecked inside the atomic
+audit/event transaction. No scan cost, customer usage or billing row is updated.
+Missing or mismatched audits, deleted receipts, a changed scan version or a newly
+recorded positive expense keep the condition unresolved. Applying a reviewed
+disposition is a separate authorized financial-record operation; this change does
+not apply a historical production disposition.
+
 ### Pending read-only evidence audits
 
 These audits have not been run. They are evidence collection only and must not write historical records, alter receipts, reset checkpoints, replay billing events, or change scan/finding states.
