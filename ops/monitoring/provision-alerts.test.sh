@@ -274,26 +274,25 @@ fi
 test "$(grep -c 'monitor scheduled-query create' "$capture" || true)" = 0
 unset FAKE_ACTION_GROUP_ENABLED
 
-for rule in terminal-cost-unreconciled; do
-  export FAKE_FAILED_RULE="$rule"
-  for failure in enabled auto-mitigate action-group; do
-    : >"$capture"
-    case "$failure" in
-      enabled) export FAKE_RULE_ENABLED=false ;;
-      auto-mitigate) export FAKE_RULE_AUTO_MITIGATE=false ;;
-      action-group) export FAKE_RULE_ACTION_GROUP=/unexpected/action-group ;;
-    esac
-    if sh ops/monitoring/provision-alerts.sh >"$test_dir/readback.out" 2>&1; then
-      echo "provisioning must fail when $rule has invalid $failure readback" >&2
-      exit 1
-    fi
-    grep -q "Scheduled query $rule" "$test_dir/readback.out"
-    if grep -q 'monitoring alerts provisioned' "$test_dir/readback.out"; then
-      echo "failed readback must never report successful provisioning" >&2
-      exit 1
-    fi
-    unset FAKE_RULE_ENABLED FAKE_RULE_AUTO_MITIGATE FAKE_RULE_ACTION_GROUP
-  done
+rule=terminal-cost-unreconciled
+export FAKE_FAILED_RULE="$rule"
+for failure in enabled auto-mitigate action-group; do
+  : >"$capture"
+  case "$failure" in
+    enabled) export FAKE_RULE_ENABLED=false ;;
+    auto-mitigate) export FAKE_RULE_AUTO_MITIGATE=false ;;
+    action-group) export FAKE_RULE_ACTION_GROUP=/unexpected/action-group ;;
+  esac
+  if sh ops/monitoring/provision-alerts.sh >"$test_dir/readback.out" 2>&1; then
+    echo "provisioning must fail when $rule has invalid $failure readback" >&2
+    exit 1
+  fi
+  grep -q "Scheduled query $rule" "$test_dir/readback.out"
+  if grep -q 'monitoring alerts provisioned' "$test_dir/readback.out"; then
+    echo "failed readback must never report successful provisioning" >&2
+    exit 1
+  fi
+  unset FAKE_RULE_ENABLED FAKE_RULE_AUTO_MITIGATE FAKE_RULE_ACTION_GROUP
 done
 unset FAKE_FAILED_RULE
 
