@@ -40,6 +40,7 @@ export default defineConfig({
       // These use node:test and run in the ops suite, not Vitest.
       ".github/scripts/tests/**",
       "ops/worker/tests.*.test.mjs",
+      "ops/monitoring/*.test.mjs",
       "packages/db/scripts/tests/*.test.mjs",
       ...(!disposableDatabaseTests ? databaseIntegrationTests : []),
     ],

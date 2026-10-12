@@ -46,6 +46,7 @@ import {
   FIX_GENERATE_WORKER_CONCURRENCY,
 } from "./worker-lifecycle"
 import { collectOperationalHealthSnapshot, evaluateOperationalHealth } from "./operational-health"
+import { startTerminalCostHealthSampler } from "./terminal-cost-health"
 
 let worker: Worker<ScanJobData, ScanJobResult> | null = null
 let webhookTrackRetryWorker: Worker<WebhookTrackRetryJobData, void> | null = null
@@ -54,6 +55,7 @@ let scheduleRunner: NodeJS.Timeout | null = null
 let heartbeatTimer: NodeJS.Timeout | null = null
 let workerHeartbeatController: WorkerHeartbeatController | null = null
 let reconciliationTimer: NodeJS.Timeout | null = null
+let terminalCostHealthTimer: NodeJS.Timeout | null = null
 let staleResourceReaperTimer: NodeJS.Timeout | null = null
 let billingJobsTimers: NodeJS.Timeout[] | null = null
 let approvalExpiryTimer: NodeJS.Timeout | null = null
@@ -228,6 +230,10 @@ async function shutdown(signal: string, exitCode = 0): Promise<void> {
   if (reconciliationTimer) {
     clearInterval(reconciliationTimer)
     reconciliationTimer = null
+  }
+  if (terminalCostHealthTimer) {
+    clearInterval(terminalCostHealthTimer)
+    terminalCostHealthTimer = null
   }
   if (staleResourceReaperTimer) {
     clearInterval(staleResourceReaperTimer)
@@ -532,6 +538,7 @@ async function main(): Promise<void> {
       })
     })
   const startupReconciliation = await reconcileScanQueue()
+  terminalCostHealthTimer = startTerminalCostHealthSampler()
   let lastReconciliationAtMs = Date.now()
   await emitOperationalHealthAlerts(startupReconciliation).catch((error) => {
     logger.warn("Operational health collection failed", {
