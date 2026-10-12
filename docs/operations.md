@@ -20,6 +20,48 @@ The 2026-10-01 report-only reconciliation failed Polar with HTTP 403 `insufficie
 
 The 2026-10-01 production rule readback found a live `reconciliation_drift` rule but no separate runtime rules for emitted `reconciliation_backlog` and `reconciliation_duplicates`; alert receiver delivery was unverified. Current source declares both rules, and product revision `851c16f2bdb0558cd5cff62b3d8de4cd5a70d437` was released on 2026-10-11. No post-release runtime rule or receiver-delivery readback is recorded here, so treat the live state as unverified. The latest recorded isolated restore predates migration `20261011000000_integration_config_deletion_outbox` from the current release, so a post-release backup and restore drill remains pending.
 
+## Urgent operator email policy
+
+`ops/monitoring/alert-policy.py` owns the delivery and detection contract. Its
+normal invocation validates all queries and writes a reviewable plan without
+changing Azure. `--apply` writes that plan, applies it and reads back every
+declared field. `provision-alerts.sh` keeps the existing agent, DCR and ingestion
+preflights and invokes the same policy. Retain the private `before.json`,
+`desired.json`, `query-validation.json` and `after.json` files for rollback and
+configuration evidence. Do not commit operator addresses or runtime snapshots.
+
+All eight metric and ten log detectors remain enabled with automatic mitigation.
+Urgent email goes to `LYRASHIELD_PRIMARY_OPERATOR_EMAIL` once; the founder address
+is no longer a duplicate recipient on every transition. Recovery transitions
+still use Azure's native email delivery. No background digest is scheduled.
+
+| Email for operator action                                          | Azure Monitor advisory, without email      |
+| ------------------------------------------------------------------ | ------------------------------------------ |
+| VM, app or scanner unavailable throughout five minutes             | CPU above 85%, individual replica restarts |
+| More than five app 5xx responses in five minutes                   | A single app 5xx response                  |
+| Sustained scan readiness failure and oldest queue wait             | Queue depth by itself                      |
+| Incomplete reconciliation, financial drift and billing backlog     | Duplicate settlement delivery receipts     |
+| Webhook catalog rejection/dead letter and evidence storage failure |                                            |
+| Unreconciled terminal cost                                         |                                            |
+
+The idle worker emits health signals roughly hourly. These event queries use a
+two-hour lookback inside a supported six-hour aggregation window and evaluate
+at five-minute intervals, retaining an ongoing incident between idle ticks.
+Resolution therefore can lag the last event; lack of an event alone is not proof
+that an accounting issue was repaired. Daily billing rules use the latest
+report in two days, so a subsequent zero-count report clears backlog and a
+completed zero-drift report clears the billing part of reconciliation drift.
+Incomplete reports stay actionable. The hourly queue-repair part of drift is
+queried separately. Missing logs must never be described as a verified recovery.
+
+On 2026-10-12, aggregate production logs still showed Polar authorization failures
+and an incomplete reconciliation, with zero reported backlog and duplicate
+counts. The terminal-cost signal also persisted. Email policy changes do not
+repair the Polar grant, change financial records, reset the reconciliation
+checkpoint or manufacture a terminal-cost disposition. Follow the source-of-truth
+credential procedure above and the evidence-backed terminal-cost disposition
+workflow for these outstanding issues.
+
 ## Live checkout verification
 
 > **Founder-controlled.** This runbook turns on real money. Stop conditions are
