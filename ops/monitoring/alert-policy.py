@@ -154,15 +154,28 @@ def desired_resources(args, existing):
     return desired
 
 
-def equal_policy(actual, expected):
+def equal_policy(actual, expected, path=()):
     # ARM adds read-only/default properties. Compare every declared field,
     # including empty action lists, rather than only enabled/severity flags.
     if isinstance(expected, dict):
-        return isinstance(actual, dict) and all(key in actual and equal_policy(actual[key], value)
-                                                for key, value in expected.items())
+        if not isinstance(actual, dict):
+            return False
+        for key, value in expected.items():
+            if key in actual:
+                observed = actual[key]
+            elif path == ("properties",) and key == "actions":
+                # Azure omits empty log-rule actions altogether.
+                observed = [] if isinstance(value, list) else {}
+            elif path == ("properties", "actions") and key in ("actionGroups", "customProperties"):
+                observed = [] if key == "actionGroups" else {}
+            else:
+                return False
+            if not equal_policy(observed, value, path + (key,)):
+                return False
+        return True
     if isinstance(expected, list):
         return isinstance(actual, list) and len(actual) == len(expected) and all(
-            equal_policy(a, b) for a, b in zip(actual, expected))
+            equal_policy(a, b, path) for a, b in zip(actual, expected))
     if isinstance(expected, str) and expected.startswith("/subscriptions/"):
         return isinstance(actual, str) and actual.lower() == expected.lower()
     return actual == expected

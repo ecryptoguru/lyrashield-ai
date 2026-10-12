@@ -83,6 +83,14 @@ class PolicyTests(unittest.TestCase):
         bad = json.loads(json.dumps(expected))
         bad["properties"]["actions"] = [{"actionGroupId": "/unexpected"}]
         self.assertFalse(policy.equal_policy(bad, expected))
+
+    def test_azure_omitted_empty_actions_are_equivalent_to_no_delivery(self):
+        expected = self.desired["scheduledQueryRules/scan-queue-depth-high"]
+        actual = json.loads(json.dumps(expected))
+        actual["properties"].pop("actions")
+        self.assertTrue(policy.equal_policy(actual, expected))
+        actual["properties"]["actions"] = {"actionGroups": ["/unexpected"]}
+        self.assertFalse(policy.equal_policy(actual, expected))
         bad = json.loads(json.dumps(expected))
         bad["properties"]["criteria"]["allOf"][0]["threshold"] = 999
         self.assertFalse(policy.equal_policy(bad, expected))
