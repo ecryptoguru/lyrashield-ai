@@ -10,6 +10,13 @@ vi.mock("@lyrashield/security", () => ({
   analyzeLiteSurface,
 }))
 vi.mock("@lyrashield/logger", () => ({ setRequestId: vi.fn(), logger: { error: vi.fn() } }))
+vi.mock("@upstash/redis", () => ({
+  Redis: class {
+    async set() {
+      return "OK"
+    }
+  },
+}))
 
 const { POST } = await import("./route")
 
@@ -32,6 +39,8 @@ describe("POST /api/lite-scan", () => {
     vi.stubEnv("NODE_ENV", "test")
     process.env.NEXT_PUBLIC_MARKETING_URL = "http://localhost:4321"
     delete process.env.TURNSTILE_SECRET_KEY
+    vi.stubEnv("UPSTASH_REDIS_REST_URL", "https://redis.example.test")
+    vi.stubEnv("UPSTASH_REDIS_REST_TOKEN", "synthetic")
     checkScanUrlSafe.mockResolvedValue({ safe: true })
     collectPublicSurface.mockResolvedValue({
       seedUrl: "https://example.com/",
@@ -62,7 +71,10 @@ describe("POST /api/lite-scan", () => {
       "fetch",
       vi.fn().mockResolvedValue({
         ok: true,
-        json: vi.fn().mockResolvedValue({ success: true }),
+        json: vi.fn().mockImplementation(async () => ({
+          success: true,
+          challenge_ts: new Date().toISOString(),
+        })),
       })
     )
   })
@@ -142,7 +154,10 @@ describe("POST /api/lite-scan", () => {
       .mockRejectedValueOnce(new Error("network timeout"))
       .mockResolvedValueOnce({
         ok: true,
-        json: vi.fn().mockResolvedValue({ success: true }),
+        json: vi.fn().mockImplementation(async () => ({
+          success: true,
+          challenge_ts: new Date().toISOString(),
+        })),
       })
     vi.stubGlobal("fetch", fetchMock)
 

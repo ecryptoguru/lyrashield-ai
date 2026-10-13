@@ -2,7 +2,12 @@
  * Cloudflare Turnstile verification (v16 2.3: extracted from the lite-scan
  * route so the lite-scorecard mint uses the identical bot check).
  *
- * Semantics preserved exactly from the original implementation:
+ * One shared, bounded digest reservation admits a proof only once across
+ * replicas and all public callers. Reservations survive failures/ambiguity;
+ * a user retry needs a new challenge. Provider retries belong to that one
+ * reservation and share an idempotency key.
+ *
+ * Provider retry semantics:
  *  - a definitive `success: false` is NOT retried (real bot-check failure);
  *  - transient network failures (timeout, connection reset) retry up to
  *    TURNSTILE_MAX_RETRIES times with linear backoff;
@@ -11,6 +16,7 @@
  */
 import { createHash, randomUUID } from "node:crypto"
 import { logger } from "@lyrashield/logger"
+import { z } from "zod"
 
 type TurnstileOutcome = "success" | "failed" | "transient-error"
 type DiagnosticContext = {
@@ -45,6 +51,46 @@ const CACHE_STATES = new Set([
   "UPDATING",
   "STALE",
 ])
+
+// Covers the 300s proof lifetime, 30s clock skew and bounded verification.
+const PROOF_RETENTION_SECONDS = 360
+const challengeTimestampSchema = z.iso.datetime({ offset: true })
+
+async function reserveProof(token: string): Promise<boolean> {
+  const url = process.env.UPSTASH_REDIS_REST_URL
+  const redisToken = process.env.UPSTASH_REDIS_REST_TOKEN
+  if (!url || !redisToken) return false
+  try {
+    const { Redis } = await import("@upstash/redis")
+    const redis = new Redis({
+      url,
+      token: redisToken,
+      retry: { retries: 0 },
+      signal: () => AbortSignal.timeout(2_000),
+    })
+    const digest = createHash("sha256").update(token).digest("hex")
+    // Global identity: never route-, replica-, IP- or credential-specific.
+    // Never release a marker after provider/route failure or a lost reply.
+    return (
+      (await redis.set(`turnstile-proof:v1:${digest}`, "1", {
+        nx: true,
+        ex: PROOF_RETENTION_SECONDS,
+      })) === "OK"
+    )
+  } catch {
+    // An uncertain write may have committed. No local fallback or retry.
+    return false
+  }
+}
+
+function freshChallenge(timestamp: unknown): boolean {
+  if (typeof timestamp !== "string" || timestamp.length > 64) return false
+  if (!challengeTimestampSchema.safeParse(timestamp).success) return false
+  const issuedAt = Date.parse(timestamp)
+  if (!Number.isFinite(issuedAt)) return false
+  const age = Date.now() - issuedAt
+  return age >= -30_000 && age < 300_000
+}
 
 function challengeAge(timestamp: unknown): "fresh" | "expired" | "future" | "missing-or-invalid" {
   if (typeof timestamp !== "string" || timestamp.length > 64) return "missing-or-invalid"
@@ -107,14 +153,21 @@ async function verifyTurnstileOnce(
 ): Promise<TurnstileOutcome> {
   let verification: Response | undefined
   try {
-    const body = new URLSearchParams({ secret, response: token })
+    const body = new URLSearchParams({
+      secret,
+      response: token,
+      idempotency_key: context.invocationId,
+    })
     verification = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
       method: "POST",
       body,
       signal: AbortSignal.timeout(5_000),
     })
     const result = (await verification.json()) as VerificationMetadata
-    const outcome = result.success === true ? "success" : "failed"
+    const outcome =
+      verification.ok && result.success === true && freshChallenge(result.challenge_ts)
+        ? "success"
+        : "failed"
     recordOutcome(context, outcome, verification, result)
     return outcome
   } catch {
@@ -127,7 +180,9 @@ async function verifyTurnstileOnce(
 export async function verifyTurnstile(token: string | undefined): Promise<boolean> {
   const secret = process.env.TURNSTILE_SECRET_KEY
   if (!secret) return false
-  if (!token) return false
+  const proof = token?.trim()
+  if (!proof || proof.length > 2048) return false
+  if (!(await reserveProof(proof))) return false
 
   const invocationId = randomUUID()
   // Recognize only Cloudflare's three documented dummy secret formats.
@@ -135,7 +190,7 @@ export async function verifyTurnstile(token: string | undefined): Promise<boolea
   const providerMode = /^[123]x0{31}AA$/.test(secret) ? "documented-test" : "unclassified"
   const maxRetries = 2
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    const outcome = await verifyTurnstileOnce(token, secret, {
+    const outcome = await verifyTurnstileOnce(proof, secret, {
       invocationId,
       attempt: attempt + 1,
       providerMode,

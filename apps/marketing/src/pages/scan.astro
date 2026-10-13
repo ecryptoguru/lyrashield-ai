@@ -725,11 +725,16 @@ const jsonLd = [
               referralCode: waitlistBody.referralCode,
               turnstileToken: mintToken,
             }),
+          }).finally(() => {
+            // A lost response may still have consumed the proof server-side.
+            // Retire it after every mint attempt, including errors and success.
+            turnstileToken = ""
+            updateScanReadiness()
+            turnstile?.reset(turnstileWidget)
           })
           const cardBody = await card.json() as { url?: string }
           if (!card.ok || !cardBody.url) {
             if (card.status === 403) {
-              turnstile?.reset(turnstileWidget)
               status.textContent = "The verification check failed. Please complete it again, then retry."
               return
             }

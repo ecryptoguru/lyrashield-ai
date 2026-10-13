@@ -52,7 +52,7 @@ async function post(request: Request): Promise<Response> {
   }
 
   if (!(await verifyTurnstile(parsed.data.turnstileToken))) {
-    return myraFail(request, "VERIFICATION_FAILED", "Please retry the abuse check.", 403)
+    return myraFail(request, "VERIFICATION_FAILED", "Complete verification again, then retry.", 403)
   }
 
   try {
