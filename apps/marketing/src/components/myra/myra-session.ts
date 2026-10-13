@@ -120,7 +120,10 @@ function loadTurnstile(): Promise<TurnstileGlobal | undefined> {
     )
     script.onload = () => {
       clearTimeout(timer)
-      resolve(w.turnstile)
+      // A load event alone does not establish that the API initialized.
+      // Clear a failed result so a later interaction can retry the script.
+      if (w.turnstile) resolve(w.turnstile)
+      else fail()
     }
     script.onerror = () => {
       clearTimeout(timer)

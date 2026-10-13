@@ -338,6 +338,27 @@ describe("Turnstile challenge lifecycle", () => {
     turnstile.renders[0]?.options.callback?.("t")
     await expect(p2).resolves.toBe("t")
   })
+
+  it("a loaded script without the API fails closed and permits a later retry", async () => {
+    w.turnstile = undefined
+    const { getTurnstileToken } = await loadSession()
+    doc.hosts.push(turnstileHost())
+
+    const firstAttempt = getTurnstileToken()
+    await tick()
+    doc.head.children.find((child) => child.tagName === "SCRIPT")?.onload?.()
+    await expect(firstAttempt).resolves.toBeUndefined()
+
+    const retry = getTurnstileToken()
+    await tick()
+    const scripts = doc.head.children.filter((child) => child.tagName === "SCRIPT")
+    expect(scripts).toHaveLength(2)
+    w.turnstile = turnstile
+    scripts[1]?.onload?.()
+    await tick()
+    turnstile.renders[0]?.options.callback?.("fresh-proof")
+    await expect(retry).resolves.toBe("fresh-proof")
+  })
 })
 
 describe("session bootstrap deduplication", () => {
