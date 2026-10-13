@@ -8,6 +8,17 @@ const billing = read("../../../web/src/app/(dashboard)/dashboard/billing/page.ts
 const architecture = read("../../../../codebase.md")
 
 describe("whole-minute billing disclosure", () => {
+  it("dates the revised draft accurately and explains provider-specific cancellation paths", () => {
+    expect(terms).toContain('const reviewed = "2026-10-13"')
+    expect(terms).toContain("Last reviewed: <time datetime={reviewed}>13 Oct 2026</time>")
+    expect(terms).toContain("Polar customers open the customer portal")
+    expect(terms).toContain(
+      "Razorpay customers contact billing support for cancellation assistance"
+    )
+    expect(terms).toContain("Cloud subscriptions can be canceled at any time.")
+    expect(terms).not.toContain("You can cancel a Cloud subscription at any time in the dashboard")
+  })
+
   it("discloses rounding before the multiplier in terms and account usage", () => {
     for (const source of [terms, billing]) {
       expect(source).toContain("Any partial minute is rounded up to the next whole minute.")

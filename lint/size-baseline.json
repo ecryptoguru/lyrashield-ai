@@ -107,8 +107,8 @@
     },
     "apps/web/src/app/(dashboard)/dashboard/billing/page.tsx|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 196,
-      "maxExcess": 196
+      "totalExcess": 194,
+      "maxExcess": 194
     },
     "apps/web/src/app/(dashboard)/dashboard/findings/finding-action-tab.tsx|max-lines-per-function": {
       "count": 1,

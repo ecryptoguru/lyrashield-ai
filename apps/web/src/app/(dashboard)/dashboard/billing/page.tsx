@@ -1,6 +1,6 @@
 import type { Metadata } from "next"
 import { CreditCard, Clock, Zap, AlertCircle } from "lucide-react"
-import { Card, CardContent, CardHeader, CardTitle, Badge, buttonVariants } from "@lyrashield/ui"
+import { Card, CardContent, CardHeader, CardTitle, Badge } from "@lyrashield/ui"
 import { prisma, withWorkspaceRLS } from "@lyrashield/db"
 import {
   getUsageBalance,
@@ -19,6 +19,7 @@ import { NoWorkspaceState } from "@/components/no-workspace-state"
 import { PageHeader } from "@/components/page-header"
 import { LocalTime } from "@/components/local-time"
 import { BillingActions } from "./billing-actions"
+import { BillingManagementCard } from "./billing-management-card"
 import { BuyPackButton } from "./buy-pack-button"
 import { TrialStatusCard } from "./trial-status-card"
 import { SpendLimitForm } from "./spend-limit-form"
@@ -395,26 +396,10 @@ export default async function BillingPage({
             path). Gating the card on provider === "polar" left Razorpay
             subscribers with no manage path at all. */}
         {canManageBilling && plan !== "FREE" && billingAccount && !isComplimentary && (
-          <Card>
-            <CardHeader>
-              <CardTitle as="h2">
-                {opensBillingSupport ? "Billing support" : "Manage Subscription"}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {opensBillingSupport && (
-                <p className="mb-3 text-sm text-muted-foreground">
-                  Contact billing support for cancellation and payment help.
-                </p>
-              )}
-              <Link
-                href={`/billing/portal?workspaceId=${encodeURIComponent(workspaceId)}`}
-                className={`${buttonVariants({ variant: "outline" })} w-full`}
-              >
-                {opensBillingSupport ? "Open billing support" : "Open Customer Portal"}
-              </Link>
-            </CardContent>
-          </Card>
+          <BillingManagementCard
+            workspaceId={workspaceId}
+            opensBillingSupport={opensBillingSupport}
+          />
         )}
       </div>
     </div>
