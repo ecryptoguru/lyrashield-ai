@@ -17,6 +17,8 @@ interface BillingActionsProps {
   purchasesAvailable: boolean
   trialAvailable: boolean
   selectedPlan?: string | null
+  /** Stored subscription provider selected by the billing-management route. */
+  managementProvider?: string
   /**
    * The checkout region the SERVER resolved for this request — display only.
    * The client never picks a currency: checkout re-resolves region itself and
@@ -53,6 +55,7 @@ export function BillingActions({
   purchasesAvailable,
   trialAvailable,
   selectedPlan,
+  managementProvider,
   billingRegion = "usd",
 }: BillingActionsProps) {
   const router = useRouter()
@@ -61,6 +64,7 @@ export function BillingActions({
   const [error, setError] = useState<string | null>(null)
   const intent = parsePlanIntent(selectedPlan)
   const canStartSubscription = plan === "FREE" && purchasesAvailable
+  const opensBillingSupport = managementProvider === "razorpay"
 
   async function act(action: string, work: () => Promise<void>) {
     if (!claim()) return
@@ -142,7 +146,9 @@ export function BillingActions({
           {plan !== "FREE"
             ? isComplimentary
               ? "Your complimentary access is already active."
-              : "Use Manage Subscription to review your existing subscription."
+              : opensBillingSupport
+                ? "Contact billing support for cancellation and payment help."
+                : "Use Manage Subscription to review your existing subscription."
             : purchasesAvailable
               ? "Choose a billing interval below when ready."
               : "You can choose a billing interval when new purchases become available."}{" "}
@@ -155,7 +161,7 @@ export function BillingActions({
           href={`/billing/portal?workspaceId=${encodeURIComponent(workspaceId)}`}
           className={buttonVariants({ variant: "outline", size: "sm" })}
         >
-          Manage Subscription
+          {opensBillingSupport ? "Billing support" : "Manage Subscription"}
         </a>
       )}
     </div>
