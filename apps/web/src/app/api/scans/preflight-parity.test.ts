@@ -117,6 +117,7 @@ vi.mock("../../../lib/queue", () => ({
 }))
 
 vi.mock("@lyrashield/integrations", () => ({
+  isTargetRelayWorkerAvailable: vi.fn().mockResolvedValue(true),
   getBranchRefSha: vi.fn(),
   getDefaultBranch: vi.fn(),
   getMergeBaseSha: vi.fn(),
@@ -134,6 +135,7 @@ vi.mock("@lyrashield/billing", () => ({
   resolveAccountBilling: vi.fn(async () => ({ effectivePlan: "PRO", currentPlan: "PRO" })),
 }))
 
+import { isTargetRelayWorkerAvailable } from "@lyrashield/integrations"
 import { prisma, createScan } from "@lyrashield/db"
 import { requirePermission } from "@lyrashield/auth/server"
 import {
@@ -168,6 +170,7 @@ const query = {
 describe("preflight → POST parity", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(isTargetRelayWorkerAvailable).mockResolvedValue(true)
     configMocks.authAssessment.enabled = "0"
     configMocks.authAssessment.allowlist = ""
     vi.mocked(requirePermission).mockResolvedValue({
@@ -206,6 +209,57 @@ describe("preflight → POST parity", () => {
       executionPlan: null,
       executionPlanHash: null,
     } as never)
+  })
+
+  it.each(["WEB_APP", "API"])(
+    "refuses unavailable relay-dependent %s reviews before mutation",
+    async (type) => {
+      vi.mocked(isTargetRelayWorkerAvailable).mockResolvedValue(false)
+      vi.mocked(prisma.target.findFirst).mockResolvedValue({
+        id: "target-1",
+        type,
+        url: "https://app.example.com",
+        apiSpecUrl: "https://app.example.com/openapi.json",
+      } as never)
+      for (const mode of ["STANDARD", "DEEP", "CUSTOM"]) {
+        const preflight = await eligibilityGET(eligibilityRequest({ ...query, mode }))
+        const advisory = (await preflight.json()).data
+        expect(advisory).toMatchObject({ allowed: false, code: "TARGET_RELAY_UNAVAILABLE" })
+        expect(
+          advisory.supportedModes
+            .filter((option: { usesAi: boolean }) => option.usesAi)
+            .every((option: { available: boolean }) => !option.available)
+        ).toBe(true)
+        expect(
+          advisory.supportedModes.some(
+            (option: { usesAi: boolean; available: boolean }) => !option.usesAi && option.available
+          )
+        ).toBe(true)
+        const post = await scansPOST(postRequest({ ...query, mode }))
+        expect(post.status).toBe(503)
+        expect((await post.json()).error.code).toBe("TARGET_RELAY_UNAVAILABLE")
+      }
+      expect(createScan).not.toHaveBeenCalled()
+      expect(assertScanAllowed).not.toHaveBeenCalled()
+      expect(evaluateScanEntitlement).not.toHaveBeenCalled()
+    }
+  )
+
+  it("keeps repository and surface reviews available without a relay", async () => {
+    vi.mocked(isTargetRelayWorkerAvailable).mockResolvedValue(false)
+    for (const [type, mode] of [
+      ["REPO", "STANDARD"],
+      ["WEB_APP", "SAFE"],
+      ["API", "QUICK"],
+    ] as const) {
+      vi.mocked(prisma.target.findFirst).mockResolvedValue({
+        id: "target-1",
+        type,
+        url: "https://app.example.com",
+      } as never)
+      const preflight = await eligibilityGET(eligibilityRequest({ ...query, mode }))
+      expect((await preflight.json()).data.allowed).toBe(true)
+    }
   })
 
   it("an allowed preflight never guarantees admission — POST re-gates on fresh state", async () => {

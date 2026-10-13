@@ -240,7 +240,10 @@ describe("worker Docker runtime", () => {
     expect(workflowStepBody(deployRolloutScript, "deploy-app-container-app")).toContain(
       '"POLAR_ENVIRONMENT=${POLAR_ENVIRONMENT}"'
     )
-    expect(deployWorkflow.match(/--remove-env-vars/g) ?? []).toHaveLength(2)
+    expect(deployWorkflow.match(/--remove-env-vars/g) ?? []).toHaveLength(3)
+    expect(workflowStepBody(deployRolloutScript, "deploy-egress-proxy-container-app")).toContain(
+      "--remove-env-vars LYRASHIELD_RELAY_SIGNING_SECRET"
+    )
     for (const legacyName of [
       "LYRASHIELD_DEPLOYMENT_ENVIRONMENT",
       "BILLING_STAGING_ADMISSION",

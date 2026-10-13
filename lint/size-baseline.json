@@ -222,8 +222,8 @@
     },
     "apps/web/src/app/(dashboard)/dashboard/scans/create-scan-sheet.tsx|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 381,
-      "maxExcess": 381
+      "totalExcess": 354,
+      "maxExcess": 354
     },
     "apps/web/src/app/(dashboard)/dashboard/scans/scan-list.tsx|max-lines-per-function": {
       "count": 1,
@@ -332,8 +332,8 @@
     },
     "apps/web/src/app/api/scans/eligibility/route.ts|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 77,
-      "maxExcess": 77
+      "totalExcess": 64,
+      "maxExcess": 64
     },
     "apps/web/src/app/api/scans/route.ts|max-lines": {
       "count": 1,
@@ -732,8 +732,8 @@
     },
     "packages/egress-proxy/src/index.ts|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 5,
-      "maxExcess": 5
+      "totalExcess": 1,
+      "maxExcess": 1
     },
     "packages/egress-proxy/src/relay.ts|max-lines-per-function": {
       "count": 2,

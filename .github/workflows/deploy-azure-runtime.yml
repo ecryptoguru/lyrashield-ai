@@ -52,7 +52,6 @@ permissions:
   actions: read
   contents: read
   id-token: write
-
 env:
   DEPLOY_SHA: ${{ inputs.source_sha }}
   WEBHOOK_CLAIMS_CUTOVER: ${{ inputs.webhook_claims_cutover && 'true' || 'false' }}
@@ -75,6 +74,7 @@ env:
   APP_URL: ${{ vars.LYRASHIELD_APP_URL || 'https://app.lyrashieldai.com' }}
   SCANNER_URL: ${{ vars.LYRASHIELD_SCANNER_URL || 'https://scanner.lyrashieldai.com' }}
   REQUIRE_EMAIL_VERIFICATION: ${{ vars.LYRASHIELD_REQUIRE_EMAIL_VERIFICATION || '1' }}
+  TARGET_RELAY_ENABLED: ${{ vars.LYRASHIELD_TARGET_RELAY_ENABLED || '0' }}
   PLATFORM_ADMIN_EMAILS: ecryptoguru@gmail.com,ankit@lyrashieldai.com
   # Scanner-only deployments remain closed; app deployments replace these
   # defaults with the validated 100%-traffic app revision before rollout.
@@ -721,6 +721,7 @@ jobs:
           IMAGE: ${{ inputs.egress_proxy_image }}@${{ inputs.egress_proxy_digest }}
           AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
           AZURE_EGRESS_PROXY_CONTAINER_APP_NAME: ${{ vars.AZURE_EGRESS_PROXY_CONTAINER_APP_NAME }}
+          AZURE_KEY_VAULT_NAME: ${{ vars.AZURE_KEY_VAULT_NAME || 'lyrashieldprodsecrets' }}
         run: bash .github/scripts/deploy-azure-rollout.sh deploy-egress-proxy-container-app
       - name: Smoke candidate revisions
         id: smoke-candidates

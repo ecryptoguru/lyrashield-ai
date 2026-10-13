@@ -21,6 +21,17 @@ while [ "$#" -gt 0 ]; do
   shift
 done
 case "$secret_name" in
+  worker-target-relay-enabled)
+    [ -n "${FAKE_RELAY_ENABLED:-}" ] || exit 1
+    printf '%s\n' "$FAKE_RELAY_ENABLED"
+    ;;
+  worker-egress-proxy-url)
+    printf '%s\n' 'https://relay.example.test'
+    ;;
+  worker-relay-signing-secret)
+    [ "${FAKE_RELAY_SECRET_MISSING:-0}" != 1 ] || exit 1
+    printf '%s\n' "${FAKE_RELAY_SECRET:-$(printf 'fixture-%040d' 0)}"
+    ;;
   worker-evidence-kek-config-ref)
     [ -n "${FAKE_CONFIG_REF:-}" ] || exit 1
     printf '%s\n' "$FAKE_CONFIG_REF"
@@ -163,4 +174,25 @@ fi
 grep -Fqx 'Evidence KEK keyring digest does not match config ref' "$test_root/digest.stderr"
 grep -Fqx 'PRESERVE=digest' "$digest_env"
 
+if grep -Eq '^LYRASHIELD_(TARGET_RELAY_URL|RELAY_SIGNING_SECRET)=' "$legacy_env"; then
+  echo "Default-off relay unexpectedly loaded configuration" >&2
+  exit 1
+fi
+relay_env="$test_root/etc/relay.env"
+run_refresh "$relay_env" FAKE_RELAY_ENABLED=1
+grep -Fqx 'LYRASHIELD_TARGET_RELAY_URL=https://relay.example.test' "$relay_env"
+expected_relay_value=$(printf 'fixture-%040d' 0)
+grep -Fqx "LYRASHIELD_RELAY_SIGNING_SECRET=$expected_relay_value" "$relay_env"
+for failure in 'FAKE_RELAY_SECRET_MISSING=1' 'FAKE_RELAY_SECRET=short'; do
+  printf '%s\n' 'PRESERVE=relay' >"$relay_env"
+  if run_refresh "$relay_env" FAKE_RELAY_ENABLED=1 "$failure" >"$test_root/relay.stdout" 2>"$test_root/relay.stderr"; then
+    echo "Incomplete relay configuration unexpectedly succeeded" >&2
+    exit 1
+  fi
+  grep -Fqx 'PRESERVE=relay' "$relay_env"
+  if grep -Fq "$expected_relay_value" "$test_root/relay.stdout" "$test_root/relay.stderr"; then
+    echo "Relay credential appeared in refresh diagnostics" >&2
+    exit 1
+  fi
+done
 printf '%s\n' 'refresh-secrets tests passed'

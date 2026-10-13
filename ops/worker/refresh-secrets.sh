@@ -196,6 +196,21 @@ fi
 # accepting jobs it cannot safely execute.
 write_secret LYRASHIELD_EGRESS_PROXY_URL worker-egress-proxy-url
 write_secret LYRASHIELD_EGRESS_PROXY_SECRET worker-egress-proxy-secret
+# Explicit operator activation; absent optional configuration preserves ordinary scans.
+read_secret_optional worker-target-relay-enabled
+case "${secret_value:-0}" in
+  0) ;;
+  1)
+    write_secret LYRASHIELD_TARGET_RELAY_URL worker-egress-proxy-url
+    read_secret worker-relay-signing-secret
+    if [ "${#secret_value}" -lt 32 ]; then
+      echo "Relay signing secret must contain at least 32 characters" >&2
+      exit 1
+    fi
+    printf 'LYRASHIELD_RELAY_SIGNING_SECRET=%s\n' "$secret_value" >>"$temporary_file"
+    ;;
+  *) echo "Worker target relay activation must be 0 or 1" >&2; exit 1 ;;
+esac
 # Optional. When present and LYRASHIELD_WEB_SEARCH_ENABLED=1, enables Parallel Search.
 write_secret_optional LYRASHIELD_WEB_SEARCH_API_KEY worker-web-search-api-key
 # Optional paid-scan overlay. The worker defaults to disabled when these are

@@ -274,3 +274,89 @@ describe("scan creation error recovery", () => {
     expect(focus).toHaveBeenCalledWith({ preventScroll: true })
   })
 })
+
+describe("unavailable live-review recovery", () => {
+  beforeEach(() => {
+    hooks.values = []
+    hooks.cursor = 0
+    hooks.effects = []
+    vi.clearAllMocks()
+  })
+  it("disables unavailable review cards and keeps the surface alternative keyboard reachable", () => {
+    const surface = {
+      ...option,
+      id: "WEB_APP_SAFE",
+      label: "Surface Review",
+      mode: "SAFE",
+      usesAi: false,
+    }
+    const tree = renderTree({
+      availableOptions: [surface, option],
+      enabledOptions: [surface, option],
+      eligibility: {
+        status: "ready",
+        eligibility: {
+          allowed: false,
+          plan: "UNKNOWN",
+          isTrial: false,
+          remainingMinutes: 0,
+          code: "TARGET_RELAY_UNAVAILABLE",
+          message: "Live reviews are temporarily unavailable.",
+          supportedModes: [
+            {
+              ...option,
+              available: false,
+              disabledReason: "Live reviews are temporarily unavailable.",
+            },
+            surface,
+          ],
+        },
+      },
+      startDisabled: true,
+    })
+    const blocked = findElement(
+      tree,
+      (el) => (el.props as { id?: string }).id === "preset-CODE_REVIEW"
+    )!
+    expect((blocked.props as { disabled: boolean }).disabled).toBe(true)
+    const alternative = findElement(
+      tree,
+      (el) => (el.props as { id?: string }).id === "preset-WEB_APP_SAFE"
+    )!
+    expect((alternative.props as { tabIndex: number }).tabIndex).toBe(0)
+    expect(defaults.choosePreset).not.toHaveBeenCalled()
+    ;(alternative.props as { onClick: () => void }).onClick()
+    expect(defaults.choosePreset).toHaveBeenCalledWith("WEB_APP_SAFE")
+  })
+  it("offers an explicit surface-review action without a billing upsell", () => {
+    const surface = {
+      ...option,
+      id: "WEB_APP_SAFE",
+      label: "Surface Review",
+      mode: "SAFE",
+      usesAi: false,
+    }
+    const html = renderToStaticMarkup(
+      <CreateScanSheet
+        {...defaults}
+        availableOptions={[surface, option]}
+        enabledOptions={[surface, option]}
+        eligibility={{
+          status: "ready",
+          eligibility: {
+            allowed: false,
+            plan: "UNKNOWN",
+            isTrial: false,
+            remainingMinutes: 0,
+            code: "TARGET_RELAY_UNAVAILABLE",
+            message: "Live reviews are temporarily unavailable.",
+          },
+        }}
+        startDisabled
+      />
+    )
+    expect(html).toContain("Choose Surface Review")
+    expect(html).not.toContain("Review billing options")
+    expect(html).not.toContain("Start free trial")
+  })
+})

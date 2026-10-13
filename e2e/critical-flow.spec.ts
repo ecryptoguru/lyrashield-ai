@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test"
 import { prisma, withWorkspaceRLS } from "@lyrashield/db"
+import { registerScanWorker, unregisterScanWorker } from "../packages/integrations/src/queue"
+import { closeRedis } from "../packages/integrations/src/redis"
 
 const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 const simulatedClientOctet =
@@ -9,6 +11,8 @@ const ownerEmail = "e2e-owner@example.com"
 const otherEmail = "e2e-other@example.com"
 const workspaceName = `E2E ${suffix}`
 let createdWorkspaceId: string | null = null
+const relayFixtureWorkerId = `e2e-relay-capability-${suffix}`
+let relayFixtureRegistered = false
 
 async function signUp(
   page: import("@playwright/test").Page,
@@ -90,7 +94,12 @@ test.afterAll(async () => {
     }
     await prisma.user.deleteMany({ where: { email: { in: [ownerEmail, otherEmail] } } })
   } finally {
-    await prisma.$disconnect()
+    await (
+      relayFixtureRegistered ? unregisterScanWorker(relayFixtureWorkerId) : Promise.resolve()
+    ).finally(async () => {
+      await closeRedis()
+      await prisma.$disconnect()
+    })
   }
 })
 
@@ -274,8 +283,21 @@ test("tenant boundaries deny another user", async ({ page, browser }, testInfo) 
   const targetSelect = page.getByLabel("Target", { exact: true })
   await targetSelect.selectOption({ label: "Example target (Web app)" })
   await expect(page.getByRole("radio", { name: /^Surface Review:/ })).toBeEnabled()
-  await expect(page.getByRole("radio", { name: /^Engine Review:/ })).toBeEnabled()
+  // No scan worker/relay runs in this disposable browser fixture. Its live
+  // tiers must be visibly unavailable while the surface tier remains usable.
+  await expect(page.getByRole("radio", { name: /^Engine Review:/ })).toBeDisabled()
   const webDeep = page.getByRole("radio", { name: /^Deep Live Review:/ })
+  await expect(webDeep).toBeDisabled()
+  await expect(webDeep).toHaveAttribute("aria-label", /Live reviews are temporarily unavailable/)
+
+  // Advertise a test-only capability so the existing API-spec/reset assertions
+  // exercise their positive infrastructure case. No worker consumes jobs or
+  // contacts a target; this lease lives only in disposable CI Redis.
+  await registerScanWorker(relayFixtureWorkerId, Date.now(), true)
+  relayFixtureRegistered = true
+  await page.reload()
+  await targetSelect.selectOption({ label: "Example target (Web app)" })
+  await expect(page.getByRole("radio", { name: /^Engine Review:/ })).toBeEnabled()
   await expect(webDeep).toBeEnabled()
   await webDeep.click()
 

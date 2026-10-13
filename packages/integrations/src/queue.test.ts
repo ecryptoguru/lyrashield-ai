@@ -15,22 +15,29 @@ const mocks = vi.hoisted(() => {
         const error = commandErrors.get(name)
         if (error) throw error
 
+        const registry = members
         const now = Number(args[1])
-        for (const [id, expiry] of members) {
-          if (expiry <= now) members.delete(id)
+        for (const [id, expiry] of registry) {
+          if (expiry <= now) registry.delete(id)
         }
 
         if (name === "scanWorkerHeartbeat") {
-          members.set(String(args[3]), Number(args[2]))
+          const workerId = String(args[3])
+          registry.set(workerId, Number(args[2]))
+          if (args[5] === "1") registry.set(`~relay~${workerId}`, Number(args[2]))
+          else registry.delete(`~relay~${workerId}`)
           return 1
         }
-        if (name === "scanWorkerReadiness") return members.size
+        if (name === "scanWorkerReadiness") return registry.size
+        if (name === "scanWorkerMembers") return [...registry.keys()]
         throw new Error(`Unexpected command: ${name}`)
       }
       Object.assign(redis, { [name]: command })
     },
-    async zrem(_key: string, member: string) {
-      return members.delete(member) ? 1 : 0
+    async zrem(_key: string, ...ids: string[]) {
+      const error = commandErrors.get("zrem")
+      if (error) throw error
+      return ids.filter((id) => members.delete(id)).length
     },
     async exists(key: string) {
       if (existsError) throw existsError
@@ -84,10 +91,13 @@ vi.mock("bullmq", () => ({
   },
 }))
 
+import { registerRelayAwareWorker } from "../../../apps/worker/src/engine/relay-readiness"
+
 import {
   enqueueScan,
   getScanQueuePosition,
   isScanWorkerAvailable,
+  isTargetRelayWorkerAvailable,
   registerScanWorker,
   SCAN_WORKER_HEARTBEAT_MS,
   SCAN_WORKER_TTL_MS,
@@ -123,6 +133,53 @@ describe("scan worker availability", () => {
     mocks.queueWorkersCount.mockResolvedValue(1)
   })
 
+  it("requires a relay capability lease independently of ordinary worker readiness", async () => {
+    await registerScanWorker("worker-1", 1_000)
+    expect(await isTargetRelayWorkerAvailable(2_000)).toBe(false)
+    await registerScanWorker("worker-1", 1_000, true)
+    expect(await isTargetRelayWorkerAvailable(2_000)).toBe(true)
+    expect(await isScanWorkerAvailable(2_000)).toBe(true)
+    expect(await isTargetRelayWorkerAvailable(400_000)).toBe(false)
+  })
+
+  it("does not advertise live review admission to a mixed worker pool", async () => {
+    await registerScanWorker("worker-1", 1_000)
+    await registerScanWorker("worker-2", 1_000)
+    await registerScanWorker("worker-1", 1_000, true)
+    expect(await isTargetRelayWorkerAvailable(2_000)).toBe(false)
+    await registerScanWorker("worker-2", 1_000, true)
+    expect(await isTargetRelayWorkerAvailable(2_000)).toBe(true)
+  })
+
+  it("cannot retain a positive relay capability after a failed deletion and a known negative probe", async () => {
+    const now = Date.now()
+    await registerScanWorker("worker-1", now)
+    await registerScanWorker("worker-1", now, true)
+    expect(await isTargetRelayWorkerAvailable(now)).toBe(true)
+    mocks.commandErrors.set("zrem", new Error("deletion rejected"))
+    await registerRelayAwareWorker("worker-1")
+    expect(await isTargetRelayWorkerAvailable(Date.now())).toBe(false)
+    expect(await isScanWorkerAvailable(Date.now())).toBe(true)
+  })
+
+  it("removes failed relay capability without closing ordinary scan admission", async () => {
+    await registerScanWorker("worker-1", 1_000)
+    await registerScanWorker("worker-1", 1_000, true)
+    await registerScanWorker("worker-1", 2_000, false)
+    expect(await isTargetRelayWorkerAvailable(2_000)).toBe(false)
+    expect(await isScanWorkerAvailable(2_000)).toBe(true)
+  })
+
+  it("removes both leases at worker shutdown and fails closed on uncertain Redis", async () => {
+    await registerScanWorker("worker-1", 1_000)
+    await registerScanWorker("worker-1", 1_000, true)
+    await unregisterScanWorker("worker-1")
+    expect(await isTargetRelayWorkerAvailable(2_000)).toBe(false)
+    expect(await isScanWorkerAvailable(2_000)).toBe(false)
+    mocks.commandErrors.set("scanWorkerMembers", new Error("redis unavailable"))
+    expect(await isTargetRelayWorkerAvailable(2_000)).toBe(false)
+  })
+
   it("supports multiple workers and expires stale heartbeats", async () => {
     expect(SCAN_WORKER_HEARTBEAT_MS).toBe(120_000)
     expect(SCAN_WORKER_TTL_MS).toBe(300_000)
@@ -142,7 +199,7 @@ describe("scan worker availability", () => {
     expect(mocks.commandCalls).toEqual([
       {
         name: "scanWorkerHeartbeat",
-        args: ["lyrashield:scan-workers", 1_000, 301_000, "worker-1", 600_000],
+        args: ["lyrashield:scan-workers", 1_000, 301_000, "worker-1", 600_000, "0"],
       },
     ])
 

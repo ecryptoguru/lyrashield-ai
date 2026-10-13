@@ -7,6 +7,7 @@ import { SCAN_QUEUE_NAME, type ScanJobData, type ScanJobResult } from "@lyrashie
 import { getRedis } from "./redis"
 
 const SCAN_WORKER_REGISTRY_KEY = "lyrashield:scan-workers"
+const TARGET_RELAY_MEMBER_PREFIX = "~relay~"
 export const SCAN_ADMISSION_STOP_KEY = "lyrashield:scan-admission:stopped"
 export const SCAN_WORKER_HEARTBEAT_MS = 120_000
 export const SCAN_WORKER_TTL_MS = 300_000
@@ -32,9 +33,11 @@ type ScanWorkerRedis = ReturnType<typeof requireRedis> & {
     now: number,
     expiresAt: number,
     workerId: string,
-    keyTtl: number
+    keyTtl: number,
+    relayReady: string
   ): Promise<number>
   scanWorkerReadiness(key: string, now: number): Promise<number>
+  scanWorkerMembers(key: string, now: number): Promise<string[]>
 }
 
 function getScanWorkerRedis(): ScanWorkerRedis {
@@ -45,7 +48,12 @@ function getScanWorkerRedis(): ScanWorkerRedis {
       numberOfKeys: 1,
       lua: `
         redis.call("ZREMRANGEBYSCORE", KEYS[1], "-inf", ARGV[1])
+        local relayMember = "~relay~" .. ARGV[3]
+        redis.call("ZREM", KEYS[1], relayMember)
         redis.call("ZADD", KEYS[1], ARGV[2], ARGV[3])
+        if ARGV[5] == "1" then
+          redis.call("ZADD", KEYS[1], ARGV[2], relayMember)
+        end
         return redis.call("PEXPIRE", KEYS[1], ARGV[4])
       `,
     })
@@ -61,23 +69,56 @@ function getScanWorkerRedis(): ScanWorkerRedis {
     })
   }
 
+  if (!redis.scanWorkerMembers) {
+    redis.defineCommand("scanWorkerMembers", {
+      numberOfKeys: 1,
+      lua: `
+        redis.call("ZREMRANGEBYSCORE", KEYS[1], "-inf", ARGV[1])
+        return redis.call("ZRANGE", KEYS[1], 0, -1)
+      `,
+    })
+  }
+
   return redis
 }
 
-export async function registerScanWorker(workerId: string, now = Date.now()): Promise<void> {
+export async function registerScanWorker(
+  workerId: string,
+  now = Date.now(),
+  relayReady = false
+): Promise<void> {
   const redis = getScanWorkerRedis()
   await redis.scanWorkerHeartbeat(
     SCAN_WORKER_REGISTRY_KEY,
     now,
     now + SCAN_WORKER_TTL_MS,
     workerId,
-    SCAN_WORKER_TTL_MS * 2
+    SCAN_WORKER_TTL_MS * 2,
+    relayReady ? "1" : "0"
   )
 }
 
 export async function unregisterScanWorker(workerId: string): Promise<void> {
   const redis = requireRedis()
-  await redis.zrem(SCAN_WORKER_REGISTRY_KEY, workerId)
+  await redis.zrem(SCAN_WORKER_REGISTRY_KEY, workerId, `${TARGET_RELAY_MEMBER_PREFIX}${workerId}`)
+}
+
+export async function isTargetRelayWorkerAvailable(now = Date.now()): Promise<boolean> {
+  if (!getRedis()) return false
+  try {
+    const redis = getScanWorkerRedis()
+    const members = await redis.scanWorkerMembers(SCAN_WORKER_REGISTRY_KEY, now)
+    const workers = members.filter((id) => !id.startsWith(TARGET_RELAY_MEMBER_PREFIX))
+    const registered = new Set(members)
+    // Both parts of a heartbeat update atomically in one key: a known negative
+    // cannot renew ordinary readiness while retaining a prior positive capability.
+    return (
+      workers.length > 0 &&
+      workers.every((id) => registered.has(`${TARGET_RELAY_MEMBER_PREFIX}${id}`))
+    )
+  } catch {
+    return false
+  }
 }
 
 export async function isScanWorkerAvailable(now = Date.now()): Promise<boolean> {
