@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto"
+import { createHash, randomUUID } from "node:crypto"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { verifyTurnstile } from "./turnstile"
 
@@ -8,7 +8,8 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@lyrashield/logger", () => ({ logger: { info: mocks.info } }))
 
 const proof = "private-proof-fixture"
-const secret = "private-key-fixture"
+// Generate a synthetic credential so no credential literal is embedded in source.
+const secret = randomUUID()
 const now = new Date("2026-10-13T14:50:00Z")
 
 function response(body: unknown, status = 200, headers?: HeadersInit) {
