@@ -16,6 +16,16 @@ import {
   TERMINAL_COST_DISPOSITION_STAGE,
   TERMINAL_FAILED_COST_DISPOSITION_RECEIPT_TYPE,
 } from "../operational-health"
+import {
+  historicalExpenseEvidenceFileSchema,
+  HISTORICAL_FAILED_EXPENSE_STAGE,
+  HISTORICAL_FAILED_EXPENSE_RECEIPT_TYPE,
+  HISTORICAL_FAILED_EXPENSE_AUDIT_ACTION,
+} from "./historical-failed-expense-contract"
+import {
+  assertHistoricalExpenseEvidence,
+  readHistoricalExpenseEvidence,
+} from "./historical-failed-expense-evidence"
 
 const CONFIRMATION_PHRASE = "I AUTHORIZE LYRASHIELD TERMINAL COST DISPOSITION"
 
@@ -30,6 +40,8 @@ interface TerminalCostScanState {
   billedCostUsd: string | null
   llmUsageUnavailableEventCount: number
   updatedAt: string | null
+  actualCostCents: number | null
+  llmRequestCount: number | null
 }
 
 interface TerminalCostOperatorState {
@@ -43,6 +55,10 @@ interface TerminalCostOperatorState {
 export interface TerminalCostDispositionDeps {
   inspectOperator(userId: string): Promise<TerminalCostOperatorState | null>
   inspect(scanId: string): Promise<TerminalCostScanState | null>
+  inspectHistoricalEvidence?(
+    scanId: string,
+    workspaceId: string
+  ): Promise<Record<string, unknown> | null>
   append(
     scans: TerminalCostDispositionReceipt["scans"],
     receipt: {
@@ -81,11 +97,10 @@ function assertUnchanged(
   expected: TerminalCostDispositionReceipt["scans"][number]["expectedState"]
 ): void {
   if (!actual) throw new Error(`scan not found: ${scanId}`)
-  const fields = Object.keys(expected) as Array<keyof typeof expected>
-  for (const field of fields) {
-    if (actual[field] !== expected[field]) {
+  for (const [field, value] of Object.entries(expected)) {
+    if (actual[field as keyof TerminalCostScanState] !== value) {
       throw new Error(
-        `${scanId} changed at ${field}: expected ${String(expected[field])}, got ${String(actual[field])}`
+        `${scanId} changed at ${field}: expected ${String(value)}, got ${String(actual[field as keyof TerminalCostScanState])}`
       )
     }
   }
@@ -132,6 +147,13 @@ export async function reviewTerminalCostDisposition(
 
   for (const scan of receipt.scans) {
     assertUnchanged(scan.scanId, await deps.inspect(scan.scanId), scan.expectedState)
+    if ("historicalEvidence" in scan) {
+      assertHistoricalExpenseEvidence(
+        (await deps.inspectHistoricalEvidence?.(scan.scanId, scan.expectedState.workspaceId)) ??
+          null,
+        scan.historicalEvidence
+      )
+    }
     results.push({ scanId: scan.scanId, result: "verified" })
   }
 
@@ -168,6 +190,8 @@ function normalizeScanState(scan: {
   billedCostUsd: { toFixed(digits: number): string } | null
   _count: { events: number }
   updatedAt: Date
+  actualCostCents: number | null
+  llmRequestCount: number | null
 }): TerminalCostScanState {
   return {
     workspaceId: scan.workspaceId,
@@ -180,6 +204,8 @@ function normalizeScanState(scan: {
     billedCostUsd: scan.billedCostUsd?.toFixed(10) ?? null,
     llmUsageUnavailableEventCount: scan._count.events,
     updatedAt: scan.updatedAt?.toISOString() ?? null,
+    actualCostCents: scan.actualCostCents ?? null,
+    llmRequestCount: scan.llmRequestCount ?? null,
   }
 }
 
@@ -193,11 +219,21 @@ const scanStateSelect = {
   providerCostUsd: true,
   billedCostUsd: true,
   updatedAt: true,
+  actualCostCents: true,
+  llmRequestCount: true,
   _count: {
     select: {
       events: { where: { stage: "llm_usage_unavailable", deletedAt: null } },
     },
   },
+} as const
+
+const operatorStateSelect = {
+  id: true,
+  email: true,
+  emailVerified: true,
+  twoFactorEnabled: true,
+  platformRole: true,
 } as const
 
 export function createTerminalCostDispositionDbDeps(
@@ -207,133 +243,148 @@ export function createTerminalCostDispositionDbDeps(
     async inspectOperator(userId) {
       return prisma.user.findUnique({
         where: { id: userId },
-        select: {
-          id: true,
-          email: true,
-          emailVerified: true,
-          twoFactorEnabled: true,
-          platformRole: true,
-        },
+        select: operatorStateSelect,
       })
     },
     async inspect(scanId) {
       const scan = await prisma.scan.findUnique({ where: { id: scanId }, select: scanStateSelect })
       return scan ? normalizeScanState(scan) : null
     },
+    async inspectHistoricalEvidence(scanId, workspaceId) {
+      return readHistoricalExpenseEvidence(prisma, scanId, workspaceId)
+    },
     async append(scanReceipts, receipt) {
-      return prisma.$transaction(async (tx) => {
-        for (const scanId of [...scanReceipts.map((scan) => scan.scanId)].sort()) {
-          await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`terminal-cost:${scanId}`}, 0))`
-        }
-        for (const scanReceipt of scanReceipts) {
-          const current = await tx.scan.findUnique({
-            where: { id: scanReceipt.scanId },
-            select: scanStateSelect,
-          })
-          assertUnchanged(
-            scanReceipt.scanId,
-            current ? normalizeScanState(current) : null,
-            scanReceipt.expectedState
-          )
-        }
-        const operator = await tx.user.findUnique({
-          where: { id: receipt.reviewed.operator.userId },
-          select: {
-            id: true,
-            email: true,
-            emailVerified: true,
-            twoFactorEnabled: true,
-            platformRole: true,
-          },
-        })
-        assertOperator(operator, receipt.reviewed.operator)
-
-        const results: Array<{ scanId: string; result: "created" | "existing" }> = []
-        for (const scanReceipt of scanReceipts) {
-          const { eventId, auditId } = terminalCostDispositionRecordIds(
-            scanReceipt.scanId,
-            receipt.receiptHash
-          )
-          const metadata = {
-            receiptType:
-              receipt.reviewed.version === 1
-                ? TERMINAL_COST_DISPOSITION_RECEIPT_TYPE
-                : TERMINAL_FAILED_COST_DISPOSITION_RECEIPT_TYPE,
-            receiptHash: receipt.receiptHash,
-            operator: receipt.reviewed.operator,
-            azureEvidence: scanReceipt.azureEvidence,
-            expectedState: scanReceipt.expectedState,
-            conclusion: scanReceipt.conclusion,
+      return prisma.$transaction(
+        async (tx) => {
+          for (const scanId of [...scanReceipts.map((scan) => scan.scanId)].sort()) {
+            await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`terminal-cost:${scanId}`}, 0))`
           }
-          const existing = await tx.scanEvent.findUnique({
-            where: { id: eventId },
-            select: { metadata: true, stage: true, scanId: true, deletedAt: true },
-          })
-          if (existing) {
-            if (
-              existing.stage !== TERMINAL_COST_DISPOSITION_STAGE ||
-              existing.scanId !== scanReceipt.scanId ||
-              existing.deletedAt !== null ||
-              canonicalJson(existing.metadata) !== canonicalJson(metadata)
-            ) {
-              throw new Error(`conflicting disposition event for ${scanReceipt.scanId}`)
-            }
-            const audit = await tx.platformAdminAudit.findUnique({
-              where: { id: auditId },
-              select: {
-                actorUserId: true,
-                sessionId: true,
-                action: true,
-                resourceType: true,
-                resourceId: true,
-                metadata: true,
-              },
+          for (const scanReceipt of scanReceipts) {
+            const current = await tx.scan.findUnique({
+              where: { id: scanReceipt.scanId },
+              select: scanStateSelect,
             })
-            if (
-              !audit ||
-              audit.actorUserId !== receipt.reviewed.operator.userId ||
-              audit.sessionId !== "offline-terminal-cost-review" ||
-              audit.action !== "terminal_cost.operator_disposition_recorded" ||
-              audit.resourceType !== "scan" ||
-              audit.resourceId !== scanReceipt.scanId ||
-              canonicalJson(audit.metadata) !== canonicalJson(metadata)
-            ) {
-              throw new Error(
-                `disposition event has mismatched atomic audit for ${scanReceipt.scanId}`
+            assertUnchanged(
+              scanReceipt.scanId,
+              current ? normalizeScanState(current) : null,
+              scanReceipt.expectedState
+            )
+            if ("historicalEvidence" in scanReceipt) {
+              assertHistoricalExpenseEvidence(
+                await readHistoricalExpenseEvidence(
+                  tx,
+                  scanReceipt.scanId,
+                  scanReceipt.expectedState.workspaceId
+                ),
+                scanReceipt.historicalEvidence
               )
             }
-            results.push({ scanId: scanReceipt.scanId, result: "existing" })
-            continue
           }
+          const operator = await tx.user.findUnique({
+            where: { id: receipt.reviewed.operator.userId },
+            select: operatorStateSelect,
+          })
+          assertOperator(operator, receipt.reviewed.operator)
 
-          await tx.platformAdminAudit.create({
-            data: {
-              id: auditId,
-              actorUserId: receipt.reviewed.operator.userId,
-              sessionId: "offline-terminal-cost-review",
-              action: "terminal_cost.operator_disposition_recorded",
-              resourceType: "scan",
-              resourceId: scanReceipt.scanId,
-              metadata,
-            },
-          })
-          await tx.scanEvent.create({
-            data: {
-              id: eventId,
-              scanId: scanReceipt.scanId,
-              stage: TERMINAL_COST_DISPOSITION_STAGE,
-              level: "info",
-              message:
-                receipt.reviewed.version === 1
-                  ? "Operator reviewed terminal provider cost as USD 0"
-                  : "Operator reviewed failed-scan provider expense; customer remains non-billable",
-              metadata,
-            },
-          })
-          results.push({ scanId: scanReceipt.scanId, result: "created" })
-        }
-        return results
-      })
+          const historical = receipt.reviewed.version === 3
+          const stage = historical
+            ? HISTORICAL_FAILED_EXPENSE_STAGE
+            : TERMINAL_COST_DISPOSITION_STAGE
+          const action = historical
+            ? HISTORICAL_FAILED_EXPENSE_AUDIT_ACTION
+            : "terminal_cost.operator_disposition_recorded"
+          const results: Array<{ scanId: string; result: "created" | "existing" }> = []
+          for (const scanReceipt of scanReceipts) {
+            const { eventId, auditId } = terminalCostDispositionRecordIds(
+              scanReceipt.scanId,
+              receipt.receiptHash
+            )
+            const metadata = {
+              receiptType: historical
+                ? HISTORICAL_FAILED_EXPENSE_RECEIPT_TYPE
+                : receipt.reviewed.version === 1
+                  ? TERMINAL_COST_DISPOSITION_RECEIPT_TYPE
+                  : TERMINAL_FAILED_COST_DISPOSITION_RECEIPT_TYPE,
+              receiptHash: receipt.receiptHash,
+              operator: receipt.reviewed.operator,
+              ...("historicalEvidence" in scanReceipt
+                ? { historicalEvidence: scanReceipt.historicalEvidence }
+                : { azureEvidence: scanReceipt.azureEvidence }),
+              expectedState: scanReceipt.expectedState,
+              conclusion: scanReceipt.conclusion,
+            }
+            const existing = await tx.scanEvent.findUnique({
+              where: { id: eventId },
+              select: { metadata: true, stage: true, scanId: true, deletedAt: true },
+            })
+            if (existing) {
+              if (
+                existing.stage !== stage ||
+                existing.scanId !== scanReceipt.scanId ||
+                existing.deletedAt !== null ||
+                canonicalJson(existing.metadata) !== canonicalJson(metadata)
+              ) {
+                throw new Error(`conflicting disposition event for ${scanReceipt.scanId}`)
+              }
+              const audit = await tx.platformAdminAudit.findUnique({
+                where: { id: auditId },
+                select: {
+                  actorUserId: true,
+                  sessionId: true,
+                  action: true,
+                  resourceType: true,
+                  resourceId: true,
+                  metadata: true,
+                },
+              })
+              if (
+                !audit ||
+                audit.actorUserId !== receipt.reviewed.operator.userId ||
+                audit.sessionId !== "offline-terminal-cost-review" ||
+                audit.action !== action ||
+                audit.resourceType !== "scan" ||
+                audit.resourceId !== scanReceipt.scanId ||
+                canonicalJson(audit.metadata) !== canonicalJson(metadata)
+              ) {
+                throw new Error(
+                  `disposition event has mismatched atomic audit for ${scanReceipt.scanId}`
+                )
+              }
+              results.push({ scanId: scanReceipt.scanId, result: "existing" })
+              continue
+            }
+
+            await tx.platformAdminAudit.create({
+              data: {
+                id: auditId,
+                actorUserId: receipt.reviewed.operator.userId,
+                sessionId: "offline-terminal-cost-review",
+                action,
+                resourceType: "scan",
+                resourceId: scanReceipt.scanId,
+                metadata,
+              },
+            })
+            await tx.scanEvent.create({
+              data: {
+                id: eventId,
+                scanId: scanReceipt.scanId,
+                stage,
+                level: "info",
+                message: historical
+                  ? "Operator reviewed historical failed-scan expense; provider reconciliation remains unavailable"
+                  : receipt.reviewed.version === 1
+                    ? "Operator reviewed terminal provider cost as USD 0"
+                    : "Operator reviewed failed-scan provider expense; customer remains non-billable",
+                metadata,
+              },
+            })
+            results.push({ scanId: scanReceipt.scanId, result: "created" })
+          }
+          return results
+        },
+        receipt.reviewed.version === 3 ? { isolationLevel: "Serializable" } : undefined
+      )
     },
   }
 }
@@ -362,7 +413,10 @@ export async function verifyTerminalCostEvidenceFiles(
     if (!path) throw new Error(`missing evidence file mapping for ${scan.scanId}`)
     const evidenceBytes = await readEvidence(path)
     const digest = createHash("sha256").update(evidenceBytes).digest("hex")
-    if (digest !== scan.azureEvidence.evidenceSha256) {
+    const reviewEvidence =
+      "historicalEvidence" in scan ? scan.historicalEvidence : scan.azureEvidence
+    const { evidenceSha256, ...evidenceFields } = reviewEvidence
+    if (digest !== evidenceSha256) {
       throw new Error(`evidence file SHA-256 does not match receipt for ${scan.scanId}`)
     }
     let rawEvidence: unknown
@@ -370,6 +424,19 @@ export async function verifyTerminalCostEvidenceFiles(
       rawEvidence = JSON.parse(new TextDecoder().decode(evidenceBytes)) as unknown
     } catch {
       throw new Error(`evidence file is not valid JSON for ${scan.scanId}`)
+    }
+    if ("historicalEvidence" in scan) {
+      const evidence = historicalExpenseEvidenceFileSchema.parse(rawEvidence)
+      const expected = {
+        version: 3,
+        scanId: scan.scanId,
+        workspaceId: scan.expectedState.workspaceId,
+        ...evidenceFields,
+      }
+      if (canonicalJson(evidence) !== canonicalJson(expected)) {
+        throw new Error(`evidence file contents do not match receipt for ${scan.scanId}`)
+      }
+      continue
     }
     const evidence =
       receipt.version === 1
@@ -394,6 +461,9 @@ export function assertExpectedAzureResourceId(
   receipt: TerminalCostDispositionReceipt,
   expectedResourceId: string
 ): void {
+  if (receipt.version === 3) {
+    throw new Error("historical engine usage evidence is not Azure provider-metric evidence")
+  }
   if (!AZURE_RESOURCE_ID.test(expectedResourceId)) {
     throw new Error("terminal-cost evidence must use an exact supported Azure resource ID")
   }
@@ -433,10 +503,12 @@ async function main(): Promise<void> {
   const parsedReceipt = parseTerminalCostDispositionReceipt(receipt)
   const expectedAzureResourceId =
     process.env.TERMINAL_COST_AZURE_RESOURCE_ID ?? process.env.LOG_ANALYTICS_WORKSPACE_ID
-  if (!expectedAzureResourceId) {
-    throw new Error("TERMINAL_COST_AZURE_RESOURCE_ID is required")
+  if (parsedReceipt.version !== 3) {
+    if (!expectedAzureResourceId) {
+      throw new Error("TERMINAL_COST_AZURE_RESOURCE_ID is required")
+    }
+    assertExpectedAzureResourceId(parsedReceipt, expectedAzureResourceId)
   }
-  assertExpectedAzureResourceId(parsedReceipt, expectedAzureResourceId)
   await verifyTerminalCostEvidenceFiles(parsedReceipt, values["evidence-file"], async (path) => {
     // Operator supplies each local evidence path explicitly; only its digest is retained.
     // eslint-disable-next-line security/detect-non-literal-fs-filename

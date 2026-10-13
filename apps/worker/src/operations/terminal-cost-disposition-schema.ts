@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { historicalExpenseReceiptSchema } from "./historical-failed-expense-contract"
 
 const HISTORICAL_SCAN_IDS = ["cmsxsrbmb000001m00cc7e6dx", "cmsxuqxpb000001fhcrr6emat"] as const
 const SHA256 = /^[0-9a-f]{64}$/
@@ -185,7 +186,7 @@ const failedExpenseReceiptSchema = z
   })
   .strict()
 export const receiptSchema = z
-  .union([historicalReceiptSchema, failedExpenseReceiptSchema])
+  .union([historicalReceiptSchema, failedExpenseReceiptSchema, historicalExpenseReceiptSchema])
   .superRefine((receipt, context) => {
     if (receipt.version !== 1) return
     const scanIds = receipt.scans.map((scan) => scan.scanId)
