@@ -114,6 +114,29 @@ recorded positive expense keep the condition unresolved. Applying a reviewed
 disposition is a separate authorized financial-record operation; this change does
 not apply a historical production disposition.
 
+Version 3 adds a separate internal expense review for the exact historical FAILED
+scan named in `historical-failed-expense-contract.ts`. Its original writer used
+`Number.toFixed(6)` and Decimal(12,6); the later precision migration retained the
+rounded value. The receipt keeps the original engine amount, stored expense and
+rounding difference as distinct fields, bound to the pinned historical source
+revision and the original scan-owned usage event's PostgreSQL JSONB digest.
+This is scan-bound engine/database evidence, not Azure provider-metric or invoice
+evidence. Legacy manifest checksum verification remains `legacy_unavailable`.
+The v2/current ten-decimal comparison stays exact.
+
+The default dry-run and serializable apply transaction recheck the nondeleted
+original event, source revision, exact scan state and zero scan-linked customer
+usage under the sponsor's account ownership. Applying a separately approved v3
+receipt appends only the matching operator audit and
+`terminal_cost_legacy_expense_reviewed` event; it preserves scan expense and
+customer billing state and records `providerReconciliation: "unavailable"`.
+This separate event does not satisfy the provider-cost predicate or clear its
+alert, and does not relax destructive failure-injection/queue-orphan preflights.
+The historical item is an internal accounting exception; normal customer scan
+admission checks the worker lease and admission stop, and deployment does not
+depend on this record. Provider reconciliation still needs independently
+attributable provider receipts. Production application requires separate approval.
+
 ### Pending read-only evidence audits
 
 These audits have not been run. They are evidence collection only and must not write historical records, alter receipts, reset checkpoints, replay billing events, or change scan/finding states.
