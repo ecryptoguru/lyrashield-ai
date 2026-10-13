@@ -4,8 +4,15 @@ import { verifyTurnstile } from "./turnstile"
 
 const mocks = vi.hoisted(() => ({
   info: vi.fn<(message: string, data: Record<string, unknown>) => void>(),
+  set: vi.fn(),
 }))
 vi.mock("@lyrashield/logger", () => ({ logger: { info: mocks.info } }))
+vi.mock("@upstash/redis", () => ({
+  Redis: class {
+    set = mocks.set
+  },
+}))
+const consumed = new Map<string, number>()
 
 const proof = "private-proof-fixture"
 // Generate a synthetic credential so no credential literal is embedded in source.
@@ -13,7 +20,9 @@ const secret = randomUUID()
 const now = new Date("2026-10-13T14:50:00Z")
 
 function response(body: unknown, status = 200, headers?: HeadersInit) {
-  return new Response(JSON.stringify(body), { status, headers })
+  const payload =
+    body && typeof body === "object" ? { challenge_ts: now.toISOString(), ...body } : body
+  return new Response(JSON.stringify(payload), { status, headers })
 }
 
 function events() {
@@ -22,9 +31,182 @@ function events() {
 
 beforeEach(() => {
   mocks.info.mockReset()
+  mocks.set.mockReset()
+  consumed.clear()
+  mocks.set.mockImplementation(async (key: string, _value: string, options: { ex: number }) => {
+    if ((consumed.get(key) ?? 0) > Date.now()) return null
+    consumed.set(key, Date.now() + options.ex * 1000)
+    return "OK"
+  })
   vi.useFakeTimers()
   vi.setSystemTime(now)
   vi.stubEnv("TURNSTILE_SECRET_KEY", secret)
+  vi.stubEnv("UPSTASH_REDIS_REST_URL", "https://redis.example.test")
+  vi.stubEnv("UPSTASH_REDIS_REST_TOKEN", randomUUID())
+})
+
+describe("application-owned proof consumption", () => {
+  function providerSuccess() {
+    const fetchMock = vi.fn(async (_url: string | URL | Request, _init?: RequestInit) =>
+      response({ success: true })
+    )
+    vi.stubGlobal("fetch", fetchMock)
+    return fetchMock
+  }
+
+  it("allows one concurrent winner across independent verifier modules", async () => {
+    const fetchMock = providerSuccess()
+    vi.resetModules()
+    const replica = await import("./turnstile")
+    const results = await Promise.all([verifyTurnstile(proof), replica.verifyTurnstile(proof)])
+    expect(results.filter(Boolean)).toHaveLength(1)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it("uses the same canonical proof for digest and provider, blocking whitespace aliases", async () => {
+    const fetchMock = providerSuccess()
+    await expect(verifyTurnstile(` \t${proof}\n`)).resolves.toBe(true)
+    await expect(verifyTurnstile(proof)).resolves.toBe(false)
+    const body = fetchMock.mock.calls[0]?.[1]?.body as URLSearchParams
+    expect(body.get("response")).toBe(proof)
+    expect(mocks.set).toHaveBeenCalledWith(
+      `turnstile-proof:v1:${createHash("sha256").update(proof).digest("hex")}`,
+      "1",
+      { nx: true, ex: 360 }
+    )
+    expect(JSON.stringify(mocks.set.mock.calls)).not.toContain(proof)
+  })
+
+  it("rejects blank and oversized proofs before storage or provider work", async () => {
+    const fetchMock = providerSuccess()
+    for (const input of [" \t", "x".repeat(2049)]) {
+      await expect(verifyTurnstile(input)).resolves.toBe(false)
+    }
+    expect(mocks.set).not.toHaveBeenCalled()
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it.each([null, undefined, true, "unexpected"])(
+    "fails closed for ambiguous store result %s",
+    async (value) => {
+      const fetchMock = providerSuccess()
+      mocks.set.mockResolvedValue(value)
+      await expect(verifyTurnstile(proof)).resolves.toBe(false)
+      expect(fetchMock).not.toHaveBeenCalled()
+    }
+  )
+
+  it("fails closed without configured storage or after a write response is lost", async () => {
+    const fetchMock = providerSuccess()
+    vi.stubEnv("UPSTASH_REDIS_REST_URL", "")
+    await expect(verifyTurnstile(proof)).resolves.toBe(false)
+    vi.stubEnv("UPSTASH_REDIS_REST_URL", "https://redis.example.test")
+    const atomicSet = mocks.set.getMockImplementation()!
+    mocks.set.mockImplementationOnce(async (...args) => {
+      await atomicSet(...args)
+      throw new Error(`${proof} ${secret}`)
+    })
+    await expect(verifyTurnstile(proof)).resolves.toBe(false)
+    await expect(verifyTurnstile(proof)).resolves.toBe(false)
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(JSON.stringify(mocks.info.mock.calls)).not.toContain(proof)
+  })
+
+  it("does not release a rejected proof and permits a new proof", async () => {
+    const fetchMock = vi.fn(async () => response({ success: false }))
+    vi.stubGlobal("fetch", fetchMock)
+    await expect(verifyTurnstile(proof)).resolves.toBe(false)
+    fetchMock.mockImplementation(async () => response({ success: true }))
+    await expect(verifyTurnstile(proof)).resolves.toBe(false)
+    await expect(verifyTurnstile(`${proof}-fresh`)).resolves.toBe(true)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it("keeps a consumed proof after exhausted transient failures", async () => {
+    const fetchMock = vi.fn(async () => {
+      throw new Error("lost response")
+    })
+    vi.stubGlobal("fetch", fetchMock)
+    const pending = verifyTurnstile(proof)
+    await vi.runAllTimersAsync()
+    await expect(pending).resolves.toBe(false)
+    await expect(verifyTurnstile(proof)).resolves.toBe(false)
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+    expect(mocks.set).toHaveBeenCalledTimes(2)
+  })
+
+  it("reuses one provider idempotency UUID inside owned retries", async () => {
+    const bodies: URLSearchParams[] = []
+    let attempts = 0
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url, init) => {
+        bodies.push(init.body)
+        if (++attempts === 1) throw new Error("lost upstream response")
+        return response({ success: true })
+      })
+    )
+    const pending = verifyTurnstile(proof)
+    await vi.runAllTimersAsync()
+    await expect(pending).resolves.toBe(true)
+    const ids = bodies.map((body) => body.get("idempotency_key"))
+    expect(ids[0]).toMatch(/^[a-f\d-]{36}$/i)
+    expect(ids[1]).toBe(ids[0])
+    expect(mocks.set).toHaveBeenCalledTimes(1)
+  })
+
+  it("rejects expired proof after its consumption marker expires", async () => {
+    providerSuccess()
+    await expect(verifyTurnstile(proof)).resolves.toBe(true)
+    vi.advanceTimersByTime(360_001)
+    await expect(verifyTurnstile(proof)).resolves.toBe(false)
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => response({ success: true, challenge_ts: new Date().toISOString() }))
+    )
+    await expect(verifyTurnstile(`${proof}-fresh`)).resolves.toBe(true)
+  })
+
+  it.each([
+    undefined,
+    "bad",
+    "2026-02-30T14:50:00Z",
+    "2026-10-13T14:45:00Z",
+    "2026-10-13T14:50:31Z",
+  ])(
+    "rejects successful responses with invalid or out-of-window timestamp %s",
+    async (timestamp) => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => response({ success: true, challenge_ts: timestamp }))
+      )
+      await expect(verifyTurnstile(proof)).resolves.toBe(false)
+    }
+  )
+
+  it("allows bounded clock skew and rejects HTTP failures even with affirmative JSON", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => response({ success: true, challenge_ts: "2026-10-13T14:50:30Z" }))
+    )
+    await expect(verifyTurnstile(proof)).resolves.toBe(true)
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => response({ success: true }, 503))
+    )
+    await expect(verifyTurnstile(`${proof}-fresh`)).resolves.toBe(false)
+  })
+
+  it.each(["2026-10-13T14:49:59.123456789Z", "2026-10-13T20:20:00+05:30"])(
+    "accepts fresh ISO timestamps with precision or explicit offset: %s",
+    async (timestamp) => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => response({ success: true, challenge_ts: timestamp }))
+      )
+      await expect(verifyTurnstile(proof)).resolves.toBe(true)
+    }
+  )
 })
 
 afterEach(() => {
@@ -96,7 +278,7 @@ describe("Turnstile outcome diagnostics", () => {
       outcome: "success",
       upstreamRayFingerprint: createHash("sha256").update(ray).digest("hex"),
       upstreamCacheState: "DYNAMIC",
-      challengeAge: "missing-or-invalid",
+      challengeAge: "fresh",
     })
     expect(JSON.stringify(mocks.info.mock.calls)).not.toContain(ray)
   })
@@ -145,15 +327,14 @@ describe("Turnstile outcome diagnostics", () => {
     expect(JSON.stringify(mocks.info.mock.calls)).not.toContain("private-")
   })
 
-  it("keeps independent validations distinct even when their proof input is identical", async () => {
+  it("rejects independent reuse even when the provider would accept it again", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => response({ success: true }))
     )
     await expect(verifyTurnstile(proof)).resolves.toBe(true)
-    await expect(verifyTurnstile(proof)).resolves.toBe(true)
-    expect(events()).toHaveLength(2)
-    expect(new Set(events().map((event) => event.invocationId)).size).toBe(2)
+    await expect(verifyTurnstile(proof)).resolves.toBe(false)
+    expect(events()).toHaveLength(1)
     expect(JSON.stringify(mocks.info.mock.calls)).not.toContain(proof)
   })
 
@@ -167,7 +348,7 @@ describe("Turnstile outcome diagnostics", () => {
         "fetch",
         vi.fn(async () => response({ success: false, challenge_ts: timestamp }))
       )
-      await expect(verifyTurnstile(proof)).resolves.toBe(false)
+      await expect(verifyTurnstile(`${proof}-${expected}`)).resolves.toBe(false)
       expect(events().at(-1)).toMatchObject({ challengeAge: expected })
       expect(JSON.stringify(mocks.info.mock.calls)).not.toContain(timestamp)
     }
