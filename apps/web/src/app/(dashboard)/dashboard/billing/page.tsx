@@ -9,6 +9,7 @@ import {
   isTrialAvailable,
   canPurchaseMinutePack,
   resolveAccountBilling,
+  listAccountBilling,
   resolveWorkspaceScanSponsor,
   CLOUD_PLAN_MAP,
   TRIAL_AGENT_MINUTES,
@@ -82,10 +83,17 @@ export default async function BillingPage({
   // 2.1: fetch the account's governing BillingAccount once here — previously
   // this page re-read it inside each helper. Subscriptions are account-owned:
   // the page renders the CALLER's account billing state.
-  const [billingAccount, trialAvailable] = await Promise.all([
+  const [billingAccount, trialAvailable, billingContracts] = await Promise.all([
     resolveAccountBilling(session.userId),
     canManageBilling ? isTrialAvailable(workspaceId, session.userId) : Promise.resolve(false),
+    canManageBilling ? listAccountBilling(session.userId) : Promise.resolve([]),
   ])
+  // Match /billing/portal's contract selection, not the checkout region or
+  // the governing entitlement row (which may be a trial marker).
+  const managementProvider = billingContracts.find(
+    (row) => row.externalId !== null && row.provider !== "trial" && row.provider !== "complimentary"
+  )?.provider
+  const opensBillingSupport = managementProvider === "razorpay"
   const teamSponsor = await resolveWorkspaceScanSponsor(workspaceId, session.userId)
 
   const [balance, trialState, graceState, workspaceTargetCount] = await Promise.all([
@@ -187,6 +195,7 @@ export default async function BillingPage({
                     trialAvailable={trialAvailable}
                     selectedPlan={selectedPlan}
                     billingRegion={checkoutRegion}
+                    managementProvider={managementProvider}
                   />
                 </div>
               )}
@@ -277,19 +286,20 @@ export default async function BillingPage({
                 />
               </div>
               <p className="text-xs text-muted-foreground">
-                Agent-minutes are measured as wall-clock time. Deep/Custom scans consume 3× minutes.
+                Agent-minutes measure wall-clock AI scan time. Any partial minute is rounded up to
+                the next whole minute. Deep/Custom scans consume 3× minutes after rounding.
               </p>
               <p className="text-xs text-muted-foreground">
-                You are only billed for usable scans: a failed scan bills nothing and a cancelled
-                scan bills only the time it actually ran.
+                Failed scans are not billed. Cancelled scans with billable work use elapsed time
+                with the same whole-minute rounding; no elapsed time means no charge.
               </p>
               <p className="text-xs text-muted-foreground">
-                A partial scan keeps its completed findings and bills only the portion that ran —
-                partial minutes are metered the same as completed minutes.
+                A partial scan keeps its completed findings. Billable work uses the same
+                whole-minute rounding as completed scans.
               </p>
               <p className="text-xs text-muted-foreground">
-                A budget-stopped scan ended because its spend ceiling was reached. Minutes already
-                used are billed; nothing further runs until usage is available again.
+                A budget-stopped scan has reached a usage or spend limit. Review its status and your
+                account balance before starting another scan.
               </p>
             </div>
 
@@ -387,14 +397,21 @@ export default async function BillingPage({
         {canManageBilling && plan !== "FREE" && billingAccount && !isComplimentary && (
           <Card>
             <CardHeader>
-              <CardTitle as="h2">Manage Subscription</CardTitle>
+              <CardTitle as="h2">
+                {opensBillingSupport ? "Billing support" : "Manage Subscription"}
+              </CardTitle>
             </CardHeader>
             <CardContent>
+              {opensBillingSupport && (
+                <p className="mb-3 text-sm text-muted-foreground">
+                  Contact billing support for cancellation and payment help.
+                </p>
+              )}
               <Link
                 href={`/billing/portal?workspaceId=${encodeURIComponent(workspaceId)}`}
                 className={`${buttonVariants({ variant: "outline" })} w-full`}
               >
-                Open Customer Portal
+                {opensBillingSupport ? "Open billing support" : "Open Customer Portal"}
               </Link>
             </CardContent>
           </Card>
