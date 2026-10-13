@@ -214,6 +214,27 @@ async function readRegisterSession(
   }
 }
 
+function handleHealthRequest(
+  reqUrl: string,
+  response: ServerResponse,
+  relayEnabled: boolean
+): boolean {
+  if (reqUrl === "/health") {
+    response.writeHead(200, { "Content-Type": "text/plain" })
+    response.end("ok")
+    return true
+  }
+
+  if (reqUrl === "/health/relay") {
+    response.setHeader("Cache-Control", "no-store")
+    response.writeHead(relayEnabled ? 200 : 503, { "Content-Type": "application/json" })
+    response.end(JSON.stringify({ relay: relayEnabled }))
+    return true
+  }
+
+  return false
+}
+
 export function startProxy(options: ProxyOptions): ProxyServer {
   const { token, port = 4000, relaySigningSecret, relayDeps } = options
   const relay = relaySigningSecret ? createRelayHandler(relaySigningSecret, relayDeps) : null
@@ -233,11 +254,7 @@ export function startProxy(options: ProxyOptions): ProxyServer {
       return
     }
 
-    if (reqUrl === "/health") {
-      response.writeHead(200, { "Content-Type": "text/plain" })
-      response.end("ok")
-      return
-    }
+    if (handleHealthRequest(reqUrl, response, Boolean(relay))) return
 
     // Relay administration: grant admission, audit retrieval and revocation.
     if (

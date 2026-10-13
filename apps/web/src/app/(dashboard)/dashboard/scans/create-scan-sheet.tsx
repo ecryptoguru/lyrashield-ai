@@ -16,8 +16,9 @@ import { formatEstimate } from "@/lib/estimator"
 import { getScanModeLabel, getTargetTypeLabel } from "@/lib/enum-labels"
 import type { ManualScanOption } from "@/lib/scan-presets"
 import { SCAN_SINGULAR, TARGET_SINGULAR } from "@/lib/terminology"
-import { getReviewSetupGuidance, isBillingRecoveryCode } from "./scans-client.utils"
+import { getReviewSetupGuidance } from "./scans-client.utils"
 import { ScanSubmissionFooter, useScanSheetErrorVisibility } from "./scan-submission-feedback"
+import { ScanEligibilityRecovery } from "./scan-eligibility-recovery"
 import type { ScanEligibilityState, TargetItem } from "./scan-types"
 import type { ScanAttachmentItem } from "@/lib/api-schemas"
 
@@ -69,7 +70,6 @@ export function CreateScanSheet({
   selectedTarget,
   handleSelectTarget,
   availableOptions,
-  enabledOptions,
   selectedOption,
   choosePreset,
   modeResetNotice,
@@ -134,11 +134,26 @@ export function CreateScanSheet({
     open,
     errorMessage
   )
+  const displayedOptions = availableOptions.map((option) => {
+    const advisory =
+      eligibility.status === "ready"
+        ? eligibility.eligibility.supportedModes?.find((mode) => mode.id === option.id)
+        : undefined
+    return advisory?.available === false
+      ? {
+          ...option,
+          available: false,
+          disabledReason: option.disabledReason ?? advisory.disabledReason ?? undefined,
+        }
+      : option
+  })
+  const enabledOptions = displayedOptions.filter((option) => option.available)
+  const selectedIsAvailable = enabledOptions.some((option) => option.id === selectedOption?.id)
   // Roving tabindex for the review-type radiogroup: exactly one radio is
   // tabbable — the selected option, or the first enabled option when nothing
   // is selected yet. With no selection, `isSelected ? 0 : -1` left the whole
   // group unreachable by keyboard.
-  const firstEnabledOptionIndex = availableOptions.findIndex((option) => option.available)
+  const firstEnabledOptionIndex = displayedOptions.findIndex((option) => option.available)
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
@@ -199,11 +214,12 @@ export function CreateScanSheet({
               </div>
 
               <div role="radiogroup" aria-label="Scan type" className="grid grid-cols-1 gap-3">
-                {availableOptions.map((option, index) => {
+                {displayedOptions.map((option, index) => {
                   const isSelected = selectedOption?.id === option.id
                   const isDisabled = !option.available
                   const isRovingFocusTarget =
-                    isSelected || (!selectedOption && index === firstEnabledOptionIndex)
+                    (isSelected && !isDisabled) ||
+                    (!selectedIsAvailable && index === firstEnabledOptionIndex)
                   return (
                     <button
                       key={option.id}
@@ -450,57 +466,15 @@ export function CreateScanSheet({
                   </p>
                 </div>
               ) : eligibility.status === "ready" ? (
-                <div
-                  className="border-destructive/40 bg-destructive/5 rounded-lg border p-3 text-sm"
-                  role="alert"
-                >
-                  <p className="font-medium">This review cannot start yet</p>
-                  <p className="text-muted-foreground mt-1">
-                    {eligibility.eligibility.message ?? "Not allowed for this workspace."}
-                  </p>
-                  {eligibility.eligibility.code === "TRIAL_AVAILABLE" &&
-                    (canManageBilling ? (
-                      <Button
-                        type="button"
-                        size="sm"
-                        className="mt-2"
-                        disabled={startingTrial}
-                        onClick={handleStartTrial}
-                      >
-                        {startingTrial ? "Starting trial…" : "Start free trial"}
-                      </Button>
-                    ) : (
-                      <p className="text-muted-foreground mt-2">
-                        Ask a workspace owner to start the trial.
-                      </p>
-                    ))}
-                  {isBillingRecoveryCode(eligibility.eligibility.code) && (
-                    <p className="mt-2">
-                      {canManageBilling ? (
-                        <Link
-                          href="/dashboard/billing"
-                          className="text-primary inline-flex min-h-11 items-center gap-1 font-medium hover:underline"
-                        >
-                          Review billing options
-                          <ChevronRight className="size-4" aria-hidden="true" />
-                        </Link>
-                      ) : (
-                        <span className="text-muted-foreground">
-                          Ask a workspace owner to review billing options.
-                        </span>
-                      )}
-                    </p>
-                  )}
-                  {eligibility.eligibility.code === "DOMAIN_VERIFICATION_REQUIRED" &&
-                    selectedTarget && (
-                      <Link
-                        href={`/dashboard/targets/${encodeURIComponent(selectedTarget)}#domain-verification`}
-                        className="text-primary mt-2 inline-flex min-h-11 items-center font-medium hover:underline"
-                      >
-                        Verify control of this domain
-                      </Link>
-                    )}
-                </div>
+                <ScanEligibilityRecovery
+                  eligibility={eligibility}
+                  enabledOptions={enabledOptions}
+                  choosePreset={choosePreset}
+                  canManageBilling={canManageBilling}
+                  startingTrial={startingTrial}
+                  handleStartTrial={handleStartTrial}
+                  selectedTarget={selectedTarget}
+                />
               ) : null}
             </div>
 

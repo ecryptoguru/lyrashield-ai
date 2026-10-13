@@ -429,3 +429,17 @@ is decrypted on GitHub's ephemeral runner. No restored writes target
 production. No new cloud resources, grants, credentials, maintenance hold,
 writer stop, migration or cutover is part of this drill. Ordinary scheduled
 backup/weekly-restore behavior is unchanged.
+
+## Optional scan relay activation
+
+The proxy's ordinary `/health` and scan-worker readiness do not establish scan-scoped relay availability. `/health/relay` reports a nonsecret boolean only. Workers publish ordinary readiness and an expiring relay capability atomically in one Redis key after complete local configuration and a bounded capability probe; admission requires all active consumers of the shared scan queue to support relay jobs. A missing capability refuses Standard and Deep/Custom URL/API reviews before entitlement mutation or scan creation. Repository and Surface/Safe/Quick reviews retain their existing gates. The composer offers the surface option explicitly; it does not silently downgrade a review.
+
+Activation is a separate operator-approved change. Preparing or merging code does not provision relay credentials. Keep `LYRASHIELD_TARGET_RELAY_ENABLED` unset or `0` in the release environment until the secure handoff is complete.
+
+1. Provision a strong shared value (at least 32 characters) directly in the approved Azure Key Vault as `worker-relay-signing-secret`, using the operator's secret interface. Never paste it into chat, source, shell arguments or logs. The proxy and worker consume the same stored secret; GitHub receives only activation metadata and managed-identity references.
+2. Grant the proxy and worker identities `Key Vault Secrets User` only at this existing secret's resource scope. Confirm each exact identity separately. Do not grant the web app access to the relay secret. The deployment preflight checks existing access and latest-version enabled metadata; it never creates keys or role assignments.
+3. Set the release environment's nonsecret `LYRASHIELD_TARGET_RELAY_ENABLED=1`. The egress rollout binds the existing secret with system identity to `LYRASHIELD_RELAY_SIGNING_SECRET`. Retain exactly one proxy replica and the existing admin-secret binding and firewall controls.
+4. Through the worker's approved Key Vault configuration channel, set nonsecret `worker-target-relay-enabled=1`. Refresh derives `LYRASHIELD_TARGET_RELAY_URL` from existing `worker-egress-proxy-url` and loads the shared signing secret atomically. The admin secret remains `worker-egress-proxy-secret`. A missing/short signing value fails refresh without replacing the prior environment file. Both sides must be ready before a relay capability can be advertised.
+5. Use the guarded release/worker promotion path. Verify deployed revisions, `/health/relay`, the worker lease and advisory/POST refusal parity. A boolean capability does not prove domain verification, correct shared-key agreement, actual target transport or a completed scan. Perform any controlled paid URL acceptance only with separate explicit authorization.
+
+For rollback, set the release flag to `0` and the worker activation setting to `0`, then use the guarded rollout/promotion path. The proxy removes the signing environment binding; worker refresh omits the relay URL/signing configuration; relay capability disappears while ordinary scan readiness stays independent. Do not delete or rotate the shared secret as a rollback shortcut. General admission remains protected by the existing queue stop and worker readiness gates.

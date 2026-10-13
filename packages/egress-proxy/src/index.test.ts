@@ -41,6 +41,27 @@ describe("egress proxy", () => {
     await proxy.close()
   })
 
+  it("reports relay unavailable while keeping ordinary proxy health ready", async () => {
+    expect((await fetch(`http://localhost:${proxy.port}/health`)).status).toBe(200)
+    expect(await fetchJson(`http://localhost:${proxy.port}/health/relay`)).toEqual({
+      status: 503,
+      body: { relay: false },
+    })
+  })
+
+  it("reports only a boolean capability when the relay is configured", async () => {
+    const enabled = startProxy({ token, port: 0, relaySigningSecret: "test-relay-secret" })
+    await enabled.ready
+    try {
+      expect(await fetchJson(`http://localhost:${enabled.port}/health/relay`)).toEqual({
+        status: 200,
+        body: { relay: true },
+      })
+    } finally {
+      await enabled.close()
+    }
+  })
+
   it("rejects requests without authorization", async () => {
     const { status, body } = await fetchJson(`http://localhost:${proxy.port}/v1/fetch`, {
       method: "POST",

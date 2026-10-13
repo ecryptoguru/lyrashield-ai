@@ -7,7 +7,6 @@ import { env, resolveWorkerExecutionProvenance } from "@lyrashield/config"
 import { resolveDbPoolMax } from "@lyrashield/db"
 import {
   closeAiResultCacheRedis,
-  registerScanWorker,
   unregisterScanWorker,
   SCAN_WORKER_HEARTBEAT_MS,
   WEBHOOK_TRACK_RETRY_QUEUE_NAME,
@@ -47,6 +46,7 @@ import {
 } from "./worker-lifecycle"
 import { collectOperationalHealthSnapshot, evaluateOperationalHealth } from "./operational-health"
 import { startTerminalCostHealthSampler } from "./terminal-cost-health"
+import { registerRelayAwareWorker } from "./engine/relay-readiness"
 
 let worker: Worker<ScanJobData, ScanJobResult> | null = null
 let webhookTrackRetryWorker: Worker<WebhookTrackRetryJobData, void> | null = null
@@ -99,6 +99,9 @@ export function createWorkerHeartbeatController(
   return {
     heartbeat() {
       if (stopped) return Promise.resolve()
+      // Completion and interval callbacks share one probe/publication operation.
+      const running = inFlight.values().next().value
+      if (running) return running
       const operation = register().then(async () => {
         if (!stopped) await markReady()
       })
@@ -423,7 +426,7 @@ async function main(): Promise<void> {
 
   await worker.waitUntilReady()
   const scanWorkerHeartbeat = createWorkerHeartbeatController(
-    () => registerScanWorker(workerId),
+    () => registerRelayAwareWorker(workerId),
     refreshWorkerReadiness
   )
   workerHeartbeatController = scanWorkerHeartbeat

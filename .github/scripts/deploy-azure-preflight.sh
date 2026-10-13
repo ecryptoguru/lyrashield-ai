@@ -78,6 +78,8 @@ verify_egress_proxy_key_vault_access() {
 
 step_prepare-private-registry-and-zero-downtime-rollout() {
   verify_egress_proxy_key_vault_access
+  source .github/scripts/target-relay-config.sh
+  verify_target_relay_key_vault_access
   GHCR_TOKEN=$(az keyvault secret show \
     --vault-name "$AZURE_KEY_VAULT_NAME" \
     --name ghcr-token \

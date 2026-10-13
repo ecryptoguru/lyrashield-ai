@@ -35,7 +35,7 @@ import {
   findScanPolicy,
   resolveCanonicalReviewMode,
   resolveSponsorScanPlan,
-  resolveUrlReviewMode,
+  resolveAvailableUrlReview,
 } from "../../../lib/scan-admission"
 import { revalidateDashboardAggregates } from "../../../lib/cache"
 import { publicScanProvenance, publicScanResult } from "../../../lib/scan-provenance"
@@ -187,7 +187,7 @@ async function post(request: Request) {
     // actually does: engine-backed tiers (STANDARD/DEEP) require a verified
     // domain on paid plans, while the deterministic-only tier needs no proof —
     // it only fetches what a browser could.
-    const urlAdmission = resolveUrlReviewMode({
+    const urlAdmission = await resolveAvailableUrlReview({
       targetType: target.type,
       mode: data.mode,
       hasApiSpec: Boolean((target as { apiSpecUrl?: string | null }).apiSpecUrl),
@@ -199,7 +199,7 @@ async function post(request: Request) {
         reason: "url_not_admitted",
         code: urlAdmission.code,
         message: urlAdmission.reason,
-        status: 400,
+        status: urlAdmission.code === "TARGET_RELAY_UNAVAILABLE" ? 503 : 400,
         targetId: data.targetId,
         mode: data.mode,
         workflow: data.workflow,
