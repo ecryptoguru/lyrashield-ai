@@ -14,9 +14,17 @@ import type { ScanMode } from "@lyrashield/db"
 import { resolveScanProfile, resolveTargetScanMode } from "@lyrashield/types"
 import { resolveAccountBilling, resolveWorkspaceScanSponsor } from "@lyrashield/billing"
 import { env, evaluateAuthAssessmentAdmission } from "@lyrashield/config"
+import { isTargetRelayWorkerAvailable } from "@lyrashield/integrations"
 import { getManualScanOptions, type ManualScanOption } from "./scan-presets"
 
 const URL_TARGET_TYPES = new Set(["WEB_APP", "API"])
+
+export const TARGET_RELAY_UNAVAILABLE_MESSAGE =
+  "Live reviews are temporarily unavailable. Choose a surface review or try again later."
+
+export async function getTargetRelayAvailability(targetType: string): Promise<boolean> {
+  return !URL_TARGET_TYPES.has(targetType) || (await isTargetRelayWorkerAvailable())
+}
 
 export type UrlReviewMode =
   { ok: true; engineBacked: boolean } | { ok: false; code: string; reason: string }
@@ -50,6 +58,19 @@ export function resolveUrlReviewMode(input: {
       resolved.profile !== null &&
       resolveScanProfile({ targetType: input.targetType, mode: input.mode }).usesAi,
   }
+}
+
+/** The same read-only infrastructure gate for advisory and mutation admission. */
+export async function resolveAvailableUrlReview(
+  input: Parameters<typeof resolveUrlReviewMode>[0],
+  relayAvailable?: boolean
+): Promise<UrlReviewMode> {
+  const resolved = resolveUrlReviewMode(input)
+  if (!resolved.ok || !resolved.engineBacked) return resolved
+  if (!(relayAvailable ?? (await getTargetRelayAvailability(input.targetType)))) {
+    return { ok: false, code: "TARGET_RELAY_UNAVAILABLE", reason: TARGET_RELAY_UNAVAILABLE_MESSAGE }
+  }
+  return resolved
 }
 
 export type CanonicalReviewMode =

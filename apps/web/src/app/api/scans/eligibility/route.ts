@@ -27,7 +27,9 @@ import {
   matchReviewOption,
   resolveCanonicalReviewMode,
   resolveSponsorScanPlan,
-  resolveUrlReviewMode,
+  resolveAvailableUrlReview,
+  getTargetRelayAvailability,
+  TARGET_RELAY_UNAVAILABLE_MESSAGE,
 } from "../../../../lib/scan-admission"
 
 /**
@@ -217,6 +219,31 @@ async function evaluatePolicyAndWorkflow(
   return { blockers: [...blockers, ...workflow.blockers], limitations: workflow.limitations }
 }
 
+async function prepareReviewOptions(target: { type: string; apiSpecUrl?: unknown }) {
+  const reviewOptions = listAdmissibleReviewOptions({
+    type: target.type,
+    hasApiSpec: Boolean((target as { apiSpecUrl?: string | null }).apiSpecUrl),
+  })
+  const targetRelayAvailable = await getTargetRelayAvailability(target.type)
+  const supportedModes: SupportedMode[] = reviewOptions.map((option) => ({
+    id: option.id,
+    label: option.label,
+    goal: option.goal,
+    mode: option.mode,
+    workflow: option.workflow,
+    available: option.available && (!option.usesAi || targetRelayAvailable),
+    disabledReason:
+      option.disabledReason ??
+      (option.usesAi && !targetRelayAvailable ? TARGET_RELAY_UNAVAILABLE_MESSAGE : null),
+    usesAi: option.usesAi ?? null,
+    requiresRevisionInputs: option.requiresRevisionInputs ?? false,
+    authorizationHint: option.authorizationHint ?? null,
+  }))
+  const advisory: AdvisoryFields = { supportedModes }
+
+  return { reviewOptions, advisory, targetRelayAvailable }
+}
+
 /**
  * Read-only scan eligibility preflight.
  *
@@ -287,23 +314,7 @@ export async function GET(request: Request) {
 
     // The review options the target currently offers — the same pure option
     // policy the composer and POST derive, projected without billing work.
-    const reviewOptions = listAdmissibleReviewOptions({
-      type: target.type,
-      hasApiSpec: Boolean((target as { apiSpecUrl?: string | null }).apiSpecUrl),
-    })
-    const supportedModes: SupportedMode[] = reviewOptions.map((option) => ({
-      id: option.id,
-      label: option.label,
-      goal: option.goal,
-      mode: option.mode,
-      workflow: option.workflow,
-      available: option.available,
-      disabledReason: option.disabledReason ?? null,
-      usesAi: option.usesAi ?? null,
-      requiresRevisionInputs: option.requiresRevisionInputs ?? false,
-      authorizationHint: option.authorizationHint ?? null,
-    }))
-    const advisory: AdvisoryFields = { supportedModes }
+    const { reviewOptions, advisory, targetRelayAvailable } = await prepareReviewOptions(target)
 
     // Workspace-scoped attachment IDs are validated exactly as POST resolves
     // them — unknown or cross-workspace IDs are an advisory blocker. Metadata
@@ -332,11 +343,14 @@ export async function GET(request: Request) {
     // Resolve the canonical review profile exactly as POST does, so the
     // preflight judges the review the run would actually perform — including
     // whether the tier is engine-backed (which decides the consent gates).
-    const urlAdmission = resolveUrlReviewMode({
-      targetType: target.type,
-      mode,
-      hasApiSpec: Boolean((target as { apiSpecUrl?: string | null }).apiSpecUrl),
-    })
+    const urlAdmission = await resolveAvailableUrlReview(
+      {
+        targetType: target.type,
+        mode,
+        hasApiSpec: Boolean((target as { apiSpecUrl?: string | null }).apiSpecUrl),
+      },
+      targetRelayAvailable
+    )
     if (!urlAdmission.ok) {
       return eligibilityResponse({
         allowed: false,

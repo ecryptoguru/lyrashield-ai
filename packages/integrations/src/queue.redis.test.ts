@@ -1,6 +1,12 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 import { closeRedis, getRedis } from "./redis"
-import { isScanWorkerAvailable, registerScanWorker, SCAN_WORKER_TTL_MS } from "./queue"
+import {
+  isScanWorkerAvailable,
+  isTargetRelayWorkerAvailable,
+  registerScanWorker,
+  unregisterScanWorker,
+  SCAN_WORKER_TTL_MS,
+} from "./queue"
 
 const SCAN_WORKER_REGISTRY_KEY = "lyrashield:scan-workers"
 const runRedisTests = process.env.CI === "true"
@@ -68,5 +74,21 @@ describe.runIf(runRedisTests)("scan worker Redis scripts", () => {
     } finally {
       sendCommand.mockRestore()
     }
+  })
+  it("publishes positive and negative relay capability atomically in the ordinary lease key", async () => {
+    if (!redis) throw new Error("REDIS_URL is required for Redis integration tests")
+    await redis.del(SCAN_WORKER_REGISTRY_KEY)
+    await registerScanWorker("relay-worker", 1_000, true)
+    expect(await isTargetRelayWorkerAvailable(2_000)).toBe(true)
+    expect(await redis.zrange(SCAN_WORKER_REGISTRY_KEY, 0, -1)).toEqual([
+      "relay-worker",
+      "~relay~relay-worker",
+    ])
+    await registerScanWorker("relay-worker", 3_000, false)
+    expect(await isTargetRelayWorkerAvailable(3_001)).toBe(false)
+    expect(await isScanWorkerAvailable(3_001)).toBe(true)
+    expect(await redis.zrange(SCAN_WORKER_REGISTRY_KEY, 0, -1)).toEqual(["relay-worker"])
+    await unregisterScanWorker("relay-worker")
+    expect(await isScanWorkerAvailable(3_002)).toBe(false)
   })
 })

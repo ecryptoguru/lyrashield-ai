@@ -220,12 +220,25 @@ step_deploy-scanner-container-app() {
 # Workflow step: Deploy egress-proxy Container App
 step_deploy-egress-proxy-container-app() {
   source ops/deployment/containerapp.sh
+  source .github/scripts/target-relay-config.sh
+  verify_target_relay_key_vault_access
+  local relay_env_args=()
+  if [ "${TARGET_RELAY_ENABLED:-0}" = 1 ]; then
+    az containerapp secret set --name "$AZURE_EGRESS_PROXY_CONTAINER_APP_NAME" \
+      --resource-group "$AZURE_RESOURCE_GROUP" \
+      --secrets "relay-signing-secret=keyvaultref:https://${AZURE_KEY_VAULT_NAME}.vault.azure.net/secrets/worker-relay-signing-secret,identityref:system" \
+      --output none
+    relay_env_args=(--set-env-vars "LYRASHIELD_RELAY_SIGNING_SECRET=secretref:relay-signing-secret")
+  else
+    relay_env_args=(--remove-env-vars LYRASHIELD_RELAY_SIGNING_SECRET)
+  fi
   az containerapp update \
     --name "$AZURE_EGRESS_PROXY_CONTAINER_APP_NAME" \
     --resource-group "$AZURE_RESOURCE_GROUP" \
     --image "$IMAGE" \
     --min-replicas 1 \
     --max-replicas 1 \
+    "${relay_env_args[@]}" \
     --output none
   candidate=$(ca_candidate "$AZURE_EGRESS_PROXY_CONTAINER_APP_NAME" "$AZURE_RESOURCE_GROUP") || {
     echo "::error::Azure did not return the egress-proxy candidate revision and FQDN. Production traffic was not changed."

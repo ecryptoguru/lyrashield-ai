@@ -93,6 +93,7 @@ export {
   enqueueScan,
   getScanQueuePosition,
   registerScanWorker,
+  isTargetRelayWorkerAvailable,
   unregisterScanWorker,
   isScanWorkerAvailable,
   assertScanWorkerAvailable,

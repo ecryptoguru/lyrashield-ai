@@ -1,3 +1,6 @@
+vi.mock("@lyrashield/integrations", () => ({
+  isTargetRelayWorkerAvailable: vi.fn().mockResolvedValue(true),
+}))
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const configMocks = vi.hoisted(() => ({

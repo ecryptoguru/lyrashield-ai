@@ -109,6 +109,7 @@ vi.mock("../../../lib/queue", () => ({
 }))
 
 vi.mock("@lyrashield/integrations", () => ({
+  isTargetRelayWorkerAvailable: vi.fn().mockResolvedValue(true),
   getBranchRefSha: vi.fn(),
   getDefaultBranch: vi.fn(),
   getMergeBaseSha: vi.fn(),
