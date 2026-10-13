@@ -138,7 +138,7 @@ describe("marketing mobile nav sheet", () => {
   })
 
   it("renders one accordion per menu", () => {
-    const accordions = [...dialog.matchAll(/<details class="mobile-menu__accordion">/g)]
+    const accordions = [...dialog.matchAll(/<details class="mobile-menu__accordion"[^>]*>/g)]
     expect(accordions).toHaveLength(3)
     for (const label of ["Product", "Free tools", "Learn"]) {
       expect(dialog).toContain(`<summary class="menu-link">${label}</summary>`)

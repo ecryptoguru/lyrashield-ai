@@ -271,8 +271,32 @@ test("keeps the Free tools menu separate from the Learn menu", async ({ page }) 
   ).toBeVisible()
 
   await learnMenu.click()
+  await expect(toolsMenu.locator("..")).not.toHaveAttribute("open")
   await expect(learnDropdown.getByRole("link", { name: "Docs", exact: true })).toBeVisible()
   await expect(learnDropdown.getByRole("link", { name: "Guides", exact: true })).toBeVisible()
+
+  const panel = learnDropdown.locator("div").first()
+  const panelBounds = await panel.boundingBox()
+  const longLink = await learnDropdown
+    .getByRole("link", { name: "MCP guard behavior and limits", exact: true })
+    .boundingBox()
+  expect(panelBounds).not.toBeNull()
+  expect(longLink).not.toBeNull()
+  expect(longLink!.x).toBeGreaterThanOrEqual(panelBounds!.x)
+  expect(longLink!.x + longLink!.width).toBeLessThanOrEqual(panelBounds!.x + panelBounds!.width)
+})
+
+test("opens only one mobile navigation accordion at a time", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto("/")
+  await page.getByRole("button", { name: "Open navigation menu" }).click()
+  const menu = page.locator("#mobile-menu")
+  await menu.getByText("Product", { exact: true }).click()
+  await expect(menu.getByRole("link", { name: "How it works", exact: true })).toBeVisible()
+  await menu.getByText("Learn", { exact: true }).click()
+  await expect(menu.locator("details[open]")).toHaveCount(1)
+  await expect(menu.getByRole("link", { name: "Docs", exact: true })).toBeVisible()
+  await expect(menu.getByRole("link", { name: "How it works", exact: true })).toBeHidden()
 })
 
 test("keeps desktop navigation labels on one line at the compact desktop width", async ({

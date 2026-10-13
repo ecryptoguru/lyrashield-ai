@@ -61,7 +61,7 @@ const learnItems = [
     <nav aria-label="Main" class="flex shrink-0 items-center gap-1 sm:gap-2">
       <ul class="hidden shrink-0 items-center gap-1 whitespace-nowrap lg:flex lg:gap-2">
         <li class="relative">
-          <details class="group">
+          <details class="group" name="desktop-navigation">
             <summary class={`inline-flex min-h-11 cursor-pointer list-none items-center gap-1 rounded-lg px-3 text-sm hover:bg-bg-raised hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent ${isActive("/methodology") || isActive("/vibe-security-50") || isActive("/evidence-vault") || isActive("/compare") ? activeClass : "text-text-muted"}`}>
               <span>Product</span>
               <svg data-nav-chevron viewBox="0 0 16 16" class="size-3.5 -translate-y-px transition-transform group-open:rotate-180" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
@@ -87,7 +87,7 @@ const learnItems = [
           </a>
         </li>
         <li class="relative">
-          <details class="group">
+          <details class="group" name="desktop-navigation">
             <summary class={`inline-flex min-h-11 cursor-pointer list-none items-center gap-1 rounded-lg px-3 text-sm hover:bg-bg-raised hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent ${isActive("/tools") || isActive("/scan") ? activeClass : "text-text-muted"}`}>
               <span>Free tools</span>
               <svg data-nav-chevron viewBox="0 0 16 16" class="size-3.5 -translate-y-px transition-transform group-open:rotate-180" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
@@ -110,14 +110,14 @@ const learnItems = [
           </a>
         </li>
         <li class="relative">
-          <details class="group">
+          <details class="group" name="desktop-navigation">
             <summary class={`inline-flex min-h-11 cursor-pointer list-none items-center gap-1 rounded-lg px-3 text-sm hover:bg-bg-raised hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent ${isActive("/blog") || isActive("/docs") || isActive("/support") ? activeClass : "text-text-muted"}`}>
               <span>Learn</span>
               <svg data-nav-chevron viewBox="0 0 16 16" class="size-3.5 -translate-y-px transition-transform group-open:rotate-180" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
                 <path d="m4 6 4 4 4-4" />
               </svg>
             </summary>
-            <div class="absolute top-full right-0 mt-1 grid w-56 gap-1 rounded-xl border border-border bg-bg-raised p-2 shadow-xl">
+            <div class="absolute top-full right-0 mt-1 grid w-max min-w-56 max-w-[calc(100vw-2rem)] gap-1 rounded-xl border border-border bg-bg-raised p-2 whitespace-normal shadow-xl">
               {learnItems.map((item) => (
                 <a href={item.href} class="rounded-lg px-3 py-2 text-sm text-text-muted hover:bg-bg hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
                   {item.label}
@@ -177,19 +177,19 @@ const learnItems = [
           </a>
         </div>
         <div class="mobile-menu__section">
-          <details class="mobile-menu__accordion">
+          <details class="mobile-menu__accordion" name="mobile-navigation">
             <summary class="menu-link">Product</summary>
             <div class="mobile-menu__accordion-body">
               {productItems.map((item) => <a href={item.href} class="menu-link mobile-menu__resource">{item.label}</a>)}
             </div>
           </details>
-          <details class="mobile-menu__accordion">
+          <details class="mobile-menu__accordion" name="mobile-navigation">
             <summary class="menu-link">Free tools</summary>
             <div class="mobile-menu__accordion-body">
               {freeToolItems.map((item) => <a href={item.href} class="menu-link mobile-menu__resource">{item.label}</a>)}
             </div>
           </details>
-          <details class="mobile-menu__accordion">
+          <details class="mobile-menu__accordion" name="mobile-navigation">
             <summary class="menu-link">Learn</summary>
             <div class="mobile-menu__accordion-body">
               {learnItems.map((item) => <a href={item.href} class="menu-link mobile-menu__resource">{item.label}</a>)}
