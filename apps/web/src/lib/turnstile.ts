@@ -164,9 +164,12 @@ async function verifyTurnstileOnce(
       signal: AbortSignal.timeout(5_000),
     })
     const result = (await verification.json()) as VerificationMetadata
-    const outcome = verification.ok && result.success === true ? "success" : "failed"
+    const outcome =
+      verification.ok && result.success === true && freshChallenge(result.challenge_ts)
+        ? "success"
+        : "failed"
     recordOutcome(context, outcome, verification, result)
-    return outcome === "success" && !freshChallenge(result.challenge_ts) ? "failed" : outcome
+    return outcome
   } catch {
     // Network timeout / DNS / connection reset — transient, worth a retry.
     recordOutcome(context, "transient-error", verification)

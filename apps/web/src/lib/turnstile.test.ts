@@ -181,6 +181,7 @@ describe("application-owned proof consumption", () => {
         vi.fn(async () => response({ success: true, challenge_ts: timestamp }))
       )
       await expect(verifyTurnstile(proof)).resolves.toBe(false)
+      expect(events().at(-1)).toMatchObject({ outcome: "failed" })
     }
   )
 
