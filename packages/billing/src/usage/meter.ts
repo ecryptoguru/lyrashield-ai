@@ -37,14 +37,11 @@ export interface RecordAgentMinutesOptions {
    * Terminal outcome of the scan. Founder-confirmed billing rules (2026-08-29):
    * - "failed" scans are NEVER billed — the caller must not call this at all
    *   for a failed terminal state (no agent_minutes UsageRecord is written).
-   * - "cancelled" scans bill for the period actually used, WITHOUT the
-   *   1-minute floor. A cancel at 20 seconds bills 20 seconds' worth.
-   *   Rounding rule (documented): minutes are whole-minute ceiling, so a
-   *   cancel at 20s bills 1 minute; the difference vs. a normal scan is that
-   *   the floor is not applied, i.e. ms<=0 bills 0 and there is no forced
-   *   minimum. Sub-minute (per-second) billing is impractical because
-   *   UsageRecord.quantity and all pool/pack arithmetic are integer minutes.
-   * - "completed" (default) applies the 1-minute floor as before.
+   * - Positive elapsed time is rounded up to the next whole minute for
+   *   "completed", "partial" and "cancelled" scans. A cancel at 20 seconds
+   *   consumes 1 minute before the mode multiplier.
+   * - Zero or negative elapsed time records no usage for any outcome.
+   * - Deep/Custom applies its 3× multiplier after whole-minute rounding.
    */
   outcome?: "completed" | "partial" | "failed" | "cancelled"
   /** Resolve uncovered minutes before this transaction commits. Throw to void
@@ -255,12 +252,9 @@ export async function recordAgentMinutes(
   }
 
   // Wall-clock ms → integer minutes.
-  // - Normal/completed scans: ceiling with a 1-minute floor (min 1 if ms > 0).
-  // - Cancelled scans: bill elapsed time only, NO floor (min 0). Rounding rule
-  //   is whole-minute ceiling, so a cancel at 20s still rounds to 1 minute;
-  //   the floor (which would also give 1) is simply not the mechanism. The
-  //   distinction that matters is that a cancelled scan is not forced up to a
-  //   minimum — only genuinely elapsed whole minutes are billed.
+  // All positive durations round up, including partial and cancelled runs.
+  // The completed floor is redundant for positive ms; nonpositive durations
+  // returned above, so they are never forced to consume a minute.
   const rawMinutes =
     opts.outcome === "cancelled" || opts.outcome === "partial"
       ? Math.ceil(ms / 60_000)

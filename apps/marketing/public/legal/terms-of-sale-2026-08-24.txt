@@ -1,0 +1,47 @@
+Archived Terms of Sale
+Last reviewed: 24 Aug 2026
+
+This archive preserves the wording before the billing disclosure correction.
+Current terms: https://lyrashieldai.com/terms-of-sale
+
+These terms govern purchases of LyraShield AI Cloud subscriptions, prepaid minute packs and Local licenses.
+
+What you are buying
+
+LyraShield AI is sold as one product in two modes under a single account. Cloud mode is a hosted subscription billed monthly or annually. Local mode is a one-time license that includes one year of updates, with an optional paid renewal. The two are purchased separately; there is no bundle.
+
+Free trial
+
+New Cloud accounts start with a separate 7-day limited Trial tier. Deep and Custom scans and Agency team seats are not included. No credit card is required to start. The trial includes a one-time allowance of 60 agent-minutes and up to 3 targets. Agency requires a paid subscription. When the trial ends or its allowance is exhausted, continued use requires a paid plan.
+
+Metering
+
+Cloud use is metered by protected targets and agent-minutes. An agent-minute is wall-clock scan time, metered per second. Deep and Custom scans consume minutes at three times the standard rate. Each plan includes a monthly agent-minute allowance and a protected-target cap shown on the pricing page.
+
+Minute packs and overage
+
+Prepaid minute packs are one-time purchases, valid for 180 days from purchase and are drawn down only after the included monthly pool is exhausted, oldest unexpired pack first. The included monthly pool does not roll over. Agency accounts may also opt into metered overage, billed at the published per-minute rate up to a spend limit you set.
+
+Billing and renewal
+
+Subscriptions renew automatically at the end of each billing period until canceled. We process payments through Polar (global merchant of record) and Razorpay (India). India pricing is in INR with GST invoicing. Available payment methods and mandate limits are presented by Razorpay at checkout and may vary by purchase and customer.
+
+Cancellation
+
+You can cancel a Cloud subscription at any time in the dashboard. Cancellation stops future renewals; the plan stays active until the end of the current paid period unless an exception applies under the policy below.
+
+Refunds
+
+Cloud subscriptions, Local licenses and prepaid minute packs are non-refundable, except where required by law or for duplicate collection, unauthorized payment or a confirmed payment error. Contact support from the account email with the transaction reference. Any approved exception returns to the original payment method.
+
+Failed and disputed payments
+
+If a renewal payment fails, we may retry it and may downgrade the workspace to the free surface until payment succeeds. Chargebacks and payment disputes are handled under the refund and fraud rules above; an unwarranted chargeback may result in suspension of the associated account and any affiliate commissions tied to it.
+
+Price changes
+
+We may change prices or plan allowances. A change applies to your next renewal after reasonable advance notice; it does not retroactively alter a period you have already paid for. Annual plans keep their current price until the annual term renews.
+
+Contact
+
+Questions about a charge, an invoice or this policy: support@lyrashieldai.com.

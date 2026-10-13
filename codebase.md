@@ -244,7 +244,8 @@ Safe/Quick/Standard use GPT-6 Luna/medium. Deep/Custom use GPT-6 Sol/medium root
 Agent-minute wall time starts immediately before `runEngine()`. An engine-backed run is
 metered only after a scan-bound completed receipt or scan-bound affirmative provider usage proves
 model-backed work occurred. Deterministic URL/API runs and pre-provider failures do not
-consume agent-minutes; failed runs with positive provider usage remain billable.
+consume agent-minutes. Failed scans are not billed, even when provider usage was observed.
+Cancelled and partial scans may consume agent-minutes when scan-bound evidence establishes billable work.
 
 ### Standards evidence
 
