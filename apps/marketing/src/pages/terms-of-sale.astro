@@ -32,6 +32,13 @@ const jsonLd = [
     <h1 class="mt-4 text-4xl font-semibold tracking-tight text-text sm:text-5xl">Terms of Sale</h1>
     <p class="mt-6 text-lg leading-8 text-text-muted">These terms govern purchases of LyraShield AI Cloud subscriptions, prepaid minute packs and Local licenses.</p>
     <p class="mt-4 text-sm text-text-muted">Last reviewed: <time datetime={reviewed}>13 Oct 2026</time></p>
+    <section aria-labelledby="billing-correction-heading" class="mt-8 rounded-lg border border-border bg-surface-2 p-5 text-sm leading-7 text-text-muted sm:p-6">
+      <h2 id="billing-correction-heading" class="text-lg font-semibold text-text">Billing disclosure correction</h2>
+      <p class="mt-3">Earlier Terms of Sale described agent-minutes as “metered per second.” Our billing system rounds any positive partial minute up to a whole minute, then applies the existing 3× multiplier for Deep and Custom scans.</p>
+      <p class="mt-3"><strong class="font-semibold text-text">Effective on publication:</strong> This corrected disclosure takes effect when these updated terms are published. It does not mean you accepted this wording earlier, and it does not change earlier charges.</p>
+      <p class="mt-3">Earlier charges that may be affected by the previous wording will be reviewed separately. <a href={`mailto:${supportEmail}`} class="font-medium text-text underline underline-offset-4">Contact billing support</a> with your transaction reference for review.</p>
+      <p class="mt-3"><a href="/legal/terms-of-sale-2026-08-24.txt" class="font-medium text-text underline underline-offset-4">Read the previous Terms of Sale, reviewed 24 Aug 2026</a>.</p>
+    </section>
     <div class="prose prose-slate mt-12 max-w-none">
       <h2>What you are buying</h2><p>LyraShield AI is sold as one product in two modes under a single account. Cloud mode is a hosted subscription billed monthly or annually. Local mode is a one-time license that includes one year of updates, with an optional paid renewal. The two are purchased separately; there is no bundle.</p>
       <h2>Free trial</h2><p>New Cloud accounts start with a separate 7-day limited Trial tier. Deep and Custom scans and Agency team seats are not included. No credit card is required to start. The trial includes a one-time allowance of 60 agent-minutes and up to 3 targets. Agency requires a paid subscription. When the trial ends or its allowance is exhausted, continued use requires a paid plan.</p>
