@@ -108,7 +108,7 @@ It runs entirely in your own runner with your own `GITHUB_TOKEN`, emits SARIF fo
 
 The fixed live AI safety catalog lives in `packages/types/src/ai-safety-tests.ts`; historical result provenance is recorded in [codebase.md](codebase.md#3-repository-map).
 
-The authenticated workflow supports project targets, findings, deterministic receipts, immutable manifests, score snapshots, reports, schedules, notifications, GitHub integrations, and privacy-bounded sharing. Fix PR execution uses a server-generated patch bound to an exact authorization receipt: browser requests require human approval, while authorized API-key and delegated OAuth requests execute within verified permissions and scope. Nothing auto-merges.
+The authenticated workflow supports project targets, findings, deterministic receipts, checksummed manifests, score snapshots, reports, schedules, notifications, GitHub integrations, and privacy-bounded sharing. Fix PR execution uses a server-generated patch bound to an exact authorization receipt: browser requests require human approval, while authorized API-key and delegated OAuth requests execute within verified permissions and scope. Nothing auto-merges.
 
 ## Evidence states
 
