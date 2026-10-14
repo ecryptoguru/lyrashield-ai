@@ -3,6 +3,9 @@ import { readEncryptedArtifact } from "@lyrashield/evidence-storage"
 import { resolveAccountBilling } from "@lyrashield/billing"
 import type { WorkspacePlan } from "@lyrashield/types"
 import type { FixPrRequest } from "./fix-pr"
+import { env } from "@lyrashield/config"
+import { resolve } from "node:path"
+import { fileURLToPath } from "node:url"
 
 export class FixPrContextError extends Error {
   constructor(
@@ -76,6 +79,27 @@ export async function resolveFixPrRequest(
   if (!Number.isInteger(installationId) || installationId <= 0)
     throw new FixPrContextError("NO_REPOSITORY_LINK", "Invalid GitHub installation on this target.")
   const artifact = await readEncryptedArtifact(proposal.diffRef, workspaceId)
+  // Decryption proves storage ownership/integrity, not who produced the bytes.
+  // Only fix-generate writes this finding/proposal-bound, content-addressed key;
+  // caller-uploaded evidence uses other namespaces and must never execute as a fix.
+  // Check stored references too (including legacy drafts and pending approvals).
+  const key = `evidence/${workspaceId}/${finding.id}/fix-patch/fix-${proposal.id}-${artifact.checksum}`
+  const uri = new URL(proposal.diffRef)
+  const producerBound =
+    /^[a-f0-9]{64}$/.test(artifact.checksum) &&
+    (uri.protocol === "s3:"
+      ? uri.pathname === `/${key}`
+      : uri.protocol === "file:" &&
+        fileURLToPath(uri) ===
+          resolve(
+            env.LYRASHIELD_LOCAL_EVIDENCE_DIR || `${process.cwd()}/.lyrashield/evidence`,
+            `${key}.enc`
+          ))
+  if (!producerBound)
+    throw new FixPrContextError(
+      "PROPOSAL_PATCH_PROVENANCE_REQUIRED",
+      "This proposal's patch is not bound to its server generator. Create a new proposal without a supplied patch reference to generate patch evidence."
+    )
   return {
     workspaceId,
     targetId: finding.targetId!,

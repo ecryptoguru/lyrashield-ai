@@ -15,7 +15,7 @@ A scanner tells you what it flagged. LyraShield tells you what was tested, what 
 1. **Evidence states, not confidence scores.** The three shipped states are `DETECTED`, `VALIDATED` and `INCONCLUSIVE`. `VERIFIED` is a future-only status and is not produced today. Confidence is triage metadata; engine-only absence remains inconclusive.
 2. **Built for how AI-built apps actually fail.** The public AI-Built Failure Taxonomy, eight AI App Security signals (AI-01–AI-08) mapped to the OWASP Top 10 for LLM Applications (2025), and 14 WebMCP controls that review the agent tool surface itself — agent rules, MCP configs, embedded secrets, prompt-injection exposure.
 3. **Agent-native.** Assurance runs where the coding agent already works: published CLI, MCP server (21 tools, stdio + remote Streamable HTTP with hosted OAuth), portable Agent Plugin, a 51-entry install registry resolving to 48 preferred client surfaces, and an account-less GitHub Action.
-4. **An approval-gated fix loop that closes itself.** Fix PRs come only from a server-generated patch bound to an explicit human approval — no client-authored patches, nothing auto-merges. A merged fix branch automatically queues a retest and re-evaluates the gate.
+4. **An approval-gated fix loop that closes itself.** Fix PRs come only from a server-generated patch bound to an exact authorization receipt. Browser requests require human approval; authorized API-key and delegated OAuth requests execute within their verified permissions and scope. Nothing auto-merges. A merged fix branch automatically queues a retest and re-evaluates the gate.
 5. **A launch verdict anyone can verify.** The Launch Gate (`lyrashield-gate/2.3.0`) produces `READY` / `NOT_READY` / `INSUFFICIENT_EVIDENCE` per target; reports are ed25519-signed with a public verify endpoint; release-identity confirmation answers only `MATCH`, `MISMATCH` or `UNAVAILABLE`.
 6. **Honest coverage accounting.** The Vibe Security 50 contract (`vibe-security-50/1.2.0`) binds one coverage receipt per control into the checksummed result manifest — "no finding" is never "passed", and seven evidence-required controls are marked as such because no scan can prove them.
 7. **Two modes, one loop.** Cloud (subscription; LyraShield pays model cost) and Local/Desktop (one-year BYOK license with perpetual fallback; scans stay on your machine, nothing syncs by default).
@@ -108,7 +108,7 @@ It runs entirely in your own runner with your own `GITHUB_TOKEN`, emits SARIF fo
 
 The fixed live AI safety catalog lives in `packages/types/src/ai-safety-tests.ts`; historical result provenance is recorded in [codebase.md](codebase.md#3-repository-map).
 
-The authenticated workflow supports project targets, findings, deterministic receipts, immutable manifests, score snapshots, reports, schedules, notifications, GitHub integrations, and privacy-bounded sharing. Fix PR execution runs through a server-generated patch pipeline that is bound to explicit human approval and never merges.
+The authenticated workflow supports project targets, findings, deterministic receipts, immutable manifests, score snapshots, reports, schedules, notifications, GitHub integrations, and privacy-bounded sharing. Fix PR execution uses a server-generated patch bound to an exact authorization receipt: browser requests require human approval, while authorized API-key and delegated OAuth requests execute within verified permissions and scope. Nothing auto-merges.
 
 ## Evidence states
 
