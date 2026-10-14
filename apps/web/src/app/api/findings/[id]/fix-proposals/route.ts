@@ -57,6 +57,8 @@ async function post(request: Request, { params }: { params: Promise<{ id: string
           ...(safetyScore != null ? { safetyScore } : {}),
         })
 
+        // Supplied references remain supported for recording drafts; they do not
+        // establish generated provenance for PR execution (fix-pr-context checks it).
         // WP3 producer: a proposal without a caller-supplied patch is enqueued for
         // deterministic generation from the finding's engine-emitted structured
         // fix. Best-effort — the proposal exists and can be regenerated; a queue

@@ -280,7 +280,7 @@ Cancelled and partial scans may consume agent-minutes when scan-bound evidence e
 - Installation ownership must be provider-backed and bound to initiating user/workspace.
 - Approval claims exact action name and input hash atomically and once.
 - Fix PR route accepts no client-authored patch, branch, title, or body.
-- PR execution is fail-closed: privileged PR creation runs only a server-generated immutable patch/evidence artifact, immutably bound to an explicit human approval.
+- PR execution is fail-closed: privileged PR creation requires a content-addressed patch whose storage key binds the workspace, finding, proposal and decrypted-byte checksum to the server generator. Caller-supplied references may be recorded in drafts but cannot substitute for that binding, including in legacy proposals or pending approvals. The exact patch is bound to an authorization receipt: browser requests require human approval; API-key and delegated OAuth requests require verified credential permission and scope.
 
 ### Public sharing
 

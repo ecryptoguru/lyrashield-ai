@@ -16,12 +16,21 @@ vi.mock("@lyrashield/db", () => ({
 vi.mock("@lyrashield/auth/server", () => ({ requirePermission: mocks.permission }))
 vi.mock("@lyrashield/logger", () => ({ setRequestId: vi.fn(), logger: { error: vi.fn() } }))
 vi.mock("@/lib/fix-pr-context", () => ({
-  FixPrContextError: class extends Error {},
+  FixPrContextError: class extends Error {
+    constructor(
+      public code: string,
+      message: string,
+      public status = 409
+    ) {
+      super(message)
+    }
+  },
   resolveFixPrRequest: mocks.resolve,
 }))
 vi.mock("@/lib/fix-pr", () => ({ executeApprovedFixPr: mocks.execute }))
 import { POST } from "./route"
 import { PERMISSIONS } from "@lyrashield/auth"
+import { FixPrContextError } from "@/lib/fix-pr-context"
 const input = { fixProposalId: "stored-proposal", diffChecksum: "checksum" }
 function call() {
   return POST(
@@ -55,6 +64,18 @@ describe("fix approval browser execution", () => {
   it("does not execute a tampered input", async () => {
     mocks.hash.mockReturnValue(false)
     expect((await call()).status).toBe(422)
+    expect(mocks.execute).not.toHaveBeenCalled()
+  })
+  it("refuses a legacy pending approval whose stored patch lacks producer provenance", async () => {
+    mocks.resolve.mockRejectedValueOnce(
+      new FixPrContextError("PROPOSAL_PATCH_PROVENANCE_REQUIRED", "Patch provenance required")
+    )
+    const response = await call()
+    expect(response.status).toBe(409)
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: "PROPOSAL_PATCH_PROVENANCE_REQUIRED" },
+    })
+    expect(mocks.approve).not.toHaveBeenCalled()
     expect(mocks.execute).not.toHaveBeenCalled()
   })
   it("does not execute across workspace boundaries", async () => {

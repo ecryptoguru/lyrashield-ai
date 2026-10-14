@@ -1,4 +1,8 @@
+import { createHash } from "node:crypto"
 import { beforeEach, describe, expect, it, vi } from "vitest"
+
+const checksum = createHash("sha256").update("diff --git ...").digest("hex")
+const generatedRef = `s3://bucket/evidence/workspace-1/finding-1/fix-patch/fix-proposal-1-${checksum}`
 
 const requirePermission = vi.fn()
 const getFixProposal = vi.fn()
@@ -92,7 +96,7 @@ describe("POST /api/fix-proposals/[id]/create-pr", () => {
     getFixProposal.mockResolvedValue({
       id: "proposal-1",
       findingId: "finding-1",
-      diffRef: "s3://bucket/evidence/workspace-1/patch.diff",
+      diffRef: generatedRef,
     })
     prisma.finding.findFirst.mockResolvedValue({
       id: "finding-1",
@@ -109,11 +113,43 @@ describe("POST /api/fix-proposals/[id]/create-pr", () => {
     expect(requestFixPrApproval).not.toHaveBeenCalled()
   })
 
+  it.each([
+    `s3://bucket/evidence/workspace-1/finding-1/fix-patch/fix-proposal-2-${checksum}`,
+    `s3://bucket/evidence/workspace-1/finding-2/fix-patch/fix-proposal-1-${checksum}`,
+    `s3://bucket/evidence/workspace-1/evidence-control-1/user-1/control-evidence/upload-1-${checksum}`,
+    `s3://bucket/evidence/workspace-1/finding-1/code_location/code-loc-0-${checksum}`,
+    `s3://bucket/evidence/workspace-1/finding-1/fix-patch/fix-proposal-1-${"0".repeat(64)}`,
+    `s3://bucket/evidence/workspace-1/extra/evidence/workspace-1/finding-1/fix-patch/fix-proposal-1-${checksum}`,
+    "s3://bucket/evidence/workspace-1/patch.diff",
+  ])("rejects stored references without this proposal's producer binding: %s", async (diffRef) => {
+    getFixProposal.mockResolvedValue({
+      id: "proposal-1",
+      findingId: "finding-1",
+      diffRef,
+      status: "approved",
+    })
+    prisma.finding.findFirst.mockResolvedValue({
+      id: "finding-1",
+      targetId: "target-1",
+      implicatedFiles: ["src/a.ts"],
+      baseCommit: "abc123",
+      target: { repoOwner: "acme", repoName: "app", installationId: "42", deletedAt: null },
+    })
+    prisma.workspace.findUnique.mockResolvedValue({ plan: "PRO" })
+    readEncryptedArtifact.mockResolvedValue({ content: Buffer.from("diff --git ..."), checksum })
+    const response = await call()
+    expect(response.status).toBe(409)
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: "PROPOSAL_PATCH_PROVENANCE_REQUIRED" },
+    })
+    expect(requestFixPrApproval).not.toHaveBeenCalled()
+  })
+
   it("rejects when there is no base commit to patch against", async () => {
     getFixProposal.mockResolvedValue({
       id: "proposal-1",
       findingId: "finding-1",
-      diffRef: "s3://bucket/evidence/workspace-1/patch.diff",
+      diffRef: generatedRef,
     })
     prisma.finding.findFirst.mockResolvedValue({
       id: "finding-1",
@@ -133,7 +169,7 @@ describe("POST /api/fix-proposals/[id]/create-pr", () => {
     getFixProposal.mockResolvedValue({
       id: "proposal-1",
       findingId: "finding-1",
-      diffRef: "s3://bucket/evidence/workspace-1/patch.diff",
+      diffRef: generatedRef,
     })
     prisma.finding.findFirst.mockResolvedValue({
       id: "finding-1",
@@ -166,7 +202,7 @@ describe("POST /api/fix-proposals/[id]/create-pr", () => {
       getFixProposal.mockResolvedValue({
         id: "proposal-1",
         findingId: "finding-1",
-        diffRef: "s3://bucket/evidence/workspace-1/patch.diff",
+        diffRef: generatedRef,
       })
       prisma.finding.findFirst.mockResolvedValue({
         id: "finding-1",
@@ -175,7 +211,7 @@ describe("POST /api/fix-proposals/[id]/create-pr", () => {
         baseCommit: "abc123",
         target: { repoOwner: "acme", repoName: "app", installationId: "42", deletedAt: null },
       })
-      readEncryptedArtifact.mockResolvedValue({ content: Buffer.from("diff --git ...") })
+      readEncryptedArtifact.mockResolvedValue({ content: Buffer.from("diff --git ..."), checksum })
       prisma.workspace.findUnique.mockResolvedValue({ plan: "LAUNCH_ASSURANCE" })
       requestFixPrApproval.mockResolvedValue({ status: "pending_approval", approvalId: "ap-1" })
 
@@ -200,7 +236,7 @@ describe("POST /api/fix-proposals/[id]/create-pr", () => {
     getFixProposal.mockResolvedValue({
       id: "proposal-1",
       findingId: "finding-1",
-      diffRef: "s3://bucket/evidence/workspace-1/patch.diff",
+      diffRef: generatedRef,
     })
     prisma.finding.findFirst.mockResolvedValue({
       id: "finding-1",
@@ -209,7 +245,7 @@ describe("POST /api/fix-proposals/[id]/create-pr", () => {
       baseCommit: "abc123",
       target: { repoOwner: "acme", repoName: "app", installationId: "42", deletedAt: null },
     })
-    readEncryptedArtifact.mockResolvedValue({ content: Buffer.from("diff --git ...") })
+    readEncryptedArtifact.mockResolvedValue({ content: Buffer.from("diff --git ..."), checksum })
     prisma.workspace.findUnique.mockResolvedValue({ plan: "STARTER" })
     requestFixPrApproval.mockResolvedValue({ status: "rejected", reason: "out of scope" })
 
@@ -223,7 +259,7 @@ describe("POST /api/fix-proposals/[id]/create-pr", () => {
     getFixProposal.mockResolvedValue({
       id: "proposal-1",
       findingId: "finding-1",
-      diffRef: "s3://bucket/evidence/workspace-1/patch.diff",
+      diffRef: generatedRef,
     })
     prisma.finding.findFirst.mockResolvedValue({
       id: "finding-1",
@@ -232,7 +268,7 @@ describe("POST /api/fix-proposals/[id]/create-pr", () => {
       baseCommit: "abc123",
       target: { repoOwner: "acme", repoName: "app", installationId: "42", deletedAt: null },
     })
-    readEncryptedArtifact.mockResolvedValue({ content: Buffer.from("diff --git ...") })
+    readEncryptedArtifact.mockResolvedValue({ content: Buffer.from("diff --git ..."), checksum })
     requestFixPrApproval.mockResolvedValue({
       status: "pending_approval",
       approvalId: "approval-1",
