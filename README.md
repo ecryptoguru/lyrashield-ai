@@ -15,7 +15,7 @@ A scanner tells you what it flagged. LyraShield tells you what was tested, what 
 1. **Evidence states, not confidence scores.** The three shipped states are `DETECTED`, `VALIDATED` and `INCONCLUSIVE`. `VERIFIED` is a future-only status and is not produced today. Confidence is triage metadata; engine-only absence remains inconclusive.
 2. **Built for how AI-built apps actually fail.** The public AI-Built Failure Taxonomy, eight AI App Security signals (AI-01–AI-08) mapped to the OWASP Top 10 for LLM Applications (2025), and 14 WebMCP controls that review the agent tool surface itself — agent rules, MCP configs, embedded secrets, prompt-injection exposure.
 3. **Agent-native.** Assurance runs where the coding agent already works: published CLI, MCP server (21 tools, stdio + remote Streamable HTTP with hosted OAuth), portable Agent Plugin, a 51-entry install registry resolving to 48 preferred client surfaces, and an account-less GitHub Action.
-4. **An approval-gated fix loop that closes itself.** Fix PRs come only from a server-generated patch bound to an exact authorization receipt. Browser requests require human approval; authorized API-key and delegated OAuth requests execute within their verified permissions and scope. Nothing auto-merges. A merged fix branch automatically queues a retest and re-evaluates the gate.
+4. **An approval-gated fix loop that closes itself.** Fix pull requests open only from a server-generated patch and only after approval. A browser session records a human approval. API-key and delegated OAuth callers act under the `fix:approve` permission instead of a per-request approval. Requesting a Fix PR also requires `fix:create_pr`. Nothing auto-merges. Fix output is a proposal requiring review. A merged fix branch automatically queues a retest and re-evaluates the gate.
 5. **A launch verdict anyone can verify.** The Launch Gate (`lyrashield-gate/2.3.0`) produces `READY` / `NOT_READY` / `INSUFFICIENT_EVIDENCE` per target; reports are ed25519-signed with a public verify endpoint; release-identity confirmation answers only `MATCH`, `MISMATCH` or `UNAVAILABLE`.
 6. **Honest coverage accounting.** The Vibe Security 50 contract (`vibe-security-50/1.2.0`) binds one coverage receipt per control into the checksummed result manifest — "no finding" is never "passed", and seven evidence-required controls are marked as such because no scan can prove them.
 7. **Two modes, one loop.** Cloud (subscription; LyraShield pays model cost) and Local/Desktop (one-year BYOK license with perpetual fallback; scans stay on your machine, nothing syncs by default).
@@ -108,7 +108,7 @@ It runs entirely in your own runner with your own `GITHUB_TOKEN`, emits SARIF fo
 
 The fixed live AI safety catalog lives in `packages/types/src/ai-safety-tests.ts`; historical result provenance is recorded in [codebase.md](codebase.md#3-repository-map).
 
-The authenticated workflow supports project targets, findings, deterministic receipts, checksummed manifests, score snapshots, reports, schedules, notifications, GitHub integrations, and privacy-bounded sharing. Fix PR execution uses a server-generated patch bound to an exact authorization receipt: browser requests require human approval, while authorized API-key and delegated OAuth requests execute within verified permissions and scope. Nothing auto-merges.
+The authenticated workflow supports project targets, findings, deterministic receipts, checksum-bound manifests, score snapshots, reports, schedules, notifications, GitHub integrations and privacy-bounded sharing. Fix PR execution uses a server-generated patch bound to an exact authorization receipt: browser requests require human approval, while authorized API-key and delegated OAuth requests execute within verified permissions and scope. Nothing auto-merges.
 
 ## Evidence states
 
@@ -179,18 +179,18 @@ Repository scans can optionally call Parallel Search for real-time OSINT. Set `L
 
 ## Engine derivative and upstream maintenance
 
-Repository reviews run through [LyraShield Engine](https://github.com/ecryptoguru/lyrashield-engine), the separately versioned sandboxed analysis process used by the worker. It is a controlled derivative of [Strix](https://github.com/usestrix/strix), not a claim that upstream results or benchmarks apply to LyraShield.
+Repository reviews run through [LyraShield Engine](https://github.com/ecryptoguru/lyrashield-engine), the separately versioned sandboxed analysis process used by the worker. It is a controlled derivative of the upstream open-source engine, not a claim that upstream results or benchmarks apply to LyraShield.
 
 LyraShield owns the product-critical execution contract: GPT-6 model policy, bounded context/output/agent/spend controls, non-interactive lifecycle and telemetry-off behavior, deterministic finding identity, evidence/control metadata, and the bounded worker artifacts. The upstream substrate remains responsible for reviewed generic sandbox, tool, agent-SDK, and vulnerability-skill plumbing. Read the engine's [ownership boundary](https://github.com/ecryptoguru/lyrashield-engine#ownership-boundary) and [upstream-import ledger](https://github.com/ecryptoguru/lyrashield-engine/blob/main/UPGRADES.md) for the exact line.
 
-Upgrades are deliberately review-gated: the engine records its incorporated Strix base, compares stable releases, prepares a review PR, and requires human approval plus its read-only CI gate. It never auto-resolves conflicts, force-pushes history, or deploys from the sync workflow. The [engine verification and upgrade guidance](https://github.com/ecryptoguru/lyrashield-engine#verification) describes the checks; they prove implementation compatibility, not scan accuracy or universal coverage.
+Upgrades are deliberately review-gated: the engine records its incorporated base from the upstream open-source engine, compares stable releases, prepares a review PR and requires human approval plus its read-only CI gate. It never auto-resolves conflicts, force-pushes history or deploys from the sync workflow. The [engine verification and upgrade guidance](https://github.com/ecryptoguru/lyrashield-engine#verification) describes the checks; they prove implementation compatibility, not scan accuracy or universal coverage.
 
 The application pins an exact engine commit in `.github/workflows/deploy-azure.yml`, executes the engine-owned worker contract against that checkout, builds the worker with it, and verifies the exact pushed worker digest before deployment can proceed. The production workflow carries that digest into the guarded worker-VM promotion, which checks idle work and queues, OCI labels, health, and runtime provenance; it never follows `latest` or another mutable tag. A new engine release is not active until that pin is deliberately advanced, the cross-repository gate passes, and the resulting worker digest is promoted by the release workflow.
 
 ## Security and release boundaries
 
 - Workspace data is tenant-scoped; sensitive operations are audit-logged; and child tables (`ScanEvent`, `Evidence`, `FixProposal`, `PullRequest`, `ScanCoverageReceipt`, `ScanResultManifest`, `ScorecardShare`, `ScorecardEvent`, `Ticket`) are protected by Postgres RLS.
-- Engine output is treated as untrusted; only independent verifier evidence can mark a finding verified.
+- Engine output is treated as untrusted. Current findings use Detected, Retest-confirmed or Inconclusive. `VERIFIED` is a future-only status and is not produced today.
 - URL/API targets use pinned deterministic URL scanners with a versioned `url-scan/3.0.0` capability registry (six profiles: Surface, Expanded Surface, Behavioral Surface, Endpoint, Contract, Contract Behavior Review) rather than the repository engine.
 - Queue admission fails closed without a healthy worker heartbeat.
 - Public scorecard payloads are allowlisted and sharing is revocable.
