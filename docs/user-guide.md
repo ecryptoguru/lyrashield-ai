@@ -12,10 +12,10 @@ This guide covers the public Lite Check, authenticated dashboard, scan choices, 
 
 ## 1. Important product boundaries
 
-LyraShield AI currently produces three shipped evidence states: Detected, Validated and Inconclusive. Its schema also defines a future Verified state:
+LyraShield AI currently produces three shipped evidence states: Detected, Retest-confirmed and Inconclusive. Its schema also defines a future Verified state that is not produced today:
 
 - **Detected** means a scanner or engine returned evidence for a possible issue.
-- **Validated** or **retest-confirmed** means a fresh deterministic retest no longer found the issue within its completed scope.
+- **Retest-confirmed** means a fresh deterministic retest no longer found the issue within its completed scope.
 - **Verified** is defined for a future independent verification step; no finding is in it today. Model confidence alone never creates this state.
 - **Inconclusive** means the available scan could not establish a reliable result.
 - **No finding** means the assigned check completed without returning a mapped finding. It does not mean the application is universally safe.
@@ -275,7 +275,7 @@ Threat-intelligence enrichment prioritizes review but does not change severity o
 2. Create and edit a fix proposal describing the change you intend to make.
 3. Apply the change yourself. Saving a proposal does not modify the repository.
 4. Queue a fresh retest after applying the change.
-5. Review whether the retest is validated, blocked or inconclusive; independently verified remains a future state.
+5. Review whether the retest is Retest-confirmed, blocked or Inconclusive. `VERIFIED` is a future-only status and is not produced today.
 6. Generate an assurance report from the retained retest when appropriate.
 
 Depending on your permission, you may also mark a finding as accepted risk or false positive. These are audited decisions, not silent deletion. When you do, the UI requires a short reason; the reason is stored as the finding's status reason and is shown on the finding detail for future reviewers.
@@ -316,7 +316,7 @@ Open **Home** or **Launch Readiness** to see:
 - `INSUFFICIENT_EVIDENCE` when no completed scan or required coverage exists;
 - `READY` or `NOT_READY` based on retained findings;
 - current score when available;
-- blocking and independently verified finding counts (current scans do not produce the reserved `VERIFIED` status);
+- blocking finding counts and reserved future-state counts (current scans do not produce the reserved `VERIFIED` status);
 - severity distribution;
 - conditions and recommendations.
 
@@ -590,7 +590,7 @@ The 2026-10-11 production release deployed product revision `851c16f2bdb0558cd5c
 
 The historical Standard scan `cmt9el7p7000001hdjnjo90wk` completed on 2026-08-26 with Luna/medium-only routing, reconciled accounting, exact source identity, complete repository scanner-family receipts, 217/217 eligible AI App Security files scanned and a sealed manifest. Its 25 retained findings remain unverified. This target- and revision-scoped result is bounded runtime proof, not a security guarantee or universal coverage proof; an approved Deep/Sol run remains a separate gate.
 
-The production application has an authenticated origin, TLS Redis queue, sandbox-capable worker compute and DNS-pinned deny-by-default egress. The worker runs an explicitly promoted, CI-verified immutable digest; the 2026-10-11 release checked the image provenance, OCI labels, Docker health and scan readiness, with the prior digest retained for rollback. Azure alert rules are declared in source, but post-release live rule and receiver-delivery readback remains open. Azure Foundry repository scans use direct JSON function tools; optional programmatic tool calling remains capability-gated for the exact provider route. A scheduled pin change defers restart without removing readiness when the single worker already has an active scan. If a claim races after preflight, new admission may temporarily fail closed while the in-flight scan finishes; the scan is not cancelled or replayed. Production private-evidence round-trip/fail-closed, operator notification acknowledgment and controlled queue-orphan recovery passed on 2026-08-26. Longer-window capacity evidence and separate proof for each additional review profile remain required. No recovery or RPO/RTO claim is made.
+The production application has an authenticated origin, TLS Redis queue, sandbox-capable worker compute and DNS-pinned deny-by-default egress. The worker runs an explicitly promoted, CI-checked content-addressed digest; the 2026-10-11 release checked the image provenance, OCI labels, Docker health and scan readiness, with the prior digest retained for rollback. Azure alert rules are declared in source, but post-release live rule and receiver-delivery readback remains open. Azure Foundry repository scans use direct JSON function tools; optional programmatic tool calling remains capability-gated for the exact provider route. A scheduled pin change defers restart without removing readiness when the single worker already has an active scan. If a claim races after preflight, new admission may temporarily fail closed while the in-flight scan finishes; the scan is not cancelled or replayed. Production private-evidence round-trip/fail-closed, operator notification acknowledgment and controlled queue-orphan recovery passed on 2026-08-26. Longer-window capacity evidence and separate proof for each additional review profile remain required. No recovery or RPO/RTO claim is made.
 
 Billing, Local/Desktop licensing and the affiliate application/ledger are implemented. Razorpay Live is activated with the matching INR Cloud catalog and an enabled production webhook; Polar Live has its private Cloud/pack/Local catalog and lifecycle webhook. Historical Polar Sandbox and Razorpay Test Mode provider receipts are retained and their isolated deployment has been removed. No live checkout or payment was exercised. Production desktop distribution proof, payout API provisioning and the public affiliate opening remain controlled release gates.
 
