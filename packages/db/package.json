@@ -16,9 +16,9 @@
     "lint": "eslint src --max-warnings 0"
   },
   "dependencies": {
-    "@prisma/client": "7.9.1",
-    "@prisma/adapter-pg": "7.9.1",
-    "@prisma/client-runtime-utils": "7.9.1",
+    "@prisma/client": "7.10.0",
+    "@prisma/adapter-pg": "7.10.0",
+    "@prisma/client-runtime-utils": "7.10.0",
     "pg": "^8.23.0",
     "pg-connection-string": "2.14.0",
     "@lyrashield/logger": "workspace:*",
@@ -31,7 +31,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
-    "prisma": "7.9.1",
+    "prisma": "7.10.0",
     "tsx": "catalog:",
     "typescript": "catalog:",
     "@types/node": "catalog:",
