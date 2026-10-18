@@ -68,7 +68,7 @@ describe("hero URL field handoff (item 3.1b)", () => {
     expect(navigated).toEqual([])
   })
 
-  it("gives the hero field its own ids, distinct from the Lite Check section", () => {
+  it("keeps one consent-bound URL form and a distinct sample section", () => {
     // Duplicate ids would make the consent box and the error line ambiguous.
     for (const id of [
       "hero-lite-form",
@@ -84,7 +84,7 @@ describe("hero URL field handoff (item 3.1b)", () => {
       "home-scan-authorized",
       "home-scan-error",
     ]) {
-      expect(homeScan, `the lower form must own ${id}`).toContain(`id="${id}"`)
+      expect(homeScan, `the sample must not repeat ${id}`).not.toContain(`id="${id}"`)
     }
     const heroIds = [...hero.matchAll(/id="([^"]+)"/g)].map((match) => match[1])
     const scanIds = [...homeScan.matchAll(/id="([^"]+)"/g)].map((match) => match[1])
@@ -98,9 +98,9 @@ describe("hero URL field handoff (item 3.1b)", () => {
   })
 
   it("shares one handoff implementation instead of forking it", () => {
-    // Both forms import the same module and neither keeps its own copy.
+    // The single homepage form uses the shared privacy-preserving handoff.
     expect(hero).toContain('from "../../lib/lite-handoff"')
-    expect(homeScan).toContain('from "../../lib/lite-handoff"')
+    expect(homeScan).not.toContain("<form")
     expect(handoff).toContain('export const LITE_TARGET_KEY = "lyrashield-lite-target"')
     expect(handoff).toContain('export const LITE_SCAN_HREF = "/scan?start=1"')
     // The navigation call must not be handed the target.
@@ -121,14 +121,12 @@ describe("hero URL field handoff (item 3.1b)", () => {
     // With JS off the submit button does nothing, so the field must sit next to
     // a real link to /scan.
     expect(hero).toContain('href="/scan"')
-    // Same disabled treatment and status line as the Lite Check section.
+    // The sole input retains a clear unavailable state.
     expect(hero).toContain("disabled={!scannerAvailable}")
     expect(hero).toContain(
       "The separately protected scanner API is not connected in this environment."
     )
-    expect(homeScan).toContain(
-      "The separately protected scanner API is not connected in this environment."
-    )
+    expect(homeScan).toContain('href="/scan"')
   })
 
   it("sends only a CTA id and a boolean to analytics", () => {

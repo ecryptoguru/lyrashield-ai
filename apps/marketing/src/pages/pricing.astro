@@ -117,7 +117,7 @@ const appUrl =
 ---
 
 <Base title={title} description={description} canonical={canonical} jsonLd={jsonLd}>
-  <div class="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
+  <div class="mx-auto max-w-7xl px-4 py-10 sm:px-6 sm:py-16 lg:px-8">
     <!-- Header -->
     <div class="text-center">
       <h1 class="text-4xl font-bold tracking-tight text-text sm:text-5xl">
@@ -136,38 +136,6 @@ const appUrl =
       <p class="text-sm text-text-muted">
         Start with a free trial: {TRIAL_LINE}. One trial per account.
       </p>
-    </div>
-
-    <!-- Audience chooser: three rows, limits read from CLOUD_PLANS -->
-    <div class="mt-12">
-      <h2 class="text-2xl font-bold text-text">Choose a starting point</h2>
-      <p class="mt-2 text-sm text-text-muted">
-        Match the plan to how you work. Every limit below comes from the plan catalog.
-      </p>
-      <div class="mt-5 divide-y divide-border rounded-xl border border-border bg-bg-raised">
-        {
-          cloudPlans.map((plan) => (
-            <div class="grid gap-2 p-5 sm:grid-cols-[1fr_auto] sm:items-center">
-              <div>
-                <p class="font-semibold text-text">{plan.name}</p>
-                <p class="mt-1 text-sm text-text-muted">{tierIntents[plan.id]}</p>
-                <p class="mt-1 text-xs text-text-muted">
-                  {plan.agentMinutes.toLocaleString()} agent-minutes a month · up to {plan.targetCaps} targets
-                  {plan.deepAllowed ? " · Deep and Custom scans" : ""}
-                </p>
-              </div>
-              <a
-                href={`${appUrl}/sign-up?plan=${plan.id}`}
-                data-analytics-event="plan_choose_click"
-                data-analytics-prop-plan={plan.id.toLowerCase()}
-                class="inline-flex min-h-11 items-center justify-center rounded-lg border border-border bg-bg px-4 text-sm font-semibold text-text hover:border-accent hover:text-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-              >
-                Choose {plan.name}
-              </a>
-            </div>
-          ))
-        }
-      </div>
     </div>
 
     <!-- Cloud / Local Toggle -->
@@ -195,7 +163,7 @@ const appUrl =
     </div>
 
     <!-- Cloud Pricing -->
-    <div id="cloud-pricing" class="mt-12">
+    <div id="cloud-pricing" class="mt-8">
       <!-- Currency + Billing Toggle -->
       <div class="mb-8 flex flex-col items-center gap-4 sm:flex-row sm:justify-center sm:gap-8">
         <div
@@ -236,15 +204,13 @@ const appUrl =
         </div>
       </div>
 
-      <!-- Plan Cards -->
+      <h2 id="cloud-plan-heading" class="mb-5 text-2xl font-bold text-text">Choose a starting point</h2>
+      <!-- Plan Cards: intent, price and capacity stay beside the choice. -->
       <div class="grid grid-cols-1 gap-6 md:grid-cols-3">
         {
           cloudPlans.map((plan) => (
             <div class="rounded-xl border border-border bg-bg-raised p-6 shadow-sm">
-              {/* h2, not h3: these cards are the first headings after the page
-                  h1, so h3 skipped a level (UF-08). Classes are unchanged, so
-                  the visual size and weight are identical. */}
-              <h2 class="text-lg font-semibold text-text">{plan.name}</h2>
+              <h3 class="text-lg font-semibold text-text">{plan.name}</h3>
               <p class="mt-2 text-sm text-text-muted">{tierIntents[plan.id]}</p>
               <div class="mt-4">
                 <span
@@ -296,7 +262,9 @@ const appUrl =
               </ul>
               <a
                 href={`${appUrl}/sign-up?plan=${plan.id}`}
-                class="mt-6 block w-full rounded-lg bg-accent px-4 py-2.5 text-center text-sm font-semibold text-bg hover:bg-accent/90 transition-colors"
+                data-analytics-event="plan_choose_click"
+                data-analytics-prop-plan={plan.id.toLowerCase()}
+                class="mt-6 flex min-h-12 w-full items-center justify-center rounded-lg bg-accent px-4 py-2.5 text-center text-sm font-semibold text-bg transition-colors hover:bg-accent/90 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent"
               >
                 {`Choose ${plan.name}`}
               </a>

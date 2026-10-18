@@ -31,7 +31,7 @@
   --color-muted-foreground: oklch(0.52 0.015 270);
   --color-accent: oklch(0.95 0.015 270);
   --color-accent-foreground: oklch(0.22 0.02 270);
-  --color-destructive: oklch(0.55 0.24 25);
+  --color-destructive: oklch(0.52 0.22 25);
   --color-destructive-foreground: oklch(0.98 0 0);
   /*
    * Solid fill for the destructive button variant. It is a separate token because the
@@ -51,7 +51,8 @@
    * are recorded in DESIGN.md.
    */
   --color-ring: #b45309;
-  --color-success: oklch(0.55 0.14 164);
+  /* Normal-size status text clears 4.5:1 on light cards and backgrounds. */
+  --color-success: oklch(0.52 0.14 164);
   --color-warning: oklch(0.65 0.15 72);
   --color-critical: oklch(0.55 0.21 25);
   --color-chart-1: oklch(0.61 0.17 218);

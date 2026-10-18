@@ -22,15 +22,18 @@ export function SpendLimitForm({ workspaceId, currentCents }: SpendLimitFormProp
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
+  const [invalidAmount, setInvalidAmount] = useState(false)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
     setError(null)
     setSaved(false)
+    setInvalidAmount(false)
     const parsed = Number.parseFloat(dollars)
-    if (!Number.isFinite(parsed) || parsed < 0) {
-      setError("Enter a non-negative dollar amount.")
+    if (!Number.isFinite(parsed) || parsed < 0 || parsed > 100_000) {
+      setInvalidAmount(true)
+      setError("Enter a dollar amount between $0 and $100,000.")
       setLoading(false)
       return
     }
@@ -63,35 +66,41 @@ export function SpendLimitForm({ workspaceId, currentCents }: SpendLimitFormProp
       <label className="block text-sm font-medium" htmlFor="spend-limit-dollars">
         Monthly overage cap (USD)
       </label>
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <input
           id="spend-limit-dollars"
           type="number"
           min="0"
+          max="100000"
           step="0.01"
           value={dollars}
           onChange={(e) => {
             setDollars(e.target.value)
             setSaved(false)
+            setInvalidAmount(false)
+            setError(null)
           }}
-          className="w-40 rounded-md border px-3 py-2 text-base md:text-sm"
+          aria-invalid={invalidAmount}
+          aria-describedby={error ? "spend-limit-error" : undefined}
+          className="min-h-11 w-40 max-w-full rounded-md border px-3 py-2 text-base md:text-sm"
           placeholder="0.00"
         />
         <button
           type="submit"
           disabled={loading}
+          aria-busy={loading}
           className={buttonVariants({ variant: "default", size: "sm" })}
         >
           {loading ? "Saving…" : "Save limit"}
         </button>
       </div>
       {error && (
-        <p className="text-sm text-red-600" role="alert">
+        <p id="spend-limit-error" className="text-destructive text-sm" role="alert">
           {error}
         </p>
       )}
       {saved && (
-        <p className="text-sm text-green-700" role="status">
+        <p className="text-success text-sm" role="status">
           Spend limit updated.
         </p>
       )}

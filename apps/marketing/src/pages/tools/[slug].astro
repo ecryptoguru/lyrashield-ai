@@ -17,6 +17,7 @@ const fieldClass =
 const buttonClass =
   "lift mt-4 inline-flex min-h-11 items-center gap-2 rounded-lg bg-accent px-5 text-sm font-semibold text-bg hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-raised"
 const labelClass = "block text-sm font-medium text-text"
+const exampleButtonClass = "mt-3 inline-flex min-h-11 items-center rounded-lg border border-border px-3 text-sm font-medium text-text-muted hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
 ---
 <ToolLayout tool={tool} faq={faq}>
   {tool.slug === "ai-app-security-checklist" && (
@@ -54,6 +55,8 @@ const labelClass = "block text-sm font-medium text-text"
     <>
       <label class={labelClass} for="sql-input">Paste a policy migration or table policy SQL</label>
       <textarea id="sql-input" rows="12" class={fieldClass} placeholder="alter table public.projects enable row level security;"></textarea>
+      <button id="load-rls-example" class={exampleButtonClass} type="button">Load example SQL</button>
+      <p class="mt-2 text-xs text-text-muted">Synthetic example. Review policy behavior with two accounts before using it in an app.</p>
       <button id="run-rls" class={buttonClass} type="button">Review SQL locally</button>
       <output id="tool-result" class="mt-6 block" aria-live="polite"></output>
     </>
@@ -64,6 +67,8 @@ const labelClass = "block text-sm font-medium text-text"
       <textarea id="jwt-input" rows="4" class={fieldClass} placeholder="eyJ..."></textarea>
       <label class={`mt-4 ${labelClass}`} for="cookie-input">Optional: paste a Set-Cookie response header</label>
       <textarea id="cookie-input" rows="3" class={fieldClass} placeholder="session=...; Secure; HttpOnly; SameSite=Lax"></textarea>
+      <button id="load-jwt-example" class={exampleButtonClass} type="button">Load example JWT and cookie</button>
+      <p class="mt-2 text-xs text-text-muted">Synthetic token with a placeholder signature. This tool does not verify signatures.</p>
       <button id="run-jwt" class={buttonClass} type="button">Inspect locally</button>
       <output id="tool-result" class="mt-6 block" aria-live="polite"></output>
     </>
@@ -72,6 +77,8 @@ const labelClass = "block text-sm font-medium text-text"
     <>
       <label class={labelClass} for="headers-input">Paste response headers from your browser network panel</label>
       <textarea id="headers-input" rows="10" class={fieldClass} placeholder="content-security-policy: default-src 'self'&#10;strict-transport-security: max-age=31536000"></textarea>
+      <button id="load-headers-example" class={exampleButtonClass} type="button">Load example headers</button>
+      <p class="mt-2 text-xs text-text-muted">Synthetic example, not a configuration recommendation for every route.</p>
       <button id="run-headers" class={buttonClass} type="button">Review headers locally</button>
       <output id="tool-result" class="mt-6 block" aria-live="polite"></output>
     </>
@@ -81,9 +88,10 @@ const labelClass = "block text-sm font-medium text-text"
 </ToolLayout>
 
 <script>
-  import { checkHeaders, checkRlsSql, checkSetCookie, inspectJwt, scanTextForSecrets } from "../../lib/tool-checks"
+  import { checkHeaders, reviewRlsSql, checkSetCookie, inspectJwt, scanTextForSecrets, type ToolObservation } from "../../lib/tool-checks"
+  import { TOOL_EXAMPLES } from "../../lib/tool-examples"
 
-  type Severity = "attention" | "info"
+  type Severity = ToolObservation["intent"]
 
   // Presentational hinting only — the result copy itself carries the honest
   // wording. We deliberately use just two tiers: an "attention" accent for
@@ -95,9 +103,10 @@ const labelClass = "block text-sm font-medium text-text"
 
   const COLOR: Record<Severity, string> = {
     attention: "var(--danger)",
+    review: "var(--accent)",
     info: "var(--border)",
   }
-  const GLYPH: Record<Severity, string> = { attention: "!", info: "•" }
+  const GLYPH: Record<Severity, string> = { attention: "!", review: "?", info: "•" }
 
   function severityOf(text: string): Severity {
     return ATTENTION.test(text) ? "attention" : "info"
@@ -111,7 +120,7 @@ const labelClass = "block text-sm font-medium text-text"
     output.replaceChildren(hint)
   }
 
-  const show = (items: string[]) => {
+  const show = (items: Array<string | ToolObservation>) => {
     const result = document.querySelector("#tool-result")
     if (!result) return
     if (items.length === 0) {
@@ -135,7 +144,7 @@ const labelClass = "block text-sm font-medium text-text"
     copy.textContent = "Copy"
     copy.addEventListener("click", async () => {
       try {
-        await navigator.clipboard.writeText(items.join("\n"))
+        await navigator.clipboard.writeText(items.map((item) => typeof item === "string" ? item : item.message).join("\n"))
         copy.textContent = "Copied"
       } catch {
         copy.textContent = "Copy failed"
@@ -148,7 +157,8 @@ const labelClass = "block text-sm font-medium text-text"
     const list = document.createElement("ul")
     list.className = "space-y-2"
     for (const item of items) {
-      const sev = severityOf(item)
+      const text = typeof item === "string" ? item : item.message
+      const sev = typeof item === "string" ? severityOf(item) : item.intent
       const row = document.createElement("li")
       row.className = "flex gap-3 rounded-lg border border-border bg-bg p-3 text-sm text-text"
       row.style.borderLeftWidth = "4px"
@@ -159,7 +169,7 @@ const labelClass = "block text-sm font-medium text-text"
       glyph.setAttribute("aria-hidden", "true")
       glyph.textContent = GLYPH[sev]
       const body = document.createElement("span")
-      body.textContent = item
+      body.textContent = sev === "review" ? `Review needed: ${text}` : text
       row.appendChild(glyph)
       row.appendChild(body)
       list.appendChild(row)
@@ -218,7 +228,7 @@ const labelClass = "block text-sm font-medium text-text"
   })
 
   document.querySelector<HTMLButtonElement>("#run-rls")?.addEventListener("click", () => {
-    show(checkRlsSql(document.querySelector<HTMLTextAreaElement>("#sql-input")?.value ?? ""))
+    show(reviewRlsSql(document.querySelector<HTMLTextAreaElement>("#sql-input")?.value ?? ""))
   })
 
   document.querySelector<HTMLButtonElement>("#run-jwt")?.addEventListener("click", () => {
@@ -235,4 +245,24 @@ const labelClass = "block text-sm font-medium text-text"
   document.querySelector<HTMLButtonElement>("#run-headers")?.addEventListener("click", () => {
     show(checkHeaders(document.querySelector<HTMLTextAreaElement>("#headers-input")?.value ?? ""))
   })
+
+  for (const [buttonId, fields] of [
+    ["load-rls-example", [["sql-input", TOOL_EXAMPLES.sql]]],
+    ["load-headers-example", [["headers-input", TOOL_EXAMPLES.headers]]],
+    ["load-jwt-example", [["jwt-input", TOOL_EXAMPLES.jwt], ["cookie-input", TOOL_EXAMPLES.cookie]]],
+  ] as const) {
+    document.getElementById(buttonId)?.addEventListener("click", () => {
+      for (const [fieldId, value] of fields) {
+        const field = document.querySelector<HTMLTextAreaElement>(`#${fieldId}`)
+        if (field) field.value = value
+      }
+      const result = document.querySelector("#tool-result")
+      if (result) {
+        renderHint(result)
+        const hint = result.querySelector("p")
+        if (hint) hint.textContent = "Example loaded. Run the local check to review it."
+      }
+      document.getElementById(fields[0][0])?.focus()
+    })
+  }
 </script>

@@ -84,6 +84,7 @@ const warningText = "mt-3 rounded-xl border border-dashed border-border bg-bg px
 </style>
 
 <script>
+  import { partitionControlSignals } from "../../lib/tool-result-presentation"
   import type { AIScanFile } from "@lyrashield/security/ai-security"
   import {
     buildSummary,
@@ -192,23 +193,32 @@ const warningText = "mt-3 rounded-xl border border-dashed border-border bg-bg px
       section.appendChild(title)
 
       const controlSignals = signals.filter((s) => s.controlId === control.id)
-      if (controlSignals.length > 0) {
+      const presentation = partitionControlSignals(controlSignals)
+      const observations = [...presentation.findings, ...presentation.coverage]
+      if (observations.length > 0) {
         const list = document.createElement("ul")
         list.className = "mt-3 space-y-3"
-        for (const signal of controlSignals) {
+        for (const signal of observations) {
           const item = document.createElement("li")
           item.className = "text-sm text-text-muted"
           const fileLine = signal.file && signal.line ? `<span class="font-mono text-xs text-text-muted">${escapeHtml(signal.file)}:${signal.line}</span>` : ""
           const snippet = signal.snippet ? `<pre tabindex="0" class="mt-1 overflow-x-auto rounded border border-border bg-bg-raised p-2 font-mono text-xs text-text">${escapeHtml(signal.snippet)}</pre>` : ""
-          item.innerHTML = `${renderBadge(signal.state)} <span class="ml-1 font-medium text-text">${escapeHtml(signal.severity)}</span>${fileLine ? ` · ${fileLine}` : ""}<p class="mt-1 text-text">${escapeHtml(signal.remediation)}</p>${snippet}`
+          item.innerHTML = `${renderBadge(signal.state)}${signal.state === "DETECTED" ? ` <span class="ml-1 font-medium text-text">${escapeHtml(signal.severity)}</span>` : ""}${fileLine ? ` · ${fileLine}` : ""}<p class="mt-1 text-text"><strong>${signal.state === "DETECTED" ? "Finding action:" : "Coverage follow-up:"}</strong> ${escapeHtml(signal.remediation)}</p>${snippet}`
           list.appendChild(item)
         }
         section.appendChild(list)
       } else if (control.state === "NOT_ASSESSED") {
         const note = document.createElement("p")
         note.className = "mt-2 text-sm text-text-muted"
-        note.textContent = "Not assessed in the free local scan. The paid repository scan adds this control, dependency CVE checks, optional AI-assisted triage and a versioned score."
+        note.textContent = "Not assessed by this browser-local tool. A hosted repository scan adds dependency checks and retains evidence, retests and reports. Safe, Quick and Standard are available during the trial; Deep and Custom require Pro or above."
         section.appendChild(note)
+      }
+
+      if (presentation.guidance.length > 0) {
+        const guidance = document.createElement("details")
+        guidance.className = "mt-3 text-sm text-text-muted"
+        guidance.innerHTML = `<summary class="cursor-pointer font-medium">Control guidance (not a finding)</summary><p class="mt-2">${presentation.guidance.map(escapeHtml).join(" ")}</p>`
+        section.appendChild(guidance)
       }
 
       wrap.appendChild(section)
@@ -217,7 +227,7 @@ const warningText = "mt-3 rounded-xl border border-dashed border-border bg-bg px
     const note = document.createElement("p")
     note.className = "mt-4 text-sm text-text-muted"
     note.innerHTML =
-      "This is a local static check, not a security guarantee. AI-03, full-repository context, optional LLM triage, persistent evidence, retest, reporting and the numeric score require a <a href=\"https://app.lyrashieldai.com/sign-up?source=ai-app-security-scanner\" class=\"font-semibold text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent\">paid repository scan</a>."
+      "This is a local static check, not a security guarantee. Start a free trial for a hosted repository scan with Safe, Quick or Standard depth and retained evidence, retests and reports. Deep and Custom require Pro or above."
     wrap.appendChild(note)
 
     resultOutput.replaceChildren(wrap)

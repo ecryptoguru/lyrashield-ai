@@ -5,3 +5,5 @@ declare const __COMPOSITION_HEIGHT__: number
 interface Window {
   __timelines: Record<string, GSAPTimeline>
 }
+
+declare const __CAPTURE_DURATION__: number

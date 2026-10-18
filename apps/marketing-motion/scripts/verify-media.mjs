@@ -5,11 +5,12 @@ import {
   MOTION_CHAPTERS,
   MOTION_DURATION,
   MOTION_FPS,
-  MOTION_GOP,
   MOTION_VARIANTS,
   motionPosterRelativePath,
   motionTrackRelativePath,
 } from "./motion-media-contract.mjs"
+
+import { assertFaststartBytes, assertGopFrames, assertDuration } from "./media-validation.mjs"
 
 const root = resolve(import.meta.dirname, "..")
 const output = resolve(root, "renders/web")
@@ -27,13 +28,10 @@ function probe(file) {
 }
 
 function assertFaststart(file) {
-  const bytes = readFileSync(file)
-  const moov = bytes.indexOf(Buffer.from("moov"))
-  const mdat = bytes.indexOf(Buffer.from("mdat"))
-  if (moov < 0 || mdat < 0 || moov > mdat) throw new Error(`${file} is missing faststart metadata`)
+  assertFaststartBytes(readFileSync(file))
 }
 
-function assertShortGop(file) {
+function assertShortGop(file, limit) {
   const frames = JSON.parse(
     capture("ffprobe", [
       "-v",
@@ -48,12 +46,7 @@ function assertShortGop(file) {
       file,
     ])
   ).frames
-  const keyframes = frames.flatMap((frame, index) => (frame.key_frame === 1 ? [index] : []))
-  if (
-    keyframes[0] !== 0 ||
-    keyframes.some((frame, index) => index > 0 && frame - keyframes[index - 1] > MOTION_GOP)
-  )
-    throw new Error(`${file} exceeds the ${MOTION_GOP}-frame GOP contract`)
+  assertGopFrames(frames, limit)
 }
 
 for (const [variant, contract] of Object.entries(MOTION_VARIANTS)) {
@@ -69,12 +62,11 @@ for (const [variant, contract] of Object.entries(MOTION_VARIANTS)) {
     throw new Error(`${file} has unexpected dimensions`)
   if (video.codec_name !== "h264" || video.pix_fmt !== "yuv420p")
     throw new Error(`${file} must use H.264 yuv420p`)
-  if (Math.abs(Number(details.format.duration) - MOTION_DURATION) > 0.04)
-    throw new Error(`${file} must be ${MOTION_DURATION} seconds`)
+  assertDuration(Number(details.format.duration), MOTION_DURATION, MOTION_FPS)
   if (details.streams.some((stream) => stream.codec_type === "audio"))
     throw new Error(`${file} unexpectedly contains audio`)
   assertFaststart(file)
-  assertShortGop(file)
+  assertShortGop(file, contract.gop)
 }
 
 for (const [variant, contract] of Object.entries(MOTION_VARIANTS)) {
@@ -86,7 +78,7 @@ for (const [variant, contract] of Object.entries(MOTION_VARIANTS)) {
       !video ||
       video.width !== contract.masterWidth ||
       video.height !== contract.masterHeight ||
-      Math.abs(Number(details.format.duration) - MOTION_DURATION) > 0.04
+      Math.abs(Number(details.format.duration) - MOTION_DURATION) > 1 / MOTION_FPS
     )
       throw new Error(`${master} does not match the master contract`)
     if (details.streams.some((stream) => stream.codec_type === "audio"))
@@ -105,7 +97,7 @@ for (const [name, duration, width, height] of [
     !video ||
     video.width !== width ||
     video.height !== height ||
-    Math.abs(Number(details.format.duration) - duration) > 0.04
+    Math.abs(Number(details.format.duration) - duration) > 1 / MOTION_FPS
   )
     throw new Error(`${file} does not match its launch-edit contract`)
   if (details.streams.some((stream) => stream.codec_type === "audio"))
@@ -123,5 +115,5 @@ for (const variant of Object.keys(MOTION_VARIANTS)) {
 }
 
 console.log(
-  "Motion V2 media verified: continuous tracks, masters, launch edits, codecs, GOPs, faststart, budgets, posters, and silence pass."
+  "Motion V3 media verified: continuous tracks, masters, launch edits, codecs, GOPs, faststart, budgets, posters, and silence pass."
 )

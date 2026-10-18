@@ -27,6 +27,7 @@ describe("platform admin lists", () => {
   it("rejects malformed cursors", () => {
     expect(parseAdminCursor("ok_123-ABC")).toBe("ok_123-ABC")
     expect(parseAdminCursor("../secret")).toBeUndefined()
+    expect(parseAdminCursor(["ok"] as unknown as string)).toBeUndefined()
     expect(parseAdminCursor("x".repeat(129))).toBeUndefined()
   })
 

@@ -122,7 +122,7 @@ Evidence discipline is the product. The contract that every scan obeys:
 
 ### 5.1 Vibe Security 50
 
-A versioned coverage contract (`vibe-security-50/1.1.0`): 50 controls across deterministic, hybrid, engine-led and evidence-required strategies. Every full scan records one immutable receipt per control. A control counts as a finding only when evidence was returned; "no finding" is never presented as "passed." Seven operational controls are honestly marked `EVIDENCE_REQUIRED` because no code or URL scan can prove them.
+A versioned coverage contract (`vibe-security-50/1.2.0`): 50 controls across deterministic, hybrid, engine-led and evidence-required strategies. Full scans record one outcome per control; scan-finalization coverage entries are bound into the checksummed result manifest. Receipt rows are an operational projection and may be updated by connector outcomes. A control counts as a finding only when evidence was returned; "no finding" is never presented as "passed." Seven operational controls are honestly marked `EVIDENCE_REQUIRED` because no code or URL scan can prove them.
 
 ### 5.2 Launch Gate
 
@@ -258,7 +258,7 @@ Public-facing contracts are named and versioned so results are reproducible and 
 
 | Contract                           | Version                                    |
 | ---------------------------------- | ------------------------------------------ |
-| Vibe Security 50 coverage contract | `vibe-security-50/1.1.0`                   |
+| Vibe Security 50 coverage contract | `vibe-security-50/1.2.0`                   |
 | Launch Gate verdict standard       | `lyrashield-gate/2.3.0`                    |
 | AI-Built Failure Taxonomy          | `ai-built-failure-taxonomy/1.0.0`          |
 | WebMCP detector / inventory        | `webmcp-assurance/2`, `webmcp-inventory/1` |

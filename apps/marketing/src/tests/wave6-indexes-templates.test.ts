@@ -42,7 +42,7 @@ describe("Wave 6 indexes and templates", () => {
   it("6.3 adds categories, search and a Start here row to the blog index", () => {
     const blog = page("blog/[...page].astro")
     expect(blog).toContain("Start here")
-    expect(blog).toContain('type="search"')
+    expect(blog).toContain("<BlogSearch posts=")
     expect(blog).toContain("blog-index__categories")
   })
 

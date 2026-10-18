@@ -179,9 +179,10 @@ export function CliIntegration({ docsUrl }: { docsUrl: string }) {
         ) : null}
 
         <p className="text-muted-foreground bg-muted/40 rounded-md border border-dashed px-3 py-2 text-xs leading-relaxed">
-          For API-key-only clients or CI, create an <code>lsk_</code> key in Settings → API keys and
-          run <code>lyrashield login</code>. Follow each client&apos;s activation steps and make a
-          read-only call to verify it loaded the connection; a configured file alone is not proof.
+          For API-key-only clients or CI, create an <code>lsk_</code> key in Workspace settings →
+          API keys and run <code>lyrashield login</code>. Follow each client&apos;s activation steps
+          and make a read-only call to verify it loaded the connection; a configured file alone is
+          not proof.
         </p>
 
         <p className="text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
@@ -202,7 +203,7 @@ export function CliIntegration({ docsUrl }: { docsUrl: string }) {
           </Link>
           <span className="hidden sm:inline">·</span>
           <Link
-            href="/dashboard/settings"
+            href="/dashboard/settings/workspace#api-keys"
             className="text-foreground underline underline-offset-2 hover:no-underline"
           >
             Go to API keys

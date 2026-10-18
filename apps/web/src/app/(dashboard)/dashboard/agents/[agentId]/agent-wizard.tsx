@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { useEffect, useRef, useState } from "react"
 import { Check, Copy, ExternalLink } from "lucide-react"
 import { Button } from "@lyrashield/ui"
@@ -282,6 +283,32 @@ export function AgentWizard({ data, docsUrl }: { data: AgentWizardData; docsUrl:
           </details>
         ))}
 
+      <section
+        className="space-y-3 rounded-xl border bg-card p-5"
+        aria-labelledby="agent-next-step"
+      >
+        <h2 id="agent-next-step" className="text-sm font-semibold">
+          Continue with a scan
+        </h2>
+        <p className="text-muted-foreground text-sm">
+          After verifying the connection in your client, choose a target and confirm a scan. You can
+          also scan from the dashboard without installing a coding agent.
+        </p>
+        <div className="flex flex-wrap gap-3">
+          <Link
+            href="/dashboard/scans?new=1"
+            className="bg-primary text-primary-foreground hover:bg-primary/90 inline-flex min-h-11 items-center rounded-md px-4 text-sm font-medium"
+          >
+            Configure a scan
+          </Link>
+          <Link
+            href="/dashboard/connections"
+            className="inline-flex min-h-11 items-center rounded-md border px-4 text-sm font-medium"
+          >
+            Review connections
+          </Link>
+        </div>
+      </section>
       <p className="text-muted-foreground text-sm">
         Full guide for {data.displayName}:{" "}
         <a

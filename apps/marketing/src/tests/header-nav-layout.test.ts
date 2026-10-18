@@ -57,6 +57,11 @@ describe("marketing header nav fit", () => {
 describe("marketing header information architecture", () => {
   const navList = code.slice(code.indexOf('<ul class="hidden shrink-0'), code.indexOf("</ul>"))
 
+  it("groups primary dropdowns so opening one closes the previous menu", () => {
+    const menus = [...navList.matchAll(/<details class="group" name="main-navigation">/g)]
+    expect(menus, "all three desktop dropdowns must share one exclusive group").toHaveLength(3)
+  })
+
   it("shows exactly five nav items before the account item", () => {
     // Five nav items plus the single Sign in / Start free trial item.
     // Linear pattern on purpose: eslint security/detect-unsafe-regex rejects
@@ -138,7 +143,9 @@ describe("marketing mobile nav sheet", () => {
   })
 
   it("renders one accordion per menu", () => {
-    const accordions = [...dialog.matchAll(/<details class="mobile-menu__accordion">/g)]
+    const accordions = [
+      ...dialog.matchAll(/<details class="mobile-menu__accordion" name="main-navigation">/g),
+    ]
     expect(accordions).toHaveLength(3)
     for (const label of ["Product", "Free tools", "Learn"]) {
       expect(dialog).toContain(`<summary class="menu-link">${label}</summary>`)

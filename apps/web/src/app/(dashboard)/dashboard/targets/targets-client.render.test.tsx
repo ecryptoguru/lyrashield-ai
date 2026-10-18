@@ -11,6 +11,7 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(navigation.search),
 }))
 
+import { TooltipProvider } from "@/components/ui/tooltip"
 import { TargetsClient } from "./targets-client"
 import type { Target } from "./targets-model"
 
@@ -67,4 +68,17 @@ it("uses the same add-target wording once targets already exist", () => {
 
   expect(html).toContain("Add target")
   expect(html).not.toContain("New Target")
+})
+
+it("starts source setup inline without the target management page", () => {
+  const html = renderToStaticMarkup(
+    <TooltipProvider>
+      <TargetsClient scanSetup workspaceId="workspace-1" initialData={[]} />
+    </TooltipProvider>
+  )
+  expect(html).toContain("Configure a scan")
+  expect(html).toContain("Continue to scan setup")
+  expect(html).toContain('id="url-input"')
+  expect(html).not.toContain("No targets yet")
+  expect(html).not.toContain("Create Target")
 })

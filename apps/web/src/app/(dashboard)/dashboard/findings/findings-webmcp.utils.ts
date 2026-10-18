@@ -138,7 +138,10 @@ export function createReviewFindingsTool(
       const newFilter = input.filter ?? currentFilter
       const newSort = input.sort ?? currentSort
 
-      if (!FILTER_VALUES.includes(newFilter as (typeof FILTER_VALUES)[number])) {
+      if (
+        input.filter !== undefined &&
+        !FILTER_VALUES.includes(newFilter as (typeof FILTER_VALUES)[number])
+      ) {
         throw new Error(`Invalid filter "${newFilter}"`)
       }
       if (!SORT_VALUES.includes(newSort)) {

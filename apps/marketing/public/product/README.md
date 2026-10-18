@@ -1,15 +1,32 @@
 # Product screenshots
 
-These are real captures of the LyraShield evidence console. They are **redacted at
-the file level** before they enter the repo.
+The homepage now uses `current-*.webp`: captures of the **current dashboard
+components with illustrative data**, generated on 2026-10-09. They are rendered
+from the actual React components, not generated artwork or live account results.
+No real identities, repositories or finding details are present.
 
-- `console-home.webp` — captured at `/dashboard` (dark theme), used full-width
-  by `components/landing/HeroProductFrame.astro` as the large frame in the
-  hero collage.
+| Files (dark/light pairs)             | Source component                     | Dimensions |
+| ------------------------------------ | ------------------------------------ | ---------- |
+| `current-posture-{dark,light}.webp`  | `TrustCommandCenter`                 | 1312 × 544 |
+| `current-findings-{dark,light}.webp` | `FindingsClient`                     | 1312 × 410 |
+| `current-agents-{dark,light}.webp`   | `AgentsGrid` through `AgentsHarness` | 1312 × 720 |
+
+The capture entry is `e2e/browser/marketing-product-preview.html`; its fixture
+imports the current dashboard components and stylesheet. Run the existing
+`e2e/browser/server.mjs` locally, open that entry with `?view=posture`, `findings`
+or `agents` and `&theme=dark` or `light`. Capture at 1600 × 820, taking the content
+region at x=288, y=0, width=1312, with the height in the table. Wait for fonts
+before capture. The Inter font uses the already installed marketing font package.
+Encode as WebP at quality 82. Regenerate both themes together after component changes.
+The homepage caption and preview dialog disclose illustrative data.
+
+The `console-*.webp` files below are **older live captures**, redacted at the file
+level before they entered the repository. They remain for their existing docs and
+methodology consumers; they are no longer the homepage previews.
+
+- `console-home.webp` — captured at `/dashboard` (dark theme), retained as a historical full-width capture.
 - `console-home-light.webp` — the same page, same scroll content, captured in
-  the app's light theme. `HeroProductFrame.astro` renders this alongside
-  `console-home.webp` and toggles which one is visible with
-  `:root[data-theme="light"]` — see "Theme-paired hero images" below.
+  the app's light theme. retained alongside `console-home.webp` as its historical theme pair.
 - `console-trust-runs.webp` — captured at `/trust-runs`, used full-width by
   `pages/methodology.astro` under "What every new scan record preserves".
 - `console-issues.webp` — captured at `/issues`, used full-width by

@@ -1,0 +1,56 @@
+---
+import type { MotionMediaManifest } from "../../lib/motion-manifest"
+interface Props { manifest: MotionMediaManifest }
+const { manifest } = Astro.props
+const opening = manifest.chapters[0]!
+---
+<scroll-world data-world-manifest={JSON.stringify(manifest)} data-world-state="poster">
+  <div class="scroll-world__stage" aria-hidden="true">
+    <picture data-world-poster>
+      <source media="(max-width: 1023px)" srcset={opening.portraitPoster} />
+      <img src={opening.desktopPoster} width={manifest.desktop.width} height={manifest.desktop.height} alt="" loading="eager" fetchpriority="high" decoding="async" />
+    </picture>
+    <video data-world-video muted playsinline preload="none" aria-hidden="true" tabindex="-1"></video>
+    <div class="scroll-world__scrim"></div>
+  </div>
+  <div class="scroll-world__controls">
+    <button type="button" data-world-toggle aria-pressed="true" hidden>Motion <span data-world-toggle-label>on</span></button>
+    <p data-world-status role="status" class="sr-only"></p>
+  </div>
+  <div class="scroll-world__content"><slot /></div>
+</scroll-world>
+<script>import "./scroll-world"</script>
+<style>
+  scroll-world { --world-height: calc(100svh - 4rem); display: block; position: relative; isolation: isolate; background: #08111c; }
+  .scroll-world__stage { position: sticky; top: var(--world-top, 4rem); height: var(--world-height); margin-bottom: calc(-1 * var(--world-height)); overflow: hidden; pointer-events: none; z-index: 0; background: #08111c; }
+  .scroll-world__stage picture, .scroll-world__stage img, .scroll-world__stage video, .scroll-world__scrim { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .scroll-world__stage img, .scroll-world__stage video { object-fit: cover; }
+  .scroll-world__stage video { opacity: 0; }
+  scroll-world[data-world-painted="true"] .scroll-world__stage video { opacity: 1; }
+  scroll-world[data-world-painted="true"] .scroll-world__stage picture { opacity: 0; }
+  .scroll-world__scrim { background: linear-gradient(90deg, rgba(8,17,28,.96), rgba(8,17,28,.8) 34%, rgba(8,17,28,.1) 65%); }
+  .scroll-world__content { position: relative; z-index: 1; }
+  .scroll-world__controls { position: sticky; top: calc(var(--world-top, 4rem) + .5rem); display: flex; justify-content: flex-end; padding: 0 1rem; pointer-events: none; height: 0; z-index: 3; }
+  .scroll-world__controls button { pointer-events: auto; align-self: start; min-height: 44px; padding: .6rem 1rem; background: #0e1a28; border: 1px solid #395466; border-radius: 12px; color: #edf6fb; font-size: .85rem; cursor: pointer; }
+  .scroll-world__controls button:focus-visible { outline: 2px solid #00bae6; outline-offset: 4px; }
+  :global(scroll-world[data-world-state] .premium-hero) { background: transparent; }
+  :global(scroll-world[data-world-state] #different), :global(scroll-world[data-world-state] #free-scan) { background: color-mix(in srgb, var(--bg-raised) 92%, transparent); }
+  :global(:root[data-theme="light"] scroll-world[data-world-state] #different), :global(:root[data-theme="light"] scroll-world[data-world-state] #free-scan) { background: color-mix(in srgb, var(--bg-raised) 96%, transparent); }
+  :global(scroll-world[data-world-state] evidence-journey) { --text: #edf6fb; --text-muted: #c3d8e6; --bg-raised: #172a3b; --border: #526778; --accent: #89dfeb; background: transparent; }
+  :global(scroll-world[data-world-state] .journey__intro), :global(scroll-world[data-world-state] .journey__chapters) { color: #edf6fb; }
+  :global(scroll-world[data-world-state] .journey__chapter > p), :global(scroll-world[data-world-state] .journey__intro p) { color: #c3d8e6; }
+  :global(scroll-world[data-world-state] .journey__layout) { grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); }
+  :global(scroll-world[data-world-state] .journey__chapter) { min-height: max(420px, 75svh); }
+  :global(scroll-world[data-world-state] .journey__scene) { grid-column: 1 / -1; position: relative; top: auto; width: min(100%, 760px); margin: 0 auto; padding: clamp(.75rem, 3vw, 2rem); border-radius: 16px; background: var(--bg-raised); color: var(--text); }
+  :global(scroll-world[data-world-state] .journey__nav) { top: var(--world-top, 4rem); width: calc(100% - 7rem); background: #0e1a28; box-shadow: 7rem 0 0 #0e1a28; color: #edf6fb; }
+  :global(scroll-world[data-world-state] .journey__nav a), :global(scroll-world[data-world-state] .journey__intro a), :global(scroll-world[data-world-state] .journey__receipt) { color: #bceaf5; }
+  :global(scroll-world[data-world-state] .journey__nav a[data-journey-link][aria-current]) { color: #11333b; background: #bde9ec; }
+  :global(scroll-world[data-world-state] .journey__nav a[aria-current] .journey__node) { color: inherit; }
+  @media (max-width: 1023px) {
+    .scroll-world__stage img, .scroll-world__stage video { object-fit: contain; }
+    .scroll-world__scrim { background: linear-gradient(180deg, rgba(8,17,28,.15), rgba(8,17,28,.88) 60%, #08111c); }
+    :global(scroll-world[data-world-state] .journey__layout) { display: block; }
+    :global(scroll-world[data-world-state] .journey__chapter) { max-width: 40rem; margin-inline: auto; justify-content: end; padding: 3rem 1rem; background: linear-gradient(180deg, transparent, rgba(8,17,28,.95) 45%); }
+  }
+  @media (prefers-reduced-motion: reduce) { .scroll-world__stage { position: absolute; top: 0; } }
+</style>

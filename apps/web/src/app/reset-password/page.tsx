@@ -50,35 +50,43 @@ export default function ResetPasswordPage() {
           <div className="gradient-primary mb-3 flex h-12 w-12 items-center justify-center rounded-xl border p-1">
             <ShieldCheck className="text-primary-foreground h-7 w-7" aria-hidden="true" />
           </div>
-          <h1 className="text-2xl font-bold tracking-tight">Choose a new password</h1>
+          <h1 className="text-2xl font-bold tracking-tight">
+            {token ? "Choose a new password" : "Request a new reset link"}
+          </h1>
         </div>
         <div className="bg-card border p-6 shadow-sm sm:p-8">
-          <form onSubmit={submit} className="space-y-4">
-            <FormField label="New password" htmlFor="password">
-              <PasswordInput
-                id="password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                autoComplete="new-password"
-                required
-                minLength={8}
-                placeholder="At least 8 characters"
-                aria-describedby="password-hint"
-              />
-              <p id="password-hint" className="text-muted-foreground mt-1.5 text-xs">
-                At least 8 characters. Use a mix of letters, numbers and symbols for a stronger
-                password.
-              </p>
-            </FormField>
-            {error && (
-              <p role="alert" className="text-destructive text-sm">
-                {error}
-              </p>
-            )}
-            <Button type="submit" disabled={loading} className="w-full" size="lg">
-              {loading && <Spinner className="mr-2" />}Reset password
-            </Button>
-          </form>
+          {!token ? (
+            <p role="status" className="text-muted-foreground text-sm">
+              This reset link is invalid or has expired. Request a new link to reset your password.
+            </p>
+          ) : (
+            <form onSubmit={submit} className="space-y-4">
+              <FormField label="New password" htmlFor="password">
+                <PasswordInput
+                  id="password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  autoComplete="new-password"
+                  required
+                  minLength={8}
+                  placeholder="At least 8 characters"
+                  aria-describedby="password-hint"
+                />
+                <p id="password-hint" className="text-muted-foreground mt-1.5 text-xs">
+                  At least 8 characters. Use a mix of letters, numbers and symbols for a stronger
+                  password.
+                </p>
+              </FormField>
+              {error && (
+                <p role="alert" className="text-destructive text-sm">
+                  {error}
+                </p>
+              )}
+              <Button type="submit" disabled={loading} className="w-full" size="lg">
+                {loading && <Spinner className="mr-2" />}Reset password
+              </Button>
+            </form>
+          )}
         </div>
         <p className="text-muted-foreground mt-6 text-center text-sm">
           <Link href="/forgot-password" className="text-primary font-medium hover:underline">

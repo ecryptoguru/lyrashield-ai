@@ -24,14 +24,6 @@ const ALLOWLIST: Array<{ file: string; text: string }> = [
     text: "A fourth state, independently verified, is defined for a future separate verification step; no finding is in it today.",
   },
   {
-    file: "pages/methodology.astro",
-    text: "establish the condition is gone. A fourth state, independently verified, is defined for a",
-  },
-  {
-    file: "pages/methodology.astro",
-    text: "A fourth state, independently verified, is defined for a future separate verification step; no finding is in it today. A score or clean result never overrides these facts.",
-  },
-  {
     // A no-finding result genuinely is not independent verification. The
     // negation is the point of the sentence, so it stays.
     file: "pages/vibe-security-50.astro",

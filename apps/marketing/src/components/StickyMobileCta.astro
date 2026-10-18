@@ -38,9 +38,14 @@ const eligible = ["/", "/pricing", "/scan"].includes(path)
       const bar = document.querySelector<HTMLElement>("[data-sticky-cta]")
       if (bar) {
         let fieldFocused = false
+        let shown = false
+        const visibleConversions = new Set<Element>()
         const sync = () => {
           const pastFirstScreen = window.scrollY > window.innerHeight
-          bar.classList.toggle("hidden", !pastFirstScreen || fieldFocused)
+          const next = pastFirstScreen && !fieldFocused && visibleConversions.size === 0
+          if (next === shown) return
+          shown = next
+          bar.classList.toggle("hidden", !shown)
         }
         document.addEventListener(
           "focusin",
@@ -61,8 +66,19 @@ const eligible = ["/", "/pricing", "/scan"].includes(path)
           },
           { passive: true }
         )
+        const conversionObserver = new IntersectionObserver((entries) => {
+          for (const entry of entries) {
+            if (entry.isIntersecting) visibleConversions.add(entry.target)
+            else visibleConversions.delete(entry.target)
+          }
+          sync()
+        })
+        document.querySelectorAll('[data-cta-id="final-cta-create-account"], [data-cta-id="footer_get_started"]').forEach((element) => conversionObserver.observe(element))
         addEventListener("scroll", sync, { passive: true })
         addEventListener("resize", sync, { passive: true })
+        new ResizeObserver(() => {
+          document.documentElement.style.setProperty("--sticky-cta-height", `${bar.getBoundingClientRect().height}px`)
+        }).observe(bar)
         sync()
       }
     </script>

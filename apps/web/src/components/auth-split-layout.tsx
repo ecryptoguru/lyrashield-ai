@@ -96,6 +96,12 @@ export function AuthSplitLayout({
             <div className="gradient-primary shadow-primary-glow mb-3 flex h-12 w-12 items-center justify-center rounded-xl">
               <ShieldCheck className="text-primary-foreground h-7 w-7" aria-hidden="true" />
             </div>
+            <Link
+              href={marketingUrl}
+              className="inline-flex min-h-11 items-center text-base font-semibold tracking-tight"
+            >
+              LyraShield AI
+            </Link>
           </div>
           <div className="mb-8 flex flex-col items-center md:items-start">
             <h1 className="text-2xl font-bold tracking-tight">{heading}</h1>

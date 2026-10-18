@@ -95,7 +95,7 @@ describe("marketing surfaces honor the status probe", () => {
     expect(demo).toContain('id="demo-step-slot" hidden')
     expect(demo).toContain('id="demo-booking-closed"')
     expect(demo).toContain(
-      "Online times may be unavailable. Request a time and we follow up by email."
+      "Online booking is unavailable. Email your timezone and a few suitable times; we will follow up to arrange the walkthrough."
     )
     // Booking work is gated: the closed fallback must reach the DOM before
     // the picker, and the booking check must precede the first slot fetch.

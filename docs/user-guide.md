@@ -1,6 +1,6 @@
 # LyraShield AI User Guide
 
-Last checked against the application code: 2026-09-19. Client-specific runtime and published-package acceptance remain separate checks.
+Last checked against the application code: 2026-10-10. Client-specific runtime and published-package acceptance remain separate checks.
 
 LyraShield AI helps builders review an application before release and retain an evidence-backed record of what was checked.
 
@@ -10,11 +10,11 @@ This guide covers the public Lite Check, authenticated dashboard, scan choices, 
 
 ## 1. Important product boundaries
 
-LyraShield AI uses precise result language:
+LyraShield AI currently produces three shipped evidence states: Detected, Validated and Inconclusive. Its schema also defines a future Verified state:
 
 - **Detected** means a scanner or engine returned evidence for a possible issue.
 - **Validated** or **retest-confirmed** means a fresh deterministic retest no longer found the issue within its completed scope.
-- **Verified** means independent verification evidence exists. Model confidence alone never creates this state.
+- **Verified** is defined for a future independent verification step; no finding is in it today. Model confidence alone never creates this state.
 - **Inconclusive** means the available scan could not establish a reliable result.
 - **No finding** means the assigned check completed without returning a mapped finding. It does not mean the application is universally safe.
 - **Evidence required** means the control needs deployment, operational or human-review proof that a repository or URL scan cannot safely establish.
@@ -379,7 +379,7 @@ Open **More → Notifications** to review scan alerts, critical-finding warnings
 - mark all notifications as read;
 - open the linked resource when a notification provides one.
 
-Personal notifications are visible only to their intended user; workspace-wide notifications are visible within the workspace.
+Scan updates remain in the dashboard notification feed, and personal notifications are visible only to their intended user. Workspace Owners and Admins can configure Slack or Discord alerts for completed scans, failed scans and critical findings in **Workspace settings → Notification channels**. Personal email and in-app settings currently save choices but do not change delivery; saved values are retained for future implementation. Push preferences are unavailable.
 
 ## 19. Team and roles
 
@@ -575,9 +575,11 @@ For CI pipelines that don't need an AI editor at all, `ecryptoguru/lyrashield-ai
 
 ## 23. Current availability
 
-The public marketing site, Lite Check, browser-local tools, methodology and content are live. The authenticated dashboard is open for registration; its dedicated BullMQ/engine worker remains a separate controlled full-scan boundary. Ordinary web requests use a restricted `NOBYPASSRLS` database role and repository scan admission fails closed when the worker heartbeat is absent. Production Standard scan `cmt9el7p7000001hdjnjo90wk` completed with Luna/medium-only routing, reconciled accounting, exact source identity, complete repository scanner-family receipts, 217/217 eligible AI App Security files scanned and a sealed manifest. Its 25 retained findings remain unverified. This target- and revision-scoped result is bounded runtime proof, not a security guarantee or universal coverage proof; an approved Deep/Sol run remains a separate gate.
+The 2026-10-10 production release deployed product revision `41462a3ff45f77e996823faf6d10f56053dec9e8` with worker digest `sha256:91203cb94795cc8ae143e4a07da86a2fc3eac5e38ed1ebc862e46c1333d55007`. A public scan-readiness check returned HTTP 200 with the worker ready. This proves scan admission only; it does not prove authenticated client use, paid-scan acceptance, billing reconciliation or commercial readiness. See [PRD §8–9](../PRD.md#8-current-production-evidence) for the dated release receipt and remaining gates.
 
-The production application has an authenticated application origin, TLS Redis queue, sandbox-capable worker compute, authorized GPT-6 Luna/Sol deployments, actionable Azure alerts and DNS-pinned deny-by-default egress. The worker runs an explicitly promoted, CI-verified immutable digest rather than a mutable tag; each future release repeats VM digest, OCI-label, Docker-health and scan-readiness reconciliation with the prior digest retained for rollback. Azure Foundry repository scans use direct JSON function tools; optional programmatic tool calling remains capability-gated for the exact provider route. A scheduled pin change defers restart without removing readiness when the single worker already has an active scan. If a claim races after preflight, new admission may temporarily fail closed while the in-flight scan finishes; the scan is not cancelled or replayed. Production private-evidence round-trip/fail-closed, operator notification acknowledgment and controlled queue-orphan recovery passed on 2026-08-26. Longer-window capacity evidence and separate proof for each additional review profile remain required. No recovery or RPO/RTO claim is made.
+The historical Standard scan `cmt9el7p7000001hdjnjo90wk` completed on 2026-08-26 with Luna/medium-only routing, reconciled accounting, exact source identity, complete repository scanner-family receipts, 217/217 eligible AI App Security files scanned and a sealed manifest. Its 25 retained findings remain unverified. This target- and revision-scoped result is bounded runtime proof, not a security guarantee or universal coverage proof; an approved Deep/Sol run remains a separate gate.
+
+The production application has an authenticated origin, TLS Redis queue, sandbox-capable worker compute, and DNS-pinned deny-by-default egress. The worker runs an explicitly promoted, CI-verified immutable digest; the 2026-10-10 release checked the digest, OCI labels, Docker health and scan readiness, with the prior digest retained for rollback. Azure alert rules are declared in source, but post-release live rule and receiver-delivery readback remains open. Azure Foundry repository scans use direct JSON function tools; optional programmatic tool calling remains capability-gated for the exact provider route. A scheduled pin change defers restart without removing readiness when the single worker already has an active scan. If a claim races after preflight, new admission may temporarily fail closed while the in-flight scan finishes; the scan is not cancelled or replayed. Production private-evidence round-trip/fail-closed, operator notification acknowledgment and controlled queue-orphan recovery passed on 2026-08-26. Longer-window capacity evidence and separate proof for each additional review profile remain required. No recovery or RPO/RTO claim is made.
 
 Billing, Local/Desktop licensing and the affiliate application/ledger are implemented. Razorpay Live is activated with the matching INR Cloud catalog and an enabled production webhook; Polar Live has its private Cloud/pack/Local catalog and lifecycle webhook. Historical Polar Sandbox and Razorpay Test Mode provider receipts are retained and their isolated deployment has been removed. No live checkout or payment was exercised. Production desktop distribution proof, payout API provisioning and the public affiliate opening remain controlled release gates.
 

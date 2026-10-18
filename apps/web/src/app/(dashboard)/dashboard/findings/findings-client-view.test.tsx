@@ -42,7 +42,8 @@ describe("findings list view", () => {
 
     expect(html).toContain("Target: API")
     expect(html).toContain("Scan: scan-1")
-    expect(html).toMatch(/aria-pressed="true"[^>]*>High<\/button>/)
+    expect(html).toContain('value="HIGH" selected=""')
+    expect(html).toContain('aria-label="Filter by evidence"')
     expect(html).toContain('value="secret"')
     expect(html).toContain('aria-label="Sort loaded results"')
     expect(html).toContain('value="severity" selected=""')
@@ -63,8 +64,8 @@ describe("findings list view", () => {
     expect(loading).not.toContain("Load more")
 
     const empty = renderToStaticMarkup(<FindingsResults {...props} findings={[]} loading={false} />)
-    expect(empty).toContain("No findings yet")
-    expect(empty).toContain("Start a scan")
+    expect(empty).toContain("No findings in this scope")
+    expect(empty).toContain("Review scans")
 
     const populated = renderToStaticMarkup(
       <FindingsResults {...props} findings={[finding]} sortedFindings={[finding]} loading={false}>
@@ -75,5 +76,21 @@ describe("findings list view", () => {
     expect(populated).toContain("Release blocker")
     expect(populated).toContain('aria-haspopup="dialog"')
     expect(populated).toContain("Load more")
+  })
+  it("offers reset for empty filtered results and suppresses emptiness on load errors", () => {
+    const props = {
+      loading: false,
+      findings: [],
+      sortedFindings: [],
+      rowRefs: { current: new Map() },
+      onOpenFinding: vi.fn(),
+    }
+    const html = renderToStaticMarkup(
+      <FindingsResults {...props} hasConstraints onReset={vi.fn()} />
+    )
+    expect(html).toContain("No matching findings")
+    expect(html).toContain("Reset filters and search")
+    expect(html).not.toContain("Start a scan")
+    expect(renderToStaticMarkup(<FindingsResults {...props} error />)).not.toContain("No findings")
   })
 })

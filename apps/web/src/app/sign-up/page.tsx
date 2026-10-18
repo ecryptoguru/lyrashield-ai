@@ -29,6 +29,8 @@ import {
 } from "@/lib/analytics"
 import { storePendingInvitation } from "@/lib/pending-invitation"
 import { parsePlanIntent, planIntentPath, rememberPlanIntent } from "@/lib/plan-intent"
+import { SignupReassurance } from "@/components/signup-reassurance"
+import { resendSignupVerificationEmail } from "@/lib/signup-verification"
 
 const marketingUrl = (process.env.NEXT_PUBLIC_MARKETING_URL || "https://lyrashieldai.com").replace(
   /\/$/,
@@ -56,6 +58,9 @@ export default function SignUpPage() {
   // "no OAuth configured" from "still loading" — rendering nothing makes the
   // page look like a bare credentials form. Show a skeleton instead.
   const [providersLoading, setProvidersLoading] = useState(true)
+  const [providersError, setProvidersError] = useState(false)
+  const [providersRetryKey, setProvidersRetryKey] = useState(0)
+  const [planIntent, setPlanIntent] = useState<ReturnType<typeof parsePlanIntent>>(null)
   const attribution = useRef<SignupAttribution>({})
   const selectedPlan = useRef<string | null>(null)
   const [invited, setInvited] = useState(false)
@@ -64,6 +69,10 @@ export default function SignUpPage() {
     const params = new URLSearchParams(window.location.search)
     selectedPlan.current = parsePlanIntent(params.get("plan"))
     rememberPlanIntent(selectedPlan.current)
+    const planTimer = window.setTimeout(
+      () => setPlanIntent(selectedPlan.current as ReturnType<typeof parsePlanIntent>),
+      0
+    )
     // Team invitation link: stash the token for the post-auth bridge and
     // strip it from the URL so it cannot leak into redirects or analytics.
     const inviteToken = params.get("invite")
@@ -92,8 +101,21 @@ export default function SignUpPage() {
       window.history.replaceState(null, "", signupErrorUrl(nextAttribution, selectedPlan.current))
     }
 
+    return () => {
+      window.clearTimeout(planTimer)
+      if (oauthErrorTimer !== undefined) window.clearTimeout(oauthErrorTimer)
+      if (inviteTimer !== undefined) window.clearTimeout(inviteTimer)
+    }
+  }, [])
+
+  useEffect(() => {
+    void providersRetryKey
+    let active = true
     void fetch("/api/auth/providers", { signal: AbortSignal.timeout(5_000) })
-      .then((response) => (response.ok ? response.json() : null))
+      .then((response) => {
+        if (!response.ok) throw new Error("Sign-up options unavailable")
+        return response.json()
+      })
       .then(
         (
           data: {
@@ -103,7 +125,8 @@ export default function SignUpPage() {
             emailVerification?: boolean
           } | null
         ) => {
-          if (data) {
+          if (!data) throw new Error("Sign-up options unavailable")
+          if (active) {
             setProviders({
               github: Boolean(data.github),
               google: Boolean(data.google),
@@ -113,14 +136,17 @@ export default function SignUpPage() {
           }
         }
       )
-      .catch(() => {})
-      .finally(() => setProvidersLoading(false))
+      .catch(() => {
+        if (active) setProvidersError(true)
+      })
+      .finally(() => {
+        if (active) setProvidersLoading(false)
+      })
 
     return () => {
-      if (oauthErrorTimer !== undefined) window.clearTimeout(oauthErrorTimer)
-      if (inviteTimer !== undefined) window.clearTimeout(inviteTimer)
+      active = false
     }
-  }, [])
+  }, [providersRetryKey])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -238,10 +264,10 @@ export default function SignUpPage() {
     setResendLoading(true)
     setResendStatus("idle")
     try {
-      await authClient.sendVerificationEmail({
+      await resendSignupVerificationEmail(
         email,
-        callbackURL: planIntentPath("/onboarding", selectedPlan.current),
-      })
+        planIntentPath("/onboarding", selectedPlan.current)
+      )
       setResendStatus("success")
       setResendCooldown(30)
       const tick = () => {
@@ -332,6 +358,7 @@ export default function SignUpPage() {
         }
       >
         <div className="bg-card rounded-xl border p-6 shadow-lg sm:p-8">
+          <SignupReassurance plan={planIntent} />
           <form onSubmit={handleSubmit} className="space-y-4">
             <FormField label="Name" htmlFor="name">
               <Input
@@ -408,20 +435,39 @@ export default function SignUpPage() {
           </form>
 
           {providersLoading && (
-            <div aria-hidden="true" data-testid="oauth-skeleton">
-              <div className="my-6 flex items-center gap-3">
-                <div className="bg-border h-px flex-1" />
-                <span className="text-muted-foreground text-xs font-medium">OR</span>
-                <div className="bg-border h-px flex-1" />
-              </div>
-              <div className="space-y-3">
-                <Skeleton className="h-10 w-full" />
-                <Skeleton className="h-10 w-full" />
+            <>
+              <div aria-hidden="true" data-testid="oauth-skeleton">
+                <div className="my-6 flex items-center gap-3">
+                  <div className="bg-border h-px flex-1" />
+                  <span className="text-muted-foreground text-xs font-medium">OR</span>
+                  <div className="bg-border h-px flex-1" />
+                </div>
+                <div className="space-y-3">
+                  <Skeleton className="h-10 w-full" />
+                  <Skeleton className="h-10 w-full" />
+                </div>
               </div>
               <span className="sr-only" role="status">
                 Loading sign-up options
               </span>
-            </div>
+            </>
+          )}
+
+          {!providersLoading && providersError && (
+            <p className="text-muted-foreground mt-6 text-sm" role="alert">
+              Sign-up options could not be loaded.{" "}
+              <button
+                type="button"
+                className="text-primary underline underline-offset-2"
+                onClick={() => {
+                  setProvidersError(false)
+                  setProvidersLoading(true)
+                  setProvidersRetryKey((key) => key + 1)
+                }}
+              >
+                Retry
+              </button>
+            </p>
           )}
 
           {!providersLoading && (providers.github || providers.google || providers.microsoft) && (

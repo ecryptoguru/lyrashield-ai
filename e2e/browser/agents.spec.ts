@@ -44,7 +44,7 @@ test("agent cards group client surfaces and update setup material with selection
   await claudeSurface.selectOption("claude-code-agent-plugin")
   await expect(claude).toContainText("Manual Agent Plugin setup")
   await expect(claude.getByLabel("Published install command")).toHaveCount(0)
-  await claude.getByText("Manual setup notes", { exact: true }).click()
+  await claude.getByText("Setup details", { exact: true }).click()
   await expect(claude).toContainText(
     "public listing and authenticated runtime acceptance remain pending"
   )
@@ -306,7 +306,7 @@ for (const width of [375, 1280]) {
       .selectOption("vscode-agent-plugin")
     await expect(card).toContainText("Manual Agent Plugin setup")
     await expect(card.getByLabel("Published install command")).toHaveCount(0)
-    await card.getByText("Manual setup notes", { exact: true }).click()
+    await card.getByText("Setup details", { exact: true }).click()
     await expect(card).toContainText("MANUAL_REQUIRED")
     await expect(card).toContainText(".vscode/mcp.json")
     await expect(card).not.toContainText("global: ~/.lyrashield/plugins/lyrashield")

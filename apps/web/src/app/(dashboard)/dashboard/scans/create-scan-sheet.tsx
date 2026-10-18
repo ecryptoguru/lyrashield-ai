@@ -174,6 +174,12 @@ export function CreateScanSheet({
                   </option>
                 ))}
               </Select>
+              <Link
+                href="/dashboard/scans?new=1&source=url"
+                className="text-primary inline-flex min-h-11 items-center text-sm font-medium underline underline-offset-4"
+              >
+                Add a new target
+              </Link>
             </FormField>
 
             <div>

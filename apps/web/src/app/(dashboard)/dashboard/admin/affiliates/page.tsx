@@ -1,3 +1,6 @@
+import Link from "next/link"
+import { buttonVariants } from "@lyrashield/ui"
+import { parseAdminCursor } from "@/lib/platform-admin-lists"
 import { prisma } from "@lyrashield/db"
 import { getCachedSession } from "@/lib/cache"
 import { redirect } from "next/navigation"
@@ -11,7 +14,55 @@ export const metadata = {
   title: "Affiliate Admin",
 }
 
-export default async function AffiliateAdminPage() {
+const PAGE_SIZE = 25
+const CURSOR_KEYS = ["pending", "approved", "suspended", "payouts"] as const
+type CursorKey = (typeof CURSOR_KEYS)[number]
+type Cursors = Partial<Record<CursorKey, string>>
+
+function listPage<T extends { id: string }>(rows: T[]) {
+  const items = rows.slice(0, PAGE_SIZE)
+  return { items, nextCursor: rows.length > PAGE_SIZE ? items.at(-1)!.id : null }
+}
+
+function AffiliatePages({
+  name,
+  cursors,
+  nextCursor,
+}: {
+  name: CursorKey
+  cursors: Cursors
+  nextCursor: string | null
+}) {
+  function href(cursor: string | null) {
+    const params = new URLSearchParams()
+    for (const key of CURSOR_KEYS) {
+      const value = key === name ? cursor : cursors[key]
+      if (value) params.set(key, value)
+    }
+    return `/dashboard/admin/affiliates?${params.toString()}#${name}`
+  }
+  if (!cursors[name] && !nextCursor) return null
+  return (
+    <nav aria-label={`${name} pages`} className="mt-4 flex flex-wrap gap-2">
+      {cursors[name] && (
+        <Link href={href(null)} className={buttonVariants({ variant: "secondary" })}>
+          First page
+        </Link>
+      )}
+      {nextCursor && (
+        <Link href={href(nextCursor)} className={buttonVariants({ variant: "secondary" })}>
+          Next page
+        </Link>
+      )}
+    </nav>
+  )
+}
+
+export default async function AffiliateAdminPage({
+  searchParams,
+}: {
+  searchParams: Promise<Partial<Record<CursorKey, string>>>
+}) {
   const session = await getCachedSession()
   if (!session) return null
 
@@ -21,17 +72,35 @@ export default async function AffiliateAdminPage() {
     redirect("/dashboard")
   }
 
-  const [pending, approved, suspended, payouts] = await Promise.all([
+  const params = await searchParams
+  const cursors: Cursors = {}
+  for (const key of CURSOR_KEYS) cursors[key] = parseAdminCursor(params[key])
+  const pagination = (name: CursorKey) => ({
+    take: PAGE_SIZE + 1,
+    ...(cursors[name] ? { cursor: { id: cursors[name] }, skip: 1 } : {}),
+  })
+  const [
+    pendingRows,
+    approvedRows,
+    suspendedRows,
+    payoutRows,
+    pendingCount,
+    approvedCount,
+    suspendedCount,
+    payoutCount,
+  ] = await Promise.all([
     prisma.affiliate.findMany({
       where: { status: "PENDING" },
-      orderBy: { createdAt: "desc" },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      ...pagination("pending"),
       include: {
         user: { select: { email: true, name: true } },
       },
     }),
     prisma.affiliate.findMany({
       where: { status: "APPROVED" },
-      orderBy: { approvedAt: "desc" },
+      orderBy: [{ approvedAt: "desc" }, { id: "desc" }],
+      ...pagination("approved"),
       include: {
         user: { select: { email: true, name: true } },
         _count: {
@@ -41,7 +110,8 @@ export default async function AffiliateAdminPage() {
     }),
     prisma.affiliate.findMany({
       where: { status: "SUSPENDED" },
-      orderBy: { createdAt: "desc" },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      ...pagination("suspended"),
       include: {
         user: { select: { email: true, name: true } },
       },
@@ -50,8 +120,8 @@ export default async function AffiliateAdminPage() {
       // C-M10: Query both PENDING and PROCESSING — requestPayout creates as
       // PROCESSING, so querying only PENDING made all payouts invisible.
       where: { status: { in: ["PENDING", "PROCESSING"] } },
-      orderBy: { requestedAt: "desc" },
-      take: 20,
+      orderBy: [{ requestedAt: "desc" }, { id: "desc" }],
+      ...pagination("payouts"),
       include: {
         affiliate: {
           include: {
@@ -60,7 +130,19 @@ export default async function AffiliateAdminPage() {
         },
       },
     }),
+    prisma.affiliate.count({ where: { status: "PENDING" } }),
+    prisma.affiliate.count({ where: { status: "APPROVED" } }),
+    prisma.affiliate.count({ where: { status: "SUSPENDED" } }),
+    prisma.payout.count({ where: { status: { in: ["PENDING", "PROCESSING"] } } }),
   ])
+  const pendingPage = listPage(pendingRows)
+  const approvedPage = listPage(approvedRows)
+  const suspendedPage = listPage(suspendedRows)
+  const payoutPage = listPage(payoutRows)
+  const pending = pendingPage.items
+  const approved = approvedPage.items
+  const suspended = suspendedPage.items
+  const payouts = payoutPage.items
 
   return (
     <div className="mx-auto w-full min-w-0 max-w-6xl px-4 py-8">
@@ -69,11 +151,11 @@ export default async function AffiliateAdminPage() {
         description="Review applications, affiliates and payouts. Changes remain disabled until one-time authorization and atomic audit controls are connected."
       />
 
-      <section className="mt-6">
-        <h2 className="mb-4 text-lg font-semibold">Approval Queue ({pending.length})</h2>
+      <section id="pending" className="mt-6 scroll-mt-24">
+        <h2 className="mb-4 text-lg font-semibold">Approval Queue ({pendingCount})</h2>
         <div className="space-y-3">
           {pending.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No pending applications.</p>
+            <p className="text-sm text-muted-foreground">No pending applications on this page.</p>
           ) : (
             pending.map((aff) => (
               <div
@@ -93,10 +175,11 @@ export default async function AffiliateAdminPage() {
             ))
           )}
         </div>
+        <AffiliatePages name="pending" cursors={cursors} nextCursor={pendingPage.nextCursor} />
       </section>
 
-      <section className="mt-8">
-        <h2 className="mb-4 text-lg font-semibold">Approved Affiliates ({approved.length})</h2>
+      <section id="approved" className="mt-8 scroll-mt-24">
+        <h2 className="mb-4 text-lg font-semibold">Approved Affiliates ({approvedCount})</h2>
         <div className="min-w-0 overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -151,13 +234,17 @@ export default async function AffiliateAdminPage() {
             </tbody>
           </table>
         </div>
+        {approved.length === 0 && (
+          <p className="text-muted-foreground py-4 text-sm">No approved affiliates on this page.</p>
+        )}
+        <AffiliatePages name="approved" cursors={cursors} nextCursor={approvedPage.nextCursor} />
       </section>
 
-      <section className="mt-8">
-        <h2 className="mb-4 text-lg font-semibold">Pending Payouts ({payouts.length})</h2>
+      <section id="payouts" className="mt-8 scroll-mt-24">
+        <h2 className="mb-4 text-lg font-semibold">Pending Payouts ({payoutCount})</h2>
         <div className="space-y-3">
           {payouts.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No pending payouts.</p>
+            <p className="text-sm text-muted-foreground">No pending payouts on this page.</p>
           ) : (
             payouts.map((p) => (
               <div
@@ -182,11 +269,12 @@ export default async function AffiliateAdminPage() {
             ))
           )}
         </div>
+        <AffiliatePages name="payouts" cursors={cursors} nextCursor={payoutPage.nextCursor} />
       </section>
 
-      {suspended.length > 0 && (
-        <section className="mt-8">
-          <h2 className="mb-4 text-lg font-semibold">Suspended Affiliates ({suspended.length})</h2>
+      {(suspendedCount > 0 || cursors.suspended) && (
+        <section id="suspended" className="mt-8 scroll-mt-24">
+          <h2 className="mb-4 text-lg font-semibold">Suspended Affiliates ({suspendedCount})</h2>
           <div className="space-y-3">
             {suspended.map((aff) => (
               <div
@@ -202,6 +290,14 @@ export default async function AffiliateAdminPage() {
               </div>
             ))}
           </div>
+          {suspended.length === 0 && (
+            <p className="text-muted-foreground text-sm">No suspended affiliates on this page.</p>
+          )}
+          <AffiliatePages
+            name="suspended"
+            cursors={cursors}
+            nextCursor={suspendedPage.nextCursor}
+          />
         </section>
       )}
     </div>

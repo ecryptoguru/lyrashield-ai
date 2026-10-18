@@ -1,5 +1,6 @@
 "use client"
 
+import { useRouter } from "next/navigation"
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react"
 import { useScansWebMcp } from "./scans-webmcp"
 import { useScanListState } from "./use-scan-list-state"
@@ -95,6 +96,7 @@ export function ScansClient({
   initialFilterUnavailable = false,
   canManageBilling = false,
 }: ScansClientProps) {
+  const router = useRouter()
   const [showCreate, setShowCreate] = useState(initialShowCreate)
   const reviewChoiceVersion = useRef(0)
   // One active target and no explicit selection: preselect it. Choosing among
@@ -235,6 +237,7 @@ export function ScansClient({
         let submission = begun.submission
         setPendingScanSubmission(submission)
         if (submission.state === "accepted" && submission.scanId) {
+          router.push(`/dashboard/scans/${encodeURIComponent(submission.scanId)}`)
           setShowCreate(false)
           return
         }
@@ -299,6 +302,7 @@ export function ScansClient({
           )
         }
         setShowCreate(false)
+        router.push(`/dashboard/scans/${encodeURIComponent(result.id)}`)
         setSelectedFocus(null)
         setBaseRef("")
         setHeadRef("")
@@ -698,7 +702,7 @@ export function ScansClient({
             aria-label={`Filter by ${TARGET_SINGULAR.toLowerCase()}`}
             value={targetFilter}
             onChange={(e) => handleTargetFilterChange(e.target.value)}
-            className="h-9 w-44"
+            className="h-11 w-full sm:w-44"
           >
             <option value="">All {TARGET_PLURAL.toLowerCase()}</option>
             {targets.map((t) => (
@@ -711,7 +715,7 @@ export function ScansClient({
             aria-label="Filter by state"
             value={stateFilter}
             onChange={(e) => handleStateFilterChange(e.target.value)}
-            className="h-9 w-40"
+            className="h-11 w-full sm:w-40"
           >
             {SCAN_STATE_FILTERS.map((state) => (
               <option key={state} value={state}>

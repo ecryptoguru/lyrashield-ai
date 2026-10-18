@@ -52,8 +52,11 @@ describe("deriveHomeDecision — one canonical action", () => {
       ...base,
       targets: { ...base.targets, total: 0, unassessed: 0 },
     })
-    expect(decision.action?.title).toBe("Add your first target")
-    expect(decision.primaryAction).toEqual({ href: "/dashboard/targets", label: "Add a target" })
+    expect(decision.action?.title).toBe("Start your first scan")
+    expect(decision.primaryAction).toEqual({
+      href: "/dashboard/scans?new=1",
+      label: "Start your first scan",
+    })
   })
 
   it("asks for a first scan when a target exists but nothing has been evaluated", () => {

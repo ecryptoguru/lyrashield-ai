@@ -16,7 +16,7 @@ import { env } from "@lyrashield/config"
  */
 
 const TTL_MS = 10 * 60 * 1000 // 10 minutes
-const INSTALL_RETURN_DESTINATIONS = ["onboarding", "integrations"] as const
+const INSTALL_RETURN_DESTINATIONS = ["onboarding", "integrations", "scan"] as const
 type InstallReturnDestination = (typeof INSTALL_RETURN_DESTINATIONS)[number]
 
 function b64url(input: Buffer | string): string {

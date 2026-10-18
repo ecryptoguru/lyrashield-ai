@@ -38,7 +38,7 @@ Both modes share the same engine and the same loop. Optional Cloud Sync moves se
 
 ## 4. What's covered
 
-- **Vibe Security 50** — a versioned 50-control coverage contract across code, URL and operational risk families. Every scan produces an immutable per-control receipt; an unreported control is never presented as passed.
+- **Vibe Security 50** — the versioned 50-control coverage contract across code, URL and operational risk families. Scans report per-control outcomes, and scan-finalization coverage is bound into the checksummed result manifest; an unreported control is never presented as passed.
 - **Launch Gate** — a named, versioned readiness standard producing `READY` / `NOT_READY` / `INSUFFICIENT_EVIDENCE` verdicts, persisted append-only per target.
 - **Launch Readiness Report** — a signed, shareable, publicly verifiable artifact bound to a frozen evidence payload.
 - **AI-Built Failure Taxonomy** — a public, citable catalog of how AI-built apps characteristically fail, every class traced to live controls.

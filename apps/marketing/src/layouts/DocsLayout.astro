@@ -27,6 +27,8 @@ const {
   currentPath = "",
 } = Astro.props
 
+const breadcrumbTitle = title.replace(/\s*\|\s*LyraShield AI$/, "")
+
 // Derived from the registry rather than hand-listed: a hard-coded list silently
 // drops newly shipped agents. `listPreferredAgents` is the same source the
 // integrations index and the dashboard use, so the three stay in sync.
@@ -126,7 +128,7 @@ const navGroups: { heading: string; links: NavLink[] }[] =
           <li aria-hidden="true">/</li>
           <li><a href="/docs/integrations" class="hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">Docs</a></li>
           <li aria-hidden="true">/</li>
-          <li aria-current="page" class="text-text">{title}</li>
+          <li aria-current="page" class="text-text">{breadcrumbTitle}</li>
         </ol>
       </nav>
       {updatedDate && (

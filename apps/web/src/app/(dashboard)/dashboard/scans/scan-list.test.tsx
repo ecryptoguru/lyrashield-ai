@@ -65,7 +65,7 @@ describe("scan retry setup", () => {
     expect(html).toContain("completed Sep 23, 2026, 00:05 UTC")
   })
 
-  it("links the empty scans state directly to the open add-target form", () => {
+  it("links the empty scans state directly to guided scan setup", () => {
     const html = renderToStaticMarkup(
       <ScanList
         scans={[]}
@@ -86,7 +86,7 @@ describe("scan retry setup", () => {
       />
     )
 
-    expect(html).toContain('href="/dashboard/targets?add=1"')
+    expect(html).toContain('href="/dashboard/scans?new=1"')
     expect(html).toContain("Add a target")
   })
 })

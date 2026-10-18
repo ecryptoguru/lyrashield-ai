@@ -26,7 +26,10 @@
     "blog:images:derive": "node scripts/derive-blog-images.mjs",
     "blog:images:verify": "node scripts/verify-blog-images.mjs",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src scripts vite.config.ts --max-warnings 0"
+    "lint": "eslint src scripts vite.config.ts --max-warnings 0",
+    "draft:desktop": "VITE_SHOW_COPY=false VITE_OUTPUT_VARIANT=desktop-draft VITE_COMP_WIDTH=960 VITE_COMP_HEIGHT=540 vite build --mode desktop && mkdir -p renders/drafts && cd dist/desktop-draft && npx --yes hyperframes@0.7.107 render --fps 15 --quality draft --workers 2 --output ../../renders/drafts/assurance-world-desktop.mp4",
+    "draft:portrait": "VITE_SHOW_COPY=false VITE_OUTPUT_VARIANT=portrait-draft VITE_COMP_WIDTH=540 VITE_COMP_HEIGHT=960 vite build --mode portrait && mkdir -p renders/drafts && cd dist/portrait-draft && npx --yes hyperframes@0.7.107 render --fps 15 --quality draft --workers 2 --output ../../renders/drafts/assurance-world-portrait.mp4",
+    "test:camera": "node --test tests/camera.test.mjs"
   },
   "dependencies": {
     "@fontsource-variable/bricolage-grotesque": "^5.3.0",

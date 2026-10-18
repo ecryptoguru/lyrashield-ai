@@ -4,6 +4,7 @@ import type { ScanStatus } from "@lyrashield/db"
 import { redirect } from "next/navigation"
 import { Radar } from "lucide-react"
 import { hasPermission, PERMISSIONS } from "@lyrashield/auth"
+import { TargetsClient } from "../targets/targets-client"
 import { ScansClient } from "./scans-client"
 import { SchedulesClient } from "../schedules/schedules-client"
 import { getCachedSession, getCachedWorkspaceContext, getCachedWorkspaceId } from "@/lib/cache"
@@ -33,6 +34,7 @@ export default async function ScansPage({
 }: {
   searchParams: Promise<{
     new?: string
+    source?: string
     tab?: string
     target?: string
     goal?: string
@@ -161,6 +163,28 @@ export default async function ScansPage({
   }))
 
   const autoOpen = params.new === "1"
+  if (
+    autoOpen &&
+    (targets.length === 0 || params.source === "repo" || params.source === "url") &&
+    !params.target
+  ) {
+    const integration = await prisma.integration.findFirst({
+      where: { workspaceId, type: "GITHUB", status: "active", deletedAt: null },
+    })
+    return (
+      <TargetsClient
+        key={workspaceId}
+        scanSetup
+        workspaceId={workspaceId}
+        initialData={[]}
+        initialNextCursor={null}
+        githubConnected={Boolean(integration)}
+        githubAccountLogin={
+          (integration?.metadata as { accountLogin?: string } | null)?.accountLogin ?? null
+        }
+      />
+    )
+  }
   const recoveryTarget = targets.find((target) => target.id === params.target)
   const activeRole = workspaceContext.workspaces.find((w) => w.id === workspaceId)?.role
   const canManageBilling = activeRole

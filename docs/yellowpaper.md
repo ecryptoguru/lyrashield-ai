@@ -86,18 +86,18 @@ Optional browser error reporting waits for a resolved opt-in and emits only sani
 
 ## 3. Deterministic coverage contracts
 
-### 3.1 Vibe Security 50 (`vibe-security-50/1.1.0`)
+### 3.1 Vibe Security 50 (`vibe-security-50/1.2.0`)
 
 Fifty controls routed through four coverage strategies:
 
-| Strategy          | Count | Controls                                  | Basis                                                         |
-| ----------------- | ----: | ----------------------------------------- | ------------------------------------------------------------- |
-| Deterministic     |     5 | 3, 27, 29, 37, 45                         | Bounded repeatable observation over repository or response    |
-| Hybrid            |    10 | 1, 2, 14, 20, 28, 31, 32, 38, 39, 47      | Deterministic signal finds risk; absence stays inconclusive   |
-| Engine-led        |    28 | 4–13, 15–19, 21–26, 30, 33, 40–42, 44, 49 | Require auth, data-flow, live interaction or business context |
-| Evidence-required |     7 | 34, 35, 36, 43, 46, 48, 50                | Need deployment/process/human proof a scan cannot establish   |
+| Strategy          | Count | Controls                                        | Basis                                                         |
+| ----------------- | ----: | ----------------------------------------------- | ------------------------------------------------------------- |
+| Deterministic     |     5 | 3, 27, 29, 37, 45                               | Bounded repeatable observation over repository or response    |
+| Hybrid            |    11 | 1, 2, 10, 14, 20, 28, 31, 32, 38, 39, 47        | Deterministic signal finds risk; absence stays inconclusive   |
+| Engine-led        |    27 | 4–9, 11–13, 15–19, 21–26, 30, 33, 40–42, 44, 49 | Require auth, data-flow, live interaction or business context |
+| Evidence-required |     7 | 34, 35, 36, 43, 46, 48, 50                      | Need deployment/process/human proof a scan cannot establish   |
 
-Every scan records a `coverage_contract` event and one immutable receipt per control. Result language is honest: `DETECTED`, `NO_FINDING` (never "passed"), `INCONCLUSIVE`, `NOT_APPLICABLE`, `EVIDENCE_REQUIRED`. URL/API scans use the versioned `url-scan/3.0.0` capability registry (six released profiles: Surface, Expanded Surface, Behavioral Surface, Endpoint, Contract, Contract Behavior Review) and show only applicable deterministic receipts.
+Every scan records a `coverage_contract` event and one outcome per control. Scan-finalization coverage entries are bound into the checksummed result manifest; receipt rows are an operational projection and connector outcomes can update them as execution progresses. Result language is honest: `DETECTED`, `NO_FINDING` (never "passed"), `INCONCLUSIVE`, `NOT_APPLICABLE`, `EVIDENCE_REQUIRED`. URL/API scans use the versioned `url-scan/3.0.0` capability registry (six released profiles: Surface, Expanded Surface, Behavioral Surface, Endpoint, Contract, Contract Behavior Review) and show only applicable deterministic receipts.
 
 Execution reuses the engine invocation plus deterministic SCA, secrets, URL, agent-configuration, AI data-exposure and ML supply-chain phases. CVE-bearing dependency findings may receive bounded, cached enrichment from the CISA KEV catalog and FIRST EPSS; enrichment may fail without failing the scan and never changes severity or verification state.
 
@@ -227,7 +227,7 @@ Threat model covered: license forgery and tampering (signature over exact payloa
 
 | Contract                       | Version                                     | Surface                         |
 | ------------------------------ | ------------------------------------------- | ------------------------------- |
-| Vibe Security 50               | `vibe-security-50/1.1.0`                    | Full scans, dashboards, reports |
+| Vibe Security 50               | `vibe-security-50/1.2.0`                    | Full scans, dashboards, reports |
 | URL scan capability registry   | `url-scan/3.0.0`                            | WEB_APP/API targets             |
 | Launch Gate                    | `lyrashield-gate/2.3.0`                     | Verdicts, reports, CLI, badge   |
 | AI-Built Failure Taxonomy      | `ai-built-failure-taxonomy/1.0.0`           | Public read-only endpoint       |

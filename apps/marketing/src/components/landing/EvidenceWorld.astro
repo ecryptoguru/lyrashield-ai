@@ -1,694 +1,511 @@
 ---
 import type { MotionMediaManifest } from "../../lib/motion-manifest"
-import { CHAPTER_POSTER_ALT } from "../../lib/motion-manifest"
-
-interface Props {
-  manifest: MotionMediaManifest
-}
-
+interface Props { manifest: MotionMediaManifest }
 const { manifest } = Astro.props
+const labels = ["Overview", "Target", "Review", "Evidence", "Approval", "Retest", "Report"]
+const receipts = [
+  "Authorized scope is stated",
+  "Target identity stays on record",
+  "The checks that ran are recorded",
+  "Detected is distinct from proven",
+  "A proposal still needs approval",
+  "Missing coverage stays inconclusive",
+  "Scope and limitations travel with the report",
+]
 ---
 
-<evidence-world id="assurance-world" aria-labelledby="journey-heading" data-manifest={JSON.stringify(manifest)}>
-  <div class="evidence-world__stage" aria-hidden="true">
-    <div class="evidence-world__media">
-      {
-        manifest.chapters.map((chapter, index) => (
-          <picture class:list={["evidence-world__poster", { "is-active": index === 0 }]} data-poster-index={index}>
-            <source media="(max-width: 767px)" srcset={chapter.portraitPoster} />
-            <img src={chapter.desktopPoster} data-poster-chapter={chapter.id} alt={CHAPTER_POSTER_ALT[chapter.id]} width="1600" height="900" loading={index === 0 ? "eager" : "lazy"} decoding="async" />
-          </picture>
-        ))
-      }
-      <video class="evidence-world__video" muted playsinline preload="none" tabindex="-1"></video>
-      <div class="evidence-world__media-veil"></div>
-    </div>
-    <div class="evidence-world__chrome">
-      <span data-progress-label>01 / 07</span>
-      <i><b data-progress-bar></b></i>
-      <span>ASSURANCE WORLD</span>
-    </div>
-  </div>
-
-  <header class="evidence-world__intro">
-    <h2 id="journey-heading">From target to verdict.</h2>
-    <p>One finding, followed through the loop.</p>
+<evidence-journey id="assurance-world" aria-labelledby="journey-heading">
+  <header class="journey__intro">
+    <div><h2 id="journey-heading">From target to verdict.</h2><p>One finding, followed through the loop.</p></div>
+    <a href="#product-preview">Skip to the product preview <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M6 18 18 6M6 6h12v12" /></svg></a>
   </header>
-
-  <div class="evidence-world__chapters">
-    {
-      manifest.chapters.map((chapter, index) => (
-        <section class="evidence-world__chapter" data-chapter-index={index} aria-labelledby={`chapter-${chapter.id}`}>
-          {[
-            { eyebrow: chapter.eyebrow, title: chapter.title, body: chapter.body },
-            chapter.supportingCard,
-          ].filter(Boolean).map((card, cardIndex) => card && (
-            <div
-              class:list={["evidence-world__copy", { "is-card-active": cardIndex === 0 }]}
-              data-story-card-index={cardIndex}
-              data-story-card-id={`${chapter.id}-${cardIndex === 0 ? "primary" : "support"}`}
-            >
-              <p>{card.eyebrow}</p>
-              <h2 id={cardIndex === 0 ? `chapter-${chapter.id}` : undefined}>{card.title}</h2>
-              <div class="evidence-world__rule"></div>
-              <p>{card.body}</p>
-              {cardIndex === 0 && chapter.id === "evidence-state" && (
-                <ul>
-                  <li><i class="state-detected" />Detected</li>
-                  <li><i class="state-confirmed" />Retest-confirmed</li>
-                  <li><i class="state-inconclusive" />Inconclusive</li>
-                </ul>
-              )}
-              {"items" in card && card.items && (
-                <ul class="evidence-world__points">
-                  {card.items.map((item) => <li>{item}</li>)}
-                </ul>
-              )}
-              {cardIndex === 0 && chapter.id === "report" && <span class="evidence-world__status">Scope stated · limitations retained</span>}
-              {"status" in card && card.status && <span class="evidence-world__status">{card.status}</span>}
-              {"primaryCta" in card && card.primaryCta && (
-                <div class="evidence-world__actions">
-                  <a href={card.primaryCta.href} data-cta-id={card.primaryCta.id}>{card.primaryCta.label}</a>
-                  {card.secondaryCta && <a class="is-secondary" href={card.secondaryCta.href} data-cta-id={card.secondaryCta.id}>{card.secondaryCta.label}</a>}
-                </div>
-              )}
-            </div>
-          ))}
+  <nav class="journey__nav" aria-label="Evidence journey chapters">
+    {manifest.chapters.map((chapter, index) => (
+      <a href={`#journey-${chapter.id}`} data-journey-link={index} aria-current={index === 0 ? "step" : undefined}>
+        <span class="journey__node" aria-hidden="true">{String(index).padStart(2, "0")}</span>{labels[index]}
+      </a>
+    ))}
+  </nav>
+  <div class="journey__layout">
+    <div class="journey__chapters">
+      {manifest.chapters.map((chapter, index) => (
+        <section id={`journey-${chapter.id}`} class="journey__chapter" data-journey-chapter={index} aria-labelledby={`chapter-${chapter.id}`}>
+          <h3 id={`chapter-${chapter.id}`}>{chapter.title}</h3>
+          <p>{chapter.body}</p>
+          {chapter.id === "evidence-state" && <ul class="journey__states"><li><i class="state-detected" />Detected</li><li><i class="state-confirmed" />Retest-confirmed</li><li><i class="state-inconclusive" />Inconclusive</li></ul>}
+          <p class="journey__receipt"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M6 3h9l3 3v15H6zM9 10h6M9 14h6M9 18h4" /></svg><span>Example EX-014 · {receipts[index]}</span></p>
+          {chapter.supportingCard && <details>
+            <summary>{chapter.supportingCard.title}</summary>
+            <p>{chapter.supportingCard.body}</p>
+            {chapter.supportingCard.items && <ul>{chapter.supportingCard.items.map(item => <li>{item}</li>)}</ul>}
+            {chapter.supportingCard.status && <p>{chapter.supportingCard.status}</p>}
+            {chapter.supportingCard.primaryCta && <div class="journey__actions"><a href={chapter.supportingCard.primaryCta.href} data-cta-id={chapter.supportingCard.primaryCta.id}>{chapter.supportingCard.primaryCta.label}</a>{chapter.supportingCard.secondaryCta && <a href={chapter.supportingCard.secondaryCta.href} data-cta-id={chapter.supportingCard.secondaryCta.id}>{chapter.supportingCard.secondaryCta.label}</a>}</div>}
+          </details>}
         </section>
-      ))
-    }
+      ))}
+    </div>
+    <aside class="journey__scene" aria-label="Illustrative finding and report" data-journey-scene data-stage="0">
+      <div class="journey__scene-heading"><span>Illustrative example</span><span data-journey-progress>01 / 07</span></div>
+      <div class="journey__track" aria-hidden="true"><i></i><span></span></div>
+      <article class="journey__artifact">
+        <div class="journey__artifact-top"><span>Finding EX-014</span><span class="journey__badge">Detected</span></div>
+        <h3>Missing rate limit on login route</h3>
+        <p>An illustrative observation, not a real vulnerability report.</p>
+        <dl><div><dt>Target scope</dt><dd>Authorized example route</dd></div><div><dt>Evidence coverage</dt><dd>Bounded to the checks that ran</dd></div><div><dt>Latest evaluated review</dt><dd>Example only</dd></div></dl>
+        <div class="journey__receipts">
+          <p data-receipt-stage="1"><span>Scope</span>Target identity retained</p>
+          <p data-receipt-stage="2"><span>Review</span>Check method recorded</p>
+          <p data-receipt-stage="3"><span>Evidence</span>Detected · not independently proven</p>
+          <p data-receipt-stage="4"><span>Approval</span>Proposal awaiting review</p>
+          <p data-receipt-stage="5"><span>Retest</span>Incomplete coverage · inconclusive</p>
+        </div>
+      </article>
+      <section class="journey__report" aria-labelledby="sample-report-heading">
+        <div><h3 id="sample-report-heading">Assurance report</h3><span>Insufficient evidence</span></div>
+        <p>Example EX-014 remains on record.</p>
+        <ul><li>Authorized scope retained</li><li>Approval required</li><li>Retest coverage incomplete</li></ul>
+        <p class="journey__report-limit">Missing proof stays visible. No security guarantee.</p>
+      </section>
+    </aside>
   </div>
-</evidence-world>
+</evidence-journey>
 
 <script>
-  function bootstrapEvidenceWorld() {
-    if (customElements.get("evidence-world")) return
-    void import("./evidence-world.ts")
-  }
-
-  const el = document.getElementById("assurance-world")
-  const connection = (
-    navigator as Navigator & {
-      connection?: { saveData?: boolean; effectiveType?: string }
-    }
-  ).connection
-  const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches
-  const saveData = connection?.saveData === true
-  const slowNetwork =
-    connection?.effectiveType === "2g" || connection?.effectiveType === "slow-2g"
-  if (el && !reduced && !saveData) el.classList.add("is-motion-layout")
-  if (el && "IntersectionObserver" in window) {
-    const observer = new IntersectionObserver(
-      (entries, obs) => {
-        for (const entry of entries) {
-          if (entry.isIntersecting) {
-            obs.disconnect()
-            bootstrapEvidenceWorld()
-            break
-          }
-        }
-      },
-      { rootMargin: "50% 0px" }
-    )
-    observer.observe(el)
-
-    // Buffer one viewport beyond the visible viewport, without downloading
-    // the timeline while a visitor is still at the hero. Use height-based
-    // pixels: IntersectionObserver percentage margins are based on width.
-    // The controller's existing 50% observer still owns story activation.
-    if (!reduced && !saveData && !slowNetwork) {
-      let warmObserver: IntersectionObserver | undefined
-      const observeApproach = () => {
-        warmObserver?.disconnect()
-        warmObserver = new IntersectionObserver(
-          (entries, obs) => {
-            if (!entries.some((entry) => entry.isIntersecting)) return
-            obs.disconnect()
-            removeEventListener("resize", observeApproach)
-            bootstrapEvidenceWorld()
-          },
-          { rootMargin: `${innerHeight}px 0px` }
-        )
-        warmObserver.observe(el)
-      }
-      addEventListener("resize", observeApproach, { passive: true })
-      observeApproach()
-    }
-  } else {
-    bootstrapEvidenceWorld()
-  }
+  import "./evidence-journey"
 </script>
 
 <style>
-  evidence-world {
-    --world-cyan: #54d6df;
-    position: relative;
+  evidence-journey {
     display: block;
-    color: #edf6fb;
-    background: #08111c;
+    scroll-margin-top: 4rem;
+    background: var(--bg);
+    color: var(--text);
+    padding: 3rem max(1rem, calc((100% - 1280px) / 2)) 4rem;
   }
-
-  .evidence-world__stage {
-    position: sticky;
-    top: 0;
-    z-index: 0;
-    height: 100svh;
-    overflow: hidden;
-  }
-
-  .evidence-world__media,
-  .evidence-world__poster,
-  .evidence-world__poster img,
-  .evidence-world__video,
-  .evidence-world__media-veil {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-  }
-
-  .evidence-world__poster,
-  .evidence-world__video {
-    opacity: 0;
-    transition: opacity 240ms ease-out;
-  }
-
-  .evidence-world__poster.is-active,
-  .evidence-world__video.is-front {
-    opacity: 1;
-  }
-
-  .evidence-world__poster img,
-  .evidence-world__video {
-    object-fit: cover;
-  }
-
-  .evidence-world__video {
-    z-index: 2;
-    backface-visibility: hidden;
-    transform: translateZ(0);
-    will-change: opacity;
-  }
-
-  .evidence-world__poster {
-    z-index: 1;
-  }
-
-  .evidence-world__media-veil {
-    z-index: 3;
-    background:
-      radial-gradient(circle at 50% 42%, transparent 30%, rgba(8, 17, 28, 0.46) 100%),
-      linear-gradient(180deg, rgba(8, 17, 28, 0.12), rgba(8, 17, 28, 0.7));
-  }
-
-  .evidence-world__chrome {
-    position: absolute;
-    right: clamp(1rem, 4vw, 4rem);
-    bottom: 2rem;
-    left: clamp(1rem, 4vw, 4rem);
-    z-index: 4;
-    display: grid;
-    grid-template-columns: auto 1fr auto;
-    align-items: center;
-    gap: 1rem;
-    color: #91a7b8;
-    font: 600 0.68rem/1 "JetBrains Mono Variable", monospace;
-    letter-spacing: 0.1em;
-  }
-
-  .evidence-world__chrome i {
-    height: 1px;
-    overflow: hidden;
-    background: rgba(145, 167, 184, 0.28);
-  }
-
-  .evidence-world__chrome b {
-    display: block;
-    width: 100%;
-    height: 100%;
-    transform: scaleX(0.02);
-    transform-origin: left;
-    background: var(--world-cyan);
-  }
-
-  .evidence-world__chapters {
-    position: relative;
-    z-index: 1;
-    margin-top: -100svh;
-  }
-
-  .evidence-world__chapter {
-    position: relative;
-    display: grid;
-    min-height: max(840px, 115svh);
-    align-items: center;
-    padding: 3.25rem max(1rem, calc((100% - 1280px) / 2));
-  }
-
-  .evidence-world__chapter:nth-child(even) .evidence-world__copy {
-    margin-left: auto;
-    text-align: right;
-  }
-
-  .evidence-world__copy {
-    box-sizing: border-box;
-    min-width: 0;
-    width: min(36rem, 46%);
-    padding: clamp(1.25rem, 3vw, 2.5rem);
-    border: 1px solid rgba(84, 214, 223, 0.18);
-    border-radius: 0.75rem;
-    background: rgba(8, 17, 28, 0.78);
-    backdrop-filter: blur(14px);
-    box-shadow: 0 1.5rem 5rem rgba(0, 0, 0, 0.24);
-  }
-
-  evidence-world.is-motion-layout .evidence-world__copy {
-    position: absolute;
-    top: 50%;
-    left: max(1rem, calc((100% - 1280px) / 2));
-    transform: translateY(-50%);
-  }
-
-  evidence-world.is-motion-layout .evidence-world__chapter:nth-child(even) .evidence-world__copy {
-    right: max(1rem, calc((100% - 1280px) / 2));
-    left: auto;
-  }
-
-  evidence-world.is-motion-layout:not(.is-enhanced) .evidence-world__copy:not(.is-card-active) {
-    visibility: hidden;
-    opacity: 0;
-  }
-
-  evidence-world.is-enhanced .evidence-world__copy {
-    visibility: hidden;
-    opacity: 0;
-    pointer-events: none;
-    transform: translateY(calc(-50% + 1.25rem)) scale(0.985);
-    transition:
-      opacity 180ms ease-in,
-      transform 240ms ease-in,
-      visibility 0s linear 240ms;
-  }
-
-  evidence-world.is-enhanced .evidence-world__chapter.is-active .evidence-world__copy.is-card-active {
-    visibility: visible;
-    opacity: 1;
-    pointer-events: auto;
-    transform: translateY(-50%) scale(1);
-    transition:
-      opacity 280ms ease-out,
-      transform 460ms cubic-bezier(0.22, 1, 0.36, 1),
-      visibility 0s;
-    will-change: opacity, transform;
-  }
-
-  evidence-world.is-enhanced.is-pinned .evidence-world__copy {
-    position: fixed;
-    top: 50svh;
-    right: auto;
-    left: max(1rem, calc((100vw - 1280px) / 2));
-    z-index: 4;
-    transform: translateY(calc(-50% + 1.25rem)) scale(0.985);
-  }
-
-  evidence-world.is-enhanced.is-pinned .evidence-world__chapter:nth-child(even) .evidence-world__copy {
-    right: max(1rem, calc((100vw - 1280px) / 2));
-    left: auto;
-  }
-
-  evidence-world.is-enhanced.is-pinned .evidence-world__chapter.is-active .evidence-world__copy.is-card-active {
-    transform: translateY(-50%) scale(1);
-  }
-
-  .evidence-world__copy > p:first-child,
-  .evidence-world__copy > p:last-of-type,
-  .evidence-world__status,
-  .evidence-world__copy ul {
-    font-family: "JetBrains Mono Variable", monospace;
-  }
-
-  .evidence-world__points li::before {
-    width: 0.35rem;
-    height: 0.35rem;
-    flex: 0 0 auto;
-    border-radius: 50%;
-    background: var(--world-cyan);
-    content: "";
-  }
-
-  .evidence-world__actions {
+  .journey__intro {
     display: flex;
-    flex-wrap: wrap;
-    min-width: 0;
-    gap: 0.75rem;
-    margin-top: 1.35rem;
+    align-items: end;
+    justify-content: space-between;
+    gap: 1.5rem;
+    margin-bottom: 2rem;
   }
-
-  .evidence-world__actions a {
-    display: inline-flex;
-    min-width: 0;
-    max-width: 100%;
-    min-height: 2.75rem;
-    align-items: center;
-    justify-content: center;
-    border: 1px solid var(--world-cyan);
-    border-radius: 0.35rem;
-    padding: 0.65rem 0.9rem;
-    color: #08111c;
-    background: var(--world-cyan);
-    font-weight: 750;
-    text-decoration: none;
-    white-space: normal;
-    overflow-wrap: anywhere;
+  .journey__intro h2 {
+    margin: 0;
+    font-family: "Bricolage Grotesque Variable", sans-serif;
+    font-size: clamp(2rem, 4vw, 3.5rem);
+    font-weight: 800;
+    letter-spacing: -0.035em;
+    line-height: 1.05;
   }
-
-  .evidence-world__actions a.is-secondary {
-    color: #edf6fb;
-    background: rgba(8, 17, 28, 0.62);
+  .journey__intro p {
+    margin: 0.8rem 0 0;
+    color: var(--text-muted);
   }
-
-  .evidence-world__actions a:focus-visible {
-    outline: 3px solid #f5b84b;
+  a:focus-visible,
+  summary:focus-visible {
+    outline: 3px solid var(--accent);
     outline-offset: 3px;
   }
-
-  .evidence-world__copy > p:first-child {
-    margin: 0 0 1rem;
-    color: var(--world-cyan);
-    font-size: 0.75rem;
-    font-weight: 700;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-  }
-
-  .evidence-world__copy h2 {
-    margin: 0;
-    font-family: "Bricolage Grotesque Variable", sans-serif;
-    font-size: clamp(2.5rem, 4.6vw, 5rem);
-    font-weight: 800;
-    line-height: 0.94;
-    letter-spacing: -0.05em;
-    text-wrap: balance;
-  }
-
-  .evidence-world__copy > p:last-of-type {
-    max-width: 44rem;
-    margin: 1.25rem 0 0;
-    color: #b7cad8;
-    font-size: clamp(0.92rem, 1.25vw, 1.08rem);
-    line-height: 1.7;
-  }
-
-  .evidence-world__rule {
-    width: 7rem;
-    height: 2px;
-    margin-top: 1.5rem;
-    background: var(--world-cyan);
-    box-shadow: 0 0 24px rgba(84, 214, 223, 0.5);
-  }
-
-  .evidence-world__chapter:nth-child(even) .evidence-world__rule {
-    margin-left: auto;
-  }
-
-  .evidence-world__copy ul {
-    display: grid;
-    gap: 0.65rem;
-    margin: 1.35rem 0 0;
-    padding: 0;
-    color: #d9e7ef;
-    font-size: 0.82rem;
-    list-style: none;
-  }
-
-  .evidence-world__copy li {
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 0.75rem;
-  }
-
-  /* Chapters alternate sides. Even chapters sit right-aligned, so their list
-     rows are pushed to the right edge to match the copy above them. Odd
-     chapters are left cards, so their rows must read from the left — the
-     generic `justify-content: flex-end` on `.evidence-world__copy li` below
-     used to win here (equal specificity, declared later), which right-aligned
-     the bullets inside a left-aligned card. The mobile block below still
-     forces every row left at <=767px, where all cards are left-aligned. */
-  .evidence-world__chapter:nth-child(odd) .evidence-world__points li {
-    justify-content: flex-start;
-  }
-
-  .evidence-world__copy li i,
-  .evidence-world__status::before {
-    width: 0.55rem;
-    height: 0.55rem;
-    border-radius: 50%;
-    content: "";
-    box-shadow: 0 0 14px currentColor;
-  }
-
-  .state-detected { color: #54d6df; background: #54d6df; }
-  .state-verified { color: #5cdb95; background: #5cdb95; }
-  .state-confirmed { color: #f5b84b; background: #f5b84b; }
-  .state-inconclusive { color: #ff7168; background: #ff7168; }
-
-  .evidence-world__status {
+  .journey__intro a {
     display: inline-flex;
     align-items: center;
-    gap: 0.75rem;
-    margin-top: 1.35rem;
-    color: #b7cad8;
-    font-size: 0.75rem;
+    gap: 0.6rem;
+    min-height: 44px;
+    color: var(--accent);
+    font-size: 0.875rem;
   }
-
-  .evidence-world__status::before {
-    color: #5cdb95;
-    background: #5cdb95;
+  .journey__nav {
+    position: sticky;
+    top: 4rem;
+    z-index: 8;
+    display: flex;
+    gap: 0.3rem;
+    overflow-x: auto;
+    padding: 0.65rem 0;
+    background: var(--bg);
+    border-block: 1px solid var(--border);
+    scrollbar-width: thin;
   }
-
-  @media (max-width: 767px) {
-    .evidence-world__media-veil {
-      background:
-        radial-gradient(circle at 50% 30%, transparent 22%, rgba(8, 17, 28, 0.24) 72%),
-        linear-gradient(180deg, rgba(8, 17, 28, 0.03) 42%, rgba(8, 17, 28, 0.8) 82%);
-    }
-
-    .evidence-world__chapter {
-      min-height: max(840px, 125svh);
-      align-items: end;
-      padding: 48svh 1rem calc(1rem + var(--safe-area-inset-bottom));
-    }
-
-    .evidence-world__chapter .evidence-world__copy,
-    .evidence-world__chapter:nth-child(even) .evidence-world__copy {
-      width: 100%;
-      margin: 0;
-      padding: 0.95rem 1.05rem 1.05rem;
-      text-align: left;
-      background: rgba(8, 17, 28, 0.9);
-      backdrop-filter: none;
-    }
-
-    evidence-world.is-motion-layout .evidence-world__chapter .evidence-world__copy,
-    evidence-world.is-motion-layout .evidence-world__chapter:nth-child(even) .evidence-world__copy {
-      top: auto;
-      right: 1rem;
-      bottom: calc(1rem + var(--safe-area-inset-bottom));
-      left: 1rem;
-      width: auto;
-      transform: none;
-    }
-
-    evidence-world.is-enhanced.is-pinned .evidence-world__chapter .evidence-world__copy,
-    evidence-world.is-enhanced.is-pinned .evidence-world__chapter:nth-child(even) .evidence-world__copy {
-      right: 1rem;
-      left: 1rem;
-      top: auto;
-      bottom: calc(1rem + var(--safe-area-inset-bottom));
-      width: auto;
-    }
-
-    evidence-world.is-enhanced .evidence-world__copy,
-    evidence-world.is-enhanced.is-pinned .evidence-world__copy {
-      transform: translateY(0.75rem) scale(0.99);
-    }
-
-    evidence-world.is-enhanced .evidence-world__chapter.is-active .evidence-world__copy.is-card-active,
-    evidence-world.is-enhanced.is-pinned .evidence-world__chapter.is-active .evidence-world__copy.is-card-active {
-      transform: none;
-    }
-
-    .evidence-world__chapter:nth-child(even) .evidence-world__rule {
-      margin-left: 0;
-    }
-
-    .evidence-world__copy h2 {
-      font-size: clamp(1.6rem, 7.4vw, 2.5rem);
-      line-height: 1;
-      overflow-wrap: anywhere;
-    }
-
-    .evidence-world__copy > p:first-child {
-      margin-bottom: 0.6rem;
-      font-size: 0.65rem;
-    }
-
-    .evidence-world__copy > p:last-of-type {
-      margin-top: 0.75rem;
-      font-size: 0.93rem;
-      line-height: 1.55;
-    }
-
-    .evidence-world__rule {
-      margin-top: 0.85rem;
-    }
-
-    .evidence-world__copy ul,
-    .evidence-world__status {
-      margin-top: 0.75rem;
-    }
-
-    .evidence-world__copy li {
-      justify-content: flex-start;
-    }
-
-    .evidence-world__chrome span:last-child {
-      display: none;
-    }
-
-    .evidence-world__chrome {
-      top: calc(5rem + var(--safe-area-inset-top));
-      bottom: auto;
-      grid-template-columns: auto 1fr;
-    }
+  .journey__nav a {
+    display: flex;
+    flex: 1 0 auto;
+    align-items: center;
+    justify-content: center;
+    gap: 0.55rem;
+    padding: 0.35rem 0.7rem;
+    min-height: 44px;
+    color: var(--text-muted);
+    border-radius: 0.5rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-decoration: none;
+    transition:
+      color 160ms,
+      background-color 160ms;
   }
-
-  @media (orientation: landscape) and (max-height: 599px) {
-    evidence-world.is-enhanced .evidence-world__stage {
-      position: relative;
-      height: 28rem;
-    }
-
-    evidence-world.is-enhanced .evidence-world__chapters {
-      margin-top: 0;
-    }
-
-    evidence-world.is-enhanced .evidence-world__chapter {
-      min-height: auto;
-      padding: 1rem;
-    }
-
-    evidence-world.is-motion-layout .evidence-world__copy,
-    evidence-world.is-motion-layout .evidence-world__chapter:nth-child(even) .evidence-world__copy {
-      position: relative;
-      inset: auto;
-      transform: none;
-    }
-
-    evidence-world.is-enhanced.is-pinned .evidence-world__copy {
-      position: relative;
-      inset: auto;
-      transform: none;
-    }
+  .journey__nav a[aria-current] {
+    color: var(--accent);
+    background: var(--accent-dim);
   }
-
-  .evidence-world__intro {
-    padding: clamp(1.5rem, 4vw, 2.5rem) 1rem 0;
-    text-align: center;
+  .journey__node {
+    font:
+      500 0.68rem/1 "JetBrains Mono Variable",
+      monospace;
   }
-
-  .evidence-world__intro h2 {
+  .journey__layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: start;
+    gap: clamp(2rem, 5vw, 5rem);
+  }
+  .journey__chapters {
+    min-width: 0;
+    width: 100%;
+  }
+  .journey__chapter:last-child {
+    min-height: max(420px, calc(100svh - 9rem));
+  }
+  .journey__chapter {
+    min-height: 420px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding-block: 3rem;
+    scroll-margin-top: 9rem;
+  }
+  .journey__chapter h3 {
     margin: 0;
-    color: #edf6fb;
     font-family: "Bricolage Grotesque Variable", sans-serif;
-    font-size: clamp(1.6rem, 3.4vw, 2.4rem);
-    font-weight: 750;
+    font-size: clamp(1.8rem, 3vw, 2.8rem);
+    line-height: 1.1;
     letter-spacing: -0.03em;
+    font-weight: 750;
+    text-wrap: balance;
+    overflow-wrap: anywhere;
   }
+  .journey__chapter > p {
+    max-width: 65ch;
+    margin: 1.2rem 0 0;
+    color: var(--text-muted);
+    line-height: 1.7;
+  }
+  .journey__states {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    padding: 0;
+    margin: 1rem 0 0;
+    list-style: none;
+    font-size: 0.8rem;
+  }
+  .journey__states li {
+    border: 1px solid var(--border);
+    border-radius: 0.25rem;
+    padding: 0.3rem 0.5rem;
+  }
+  .journey__receipt {
+    display: flex;
+    align-items: start;
+    gap: 0.65rem;
+    font-size: 0.8rem;
+  }
+  .journey__receipt svg {
+    width: 20px;
+    height: 20px;
+    flex: none;
+    color: var(--accent);
+  }
+  .journey__chapter details {
+    margin-top: 1.5rem;
+    border-top: 1px solid var(--border);
+    font-size: 0.9rem;
+  }
+  .journey__chapter summary {
+    min-height: 44px;
+    padding-block: 0.8rem;
+    cursor: pointer;
+    font-weight: 600;
+  }
+  .journey__chapter details p,
+  .journey__chapter details ul {
+    color: var(--text-muted);
+    line-height: 1.7;
+  }
+  .journey__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+  }
+  .journey__actions a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    color: var(--accent);
+  }
+  .journey__scene {
+    min-width: 0;
+    position: sticky;
+    top: 9rem;
+    padding-top: 1rem;
+    padding-bottom: 1rem;
+  }
+  .journey__scene-heading {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 1rem;
+    color: var(--text-muted);
+    font:
+      500 0.72rem/1.5 "JetBrains Mono Variable",
+      monospace;
+  }
+  .journey__track {
+    position: relative;
+    height: 8px;
+    margin: 0.8rem 0 1rem;
+    overflow: clip;
+  }
+  .journey__track::before {
+    content: "";
+    position: absolute;
+    inset: 3px 4px auto;
+    height: 2px;
+    background: var(--border);
+  }
+  .journey__track i {
+    display: block;
+    width: calc(100% - 8px);
+    height: 2px;
+    margin: 3px 4px 0;
+    background: var(--accent);
+    transform: scaleX(var(--journey-progress, 0.02));
+    transform-origin: left;
 
-  .evidence-world__intro p {
-    margin: 0.5rem 0 0;
-    color: #91a7b8;
+  }
+  .journey__track span {
+    position: absolute;
+    top: 0;
+    left: 4px;
+    transform: translateX(calc(var(--journey-progress, 0) * 100%));
+    width: calc(100% - 8px);
+    height: 8px;
+  }
+  .journey__track span::after {
+    content: "";
+    display: block;
+    width: 8px;
+    height: 8px;
+    transform: translateX(-4px);
+    border-radius: 50%;
+    background: var(--accent);
+
+  }
+  .journey__artifact {
+    position: relative;
+    padding: 1.5rem;
+    border-radius: 0.75rem;
+    background: var(--bg-raised);
+    border: 1px solid var(--border);
+    isolation: isolate;
+  }
+  .journey__artifact-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.7rem;
+    font:
+      500 0.75rem/1.5 "JetBrains Mono Variable",
+      monospace;
+  }
+  .journey__badge {
+    border: 1px solid var(--accent);
+    padding: 0.2rem 0.45rem;
+    border-radius: 0.25rem;
+    color: var(--accent);
+  }
+  .journey__artifact h3 {
+    margin: 1rem 0 0.5rem;
+    font-size: 1.3rem;
+    line-height: 1.3;
+    letter-spacing: -0.02em;
+  }
+  .journey__artifact > p {
+    color: var(--text-muted);
+    font-size: 0.82rem;
+    line-height: 1.6;
+  }
+  .journey__artifact dl {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.65rem 1rem;
+    margin: 1rem 0;
+  }
+  .journey__artifact dl > div:last-child { grid-column: 1 / -1; }
+  .journey__artifact dt {
+    color: var(--text-muted);
+    font-size: 0.72rem;
+  }
+  .journey__artifact dd {
+    margin: 0.25rem 0 0;
+    font-size: 0.85rem;
+  }
+  .journey__receipts {
+    border-top: 1px solid var(--border);
+    padding-top: 0.7rem;
+  }
+  .journey__receipts p {
+    margin: 0;
+    padding: 0.35rem 0.5rem;
+    border-radius: 0.25rem;
+    transition: opacity 280ms, transform 420ms cubic-bezier(0.16, 1, 0.3, 1), background-color 280ms;
+    font-size: 0.78rem;
+    line-height: 1.5;
+  }
+  .journey__receipts span {
+    color: var(--accent);
+    display: inline-block;
+    min-width: 5rem;
+  }
+  .journey__report {
+    margin-top: 0.85rem;
+    padding: 1rem;
+    border: 1px solid var(--border);
+    border-radius: 0.75rem;
+    background: var(--bg-raised);
+  }
+  .journey__report > div {
+    display: flex;
+    gap: 0.8rem;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+  }
+  .journey__report h3 {
+    margin: 0;
     font-size: 1rem;
   }
-
-  /* No-JS, reduced-motion, and Save-Data fallback. Normal-motion visitors get
-     is-motion-layout before the lazy controller loads so the page never jumps. */
-  evidence-world:not(.is-motion-layout) .evidence-world__stage {
-    position: relative;
-    height: auto;
-    min-height: 420px;
+  .journey__report > div > span {
+    color: #9b6509;
+    background: #fff5e2;
+    border: 1px solid #ddb977;
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.25rem;
+    font-size: 0.72rem;
   }
-
-  evidence-world:not(.is-motion-layout) .evidence-world__chapters {
-    margin-top: 0;
+  :global(:root[data-theme="dark"]) .journey__report > div > span {
+    color: #f3b95f;
+    background: #282217;
+    border-color: #6b5630;
   }
-
-  evidence-world:not(.is-motion-layout) .evidence-world__chapter {
-    min-height: auto;
-    padding-block: 1.75rem;
+  .journey__report p,
+  .journey__report ul {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    line-height: 1.7;
   }
-
-  evidence-world:not(.is-motion-layout) .evidence-world__media {
-    position: relative;
-    height: 420px;
+  .journey__report ul {
+    padding-left: 1.1rem;
   }
-
-  evidence-world:not(.is-motion-layout) .evidence-world__poster {
-    opacity: 1;
+  .journey__report-limit {
+    margin-bottom: 0;
   }
-
-  evidence-world:not(.is-motion-layout) .evidence-world__poster:not(.is-active) {
-    display: none;
+  /* Reserve the complete record from first paint. Receipt and report reveals
+     must never resize the sticky scene or move the document's scroll anchor. */
+  evidence-journey.is-enhanced [data-receipt-stage]:not(.is-collected) {
+    visibility: hidden;
+    opacity: 0;
+    transform: translateX(10px);
   }
-
-  evidence-world:not(.is-motion-layout) .evidence-world__video {
-    display: none;
+  evidence-journey.is-enhanced .journey__report:not(.is-assembled) {
+    visibility: hidden;
+    opacity: 0;
+    transform: translateY(12px);
   }
-
-  @media (prefers-reduced-motion: reduce) {
-    .evidence-world__poster,
-    .evidence-world__video,
-    evidence-world.is-enhanced .evidence-world__copy,
-    evidence-world.is-enhanced .evidence-world__chapter.is-active .evidence-world__copy.is-card-active {
-      transition: none;
+  .journey__report {
+    transition: opacity 420ms, transform 600ms cubic-bezier(0.16, 1, 0.3, 1), visibility 420ms;
+  }
+  .journey__receipts .is-current { background: var(--accent-dim); }
+  @media (min-width: 901px) and (prefers-reduced-motion: no-preference) {
+    .is-enhanced:not(.is-flow) .is-collected {
+      animation: receipt-attach 500ms cubic-bezier(0.16, 1, 0.3, 1);
     }
-
-    evidence-world.is-enhanced .evidence-world__stage {
-      position: relative;
-      height: auto;
-      min-height: 380px;
+    .is-enhanced:not(.is-flow) .is-assembled { animation: report-assemble 650ms cubic-bezier(0.16, 1, 0.3, 1); }
+    @keyframes receipt-attach {
+      from { clip-path: inset(0 100% 0 0); }
+      to { clip-path: inset(0); }
     }
-
-    evidence-world.is-enhanced .evidence-world__media {
-      position: relative;
-      height: 380px;
+    @keyframes report-assemble {
+      from { clip-path: inset(0 0 100% 0); opacity: 0.3; transform: translateY(12px); }
+      to { clip-path: inset(0); opacity: 1; transform: none; }
     }
-
-    evidence-world.is-enhanced .evidence-world__chapters {
-      margin-top: 0;
+  }
+  @media (max-width: 900px) {
+    .journey__intro {
+      align-items: start;
+      flex-direction: column;
+      gap: 0.6rem;
     }
-
-    evidence-world.is-enhanced .evidence-world__chapter {
-      min-height: auto;
-      padding-block: 1.5rem;
+    .journey__layout {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
     }
-
-    evidence-world.is-enhanced .evidence-world__copy,
-    evidence-world.is-enhanced .evidence-world__chapter .evidence-world__copy,
-    evidence-world.is-enhanced .evidence-world__chapter:nth-child(even) .evidence-world__copy {
-      visibility: visible;
-      opacity: 1;
-      pointer-events: auto;
+    .journey__scene {
       position: relative;
       top: auto;
-      right: auto;
-      left: auto;
+      order: -1;
+      width: 100%;
+      padding-top: 1rem;
+    }
+    evidence-journey.is-enhanced .journey__scene {
+      min-height: 0;
+    }
+    /* The phone keeps a complete record in view, with a compact chapter navigator.
+         It never needs to chase a sticky artifact covering the explanation. */
+    evidence-journey.is-enhanced [data-receipt-stage]:not(.is-collected),
+    evidence-journey.is-enhanced .journey__report:not(.is-assembled) {
+      visibility: visible;
+      opacity: 1;
       transform: none;
-      width: min(46rem, 100%);
-      margin: 0;
+    }
+    .journey__chapter,
+    .journey__chapter:last-child {
+      min-height: 0;
+      padding-block: 2rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .journey__chapter h3 {
+      font-size: 1.8rem;
+    }
+    .journey__nav a {
+      justify-content: start;
     }
   }
-
+  evidence-journey.is-flow .journey__scene { position: relative; top: auto; }
+  evidence-journey.is-flow [data-receipt-stage]:not(.is-collected),
+  evidence-journey.is-flow .journey__report:not(.is-assembled) {
+    visibility: visible;
+    opacity: 1;
+    transform: none;
+  }
+  @media (max-height: 760px) and (min-width: 901px) {
+    .journey__scene { position: relative; top: auto; }
+    evidence-journey.is-enhanced [data-receipt-stage]:not(.is-collected),
+    evidence-journey.is-enhanced .journey__report:not(.is-assembled) {
+      visibility: visible;
+      opacity: 1;
+      transform: none;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .journey__artifact,
+    .journey__track i,
+    .journey__track span {
+      transition: none;
+    }
+    .journey__artifact {
+      transform: none;
+    }
+  }
 </style>

@@ -120,3 +120,5 @@ verify-*.mts
 dogfood-output/
 
 .serena/
+
+.impeccable/

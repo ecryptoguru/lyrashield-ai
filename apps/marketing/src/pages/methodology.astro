@@ -108,19 +108,15 @@ const jsonLd = [
         A security result should say what it knows—and what it does not.
       </h1>
       <p class="mt-6 text-lg leading-8 text-text-muted" data-reveal>
-        An evidence state records how strongly a security finding is supported. Three states ship
-        today. Detected means a scanner saw a signal. Retest-confirmed means a server-owned
-        retest found the condition absent after a fix. Inconclusive means the evidence cannot
-        establish the condition is gone. A fourth state, independently verified, is defined for a
-        future separate verification step and no finding is in it today. These are never blended
-        into a single score.
+        Read the scope, coverage and evidence state before making a release decision.
+        A score or clean result never overrides missing proof.
       </p>
-      <div class="mt-6 rounded-xl border border-border bg-bg-raised p-5 text-sm leading-7 text-text-muted" data-reveal="fade">
-        <p class="font-semibold text-text">TL;DR</p>
-        <p class="mt-2">
-          Every finding carries one of three shipped evidence states: <strong>detected</strong> (a scanner signal that needs review), <strong>retest-confirmed</strong> (a deterministic retest found the condition absent) or <strong>inconclusive</strong> (the retained evidence cannot establish resolution). A fourth state, independently verified, is defined for a future separate verification step; no finding is in it today. A score or clean result never overrides these facts.
-        </p>
-      </div>
+      <dl class="mt-6 grid gap-5 rounded-xl border border-border bg-bg-raised p-5 sm:grid-cols-3" data-reveal="fade">
+        <div><dt class="font-semibold text-text">Detected</dt><dd class="mt-2 text-sm leading-6 text-text-muted">A scanner saw a signal that needs review.</dd></div>
+        <div><dt class="font-semibold text-text">Retest-confirmed</dt><dd class="mt-2 text-sm leading-6 text-text-muted">A server-owned deterministic retest found the condition absent after a fix.</dd></div>
+        <div><dt class="font-semibold text-text">Inconclusive</dt><dd class="mt-2 text-sm leading-6 text-text-muted">The retained evidence cannot establish that the condition is gone.</dd></div>
+      </dl>
+      <p class="mt-4 text-sm leading-6 text-text-muted" data-reveal="fade">These are the three shipped finding states. A fourth state, independently verified, is defined for a future separate verification step; no finding is in it today.</p>
       <p class="mt-4 text-sm text-text-muted" data-reveal="fade">Last reviewed: <time datetime="2026-10-05">5 Oct 2026</time> · Maintained by LyraShield Security + Engineering</p>
     </header>
 
@@ -175,9 +171,18 @@ const jsonLd = [
     </section>
 
     <section aria-labelledby="verdict-heading" class="py-16" data-reveal-group>
-      <h2 id="verdict-heading" class="text-2xl font-semibold text-text" data-reveal>Release verdict</h2>
+      <h2 id="verdict-heading" class="text-2xl font-semibold text-text" data-reveal>Launch gate and scorecard verdicts</h2>
       <p class="mt-5 max-w-3xl leading-7 text-text-muted" data-reveal>
-        A public scorecard may include a release verdict. The verdict is derived from the frozen LyraShield Score using the same versioned model that produced the grade. It is an interpretation aid, not an override of the underlying evidence.
+        The launch gate reports <strong>ready</strong>, <strong>not ready</strong> or{" "}
+        <strong>insufficient evidence</strong> from current applicable checks and retained receipts.
+        Ready requires every check to pass; a blocking failure is not ready, and missing coverage
+        remains insufficient evidence. A high score cannot override that gate.
+      </p>
+      <p class="mt-4 max-w-3xl leading-7 text-text-muted" data-reveal>
+        A public scorecard separately summarizes its frozen LyraShield Score with the labels below.
+        These score-based labels describe that shared snapshot, not the current launch gate or
+        a finding's evidence state. They are interpretation aids, never permission to ignore
+        coverage limits, open findings or an insufficient-evidence gate.
       </p>
       <dl class="mt-8 grid gap-6 sm:grid-cols-2" data-reveal-group>
         <div data-reveal>
