@@ -38,7 +38,9 @@ describe("premium assurance-world homepage", () => {
     expect(homepage).toContain("<EvidenceWorld manifest={motionManifest} />")
     // Nine-block order (spec section 8): hero, what is different, Lite Check,
     // journey, surfaces, coverage, pricing, FAQ, closing CTA.
-    expect(homepage.indexOf("<PremiumHero cinematic />")).toBeLessThan(homepage.indexOf('id="different"'))
+    expect(homepage.indexOf("<PremiumHero cinematic />")).toBeLessThan(
+      homepage.indexOf('id="different"')
+    )
     expect(homepage.indexOf('id="different"')).toBeLessThan(homepage.indexOf("<HomeLiteScan"))
     expect(homepage.indexOf("<HomeLiteScan")).toBeLessThan(homepage.indexOf("<EvidenceWorld"))
     expect(homepage.indexOf("<EvidenceWorld")).toBeLessThan(
