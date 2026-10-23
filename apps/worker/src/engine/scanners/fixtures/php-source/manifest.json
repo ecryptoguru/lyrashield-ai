@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "ruleVersion": "php-source-local-flow/1.0.0",
+  "ruleVersion": "php-source-local-flow/1.0.1",
   "scope": "Passive built-in PHP lexical/local-variable rules only. These controls are rule-specific; a quiet patched fixture is not proof of whole-application safety. No Semgrep, Trivy or engine benchmark was run.",
   "cases": [
     {

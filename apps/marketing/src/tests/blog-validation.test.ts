@@ -501,9 +501,10 @@ ${filler}
   })
 
   it.each([
-    ["GitHub diff", "Pillar + GitHub diff gate"],
-    ["MCP", "Pillar + MCP security"],
-  ])("keeps %s topic CTAs on the honest free checklist", (_topic, cta) => {
+    ["GitHub diff", "Pillar + GitHub diff gate", "/tools/ai-app-security-checklist"],
+    ["MCP", "Pillar + MCP security", "/tools/ai-app-security-checklist"],
+    ["PHP", "Pillar + PHP checker", "/tools/php2shell-checker"],
+  ])("keeps %s topic CTAs on the required free tool", (_topic, cta, requiredRoute) => {
     const directAnswer = Array(45).fill("answer").join(" ")
     const filler = Array(1160).fill("guidance").join(" ")
     const entry = { index: 28, slug: "workflow-post", cluster: "Agent", cta }
@@ -525,7 +526,7 @@ ${filler}
 
 ${filler}
 
-[Free checklist](/tools/ai-app-security-checklist) and [related article](/blog/agent-post).
+[Free tool](${requiredRoute}) and [related article](/blog/agent-post).
 
 [OWASP](https://owasp.org/a) [NIST](https://csrc.nist.gov/b) [RFC](https://www.rfc-editor.org/c)
 `,
@@ -539,15 +540,27 @@ ${filler}
 
     const scanOnly = {
       ...article,
-      body: article.body.replace("/tools/ai-app-security-checklist", "/scan"),
+      body: article.body.replace(requiredRoute, "/scan"),
     }
     expect(validateArticle(scanOnly, entry, context)).toContain(
-      `missing approved CTA link for ${cta}: /tools/ai-app-security-checklist`
+      `missing approved CTA link for ${cta}: ${requiredRoute}`
     )
   })
 
   it("classifies primary and authoritative sources deterministically", () => {
     expect(classifySource("https://datatracker.ietf.org/doc/html/rfc9110")).toBe("primary")
+    expect(classifySource("https://www.php.net/archive/2026.php")).toBe("official")
+    expect(classifySource("https://getcomposer.org/doc/06-config.md#platform")).toBe("official")
+    expect(classifySource("https://wordpress.org/documentation/article/site-health-screen/")).toBe(
+      "official"
+    )
+    expect(classifySource("https://php.net.untrusted.test/advisory")).toBe("other")
+    expect(classifySource("https://cloudlinux.statuspage.io/incidents/zl0vt1yq3dj5")).toBe(
+      "primary"
+    )
+    expect(classifySource("https://access.redhat.com/security/updates/backporting")).toBe("primary")
+    expect(classifySource("https://unrelated.statuspage.io/incidents/report")).toBe("other")
+    expect(classifySource("https://access.redhat.com.untrusted.test/backporting")).toBe("other")
     expect(classifySource("https://owasp.org/www-project-top-ten/")).toBe("official")
     expect(
       classifySource("https://docs.aws.amazon.com/wellarchitected/latest/security-pillar/")

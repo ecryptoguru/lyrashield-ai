@@ -17,7 +17,7 @@
     "typecheck": "astro check",
     "lint": "eslint src --max-warnings 0",
     "test:browser": "node --test scripts/marketing-browser-retry-policy.test.mjs && node scripts/run-browser-tests.mjs",
-    "blog:validate": "node scripts/validate-blog-content.mjs",
+    "blog:validate": "node scripts/validate-blog-content.mjs && node --test scripts/php2shell-content.test.mjs",
     "blog:validate:images": "node scripts/validate-blog-images.mjs",
     "blog:validate:mdx": "node scripts/validate-blog-mdx.mjs",
     "blog:validate:offline": "node scripts/validate-blog-offline-gates.mjs",

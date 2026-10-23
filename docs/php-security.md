@@ -4,6 +4,31 @@ This runbook describes source capabilities. Deployment and customer acceptance
 require separate evidence. Repository scanners do not execute the customer's PHP
 code or send PHP2Shell exploit or load probes.
 
+## Project selection and coverage
+
+Standard and Deep repository scans detect PHP project scopes before adding
+PHP-specific analyzers or optional post-scan engine triage context. A non-PHP
+repository keeps its ordinary repository checks without those PHP additions. Initial engine
+instructions are unchanged; PHP context is limited to existing eligible
+AI-security triage excerpts, within their 4,096-byte bound, with no additional
+engine calls. This context is limited to the existing enabled, accounted
+Standard/Deep medium-severity AI-security candidate cohort. Discovery uses
+repository source and declarations; it does not execute PHP or Composer to identify a
+project. Documentation, tests, fixtures and example paths are excluded
+from PHP application source selection; `.php` extension matching is
+case-insensitive. Excluded examples do not establish a PHP application scope.
+
+In a monorepo, review each PHP service and its associated manifest, lockfile and
+runtime declarations. A runtime declaration for one service must not be treated
+as inventory for every sibling service. Child service boundaries also prevent
+inheriting a root runtime declaration. Discovery receipts are capped at 32 PHP
+scopes and 64 service boundaries; overflow suppresses PHP triage context and stays
+incomplete. Discovery limits, unreadable inputs and
+PHP scopes without usable exact runtime identity remain incomplete; absence of
+a runtime CVE finding does not make those services clean. Composer resolver
+constraints establish dependency resolution context, not the PHP version serving
+requests.
+
 ## Detection scope
 
 | Input                                    | Deterministic family | Meaning and limits                                                                                                                                                                                                                                                                                       |
@@ -38,7 +63,7 @@ an 8.5 fix threshold. SAPI, extension and OS conditions remain explicit; omitted
 conditions are unknown. The catalog is reviewed source data, not a continuously
 updated feed or an exhaustive historical PHP catalog. Update its primary-source
 ranges and boundary tests together when PHP publishes another advisory or ends
-branch support. See the [catalog](../apps/worker/src/engine/scanners/php-runtime-advisories.json)
+branch support. See the [catalog](../packages/security/src/php-runtime-advisories.json)
 and [catalog tests](../apps/worker/src/engine/scanners/php-runtime-catalog.test.ts).
 
 Declared end-of-life branches receive an upgrade warning. Future branches outside
@@ -46,7 +71,7 @@ the pinned catalog remain unknown rather than being assumed end-of-life or clean
 Vendor backports need vendor evidence; a low upstream version alone cannot settle
 whether the installed vendor package contains a fix.
 
-Source rules are pinned at `php-source-local-flow/1.0.0`. They recognize a bounded
+Source rules are pinned at `php-source-local-flow/1.0.1`. They recognize a bounded
 subset of request helpers, local assignments, interpolation, parameterized SQL,
 sink-specific shell/integer sanitizers and fixed literal allowlist lookups.
 Receiver types and branch reachability are not established. Unsupported syntax
@@ -54,8 +79,35 @@ and reached token/statement/nesting limits are explicit coverage issues. Every
 scanned `.php` file keeps partial SAST coverage because this local analysis cannot establish
 cross-file or application-wide absence. It emits review guidance and source
 provenance, with no automatic source patch or exploit-validation claim. The
-deterministic integration selects `.php` files; alternative PHP template/include
+deterministic integration selects `.php` files case-insensitively; alternative PHP template/include
 extensions require separate review and are not covered by this source benchmark.
+
+## Browser-local PHP2Shell review
+
+The free [PHP2Shell checker](https://lyrashieldai.com/tools/php2shell-checker)
+guides a review of a reported PHP version and deployment conditions. Its version
+assessment shares the browser-safe `@lyrashield/security/php-security` advisory
+matcher with the worker. The original advisories are CVE-2026-109618 and
+CVE-2026-109619; compare exact versions within their own branch. The checker
+makes no target requests, uploads no inputs and runs no exploit or load test.
+Unknown versions and deployment details remain unknown, and a result is not an
+installed-runtime attestation, a finding verification or a compromise assessment.
+
+**Separate notice, reviewed 24 October 2026:** PHP's
+[23 October session upload progress notice](https://www.php.net/archive/2026.php)
+describes CVE-2026-115560, with a full advisory and fix expected in a later regular
+release. It supplies no fixed-version threshold to reuse from the original pair.
+The condition review requires upload progress to be enabled, a configured
+`php_binary` or `php_serialize` session handler and an application switch to `php`
+with `ini_set()` before `session_start()`. PHP recommends disabling
+`session.upload_progress.enabled` pending the regular fix; applications that
+never switch handlers at runtime may retain the feature. Check effective serving
+configuration independently and retain unknown answers as unresolved.
+
+A version past the original two advisory thresholds does not resolve this
+separate notice. A Composer dependency update does not replace PHP. Apply runtime
+remediation through the deployment process below and preserve readback from the
+serving workers rather than relying on a source declaration or public banner.
 
 ## Supporting runtime inventory
 
@@ -182,7 +234,7 @@ and credential recovery require their own evidence.
 Run runtime, inventory and fix tests from the repository root:
 
 ```sh
-pnpm exec vitest run apps/worker/src/engine/scanners/php-runtime.test.ts apps/worker/src/engine/scanners/php-runtime-catalog.test.ts apps/worker/src/engine/scanners/resolved-dependencies.test.ts apps/worker/src/engine/scanners/composer-dependencies.test.ts apps/worker/src/engine/scanners/sca-scanner.test.ts
+pnpm exec vitest run packages/security/src/php-security.test.ts apps/worker/src/engine/scanners/php-project-integration.test.ts apps/worker/src/engine/scanners/php-runtime.test.ts apps/worker/src/engine/scanners/php-runtime-catalog.test.ts apps/worker/src/engine/scanners/resolved-dependencies.test.ts apps/worker/src/engine/scanners/composer-dependencies.test.ts apps/worker/src/engine/scanners/sca-scanner.test.ts
 LYRASHIELD_COMPOSER_SMOKE=1 pnpm exec vitest run apps/worker/src/jobs/composer-fix.test.ts
 pnpm exec vitest run packages/fix/src apps/worker/src/jobs/composer-fix-proposal.test.ts apps/worker/src/jobs/fix-generate.job.test.ts apps/web/src/lib/composer-fix-pr.test.ts apps/worker/src/engine/result-integrity.test.ts
 pnpm exec vitest run apps/worker/src/engine/scanners/php-source-benchmark.test.ts --reporter=verbose

@@ -17,7 +17,7 @@ import {
   finalizeScanLifecycle,
   runScanCompletionFollowups,
 } from "./run-scan/finalization"
-import { runEngineTriageOverlay } from "./run-scan/triage"
+import { runEngineTriageOverlay, triageEvidence } from "./run-scan/triage"
 import {
   updateScanStatus,
   addScanEvent,
@@ -483,7 +483,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         hasGlobalScanTimeout,
         isScanCancelled,
         engineResult,
-        aiSecuritySignals: orchestratorResult.aiAppSecuritySignals ?? [],
+        ...triageEvidence(orchestratorResult),
         billedCostUsd,
         costReconciled,
         budgetExceeded,

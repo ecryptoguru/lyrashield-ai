@@ -93,6 +93,7 @@ const jsonLd = [
           <p id="verification-status" class={`mt-3 text-sm leading-6 text-text-muted${challengeAvailable ? "" : " hidden"}`} role="status" aria-live="polite">{challengeAvailable ? "Preparing verification…" : ""}</p>
           <button id="retry-challenge" type="button" hidden class="mt-2 min-h-11 rounded-lg border border-border px-4 text-sm font-semibold text-text hover:border-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">Retry verification</button>
           {!scannerAvailable && <p class="mt-4 rounded-lg border border-(--terminal-warning)/40 bg-(--terminal-amber)/10 p-3 text-sm leading-6 text-text-muted" role="status">Live scanning requires the separately deployed LyraShield app API. This preview will not send a target to localhost or another fallback service.</p>}
+          <p class="mt-4 text-sm leading-6 text-text-muted">Checking PHP2Shell? Use the free <a href="/tools/php2shell-checker" class="font-medium text-accent underline underline-offset-4">browser-local PHP2Shell checker</a> to review reported versions and conditions. A public URL check cannot verify the PHP runtime or a deployed fix.</p>
           <p id="scan-error" class="mt-4 hidden rounded-lg border border-danger/40 bg-danger/5 p-3 text-sm text-danger" role="alert"></p>
         </form>
       </div>

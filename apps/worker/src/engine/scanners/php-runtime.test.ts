@@ -318,3 +318,11 @@ it.each(["# escape = `", "# escape= `", "# escape\t=\t`"])(
     expect(inspectPhpRuntimeInput("Dockerfile", input, "dockerfile").hasIdentity).toBe(false)
   }
 )
+
+it.each([
+  "services: # runtime service\n  web:\n    image: php:8.4.26-fpm\n",
+  "services: { web: { image: 'php:8.4.26-fpm' } }\n",
+])("detects PHP from valid named Compose syntax: %s", async (content) => {
+  const { findings } = await scan({ "compose.yaml": content })
+  expect(findings).toContainEqual(expect.objectContaining({ cve: "CVE-2026-109618" }))
+})

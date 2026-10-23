@@ -2,7 +2,7 @@
 title: "How to reduce security scanner false positives"
 description: "Reduce security scanner false positives with context, verification, narrow tuning, recorded suppressions, baselines and fresh retests."
 pubDate: 2026-07-17
-updatedDate: 2026-08-07
+updatedDate: 2026-10-24
 author: lyrashield-team
 tags: ["verification"]
 draft: false
@@ -48,6 +48,8 @@ This is also how you find true positives that initially look noisy. A sanitizer 
 Do not call a second model's agreement a retest. Use evidence that tests the underlying claim: a focused unit or integration test, a data-flow review, a safe request against an authorized test environment, a package inventory or a provider check that does not disclose the secret.
 
 The [critical finding response guide](/blog/critical-security-finding-response) shows how to preserve the original candidate while confirming applicability. The short version is to state the precondition, perform a bounded check, retain the result and describe what the check could not establish.
+
+A PHP runtime alert is one case where the complete package identity matters. A vendor can backport a fix while retaining an older upstream version string, but a reported backport alone is not proof. The [PHP2Shell backport review](/blog/php2shell-still-flagged-after-updating) explains how to compare vendor advisories, exact package revisions and serving-runtime evidence without broadly suppressing the CVE.
 
 Confidence is useful for triage, but it cannot verify itself. A rule with high historical precision can still be wrong for this revision. A result with weak confidence can still identify a real exposed path. Keep the tool's confidence separate from the evidence state.
 

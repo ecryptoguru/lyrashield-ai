@@ -1,0 +1,126 @@
+---
+import Php2ShellGuides from "@components/Php2ShellGuides.astro"
+const appUrl = (import.meta.env.PUBLIC_APP_URL as string | undefined)?.replace(/\/$/, "") || "https://app.lyrashieldai.com"
+const field = "mt-2 min-h-11 w-full rounded-lg border border-border bg-bg p-3 text-sm text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+const label = "block text-sm font-medium text-text"
+const button = "inline-flex min-h-11 items-center justify-center rounded-lg border border-border px-4 py-2 text-sm font-semibold hover:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+---
+<div id="php-checker" class="space-y-6" data-ph-capture-attribute-ignore>
+  <p class="text-sm leading-6 text-text-muted">Check the PHP runtime that serves your site. Your answers stay in this tab. You do not need a website URL, source code or credentials.</p>
+  <form id="php-form" class="space-y-5" data-ph-no-capture>
+    <fieldset class="grid gap-5 sm:grid-cols-2">
+      <legend class="mb-4 text-lg font-semibold text-text">1. Identify your runtime</legend>
+      <div><label for="php-version" class={label}>Exact PHP version (optional if unknown)</label><input id="php-version" name="version" class={field} placeholder="8.4.26" maxlength="40" autocomplete="off" spellcheck="false" aria-describedby="php-version-help" /><p id="php-version-help" class="mt-2 text-xs leading-5 text-text-muted">Use major.minor.patch. Keep vendor package suffixes in your own evidence; do not remove them to claim a verified fix.</p></div>
+      <div><label for="php-source" class={label}>Where did this version come from?</label><select id="php-source" name="source" class={field}><option value="unknown">I don't know</option><option value="web">Serving web runtime / hosting panel</option><option value="cli">Command line (CLI)</option><option value="declaration">Dockerfile / Composer / source declaration</option></select></div>
+      <div><label for="php-deployment" class={label}>How is PHP deployed?</label><select id="php-deployment" name="deployment" class={field}><option value="unknown">I don't know</option><option value="managed">Managed or shared hosting</option><option value="container">Docker / containers</option><option value="vendor">Distribution / vendor packages</option></select></div>
+      <label class="flex min-h-11 items-start gap-3 self-center text-sm leading-6 text-text"><input id="php-backport" name="backport" type="checkbox" class="mt-1 size-4 accent-accent" />My vendor says this package includes a backported fix</label>
+    </fieldset>
+    <details class="rounded-xl border border-border p-4"><summary class="cursor-pointer font-medium text-text">How do I find the serving PHP version?</summary><div class="mt-3 space-y-3 text-sm leading-6 text-text-muted"><p>Check the PHP runtime assigned to this site in your hosting panel, or ask your administrator for the active FPM/Apache worker's version and exact package revision. A terminal's <code>php -v</code> output can describe a different installation.</p><p>For containers, record the running image digest and the runtime it contains. A Dockerfile tag describes source intent. Do not create a public phpinfo page or paste secrets here.</p><a href="/blog/check-php-version-php2shell" class="text-accent underline">Read the runtime identification guide</a></div></details>
+    <fieldset class="grid gap-5 sm:grid-cols-2">
+      <legend class="mb-3 text-lg font-semibold text-text">2. Review the October 23 session issue</legend>
+      <p class="text-sm leading-6 text-text-muted sm:col-span-2">CVE-2026-115560 is separate from the original two PHP2Shell fixes. Leave settings unknown if you cannot confirm the effective configuration.</p>
+      <div><label for="php-upload" class={label}>Is session upload progress enabled?</label><select id="php-upload" name="uploadProgress" class={field}><option value="unknown">I don't know</option><option value="yes">Yes</option><option value="no">No, disabled in startup configuration</option></select></div>
+      <div><label for="php-serializer" class={label}>Configured session.serialize_handler</label><select id="php-serializer" name="serializer" class={field}><option value="unknown">I don't know</option><option value="php">php</option><option value="php_binary">php_binary</option><option value="php_serialize">php_serialize</option></select></div>
+      <div class="sm:col-span-2"><label for="php-switch" class={label}>Does application code switch that handler to php before session_start()?</label><select id="php-switch" name="switchesHandler" class={field}><option value="unknown">I don't know</option><option value="yes">Yes</option><option value="no">No</option></select></div>
+    </fieldset>
+    <div class="flex flex-wrap gap-3"><button id="php-run" type="submit" disabled class={`${button} bg-accent text-bg disabled:cursor-not-allowed disabled:opacity-50`}>Check PHP2Shell locally</button><button id="php-example" type="button" class={button}>Load example</button><button type="reset" class={button}>Reset</button></div>
+    <p class="text-xs leading-5 text-text-muted">The example is synthetic. Nothing here is a live test of a website. If the check button stays disabled, JavaScript is unavailable. Use <a href="/blog/php2shell-explained" class="text-accent underline">the PHP2Shell guide</a> and the primary references below.</p>
+  </form>
+  <div id="php-results" role="region" aria-label="PHP assessment" tabindex="-1" class="hidden scroll-mt-24 space-y-4 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"></div>
+  <p id="php-announcement" role="status" aria-live="polite" class="sr-only"></p>
+  <div id="php-export" class="hidden"><div class="flex flex-wrap gap-3"><button id="php-copy" type="button" class={button}>Copy assessment</button><button id="php-download" type="button" class={button}>Download assessment</button></div><p id="php-export-status" role="status" class="mt-3 text-sm text-text-muted"></p><textarea id="php-copy-fallback" readonly class={`hidden ${field}`} rows="8" aria-label="Assessment text to copy manually"></textarea></div>
+  <aside class="rounded-xl border border-accent/40 p-5">
+    <h2 class="text-lg font-semibold text-text">Check the rest of your PHP application</h2>
+    <p class="mt-3 text-sm leading-6 text-text-muted">Standard and Deep repository scans run PHP runtime, Composer, configuration and supported source checks when a PHP project is detected. Deep adds the broader analysis available for your authorized target and plan. Deployed patch verification still needs runtime evidence.</p>
+    <a href={`${appUrl}/sign-up?source=php2shell-checker`} data-cta-id="php2shell-signup-deep" class={`${button} mt-4 bg-accent text-bg`}>Sign up for a Deep scan</a>
+    <a href="/scan" class="ml-3 mt-4 inline-flex min-h-11 items-center text-sm text-accent underline">Try the free URL Lite Check</a>
+    <p class="mt-2 text-xs leading-5 text-text-muted">The URL Lite Check is passive and cannot establish your PHP patch status.</p>
+  </aside>
+  <Php2ShellGuides />
+
+</div>
+<script>
+  import { assessPhp2Shell, PHP_CHECK_SOURCE, type PhpCheckInput } from "../../lib/php2shell-checker"
+  const form = document.querySelector<HTMLFormElement>("#php-form")
+  const results = document.querySelector<HTMLDivElement>("#php-results")
+  const exportPanel = document.querySelector<HTMLDivElement>("#php-export")
+  const status = document.querySelector<HTMLParagraphElement>("#php-export-status")
+  let reportText = ""
+  const node = (tag: string, content: string, className = "") => {
+    const el = document.createElement(tag)
+    el.textContent = content
+    el.className = className
+    return el
+  }
+  if (form && results && exportPanel && status) {
+    const select = (name: string) => (form.elements.namedItem(name) as HTMLInputElement | HTMLSelectElement).value
+    const announce = (message: string) => { const el = document.querySelector("#php-announcement"); if (el) el.textContent = message }
+    form.addEventListener("submit", (event) => {
+      event.preventDefault()
+      const input: PhpCheckInput = {
+        version: select("version"), source: select("source") as PhpCheckInput["source"], deployment: select("deployment") as PhpCheckInput["deployment"],
+        backport: (form.elements.namedItem("backport") as HTMLInputElement).checked,
+        uploadProgress: select("uploadProgress") as PhpCheckInput["uploadProgress"], serializer: select("serializer") as PhpCheckInput["serializer"], switchesHandler: select("switchesHandler") as PhpCheckInput["switchesHandler"],
+      }
+      const assessment = assessPhp2Shell(input)
+      const titles = { affected: "Affected upstream version reported", fixed: "Original PHP2Shell patch threshold met", invalid: "Enter an exact version or obtain runtime identity", unsupported: "Version requires PHP/vendor advisory review" }
+      results.replaceChildren(node("h2", "Your PHP assessment", "text-2xl font-semibold text-text"), node("p", `Rules: ${assessment.rules}. Assessed ${new Date().toISOString()}.`, "break-words text-xs text-text-muted"))
+      const summaries = [
+        { title: "CVE-2026-109618: OOM corruption", text: titles[assessment.runtime.status] },
+        { title: "CVE-2026-109619: stale global state", text: titles[assessment.runtime.status] },
+        { title: "CVE-2026-115560: session upload progress", text: `${assessment.session.title}. ${assessment.session.guidance}` },
+      ]
+      for (const item of summaries) {
+        const section = node("section", "", "rounded-xl border border-border p-4")
+        section.appendChild(node("h3", item.title, "font-semibold text-text")); section.appendChild(node("p", item.text, "mt-2 text-sm leading-6 text-text-muted"))
+        results.appendChild(section)
+      }
+      const notes = node("ul", "", "list-disc space-y-2 pl-5 text-sm leading-6 text-text-muted")
+      for (const note of assessment.notes) notes.appendChild(node("li", note))
+      const steps = node("ol", "", "list-decimal space-y-3 pl-5 text-sm leading-6 text-text-muted")
+      for (const step of assessment.steps) steps.appendChild(node("li", step))
+      results.appendChild(notes); results.appendChild(node("h3", "What to do next", "text-lg font-semibold text-text")); results.appendChild(steps)
+      const reference = node("a", "Read PHP's official advisories", "inline-flex min-h-11 items-center text-sm text-accent underline") as HTMLAnchorElement
+      reference.href = PHP_CHECK_SOURCE
+      results.appendChild(reference)
+      reportText = JSON.stringify({ assessedAt: new Date().toISOString(), input, ...assessment, reference: PHP_CHECK_SOURCE }, null, 2)
+      results.classList.remove("hidden"); exportPanel.classList.remove("hidden"); status.textContent = ""
+      results.focus(); announce("PHP assessment ready. Three advisory results and next steps are available.")
+    })
+    const clearAssessment = () => {
+      const hadAssessment = Boolean(reportText)
+      results.replaceChildren(); results.classList.add("hidden"); exportPanel.classList.add("hidden"); reportText = ""; status.textContent = ""
+      const fallback = document.querySelector<HTMLTextAreaElement>("#php-copy-fallback")
+      if (fallback) { fallback.value = ""; fallback.classList.add("hidden") }
+      if (hadAssessment) announce("Assessment cleared.")
+    }
+    form.addEventListener("reset", clearAssessment)
+    form.addEventListener("input", clearAssessment)
+    form.addEventListener("change", clearAssessment)
+    document.querySelector("#php-example")?.addEventListener("click", () => {
+      form.reset()
+      const values = { version: "8.4.26", source: "web", deployment: "container", uploadProgress: "yes", serializer: "php_binary", switchesHandler: "yes" }
+      for (const [name, value] of Object.entries(values)) (form.elements.namedItem(name) as HTMLInputElement).value = value
+      announce("Synthetic example loaded. Run the check to see its result.")
+    })
+    document.querySelector("#php-copy")?.addEventListener("click", async () => {
+      if (!reportText) return
+      try { await navigator.clipboard.writeText(reportText); status.textContent = "Assessment copied." }
+      catch {
+        const fallback = document.querySelector<HTMLTextAreaElement>("#php-copy-fallback")
+        if (fallback) { fallback.value = reportText; fallback.classList.remove("hidden"); fallback.focus(); fallback.select() }
+        status.textContent = "Clipboard unavailable. Select and copy the assessment text below."
+      }
+    })
+    document.querySelector("#php-download")?.addEventListener("click", () => {
+      if (!reportText) return
+      try {
+        const url = URL.createObjectURL(new Blob([reportText], { type: "application/json" }))
+        const link = document.createElement("a"); link.href = url; link.download = "php2shell-assessment.json"; document.body.appendChild(link); link.click(); link.remove()
+        setTimeout(() => URL.revokeObjectURL(url), 1000); status.textContent = "Assessment download requested."
+      } catch { status.textContent = "Download unavailable. Use Copy assessment to save the result." }
+    })
+    const runButton = document.querySelector<HTMLButtonElement>("#php-run")
+    if (runButton) runButton.disabled = false
+  }
+</script>

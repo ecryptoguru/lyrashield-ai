@@ -1,6 +1,10 @@
 // security-scan-skip-file: passive version and configuration detection rules
 /* eslint-disable security/detect-unsafe-regex */
 import { basename } from "node:path"
+import {
+  PHP_SESSION_UPLOAD_PROGRESS_NOTICE,
+  matchPhpRuntimeAdvisories,
+} from "@lyrashield/security/php-security"
 import { z } from "zod"
 import { parseDocument } from "yaml"
 import { parsePhpVersionFile } from "./php-runtime-declarations"
@@ -158,6 +162,87 @@ function dockerImageDeclarations(content: string, issue: (reason: string) => voi
   return result
 }
 
+function phpConfigurationFindings(
+  path: string,
+  content: string,
+  issues?: ScannerCoverageIssue[]
+): EngineVulnerability[] {
+  const findings: EngineVulnerability[] = []
+  // A source configuration can justify review, never a verified runtime CVE claim.
+  const settings = new Map<string, { value: string; line: number }>()
+  for (const [index, line] of content.split("\n").entries()) {
+    const setting =
+      /^\s*(session\.(?:upload_progress\.enabled|serialize_handler))\s*=\s*["']?([a-z0-9_]+)["']?\s*(?:;.*)?$/i.exec(
+        line
+      )
+    if (setting)
+      settings.set(setting[1]!.toLowerCase(), {
+        value: setting[2]!.toLowerCase(),
+        line: index + 1,
+      })
+  }
+  const handler = settings.get("session.serialize_handler")
+  const upload = settings.get("session.upload_progress.enabled")
+  if (
+    handler &&
+    ["php_binary", "php_serialize"].includes(handler.value) &&
+    (!upload || ["1", "on", "true", "yes"].includes(upload.value))
+  ) {
+    findings.push({
+      id: `php-config-${PHP_SESSION_UPLOAD_PROGRESS_NOTICE.id}-${path}`,
+      title: "PHP session upload progress: configuration review",
+      severity: "info",
+      timestamp: new Date().toISOString(),
+      target: path,
+      scannerSource: "iac",
+      cve: PHP_SESSION_UPLOAD_PROGRESS_NOTICE.id,
+      finding_class: "php_runtime_config",
+      description: PHP_SESSION_UPLOAD_PROGRESS_NOTICE.description,
+      technical_analysis: PHP_SESSION_UPLOAD_PROGRESS_NOTICE.url,
+      remediation_steps: PHP_SESSION_UPLOAD_PROGRESS_NOTICE.remediation,
+      dependency_metadata: {
+        evidence_scope: "source_declaration",
+        runtime_verified: false,
+        applicability: "configuration_review",
+        advisory_id: PHP_SESSION_UPLOAD_PROGRESS_NOTICE.id,
+        advisory_url: PHP_SESSION_UPLOAD_PROGRESS_NOTICE.url,
+      },
+      code_locations: [{ file: path, start_line: handler.line }],
+    })
+  }
+  for (const [i, line] of content.split("\n").entries()) {
+    if (findings.length >= 100) {
+      recordCoverageIssue(issues, {
+        scanner: "iac",
+        status: "bounded",
+        subject: path,
+        reason: "PHP runtime configuration finding limit reached",
+      })
+      break
+    }
+    const match = /^\s*(display_errors|allow_url_include)\s*=\s*(?:On|1|true)\s*(?:;.*)?$/i.exec(
+      line
+    )
+    if (match)
+      findings.push({
+        id: `php-config-${path}-${i + 1}`,
+        title: `PHP configuration declaration: ${match[1]} enabled`,
+        severity: "low",
+        timestamp: new Date().toISOString(),
+        target: path,
+        scannerSource: "iac",
+        finding_class: "php_runtime_config",
+        description:
+          "Source configuration warning only; active pool, per-directory and deployment overrides are unknown.",
+        remediation_steps:
+          "Review the production configuration and disable this setting where appropriate. Independently confirm the effective configuration after deployment.",
+        dependency_metadata: { evidence_scope: "source_declaration", runtime_verified: false },
+        code_locations: [{ file: path, start_line: i + 1 }],
+      })
+  }
+  return findings
+}
+
 function parseRuntimeDeclarations(
   path: string,
   content: string,
@@ -243,36 +328,7 @@ function parseRuntimeDeclarations(
       issue("PHP runtime inventory is malformed, unsupported or lacks an exact stable identity")
     }
   } else if (name === "php.ini") {
-    for (const [i, line] of content.split("\n").entries()) {
-      if (findings.length >= 100) {
-        recordCoverageIssue(issues, {
-          scanner: "iac",
-          status: "bounded",
-          subject: path,
-          reason: "PHP runtime configuration finding limit reached",
-        })
-        break
-      }
-      const match = /^\s*(display_errors|allow_url_include)\s*=\s*(?:On|1|true)\s*(?:;.*)?$/i.exec(
-        line
-      )
-      if (match)
-        findings.push({
-          id: `php-config-${path}-${i + 1}`,
-          title: `PHP configuration declaration: ${match[1]} enabled`,
-          severity: "low",
-          timestamp: new Date().toISOString(),
-          target: path,
-          scannerSource: "iac",
-          finding_class: "php_runtime_config",
-          description:
-            "Source configuration warning only; active pool, per-directory and deployment overrides are unknown.",
-          remediation_steps:
-            "Review the production configuration and disable this setting where appropriate. Independently confirm the effective configuration after deployment.",
-          dependency_metadata: { evidence_scope: "source_declaration", runtime_verified: false },
-          code_locations: [{ file: path, start_line: i + 1 }],
-        })
-    }
+    findings.push(...phpConfigurationFindings(path, content, issues))
   }
   return { findings, declarations, phpPresent }
 }
@@ -323,14 +379,7 @@ function declaredRuntimeFindings(
     issue(
       "PHP runtime identity belongs to a branch outside the pinned catalog; advisory coverage is unknown"
     )
-  for (const advisory of PHP_RUNTIME_CATALOG.advisories) {
-    const range = advisory.ranges.find((r) => r.branch === branch)
-    if (
-      !range ||
-      patchOf(declaration.version) < patchOf(range.introduced) ||
-      patchOf(declaration.version) >= patchOf(range.fixed)
-    )
-      continue
+  for (const { advisory, range } of matchPhpRuntimeAdvisories(declaration.version)) {
     if (
       advisory.extension &&
       declaration.extensions &&
@@ -399,14 +448,22 @@ function declaredRuntimeFindings(
   return findings
 }
 
+/** Reuse parsed declarations from the existing IaC walk; no second traversal or file read. */
+export function discoverPhpRuntimeInput(path: string, content: string, kind: string | null) {
+  const issues: ScannerCoverageIssue[] = []
+  return { ...parseRuntimeDeclarations(path, content, kind, issues), issues }
+}
+
 /** Passive declarations only. Neither PHP nor Composer is executed. */
 export function inspectPhpRuntimeInput(
   path: string,
   content: string,
   kind: string | null,
-  issues?: ScannerCoverageIssue[]
+  issues?: ScannerCoverageIssue[],
+  discovered?: ReturnType<typeof discoverPhpRuntimeInput>
 ): { findings: EngineVulnerability[]; hasIdentity: boolean; phpPresent: boolean } {
-  const parsed = parseRuntimeDeclarations(path, content, kind, issues)
+  const parsed = discovered ?? discoverPhpRuntimeInput(path, content, kind)
+  for (const issue of parsed.issues) recordCoverageIssue(issues, issue)
   for (const declaration of parsed.declarations) {
     if (parsed.findings.length >= 100) {
       recordCoverageIssue(issues, {

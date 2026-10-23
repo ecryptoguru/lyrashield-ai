@@ -253,15 +253,37 @@ Cancelled and partial scans may consume agent-minutes when scan-bound evidence e
 
 ### Findings and result integrity
 
-PHP detection reuses the existing `sca`, `iac`, `sast` and `url` families.
+PHP detection reuses the existing `sca`, `iac`, `sast` and `url` families. Standard
+and Deep repository integration first detects PHP project scopes and gates
+PHP-specific analyzers and optional post-scan triage context on that result.
+Monorepo service scopes stay distinct, and uncertain discovery or absent exact runtime identity stays
+incomplete. Non-PHP repositories retain the ordinary scanner path without PHP
+analysis or PHP triage context. The existing IaC walk records eligible PHP source
+directories; `php-runtime.ts` reuses parsed declarations through
+`discoverPhpRuntimeInput()` before invoking runtime analysis for applicable
+inputs. `php-project.ts` owns documentation/test/fixture path exclusions shared
+with PHP SAST; source extension matching is case-insensitive. No separate PHP
+repository walk is added. `php-runtime-discovery.ts` builds a receipt from those
+existing inputs, capped at 32 PHP scopes and 64 service boundaries. Child service
+boundaries prevent inheriting a root runtime declaration or PHP context; overflow
+stays incomplete and suppresses context. `php-engine-context.ts` enriches only
+existing eligible medium-severity AI-security candidate excerpts in the enabled,
+accounted Standard/Deep triage cohort within their 4,096-byte bound, with anonymous scope identifiers
+and exact-identity completeness. Initial engine instructions and the number of
+engine calls do not change; this is not full PHP engine acceptance.
 `resolved-dependencies.ts` and `composer-dependencies.ts` resolve bounded exact
 Packagist locks with manifest content-hash checks; `dependency-manifests.ts`
 retains standalone discovery for other ecosystems. `php-runtime.ts` matches
-declared/reported identities against the pinned `php-runtime-advisories.json`
-catalog. A banner creates only a passive lead. `php_runtime_` findings cannot
+declared/reported identities against the pinned shared
+`packages/security/src/php-runtime-advisories.json` catalog through the worker
+`php-runtime-catalog.ts` compatibility export. A banner creates only a passive lead. `php_runtime_` findings cannot
 become `FIXED`/`VALIDATED` from source-only retests, even with complete source
 manifests. The [PHP runbook](./docs/php-security.md) owns supporting inventory,
-runtime replacement evidence and detection limitations.
+runtime replacement evidence and detection limitations. The free
+`/tools/php2shell-checker` consumes the shared browser-safe
+`@lyrashield/security/php-security` matcher for the original two advisories and
+keeps the 23 October CVE-2026-115560 configuration review separate; neither path
+performs a live probe or establishes deployed-runtime identity.
 
 Composer fixes use the existing job and encrypted artifact namespace through
 `jobs/composer-fix-proposal.ts` and the digest-pinned offline producer in

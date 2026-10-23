@@ -10,6 +10,7 @@ import {
   parseComposerManifest,
 } from "./composer-dependencies"
 import { recordCoverageIssue, type ScannerCoverageIssue } from "../scanner-coverage"
+import { isExcludedPhpPath } from "./php-project"
 
 export interface ResolvedDependencyInventory {
   status: "COMPLETE" | "PARTIAL" | "UNSUPPORTED"
@@ -115,6 +116,20 @@ interface DependencyInputs {
   truncated: boolean
 }
 
+function eligibleDependencyEntries<T extends { name: string }>(
+  entries: T[],
+  root: string,
+  directory: string
+): T[] {
+  return entries.filter(
+    (entry) =>
+      !(
+        ["composer.json", "composer.lock"].includes(entry.name) &&
+        isExcludedPhpPath(relative(root, join(directory, entry.name)))
+      )
+  )
+}
+
 async function walkDependencyInputs(
   directory: string,
   depth: number,
@@ -153,7 +168,7 @@ async function walkDependencyInputs(
     })
     return
   }
-  for (const entry of entries) {
+  for (const entry of eligibleDependencyEntries(entries, repoPath, directory)) {
     if (signal?.aborted) throw new Error("Dependency resolution cancelled")
     if (++state.entries > MAX_WALK_ENTRIES) {
       context.truncated = true

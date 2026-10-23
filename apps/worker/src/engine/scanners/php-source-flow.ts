@@ -49,6 +49,42 @@ function fixedShellExecutablePrefix(tokens: PhpToken[]): boolean {
   const first = tokens[0]
   if (first?.kind !== "string") return false
   const prefix = first.text.slice(1, -1)
+  const executable = /^\s*([a-zA-Z0-9_./-]+)[ \t]/.exec(prefix)?.[1]?.split("/").at(-1)
+  const name =
+    executable
+      ?.toLowerCase()
+      .split(".")[0]
+      ?.replace(/[0-9]+$/, "") ?? ""
+  // Dispatchers/shells select code; interpreter eval flags consume an argument as code.
+  const dispatchers = [
+    "env",
+    "sh",
+    "bash",
+    "dash",
+    "zsh",
+    "ksh",
+    "fish",
+    "csh",
+    "tcsh",
+    "cmd",
+    "powershell",
+    "pwsh",
+    "xargs",
+    "sudo",
+    "doas",
+    "busybox",
+  ]
+  const interpreters = ["php", "python", "perl", "ruby", "node", "nodejs", "lua", "awk", "gawk"]
+  const words = prefix.trim().split(/\s+/)
+  if (
+    dispatchers.includes(name) ||
+    (interpreters.includes(name) &&
+      (words.length !== 2 ||
+        words[1]!.startsWith("-") ||
+        !/^[a-zA-Z0-9_./-]+$/.test(words[1]!) ||
+        /[ \t](?:-c|-r|-e|--eval|--execute)(?:[ \t]|$)/.test(prefix)))
+  )
+    return false
   // A literal executable word must end before user data. Operators reopen command position.
   return (
     /^\s*[a-zA-Z0-9_./-]+[ \t]/.test(prefix) &&

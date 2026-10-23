@@ -1,11 +1,13 @@
 // security-scan-skip-file: detection rules reference dangerous patterns by design
 /* eslint-disable security/detect-non-literal-fs-filename, security/detect-unsafe-regex */
 import { lstat, readFile, readdir } from "fs/promises"
-import { basename, dirname, join, relative } from "path"
+import { basename, join, relative } from "path"
 import { logger } from "@lyrashield/logger"
 import type { EngineVulnerability } from "../output-parser"
 import { IAC_RULES, K8S_MISSING_SECURITY_CONTEXT, type IacFileKind } from "./iac-rules"
-import { inspectPhpRuntimeInput, isPhpRuntimeInput } from "./php-runtime"
+import { isPhpRuntimeInput } from "./php-runtime"
+import { createPhpRuntimeDiscovery } from "./php-runtime-discovery"
+import { isExcludedPhpPath, isPhpServiceBoundary } from "./php-project"
 import {
   recordCoverageIssue,
   type ScannerCoverageIssue,
@@ -50,7 +52,6 @@ const MAX_TOTAL_FINDINGS = 5_000
 const K8S_API_VERSION = /^apiVersion:\s*\S+/m
 const K8S_KIND =
   /^kind:\s*(Deployment|Pod|DaemonSet|StatefulSet|Job|CronJob|Service|Role|ClusterRole|RoleBinding|ClusterRoleBinding|NetworkPolicy|Ingress|Secret|ConfigMap|ServiceAccount)\b/m
-const COMPOSE_SERVICES = /^services:\s*$/m
 
 function classify(path: string, content: string): IacFileKind | null {
   const name = basename(path)
@@ -59,7 +60,7 @@ function classify(path: string, content: string): IacFileKind | null {
   }
   if (/\.tf$/i.test(name)) return "terraform"
   if (/^docker-compose.*\.ya?ml$/i.test(name) || /^compose\.ya?ml$/i.test(name)) {
-    return COMPOSE_SERVICES.test(content) ? "compose" : null
+    return "compose"
   }
   if (/\.ya?ml$/i.test(name) && K8S_API_VERSION.test(content) && K8S_KIND.test(content)) {
     return "kubernetes"
@@ -88,9 +89,11 @@ async function walkDir(
     phpSources: 0,
     symlinks: 0,
     phpDirectories: new Set<string>(),
+    serviceDirectories: new Set<string>(),
   },
   depth = 0,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  root = dir
 ): Promise<void> {
   throwIfAborted(signal)
   if (depth > MAX_WALK_DEPTH || state.entries >= MAX_WALK_ENTRIES) {
@@ -125,10 +128,12 @@ async function walkDir(
     }
     if (s.isDirectory()) {
       if (!IGNORED_DIRS.has(entry)) {
-        await walkDir(fullPath, files, state, depth + 1, signal)
+        await walkDir(fullPath, files, state, depth + 1, signal, root)
       }
     } else if (s.isFile()) {
-      if (/\.php$/i.test(entry)) {
+      if (isPhpServiceBoundary(entry) && !isExcludedPhpPath(relative(root, fullPath)))
+        state.serviceDirectories.add(dir)
+      if (/\.php$/i.test(entry) && !isExcludedPhpPath(relative(root, fullPath))) {
         state.phpSources++
         state.phpDirectories.add(dir)
       }
@@ -311,6 +316,7 @@ export async function scanIac(config: IacScanConfig): Promise<EngineVulnerabilit
     phpSources: 0,
     symlinks: 0,
     phpDirectories: new Set<string>(),
+    serviceDirectories: new Set<string>(),
   }
   await walkDir(repoPath, candidates, walkState, 0, signal)
   if (walkState.bounded) {
@@ -340,9 +346,12 @@ export async function scanIac(config: IacScanConfig): Promise<EngineVulnerabilit
   let bytesScanned = 0
   let filesScanned = 0
 
-  let phpPresent = walkState.phpSources > 0
-  let hasPhpIdentity = false
-  const phpIdentityDirectories = new Set<string>()
+  const php = createPhpRuntimeDiscovery(
+    workspaceDir,
+    walkState.phpDirectories,
+    coverageIssues,
+    walkState.serviceDirectories
+  )
   if (walkState.symlinks > 0)
     recordCoverageIssue(coverageIssues, {
       scanner: "iac",
@@ -385,10 +394,7 @@ export async function scanIac(config: IacScanConfig): Promise<EngineVulnerabilit
       })
       continue
     }
-    const runtime = inspectPhpRuntimeInput(relPath, content, kind, coverageIssues)
-    phpPresent ||= runtime.phpPresent
-    hasPhpIdentity ||= runtime.hasIdentity
-    if (runtime.hasIdentity) phpIdentityDirectories.add(dirname(filePath))
+    const runtime = php.inspect(relPath, filePath, content, kind)
     const runtimeCapacity = Math.min(MAX_FINDINGS_PER_FILE, MAX_TOTAL_FINDINGS - findings.length)
     findings.push(...runtime.findings.slice(0, runtimeCapacity))
     if (runtime.findings.length > runtimeCapacity)
@@ -428,19 +434,13 @@ export async function scanIac(config: IacScanConfig): Promise<EngineVulnerabilit
     }
   }
 
-  const uncoveredPhpDirectory = [...walkState.phpDirectories].some(
-    (sourceDir) =>
-      ![...phpIdentityDirectories].some(
-        (identityDir) => sourceDir === identityDir || sourceDir.startsWith(identityDir + "/")
-      )
+  const phpContext = php.finish(
+    walkState.bounded ||
+      walkState.oversizedFiles > 0 ||
+      skippedByReason.unreadable > 0 ||
+      skippedByReason.findingLimit > 0 ||
+      walkState.symlinks > 0
   )
-  if (phpPresent && (!hasPhpIdentity || uncoveredPhpDirectory))
-    recordCoverageIssue(coverageIssues, {
-      scanner: "iac",
-      status: "partial",
-      reason:
-        "PHP sources/declarations were found without usable exact runtime identity; runtime advisory coverage is incomplete",
-    })
 
   if (skippedByReason.unreadable > 0) {
     recordCoverageIssue(coverageIssues, {
@@ -456,6 +456,7 @@ export async function scanIac(config: IacScanConfig): Promise<EngineVulnerabilit
       bytesScanned,
       skippedByReason,
       representativeSkippedPaths: undefined,
+      php: phpContext,
     }
   }
 

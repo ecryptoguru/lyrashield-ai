@@ -168,3 +168,36 @@ it.each([
 ])("retains raw interpolation or literal shell command substitution: %s", (body) => {
   expect(ids(body)).toContain("CWE-78")
 })
+
+it.each([
+  "system('sh -c ' . escapeshellarg($_GET['cmd']));",
+  "system('/bin/bash -c ' . escapeshellarg($_GET['cmd']));",
+  "system('env ' . escapeshellarg($_GET['binary']));",
+  "$cmd = 'sh -c ' . escapeshellarg($_GET['cmd']); system($cmd);",
+  "system('python3 -c ' . escapeshellarg($_GET['cmd']));",
+  "system('php -r ' . escapeshellarg($_GET['cmd']));",
+])("retains escaped command text passed to a dispatcher or interpreter: %s", (body) => {
+  expect(ids(body)).toContain("CWE-78")
+})
+
+it.each([
+  "system('python3 trusted-script.py ' . escapeshellarg($_GET['argument']));",
+  "system('php trusted-script.php ' . escapeshellarg($_GET['argument']));",
+])("keeps an escaped data argument to a fixed interpreter script quiet: %s", (body) => {
+  expect(scan(body).findings).toEqual([])
+})
+
+it.each([
+  "system('python3 -I ' . escapeshellarg($_GET['script']));",
+  "system('php -n ' . escapeshellarg($_GET['script']));",
+])("retains script selection after interpreter options: %s", (body) => {
+  expect(ids(body)).toContain("CWE-78")
+})
+
+it("retains an interpolated attacker-selected script behind an interpreter", () => {
+  expect(
+    ids(
+      '$script = escapeshellarg($_GET["script"]); system("python3 $script " . escapeshellarg($_GET["argument"]));'
+    )
+  ).toContain("CWE-78")
+})

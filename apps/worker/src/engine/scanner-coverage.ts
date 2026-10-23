@@ -12,6 +12,7 @@ interface ScannerDiscoveryReceipt {
   bytesScanned: number
   skippedByReason: Record<string, number>
   representativeSkippedPaths?: string[]
+  php?: import("./php-engine-context").PhpRepositoryContext
 }
 
 /** Mutable sink a scanner fills during its run — same out-param pattern as coverageIssues. */

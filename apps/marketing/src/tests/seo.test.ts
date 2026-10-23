@@ -115,7 +115,7 @@ describe("marketing SEO metadata", () => {
     // date the page displays (the Oct 2026 drift).
     expect(methodology).toContain('const reviewed = "')
     expect(methodology).toContain("dateModified: reviewed")
-    expect(methodology).toContain('const reviewed = "2026-10-11"')
+    expect(methodology).toContain('const reviewed = "2026-10-24"')
     expect(hero).toContain("A fresh retest checks each fix.")
     expect(hero).not.toContain("A fresh retest confirms each fix")
     expect(kiloGuide).toContain("staging-web")

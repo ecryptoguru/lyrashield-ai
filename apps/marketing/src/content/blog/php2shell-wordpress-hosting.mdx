@@ -1,0 +1,98 @@
+---
+title: "PHP2Shell and WordPress: what to ask your host"
+description: "Check who owns your WordPress PHP runtime, request useful patch evidence from your host and test the site without confusing plugin updates with PHP fixes."
+pubDate: 2026-10-24T00:00:00+05:30
+author: lyrashield-team
+tags: ["web-security", "verification"]
+draft: false
+heroImage: php2shell-wordpress
+faq:
+  - q: "Does updating WordPress patch PHP2Shell?"
+    a: "Updating WordPress core or plugins does not replace the hosting provider's PHP interpreter. Confirm the runtime patch with whoever administers PHP for the site."
+  - q: "Can my host backport the patch without changing the main PHP version?"
+    a: "Yes. Ask for the exact package revision and a vendor statement covering both October 21 CVEs, plus confirmation that the site's affected workers were restarted."
+  - q: "Should I install a plugin to test exploitation?"
+    a: "Do not add an untrusted plugin or attack a production site to verify this patch. Use host evidence, authorized runtime inspection and ordinary application smoke tests."
+---
+
+For WordPress, ask the hosting provider whether the PHP runtime serving your specific site has the PHP2Shell patches and whether all affected workers were restarted. Updating WordPress core, themes or plugins does not replace PHP itself. Check the selected runtime in your hosting account, request package or backport evidence and test the site's normal functions after the provider applies the update.
+
+A solo founder can control the site while having no access to its PHP service. You control the site and its plugins, but the host controls the interpreter underneath them. The [vibe coding security guide](/blog/vibe-coding-security-guide) encourages following each security responsibility to its owner. For a managed WordPress site, that owner may be a hosting support team rather than your developer.
+
+## Separate WordPress from its PHP runtime
+
+WordPress runs on PHP, but they have separate update paths. A current WordPress version can run on an affected interpreter. A security plugin may protect selected application requests while the underlying runtime still requires a vendor patch. Start the discussion with the PHP service instead of looking for a plugin carrying the CVE name.
+
+The [October 21 PHP release notice](https://www.php.net/archive/2026.php#2026-10-21-1) identifies fixes for CVE-2026-109618 and CVE-2026-109619 in 8.2.35, 8.3.36, 8.4.27 and 8.5.12. A hosting provider may use a documented backport rather than an identical upstream version string. Ask which evidence applies to your account.
+
+If you operate your own VPS or container, you own the runtime update unless a management contract says otherwise. A WordPress auto-update setting does not become an operating system patch service. Use the [Docker, FPM and Apache guide](/blog/patch-php2shell-docker-fpm-apache) when your team administers that layer.
+
+## Gather the site's current information
+
+Open WordPress Tools, Site Health, Info and inspect the Server section. WordPress's [Site Health documentation](https://wordpress.org/documentation/article/site-health-screen/) describes the information available there. Record the PHP version and relevant server details without publishing the entire export.
+
+For an agency managing several customer sites, create one row per production site rather than one row per hosting company. Put the account owner and support-ticket reference beside it. Two sites with similar branding can use different plans or runtime pools, so copy a provider answer only when it explicitly covers both sites. This small inventory makes follow-up far less ambiguous.
+
+Compare that result with the PHP selector in your hosting control panel. Confirm that you are viewing the production domain and the correct account. A staging site, addon domain or subdomain may use another pool or branch. One patched website does not establish the state of every site on the same invoice.
+
+If Site Health and the control panel disagree, ask the provider which setting is effective for actual requests. Cached pages and delayed control-panel updates can complicate the picture. Keep both observations and their times rather than deleting the inconvenient one from the ticket.
+
+Use the [PHP2Shell checker](/tools/php2shell-checker) to interpret the version and configuration evidence you have. An unknown value is a useful prompt for the provider. It should remain unknown until someone with the appropriate access supplies evidence.
+
+## Send a question support can answer
+
+A request to "make us safe from PHP2Shell" invites a vague reply. Give the provider your authorized site identifier and ask for a concrete runtime statement. Keep account numbers, internal hostnames and access details in the private support channel.
+
+You can adapt this message:
+
+```text
+Please confirm the PHP runtime serving our production site is patched for
+CVE-2026-109618 and CVE-2026-109619. Which PHP package revision or vendor
+backport covers these CVEs? Please also confirm all affected workers for
+our site were restarted and identify the effective PHP branch.
+
+Separately, please confirm whether session.upload_progress.enabled is
+disabled before request parsing for the October 23 CVE-2026-115560 notice.
+```
+
+Ask the provider to distinguish a completed rollout from a scheduled one. If the answer names a future maintenance window, leave the task open and set a reminder to request completion evidence afterward. Save the original reply so another administrator can follow the commitment. If it uses multiple origin nodes, request confirmation for the pool serving your site. A statement about the provider's global patch program helps with planning, but it does not establish that your account has reached the completed stage.
+
+For a backport, ask for the vendor bulletin or package reference. Support does not need to disclose unrelated infrastructure details to explain which patch applies. Keep the reply with the site record so the next administrator does not reopen the same version-string question without context.
+
+## Evaluate common hosting replies
+
+"Your PHP is up to date" needs a source. Ask whether that means the newest package available in the enabled repository, the newest branch your plan offers or a package explicitly patched for the two CVEs. Those are different claims.
+
+"Our firewall blocks the exploit" describes a compensating control. Request the patch schedule as well. The [maintainer OOM advisory](https://github.com/php/php-src/security/advisories/GHSA-w8hw-w9fx-j79w) identifies a confirmed runtime path before application code, so a plugin's application-level checks cannot establish that the underlying issue is fixed.
+
+"We use FPM" is useful architecture context, but it does not close the issue. The [stale-state advisory](https://github.com/php/php-src/security/advisories/GHSA-6wmf-4rv5-p3rp) describes a validated FPM path with application-dependent conditions. Avoid turning a SAPI name into an immunity claim.
+
+If the provider cannot yet confirm the patch, agree on a deadline and the temporary controls it can support. Keep the site's business needs in the discussion. An improvised PHP branch change during a busy trading period can create avoidable downtime if an old extension or payment integration fails.
+
+## Plan the compatibility check before switching branches
+
+Prefer a patched release within the existing supported branch when the provider offers one. If an older branch must be retired, test the replacement in staging using a representative copy under your privacy and access rules. Check the theme and plugins that handle important customer actions.
+
+For a brochure site, test the editor, navigation, contact form and media upload. For a store, add cart, checkout sandbox, order email and scheduled tasks. Use test transactions and approved accounts; patch verification does not require a real customer charge.
+
+Confirm that backups and restore instructions are current before the change. Know who can revert a PHP selector and whether reverting would restore an affected runtime. Record that security implication in the recovery plan. A functional rollback may need a different patched branch or a repaired plugin rather than a return to the original interpreter.
+
+## Review the separate upload progress notice
+
+PHP's [October 23 notice](https://www.php.net/archive/2026.php#2026-10-23-1) covers CVE-2026-115560, an unusual configuration plus runtime serializer-switch condition. It recommends disabling session upload progress pending a regular bugfix release. Do not assume a WordPress plugin uses this pattern merely because it creates sessions; inspect the relevant code or obtain a scoped provider assessment.
+
+If your host applies the mitigation, ask whether it is effective before request parsing and whether workers restarted. An `ini_set()` added to a theme or plugin executes too late for this startup control. The [dedicated session guide](/blog/cve-2026-115560-session-upload-progress) explains what to review and how to retain an honest unknown result.
+
+Disabling the feature may change an upload progress indicator used by an application. Test the affected user experience after the change, including whether uploads still complete. Keep the provider's temporary setting in the site operations notes so a migration does not accidentally re-enable it.
+
+## Keep patching and incident investigation separate
+
+A completed update addresses the affected component going forward. It does not prove the site was never attacked. If you see unexplained files, new administrator accounts or suspicious requests, preserve evidence and follow your incident response process with the host. Avoid cleaning up first and losing the record needed to understand what happened.
+
+Do not publish a `phpinfo()` file or install an untrusted checker plugin to obtain reassurance. The [version checking walkthrough](/blog/check-php-version-php2shell) describes safer inspection routes. Restrict diagnostic information and remove temporary endpoints once the authorized check is complete.
+
+## Record what your host actually confirmed
+
+Keep a concise site record with the runtime branch, fixed package or backport reference, completion time, worker replacement confirmation and smoke-test result. Note any remaining account or origin that support has not checked. This gives a future maintainer something more useful than a screenshot of a green dashboard.
+
+LyraShield AI conditionally runs PHP checks in Standard and Deep scans when relevant target evidence is available. It cannot attest every managed hosting worker from public behavior. Try the [free Lite Check](/scan) for a passive URL review, or [sign up and select a Deep scan](https://app.lyrashieldai.com/sign-up) for authorized application assessment. Keep the provider's runtime receipt beside those results.

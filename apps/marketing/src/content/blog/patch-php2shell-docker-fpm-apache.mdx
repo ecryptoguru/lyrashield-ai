@@ -1,0 +1,100 @@
+---
+title: "Patch PHP2Shell in Docker, PHP-FPM and Apache"
+description: "Update the PHP artifact, restart the correct workers and verify each replica. A practical PHP2Shell rollout guide for Docker, FPM and Apache operators."
+pubDate: 2026-10-24T00:00:00+05:30
+author: lyrashield-team
+tags: ["web-security", "supply-chain", "verification"]
+draft: false
+heroImage: php2shell-patching
+faq:
+  - q: "Does restarting an old PHP container patch PHP2Shell?"
+    a: "No. Rebuild or obtain a patched image and replace the running containers. Restarting a container from the same affected image leaves the affected PHP binary in place."
+  - q: "Should I restart nginx after updating PHP-FPM?"
+    a: "Identify which process runs PHP. Updating FPM requires replacing its affected workers. Restarting nginx alone does not replace the PHP interpreter behind an FPM socket."
+  - q: "Is disabling upload progress a substitute for upgrading?"
+    a: "No. It removes specific session paths and helps with the separate October 23 issue, but the two October 21 CVEs require the applicable patches."
+---
+
+Patch PHP2Shell by replacing the PHP binary or container image that handles requests, then restarting every affected worker and checking the result. For Docker, rebuild and redeploy the runtime image. For PHP-FPM or Apache packages, follow the vendor's update procedure and replace the correct processes. Keep a tested recovery path and verify application behavior before expanding the rollout.
+
+A deployment can appear successful while the old PHP workers keep serving traffic. That is why the [vibe coding security guide](/blog/vibe-coding-security-guide) separates source changes, deployment and runtime evidence. This guide focuses on the operational gap between installing the patch and proving that the intended service uses it.
+
+## Establish the change boundary first
+
+Identify the public service, PHP branch, package or image owner and current web handler. Keep CLI and web runtimes separate until you have confirmed they share the installation. The [version inspection guide](/blog/check-php-version-php2shell) provides a read-only starting point when that mapping is unclear.
+
+PHP's [October 21 notice](https://www.php.net/archive/2026.php#2026-10-21-1) names 8.2.35, 8.3.36, 8.4.27 and 8.5.12 as patched releases for CVE-2026-109618 and CVE-2026-109619. Select the release for your branch or the vendor's explicit backport. Do not replace an unsupported branch with a random newer tag without testing compatibility.
+
+Before changing anything, confirm that backups and recovery procedures are usable for the application. A runtime patch normally should not require a database migration. Keep unrelated schema work out of the emergency deployment so recovery remains understandable. Record the previous artifact and the patched candidate separately.
+
+## Docker: replace the runtime artifact
+
+Inspect the final runtime stage of the Dockerfile. Multi-stage builds can use one PHP version to install dependencies and another to serve requests. Update the stage that reaches production, then check extension installation and operating system dependencies against the selected image.
+
+An illustrative upstream branch update looks like this:
+
+```dockerfile
+# Example branch-specific patched runtime. Preserve your required variant.
+FROM php:8.3.36-fpm
+```
+
+This example assumes your project already uses an official FPM image in the 8.3 branch. Preserve the required operating system variant, build steps and extension compatibility. If you use a vendor image, follow that vendor's patch identity rather than replacing the image family during the incident.
+
+Rebuild through the existing release pipeline with fresh base-image resolution. Docker's [build guidance](https://docs.docker.com/build/building/best-practices/) explains pulling updated bases, rebuilding and using digests to identify exact image content. If you pin a digest, update it deliberately; rebuilding against the same old pinned base preserves the old input.
+
+Test the candidate, publish it to your registry and deploy its immutable identity through the normal rollout mechanism. Restarting a container from the affected image does not install a patch. Editing packages interactively inside a running container also leaves the deployment unreproducible and can disappear during the next replacement.
+
+## Verify the new containers after rollout
+
+Record the deployed image digest and collect a PHP version readback inside each relevant replica. Confirm the web handler uses the inspected installation. Compare the running image with the release record rather than relying on a mutable tag displayed in a dashboard.
+
+For a service with several replicas, start with the existing canary or smallest supported rollout unit. Compare error rates and the selected smoke tests with the previous release before continuing. If your platform cannot identify which image handled a request, close that observability gap in the deployment record rather than treating a random successful response as proof about the entire fleet.
+
+Check that old replicas have drained and terminated. Check the platform's configured desired image as well, so replacement replicas inherit the patched artifact after a later restart. Include scheduled jobs or separate workers if they use the same affected runtime, while keeping the web exposure assessment specific to request-serving services. An autoscaling template or standby definition pointing to an old image can reintroduce the problem after the current rollout finishes.
+
+Smoke-test the application paths most likely to expose compatibility failures: authentication, session continuity, ordinary uploads and the business action your users depend on. Use staging fixtures or approved test accounts. A homepage response alone gives little evidence about extensions or session handling.
+
+## PHP-FPM: update the pool's interpreter
+
+Find the FPM service and pool behind the application's configured socket or upstream. Use the distribution's supported update procedure, retaining the exact package revision and vendor bulletin. Several FPM branches can coexist, so a successful package update needs to match the service serving this site.
+
+Validate configuration before restarting with the package's supported FPM configuration test. Service names and executable paths vary by platform; use the installed unit and vendor instructions rather than copying a guessed service command. Replace every affected worker through the supported restart or rollout procedure, then verify that old workers have exited.
+
+Check the effective configuration after replacement. A central configuration file, pool override and deployment-mounted fragment may disagree. PHP documents [configuration loading](https://www.php.net/manual/en/configuration.file.php), but your service definition determines which files the selected runtime reads. Keep that path in the change record for the next operator.
+
+If you disable upload progress, apply it administratively before request parsing. A representative FPM pool setting is:
+
+```ini
+; Pool-level administrative setting, reviewed for this application.
+php_admin_flag[session.upload_progress.enabled] = off
+```
+
+Test the configuration and restart the workers after applying it. Confirm the effective value through an authorized readback. The setting changes a specific feature; it does not establish that both original PHP2Shell patches are installed.
+
+## Apache: distinguish mod_php from proxying
+
+An Apache frontend may execute PHP through mod_php or forward it to FPM. Inspect the configured handler before choosing the restart target. If it proxies to FPM, follow the FPM service through the socket or backend address. Restarting Apache alone can leave the affected interpreter untouched.
+
+For mod_php, update the package that provides the loaded PHP module and replace the Apache worker processes through the supported procedure. Validate Apache configuration first. Confirm that no old generation continues receiving requests after draining, then collect the module and package identity used by the replacement service.
+
+The [OOM advisory](https://github.com/php/php-src/security/advisories/GHSA-w8hw-w9fx-j79w) documents a confirmed mod_php path before application execution. Application-level upload validation cannot substitute for updating this runtime. Treat a working WordPress dashboard or framework health route as a smoke test after the upgrade, not evidence that the vulnerable runtime path was unreachable beforehand.
+
+## Temporary controls need a second review
+
+The [stale-state advisory](https://github.com/php/php-src/security/advisories/GHSA-6wmf-4rv5-p3rp) describes partial controls for specific paths, including disabling upload progress. Keep their scope in the ticket. A mitigation that removes a demonstrated session path does not cover every possible lifecycle path named by the advisory.
+
+Review resource implications before making emergency memory changes. Do not apply unlimited PHP memory settings without an operator-approved availability boundary and the current maintainer instructions. Some resource limits can introduce the underlying allocation failures the advice is trying to avoid. Use the advisory as the authority, with a named owner for temporary settings.
+
+Also track [CVE-2026-115560](/blog/cve-2026-115560-session-upload-progress) separately. PHP's [October 23 notice](https://www.php.net/archive/2026.php#2026-10-23-1) recommends disabling session upload progress for its unusual serializer-switch condition pending a regular bugfix release. Installing an October 21 fixed version should not automatically close that later configuration review.
+
+## Make rollback preserve the decision
+
+Prepare a patched rollback artifact where practical. If the new image fails because of an extension mismatch, you want a reviewed previous application build on a patched runtime rather than an automatic return to the affected image. Test that combination before relying on it.
+
+For a failed deployment, record which replicas accepted traffic and which runtime they used. Preserve useful diagnostics without exporting credentials or customer request data. Restore availability through the existing response process, then state any remaining exposure explicitly. A rollback is an operational event, not automatic security closure.
+
+## Finish with a readable receipt
+
+Keep the previous and replacement package or image identity, rollout time, worker replacement evidence and post-change checks in one record. Add the vendor backport reference where applicable. Link the runtime receipt to the [PHP2Shell checker](/tools/php2shell-checker) assessment so a future reviewer can distinguish entered evidence from independently observed deployment state.
+
+LyraShield AI conditionally runs PHP checks in Standard and Deep scans when relevant target evidence is available; those checks cannot attest every running worker. Use the [free Lite Check](/scan) for a passive URL review, or [create an account to choose a Deep scan](https://app.lyrashieldai.com/sign-up) for authorized assessment. Close the deployment task when the patched artifact, worker replacement and application checks all have evidence.

@@ -59,6 +59,11 @@
       "types": "./src/webmcp/rewrite.ts",
       "import": "./src/webmcp/rewrite.ts",
       "default": "./src/webmcp/rewrite.ts"
+    },
+    "./php-security": {
+      "types": "./src/php-security.ts",
+      "import": "./src/php-security.ts",
+      "default": "./src/php-security.ts"
     }
   },
   "scripts": {

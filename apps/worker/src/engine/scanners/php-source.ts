@@ -3,7 +3,7 @@ import type { EngineVulnerability } from "../output-parser"
 import { closingToken, splitPhpArguments, tokenizePhp, type PhpToken } from "./php-source-lexer"
 import { phpExpressionFlow, type PhpContext, type PhpLocals } from "./php-source-flow"
 
-export const PHP_SOURCE_RULE_VERSION = "php-source-local-flow/1.0.0"
+export const PHP_SOURCE_RULE_VERSION = "php-source-local-flow/1.0.1"
 const MAX_BYTES = 512 * 1024
 const LIMITATION =
   "PHP analysis covers bounded lexical request-to-sink and local-variable flows only; cross-file, function-return, authorization, CSRF and session behavior remain unassessed"

@@ -1,6 +1,8 @@
 ---
 import Base from "@layouts/Base.astro"
 import BlogCta from "@components/BlogCta.astro"
+import Php2ShellGuides from "@components/Php2ShellGuides.astro"
+import { PHP2SHELL_GUIDE_SLUGS } from "../lib/php2shell-guides"
 import type { CollectionEntry } from "astro:content"
 
 interface Heading {
@@ -190,11 +192,11 @@ if (faq && faq.length > 0) {
         <p class="blog-post__summary">{description}</p>
         <p class="blog-post__meta">
           <time datetime={pubDate.toISOString()}>
-            {pubDate.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}
+            {pubDate.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric", timeZone: "Asia/Kolkata" })}
           </time>
           {updatedDate && (
             <span class="ml-2 text-sm">
-              Updated <time datetime={updatedDate.toISOString()}>{updatedDate.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}</time>
+              Updated <time datetime={updatedDate.toISOString()}>{updatedDate.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric", timeZone: "Asia/Kolkata" })}</time>
             </span>
           )}
           {author && (
@@ -313,6 +315,7 @@ if (faq && faq.length > 0) {
         </section>
       )}
 
+      {PHP2SHELL_GUIDE_SLUGS.includes(Astro.url.pathname.split("/").filter(Boolean).at(-1) ?? "") && <Php2ShellGuides />}
       <BlogCta />
     </article>
 

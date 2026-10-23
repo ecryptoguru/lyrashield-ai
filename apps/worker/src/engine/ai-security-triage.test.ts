@@ -48,3 +48,46 @@ describe("engine AI-security triage selection", () => {
     ).toMatchObject({ eligible: false, reason: "PAID_PLAN_REQUIRED" })
   })
 })
+
+it("adds bounded path-free PHP context only to candidates within detected PHP scopes", () => {
+  const context = {
+    scopes: [{ directory: "services/php", hasExactRuntimeIdentity: false }],
+    incomplete: true,
+  }
+  const phpSignal = { ...signal, file: "services/php/agent.php", snippet: "é".repeat(6000) }
+  const input = buildEngineTriageInput([phpSignal], "b".repeat(40), context)
+  const excerpt = input!.candidates[0]!.evidenceExcerpt
+  expect(excerpt).toContain("PHP scope 1")
+  expect(excerpt).toContain("incomplete")
+  expect(excerpt).toContain("runtime identity unavailable")
+  expect(excerpt).toContain("CVE-2026-115560")
+  expect(Buffer.byteLength(excerpt)).toBeLessThanOrEqual(4096)
+  expect(excerpt).not.toContain("services/php")
+  expect(
+    buildEngineTriageInput([{ ...signal, file: "services/js/agent.ts" }], "b".repeat(40), context)
+      ?.candidates[0]?.evidenceExcerpt
+  ).toBe("bounded candidate")
+  expect(
+    buildEngineTriageInput([phpSignal], "b".repeat(40))?.candidates[0]?.evidenceExcerpt
+  ).not.toContain("PHP scope")
+})
+
+it("selects the closest detected service and excludes example evidence from PHP triage context", () => {
+  const context = {
+    scopes: [
+      { directory: ".", hasExactRuntimeIdentity: true },
+      { directory: "services/php", hasExactRuntimeIdentity: false },
+    ],
+    incomplete: true,
+  }
+  const input = buildEngineTriageInput(
+    [{ ...signal, file: "services/php/agent.php" }],
+    "b".repeat(40),
+    context
+  )
+  expect(input?.candidates[0]?.evidenceExcerpt).toContain("runtime identity unavailable")
+  expect(
+    buildEngineTriageInput([{ ...signal, file: "docs/agent.php" }], "b".repeat(40), context)
+      ?.candidates[0]?.evidenceExcerpt
+  ).toBe("bounded candidate")
+})

@@ -517,8 +517,8 @@
     },
     "apps/worker/src/engine/scanners/iac-scanner.ts|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 9,
-      "maxExcess": 9
+      "totalExcess": 5,
+      "maxExcess": 5
     },
     "apps/worker/src/engine/scanners/openapi-scanner.ts|max-lines-per-function": {
       "count": 1,

@@ -326,3 +326,22 @@ describe("Mixed manifest failures", () => {
     }
   )
 })
+
+it("ignores Composer documentation and fixture files while retaining JavaScript dependency resolution", async () => {
+  const root = await repo({
+    "package-lock.json": JSON.stringify({
+      lockfileVersion: 3,
+      packages: { "node_modules/lodash": { version: "4.17.20" } },
+    }),
+    "docs/composer.json": "malformed example",
+    "fixtures/composer.lock": JSON.stringify({
+      packages: [{ name: "vendor/example", version: "1.2.3" }],
+    }),
+  })
+  const inventory = await resolveExactDependencies({ repoPath: root })
+  expect(inventory.status).toBe("COMPLETE")
+  expect(inventory.packages).toEqual([
+    expect.objectContaining({ ecosystem: "npm", name: "lodash" }),
+  ])
+  expect(inventory.unresolved).toEqual([])
+})

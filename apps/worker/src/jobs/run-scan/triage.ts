@@ -178,6 +178,17 @@ async function attemptRepoTriageOverlay(args: {
   return { aiSecuritySignals, triageSnapshot, triageTerminalReason, cacheOperations }
 }
 
+/** Keep the original orchestration call bounded as scanner evidence grows. */
+export function triageEvidence(result: {
+  aiAppSecuritySignals?: AISecuritySignal[]
+  scannerDiscovery?: import("../../engine/scanner-coverage").ScannerDiscovery
+}) {
+  return {
+    aiSecuritySignals: result.aiAppSecuritySignals ?? [],
+    phpContext: result.scannerDiscovery?.iac?.php,
+  }
+}
+
 export async function runEngineTriageOverlay(params: {
   scanId: string
   scope: { workspaceId: string; targetId: string; targetType: string }
@@ -189,6 +200,7 @@ export async function runEngineTriageOverlay(params: {
   isScanCancelled: () => Promise<boolean>
   engineResult: EngineRunResult
   aiSecuritySignals: AISecuritySignal[]
+  phpContext?: import("../../engine/php-engine-context").PhpRepositoryContext
   billedCostUsd: number | null
   costReconciled: boolean
   budgetExceeded: boolean
@@ -232,7 +244,11 @@ export async function runEngineTriageOverlay(params: {
     reconciliationReason = updatedAccounting.reconciliationReason
   }
 
-  const triageInput = buildEngineTriageInput(aiSecuritySignals, engineResult.sourceRevision)
+  const triageInput = buildEngineTriageInput(
+    aiSecuritySignals,
+    engineResult.sourceRevision,
+    params.phpContext
+  )
   const triageFeatureEnabled =
     !deterministicRetest &&
     !agentMinuteTerminalError &&

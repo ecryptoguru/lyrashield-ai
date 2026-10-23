@@ -5,6 +5,7 @@ import { join, relative } from "path"
 import { logger } from "@lyrashield/logger"
 import type { EngineVulnerability } from "../output-parser"
 import { analyzePhpSource } from "./php-source"
+import { isExcludedPhpPath } from "./php-project"
 import {
   recordCoverageIssue,
   type ScannerCoverageIssue,
@@ -311,7 +312,7 @@ async function walkDir(
         await walkDir(fullPath, files, state, depth + 1, signal)
       }
     } else if (s.isFile()) {
-      const ext = entry.substring(entry.lastIndexOf("."))
+      const ext = entry.substring(entry.lastIndexOf(".")).toLowerCase()
       if (!SOURCE_EXTENSIONS.has(ext)) continue
       if (s.size <= MAX_FILE_SIZE) {
         files.push(fullPath)
@@ -433,7 +434,7 @@ export async function scanSast(config: SastScanConfig): Promise<EngineVulnerabil
     }
 
     const relPath = relative(workspaceDir, filePath)
-    if (isTestFixturePath(relPath)) {
+    if (isTestFixturePath(relPath) || (/\.php$/i.test(filePath) && isExcludedPhpPath(relPath))) {
       skippedByReason.testFixture++
       continue
     }
@@ -443,7 +444,7 @@ export async function scanSast(config: SastScanConfig): Promise<EngineVulnerabil
     const lines = content.split("\n")
     let findingsInFile = 0
     let findingLimitReached = false
-    if (filePath.endsWith(".php")) {
+    if (/\.php$/i.test(filePath)) {
       const result = analyzePhpSource(content, relPath)
       const available = Math.min(MAX_FINDINGS_PER_FILE, MAX_TOTAL_FINDINGS - findings.length)
       findings.push(...result.findings.slice(0, available))
