@@ -3,6 +3,12 @@ import { lstat, readFile, readdir } from "fs/promises"
 import { dirname, join, relative } from "path"
 import type { OsvQueryPackage } from "@lyrashield/db"
 import { parsePackageLock, parsePnpmLock, parseYarnLock } from "./dependency-lock-parsers"
+import {
+  composerContentHash,
+  composerRequirements,
+  parseComposerLock,
+  parseComposerManifest,
+} from "./composer-dependencies"
 import { recordCoverageIssue, type ScannerCoverageIssue } from "../scanner-coverage"
 
 export interface ResolvedDependencyInventory {
@@ -35,10 +41,12 @@ const LOCKFILES = new Set([
   "yarn.lock",
   "requirements.txt",
   "requirements.lock",
+  "composer.lock",
 ])
 const MAX_WALK_ENTRIES = 50_000
 const MAX_WALK_DEPTH = 40
 const MAX_DEPENDENCIES = 500
+const MAX_COMPOSER_FILE_BYTES = 512 * 1024
 
 function parsePinnedRequirements(
   content: string,
@@ -69,17 +77,21 @@ function parsePinnedRequirements(
 }
 
 function declaredNpmDependencies(content: string): string[] {
-  try {
-    const parsed = JSON.parse(content) as Record<string, unknown>
-    return ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"].flatMap(
-      (section) => {
-        const value = parsed[section]
-        return value && typeof value === "object" && !Array.isArray(value) ? Object.keys(value) : []
-      }
-    )
-  } catch {
-    return []
+  const parsed = JSON.parse(content) as unknown
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("Dependency manifest must be an object")
   }
+  const manifest = parsed as Record<string, unknown>
+  return ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"].flatMap(
+    (section) => {
+      const value = manifest[section]
+      if (value === undefined) return []
+      if (!value || typeof value !== "object" || Array.isArray(value)) {
+        throw new Error("Dependency manifest section must be an object")
+      }
+      return Object.keys(value)
+    }
+  )
 }
 
 function languageFor(filename: string): "json" | "yaml" | "unknown" {
@@ -101,6 +113,8 @@ export async function resolveExactDependencies({
   const unresolved: ResolvedDependencyInventory["unresolved"] = []
   const packageJsonByDirectory = new Map<string, string[]>()
   const lockDirectories = new Set<string>()
+  const composerManifests = new Map<string, Record<string, unknown>>()
+  const composerLocks = new Map<string, unknown>()
   let evidenceFile: ResolvedDependencyInventory["evidenceFile"] = {
     path: "dependency-lockfile",
     content: "",
@@ -126,6 +140,11 @@ export async function resolveExactDependencies({
     try {
       entries = await readdir(directory, { withFileTypes: true, encoding: "utf8" })
     } catch {
+      unresolved.push({
+        ecosystem: "unknown",
+        name: relative(repoPath, directory) || ".",
+        reason: "repository directory could not be read",
+      })
       return
     }
     for (const entry of entries) {
@@ -139,15 +158,54 @@ export async function resolveExactDependencies({
       try {
         stat = await lstat(fullPath)
       } catch {
+        unresolved.push({
+          ecosystem: "unknown",
+          name: relative(repoPath, fullPath),
+          reason: "repository path could not be read",
+        })
         continue
       }
-      if (stat.isSymbolicLink()) continue
+      if (stat.isSymbolicLink()) {
+        if (entry.name === "composer.json" || entry.name === "composer.lock") {
+          unresolved.push({
+            ecosystem: "Packagist",
+            name: relative(repoPath, fullPath),
+            reason: "Composer dependency path is a symbolic link and was not read",
+          })
+        }
+        continue
+      }
       if (stat.isDirectory()) {
         if (!IGNORED_DIRECTORIES.has(entry.name)) await walk(fullPath, depth + 1, state)
         continue
       }
       if (!stat.isFile()) continue
       const filePath = relative(repoPath, fullPath)
+      const isComposerFile = entry.name === "composer.json" || entry.name === "composer.lock"
+      if (isComposerFile && stat.size > MAX_COMPOSER_FILE_BYTES) {
+        unresolved.push({
+          ecosystem: "Packagist",
+          name: filePath,
+          reason: `dependency input exceeds the ${MAX_COMPOSER_FILE_BYTES}-byte scanner limit`,
+        })
+        truncated = true
+        continue
+      }
+      if (entry.name === "composer.json") {
+        try {
+          composerManifests.set(
+            dirname(filePath),
+            parseComposerManifest(await readFile(fullPath, "utf8"))
+          )
+        } catch {
+          unresolved.push({
+            ecosystem: "Packagist",
+            name: filePath,
+            reason: "Composer dependency manifest could not be read or parsed",
+          })
+        }
+        continue
+      }
       if (entry.name === "package.json") {
         try {
           packageJsonByDirectory.set(
@@ -176,7 +234,11 @@ export async function resolveExactDependencies({
             language: languageFor(entry.name),
           }
         }
-        if (entry.name === "requirements.txt" || entry.name === "requirements.lock") {
+        if (entry.name === "composer.lock") {
+          const parsed = parseComposerLock(content, filePath, unresolved)
+          packages.push(...parsed.packages)
+          composerLocks.set(dirname(filePath), parsed.contentHash)
+        } else if (entry.name === "requirements.txt" || entry.name === "requirements.lock") {
           packages.push(...parsePinnedRequirements(content, filePath, unresolved))
         } else {
           lockDirectories.add(dirname(filePath))
@@ -214,10 +276,13 @@ export async function resolveExactDependencies({
     })
   }
   for (const [directory, declarations] of packageJsonByDirectory) {
-    if (!lockDirectories.has(directory)) continue
+    let lockDirectory = directory
+    while (!lockDirectories.has(lockDirectory) && lockDirectory !== ".") {
+      lockDirectory = dirname(lockDirectory)
+    }
     const resolved = new Set(
       packages
-        .filter((pkg) => dirname(pkg.filePath) === directory && pkg.ecosystem === "npm")
+        .filter((pkg) => dirname(pkg.filePath) === lockDirectory && pkg.ecosystem === "npm")
         .map((pkg) => pkg.name)
     )
     for (const name of declarations) {
@@ -229,6 +294,51 @@ export async function resolveExactDependencies({
         })
       }
     }
+  }
+
+  for (const [directory, manifest] of composerManifests) {
+    const filePath = join(directory, "composer.json")
+    const names = composerRequirements(manifest, filePath, unresolved)
+    const lockedNames = new Set(
+      packages
+        .filter((pkg) => pkg.ecosystem === "Packagist" && dirname(pkg.filePath) === directory)
+        .map((pkg) => pkg.name)
+    )
+    for (const name of names) {
+      if (!lockedNames.has(name))
+        unresolved.push({
+          ecosystem: "Packagist",
+          name,
+          reason: `not resolved by the lockfile in ${directory || "."}`,
+        })
+    }
+    const hash = composerLocks.get(directory)
+    let current = false
+    try {
+      current =
+        typeof hash === "string" &&
+        /^[a-f0-9]{32}$/.test(hash) &&
+        hash === composerContentHash(manifest)
+    } catch {
+      // Malformed/deep input remains incomplete without dropping safe lock releases.
+    }
+    if (!current) {
+      unresolved.push({
+        ecosystem: "Packagist",
+        name: filePath,
+        reason:
+          "Composer manifest/lockfile consistency could not be verified: missing or stale content-hash",
+      })
+    }
+  }
+  for (const directory of composerLocks.keys()) {
+    if (!composerManifests.has(directory))
+      unresolved.push({
+        ecosystem: "Packagist",
+        name: join(directory, "composer.lock"),
+        reason:
+          "Composer manifest is missing or unreadable; lockfile consistency could not be verified",
+      })
   }
 
   const unique = [
@@ -245,6 +355,20 @@ export async function resolveExactDependencies({
     truncated = true
   }
   const bounded = unique.slice(0, MAX_DEPENDENCIES)
+  for (const issue of unresolved) {
+    recordCoverageIssue(coverageIssues, {
+      scanner: "sca",
+      status: bounded.length ? "partial" : "unsupported",
+      subject: issue.name,
+      reason: issue.reason,
+    })
+  }
+  if (truncated)
+    recordCoverageIssue(coverageIssues, {
+      scanner: "sca",
+      status: "bounded",
+      reason: "Dependency inventory is incomplete because a scanner limit was reached",
+    })
   return {
     status:
       bounded.length > 0 && unresolved.length === 0 && !truncated

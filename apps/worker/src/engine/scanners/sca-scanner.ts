@@ -1,6 +1,7 @@
 /* eslint-disable security/detect-non-literal-fs-filename, security/detect-unsafe-regex */
 import { lstat, readFile, readdir } from "fs/promises"
 import { basename, join, relative } from "path"
+import { z } from "zod"
 import { logger } from "@lyrashield/logger"
 import type { AdvisoryBatchResult } from "@lyrashield/db"
 import type { HostResolver } from "@lyrashield/security"
@@ -11,7 +12,7 @@ import {
   type ScannerDiscovery,
 } from "../scanner-coverage"
 import { fetchThreatSignals, type ThreatSignal } from "./threat-intelligence"
-import type { ResolvedDependencyInventory } from "./resolved-dependencies"
+import { resolveExactDependencies, type ResolvedDependencyInventory } from "./resolved-dependencies"
 
 interface ScaScanConfig {
   repoPath: string
@@ -47,12 +48,41 @@ interface OsvVulnerability {
   affected?: Array<{
     package?: { name: string; ecosystem: string }
     ranges?: Array<{
-      type: string
+      type?: string
       events: Array<{ introduced?: string; fixed?: string; last_affected?: string }>
     }>
   }>
   database_specific?: { severity?: string; cvss?: { vectorString?: string } }
 }
+
+const osvVulnerabilitySchema = z.object({
+  id: z.string().min(1),
+  summary: z.string().optional(),
+  details: z.string().optional(),
+  severity: z.array(z.object({ type: z.string(), score: z.string() })).optional(),
+  references: z.array(z.object({ url: z.string() })).optional(),
+  affected: z
+    .array(
+      z.object({
+        ranges: z
+          .array(
+            z.object({
+              events: z.array(
+                z.object({
+                  introduced: z.string().optional(),
+                  fixed: z.string().optional(),
+                  last_affected: z.string().optional(),
+                })
+              ),
+            })
+          )
+          .optional(),
+      })
+    )
+    .optional(),
+  database_specific: z.object({ severity: z.string().optional() }).optional(),
+})
+const osvEntrySchema = z.object({ vulns: z.array(osvVulnerabilitySchema).optional() })
 
 const DEP_FILE_PATTERNS = [
   "package.json",
@@ -63,6 +93,7 @@ const DEP_FILE_PATTERNS = [
   "build.gradle",
   "Gemfile",
   "composer.json",
+  "composer.lock",
 ]
 
 const IGNORED_DIRECTORIES = new Set([
@@ -238,31 +269,6 @@ function parseGemfile(content: string, filePath: string): Dependency[] {
     }
   }
   return deps
-}
-
-function parseComposerJson(content: string, filePath: string): Dependency[] {
-  try {
-    const pkg = JSON.parse(content)
-    const deps: Dependency[] = []
-    const sections = ["require", "require-dev"]
-    for (const section of sections) {
-      const sectionDeps = pkg[section]
-      if (sectionDeps && typeof sectionDeps === "object") {
-        for (const [name, version] of Object.entries(sectionDeps)) {
-          if (typeof version === "string") {
-            const cleanVersion = version.replace(/[\^~>=<]/g, "").split(" ")[0]
-            if (cleanVersion && name !== "php") {
-              deps.push({ name, version: cleanVersion, ecosystem: "Packagist", filePath })
-            }
-          }
-        }
-      }
-    }
-    return deps
-  } catch {
-    logger.warn("Failed to parse composer.json", { filePath })
-    return []
-  }
 }
 
 interface XmlBlock {
@@ -519,8 +525,6 @@ async function parseDependencyFile(
         return parseCargoToml(content, filePath)
       case "Gemfile":
         return parseGemfile(content, filePath)
-      case "composer.json":
-        return parseComposerJson(content, filePath)
       case "pom.xml":
         return parsePomXml(content, filePath, coverageIssues)
       case "build.gradle":
@@ -536,7 +540,8 @@ async function parseDependencyFile(
 async function queryOsvBatch(
   dependencies: Dependency[],
   fetchFn?: typeof fetch,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  coverageIssues?: ScannerCoverageIssue[]
 ): Promise<Map<string, OsvVulnerability[]>> {
   const result = new Map<string, OsvVulnerability[]>()
   const doFetch = fetchFn ?? fetch
@@ -562,7 +567,18 @@ async function queryOsvBatch(
       if (!response.ok) throw new Error(`OSV API returned ${response.status}`)
       const data = (await response.json()) as { results?: Array<{ vulns?: OsvVulnerability[] }> }
       for (const [index, dependency] of chunk.entries()) {
-        result.set(dependencyKey(dependency), data.results?.[index]?.vulns ?? [])
+        const entry = data.results?.[index]
+        const parsed = osvEntrySchema.safeParse(entry)
+        if (!parsed.success) {
+          recordCoverageIssue(coverageIssues, {
+            scanner: "sca",
+            status: "partial",
+            subject: dependency.filePath,
+            reason: "Advisory response did not resolve an exact dependency",
+          })
+          continue
+        }
+        result.set(dependencyKey(dependency), parsed.data.vulns ?? [])
       }
     } catch (error) {
       if (signal?.aborted) throw new Error("SCA scan cancelled")
@@ -570,7 +586,11 @@ async function queryOsvBatch(
         error: error instanceof Error ? error.message : String(error),
         dependencyCount: chunk.length,
       })
-      for (const dependency of chunk) result.set(dependencyKey(dependency), [])
+      recordCoverageIssue(coverageIssues, {
+        scanner: "sca",
+        status: "partial",
+        reason: "Advisory lookup failed; dependencies could not be fully assessed",
+      })
     } finally {
       clearTimeout(timer)
       signal?.removeEventListener("abort", onAbort)
@@ -666,7 +686,26 @@ export async function scanSca(config: ScaScanConfig): Promise<EngineVulnerabilit
       ...resolvedDependencyInventory.packages.map((pkg) => pkg.filePath),
     ]).size
     manifestBytes = resolvedDependencyInventory.evidenceFile.size
-    emptyManifests = resolvedDependencyInventory.truncated ? 1 : 0
+    emptyManifests = resolvedDependencyInventory.status !== "COMPLETE" ? 1 : 0
+    if (resolvedDependencyInventory.status !== "COMPLETE")
+      recordCoverageIssue(coverageIssues, {
+        scanner: "sca",
+        status: resolvedDependencyInventory.packages.length ? "partial" : "unsupported",
+        reason: "Resolved dependency inventory is empty or incomplete",
+      })
+    for (const issue of resolvedDependencyInventory.unresolved)
+      recordCoverageIssue(coverageIssues, {
+        scanner: "sca",
+        status: "partial",
+        subject: issue.name,
+        reason: issue.reason,
+      })
+    if (!advisoryBatch || advisoryBatch.status !== "COMPLETE")
+      recordCoverageIssue(coverageIssues, {
+        scanner: "sca",
+        status: "partial",
+        reason: "Advisory batch is missing or incomplete",
+      })
     allDeps.push(
       ...resolvedDependencyInventory.packages.map((pkg) => ({
         name: pkg.name,
@@ -686,6 +725,11 @@ export async function scanSca(config: ScaScanConfig): Promise<EngineVulnerabilit
     )
     manifestFiles = depFiles.length
     if (depFiles.length === 0) {
+      recordCoverageIssue(coverageIssues, {
+        scanner: "sca",
+        status: "unsupported",
+        reason: "No dependency manifests or lockfiles were found",
+      })
       logger.info("No dependency files found", { repoPath })
       if (discovery) {
         discovery.sca = {
@@ -696,6 +740,11 @@ export async function scanSca(config: ScaScanConfig): Promise<EngineVulnerabilit
       }
       return []
     }
+    if (depFiles.some((file) => ["composer.json", "composer.lock"].includes(basename(file)))) {
+      const inventory = await resolveExactDependencies({ repoPath, coverageIssues, signal })
+      allDeps.push(...inventory.packages.filter((pkg) => pkg.ecosystem === "Packagist"))
+      if (inventory.status !== "COMPLETE") emptyManifests++
+    }
     for (const file of depFiles) {
       throwIfAborted(signal)
       try {
@@ -704,8 +753,17 @@ export async function scanSca(config: ScaScanConfig): Promise<EngineVulnerabilit
       } catch {
         // manifest may have been removed between walk and parse
       }
+      if (["composer.json", "composer.lock"].includes(basename(file))) continue
       const deps = await parseDependencyFile(file, repoPath, coverageIssues)
-      if (deps.length === 0) emptyManifests++
+      if (deps.length === 0) {
+        emptyManifests++
+        recordCoverageIssue(coverageIssues, {
+          scanner: "sca",
+          status: "partial",
+          subject: file,
+          reason: "Dependency manifest has no readable resolved dependencies",
+        })
+      }
       allDeps.push(...deps)
     }
   }
@@ -730,7 +788,19 @@ export async function scanSca(config: ScaScanConfig): Promise<EngineVulnerabilit
           result.vulns as OsvVulnerability[],
         ])
       )
-    : await queryOsvBatch(uniqueDeps, fetchFn, signal)
+    : await queryOsvBatch(uniqueDeps, fetchFn, signal, coverageIssues)
+
+  if (resolvedDependencyInventory) {
+    for (const dep of uniqueDeps) {
+      if (!osvResults.has(dependencyKey(dep)))
+        recordCoverageIssue(coverageIssues, {
+          scanner: "sca",
+          status: "partial",
+          subject: dep.filePath,
+          reason: "Advisory batch did not resolve an exact dependency",
+        })
+    }
+  }
 
   const seenDependencyVulnerabilities = new Set<string>()
   const findings: EngineVulnerability[] = []
@@ -760,8 +830,19 @@ export async function scanSca(config: ScaScanConfig): Promise<EngineVulnerabilit
           package_name: dep.name,
           installed_version: dep.version,
           package_ecosystem: dep.ecosystem.toLowerCase(),
+          ...(dep.ecosystem === "Packagist" ? { lockfile_path: dep.filePath } : {}),
           ...(fixedVersion ? { fixed_version: fixedVersion } : {}),
         },
+        ...(dep.ecosystem === "Packagist"
+          ? {
+              code_locations: [
+                {
+                  file: dep.filePath,
+                  label: `Resolved Composer package ${dep.name}@${dep.version}`,
+                },
+              ],
+            }
+          : {}),
         control_ids: [37],
         description:
           vuln.summary ?? `Vulnerability ${vuln.id} affects ${dep.name} version ${dep.version}`,
