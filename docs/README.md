@@ -30,6 +30,7 @@ Keep these three documents separate: the litepaper gives a short executive overv
 
 - [`user-guide.md`](./user-guide.md) — end-user workflows, options, permissions and limitations.
 - [`webmcp-runtime.md`](./webmcp-runtime.md) — opt-in WebMCP runtime checker: commands, receipt contract, PASS/INCONCLUSIVE semantics and evidence caveats.
+- [`php-security.md`](./php-security.md) — Composer inventory and draft fixes, passive PHP runtime evidence, detection limits and runtime remediation/retest runbook.
 - [`operations.md`](./operations.md) — founder/operator runbooks: live checkout verification, license signing-key compromise response and affiliate payout operations.
 - [`policies.md`](./policies.md) — public `/api/v1` stability and deprecation contract, public claims policy, accepted security-risk register and the customer threat-model worksheet.
 - [`myra-spec.md`](./myra-spec.md) — master implementation specification for the Myra support agent and demo booking.

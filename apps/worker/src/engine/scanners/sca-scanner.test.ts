@@ -841,3 +841,56 @@ it.skipIf(process.getuid?.() === 0)(
     }
   }
 )
+
+it.each([
+  ["13.28.0", "13.29.0"],
+  ["14.0.0", undefined],
+])("selects only a matching Composer advisory fix interval for %s", async (version, fixed) => {
+  cleanupRepo()
+  const dir = await setupRepo({
+    "composer.lock": JSON.stringify({
+      packages: [{ name: "vendor/pkg", version }],
+      "packages-dev": [],
+    }),
+  })
+  try {
+    const findings = await scanSca({
+      repoPath: dir,
+      workspaceDir: dir,
+      fetchFn: makeMockFetch({
+        [`vendor/pkg@${version}`]: [
+          {
+            id: "GHSA-multi-branch",
+            affected: [
+              {
+                package: { name: "vendor/other", ecosystem: "Packagist" },
+                ranges: [
+                  { type: "ECOSYSTEM", events: [{ introduced: "0" }, { fixed: "13.28.1" }] },
+                ],
+              },
+              {
+                package: { name: "vendor/pkg", ecosystem: "Packagist" },
+                ranges: [
+                  {
+                    type: "ECOSYSTEM",
+                    events: [
+                      { introduced: "0" },
+                      { fixed: "12.68.0" },
+                      { introduced: "13.0.0" },
+                      { fixed: "13.29.0" },
+                      { introduced: "15.0.0" },
+                      { fixed: "15.1.0" },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      }),
+    })
+    expect(findings[0]?.dependency_metadata?.fixed_version).toBe(fixed)
+  } finally {
+    cleanupRepo()
+  }
+})

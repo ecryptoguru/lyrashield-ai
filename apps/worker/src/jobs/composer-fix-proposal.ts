@@ -41,17 +41,13 @@ const ClaimSchema = z
   })
   .passthrough()
 
-/** Only immutable deterministic SCA evidence can authorize dependency resolution. */
-export async function prepareComposerFixProposal(params: {
+async function readComposerClaim(
+  evidenceRows: { storageUri: string | null; type: string }[],
   workspaceId: string
-  proposalId: string
-  finding: Finding
-  evidence: Array<{ storageUri: string | null; type: string }>
-}): Promise<ComposerFixArtifact | null> {
-  const { workspaceId, proposalId, finding } = params
+) {
   let claim: z.infer<typeof ClaimSchema> | undefined
   let metadataChecksum: string | undefined
-  for (const evidence of params.evidence) {
+  for (const evidence of evidenceRows) {
     if (evidence.type !== "claim_context" || !evidence.storageUri) continue
     const artifact = await readEncryptedArtifact(evidence.storageUri, workspaceId)
     if (artifact.content.byteLength > 1024 * 1024) continue
@@ -68,6 +64,37 @@ export async function prepareComposerFixProposal(params: {
       /* Other claim artifacts are not Composer update requests. */
     }
   }
+
+  return { claim, metadataChecksum }
+}
+
+function composerMetadataTransport() {
+  const fetchFn =
+    env.LYRASHIELD_EGRESS_PROXY_URL && env.LYRASHIELD_EGRESS_PROXY_SECRET
+      ? createEgressProxyFetchFn({
+          url: env.LYRASHIELD_EGRESS_PROXY_URL,
+          secret: env.LYRASHIELD_EGRESS_PROXY_SECRET,
+          connectTimeoutMs: env.LYRASHIELD_EGRESS_PROXY_CONNECT_TIMEOUT_MS,
+          readTimeoutMs: env.LYRASHIELD_EGRESS_PROXY_READ_TIMEOUT_MS,
+        })
+      : undefined
+  if (env.NODE_ENV === "production" && !fetchFn)
+    throw new ComposerFixUnavailableError(
+      "Composer metadata requires the configured authenticated egress proxy"
+    )
+
+  return fetchFn
+}
+
+/** Only immutable deterministic SCA evidence can authorize dependency resolution. */
+export async function prepareComposerFixProposal(params: {
+  workspaceId: string
+  proposalId: string
+  finding: Finding
+  evidence: Array<{ storageUri: string | null; type: string }>
+}): Promise<ComposerFixArtifact | null> {
+  const { workspaceId, proposalId, finding } = params
+  const { claim, metadataChecksum } = await readComposerClaim(params.evidence, workspaceId)
   if (!claim) return null
   const target = finding.target
   if (
@@ -162,21 +189,8 @@ export async function prepareComposerFixProposal(params: {
     throw new ComposerFixUnavailableError(
       "Composer manifest or lock is unavailable at the scanned commit"
     )
-  const fetchFn =
-    env.LYRASHIELD_EGRESS_PROXY_URL && env.LYRASHIELD_EGRESS_PROXY_SECRET
-      ? createEgressProxyFetchFn({
-          url: env.LYRASHIELD_EGRESS_PROXY_URL,
-          secret: env.LYRASHIELD_EGRESS_PROXY_SECRET,
-          connectTimeoutMs: env.LYRASHIELD_EGRESS_PROXY_CONNECT_TIMEOUT_MS,
-          readTimeoutMs: env.LYRASHIELD_EGRESS_PROXY_READ_TIMEOUT_MS,
-        })
-      : undefined
-  if (env.NODE_ENV === "production" && !fetchFn)
-    throw new ComposerFixUnavailableError(
-      "Composer metadata requires the configured authenticated egress proxy"
-    )
   const result = await regenerateComposerLock({
-    fetchFn,
+    fetchFn: composerMetadataTransport(),
     originalManifest,
     originalLock: before,
     packageName: metadata.package_name,

@@ -253,6 +253,26 @@ Cancelled and partial scans may consume agent-minutes when scan-bound evidence e
 
 ### Findings and result integrity
 
+PHP detection reuses the existing `sca`, `iac`, `sast` and `url` families.
+`resolved-dependencies.ts` and `composer-dependencies.ts` resolve bounded exact
+Packagist locks with manifest content-hash checks; `dependency-manifests.ts`
+retains standalone discovery for other ecosystems. `php-runtime.ts` matches
+declared/reported identities against the pinned `php-runtime-advisories.json`
+catalog. A banner creates only a passive lead. `php_runtime_` findings cannot
+become `FIXED`/`VALIDATED` from source-only retests, even with complete source
+manifests. The [PHP runbook](./docs/php-security.md) owns supporting inventory,
+runtime replacement evidence and detection limitations.
+
+Composer fixes use the existing job and encrypted artifact namespace through
+`jobs/composer-fix-proposal.ts` and the digest-pinned offline producer in
+`jobs/composer-fix.ts`. `packages/fix/src/composer-update.ts` binds exact identity,
+before/after bytes, single-package semantics and resolver checks. Approval and
+execution revalidate the receipt; ordinary patches still reject lockfiles.
+Production metadata uses the authenticated egress proxy. Resolver consistency
+does not prove application compatibility: summaries and approval inputs mark it
+unverified and the provider PR is forced to draft for customer CI and review.
+No new queue, schema or automatic merge path is added.
+
 - `confidence` never sets `verified`.
 - Engine and scanner output create bounded candidates and receipts.
 - Evidence must use `uploadEvidence()` with checksum and encryption key reference.

@@ -34,7 +34,7 @@ vi.mock("@lyrashield/evidence-storage", () => ({
 vi.mock("./composer-fix-proposal", () => ({ prepareComposerFixProposal: mocks.prepare }))
 vi.mock("./composer-fix", () => ({ ComposerFixUnavailableError: class extends Error {} }))
 import { buildComposerUpdateDiff, diffChecksum } from "@lyrashield/fix"
-import { processFixGenerateJob } from "./fix-generate.job"
+import { processFixGenerateJob, processQueuedFixGenerateJob } from "./fix-generate.job"
 const finding = {
   id: "finding-1",
   targetId: "target-1",
@@ -183,5 +183,20 @@ it("settles exhausted infrastructure failure with an actionable reason without o
         summary: expect.stringContaining("after retries"),
       }),
     })
+  )
+})
+
+it("binds queue attempt counters into final failure settlement", async () => {
+  mocks.prepare.mockRejectedValue(new Error("resolver offline"))
+  await expect(
+    processQueuedFixGenerateJob({
+      data: input,
+      id: "job-1",
+      attemptsMade: 2,
+      opts: { attempts: 3 },
+    })
+  ).rejects.toThrow("resolver offline")
+  expect(mocks.updateMany).toHaveBeenCalledWith(
+    expect.objectContaining({ data: expect.objectContaining({ status: "failed" }) })
   )
 })

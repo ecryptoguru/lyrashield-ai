@@ -55,9 +55,11 @@ const osvVulnerabilitySchema = z.object({
   affected: z
     .array(
       z.object({
+        package: z.object({ name: z.string().min(1), ecosystem: z.string().min(1) }).optional(),
         ranges: z
           .array(
             z.object({
+              type: z.string().optional(),
               events: z.array(
                 z.object({
                   introduced: z.string().optional(),
@@ -196,6 +198,53 @@ function extractCveId(vuln: OsvVulnerability): string | undefined {
   return vuln.references?.find((r) => r.url.includes("CVE-"))?.url.match(/CVE-\d{4}-\d+/)?.[0]
 }
 
+function stableRelease(version: string): number[] | undefined {
+  return /^v?\d{1,6}\.\d{1,6}\.\d{1,6}$/.test(version)
+    ? version.replace(/^v/, "").split(".").map(Number)
+    : undefined
+}
+function compareRelease(left: number[], right: number[]): number {
+  for (let i = 0; i < 3; i++) {
+    const delta = left[i]! - right[i]!
+    if (delta) return delta
+  }
+  return 0
+}
+/** Only a fixed interval containing the exact installed Composer release is actionable. */
+function composerFixedVersion(vuln: OsvVulnerability, dependency: Dependency): string | undefined {
+  const installed = stableRelease(dependency.version)
+  if (!installed) return undefined
+  const fixes: string[] = []
+  for (const affected of vuln.affected ?? []) {
+    if (
+      affected.package &&
+      (affected.package.name !== dependency.name || affected.package.ecosystem !== "Packagist")
+    )
+      continue
+    for (const range of affected.ranges ?? []) {
+      if (range.type && !["SEMVER", "ECOSYSTEM"].includes(range.type)) continue
+      let introduced: number[] | undefined = [0, 0, 0]
+      for (const event of range.events) {
+        if (event.introduced !== undefined)
+          introduced = event.introduced === "0" ? [0, 0, 0] : stableRelease(event.introduced)
+        if (event.fixed !== undefined) {
+          const fixed = stableRelease(event.fixed)
+          if (
+            introduced &&
+            fixed &&
+            compareRelease(installed, introduced) >= 0 &&
+            compareRelease(installed, fixed) < 0
+          )
+            fixes.push(event.fixed)
+          introduced = undefined
+        }
+        if (event.last_affected !== undefined) introduced = undefined
+      }
+    }
+  }
+  return fixes.sort((left, right) => compareRelease(stableRelease(left)!, stableRelease(right)!))[0]
+}
+
 function extractFixedVersion(vuln: OsvVulnerability): string | undefined {
   for (const affected of vuln.affected ?? []) {
     for (const range of affected.ranges ?? []) {
@@ -282,7 +331,8 @@ export async function scanSca(config: ScaScanConfig): Promise<EngineVulnerabilit
 
       const severity = mapOsvSeverity(vuln)
       const cve = extractCveId(vuln)
-      const fixedVersion = extractFixedVersion(vuln)
+      const fixedVersion =
+        dep.ecosystem === "Packagist" ? composerFixedVersion(vuln, dep) : extractFixedVersion(vuln)
 
       findings.push({
         id: vuln.id,

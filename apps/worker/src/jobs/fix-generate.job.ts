@@ -119,6 +119,72 @@ async function readStructuredFix(
   return fixLocation
 }
 
+async function linkGeneratedPatch(params: {
+  workspaceId: string
+  fixProposalId: string
+  findingId: string
+  storageUri: string
+  composerFix: boolean
+  summary: string
+  implicatedFiles: string[]
+}) {
+  return await withWorkspaceRLS(params.workspaceId, async (tx) => {
+    // Re-read status inside the linking transaction: a concurrent run may
+    // have marked this proposal ready or failed while we were uploading.
+    const current = await tx.fixProposal.findUnique({
+      where: { id: params.fixProposalId },
+      select: { status: true },
+    })
+    if (current?.status !== "draft") return false
+    const claimed = await tx.fixProposal.updateMany({
+      where: {
+        id: params.fixProposalId,
+        status: "draft",
+        finding: { workspaceId: params.workspaceId },
+        deletedAt: null,
+      },
+      data: {
+        diffRef: params.storageUri,
+        status: "ready",
+        ...(params.composerFix
+          ? {
+              kind: "composer_update",
+              summary: `${params.summary.slice(0, 2500)}\n\nLock consistency passed. Application compatibility is unverified. Approval opens a draft PR for customer CI and review; run compatibility tests before marking it ready for merge.`,
+            }
+          : {}),
+      },
+    })
+    if (claimed.count !== 1) return false
+    await tx.finding.update({
+      where: { id: params.findingId },
+      data: { implicatedFiles: params.implicatedFiles },
+    })
+    return true
+  })
+}
+
+async function settleFailedGeneration(workspaceId: string, fixProposalId: string) {
+  await withWorkspaceRLS(workspaceId, async (tx) => {
+    const current = await tx.fixProposal.findFirst({
+      where: {
+        id: fixProposalId,
+        status: "draft",
+        finding: { workspaceId, deletedAt: null },
+        deletedAt: null,
+      },
+      select: { summary: true },
+    })
+    if (!current) return
+    await tx.fixProposal.updateMany({
+      where: { id: fixProposalId, status: "draft", finding: { workspaceId }, deletedAt: null },
+      data: {
+        status: "failed",
+        summary: `${current.summary.slice(0, 2500)}\n\nFix generation could not complete after retries. Check metadata access, resolver availability and evidence storage, then request a new proposal.`,
+      },
+    })
+  })
+}
+
 /**
  * Process a fix-generation job. Reads the proposal + finding + the engine's
  * structured fix, builds and validates the diff, stores it, and links it.
@@ -244,33 +310,14 @@ export async function processFixGenerateJob(
 
     // Phase 2 — short transaction to link the patch to the proposal and stamp
     // the finding's fix-PR fields. Nothing above holds locks across this.
-    const linked = await withWorkspaceRLS(workspaceId, async (tx) => {
-      // Re-read status inside the linking transaction: a concurrent run may
-      // have marked this proposal ready or failed while we were uploading.
-      const current = await tx.fixProposal.findUnique({
-        where: { id: fixProposalId },
-        select: { status: true },
-      })
-      if (current?.status !== "draft") return false
-      const claimed = await tx.fixProposal.updateMany({
-        where: { id: fixProposalId, status: "draft", finding: { workspaceId }, deletedAt: null },
-        data: {
-          diffRef: artifact.storageUri,
-          status: "ready",
-          ...(composerFix
-            ? {
-                kind: "composer_update",
-                summary: `${prepared.summary.slice(0, 2500)}\n\nLock consistency passed. Application compatibility is unverified. Approval opens a draft PR for customer CI and review; run compatibility tests before marking it ready for merge.`,
-              }
-            : {}),
-        },
-      })
-      if (claimed.count !== 1) return false
-      await tx.finding.update({
-        where: { id: finding.id },
-        data: { implicatedFiles },
-      })
-      return true
+    const linked = await linkGeneratedPatch({
+      workspaceId,
+      fixProposalId,
+      findingId: finding.id,
+      storageUri: artifact.storageUri,
+      composerFix: !!composerFix,
+      summary: prepared.summary,
+      implicatedFiles,
     })
     if (!linked) {
       return { status: "skipped", reason: "proposal is no longer a draft" }
@@ -289,31 +336,31 @@ export async function processFixGenerateJob(
     // A thrown error (not a named rejection above) is infrastructure, not a
     // verdict on the diff. Keep the proposal in its current (draft) state so a
     // BullMQ retry re-attempts generation rather than burying it as failed.
-    if (retry && retry.attempt >= retry.maxAttempts) {
-      await withWorkspaceRLS(workspaceId, async (tx) => {
-        const current = await tx.fixProposal.findFirst({
-          where: {
-            id: fixProposalId,
-            status: "draft",
-            finding: { workspaceId, deletedAt: null },
-            deletedAt: null,
-          },
-          select: { summary: true },
-        })
-        if (!current) return
-        await tx.fixProposal.updateMany({
-          where: { id: fixProposalId, status: "draft", finding: { workspaceId }, deletedAt: null },
-          data: {
-            status: "failed",
-            summary: `${current.summary.slice(0, 2500)}\n\nFix generation could not complete after retries. Check metadata access, resolver availability and evidence storage, then request a new proposal.`,
-          },
-        })
-      })
-    }
+    if (retry && retry.attempt >= retry.maxAttempts)
+      await settleFailedGeneration(workspaceId, fixProposalId)
     logger.error("Fix generation job errored", {
       fixProposalId,
       error: error instanceof Error ? error.message : String(error),
     })
     throw error
   }
+}
+
+/** Queue attempt context keeps transient failures retryable and settles final failure. */
+export async function processQueuedFixGenerateJob(job: {
+  data: FixGenerateJobData
+  id?: string
+  attemptsMade: number
+  opts: { attempts?: number }
+}) {
+  const result = await processFixGenerateJob(job.data, {
+    attempt: job.attemptsMade + 1,
+    maxAttempts: job.opts.attempts ?? 1,
+  })
+  logger.info("Fix generation job processed", {
+    jobId: job.id,
+    fixProposalId: job.data.fixProposalId,
+    status: result.status,
+  })
+  return result
 }

@@ -151,6 +151,17 @@ The passive Lite Scanner is separate from the BullMQ/engine repository pipeline.
 - `API`: deterministic OpenAPI checks; Standard and Deep/Custom also select the engine and require a validated public HTTPS spec URL. Engine-backed URL/API tiers require domain verification and a scan-scoped relay grant.
 - Cloud, container, and standalone IaC targets remain roadmap work. Repository scans include bounded SAST and IaC scanner families.
 
+Repository PHP coverage includes exact Composer lock inventory in shared SCA, a
+reviewed branch-specific runtime advisory catalog, passive runtime declarations
+and bounded application source checks. Runtime declarations and public headers
+remain unverified supporting evidence. A clean source retest cannot validate a
+deployed PHP runtime fix. Dedicated Composer proposals preserve the generic
+lockfile prohibition and open draft PRs for customer compatibility tests and
+review. See the [PHP detection and remediation runbook](./docs/php-security.md)
+for supported inputs, scope limits and operational evidence requirements. This
+source capability does not establish a deployed release or universal PHP
+vulnerability coverage.
+
 ### Model routing and budgets
 
 | Profile  | Root model | Specialist model | Reasoning                     | Provider cap |
