@@ -299,3 +299,11 @@ it("ignores parser-like comments inside heredocs", () => {
   const input = "FROM node:24\nRUN cat <<EOF\n# escape=`\nEOF\nRUN echo \\\nFROM php:8.4.26-fpm\n"
   expect(inspectPhpRuntimeInput("Dockerfile", input, "dockerfile").hasIdentity).toBe(false)
 })
+
+it.each(["# escape = `", "# escape= `", "# escape\t=\t`"])(
+  "honors Docker header whitespace in %j",
+  (directive) => {
+    const input = directive + "\nFROM node:24\nRUN echo `\nFROM php:8.4.26-fpm\n"
+    expect(inspectPhpRuntimeInput("Dockerfile", input, "dockerfile").hasIdentity).toBe(false)
+  }
+)

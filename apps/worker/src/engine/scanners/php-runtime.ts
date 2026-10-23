@@ -117,7 +117,7 @@ function dockerImageDeclarations(content: string, issue: (reason: string) => voi
     }
     // Docker stops recognizing directives after a normal comment, blank or instruction.
     if (header) {
-      const directive = /^\s*#\s*(syntax|check|escape)=(.*?)\s*$/i.exec(line)
+      const directive = /^\s*#\s*(syntax|check|escape)[ \t]*=[ \t]*(.*?)\s*$/i.exec(line)
       if (directive) {
         const key = directive[1]!.toLowerCase()
         const value = directive[2]!
