@@ -14,7 +14,7 @@ import type { EngineVulnerability } from "../output-parser"
 import { recordCoverageIssue, type ScannerCoverageIssue } from "../scanner-coverage"
 
 const officialImagePattern =
-  /^(?:(?:docker\.io\/)?library\/|docker\.io\/)?php:(\d+\.\d+\.\d+)(-(?:apache|fpm|cli|zts)(?:-(?:alpine[0-9.]*|bookworm|bullseye|trixie))?|-(?:alpine[0-9.]*|bookworm|bullseye|trixie))?(?:@sha256:[a-f0-9]{64})?$/
+  /^(?:(?:docker\.io\/)?library\/|docker\.io\/)?php:(\d+\.\d+\.\d+)(-(?:apache|fpm|cli|zts)(?:-(?:alpine(?:[1-9]\d?(?:\.(?:0|[1-9]\d?))?)?|bookworm|bullseye|trixie))?|-(?:alpine(?:[1-9]\d?(?:\.(?:0|[1-9]\d?))?)?|bookworm|bullseye|trixie))?(?:@sha256:[a-f0-9]{64})?$/
 
 const inventorySchema = z
   .object({
@@ -100,6 +100,47 @@ function addImageDeclaration(
   return phpPresent
 }
 
+/** Recognize instruction starts, never FROM text in shell continuations/heredocs. */
+function dockerImageDeclarations(content: string, issue: (reason: string) => void) {
+  const result: { image: string; line: number }[] = []
+  const heredocs: { delimiter: string; stripTabs: boolean }[] = []
+  let continued = false
+  let escape = "\\"
+  for (const [i, line] of content.split("\n").entries()) {
+    const directive = /^\s*#\s*escape=(\\|`)\s*$/i.exec(line)
+    if (directive && i < 5) escape = directive[1]!
+    const pending = heredocs[0]
+    if (pending) {
+      const text = pending.stripTabs ? line.replace(/^\t+/, "") : line
+      if (text.replace(/\r$/, "") === pending.delimiter) heredocs.shift()
+      continue
+    }
+    if (/^\s*(?:#|$)/.test(line)) continue
+    const wasContinued = continued
+    continued = line.trimEnd().endsWith(escape)
+    if (!wasContinued && !continued) {
+      const match = /^\s*FROM\s+(?:--platform=\S+\s+)?(\S+)/i.exec(line)
+      if (match) result.push({ image: match[1]!, line: i + 1 })
+    } else if (!wasContinued && /^\s*FROM\b/i.test(line)) {
+      issue("PHP runtime multiline FROM declaration requires independent inventory")
+    }
+    // Conservative recognition: unrecognized delimiters stop further interpretation.
+    const starts = [
+      ...line.matchAll(
+        /<<(-?)(?:'([A-Za-z_][A-Za-z0-9_]*)'|"([A-Za-z_][A-Za-z0-9_]*)"|([A-Za-z_][A-Za-z0-9_]*))/g
+      ),
+    ]
+    if (line.includes("<<") && starts.length === 0) {
+      issue("PHP runtime Dockerfile heredoc syntax is unsupported")
+      break
+    }
+    for (const start of starts)
+      heredocs.push({ delimiter: (start[2] ?? start[3] ?? start[4])!, stripTabs: start[1] === "-" })
+  }
+  if (heredocs.length || continued) issue("PHP runtime Dockerfile has an incomplete instruction")
+  return result
+}
+
 function parseRuntimeDeclarations(
   path: string,
   content: string,
@@ -113,11 +154,10 @@ function parseRuntimeDeclarations(
   const issue = (reason: string) =>
     recordCoverageIssue(issues, { scanner: "iac", status: "partial", subject: path, reason })
   if (kind === "dockerfile") {
-    for (const [i, line] of content.split("\n").entries()) {
-      const match = /^\s*FROM\s+(?:--platform=\S+\s+)?(\S+)/i.exec(line)
-      if (match)
-        phpPresent = addImageDeclaration(match[1]!, i + 1, true, declarations, issue) || phpPresent
-    }
+    for (const declaration of dockerImageDeclarations(content, issue))
+      phpPresent =
+        addImageDeclaration(declaration.image, declaration.line, true, declarations, issue) ||
+        phpPresent
   } else if (kind === "compose") {
     try {
       const doc = parseDocument(content, { uniqueKeys: true, strict: true })

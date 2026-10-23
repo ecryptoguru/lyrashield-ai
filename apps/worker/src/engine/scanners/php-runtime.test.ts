@@ -268,3 +268,19 @@ it("bounds in-memory runtime candidate expansion before IaC integration", () => 
   expect(findings.length).toBeLessThanOrEqual(100)
   expect(issues.some((i) => i.status === "bounded")).toBe(true)
 })
+
+it("ignores FROM literals inside Docker heredocs and continued RUN instructions", async () => {
+  const { findings } = await scan({
+    Dockerfile:
+      "FROM node:24\nRUN cat <<'EOF' > /tmp/example\nFROM php:8.4.26-fpm\nEOF\nRUN echo \\\n FROM php:8.4.26-fpm\n",
+  })
+  expect(findings).toEqual([])
+})
+it.each(["alpine....", "alpine3..22", "alpine.3.22"])(
+  "rejects malformed official suffix %s without an edit",
+  async (suffix) => {
+    const { findings, issues } = await scan({ Dockerfile: `FROM php:8.4.26-fpm-${suffix}\n` })
+    expect(findings).toEqual([])
+    expect(issues.some((issue) => /malformed/.test(issue.reason))).toBe(true)
+  }
+)
