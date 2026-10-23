@@ -50,6 +50,10 @@ if (new URLSearchParams(location.search).has("notification-integrations")) {
       setLastTraceId: () => {},
     }
   )
+} else if (new URLSearchParams(location.search).has("fixProposals")) {
+  await import("../../apps/web/src/app/globals.css")
+  const { default: FixProposalsHarness } = await import("./fix-proposals-harness")
+  root.render(<FixProposalsHarness />)
 } else if (new URLSearchParams(location.search).has("findings")) {
   await import("../../apps/web/src/app/globals.css")
   const { default: FindingsHarness } = await import("./findings-harness")

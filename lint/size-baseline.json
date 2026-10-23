@@ -137,8 +137,8 @@
     },
     "apps/web/src/app/(dashboard)/dashboard/findings/fixes-client.tsx|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 20,
-      "maxExcess": 20
+      "totalExcess": 19,
+      "maxExcess": 19
     },
     "apps/web/src/app/(dashboard)/dashboard/findings/page.tsx|max-lines-per-function": {
       "count": 1,
