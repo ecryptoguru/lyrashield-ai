@@ -52,7 +52,12 @@ function fixedShellExecutablePrefix(tokens: PhpToken[]): boolean {
   // A literal executable word must end before user data. Operators reopen command position.
   return (
     /^\s*[a-zA-Z0-9_./-]+[ \t]/.test(prefix) &&
-    !tokens.some((token) => token.kind === "string" && /[;&|`$><\n\r]/.test(token.text))
+    !/[;&|`><\n\r]|\$[({]/.test(
+      tokens
+        .filter((token) => token.kind === "string")
+        .map((token) => token.text.slice(1, -1))
+        .join("")
+    )
   )
 }
 

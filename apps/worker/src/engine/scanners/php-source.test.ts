@@ -154,3 +154,17 @@ describe("bounded PHP source flow", () => {
     expect(capped.issues.join(" ")).toContain("finding limit")
   })
 })
+
+it.each([
+  '$arg = escapeshellarg($_GET["host"]); system("ping $arg");',
+  '$arg = escapeshellarg($_GET["host"]); $cmd = "ping $arg"; system($cmd);',
+])("keeps sanitized PHP interpolation after a fixed executable quiet: %s", (body) => {
+  expect(scan(body).findings).toEqual([])
+})
+it.each([
+  'system("ping $_GET[host]");',
+  "system('echo $(' . escapeshellarg($_GET['cmd']) . ')');",
+  "system('echo $' . '(' . escapeshellarg($_GET['cmd']) . ')');",
+])("retains raw interpolation or literal shell command substitution: %s", (body) => {
+  expect(ids(body)).toContain("CWE-78")
+})
