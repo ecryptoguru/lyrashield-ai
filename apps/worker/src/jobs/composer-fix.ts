@@ -15,6 +15,7 @@ import {
 } from "../engine/scanners/composer-dependencies"
 
 const runDocker = promisify(execFile)
+const COMPOSER_CONSTRAINT_EXIT_CODE = 42
 export class ComposerFixUnavailableError extends Error {}
 /** Reviewed multiarchitecture Composer 2.10.3 identity; never target-controlled. */
 export const COMPOSER_RESOLVER_IMAGE =
@@ -39,21 +40,24 @@ const LockSchema = z
 
 // Only worker-owned PHP is executed. No target code, scripts, plugins, installation or network.
 const RESOLVE_SCRIPT = `<?php
+function checkComposerExit($code) {
+  if ($code !== 0) exit(in_array($code, [1, 2], true) ? ${COMPOSER_CONSTRAINT_EXIT_CODE} : 1);
+}
 $original = file_get_contents('/app/composer.original.json');
 $manifest = json_decode($original, true, 512, JSON_THROW_ON_ERROR);
 $manifest['repositories'] = [['type' => 'package', 'package' => json_decode(file_get_contents('/app/repository.json'), true, 512, JSON_THROW_ON_ERROR)], ['packagist.org' => false]];
 file_put_contents('/app/composer.json', json_encode($manifest, JSON_UNESCAPED_SLASHES));
 $flags = ' --no-install --no-scripts --no-plugins --no-interaction --no-audit --no-progress';
 passthru('composer update ' . escapeshellarg(getenv('LYRA_COMPOSER_PACKAGE')) . $flags, $code);
-if ($code !== 0) exit($code);
+checkComposerExit($code);
 $lock = json_decode(file_get_contents('/app/composer.lock'), true, 512, JSON_THROW_ON_ERROR);
 $lock['content-hash'] = getenv('LYRA_COMPOSER_CONTENT_HASH');
 file_put_contents('/app/composer.lock', json_encode($lock, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\\n");
 file_put_contents('/app/composer.json', $original);
 passthru('composer --no-scripts --no-plugins validate --no-check-publish --check-lock', $code);
-if ($code !== 0) exit($code);
+checkComposerExit($code);
 passthru('composer install --dry-run --no-scripts --no-plugins --no-interaction --no-progress', $code);
-exit($code);
+checkComposerExit($code);
 `
 
 async function fixedPackage(
@@ -194,13 +198,13 @@ export async function regenerateComposerLock(
       })
     } catch (error) {
       input.signal?.throwIfAborted()
-      const code = (error as { code?: unknown }).code
-      if (typeof code === "number" && ![125, 126, 127].includes(code))
+      const failure = error as { code?: unknown; killed?: boolean; signal?: unknown }
+      if (failure.code === COMPOSER_CONSTRAINT_EXIT_CODE && !failure.killed && !failure.signal)
         throw new ComposerFixUnavailableError(
           "Composer cannot resolve this isolated update under the current constraints and platform. Update manually if new dependencies, platform changes or wider constraints are required."
         )
       throw new Error(
-        "Isolated Composer resolution or consistency checks failed; update manually if the fixed release needs new dependencies, platform changes, or wider constraints"
+        "Isolated Composer resolver infrastructure failed; retry the dependency update"
       )
     }
     const output = join(root, "composer.lock")
