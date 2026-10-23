@@ -28,7 +28,7 @@ installed runtime or builder support. Parsing is capped at 64 KiB and 256 enviro
 entries. Explicit buildpack groups are limited to `paketo-buildpacks/php` and
 `paketo-buildpacks/php-dist`; unsupported groups or overrides require independent
 inventory. A known PHP group without an exact version stays partial. Both new inputs
-remain unverified, carry override uncertainty, and produce no automatic runtime edit.
+remain unverified, carry override uncertainty and produce no automatic runtime edit.
 
 The pinned runtime catalog is `php-maintainers-2026-10-23.1`: 29 maintainer
 advisories published in 2026 and three selected older PHP KEV advisories
