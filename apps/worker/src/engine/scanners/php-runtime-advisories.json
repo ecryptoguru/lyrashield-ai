@@ -1,0 +1,1062 @@
+{
+  "schemaVersion": 1,
+  "catalogVersion": "php-maintainers-2026-10-23.1",
+  "asOf": "2026-10-23",
+  "lifecycleSource": "https://www.php.net/supported-versions.php",
+  "supportedBranches": ["8.2", "8.3", "8.4", "8.5"],
+  "advisories": [
+    {
+      "id": "CVE-2026-93682",
+      "ghsa": "GHSA-7875-c8px-7q5f",
+      "published": "2026-09-24",
+      "summary": "Out-of-bounds read in the HTTP stream wrapper when following a redirect with an empty Location header",
+      "severity": "medium",
+      "url": "https://github.com/php/php-src/security/advisories/GHSA-7875-c8px-7q5f",
+      "ranges": [
+        {
+          "branch": "8.2",
+          "introduced": "8.2.28",
+          "fixed": "8.2.34",
+          "sourceRange": "<8.2.34"
+        },
+        {
+          "branch": "8.3",
+          "introduced": "8.3.18",
+          "fixed": "8.3.35",
+          "sourceRange": "<8.3.35"
+        },
+        {
+          "branch": "8.4",
+          "introduced": "8.4.5",
+          "fixed": "8.4.26",
+          "sourceRange": "<8.4.26"
+        },
+        {
+          "branch": "8.5",
+          "introduced": "8.5.0",
+          "fixed": "8.5.11",
+          "sourceRange": "<8.5.11"
+        }
+      ],
+      "extension": "standard"
+    },
+    {
+      "id": "CVE-2026-109618",
+      "ghsa": "GHSA-w8hw-w9fx-j79w",
+      "published": "2026-10-21",
+      "summary": "RCE via OOM corruption",
+      "severity": "critical",
+      "url": "https://github.com/php/php-src/security/advisories/GHSA-w8hw-w9fx-j79w",
+      "ranges": [
+        {
+          "branch": "8.2",
+          "introduced": "8.2.0",
+          "fixed": "8.2.35",
+          "sourceRange": "< 8.2.35"
+        },
+        {
+          "branch": "8.3",
+          "introduced": "8.3.0",
+          "fixed": "8.3.36",
+          "sourceRange": "< 8.3.36"
+        },
+        {
+          "branch": "8.4",
+          "introduced": "8.4.0",
+          "fixed": "8.4.27",
+          "sourceRange": "< 8.4.27"
+        },
+        {
+          "branch": "8.5",
+          "introduced": "8.5.0",
+          "fixed": "8.5.12",
+          "sourceRange": "< 8.5.12"
+        }
+      ]
+    },
+    {
+      "id": "CVE-2026-109619",
+      "ghsa": "GHSA-6wmf-4rv5-p3rp",
+      "published": "2026-10-21",
+      "summary": "RCE via stale global state",
+      "severity": "critical",
+      "url": "https://github.com/php/php-src/security/advisories/GHSA-6wmf-4rv5-p3rp",
+      "ranges": [
+        {
+          "branch": "8.2",
+          "introduced": "8.2.0",
+          "fixed": "8.2.35",
+          "sourceRange": "< 8.2.35"
+        },
+        {
+          "branch": "8.3",
+          "introduced": "8.3.0",
+          "fixed": "8.3.36",
+          "sourceRange": "< 8.3.36"
+        },
+        {
+          "branch": "8.4",
+          "introduced": "8.4.0",
+          "fixed": "8.4.27",
+          "sourceRange": "< 8.4.27"
+        },
+        {
+          "branch": "8.5",
+          "introduced": "8.5.0",
+          "fixed": "8.5.12",
+          "sourceRange": "< 8.5.12"
+        }
+      ]
+    },
+    {
+      "id": "CVE-2026-91768",
+      "ghsa": "GHSA-62xp-839h-2637",
+      "published": "2026-09-24",
+      "summary": "IPv6 ACL bypass in FastCGI listen.allowed_clients due to partial address comparison (memcmp 12 bytes)",
+      "severity": "medium",
+      "url": "https://github.com/php/php-src/security/advisories/GHSA-62xp-839h-2637",
+      "ranges": [
+        {
+          "branch": "8.2",
+          "introduced": "8.2.0",
+          "fixed": "8.2.34",
+          "sourceRange": "<8.2.34"
+        },
+        {
+          "branch": "8.3",
+          "introduced": "8.3.0",
+          "fixed": "8.3.35",
+          "sourceRange": "<8.3.35"
+        },
+        {
+          "branch": "8.4",
+          "introduced": "8.4.0",
+          "fixed": "8.4.26",
+          "sourceRange": "<8.4.26"
+        },
+        {
+          "branch": "8.5",
+          "introduced": "8.5.0",
+          "fixed": "8.5.11",
+          "sourceRange": "<8.5.11"
+        }
+      ],
+      "sapi": "fpm"
+    },
+    {
+      "id": "GHSA-ch8v-r6jh-4vvr",
+      "ghsa": "GHSA-ch8v-r6jh-4vvr",
+      "published": "2026-09-24",
+      "summary": "ext/filter: encode 0xFF in FILTER_SANITIZE_ENCODED",
+      "severity": "low",
+      "url": "https://github.com/php/php-src/security/advisories/GHSA-ch8v-r6jh-4vvr",
+      "ranges": [
+        {
+          "branch": "8.2",
+          "introduced": "8.2.0",
+          "fixed": "8.2.34",
+          "sourceRange": "<8.2.34"
+        },
+        {
+          "branch": "8.3",
+          "introduced": "8.3.0",
+          "fixed": "8.3.35",
+          "sourceRange": "<8.3.35"
+        },
+        {
+          "branch": "8.4",
+          "introduced": "8.4.0",
+          "fixed": "8.4.25",
+          "sourceRange": "<8.4.25"
+        },
+        {
+          "branch": "8.5",
+          "introduced": "8.5.0",
+          "fixed": "8.5.10",
+          "sourceRange": "<8.5.10"
+        }
+      ],
+      "extension": "filter"
+    },
+    {
+      "id": "CVE-2026-14355",
+      "ghsa": "GHSA-7jrw-539f-x6vr",
+      "published": "2026-07-02",
+      "summary": "ext/openssl: Memory corruption (zend_mm_heap corrupted) in openssl_encrypt with AES-WRAP-PAD",
+      "severity": "medium",
+      "url": "https://github.com/php/php-src/security/advisories/GHSA-7jrw-539f-x6vr",
+      "ranges": [
+        {
+          "branch": "8.2",
+          "introduced": "8.2.0",
+          "fixed": "8.2.32",
+          "sourceRange": "< 8.2.32"
+        },
+        {
+          "branch": "8.3",
+          "introduced": "8.3.0",
+          "fixed": "8.3.32",
+          "sourceRange": "< 8.3.32"
+        },
+        {
+          "branch": "8.4",
+          "introduced": "8.4.0",
+          "fixed": "8.4.23",
+          "sourceRange": "< 8.4.23"
+        },
+        {
+          "branch": "8.5",
+          "introduced": "8.5.0",
+          "fixed": "8.5.8",
+          "sourceRange": "< 8.5.8"
+        }
+      ],
+      "extension": "openssl"
+    },
+    {
+      "id": "CVE-2026-91766",
+      "ghsa": "GHSA-fpwc-w8rq-cr92",
+      "published": "2026-09-24",
+      "summary": "Cross-origin credential leak in HTTP stream wrapper redirects",
+      "severity": "medium",
+      "url": "https://github.com/php/php-src/security/advisories/GHSA-fpwc-w8rq-cr92",
+      "ranges": [
+        {
+          "branch": "8.2",
+          "introduced": "8.2.0",
+          "fixed": "8.2.34",
+          "sourceRange": "<8.2.34"
+        },
+        {
+          "branch": "8.3",
+          "introduced": "8.3.0",
+          "fixed": "8.3.35",
+          "sourceRange": "<8.3.35"
+        },
+        {
+          "branch": "8.4",
+          "introduced": "8.4.0",
+          "fixed": "8.4.26",
+          "sourceRange": "<8.4.26"
+        },
+        {
+          "branch": "8.5",
+          "introduced": "8.5.0",
+          "fixed": "8.5.11",
+          "sourceRange": "<8.5.11"
+        }
+      ],
+      "extension": "standard"
+    },
+    {
+      "id": "CVE-2026-91765",
+      "ghsa": "GHSA-rgrp-mwpx-f6rm",
+      "published": "2026-09-24",
+      "summary": "SOAP: Unbounded Recursion in Server-Side cleanup_xml_node",
+      "severity": "high",
+      "url": "https://github.com/php/php-src/security/advisories/GHSA-rgrp-mwpx-f6rm",
+      "ranges": [
+        {
+          "branch": "8.2",
+          "introduced": "8.2.0",
+          "fixed": "8.2.34",
+          "sourceRange": "<8.2.34"
+        },
+        {
+          "branch": "8.3",
+          "introduced": "8.3.0",
+          "fixed": "8.3.35",
+          "sourceRange": "<8.3.35"
+        },
+        {
+          "branch": "8.4",
+          "introduced": "8.4.0",
+          "fixed": "8.4.26",
+          "sourceRange": "<8.4.26"
+        },
+        {
+          "branch": "8.5",
+          "introduced": "8.5.0",
+          "fixed": "8.5.11",
+          "sourceRange": "<8.5.11"
+        }
+      ],
+      "extension": "soap"
+    },
+    {
+      "id": "CVE-2026-17543",
+      "ghsa": "GHSA-7qpv-r5mr-78m4",
+      "published": "2026-07-30",
+      "summary": "SQL injection in ext-pgsql via E'...' backslash breakout",
+      "severity": "high",
+      "url": "https://github.com/php/php-src/security/advisories/GHSA-7qpv-r5mr-78m4",
+      "ranges": [
+        {
+          "branch": "8.2",
+          "introduced": "8.2.0",
+          "fixed": "8.2.33",
+          "sourceRange": "<8.2.33"
+        },
+        {
+          "branch": "8.3",
+          "introduced": "8.3.0",
+          "fixed": "8.3.33",
+          "sourceRange": "<8.3.33"
+        },
+        {
+          "branch": "8.4",
+          "introduced": "8.4.0",
+          "fixed": "8.4.24",
+          "sourceRange": "<8.4.24"
+        },
+        {
+          "branch": "8.5",
+          "introduced": "8.5.0",
+          "fixed": "8.5.9",
+          "sourceRange": "<8.5.9"
+        }
+      ],
+      "extension": "pgsql"
+    },
+    {
+      "id": "CVE-2026-17544",
+      "ghsa": "GHSA-x692-q9x7-8c3f",
+      "published": "2026-07-30",
+      "summary": "Out-of-bounds write in bccomp() via crafted operand and scale",
+      "severity": "high",
+      "url": "https://github.com/php/php-src/security/advisories/GHSA-x692-q9x7-8c3f",
+      "ranges": [
+        {
+          "branch": "8.4",
+          "introduced": "8.4.0",
+          "fixed": "8.4.24",
+          "sourceRange": "<8.4.24"
+        },
+        {
+          "branch": "8.5",
+          "introduced": "8.5.0",
+          "fixed": "8.5.9",
+          "sourceRange": "<8.5.9"
+        }
+      ],
+      "extension": "bcmath"
+    },
+    {
+      "id": "CVE-2026-12184",
+      "ghsa": "GHSA-mhmq-mmqj-2v39",
+      "published": "2026-07-02",
+      "summary": "Failure to setup TLS with a remote server can result in a remote DoS",
+      "severity": "high",
+      "url": "https://github.com/php/php-src/security/advisories/GHSA-mhmq-mmqj-2v39",
+      "ranges": [
+        {
+          "branch": "8.3",
+          "introduced": "8.3.0",
+          "fixed": "8.3.32",
+          "sourceRange": "< 8.3.32"
+        },
+        {
+          "branch": "8.4",
+          "introduced": "8.4.0",
+          "fixed": "8.4.21",
+          "sourceRange": "< 8.4.21"
+        },
+        {
+          "branch": "8.5",
+          "introduced": "8.5.0",
+          "fixed": "8.5.6",
+          "sourceRange": "< 8.5.6"
+        }
+      ],
+      "extension": "openssl"
+    },
+    {
+      "id": "CVE-2026-91767",
+      "ghsa": "GHSA-xr7j-rvgx-xq5p",
+      "published": "2026-09-24",
+      "summary": "Heap-buffer-overflow in php_openssl_matches_wildcard_name on crafted server cert wildcard CN",
+      "severity": "medium",
+      "url": "https://github.com/php/php-src/security/advisories/GHSA-xr7j-rvgx-xq5p",
+      "ranges": [
+        {
+          "branch": "8.2",
+          "introduced": "8.2.0",
+          "fixed": "8.2.34",
+          "sourceRange": "<8.2.34"
+        },
+        {
+          "branch": "8.3",
+          "introduced": "8.3.0",
+          "fixed": "8.3.35",
+          "sourceRange": "<8.3.35"
+        },
+        {
+          "branch": "8.4",
+          "introduced": "8.4.0",
+          "fixed": "8.4.26",
+          "sourceRange": "<8.4.26"
+        },
+        {
+          "branch": "8.5",
+          "introduced": "8.5.0",
+          "fixed": "8.5.11",
+          "sourceRange": "<8.5.11"
+        }
+      ],
+      "extension": "openssl"
+    },
+    {
+      "id": "CVE-2026-7262",
+      "ghsa": "GHSA-hmxp-6pc4-f3vv",
+      "published": "2026-05-07",
+      "summary": "NULL pointer dereference in SOAP apache:Map decoder with missing <value>",
+      "severity": "medium",
+      "url": "https://github.com/php/php-src/security/advisories/GHSA-hmxp-6pc4-f3vv",
+      "ranges": [
+        {
+          "branch": "8.2",
+          "introduced": "8.2.0",
+          "fixed": "8.2.31",
+          "sourceRange": "< 8.2.31"
+        },
+        {
+          "branch": "8.3",
+          "introduced": "8.3.0",
+          "fixed": "8.3.31",
+          "sourceRange": "< 8.3.31"
+        },
+        {
+          "branch": "8.4",
+          "introduced": "8.4.0",
+          "fixed": "8.4.21",
+          "sourceRange": "< 8.4.21"
+        },
+        {
+          "branch": "8.5",
+          "introduced": "8.5.0",
+          "fixed": "8.5.6",
+          "sourceRange": "< 8.5.6"
+        }
+      ],
+      "extension": "soap"
+    },
+    {
+      "id": "CVE-2026-7261",
+      "ghsa": "GHSA-m33r-qmcv-p97q",
+      "published": "2026-05-07",
+      "summary": "SoapServer session-persisted object use-after-free via SOAP header fault",
+      "severity": "medium",
+      "url": "https://github.com/php/php-src/security/advisories/GHSA-m33r-qmcv-p97q",
+      "ranges": [
+        {
+          "branch": "8.2",
+          "introduced": "8.2.0",
+          "fixed": "8.2.31",
+          "sourceRange": "< 8.2.31"
+        },
+        {
+          "branch": "8.3",
+          "introduced": "8.3.0",
+          "fixed": "8.3.31",
+          "sourceRange": "< 8.3.31"
+        },
+        {
+          "branch": "8.4",
+          "introduced": "8.4.0",
+          "fixed": "8.4.21",
+          "sourceRange": "< 8.4.21"
+        },
+        {
+          "branch": "8.5",
+          "introduced": "8.5.0",
+          "fixed": "8.5.6",
+          "sourceRange": "< 8.5.6"
+        }
+      ],
+      "extension": "soap"
+    },
+    {
+      "id": "CVE-2026-6722",
+      "ghsa": "GHSA-85c2-q967-79q5",
+      "published": "2026-05-07",
+      "summary": "Use-After-Free in SOAP using Apache map with Remote Code Execution",
+      "severity": "high",
+      "url": "https://github.com/php/php-src/security/advisories/GHSA-85c2-q967-79q5",
+      "ranges": [
+        {
+          "branch": "8.2",
+          "introduced": "8.2.0",
+          "fixed": "8.2.31",
+          "sourceRange": "< 8.2.31"
+        },
+        {
+          "branch": "8.3",
+          "introduced": "8.3.0",
+          "fixed": "8.3.31",
+          "sourceRange": "< 8.3.31"
+        },
+        {
+          "branch": "8.4",
+          "introduced": "8.4.0",
+          "fixed": "8.4.21",
+          "sourceRange": "< 8.4.21"
+        },
+        {
+          "branch": "8.5",
+          "introduced": "8.5.0",
+          "fixed": "8.5.6",
+          "sourceRange": "< 8.5.6"
+        }
+      ],
+      "extension": "soap"
+    },
+    {
+      "id": "CVE-2026-7258",
+      "ghsa": "GHSA-m8rr-4c36-8gq4",
+      "published": "2026-05-07",
+      "summary": "Out-of-bounds read in urldecode()",
+      "severity": "medium",
+      "url": "https://github.com/php/php-src/security/advisories/GHSA-m8rr-4c36-8gq4",
+      "ranges": [
+        {
+          "branch": "8.2",
+          "introduced": "8.2.0",
+          "fixed": "8.2.31",
+          "sourceRange": "< 8.2.31"
+        },
+        {
+          "branch": "8.3",
+          "introduced": "8.3.0",
+          "fixed": "8.3.31",
+          "sourceRange": "< 8.3.31"
+        },
+        {
+          "branch": "8.4",
+          "introduced": "8.4.0",
+          "fixed": "8.4.21",
+          "sourceRange": "< 8.4.21"
+        },
+        {
+          "branch": "8.5",
+          "introduced": "8.5.0",
+          "fixed": "8.5.6",
+          "sourceRange": "< 8.5.6"
+        }
+      ]
+    },
+    {
+      "id": "CVE-2026-17545",
+      "ghsa": "GHSA-9f67-6fw4-hpfp",
+      "published": "2026-09-24",
+      "summary": "PHP on Windows: Reserved Device Names Are Not Rejected Before File/Stream I/O which can cause DoS",
+      "severity": "medium",
+      "url": "https://github.com/php/php-src/security/advisories/GHSA-9f67-6fw4-hpfp",
+      "ranges": [
+        {
+          "branch": "8.2",
+          "introduced": "8.2.0",
+          "fixed": "8.2.34",
+          "sourceRange": "<8.2.34"
+        },
+        {
+          "branch": "8.3",
+          "introduced": "8.3.0",
+          "fixed": "8.3.35",
+          "sourceRange": "<8.3.35"
+        },
+        {
+          "branch": "8.4",
+          "introduced": "8.4.0",
+          "fixed": "8.4.26",
+          "sourceRange": "<8.4.26"
+        },
+        {
+          "branch": "8.5",
+          "introduced": "8.5.0",
+          "fixed": "8.5.11",
+          "sourceRange": "<8.5.11"
+        }
+      ],
+      "os": "windows"
+    },
+    {
+      "id": "CVE-2026-7260",
+      "ghsa": "GHSA-vc5h-9ppw-p5f3",
+      "published": "2026-07-30",
+      "summary": "Stack overflow in phar with circular symlinks",
+      "severity": "medium",
+      "url": "https://github.com/php/php-src/security/advisories/GHSA-vc5h-9ppw-p5f3",
+      "ranges": [
+        {
+          "branch": "8.2",
+          "introduced": "8.2.0",
+          "fixed": "8.2.33",
+          "sourceRange": "<8.2.33"
+        },
+        {
+          "branch": "8.3",
+          "introduced": "8.3.0",
+          "fixed": "8.3.33",
+          "sourceRange": "<8.3.33"
+        },
+        {
+          "branch": "8.4",
+          "introduced": "8.4.0",
+          "fixed": "8.4.24",
+          "sourceRange": "<8.4.24"
+        },
+        {
+          "branch": "8.5",
+          "introduced": "8.5.0",
+          "fixed": "8.5.9",
+          "sourceRange": "<8.5.9"
+        }
+      ],
+      "extension": "phar"
+    },
+    {
+      "id": "CVE-2026-91769",
+      "ghsa": "GHSA-vvx9-73fr-5jjx",
+      "published": "2026-09-24",
+      "summary": "TLS Hostname Verification Falls Back to CN After SAN Mismatch",
+      "severity": "medium",
+      "url": "https://github.com/php/php-src/security/advisories/GHSA-vvx9-73fr-5jjx",
+      "ranges": [
+        {
+          "branch": "8.2",
+          "introduced": "8.2.0",
+          "fixed": "8.2.34",
+          "sourceRange": "<8.2.34"
+        },
+        {
+          "branch": "8.3",
+          "introduced": "8.3.0",
+          "fixed": "8.3.35",
+          "sourceRange": "<8.3.35"
+        },
+        {
+          "branch": "8.4",
+          "introduced": "8.4.0",
+          "fixed": "8.4.26",
+          "sourceRange": "<8.4.26"
+        },
+        {
+          "branch": "8.5",
+          "introduced": "8.5.0",
+          "fixed": "8.5.11",
+          "sourceRange": "<8.5.11"
+        }
+      ],
+      "extension": "openssl"
+    },
+    {
+      "id": "CVE-2026-6103",
+      "ghsa": "GHSA-j3wh-g957-2m85",
+      "published": "2026-09-24",
+      "summary": "Phar TAR phar_tar_number() Integer Overflow - Archive Entry Injection",
+      "severity": "medium",
+      "url": "https://github.com/php/php-src/security/advisories/GHSA-j3wh-g957-2m85",
+      "ranges": [
+        {
+          "branch": "8.2",
+          "introduced": "8.2.0",
+          "fixed": "8.2.34",
+          "sourceRange": "<8.2.34"
+        },
+        {
+          "branch": "8.3",
+          "introduced": "8.3.0",
+          "fixed": "8.3.35",
+          "sourceRange": "<8.3.35"
+        },
+        {
+          "branch": "8.4",
+          "introduced": "8.4.0",
+          "fixed": "8.4.26",
+          "sourceRange": "<8.4.26"
+        },
+        {
+          "branch": "8.5",
+          "introduced": "8.5.0",
+          "fixed": "8.5.11",
+          "sourceRange": "<8.5.11"
+        }
+      ],
+      "extension": "phar"
+    },
+    {
+      "id": "CVE-2026-6104",
+      "ghsa": "GHSA-74r9-qxhc-fx53",
+      "published": "2026-05-07",
+      "summary": "Global buffer over-read in mb_convert_encoding() with attacker-supplied encoding",
+      "severity": "medium",
+      "url": "https://github.com/php/php-src/security/advisories/GHSA-74r9-qxhc-fx53",
+      "ranges": [
+        {
+          "branch": "8.4",
+          "introduced": "8.4.0",
+          "fixed": "8.4.21",
+          "sourceRange": "< 8.4.21"
+        },
+        {
+          "branch": "8.5",
+          "introduced": "8.5.0",
+          "fixed": "8.5.6",
+          "sourceRange": "< 8.5.6"
+        }
+      ],
+      "extension": "mbstring"
+    },
+    {
+      "id": "CVE-2026-7263",
+      "ghsa": "GHSA-4jhr-8w89-j733",
+      "published": "2026-05-07",
+      "summary": "DoS attack via DOMNode::C14N()",
+      "severity": "high",
+      "url": "https://github.com/php/php-src/security/advisories/GHSA-4jhr-8w89-j733",
+      "ranges": [
+        {
+          "branch": "8.4",
+          "introduced": "8.4.0",
+          "fixed": "8.4.21",
+          "sourceRange": "< 8.4.21"
+        },
+        {
+          "branch": "8.5",
+          "introduced": "8.5.0",
+          "fixed": "8.5.6",
+          "sourceRange": "< 8.5.6"
+        }
+      ],
+      "extension": "dom"
+    },
+    {
+      "id": "CVE-2026-92842",
+      "ghsa": "GHSA-88hq-2827-7pg6",
+      "published": "2026-09-24",
+      "summary": "OOB read / info leak in convert.* stream filters when line-break-chars contains NUL",
+      "severity": "medium",
+      "url": "https://github.com/php/php-src/security/advisories/GHSA-88hq-2827-7pg6",
+      "ranges": [
+        {
+          "branch": "8.2",
+          "introduced": "8.2.0",
+          "fixed": "8.2.34",
+          "sourceRange": "<8.2.34"
+        },
+        {
+          "branch": "8.3",
+          "introduced": "8.3.0",
+          "fixed": "8.3.35",
+          "sourceRange": "<8.3.35"
+        },
+        {
+          "branch": "8.4",
+          "introduced": "8.4.0",
+          "fixed": "8.4.26",
+          "sourceRange": "<8.4.26"
+        },
+        {
+          "branch": "8.5",
+          "introduced": "8.5.0",
+          "fixed": "8.5.11",
+          "sourceRange": "<8.5.11"
+        }
+      ],
+      "extension": "standard"
+    },
+    {
+      "id": "CVE-2026-6735",
+      "ghsa": "GHSA-7qg2-v9fj-4mwv",
+      "published": "2026-05-07",
+      "summary": "XSS within PHP-FPM status endpoint",
+      "severity": "medium",
+      "url": "https://github.com/php/php-src/security/advisories/GHSA-7qg2-v9fj-4mwv",
+      "ranges": [
+        {
+          "branch": "8.2",
+          "introduced": "8.2.0",
+          "fixed": "8.2.31",
+          "sourceRange": "< 8.2.31"
+        },
+        {
+          "branch": "8.3",
+          "introduced": "8.3.0",
+          "fixed": "8.3.31",
+          "sourceRange": "< 8.3.31"
+        },
+        {
+          "branch": "8.4",
+          "introduced": "8.4.0",
+          "fixed": "8.4.21",
+          "sourceRange": "< 8.4.21"
+        },
+        {
+          "branch": "8.5",
+          "introduced": "8.5.0",
+          "fixed": "8.5.6",
+          "sourceRange": "< 8.5.6"
+        }
+      ],
+      "sapi": "fpm"
+    },
+    {
+      "id": "CVE-2026-7568",
+      "ghsa": "GHSA-96wq-48vp-hh57",
+      "published": "2026-05-07",
+      "summary": "Signed integer overflow in metaphone()",
+      "severity": "low",
+      "url": "https://github.com/php/php-src/security/advisories/GHSA-96wq-48vp-hh57",
+      "ranges": [
+        {
+          "branch": "8.2",
+          "introduced": "8.2.0",
+          "fixed": "8.2.31",
+          "sourceRange": "< 8.2.31"
+        },
+        {
+          "branch": "8.3",
+          "introduced": "8.3.0",
+          "fixed": "8.3.31",
+          "sourceRange": "< 8.3.31"
+        },
+        {
+          "branch": "8.4",
+          "introduced": "8.4.0",
+          "fixed": "8.4.21",
+          "sourceRange": "< 8.4.21"
+        },
+        {
+          "branch": "8.5",
+          "introduced": "8.5.0",
+          "fixed": "8.5.6",
+          "sourceRange": "< 8.5.6"
+        }
+      ],
+      "extension": "standard"
+    },
+    {
+      "id": "CVE-2026-7259",
+      "ghsa": "GHSA-wm6j-2649-pv75",
+      "published": "2026-05-07",
+      "summary": "Null pointer dereference in php_mb_check_encoding() via mb_ereg_search_init()",
+      "severity": "low",
+      "url": "https://github.com/php/php-src/security/advisories/GHSA-wm6j-2649-pv75",
+      "ranges": [
+        {
+          "branch": "8.5",
+          "introduced": "8.5.0",
+          "fixed": "8.5.6",
+          "sourceRange": "< 8.5.6"
+        },
+        {
+          "branch": "8.4",
+          "introduced": "8.4.0",
+          "fixed": "8.4.21",
+          "sourceRange": "< 8.4.21"
+        },
+        {
+          "branch": "8.3",
+          "introduced": "8.3.0",
+          "fixed": "8.3.31",
+          "sourceRange": "< 8.3.31"
+        },
+        {
+          "branch": "8.2",
+          "introduced": "8.2.0",
+          "fixed": "8.2.31",
+          "sourceRange": "< 8.2.31"
+        }
+      ],
+      "extension": "mbstring"
+    },
+    {
+      "id": "CVE-2025-14179",
+      "ghsa": "GHSA-w476-322c-wpvm",
+      "published": "2026-05-07",
+      "summary": "SQL injection in pdo_firebird via NUL bytes in quoted strings",
+      "severity": "high",
+      "url": "https://github.com/php/php-src/security/advisories/GHSA-w476-322c-wpvm",
+      "ranges": [
+        {
+          "branch": "8.2",
+          "introduced": "8.2.0",
+          "fixed": "8.2.31",
+          "sourceRange": "< 8.2.31"
+        },
+        {
+          "branch": "8.3",
+          "introduced": "8.3.0",
+          "fixed": "8.3.31",
+          "sourceRange": "< 8.3.31"
+        },
+        {
+          "branch": "8.4",
+          "introduced": "8.4.0",
+          "fixed": "8.4.21",
+          "sourceRange": "< 8.4.21"
+        },
+        {
+          "branch": "8.5",
+          "introduced": "8.5.0",
+          "fixed": "8.5.6",
+          "sourceRange": "< 8.5.6"
+        }
+      ],
+      "extension": "pdo_firebird"
+    },
+    {
+      "id": "CVE-2025-14181",
+      "ghsa": "GHSA-cj93-vc83-wgqv",
+      "published": "2026-09-24",
+      "summary": "Integer overflow to buffer overflow in soap HTTP parsing",
+      "severity": "medium",
+      "url": "https://github.com/php/php-src/security/advisories/GHSA-cj93-vc83-wgqv",
+      "ranges": [
+        {
+          "branch": "8.2",
+          "introduced": "8.2.0",
+          "fixed": "8.2.34",
+          "sourceRange": "<8.2.34"
+        },
+        {
+          "branch": "8.3",
+          "introduced": "8.3.0",
+          "fixed": "8.3.35",
+          "sourceRange": "<8.3.35"
+        },
+        {
+          "branch": "8.4",
+          "introduced": "8.4.0",
+          "fixed": "8.4.26",
+          "sourceRange": "<8.4.26"
+        },
+        {
+          "branch": "8.5",
+          "introduced": "8.5.0",
+          "fixed": "8.5.11",
+          "sourceRange": "<8.5.11"
+        }
+      ],
+      "extension": "soap"
+    },
+    {
+      "id": "CVE-2025-1218",
+      "ghsa": "GHSA-r6x9-5r99-36j7",
+      "published": "2026-09-24",
+      "summary": "Various packet overreads in mysqlnd_writeprotocol.c",
+      "severity": "low",
+      "url": "https://github.com/php/php-src/security/advisories/GHSA-r6x9-5r99-36j7",
+      "ranges": [
+        {
+          "branch": "8.2",
+          "introduced": "8.2.0",
+          "fixed": "8.2.34",
+          "sourceRange": "<8.2.34"
+        },
+        {
+          "branch": "8.3",
+          "introduced": "8.3.0",
+          "fixed": "8.3.35",
+          "sourceRange": "<8.3.35"
+        },
+        {
+          "branch": "8.4",
+          "introduced": "8.4.0",
+          "fixed": "8.4.26",
+          "sourceRange": "<8.4.26"
+        },
+        {
+          "branch": "8.5",
+          "introduced": "8.5.0",
+          "fixed": "8.5.11",
+          "sourceRange": "<8.5.11"
+        }
+      ],
+      "extension": "mysqlnd"
+    },
+    {
+      "id": "CVE-2024-4577",
+      "ghsa": "GHSA-3qgc-jrrr-25jv",
+      "published": "2024-09-28",
+      "summary": "PHP RCE: A Bypass of CVE-2012-1823, Argument Injection in PHP-CGI",
+      "severity": "high",
+      "url": "https://github.com/php/php-src/security/advisories/GHSA-3qgc-jrrr-25jv",
+      "ranges": [
+        {
+          "branch": "8.3",
+          "introduced": "8.3.0",
+          "fixed": "8.3.8",
+          "sourceRange": "< 8.3.8"
+        },
+        {
+          "branch": "8.2",
+          "introduced": "8.2.0",
+          "fixed": "8.2.20",
+          "sourceRange": "< 8.2.20"
+        },
+        {
+          "branch": "8.1",
+          "introduced": "8.1.0",
+          "fixed": "8.1.29",
+          "sourceRange": "< 8.1.29"
+        }
+      ],
+      "os": "windows",
+      "sapi": "cgi",
+      "kev": true
+    },
+    {
+      "id": "CVE-2019-11043",
+      "published": "2019-10-24",
+      "summary": "FPM env_path_info underflow",
+      "severity": "critical",
+      "url": "https://www.php.net/ChangeLog-7.php",
+      "ranges": [
+        {
+          "branch": "7.1",
+          "introduced": "7.1.0",
+          "fixed": "7.1.33",
+          "sourceRange": "< 7.1.33"
+        },
+        {
+          "branch": "7.2",
+          "introduced": "7.2.0",
+          "fixed": "7.2.24",
+          "sourceRange": "< 7.2.24"
+        },
+        {
+          "branch": "7.3",
+          "introduced": "7.3.0",
+          "fixed": "7.3.11",
+          "sourceRange": "< 7.3.11"
+        }
+      ],
+      "sapi": "fpm",
+      "kev": true
+    },
+    {
+      "id": "CVE-2012-1823",
+      "published": "2012-05-03",
+      "summary": "PHP-CGI query string parameter injection",
+      "severity": "critical",
+      "url": "https://www.php.net/ChangeLog-5.php",
+      "ranges": [
+        {
+          "branch": "5.3",
+          "introduced": "5.3.0",
+          "fixed": "5.3.12",
+          "sourceRange": "< 5.3.12"
+        },
+        {
+          "branch": "5.4",
+          "introduced": "5.4.0",
+          "fixed": "5.4.2",
+          "sourceRange": "< 5.4.2"
+        }
+      ],
+      "sapi": "cgi",
+      "kev": true
+    }
+  ]
+}
