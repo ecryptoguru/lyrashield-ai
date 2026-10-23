@@ -131,6 +131,8 @@ describe("fix PR patch provenance with disposable encrypted artifacts", () => {
       id: "finding-1",
       targetId: "target-1",
       baseCommit: "scanned-sha",
+      scanId: "original-scan",
+      scan: { createdById: "sponsor-1" },
       implicatedFiles: ["src/a.ts"],
     }
     const tx = {
@@ -138,8 +140,13 @@ describe("fix PR patch provenance with disposable encrypted artifacts", () => {
         findFirst: vi.fn().mockResolvedValue({ status: "draft", finding }),
         findUnique: vi.fn().mockResolvedValue({ status: "draft" }),
         update: vi.fn(),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
       },
-      evidence: { findMany: vi.fn().mockResolvedValue([{ storageUri: structured.storageUri }]) },
+      evidence: {
+        findMany: vi
+          .fn()
+          .mockResolvedValue([{ storageUri: structured.storageUri, type: "code_location" }]),
+      },
       workspace: { findUnique: vi.fn().mockResolvedValue({ plan: "PRO" }) },
       finding: { update: vi.fn() },
     }
@@ -149,8 +156,13 @@ describe("fix PR patch provenance with disposable encrypted artifacts", () => {
       fixProposalId: "proposal-1",
     })
     expect(result.status).toBe("stored")
-    expect(tx.fixProposal.update).toHaveBeenCalledWith({
-      where: { id: "proposal-1" },
+    expect(tx.fixProposal.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: "proposal-1",
+        status: "draft",
+        finding: { workspaceId: "workspace-1" },
+        deletedAt: null,
+      },
       data: { status: "ready", diffRef: result.diffRef },
     })
     reference(result.diffRef!, "ready")

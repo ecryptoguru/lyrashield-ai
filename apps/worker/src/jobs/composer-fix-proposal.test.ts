@@ -8,7 +8,19 @@ const mocks = vi.hoisted(() => ({
   read: vi.fn(),
   regenerate: vi.fn(),
   github: vi.fn(),
+  proxy: vi.fn(),
+  proxyFetch: vi.fn(),
 }))
+vi.mock("@lyrashield/config", () => ({
+  env: {
+    NODE_ENV: "production",
+    LYRASHIELD_EGRESS_PROXY_URL: "https://proxy.test",
+    LYRASHIELD_EGRESS_PROXY_SECRET: "test-secret",
+    LYRASHIELD_EGRESS_PROXY_CONNECT_TIMEOUT_MS: 10000,
+    LYRASHIELD_EGRESS_PROXY_READ_TIMEOUT_MS: 30000,
+  },
+}))
+vi.mock("@lyrashield/security", () => ({ createEgressProxyFetchFn: mocks.proxy }))
 vi.mock("@lyrashield/db", () => ({
   withWorkspaceRLS: async (_ws: string, fn: (tx: unknown) => unknown) =>
     fn({
@@ -61,6 +73,7 @@ const params = {
 }
 beforeEach(() => {
   vi.clearAllMocks()
+  mocks.proxy.mockReturnValue(mocks.proxyFetch)
   mocks.read.mockResolvedValue({ content: Buffer.from(JSON.stringify(claim)) })
   mocks.candidate.mockResolvedValue({
     payload: {
@@ -142,4 +155,20 @@ describe("Composer finding to resolver authorization", () => {
     })
     expect(mocks.github).toHaveBeenCalledWith(1, "owner", "repo", "composer.lock", "a".repeat(40))
   })
+})
+
+it("uses the authenticated approved egress transport in the production proposal path", async () => {
+  await prepareComposerFixProposal(params)
+  expect(mocks.proxy).toHaveBeenCalledWith(
+    expect.objectContaining({ url: "https://proxy.test", secret: "test-secret" })
+  )
+  expect(mocks.regenerate).toHaveBeenCalledWith(
+    expect.objectContaining({ fetchFn: mocks.proxyFetch })
+  )
+})
+
+it("fails closed when production has no approved metadata transport", async () => {
+  mocks.proxy.mockReturnValue(undefined)
+  await expect(prepareComposerFixProposal(params)).rejects.toThrow(/egress proxy/)
+  expect(mocks.regenerate).not.toHaveBeenCalled()
 })

@@ -41,12 +41,91 @@ export interface FixGenerateJobResult {
   diffRef?: string
 }
 
+async function prepareFixJob(workspaceId: string, fixProposalId: string) {
+  return await withWorkspaceRLS(workspaceId, async (tx) => {
+    const proposal = await tx.fixProposal.findFirst({
+      where: { id: fixProposalId, finding: { workspaceId, deletedAt: null }, deletedAt: null },
+      include: {
+        finding: {
+          select: {
+            id: true,
+            targetId: true,
+            scanId: true,
+            scan: { select: { createdById: true } },
+            baseCommit: true,
+            implicatedFiles: true,
+            target: {
+              select: {
+                type: true,
+                repoOwner: true,
+                repoName: true,
+                installationId: true,
+                deletedAt: true,
+              },
+            },
+          },
+        },
+      },
+    })
+    if (!proposal) return { skip: "proposal not found" as const }
+    if (!proposal.finding) return { skip: "finding not found" as const }
+    // Idempotent re-run guard: a proposal that already reached `ready` has a
+    // stored, checksum-bound patch. Re-generating would silently rewrite the
+    // diffRef an approval may already be bound to — skip instead.
+    if (proposal.status === "ready") return { skip: "proposal already ready" as const }
+    if (proposal.status === "failed")
+      return { skip: "proposal previously failed validation" as const }
+    if (proposal.status !== "draft") return { skip: "proposal is no longer a draft" as const }
+
+    const finding = proposal.finding
+
+    // The engine's structured fix lives in the finding's evidence (claim_context
+    // / code_location artifacts). Pull the latest code_location with a fix.
+    const evidence = await tx.evidence.findMany({
+      where: { findingId: finding.id, type: { in: ["code_location", "claim_context"] } },
+      select: { storageUri: true, type: true },
+      orderBy: { createdAt: "desc" },
+    })
+
+    return { finding, evidence, summary: proposal.summary }
+  })
+}
+
+async function readStructuredFix(
+  evidence: { type: string; storageUri: string | null }[],
+  workspaceId: string
+) {
+  let fixLocation: { file?: string; fix_before?: string; fix_after?: string } | null = null
+  for (const ev of evidence) {
+    if (ev.type !== "code_location") continue
+    if (!ev.storageUri) continue
+    try {
+      const artifact = await readEncryptedArtifact(ev.storageUri, workspaceId)
+      const parsed = JSON.parse(artifact.content.toString("utf8")) as {
+        file?: string
+        fix_before?: string
+        fix_after?: string
+      }
+      if (parsed.file && parsed.fix_before !== undefined && parsed.fix_after !== undefined) {
+        fixLocation = parsed
+        break
+      }
+    } catch {
+      // Skip an unreadable/non-JSON artifact; try the next.
+      continue
+    }
+  }
+
+  return fixLocation
+}
+
 /**
  * Process a fix-generation job. Reads the proposal + finding + the engine's
  * structured fix, builds and validates the diff, stores it, and links it.
  */
 export async function processFixGenerateJob(
-  data: FixGenerateJobData
+  data: FixGenerateJobData,
+  retry?: { attempt: number; maxAttempts: number }
 ): Promise<FixGenerateJobResult> {
   const { workspaceId, fixProposalId } = data
 
@@ -55,53 +134,7 @@ export async function processFixGenerateJob(
     // inside the DB transaction: holding an RLS transaction open across S3
     // round-trips needlessly extends row locks and, on a post-upload rollback,
     // would orphan the uploaded artifact with no compensating cleanup.
-    const prepared = await withWorkspaceRLS(workspaceId, async (tx) => {
-      const proposal = await tx.fixProposal.findFirst({
-        where: { id: fixProposalId, finding: { workspaceId, deletedAt: null }, deletedAt: null },
-        include: {
-          finding: {
-            select: {
-              id: true,
-              targetId: true,
-              scanId: true,
-              scan: { select: { createdById: true } },
-              baseCommit: true,
-              implicatedFiles: true,
-              target: {
-                select: {
-                  type: true,
-                  repoOwner: true,
-                  repoName: true,
-                  installationId: true,
-                  deletedAt: true,
-                },
-              },
-            },
-          },
-        },
-      })
-      if (!proposal) return { skip: "proposal not found" as const }
-      if (!proposal.finding) return { skip: "finding not found" as const }
-      // Idempotent re-run guard: a proposal that already reached `ready` has a
-      // stored, checksum-bound patch. Re-generating would silently rewrite the
-      // diffRef an approval may already be bound to — skip instead.
-      if (proposal.status === "ready") return { skip: "proposal already ready" as const }
-      if (proposal.status === "failed")
-        return { skip: "proposal previously failed validation" as const }
-      if (proposal.status !== "draft") return { skip: "proposal is no longer a draft" as const }
-
-      const finding = proposal.finding
-
-      // The engine's structured fix lives in the finding's evidence (claim_context
-      // / code_location artifacts). Pull the latest code_location with a fix.
-      const evidence = await tx.evidence.findMany({
-        where: { findingId: finding.id, type: { in: ["code_location", "claim_context"] } },
-        select: { storageUri: true, type: true },
-        orderBy: { createdAt: "desc" },
-      })
-
-      return { finding, evidence, summary: proposal.summary }
-    })
+    const prepared = await prepareFixJob(workspaceId, fixProposalId)
 
     if ("skip" in prepared) {
       return { status: "skipped", reason: prepared.skip }
@@ -141,26 +174,7 @@ export async function processFixGenerateJob(
     // The structured fix (fix_before/fix_after) is read from the finding's
     // stored code-location evidence content. The producer requires it; without
     // a fix-bearing code location there is nothing to assemble.
-    let fixLocation: { file?: string; fix_before?: string; fix_after?: string } | null = null
-    for (const ev of evidence) {
-      if (ev.type !== "code_location") continue
-      if (!ev.storageUri) continue
-      try {
-        const artifact = await readEncryptedArtifact(ev.storageUri, workspaceId)
-        const parsed = JSON.parse(artifact.content.toString("utf8")) as {
-          file?: string
-          fix_before?: string
-          fix_after?: string
-        }
-        if (parsed.file && parsed.fix_before !== undefined && parsed.fix_after !== undefined) {
-          fixLocation = parsed
-          break
-        }
-      } catch {
-        // Skip an unreadable/non-JSON artifact; try the next.
-        continue
-      }
-    }
+    const fixLocation = await readStructuredFix(evidence, workspaceId)
 
     if (
       !composerFix &&
@@ -243,7 +257,12 @@ export async function processFixGenerateJob(
         data: {
           diffRef: artifact.storageUri,
           status: "ready",
-          ...(composerFix ? { kind: "composer_update" } : {}),
+          ...(composerFix
+            ? {
+                kind: "composer_update",
+                summary: `${prepared.summary.slice(0, 2500)}\n\nLock consistency passed. Application compatibility is unverified. Approval opens a draft PR for customer CI and review; run compatibility tests before marking it ready for merge.`,
+              }
+            : {}),
         },
       })
       if (claimed.count !== 1) return false
@@ -270,6 +289,27 @@ export async function processFixGenerateJob(
     // A thrown error (not a named rejection above) is infrastructure, not a
     // verdict on the diff. Keep the proposal in its current (draft) state so a
     // BullMQ retry re-attempts generation rather than burying it as failed.
+    if (retry && retry.attempt >= retry.maxAttempts) {
+      await withWorkspaceRLS(workspaceId, async (tx) => {
+        const current = await tx.fixProposal.findFirst({
+          where: {
+            id: fixProposalId,
+            status: "draft",
+            finding: { workspaceId, deletedAt: null },
+            deletedAt: null,
+          },
+          select: { summary: true },
+        })
+        if (!current) return
+        await tx.fixProposal.updateMany({
+          where: { id: fixProposalId, status: "draft", finding: { workspaceId }, deletedAt: null },
+          data: {
+            status: "failed",
+            summary: `${current.summary.slice(0, 2500)}\n\nFix generation could not complete after retries. Check metadata access, resolver availability and evidence storage, then request a new proposal.`,
+          },
+        })
+      })
+    }
     logger.error("Fix generation job errored", {
       fixProposalId,
       error: error instanceof Error ? error.message : String(error),

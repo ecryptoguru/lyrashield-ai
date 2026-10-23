@@ -103,6 +103,9 @@ describe("approval-bound Composer updates", () => {
       expect.objectContaining({
         input: expect.objectContaining({
           composerReceiptChecksum: expect.stringMatching(/^[a-f0-9]{64}$/),
+          compatibility:
+            "Application compatibility is unverified; open a draft PR for customer CI and review.",
+          prMode: "draft",
         }),
       })
     )
@@ -125,7 +128,8 @@ describe("approval-bound Composer updates", () => {
       expect.any(String),
       expect.stringContaining("application compatibility tests"),
       expect.any(String),
-      "main"
+      "main",
+      { draft: true }
     )
   })
   it("refuses changed base bytes before opening a provider branch", async () => {

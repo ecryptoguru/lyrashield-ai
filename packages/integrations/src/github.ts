@@ -571,7 +571,8 @@ export async function createPullRequest(
   title: string,
   body: string,
   headBranch: string,
-  baseBranch: string
+  baseBranch: string,
+  options?: { draft?: boolean }
 ): Promise<{ number: number; url: string }> {
   const token = await getInstallationToken(installationId)
   const res = await githubFetch(`${GITHUB_API_BASE}/repos/${owner}/${repo}/pulls`, {
@@ -582,6 +583,7 @@ export async function createPullRequest(
       body,
       head: headBranch,
       base: baseBranch,
+      ...(options?.draft ? { draft: true } : {}),
     }),
   })
   if (!res.ok) {

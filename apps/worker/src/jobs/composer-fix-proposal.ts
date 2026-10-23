@@ -1,4 +1,6 @@
 import { z } from "zod"
+import { env } from "@lyrashield/config"
+import { createEgressProxyFetchFn } from "@lyrashield/security"
 import { withWorkspaceRLS, verifyStoredManifestChecksum } from "@lyrashield/db"
 import { getFileContent } from "@lyrashield/integrations"
 import { readEncryptedArtifact } from "@lyrashield/evidence-storage"
@@ -160,7 +162,21 @@ export async function prepareComposerFixProposal(params: {
     throw new ComposerFixUnavailableError(
       "Composer manifest or lock is unavailable at the scanned commit"
     )
+  const fetchFn =
+    env.LYRASHIELD_EGRESS_PROXY_URL && env.LYRASHIELD_EGRESS_PROXY_SECRET
+      ? createEgressProxyFetchFn({
+          url: env.LYRASHIELD_EGRESS_PROXY_URL,
+          secret: env.LYRASHIELD_EGRESS_PROXY_SECRET,
+          connectTimeoutMs: env.LYRASHIELD_EGRESS_PROXY_CONNECT_TIMEOUT_MS,
+          readTimeoutMs: env.LYRASHIELD_EGRESS_PROXY_READ_TIMEOUT_MS,
+        })
+      : undefined
+  if (env.NODE_ENV === "production" && !fetchFn)
+    throw new ComposerFixUnavailableError(
+      "Composer metadata requires the configured authenticated egress proxy"
+    )
   const result = await regenerateComposerLock({
+    fetchFn,
     originalManifest,
     originalLock: before,
     packageName: metadata.package_name,

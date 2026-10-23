@@ -496,7 +496,10 @@ async function main(): Promise<void> {
   fixGenerateWorker = new Worker<FixGenerateJobData, FixGenerateJobResult>(
     FIX_GENERATE_QUEUE_NAME,
     async (job) => {
-      const result = await processFixGenerateJob(job.data)
+      const result = await processFixGenerateJob(job.data, {
+        attempt: job.attemptsMade + 1,
+        maxAttempts: job.opts.attempts ?? 1,
+      })
       logger.info("Fix generation job processed", {
         jobId: job.id,
         fixProposalId: job.data.fixProposalId,

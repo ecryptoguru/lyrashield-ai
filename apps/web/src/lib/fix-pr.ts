@@ -142,7 +142,13 @@ export async function requestFixPrApproval(
     baseCommit: req.baseCommit,
     targetRepo: `${req.repoOwner}/${req.repoName}`,
     ...(req.composerFix
-      ? { composerReceiptChecksum: diffChecksum(JSON.stringify(req.composerFix)) }
+      ? {
+          composerReceiptChecksum: diffChecksum(JSON.stringify(req.composerFix)),
+          title: "Open draft Composer update PR: compatibility tests required",
+          compatibility:
+            "Application compatibility is unverified; open a draft PR for customer CI and review.",
+          prMode: "draft",
+        }
       : {}),
   }
   const inputHash = hashInput(APPROVAL_ACTION, input)
@@ -186,7 +192,13 @@ export async function executeApprovedFixPr(
     baseCommit: req.baseCommit,
     targetRepo: `${req.repoOwner}/${req.repoName}`,
     ...(req.composerFix
-      ? { composerReceiptChecksum: diffChecksum(JSON.stringify(req.composerFix)) }
+      ? {
+          composerReceiptChecksum: diffChecksum(JSON.stringify(req.composerFix)),
+          title: "Open draft Composer update PR: compatibility tests required",
+          compatibility:
+            "Application compatibility is unverified; open a draft PR for customer CI and review.",
+          prMode: "draft",
+        }
       : {}),
   }
   const inputHash = hashInput(APPROVAL_ACTION, input)
@@ -268,7 +280,8 @@ export async function executeApprovedFixPr(
       `LyraShield fix proposal ${req.fixProposalId.slice(0, 8)}`,
       prBody(req, checksum),
       branchName,
-      baseBranch
+      baseBranch,
+      req.composerFix ? { draft: true } : undefined
     )
 
     await createPullRequestRecord(req.fixProposalId, req.workspaceId, {
@@ -321,7 +334,7 @@ function prBody(req: FixPrRequest, checksum: string): string {
       ? [
           "",
           `Composer upgraded ${req.composerFix.packageName} from ${req.composerFix.fromVersion} to ${req.composerFix.toVersion} in an isolated resolver with networking, scripts, plugins and installation disabled. Lock consistency passed.`,
-          "Run your application compatibility tests and CI before merging; package-manager consistency is not application compatibility proof.",
+          "This PR is a draft because application compatibility is unverified. Run your application compatibility tests and CI before marking it ready for merge; package-manager consistency is not application compatibility proof.",
         ]
       : []),
   ].join("\n")

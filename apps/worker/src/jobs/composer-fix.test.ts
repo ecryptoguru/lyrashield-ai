@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
-import { regenerateComposerLock } from "./composer-fix"
+import { ComposerFixUnavailableError, regenerateComposerLock } from "./composer-fix"
 import { composerContentHash } from "../engine/scanners/composer-dependencies"
 
 vi.mock("@lyrashield/logger", () => ({
@@ -123,3 +123,23 @@ describe("offline Composer update boundary", () => {
     120_000
   )
 })
+
+it.runIf(process.env.LYRASHIELD_COMPOSER_SMOKE === "1")(
+  "settles an unsatisfied manifest as unavailable instead of retrying indefinitely",
+  async () => {
+    const pinned = { ...manifest, require: { "psr/log": "1.1.3" } }
+    await expect(
+      regenerateComposerLock({
+        ...request,
+        originalManifest: JSON.stringify(pinned),
+        originalLock: originalLock.replace(
+          composerContentHash(manifest),
+          composerContentHash(pinned)
+        ),
+        fetchFn: fakeMetadataFetch as typeof fetch,
+        resolver: async () => ["93.184.216.34"],
+      })
+    ).rejects.toBeInstanceOf(ComposerFixUnavailableError)
+  },
+  120000
+)

@@ -94,7 +94,9 @@ async function fixedPackage(
       return { ...expanded, version }
     }
   }
-  throw new Error("The fixed Composer package release is absent from trusted metadata")
+  throw new ComposerFixUnavailableError(
+    "The fixed Composer package release is absent from trusted metadata"
+  )
 }
 
 export async function regenerateComposerLock(
@@ -186,7 +188,13 @@ export async function regenerateComposerLock(
     ]
     try {
       await exec("docker", args, { signal: input.signal, timeout: 90_000, maxBuffer: 128 * 1024 })
-    } catch {
+    } catch (error) {
+      input.signal?.throwIfAborted()
+      const code = (error as { code?: unknown }).code
+      if (typeof code === "number" && ![125, 126, 127].includes(code))
+        throw new ComposerFixUnavailableError(
+          "Composer cannot resolve this isolated update under the current constraints and platform. Update manually if new dependencies, platform changes or wider constraints are required."
+        )
       throw new Error(
         "Isolated Composer resolution or consistency checks failed; update manually if the fixed release needs new dependencies, platform changes, or wider constraints"
       )

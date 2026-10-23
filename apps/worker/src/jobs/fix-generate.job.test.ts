@@ -169,3 +169,19 @@ describe("fix generation lifecycle", () => {
     expect(mocks.upload).not.toHaveBeenCalled()
   })
 })
+
+it("settles exhausted infrastructure failure with an actionable reason without overwriting a terminal proposal", async () => {
+  mocks.prepare.mockRejectedValue(new Error("resolver offline"))
+  await expect(processFixGenerateJob(input, { attempt: 3, maxAttempts: 3 })).rejects.toThrow(
+    "resolver offline"
+  )
+  expect(mocks.updateMany).toHaveBeenCalledWith(
+    expect.objectContaining({
+      where: expect.objectContaining({ status: "draft", finding: { workspaceId: "ws-1" } }),
+      data: expect.objectContaining({
+        status: "failed",
+        summary: expect.stringContaining("after retries"),
+      }),
+    })
+  )
+})
