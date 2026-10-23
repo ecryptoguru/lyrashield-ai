@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { writeFile, mkdir } from "fs/promises"
+import { writeFile, mkdir, symlink, chmod } from "fs/promises"
 import { join } from "path"
 import { tmpdir } from "os"
 import { rmSync } from "fs"
@@ -712,3 +712,132 @@ describe("SCA advisory coverage", () => {
     }
   })
 })
+
+describe("SCA review regressions", () => {
+  beforeEach(() => {
+    cleanupRepo()
+    clearThreatIntelligenceCache()
+  })
+
+  it("validates COMPLETE shared advisory data before consuming findings", async () => {
+    const dir = await setupRepo({})
+    const coverageIssues: ScannerCoverageIssue[] = []
+    const pkg = {
+      name: "vendor/pkg",
+      version: "1.2.3",
+      ecosystem: "Packagist" as const,
+      filePath: "composer.lock",
+    }
+    const other = { ...pkg, name: "vendor/other" }
+    try {
+      const findings = await scanSca({
+        repoPath: dir,
+        workspaceDir: dir,
+        coverageIssues,
+        resolvedDependencyInventory: {
+          status: "COMPLETE",
+          packages: [pkg, other],
+          unresolved: [],
+          truncated: false,
+          evidenceFile: {
+            path: "composer.lock",
+            content: "{}",
+            size: 2,
+            extension: ".lock",
+            language: "json",
+          },
+        },
+        advisoryBatch: {
+          status: "COMPLETE",
+          source: "OSV",
+          requestedCount: 2,
+          resolvedCount: 2,
+          results: [
+            { package: pkg, vulns: [null, { id: "GHSA-same-package" }] as never },
+            { package: other, vulns: [{ id: "GHSA-retained" }] },
+          ],
+          fetchedAt: null,
+          snapshotId: null,
+          snapshotChecksum: null,
+          cacheAgeSeconds: null,
+          supportedEcosystems: ["Packagist"],
+          unresolved: [],
+        },
+      })
+      expect(findings.map((finding) => finding.id)).toEqual(["GHSA-same-package", "GHSA-retained"])
+      expect(coverageIssues).toContainEqual(
+        expect.objectContaining({ scanner: "sca", status: "partial" })
+      )
+    } finally {
+      cleanupRepo()
+    }
+  })
+
+  it("records skipped Composer symlinks in standalone mixed repository coverage", async () => {
+    const dir = await setupRepo({
+      "package.json": JSON.stringify({ dependencies: { lodash: "4.17.21" } }),
+    })
+    const externalManifest = TEST_DIR + "-composer.json"
+    const externalLock = TEST_DIR + "-composer.lock"
+    const coverageIssues: ScannerCoverageIssue[] = []
+    await writeFile(externalManifest, JSON.stringify({ require: { "vendor/pkg": "^1" } }))
+    await writeFile(
+      externalLock,
+      JSON.stringify({ packages: [{ name: "vendor/pkg", version: "1.2.3" }] })
+    )
+    await symlink(externalManifest, join(dir, "composer.json"))
+    await symlink(externalLock, join(dir, "composer.lock"))
+    try {
+      const findings = await scanSca({
+        repoPath: dir,
+        workspaceDir: dir,
+        coverageIssues,
+        fetchFn: makeMockFetch({ "vendor/pkg@1.2.3": [{ id: "GHSA-external" }] }),
+      })
+      expect(findings).toEqual([])
+      expect(coverageIssues).toContainEqual(
+        expect.objectContaining({
+          scanner: "sca",
+          status: "partial",
+          reason: expect.stringContaining("symbolic link"),
+        })
+      )
+    } finally {
+      cleanupRepo()
+      rmSync(externalManifest, { force: true })
+      rmSync(externalLock, { force: true })
+    }
+  })
+})
+
+it.skipIf(process.getuid?.() === 0)(
+  "records unreadable standalone dependency directories beside valid npm input",
+  async () => {
+    cleanupRepo()
+    const dir = await setupRepo({
+      "package.json": JSON.stringify({ dependencies: { lodash: "4.17.21" } }),
+      "private/composer.json": "{}",
+    })
+    const privateDirectory = join(dir, "private")
+    const coverageIssues: ScannerCoverageIssue[] = []
+    await chmod(privateDirectory, 0)
+    try {
+      await scanSca({
+        repoPath: dir,
+        workspaceDir: dir,
+        coverageIssues,
+        fetchFn: makeMockFetch({}),
+      })
+      expect(coverageIssues).toContainEqual(
+        expect.objectContaining({
+          scanner: "sca",
+          status: "partial",
+          reason: expect.stringContaining("directory could not be read"),
+        })
+      )
+    } finally {
+      await chmod(privateDirectory, 0o700)
+      cleanupRepo()
+    }
+  }
+)

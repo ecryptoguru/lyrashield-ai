@@ -82,7 +82,37 @@ const osvVulnerabilitySchema = z.object({
     .optional(),
   database_specific: z.object({ severity: z.string().optional() }).optional(),
 })
-const osvEntrySchema = z.object({ vulns: z.array(osvVulnerabilitySchema).optional() })
+const osvEntrySchema = z.object({ vulns: z.array(z.unknown()).optional() })
+
+function validatedAdvisoryEntry(
+  value: unknown,
+  subject: string,
+  coverageIssues?: ScannerCoverageIssue[]
+): OsvVulnerability[] | undefined {
+  const parsed = osvEntrySchema.safeParse(value)
+  if (!parsed.success) {
+    recordCoverageIssue(coverageIssues, {
+      scanner: "sca",
+      status: "partial",
+      subject,
+      reason: "Advisory response did not resolve an exact dependency",
+    })
+    return undefined
+  }
+  const vulnerabilities: OsvVulnerability[] = []
+  for (const candidate of parsed.data.vulns ?? []) {
+    const vulnerability = osvVulnerabilitySchema.safeParse(candidate)
+    if (vulnerability.success) vulnerabilities.push(vulnerability.data)
+    else
+      recordCoverageIssue(coverageIssues, {
+        scanner: "sca",
+        status: "partial",
+        subject,
+        reason: "Malformed advisory record was rejected; advisory coverage is incomplete",
+      })
+  }
+  return vulnerabilities
+}
 
 const DEP_FILE_PATTERNS = [
   "package.json",
@@ -138,9 +168,26 @@ async function findDependencyFiles(
       try {
         entryStat = await lstat(fullPath)
       } catch {
+        if (entry.name === "composer.json" || entry.name === "composer.lock")
+          recordCoverageIssue(coverageIssues, {
+            scanner: "sca",
+            status: "partial",
+            subject: relative(repoPath, fullPath),
+            reason: "Composer dependency path could not be read",
+          })
         continue
       }
-      if (entryStat.isSymbolicLink()) continue
+      if (entryStat.isSymbolicLink()) {
+        if (entry.name === "composer.json" || entry.name === "composer.lock") {
+          recordCoverageIssue(coverageIssues, {
+            scanner: "sca",
+            status: "partial",
+            subject: relative(repoPath, fullPath),
+            reason: "Composer dependency path is a symbolic link and was not read",
+          })
+        }
+        continue
+      }
       if (entryStat.isDirectory()) {
         if (!IGNORED_DIRECTORIES.has(entry.name)) {
           found.push(
@@ -160,6 +207,12 @@ async function findDependencyFiles(
     }
     return found
   } catch {
+    recordCoverageIssue(coverageIssues, {
+      scanner: "sca",
+      status: "partial",
+      subject: relative(repoPath, directory) || ".",
+      reason: "Dependency-manifest directory could not be read",
+    })
     return []
   }
 }
@@ -567,18 +620,12 @@ async function queryOsvBatch(
       if (!response.ok) throw new Error(`OSV API returned ${response.status}`)
       const data = (await response.json()) as { results?: Array<{ vulns?: OsvVulnerability[] }> }
       for (const [index, dependency] of chunk.entries()) {
-        const entry = data.results?.[index]
-        const parsed = osvEntrySchema.safeParse(entry)
-        if (!parsed.success) {
-          recordCoverageIssue(coverageIssues, {
-            scanner: "sca",
-            status: "partial",
-            subject: dependency.filePath,
-            reason: "Advisory response did not resolve an exact dependency",
-          })
-          continue
-        }
-        result.set(dependencyKey(dependency), parsed.data.vulns ?? [])
+        const vulnerabilities = validatedAdvisoryEntry(
+          data.results?.[index],
+          dependency.filePath,
+          coverageIssues
+        )
+        if (vulnerabilities) result.set(dependencyKey(dependency), vulnerabilities)
       }
     } catch (error) {
       if (signal?.aborted) throw new Error("SCA scan cancelled")
@@ -782,22 +829,25 @@ export async function scanSca(config: ScaScanConfig): Promise<EngineVulnerabilit
     sharedResolution: !!resolvedDependencyInventory,
   })
   const osvResults = resolvedDependencyInventory
-    ? new Map(
-        (advisoryBatch?.results ?? []).map((result) => [
-          dependencyKey(result.package),
-          result.vulns as OsvVulnerability[],
-        ])
-      )
+    ? new Map<string, OsvVulnerability[]>()
     : await queryOsvBatch(uniqueDeps, fetchFn, signal, coverageIssues)
 
   if (resolvedDependencyInventory) {
+    for (const result of advisoryBatch?.results ?? []) {
+      const vulnerabilities = validatedAdvisoryEntry(
+        result,
+        result.package.filePath,
+        coverageIssues
+      )
+      if (vulnerabilities) osvResults.set(dependencyKey(result.package), vulnerabilities)
+    }
     for (const dep of uniqueDeps) {
       if (!osvResults.has(dependencyKey(dep)))
         recordCoverageIssue(coverageIssues, {
           scanner: "sca",
           status: "partial",
           subject: dep.filePath,
-          reason: "Advisory batch did not resolve an exact dependency",
+          reason: "Advisory batch did not resolve a valid exact dependency response",
         })
     }
   }
