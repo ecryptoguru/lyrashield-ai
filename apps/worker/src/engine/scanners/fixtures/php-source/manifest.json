@@ -1,0 +1,115 @@
+{
+  "schema": 1,
+  "ruleVersion": "php-source-local-flow/1.0.0",
+  "scope": "Passive built-in PHP lexical/local-variable rules only. These controls are rule-specific; a quiet patched fixture is not proof of whole-application safety. No Semgrep, Trivy or engine benchmark was run.",
+  "cases": [
+    {
+      "file": "command.vulnerable.php",
+      "expectedCwes": ["CWE-78"],
+      "kind": "vulnerable"
+    },
+    {
+      "file": "command.patched.php",
+      "expectedCwes": [],
+      "kind": "patched"
+    },
+    {
+      "file": "pdo-query.vulnerable.php",
+      "expectedCwes": ["CWE-89"],
+      "kind": "vulnerable"
+    },
+    {
+      "file": "pdo-query.patched.php",
+      "expectedCwes": [],
+      "kind": "patched"
+    },
+    {
+      "file": "state-deserialization.vulnerable.php",
+      "expectedCwes": ["CWE-502"],
+      "kind": "vulnerable"
+    },
+    {
+      "file": "state-deserialization.patched.php",
+      "expectedCwes": [],
+      "kind": "patched"
+    },
+    {
+      "file": "page-include.vulnerable.php",
+      "expectedCwes": ["CWE-98"],
+      "kind": "vulnerable"
+    },
+    {
+      "file": "page-include.patched.php",
+      "expectedCwes": [],
+      "kind": "patched"
+    },
+    {
+      "file": "download-path.vulnerable.php",
+      "expectedCwes": ["CWE-22"],
+      "kind": "vulnerable"
+    },
+    {
+      "file": "download-path.patched.php",
+      "expectedCwes": [],
+      "kind": "patched"
+    },
+    {
+      "file": "upload-destination.vulnerable.php",
+      "expectedCwes": ["CWE-434"],
+      "kind": "vulnerable"
+    },
+    {
+      "file": "upload-destination.patched.php",
+      "expectedCwes": [],
+      "kind": "patched"
+    },
+    {
+      "file": "xml-import.vulnerable.php",
+      "expectedCwes": ["CWE-611"],
+      "kind": "vulnerable"
+    },
+    {
+      "file": "xml-import.patched.php",
+      "expectedCwes": [],
+      "kind": "patched"
+    },
+    {
+      "file": "webhook-target.vulnerable.php",
+      "expectedCwes": ["CWE-918"],
+      "kind": "vulnerable"
+    },
+    {
+      "file": "webhook-target.patched.php",
+      "expectedCwes": [],
+      "kind": "patched"
+    },
+    {
+      "file": "laravel-raw-sql.vulnerable.php",
+      "expectedCwes": ["CWE-89"],
+      "kind": "vulnerable"
+    },
+    {
+      "file": "laravel-raw-sql.patched.php",
+      "expectedCwes": [],
+      "kind": "patched"
+    },
+    {
+      "file": "cross-file-source.php",
+      "expectedCwes": [],
+      "kind": "unassessed",
+      "limitation": "No cross-file or authorization, CSRF, session proof is produced."
+    },
+    {
+      "file": "cross-file-sink.php",
+      "expectedCwes": [],
+      "kind": "unassessed",
+      "limitation": "No cross-file or authorization, CSRF, session proof is produced."
+    },
+    {
+      "file": "authorization-csrf-session.php",
+      "expectedCwes": [],
+      "kind": "unassessed",
+      "limitation": "No cross-file or authorization, CSRF, session proof is produced."
+    }
+  ]
+}
