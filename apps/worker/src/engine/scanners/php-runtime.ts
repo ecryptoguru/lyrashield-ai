@@ -3,6 +3,7 @@
 import { basename } from "node:path"
 import { z } from "zod"
 import { parseDocument } from "yaml"
+import { parsePhpVersionFile } from "./php-runtime-declarations"
 import {
   PHP_RUNTIME_CATALOG,
   branchOf,
@@ -53,7 +54,7 @@ function parseIdentityJson(content: string): unknown {
 }
 
 export function isPhpRuntimeInput(name: string): boolean {
-  return /^(?:composer\.json|php-runtime\.json|php\.ini)$/i.test(name)
+  return /^(?:composer\.json|php-runtime\.json|php\.ini|project\.toml|\.php-version)$/i.test(name)
 }
 
 function addImageDeclaration(
@@ -198,6 +199,11 @@ function parseRuntimeDeclarations(
     } catch {
       issue("PHP runtime Compose inventory is malformed or uses unsupported YAML aliases")
     }
+  } else if (name === "project.toml" || name === ".php-version") {
+    const parsed = parsePhpVersionFile(name, content, issue)
+    phpPresent = parsed.phpPresent
+    if (parsed.version)
+      declarations.push({ version: parsed.version, scope: "source_declaration", line: 1 })
   } else if (name === "composer.json") {
     try {
       const schema = z

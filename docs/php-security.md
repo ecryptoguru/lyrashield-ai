@@ -11,10 +11,24 @@ code or send PHP2Shell exploit or load probes.
 | `composer.json` and `composer.lock`      | SCA                  | Exact stable production, development and transitive Packagist releases. A matching Composer content hash is required for complete inventory. Missing, stale, malformed, unreadable or bounded input remains incomplete. PHP and extension constraints are platform declarations, not Packagist packages. |
 | Dockerfile and Compose PHP images        | IaC                  | Exact recognized official PHP tags are declarations. Variables, floating tags, custom images, unsupported suffixes and digest-only identities require independent inventory. A tag plus digest is still a declaration, not a registry or deployed-image check.                                           |
 | Composer `config.platform.php`           | IaC                  | An exact resolver platform declaration. Neither `require.php` nor `config.platform.php` proves the installed web runtime.                                                                                                                                                                                |
+| `project.toml` buildpack environment     | IaC                  | Parsed CNB schema 0.2 and legacy 0.1 `BP_PHP_VERSION` declarations. One exact stable value is source evidence only; duplicate/mixed schemas, unsupported buildpacks and explicit overrides remain incomplete.                                                                                            |
+| `.php-version`                           | IaC                  | One exact stable version line, with an optional final newline. Ranges, comments, multiple values and malformed input remain incomplete; no automatic edit is generated.                                                                                                                                  |
 | `php-runtime.json`                       | IaC                  | Strict, bounded, user-reported supporting inventory. Backport claims never suppress upstream advisory candidates.                                                                                                                                                                                        |
 | `php.ini`                                | IaC                  | Conservative declaration warnings for enabled `display_errors` and `allow_url_include`; effective deployment configuration remains unknown.                                                                                                                                                              |
 | Public `Server` / `X-Powered-By` headers | URL                  | Passive version-disclosure lead from an existing response. No CVE is inferred from a header.                                                                                                                                                                                                             |
 | PHP `.php` application source            | SAST                 | Bounded request/local-variable flow to command, SQL, deserialization, inclusion/path, upload, XML entity and outbound URL sinks. Cross-file, function-return, authorization, CSRF and session analysis remain incomplete.                                                                                |
+
+Buildpack declarations use the current
+[`[[io.buildpacks.build.env]]` schema 0.2](https://buildpacks.io/docs/reference/config/project-descriptor/)
+or the [legacy `[[build.env]]` schema](https://github.com/buildpacks/spec/blob/extensions/project-descriptor/v0.1/extensions/project-descriptor.md).
+[Paketo documents `BP_PHP_VERSION` precedence](https://paketo.io/docs/howto/php/#install-a-specific-php-version)
+over Composer declarations, and build-time flags can override descriptor values.
+The scanner assesses source declarations independently and does not infer the effective
+installed runtime or builder support. Parsing is capped at 64 KiB and 256 environment
+entries. Explicit buildpack groups are limited to `paketo-buildpacks/php` and
+`paketo-buildpacks/php-dist`; unsupported groups or overrides require independent
+inventory. A known PHP group without an exact version stays partial. Both new inputs
+remain unverified, carry override uncertainty, and produce no automatic runtime edit.
 
 The pinned runtime catalog is `php-maintainers-2026-10-23.1`: 29 maintainer
 advisories published in 2026 and three selected older PHP KEV advisories
