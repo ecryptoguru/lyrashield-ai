@@ -105,15 +105,31 @@ function dockerImageDeclarations(content: string, issue: (reason: string) => voi
   const result: { image: string; line: number }[] = []
   const heredocs: { delimiter: string; stripTabs: boolean }[] = []
   let continued = false
+  let header = true
+  const directives = new Set<string>()
   let escape = "\\"
   for (const [i, line] of content.split("\n").entries()) {
-    const directive = /^\s*#\s*escape=(\\|`)\s*$/i.exec(line)
-    if (directive && i < 5) escape = directive[1]!
     const pending = heredocs[0]
     if (pending) {
       const text = pending.stripTabs ? line.replace(/^\t+/, "") : line
       if (text.replace(/\r$/, "") === pending.delimiter) heredocs.shift()
       continue
+    }
+    // Docker stops recognizing directives after a normal comment, blank or instruction.
+    if (header) {
+      const directive = /^\s*#\s*(syntax|check|escape)=(.*?)\s*$/i.exec(line)
+      if (directive) {
+        const key = directive[1]!.toLowerCase()
+        const value = directive[2]!
+        if (directives.has(key) || (key === "escape" && value !== "\\" && value !== "`")) {
+          issue("PHP runtime Dockerfile parser directive is invalid or duplicated")
+          break
+        }
+        directives.add(key)
+        if (key === "escape") escape = value
+        continue
+      }
+      header = false
     }
     if (/^\s*(?:#|$)/.test(line)) continue
     const wasContinued = continued

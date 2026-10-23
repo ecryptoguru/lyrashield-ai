@@ -284,3 +284,18 @@ it.each(["alpine....", "alpine3..22", "alpine.3.22"])(
     expect(issues.some((issue) => /malformed/.test(issue.reason))).toBe(true)
   }
 )
+
+it.each(["FROM node:24\n", "# ordinary comment\n", "\n"])(
+  "does not recognize parser directives after header boundary %j",
+  (prefix) => {
+    const issues: ScannerCoverageIssue[] = []
+    const input = prefix + "# escape=`\nRUN echo \\\nFROM php:8.4.26-fpm\n"
+    expect(inspectPhpRuntimeInput("Dockerfile", input, "dockerfile", issues).hasIdentity).toBe(
+      false
+    )
+  }
+)
+it("ignores parser-like comments inside heredocs", () => {
+  const input = "FROM node:24\nRUN cat <<EOF\n# escape=`\nEOF\nRUN echo \\\nFROM php:8.4.26-fpm\n"
+  expect(inspectPhpRuntimeInput("Dockerfile", input, "dockerfile").hasIdentity).toBe(false)
+})
