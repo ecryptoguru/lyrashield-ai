@@ -340,7 +340,11 @@ function declaredRuntimeFindings(
         .map((r) => r.fixed)
         .sort((a, b) => patchOf(b) - patchOf(a))[0] ?? range.fixed
     // Full-file edits bind to an exact official mutable tag. Digests need verified registry data.
-    const canEdit = !!declaration.mutableImage && supported && content.length <= 16000
+    const canEdit =
+      !!declaration.mutableImage &&
+      supported &&
+      content.length <= 16000 &&
+      content.split("\n").length <= 256
     const after = canEdit
       ? content
           .split("\n")

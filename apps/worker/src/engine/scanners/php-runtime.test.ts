@@ -27,6 +27,17 @@ async function scan(files: Record<string, string>) {
 }
 
 describe("passive declared PHP runtime detection", () => {
+  it("withholds full-file edits above 256 lines while retaining CVE detection and guidance", async () => {
+    const content = "FROM php:8.4.26-fpm\n" + "\n".repeat(399)
+    expect(content.length).toBeLessThan(16000)
+    const { findings } = await scan({ Dockerfile: content })
+    const finding = findings.find((entry) => entry.cve === "CVE-2026-109618")
+    expect(finding).toBeDefined()
+    expect(finding?.code_locations?.[0]).not.toHaveProperty("fix_before")
+    expect(finding?.code_locations?.[0]).not.toHaveProperty("fix_after")
+    expect(finding?.remediation_steps).toContain("rebuild, deploy and restart every replica")
+  })
+
   it.each([
     ["8.2.34", "8.2.35"],
     ["8.3.35", "8.3.36"],

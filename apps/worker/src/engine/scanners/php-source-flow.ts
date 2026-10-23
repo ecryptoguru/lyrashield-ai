@@ -1,11 +1,12 @@
 import { closingToken, splitPhpArguments, type PhpToken } from "./php-source-lexer"
 
 export type PhpContext =
-  "command" | "sql" | "deserialize" | "include" | "path" | "upload" | "xml" | "ssrf"
+  "command" | "executable" | "sql" | "deserialize" | "include" | "path" | "upload" | "xml" | "ssrf"
 export type PhpFlow = Set<PhpContext>
 export type PhpLocals = Map<string, PhpFlow>
 const CONTEXTS: PhpContext[] = [
   "command",
+  "executable",
   "sql",
   "deserialize",
   "include",
@@ -42,6 +43,17 @@ function literalAllowlist(tokens: PhpToken[]): boolean {
         (token.kind === "string" && !token.text.includes("$")) ||
         /^\d+$/.test(token.text)
     )
+}
+
+function fixedShellExecutablePrefix(tokens: PhpToken[]): boolean {
+  const first = tokens[0]
+  if (first?.kind !== "string") return false
+  const prefix = first.text.slice(1, -1)
+  // A literal executable word must end before user data. Operators reopen command position.
+  return (
+    /^\s*[a-zA-Z0-9_./-]+[ \t]/.test(prefix) &&
+    !tokens.some((token) => token.kind === "string" && /[;&|`$><\n\r]/.test(token.text))
+  )
 }
 
 /** Forward local flow only. Sanitizers are sink-context specific and explicit. */
@@ -101,5 +113,6 @@ export function phpExpressionFlow(
       }
     }
   }
+  if (fixedShellExecutablePrefix(tokens)) flow.delete("executable")
   return flow
 }

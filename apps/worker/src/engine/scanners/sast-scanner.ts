@@ -252,7 +252,8 @@ function isTestFixturePath(relativePath: string): boolean {
   return (
     /(?:^|\/)(?:__tests__|fixtures?|e2e|testdata|mocks?)(?:\/|$)/i.test(relativePath) ||
     /(?:^|\/)[^/]+\.(?:test|spec)\.[^/]+$/i.test(relativePath) ||
-    /(?:^|\/)(?:tests?\/.*|[^/]*(?:Test|Spec))\.php$/i.test(relativePath)
+    /(?:^|\/)tests?\/.*\.php$/i.test(relativePath) ||
+    /(?:^|\/)[^/]*(?:Test|Spec)\.php$/.test(relativePath)
   )
 }
 

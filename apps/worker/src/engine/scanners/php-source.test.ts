@@ -6,6 +6,33 @@ const ids = (body: string) => scan(body).findings.map((finding) => finding.cwe)
 
 describe("bounded PHP source flow", () => {
   it.each([
+    "system(escapeshellarg($_GET['cmd']) . ' ' . escapeshellarg($_GET['arg']));",
+    "$cmd = $_GET['cmd']; $cmd = escapeshellarg($cmd); system($cmd);",
+    "$cmd = escapeshellarg($_GET['cmd']) . ' ' . escapeshellarg($_GET['arg']); system($cmd);",
+  ])("retains escaped executable selection: %s", (body) => {
+    expect(ids(body)).toContain("CWE-78")
+  })
+
+  it.each([
+    "system('ping ' . escapeshellarg($_GET['host']));",
+    "$cmd = 'ping ' . escapeshellarg($_GET['host']); system($cmd);",
+    "$arg = escapeshellarg($_GET['host']); $cmd = 'ping ' . $arg; system($cmd);",
+  ])("keeps quoted data after a fixed executable quiet: %s", (body) => {
+    expect(scan(body).findings).toEqual([])
+  })
+
+  it.each(["", ";"])(
+    "preserves local flow across a closing tag with terminator %j",
+    (terminator) => {
+      const result = analyzePhpSource(
+        `<?php $cmd = $_GET['cmd']${terminator} ?>inert HTML system($fake) <?php system($cmd);`,
+        "template.php"
+      )
+      expect(result.findings.map((finding) => finding.cwe)).toEqual(["CWE-78"])
+    }
+  )
+
+  it.each([
     'system("echo \\$_GET");',
     '$cmd = $_GET["cmd"]; system("echo \\$cmd");',
     "$object->query = $_GET['field'];",

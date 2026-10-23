@@ -27,6 +27,8 @@ export function tokenizePhp(source: string, issues: string[]): PhpToken[] {
       inPhp = Boolean(tag)
     } else if (rest.startsWith("?>")) {
       text = "?>"
+      // PHP closes the preceding statement even when a template omits its semicolon.
+      tokens.push({ text: ";", kind: "symbol", line })
       inPhp = false
     } else if (/^\s/.test(rest)) {
       text = /^\s+/.exec(rest)![0]

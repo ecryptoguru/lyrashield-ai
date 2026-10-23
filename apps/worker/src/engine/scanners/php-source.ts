@@ -141,8 +141,10 @@ function buildFinding(rule: Rule, path: string, token: PhpToken): EngineVulnerab
 
 function commandArgumentFlows(args: PhpToken[][], locals: PhpLocals, issues: string[]): boolean {
   const command = args[0] ?? []
-  if (command[0]?.text !== "[" || closingToken(command, 0) !== command.length - 1)
-    return phpExpressionFlow(command, locals, issues).has("command")
+  if (command[0]?.text !== "[" || closingToken(command, 0) !== command.length - 1) {
+    const flow = phpExpressionFlow(command, locals, issues)
+    return flow.has("command") || flow.has("executable")
+  }
   const argv = splitPhpArguments(command.slice(1, -1))
   const executable = argv[0] ?? []
   // Escaping a shell argument does not establish a trusted executable identity.
@@ -207,7 +209,7 @@ function inspectStatement(
     for (const rule of rules) {
       const argument = ruleArgument(rule, name, args)
       const flows =
-        rule.context === "command" && name === "proc_open"
+        rule.context === "command"
           ? commandArgumentFlows(args, locals, issues)
           : argument && phpExpressionFlow(argument, locals, issues).has(rule.context)
       if (flows) findings.push(buildFinding(rule, path, token))
