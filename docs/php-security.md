@@ -14,7 +14,7 @@ code or send PHP2Shell exploit or load probes.
 | `php-runtime.json`                       | IaC                  | Strict, bounded, user-reported supporting inventory. Backport claims never suppress upstream advisory candidates.                                                                                                                                                                                        |
 | `php.ini`                                | IaC                  | Conservative declaration warnings for enabled `display_errors` and `allow_url_include`; effective deployment configuration remains unknown.                                                                                                                                                              |
 | Public `Server` / `X-Powered-By` headers | URL                  | Passive version-disclosure lead from an existing response. No CVE is inferred from a header.                                                                                                                                                                                                             |
-| PHP application source                   | SAST                 | Bounded request/local-variable flow to command, SQL, deserialization, inclusion/path, upload, XML entity and outbound URL sinks. Cross-file, function-return, authorization, CSRF and session analysis remain incomplete.                                                                                |
+| PHP `.php` application source            | SAST                 | Bounded request/local-variable flow to command, SQL, deserialization, inclusion/path, upload, XML entity and outbound URL sinks. Cross-file, function-return, authorization, CSRF and session analysis remain incomplete.                                                                                |
 
 The pinned runtime catalog is `php-maintainers-2026-10-23.1`: 29 maintainer
 advisories published in 2026 and three selected older PHP KEV advisories
@@ -37,9 +37,11 @@ subset of request helpers, local assignments, interpolation, parameterized SQL,
 sink-specific shell/integer sanitizers and fixed literal allowlist lookups.
 Receiver types and branch reachability are not established. Unsupported syntax
 and reached token/statement/nesting limits are explicit coverage issues. Every
-PHP file keeps partial SAST coverage because this local analysis cannot establish
+scanned `.php` file keeps partial SAST coverage because this local analysis cannot establish
 cross-file or application-wide absence. It emits review guidance and source
-provenance, with no automatic source patch or exploit-validation claim.
+provenance, with no automatic source patch or exploit-validation claim. The
+deterministic integration selects `.php` files; alternative PHP template/include
+extensions require separate review and are not covered by this source benchmark.
 
 ## Supporting runtime inventory
 
@@ -130,7 +132,9 @@ checks pass. Composer consistency does not substitute for application tests.
 
 Recognized mutable official Dockerfile tags can receive a structured, full-file
 edit to the latest fixed release retained for their current supported branch.
-The existing suffix and Dockerfile content are preserved. No digest is invented,
+The existing suffix and Dockerfile content are preserved. Automatic edits are
+limited to 16,000 characters and 256 lines before the existing diff builder runs;
+larger files retain findings and manual remediation guidance. No digest is invented,
 removed or changed. Digest-pinned images, vendor packages, managed hosts,
 appliances, Compose/platform declarations and end-of-life branch migrations need
 operator or vendor action and compatibility testing.
