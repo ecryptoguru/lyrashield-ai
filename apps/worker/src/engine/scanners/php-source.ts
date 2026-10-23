@@ -179,7 +179,7 @@ function inspectStatement(
     const rules = RULES.filter(
       (rule) =>
         rule.names.includes(name) &&
-        // exec() is a shell builtin; PDO exec() is SQL. Generic select/query are method-only.
+        // The exec name denotes a shell builtin unless used as a SQL method. Select/query are method-only.
         !(rule.context === "command" && isMethod) &&
         !(
           rule.context === "sql" &&

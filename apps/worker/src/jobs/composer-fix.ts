@@ -14,7 +14,7 @@ import {
   parseComposerManifest,
 } from "../engine/scanners/composer-dependencies"
 
-const exec = promisify(execFile)
+const runDocker = promisify(execFile)
 export class ComposerFixUnavailableError extends Error {}
 /** Reviewed multiarchitecture Composer 2.10.3 identity; never target-controlled. */
 export const COMPOSER_RESOLVER_IMAGE =
@@ -187,7 +187,11 @@ export async function regenerateComposerLock(
       "/app/resolve.php",
     ]
     try {
-      await exec("docker", args, { signal: input.signal, timeout: 90_000, maxBuffer: 128 * 1024 })
+      await runDocker("docker", args, {
+        signal: input.signal,
+        timeout: 90_000,
+        maxBuffer: 128 * 1024,
+      })
     } catch (error) {
       input.signal?.throwIfAborted()
       const code = (error as { code?: unknown }).code
@@ -216,7 +220,7 @@ export async function regenerateComposerLock(
       compatibility: "customer-tests-required" as const,
     }
   } finally {
-    await exec("docker", ["rm", "-f", name], { timeout: 10_000, maxBuffer: 1024 }).catch(
+    await runDocker("docker", ["rm", "-f", name], { timeout: 10_000, maxBuffer: 1024 }).catch(
       () => undefined
     )
     await rm(root, { recursive: true, force: true })

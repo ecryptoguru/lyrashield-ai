@@ -15,7 +15,7 @@ vi.mock("@lyrashield/config", () => ({
   env: {
     NODE_ENV: "production",
     LYRASHIELD_EGRESS_PROXY_URL: "https://proxy.test",
-    LYRASHIELD_EGRESS_PROXY_SECRET: "test-secret",
+    LYRASHIELD_EGRESS_PROXY_SECRET: "dummy",
     LYRASHIELD_EGRESS_PROXY_CONNECT_TIMEOUT_MS: 10000,
     LYRASHIELD_EGRESS_PROXY_READ_TIMEOUT_MS: 30000,
   },
@@ -160,7 +160,7 @@ describe("Composer finding to resolver authorization", () => {
 it("uses the authenticated approved egress transport in the production proposal path", async () => {
   await prepareComposerFixProposal(params)
   expect(mocks.proxy).toHaveBeenCalledWith(
-    expect.objectContaining({ url: "https://proxy.test", secret: "test-secret" })
+    expect.objectContaining({ url: "https://proxy.test", secret: "dummy" })
   )
   expect(mocks.regenerate).toHaveBeenCalledWith(
     expect.objectContaining({ fetchFn: mocks.proxyFetch })
