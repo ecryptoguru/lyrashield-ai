@@ -16,6 +16,15 @@ const CONTEXTS: PhpContext[] = [
 ]
 const REQUEST = /^\$_(?:GET|POST|REQUEST|COOKIE|FILES|SERVER)$/
 
+/** A PHP double-quoted dollar is literal after an odd number of backslashes. */
+function interpolatedVariables(text: string): string[] {
+  return [...text.matchAll(/\$[a-zA-Z_]\w*/g)].flatMap((match) => {
+    let slashes = 0
+    for (let i = match.index - 1; i >= 0 && text[i] === "\\"; i--) slashes++
+    return slashes % 2 === 0 ? [match[0]] : []
+  })
+}
+
 function literalAllowlist(tokens: PhpToken[]): boolean {
   if (tokens[0]?.text !== "[") return false
   const end = closingToken(tokens, 0)
@@ -86,7 +95,7 @@ export function phpExpressionFlow(
       for (const context of REQUEST.test(token.text) ? CONTEXTS : (locals.get(token.text) ?? []))
         flow.add(context)
     } else if (token.kind === "string" && token.text.startsWith('"')) {
-      for (const variable of token.text.match(/\$[a-zA-Z_]\w*/g) ?? []) {
+      for (const variable of interpolatedVariables(token.text)) {
         for (const context of REQUEST.test(variable) ? CONTEXTS : (locals.get(variable) ?? []))
           flow.add(context)
       }

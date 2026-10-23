@@ -6,6 +6,41 @@ const ids = (body: string) => scan(body).findings.map((finding) => finding.cwe)
 
 describe("bounded PHP source flow", () => {
   it.each([
+    'system("echo \\$_GET");',
+    '$cmd = $_GET["cmd"]; system("echo \\$cmd");',
+    "$object->query = $_GET['field'];",
+    "$arg = $_GET['host']; $arg = escapeshellarg($arg); system('ping ' . $arg);",
+    "$id = $_GET['id']; $id = intval($id); $pdo->query('SELECT * FROM users WHERE id=' . $id);",
+    "$cmd = $_GET['cmd']; $cmd = 'uptime'; system($cmd);",
+    "proc_open(['/usr/bin/printf', '%s', $_GET['text']], [], $pipes);",
+  ])("respects definite safe local syntax: %s", (body) => {
+    expect(scan(body).findings).toEqual([])
+  })
+
+  it.each([
+    'system("echo $_GET[cmd]");',
+    'system("echo \\\\$_GET[cmd]");',
+    "$arg = $_GET['host']; if ($allowed) { $arg = escapeshellarg($arg); } system('ping ' . $arg);",
+    "$cmd = $_GET['cmd']; $f = function () { return 'fixed'; }; system($cmd);",
+    "$cmd = $_GET['cmd']; function helper() { $cmd = 'fixed'; } system($cmd);",
+    "proc_open([$_GET['binary'], 'fixed'], [], $pipes);",
+    "proc_open(['/bin/sh', '-c', $_GET['cmd']], [], $pipes);",
+    "proc_open(['/bin/bash', '-c', $_GET['cmd']], [], $pipes);",
+    "proc_open(['/usr/bin/env', $_GET['binary']], [], $pipes);",
+    "proc_open([escapeshellarg($_GET['binary']), 'fixed'], [], $pipes);",
+    "proc_open($_GET['cmd'], [], $pipes);",
+  ])("retains actual and alternate request-to-command flow: %s", (body) => {
+    expect(ids(body)).toContain("CWE-78")
+  })
+
+  it("keeps argv command-specific injection and unknown executable identity unassessed", () => {
+    const result = scan("proc_open(['/usr/bin/printf', '%s', $_GET['text']], [], $pipes);")
+    expect(result.issues.join(" ")).toContain(
+      "command-specific argument injection remain unassessed"
+    )
+  })
+
+  it.each([
     ["system($_GET['cmd']);", "CWE-78"],
     ["$input = $_POST['cmd']; $next = $input; shell_exec('tool ' . $next);", "CWE-78"],
     [

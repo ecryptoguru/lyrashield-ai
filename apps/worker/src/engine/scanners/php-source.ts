@@ -139,6 +139,29 @@ function buildFinding(rule: Rule, path: string, token: PhpToken): EngineVulnerab
   }
 }
 
+function commandArgumentFlows(args: PhpToken[][], locals: PhpLocals, issues: string[]): boolean {
+  const command = args[0] ?? []
+  if (command[0]?.text !== "[" || closingToken(command, 0) !== command.length - 1)
+    return phpExpressionFlow(command, locals, issues).has("command")
+  const argv = splitPhpArguments(command.slice(1, -1))
+  const executable = argv[0] ?? []
+  // Escaping a shell argument does not establish a trusted executable identity.
+  if (phpExpressionFlow(executable, locals, issues).has("path")) return true
+  const name =
+    executable.length === 1 && executable[0]?.kind === "string"
+      ? executable[0].text.slice(1, -1)
+      : undefined
+  const shell =
+    /(?:^|[\\/])(?:sh|bash|dash|zsh|ksh|fish|csh|tcsh|cmd(?:\.exe)?|powershell(?:\.exe)?|pwsh(?:\.exe)?)$/i
+  // env can dispatch an attacker-selected executable, including a shell.
+  if (shell.test(name ?? "") || /(?:^|[\\/])env$/.test(name ?? ""))
+    return phpExpressionFlow(command, locals, issues).has("path")
+  issues.push(
+    "PHP proc_open argv-array executable resolution and command-specific argument injection remain unassessed"
+  )
+  return false
+}
+
 function inspectStatement(
   tokens: PhpToken[],
   locals: PhpLocals,
@@ -173,6 +196,8 @@ function inspectStatement(
     )
     if (!rules.length) continue
     const hasParens = tokens[i + 1]?.text === "("
+    if (!hasParens && !rules.some((rule) => rule.context === "include")) continue
+    if (["function", "fn"].includes(tokens[i - 1]?.text.toLowerCase() ?? "")) continue
     const end = hasParens ? closingToken(tokens, i + 1) : tokens.length
     if (end < 0) {
       issues.push("Unsupported unbalanced PHP sink call")
@@ -181,18 +206,28 @@ function inspectStatement(
     const args = hasParens ? splitPhpArguments(tokens.slice(i + 2, end)) : [tokens.slice(i + 1)]
     for (const rule of rules) {
       const argument = ruleArgument(rule, name, args)
-      if (argument && phpExpressionFlow(argument, locals, issues).has(rule.context))
-        findings.push(buildFinding(rule, path, token))
+      const flows =
+        rule.context === "command" && name === "proc_open"
+          ? commandArgumentFlows(args, locals, issues)
+          : argument && phpExpressionFlow(argument, locals, issues).has(rule.context)
+      if (flows) findings.push(buildFinding(rule, path, token))
     }
   }
   return findings
 }
 
-function updateLocals(tokens: PhpToken[], locals: PhpLocals, issues: string[]): void {
+function updateLocals(
+  tokens: PhpToken[],
+  locals: PhpLocals,
+  issues: string[],
+  conditional: boolean
+): void {
   if (tokens[0]?.kind !== "variable" || !["=", ".="].includes(tokens[1]?.text ?? "")) return
   const flow = phpExpressionFlow(tokens.slice(2), locals, issues)
-  // Retain previous possible values: this is not a control-flow graph or branch proof.
-  for (const context of locals.get(tokens[0].text) ?? []) flow.add(context)
+  // Only definite straight-line replacement can remove a previous possible value.
+  if (conditional || tokens[1]?.text === ".=") {
+    for (const context of locals.get(tokens[0].text) ?? []) flow.add(context)
+  }
   locals.set(tokens[0].text, flow)
 }
 
@@ -207,7 +242,8 @@ export function analyzePhpSource(
   const locals: PhpLocals = new Map()
   const findings: EngineVulnerability[] = []
   let statement: PhpToken[] = []
-  const functionScopes: boolean[] = []
+  const scopes: { outerLocals?: PhpLocals; conditionalDepth: number }[] = []
+  let conditionalDepth = 0
   let depth = 0
   let statementBounded = false
   for (const token of tokens) {
@@ -218,13 +254,26 @@ export function analyzePhpSource(
     if (["{", "}", ";"].includes(token.text) && depth === 0) {
       if (!statementBounded) {
         findings.push(...inspectStatement(statement, locals, path, issues))
-        updateLocals(statement, locals, issues)
+        updateLocals(statement, locals, issues, conditionalDepth > 0)
       }
       if (token.text === "{") {
         const functionScope = statement.some((part) => part.text.toLowerCase() === "function")
-        functionScopes.push(functionScope)
-        if (functionScope) locals.clear()
-      } else if (token.text === "}" && functionScopes.pop()) locals.clear()
+        scopes.push({
+          conditionalDepth,
+          ...(functionScope ? { outerLocals: new Map(locals) } : {}),
+        })
+        if (functionScope) {
+          locals.clear()
+          conditionalDepth = 0
+        } else conditionalDepth++
+      } else if (token.text === "}") {
+        const scope = scopes.pop()
+        conditionalDepth = scope?.conditionalDepth ?? 0
+        if (scope?.outerLocals) {
+          locals.clear()
+          for (const [name, flow] of scope.outerLocals) locals.set(name, flow)
+        }
+      }
       statement = []
       statementBounded = false
       if (findings.length >= 100) {
