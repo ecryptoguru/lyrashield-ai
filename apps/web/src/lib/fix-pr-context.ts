@@ -6,6 +6,7 @@ import type { FixPrRequest } from "./fix-pr"
 import { env } from "@lyrashield/config"
 import { resolve } from "node:path"
 import { fileURLToPath } from "node:url"
+import { parseComposerFixArtifact } from "@lyrashield/fix"
 
 export class FixPrContextError extends Error {
   constructor(
@@ -100,11 +101,24 @@ export async function resolveFixPrRequest(
       "PROPOSAL_PATCH_PROVENANCE_REQUIRED",
       "This proposal's patch is not bound to its server generator. Create a new proposal without a supplied patch reference to generate patch evidence."
     )
+  let composerFix
+  if (proposal.kind === "composer_update") {
+    try {
+      composerFix = parseComposerFixArtifact(artifact.content.toString("utf8"))
+    } catch {
+      throw new FixPrContextError(
+        "COMPOSER_FIX_PROVENANCE_REQUIRED",
+        "The dependency update receipt is invalid. Generate a new fix proposal from a completed scan."
+      )
+    }
+  }
   return {
     workspaceId,
     targetId: finding.targetId!,
     fixProposalId: proposal.id,
-    diff: artifact.content.toString("utf8"),
+    diff: composerFix?.diff ?? artifact.content.toString("utf8"),
+    findingId: finding.id,
+    ...(composerFix ? { composerFix } : {}),
     anchorFile,
     implicatedFiles,
     plan: ((await resolveAccountBilling(requestedById))?.effectivePlan ?? "FREE") as WorkspacePlan,

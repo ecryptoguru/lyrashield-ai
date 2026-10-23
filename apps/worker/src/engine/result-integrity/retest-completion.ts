@@ -112,6 +112,7 @@ function evaluateRetestOutcome(params: {
   baselineCoverage: { id: string; controlId: string; status: string }[]
   retestCoverage: { id: string; controlId: string; status: string }[]
   sources: string[]
+  requiresDeployedPhpEvidence?: boolean
 }) {
   const {
     retestId,
@@ -122,6 +123,7 @@ function evaluateRetestOutcome(params: {
     baselineCoverage,
     retestCoverage,
     sources,
+    requiresDeployedPhpEvidence,
   } = params
   const baselineChecksumValid = verifyStoredManifestChecksum(baselineManifest) === "MATCH"
   const retestChecksumValid = verifyStoredManifestChecksum(retestManifest) === "MATCH"
@@ -185,6 +187,7 @@ function evaluateRetestOutcome(params: {
     }
   )
   const canValidate =
+    !requiresDeployedPhpEvidence &&
     identityValid &&
     coverageComplete &&
     revisionIdentityValid &&
@@ -216,6 +219,8 @@ function evaluateRetestOutcome(params: {
   }
 
   const missingParts: string[] = []
+  if (requiresDeployedPhpEvidence)
+    missingParts.push("trusted deployed PHP runtime identity and worker replacement evidence")
   if (!baselineChecksumValid) missingParts.push("baseline result manifest checksum")
   if (!retestChecksumValid) missingParts.push("retest result manifest checksum")
   if (sources.length === 0 || hasEngineOrUnknownSource)
@@ -264,7 +269,7 @@ export async function completeRetestsForScan(params: {
       }),
       tx.findingCandidate.findMany({
         where: { scanId: { in: baselineScanIds } },
-        select: { findingId: true, scanId: true, scannerSource: true },
+        select: { findingId: true, scanId: true, scannerSource: true, payload: true },
       }),
       tx.finding.findMany({
         where: {
@@ -282,11 +287,22 @@ export async function completeRetestsForScan(params: {
     const scanById = new Map(baselineScans.map((scan) => [scan.id, scan]))
 
     const candidateSourcesByFinding = new Map<string, string[]>()
+    const deployedPhpEvidenceRequired = new Set<string>()
     for (const candidate of candidateRows) {
       if (!candidate.findingId) continue
       const sources = candidateSourcesByFinding.get(candidate.findingId) ?? []
       sources.push(candidate.scannerSource)
       candidateSourcesByFinding.set(candidate.findingId, sources)
+      const payload = candidate.payload
+      if (
+        payload &&
+        typeof payload === "object" &&
+        !Array.isArray(payload) &&
+        typeof payload.findingClass === "string" &&
+        payload.findingClass.startsWith("php_runtime_")
+      ) {
+        deployedPhpEvidenceRequired.add(candidate.findingId)
+      }
     }
 
     const evidenceScanIds = [...new Set([params.scanId, ...baselineScanIds])]
@@ -368,6 +384,7 @@ export async function completeRetestsForScan(params: {
         baselineCoverage,
         retestCoverage,
         sources: [...new Set(candidateSourcesByFinding.get(retest.findingId) ?? [])].sort(),
+        requiresDeployedPhpEvidence: deployedPhpEvidenceRequired.has(retest.findingId),
       })
 
       if (outcome.valid) {

@@ -36,6 +36,8 @@ import {
   patchScopeForPlan,
   applyUnifiedDiff,
   extractFileDiff,
+  validateComposerFixArtifact,
+  type ComposerFixArtifact,
 } from "@lyrashield/fix"
 import { logger } from "@lyrashield/logger"
 
@@ -46,6 +48,9 @@ export interface FixPrRequest {
   workspaceId: string
   targetId: string
   fixProposalId: string
+  /** Server-resolved finding and isolated resolver receipt; never accepted from a client. */
+  findingId?: string
+  composerFix?: ComposerFixArtifact
   /** The unified diff to apply. Hashed into the approval. */
   diff: string
   /** The single file the finding is anchored to. */
@@ -79,6 +84,34 @@ function approvalUrl(base: string, approvalId: string): string {
   return `${base.replace(/\/+$/, "")}/dashboard/approvals?approval=${encodeURIComponent(approvalId)}`
 }
 
+function validateRequestPatch(req: FixPrRequest) {
+  const policy = patchScopeForPlan(req.plan)
+  if (!req.composerFix)
+    return validatePatchDiff(req.diff, req.anchorFile, req.implicatedFiles, policy)
+  if (
+    req.diff !== req.composerFix.diff ||
+    req.anchorFile !== req.composerFix.lockPath ||
+    req.implicatedFiles.length !== 1 ||
+    req.implicatedFiles[0] !== req.anchorFile
+  ) {
+    return {
+      ok: false as const,
+      reason: "Composer patch does not match its server-generated scope.",
+    }
+  }
+  return validateComposerFixArtifact(
+    req.composerFix,
+    {
+      workspaceId: req.workspaceId,
+      targetId: req.targetId,
+      findingId: req.findingId ?? "",
+      proposalId: req.fixProposalId,
+      baseCommit: req.baseCommit,
+    },
+    policy
+  )
+}
+
 /**
  * Validate a fix PR and bind its exact patch to an audited authorization receipt.
  * Authorized credentials execute immediately; browser requests retain review.
@@ -92,12 +125,11 @@ export async function requestFixPrApproval(
 
   // Validate the diff against the plan-tiered scope policy before any approval
   // exists — an unsound or out-of-scope patch must never be presented as viable.
-  const policy = patchScopeForPlan(req.plan)
-  const validation = validatePatchDiff(req.diff, req.anchorFile, req.implicatedFiles, policy)
+  const validation = validateRequestPatch(req)
   if (!validation.ok) {
     logger.warn("Fix PR diff rejected by validator", {
       fixProposalId: req.fixProposalId,
-      code: validation.code,
+      code: "code" in validation ? validation.code : "COMPOSER_SCOPE_MISMATCH",
     })
     return { status: "rejected", reason: validation.reason }
   }
@@ -109,6 +141,9 @@ export async function requestFixPrApproval(
     diffChecksum: checksum,
     baseCommit: req.baseCommit,
     targetRepo: `${req.repoOwner}/${req.repoName}`,
+    ...(req.composerFix
+      ? { composerReceiptChecksum: diffChecksum(JSON.stringify(req.composerFix)) }
+      : {}),
   }
   const inputHash = hashInput(APPROVAL_ACTION, input)
 
@@ -150,13 +185,15 @@ export async function executeApprovedFixPr(
     diffChecksum: checksum,
     baseCommit: req.baseCommit,
     targetRepo: `${req.repoOwner}/${req.repoName}`,
+    ...(req.composerFix
+      ? { composerReceiptChecksum: diffChecksum(JSON.stringify(req.composerFix)) }
+      : {}),
   }
   const inputHash = hashInput(APPROVAL_ACTION, input)
 
   // Re-validate at execution time: the approval binds to this exact hash, but
   // defense-in-depth says re-check the diff against scope before any write.
-  const policy = patchScopeForPlan(req.plan)
-  const validation = validatePatchDiff(req.diff, req.anchorFile, req.implicatedFiles, policy)
+  const validation = validateRequestPatch(req)
   if (!validation.ok) {
     return { status: "rejected", reason: validation.reason }
   }
@@ -183,12 +220,11 @@ export async function executeApprovedFixPr(
         "The repository changed since this scan. Retest and request a new fix approval."
       )
     }
-    await createBranch(req.installationId, req.repoOwner, req.repoName, branchName, fromSha)
-
     // Apply the validated diff file-by-file: fetch current content at the base
     // commit, apply the unified diff (fail-closed on any hunk mismatch), write
     // the result to the fix branch. A file with no readable content is a hard
     // failure — we never write a partial patch.
+    const preparedFiles: Array<{ file: string; content: string }> = []
     for (const file of validation.filesTouched) {
       const current = await getFileContent(
         req.installationId,
@@ -202,13 +238,24 @@ export async function executeApprovedFixPr(
           `Cannot read ${file} at the scanned commit — patch cannot be applied safely.`
         )
       }
+      if (req.composerFix && current !== req.composerFix.before) {
+        throw new Error(
+          "The Composer lock no longer matches its resolver receipt. Retest and regenerate the proposal."
+        )
+      }
       const newContent = applyUnifiedDiff(current, extractFileDiff(req.diff, file))
+      if (req.composerFix && newContent !== req.composerFix.after)
+        throw new Error("Composer patch result differs from the resolver output")
+      preparedFiles.push({ file, content: newContent })
+    }
+    await createBranch(req.installationId, req.repoOwner, req.repoName, branchName, fromSha)
+    for (const { file, content } of preparedFiles) {
       await createOrUpdateFile(
         req.installationId,
         req.repoOwner,
         req.repoName,
         file,
-        newContent,
+        content,
         `fix: ${req.fixProposalId}`,
         branchName
       )
@@ -270,5 +317,12 @@ function prBody(req: FixPrRequest, checksum: string): string {
     `- Patch checksum (SHA-256): \`${checksum}\``,
     ``,
     `This PR was prepared for developer review. Verify the change before merging.`,
+    ...(req.composerFix
+      ? [
+          "",
+          `Composer upgraded ${req.composerFix.packageName} from ${req.composerFix.fromVersion} to ${req.composerFix.toVersion} in an isolated resolver with networking, scripts, plugins and installation disabled. Lock consistency passed.`,
+          "Run your application compatibility tests and CI before merging; package-manager consistency is not application compatibility proof.",
+        ]
+      : []),
   ].join("\n")
 }

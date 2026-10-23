@@ -26,9 +26,14 @@ import {
   validatePatchDiff,
   diffChecksum,
   patchScopeForPlan,
+  validateComposerFixArtifact,
 } from "@lyrashield/fix"
 import { withWorkspaceRLS } from "@lyrashield/db"
 import type { FixGenerateJobData } from "@lyrashield/integrations"
+import { prepareComposerFixProposal } from "./composer-fix-proposal"
+import { ComposerFixUnavailableError } from "./composer-fix"
+import { ZodError } from "zod"
+import { resolveAccountBilling } from "@lyrashield/billing"
 
 export interface FixGenerateJobResult {
   status: "stored" | "rejected" | "skipped"
@@ -58,9 +63,19 @@ export async function processFixGenerateJob(
             select: {
               id: true,
               targetId: true,
+              scanId: true,
+              scan: { select: { createdById: true } },
               baseCommit: true,
               implicatedFiles: true,
-              target: { select: { type: true } },
+              target: {
+                select: {
+                  type: true,
+                  repoOwner: true,
+                  repoName: true,
+                  installationId: true,
+                  deletedAt: true,
+                },
+              },
             },
           },
         },
@@ -73,18 +88,19 @@ export async function processFixGenerateJob(
       if (proposal.status === "ready") return { skip: "proposal already ready" as const }
       if (proposal.status === "failed")
         return { skip: "proposal previously failed validation" as const }
+      if (proposal.status !== "draft") return { skip: "proposal is no longer a draft" as const }
 
       const finding = proposal.finding
 
       // The engine's structured fix lives in the finding's evidence (claim_context
       // / code_location artifacts). Pull the latest code_location with a fix.
       const evidence = await tx.evidence.findMany({
-        where: { findingId: finding.id, type: "code_location" },
-        select: { storageUri: true },
+        where: { findingId: finding.id, type: { in: ["code_location", "claim_context"] } },
+        select: { storageUri: true, type: true },
         orderBy: { createdAt: "desc" },
       })
 
-      return { finding, evidence }
+      return { finding, evidence, summary: proposal.summary }
     })
 
     if ("skip" in prepared) {
@@ -92,12 +108,42 @@ export async function processFixGenerateJob(
     }
 
     const { finding, evidence } = prepared
+    const sponsorId = finding.scan.createdById
+    const account = sponsorId ? await resolveAccountBilling(sponsorId) : null
+    const policy = patchScopeForPlan(account?.effectivePlan ?? "FREE")
+    let composerFix
+    try {
+      composerFix = await prepareComposerFixProposal({
+        workspaceId,
+        proposalId: fixProposalId,
+        finding,
+        evidence,
+      })
+    } catch (error) {
+      if (!(error instanceof ComposerFixUnavailableError) && !(error instanceof ZodError))
+        throw error
+      const reason =
+        error instanceof Error
+          ? error.message.slice(0, 500)
+          : "Automatic Composer update unavailable"
+      await withWorkspaceRLS(workspaceId, (tx) =>
+        tx.fixProposal.updateMany({
+          where: { id: fixProposalId, status: "draft", finding: { workspaceId } },
+          data: {
+            status: "failed",
+            summary: `${prepared.summary.slice(0, 2500)}\n\nAutomatic Composer update unavailable: ${reason}`,
+          },
+        })
+      )
+      return { status: "rejected", reason }
+    }
 
     // The structured fix (fix_before/fix_after) is read from the finding's
     // stored code-location evidence content. The producer requires it; without
     // a fix-bearing code location there is nothing to assemble.
     let fixLocation: { file?: string; fix_before?: string; fix_after?: string } | null = null
     for (const ev of evidence) {
+      if (ev.type !== "code_location") continue
       if (!ev.storageUri) continue
       try {
         const artifact = await readEncryptedArtifact(ev.storageUri, workspaceId)
@@ -117,38 +163,45 @@ export async function processFixGenerateJob(
     }
 
     if (
-      !fixLocation?.file ||
-      fixLocation.fix_before === undefined ||
-      fixLocation.fix_after === undefined
+      !composerFix &&
+      (!fixLocation?.file ||
+        fixLocation.fix_before === undefined ||
+        fixLocation.fix_after === undefined)
     ) {
       return { status: "skipped", reason: "no structured fix in the finding's evidence" }
     }
 
-    const anchorFile = fixLocation.file
+    const anchorFile = composerFix?.lockPath ?? fixLocation!.file!
     const implicatedFiles = [anchorFile]
 
     // Build the diff from before → after on the implicated file.
-    const diff = buildUnifiedDiff(anchorFile, fixLocation.fix_before, fixLocation.fix_after)
+    const diff =
+      composerFix?.diff ??
+      buildUnifiedDiff(anchorFile, fixLocation!.fix_before!, fixLocation!.fix_after!)
     if (!diff) {
       return { status: "skipped", reason: "fix produced no change" }
     }
 
     // Resolve the plan for the scope policy (read outside the transaction —
     // plan resolution needs no row locks).
-    const workspace = await withWorkspaceRLS(workspaceId, (tx) =>
-      tx.workspace.findUnique({
-        where: { id: workspaceId },
-        select: { plan: true },
-      })
-    )
-    const policy = patchScopeForPlan(workspace?.plan ?? "STARTER")
-
     // Validate the generated diff against the plan-tiered scope before storing.
-    const validation = validatePatchDiff(diff, anchorFile, implicatedFiles, policy)
+    const validation = composerFix
+      ? validateComposerFixArtifact(
+          composerFix,
+          {
+            workspaceId,
+            targetId: finding.targetId!,
+            findingId: finding.id,
+            proposalId: fixProposalId,
+            baseCommit: finding.baseCommit!,
+          },
+          policy
+        )
+      : validatePatchDiff(diff, anchorFile, implicatedFiles, policy)
     if (!validation.ok) {
       await withWorkspaceRLS(workspaceId, (tx) =>
-        tx.fixProposal.update({
-          where: { id: fixProposalId },
+        tx.fixProposal.updateMany({
+          where: { id: fixProposalId, status: "draft", finding: { workspaceId }, deletedAt: null },
           data: { status: "failed" },
         })
       )
@@ -168,9 +221,9 @@ export async function processFixGenerateJob(
       workspaceId,
       ownerId: finding.id,
       type: "fix-patch",
-      content: diff,
+      content: composerFix ? JSON.stringify(composerFix) : diff,
       artifactId: `fix-${fixProposalId}`,
-      contentType: "text/x-diff; charset=utf-8",
+      contentType: composerFix ? "application/json; charset=utf-8" : "text/x-diff; charset=utf-8",
     })
 
     const checksum = diffChecksum(diff)
@@ -184,11 +237,16 @@ export async function processFixGenerateJob(
         where: { id: fixProposalId },
         select: { status: true },
       })
-      if (current?.status === "ready") return false
-      await tx.fixProposal.update({
-        where: { id: fixProposalId },
-        data: { diffRef: artifact.storageUri, status: "ready" },
+      if (current?.status !== "draft") return false
+      const claimed = await tx.fixProposal.updateMany({
+        where: { id: fixProposalId, status: "draft", finding: { workspaceId }, deletedAt: null },
+        data: {
+          diffRef: artifact.storageUri,
+          status: "ready",
+          ...(composerFix ? { kind: "composer_update" } : {}),
+        },
       })
+      if (claimed.count !== 1) return false
       await tx.finding.update({
         where: { id: finding.id },
         data: { implicatedFiles },
@@ -196,7 +254,7 @@ export async function processFixGenerateJob(
       return true
     })
     if (!linked) {
-      return { status: "skipped", reason: "proposal already ready" }
+      return { status: "skipped", reason: "proposal is no longer a draft" }
     }
 
     logger.info("Fix patch generated and stored", {

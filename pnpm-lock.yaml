@@ -893,6 +893,10 @@ importers:
         version: 6.0.3
 
   packages/fix:
+    dependencies:
+      zod:
+        specifier: 'catalog:'
+        version: 4.5.4
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
