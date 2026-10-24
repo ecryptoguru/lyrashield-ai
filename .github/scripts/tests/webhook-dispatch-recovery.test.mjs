@@ -79,7 +79,7 @@ test("cutover retry requires a proven receipt or reclassifies only on current ma
   const runtime = readFileSync(".github/workflows/deploy-azure-runtime.yml", "utf8")
   const section = runtime.slice(
     runtime.indexOf("      - name: Revalidate retry state for an automatic first cutover"),
-    runtime.indexOf("      # A retried first cutover may reuse")
+    runtime.indexOf("      - name: Verify compatible webhook cutover baseline")
   )
   assert.match(
     section,
