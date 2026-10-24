@@ -30,6 +30,7 @@ write_mocks() {
   do
     printf 'image asset: %s\n' "$asset" > "$case_dir/image-assets/$asset"
   done
+  printf 'redis.fixture 13.200.201.38 6379\nredis.fixture 13.234.196.111 6379\n' > "$case_dir/egress-pins"
   local host_script
   for host_script in \
     lyrashield-run-worker \
@@ -438,6 +439,7 @@ run_case() {
       LYRASHIELD_WORKER_IMAGE_FLOOR_BYTES="$floor_env" \
       LYRASHIELD_WORKER_RUNTIME_CONFIG="$case_dir/runtime.conf" \
       LYRASHIELD_WORKER_ENV_FILE="$case_dir/worker.env" \
+      LYRASHIELD_EGRESS_PIN_FILE="$case_dir/egress-pins" \
       LYRASHIELD_WORKER_PROMOTION_STATE_DIR="$case_dir/promotion" \
       LYRASHIELD_WORKER_HOST_LIBEXEC_DIR="$case_dir/host/libexec" \
       LYRASHIELD_WORKER_HOST_ASSETS_DIR="$case_dir/host/assets" \
@@ -688,6 +690,7 @@ preflight_output=$(
     MOCK_ORDER_LOG="$preflight_dir/order.log" \
     LYRASHIELD_WORKER_RUNTIME_CONFIG="$preflight_dir/runtime.conf" \
     LYRASHIELD_WORKER_ENV_FILE="$preflight_dir/worker.env" \
+    LYRASHIELD_EGRESS_PIN_FILE="$preflight_dir/egress-pins" \
     LYRASHIELD_WORKER_HOST_LIBEXEC_DIR="$preflight_dir/host/libexec" \
     LYRASHIELD_WORKER_HOST_ASSETS_DIR="$preflight_dir/host/assets" \
     LYRASHIELD_WORKER_ENV_LIB="$repo/ops/worker/worker-env.sh" \
@@ -696,5 +699,16 @@ preflight_output=$(
 grep -Fq 'Worker empty-queue preflight passed' <<< "$preflight_output"
 [ "$(grep -Fxc 'refresh-secrets' "$preflight_dir/order.log")" -eq 1 ]
 [ ! -s "$preflight_dir/systemctl.log" ]
+
+while IFS= read -r log; do
+  while IFS= read -r line; do
+    case "$line" in
+      run*lyrashield-maintenance-*|run*lyrashield-candidate-check-*)
+        [[ "$line" == *"--add-host redis.fixture:13.200.201.38"* ]]
+        [[ "$line" == *"--add-host redis.fixture:13.234.196.111"* ]]
+        ;;
+    esac
+  done < "$log"
+done < <(find "$tmp" -name docker.log -type f)
 
 echo "Worker promotion systemd proof passed."

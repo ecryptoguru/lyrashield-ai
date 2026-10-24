@@ -34,6 +34,31 @@ worker_image_from_config() {
   printf '%s\n' "$image"
 }
 
+# Match the live worker's committed DNS pins; independent DNS can leave the firewall allowlist.
+worker_pinned_host_args() {
+  pins=${LYRASHIELD_EGRESS_PIN_FILE:-/run/lyrashield-egress-hosts}
+  [ -r "$pins" ] && [ -s "$pins" ] || {
+    echo "Worker egress pins are unavailable" >&2
+    return 1
+  }
+  while read -r pinned_host pinned_address pinned_port extra || [ -n "$pinned_host" ]; do
+    case "$pinned_host" in
+      ''|*[!A-Za-z0-9.-]*) echo "Invalid host in worker egress pins" >&2; return 1 ;;
+    esac
+    case "$pinned_address" in
+      ''|*[!0-9.]*) echo "Invalid IPv4 address in worker egress pins" >&2; return 1 ;;
+    esac
+    case "$pinned_port" in
+      ''|*[!0-9]*) echo "Invalid port in worker egress pins" >&2; return 1 ;;
+    esac
+    [ -z "$extra" ] && [ "$pinned_port" -ge 1 ] && [ "$pinned_port" -le 65535 ] || {
+      echo "Invalid worker egress pin entry" >&2
+      return 1
+    }
+    printf '%s\n' "--add-host ${pinned_host}:${pinned_address}"
+  done < "$pins"
+}
+
 # Runs a one-shot worker-image container with the full worker environment: the
 # environment file plus the same --env set the live worker gets. The docker
 # socket and the shared root stay unmounted; the container only reaches
@@ -42,7 +67,8 @@ worker_oneshot() (
   code=$1
   shift
   image=$(worker_image_from_config)
-  env_args=$(lyrashield_worker_env_args "$config" "$environment_file")
+  env_args=$(lyrashield_worker_env_args "$config" "$environment_file") || return 1
+  pin_args=$(worker_pinned_host_args) || return 1
   probe_dir=$(mktemp -d)
   probe_name="lyrashield-maintenance-$(basename "$probe_dir")"
   cleanup_probe() {
@@ -75,7 +101,7 @@ worker_oneshot() (
     --cidfile "$probe_dir/container.id" --network bridge --no-healthcheck \
     --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m \
     --env-file "$environment_file" \
-    $env_args \
+    $pin_args $env_args \
     --env TMPDIR=/tmp \
     -w /app/apps/worker "$image" \
     node --import tsx --input-type=module -e "$code" "$@"
@@ -84,7 +110,8 @@ worker_oneshot() (
 worker_candidate_oneshot() (
   code=$1
   shift
-  env_args=$(lyrashield_worker_env_args "$config" "$environment_file")
+  env_args=$(lyrashield_worker_env_args "$config" "$environment_file") || return 1
+  pin_args=$(worker_pinned_host_args) || return 1
   probe_dir=$(mktemp -d)
   probe_name="lyrashield-candidate-check-$(basename "$probe_dir")"
   cleanup_probe() {
@@ -111,7 +138,7 @@ worker_candidate_oneshot() (
   timeout --kill-after=10s 120s docker run --name "$probe_name" \
     --cidfile "$probe_dir/container.id" --network bridge --no-healthcheck \
     --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m \
-    --env-file "$environment_file" $env_args --env TMPDIR=/tmp \
+    --env-file "$environment_file" $pin_args $env_args --env TMPDIR=/tmp \
     -w /app/apps/worker "$target" node --import tsx --input-type=module -e "$code" "$@"
 )
 
