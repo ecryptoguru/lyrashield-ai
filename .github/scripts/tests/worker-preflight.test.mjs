@@ -346,6 +346,10 @@ const preflightEnvFile = [
 
 const installPreflightSecretRefresher = (directory) => {
   writeFileSync(
+    path.join(directory, "egress-pins"),
+    "redis.internal 13.200.201.38 6379\nredis.internal 13.234.196.111 6379\npostgres.internal 13.200.110.68 5432\n"
+  )
+  writeFileSync(
     path.join(directory, "timeout"),
     '#!/bin/sh\nset -eu\ncase "$1 $2" in\n  "--kill-after=10s 120s"|"--kill-after=5s 10s") ;;\n  *) exit 1 ;;\nesac\nshift 2\nexec "$@"\n',
     { mode: 0o700 }
@@ -424,6 +428,7 @@ test("worker preflight reads refreshed Key Vault credentials without restarting 
           MOCK_LIVE_DATABASE_URL: "postgres://worker:other@postgres.internal:5432/lyrashield",
           LYRASHIELD_WORKER_RUNTIME_CONFIG: runtimeConfig,
           LYRASHIELD_WORKER_ENV_FILE: envFile,
+          LYRASHIELD_EGRESS_PIN_FILE: path.join(directory, "egress-pins"),
           LYRASHIELD_WORKER_ENV_LIB: path.resolve("ops/worker/worker-env.sh"),
           LYRASHIELD_WORKER_HOST_LIBEXEC_DIR: directory,
         },
@@ -437,6 +442,12 @@ test("worker preflight reads refreshed Key Vault credentials without restarting 
     assert.equal(env.TMPDIR, "/tmp")
     assert.ok(tokens.includes("/tmp:rw,nosuid,nodev,noexec,size=64m"))
     assert.ok(!tokens.includes("--mount"))
+    const hosts = tokens.flatMap((token, i) => (token === "--add-host" ? [tokens[i + 1]] : []))
+    assert.deepEqual(hosts, [
+      "redis.internal:13.200.201.38",
+      "redis.internal:13.234.196.111",
+      "postgres.internal:13.200.110.68",
+    ])
     const passedNames = new Set()
     for (let i = 0; i < tokens.length; i++) {
       if (tokens[i] === "--env") passedNames.add(tokens[i + 1].split("=")[0])
@@ -462,6 +473,26 @@ test("worker preflight reads refreshed Key Vault credentials without restarting 
     ]) {
       assert.throws(() => run(state))
     }
+    for (const pins of [
+      "",
+      "bad;host 13.200.201.38 6379\n",
+      "redis.internal bad:address 6379\n",
+      "redis.internal 13.200.201.38 6379 extra\n",
+    ]) {
+      writeFileSync(path.join(directory, "egress-pins"), pins)
+      const before = readFileSync(dockerLog, "utf8")
+        .split("\n")
+        .filter((line) => line.startsWith("run ")).length
+      assert.throws(() => run(JSON.stringify(empty)))
+      assert.equal(
+        readFileSync(dockerLog, "utf8")
+          .split("\n")
+          .filter((line) => line.startsWith("run ")).length,
+        before
+      )
+    }
+    rmSync(path.join(directory, "egress-pins"))
+    assert.throws(() => run(JSON.stringify(empty)))
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
@@ -506,6 +537,7 @@ test("worker preflight reports a stale worker environment without printing endpo
           MOCK_LIVE_DATABASE_URL: liveDatabaseUrl,
           LYRASHIELD_WORKER_RUNTIME_CONFIG: runtimeConfig,
           LYRASHIELD_WORKER_ENV_FILE: envFile,
+          LYRASHIELD_EGRESS_PIN_FILE: path.join(directory, "egress-pins"),
           LYRASHIELD_WORKER_ENV_LIB: path.resolve("ops/worker/worker-env.sh"),
           LYRASHIELD_WORKER_HOST_LIBEXEC_DIR: directory,
         },
@@ -591,6 +623,7 @@ test("preflight environment loads @lyrashield/config in production and matches t
         MOCK_LIVE_DATABASE_URL: "postgres://worker:other@postgres.internal:5432/lyrashield",
         LYRASHIELD_WORKER_RUNTIME_CONFIG: runtimeConfig,
         LYRASHIELD_WORKER_ENV_FILE: envFile,
+        LYRASHIELD_EGRESS_PIN_FILE: path.join(directory, "egress-pins"),
         LYRASHIELD_WORKER_ENV_LIB: path.resolve("ops/worker/worker-env.sh"),
         LYRASHIELD_WORKER_HOST_LIBEXEC_DIR: directory,
       },
