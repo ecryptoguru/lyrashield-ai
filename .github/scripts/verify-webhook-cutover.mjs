@@ -245,7 +245,17 @@ for (const name of [
       )
     )
       fail("Writer OCI revision does not match source identity")
-    run("git", ["fetch", "--no-tags", "origin", identity])
+    // Authenticate this private-repository fetch without storing the job token in Git config.
+    run("git", [
+      "-c",
+      "credential.https://github.com.helper=",
+      "-c",
+      "credential.https://github.com.helper=!gh auth git-credential",
+      "fetch",
+      "--no-tags",
+      "origin",
+      identity,
+    ])
     const source = run("git", ["show", `${identity}:packages/billing/src/webhook-tracks.ts`])
     const sourceProtocol = source.match(
       /export const WEBHOOK_TRACK_CLAIM_PROTOCOL\s*=\s*["']([^"']+)["']/

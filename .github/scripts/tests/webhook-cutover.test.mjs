@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { createHash } from "node:crypto"
+import { createHash, randomUUID } from "node:crypto"
 import { spawnSync } from "node:child_process"
 import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
@@ -429,7 +429,7 @@ function fixture(t, scenario, expectedMode) {
   )
   executable(
     "git",
-    `if(process.argv[2]==="show") { const identity=process.argv[3].split(":")[0]; console.log([${JSON.stringify(legacyProduct)},${JSON.stringify(alternateLegacyProduct)},${JSON.stringify(legacyUnapprovedProduct)}].includes(identity)?${JSON.stringify('export const WEBHOOK_TRACK_CLAIM_PROTOCOL = "durable-claims/1"')}:${JSON.stringify(scenario === "unknown writer source" ? "export const OTHER_PROTOCOL = true" : `export const WEBHOOK_TRACK_CLAIM_PROTOCOL = "${protocol}"`)}); }`
+    `const args=process.argv.slice(2); if(${JSON.stringify(scenario)}==="private source fetch" && args.includes("fetch") && (!args.includes("credential.https://github.com.helper=!gh auth git-credential") || !process.env.GH_TOKEN)) { console.error("Private source fetch requires scoped GitHub authentication"); process.exit(1); } if(process.argv[2]==="show") { const identity=process.argv[3].split(":")[0]; console.log([${JSON.stringify(legacyProduct)},${JSON.stringify(alternateLegacyProduct)},${JSON.stringify(legacyUnapprovedProduct)}].includes(identity)?${JSON.stringify('export const WEBHOOK_TRACK_CLAIM_PROTOCOL = "durable-claims/1"')}:${JSON.stringify(scenario === "unknown writer source" ? "export const OTHER_PROTOCOL = true" : `export const WEBHOOK_TRACK_CLAIM_PROTOCOL = "${protocol}"`)}); }`
   )
   const output = path.join(directory, "github-output")
   writeFileSync(output, "")
@@ -442,6 +442,7 @@ function fixture(t, scenario, expectedMode) {
       PATH: `${directory}:${process.env.PATH}`,
       AZURE_KEY_VAULT_NAME: "vault",
       GHCR_USERNAME: "owner",
+      GH_TOKEN: randomUUID(),
       AZURE_WEBHOOK_WRITER_TOPOLOGY:
         scenario === "unknown topology"
           ? "unknown"
@@ -473,6 +474,22 @@ test("fully compatible writers and migrations select ordinary release", (t) => {
   assert.equal(result.status, 0, result.stderr)
   assert.match(result.stdout, /Webhook baseline verified/)
   assert.match(result.githubOutput, /webhook_claims_cutover=false/)
+})
+
+test("private source verification authenticates fetch without persisting checkout credentials", (t) => {
+  const result = fixture(t, "private source fetch")
+  assert.equal(result.status, 0, result.stderr)
+  assert.match(result.stdout, /Webhook baseline verified/)
+  const workflow = readFileSync(".github/workflows/deploy-azure-runtime.yml", "utf8")
+  for (const name of [
+    "Verify compatible webhook cutover baseline",
+    "Verify installed compatible webhook writer baseline",
+  ]) {
+    const step = workflow.split(`- name: ${name}\n`)[1]?.split("\n      - name:")[0]
+    assert.ok(step, name)
+    assert.match(step, /GH_TOKEN: \$\{\{ github\.token }\}/)
+  }
+  assert.doesNotMatch(workflow, /persist-credentials: true/)
 })
 
 test("digest-only writer image with explicit revision selects ordinary release", (t) => {

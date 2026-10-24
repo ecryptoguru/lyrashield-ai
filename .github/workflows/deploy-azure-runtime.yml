@@ -297,12 +297,11 @@ jobs:
             exit 1
           fi
 
-      # A retried first cutover may reuse its mode only after same-run receipt
-      # proof. If no receipt exists, reclassify the still-live first-cutover
-      # baseline; stale workflow outputs alone never authorize maintenance.
+      # Reuse first-cutover mode only with a same-run receipt; otherwise reclassify live writers.
       - name: Verify compatible webhook cutover baseline
         if: inputs.held_recovery != true && (inputs.webhook_claims_cutover != true || github.run_attempt == 1 || steps.cutover-retry.outputs.receipt == 'absent')
         env:
+          GH_TOKEN: ${{ github.token }}
           AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
           AZURE_APP_CONTAINER_APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
           AZURE_SCANNER_CONTAINER_APP_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
@@ -918,6 +917,7 @@ jobs:
       - name: Verify installed compatible webhook writer baseline
         if: inputs.webhook_claims_cutover == true || inputs.held_recovery == true
         env:
+          GH_TOKEN: ${{ github.token }}
           AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
           AZURE_APP_CONTAINER_APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
           AZURE_SCANNER_CONTAINER_APP_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
