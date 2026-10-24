@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1113.0",
+    "@iarna/toml": "^2.2.5",
     "@lyrashield/affiliate": "workspace:*",
     "@lyrashield/auth": "workspace:*",
     "@lyrashield/billing": "workspace:*",
@@ -29,7 +30,7 @@
     "@lyrashield/myra": "workspace:*",
     "@lyrashield/security": "workspace:*",
     "@lyrashield/types": "workspace:*",
-    "@sentry/node": "^10.70.0",
+    "@sentry/node": "^10.75.2",
     "bullmq": "6.2.0",
     "ioredis": "^5.11.1",
     "tsx": "catalog:",
@@ -37,6 +38,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@types/iarna__toml": "^2.0.5",
     "@types/node": "catalog:",
     "typescript": "catalog:"
   }

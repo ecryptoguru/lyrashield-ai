@@ -1,5 +1,6 @@
 ---
 import ToolLayout from "@layouts/ToolLayout.astro"
+import Php2ShellChecker from "@components/tools/Php2ShellChecker.astro"
 import AiAppSecurityScanner from "@components/tools/AiAppSecurityScanner.astro"
 import WebMcpSecurityLab from "@components/tools/WebMcpSecurityLab.astro"
 import { tools } from "../../lib/tools"
@@ -83,6 +84,7 @@ const exampleButtonClass = "mt-3 inline-flex min-h-11 items-center rounded-lg bo
       <output id="tool-result" class="mt-6 block" aria-live="polite"></output>
     </>
   )}
+  {tool.slug === "php2shell-checker" && <Php2ShellChecker />}
   {tool.slug === "ai-app-security-scanner" && <AiAppSecurityScanner />}
   {tool.slug === "webmcp-security-checker" && <WebMcpSecurityLab />}
 </ToolLayout>

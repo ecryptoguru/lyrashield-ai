@@ -137,8 +137,8 @@
     },
     "apps/web/src/app/(dashboard)/dashboard/findings/fixes-client.tsx|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 20,
-      "maxExcess": 20
+      "totalExcess": 19,
+      "maxExcess": 19
     },
     "apps/web/src/app/(dashboard)/dashboard/findings/page.tsx|max-lines-per-function": {
       "count": 1,
@@ -482,8 +482,8 @@
     },
     "apps/worker/src/engine/result-integrity/retest-completion.ts|max-lines-per-function": {
       "count": 2,
-      "totalExcess": 103,
-      "maxExcess": 54
+      "totalExcess": 95,
+      "maxExcess": 50
     },
     "apps/worker/src/engine/runner-process.ts|max-lines-per-function": {
       "count": 2,
@@ -515,15 +515,10 @@
       "totalExcess": 10,
       "maxExcess": 10
     },
-    "apps/worker/src/engine/scanners/iac-scanner.ts|max-lines": {
-      "count": 1,
-      "totalExcess": 54,
-      "maxExcess": 54
-    },
     "apps/worker/src/engine/scanners/iac-scanner.ts|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 46,
-      "maxExcess": 46
+      "totalExcess": 5,
+      "maxExcess": 5
     },
     "apps/worker/src/engine/scanners/openapi-scanner.ts|max-lines-per-function": {
       "count": 1,
@@ -532,23 +527,18 @@
     },
     "apps/worker/src/engine/scanners/resolved-dependencies.ts|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 17,
-      "maxExcess": 17
+      "totalExcess": 8,
+      "maxExcess": 8
     },
     "apps/worker/src/engine/scanners/sast-scanner.ts|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 23,
-      "maxExcess": 23
-    },
-    "apps/worker/src/engine/scanners/sca-scanner.ts|max-lines": {
-      "count": 1,
-      "totalExcess": 154,
-      "maxExcess": 154
+      "totalExcess": 12,
+      "maxExcess": 12
     },
     "apps/worker/src/index.ts|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 99,
-      "maxExcess": 99
+      "totalExcess": 91,
+      "maxExcess": 91
     },
     "apps/worker/src/jobs/run-scan.job.ts|max-lines": {
       "count": 1,

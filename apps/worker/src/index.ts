@@ -17,7 +17,7 @@ import { FIX_GENERATE_QUEUE_NAME, type FixGenerateJobData } from "@lyrashield/in
 import { SCAN_QUEUE_NAME, type ScanJobData, type ScanJobResult } from "./types"
 import { processScanJob } from "./jobs/run-scan.job"
 import { processWebhookTrackRetry } from "./jobs/webhook-track-retry.job"
-import { processFixGenerateJob, type FixGenerateJobResult } from "./jobs/fix-generate.job"
+import { processQueuedFixGenerateJob, type FixGenerateJobResult } from "./jobs/fix-generate.job"
 import { startScheduleRunner } from "./schedules"
 import { startBillingJobsScheduler } from "./billing-jobs-scheduler"
 import { startApprovalExpiryRunner } from "./approval-expiry"
@@ -495,15 +495,7 @@ async function main(): Promise<void> {
   // engine-emitted structured fix and stores it for the approval-bound PR flow.
   fixGenerateWorker = new Worker<FixGenerateJobData, FixGenerateJobResult>(
     FIX_GENERATE_QUEUE_NAME,
-    async (job) => {
-      const result = await processFixGenerateJob(job.data)
-      logger.info("Fix generation job processed", {
-        jobId: job.id,
-        fixProposalId: job.data.fixProposalId,
-        status: result.status,
-      })
-      return result
-    },
+    processQueuedFixGenerateJob,
     {
       connection: {
         url: env.REDIS_URL || "redis://localhost:6379",

@@ -11,7 +11,7 @@ const description =
 // One editorial review date drives the visible "Last reviewed" text, the
 // <time datetime> attribute, the page JSON-LD dateModified and the sitemap
 // lastmod (parsed in astro.config.mjs). Change this constant only.
-const reviewed = "2026-10-11"
+const reviewed = "2026-10-24"
 const reviewedLabel = new Date(`${reviewed}T00:00:00Z`).toLocaleDateString("en-GB", {
   day: "numeric",
   month: "short",
@@ -237,6 +237,13 @@ const jsonLd = [
           </tbody>
         </table>
       </div>
+    </section>
+
+    <section aria-labelledby="php-coverage-heading" class="border-t border-border py-16" data-reveal-group>
+      <h2 id="php-coverage-heading" class="text-2xl font-semibold text-text" data-reveal>PHP source evidence and runtime proof</h2>
+      <p class="mt-5 max-w-3xl leading-7 text-text-muted" data-reveal>Standard and Deep repository source support detects PHP projects before adding Composer inventory, runtime declaration checks and bounded PHP code analysis. In a monorepo, each PHP service needs its own usable runtime identity; missing identity and incomplete discovery stay visible as coverage limits. These source capabilities require separate release and customer acceptance evidence.</p>
+      <p class="mt-5 max-w-3xl leading-7 text-text-muted" data-reveal>A Dockerfile tag, a Composer platform setting or a public version header cannot establish what is running. Updating a Composer package cannot patch PHP itself. Runtime findings remain inconclusive after a source-only retest because LyraShield has no trusted deployed-runtime verifier; operators need deployment and worker replacement evidence plus independent runtime readback.</p>
+      <p class="mt-5 max-w-3xl leading-7 text-text-muted" data-reveal>The free <a href="/tools/php2shell-checker" class="font-medium text-accent underline underline-offset-4">PHP2Shell checker</a> reviews your reported version and conditions locally in your browser, including a separate 23 October session upload progress notice. It uploads no inputs and sends no exploit or target requests. Its result does not verify a deployment or rule out compromise.</p>
     </section>
 
     <section aria-labelledby="limits-heading" class="rounded-2xl border border-border bg-bg-raised p-7 sm:p-9" data-reveal="scale">

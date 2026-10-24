@@ -63,7 +63,7 @@ class ScrollWorld extends HTMLElement {
     this.reduced.addEventListener("change", this.preference)
     this.video.addEventListener("loadedmetadata", this.metadata)
     this.video.addEventListener("seeked", this.seeked)
-    this.video.addEventListener("error", this.fail)
+    this.video.addEventListener("error", this.mediaError)
     document.addEventListener("visibilitychange", this.documentVisibility)
     addEventListener("resize", this.geometry, { passive: true })
     this.resize = new ResizeObserver(this.measure)
@@ -104,7 +104,7 @@ class ScrollWorld extends HTMLElement {
     this.toggle?.removeEventListener("click", this.toggleMotion)
     this.video?.removeEventListener("loadedmetadata", this.metadata)
     this.video?.removeEventListener("seeked", this.seeked)
-    this.video?.removeEventListener("error", this.fail)
+    this.video?.removeEventListener("error", this.mediaError)
     cancelAnimationFrame(this.frame)
     this.release()
   }
@@ -113,6 +113,20 @@ class ScrollWorld extends HTMLElement {
     const saveData = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection
       ?.saveData
     return this.enabled && !this.reduced.matches && !saveData
+  }
+
+  private ensureActiveMedia() {
+    if (!this.isConnected) return false
+    // Preference notifications may trail already queued media work.
+    if (!this.allowed()) {
+      if (this.dataset.worldState !== "static") this.preference()
+      return false
+    }
+    return !this.failed && !!this.video.getAttribute("src")
+  }
+
+  private mediaError = () => {
+    if (this.ensureActiveMedia()) this.fail()
   }
 
   private toggleMotion = () => {
@@ -201,6 +215,7 @@ class ScrollWorld extends HTMLElement {
   }
 
   private metadata = () => {
+    if (!this.ensureActiveMedia()) return
     if (!Number.isFinite(this.video.duration) || this.video.duration <= 0) {
       this.fail()
       return
@@ -213,6 +228,7 @@ class ScrollWorld extends HTMLElement {
   }
 
   private seeked = () => {
+    if (!this.ensureActiveMedia()) return
     this.observeFrame()
     if (this.inFlight && this.allowed() && !this.failed && !document.hidden) {
       this.prime()
@@ -229,7 +245,7 @@ class ScrollWorld extends HTMLElement {
       // promise. The presentation watchdog still catches an actual stall.
       if (epoch !== this.epoch || (error instanceof DOMException && error.name === "AbortError"))
         return
-      this.fail()
+      if (this.ensureActiveMedia()) this.fail()
     })
   }
 
@@ -252,7 +268,7 @@ class ScrollWorld extends HTMLElement {
         this.updatePoster()
       }
       this.dataset.worldTime = this.desired.toFixed(3)
-      if (this.allowed() && !this.failed) {
+      if (this.ensureActiveMedia()) {
         this.flush()
         if (Math.abs(this.eased - this.desired) > 0.001) this.queue()
       }
@@ -287,11 +303,18 @@ class ScrollWorld extends HTMLElement {
   }
 
   private observeFrame() {
-    if (this.presentation || !("requestVideoFrameCallback" in this.video)) return
+    if (
+      this.presentation ||
+      !this.ensureActiveMedia() ||
+      !("requestVideoFrameCallback" in this.video)
+    )
+      return
     const epoch = this.epoch
     this.presentation = this.video.requestVideoFrameCallback((_now, metadata) => {
+      // A retired callback must not clear the replacement decoder's handle.
+      if (epoch !== this.epoch) return
       this.presentation = 0
-      if (epoch !== this.epoch || !this.isConnected) return
+      if (!this.ensureActiveMedia()) return
       this.dataset.worldPresented = metadata.mediaTime.toFixed(3)
       if (this.priming) {
         this.priming = false
@@ -331,7 +354,10 @@ class ScrollWorld extends HTMLElement {
 
   private armDeadline(ms: number) {
     this.clearDeadline()
-    this.deadline = window.setTimeout(this.fail, ms)
+    const epoch = this.epoch
+    this.deadline = window.setTimeout(() => {
+      if (epoch === this.epoch && this.ensureActiveMedia()) this.fail()
+    }, ms)
   }
   private clearDeadline() {
     clearTimeout(this.deadline)

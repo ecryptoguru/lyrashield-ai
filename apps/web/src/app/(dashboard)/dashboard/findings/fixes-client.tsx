@@ -17,11 +17,17 @@ type BadgeVariant = "default" | "success" | "danger" | "warning" | "info" | "mut
 
 const PROPOSAL_STATUS_BADGE: Record<string, BadgeVariant> = {
   draft: "muted",
+  ready: "info",
+  failed: "danger",
   approved: "info",
   pr_opened: "info",
   pr_merged: "success",
   pr_closed: "muted",
   rejected: "danger",
+}
+const PROPOSAL_STATUS_LABEL: Record<string, string> = {
+  ready: "Ready for review",
+  failed: "Generation failed",
 }
 
 interface FixProposalItem {
@@ -98,6 +104,28 @@ const fixProposalItemSchema = z
 
 const fixProposalsPaginatedSchema = paginatedResponseSchema(fixProposalItemSchema)
 
+function ProposalReviewDetails({ kind, summary }: Pick<FixProposalItem, "kind" | "summary">) {
+  return (
+    <>
+      {kind === "composer_update" && (
+        <p className="border-warning/30 bg-warning/5 mt-3 rounded-md border p-3 text-sm">
+          <strong>Application compatibility is unverified.</strong> Review the draft pull request
+          and run your application tests before merging. Lockfile consistency does not verify
+          application behavior.
+        </p>
+      )}
+      <details className="mt-3 min-w-0 rounded-md border p-3">
+        <summary className="focus-visible:ring-ring cursor-pointer rounded text-sm font-medium focus-visible:ring-2 focus-visible:outline-none">
+          Review full proposal
+        </summary>
+        <p className="text-muted-foreground mt-2 whitespace-pre-wrap wrap-break-word text-sm">
+          {summary}
+        </p>
+      </details>
+    </>
+  )
+}
+
 /**
  * The Findings → Proposed fixes tab: every fix proposal in the workspace with
  * its parent finding, safety score, and pull requests. Formerly the
@@ -145,40 +173,39 @@ export function FixesClient({
           {proposals.map((proposal) => (
             <Card
               key={proposal.id}
+              role="article"
+              aria-label={`Proposed fix for ${proposal.finding.title}`}
               className="group p-5 transition-[border-color,box-shadow] duration-(--duration-base) ease-out hover:shadow-md"
             >
               <div>
-                <div className="mb-2 flex items-center gap-2">
+                <div className="mb-2 flex flex-wrap items-center gap-2">
                   <Badge variant={PROPOSAL_STATUS_BADGE[proposal.status] ?? "muted"}>
-                    {humanizeToken(proposal.status)}
+                    {PROPOSAL_STATUS_LABEL[proposal.status] ?? humanizeToken(proposal.status)}
                   </Badge>
                   <Badge variant={SEVERITY_BADGE[proposal.finding.severity] ?? "muted"}>
                     {severityLabel(proposal.finding.severity)}
                   </Badge>
                   {proposal.safetyScore != null && (
                     <div className="flex items-center gap-1">
-                      <Badge variant={proposal.safetyScore >= 80 ? "success" : "warning"}>
-                        Safety: {proposal.safetyScore}
-                      </Badge>
+                      <Badge variant="muted">Review score: {proposal.safetyScore}</Badge>
                       <Tooltip>
-                        <TooltipTrigger aria-label="What the safety score means">
+                        <TooltipTrigger aria-label="What the review score means">
                           <Info className="text-muted-foreground size-3.5" aria-hidden="true" />
                         </TooltipTrigger>
                         <TooltipContent className="max-w-xs">
-                          Estimated confidence that the proposed change is safe and correct (0–100).
-                          Higher is safer.
+                          A reported estimate for review (0–100). It does not verify security,
+                          correctness or application compatibility.
                         </TooltipContent>
                       </Tooltip>
                     </div>
                   )}
                 </div>
 
-                <h3 className="truncate font-semibold" title={proposal.finding.title}>
-                  {proposal.finding.title}
-                </h3>
-                <p className="text-muted-foreground mt-1 line-clamp-2 text-sm">
+                <h3 className="wrap-break-word font-semibold">{proposal.finding.title}</h3>
+                <p className="text-muted-foreground mt-1 line-clamp-2 wrap-break-word text-sm">
                   {proposal.summary}
                 </p>
+                <ProposalReviewDetails kind={proposal.kind} summary={proposal.summary} />
 
                 <div className="text-muted-foreground mt-3 flex flex-wrap items-center gap-3 text-xs">
                   {proposal.finding.cwe && (

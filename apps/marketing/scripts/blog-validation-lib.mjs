@@ -55,14 +55,15 @@ export const PROGRAM_RELEASES = Object.freeze([
   "batch-8",
   "batch-9",
   "batch-11",
+  "php2shell",
 ])
 
 // Declarative corpus size. Bump these together with a release: drift in either
 // direction still fails, but the expected shape is stated once instead of being
 // spread across hardcoded literals in the distribution assertions below.
-export const PROGRAM_ARTICLE_COUNT = 153
+export const PROGRAM_ARTICLE_COUNT = 160
 
-export const IMAGE_CORPUS = Object.freeze({ authority: 1, shared: 61 })
+export const IMAGE_CORPUS = Object.freeze({ authority: 1, shared: 68 })
 
 const MAX_SHARED_IMAGE_USAGE = 3
 
@@ -84,6 +85,7 @@ const CTA_LINK_REQUIREMENTS = Object.freeze({
   "Pillar + Secret Scanner": Object.freeze(["/tools/secret-exposure-scanner"]),
   "Pillar + JWT Inspector": Object.freeze(["/tools/jwt-session-inspector"]),
   "Pillar + Headers Checker": Object.freeze(["/tools/security-headers-checker"]),
+  "Pillar + PHP checker": Object.freeze(["/tools/php2shell-checker"]),
   "Pillar + full app scan CTA": FREE_CHECKLIST_ROUTE,
   "Pillar + product audit trail": FREE_CHECKLIST_ROUTE,
   "Pillar + schedules/notifications": FREE_CHECKLIST_ROUTE,
@@ -170,6 +172,9 @@ export const PROHIBITED_CLAIMS = [
 ]
 
 const OFFICIAL_HOSTS = [
+  "php.net",
+  "getcomposer.org",
+  "wordpress.org",
   "owasp.org",
   "mitre.org",
   "nist.gov",
@@ -215,6 +220,8 @@ const OFFICIAL_HOSTS = [
 ]
 
 const PRIMARY_HOSTS = [
+  "cloudlinux.statuspage.io",
+  "access.redhat.com",
   "datatracker.ietf.org",
   "rfc-editor.org",
   "docs.github.com",

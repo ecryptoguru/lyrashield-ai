@@ -26,7 +26,7 @@ const buildDate =
 // Explicit freshness floor: the last content change to this page. The
 // git-derived buildDate wins when it resolves; the floor keeps dateModified
 // honest when the page ships without .git.
-const updatedDate = "2026-10-05"
+const updatedDate = "2026-10-24"
 const dateModified = buildDate ?? `${updatedDate}T00:00:00.000Z`
 const cloudPlans = CLOUD_PLANS.filter((plan) => plan.selfServe)
 
@@ -301,7 +301,7 @@ const jsonLd = [
         <div class="mt-6 grid gap-4 sm:grid-cols-3">
           <article class="rounded-xl border border-border bg-bg p-5">
             <h3 class="font-semibold text-text">LyraShield covers</h3>
-            <p class="mt-2 text-sm leading-6 text-text-muted">Repository, URL and API reviews, agent-tool surfaces and an operational evidence record.</p>
+            <p class="mt-2 text-sm leading-6 text-text-muted">Repository, URL and API reviews, agent-tool surfaces and an operational evidence record. PHP source support adds Composer inventory, runtime advisory leads and bounded code checks in Standard and Deep.</p>
           </article>
           <article class="rounded-xl border border-border bg-bg p-5">
             <h3 class="font-semibold text-text">Scanners you already run</h3>
@@ -315,6 +315,7 @@ const jsonLd = [
         <div class="mt-5 flex flex-wrap gap-x-6 gap-y-2 text-sm font-semibold">
           <a href="/vibe-security-50" data-cta-id="homepage-coverage-controls" class="inline-flex min-h-11 items-center text-accent underline underline-offset-4">Vibe Security 50</a>
           <a href="/evidence-vault" data-cta-id="homepage-coverage-vault" class="inline-flex min-h-11 items-center text-accent underline underline-offset-4">Evidence Vault</a>
+          <a href="/tools/php2shell-checker" data-cta-id="homepage-coverage-php2shell" class="inline-flex min-h-11 items-center text-accent underline underline-offset-4">Free PHP2Shell checker</a>
         </div>
       </div>
       <aside class="rounded-xl border border-border bg-bg p-5">

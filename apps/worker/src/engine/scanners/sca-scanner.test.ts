@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { writeFile, mkdir } from "fs/promises"
+import { writeFile, mkdir, symlink, chmod } from "fs/promises"
 import { join } from "path"
 import { tmpdir } from "os"
 import { rmSync } from "fs"
@@ -492,4 +492,405 @@ describe("scanSca", () => {
       cleanupRepo()
     }
   })
+})
+
+// Keep real repository parsing and scanner behavior; only advisory transport is fake.
+describe("Composer SCA", () => {
+  beforeEach(() => {
+    cleanupRepo()
+    clearThreatIntelligenceCache()
+  })
+
+  it("queries the locked release, including transitive dependencies, rather than stripped ranges", async () => {
+    const dir = await setupRepo({
+      "composer.json": JSON.stringify({
+        require: { "vendor/pkg": "^1.0", php: "^8.3", "ext-json": "*" },
+      }),
+      "composer.lock": JSON.stringify({
+        "content-hash": "ae249e840ca7ae6b6c5fa888a15191cb",
+        packages: [
+          { name: "vendor/pkg", version: "1.2.3" },
+          { name: "vendor/transitive", version: "2.0.1" },
+        ],
+      }),
+    })
+    try {
+      const findings = await scanSca({
+        repoPath: dir,
+        workspaceDir: dir,
+        fetchFn: makeMockFetch({
+          "vendor/pkg@1.2.3": [{ id: "GHSA-locked", summary: "Locked issue" }],
+          "vendor/transitive@2.0.1": [{ id: "GHSA-transitive", summary: "Transitive issue" }],
+          "vendor/pkg@1.0": [{ id: "GHSA-guessed" }],
+        }),
+      })
+      expect(findings.map((finding) => finding.id)).toEqual(["GHSA-locked", "GHSA-transitive"])
+      expect(findings[0]).toMatchObject({
+        target: "composer.lock",
+        dependency_metadata: {
+          installed_version: "1.2.3",
+          package_ecosystem: "packagist",
+          lockfile_path: "composer.lock",
+        },
+        code_locations: [
+          { file: "composer.lock", label: expect.stringContaining("Resolved Composer package") },
+        ],
+      })
+    } finally {
+      cleanupRepo()
+    }
+  })
+
+  it("keeps missing Composer lock coverage incomplete without querying a guessed release", async () => {
+    const dir = await setupRepo({
+      "composer.json": JSON.stringify({ require: { "vendor/pkg": "^1.0" } }),
+    })
+    const coverageIssues: ScannerCoverageIssue[] = []
+    try {
+      const findings = await scanSca({
+        repoPath: dir,
+        workspaceDir: dir,
+        coverageIssues,
+        fetchFn: makeMockFetch({ "vendor/pkg@1.0": [{ id: "GHSA-guessed" }] }),
+      })
+      expect(findings).toEqual([])
+      expect(coverageIssues).toContainEqual(expect.objectContaining({ scanner: "sca" }))
+    } finally {
+      cleanupRepo()
+    }
+  })
+
+  it.each([new Response("down", { status: 503 }), new Response(JSON.stringify({ results: [] }))])(
+    "records advisory transport and truncated response failures as incomplete coverage",
+    async (response) => {
+      const dir = await setupRepo({
+        "package.json": JSON.stringify({ dependencies: { lodash: "4.17.20" } }),
+      })
+      const coverageIssues: ScannerCoverageIssue[] = []
+      try {
+        await scanSca({
+          repoPath: dir,
+          workspaceDir: dir,
+          coverageIssues,
+          fetchFn: async () => response,
+        })
+        expect(coverageIssues).toContainEqual(
+          expect.objectContaining({ scanner: "sca", status: "partial" })
+        )
+      } finally {
+        cleanupRepo()
+      }
+    }
+  )
+
+  it("records empty standalone input as unsupported coverage", async () => {
+    const dir = await setupRepo({ "README.md": "empty" })
+    const coverageIssues: ScannerCoverageIssue[] = []
+    try {
+      await scanSca({ repoPath: dir, workspaceDir: dir, coverageIssues })
+      expect(coverageIssues).toContainEqual(
+        expect.objectContaining({ scanner: "sca", status: "unsupported" })
+      )
+    } finally {
+      cleanupRepo()
+    }
+  })
+})
+
+describe("SCA advisory coverage", () => {
+  beforeEach(() => {
+    cleanupRepo()
+    clearThreatIntelligenceCache()
+  })
+
+  it.each([[], { vulns: [null] }, { vulns: [{ summary: "missing advisory id" }] }])(
+    "rejects malformed advisory records without reporting clean coverage",
+    async (entry) => {
+      const dir = await setupRepo({
+        "package.json": JSON.stringify({ dependencies: { lodash: "4.17.20" } }),
+      })
+      const coverageIssues: ScannerCoverageIssue[] = []
+      try {
+        const findings = await scanSca({
+          repoPath: dir,
+          workspaceDir: dir,
+          coverageIssues,
+          fetchFn: async () => new Response(JSON.stringify({ results: [entry] })),
+        })
+        expect(findings).toEqual([])
+        expect(coverageIssues).toContainEqual(
+          expect.objectContaining({ scanner: "sca", status: "partial" })
+        )
+      } finally {
+        cleanupRepo()
+      }
+    }
+  )
+
+  it("retains advisory findings while marking a shared partial batch incomplete", async () => {
+    const dir = await setupRepo({})
+    const coverageIssues: ScannerCoverageIssue[] = []
+    const pkg = {
+      name: "vendor/pkg",
+      version: "1.2.3",
+      ecosystem: "Packagist" as const,
+      filePath: "composer.lock",
+    }
+    try {
+      const findings = await scanSca({
+        repoPath: dir,
+        workspaceDir: dir,
+        coverageIssues,
+        resolvedDependencyInventory: {
+          status: "PARTIAL",
+          packages: [pkg],
+          unresolved: [{ ecosystem: "Packagist", name: "vendor/missing", reason: "not resolved" }],
+          truncated: false,
+          evidenceFile: {
+            path: "composer.lock",
+            content: "{}",
+            size: 2,
+            extension: ".lock",
+            language: "json",
+          },
+        },
+        advisoryBatch: {
+          status: "PARTIAL",
+          source: "OSV",
+          requestedCount: 2,
+          resolvedCount: 1,
+          results: [
+            { package: pkg, vulns: [{ id: "GHSA-exact", summary: "Exact lock advisory" }] },
+          ],
+          fetchedAt: null,
+          snapshotId: null,
+          snapshotChecksum: null,
+          cacheAgeSeconds: null,
+          supportedEcosystems: ["Packagist"],
+          unresolved: [
+            { ecosystem: "Packagist", name: "vendor/missing", reason: "advisory unavailable" },
+          ],
+        },
+      })
+      expect(findings.map((finding) => finding.id)).toEqual(["GHSA-exact"])
+      expect(coverageIssues).toContainEqual(
+        expect.objectContaining({ scanner: "sca", status: "partial" })
+      )
+    } finally {
+      cleanupRepo()
+    }
+  })
+
+  it("records missing shared advisory batches and unsupported inventories", async () => {
+    const dir = await setupRepo({})
+    const coverageIssues: ScannerCoverageIssue[] = []
+    try {
+      const findings = await scanSca({
+        repoPath: dir,
+        workspaceDir: dir,
+        coverageIssues,
+        resolvedDependencyInventory: {
+          status: "UNSUPPORTED",
+          packages: [],
+          unresolved: [],
+          truncated: false,
+          evidenceFile: {
+            path: "dependency-lockfile",
+            content: "",
+            size: 0,
+            extension: ".json",
+            language: "json",
+          },
+        },
+      })
+      expect(findings).toEqual([])
+      expect(coverageIssues).toContainEqual(
+        expect.objectContaining({ scanner: "sca", status: "unsupported" })
+      )
+    } finally {
+      cleanupRepo()
+    }
+  })
+})
+
+describe("SCA review regressions", () => {
+  beforeEach(() => {
+    cleanupRepo()
+    clearThreatIntelligenceCache()
+  })
+
+  it("validates COMPLETE shared advisory data before consuming findings", async () => {
+    const dir = await setupRepo({})
+    const coverageIssues: ScannerCoverageIssue[] = []
+    const pkg = {
+      name: "vendor/pkg",
+      version: "1.2.3",
+      ecosystem: "Packagist" as const,
+      filePath: "composer.lock",
+    }
+    const other = { ...pkg, name: "vendor/other" }
+    try {
+      const findings = await scanSca({
+        repoPath: dir,
+        workspaceDir: dir,
+        coverageIssues,
+        resolvedDependencyInventory: {
+          status: "COMPLETE",
+          packages: [pkg, other],
+          unresolved: [],
+          truncated: false,
+          evidenceFile: {
+            path: "composer.lock",
+            content: "{}",
+            size: 2,
+            extension: ".lock",
+            language: "json",
+          },
+        },
+        advisoryBatch: {
+          status: "COMPLETE",
+          source: "OSV",
+          requestedCount: 2,
+          resolvedCount: 2,
+          results: [
+            { package: pkg, vulns: [null, { id: "GHSA-same-package" }] as never },
+            { package: other, vulns: [{ id: "GHSA-retained" }] },
+          ],
+          fetchedAt: null,
+          snapshotId: null,
+          snapshotChecksum: null,
+          cacheAgeSeconds: null,
+          supportedEcosystems: ["Packagist"],
+          unresolved: [],
+        },
+      })
+      expect(findings.map((finding) => finding.id)).toEqual(["GHSA-same-package", "GHSA-retained"])
+      expect(coverageIssues).toContainEqual(
+        expect.objectContaining({ scanner: "sca", status: "partial" })
+      )
+    } finally {
+      cleanupRepo()
+    }
+  })
+
+  it("records skipped Composer symlinks in standalone mixed repository coverage", async () => {
+    const dir = await setupRepo({
+      "package.json": JSON.stringify({ dependencies: { lodash: "4.17.21" } }),
+    })
+    const externalManifest = TEST_DIR + "-composer.json"
+    const externalLock = TEST_DIR + "-composer.lock"
+    const coverageIssues: ScannerCoverageIssue[] = []
+    await writeFile(externalManifest, JSON.stringify({ require: { "vendor/pkg": "^1" } }))
+    await writeFile(
+      externalLock,
+      JSON.stringify({ packages: [{ name: "vendor/pkg", version: "1.2.3" }] })
+    )
+    await symlink(externalManifest, join(dir, "composer.json"))
+    await symlink(externalLock, join(dir, "composer.lock"))
+    try {
+      const findings = await scanSca({
+        repoPath: dir,
+        workspaceDir: dir,
+        coverageIssues,
+        fetchFn: makeMockFetch({ "vendor/pkg@1.2.3": [{ id: "GHSA-external" }] }),
+      })
+      expect(findings).toEqual([])
+      expect(coverageIssues).toContainEqual(
+        expect.objectContaining({
+          scanner: "sca",
+          status: "partial",
+          reason: expect.stringContaining("symbolic link"),
+        })
+      )
+    } finally {
+      cleanupRepo()
+      rmSync(externalManifest, { force: true })
+      rmSync(externalLock, { force: true })
+    }
+  })
+})
+
+it.skipIf(process.getuid?.() === 0)(
+  "records unreadable standalone dependency directories beside valid npm input",
+  async () => {
+    cleanupRepo()
+    const dir = await setupRepo({
+      "package.json": JSON.stringify({ dependencies: { lodash: "4.17.21" } }),
+      "private/composer.json": "{}",
+    })
+    const privateDirectory = join(dir, "private")
+    const coverageIssues: ScannerCoverageIssue[] = []
+    await chmod(privateDirectory, 0)
+    try {
+      await scanSca({
+        repoPath: dir,
+        workspaceDir: dir,
+        coverageIssues,
+        fetchFn: makeMockFetch({}),
+      })
+      expect(coverageIssues).toContainEqual(
+        expect.objectContaining({
+          scanner: "sca",
+          status: "partial",
+          reason: expect.stringContaining("directory could not be read"),
+        })
+      )
+    } finally {
+      await chmod(privateDirectory, 0o700)
+      cleanupRepo()
+    }
+  }
+)
+
+it.each([
+  ["13.28.0", "13.29.0"],
+  ["14.0.0", undefined],
+])("selects only a matching Composer advisory fix interval for %s", async (version, fixed) => {
+  cleanupRepo()
+  const dir = await setupRepo({
+    "composer.lock": JSON.stringify({
+      packages: [{ name: "vendor/pkg", version }],
+      "packages-dev": [],
+    }),
+  })
+  try {
+    const findings = await scanSca({
+      repoPath: dir,
+      workspaceDir: dir,
+      fetchFn: makeMockFetch({
+        [`vendor/pkg@${version}`]: [
+          {
+            id: "GHSA-multi-branch",
+            affected: [
+              {
+                package: { name: "vendor/other", ecosystem: "Packagist" },
+                ranges: [
+                  { type: "ECOSYSTEM", events: [{ introduced: "0" }, { fixed: "13.28.1" }] },
+                ],
+              },
+              {
+                package: { name: "vendor/pkg", ecosystem: "Packagist" },
+                ranges: [
+                  {
+                    type: "ECOSYSTEM",
+                    events: [
+                      { introduced: "0" },
+                      { fixed: "12.68.0" },
+                      { introduced: "13.0.0" },
+                      { fixed: "13.29.0" },
+                      { introduced: "15.0.0" },
+                      { fixed: "15.1.0" },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      }),
+    })
+    expect(findings[0]?.dependency_metadata?.fixed_version).toBe(fixed)
+  } finally {
+    cleanupRepo()
+  }
 })

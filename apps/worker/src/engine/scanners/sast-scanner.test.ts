@@ -56,6 +56,49 @@ describe("scanSast", () => {
     expect(findings).toEqual([])
   })
 
+  it("integrates PHP flow findings, provenance and incomplete coverage while skipping PHP tests", async () => {
+    const dir = await setupRepo({
+      "public/run.php": "<?php\n$cmd = $_GET['cmd'];\nsystem($cmd);",
+      "tests/CommandTest.php": "<?php system($_GET['cmd']);",
+      "examples.test.php": "<?php system($_GET['cmd']);",
+    })
+    const coverageIssues: import("../scanner-coverage").ScannerCoverageIssue[] = []
+    const findings = await scanSast({ repoPath: dir, workspaceDir: dir, coverageIssues })
+    expect(findings.filter((f) => f.finding_class === "php_source_flow")).toHaveLength(1)
+    expect(findings[0]?.dependency_metadata).toMatchObject({
+      rule_version: "php-source-local-flow/1.0.1",
+    })
+    expect(coverageIssues).toContainEqual(
+      expect.objectContaining({ scanner: "sast", status: "partial", subject: "public/run.php" })
+    )
+  })
+
+  it("scans production PHP word suffixes while excluding conventional test paths", async () => {
+    const source = "<?php system($_GET['cmd']);"
+    const dir = await setupRepo({
+      "latest.php": source,
+      "contest.php": source,
+      "inspect.php": source,
+      "CommandTest.php": source,
+      "CommandSpec.php": source,
+      "command.test.php": source,
+      "command.spec.php": source,
+      "Tests/command.php": source,
+    })
+    const coverageIssues: import("../scanner-coverage").ScannerCoverageIssue[] = []
+    const findings = await scanSast({ repoPath: dir, workspaceDir: dir, coverageIssues })
+    expect(findings.map((finding) => finding.target).sort()).toEqual([
+      "contest.php",
+      "inspect.php",
+      "latest.php",
+    ])
+    expect(coverageIssues.map((issue) => issue.subject).sort()).toEqual([
+      "contest.php",
+      "inspect.php",
+      "latest.php",
+    ])
+  })
+
   it("flags MD5 in password context as high with control 10", async () => {
     const dir = await setupRepo({
       "auth.ts": `import { createHash } from 'crypto'\nconst passwordHash = createHash("md5").update(password).digest("hex")`,

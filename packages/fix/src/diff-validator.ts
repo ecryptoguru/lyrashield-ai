@@ -10,6 +10,7 @@
  */
 
 import type { PatchScopePolicy } from "./scope-policy"
+import { checkComposerFixArtifact, type ComposerFixBindings } from "./composer-update"
 
 export type DiffRejectCode =
   | "EMPTY_DIFF"
@@ -185,6 +186,34 @@ export function validatePatchDiff(
   implicatedFiles: readonly string[],
   policy: PatchScopePolicy
 ): DiffValidation {
+  return validateScopedDiff(diff, anchorFile, implicatedFiles, policy)
+}
+
+/** Only resolver-bound, semantically constrained Composer artifacts may edit a lockfile. */
+export function validateComposerFixArtifact(
+  input: unknown,
+  bindings: ComposerFixBindings,
+  policy: PatchScopePolicy
+): DiffValidation {
+  try {
+    const artifact = checkComposerFixArtifact(input, bindings)
+    return validateScopedDiff(artifact.diff, artifact.lockPath, [], policy, artifact.lockPath)
+  } catch (error) {
+    return {
+      ok: false,
+      code: "VALIDATION_ERROR",
+      reason: error instanceof Error ? error.message : "Invalid Composer update",
+    }
+  }
+}
+
+function validateScopedDiff(
+  diff: string,
+  anchorFile: string,
+  implicatedFiles: readonly string[],
+  policy: PatchScopePolicy,
+  composerLockPath?: string
+): DiffValidation {
   try {
     if (!diff || !diff.trim()) {
       return { ok: false, code: "EMPTY_DIFF", reason: "The patch is empty." }
@@ -223,7 +252,7 @@ export function validatePatchDiff(
           reason: `Binary change to ${path} is not allowed.`,
         }
       }
-      if (LOCKFILE_NAMES.has(baseName(path).toLowerCase())) {
+      if (LOCKFILE_NAMES.has(baseName(path).toLowerCase()) && path !== composerLockPath) {
         return {
           ok: false,
           code: "LOCKFILE_NOT_ALLOWED",

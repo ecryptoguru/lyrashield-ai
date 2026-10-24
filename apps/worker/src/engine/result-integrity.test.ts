@@ -73,7 +73,12 @@ function mockRepoRetestState(
     retestRevision?: string | null
     baselineManifest?: ReturnType<typeof manifestRow> | null
     retestManifest?: ReturnType<typeof manifestRow> | null
-    candidates?: Array<{ findingId: string; scanId: string; scannerSource: string }>
+    candidates?: Array<{
+      findingId: string
+      scanId: string
+      scannerSource: string
+      payload?: unknown
+    }>
     baselineReceipts?: Array<{ id: string; controlId: string; status: string }>
     retestReceipts?: Array<{ id: string; controlId: string; status: string }>
     retestFindingIds?: string[]
@@ -719,6 +724,33 @@ describe("result integrity", () => {
   })
 
   describe("completeRetestsForScan — immutable evidence binding", () => {
+    it.each(["php_runtime_cve", "php_runtime_eol", "php_runtime_banner"])(
+      "keeps %s inconclusive when only source declarations changed",
+      async (findingClass) => {
+        mockRepoRetestState({
+          candidates: [
+            {
+              findingId: "finding-1",
+              scanId: "scan-1",
+              scannerSource: "iac",
+              payload: { findingClass },
+            },
+          ],
+          baselineReceipts: [{ id: "baseline-iac", controlId: "iac", status: "COMPLETED" }],
+          retestReceipts: [{ id: "retest-iac", controlId: "iac", status: "COMPLETED" }],
+        })
+        await completeRetestsForScan({ scanId: "scan-2", workspaceId: "workspace-1" })
+        expect(prisma.finding.update).not.toHaveBeenCalled()
+        expect(prisma.findingVerification.upsert).toHaveBeenCalledWith(
+          expect.objectContaining({
+            create: expect.objectContaining({
+              status: "INCONCLUSIVE",
+              reason: expect.stringContaining("deployed PHP runtime"),
+            }),
+          })
+        )
+      }
+    )
     it("validates a same-revision repository retest against stored manifests", async () => {
       mockRepoRetestState({ baselineRevision: REV_A, retestRevision: REV_A })
 

@@ -8,6 +8,9 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint src --max-warnings 0"
   },
+  "dependencies": {
+    "zod": "catalog:"
+  },
   "devDependencies": {
     "@types/node": "catalog:",
     "typescript": "catalog:"

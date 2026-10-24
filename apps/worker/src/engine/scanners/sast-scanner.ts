@@ -4,6 +4,8 @@ import { lstat, readFile, readdir } from "fs/promises"
 import { join, relative } from "path"
 import { logger } from "@lyrashield/logger"
 import type { EngineVulnerability } from "../output-parser"
+import { analyzePhpSource } from "./php-source"
+import { isExcludedPhpPath } from "./php-project"
 import {
   recordCoverageIssue,
   type ScannerCoverageIssue,
@@ -250,7 +252,9 @@ const SAST_RULES: SastRule[] = [
 function isTestFixturePath(relativePath: string): boolean {
   return (
     /(?:^|\/)(?:__tests__|fixtures?|e2e|testdata|mocks?)(?:\/|$)/i.test(relativePath) ||
-    /(?:^|\/)[^/]+\.(?:test|spec)\.[^/]+$/i.test(relativePath)
+    /(?:^|\/)[^/]+\.(?:test|spec)\.[^/]+$/i.test(relativePath) ||
+    /(?:^|\/)tests?\/.*\.php$/i.test(relativePath) ||
+    /(?:^|\/)[^/]*(?:Test|Spec)\.php$/.test(relativePath)
   )
 }
 
@@ -308,7 +312,7 @@ async function walkDir(
         await walkDir(fullPath, files, state, depth + 1, signal)
       }
     } else if (s.isFile()) {
-      const ext = entry.substring(entry.lastIndexOf("."))
+      const ext = entry.substring(entry.lastIndexOf(".")).toLowerCase()
       if (!SOURCE_EXTENSIONS.has(ext)) continue
       if (s.size <= MAX_FILE_SIZE) {
         files.push(fullPath)
@@ -316,6 +320,46 @@ async function walkDir(
         state.oversizedFiles++
       }
     }
+  }
+}
+
+function buildRuleFinding(
+  rule: SastRule,
+  relPath: string,
+  lineNum: number,
+  line: string,
+  matchedText: string,
+  contextWindow: string,
+  findingId: string
+): EngineVulnerability {
+  const controlApplies = Boolean(rule.controlContext?.test(contextWindow))
+  const severity =
+    rule.strongContext && (controlApplies || rule.strongContext.test(contextWindow))
+      ? "high"
+      : rule.severity
+  return {
+    id: findingId,
+    title: `${rule.name} in ${relPath}:${lineNum}`,
+    severity,
+    timestamp: new Date().toISOString(),
+    target: relPath,
+    cwe: rule.cwe,
+    description: rule.description,
+    technical_analysis: `${rule.name} detected in ${relPath} at line ${lineNum}. Matched: ${matchedText.slice(0, 120)}.`,
+    impact: rule.impact,
+    remediation_steps: rule.remediation,
+    poc_description: `Review line ${lineNum} of ${relPath}: ${matchedText.slice(0, 120)}.`,
+    ...(rule.controlIds && (!rule.controlContext || controlApplies)
+      ? { control_ids: rule.controlIds }
+      : {}),
+    code_locations: [
+      {
+        file: relPath,
+        start_line: lineNum,
+        label: rule.name,
+        snippet: line.trim().slice(0, 200),
+      },
+    ],
   }
 }
 
@@ -390,7 +434,7 @@ export async function scanSast(config: SastScanConfig): Promise<EngineVulnerabil
     }
 
     const relPath = relative(workspaceDir, filePath)
-    if (isTestFixturePath(relPath)) {
+    if (isTestFixturePath(relPath) || (/\.php$/i.test(filePath) && isExcludedPhpPath(relPath))) {
       skippedByReason.testFixture++
       continue
     }
@@ -400,6 +444,21 @@ export async function scanSast(config: SastScanConfig): Promise<EngineVulnerabil
     const lines = content.split("\n")
     let findingsInFile = 0
     let findingLimitReached = false
+    if (/\.php$/i.test(filePath)) {
+      const result = analyzePhpSource(content, relPath)
+      const available = Math.min(MAX_FINDINGS_PER_FILE, MAX_TOTAL_FINDINGS - findings.length)
+      findings.push(...result.findings.slice(0, available))
+      findingsInFile = Math.min(result.findings.length, available)
+      findingLimitReached = result.findings.length > available
+      for (const reason of result.issues) {
+        recordCoverageIssue(coverageIssues, {
+          scanner: "sast",
+          status: reason.includes("limit") ? "bounded" : "partial",
+          subject: relPath,
+          reason,
+        })
+      }
+    }
 
     for (const [index, line] of lines.entries()) {
       if (findingsInFile >= MAX_FINDINGS_PER_FILE || findings.length >= MAX_TOTAL_FINDINGS) {
@@ -443,37 +502,10 @@ export async function scanSast(config: SastScanConfig): Promise<EngineVulnerabil
         if (seenFindings.has(findingId)) continue
         seenFindings.add(findingId)
 
-        const controlApplies = Boolean(rule.controlContext?.test(contextWindow))
-        const severity =
-          rule.strongContext && (controlApplies || rule.strongContext.test(contextWindow))
-            ? "high"
-            : rule.severity
         findingsInFile++
-
-        findings.push({
-          id: findingId,
-          title: `${rule.name} in ${relPath}:${lineNum}`,
-          severity,
-          timestamp: new Date().toISOString(),
-          target: relPath,
-          cwe: rule.cwe,
-          description: rule.description,
-          technical_analysis: `${rule.name} detected in ${relPath} at line ${lineNum}. Matched: ${matchedText.slice(0, 120)}.`,
-          impact: rule.impact,
-          remediation_steps: rule.remediation,
-          poc_description: `Review line ${lineNum} of ${relPath}: ${matchedText.slice(0, 120)}.`,
-          ...(rule.controlIds && (!rule.controlContext || controlApplies)
-            ? { control_ids: rule.controlIds }
-            : {}),
-          code_locations: [
-            {
-              file: relPath,
-              start_line: lineNum,
-              label: rule.name,
-              snippet: line.trim().slice(0, 200),
-            },
-          ],
-        })
+        findings.push(
+          buildRuleFinding(rule, relPath, lineNum, line, matchedText, contextWindow, findingId)
+        )
       }
     }
     if (findingLimitReached) {

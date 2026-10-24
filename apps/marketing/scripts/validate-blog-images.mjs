@@ -21,6 +21,7 @@ const releases = [
   "batch-8",
   "batch-9",
   "batch-11",
+  "php2shell",
 ]
 
 function releaseOption(arguments_) {

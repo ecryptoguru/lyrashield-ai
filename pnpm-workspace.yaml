@@ -6,7 +6,7 @@ packages:
 catalog:
   typescript: ^6.0.3
   "@types/node": ^24.0.0
-  zod: ^4.5.4
+  zod: 4.6.6
   vitest: ^4.1.11
   "@vitest/coverage-v8": ^4.1.11
   tsup: ^8.5.1
@@ -18,18 +18,20 @@ catalog:
   eslint: ^9.39.5
   tailwindcss: ^4.3.3
   "@tailwindcss/vite": ^4.3.3
-  vite: ^8.2.2
+  vite: ^8.2.4
   yaml: ^2.9.0
 
 overrides:
+  # GHSA-mrhx-c7xc-m3w5: reject oversized constrained collections before element parsing.
+  "zod@>=4 <4.6.6": 4.6.6
   # IPv6 classification, cross-family subnet and bounded-parser fixes.
   "ip-address@<10.7.1": "^10.7.1"
   # GHSA-2v37-7h3g-55p8: keep postcss on the patched nanoid 3.x line.
   "nanoid@<3.3.18": "^3.3.19"
   # GHSA-9mqv-5hh9-4cgg and GHSA-frvp-7c67-39w9: patch node-server 2.x.
   "@hono/node-server@<2.0.10": "^2.0.10"
-  # GHSA-p98j-92pf-mc4p: patch the affected DOMPurify 3.4.x range.
-  "dompurify@>=3.4.13 <3.4.16": "3.4.16"
+  # GHSA-cg2g-xh64-v4q7 and GHSA-mrv2-3pqr-j5jr: patch DOMPurify 3.x.
+  "dompurify@>=3 <3.4.17": "3.4.17"
   # Kept pending auth-owner confirmation of the original pin in #273.
   "@better-auth/core": "1.7.1"
   # GHSA-gv7w-rqvm-qjhr and GHSA-g7r4-m6w7-qqqr: keep affected esbuild below 0.28.1 out.
@@ -54,8 +56,14 @@ overrides:
   "minimatch@>=10 <10.2.3": "^10.2.3"
   # GHSA-ggr8-5vv4-36mx: @prisma/config pins an affected pre-8 release.
   "deepmerge-ts@<8.0.0": "^8.0.0"
-  # GHSA-vcvr-r3jv-pc5j (next/og RCE), plus GHSA-p293-qw3h-jr36.
-  "next@>=16 <16.3.6": "16.3.6"
+  # GHSA-2464-fhr4-w9xw, GHSA-p3m5-59mp-jv5r, and GHSA-673q-mjm6-r5xr.
+  "next@>=16 <16.4.1": "16.4.1"
+  # GHSA-587h-7wmj-h5pm: patch the affected Vite 8.2.x editor handling.
+  "vite@>=8.2.0 <8.2.4": "8.2.4"
+  # GHSA-q3jh-wrc6-jgq8 and GHSA-8r9p-f939-6h3c: preserve redirect header isolation.
+  "follow-redirects@>=1.16.0 <1.16.1": "1.16.1"
+  # GHSA-r7fv-28h4-cvq7 and GHSA-gfr2-rv44-r23c: bound Markdown parser work.
+  "markdown-it@>=14 <14.3.3": "14.3.3"
   # GHSA-fxqj-rqcc-2cmp: patched PostCSS starts at 8.5.23.
   "postcss@<8.5.23": "^8.5.26"
   # GHSA-rgj7-g3m4-5g8c and GHSA-wq5f-xc86-pv6w: keep Sharp on its patched 0.35.x line.

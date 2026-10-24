@@ -1,0 +1,88 @@
+---
+title: "Patched PHP2Shell? Check for earlier compromise"
+description: "Investigate PHP2Shell exposure before disclosure, preserve useful evidence and interpret logs and shared indicators without assuming compromise or safety."
+pubDate: 2026-10-24T00:00:00+05:30
+author: lyrashield-team
+tags: ["web-security", "verification"]
+draft: false
+heroImage: php2shell-investigation
+faq:
+  - q: "Does installing the PHP2Shell patch show that we were never compromised?"
+    a: "No. Patching addresses the affected runtime going forward. Earlier activity needs a separate investigation using the exposure timeline and available host, network and application evidence."
+  - q: "How far back should we investigate PHP2Shell activity?"
+    a: "Include at least October 17, 2026, then adjust for your exposure timeline and retained evidence."
+  - q: "Does a matching IP address prove PHP2Shell compromise?"
+    a: "No. Shared anonymization infrastructure can generate unrelated traffic. Correlate an observation with request context and host evidence."
+---
+
+After patching PHP2Shell, review whether the service was exposed before the update and preserve evidence for that period. AWS recommends investigating from at least October 17, 2026, based on attempts observed before public disclosure. That finding does not prove your service was compromised. Build a timeline, inspect available request and host records and document gaps instead of treating a quiet log as clearance.
+
+The patch receipt can be complete while the historical investigation remains open. The [vibe coding security guide](/blog/vibe-coding-security-guide) separates a current finding from a verified outcome. Apply the same discipline here: record the patch state and the historical investigation as different pieces of work with their own evidence.
+
+## Why the review begins before disclosure
+
+[Amazon Threat Intelligence's MadPot report](https://aws.amazon.com/blogs/security/amazon-threat-intelligence-identifies-php2shell-exploitation-prior-to-public-disclosure-in-madpot/) describes a PHP2Shell exploitation attempt on October 17, four days before disclosure. It says the success of the observed attempts against real-world systems remains unclear. The date supports an earlier investigation window; it does not establish successful compromise of every exposed installation.
+
+Set the initial review window to include at least that date, then adjust it to your service's exposure and retention. If the runtime was publicly reachable earlier, keep that fact in the record. A public report identifies observed activity, not the earliest possible hostile request against your application.
+
+Document when the affected runtime entered service, when mitigations became effective and when all workers received the patch. The [PHP2Shell overview](/blog/php2shell-explained) covers the runtime response. If package identity remains disputed, resolve the [vendor backport evidence](/blog/php2shell-still-flagged-after-updating) without waiting to preserve historical records.
+
+## Assign an owner and preserve what will expire
+
+Name an investigation lead and identify who controls web logs, host telemetry and deployment records. For a managed service, request the provider's evidence promptly. Rotation can remove the very period you need while separate teams debate whether an incident occurred.
+
+For a provider request, name the affected service and the requested dates, including timezone. Ask which origin nodes the export covers and whether records survive account-level log rotation. Request the retained evidence through the approved private channel rather than asking support to paste raw requests into a public ticket. Keep the request open if the first response covers only the current day.
+
+Preserve relevant records through approved tooling and access controls. Keep original timestamps and timezone information, record the source and collection time and restrict the working copy. Capture the scope of each export so a later reviewer knows whether it covers all origins or one instance.
+
+[NIST SP 800-61 Rev. 3](https://csrc.nist.gov/pubs/sp/800/61/r3/final) places incident detection, response and recovery within ongoing risk management. Use your organization's response procedure to decide preservation and containment priorities. If harmful activity is active, contain it without waiting for a perfect archive and record what could not be retained.
+
+## Build a timeline that connects exposure to evidence
+
+Start with deployment and package records, then add worker replacement and mitigation times. Separate the first patched replica from completion across the fleet. Include reverse proxies and hosting pools that could route requests to an older origin after the main deployment finished.
+
+For each interval, state what you know about the runtime and what telemetry exists. A period with access logs but no process telemetry supports a different level of investigation from a period with neither. Avoid treating a missing sensor as an uneventful interval.
+
+For example, the release record may show a new image on October 21 while an old origin remained registered until October 22. That creates a distinct interval to investigate even if most users reached the new image. Tie those intervals to routing and worker evidence instead of using the first deployment timestamp as the end of every exposure window.
+
+Keep a working hypothesis beside each observation. An unusual POST followed by a worker exit is worth investigating, but an application bug can also cause that pattern. Look for corroborating changes rather than labeling every crash an exploit. Preserve the distinction between an attempted request, possible execution and confirmed impact.
+
+## Inspect the log format before searching for a payload
+
+AWS's [recommended actions](https://aws.amazon.com/blogs/security/amazon-threat-intelligence-identifies-php2shell-exploitation-prior-to-public-disclosure-in-madpot/) include reviewing POST requests carrying `PHP_SESSION_UPLOAD_PROGRESS` and checking unexpected process execution or file changes. First determine whether your retained logs contain request bodies. Many ordinary access logs record request metadata without POST bodies, so a text search for a form field can return nothing even when relevant requests occurred.
+
+The [Apache logging reference](https://httpd.apache.org/docs/2.4/logs.html) shows Common and Combined formats containing the request line, status and other metadata. Those examples do not include the POST body. Inspect your deployed format and any WAF capture separately instead of assuming the field must appear in `access.log`.
+
+Correlate request times with error logs, worker lifecycle events and available host telemetry. Check whether origin addresses represent the actual client or a proxy. Use trusted ingress records for attribution and preserve the mapping between layers when available.
+
+Do not enable broad body logging as an improvised retroactive fix. It cannot reconstruct old requests and may collect credentials or customer data going forward. Any logging change needs a deliberate scope and retention policy.
+
+## Use published indicators as investigation leads
+
+AWS's [indicator guidance](https://aws.amazon.com/blogs/security/amazon-threat-intelligence-identifies-php2shell-exploitation-prior-to-public-disclosure-in-madpot/) says the listed addresses include shared anonymization infrastructure and recommends investigating observations rather than simply blocking them. A match needs context. An absent match does not exclude another source or payload.
+
+Record the request destination, timing and behavior associated with a match. Compare it with host events and the service's exposure at that time. If normal customer traffic shares an address, preserve that ambiguity rather than assigning every request to one actor.
+
+Avoid turning a copied indicator list into an automatic incident conclusion. Blocking decisions belong to the current response plan and observed behavior. Keep a dated reference to the original intelligence so later investigators can distinguish the source's claim from your team's assessment.
+
+## Look beyond HTTP status codes
+
+Review available process execution records, file integrity observations and application administration events around suspicious activity. Compare changes with known deployment artifacts and approved maintenance. An unexpected file is a lead; establish who created it and whether it was part of a legitimate release before removing it.
+
+Inspect persistence and credential access through the team's incident response procedure. If evidence supports intrusion, scope the affected identities and dependent systems before recovery. Do not assume that replacing PHP removes an attacker-created account or revokes a credential that was already exposed.
+
+A successful HTTP response does not prove execution occurred, and an error response does not prove it failed. Keep conclusions tied to the telemetry actually available. When the relevant process or filesystem history was never collected, document that limitation instead of filling it with a confident guess.
+
+## Preserve evidence while completing remediation
+
+Confirm the original patches independently through the [Docker, FPM and Apache workflow](/blog/patch-php2shell-docker-fpm-apache). PHP's [October 21 notice](https://www.php.net/archive/2026.php#2026-10-21-1) identifies the fixed branches. Historical investigation should not become a reason to leave an affected runtime exposed while every log is reviewed.
+
+Keep the separate [October 23 session issue](/blog/cve-2026-115560-session-upload-progress) on its own checklist. A completed original patch does not settle that configuration review, just as it does not settle the historical intrusion question.
+
+If stronger evidence emerges, follow the response plan for containment and recovery. Preserve the original artifacts when safe rather than deleting suspicious files first. The [critical finding response guide](/blog/critical-security-finding-response) explains assigning ownership and choosing containment from verified context.
+
+## Report findings with the gaps attached
+
+A useful report states the exposure period, sources reviewed, observations and unresolved questions. Assign an owner to unresolved evidence requests and explain which conclusion each could change. If older records are unavailable, retain that gap in the final report rather than quietly shortening the review window to the dates you can search. Separate "no relevant activity found in retained records" from a claim that no compromise occurred. Name missing dates and absent telemetry so the decision owner can assess the remaining uncertainty.
+
+Use the [PHP2Shell checker](/tools/php2shell-checker) for current version assessment. LyraShield AI conditionally runs PHP checks in Standard and Deep repository scans when relevant evidence is available. Those checks cannot attest every deployed worker or reconstruct an intrusion history that was not recorded. Try the [free Lite Check](/scan) for passive URL review, or [sign up to choose a Deep scan](https://app.lyrashieldai.com/sign-up) for authorized application assessment. Keep the historical review alongside the patch receipt.

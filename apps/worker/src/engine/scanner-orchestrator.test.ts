@@ -150,12 +150,15 @@ vi.mock("./scanners/ai-app-security", () => ({
   }),
 }))
 
-vi.mock("fs/promises", () => ({
+vi.mock("fs/promises", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("fs/promises")>()),
   mkdir: vi.fn().mockResolvedValue(undefined),
 }))
 
 import { runScannerOrchestrator } from "./scanner-orchestrator"
 import { scanSca } from "./scanners/sca-scanner"
+import { scanSast } from "./scanners/sast-scanner"
+import { scanIac } from "./scanners/iac-scanner"
 import { scanSecrets } from "./scanners/secrets-scanner"
 import { scanUrl } from "./scanners/url-scanner"
 import { scanAgentConfig } from "./scanners/agent-config-scanner"
@@ -890,3 +893,43 @@ describe("runScannerOrchestrator", () => {
     }
   })
 })
+
+it.each(["STANDARD", "DEEP"])(
+  "carries actual PHP scanner findings and scoped discovery through %s orchestration",
+  async (mode) => {
+    const fs = await vi.importActual<typeof import("fs/promises")>("fs/promises")
+    const { tmpdir } = await import("node:os")
+    const { join } = await import("node:path")
+    const directory = await fs.mkdtemp(join(tmpdir(), "php-orchestrator-"))
+    try {
+      await fs.writeFile(join(directory, "Dockerfile"), "FROM php:8.4.26-fpm\nUSER www-data\n")
+      await fs.writeFile(join(directory, "index.php"), "<?php system($_GET['command']);")
+      const sast =
+        await vi.importActual<typeof import("./scanners/sast-scanner")>("./scanners/sast-scanner")
+      const iac =
+        await vi.importActual<typeof import("./scanners/iac-scanner")>("./scanners/iac-scanner")
+      vi.mocked(scanSast).mockImplementationOnce(sast.scanSast)
+      vi.mocked(scanIac).mockImplementationOnce(iac.scanIac)
+      const result = await runScannerOrchestrator({
+        scanId: "scan-php",
+        workspaceId: "ws-1",
+        targetId: "target-php",
+        target: { id: "target-php", type: "REPO", name: "PHP" },
+        goal: "TEST_APP",
+        mode,
+        engineFindings: [],
+        workspaceDir: directory,
+      })
+      expect(result.sastFindings).toContainEqual(
+        expect.objectContaining({ finding_class: "php_source_flow" })
+      )
+      expect(result.iacFindings).toContainEqual(expect.objectContaining({ cve: "CVE-2026-109618" }))
+      expect(result.scannerDiscovery?.iac?.php).toMatchObject({
+        scopes: [{ directory: ".", hasExactRuntimeIdentity: true }],
+        incomplete: false,
+      })
+    } finally {
+      await fs.rm(directory, { recursive: true, force: true })
+    }
+  }
+)
