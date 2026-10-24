@@ -308,7 +308,10 @@ export async function completeRetestsForScan(params: {
         select: { id: true, targetId: true },
       }),
       tx.findingCandidate.findMany({
-        where: { scanId: { in: baselineScanIds } },
+        where: {
+          workspaceId: params.workspaceId,
+          scanId: { in: [...baselineScanIds, params.scanId] },
+        },
         select: { findingId: true, scanId: true, scannerSource: true, payload: true },
       }),
       tx.finding.findMany({
@@ -326,8 +329,43 @@ export async function completeRetestsForScan(params: {
     const persistedFindingIds = new Set(retestFindings.map((finding) => finding.id))
     const scanById = new Map(baselineScans.map((scan) => [scan.id, scan]))
 
+    const baselineCandidates = candidateRows.filter(
+      (candidate) => candidate.scanId !== params.scanId
+    )
+    const currentComposerAliases = new Set<string>()
+    for (const candidate of candidateRows) {
+      if (
+        candidate.scanId !== params.scanId ||
+        !candidate.findingId ||
+        !persistedFindingIds.has(candidate.findingId)
+      )
+        continue
+      const payload = candidate.payload as {
+        dependencyIdentityVersion?: unknown
+        dependencyLegacyDedupeKey?: unknown
+      } | null
+      if (
+        payload?.dependencyIdentityVersion === "composer-lock/1" &&
+        typeof payload.dependencyLegacyDedupeKey === "string"
+      )
+        currentComposerAliases.add(payload.dependencyLegacyDedupeKey)
+    }
+    // Scoped Composer findings still represent legacy unscoped findings while any service remains affected.
+    for (const candidate of baselineCandidates) {
+      const payload = candidate.payload as {
+        dependencyIdentityVersion?: unknown
+        dedupeKey?: unknown
+      } | null
+      if (
+        candidate.findingId &&
+        payload?.dependencyIdentityVersion === undefined &&
+        typeof payload?.dedupeKey === "string" &&
+        currentComposerAliases.has(payload.dedupeKey)
+      )
+        persistedFindingIds.add(candidate.findingId)
+    }
     const { candidateSourcesByFinding, deployedPhpEvidenceRequired } =
-      groupCandidateSources(candidateRows)
+      groupCandidateSources(baselineCandidates)
 
     const evidenceScanIds = [...new Set([params.scanId, ...baselineScanIds])]
     const [manifestRows, coverageRows] = await Promise.all([

@@ -71,9 +71,11 @@ the pinned catalog remain unknown rather than being assumed end-of-life or clean
 Vendor backports need vendor evidence; a low upstream version alone cannot settle
 whether the installed vendor package contains a fix.
 
-Source rules are pinned at `php-source-local-flow/1.0.1`. They recognize a bounded
+Source rules are pinned at `php-source-local-flow/1.0.2`. They recognize a bounded
 subset of request helpers, local assignments, interpolation, parameterized SQL,
-sink-specific shell/integer sanitizers and fixed literal allowlist lookups.
+sink-specific global PHP shell/integer sanitizers and fixed literal allowlist lookups.
+Methods and namespaced functions with sanitizer-like names retain taint. Conditional
+assignments conservatively retain possible input flows, including unbraced bodies.
 Receiver types and branch reachability are not established. Unsupported syntax
 and reached token/statement/nesting limits are explicit coverage issues. Every
 scanned `.php` file keeps partial SAST coverage because this local analysis cannot establish
@@ -165,6 +167,11 @@ The dedicated Composer producer requires a promoted deterministic SCA candidate,
 its original completed checksummed scan manifest, the exact scanned commit and
 an active workspace GitHub integration. It reads the manifest and lock from that
 commit. Model claims or client-supplied patches cannot authorize a lock update.
+
+Each Composer lockfile has its own finding and fix proposal, including when two
+services use the same vulnerable package release. Advisory lookups remain shared.
+Legacy Composer findings retain their original package identity during retest:
+any remaining affected service prevents validation of the old unscoped finding.
 
 Official Packagist metadata travels through the existing authenticated egress
 proxy in production. The resolver image is pinned by digest. Its container has

@@ -413,7 +413,15 @@ export async function resolveExactDependencies({
 
   const unique = [
     ...new Map(
-      packages.map((pkg) => [`${pkg.ecosystem}:${pkg.name.toLowerCase()}@${pkg.version}`, pkg])
+      packages.map((pkg) => [
+        JSON.stringify([
+          pkg.ecosystem,
+          pkg.name.toLowerCase(),
+          pkg.version,
+          ...(pkg.ecosystem === "Packagist" ? [pkg.filePath] : []),
+        ]),
+        pkg,
+      ])
     ).values(),
   ]
   if (unique.length > MAX_DEPENDENCIES) {

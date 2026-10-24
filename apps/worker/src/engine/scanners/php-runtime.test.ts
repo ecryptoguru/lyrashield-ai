@@ -4,6 +4,8 @@ import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
 import { scanIac } from "./iac-scanner"
 import { inspectPhpRuntimeInput } from "./php-runtime"
+import { generateDedupeKey } from "../output-parser-findings"
+import { normalizeFindings } from "../normalizer"
 import type { ScannerCoverageIssue } from "../scanner-coverage"
 
 const dirs: string[] = []
@@ -325,4 +327,40 @@ it.each([
 ])("detects PHP from valid named Compose syntax: %s", async (content) => {
   const { findings } = await scan({ "compose.yaml": content })
   expect(findings).toContainEqual(expect.objectContaining({ cve: "CVE-2026-109618" }))
+})
+
+it.each([
+  ["services:\n  web:\n    image: php:8.4.26-fpm\n  jobs:\n    image: php:8.4.26-cli\n", [3, 5]],
+  ["services: { web: { image: 'php:8.4.26-fpm' }, jobs: { image: 'php:8.4.26-cli' } }\n", [1, 1]],
+])("preserves every Compose service through finding normalization", (content, lines) => {
+  const findings = inspectPhpRuntimeInput("compose.yaml", content, "compose").findings.filter(
+    (finding) => finding.cve === "CVE-2026-109618"
+  )
+  expect(normalizeFindings(findings, "target", generateDedupeKey)).toHaveLength(2)
+  expect(new Set(findings.map((finding) => finding.id)).size).toBe(2)
+  expect(findings.map((finding) => finding.dependency_metadata?.compose_service)).toEqual([
+    "web",
+    "jobs",
+  ])
+  expect(findings.map((finding) => finding.code_locations?.[0]?.start_line)).toEqual(lines)
+})
+
+it("keeps case-sensitive Compose service identities distinct on the same line", () => {
+  const findings = inspectPhpRuntimeInput(
+    "compose.yaml",
+    "services: { web: { image: 'php:8.4.26-fpm' }, Web: { image: 'php:8.4.26-fpm' } }",
+    "compose"
+  ).findings.filter((finding) => finding.cve === "CVE-2026-109618")
+  expect(normalizeFindings(findings, "target", generateDedupeKey)).toHaveLength(2)
+})
+
+it("keeps case-sensitive Compose file paths distinct for the same service", () => {
+  const findings = ["services/API/compose.yml", "services/api/compose.yml"].flatMap((path) =>
+    inspectPhpRuntimeInput(
+      path,
+      "services: { web: { image: 'php:8.4.26-fpm' } }",
+      "compose"
+    ).findings.filter((finding) => finding.cve === "CVE-2026-109618")
+  )
+  expect(normalizeFindings(findings, "target", generateDedupeKey)).toHaveLength(2)
 })

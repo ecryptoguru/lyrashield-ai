@@ -1,5 +1,6 @@
 import { checksum } from "./checksum"
 import { prisma } from "@lyrashield/db"
+import { computeDedupeKey } from "@lyrashield/security"
 import type { EngineVulnerability } from "../output-parser"
 import type { NormalizedFinding } from "../normalizer"
 
@@ -9,7 +10,12 @@ function isNormalizedFinding(finding: FindingInput): finding is NormalizedFindin
   return "normalizedSeverity" in finding && "dedupeKey" in finding
 }
 
-function candidatePayload(finding: FindingInput, severity: string, dedupeKey: string) {
+function candidatePayload(
+  finding: FindingInput,
+  severity: string,
+  dedupeKey: string,
+  targetId: string
+) {
   const contentHashes = Object.fromEntries(
     Object.entries({
       description: finding.description,
@@ -44,6 +50,26 @@ function candidatePayload(finding: FindingInput, severity: string, dedupeKey: st
     cvss: finding.cvss ?? null,
     dedupeKey,
     findingClass: finding.finding_class ?? null,
+    ...(finding.dependency_metadata?.package_ecosystem === "packagist" &&
+    typeof finding.dependency_metadata.lockfile_path === "string"
+      ? {
+          dependencyIdentityVersion: "composer-lock/1",
+          dependencyLegacyDedupeKey: computeDedupeKey(
+            {
+              cve: finding.cve,
+              id: finding.id,
+              dependency: {
+                packageEcosystem: "packagist",
+                packageName:
+                  typeof finding.dependency_metadata.package_name === "string"
+                    ? finding.dependency_metadata.package_name
+                    : undefined,
+              },
+            },
+            targetId
+          ),
+        }
+      : {}),
     fixEffort: finding.fix_effort ?? null,
     controlIds: finding.control_ids ?? [],
     // Small structured evidence stays literal; large text is hash-bound above.
@@ -81,7 +107,12 @@ export async function persistDetectionReceipt(params: {
   httpExchangeArtifactChecksum?: string
 }): Promise<void> {
   const normalized = isNormalizedFinding(params.finding) ? params.finding : null
-  const payload = candidatePayload(params.finding, params.severity, params.dedupeKey)
+  const payload = candidatePayload(
+    params.finding,
+    params.severity,
+    params.dedupeKey,
+    params.targetId
+  )
   const evidenceHash = checksum(payload)
   const scannerSources = [
     ...new Set(

@@ -662,6 +662,53 @@ describe("result integrity", () => {
     expect(failed.checksum).not.toBe(completed.checksum)
   })
 
+  it("binds the Composer lock identity version into immutable candidate evidence", async () => {
+    vi.mocked(prisma.findingCandidate.upsert).mockResolvedValue({ id: "candidate-1" } as never)
+    await persistDetectionReceipt({
+      scanId: "scan-1",
+      workspaceId: "workspace-1",
+      targetId: "target-1",
+      findingId: "finding-1",
+      severity: "HIGH",
+      dedupeKey: "scoped-key",
+      finding: {
+        id: "GHSA-composer",
+        title: "Composer advisory",
+        severity: "high",
+        timestamp: "2026-10-24T00:00:00Z",
+        finding_class: "dependency_cve",
+        dependency_metadata: {
+          package_ecosystem: "packagist",
+          package_name: "vendor/pkg",
+          lockfile_path: "service/composer.lock",
+        },
+        code_locations: [{ file: "service/composer.lock" }],
+      },
+    })
+    const create = vi.mocked(prisma.findingCandidate.upsert).mock.calls[0]![0].create
+    expect(create).toMatchObject({
+      dedupeKey: "scoped-key",
+      payload: {
+        dependencyIdentityVersion: "composer-lock/1",
+        codeLocations: [{ file: "service/composer.lock" }],
+      },
+    })
+    const { computeDedupeKey } = await import("@lyrashield/security")
+    expect(create.payload).toMatchObject({
+      dependencyLegacyDedupeKey: computeDedupeKey(
+        {
+          id: "GHSA-composer",
+          dependency: { packageEcosystem: "packagist", packageName: "vendor/pkg" },
+        },
+        "target-1"
+      ),
+    })
+    const { createHash } = await import("node:crypto")
+    expect(create.evidenceHash).toBe(
+      createHash("sha256").update(JSON.stringify(create.payload)).digest("hex")
+    )
+  })
+
   it("never stores raw PoC content in a detection ledger payload", async () => {
     vi.mocked(prisma.findingCandidate.upsert).mockResolvedValue({ id: "candidate-1" } as never)
 
@@ -724,6 +771,108 @@ describe("result integrity", () => {
   })
 
   describe("completeRetestsForScan — immutable evidence binding", () => {
+    it.each([
+      {
+        name: "legacy Composer remains affected",
+        scoped: false,
+        persisted: true,
+        related: true,
+        present: true,
+        failed: true,
+      },
+      {
+        name: "PR1021 legacy Composer with location remains affected",
+        scoped: false,
+        persisted: true,
+        related: true,
+        present: true,
+        failed: true,
+        baselineLocation: "service/composer.lock",
+      },
+      {
+        name: "legacy Composer all fixed",
+        scoped: false,
+        persisted: false,
+        related: true,
+        present: false,
+        failed: false,
+      },
+      {
+        name: "unpersisted candidate cannot assert detection",
+        scoped: false,
+        persisted: false,
+        related: true,
+        present: true,
+        failed: false,
+      },
+      {
+        name: "unrelated npm legacy identity",
+        scoped: false,
+        persisted: true,
+        related: false,
+        present: true,
+        failed: false,
+      },
+      {
+        name: "fixed scoped service with another affected service",
+        scoped: true,
+        persisted: true,
+        related: true,
+        present: true,
+        failed: false,
+      },
+    ])(
+      "preserves retest identity: $name",
+      async ({ scoped, persisted, related, present, failed, baselineLocation }) => {
+        mockRepoRetestState({
+          candidates: [
+            {
+              findingId: "finding-1",
+              scanId: "scan-1",
+              scannerSource: "sca",
+              payload: {
+                findingClass: "dependency_cve",
+                dedupeKey: related ? "legacy-composer-key" : "legacy-npm-key",
+                codeLocations: baselineLocation ? [{ file: baselineLocation }] : [],
+                contentHashes: { dependencyMetadata: "original-checksum" },
+                ...(scoped ? { dependencyIdentityVersion: "composer-lock/1" } : {}),
+              },
+            },
+            ...(present
+              ? [
+                  {
+                    findingId: "scoped-finding",
+                    scanId: "scan-2",
+                    scannerSource: "sca",
+                    payload: {
+                      findingClass: "dependency_cve",
+                      dedupeKey: "scoped-key",
+                      dependencyIdentityVersion: "composer-lock/1",
+                      dependencyLegacyDedupeKey: "legacy-composer-key",
+                      codeLocations: [{ file: "service/composer.lock" }],
+                    },
+                  },
+                ]
+              : []),
+          ],
+          baselineReceipts: [{ id: "baseline-sca", controlId: "sca", status: "COMPLETED" }],
+          retestReceipts: [{ id: "retest-sca", controlId: "sca", status: "COMPLETED" }],
+          retestFindingIds: persisted ? ["scoped-finding"] : [],
+        })
+        await completeRetestsForScan({ scanId: "scan-2", workspaceId: "workspace-1" })
+        if (failed) {
+          expect(prisma.finding.update).not.toHaveBeenCalled()
+          expect(prisma.retest.update).toHaveBeenCalledWith(
+            expect.objectContaining({ data: expect.objectContaining({ status: "failed" }) })
+          )
+        } else {
+          expect(prisma.finding.update).toHaveBeenCalledWith(
+            expect.objectContaining({ data: expect.objectContaining({ status: "FIXED" }) })
+          )
+        }
+      }
+    )
+
     it.each(["php_runtime_cve", "php_runtime_eol", "php_runtime_banner"])(
       "keeps %s inconclusive when only source declarations changed",
       async (findingClass) => {

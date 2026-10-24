@@ -102,6 +102,7 @@ export function phpExpressionFlow(
   tokens: PhpToken[],
   locals: PhpLocals,
   issues: string[],
+  allowBareSanitizers = true,
   depth = 0
 ): PhpFlow {
   const flow: PhpFlow = new Set()
@@ -119,7 +120,13 @@ export function phpExpressionFlow(
         issues.push("Unsupported unbalanced PHP expression")
         break
       }
-      for (const context of phpExpressionFlow(tokens.slice(i + 1, end), locals, issues, depth + 1))
+      for (const context of phpExpressionFlow(
+        tokens.slice(i + 1, end),
+        locals,
+        issues,
+        allowBareSanitizers,
+        depth + 1
+      ))
         flow.add(context)
       i = end
     } else if (token.kind === "word" && tokens[i + 1]?.text === "(") {
@@ -130,7 +137,7 @@ export function phpExpressionFlow(
       }
       const name = token.text.toLowerCase()
       const args = splitPhpArguments(tokens.slice(i + 2, end))
-      const nested = phpExpressionFlow(args.flat(), locals, issues, depth + 1)
+      const nested = phpExpressionFlow(args.flat(), locals, issues, allowBareSanitizers, depth + 1)
       if (
         name === "request" ||
         name === "filter_input" ||
@@ -140,8 +147,15 @@ export function phpExpressionFlow(
       ) {
         for (const context of CONTEXTS) nested.add(context)
       }
-      if (name === "escapeshellarg") nested.delete("command")
-      if (name === "intval") nested.delete("sql")
+      const previous = tokens[i - 1]
+      const qualifier = tokens[i - 2]
+      const builtin =
+        !["->", "?->", "::"].includes(previous?.text ?? "") &&
+        (previous?.text === "\\"
+          ? !qualifier || !["word", "variable"].includes(qualifier.kind)
+          : allowBareSanitizers)
+      if (builtin && name === "escapeshellarg") nested.delete("command")
+      if (builtin && name === "intval") nested.delete("sql")
       for (const context of nested) flow.add(context)
       i = end
     } else if (token.kind === "variable") {
