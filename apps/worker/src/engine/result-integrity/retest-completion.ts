@@ -278,6 +278,55 @@ function groupCandidateSources(
   return { candidateSourcesByFinding, deployedPhpEvidenceRequired }
 }
 
+/** Match current detections to both scoped and legacy Composer identities without mutating evidence. */
+function resolveRetestCandidateIdentity(
+  candidateRows: {
+    findingId: string | null
+    scanId: string
+    scannerSource: string
+    payload: unknown
+  }[],
+  retestFindings: { id: string }[],
+  scanId: string
+) {
+  const persistedFindingIds = new Set(retestFindings.map((finding) => finding.id))
+
+  const baselineCandidates = candidateRows.filter((candidate) => candidate.scanId !== scanId)
+  const currentComposerAliases = new Set<string>()
+  for (const candidate of candidateRows) {
+    if (
+      candidate.scanId !== scanId ||
+      !candidate.findingId ||
+      !persistedFindingIds.has(candidate.findingId)
+    )
+      continue
+    const payload = candidate.payload as {
+      dependencyIdentityVersion?: unknown
+      dependencyLegacyDedupeKey?: unknown
+    } | null
+    if (
+      payload?.dependencyIdentityVersion === "composer-lock/1" &&
+      typeof payload.dependencyLegacyDedupeKey === "string"
+    )
+      currentComposerAliases.add(payload.dependencyLegacyDedupeKey)
+  }
+  // Scoped Composer findings still represent legacy unscoped findings while any service remains affected.
+  for (const candidate of baselineCandidates) {
+    const payload = candidate.payload as {
+      dependencyIdentityVersion?: unknown
+      dedupeKey?: unknown
+    } | null
+    if (
+      candidate.findingId &&
+      payload?.dependencyIdentityVersion === undefined &&
+      typeof payload?.dedupeKey === "string" &&
+      currentComposerAliases.has(payload.dedupeKey)
+    )
+      persistedFindingIds.add(candidate.findingId)
+  }
+  return { persistedFindingIds, ...groupCandidateSources(baselineCandidates) }
+}
+
 export async function completeRetestsForScan(params: {
   scanId: string
   workspaceId: string
@@ -298,6 +347,7 @@ export async function completeRetestsForScan(params: {
     if (retests.length === 0) return
 
     const baselineScanIds = [...new Set(retests.map((retest) => retest.finding.scanId))]
+    const evidenceScanIds = [...new Set([params.scanId, ...baselineScanIds])]
     const [retestScan, baselineScans, candidateRows, retestFindings] = await Promise.all([
       tx.scan.findUnique({
         where: { id: params.scanId },
@@ -308,10 +358,7 @@ export async function completeRetestsForScan(params: {
         select: { id: true, targetId: true },
       }),
       tx.findingCandidate.findMany({
-        where: {
-          workspaceId: params.workspaceId,
-          scanId: { in: [...baselineScanIds, params.scanId] },
-        },
+        where: { workspaceId: params.workspaceId, scanId: { in: evidenceScanIds } },
         select: { findingId: true, scanId: true, scannerSource: true, payload: true },
       }),
       tx.finding.findMany({
@@ -326,48 +373,10 @@ export async function completeRetestsForScan(params: {
     if (!retestScan?.targetId) {
       throw new Error(`Retest scan has no target for retest finalization: ${params.scanId}`)
     }
-    const persistedFindingIds = new Set(retestFindings.map((finding) => finding.id))
     const scanById = new Map(baselineScans.map((scan) => [scan.id, scan]))
+    const { persistedFindingIds, candidateSourcesByFinding, deployedPhpEvidenceRequired } =
+      resolveRetestCandidateIdentity(candidateRows, retestFindings, params.scanId)
 
-    const baselineCandidates = candidateRows.filter(
-      (candidate) => candidate.scanId !== params.scanId
-    )
-    const currentComposerAliases = new Set<string>()
-    for (const candidate of candidateRows) {
-      if (
-        candidate.scanId !== params.scanId ||
-        !candidate.findingId ||
-        !persistedFindingIds.has(candidate.findingId)
-      )
-        continue
-      const payload = candidate.payload as {
-        dependencyIdentityVersion?: unknown
-        dependencyLegacyDedupeKey?: unknown
-      } | null
-      if (
-        payload?.dependencyIdentityVersion === "composer-lock/1" &&
-        typeof payload.dependencyLegacyDedupeKey === "string"
-      )
-        currentComposerAliases.add(payload.dependencyLegacyDedupeKey)
-    }
-    // Scoped Composer findings still represent legacy unscoped findings while any service remains affected.
-    for (const candidate of baselineCandidates) {
-      const payload = candidate.payload as {
-        dependencyIdentityVersion?: unknown
-        dedupeKey?: unknown
-      } | null
-      if (
-        candidate.findingId &&
-        payload?.dependencyIdentityVersion === undefined &&
-        typeof payload?.dedupeKey === "string" &&
-        currentComposerAliases.has(payload.dedupeKey)
-      )
-        persistedFindingIds.add(candidate.findingId)
-    }
-    const { candidateSourcesByFinding, deployedPhpEvidenceRequired } =
-      groupCandidateSources(baselineCandidates)
-
-    const evidenceScanIds = [...new Set([params.scanId, ...baselineScanIds])]
     const [manifestRows, coverageRows] = await Promise.all([
       tx.scanResultManifest.findMany({
         where: { scanId: { in: evidenceScanIds } },

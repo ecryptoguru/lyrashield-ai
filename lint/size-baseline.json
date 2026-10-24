@@ -482,8 +482,8 @@
     },
     "apps/worker/src/engine/result-integrity/retest-completion.ts|max-lines-per-function": {
       "count": 2,
-      "totalExcess": 95,
-      "maxExcess": 50
+      "totalExcess": 93,
+      "maxExcess": 49
     },
     "apps/worker/src/engine/runner-process.ts|max-lines-per-function": {
       "count": 2,
