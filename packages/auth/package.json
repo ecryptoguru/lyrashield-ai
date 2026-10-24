@@ -23,7 +23,7 @@
   },
   "devDependencies": {
     "@types/node": "catalog:",
-    "next": "^16.4.1",
+    "next": "^16.4.2",
     "typescript": "catalog:"
   }
 }
