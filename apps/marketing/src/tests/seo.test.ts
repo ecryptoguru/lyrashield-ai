@@ -153,7 +153,7 @@ describe("marketing SEO metadata", () => {
     expect(llms).toContain("const publicLinks = [")
     expect(llms).toContain("...publicLinks.map(({ label, url }) => markdownLink(label, url))")
     expect(llms).toContain('markdownLink("Start free trial"')
-    expect(llms).toContain('markdownLink("LyraShield AI source code on GitHub"')
+    expect(llms).toContain('markdownLink("Maintainer GitHub profile"')
     expect(llms).not.toContain("const publicPaths = [")
   })
 

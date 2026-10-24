@@ -266,7 +266,7 @@ export const GET: APIRoute = async (context) => {
     `The passive Lite Check at /scan also needs no account, but it is not browser-local: LyraShield's server fetches the authorized public URL and its linked assets read-only.`,
     `The full launch-gate platform is in open beta with open registration: ${markdownLink("Start free trial", "https://app.lyrashieldai.com/sign-up")}. Access is not gated behind a waitlist; the email form on the site is an optional product-updates subscription.`,
     "LyraShield offers MCP connections for documented coding clients, including Pi's built-in MCP client, and standalone CLI/CI workflows for Aider. Setup and authenticated runtime evidence are client-specific; the CLI is published on npm.",
-    `LyraShield AI's ${markdownLink("LyraShield AI source code on GitHub", "https://github.com/ecryptoguru/lyrashield-ai")} is under the MIT License; the LyraShield AI name and logos are not included in that license. This covers the published source, not separately hosted backend services.`,
+    `Public projects: ${markdownLink("Maintainer GitHub profile", "https://github.com/ecryptoguru")}.`,
   ]
 
   return new Response(sections.join("\n"), {
