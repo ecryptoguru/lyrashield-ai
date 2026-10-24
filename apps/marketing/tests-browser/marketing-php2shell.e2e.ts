@@ -95,6 +95,40 @@ test("clipboard rejection exposes selectable report text", async ({ page }) => {
   await expect(page.locator("#php-export-status")).toContainText("Clipboard unavailable")
 })
 
+for (const outcome of ["resolve", "reject"] as const) {
+  test(`a delayed clipboard ${outcome} cannot change a replacement assessment`, async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, "clipboard", {
+        value: {
+          writeText: () =>
+            new Promise<void>((resolve, reject) => {
+              Object.assign(window, {
+                settleClipboard: (success: boolean) =>
+                  success ? resolve() : reject(new Error("denied")),
+              })
+            }),
+        },
+      })
+    })
+    await page.goto("/tools/php2shell-checker")
+    await page.getByRole("button", { name: "Load example", exact: true }).click()
+    await page.getByRole("button", { name: "Check PHP2Shell locally" }).click()
+    await page.getByRole("button", { name: "Copy assessment" }).click()
+    await page.getByRole("button", { name: "Reset", exact: true }).click()
+    await page.getByLabel("Exact PHP version", { exact: false }).fill("8.4.27")
+    await page.getByRole("button", { name: "Check PHP2Shell locally" }).click()
+    await page.evaluate((success) => {
+      const testWindow = window as typeof window & { settleClipboard: (success: boolean) => void }
+      testWindow.settleClipboard(success)
+    }, outcome === "resolve")
+    await expect(page.locator("#php-export-status")).toHaveText("")
+    await expect(page.getByLabel("Assessment text to copy manually")).toBeHidden()
+    await expect(page.getByRole("region", { name: "PHP assessment" })).toBeFocused()
+  })
+}
+
 for (const slug of slugs) {
   test(`article ${slug} has generated imagery, metadata and conversion links`, async ({ page }) => {
     await page.goto(`/blog/${slug}`)

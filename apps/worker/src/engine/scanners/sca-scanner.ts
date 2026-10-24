@@ -288,7 +288,16 @@ export async function scanSca(config: ScaScanConfig): Promise<EngineVulnerabilit
 
   const allDeps = await collectScaDependencies(config)
 
-  const uniqueDeps = Array.from(new Map(allDeps.map((dep) => [dependencyKey(dep), dep])).values())
+  const uniqueDeps = Array.from(
+    new Map(
+      allDeps.map((dep) => [
+        dep.ecosystem === "Packagist"
+          ? JSON.stringify([dependencyKey(dep), dep.filePath])
+          : dependencyKey(dep),
+        dep,
+      ])
+    ).values()
+  )
   logger.info("Dependencies parsed", {
     total: allDeps.length,
     unique: uniqueDeps.length,
@@ -296,7 +305,12 @@ export async function scanSca(config: ScaScanConfig): Promise<EngineVulnerabilit
   })
   const osvResults = resolvedDependencyInventory
     ? new Map<string, OsvVulnerability[]>()
-    : await queryOsvBatch(uniqueDeps, fetchFn, signal, coverageIssues)
+    : await queryOsvBatch(
+        [...new Map(uniqueDeps.map((dep) => [dependencyKey(dep), dep])).values()],
+        fetchFn,
+        signal,
+        coverageIssues
+      )
 
   if (resolvedDependencyInventory) {
     for (const result of advisoryBatch?.results ?? []) {
@@ -325,7 +339,11 @@ export async function scanSca(config: ScaScanConfig): Promise<EngineVulnerabilit
     throwIfAborted(signal)
     const vulns = osvResults.get(dependencyKey(dep)) ?? []
     for (const vuln of vulns) {
-      const dependencyVulnerabilityId = `${dependencyKey(dep)}:${vuln.id}`
+      const dependencyVulnerabilityId = JSON.stringify([
+        dependencyKey(dep),
+        vuln.id,
+        ...(dep.ecosystem === "Packagist" ? [dep.filePath] : []),
+      ])
       if (seenDependencyVulnerabilities.has(dependencyVulnerabilityId)) continue
       seenDependencyVulnerabilities.add(dependencyVulnerabilityId)
 

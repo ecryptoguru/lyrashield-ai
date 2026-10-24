@@ -201,3 +201,43 @@ it("retains an interpolated attacker-selected script behind an interpreter", () 
     )
   ).toContain("CWE-78")
 })
+
+it.each([
+  "$cmd = 'uptime'; if ($allowed) $cmd = $_GET['cmd']; system($cmd);",
+  "$cmd = $_GET['cmd']; if ($allowed) $cmd = 'uptime'; system($cmd);",
+  "$cmd = 'uptime'; if ($allowed) $cmd = 'date'; else $cmd = $_GET['cmd']; system($cmd);",
+  "$cmd = 'uptime'; if ($a) if ($b) $cmd = $_GET['cmd']; system($cmd);",
+])("retains possible assignments in unbraced branches: %s", (body) => {
+  expect(ids(body)).toContain("CWE-78")
+})
+
+it.each([
+  ["system('ping ' . $helper->escapeshellarg($_GET['host']));", "CWE-78"],
+  ["system('ping ' . Fake::escapeshellarg($_GET['host']));", "CWE-78"],
+  ["system('ping ' . evil\\escapeshellarg($_GET['host']));", "CWE-78"],
+  ["$pdo->query('SELECT ' . $helper->intval($_GET['id']));", "CWE-89"],
+])("does not trust a custom method or namespaced sanitizer: %s", (body, cwe) => {
+  expect(ids(body)).toContain(cwe)
+})
+
+it("recognizes explicitly global PHP sanitizers", () => {
+  expect(ids("system('ping ' . \\escapeshellarg($_GET['host']));")).toEqual([])
+  expect(ids("$pdo->query('SELECT ' . \\intval($_GET['id']));")).toEqual([])
+})
+
+it.each([
+  "namespace App; function escapeshellarg($value) { return $value; } system('ping ' . escapeshellarg($_GET['host']));",
+  "use function Evil\\escapeshellarg; system('ping ' . escapeshellarg($_GET['host']));",
+  "use Evil\\{function escapeshellarg}; system('ping ' . escapeshellarg($_GET['host']));",
+])("keeps bare sanitizer resolution conservative for namespaces and imports: %s", (body) => {
+  expect(ids(body)).toContain("CWE-78")
+  expect(scan(body).issues.join(" ")).toContain("function resolution")
+})
+
+it.each([
+  "namespace App; system('ping ' . \\escapeshellarg($_GET['host']));",
+  "use function Evil\\escapeshellarg; system('ping ' . \\escapeshellarg($_GET['host']));",
+  "use Vendor\\Helper; system('ping ' . escapeshellarg($_GET['host']));",
+])("retains provable global sanitizer controls: %s", (body) => {
+  expect(ids(body)).toEqual([])
+})

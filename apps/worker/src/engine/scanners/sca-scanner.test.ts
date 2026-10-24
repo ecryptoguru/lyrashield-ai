@@ -5,11 +5,19 @@ import { tmpdir } from "os"
 import { rmSync } from "fs"
 import { performance } from "node:perf_hooks"
 
+// The shared OSV client uses an isolated in-memory cache here, never a database.
+vi.mock("../../../../../packages/db/src/client", () => ({ prisma: {} }))
+
 vi.mock("@lyrashield/logger", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }))
 
 import { scanSca } from "./sca-scanner"
+import { resolveExactDependencies } from "./resolved-dependencies"
+import { composerContentHash } from "./composer-dependencies"
+import { generateDedupeKey } from "../output-parser"
+import { queryOsvWithCache } from "../../../../../packages/db/src/osv-client"
+import { InMemoryAdvisoryCache } from "../../../../../packages/db/src/advisory-cache-service"
 import { clearThreatIntelligenceCache } from "./threat-intelligence"
 import type { ScannerCoverageIssue } from "../scanner-coverage"
 
@@ -496,6 +504,99 @@ describe("scanSca", () => {
 
 // Keep real repository parsing and scanner behavior; only advisory transport is fake.
 describe("Composer SCA", () => {
+  it("keeps identical vulnerable releases actionable in each Composer service", async () => {
+    const manifest = { require: { "vendor/pkg": "^1.0" } }
+    const lock = {
+      "content-hash": composerContentHash(manifest),
+      packages: [{ name: "vendor/pkg", version: "1.2.3" }],
+    }
+    const dir = await setupRepo(
+      Object.fromEntries(
+        ["services/One", "services/Two"].flatMap((service) => [
+          [`${service}/composer.json`, JSON.stringify(manifest)],
+          [`${service}/composer.lock`, JSON.stringify(lock)],
+        ])
+      )
+    )
+    try {
+      const inventory = await resolveExactDependencies({ repoPath: dir })
+      expect(inventory.status).toBe("COMPLETE")
+      expect(inventory.packages.map((pkg) => pkg.filePath).sort()).toEqual([
+        "services/One/composer.lock",
+        "services/Two/composer.lock",
+      ])
+      const advisory = {
+        id: "GHSA-shared",
+        affected: [
+          {
+            package: { name: "vendor/pkg", ecosystem: "Packagist" },
+            ranges: [{ type: "ECOSYSTEM", events: [{ introduced: "0" }, { fixed: "1.2.4" }] }],
+          },
+        ],
+      }
+      const calls: Array<{ count: number }> = []
+      const findings = await scanSca({
+        repoPath: dir,
+        workspaceDir: dir,
+        fetchFn: makeMockFetch({ "vendor/pkg@1.2.3": [advisory] }, calls),
+      })
+      expect(calls).toEqual([{ count: 1 }])
+      expect(findings).toHaveLength(2)
+      expect(findings.map((finding) => finding.dependency_metadata?.lockfile_path).sort()).toEqual([
+        "services/One/composer.lock",
+        "services/Two/composer.lock",
+      ])
+      expect(
+        findings.every((finding) => finding.dependency_metadata?.fixed_version === "1.2.4")
+      ).toBe(true)
+      expect(new Set(findings.map((finding) => generateDedupeKey(finding, "target-1"))).size).toBe(
+        2
+      )
+      expect(
+        generateDedupeKey(
+          {
+            ...findings[0]!,
+            dependency_metadata: {
+              ...findings[0]!.dependency_metadata,
+              lockfile_path: "services/WEB/composer.lock",
+            },
+          },
+          "target-1"
+        )
+      ).not.toBe(
+        generateDedupeKey(
+          {
+            ...findings[0]!,
+            dependency_metadata: {
+              ...findings[0]!.dependency_metadata,
+              lockfile_path: "services/web/composer.lock",
+            },
+          },
+          "target-1"
+        )
+      )
+      // The shared advisory cache deduplicates network queries, but each lock remains a finding.
+      const sharedCalls: Array<{ count: number }> = []
+      const advisoryBatch = await queryOsvWithCache(inventory.packages, {
+        cache: new InMemoryAdvisoryCache(),
+        fetchFn: makeMockFetch({ "vendor/pkg@1.2.3": [advisory] }, sharedCalls),
+      })
+      expect(sharedCalls).toEqual([{ count: 1 }])
+      expect(advisoryBatch.status).toBe("COMPLETE")
+      const shared = await scanSca({
+        repoPath: dir,
+        workspaceDir: dir,
+        resolvedDependencyInventory: inventory,
+        advisoryBatch,
+      })
+      expect(shared.map((finding) => generateDedupeKey(finding, "target-1")).sort()).toEqual(
+        findings.map((finding) => generateDedupeKey(finding, "target-1")).sort()
+      )
+    } finally {
+      cleanupRepo()
+    }
+  })
+
   beforeEach(() => {
     cleanupRepo()
     clearThreatIntelligenceCache()

@@ -111,6 +111,37 @@ beforeEach(() => {
   })
 })
 describe("Composer finding to resolver authorization", () => {
+  it.each(["services/One/composer.lock", "services/Two/composer.lock"])(
+    "resolves only the evidence-bound lock at %s",
+    async (lockPath) => {
+      const scopedMetadata = { ...metadata, lockfile_path: lockPath }
+      mocks.read.mockResolvedValue({
+        content: Buffer.from(JSON.stringify({ ...claim, dependencyMetadata: scopedMetadata })),
+      })
+      mocks.candidate.mockResolvedValue({
+        payload: {
+          findingClass: "dependency_cve",
+          contentHashes: { dependencyMetadata: hash(scopedMetadata) },
+        },
+      })
+      mocks.github.mockImplementation(
+        async (_id: number, _owner: string, _repo: string, path: string) =>
+          path.endsWith(".lock") ? `lock:${path}` : `manifest:${path}`
+      )
+      const artifact = await prepareComposerFixProposal(params)
+      expect(artifact).toMatchObject({
+        lockPath,
+        manifestPath: lockPath.replace(/\.lock$/, ".json"),
+      })
+      expect(mocks.regenerate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          originalLock: `lock:${lockPath}`,
+          originalManifest: `manifest:${lockPath.replace(/\.lock$/, ".json")}`,
+        })
+      )
+      expect(mocks.github).toHaveBeenCalledTimes(2)
+    }
+  )
   it("requires a deterministic SCA candidate rather than trusting an engine claim", async () => {
     mocks.candidate.mockResolvedValue(null)
     await expect(prepareComposerFixProposal(params)).rejects.toThrow(/deterministic|SCA/)

@@ -6,7 +6,7 @@ import {
   matchPhpRuntimeAdvisories,
 } from "@lyrashield/security/php-security"
 import { z } from "zod"
-import { parseDocument } from "yaml"
+import { isScalar, LineCounter, parseDocument } from "yaml"
 import { parsePhpVersionFile } from "./php-runtime-declarations"
 import {
   PHP_RUNTIME_CATALOG,
@@ -48,6 +48,7 @@ type Declaration = Partial<Inventory> & {
   line: number
   image?: string
   mutableImage?: string
+  composeService?: string
 }
 
 function parseIdentityJson(content: string): unknown {
@@ -66,7 +67,8 @@ function addImageDeclaration(
   line: number,
   editable: boolean,
   declarations: Declaration[],
-  issue: (reason: string) => void
+  issue: (reason: string) => void,
+  composeService?: string
 ): boolean {
   let phpPresent = false
   const official = /^(?:(?:docker\.io\/)?library\/|docker\.io\/)?php(?=:|@|$)/.test(image)
@@ -92,6 +94,7 @@ function addImageDeclaration(
     scope: "source_declaration",
     line,
     image,
+    composeService,
     mutableImage: editable && !image.includes("@") ? image : undefined,
     sapi: match[2]?.startsWith("-fpm")
       ? "fpm"
@@ -262,23 +265,29 @@ function parseRuntimeDeclarations(
         phpPresent
   } else if (kind === "compose") {
     try {
-      const doc = parseDocument(content, { uniqueKeys: true, strict: true })
+      const lineCounter = new LineCounter()
+      const doc = parseDocument(content, { uniqueKeys: true, strict: true, lineCounter })
       if (doc.errors.length) throw new Error("invalid compose")
       const parsed: unknown = doc.toJS({ maxAliasCount: 0 })
       const shape = z
         .object({
           services: z.record(
-            z.string(),
+            z.string().max(256),
             z.object({ image: z.string().max(256).optional() }).passthrough()
           ),
         })
         .passthrough()
         .safeParse(parsed)
       if (!shape.success) throw new Error("invalid compose services")
-      for (const service of Object.values(shape.data.services).slice(0, 256))
-        if (service.image)
-          phpPresent =
-            addImageDeclaration(service.image, 1, false, declarations, issue) || phpPresent
+      for (const [serviceName, service] of Object.entries(shape.data.services).slice(0, 256)) {
+        if (!service.image) continue
+        const imageNode = doc.getIn(["services", serviceName, "image"], true)
+        const line =
+          isScalar(imageNode) && imageNode.range ? lineCounter.linePos(imageNode.range[0]).line : 1
+        phpPresent =
+          addImageDeclaration(service.image, line, false, declarations, issue, serviceName) ||
+          phpPresent
+      }
       if (Object.keys(shape.data.services).length > 256)
         issue("PHP runtime Compose inventory is bounded at 256 services")
     } catch {
@@ -346,6 +355,7 @@ function declaredRuntimeFindings(
   const supported = PHP_RUNTIME_CATALOG.supportedBranches.includes(branch)
   const metadata = {
     runtime_version: declaration.version,
+    ...(declaration.composeService ? { compose_service: declaration.composeService } : {}),
     evidence_scope: declaration.scope,
     runtime_verified: false,
     catalog_version: PHP_RUNTIME_CATALOG.catalogVersion,
@@ -362,12 +372,16 @@ function declaredRuntimeFindings(
     scannerSource: "iac" as const,
     code_locations: [{ file: path, start_line: declaration.line }],
   }
+  const serviceSuffix = declaration.composeService ? ` (service ${declaration.composeService})` : ""
+  const identitySuffix = declaration.composeService
+    ? `-${encodeURIComponent(declaration.composeService)}`
+    : ""
   const [major, minor] = branch.split(".").map(Number)
   if (major! < 8 || (major === 8 && minor! < 2)) {
     findings.push({
       ...base,
-      id: `php-eol-${path}-${declaration.line}`,
-      title: `Declared PHP ${declaration.version} is end-of-life`,
+      id: `php-eol-${path}-${declaration.line}${identitySuffix}`,
+      title: `Declared PHP ${declaration.version} is end-of-life${serviceSuffix}`,
       severity: "high",
       finding_class: "php_runtime_eol",
       description: `This branch is unsupported in the catalog dated ${PHP_RUNTIME_CATALOG.asOf}; the source declaration is not installed-runtime verification.`,
@@ -415,8 +429,8 @@ function declaredRuntimeFindings(
       : undefined
     findings.push({
       ...base,
-      id: `php-runtime-${advisory.id}-${path}-${declaration.line}`,
-      title: `Declared PHP ${declaration.version}: ${advisory.id}`,
+      id: `php-runtime-${advisory.id}-${path}-${declaration.line}${identitySuffix}`,
+      title: `Declared PHP ${declaration.version}: ${advisory.id}${serviceSuffix}`,
       severity: advisory.severity,
       finding_class: "php_runtime_cve",
       ...(advisory.id.startsWith("CVE-") ? { cve: advisory.id } : {}),

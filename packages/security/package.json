@@ -76,7 +76,7 @@
     "@noble/hashes": "2.2.0",
     "parse5": "^8.0.1",
     "typescript": "catalog:",
-    "undici": "8.10.2",
+    "undici": "8.12.2",
     "zod": "catalog:"
   },
   "devDependencies": {

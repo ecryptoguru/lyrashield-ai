@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "vitest"
 import { mkdir, rm, writeFile } from "fs/promises"
 import { join } from "path"
 import { resolveExactDependencies } from "./resolved-dependencies"
+import { composerContentHash } from "./composer-dependencies"
 
 const tempDirectories: string[] = []
 
@@ -87,6 +88,29 @@ describe("resolveExactDependencies", () => {
 // These exercise on-disk repositories: a missing Composer resolver or an unsafe
 // version fallback must change the inventory, not merely a parser mock.
 describe("Composer inventory", () => {
+  it("marks preserved Composer locations beyond the inventory cap incomplete", async () => {
+    const manifest = { require: { "vendor/pkg0": "^1" } }
+    const lock = JSON.stringify({
+      "content-hash": composerContentHash(manifest),
+      packages: Array.from({ length: 251 }, (_, index) => ({
+        name: `vendor/pkg${index}`,
+        version: "1.0.0",
+      })),
+    })
+    const root = await repo({
+      "one/composer.json": JSON.stringify(manifest),
+      "one/composer.lock": lock,
+      "two/composer.json": JSON.stringify(manifest),
+      "two/composer.lock": lock,
+    })
+    const inventory = await resolveExactDependencies({ repoPath: root })
+    expect(inventory).toMatchObject({ status: "PARTIAL", truncated: true })
+    expect(inventory.packages).toHaveLength(500)
+    expect(inventory.unresolved).toContainEqual(
+      expect.objectContaining({ reason: "dependency limit reached (500)" })
+    )
+  })
+
   it("resolves runtime, transitive and development releases without platform constraints", async () => {
     const root = await repo({
       "composer.json": JSON.stringify({
