@@ -297,9 +297,7 @@ jobs:
             exit 1
           fi
 
-      # A retried first cutover may reuse its mode only after same-run receipt
-      # proof. If no receipt exists, reclassify the still-live first-cutover
-      # baseline; stale workflow outputs alone never authorize maintenance.
+      # Reuse first-cutover mode only with a same-run receipt; otherwise reclassify live writers.
       - name: Verify compatible webhook cutover baseline
         if: inputs.held_recovery != true && (inputs.webhook_claims_cutover != true || github.run_attempt == 1 || steps.cutover-retry.outputs.receipt == 'absent')
         env:
