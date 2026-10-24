@@ -1,4 +1,5 @@
 import { createRequire } from "node:module"
+import { randomUUID } from "node:crypto"
 import { afterEach, expect, it, vi } from "vitest"
 
 // Exercise the installed SDK rather than mocking MSAL: the security override
@@ -17,6 +18,7 @@ it("keeps DefaultAzureCredential managed identity compatible with the patched MS
   vi.stubEnv("IDENTITY_ENDPOINT", "http://127.0.0.1:1/identity")
   vi.stubEnv("IDENTITY_HEADER", "fixture-identity-header")
   const clientId = "11111111-1111-1111-1111-111111111111"
+  const expectedToken = randomUUID()
   const requests: { url: string; method: string; identityHeader?: string }[] = []
   const credential = new DefaultAzureCredential({
     managedIdentityClientId: clientId,
@@ -33,7 +35,7 @@ it("keeps DefaultAzureCredential managed identity compatible with the patched MS
           status: 200,
           headers: createHttpHeaders({ "content-type": "application/json" }),
           bodyAsText: JSON.stringify({
-            access_token: "fixture-token",
+            access_token: expectedToken,
             expires_on: String(Math.floor(Date.now() / 1000) + 3600),
             resource: "https://vault.azure.net",
             token_type: "Bearer",
@@ -44,7 +46,7 @@ it("keeps DefaultAzureCredential managed identity compatible with the patched MS
   })
 
   const token = await credential.getToken("https://vault.azure.net/.default")
-  expect(token?.token).toBe("fixture-token")
+  expect(token?.token).toBe(expectedToken)
   expect(requests).toHaveLength(1)
   const request = requests[0]!
   const url = new URL(request.url)
