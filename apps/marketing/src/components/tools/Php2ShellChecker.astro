@@ -46,6 +46,7 @@ const button = "inline-flex min-h-11 items-center justify-center rounded-lg bord
   const exportPanel = document.querySelector<HTMLDivElement>("#php-export")
   const status = document.querySelector<HTMLParagraphElement>("#php-export-status")
   let reportText = ""
+  let assessmentRevision = 0
   const node = (tag: string, content: string, className = "") => {
     const el = document.createElement(tag)
     el.textContent = content
@@ -57,6 +58,7 @@ const button = "inline-flex min-h-11 items-center justify-center rounded-lg bord
     const announce = (message: string) => { const el = document.querySelector("#php-announcement"); if (el) el.textContent = message }
     form.addEventListener("submit", (event) => {
       event.preventDefault()
+      assessmentRevision++
       const input: PhpCheckInput = {
         version: select("version"), source: select("source") as PhpCheckInput["source"], deployment: select("deployment") as PhpCheckInput["deployment"],
         backport: (form.elements.namedItem("backport") as HTMLInputElement).checked,
@@ -88,6 +90,7 @@ const button = "inline-flex min-h-11 items-center justify-center rounded-lg bord
       results.focus(); announce("PHP assessment ready. Three advisory results and next steps are available.")
     })
     const clearAssessment = () => {
+      assessmentRevision++
       const hadAssessment = Boolean(reportText)
       results.replaceChildren(); results.classList.add("hidden"); exportPanel.classList.add("hidden"); reportText = ""; status.textContent = ""
       const fallback = document.querySelector<HTMLTextAreaElement>("#php-copy-fallback")
@@ -105,10 +108,16 @@ const button = "inline-flex min-h-11 items-center justify-center rounded-lg bord
     })
     document.querySelector("#php-copy")?.addEventListener("click", async () => {
       if (!reportText) return
-      try { await navigator.clipboard.writeText(reportText); status.textContent = "Assessment copied." }
+      const revision = assessmentRevision
+      const copiedReport = reportText
+      try {
+        await navigator.clipboard.writeText(copiedReport)
+        if (revision === assessmentRevision) status.textContent = "Assessment copied."
+      }
       catch {
+        if (revision !== assessmentRevision) return
         const fallback = document.querySelector<HTMLTextAreaElement>("#php-copy-fallback")
-        if (fallback) { fallback.value = reportText; fallback.classList.remove("hidden"); fallback.focus(); fallback.select() }
+        if (fallback) { fallback.value = copiedReport; fallback.classList.remove("hidden"); fallback.focus(); fallback.select() }
         status.textContent = "Clipboard unavailable. Select and copy the assessment text below."
       }
     })
