@@ -24,6 +24,11 @@ catalog:
 overrides:
   # GHSA-mrhx-c7xc-m3w5: reject oversized constrained collections before element parsing.
   "zod@>=4 <4.6.6": 4.6.6
+  # GHSA-27r3-jxmh-p828: handle decoder errors after compressed request bodies.
+  "body-parser@>=2 <2.4.0": "2.4.0"
+  # GHSA-xcx6-jx8p-x3h5: fixed authorization-code endpoint validation.
+  # v6/v7 breaks only interactive browser-loopback options; our managed identity path is covered.
+  "@azure/msal-node@>=5 <7.1.0": "7.1.0"
   # IPv6 classification, cross-family subnet and bounded-parser fixes.
   "ip-address@<10.7.1": "^10.7.1"
   # GHSA-2v37-7h3g-55p8: keep postcss on the patched nanoid 3.x line.
@@ -68,10 +73,11 @@ overrides:
   "postcss@<8.5.23": "^8.5.26"
   # GHSA-rgj7-g3m4-5g8c and GHSA-wq5f-xc86-pv6w: keep Sharp on its patched 0.35.x line.
   "sharp@<0.35.5": "^0.35.5"
+  # GHSA-xjj6-f33q-929c additionally fixes orphaned content-decoding errors on both lines.
   # GHSA-4cwx-7wf7-3272, GHSA-jr45-8vmc-qm54, and GHSA-pmjh-fq2x-6v4x: patch undici 7.x.
-  "undici@>=7 <7.29.1": "^7.29.1"
+  "undici@>=7 <7.30.1": "7.30.1"
   # GHSA-rfgv-xxqx-mfg5, GHSA-w293-vg96-wgc3, GHSA-vp8m-p9jh-q5pm.
-  "undici@>=8 <8.10.2": "8.10.2"
+  "undici@>=8 <8.12.2": "8.12.2"
   # GHSA-2883-xcg3-v3hh: Astro and @eslint/eslintrc still admit vulnerable js-yaml.
   "js-yaml@<4.3.2": "^4.3.2"
   # GHSA-w27v-7q3p-w38r: Astro still admits vulnerable svgo.
@@ -125,6 +131,8 @@ minimumReleaseAgeExclude:
   - "@lyrashield/*"
   # GHSA-68fv-2mgg-jv7q: allow only the published fix through the age gate.
   - "source-map-js@1.2.2"
+  # GHSA-27r3-jxmh-p828: exact security fix published 2026-10-22.
+  - "body-parser@2.4.0"
 # GHSA-ch52-4w7c-c8xp has no patched npm version as of 2026-10-03. Astro's
 # remote asset helper creates a fresh Request(src) and only asks its cache
 # policy for storable/timeToLive; it does not invoke the vulnerable
