@@ -69,7 +69,7 @@ describe("scan-local private repository Git credentials", () => {
     expect(() =>
       buildEngineEnv(profile, undefined, {
         ...options,
-        repositoryAuth: { ...options.repositoryAuth, token: "bad\nheader" },
+        repositoryAuth: { ...options.repositoryAuth, token: `${token}\nheader` },
       })
     ).toThrow()
     expect(() =>

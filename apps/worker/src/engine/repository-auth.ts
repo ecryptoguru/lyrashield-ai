@@ -33,7 +33,7 @@ export async function prepareRepositoryAuth(params: {
   )
     throw new Error("Invalid repository installation identity")
   // Validate the scope before querying the credential provider.
-  repositoryAuthEnv({ repoFullName: target.repoFullName, token: "scope-validation" })
+  repositoryAuthEnv({ repoFullName: target.repoFullName, token: "scope" })
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0)
     throw new Error("Repository authorization deadline exhausted")
   let timer: ReturnType<typeof setTimeout> | undefined

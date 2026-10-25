@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { randomUUID } from "node:crypto"
 const mocks = vi.hoisted(() => ({ integration: vi.fn(), token: vi.fn(), rls: vi.fn() }))
 vi.mock("@lyrashield/db", () => ({ withWorkspaceRLS: mocks.rls }))
 vi.mock("@lyrashield/integrations", () => ({ getInstallationToken: mocks.token }))
@@ -9,6 +10,7 @@ const target = {
   repoFullName: "owner/private",
   installationId: "123",
 }
+const token = randomUUID()
 const input = () => ({
   workspaceId: "workspace-1",
   target,
@@ -22,14 +24,14 @@ beforeEach(() => {
     fn({ integration: { findFirst: mocks.integration } })
   )
   mocks.integration.mockResolvedValue({ id: "integration-1" })
-  mocks.token.mockResolvedValue("generated-test-token")
+  mocks.token.mockResolvedValue(token)
 })
 afterEach(() => vi.useRealTimers())
 describe("private repository authorization before the billable boundary", () => {
   it("checks the active integration in the exact workspace before minting a token", async () => {
     expect(await prepareRepositoryAuth(input())).toEqual({
       repoFullName: target.repoFullName,
-      token: "generated-test-token",
+      token,
     })
     expect(mocks.rls).toHaveBeenCalledWith("workspace-1", expect.any(Function))
     expect(mocks.integration).toHaveBeenCalledWith({

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
+import { randomUUID } from "node:crypto"
 
 const mocks = vi.hoisted(() => ({
   logger: { warn: vi.fn(), error: vi.fn(), info: vi.fn() },
@@ -172,7 +173,7 @@ describe("executeScanTarget relay lifecycle", () => {
   })
 
   it("prepares private Git credentials before billable work and sends a credential-free canonical URL", async () => {
-    const repositoryAuth = { repoFullName: "owner/private", token: "test-ephemeral-credential" }
+    const repositoryAuth = { repoFullName: "owner/private", token: randomUUID() }
     mocks.prepareRepositoryAuth.mockResolvedValue(repositoryAuth)
     const input = params({
       target: {
