@@ -11,6 +11,7 @@ import {
 import { fetchThreatSignals, type ThreatSignal } from "./threat-intelligence"
 import type { ResolvedDependencyInventory } from "./resolved-dependencies"
 import { collectScaDependencies, type Dependency } from "./dependency-manifests"
+import { osvCvss } from "./osv-cvss"
 
 interface ScaScanConfig {
   repoPath: string
@@ -156,14 +157,12 @@ function mapOsvSeverity(vuln: OsvVulnerability): string {
     if (map[dbSeverity]) return map[dbSeverity]
   }
 
-  if (vuln.severity?.length) {
-    for (const s of vuln.severity) {
-      const score = parseFloat(s.score.match(/CVSS:3\.[01]\/[A-Z]:([0-9.]+)/)?.[1] ?? "0")
-      if (score >= 9) return "critical"
-      if (score >= 7) return "high"
-      if (score >= 4) return "medium"
-      if (score > 0) return "low"
-    }
+  const score = osvCvss(vuln.severity)?.score
+  if (score !== undefined) {
+    if (score >= 9) return "critical"
+    if (score >= 7) return "high"
+    if (score >= 4) return "medium"
+    return score > 0 ? "low" : "info"
   }
 
   return "medium"
@@ -330,6 +329,7 @@ export async function scanSca(config: ScaScanConfig): Promise<EngineVulnerabilit
       seenDependencyVulnerabilities.add(dependencyVulnerabilityId)
 
       const severity = mapOsvSeverity(vuln)
+      const advisoryCvss = osvCvss(vuln.severity)
       const cve = extractCveId(vuln)
       const fixedVersion =
         dep.ecosystem === "Packagist" ? composerFixedVersion(vuln, dep) : extractFixedVersion(vuln)
@@ -341,7 +341,10 @@ export async function scanSca(config: ScaScanConfig): Promise<EngineVulnerabilit
         timestamp: new Date().toISOString(),
         target: dep.filePath,
         cve,
-        cwe: "CWE-1104", // Use of Unmaintained Third Party Components
+        cwe:
+          vuln.database_specific?.cwe_ids?.find((id) => /^CWE-[1-9]\d{0,5}$/.test(id)) ??
+          "CWE-1104",
+        ...(advisoryCvss ? { cvss: advisoryCvss.score, advisory_cvss: advisoryCvss } : {}),
         finding_class: "dependency_cve",
         dependency_metadata: {
           package_name: dep.name,

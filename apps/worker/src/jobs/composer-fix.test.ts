@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from "vitest"
 import { ComposerFixUnavailableError, regenerateComposerLock } from "./composer-fix"
 import { composerContentHash } from "../engine/scanners/composer-dependencies"
+import {
+  buildComposerUpdateDiff,
+  validateComposerFixArtifact,
+  patchScopeForPlan,
+  diffChecksum,
+} from "@lyrashield/fix"
 
 vi.mock("@lyrashield/logger", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
@@ -49,6 +55,67 @@ const fakeMetadataFetch = async () =>
   new Response(JSON.stringify({ packages: { "psr/log": [nextPackage] } }), {
     headers: { "content-type": "application/json" },
   })
+
+it.runIf(process.env.LYRASHIELD_COMPOSER_SMOKE === "1").each([
+  { indent: 2, eol: "\n" },
+  { indent: "\t", eol: "\r\n" },
+])(
+  "preserves unrelated package and lock metadata through full artifact validation ($indent, $eol)",
+  async ({ indent, eol }) => {
+    const fullManifest = { ...manifest, "require-dev": { "vendor/retained": "1.0.0" } }
+    const retained = { name: "vendor/retained", version: "1.0.0", type: "library", funding: [] }
+    const before =
+      JSON.stringify(
+        {
+          ...JSON.parse(originalLock),
+          "content-hash": composerContentHash(fullManifest),
+          "packages-dev": [retained],
+          "plugin-api-version": "2.6.0",
+        },
+        null,
+        indent
+      ).replaceAll("\n", eol) + eol
+    const result = await regenerateComposerLock({
+      ...request,
+      originalManifest: JSON.stringify(fullManifest),
+      originalLock: before,
+      fetchFn: fakeMetadataFetch as typeof fetch,
+      resolver: async () => ["93.184.216.34"],
+    })
+    const bindings = {
+      workspaceId: "workspace",
+      targetId: "target",
+      findingId: "finding",
+      proposalId: "proposal",
+      baseCommit: "a".repeat(40),
+    }
+    const diff = buildComposerUpdateDiff("composer.lock", before, result.after)
+    const artifact = {
+      ...bindings,
+      ...result,
+      version: "composer-fix/1",
+      manifestPath: "composer.json",
+      lockPath: "composer.lock",
+      packageName: "psr/log",
+      fromVersion: "1.1.3",
+      toVersion: "1.1.4",
+      before,
+      diff,
+      diffChecksum: diffChecksum(diff),
+    }
+    expect(
+      validateComposerFixArtifact(artifact, bindings, patchScopeForPlan("STARTER"))
+    ).toMatchObject({ ok: true })
+    expect(JSON.parse(result.after)["packages-dev"]).toEqual([retained])
+    expect(JSON.parse(result.after)._readme).toEqual(JSON.parse(before)._readme)
+    expect(JSON.parse(result.after)["plugin-api-version"]).toBe("2.6.0")
+    expect(result.after).toContain(
+      `${eol}${typeof indent === "number" ? " ".repeat(indent) : indent}"packages": [`
+    )
+    expect(result.after.endsWith(eol)).toBe(true)
+  },
+  120000
+)
 
 describe("offline Composer update boundary", () => {
   it("rejects target-controlled repositories before contacting any server", async () => {

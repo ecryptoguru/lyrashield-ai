@@ -185,59 +185,65 @@ it("does not treat a paginated batch as complete", async () => {
   expect(result.unresolved[0]?.reason).toMatch(/pagination/i)
 })
 
-it("refreshes a fresh legacy cache containing ID-only advisories", async () => {
-  const cache = new InMemoryAdvisoryCache()
-  await cache.set({
-    ecosystem: "Packagist",
-    name: composerPackage.name,
-    version: composerPackage.version,
-    vulns: [],
-    source: "osv",
-    fetchedAt: new Date(),
-    snapshot: JSON.stringify([{ id: composerAdvisory.id }]),
-    checksum: "legacy",
-    schemaVersion: "osv-querybatch/1",
-  })
-  const calls: string[] = []
-  const result = await queryOsvWithCache([composerPackage], {
-    cache,
-    fetchFn: async (url) => {
-      calls.push(String(url))
-      return new Response(
-        JSON.stringify(
-          String(url).endsWith("/querybatch")
-            ? { results: [{ vulns: [{ id: composerAdvisory.id }] }] }
-            : composerAdvisory
+it.each(["osv-querybatch/1", "osv-querybatch/2"])(
+  "refreshes a legacy %s advisory cache",
+  async (schemaVersion) => {
+    const cache = new InMemoryAdvisoryCache()
+    await cache.set({
+      ecosystem: "Packagist",
+      name: composerPackage.name,
+      version: composerPackage.version,
+      vulns: [],
+      source: "osv",
+      fetchedAt: new Date(),
+      snapshot: JSON.stringify([{ id: composerAdvisory.id }]),
+      checksum: "legacy",
+      schemaVersion,
+    })
+    const calls: string[] = []
+    const result = await queryOsvWithCache([composerPackage], {
+      cache,
+      fetchFn: async (url) => {
+        calls.push(String(url))
+        return new Response(
+          JSON.stringify(
+            String(url).endsWith("/querybatch")
+              ? { results: [{ vulns: [{ id: composerAdvisory.id }] }] }
+              : composerAdvisory
+          )
         )
-      )
-    },
-  })
-  expect(result.status).toBe("COMPLETE")
-  expect(result.results[0]?.vulns[0]).toMatchObject(composerAdvisory)
-  expect(calls).toHaveLength(2)
-})
+      },
+    })
+    expect(result.status).toBe("COMPLETE")
+    expect(result.results[0]?.vulns[0]).toMatchObject(composerAdvisory)
+    expect(calls).toHaveLength(2)
+  }
+)
 
-it("refetches a legacy empty cache because older batches did not track pagination", async () => {
-  const cache = new InMemoryAdvisoryCache()
-  await cache.set({
-    ecosystem: pkg.ecosystem,
-    name: pkg.name,
-    version: pkg.version,
-    vulns: [],
-    source: "osv",
-    fetchedAt: new Date(),
-    snapshot: "[]",
-    checksum: "legacy",
-    schemaVersion: "osv-querybatch/1",
-  })
-  let calls = 0
-  const result = await queryOsvWithCache([pkg], {
-    cache,
-    fetchFn: async () => {
-      calls++
-      return new Response(JSON.stringify({ results: [{}] }))
-    },
-  })
-  expect(result.status).toBe("COMPLETE")
-  expect(calls).toBe(1)
-})
+it.each(["osv-querybatch/1", "osv-querybatch/2"])(
+  "refetches a legacy empty %s cache",
+  async (schemaVersion) => {
+    const cache = new InMemoryAdvisoryCache()
+    await cache.set({
+      ecosystem: pkg.ecosystem,
+      name: pkg.name,
+      version: pkg.version,
+      vulns: [],
+      source: "osv",
+      fetchedAt: new Date(),
+      snapshot: "[]",
+      checksum: "legacy",
+      schemaVersion,
+    })
+    let calls = 0
+    const result = await queryOsvWithCache([pkg], {
+      cache,
+      fetchFn: async () => {
+        calls++
+        return new Response(JSON.stringify({ results: [{}] }))
+      },
+    })
+    expect(result.status).toBe("COMPLETE")
+    expect(calls).toBe(1)
+  }
+)

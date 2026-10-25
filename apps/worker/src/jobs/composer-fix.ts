@@ -44,6 +44,8 @@ function checkComposerExit($code) {
   if ($code !== 0) exit(in_array($code, [1, 2], true) ? ${COMPOSER_CONSTRAINT_EXIT_CODE} : 1);
 }
 $original = file_get_contents('/app/composer.original.json');
+$originalLockBytes = file_get_contents('/app/composer.lock');
+$originalLock = json_decode($originalLockBytes, false, 512, JSON_THROW_ON_ERROR);
 $manifest = json_decode($original, true, 512, JSON_THROW_ON_ERROR);
 $manifest['repositories'] = [['type' => 'package', 'package' => json_decode(file_get_contents('/app/repository.json'), true, 512, JSON_THROW_ON_ERROR)], ['packagist.org' => false]];
 file_put_contents('/app/composer.json', json_encode($manifest, JSON_UNESCAPED_SLASHES));
@@ -51,8 +53,32 @@ $flags = ' --no-install --no-scripts --no-plugins --no-interaction --no-audit --
 passthru('composer update ' . escapeshellarg(getenv('LYRA_COMPOSER_PACKAGE')) . $flags, $code);
 checkComposerExit($code);
 $lock = json_decode(file_get_contents('/app/composer.lock'), true, 512, JSON_THROW_ON_ERROR);
-$lock['content-hash'] = getenv('LYRA_COMPOSER_CONTENT_HASH');
-file_put_contents('/app/composer.lock', json_encode($lock, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\\n");
+// Preserve unchanged package records, including metadata Composer omits when serializing.
+// Keep the solver's package set and versions so semantic validation still rejects wider updates.
+foreach (['packages', 'packages-dev'] as $section) {
+  $originalPackages = [];
+  foreach ($originalLock->{$section} ?? [] as $package) $originalPackages[$package->name] = $package;
+  foreach ($lock[$section] ?? [] as $index => $package) {
+    $previous = $originalPackages[$package['name']] ?? null;
+    if ($package['name'] !== getenv('LYRA_COMPOSER_PACKAGE') && $previous !== null
+        && ltrim($previous->version, 'v') === ltrim($package['version'], 'v')) {
+      $lock[$section][$index] = $previous;
+    }
+  }
+}
+$resolved = $lock;
+$lock = $originalLock;
+foreach (['packages', 'packages-dev'] as $key) {
+  if (array_key_exists($key, $resolved)) $lock->{$key} = $resolved[$key];
+}
+$lock->{'content-hash'} = getenv('LYRA_COMPOSER_CONTENT_HASH');
+$encoded = json_encode($lock, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+if (preg_match('/\\r?\\n([ \\t]+)"/', $originalLockBytes, $indent) && strlen($indent[1]) <= 10) {
+  $encoded = preg_replace_callback('/^ +/m', fn($match) => str_repeat($indent[1], intdiv(strlen($match[0]), 4)), $encoded);
+}
+if (str_contains($originalLockBytes, "\\r\\n")) $encoded = str_replace("\\n", "\\r\\n", $encoded);
+$ending = str_ends_with($originalLockBytes, "\\r\\n") ? "\\r\\n" : (str_ends_with($originalLockBytes, "\\n") ? "\\n" : '');
+file_put_contents('/app/composer.lock', $encoded . $ending);
 file_put_contents('/app/composer.json', $original);
 passthru('composer --no-scripts --no-plugins validate --no-check-publish --check-lock', $code);
 checkComposerExit($code);

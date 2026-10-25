@@ -1,6 +1,6 @@
 import { z } from "zod"
 
-export const OSV_CACHE_SCHEMA_VERSION = "osv-querybatch/2"
+export const OSV_CACHE_SCHEMA_VERSION = "osv-querybatch/3"
 
 export const OsvVulnerabilitySchema = z.object({
   id: z.string().min(1).max(200),
@@ -33,6 +33,7 @@ export const OsvVulnerabilitySchema = z.object({
   database_specific: z
     .object({
       severity: z.string().optional(),
+      cwe_ids: z.array(z.string().max(64)).max(128).optional(),
       cvss: z.object({ vectorString: z.string() }).optional(),
     })
     .optional(),

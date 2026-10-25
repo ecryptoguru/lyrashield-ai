@@ -65,14 +65,48 @@ describe("scan-local private repository Git credentials", () => {
       vi.unstubAllEnvs()
     }
   })
-  it.each(["../private", "owner/private/extra", "owner/private\nheader"])(
-    "rejects an invalid repository identity %s",
+  it.each(["owner/.github", "owner/_private", "owner/php..app"])(
+    "supports accepted repository name %s without changing credential scope",
     (repoFullName) => {
+      const environment = buildEngineEnv(profile, undefined, {
+        ...options,
+        repositoryAuth: { repoFullName, token },
+      })
+      const header = execFileSync(
+        "git",
+        ["config", "--get-urlmatch", "http.extraheader", `https://github.com/${repoFullName}.git`],
+        { cwd: gitCwd, env: { ...process.env, ...environment }, encoding: "utf8" }
+      )
+      expect(header.trim()).toBe(environment.GIT_CONFIG_VALUE_0)
       expect(() =>
-        buildEngineEnv(profile, undefined, { ...options, repositoryAuth: { repoFullName, token } })
+        execFileSync(
+          "git",
+          [
+            "config",
+            "--get-urlmatch",
+            "http.extraheader",
+            `https://github.com/${repoFullName}-other.git`,
+          ],
+          { cwd: gitCwd, env: { ...process.env, ...environment }, stdio: "pipe" }
+        )
       ).toThrow()
     }
   )
+  it.each([
+    "../private",
+    "./private",
+    "owner/.",
+    "owner/..",
+    "owner/private/extra",
+    "owner/private\nheader",
+    "owner/private%2fother",
+    `${"a".repeat(101)}/private`,
+    `owner/${"a".repeat(101)}`,
+  ])("rejects an invalid repository identity %s", (repoFullName) => {
+    expect(() =>
+      buildEngineEnv(profile, undefined, { ...options, repositoryAuth: { repoFullName, token } })
+    ).toThrow()
+  })
   it("rejects header injection and credentials on URL runs", () => {
     expect(() =>
       buildEngineEnv(profile, undefined, {
