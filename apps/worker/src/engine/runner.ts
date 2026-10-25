@@ -187,7 +187,10 @@ export async function runEngine(
       () => readEngineSpendUsd(absWorkDir, scanId),
       onAgentLoopTick,
       config.relay,
-      STRIX_RUN_TYPES[config.target.type] ?? "repository"
+      {
+        runType: STRIX_RUN_TYPES[config.target.type] ?? "repository",
+        repositoryAuth: config.target.type === "REPO" ? config.repositoryAuth : undefined,
+      }
     )
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code

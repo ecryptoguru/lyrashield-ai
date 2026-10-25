@@ -1,3 +1,4 @@
+import type { RepositoryAuth } from "./repository-auth"
 import { env } from "@lyrashield/config"
 import { ENGINE_TEMP_ROOT } from "./workspace-path"
 
@@ -129,11 +130,40 @@ const WEB_SEARCH_DEFAULTS: Record<string, string> = {
   LYRASHIELD_WEB_SEARCH_MAX_CALLS_PER_SCAN: "50",
   LYRASHIELD_WEB_SEARCH_BUDGET_USD: "1.0",
 }
+export function repositoryAuthEnv(auth: RepositoryAuth): Record<string, string> {
+  if (
+    !/^[A-Za-z0-9][A-Za-z0-9_.-]*\/[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(auth.repoFullName) ||
+    auth.repoFullName.includes("..")
+  )
+    throw new Error("Invalid repository credential scope")
+  if (!/^[A-Za-z0-9._-]{1,8192}$/.test(auth.token)) throw new Error("Invalid repository credential")
+  const url = `https://github.com/${auth.repoFullName}.git`
+  return {
+    GIT_CONFIG_NOSYSTEM: "1",
+    GIT_CONFIG_GLOBAL: "/dev/null",
+    GIT_TERMINAL_PROMPT: "0",
+    GIT_CONFIG_COUNT: "6",
+    GIT_CONFIG_KEY_0: `http.${url}.extraheader`,
+    GIT_CONFIG_VALUE_0: `Authorization: Basic ${Buffer.from(`x-access-token:${auth.token}`).toString("base64")}`,
+    GIT_CONFIG_KEY_1: "http.followRedirects",
+    GIT_CONFIG_VALUE_1: "false",
+    GIT_CONFIG_KEY_2: "credential.helper",
+    GIT_CONFIG_VALUE_2: "",
+    GIT_CONFIG_KEY_3: "core.hooksPath",
+    GIT_CONFIG_VALUE_3: "/dev/null",
+    GIT_CONFIG_KEY_4: "protocol.file.allow",
+    GIT_CONFIG_VALUE_4: "never",
+    GIT_CONFIG_KEY_5: "protocol.ext.allow",
+    GIT_CONFIG_VALUE_5: "never",
+  }
+}
+
 export function buildEngineEnv(
   profile: EngineProfile,
   scanId?: string,
   opts?: {
     runType?: string
+    repositoryAuth?: RepositoryAuth
     /** Scan-scoped relay for engine-backed URL/API targets. */
     relay?: { url: string; grant: string }
   }
@@ -234,5 +264,10 @@ export function buildEngineEnv(
     }
   }
 
+  if (opts?.repositoryAuth) {
+    if (opts.runType !== "repository")
+      throw new Error("Repository credentials require a repository run")
+    Object.assign(filtered, repositoryAuthEnv(opts.repositoryAuth))
+  }
   return filtered
 }

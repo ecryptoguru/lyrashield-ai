@@ -550,3 +550,5 @@ export {
   type WorkspaceNotificationChannel,
   type NotificationIntegrationSummary,
 } from "./notification-integration-service"
+
+export { hydrateOsvDetails, hasOsvDetails, OsvVulnerabilitySchema } from "./osv-details"

@@ -1,3 +1,4 @@
+import { OSV_CACHE_SCHEMA_VERSION } from "./osv-details"
 import { logger } from "@lyrashield/logger"
 import { prisma } from "./client"
 
@@ -76,7 +77,7 @@ export class PostgresAdvisoryCache implements AdvisoryCache {
           normalizedName: normalizedName(name),
           version,
           source: "osv",
-          schemaVersion: "osv-querybatch/1",
+          schemaVersion: OSV_CACHE_SCHEMA_VERSION,
         },
       },
     })

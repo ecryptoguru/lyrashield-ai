@@ -1,3 +1,4 @@
+import { prepareRepositoryAuth } from "../../engine/repository-auth"
 import { uploadEncryptedArtifact } from "@lyrashield/evidence-storage"
 import {
   addScanEvent,
@@ -44,7 +45,11 @@ import {
   type StagedScanAttachments,
 } from "./attachments"
 import { ScanAttachmentError } from "@lyrashield/db"
-import { requireEngineModel, resolveEngineRuntimeBudgetMs } from "./lifecycle-utils"
+import {
+  enterEngineBillablePhase,
+  requireEngineModel,
+  resolveEngineRuntimeBudgetMs,
+} from "./lifecycle-utils"
 import type { ScanExecutionTarget } from "./preparation"
 import type { ScanTerminalError } from "./settlement"
 
@@ -568,17 +573,12 @@ export async function executeScanTarget(params: {
       relay = relayResult.relay
     }
 
+    const repositoryAuth = await prepareRepositoryAuth(params)
+
     // Once the external engine begins, an automatic BullMQ replay could
     // spend twice for the same scan. Preflight remains retryable; the
     // billable phase is terminal and any rerun requires a fresh scan.
-    await addScanEvent(
-      scanId,
-      "billable_boundary",
-      "info",
-      "Automatic retries disabled before provider-billable analysis",
-      { retryPolicy: "fresh_scan_required" }
-    )
-    markBillablePhaseStarted()
+    await enterEngineBillablePhase(scanId, markBillablePhaseStarted)
 
     // Keep the profile's deterministic-scanner reserve available even when
     // the model is healthy until its own wall-clock cap.
@@ -604,6 +604,7 @@ export async function executeScanTarget(params: {
             type: target.type as TargetType,
             url: target.url,
             repoFullName: target.repoFullName,
+            repoUrl: repositoryAuth && `https://github.com/${target.repoFullName}.git`,
             branch: target.branch,
             name: target.name,
           },
@@ -619,6 +620,7 @@ export async function executeScanTarget(params: {
                   focus,
                 }),
           maxBudgetUsd,
+          ...(repositoryAuth ? { repositoryAuth } : {}),
           ...(relay ? { relay: relay.context } : {}),
           // The stored plan drives --scope-mode and, for Review Changes, the
           // immutable --diff-base/--diff-head/--repository-revision pins.
@@ -627,14 +629,7 @@ export async function executeScanTarget(params: {
         scanId,
         engineTimeoutMs,
         isScanCancelled,
-        // Sprint 10: metering hook — called on each agent-loop tick with
-        // wall-clock elapsed ms. The hook is a no-op for now; the final
-        // metering is done after the engine completes. This signal can be
-        // used for real-time balance checks in a future iteration.
-        (_elapsedMs: number) => {
-          // Real-time metering hook — intentionally empty for now.
-          // The final wall-clock duration is recorded after the engine exits.
-        }
+        undefined
       )
     } finally {
       // Relay hygiene runs on EVERY terminal path — success, failure,

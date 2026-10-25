@@ -1,3 +1,4 @@
+import type { RepositoryAuth } from "./repository-auth"
 import { spawn, type ChildProcess } from "child_process"
 import { logger } from "@lyrashield/logger"
 import type { EngineCommand } from "./command-builder"
@@ -104,6 +105,11 @@ export function createKillEscalation(
     },
   }
 }
+interface EngineProcessContext {
+  runType?: string
+  repositoryAuth?: RepositoryAuth
+}
+
 export async function runEngineProcess(
   cmd: EngineCommand,
   absWorkDir: string,
@@ -116,7 +122,7 @@ export async function runEngineProcess(
   readSpendUsd?: () => Promise<number | null>,
   onAgentLoopTick?: (elapsedMs: number) => void,
   relay?: { url: string; grant: string },
-  runType?: string
+  context?: EngineProcessContext
 ): Promise<{
   exitCode: number
   timedOut: boolean
@@ -128,7 +134,7 @@ export async function runEngineProcess(
   return new Promise((resolvePromise, reject) => {
     const child: ChildProcess = spawn(cmd.executable, cmd.args, {
       cwd: absWorkDir,
-      env: buildEngineEnv(profile, scanId, { runType, relay }),
+      env: buildEngineEnv(profile, scanId, { ...context, relay }),
       stdio: ["ignore", "pipe", "pipe"],
     })
 
