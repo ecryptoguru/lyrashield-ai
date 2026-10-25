@@ -9,6 +9,7 @@ vi.mock("node:child_process", async (importOriginal) => {
 })
 
 vi.mock("@lyrashield/db", () => ({
+  withWorkspaceRLS: vi.fn(),
   prisma: {
     retest: { findMany: vi.fn() },
     findingCandidate: { findMany: vi.fn() },
@@ -17,7 +18,7 @@ vi.mock("@lyrashield/db", () => ({
   },
 }))
 vi.mock("@lyrashield/integrations", () => ({ getInstallationToken: vi.fn() }))
-import { prisma } from "@lyrashield/db"
+import { prisma, withWorkspaceRLS } from "@lyrashield/db"
 import { getInstallationToken } from "@lyrashield/integrations"
 import { listOwnedScanDirectories } from "./stale-resource-reaper"
 import {
@@ -45,6 +46,7 @@ describe("deterministic retest authority", () => {
   })
   beforeEach(() => {
     vi.resetAllMocks()
+    vi.mocked(withWorkspaceRLS).mockImplementation(async (_workspaceId, fn) => fn(prisma as never))
     gitMock.mockImplementation(async (_file: string, args: string[]) => {
       const init = args.indexOf("init")
       if (init >= 0) await mkdir(args[init + 1]!, { recursive: true })
@@ -72,6 +74,29 @@ describe("deterministic retest authority", () => {
       manifest,
       checksum: createHash("sha256").update(JSON.stringify(manifest)).digest("hex"),
     } as never)
+  })
+  it("binds baseline manifests and coverage reads to the workspace RLS transaction", async () => {
+    const scopedManifest = vi
+      .fn()
+      .mockResolvedValue(
+        await prisma.scanResultManifest.findFirst({ where: { scanId: "baseline" } })
+      )
+    const scopedCoverage = vi
+      .fn()
+      .mockResolvedValue([{ controlId: "secrets", status: "COMPLETED" }])
+    vi.mocked(prisma.scanResultManifest.findFirst).mockRejectedValue(new Error("Unbound RLS read"))
+    vi.mocked(prisma.scanCoverageReceipt.findMany).mockRejectedValue(new Error("Unbound RLS read"))
+    vi.mocked(withWorkspaceRLS).mockImplementationOnce(async (_workspaceId, fn) =>
+      fn({
+        ...prisma,
+        scanResultManifest: { findFirst: scopedManifest },
+        scanCoverageReceipt: { findMany: scopedCoverage },
+      } as never)
+    )
+    await authorizeDeterministicRetest("s", "w", "t")
+    expect(withWorkspaceRLS).toHaveBeenCalledWith("w", expect.any(Function))
+    expect(scopedManifest).toHaveBeenCalledOnce()
+    expect(scopedCoverage).toHaveBeenCalledOnce()
   })
   it("requires persisted baseline, candidates and completed family coverage", async () => {
     await expect(authorizeDeterministicRetest("s", "w", "t")).resolves.toBeUndefined()

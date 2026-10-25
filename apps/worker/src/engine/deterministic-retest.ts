@@ -3,7 +3,7 @@ import { promisify } from "node:util"
 import { mkdtemp, rm, readdir, lstat, mkdir, open, statfs } from "node:fs/promises"
 import { constants } from "node:fs"
 import { join } from "node:path"
-import { prisma } from "@lyrashield/db"
+import { withWorkspaceRLS } from "@lyrashield/db"
 import { getInstallationToken } from "@lyrashield/integrations"
 import { env } from "@lyrashield/config"
 import { RETEST_CHECKOUT_ROOT, engineWorkspacePath } from "./workspace-path"
@@ -39,57 +39,61 @@ export async function authorizeDeterministicRetest(
   workspaceId: string,
   targetId: string
 ) {
-  const retests = await prisma.retest.findMany({
-    where: { scanId, workspaceId, status: { in: ["pending", "running"] } },
-    select: { finding: { select: { id: true, scanId: true, targetId: true, workspaceId: true } } },
-  })
-  if (!retests.length) throw new Error("Deterministic retest has no persisted finding lineage")
-  for (const { finding } of retests) {
-    if (finding.targetId !== targetId || finding.workspaceId !== workspaceId)
-      throw new Error("Deterministic retest target lineage mismatch")
-    const [candidates, baseline, coverage] = await Promise.all([
-      prisma.findingCandidate.findMany({
-        where: { workspaceId, scanId: finding.scanId, findingId: finding.id },
-        select: { scannerSource: true },
-      }),
-      prisma.scanResultManifest.findFirst({
-        where: { scan: { workspaceId, targetId }, scanId: finding.scanId },
-      }),
-      prisma.scanCoverageReceipt.findMany({
-        where: { scan: { workspaceId, targetId }, scanId: finding.scanId },
-        select: { controlId: true, status: true },
-      }),
-    ])
-    const receipt = baseline?.manifest as
-      | {
-          target?: { id?: string }
-          engineExecution?: { sourceRevision?: string }
-          sourceExecution?: { sourceRevision?: string }
-          terminalOutcome?: { status?: string }
-        }
-      | undefined
-    const revision =
-      receipt?.sourceExecution?.sourceRevision ?? receipt?.engineExecution?.sourceRevision
-    // The stored digest identifies the producer's original serialized receipt.
-    // JSONB does not preserve key order, so hashing JSON.stringify(receipt) here
-    // would reject valid historical receipts. This trusts the tenant-scoped,
-    // application-insert-only store; it is not protection against DB tampering.
-    if (
-      !candidates.length ||
-      candidates.some(
-        ({ scannerSource }) =>
-          !SCANNERS.has(scannerSource) ||
-          !coverage.some((row) => row.controlId === scannerSource && row.status === "COMPLETED")
-      ) ||
-      receipt?.target?.id !== targetId ||
-      receipt.terminalOutcome?.status !== "COMPLETED" ||
-      !revision ||
-      !/^[a-f0-9]{40}$/i.test(revision) ||
-      !/^[a-f0-9]{64}$/i.test(baseline?.checksum ?? "")
-    ) {
-      throw new Error("Deterministic retest baseline provenance is incomplete")
+  return withWorkspaceRLS(workspaceId, async (tx) => {
+    const retests = await tx.retest.findMany({
+      where: { scanId, workspaceId, status: { in: ["pending", "running"] } },
+      select: {
+        finding: { select: { id: true, scanId: true, targetId: true, workspaceId: true } },
+      },
+    })
+    if (!retests.length) throw new Error("Deterministic retest has no persisted finding lineage")
+    for (const { finding } of retests) {
+      if (finding.targetId !== targetId || finding.workspaceId !== workspaceId)
+        throw new Error("Deterministic retest target lineage mismatch")
+      const [candidates, baseline, coverage] = await Promise.all([
+        tx.findingCandidate.findMany({
+          where: { workspaceId, scanId: finding.scanId, findingId: finding.id },
+          select: { scannerSource: true },
+        }),
+        tx.scanResultManifest.findFirst({
+          where: { scan: { workspaceId, targetId }, scanId: finding.scanId },
+        }),
+        tx.scanCoverageReceipt.findMany({
+          where: { scan: { workspaceId, targetId }, scanId: finding.scanId },
+          select: { controlId: true, status: true },
+        }),
+      ])
+      const receipt = baseline?.manifest as
+        | {
+            target?: { id?: string }
+            engineExecution?: { sourceRevision?: string }
+            sourceExecution?: { sourceRevision?: string }
+            terminalOutcome?: { status?: string }
+          }
+        | undefined
+      const revision =
+        receipt?.sourceExecution?.sourceRevision ?? receipt?.engineExecution?.sourceRevision
+      // The stored digest identifies the producer's original serialized receipt.
+      // JSONB does not preserve key order, so hashing JSON.stringify(receipt) here
+      // would reject valid historical receipts. This trusts the tenant-scoped,
+      // application-insert-only store; it is not protection against DB tampering.
+      if (
+        !candidates.length ||
+        candidates.some(
+          ({ scannerSource }) =>
+            !SCANNERS.has(scannerSource) ||
+            !coverage.some((row) => row.controlId === scannerSource && row.status === "COMPLETED")
+        ) ||
+        receipt?.target?.id !== targetId ||
+        receipt.terminalOutcome?.status !== "COMPLETED" ||
+        !revision ||
+        !/^[a-f0-9]{40}$/i.test(revision) ||
+        !/^[a-f0-9]{64}$/i.test(baseline?.checksum ?? "")
+      ) {
+        throw new Error("Deterministic retest baseline provenance is incomplete")
+      }
     }
-  }
+  })
 }
 
 /** Separate checkout: fixed GitHub transport, no hooks/submodules, bounded lifetime and tree. */
