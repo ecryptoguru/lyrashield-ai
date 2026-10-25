@@ -4,6 +4,13 @@ This runbook describes source capabilities. Deployment and customer acceptance
 require separate evidence. Repository scanners do not execute the customer's PHP
 code or send PHP2Shell exploit or load probes.
 
+Standard and Deep private GitHub scans require the target's stored repository and installation to
+match an active integration in the same workspace. The host receives temporary
+credentials scoped to that exact canonical clone URL; credentials are excluded
+from sandbox environments and are not written to files or command arguments.
+Authentication preflight is bounded and cancellable. This repository access does
+not enable private Composer registries or target-controlled package repositories.
+
 ## Project selection and coverage
 
 Standard and Deep repository scans detect PHP project scopes before adding
@@ -42,6 +49,20 @@ requests.
 | `php.ini`                                | IaC                  | Conservative declaration warnings for enabled `display_errors` and `allow_url_include`; effective deployment configuration remains unknown.                                                                                                                                                              |
 | Public `Server` / `X-Powered-By` headers | URL                  | Passive version-disclosure lead from an existing response. No CVE is inferred from a header.                                                                                                                                                                                                             |
 | PHP `.php` application source            | SAST                 | Bounded request/local-variable flow to command, SQL, deserialization, inclusion/path, upload, XML entity and outbound URL sinks. Cross-file, function-return, authorization, CSRF and session analysis remain incomplete.                                                                                |
+
+OSV batch responses can contain advisory identifiers without their affected ranges
+or fix details. The shared client and standalone SCA path hydrate those records
+from the fixed OSV API origin, with at most 200 unique detail requests, eight
+concurrent requests, 512 KiB per response and the caller's cancellation deadline.
+Failed, malformed, mismatched or paginated results retain detections but leave
+coverage partial and cannot create a trusted complete cache snapshot. Cache schema
+`osv-querybatch/3` rejects earlier snapshots. Complete CVSS 3.0/3.1 base vectors
+retain their calculated score and vector; supported advisory CWE identifiers are
+preserved. Unsupported vectors do not establish an advisory CVSS score.
+
+Composer fix selection accepts numeric shortened introduced boundaries such as
+`6` and `6.4`. Installed and fixed releases still require exact stable versions;
+prereleases, wildcards and unknown fix ranges do not authorize an assumed update.
 
 Buildpack declarations use the current
 [`[[io.buildpacks.build.env]]` schema 0.2](https://buildpacks.io/docs/reference/config/project-descriptor/)
@@ -181,6 +202,13 @@ disabled. The original manifest is restored before lock validation and a dry-run
 install consistency check. Target application tests are not executed in this
 resolver.
 
+The producer preserves unchanged package records, root lock metadata, the plugin
+API header and existing indentation/line endings before those final checks. This
+avoids changes caused only by Composer serialization. The solver's package set
+and versions remain subject to the unchanged artifact validator; retaining
+metadata cannot authorize an unrelated dependency update. Rejected proposals
+retain bounded validation guidance rather than presenting a failed draft as ready.
+
 The first supported update changes one exact stable package while preserving
 the dependency set, unrelated package records and manifest semantics. Custom or
 private repositories, stale locks, incompatible constraints/platforms and updates
@@ -236,12 +264,41 @@ assertions and model confidence never establish independent verification.
 Patching a runtime also does not remove prior compromise; incident investigation
 and credential recovery require their own evidence.
 
+Deterministic repository retests read baseline lineage, manifests and family
+coverage through the workspace-bound RLS transaction. Incomplete provenance stays
+inconclusive; a failed scan or failed proposal never establishes a fix. Failed
+proposal generation stays in history, and the finding offers a new proposal.
+
+## Production acceptance — 2026-10-25
+
+Controlled private Standard and Deep scans at fixture revision
+`901f928a82a9bdbfea457870bf242599eebcb627` completed on product `d62303b1`.
+Both manifests are checksum `MATCH`; all nine vulnerable source cases were
+reported and all nine paired controls were excluded from the corresponding
+checks. Scoped runtime and Composer controls passed; source-flow and runtime
+identity limitations remained incomplete.
+
+The current deployed runtime is `b21aefe8`. PR #1035 merged the retest RLS,
+exact-repository credential and failed-proposal recovery corrections as
+`e079eee9`, with all exact-head CI gates green. Its production release was
+blocked before execution by GitHub account billing/Actions admission. The
+historical proposal and unchanged-source retest failures remain recorded;
+production Composer proposal → draft PR → merge → trusted retest acceptance
+is pending. No finding was marked fixed by those failed attempts.
+
+See [PRD §8](../PRD.md#8-current-production-evidence) for exact image/scan/run
+identities and [operations](./operations.md#current-production-readback--2026-10-25)
+for guarded continuation. These controls do not establish universal detection,
+customer deployed-runtime patching, vendor-backport status, earlier compromise
+or application compatibility.
+
 ## Local verification
 
 Run runtime, inventory and fix tests from the repository root:
 
 ```sh
 pnpm exec vitest run packages/security/src/php-security.test.ts apps/worker/src/engine/scanners/php-project-integration.test.ts apps/worker/src/engine/scanners/php-runtime.test.ts apps/worker/src/engine/scanners/php-runtime-catalog.test.ts apps/worker/src/engine/scanners/resolved-dependencies.test.ts apps/worker/src/engine/scanners/composer-dependencies.test.ts apps/worker/src/engine/scanners/sca-scanner.test.ts
+pnpm exec vitest run packages/db/src/osv-client.test.ts packages/db/src/osv-details.test.ts apps/worker/src/engine/scanners/osv-cvss.test.ts apps/worker/src/engine/repository-auth.test.ts apps/worker/src/engine/repository-auth-preflight.test.ts
 LYRASHIELD_COMPOSER_SMOKE=1 pnpm exec vitest run apps/worker/src/jobs/composer-fix.test.ts
 pnpm exec vitest run packages/fix/src apps/worker/src/jobs/composer-fix-proposal.test.ts apps/worker/src/jobs/fix-generate.job.test.ts apps/web/src/lib/composer-fix-pr.test.ts apps/worker/src/engine/result-integrity.test.ts
 pnpm exec vitest run apps/worker/src/engine/scanners/php-source-benchmark.test.ts --reporter=verbose
