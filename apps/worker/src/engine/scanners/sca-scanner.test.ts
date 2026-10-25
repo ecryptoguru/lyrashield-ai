@@ -505,6 +505,45 @@ describe("scanSca", () => {
 
 // Keep real repository parsing and scanner behavior; only advisory transport is fake.
 describe("Composer SCA", () => {
+  it("retains the real advisory CVSS vector and CWE for a Composer finding", async () => {
+    const manifest = { require: { "symfony/process": "^6.4" } }
+    const vector = "CVSS:3.1/AV:L/AC:H/PR:N/UI:R/S:U/C:N/I:H/A:H"
+    cleanupRepo()
+    const dir = await setupRepo({
+      "composer.json": JSON.stringify(manifest),
+      "composer.lock": JSON.stringify({
+        "content-hash": composerContentHash(manifest),
+        packages: [{ name: "symfony/process", version: "6.4.32" }],
+      }),
+    })
+    try {
+      const findings = await scanSca({
+        repoPath: dir,
+        workspaceDir: dir,
+        fetchFn: makeMockFetch({
+          "symfony/process@6.4.32": [
+            {
+              id: "GHSA-r39x-jcww-82v6",
+              severity: [{ type: "CVSS_V3", score: vector }],
+              database_specific: { severity: "MODERATE", cwe_ids: ["CWE-88"] },
+              affected: [{ ranges: [{ events: [{ introduced: "6.4" }, { fixed: "6.4.33" }] }] }],
+            },
+          ],
+        }),
+      })
+      expect(findings).toHaveLength(1)
+      expect(findings[0]).toMatchObject({
+        severity: "medium",
+        cwe: "CWE-88",
+        cvss: 6.3,
+        advisory_cvss: { score: 6.3, vector, source: "OSV" },
+        dependency_metadata: { fixed_version: "6.4.33" },
+      })
+    } finally {
+      cleanupRepo()
+    }
+  })
+
   it("keeps identical vulnerable releases actionable in each Composer service", async () => {
     const manifest = { require: { "vendor/pkg": "^1.0" } }
     const lock = {

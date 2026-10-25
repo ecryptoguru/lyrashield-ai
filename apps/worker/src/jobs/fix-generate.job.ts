@@ -282,7 +282,10 @@ export async function processFixGenerateJob(
       await withWorkspaceRLS(workspaceId, (tx) =>
         tx.fixProposal.updateMany({
           where: { id: fixProposalId, status: "draft", finding: { workspaceId }, deletedAt: null },
-          data: { status: "failed" },
+          data: {
+            status: "failed",
+            summary: `${prepared.summary.slice(0, 2500)}\n\nAutomatic fix unavailable (${validation.code}): ${validation.reason.slice(0, 500)}`,
+          },
         })
       )
       logger.warn("Generated fix failed scope validation", {

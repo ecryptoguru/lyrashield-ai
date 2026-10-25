@@ -167,6 +167,14 @@ describe("fix generation lifecycle", () => {
     })
     expect(await processFixGenerateJob(input)).toMatchObject({ status: "rejected" })
     expect(mocks.upload).not.toHaveBeenCalled()
+    expect(mocks.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: "failed",
+          summary: expect.stringMatching(/Fix this issue[\s\S]*100/),
+        }),
+      })
+    )
   })
 })
 
