@@ -253,6 +253,11 @@ Cancelled and partial scans may consume agent-minutes when scan-bound evidence e
 
 ### Findings and result integrity
 
+`engine/repository-auth.ts` binds a private GitHub scan to the stored target and
+active workspace integration before billable analysis. The bounded, cancellable
+preflight produces an exact clone-URL credential scope passed only to the engine
+host through explicit child configuration; the sandbox environment excludes it.
+
 PHP detection reuses the existing `sca`, `iac`, `sast` and `url` families. Standard
 and Deep repository integration first detects PHP project scopes and gates
 PHP-specific analyzers and optional post-scan triage context on that result.
@@ -285,6 +290,14 @@ runtime replacement evidence and detection limitations. The free
 keeps the 23 October CVE-2026-115560 configuration review separate; neither path
 performs a live probe or establishes deployed-runtime identity.
 
+`packages/db/src/osv-details.ts` owns bounded full-advisory hydration shared by the
+cached and standalone SCA paths. Incomplete detail retrieval or pagination cannot
+produce complete coverage or a trusted cache snapshot; `osv-querybatch/3` excludes
+legacy snapshots. `scanners/osv-cvss.ts` calculates complete CVSS 3.0/3.1 base
+vectors while preserving the source vector; the shared schema retains advisory
+CWE identifiers. Composer introduced-range boundaries may omit numeric minor or
+patch components, while installed/fixed releases remain exact and stable.
+
 Composer fixes use the existing job and encrypted artifact namespace through
 `jobs/composer-fix-proposal.ts` and the digest-pinned offline producer in
 `jobs/composer-fix.ts`. `packages/fix/src/composer-update.ts` binds exact identity,
@@ -294,7 +307,11 @@ Production metadata uses the authenticated egress proxy. Resolver consistency
 does not prove application compatibility: summaries and approval inputs mark it
 unverified and the provider PR is forced to draft for customer CI and review.
 No new queue, schema or automatic merge path is added.
+The producer preserves original unchanged-package/root metadata and JSON format
+before its final validate/dry-run, keeping solver set/version changes visible to
+the strict artifact validator. Scope rejections retain bounded user guidance.
 
+- Deterministic repository retest authorization reads persisted lineage, parent-scoped manifests and coverage through one `withWorkspaceRLS` transaction. Failed proposal generation remains in history and does not block creating a fresh proposal.
 - `confidence` never sets `verified`.
 - Engine and scanner output create bounded candidates and receipts.
 - Evidence must use `uploadEvidence()` with checksum and encryption key reference.
@@ -508,13 +525,11 @@ Current command output is authoritative; never copy historical test counts forwa
 
 ### Current release evidence — 2026-10-25
 
-- Runtime product revision `a9bd70c79aaf1f0914c22a60b85bd46601c2d3c6` passed [production release 40130400508](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/40130400508). The final reviewed tree passed [CI 40129363896](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/40129363896) before merging as PR #1030.
-- Web/scanner digest: `sha256:e51a708a2902308dd5f026306e6c23c7222b09983c8bdef43184c22318751d28`; worker digest: `sha256:e71bf133050c5ee255463b731e783c847c4915119821f0e0d241a21d2de8d319`; egress-proxy digest: `sha256:409bd70d5620bf78a44d55744ef625d4a35efbb68c33272a807b6dcb3e572fb5`; engine: `3001517530300ca5f602536bfadcbd3c95ad3039`.
-- Provider readback on 2026-10-25 verified healthy serving revisions app `lyrashield-app--0000500`, scanner `lyrashield-scanner--0000474` and egress `lyrashield-egress-proxy--0000340`, each at explicit 100% traffic. Healthy prior revisions remain at zero traffic for rollback.
-- Direct VM readback matched the worker's digest-pinned reference, OCI product/engine labels, runtime provenance and five PHP/Composer/integrity source hashes to the reviewed tree. The worker was healthy; its pin-refresh timer had fired automatically and scheduled its next activation. Temporary promotion probes now use the same committed host mappings as the live worker and refuse missing or malformed pins.
-- Public health, app readiness and scan readiness at `2026-10-25T08:37:26Z` returned HTTP 200 with `Cache-Control: no-store`; database, Redis and worker checks were true.
-- Marketing remains at `5c5f55ec89e2837cdaefce80b30c1166a7989de0`, with unchanged source since its successful deployment. Fresh verification passed 72 desktop/mobile checker/article cases with zero retries, four clipboard-race cases, 14 CTA/cluster accessibility cases, all 367 links and all 35 image hashes. The seven guides meet their editorial-length and publishing contracts.
-- Earlier build/authentication/pin failures were resolved before the successful final release. Runtime deployment/readiness does not establish a paid PHP scan, customer runtime patch verification, live email/OAuth or provider financial acceptance. Historical backup/monitoring acceptance remains in [PRD §8](./PRD.md#8-current-production-evidence).
+- Runtime product `b21aefe8481728fcf96d431ad0846f08a3eea13d` passed [production release 40194324300](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/40194324300). Web/scanner: `sha256:c7e867678c4bc525278d6012dc9d85868feb518fc918fd73e909e6241cfed365`; worker: `sha256:abfdd6cbabaaef3a2feeddc9ff31143caffc2c97360a46ea3aa2cf639297509d`; proxy: `sha256:a2642a959977d471a61e6c97f8757fb3c3a6cece0532ee38204b2caab1df3bfb`; engine: `3001517530300ca5f602536bfadcbd3c95ad3039`.
+- Current provider readback confirms healthy serving app `0000502`, scanner `0000476` and proxy `0000342` with sole explicit 100% traffic. Direct VM readback verifies the immutable worker reference, OCI/runtime provenance and 19 source hashes against the reviewed tree. Health, database/Redis readiness and worker readiness returned HTTP 200/no-store at `2026-10-25T14:29:50Z`.
+- Marketing is independently verified at `b21aefe8481728fcf96d431ad0846f08a3eea13d`. All seven guides meet the 1,200–1,500-word contract, have loaded generated images and link to the other six guides. Fresh checks passed 28 article and 16 checker cases across desktop/mobile and two rounds with zero retries, 367 unique links and 35 image-asset hash checks. The checker retains unknown/backport/configuration limits; it does not attest a deployed runtime.
+
+Controlled private PHP Standard and Deep scans completed on the recorded earlier `d62303b1` image with checksum `MATCH`, nine detected source cases, nine excluded paired controls and scoped runtime/Composer controls. PR #1035 merged as `e079eee9dea577dd236203b4f674341835712366`; [exact-head CI 40199784379](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/40199784379) passed. Its workspace-RLS retest, exact-repository credential and failed-proposal recovery corrections are not deployed: [release 40202231545](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/40202231545) was blocked before execution by GitHub account billing/Actions admission. The first proposal and unchanged-source retest failures remain recorded; Composer PR/retest closure is pending. See [PRD §8](./PRD.md#8-current-production-evidence) for exact scan/image identities, test counts and limits.
 
 ### Previous production release — 2026-10-10
 
@@ -532,7 +547,7 @@ Current command output is authoritative; never copy historical test counts forwa
 - The 2026-10-01 report-only billing reconciliation received Polar HTTP 403 `insufficient_scope`; its receipt was incomplete with zero Polar and Razorpay items checked. The worker invokes providers sequentially, but the response row count is not retained. Do not infer completed reconciliation from readiness or the zero counters; no newer completed receipt is recorded here. The 2026-10-01 production rule readback found `reconciliation_drift` but lacked dedicated runtime rules for `reconciliation_backlog` and `reconciliation_duplicates`; receiver delivery was not verified. Current source declares both rules and product revision `e68c760c5189e65f1180200b7d2449d5537cee10` was released on 2026-10-11. The 2026-10-11 readback confirmed both rules and `webhook-catalog-rejection` still absent; receiver delivery remains untested (see current evidence above).
 - The release sync maps the app's Polar credential into worker Key Vault. A worker-only credential replacement would be overwritten by the next release. Correct the source-of-truth provider grant or approve a separate worker binding, then use the guarded refresh/promotion path and rerun report-only reconciliation. No credential values were read or changed.
 - The 2026-10-11 isolated restore passed the then-current schema/migrations and readiness but withheld its public proof on the TLS gate; see current evidence above. Cloud admission is configured public on both payment rails and Local admission is off; this is configuration evidence, not authorization for charges or proof of settlement, refunds, payouts, or commercial readiness.
-- The 2026-10-01 deployed retest finalizer lacked a requirement for checksum `MATCH` on both the original and retest manifests. The source audit did not inspect production finding rows or establish an incorrectly validated receipt. The fix shipped on 2026-10-10 and is included in current product revision `a9bd70c79aaf1f0914c22a60b85bd46601c2d3c6`. Separately, current MCP delegated-operation handling persists terminal outcomes across grant rotation and retains late scan results only after fresh authorization checks; it never replays an uncertain mutation. See [PRD §9](./PRD.md#9-release-status) for the current release and remaining readbacks.
+- The 2026-10-01 deployed retest finalizer lacked a requirement for checksum `MATCH` on both the original and retest manifests. The source audit did not inspect production finding rows or establish an incorrectly validated receipt. The fix shipped on 2026-10-10 and is included in current product revision `b21aefe8481728fcf96d431ad0846f08a3eea13d`. Separately, current MCP delegated-operation handling persists terminal outcomes across grant rotation and retains late scan results only after fresh authorization checks; it never replays an uncertain mutation. See [PRD §9](./PRD.md#9-release-status) for the current release and remaining readbacks.
 - Public OAuth discovery and unauthenticated MCP denial were checked, but no OAuth login, authenticated workspace read, or real-client plugin discovery was performed. Package/export integrity is separate from npm publication, immutable marketplace release, and authenticated client-runtime acceptance.
 
 ### Browser error collection
