@@ -1,6 +1,6 @@
 import { z } from "zod"
 import { logger } from "@lyrashield/logger"
-import type { AdvisoryBatchResult } from "@lyrashield/db"
+import { hydrateOsvDetails, OsvVulnerabilitySchema, type AdvisoryBatchResult } from "@lyrashield/db"
 import type { HostResolver } from "@lyrashield/security"
 import type { EngineVulnerability } from "../output-parser"
 import {
@@ -30,51 +30,8 @@ function throwIfAborted(signal?: AbortSignal): void {
   if (signal?.aborted) throw new Error("SCA scan cancelled")
 }
 
-interface OsvVulnerability {
-  id: string
-  summary?: string
-  details?: string
-  severity?: Array<{ type: string; score: string }>
-  references?: Array<{ url: string }>
-  affected?: Array<{
-    package?: { name: string; ecosystem: string }
-    ranges?: Array<{
-      type?: string
-      events: Array<{ introduced?: string; fixed?: string; last_affected?: string }>
-    }>
-  }>
-  database_specific?: { severity?: string; cvss?: { vectorString?: string } }
-}
+type OsvVulnerability = z.infer<typeof OsvVulnerabilitySchema>
 
-const osvVulnerabilitySchema = z.object({
-  id: z.string().min(1),
-  summary: z.string().optional(),
-  details: z.string().optional(),
-  severity: z.array(z.object({ type: z.string(), score: z.string() })).optional(),
-  references: z.array(z.object({ url: z.string() })).optional(),
-  affected: z
-    .array(
-      z.object({
-        package: z.object({ name: z.string().min(1), ecosystem: z.string().min(1) }).optional(),
-        ranges: z
-          .array(
-            z.object({
-              type: z.string().optional(),
-              events: z.array(
-                z.object({
-                  introduced: z.string().optional(),
-                  fixed: z.string().optional(),
-                  last_affected: z.string().optional(),
-                })
-              ),
-            })
-          )
-          .optional(),
-      })
-    )
-    .optional(),
-  database_specific: z.object({ severity: z.string().optional() }).optional(),
-})
 const osvEntrySchema = z.object({ vulns: z.array(z.unknown()).optional() })
 
 function validatedAdvisoryEntry(
@@ -94,7 +51,7 @@ function validatedAdvisoryEntry(
   }
   const vulnerabilities: OsvVulnerability[] = []
   for (const candidate of parsed.data.vulns ?? []) {
-    const vulnerability = osvVulnerabilitySchema.safeParse(candidate)
+    const vulnerability = OsvVulnerabilitySchema.safeParse(candidate)
     if (vulnerability.success) vulnerabilities.push(vulnerability.data)
     else
       recordCoverageIssue(coverageIssues, {
@@ -135,14 +92,33 @@ async function queryOsvBatch(
         signal: controller.signal,
       })
       if (!response.ok) throw new Error(`OSV API returned ${response.status}`)
-      const data = (await response.json()) as { results?: Array<{ vulns?: OsvVulnerability[] }> }
+      const data = (await response.json()) as {
+        results?: Array<{ vulns?: OsvVulnerability[]; next_page_token?: unknown }>
+      }
+      const hydrated = await hydrateOsvDetails(
+        (data.results ?? []).flatMap((row) => (Array.isArray(row?.vulns) ? row.vulns : [])),
+        doFetch,
+        controller.signal
+      )
+      const byId = new Map(hydrated.vulns.map((vulnerability) => [vulnerability.id, vulnerability]))
       for (const [index, dependency] of chunk.entries()) {
         const vulnerabilities = validatedAdvisoryEntry(
           data.results?.[index],
           dependency.filePath,
           coverageIssues
         )
-        if (vulnerabilities) result.set(dependencyKey(dependency), vulnerabilities)
+        if (vulnerabilities)
+          result.set(
+            dependencyKey(dependency),
+            vulnerabilities.map((vulnerability) => byId.get(vulnerability.id) ?? vulnerability)
+          )
+        if (hydrated.incomplete || data.results?.[index]?.next_page_token)
+          recordCoverageIssue(coverageIssues, {
+            scanner: "sca",
+            status: "partial",
+            subject: dependency.filePath,
+            reason: "Advisory details or pagination coverage are incomplete",
+          })
       }
     } catch (error) {
       if (signal?.aborted) throw new Error("SCA scan cancelled")
@@ -198,11 +174,17 @@ function extractCveId(vuln: OsvVulnerability): string | undefined {
   return vuln.references?.find((r) => r.url.includes("CVE-"))?.url.match(/CVE-\d{4}-\d+/)?.[0]
 }
 
-function stableRelease(version: string): number[] | undefined {
-  return /^v?\d{1,6}\.\d{1,6}\.\d{1,6}$/.test(version)
-    ? version.replace(/^v/, "").split(".").map(Number)
-    : undefined
+function stableRelease(version: string, allowPartial = false): number[] | undefined {
+  const parts = version.replace(/^v/, "").split(".")
+  if (
+    parts.length > 3 ||
+    parts.length < (allowPartial ? 1 : 3) ||
+    !parts.every((part) => /^\d{1,6}$/.test(part))
+  )
+    return undefined
+  return [Number(parts[0]), Number(parts[1] ?? 0), Number(parts[2] ?? 0)]
 }
+
 function compareRelease(left: number[], right: number[]): number {
   for (let i = 0; i < 3; i++) {
     const delta = left[i]! - right[i]!
@@ -226,7 +208,7 @@ function composerFixedVersion(vuln: OsvVulnerability, dependency: Dependency): s
       let introduced: number[] | undefined = [0, 0, 0]
       for (const event of range.events) {
         if (event.introduced !== undefined)
-          introduced = event.introduced === "0" ? [0, 0, 0] : stableRelease(event.introduced)
+          introduced = event.introduced === "0" ? [0, 0, 0] : stableRelease(event.introduced, true)
         if (event.fixed !== undefined) {
           const fixed = stableRelease(event.fixed)
           if (

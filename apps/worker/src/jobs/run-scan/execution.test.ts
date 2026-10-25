@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   interpretExitCode: vi.fn(),
   resolveEngineProfile: vi.fn(),
   runEngine: vi.fn(),
+  prepareRepositoryAuth: vi.fn(),
   resolveScanBudgetUsd: vi.fn(),
   requireEngineModel: vi.fn(),
   resolveEngineRuntimeBudgetMs: vi.fn(),
@@ -61,6 +62,9 @@ vi.mock("../../engine/relay-client", () => ({
   resolveSpecServerHosts: mocks.resolveSpecServerHosts,
   revokeRelayGrant: mocks.revokeRelayGrant,
 }))
+vi.mock("../../engine/repository-auth", () => ({
+  prepareRepositoryAuth: mocks.prepareRepositoryAuth,
+}))
 vi.mock("../../engine/runner", () => ({
   interpretExitCode: mocks.interpretExitCode,
   resolveEngineProfile: mocks.resolveEngineProfile,
@@ -72,6 +76,16 @@ vi.mock("../../engine/command-builder", () => ({
 vi.mock("./lifecycle-utils", () => ({
   requireEngineModel: mocks.requireEngineModel,
   resolveEngineRuntimeBudgetMs: mocks.resolveEngineRuntimeBudgetMs,
+  enterEngineBillablePhase: async (scanId: string, markStarted: () => void) => {
+    await mocks.addScanEvent(
+      scanId,
+      "billable_boundary",
+      "info",
+      "Automatic retries disabled before provider-billable analysis",
+      { retryPolicy: "fresh_scan_required" }
+    )
+    markStarted()
+  },
 }))
 vi.mock("./auth-session", () => ({
   resolveRelaySessionBinding: mocks.resolveRelaySessionBinding,
@@ -155,6 +169,65 @@ describe("executeScanTarget relay lifecycle", () => {
     mocks.revokeRelayGrant.mockResolvedValue(undefined)
     mocks.addScanEvent.mockResolvedValue({ id: "evt-1" })
     mocks.runEngine.mockResolvedValue(engineResult)
+  })
+
+  it("prepares private Git credentials before billable work and sends a credential-free canonical URL", async () => {
+    const repositoryAuth = { repoFullName: "owner/private", token: "test-ephemeral-credential" }
+    mocks.prepareRepositoryAuth.mockResolvedValue(repositoryAuth)
+    const input = params({
+      target: {
+        ...targetFixture,
+        type: "REPO",
+        repoProvider: "github",
+        repoFullName: "owner/private",
+        installationId: "123",
+        url: null,
+      },
+      urlEngineBacked: false,
+    })
+    await executeScanTarget(input)
+    expect(mocks.prepareRepositoryAuth).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceId: "ws-1",
+        target: input.target,
+        scanRuntimeBudgetMs: 300_000,
+      })
+    )
+    expect(mocks.runEngine).toHaveBeenCalledWith(
+      expect.objectContaining({
+        repositoryAuth,
+        target: expect.objectContaining({ repoUrl: "https://github.com/owner/private.git" }),
+      }),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      undefined
+    )
+    expect(mocks.prepareRepositoryAuth.mock.invocationCallOrder[0]).toBeLessThan(
+      input.markBillablePhaseStarted.mock.invocationCallOrder[0]!
+    )
+  })
+
+  it("never enters billable work or launches the engine after repository authorization fails", async () => {
+    mocks.prepareRepositoryAuth.mockRejectedValue(
+      new Error("Repository authorization deadline exhausted")
+    )
+    const input = params({
+      target: {
+        ...targetFixture,
+        type: "REPO",
+        repoProvider: "github",
+        repoFullName: "owner/private",
+        installationId: "123",
+        url: null,
+      },
+      urlEngineBacked: false,
+    })
+    await expect(executeScanTarget(input)).rejects.toThrow(
+      "Repository authorization deadline exhausted"
+    )
+    expect(input.markBillablePhaseStarted).not.toHaveBeenCalled()
+    expect(mocks.runEngine).not.toHaveBeenCalled()
   })
 
   it("revokes the relay grant in finally when the engine throws", async () => {
@@ -335,7 +408,7 @@ describe("executeScanTarget relay lifecycle", () => {
       "scan-1",
       expect.anything(),
       expect.anything(),
-      expect.anything()
+      undefined
     )
     // No relay grant is minted for a repository Review Changes run.
     expect(mocks.mintScanRelayGrant).not.toHaveBeenCalled()
@@ -370,7 +443,7 @@ describe("executeScanTarget relay lifecycle", () => {
       "scan-1",
       120_000,
       expect.anything(),
-      expect.anything()
+      undefined
     )
   })
 })
@@ -471,7 +544,7 @@ describe("executeScanTarget authenticated staging beta", () => {
       "scan-1",
       expect.anything(),
       expect.anything(),
-      expect.anything()
+      undefined
     )
     // The binding receipt records references, never session material.
     const boundEvent = mocks.addScanEvent.mock.calls.find(

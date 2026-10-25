@@ -168,6 +168,7 @@ describe("scanSca", () => {
       expect(String(vi.mocked(cisaFetchFn).mock.calls[0]?.[0])).toContain("www.cisa.gov")
       expect(vi.mocked(fetchFn).mock.calls.map((call) => String(call[0]))).toEqual([
         "https://api.osv.dev/v1/querybatch",
+        "https://api.osv.dev/v1/vulns/CVE-2024-12345",
         expect.stringContaining("https://api.first.org/data/v1/epss?"),
       ])
       expect(vi.mocked(fetchFn).mock.calls[0]?.[1]?.method).toBe("POST")
@@ -995,3 +996,45 @@ it.each([
     cleanupRepo()
   }
 })
+
+it.each([
+  ["6.4", "6.4.32", "6.4.33"],
+  ["6", "6.4.32", "6.4.33"],
+  ["6.4", "6.3.99", undefined],
+  ["6.4", "6.4.33", undefined],
+  ["6.4.*", "6.4.32", undefined],
+  ["6.4-beta", "6.4.32", undefined],
+])(
+  "handles Composer advisory introduction %s at installed %s",
+  async (introduced, version, fixed) => {
+    cleanupRepo()
+    const dir = await setupRepo({
+      "composer.lock": JSON.stringify({
+        packages: [{ name: "symfony/process", version }],
+        "packages-dev": [],
+      }),
+    })
+    try {
+      const findings = await scanSca({
+        repoPath: dir,
+        workspaceDir: dir,
+        fetchFn: makeMockFetch({
+          [`symfony/process@${version}`]: [
+            {
+              id: "GHSA-r39x-jcww-82v6",
+              affected: [
+                {
+                  package: { name: "symfony/process", ecosystem: "Packagist" },
+                  ranges: [{ type: "ECOSYSTEM", events: [{ introduced }, { fixed: "6.4.33" }] }],
+                },
+              ],
+            },
+          ],
+        }),
+      })
+      expect(findings[0]?.dependency_metadata?.fixed_version).toBe(fixed)
+    } finally {
+      cleanupRepo()
+    }
+  }
+)

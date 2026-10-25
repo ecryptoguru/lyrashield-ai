@@ -842,7 +842,7 @@ describe("processScanJob", () => {
         "scan-1",
         expect.any(Number),
         expect.any(Function),
-        expect.any(Function)
+        undefined
       )
       expect(registerRelayGrant).toHaveBeenCalledWith(
         "scan-1",
@@ -1341,7 +1341,7 @@ describe("processScanJob", () => {
       "scan-1",
       expect.any(Number),
       expect.any(Function),
-      expect.any(Function)
+      undefined
     )
     expect(addScanEvent).toHaveBeenCalledWith(
       "scan-1",
@@ -1812,7 +1812,7 @@ describe("processScanJob", () => {
       "scan-1",
       expect.any(Number),
       expect.any(Function),
-      expect.any(Function)
+      undefined
     )
   })
 
@@ -1881,7 +1881,7 @@ describe("processScanJob", () => {
       "scan-1",
       expect.any(Number),
       expect.any(Function),
-      expect.any(Function)
+      undefined
     )
     expect(typeof deepTimeoutMs).toBe("number")
     expect(deepTimeoutMs).toBeGreaterThan(0)

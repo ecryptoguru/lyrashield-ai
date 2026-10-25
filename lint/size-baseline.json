@@ -567,8 +567,8 @@
     },
     "apps/worker/src/jobs/run-scan/execution.ts|max-lines-per-function": {
       "count": 2,
-      "totalExcess": 291,
-      "maxExcess": 217
+      "totalExcess": 286,
+      "maxExcess": 212
     },
     "apps/worker/src/jobs/run-scan/finalization.ts|max-lines-per-function": {
       "count": 1,
@@ -694,11 +694,6 @@
       "count": 1,
       "totalExcess": 7,
       "maxExcess": 7
-    },
-    "packages/db/src/osv-client.ts|max-lines-per-function": {
-      "count": 1,
-      "totalExcess": 9,
-      "maxExcess": 9
     },
     "packages/db/src/report-generator-html.ts|max-lines-per-function": {
       "count": 1,

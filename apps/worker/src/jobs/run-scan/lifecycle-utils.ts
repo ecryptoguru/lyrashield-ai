@@ -1,6 +1,6 @@
 import { hasUnsettledScanIntent } from "@lyrashield/billing"
 import { env } from "@lyrashield/config"
-import { evaluateGateForTarget } from "@lyrashield/db"
+import { addScanEvent, evaluateGateForTarget } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 import { resolveScanProfile } from "@lyrashield/types"
 import type { TargetType } from "../../engine/command-builder"
@@ -161,4 +161,18 @@ export function isTimeoutError(error: unknown): boolean {
 
   const message = error.message.toLowerCase()
   return message.includes("timeout") || message.includes("timed out")
+}
+
+export async function enterEngineBillablePhase(
+  scanId: string,
+  markStarted: () => void
+): Promise<void> {
+  await addScanEvent(
+    scanId,
+    "billable_boundary",
+    "info",
+    "Automatic retries disabled before provider-billable analysis",
+    { retryPolicy: "fresh_scan_required" }
+  )
+  markStarted()
 }

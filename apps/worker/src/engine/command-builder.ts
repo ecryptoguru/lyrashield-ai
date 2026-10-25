@@ -1,3 +1,4 @@
+import type { RepositoryAuth } from "./repository-auth"
 import { env } from "@lyrashield/config"
 import { checkInstructionSafety } from "@lyrashield/security"
 import { resolveScanProfile, type ScanExecutionPlan } from "@lyrashield/types"
@@ -26,6 +27,8 @@ export interface ScanConfig {
   maxBudgetUsd?: number
   /** Scan-scoped relay grant for engine-backed URL/API targets. */
   relay?: { url: string; grant: string }
+  /** Engine-host Git authentication; never serialized into arguments or sandbox inputs. */
+  repositoryAuth?: RepositoryAuth
   /**
    * Validated stored execution plan (hash-verified upstream in run-scan
    * authority). Its scope drives --scope-mode: a DIFF plan (Review Changes)

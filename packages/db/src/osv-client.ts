@@ -1,3 +1,10 @@
+import {
+  OSV_CACHE_SCHEMA_VERSION,
+  hydrateOsvDetails,
+  hasOsvDetails,
+  OsvVulnerabilitySchema,
+  type OsvVulnerability,
+} from "./osv-details"
 import { createHash } from "node:crypto"
 import { logger } from "@lyrashield/logger"
 import {
@@ -14,22 +21,7 @@ export interface OsvQueryPackage {
   filePath: string
 }
 
-export interface OsvVulnerability {
-  id: string
-  summary?: string
-  details?: string
-  severity?: Array<{ type: string; score: string }>
-  aliases?: string[]
-  references?: Array<{ url: string }>
-  affected?: Array<{
-    package?: { name: string; ecosystem: string }
-    ranges?: Array<{
-      type: string
-      events: Array<{ introduced?: string; fixed?: string; last_affected?: string }>
-    }>
-  }>
-  database_specific?: { severity?: string; cvss?: { vectorString?: string } }
-}
+export type { OsvVulnerability } from "./osv-details"
 
 export interface OsvQueryResult {
   package: OsvQueryPackage
@@ -64,7 +56,7 @@ export interface OsvQueryOptions {
 const OSV_BATCH_URL = "https://api.osv.dev/v1/querybatch"
 const OSV_TIMEOUT_MS = 15_000
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000
-const SCHEMA_VERSION = "osv-querybatch/1"
+const SCHEMA_VERSION = OSV_CACHE_SCHEMA_VERSION
 
 function ecosystemToOsv(ecosystem: AdvisoryEcosystem): string {
   return ecosystem
@@ -125,6 +117,88 @@ function unavailable(
   }
 }
 
+async function resolveFreshOsvResults(
+  rows: Array<{ vulns?: OsvVulnerability[]; next_page_token?: unknown }>,
+  packages: OsvQueryPackage[],
+  fetchFn: typeof fetch,
+  signal: AbortSignal
+): Promise<{ results: OsvQueryResult[]; reason?: string }> {
+  const results: OsvQueryResult[] = []
+  for (const [index, pkg] of packages.entries()) {
+    const row = rows[index]
+    if (!row || (row.vulns !== undefined && !Array.isArray(row.vulns)))
+      return { results: [], reason: "OSV returned malformed advisory data" }
+    results.push({ package: pkg, vulns: row.vulns ?? [] })
+  }
+  const hydrated = await hydrateOsvDetails(
+    results.flatMap((result) => result.vulns),
+    fetchFn,
+    signal
+  )
+  const byId = new Map(hydrated.vulns.map((vulnerability) => [vulnerability.id, vulnerability]))
+  for (const result of results)
+    result.vulns = result.vulns.flatMap((vulnerability) => {
+      const detail = byId.get(vulnerability?.id)
+      return detail ? [detail] : []
+    })
+  const paginated = rows.some(
+    (row) => row.next_page_token !== undefined && row.next_page_token !== ""
+  )
+  return {
+    results,
+    ...(hydrated.incomplete || paginated
+      ? {
+          reason: paginated
+            ? "OSV pagination requires additional advisory coverage"
+            : "OSV advisory details unavailable or exceeded validation limits",
+        }
+      : {}),
+  }
+}
+
+async function readCachedOsvResults(unique: OsvQueryPackage[], cache: AdvisoryCache, now: Date) {
+  const results: OsvQueryResult[] = []
+  const uncached: OsvQueryPackage[] = []
+  let oldestFreshCache: Date | undefined
+
+  for (const pkg of unique) {
+    try {
+      const cached = await cache.get(pkg.ecosystem, pkg.name, pkg.version)
+      if (
+        !cached ||
+        cached.schemaVersion !== SCHEMA_VERSION ||
+        now.getTime() - cached.fetchedAt.getTime() >= CACHE_TTL_MS
+      ) {
+        uncached.push(pkg)
+        continue
+      }
+      const vulns = JSON.parse(cached.snapshot) as OsvVulnerability[]
+      if (
+        !Array.isArray(vulns) ||
+        !vulns.every((value) => {
+          const parsed = OsvVulnerabilitySchema.safeParse(value)
+          return parsed.success && hasOsvDetails(parsed.data)
+        })
+      ) {
+        uncached.push(pkg)
+        continue
+      }
+      oldestFreshCache =
+        !oldestFreshCache || cached.fetchedAt < oldestFreshCache
+          ? cached.fetchedAt
+          : oldestFreshCache
+      results.push({ package: pkg, vulns })
+    } catch (error) {
+      logger.warn("OSV cache entry could not be read", {
+        error: error instanceof Error ? error.message : String(error),
+      })
+      uncached.push(pkg)
+    }
+  }
+
+  return { results, uncached, oldestFreshCache }
+}
+
 /**
  * Queries exact resolved releases only. Transport or response failures are
  * represented explicitly so callers can never treat an outage as a clean scan.
@@ -152,34 +226,7 @@ export async function queryOsvWithCache(
   }
 
   const cache = options.cache ?? getAdvisoryCache()
-  const results: OsvQueryResult[] = []
-  const uncached: OsvQueryPackage[] = []
-  let oldestFreshCache: Date | undefined
-
-  for (const pkg of unique) {
-    try {
-      const cached = await cache.get(pkg.ecosystem, pkg.name, pkg.version)
-      if (!cached || now.getTime() - cached.fetchedAt.getTime() >= CACHE_TTL_MS) {
-        uncached.push(pkg)
-        continue
-      }
-      const vulns = JSON.parse(cached.snapshot) as OsvVulnerability[]
-      if (!Array.isArray(vulns)) {
-        uncached.push(pkg)
-        continue
-      }
-      oldestFreshCache =
-        !oldestFreshCache || cached.fetchedAt < oldestFreshCache
-          ? cached.fetchedAt
-          : oldestFreshCache
-      results.push({ package: pkg, vulns })
-    } catch (error) {
-      logger.warn("OSV cache entry could not be read", {
-        error: error instanceof Error ? error.message : String(error),
-      })
-      uncached.push(pkg)
-    }
-  }
+  const { results, uncached, oldestFreshCache } = await readCachedOsvResults(unique, cache, now)
 
   if (uncached.length > 0) {
     const controller = new AbortController()
@@ -208,7 +255,9 @@ export async function queryOsvWithCache(
           now
         )
       }
-      const data = (await response.json()) as { results?: Array<{ vulns?: OsvVulnerability[] }> }
+      const data = (await response.json()) as {
+        results?: Array<{ vulns?: OsvVulnerability[]; next_page_token?: unknown }>
+      }
       if (!Array.isArray(data.results) || data.results.length !== uncached.length) {
         return unavailable(
           unique,
@@ -221,23 +270,24 @@ export async function queryOsvWithCache(
           now
         )
       }
-      const freshResults: OsvQueryResult[] = []
-      for (const [index, pkg] of uncached.entries()) {
-        const row = data.results[index]
-        if (!row || (row.vulns !== undefined && !Array.isArray(row.vulns))) {
-          return unavailable(
-            unique,
-            results,
-            uncached.map((candidate) => ({
-              ecosystem: candidate.ecosystem,
-              name: candidate.name,
-              reason: "OSV returned malformed advisory data",
-            })),
-            now
-          )
-        }
-        freshResults.push({ package: pkg, vulns: row.vulns ?? [] })
-      }
+      const fresh = await resolveFreshOsvResults(
+        data.results,
+        uncached,
+        options.fetchFn ?? fetch,
+        controller.signal
+      )
+      if (fresh.reason)
+        return unavailable(
+          unique,
+          [...results, ...fresh.results],
+          uncached.map((pkg) => ({
+            ecosystem: pkg.ecosystem,
+            name: pkg.name,
+            reason: fresh.reason!,
+          })),
+          now
+        )
+      const freshResults = fresh.results
       // Cache only a verified complete response; an individual cache write is
       // non-authoritative and does not change the just-received OSV result.
       await Promise.all(
