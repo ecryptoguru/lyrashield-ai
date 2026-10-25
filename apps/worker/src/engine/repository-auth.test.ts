@@ -1,10 +1,16 @@
-import { beforeEach, afterEach, describe, expect, it, vi } from "vitest"
+import { beforeEach, afterEach, afterAll, describe, expect, it, vi } from "vitest"
 import { randomUUID } from "node:crypto"
 import { execFileSync } from "node:child_process"
+import { mkdtempSync, rmSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import { buildEngineEnv } from "./runner-config"
 
 beforeEach(() => vi.stubEnv("LYRASHIELD_ENGINE_SANDBOX_NETWORK", "test-restricted-egress"))
 afterEach(() => vi.unstubAllEnvs())
+// Git otherwise reads the CI checkout's independent repository-local auth header.
+const gitCwd = mkdtempSync(join(tmpdir(), "lyra-git-auth-"))
+afterAll(() => rmSync(gitCwd, { recursive: true, force: true }))
 
 const profile = {
   model: "azure_ai/gpt-6-luna",
@@ -24,7 +30,7 @@ describe("scan-local private repository Git credentials", () => {
     const value = execFileSync(
       "git",
       ["config", "--get-urlmatch", "http.extraheader", "https://github.com/owner/private.git"],
-      { env: gitEnv, encoding: "utf8" }
+      { cwd: gitCwd, env: gitEnv, encoding: "utf8" }
     )
     expect(value.trim()).toBe(
       `Authorization: Basic ${Buffer.from(`x-access-token:${token}`).toString("base64")}`
@@ -36,12 +42,14 @@ describe("scan-local private repository Git credentials", () => {
     ])
       expect(() =>
         execFileSync("git", ["config", "--get-urlmatch", "http.extraheader", url], {
+          cwd: gitCwd,
           env: gitEnv,
           stdio: "pipe",
         })
       ).toThrow()
     expect(
       execFileSync("git", ["config", "--get", "http.followRedirects"], {
+        cwd: gitCwd,
         env: gitEnv,
         encoding: "utf8",
       }).trim()
