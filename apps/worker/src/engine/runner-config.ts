@@ -132,8 +132,8 @@ const WEB_SEARCH_DEFAULTS: Record<string, string> = {
 }
 export function repositoryAuthEnv(auth: RepositoryAuth): Record<string, string> {
   if (
-    !/^[A-Za-z0-9][A-Za-z0-9_.-]*\/[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(auth.repoFullName) ||
-    auth.repoFullName.includes("..")
+    !/^[A-Za-z0-9_.-]{1,100}\/[A-Za-z0-9_.-]{1,100}$/.test(auth.repoFullName) ||
+    auth.repoFullName.split("/").some((part) => part === "." || part === "..")
   )
     throw new Error("Invalid repository credential scope")
   if (!/^[A-Za-z0-9._-]{1,8192}$/.test(auth.token)) throw new Error("Invalid repository credential")
