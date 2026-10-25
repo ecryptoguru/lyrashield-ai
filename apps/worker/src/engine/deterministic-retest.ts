@@ -6,6 +6,7 @@ import { join } from "node:path"
 import { withWorkspaceRLS } from "@lyrashield/db"
 import { getInstallationToken } from "@lyrashield/integrations"
 import { env } from "@lyrashield/config"
+import { repositoryAuthEnv } from "./runner-config"
 import { RETEST_CHECKOUT_ROOT, engineWorkspacePath } from "./workspace-path"
 
 const execute = promisify(execFile)
@@ -116,8 +117,8 @@ export async function checkoutDeterministicRetest(params: {
     throw new Error("Invalid repository installation identity")
   if (
     !params.repoFullName ||
-    !/^[A-Za-z0-9][A-Za-z0-9_.-]*\/[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(params.repoFullName) ||
-    params.repoFullName.includes("..")
+    !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}\/[A-Za-z0-9_.-]{1,100}$/.test(params.repoFullName) ||
+    params.repoFullName.split("/").some((part) => part === "." || part === "..")
   )
     throw new Error("Invalid repository identity")
   if (
@@ -215,13 +216,8 @@ export async function checkoutDeterministicRetest(params: {
       GIT_CONFIG_NOSYSTEM: "1",
       GIT_CONFIG_GLOBAL: "/dev/null",
       GIT_TERMINAL_PROMPT: "0",
-      GIT_CONFIG_COUNT: token ? "1" : "0",
-      ...(token
-        ? {
-            GIT_CONFIG_KEY_0: "http.https://github.com/.extraheader",
-            GIT_CONFIG_VALUE_0: `Authorization: Basic ${Buffer.from(`x-access-token:${token}`).toString("base64")}`,
-          }
-        : {}),
+      GIT_CONFIG_COUNT: "0",
+      ...(token ? repositoryAuthEnv({ repoFullName: params.repoFullName, token }) : {}),
     }
     const git = (args: string[]) =>
       execute(
