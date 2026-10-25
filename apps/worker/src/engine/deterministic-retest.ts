@@ -3,9 +3,10 @@ import { promisify } from "node:util"
 import { mkdtemp, rm, readdir, lstat, mkdir, open, statfs } from "node:fs/promises"
 import { constants } from "node:fs"
 import { join } from "node:path"
-import { prisma } from "@lyrashield/db"
+import { withWorkspaceRLS } from "@lyrashield/db"
 import { getInstallationToken } from "@lyrashield/integrations"
 import { env } from "@lyrashield/config"
+import { repositoryAuthEnv } from "./runner-config"
 import { RETEST_CHECKOUT_ROOT, engineWorkspacePath } from "./workspace-path"
 
 const execute = promisify(execFile)
@@ -39,57 +40,61 @@ export async function authorizeDeterministicRetest(
   workspaceId: string,
   targetId: string
 ) {
-  const retests = await prisma.retest.findMany({
-    where: { scanId, workspaceId, status: { in: ["pending", "running"] } },
-    select: { finding: { select: { id: true, scanId: true, targetId: true, workspaceId: true } } },
-  })
-  if (!retests.length) throw new Error("Deterministic retest has no persisted finding lineage")
-  for (const { finding } of retests) {
-    if (finding.targetId !== targetId || finding.workspaceId !== workspaceId)
-      throw new Error("Deterministic retest target lineage mismatch")
-    const [candidates, baseline, coverage] = await Promise.all([
-      prisma.findingCandidate.findMany({
-        where: { workspaceId, scanId: finding.scanId, findingId: finding.id },
-        select: { scannerSource: true },
-      }),
-      prisma.scanResultManifest.findFirst({
-        where: { scan: { workspaceId, targetId }, scanId: finding.scanId },
-      }),
-      prisma.scanCoverageReceipt.findMany({
-        where: { scan: { workspaceId, targetId }, scanId: finding.scanId },
-        select: { controlId: true, status: true },
-      }),
-    ])
-    const receipt = baseline?.manifest as
-      | {
-          target?: { id?: string }
-          engineExecution?: { sourceRevision?: string }
-          sourceExecution?: { sourceRevision?: string }
-          terminalOutcome?: { status?: string }
-        }
-      | undefined
-    const revision =
-      receipt?.sourceExecution?.sourceRevision ?? receipt?.engineExecution?.sourceRevision
-    // The stored digest identifies the producer's original serialized receipt.
-    // JSONB does not preserve key order, so hashing JSON.stringify(receipt) here
-    // would reject valid historical receipts. This trusts the tenant-scoped,
-    // application-insert-only store; it is not protection against DB tampering.
-    if (
-      !candidates.length ||
-      candidates.some(
-        ({ scannerSource }) =>
-          !SCANNERS.has(scannerSource) ||
-          !coverage.some((row) => row.controlId === scannerSource && row.status === "COMPLETED")
-      ) ||
-      receipt?.target?.id !== targetId ||
-      receipt.terminalOutcome?.status !== "COMPLETED" ||
-      !revision ||
-      !/^[a-f0-9]{40}$/i.test(revision) ||
-      !/^[a-f0-9]{64}$/i.test(baseline?.checksum ?? "")
-    ) {
-      throw new Error("Deterministic retest baseline provenance is incomplete")
+  return withWorkspaceRLS(workspaceId, async (tx) => {
+    const retests = await tx.retest.findMany({
+      where: { scanId, workspaceId, status: { in: ["pending", "running"] } },
+      select: {
+        finding: { select: { id: true, scanId: true, targetId: true, workspaceId: true } },
+      },
+    })
+    if (!retests.length) throw new Error("Deterministic retest has no persisted finding lineage")
+    for (const { finding } of retests) {
+      if (finding.targetId !== targetId || finding.workspaceId !== workspaceId)
+        throw new Error("Deterministic retest target lineage mismatch")
+      const [candidates, baseline, coverage] = await Promise.all([
+        tx.findingCandidate.findMany({
+          where: { workspaceId, scanId: finding.scanId, findingId: finding.id },
+          select: { scannerSource: true },
+        }),
+        tx.scanResultManifest.findFirst({
+          where: { scan: { workspaceId, targetId }, scanId: finding.scanId },
+        }),
+        tx.scanCoverageReceipt.findMany({
+          where: { scan: { workspaceId, targetId }, scanId: finding.scanId },
+          select: { controlId: true, status: true },
+        }),
+      ])
+      const receipt = baseline?.manifest as
+        | {
+            target?: { id?: string }
+            engineExecution?: { sourceRevision?: string }
+            sourceExecution?: { sourceRevision?: string }
+            terminalOutcome?: { status?: string }
+          }
+        | undefined
+      const revision =
+        receipt?.sourceExecution?.sourceRevision ?? receipt?.engineExecution?.sourceRevision
+      // The stored digest identifies the producer's original serialized receipt.
+      // JSONB does not preserve key order, so hashing JSON.stringify(receipt) here
+      // would reject valid historical receipts. This trusts the tenant-scoped,
+      // application-insert-only store; it is not protection against DB tampering.
+      if (
+        !candidates.length ||
+        candidates.some(
+          ({ scannerSource }) =>
+            !SCANNERS.has(scannerSource) ||
+            !coverage.some((row) => row.controlId === scannerSource && row.status === "COMPLETED")
+        ) ||
+        receipt?.target?.id !== targetId ||
+        receipt.terminalOutcome?.status !== "COMPLETED" ||
+        !revision ||
+        !/^[a-f0-9]{40}$/i.test(revision) ||
+        !/^[a-f0-9]{64}$/i.test(baseline?.checksum ?? "")
+      ) {
+        throw new Error("Deterministic retest baseline provenance is incomplete")
+      }
     }
-  }
+  })
 }
 
 /** Separate checkout: fixed GitHub transport, no hooks/submodules, bounded lifetime and tree. */
@@ -112,8 +117,8 @@ export async function checkoutDeterministicRetest(params: {
     throw new Error("Invalid repository installation identity")
   if (
     !params.repoFullName ||
-    !/^[A-Za-z0-9][A-Za-z0-9_.-]*\/[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(params.repoFullName) ||
-    params.repoFullName.includes("..")
+    !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}\/[A-Za-z0-9_.-]{1,100}$/.test(params.repoFullName) ||
+    params.repoFullName.split("/").some((part) => part === "." || part === "..")
   )
     throw new Error("Invalid repository identity")
   if (
@@ -211,13 +216,8 @@ export async function checkoutDeterministicRetest(params: {
       GIT_CONFIG_NOSYSTEM: "1",
       GIT_CONFIG_GLOBAL: "/dev/null",
       GIT_TERMINAL_PROMPT: "0",
-      GIT_CONFIG_COUNT: token ? "1" : "0",
-      ...(token
-        ? {
-            GIT_CONFIG_KEY_0: "http.https://github.com/.extraheader",
-            GIT_CONFIG_VALUE_0: `Authorization: Basic ${Buffer.from(`x-access-token:${token}`).toString("base64")}`,
-          }
-        : {}),
+      GIT_CONFIG_COUNT: "0",
+      ...(token ? repositoryAuthEnv({ repoFullName: params.repoFullName, token }) : {}),
     }
     const git = (args: string[]) =>
       execute(

@@ -178,7 +178,7 @@ export function FindingActionTab({
     status: finding.status,
     latestRetestStatus: latestRetest?.status,
     hasEvidence: (detail.evidence?.length ?? 0) > 0,
-    hasFixProposal: (detail.fixProposals?.length ?? 0) > 0,
+    hasFixProposal: detail.fixProposals?.some((proposal) => proposal.status !== "failed") ?? false,
   })
   const nextStep = nextAction.action
   const isResolved = finding.status === "ACCEPTED_RISK" || finding.status === "FALSE_POSITIVE"
