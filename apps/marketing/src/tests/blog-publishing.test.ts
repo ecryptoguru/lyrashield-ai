@@ -1,7 +1,7 @@
 import { readFileSync, readdirSync } from "node:fs"
 import { join } from "node:path"
 import { fileURLToPath } from "node:url"
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 
 import {
   BUILD_DATE,
@@ -22,6 +22,28 @@ const pastPost = { data: { pubDate: new Date("2026-09-21T00:00:00.000Z"), draft:
 const draftPost = { data: { pubDate: new Date("2026-09-20T00:00:00.000Z"), draft: true } }
 
 describe("blog publication gate", () => {
+  it("uses the injected build cutoff when workerd's module clock is at the epoch", async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(0)
+    vi.stubGlobal("__MARKETING_BUILD_TIMESTAMP__", buildDate.getTime())
+    vi.resetModules()
+    try {
+      const publishing = await import("../lib/blog-publishing")
+      expect(publishing.BUILD_DATE.toISOString()).toBe(buildDate.toISOString())
+      expect(publishing.isPublished(pastPost)).toBe(true)
+      expect(publishing.isPublished(todayPost)).toBe(true)
+      expect(publishing.isPublished(futurePost)).toBe(false)
+      expect(publishing.isPublished(draftPost)).toBe(false)
+      expect(publishing.clampToBuildDate(futurePost.data.pubDate).toISOString()).toBe(
+        buildDate.toISOString()
+      )
+    } finally {
+      vi.useRealTimers()
+      vi.unstubAllGlobals()
+      vi.resetModules()
+    }
+  })
+
   it("holds a future-dated post back and releases it on or after its pubDate", () => {
     // The regression: draft: false was the only gate, so Batch-11 posts dated
     // 2026-09-21 to 2026-09-25 all went live on the 2026-09-24 deploy.

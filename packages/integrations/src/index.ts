@@ -8,6 +8,7 @@ export {
   getAppInstallations,
   exchangeInstallUserCode,
   userCanAdminInstallation,
+  getUserAdminInstallations,
   GitHubOwnershipError,
   verifyWebhookSignature,
   getInstallAppUrl,

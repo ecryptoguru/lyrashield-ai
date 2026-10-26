@@ -1,5 +1,6 @@
 "use client"
 
+import { OnboardingConnectionAlerts } from "./onboarding-connection-alerts"
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { track } from "@/lib/analytics"
@@ -20,7 +21,7 @@ import {
   targetNameFromUrl,
   type OnboardingPath,
 } from "./onboarding-flow.utils"
-import { OnboardingAlerts, OnboardingStepSection, StepProgress } from "./onboarding-step-views"
+import { OnboardingStepSection, StepProgress } from "./onboarding-step-views"
 import { useOnboardingPersistence } from "./use-onboarding-persistence"
 import { useOnboardingRepos } from "./use-onboarding-repos"
 import { useOnboardingScan } from "./use-onboarding-scan"
@@ -38,6 +39,7 @@ export function OnboardingWizard({
   oauthReturnState,
   acquisitionCookiePresent,
   targetTypeHint,
+  ...connectionRecovery
 }: OnboardingWizardProps) {
   const router = useRouter()
   useOnboardingEntryEffects({ selectedPlan, acquisitionCookiePresent })
@@ -90,9 +92,7 @@ export function OnboardingWizard({
     persist,
     oauthReturnState,
   })
-  const reviewOptions = getOnboardingReviewOptions(path)
-  const selectedReview =
-    reviewOptions.find((option) => option.goal === selectedGoal) ?? reviewOptions[0]
+  const { reviewOptions, selectedReview } = selectedReviewOptions(path, selectedGoal)
   const { persistedTargetReusable, onTargetBound, onRepoSelected, onUrlEdited } =
     useOnboardingTargetBinding({
       data,
@@ -177,14 +177,14 @@ export function OnboardingWizard({
   return (
     <div className="w-full max-w-2xl">
       <StepProgress steps={steps} displayStep={displayStep} />
-      <OnboardingAlerts
+      <OnboardingConnectionAlerts
         failure={failure}
         error={error}
-        loading={loading}
-        onRetryFailure={(retry) => {
-          setFailure(null)
-          retry()
-        }}
+        loading={busy}
+        setFailure={setFailure}
+        {...connectionRecovery}
+        onConnect={connectGitHub}
+        onSkip={skipOnboarding}
       />
 
       <OnboardingScanRecovery
@@ -243,7 +243,7 @@ export function OnboardingWizard({
         onSelectRepo={onRepoSelected}
         reposLoadFailed={Boolean(error)}
         onLoadRepos={loadRepos}
-        onReconnect={connectGitHub}
+        onReconnect={() => void connectGitHub()}
         onRepoBack={() => setStep(1)}
         onRepoContinue={confirmRepoAndContinue}
         retryingExistingTarget={persistedTargetReusable}
@@ -260,4 +260,13 @@ export function OnboardingWizard({
       />
     </div>
   )
+}
+
+function selectedReviewOptions(path: OnboardingPath, selectedGoal: string) {
+  const reviewOptions = getOnboardingReviewOptions(path)
+  return {
+    reviewOptions,
+    selectedReview:
+      reviewOptions.find((option) => option.goal === selectedGoal) ?? reviewOptions[0],
+  }
 }

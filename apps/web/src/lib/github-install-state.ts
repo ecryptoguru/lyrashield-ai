@@ -1,4 +1,5 @@
 import { createHmac, randomBytes, timingSafeEqual } from "crypto"
+import { GitHubContextSchema, type GitHubContext } from "./github-oauth-context"
 import { env } from "@lyrashield/config"
 
 /**
@@ -12,12 +13,14 @@ import { env } from "@lyrashield/config"
  * tamper-evident (HMAC over the app secret), and time-limits it.
  *
  * Format: base64url(workspaceId) + "." + return destination + "." + nonce +
- * "." + expiry + "." + base64url(hmac)
+ * "." + expiry + "." + base64url(hmac). The nonce can encode an optional
+ * return context and GitHub purpose/session context. Chooser state identifies
+ * candidates only; a fresh provider code and authority check still authorize binding.
  */
 
 const TTL_MS = 10 * 60 * 1000 // 10 minutes
 const INSTALL_RETURN_DESTINATIONS = ["onboarding", "integrations", "scan"] as const
-type InstallReturnDestination = (typeof INSTALL_RETURN_DESTINATIONS)[number]
+export type InstallReturnDestination = (typeof INSTALL_RETURN_DESTINATIONS)[number]
 
 function b64url(input: Buffer | string): string {
   return Buffer.from(input).toString("base64url")
@@ -31,25 +34,35 @@ export function createInstallState(
   workspaceId: string,
   returnTo: InstallReturnDestination = "integrations",
   now: number = Date.now(),
-  oauthReturnState?: string
+  oauthReturnState?: string,
+  github?: GitHubContext
 ): string {
-  const nonce = oauthReturnState
-    ? b64url(JSON.stringify({ nonce: b64url(randomBytes(12)), oauthReturnState }))
-    : b64url(randomBytes(12))
+  const nonce =
+    oauthReturnState || github
+      ? b64url(
+          JSON.stringify({
+            nonce: b64url(randomBytes(12)),
+            oauthReturnState,
+            ...(github ? { github: GitHubContextSchema.parse(github) } : {}),
+          })
+        )
+      : b64url(randomBytes(12))
   const payload = `${b64url(workspaceId)}.${returnTo}.${nonce}.${now + TTL_MS}`
   return `${payload}.${sign(payload)}`
 }
 
-type InstallStateResult =
+export type InstallStateResult =
   | {
       valid: true
       workspaceId: string
       returnTo: InstallReturnDestination
       oauthReturnState?: string
+      github?: GitHubContext
     }
   | { valid: false; reason: "malformed" | "bad_signature" | "expired" }
 
 export function verifyInstallState(state: string, now: number = Date.now()): InstallStateResult {
+  if (state.length > 24000) return { valid: false, reason: "malformed" }
   const parts = state.split(".")
   if (parts.length !== 4 && parts.length !== 5) return { valid: false, reason: "malformed" }
   const legacy = parts.length === 4
@@ -88,9 +101,15 @@ export function verifyInstallState(state: string, now: number = Date.now()): Ins
   if (!workspaceId) return { valid: false, reason: "malformed" }
 
   let oauthReturnState: string | undefined
+  let github: GitHubContext | undefined
   try {
     const context = JSON.parse(Buffer.from(nonce, "base64url").toString("utf8"))
-    if (typeof context.oauthReturnState === "string" && context.oauthReturnState.length <= 8192)
+    if (context?.github !== undefined) {
+      const parsed = GitHubContextSchema.safeParse(context.github)
+      if (!parsed.success) return { valid: false, reason: "malformed" }
+      github = parsed.data
+    }
+    if (typeof context?.oauthReturnState === "string" && context.oauthReturnState.length <= 8192)
       oauthReturnState = context.oauthReturnState
   } catch {
     /* Older states contain only a random nonce. */
@@ -100,5 +119,6 @@ export function verifyInstallState(state: string, now: number = Date.now()): Ins
     workspaceId,
     returnTo: returnTo as InstallReturnDestination,
     ...(oauthReturnState ? { oauthReturnState } : {}),
+    ...(github ? { github } : {}),
   }
 }

@@ -1,7 +1,11 @@
 import { createRoot } from "react-dom/client"
 
 const root = createRoot(document.getElementById("root")!)
-if (new URLSearchParams(location.search).has("notification-integrations")) {
+if (new URLSearchParams(location.search).has("github-connection")) {
+  await import("../../apps/web/src/app/globals.css")
+  const { default: GitHubConnectionHarness } = await import("./github-connection-harness")
+  root.render(<GitHubConnectionHarness />)
+} else if (new URLSearchParams(location.search).has("notification-integrations")) {
   await import("../../apps/web/src/app/globals.css")
   const { default: NotificationIntegrationsHarness } =
     await import("./notification-integrations-harness")

@@ -1,3 +1,4 @@
+import { hasPermission, PERMISSIONS } from "@lyrashield/auth"
 import { redirect } from "next/navigation"
 import { getWorkspaceMembership, getSession } from "@lyrashield/auth/server"
 import { prisma, withWorkspaceRLS } from "@lyrashield/db"
@@ -19,7 +20,7 @@ import { claimAccountAcquisition } from "@/lib/account-acquisition"
 export default async function OnboardingPage({
   searchParams,
 }: {
-  searchParams: Promise<{ plan?: string; oauth_return?: string }>
+  searchParams: Promise<{ plan?: string; oauth_return?: string; github?: string }>
 }) {
   const params = await searchParams
   const selectedPlan =
@@ -110,6 +111,7 @@ export default async function OnboardingPage({
     })
   }
 
+  const membership = workspaceId ? await getWorkspaceMembership(workspaceId, session.userId) : null
   const initialState = {
     currentStep: state.workspaceId ? state.currentStep : Math.max(state.currentStep, 1),
     completed: state.completed,
@@ -144,6 +146,10 @@ export default async function OnboardingPage({
       <OnboardingWizard
         key={state.updatedAt.toISOString()}
         principalId={session.userId}
+        githubStatus={params.github}
+        canManageGitHub={
+          !!membership && hasPermission(membership.role, PERMISSIONS.integration.manage)
+        }
         initialState={{ ...initialState, updatedAt: state.updatedAt.toISOString() }}
         selectedPlan={selectedPlan}
         acquisitionCookiePresent={Boolean(acquisitionCookie) && (acquisitionClaim.ok || optedOut)}

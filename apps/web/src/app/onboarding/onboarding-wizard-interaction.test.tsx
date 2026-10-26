@@ -39,6 +39,7 @@ vi.mock("@/lib/api-client", () => ({
     }
   },
 }))
+import { OnboardingConnectionAlerts } from "./onboarding-connection-alerts"
 import { OnboardingWizard } from "./onboarding-wizard"
 import { OnboardingScanRecovery } from "./onboarding-scan-recovery"
 import { Button } from "@lyrashield/ui"
@@ -75,6 +76,7 @@ type Element = ReactElement<{
 // exactly those so assertions still see the inputs they render; library
 // components (Button/Input/etc.) stay opaque leaf elements.
 const VIEW_COMPONENTS = new Set<unknown>([
+  OnboardingConnectionAlerts,
   OnboardingAlerts,
   OnboardingScanRecovery,
   OnboardingStepSection,

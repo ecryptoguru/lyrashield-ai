@@ -152,8 +152,8 @@
     },
     "apps/web/src/app/(dashboard)/dashboard/integrations/github-integration.tsx|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 27,
-      "maxExcess": 27
+      "totalExcess": 20,
+      "maxExcess": 20
     },
     "apps/web/src/app/(dashboard)/dashboard/integrations/mcp-integration.tsx|max-lines-per-function": {
       "count": 1,
@@ -310,11 +310,6 @@
       "totalExcess": 37,
       "maxExcess": 37
     },
-    "apps/web/src/app/api/integrations/github/install/route.ts|max-lines-per-function": {
-      "count": 1,
-      "totalExcess": 43,
-      "maxExcess": 43
-    },
     "apps/web/src/app/api/licenses/issue/route.ts|max-lines-per-function": {
       "count": 1,
       "totalExcess": 84,
@@ -382,8 +377,8 @@
     },
     "apps/web/src/app/onboarding/onboarding-wizard.tsx|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 58,
-      "maxExcess": 58
+      "totalExcess": 57,
+      "maxExcess": 57
     },
     "apps/web/src/app/reports/shared/[id]/launch-report-view.tsx|max-lines-per-function": {
       "count": 1,
