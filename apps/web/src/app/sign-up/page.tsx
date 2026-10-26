@@ -30,72 +30,16 @@ import {
 import { storePendingInvitation } from "@/lib/pending-invitation"
 import { parsePlanIntent, planIntentPath, rememberPlanIntent } from "@/lib/plan-intent"
 import { SignupReassurance } from "@/components/signup-reassurance"
-import { resendSignupVerificationEmail } from "@/lib/signup-verification"
+import {
+  resendSignupVerificationEmail,
+  signupVerificationErrorStatus,
+} from "@/lib/signup-verification"
+import { EmailVerificationPanel, type ResendStatus } from "@/components/email-verification-panel"
 
 const marketingUrl = (process.env.NEXT_PUBLIC_MARKETING_URL || "https://lyrashieldai.com").replace(
   /\/$/,
   ""
 )
-
-function EmailVerificationPanel({
-  email,
-  resendLoading,
-  resendCooldown,
-  resendStatus,
-  onResend,
-}: {
-  email: string
-  resendLoading: boolean
-  resendCooldown: number
-  resendStatus: "idle" | "success" | "error"
-  onResend: () => void
-}) {
-  return (
-    <main className="relative flex min-h-screen items-center justify-center px-4">
-      <ThemeToggle className="fixed top-4 right-4 z-10" />
-      <div className="gradient-hero pointer-events-none absolute inset-0" aria-hidden="true" />
-      <div className="relative w-full max-w-md">
-        <div className="bg-card rounded-xl border p-6 text-center shadow-lg sm:p-8">
-          <h2 className="text-xl font-semibold tracking-tight">Check your email</h2>
-          <p className="text-muted-foreground mt-2 text-sm">
-            We sent a verification link to {email}. Click it to verify your account and continue.
-          </p>
-          <div className="mt-4 flex flex-col items-center gap-2">
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              disabled={resendLoading || resendCooldown > 0}
-              onClick={onResend}
-            >
-              {resendLoading
-                ? "Sending…"
-                : resendCooldown > 0
-                  ? `Resend in ${resendCooldown}s`
-                  : "Resend verification email"}
-            </Button>
-            {resendStatus === "success" && (
-              <p className="text-sm text-emerald-600" role="status">
-                Verification email resent.
-              </p>
-            )}
-            {resendStatus === "error" && (
-              <p className="text-destructive text-sm" role="alert">
-                Could not resend. Please try again.
-              </p>
-            )}
-          </div>
-          <p className="text-muted-foreground mt-4 text-sm">
-            Already verified?{" "}
-            <Link href="/sign-in" className="text-primary font-medium hover:underline">
-              Sign in
-            </Link>
-          </p>
-        </div>
-      </div>
-    </main>
-  )
-}
 
 function SignUpFooter({ invited }: { invited: boolean }) {
   return (
@@ -126,7 +70,7 @@ export default function SignUpPage() {
   const [emailSent, setEmailSent] = useState(false)
   const [resendLoading, setResendLoading] = useState(false)
   const [resendCooldown, setResendCooldown] = useState(0)
-  const [resendStatus, setResendStatus] = useState<"idle" | "success" | "error">("idle")
+  const [resendStatus, setResendStatus] = useState<ResendStatus>("idle")
 
   useEffect(() => {
     if (resendCooldown <= 0) return
@@ -350,17 +294,16 @@ export default function SignUpPage() {
   }
 
   async function handleResend() {
+    const signOutFirst = resendStatus === "email-mismatch"
+    const callbackURL = planIntentPath("/onboarding", selectedPlan.current)
     setResendLoading(true)
     setResendStatus("idle")
     try {
-      await resendSignupVerificationEmail(
-        email,
-        planIntentPath("/onboarding", selectedPlan.current)
-      )
+      await resendSignupVerificationEmail(email, callbackURL, signOutFirst)
       setResendStatus("success")
       setResendCooldown(30)
-    } catch {
-      setResendStatus("error")
+    } catch (error) {
+      setResendStatus(signupVerificationErrorStatus(error))
     } finally {
       setResendLoading(false)
     }
