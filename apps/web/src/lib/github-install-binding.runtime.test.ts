@@ -4,6 +4,11 @@ import { prisma, createBoundedPgAdapter } from "@lyrashield/db"
 import { PrismaClient } from "../../../../packages/db/src/generated/prisma"
 
 vi.mock("@lyrashield/config", async (original) => {
+  if (process.env.LYRASHIELD_TEST_DB_DISPOSABLE === "1" && !process.env.RLS_RUNTIME_DATABASE_URL) {
+    throw new Error(
+      "GitHub binding runtime tests require an explicit restricted RLS_RUNTIME_DATABASE_URL"
+    )
+  }
   const actual = await original<typeof import("@lyrashield/config")>()
   return {
     ...actual,
@@ -45,12 +50,10 @@ describe.skipIf(process.env.LYRASHIELD_TEST_DB_DISPOSABLE !== "1")(
   "GitHub binding on disposable PostgreSQL with the real extended client",
   () => {
     beforeAll(async () => {
-      if (process.env.RLS_RUNTIME_DATABASE_URL) {
-        const [role] = await prisma.$queryRaw<
-          Array<{ superuser: boolean; bypass: boolean }>
-        >`SELECT rolsuper AS superuser, rolbypassrls AS bypass FROM pg_roles WHERE rolname = current_user`
-        expect(role).toEqual({ superuser: false, bypass: false })
-      }
+      const [role] = await prisma.$queryRaw<
+        Array<{ superuser: boolean; bypass: boolean }>
+      >`SELECT rolsuper AS superuser, rolbypassrls AS bypass FROM pg_roles WHERE rolname = current_user`
+      expect(role).toEqual({ superuser: false, bypass: false })
       for (const workspaceId of workspaces)
         await owner.workspace.create({
           data: { id: workspaceId, name: "GitHub reconnect fixture", slug: workspaceId },
