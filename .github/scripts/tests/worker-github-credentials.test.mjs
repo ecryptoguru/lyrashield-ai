@@ -14,6 +14,10 @@ const grants = ["worker-github-app-id", "worker-github-app-private-key"].map((na
   scope: `${vaultId}/secrets/${name}`,
   roleDefinitionId: roleId,
 }))
+// The scoped atScope() query omits descendant secret assignments. Keep the
+// fixtures disjoint so either missing inventory changes the verifier outcome.
+const descendants = (rows) => rows.filter((row) => row.scope.startsWith(`${vaultId}/`))
+const inherited = (rows) => rows.filter((row) => !row.scope.startsWith(`${vaultId}/`))
 function check(worker = grants, scanner = [], extra = {}) {
   const dir = mkdtempSync(join(tmpdir(), "worker-github-"))
   const log = join(dir, "calls")
@@ -26,7 +30,13 @@ if (a.slice(0,2).join(' ')==='keyvault show') console.log(value('--query')==='id
 else if (a.slice(0,2).join(' ')==='vm show') console.log(JSON.stringify({principalId:'worker-identity'}));
 else if (a.slice(0,2).join(' ')==='containerapp show') console.log(JSON.stringify({principalId:process.env.SCANNER_ID,userAssignedIdentities:process.env.EXTRA_SCANNER ? {extra:{principalId:'extra-identity'}} : undefined}));
 else if (a.slice(0,3).join(' ')==='keyvault secret set') { const file=value('--file'); if(value('--vault-name')!=='app-only-vault' || !fs.readFileSync(file,'utf8').startsWith('fixture-') || (fs.statSync(file).mode&0o777)!==0o600 || process.env.GITHUB_APP_ID || process.env.GITHUB_APP_PRIVATE_KEY) process.exit(7); }
-else if (a.slice(0,3).join(' ')==='role assignment list') console.log(value('--assignee-object-id')==='worker-identity' ? process.env.WORKER_GRANTS : value('--assignee-object-id')==='extra-identity' ? process.env.EXTRA_SCANNER_GRANTS : process.env.SCANNER_GRANTS);
+else if (a.slice(0,3).join(' ')==='role assignment list') {
+  const prefix=value('--assignee-object-id')==='worker-identity' ? 'WORKER' : value('--assignee-object-id')==='extra-identity' ? 'EXTRA_SCANNER' : 'SCANNER';
+  if (!a.includes('--include-groups')) process.exit(8);
+  if (a.includes('--all') && !a.includes('--scope')) console.log(process.env[prefix+'_DESCENDANT_GRANTS']);
+  else if (!a.includes('--all') && value('--scope')===process.env.VAULT_ID && a.includes('--include-inherited')) console.log(process.env[prefix+'_INHERITED_GRANTS']);
+  else process.exit(9);
+}
 else process.exit(5);
 `,
     { mode: 0o755 }
@@ -45,9 +55,12 @@ else process.exit(5);
       VAULT_ID: vaultId,
       RBAC: "true",
       SCANNER_ID: "scanner-identity",
-      WORKER_GRANTS: JSON.stringify(worker),
-      SCANNER_GRANTS: JSON.stringify(scanner),
-      EXTRA_SCANNER_GRANTS: JSON.stringify([grants[0]]),
+      WORKER_DESCENDANT_GRANTS: JSON.stringify(descendants(worker)),
+      WORKER_INHERITED_GRANTS: JSON.stringify(inherited(worker)),
+      SCANNER_DESCENDANT_GRANTS: JSON.stringify(descendants(scanner)),
+      SCANNER_INHERITED_GRANTS: JSON.stringify(inherited(scanner)),
+      EXTRA_SCANNER_DESCENDANT_GRANTS: JSON.stringify([grants[0]]),
+      EXTRA_SCANNER_INHERITED_GRANTS: "[]",
       GITHUB_APP_ID: "fixture-app-id",
       GITHUB_APP_PRIVATE_KEY: "fixture-private-key",
       AZURE_APP_SECRET_KEY_VAULT_NAME: "app-only-vault",
@@ -68,12 +81,37 @@ else process.exit(5);
   rmSync(dir, { recursive: true, force: true })
   return { ...result, calls }
 }
-test("accepts only the two exact VM secret grants and no scanner access", () => {
+test("accepts required VM grants found only in the descendant inventory", () => {
   const result = check()
   assert.equal(result.status, 0, result.stderr)
-  assert.match(result.calls, /--include-inherited/)
+  const queries = result.calls.split("\n").filter((line) => line.startsWith("role assignment list"))
+  assert.equal(queries.length, 4)
+  for (const identity of ["worker-identity", "scanner-identity"]) {
+    const ownQueries = queries.filter((line) => line.includes(`--assignee-object-id ${identity} `))
+    assert.equal(ownQueries.length, 2)
+    assert.equal(ownQueries.filter((line) => line.includes("--all ")).length, 1)
+    assert.equal(
+      ownQueries.filter((line) => line.includes(`--scope ${vaultId} --include-inherited `)).length,
+      1
+    )
+    assert.ok(ownQueries.every((line) => line.includes("--include-groups")))
+  }
   assert.doesNotMatch(result.calls, /role assignment create|secret (show|set)/)
 })
+for (const identity of ["worker", "scanner"]) {
+  test(`rejects ${identity} access found only in the inherited inventory`, () => {
+    const broadGrant = { scope: "/subscriptions/fixture", roleDefinitionId: roleId }
+    const result =
+      identity === "worker" ? check([...grants, broadGrant]) : check(grants, [broadGrant])
+    assert.notEqual(result.status, 0)
+    assert.match(result.stderr, new RegExp(`isolation check failed for ${identity}`))
+    assert.match(
+      result.calls,
+      new RegExp(`--scope ${vaultId} --include-inherited --assignee-object-id ${identity}-identity`)
+    )
+    assert.doesNotMatch(result.calls, /role assignment create|secret (show|set)/)
+  })
+}
 for (const [name, worker, scanner, extra] of [
   ["missing grant", grants.slice(0, 1)],
   ["vault-wide VM role", [...grants, { scope: vaultId, roleDefinitionId: roleId }]],
