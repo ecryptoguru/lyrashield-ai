@@ -30,7 +30,7 @@
     "preview:motion": "pnpm preview:build && node scripts/prepare-motion-test-media.mjs && node scripts/preview-motion.mjs"
   },
   "dependencies": {
-    "@astrojs/cloudflare": "^14.2.2",
+    "@astrojs/cloudflare": "14.3.0",
     "@astrojs/markdown-satteri": "^0.3.6",
     "@astrojs/mdx": "^7.0.6",
     "@astrojs/rss": "^4.0.19",
@@ -46,7 +46,7 @@
     "@lyrashield/security": "workspace:*",
     "@lyrashield/types": "workspace:*",
     "@tailwindcss/vite": "catalog:",
-    "astro": "^7.2.8",
+    "astro": "7.3.3",
     "posthog-js": "^1.418.1",
     "tailwindcss": "catalog:",
     "zod": "catalog:"

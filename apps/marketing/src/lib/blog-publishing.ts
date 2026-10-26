@@ -12,10 +12,13 @@
  * appears on the first deploy on or after its pubDate, because at that build
  * the pubDate is no longer after the build date.
  *
- * `BUILD_DATE` is captured once when this module is first evaluated so every
- * consumer in one build agrees on the same cutoff.
+ * Astro injects the Node build timestamp so every consumer agrees on one
+ * cutoff even when workerd preloads this module with its clock at the epoch.
+ * Nonbundled Node consumers and unit tests capture their own startup time.
  */
-export const BUILD_DATE: Date = new Date()
+export const BUILD_DATE: Date = new Date(
+  typeof __MARKETING_BUILD_TIMESTAMP__ === "undefined" ? Date.now() : __MARKETING_BUILD_TIMESTAMP__
+)
 
 export interface PublishableData {
   pubDate: Date

@@ -1,5 +1,7 @@
 "use client"
 
+import { GitHubConnectionRecovery } from "@/components/github-connection-recovery"
+
 import { useState, useEffect, useCallback, type Dispatch, type SetStateAction } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
@@ -112,13 +114,13 @@ function createTargetScanHandlers(args: {
       }
     }
   }
-  async function connectForScan() {
+  async function connectForScan(mode: "existing" | "install-new" = "existing") {
     args.setConnecting(true)
     args.setError(null)
     try {
       const data = await apiPost(
         "/api/integrations/github/install",
-        { workspaceId, returnTo: "scan" },
+        { workspaceId, returnTo: "scan", mode },
         { schema: installUrlSchema }
       )
       window.location.href = data.installUrl
@@ -209,11 +211,11 @@ function CreatedTargetNotice({ target }: { target: { id: string; name: string } 
 function GithubScanConnection({
   connecting,
   onConnect,
-  showWarning,
+  githubStatus,
 }: {
   connecting: boolean
-  onConnect: () => void
-  showWarning: boolean
+  onConnect: (mode?: "existing" | "install-new") => void
+  githubStatus: string | null
 }) {
   return (
     <div className="mb-4 space-y-2">
@@ -221,20 +223,26 @@ function GithubScanConnection({
         Connect GitHub to choose an accessible repository. You can also enter a public repository
         below.
       </p>
-      {showWarning && (
-        <p role="status" className="text-sm">
-          GitHub access could not be confirmed. Retry the connection or use a public repository.
-        </p>
-      )}
+      <GitHubConnectionRecovery status={githubStatus} />
       <Button
         type="button"
         variant="outline"
         disabled={connecting}
         aria-busy={connecting}
-        onClick={onConnect}
+        onClick={() => onConnect()}
       >
         {connecting ? "Connecting…" : "Connect GitHub"}
       </Button>
+      {githubStatus !== "workspace_already_connected" && (
+        <Button
+          type="button"
+          variant="ghost"
+          disabled={connecting}
+          onClick={() => onConnect("install-new")}
+        >
+          Install on another account
+        </Button>
+      )}
     </div>
   )
 }
@@ -457,8 +465,8 @@ export function TargetsClient({
           {scanSetup && formType === "REPO" && !githubConnected && (
             <GithubScanConnection
               connecting={connecting}
-              onConnect={() => void connectForScan()}
-              showWarning={Boolean(searchParams.get("github"))}
+              onConnect={(mode) => void connectForScan(mode)}
+              githubStatus={searchParams.get("github")}
             />
           )}
           {formType === "REPO" ? (

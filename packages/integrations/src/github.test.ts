@@ -185,8 +185,100 @@ describe("install-callback ownership verification", () => {
   })
 
   describe("userCanAdminInstallation", () => {
+    it.each([
+      [{ type: "User", id: 42, login: "owner" }, { id: 7 }, [], false],
+      [{ type: "User", id: 42, login: "owner" }, { id: 42 }, [], true],
+      [
+        { type: "Organization", id: 42, login: "acme" },
+        { id: 7 },
+        [{ state: "active", role: "member", organization: { id: 42 } }],
+        false,
+      ],
+      [
+        { type: "Organization", id: 42, login: "acme" },
+        { id: 7 },
+        [{ state: "pending", role: "admin", organization: { id: 42 } }],
+        false,
+      ],
+      [
+        { type: "Organization", id: 42, login: "acme" },
+        { id: 7 },
+        [{ state: "active", role: "admin", organization: { id: 42 } }],
+        true,
+      ],
+    ])(
+      "requires account ownership or active organization administration: %j",
+      async (account, user, memberships, expected) => {
+        vi.stubGlobal(
+          "fetch",
+          vi.fn(async (url: string) => ({
+            ok: true,
+            status: 200,
+            headers: { get: () => null },
+            json: async () =>
+              url.includes("/user/installations")
+                ? { installations: [{ id: 222, account }] }
+                : url.includes("/user/memberships/orgs")
+                  ? memberships
+                  : user,
+          }))
+        )
+        await expect(userCanAdminInstallation("tok-x", 222)).resolves.toBe(expected)
+      }
+    )
+
+    it("fails closed when personal-owner identity cannot be verified", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (url: string) => ({
+          ok: !url.endsWith("/user"),
+          status: url.endsWith("/user") ? 401 : 200,
+          headers: { get: () => null },
+          json: async () => ({ installations: [{ id: 222, account: { type: "User", id: 42 } }] }),
+        }))
+      )
+      await expect(userCanAdminInstallation("tok-x", 222)).rejects.toBeInstanceOf(
+        GitHubOwnershipError
+      )
+    })
+
+    it("verifies organization administration beyond the first membership page", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (url: string) => ({
+          ok: true,
+          status: 200,
+          headers: { get: () => null },
+          json: async () =>
+            url.includes("/user/installations")
+              ? { installations: [{ id: 222, account: { type: "Organization", id: 9999 } }] }
+              : url.endsWith("page=1")
+                ? Array.from({ length: 100 }, (_, i) => ({
+                    state: "active",
+                    role: "admin",
+                    organization: { id: i + 1 },
+                  }))
+                : [{ state: "active", role: "admin", organization: { id: 9999 } }],
+        }))
+      )
+      await expect(userCanAdminInstallation("tok-x", 222)).resolves.toBe(true)
+    })
+
     it("confirms an installation the user can administer", async () => {
-      vi.stubGlobal("fetch", mockFetchOnce(200, { installations: [{ id: 111 }, { id: 222 }] }))
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (url: string) => ({
+          ok: true,
+          status: 200,
+          headers: { get: () => null },
+          json: async () =>
+            url.endsWith("/user")
+              ? { id: 42 }
+              : {
+                  installations: [{ id: 111 }, { id: 222, account: { type: "User", id: 42 } }],
+                },
+        }))
+      )
       await expect(userCanAdminInstallation("tok-x", 222)).resolves.toBe(true)
     })
 
@@ -202,7 +294,7 @@ describe("install-callback ownership verification", () => {
 
     it("walks pagination rather than stopping at the first full page", async () => {
       const firstPage = { installations: Array.from({ length: 100 }, (_, i) => ({ id: i + 1 })) }
-      const secondPage = { installations: [{ id: 777 }] }
+      const secondPage = { installations: [{ id: 777, account: { type: "User", id: 42 } }] }
       const fetchMock = vi
         .fn()
         .mockResolvedValueOnce({
@@ -217,10 +309,16 @@ describe("install-callback ownership verification", () => {
           headers: { get: () => null },
           json: async () => secondPage,
         })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: { get: () => null },
+          json: async () => ({ id: 42 }),
+        })
       vi.stubGlobal("fetch", fetchMock)
 
       await expect(userCanAdminInstallation("tok-x", 777)).resolves.toBe(true)
-      expect(fetchMock).toHaveBeenCalledTimes(2)
+      expect(fetchMock).toHaveBeenCalledTimes(3)
     })
 
     it("fails closed instead of paging forever when every page is full", async () => {

@@ -1,3 +1,5 @@
+import { getWorkspaceMembership } from "@lyrashield/auth/server"
+import { hasPermission, PERMISSIONS } from "@lyrashield/auth"
 import type { Metadata } from "next"
 import { prisma } from "@lyrashield/db"
 import { env } from "@lyrashield/config"
@@ -37,6 +39,7 @@ export default async function IntegrationsPage({
     )
   }
 
+  const membership = await getWorkspaceMembership(workspaceId, session.userId)
   const params = await searchParams
   const appOriginRaw = (env.NEXT_PUBLIC_APP_URL as string | undefined) ?? ""
   const appOrigin = appOriginRaw.replace(/\/+$/, "")
@@ -51,39 +54,16 @@ export default async function IntegrationsPage({
     where: { workspaceId, deletedAt: null },
   })
   const githubIntegration = integrations.find((i) => i.type === "GITHUB")
-  const githubStatus = params.github
-  const githubVerificationRequired = githubStatus === "verification_required"
-  const githubAlreadyClaimed = githubStatus === "already_claimed"
 
   return (
     <div>
       <PageHeader title="Integrations" description="Connect external services to your workspace." />
 
-      {githubVerificationRequired && (
-        <div
-          className="mb-6 rounded-lg border border-amber-500/50 bg-amber-500/10 p-4 text-sm"
-          role="alert"
-        >
-          We could not confirm with GitHub that you administer this installation, so it was not
-          connected. Start the install from the Connect button below — approving GitHub&apos;s
-          authorization prompt is what proves ownership. If you cancelled that prompt, try again.
-        </div>
-      )}
-
-      {githubAlreadyClaimed && (
-        <div
-          className="mb-6 rounded-lg border border-amber-500/50 bg-amber-500/10 p-4 text-sm"
-          role="alert"
-        >
-          This GitHub installation is already connected to a different LyraShield workspace. An
-          installation can only be linked to one workspace at a time — disconnect it there first or
-          install the app on a different GitHub account or organisation.
-        </div>
-      )}
-
       <div className="space-y-6">
         <GithubIntegration
           workspaceId={workspaceId}
+          githubStatus={params.github}
+          canManage={!!membership && hasPermission(membership.role, PERMISSIONS.integration.manage)}
           connected={!!githubIntegration}
           accountLogin={githubIntegration?.metadata as { accountLogin?: string } | null}
         />
