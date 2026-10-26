@@ -216,7 +216,13 @@ grep -Fqx 'GITHUB_APP_ID=12345' "$config_env"
 expected_key=$(awk 'BEGIN { ORS="" } { printf "%s\\n", $0 }' "$test_root/key.pem")
 grep -Fqx "GITHUB_APP_PRIVATE_KEY=$expected_key" "$config_env"
 [ "$(grep -c '^GITHUB_APP_PRIVATE_KEY=' "$config_env")" = 1 ]
-[ "$(stat -f '%Lp' "$config_env" 2>/dev/null || stat -c '%a' "$config_env")" = 600 ]
+# A failed stat implementation can emit stdout; replace it before comparing.
+if permissions=$(stat -c '%a' "$config_env" 2>/dev/null); then
+  :
+else
+  permissions=$(stat -f '%Lp' "$config_env")
+fi
+[ "$permissions" = 600 ]
 if grep -Eq '^GITHUB_(WEBHOOK|APP_CLIENT)' "$config_env"; then exit 1; fi
 # Exercise the traditional RSA form as well as the PKCS8 fixture above.
 # OpenSSL 3 requires -traditional; LibreSSL emits this form without the flag.
