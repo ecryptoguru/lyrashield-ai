@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { resendSignupVerificationEmail } from "./signup-verification"
+import { resendSignupVerificationEmail, signupVerificationErrorStatus } from "./signup-verification"
 
 const { sendVerificationEmail, signOut } = vi.hoisted(() => ({
   sendVerificationEmail: vi.fn(),
@@ -69,5 +69,17 @@ describe("signup verification resend", () => {
     await expect(
       resendSignupVerificationEmail("example@example.invalid", "/onboarding")
     ).rejects.toThrow("Offline")
+  })
+})
+
+describe("signup verification recovery", () => {
+  it.each([
+    [{ code: "EMAIL_MISMATCH" }, "email-mismatch"],
+    [{ code: "EMAIL_ALREADY_VERIFIED" }, "already-verified"],
+    [{ code: "RATE_LIMITED" }, "error"],
+    [null, "error"],
+    [new Error("Offline"), "error"],
+  ])("maps %j to the appropriate recovery state", (error, expected) => {
+    expect(signupVerificationErrorStatus(error)).toBe(expected)
   })
 })

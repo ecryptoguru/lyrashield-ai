@@ -13,3 +13,10 @@ export async function resendSignupVerificationEmail(
   const { error } = await authClient.sendVerificationEmail({ email, callbackURL })
   if (error) throw error
 }
+
+export function signupVerificationErrorStatus(error: unknown) {
+  const code = (error as { code?: string } | null)?.code
+  if (code === "EMAIL_MISMATCH") return "email-mismatch"
+  if (code === "EMAIL_ALREADY_VERIFIED") return "already-verified"
+  return "error"
+}
