@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { createVerify, generateKeyPairSync } from "node:crypto"
+import { createVerify, generateKeyPairSync, randomUUID } from "node:crypto"
 
 const credentials = vi.hoisted(() => ({ GITHUB_APP_ID: "12345", GITHUB_APP_PRIVATE_KEY: "" }))
 vi.mock("@lyrashield/config", () => ({ env: credentials }))
@@ -27,17 +27,18 @@ describe("GitHub worker credentials", () => {
   })
   it("mints a cold-cache installation token with the worker env-file PEM", async () => {
     credentials.GITHUB_APP_PRIVATE_KEY = privateKey.replace(/\n/g, "\\n")
+    const expectedToken = randomUUID()
     const fetchMock = vi.fn(async (_url: string, init: RequestInit) => {
       verifyJWT((init.headers as Record<string, string>).Authorization!.slice(7))
       return new Response(
         JSON.stringify({
-          token: "ghs_fixture",
+          token: expectedToken,
           expires_at: new Date(Date.now() + 3600000).toISOString(),
         })
       )
     })
     vi.stubGlobal("fetch", fetchMock)
-    await expect(getInstallationToken(987654321)).resolves.toBe("ghs_fixture")
+    await expect(getInstallationToken(987654321)).resolves.toBe(expectedToken)
     expect(fetchMock).toHaveBeenCalledTimes(1)
     expect(fetchMock.mock.calls[0]![0]).toContain("/app/installations/987654321/access_tokens")
   })

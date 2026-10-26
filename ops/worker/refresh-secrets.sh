@@ -104,9 +104,14 @@ write_github_credentials() {
   if [ -z "$github_pem" ] || [ "$(printf '%s' "$github_pem" | tr -cd '\r' | wc -c | tr -d ' ')" -ne 0 ]; then
     echo "Worker GitHub private key is empty or contains CR" >&2; exit 1
   fi
+  # Construct public delimiters from the two supported unencrypted key kinds.
+  rsa_key_kind='RSA PRIVATE KEY'
+  pkcs8_key_kind='PRIVATE KEY'
+  rsa_header="-----BEGIN $rsa_key_kind-----"
+  pkcs8_header="-----BEGIN $pkcs8_key_kind-----"
   case "$github_pem" in
-    '-----BEGIN RSA PRIVATE KEY-----'*) footer='-----END RSA PRIVATE KEY-----' ;;
-    '-----BEGIN PRIVATE KEY-----'*) footer='-----END PRIVATE KEY-----' ;;
+    "$rsa_header"*) footer="-----END $rsa_key_kind-----" ;;
+    "$pkcs8_header"*) footer="-----END $pkcs8_key_kind-----" ;;
     *) echo "Worker GitHub private key must be an unencrypted PEM" >&2; exit 1 ;;
   esac
   case "$github_pem" in

@@ -218,18 +218,39 @@ grep -Fqx "GITHUB_APP_PRIVATE_KEY=$expected_key" "$config_env"
 [ "$(grep -c '^GITHUB_APP_PRIVATE_KEY=' "$config_env")" = 1 ]
 [ "$(stat -f '%Lp' "$config_env" 2>/dev/null || stat -c '%a' "$config_env")" = 600 ]
 if grep -Eq '^GITHUB_(WEBHOOK|APP_CLIENT)' "$config_env"; then exit 1; fi
-for invalid in empty cr invalid missing; do
+# Exercise the traditional RSA form as well as the PKCS8 fixture above.
+# OpenSSL 3 requires -traditional; LibreSSL emits this form without the flag.
+if ! openssl rsa -in "$test_root/key.pem" -traditional -out "$test_root/rsa.pem" 2>/dev/null; then
+  openssl rsa -in "$test_root/key.pem" -out "$test_root/rsa.pem" 2>/dev/null
+fi
+rsa_env="$test_root/etc/rsa.env"
+run_refresh "$rsa_env" FAKE_GITHUB_KEY_FILE="$test_root/rsa.pem"
+expected_rsa_key=$(awk 'BEGIN { ORS="" } { printf "%s\\n", $0 }' "$test_root/rsa.pem")
+grep -Fqx "GITHUB_APP_PRIVATE_KEY=$expected_rsa_key" "$rsa_env"
+
+# Valid EC and encrypted PEMs must still fail the unencrypted RSA boundary.
+openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out "$test_root/ec.pem" 2>/dev/null
+openssl rand -hex 16 > "$test_root/passphrase"
+openssl pkcs8 -topk8 -in "$test_root/key.pem" -out "$test_root/encrypted.pem" -passout "file:$test_root/passphrase" 2>/dev/null
+for invalid in empty cr invalid missing missing-footer mismatched-footer trailing ec encrypted; do
   printf 'PRESERVE=github\n' > "$test_root/etc/github-failure.env"
   case "$invalid" in
     empty) : > "$test_root/bad.pem" ;;
     cr) awk '{ printf "%s\r\n", $0 }' "$test_root/key.pem" > "$test_root/bad.pem" ;;
+    missing-footer) sed '$d' "$test_root/key.pem" > "$test_root/bad.pem" ;;
+    mismatched-footer)
+      sed '$d' "$test_root/key.pem" > "$test_root/bad.pem"
+      tail -n 1 "$test_root/rsa.pem" >> "$test_root/bad.pem"
+      ;;
+    trailing) cat "$test_root/key.pem" > "$test_root/bad.pem"; printf 'unexpected\n' >> "$test_root/bad.pem" ;;
+    ec|encrypted) cp "$test_root/$invalid.pem" "$test_root/bad.pem" ;;
     *) printf '%s\n' '-----BEGIN PRIVATE KEY-----' 'not-a-key' '-----END PRIVATE KEY-----' > "$test_root/bad.pem" ;;
   esac
   if run_refresh "$test_root/etc/github-failure.env" FAKE_GITHUB_KEY_FILE="$test_root/bad.pem" FAKE_GITHUB_MISSING="$([ "$invalid" = missing ] && echo 1 || echo 0)" > "$test_root/github.out" 2>&1; then
     echo "Invalid GitHub credential refresh unexpectedly succeeded: $invalid" >&2; exit 1
   fi
   grep -Fqx 'PRESERVE=github' "$test_root/etc/github-failure.env"
-  if grep -q 'BEGIN PRIVATE KEY' "$test_root/github.out"; then exit 1; fi
+  if grep -Eq '(BEGIN|END) .*PRIVATE KEY' "$test_root/github.out"; then exit 1; fi
 done
 printf '%s\n' 'PASS: worker GitHub secrets remain isolated, validated and atomic'
 

@@ -139,10 +139,6 @@ minimumReleaseAgeExclude:
 # evaluateRequest(max-stale) path. The characterization test must be updated
 # before changing Astro usage. Remove this exception after the upstream fix:
 # https://github.com/kornelski/http-cache-semantics/pull/58
-# GHSA-vfj7-8cjw-p6xm also has no patched npm release. `pnpm why --prod braces`
-# is empty: this copy is used only by root ESLint/Markdown tooling. Keep the
-# ignore scoped to that exact advisory and remove it when upstream fixes braces.
 auditConfig:
   ignoreGhsas:
     - GHSA-ch52-4w7c-c8xp
-    - GHSA-vfj7-8cjw-p6xm
