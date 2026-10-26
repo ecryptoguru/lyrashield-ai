@@ -2,6 +2,7 @@ import { env } from "@lyrashield/config"
 import { logger } from "@lyrashield/logger"
 import { createHmac, createSign, timingSafeEqual as cryptoTimingSafeEqual } from "crypto"
 import { getRedis } from "./redis"
+import { z } from "zod"
 
 export const GITHUB_API_BASE = "https://api.github.com"
 
@@ -306,8 +307,9 @@ export async function getAppInstallations(): Promise<InstallationInfo[]> {
 // The missing half is an assertion from GitHub about the *user*: with "Request
 // user authorization (OAuth) during installation" enabled, GitHub appends a
 // `code` to the callback. Exchanging it yields a user token whose
-// GET /user/installations list is exactly the set of installations that user is
-// allowed to act on. Membership in that list is the ownership proof.
+// GET /user/installations proves association, not installation-wide authority.
+// Personal account ownership or active organization administration must also
+// be verified before granting the installation to a workspace.
 //
 // The token is used for this one check and then discarded — never persisted.
 
@@ -349,9 +351,62 @@ export async function exchangeInstallUserCode(code: string): Promise<string> {
   return data.access_token
 }
 
+async function getGitHubUserData(userToken: string, path: string): Promise<unknown> {
+  const res = await githubFetch(`${GITHUB_API_BASE}${path}`, {
+    headers: { Authorization: `Bearer ${userToken}`, ...GITHUB_HEADERS },
+  })
+  if (!res.ok) throw new GitHubOwnershipError(`GitHub user verification failed: ${res.status}`)
+  return res.json()
+}
+
+const githubIdSchema = z.number().int().positive().max(Number.MAX_SAFE_INTEGER)
+const installationAccountSchema = z.object({
+  id: githubIdSchema,
+  type: z.enum(["User", "Organization"]),
+})
+const organizationMembershipsSchema = z
+  .array(
+    z.object({
+      state: z.string(),
+      role: z.string(),
+      organization: z.object({ id: githubIdSchema }),
+    })
+  )
+  .max(100)
+
+async function isInstallationAdministrator(userToken: string, account: unknown): Promise<boolean> {
+  const parsed = installationAccountSchema.safeParse(account)
+  if (!parsed.success) return false
+  if (parsed.data.type === "User") {
+    const user = z
+      .object({ id: githubIdSchema })
+      .safeParse(await getGitHubUserData(userToken, "/user"))
+    if (!user.success) throw new GitHubOwnershipError("Malformed GitHub user identity")
+    return user.data.id === parsed.data.id
+  }
+  // This listing supports GitHub App user tokens without requesting additional
+  // organization permissions. Repository access alone is never an admin grant.
+  for (let page = 1; page <= 20; page++) {
+    const memberships = organizationMembershipsSchema.safeParse(
+      await getGitHubUserData(
+        userToken,
+        `/user/memberships/orgs?state=active&per_page=100&page=${page}`
+      )
+    )
+    if (!memberships.success) throw new GitHubOwnershipError("Malformed organization membership")
+    if (
+      memberships.data.some(
+        (m) => m.organization.id === parsed.data.id && m.state === "active" && m.role === "admin"
+      )
+    )
+      return true
+    if (memberships.data.length < 100) return false
+  }
+  throw new GitHubOwnershipError("Organization membership verification exceeded page limit")
+}
+
 /**
- * True when `installationId` appears among the installations the bearer of
- * `userToken` may administer. Fails closed: any transport or parse problem
+ * True only when the user can access and administer the installation. Fails closed: any transport or parse problem
  * raises rather than returning false-negative-as-success.
  */
 export async function userCanAdminInstallation(
@@ -375,9 +430,10 @@ export async function userCanAdminInstallation(
       throw new GitHubOwnershipError(`Failed to list user installations: ${res.status}`)
     }
 
-    const data = (await res.json()) as { installations?: { id: number }[] }
+    const data = (await res.json()) as { installations?: { id: number; account?: unknown }[] }
     const installations = data.installations ?? []
-    if (installations.some((i) => i.id === installationId)) return true
+    const installation = installations.find((i) => i.id === installationId)
+    if (installation) return isInstallationAdministrator(userToken, installation.account)
     if (installations.length < 100) return false
   }
 
