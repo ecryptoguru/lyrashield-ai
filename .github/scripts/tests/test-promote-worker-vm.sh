@@ -358,6 +358,9 @@ run_case() {
   : > "$case_dir/journalctl.log"
   : > "$case_dir/order.log"
   printf 'LYRASHIELD_WORKER_IMAGE=%s\nLYRASHIELD_SANDBOX_IMAGE=ghcr.io/example/sandbox@sha256:%s\nGHCR_USERNAME=test-user\n' "$old_image" "$(printf 'e%.0s' {1..64})" > "$case_dir/runtime.conf"
+  if [ "$name" != healthy ]; then
+    printf 'LYRASHIELD_GITHUB_CREDENTIAL_VAULT_NAME=prior-app-vault\n' >> "$case_dir/runtime.conf"
+  fi
   if [ "$floor_via" = config ] && [ -n "$floor_bytes" ]; then
     printf 'LYRASHIELD_WORKER_IMAGE_FLOOR_BYTES=%s\n' "$floor_bytes" >> "$case_dir/runtime.conf"
   fi
@@ -405,6 +408,7 @@ run_case() {
   set +e
   output=$(
     PATH="$case_dir/bin:$PATH" \
+      LYRASHIELD_WORKER_GITHUB_CREDENTIAL_VAULT=app-only-vault \
       MOCK_TARGET="$target" \
       MOCK_CLAIM_PROTOCOL="$protocol" \
       MOCK_UNHEALTHY="$unhealthy" \
@@ -545,6 +549,8 @@ run_case() {
     fi
   fi
   if [ "$expected" = success ]; then
+    grep -Fxq 'LYRASHIELD_GITHUB_CREDENTIAL_VAULT_NAME=app-only-vault' "$case_dir/runtime.conf"
+    [ "$(grep -c '^LYRASHIELD_GITHUB_CREDENTIAL_VAULT_NAME=' "$case_dir/runtime.conf")" -eq 1 ]
     # Exactly one restart and it happens after the admission-stop claim and
     # the empty-queue check: a scan admitted before promotion finishes against
     # the old worker before the container is replaced.
@@ -569,6 +575,7 @@ run_case() {
       grep -Fq '2147483648-byte floor' <<< "$output"
     fi
   else
+    grep -Fxq 'LYRASHIELD_GITHUB_CREDENTIAL_VAULT_NAME=prior-app-vault' "$case_dir/runtime.conf"
     # A rollback must restore legacy assets if the previous image needs them.
     if [ "$name" = rolls-back-maintenance-assets ]; then
       grep -Fxq 'legacy maintenance runner' "$case_dir/host/libexec/lyrashield-trial-claim-backfill"

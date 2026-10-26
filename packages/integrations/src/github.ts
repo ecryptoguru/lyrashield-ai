@@ -13,7 +13,8 @@ export const GITHUB_HEADERS = {
 
 function getAppCredentials() {
   const appId = env.GITHUB_APP_ID
-  const privateKey = env.GITHUB_APP_PRIVATE_KEY
+  // Docker env files store the worker PEM on one line. App secrets may remain multiline.
+  const privateKey = env.GITHUB_APP_PRIVATE_KEY?.replace(/\\n/g, "\n")
 
   if (!appId || !privateKey) {
     throw new Error(

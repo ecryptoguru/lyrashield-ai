@@ -681,6 +681,17 @@ jobs:
           AZURE_KEY_VAULT_NAME: ${{ vars.AZURE_KEY_VAULT_NAME || 'lyrashieldprodsecrets' }}
           AZURE_APP_SECRET_KEY_VAULT_NAME: ${{ vars.AZURE_APP_SECRET_KEY_VAULT_NAME }}
         run: bash .github/scripts/deploy-azure-preflight.sh sync-github-app-secrets-to-app-container-app
+      - name: Sync isolated worker GitHub credentials
+        env:
+          HELD_RECOVERY: ${{ inputs.held_recovery }}
+          GITHUB_APP_ID: ${{ secrets.LYRASHIELD_GITHUB_APP_ID }}
+          GITHUB_APP_PRIVATE_KEY: ${{ secrets.LYRASHIELD_GITHUB_APP_PRIVATE_KEY }}
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          AZURE_WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
+          AZURE_SCANNER_CONTAINER_APP_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
+          AZURE_KEY_VAULT_NAME: ${{ vars.AZURE_KEY_VAULT_NAME || 'lyrashieldprodsecrets' }}
+          AZURE_APP_SECRET_KEY_VAULT_NAME: ${{ vars.AZURE_APP_SECRET_KEY_VAULT_NAME }}
+        run: bash .github/scripts/deploy-azure-preflight.sh sync-worker-github-credentials
       - name: Deploy app Container App
         id: deploy-app
         if: vars.AZURE_APP_CONTAINER_APP_NAME != ''
@@ -761,6 +772,7 @@ jobs:
         env:
           RG: ${{ vars.AZURE_RESOURCE_GROUP }}
           WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
+          AZURE_APP_SECRET_KEY_VAULT_NAME: ${{ vars.AZURE_APP_SECRET_KEY_VAULT_NAME }}
           WORKER_IMAGE: ${{ inputs.worker_image }}
           WORKER_DIGEST: ${{ inputs.worker_digest }}
         run: bash .github/scripts/deploy-azure-rollout.sh promote-verified-worker-digest-on-vm
@@ -801,27 +813,12 @@ jobs:
         run: |
           bash .github/scripts/deploy-azure-rollout.sh deactivate-superseded-container-app-revisions || echo "::warning::Deactivate superseded Container App revisions failed; production traffic remains active."
           if [ -n "$SCANNER_NAME" ]; then bash .github/scripts/deploy-azure-rollout.sh remove-excess-scanner-secrets || echo "::warning::Remove excess scanner secrets failed; the promoted scanner revision remains active."; fi
-      # v16 4.3 — why worker-VM promotion may run AFTER the app traffic
-      # cutover (deliberate ordering, not an oversight):
-      #
-      # 1. The empty-queue preflight above already verified the worker queues
-      #    are drained BEFORE traffic was promoted, so the gap window carries
-      #    only jobs created by the NEW app after cutover.
-      # 2. The early cutover guard independently proves all current billing
-      #    writers and rollback images support durable claims. Engine pins alone
-      #    do not prove billing compatibility. Engine job/result compatibility
-      #    remains pinned and CI-enforced in both
-      #    directions: the app's ENGINE_REVISION pin (verified by
-      #    verify-engine-revision.sh with green engine checks at that exact
-      #    SHA) and the engine's .lyrashield-worker-pin contract tests. A
-      #    merge that changed the job/result contract incompatible with the
-      #    deployed worker cannot reach this step — the pinned-contract CI
-      #    jobs fail first.
-      # 3. The promotion is digest-exact and idempotent: promote-worker-vm.sh
-      #    verifies the digest, swaps the systemd unit and restarts. A
-      #    failure here rolls traffic back (the rollback step below keys on
-      #    this step's outcome) while the old worker keeps serving until a
-      #    retry succeeds.
+      # Queues drain before app traffic promotion. The early guard proves durable
+      # billing claims for every writer and rollback image; engine pins alone do not.
+      # CI enforces both ENGINE_REVISION and the reverse engine worker contract.
+      # Digest-exact worker promotion persists its isolated credential-vault name
+      # with the image, restores prior configuration on failure and rolls app
+      # traffic back through the guarded cleanup steps below.
       - name: Refresh Azure OIDC login before ordinary worker promotion
         if: inputs.held_recovery != true && inputs.webhook_claims_cutover != true
         id: ordinary-worker-login
@@ -836,6 +833,7 @@ jobs:
         env:
           RG: ${{ vars.AZURE_RESOURCE_GROUP }}
           WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
+          AZURE_APP_SECRET_KEY_VAULT_NAME: ${{ vars.AZURE_APP_SECRET_KEY_VAULT_NAME }}
           WORKER_IMAGE: ${{ inputs.worker_image }}
           WORKER_DIGEST: ${{ inputs.worker_digest }}
         run: bash .github/scripts/deploy-azure-rollout.sh promote-verified-worker-digest-on-vm

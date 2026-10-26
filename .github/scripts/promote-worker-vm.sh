@@ -258,6 +258,11 @@ esac
 target=${1:?worker image digest reference is required}
 expected_app=${2:?product revision is required}
 expected_engine=${3:?engine revision is required}
+# Capture the requested vault before worker-env.sh sources the old config.
+credential_vault=${LYRASHIELD_WORKER_GITHUB_CREDENTIAL_VAULT:-}
+case "$credential_vault" in
+  ''|*[!A-Za-z0-9-]*) echo "A valid worker GitHub credential vault is required" >&2; exit 1 ;;
+esac
 timer=lyrashield-worker-egress-refresh.timer
 service=lyrashield-worker.service
 promotion_state_dir=${LYRASHIELD_WORKER_PROMOTION_STATE_DIR:-/var/lib/lyrashield}
@@ -771,7 +776,7 @@ if [ "$webhook_cutover" -eq 0 ] || [ ! -e "$backup" ]; then
   cp -p "$config" "$backup"
 fi
 temporary=$(mktemp "${config}.XXXXXX")
-awk -v image="$target" 'BEGIN { found=0 } /^LYRASHIELD_WORKER_IMAGE=/ { print "LYRASHIELD_WORKER_IMAGE=" image; found=1; next } { print } END { if (!found) exit 1 }' "$config" > "$temporary"
+awk -v image="$target" -v vault="$credential_vault" 'BEGIN { found=0 } /^LYRASHIELD_WORKER_IMAGE=/ { print "LYRASHIELD_WORKER_IMAGE=" image; found=1; next } /^LYRASHIELD_GITHUB_CREDENTIAL_VAULT_NAME=/ { next } { print } END { if (!found) exit 1; print "LYRASHIELD_GITHUB_CREDENTIAL_VAULT_NAME=" vault }' "$config" > "$temporary"
 chmod 0600 "$temporary"
 chown root:root "$temporary"
 mv "$temporary" "$config"
