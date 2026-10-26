@@ -35,6 +35,7 @@ Copy the four scripts to `/usr/local/libexec/`, including `capture-stop-provenan
 LYRASHIELD_WORKER_IMAGE=ghcr.io/ecryptoguru/lyrashield-ai/lyrashield-worker@sha256:<approved-worker-digest>
 LYRASHIELD_SANDBOX_IMAGE=ghcr.io/ecryptoguru/lyrashield-sandbox@sha256:<approved-sandbox-digest>
 LYRASHIELD_SANDBOX_NETWORK=lyrashield-sandbox
+LYRASHIELD_GITHUB_CREDENTIAL_VAULT_NAME=lyrashieldappsecrets
 # Required when either image is hosted on ghcr.io. GHCR_TOKEN is pulled from Key Vault by refresh-secrets.sh.
 GHCR_USERNAME=<github-username-or-bot>
 ```
@@ -45,9 +46,17 @@ GHCR_USERNAME=<github-username-or-bot>
 
 Deterministic retests run inside the worker without a sandbox bind. Their checkout lives on `/lyrashield-retests`, a separate 1 GiB tmpfs shared across retests. Production rejects an absent or uncapped mount before fetching credentials or source. Each checkout also has a sampled 512 MiB limit; concurrent retests can exhaust the shared cap sooner. Local development uses `/tmp/lyrashield-retests` with the sampled limit only. The stale-resource reaper covers both checkout roots.
 
+## Worker GitHub credential boundary
+
+Private repository fetches and Composer proposals need GitHub App mint authority even when the installation-token cache is cold. The existing app-only vault holds **only these worker-specific copies**: `worker-github-app-id` and `worker-github-app-private-key`. The VM system identity requires `Key Vault Secrets User` at each exact secret resource, never at the app vault, resource group or subscription. The public scanner and additional VM/scanner identities must have no assignments on that vault or its secrets. The ordinary worker/scanner vault must never hold these credentials. OAuth client and webhook secrets remain app-only.
+
+An operator with role-assignment authority must preconfigure the two secret-scoped VM grants. `.github/scripts/verify-worker-github-access.sh` verifies RBAC mode, exact grants, inherited/group assignments and scanner exclusion without creating grants or reading secrets. Deployment then syncs the two copies from the existing GitHub Actions inputs `LYRASHIELD_GITHUB_APP_ID` and `LYRASHIELD_GITHUB_APP_PRIVATE_KEY`; held recovery only validates access and retains existing secret versions. `AZURE_APP_SECRET_KEY_VAULT_NAME` in the `azure-production` environment supplies the vault name to controlled promotion. Its prior value is restored with the prior image on ordinary rollback.
+
+At service start, `refresh-secrets.sh` uses managed identity to load these copies into the root-only `worker.env` as `GITHUB_APP_ID` and a single-line `GITHUB_APP_PRIVATE_KEY` with literal `\n` separators. A dedicated PEM loader rejects empty, CR-containing, malformed and non-RSA keys without printing them. GitHub signing normalizes those separators while preserving multiline app secrets. Every refresh stages the whole environment with mode `0600`; failed reads or validation leave the prior file intact. Do not pass credential values on command lines, add them to runtime configuration or log the environment. Source/local tests do not establish deployed cold-cache private-repository acceptance.
+
 ## Promote a verified worker release
 
-Digest pinning prevents silent updates; it does not freeze the worker. After the application repository's main deployment verifies a SHA-only worker image, its exact digest, and its OCI labels, the production workflow stops admission, proves the database and both queues are idle, pre-pulls the digest, atomically installs the image-owned host scripts and systemd units with rollback copies, updates only `LYRASHIELD_WORKER_IMAGE`, restarts the service, verifies provenance and readiness, then resumes admission. This keeps host startup behavior bound to the reviewed worker digest instead of the VM's bootstrap date. The launcher also pulls an immutable image when it is absent locally, so an empty VM cache cannot break a reviewed promotion.
+Digest pinning prevents silent updates; it does not freeze the worker. After the application repository's main deployment verifies a SHA-only worker image, its exact digest, and its OCI labels, the production workflow stops admission, proves the database and both queues are idle, pre-pulls the digest, atomically installs the image-owned host scripts and systemd units with rollback copies, atomically persists `LYRASHIELD_WORKER_IMAGE` and the nonsecret `LYRASHIELD_GITHUB_CREDENTIAL_VAULT_NAME`, restarts the service, verifies provenance and readiness, then resumes admission. This keeps host startup behavior bound to the reviewed worker digest instead of the VM's bootstrap date. The launcher also pulls an immutable image when it is absent locally, so an empty VM cache cannot break a reviewed promotion.
 
 `run-worker.sh` derives the worker execution provenance entirely from the immutable image: `LYRASHIELD_PRODUCT_REVISION` from the `org.opencontainers.image.revision` label, `LYRASHIELD_ENGINE_REVISION` from the `io.lyrashield.engine.revision` label, and `LYRASHIELD_WORKER_IMAGE_DIGEST` from the pinned reference itself. All three are validated as exact 40-hex/`sha256:<64 hex>` values before the container is created, and the production worker fails closed before readiness if any is missing. Never set these three variables by hand in `worker.env` — the launcher owns them.
 

@@ -13,14 +13,25 @@ if [ "${1:-}" = login ]; then
   exit 0
 fi
 secret_name=
+vault=
 while [ "$#" -gt 0 ]; do
   if [ "$1" = --name ]; then
     secret_name=$2
-    break
+    shift
   fi
+  if [ "$1" = --vault-name ]; then vault=$2; shift; fi
   shift
 done
 case "$secret_name" in
+  worker-github-app-id)
+    [ "$vault" = app-only-vault ] || exit 1
+    printf '%s' "${FAKE_GITHUB_ID-12345}"
+    ;;
+  worker-github-app-private-key)
+    [ "$vault" = app-only-vault ] || exit 1
+    [ "${FAKE_GITHUB_MISSING:-0}" != 1 ] || exit 1
+    cat "$FAKE_GITHUB_KEY_FILE"
+    ;;
   worker-target-relay-enabled)
     [ -n "${FAKE_RELAY_ENABLED:-}" ] || exit 1
     printf '%s\n' "$FAKE_RELAY_ENABLED"
@@ -76,15 +87,18 @@ EOF
 chmod +x "$test_root/bin/az"
 
 cat >"$test_root/etc/runtime.conf" <<'EOF'
+LYRASHIELD_GITHUB_CREDENTIAL_VAULT_NAME=app-only-vault
 LYRASHIELD_WORKER_IMAGE=registry.azurecr.io/worker@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 LYRASHIELD_SANDBOX_IMAGE=registry.azurecr.io/sandbox@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
 EOF
 
+openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out "$test_root/key.pem" 2>/dev/null
 run_refresh() {
   env_file=$1
   shift
   env \
     PATH="$test_root/bin:$PATH" \
+    FAKE_GITHUB_KEY_FILE="$test_root/key.pem" \
     AZURE_CONFIG_DIR="$test_root/azure" \
     LYRASHIELD_WORKER_RUNTIME_CONFIG="$test_root/etc/runtime.conf" \
     LYRASHIELD_WORKER_ENV_FILE="$env_file" \
@@ -196,3 +210,63 @@ for failure in 'FAKE_RELAY_SECRET_MISSING=1' 'FAKE_RELAY_SECRET=short'; do
   fi
 done
 printf '%s\n' 'refresh-secrets tests passed'
+
+# Only the dedicated app-vault copies may reach the root-only env file.
+grep -Fqx 'GITHUB_APP_ID=12345' "$config_env"
+expected_key=$(awk 'BEGIN { ORS="" } { printf "%s\\n", $0 }' "$test_root/key.pem")
+grep -Fqx "GITHUB_APP_PRIVATE_KEY=$expected_key" "$config_env"
+[ "$(grep -c '^GITHUB_APP_PRIVATE_KEY=' "$config_env")" = 1 ]
+# A failed stat implementation can emit stdout; replace it before comparing.
+if permissions=$(stat -c '%a' "$config_env" 2>/dev/null); then
+  :
+else
+  permissions=$(stat -f '%Lp' "$config_env")
+fi
+[ "$permissions" = 600 ]
+if grep -Eq '^GITHUB_(WEBHOOK|APP_CLIENT)' "$config_env"; then exit 1; fi
+# Exercise the traditional RSA form as well as the PKCS8 fixture above.
+# OpenSSL 3 requires -traditional; LibreSSL emits this form without the flag.
+if ! openssl rsa -in "$test_root/key.pem" -traditional -out "$test_root/rsa.pem" 2>/dev/null; then
+  openssl rsa -in "$test_root/key.pem" -out "$test_root/rsa.pem" 2>/dev/null
+fi
+rsa_env="$test_root/etc/rsa.env"
+run_refresh "$rsa_env" FAKE_GITHUB_KEY_FILE="$test_root/rsa.pem"
+expected_rsa_key=$(awk 'BEGIN { ORS="" } { printf "%s\\n", $0 }' "$test_root/rsa.pem")
+grep -Fqx "GITHUB_APP_PRIVATE_KEY=$expected_rsa_key" "$rsa_env"
+
+# Valid EC and encrypted PEMs must still fail the unencrypted RSA boundary.
+openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out "$test_root/ec.pem" 2>/dev/null
+openssl rand -hex 16 > "$test_root/passphrase"
+openssl pkcs8 -topk8 -in "$test_root/key.pem" -out "$test_root/encrypted.pem" -passout "file:$test_root/passphrase" 2>/dev/null
+for invalid in empty cr invalid missing missing-footer mismatched-footer trailing ec encrypted; do
+  printf 'PRESERVE=github\n' > "$test_root/etc/github-failure.env"
+  case "$invalid" in
+    empty) : > "$test_root/bad.pem" ;;
+    cr) awk '{ printf "%s\r\n", $0 }' "$test_root/key.pem" > "$test_root/bad.pem" ;;
+    missing-footer) sed '$d' "$test_root/key.pem" > "$test_root/bad.pem" ;;
+    mismatched-footer)
+      sed '$d' "$test_root/key.pem" > "$test_root/bad.pem"
+      tail -n 1 "$test_root/rsa.pem" >> "$test_root/bad.pem"
+      ;;
+    trailing) cat "$test_root/key.pem" > "$test_root/bad.pem"; printf 'unexpected\n' >> "$test_root/bad.pem" ;;
+    ec|encrypted) cp "$test_root/$invalid.pem" "$test_root/bad.pem" ;;
+    *) printf '%s\n' '-----BEGIN PRIVATE KEY-----' 'not-a-key' '-----END PRIVATE KEY-----' > "$test_root/bad.pem" ;;
+  esac
+  if run_refresh "$test_root/etc/github-failure.env" FAKE_GITHUB_KEY_FILE="$test_root/bad.pem" FAKE_GITHUB_MISSING="$([ "$invalid" = missing ] && echo 1 || echo 0)" > "$test_root/github.out" 2>&1; then
+    echo "Invalid GitHub credential refresh unexpectedly succeeded: $invalid" >&2; exit 1
+  fi
+  grep -Fqx 'PRESERVE=github' "$test_root/etc/github-failure.env"
+  if grep -Eq '(BEGIN|END) .*PRIVATE KEY' "$test_root/github.out"; then exit 1; fi
+done
+printf '%s\n' 'PASS: worker GitHub secrets remain isolated, validated and atomic'
+
+for bad_id in '' 'id-with-newline' 'abc'; do
+  printf 'PRESERVE=id\n' > "$test_root/etc/github-failure.env"
+  if run_refresh "$test_root/etc/github-failure.env" FAKE_GITHUB_ID="$bad_id" >/dev/null 2>&1; then exit 1; fi
+  grep -Fqx 'PRESERVE=id' "$test_root/etc/github-failure.env"
+done
+for bad_vault in '' 'lyrashieldprodsecrets'; do
+  sed "s/^LYRASHIELD_GITHUB_CREDENTIAL_VAULT_NAME=.*/LYRASHIELD_GITHUB_CREDENTIAL_VAULT_NAME=$bad_vault/" "$test_root/etc/runtime.conf" > "$test_root/etc/bad-runtime.conf"
+  if run_refresh "$test_root/etc/github-failure.env" LYRASHIELD_WORKER_RUNTIME_CONFIG="$test_root/etc/bad-runtime.conf" >/dev/null 2>&1; then exit 1; fi
+  grep -Fqx 'PRESERVE=id' "$test_root/etc/github-failure.env"
+done

@@ -664,8 +664,21 @@ step_sync-github-app-secrets-to-app-container-app() {
   echo "GitHub App Key Vault references synced to the app Container App."
 }
 
+# Workflow step: Sync only worker installation-token mint authority.
+step_sync-worker-github-credentials() {
+  source .github/scripts/azure_secret_set.sh
+  set -euo pipefail
+  bash .github/scripts/verify-worker-github-access.sh
+  # Held recovery retains existing secret versions and only validates access.
+  [ "${HELD_RECOVERY:-false}" != true ] || return 0
+  azure_keyvault_sync_env_group "$AZURE_APP_SECRET_KEY_VAULT_NAME" \
+    worker-github-app-id:GITHUB_APP_ID \
+    worker-github-app-private-key:GITHUB_APP_PRIVATE_KEY
+}
+
 step="${1:-}"
 case "$step" in
+  sync-worker-github-credentials) step_sync-worker-github-credentials ;;
   ensure-app-and-scanner-system-identities) step_ensure-app-and-scanner-system-identities ;;
   verify-egress-proxy-key-vault-access) verify_egress_proxy_key_vault_access ;;
   prepare-private-registry-and-zero-downtime-rollout) step_prepare-private-registry-and-zero-downtime-rollout ;;

@@ -495,6 +495,9 @@ step_promote-verified-worker-digest-on-vm() {
   # Until the first promotion installs worker-env.sh on the host the
   # script sources the copy embedded in this payload.
   worker_env_payload=$(base64 --wrap=0 ops/worker/worker-env.sh)
+  [[ "${AZURE_APP_SECRET_KEY_VAULT_NAME:-}" =~ ^[a-zA-Z][a-zA-Z0-9-]{1,22}[a-zA-Z0-9]$ ]] || {
+    echo '::error::A valid app-only worker GitHub credential vault is required.' >&2; exit 1;
+  }
   worker_ref="${WORKER_IMAGE%@*}@${WORKER_DIGEST}"
   promotion_prefix=""
   promotion_flag=""
@@ -533,7 +536,7 @@ step_promote-verified-worker-digest-on-vm() {
     --name "$WORKER_VM_NAME" \
     --resource-group "$RG" \
     --command-id RunShellScript \
-    --scripts "printf '%s' '$worker_env_payload' | base64 -d > /tmp/lyrashield-worker-env.sh && printf '%s' '$payload' | base64 -d | LYRASHIELD_WORKER_ENV_LIB=/tmp/lyrashield-worker-env.sh ${promotion_prefix}sh -s -- ${promotion_flag}'$worker_ref' '$DEPLOY_SHA' '$ENGINE_REVISION'" \
+    --scripts "printf '%s' '$worker_env_payload' | base64 -d > /tmp/lyrashield-worker-env.sh && printf '%s' '$payload' | base64 -d | LYRASHIELD_WORKER_ENV_LIB=/tmp/lyrashield-worker-env.sh LYRASHIELD_WORKER_GITHUB_CREDENTIAL_VAULT='$AZURE_APP_SECRET_KEY_VAULT_NAME' ${promotion_prefix}sh -s -- ${promotion_flag}'$worker_ref' '$DEPLOY_SHA' '$ENGINE_REVISION'" \
     --query 'value[0].message' \
     --output tsv)
   printf '%s\n' "$result"

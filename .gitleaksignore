@@ -47,3 +47,7 @@ e02853f094dd61f5732b539b81143e6cc49f647d:codebase.md:generic-api-key:290
 # the example value is synthetic and the literal field was removed to avoid
 # future false positives from the generic-api-key rule.
 b8b0c672fef24eeeec71c0d08a5494cedaad54c9:packages/sdk/README.md:generic-api-key:38
+
+# Historical worker PEM validation delimiters only; no encoded key body.
+# Current source constructs public markers from the supported key kinds.
+fa3f24b6b714229d29387b3781578e494ea9bd76:ops/worker/refresh-secrets.sh:private-key:108
