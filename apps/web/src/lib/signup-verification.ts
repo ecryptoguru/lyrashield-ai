@@ -1,4 +1,5 @@
 import { authClient } from "@lyrashield/auth"
+import { signOutAndClearSessionData } from "@/lib/sign-out"
 
 /** Acceptance does not establish delivery or disclose whether the account exists. */
 export async function resendSignupVerificationEmail(
@@ -7,7 +8,7 @@ export async function resendSignupVerificationEmail(
   signOutFirst = false
 ): Promise<void> {
   if (signOutFirst) {
-    const { error } = await authClient.signOut()
+    const { error } = await signOutAndClearSessionData()
     if (error) throw error
   }
   const { error } = await authClient.sendVerificationEmail({ email, callbackURL })
