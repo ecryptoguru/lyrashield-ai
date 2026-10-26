@@ -103,3 +103,58 @@ it("binds the first-scan return destination to the signed install state", () => 
     reason: "bad_signature",
   })
 })
+
+it("retains purpose, initiating identity and session digest without changing legacy returns", () => {
+  const github = {
+    purpose: "github-discover",
+    userId: "user-1",
+    sessionHash: "a".repeat(64),
+  } as const
+  const state = createInstallState("ws", "onboarding", 1000, "signed-mcp-return", github)
+  expect(verifyInstallState(state, 1001)).toMatchObject({
+    valid: true,
+    github,
+    oauthReturnState: "signed-mcp-return",
+  })
+  expect(verifyInstallState(state.replace(".onboarding.", ".scan."), 1001).valid).toBe(false)
+})
+
+it("keeps chooser and final selection distinct and bound to the discovered GitHub user", () => {
+  const identity = { userId: "user-1", sessionHash: "b".repeat(64) }
+  const chooser = createInstallState("ws", "scan", 1000, undefined, {
+    ...identity,
+    purpose: "github-choose",
+    providerUserId: 42,
+    candidates: [
+      { id: 777, login: "acme" },
+      { id: 888, login: "other" },
+    ],
+  })
+  const selected = createInstallState("ws", "scan", 1000, undefined, {
+    ...identity,
+    purpose: "github-selected",
+    providerUserId: 42,
+    selectedId: 777,
+  })
+  expect(verifyInstallState(chooser, 1001)).toMatchObject({
+    github: { purpose: "github-choose", providerUserId: 42 },
+  })
+  expect(verifyInstallState(selected, 1001)).toMatchObject({
+    github: { purpose: "github-selected", providerUserId: 42, selectedId: 777 },
+  })
+  expect(verifyInstallState(chooser, 1000000).valid).toBe(false)
+  expect(verifyInstallState(selected, 1000000).valid).toBe(false)
+})
+it("rejects signed malformed GitHub contexts instead of treating them as legacy authority", () => {
+  const nonce = Buffer.from(
+    JSON.stringify({ github: { purpose: "github-selected", selectedId: 777 } })
+  ).toString("base64url")
+  const payload = `${Buffer.from("ws").toString("base64url")}.scan.${nonce}.${Date.now() + 60000}`
+  const signature = createHmac("sha256", "test-secret-key-at-least-32-characters-long")
+    .update(payload)
+    .digest("base64url")
+  expect(verifyInstallState(`${payload}.${signature}`)).toEqual({
+    valid: false,
+    reason: "malformed",
+  })
+})

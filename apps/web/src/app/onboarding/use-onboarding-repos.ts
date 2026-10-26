@@ -102,7 +102,7 @@ export function useOnboardingRepos({
     }
   }, [step, workspaceId, fetchRepos, setError])
 
-  async function connectGitHub() {
+  async function connectGitHub(mode: "existing" | "install-new" = "existing") {
     setLoading(true)
     setError(null)
     setFailure(null)
@@ -113,6 +113,7 @@ export function useOnboardingRepos({
         {
           workspaceId: resolvedWorkspaceId,
           returnTo: "onboarding",
+          mode,
           ...(oauthReturnState ? { oauthReturnState } : {}),
         },
         { schema: installUrlSchema }

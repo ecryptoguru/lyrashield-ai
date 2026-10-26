@@ -2,14 +2,9 @@ import { env } from "@lyrashield/config"
 import { logger } from "@lyrashield/logger"
 import { createHmac, createSign, timingSafeEqual as cryptoTimingSafeEqual } from "crypto"
 import { getRedis } from "./redis"
-import { z } from "zod"
 
-export const GITHUB_API_BASE = "https://api.github.com"
-
-export const GITHUB_HEADERS = {
-  Accept: "application/vnd.github+json",
-  "X-GitHub-Api-Version": "2022-11-28",
-} as const
+import { githubFetch, GITHUB_API_BASE, GITHUB_HEADERS } from "./github-http"
+export { githubFetch, GITHUB_API_BASE, GITHUB_HEADERS } from "./github-http"
 
 function getAppCredentials() {
   const appId = env.GITHUB_APP_ID
@@ -46,41 +41,6 @@ export function createAppJWT(): string {
   const signature = sign.sign(privateKey, "base64url")
 
   return `${data}.${signature}`
-}
-
-/**
- * fetch() wrapper that retries transient GitHub failures: 5xx, 429, and 403s
- * that carry a Retry-After (secondary rate limit). A 403 WITHOUT Retry-After is
- * an auth/permission error and is NOT retried. Honors Retry-After, else backs
- * off exponentially (capped).
- *
- * Exported for the read-only outbound connector tools (connectors/github.ts);
- * callers must keep it on GET/HEAD paths — the retry policy assumes idempotent
- * requests.
- */
-export async function githubFetch(
-  url: string,
-  init: RequestInit,
-  retries = 3,
-  fetchFn: typeof fetch = fetch
-): Promise<Response> {
-  let attempt = 0
-  while (true) {
-    const res = await fetchFn(url, {
-      ...init,
-      signal: init.signal ?? AbortSignal.timeout(30_000),
-    })
-    if (res.ok || attempt >= retries) return res
-
-    const retryAfter = res.headers.get("retry-after")
-    const isSecondaryRateLimit = res.status === 403 && retryAfter !== null
-    const retryable = res.status >= 500 || res.status === 429 || isSecondaryRateLimit
-    if (!retryable) return res
-
-    const delayMs = retryAfter ? Number(retryAfter) * 1000 : Math.min(1000 * 2 ** attempt, 8000)
-    await new Promise((r) => setTimeout(r, delayMs))
-    attempt++
-  }
 }
 
 // ── Installation-token cache ──────────────────────────────────────────────────
@@ -301,148 +261,12 @@ export async function getAppInstallations(): Promise<InstallationInfo[]> {
   return installations
 }
 
-// ── Install-callback ownership verification ──────────────────────────────────
-// `installation_id` on the install callback is a global, enumerable identifier.
-// On its own it proves nothing about the caller, so binding a workspace to it
-// from the callback alone let a user claim someone else's installation (S2).
-// The missing half is an assertion from GitHub about the *user*: with "Request
-// user authorization (OAuth) during installation" enabled, GitHub appends a
-// `code` to the callback. Exchanging it yields a user token whose
-// GET /user/installations proves association, not installation-wide authority.
-// Personal account ownership or active organization administration must also
-// be verified before granting the installation to a workspace.
-//
-// The token is used for this one check and then discarded — never persisted.
-
-/** Raised when the provider-side ownership handshake cannot be completed. */
-export class GitHubOwnershipError extends Error {
-  constructor(message: string) {
-    super(message)
-    this.name = "GitHubOwnershipError"
-  }
-}
-
-/** Exchange an install-callback `code` for a short-lived GitHub user token. */
-export async function exchangeInstallUserCode(code: string): Promise<string> {
-  const clientId = env.GITHUB_APP_CLIENT_ID
-  const clientSecret = env.GITHUB_APP_CLIENT_SECRET
-  if (!clientId || !clientSecret) {
-    throw new GitHubOwnershipError(
-      "GitHub App OAuth credentials not configured (GITHUB_APP_CLIENT_ID / GITHUB_APP_CLIENT_SECRET)"
-    )
-  }
-
-  const res = await githubFetch("https://github.com/login/oauth/access_token", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Accept: "application/json" },
-    body: JSON.stringify({ client_id: clientId, client_secret: clientSecret, code }),
-  })
-
-  if (!res.ok) {
-    throw new GitHubOwnershipError(`Install code exchange failed: ${res.status}`)
-  }
-
-  const data = (await res.json()) as { access_token?: string; error?: string }
-  if (!data.access_token) {
-    // GitHub returns 200 with an `error` body for bad/expired codes.
-    throw new GitHubOwnershipError(
-      `Install code exchange returned no token${data.error ? `: ${data.error}` : ""}`
-    )
-  }
-  return data.access_token
-}
-
-async function getGitHubUserData(userToken: string, path: string): Promise<unknown> {
-  const res = await githubFetch(`${GITHUB_API_BASE}${path}`, {
-    headers: { Authorization: `Bearer ${userToken}`, ...GITHUB_HEADERS },
-  })
-  if (!res.ok) throw new GitHubOwnershipError(`GitHub user verification failed: ${res.status}`)
-  return res.json()
-}
-
-const githubIdSchema = z.number().int().positive().max(Number.MAX_SAFE_INTEGER)
-const installationAccountSchema = z.object({
-  id: githubIdSchema,
-  type: z.enum(["User", "Organization"]),
-})
-const organizationMembershipsSchema = z
-  .array(
-    z.object({
-      state: z.string(),
-      role: z.string(),
-      organization: z.object({ id: githubIdSchema }),
-    })
-  )
-  .max(100)
-
-async function isInstallationAdministrator(userToken: string, account: unknown): Promise<boolean> {
-  const parsed = installationAccountSchema.safeParse(account)
-  if (!parsed.success) return false
-  if (parsed.data.type === "User") {
-    const user = z
-      .object({ id: githubIdSchema })
-      .safeParse(await getGitHubUserData(userToken, "/user"))
-    if (!user.success) throw new GitHubOwnershipError("Malformed GitHub user identity")
-    return user.data.id === parsed.data.id
-  }
-  // This listing supports GitHub App user tokens without requesting additional
-  // organization permissions. Repository access alone is never an admin grant.
-  for (let page = 1; page <= 20; page++) {
-    const memberships = organizationMembershipsSchema.safeParse(
-      await getGitHubUserData(
-        userToken,
-        `/user/memberships/orgs?state=active&per_page=100&page=${page}`
-      )
-    )
-    if (!memberships.success) throw new GitHubOwnershipError("Malformed organization membership")
-    if (
-      memberships.data.some(
-        (m) => m.organization.id === parsed.data.id && m.state === "active" && m.role === "admin"
-      )
-    )
-      return true
-    if (memberships.data.length < 100) return false
-  }
-  throw new GitHubOwnershipError("Organization membership verification exceeded page limit")
-}
-
-/**
- * True only when the user can access and administer the installation. Fails closed: any transport or parse problem
- * raises rather than returning false-negative-as-success.
- */
-export async function userCanAdminInstallation(
-  userToken: string,
-  installationId: number
-): Promise<boolean> {
-  // Bounded rather than `while (true)`: this runs inside a request path, and an
-  // unbounded pager driven by a remote response length is a hang waiting to
-  // happen. 20 pages = 2,000 installations, far past any real account.
-  const MAX_PAGES = 20
-
-  for (let page = 1; page <= MAX_PAGES; page++) {
-    const res = await githubFetch(
-      `${GITHUB_API_BASE}/user/installations?per_page=100&page=${page}`,
-      {
-        headers: { Authorization: `Bearer ${userToken}`, ...GITHUB_HEADERS },
-      }
-    )
-
-    if (!res.ok) {
-      throw new GitHubOwnershipError(`Failed to list user installations: ${res.status}`)
-    }
-
-    const data = (await res.json()) as { installations?: { id: number; account?: unknown }[] }
-    const installations = data.installations ?? []
-    const installation = installations.find((i) => i.id === installationId)
-    if (installation) return isInstallationAdministrator(userToken, installation.account)
-    if (installations.length < 100) return false
-  }
-
-  // Ran out of pages without a match: fail closed rather than guessing.
-  throw new GitHubOwnershipError(
-    `Exceeded ${MAX_PAGES} pages listing user installations without a match`
-  )
-}
+export {
+  exchangeInstallUserCode,
+  userCanAdminInstallation,
+  getUserAdminInstallations,
+  GitHubOwnershipError,
+} from "./github-ownership"
 
 export function verifyWebhookSignature(payload: string, signature: string | null): boolean {
   const secret = env.GITHUB_WEBHOOK_SECRET

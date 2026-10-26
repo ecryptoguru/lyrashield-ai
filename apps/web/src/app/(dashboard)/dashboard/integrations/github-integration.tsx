@@ -1,5 +1,6 @@
 "use client"
 
+import { GitHubConnectionRecovery } from "@/components/github-connection-recovery"
 import { useState } from "react"
 import Link from "next/link"
 import { Check, RefreshCw, Plus, ChevronRight } from "lucide-react"
@@ -22,7 +23,11 @@ export function GithubIntegration({
   workspaceId,
   connected,
   accountLogin,
+  githubStatus,
+  canManage = false,
 }: {
+  githubStatus?: string
+  canManage?: boolean
   workspaceId: string
   connected: boolean
   accountLogin: { accountLogin?: string } | null
@@ -34,7 +39,7 @@ export function GithubIntegration({
   const [selectedRepo, setSelectedRepo] = useState<Repo | null>(null)
   const [targetCreated, setTargetCreated] = useState(false)
 
-  async function handleConnect() {
+  async function handleConnect(mode: "existing" | "install-new" = "existing") {
     setLoading(true)
     setError(null)
     try {
@@ -42,6 +47,7 @@ export function GithubIntegration({
         "/api/integrations/github/install",
         {
           workspaceId,
+          mode,
         },
         { schema: installUrlSchema }
       )
@@ -99,30 +105,19 @@ export function GithubIntegration({
 
   return (
     <div className="bg-card rounded-xl border p-4 shadow-sm sm:p-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div className="flex items-start gap-4">
-          <div className="bg-foreground text-background flex h-10 w-10 shrink-0 items-center justify-center rounded-lg">
-            <GithubIcon className="h-5 w-5" aria-hidden="true" />
-          </div>
-          <div>
-            <h2 className="text-lg font-semibold">GitHub</h2>
-            <p className="text-muted-foreground text-sm">
-              Connect your GitHub repositories for scanning.
-            </p>
-          </div>
-        </div>
-        {connected ? (
-          <Badge variant="success">
-            <Check className="h-3 w-3" aria-hidden="true" />
-            Connected{accountLogin?.accountLogin ? ` as ${accountLogin.accountLogin}` : ""}
-          </Badge>
-        ) : (
-          <Button onClick={handleConnect} disabled={loading} className="gap-2">
-            {loading ? <Spinner /> : <GithubIcon className="h-4 w-4" aria-hidden="true" />}
-            Connect GitHub
-          </Button>
-        )}
-      </div>
+      <GitHubConnectionHeader
+        connected={connected}
+        accountLogin={accountLogin}
+        loading={loading}
+        onConnect={canManage ? handleConnect : undefined}
+      />
+
+      <GitHubConnectActions
+        status={githubStatus}
+        loading={loading}
+        connected={connected}
+        onConnect={canManage ? handleConnect : undefined}
+      />
 
       {error && (
         <div
@@ -199,6 +194,75 @@ export function GithubIntegration({
           )}
         </div>
       )}
+    </div>
+  )
+}
+
+function GitHubConnectActions({
+  status,
+  loading,
+  connected,
+  onConnect,
+}: {
+  status?: string
+  loading: boolean
+  connected: boolean
+  onConnect?: (mode?: "existing" | "install-new") => void
+}) {
+  return (
+    <>
+      <GitHubConnectionRecovery status={status} />
+      {onConnect && (
+        <div className="mt-4 flex flex-wrap gap-2">
+          {connected && (
+            <Button variant="outline" disabled={loading} onClick={() => onConnect()}>
+              Reconnect GitHub
+            </Button>
+          )}
+          <Button variant="ghost" disabled={loading} onClick={() => onConnect("install-new")}>
+            Install on another account
+          </Button>
+        </div>
+      )}
+    </>
+  )
+}
+
+function GitHubConnectionHeader({
+  connected,
+  accountLogin,
+  loading,
+  onConnect,
+}: {
+  connected: boolean
+  accountLogin: { accountLogin?: string } | null
+  loading: boolean
+  onConnect?: () => void
+}) {
+  return (
+    <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+      <div className="flex items-start gap-4">
+        <div className="bg-foreground text-background flex h-10 w-10 shrink-0 items-center justify-center rounded-lg">
+          <GithubIcon className="h-5 w-5" aria-hidden="true" />
+        </div>
+        <div>
+          <h2 className="text-lg font-semibold">GitHub</h2>
+          <p className="text-muted-foreground text-sm">
+            Connect your GitHub repositories for scanning.
+          </p>
+        </div>
+      </div>
+      {connected ? (
+        <Badge variant="success">
+          <Check className="h-3 w-3" aria-hidden="true" />
+          Connected{accountLogin?.accountLogin ? ` as ${accountLogin.accountLogin}` : ""}
+        </Badge>
+      ) : onConnect ? (
+        <Button onClick={() => onConnect()} disabled={loading} className="gap-2">
+          {loading ? <Spinner /> : <GithubIcon className="h-4 w-4" aria-hidden="true" />}
+          Connect GitHub
+        </Button>
+      ) : null}
     </div>
   )
 }

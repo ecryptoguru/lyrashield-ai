@@ -112,13 +112,13 @@ function createTargetScanHandlers(args: {
       }
     }
   }
-  async function connectForScan() {
+  async function connectForScan(mode: "existing" | "install-new" = "existing") {
     args.setConnecting(true)
     args.setError(null)
     try {
       const data = await apiPost(
         "/api/integrations/github/install",
-        { workspaceId, returnTo: "scan" },
+        { workspaceId, returnTo: "scan", mode },
         { schema: installUrlSchema }
       )
       window.location.href = data.installUrl
@@ -212,7 +212,7 @@ function GithubScanConnection({
   showWarning,
 }: {
   connecting: boolean
-  onConnect: () => void
+  onConnect: (mode?: "existing" | "install-new") => void
   showWarning: boolean
 }) {
   return (
@@ -231,9 +231,17 @@ function GithubScanConnection({
         variant="outline"
         disabled={connecting}
         aria-busy={connecting}
-        onClick={onConnect}
+        onClick={() => onConnect()}
       >
         {connecting ? "Connecting…" : "Connect GitHub"}
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        disabled={connecting}
+        onClick={() => onConnect("install-new")}
+      >
+        Install on another account
       </Button>
     </div>
   )
@@ -457,7 +465,7 @@ export function TargetsClient({
           {scanSetup && formType === "REPO" && !githubConnected && (
             <GithubScanConnection
               connecting={connecting}
-              onConnect={() => void connectForScan()}
+              onConnect={(mode) => void connectForScan(mode)}
               showWarning={Boolean(searchParams.get("github"))}
             />
           )}
