@@ -8,6 +8,8 @@ const database = vi.hoisted(() => ({
   audit: vi.fn(),
 }))
 vi.mock("@lyrashield/db", () => ({
+  withWorkspaceRLS: async (_workspaceId: string, fn: (tx: unknown) => Promise<unknown>) =>
+    fn({ integration: database, $executeRaw: vi.fn() }),
   prisma: { integration: database, auditLog: { create: database.audit } },
 }))
 vi.mock("@lyrashield/logger", () => ({ logger: { info: vi.fn(), warn: vi.fn() } }))

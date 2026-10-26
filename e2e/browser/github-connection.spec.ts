@@ -100,3 +100,19 @@ test("recovery hides connection actions when membership cannot authorize them", 
   await expect(recovery.getByRole("button", { name: "Install on another account" })).toHaveCount(0)
   await expect(recovery.getByRole("button", { name: "Skip for now" })).toBeVisible()
 })
+
+test("workspace conflict preserves the existing connection and offers useful recovery", async ({
+  page,
+}) => {
+  await page.route("**/api/**", (route) => route.fulfill({ json: { success: true, data: [] } }))
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto("?github-connection=recovery&github=workspace_already_connected")
+  const recovery = page.getByRole("region", { name: "GitHub connection recovery" })
+  await expect(recovery).toContainText("Its connection has been preserved")
+  await expect(recovery.getByRole("button", { name: "Retry connection" })).toBeVisible()
+  await expect(recovery.getByRole("button", { name: "Install on another account" })).toHaveCount(0)
+  await expect(recovery.getByRole("button", { name: "Skip for now" })).toBeVisible()
+  await expect
+    .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
+    .toBe(true)
+})

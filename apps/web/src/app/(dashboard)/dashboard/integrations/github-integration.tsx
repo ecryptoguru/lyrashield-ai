@@ -219,9 +219,11 @@ function GitHubConnectActions({
               Reconnect GitHub
             </Button>
           )}
-          <Button variant="ghost" disabled={loading} onClick={() => onConnect("install-new")}>
-            Install on another account
-          </Button>
+          {status !== "workspace_already_connected" && (
+            <Button variant="ghost" disabled={loading} onClick={() => onConnect("install-new")}>
+              Install on another account
+            </Button>
+          )}
         </div>
       )}
     </>

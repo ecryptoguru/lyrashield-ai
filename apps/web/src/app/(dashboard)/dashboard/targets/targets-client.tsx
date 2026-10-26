@@ -1,5 +1,7 @@
 "use client"
 
+import { GitHubConnectionRecovery } from "@/components/github-connection-recovery"
+
 import { useState, useEffect, useCallback, type Dispatch, type SetStateAction } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
@@ -209,11 +211,11 @@ function CreatedTargetNotice({ target }: { target: { id: string; name: string } 
 function GithubScanConnection({
   connecting,
   onConnect,
-  showWarning,
+  githubStatus,
 }: {
   connecting: boolean
   onConnect: (mode?: "existing" | "install-new") => void
-  showWarning: boolean
+  githubStatus: string | null
 }) {
   return (
     <div className="mb-4 space-y-2">
@@ -221,11 +223,7 @@ function GithubScanConnection({
         Connect GitHub to choose an accessible repository. You can also enter a public repository
         below.
       </p>
-      {showWarning && (
-        <p role="status" className="text-sm">
-          GitHub access could not be confirmed. Retry the connection or use a public repository.
-        </p>
-      )}
+      <GitHubConnectionRecovery status={githubStatus} />
       <Button
         type="button"
         variant="outline"
@@ -235,14 +233,16 @@ function GithubScanConnection({
       >
         {connecting ? "Connecting…" : "Connect GitHub"}
       </Button>
-      <Button
-        type="button"
-        variant="ghost"
-        disabled={connecting}
-        onClick={() => onConnect("install-new")}
-      >
-        Install on another account
-      </Button>
+      {githubStatus !== "workspace_already_connected" && (
+        <Button
+          type="button"
+          variant="ghost"
+          disabled={connecting}
+          onClick={() => onConnect("install-new")}
+        >
+          Install on another account
+        </Button>
+      )}
     </div>
   )
 }
@@ -466,7 +466,7 @@ export function TargetsClient({
             <GithubScanConnection
               connecting={connecting}
               onConnect={(mode) => void connectForScan(mode)}
-              showWarning={Boolean(searchParams.get("github"))}
+              githubStatus={searchParams.get("github")}
             />
           )}
           {formType === "REPO" ? (

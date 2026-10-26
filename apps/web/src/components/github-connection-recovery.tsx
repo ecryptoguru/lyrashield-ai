@@ -3,6 +3,8 @@
 import { Button } from "@lyrashield/ui"
 
 const messages: Record<string, string> = {
+  workspace_already_connected:
+    "This workspace already has a different active GitHub installation. Its connection has been preserved. Retry with the existing installation or use another workspace. If several installations were previously connected here, ask your workspace owner to resolve the conflicting connections.",
   already_claimed:
     "This GitHub installation is already connected to another LyraShield workspace. Ask that workspace's owner for access, or install on a different GitHub account. An installation cannot be shared between workspaces.",
   verification_required:
@@ -48,14 +50,16 @@ export function GitHubConnectionRecovery({
               >
                 Retry connection
               </Button>
-              <Button
-                type="button"
-                variant="outline"
-                disabled={busy}
-                onClick={() => onConnect("install-new")}
-              >
-                Install on another account
-              </Button>
+              {status !== "workspace_already_connected" && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={busy}
+                  onClick={() => onConnect("install-new")}
+                >
+                  Install on another account
+                </Button>
+              )}
             </>
           )}
           {onSkip && (

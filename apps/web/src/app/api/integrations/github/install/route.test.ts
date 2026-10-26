@@ -44,6 +44,11 @@ vi.mock("@lyrashield/config", () => ({
 }))
 
 vi.mock("@lyrashield/db", () => ({
+  withWorkspaceRLS: async (_workspaceId: string, fn: (tx: unknown) => Promise<unknown>) =>
+    fn({
+      integration: { findFirst: async () => null, upsert: integrationUpsert },
+      $executeRaw: vi.fn(),
+    }),
   prisma: {
     integration: {
       upsert: integrationUpsert,

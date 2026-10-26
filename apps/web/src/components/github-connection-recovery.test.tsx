@@ -58,3 +58,17 @@ it("does not offer integration recovery mutations without current manage permiss
   expect(html).not.toContain("Install on another account")
   expect(html).not.toContain(">Connect GitHub<")
 })
+
+it("explains an existing workspace binding without offering an ineffective install-new action", () => {
+  const html = renderToStaticMarkup(
+    <GitHubConnectionRecovery
+      status="workspace_already_connected"
+      onConnect={vi.fn()}
+      onSkip={vi.fn()}
+    />
+  )
+  expect(html).toContain("different active GitHub installation")
+  expect(html).toContain("Retry connection")
+  expect(html).not.toContain("Install on another account")
+  expect(html).toContain("Skip for now")
+})

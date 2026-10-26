@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { prisma } from "@lyrashield/db"
+import { prisma, withWorkspaceRLS } from "@lyrashield/db"
 import {
   connectorScopesForInstallationPermissions,
   listInstallationRepos,
@@ -72,17 +72,37 @@ export async function bindGitHubInstallation({
       capabilities,
       metadata,
     }
-    const integration = await prisma.integration.upsert({
-      where: {
-        workspaceId_type_externalId: {
+    const integration = await withWorkspaceRLS(workspaceId, async (tx) => {
+      // Serialize only the local binding decision. Provider HTTP calls precede
+      // this transaction; audit creation follows it under its own chain lock.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`github-binding:${workspaceId}`}, 0))`
+      const other = await tx.integration.findFirst({
+        where: {
           workspaceId,
           type: "GITHUB",
-          externalId: canonicalInstallationId,
+          status: "active",
+          externalId: { not: canonicalInstallationId },
         },
-      },
-      create: { workspaceId, type: "GITHUB", externalId: canonicalInstallationId, ...data },
-      update: data,
+        select: { id: true },
+      })
+      if (other) return null
+      return tx.integration.upsert({
+        where: {
+          workspaceId_type_externalId: {
+            workspaceId,
+            type: "GITHUB",
+            externalId: canonicalInstallationId,
+          },
+        },
+        create: { workspaceId, type: "GITHUB", externalId: canonicalInstallationId, ...data },
+        update: data,
+      })
     })
+    if (!integration) {
+      const redirectUrl = new URL(returnPath, origin)
+      redirectUrl.searchParams.set("github", "workspace_already_connected")
+      return NextResponse.redirect(redirectUrl)
+    }
 
     await prisma.auditLog.create({
       data: {
