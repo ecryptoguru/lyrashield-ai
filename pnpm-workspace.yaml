@@ -7,8 +7,8 @@ catalog:
   typescript: ^6.0.3
   "@types/node": ^24.0.0
   zod: 4.6.6
-  vitest: ^4.1.11
-  "@vitest/coverage-v8": ^4.1.11
+  vitest: ^4.1.12
+  "@vitest/coverage-v8": ^4.1.12
   tsup: ^8.5.1
   tsx: ^4.23.12
   react: ^19.2.8
@@ -22,6 +22,13 @@ catalog:
   yaml: ^2.9.0
 
 overrides:
+  # GHSA-rj75-hqrm-r3gf: typography uses the retained selector AST APIs.
+  "@tailwindcss/typography@0.5.20>postcss-selector-parser": "7.1.6"
+  # GHSA-238p-pmpm-9mq7: the math extension uses the retained public renderer.
+  "micromark-extension-math@3.1.0>katex": "0.18.2"
+  # Astro 7.3 requires the adapter's new prerender API; keep its supported plugin
+  # at the minimum compatible release for the existing Wrangler 4.125 toolchain.
+  "@astrojs/cloudflare@14.3.0>@cloudflare/vite-plugin": "1.53.0"
   # GHSA-mrhx-c7xc-m3w5: reject oversized constrained collections before element parsing.
   "zod@>=4 <4.6.6": 4.6.6
   # GHSA-27r3-jxmh-p828: handle decoder errors after compressed request bodies.
@@ -29,8 +36,8 @@ overrides:
   # GHSA-xcx6-jx8p-x3h5: fixed authorization-code endpoint validation.
   # v6/v7 breaks only interactive browser-loopback options; our managed identity path is covered.
   "@azure/msal-node@>=5 <7.1.0": "7.1.0"
-  # IPv6 classification, cross-family subnet and bounded-parser fixes.
-  "ip-address@<10.7.1": "^10.7.1"
+  # IPv6 classification, cross-family subnet and bounded-parser fixes, including GHSA-rxp7-6hxx-x8q5.
+  "ip-address@<10.7.4": "10.7.4"
   # GHSA-2v37-7h3g-55p8: keep postcss on the patched nanoid 3.x line.
   "nanoid@<3.3.18": "^3.3.19"
   # GHSA-9mqv-5hh9-4cgg and GHSA-frvp-7c67-39w9: patch node-server 2.x.
@@ -44,10 +51,11 @@ overrides:
   # fast-uri 3.x fixes: GHSA-v2hh-gcrm-f6hx, GHSA-7p8r-x3mc-p8w7,
   # GHSA-fph4-wmhf-6fwf, GHSA-f65p-4m7j-42xc, GHSA-5jgf-p345-68v8,
   # GHSA-jqff-g426-hqxp, GHSA-58mr-gqgx-xq4g, GHSA-qw65-cvwx-89v3,
-  # and GHSA-hrr3-gc8f-f4qj.
-  "fast-uri@>=3 <3.1.8": "^3.1.8"
-  # GHSA-g6gw-c38x-mqfc: bound Hono to the patched 4.x line.
-  "hono@<4.13.5": "^4.13.5"
+  # GHSA-hrr3-gc8f-f4qj, GHSA-w74x-v6f9-j3xg, GHSA-xhq7-xmqj-769h,
+  # GHSA-wjr9-j795-jxcr and GHSA-333x-w4r6-6crp.
+  "fast-uri@>=3 <3.1.9": "3.1.9"
+  # GHSA-g6gw-c38x-mqfc and GHSA-5r4p-p66f-jhc7: bound Hono to the patched 4.x line.
+  "hono@<4.13.11": "4.13.11"
   # Kept pending auth-owner confirmation; 0.28.17 is the known fixed line.
   kysely: "0.28.17"
   # GHSA-rgw5-rvv9-x895, GHSA-qhr7-859c-m2p7 and GHSA-6j4f-fj2g-mc7p:
@@ -80,6 +88,8 @@ overrides:
   "undici@>=8 <8.12.2": "8.12.2"
   # GHSA-2883-xcg3-v3hh: Astro and @eslint/eslintrc still admit vulnerable js-yaml.
   "js-yaml@<4.3.2": "^4.3.2"
+  # GHSA-r3ph-w7gj-g6xm: bound merge-source CPU work on the separate 5.x line.
+  "js-yaml@>=5 <5.4.1": "5.4.1"
   # GHSA-w27v-7q3p-w38r: Astro still admits vulnerable svgo.
   "svgo@<4.1.0": "^4.1.0"
   # GHSA-4mjr-xmp4-gh2g: Express admits vulnerable qs.
@@ -133,6 +143,9 @@ minimumReleaseAgeExclude:
   - "source-map-js@1.2.2"
   # GHSA-27r3-jxmh-p828: exact security fix published 2026-10-22.
   - "body-parser@2.4.0"
+  # Four URI security fixes; official v3.1.9 tag/registry gitHead 0def703 verified.
+  # https://github.com/fastify/fast-uri/releases/tag/v3.1.9
+  - "fast-uri@3.1.9"
 # GHSA-ch52-4w7c-c8xp has no patched npm version as of 2026-10-03. Astro's
 # remote asset helper creates a fresh Request(src) and only asks its cache
 # policy for storable/timeToLive; it does not invoke the vulnerable

@@ -10,7 +10,12 @@ import tailwindcss from "@tailwindcss/vite"
 import { parseJsonc } from "./src/lib/jsonc"
 import { tools } from "./src/lib/tools"
 import { listGeneratedIntegrationDocLastmods } from "./src/lib/integration-doc-routes"
-import { isFutureDated } from "./src/lib/blog-publishing"
+import { BUILD_DATE, isFutureDated } from "./src/lib/blog-publishing"
+
+// workerd freezes its module-scope clock at the epoch before the first request.
+// Use the same Node-owned cutoff for config filters and prerendered consumers.
+const buildTimestamp = BUILD_DATE.getTime()
+if (!Number.isFinite(buildTimestamp)) throw new Error("Marketing build timestamp must be finite")
 
 // Code-block palette. Astro's markdown pipeline (@astrojs/markdown-satteri →
 // shiki) defaults to the bundled `github-dark` theme, whose comment token
@@ -601,6 +606,7 @@ export default defineConfig({
       __MARKETING_X_URL__: JSON.stringify(xUrl),
       __MARKETING_MYRA_ENABLED__: JSON.stringify(myraMarketingEnabled),
       __MARKETING_BUILD_REVISION__: JSON.stringify(buildRevision),
+      __MARKETING_BUILD_TIMESTAMP__: JSON.stringify(buildTimestamp),
       __MARKETING_SOURCE_DATES__: JSON.stringify(SOURCE_DATES),
       __MARKETING_GOOGLE_VERIFICATION__: JSON.stringify(googleVerification),
       __MARKETING_BING_VERIFICATION__: JSON.stringify(bingVerification),
