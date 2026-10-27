@@ -293,8 +293,23 @@ export function computeGateVerdict(input: GateEvidenceInput): GateVerdictResult 
   const evidenceSummary = summarizeEvidence(input.findings)
   const staleness = evaluateStaleness(input)
 
+  // This newly emitted scoped receipt records a known applicability limitation;
+  // it does not add a required scanner family or change historical missing-receipt expectations.
+  const incompleteWindowsApplicability = receipts.some(
+    (receipt) =>
+      receipt.controlId === "php-runtime:windows-brotli" &&
+      receipt.scanner === "php-windows-brotli" &&
+      receipt.status !== "COMPLETED" &&
+      receipt.status !== "NOT_APPLICABLE"
+  )
+
   // Resolution order: GATE-1 -> GATE-2/3 -> GATE-4 -> READY. GATE-5 annotates.
-  if (!anyCompleted || missingRequired.length > 0 || assessmentIdentityIncomplete) {
+  if (
+    !anyCompleted ||
+    missingRequired.length > 0 ||
+    assessmentIdentityIncomplete ||
+    incompleteWindowsApplicability
+  ) {
     return {
       standardVersion: GATE_STANDARD_VERSION,
       state: "INSUFFICIENT_EVIDENCE",

@@ -70,6 +70,52 @@ describe("computeGateVerdict", () => {
     expect(result.blockingReasons).toEqual([])
   })
 
+  it.each([
+    ["BLOCKED", "INSUFFICIENT_EVIDENCE"],
+    ["FAILED", "INSUFFICIENT_EVIDENCE"],
+    ["NOT_RUN", "INSUFFICIENT_EVIDENCE"],
+    ["COMPLETED", "READY"],
+    ["NOT_APPLICABLE", "READY"],
+  ] as const)("handles scoped Windows applicability %s as %s", (status, expected) => {
+    const result = computeGateVerdict(
+      baseInput({
+        coverageReceipts: [
+          ...fullCoverage(),
+          {
+            controlId: "php-runtime:windows-brotli",
+            scanner: "php-windows-brotli",
+            status,
+            reason: "Package and cURL configuration require verification",
+          },
+        ],
+      })
+    )
+    expect(result.state).toBe(expected)
+    if (expected === "INSUFFICIENT_EVIDENCE") {
+      expect(result.nonCoverage).toContainEqual(
+        expect.objectContaining({
+          controlId: "php-runtime:windows-brotli",
+          status,
+        })
+      )
+    }
+  })
+
+  it.each([
+    ["php-windows-brotli", "other-control"],
+    ["other-scanner", "php-runtime:windows-brotli"],
+  ])("does not apply the scoped guard to unrelated receipt %s/%s", (scanner, controlId) => {
+    const result = computeGateVerdict(
+      baseInput({
+        coverageReceipts: [
+          ...fullCoverage(),
+          { scanner, controlId, status: "BLOCKED", reason: null },
+        ],
+      })
+    )
+    expect(result.state).toBe("READY")
+  })
+
   it("INSUFFICIENT_EVIDENCE when no scanner completed (absence of evidence is not a clean result)", () => {
     const result = computeGateVerdict(
       baseInput({
