@@ -862,7 +862,7 @@ SDK callers pass bare resource paths; the shared client adds `/api/v1` and rejec
 | Vibe Security 50          | `vibe-security-50/1.2.0`                    | Control catalog/coverage interpretation       |
 | URL scan capabilities     | `url-scan/3.0.0`                            | Six bounded URL/API profiles                  |
 | Repository scan depths    | `scan-depths/1.3.0`                         | Cross-language depth/ceiling fixture          |
-| Launch Gate               | `lyrashield-gate/2.3.0`                     | Verdict rules                                 |
+| Launch Gate               | `lyrashield-gate/2.4.0`                     | Verdict rules                                 |
 | Gate assessment           | 2                                           | Immutable release/policy/evidence binding     |
 | LyraShield Score          | `lyrashield-score/1.0.0`                    | Pure numeric/grade calculation                |
 | AI-Built Failure Taxonomy | `ai-built-failure-taxonomy/1.0.0`           | Eight named review classes                    |

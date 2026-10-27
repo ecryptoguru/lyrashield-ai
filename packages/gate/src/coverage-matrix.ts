@@ -32,7 +32,7 @@ export const SCANNER_FAMILIES = [
 export type ScannerFamily = (typeof SCANNER_FAMILIES)[number]
 
 /**
- * Required scanner classes per target type for lyrashield-gate/2.3.0.
+ * Required scanner classes per target type for lyrashield-gate/2.4.0.
  * A target counts as evaluated only when each required family reports
  * COMPLETED or NOT_APPLICABLE on the latest completed scan.
  *

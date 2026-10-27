@@ -36,7 +36,16 @@ function baseInput(overrides: Partial<GateEvidenceInput> = {}): GateEvidenceInpu
 
 describe("gate standard versioning", () => {
   it("is named and versioned", () => {
-    expect(GATE_STANDARD_VERSION).toBe("lyrashield-gate/2.3.0")
+    expect(GATE_STANDARD_VERSION).toBe("lyrashield-gate/2.4.0")
+  })
+
+  it("retains the original 2.3.0 evidence checksum when explicitly verifying historical inputs", () => {
+    expect(computeInputChecksum(baseInput(), "lyrashield-gate/2.3.0")).toBe(
+      "e9e54b8fb2dc54c5df525a52d97d0d18e5d85e1c662e42b51380eb7cb084406e"
+    )
+    expect(computeInputChecksum(baseInput())).not.toBe(
+      computeInputChecksum(baseInput(), "lyrashield-gate/2.3.0")
+    )
   })
 
   it("derives required scanners per target type", () => {
