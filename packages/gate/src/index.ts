@@ -158,6 +158,31 @@ function evaluateStaleness(input: GateEvidenceInput): StalenessSignal {
   return { current: true, reason: null }
 }
 
+// This scoped receipt records a known limitation without adding a required scanner family.
+function hasIncompleteWindowsApplicability(receipts: GateCoverageReceiptInput[]): boolean {
+  return receipts.some(
+    (receipt) =>
+      receipt.controlId === "php-runtime:windows-brotli" &&
+      receipt.scanner === "php-windows-brotli" &&
+      receipt.status !== "COMPLETED" &&
+      receipt.status !== "NOT_APPLICABLE"
+  )
+}
+
+function findBlockingReasons(findings: GateEvidenceInput["findings"]): BlockingReason[] {
+  const blocking = findings.filter(
+    (f) => isBlocking(f) && (f.severity === "CRITICAL" || f.severity === "HIGH")
+  )
+  return blocking
+    .slice()
+    .sort((a, b) => severityRank(b.severity) - severityRank(a.severity))
+    .map((f) => ({
+      findingId: f.id,
+      severity: f.severity,
+      verificationStatus: f.verificationStatus,
+    }))
+}
+
 /**
  * Evaluate the standard against stored evidence. Pure and deterministic: the
  * same input always yields the same output. No clocks, no I/O, no randomness.
@@ -278,37 +303,17 @@ export function computeGateVerdict(input: GateEvidenceInput): GateVerdictResult 
   // GATE-2 / GATE-3 — only CRITICAL and HIGH blockers fail the gate. MEDIUM/LOW
   // with a blocking lifecycle status are surfaced in evidenceSummary but do NOT
   // block in v1.0.0 (founder-confirmed 2026-09-02).
-  const blocking = input.findings.filter(
-    (f) => isBlocking(f) && (f.severity === "CRITICAL" || f.severity === "HIGH")
-  )
-  const blockingReasons: BlockingReason[] = blocking
-    .slice()
-    .sort((a, b) => severityRank(b.severity) - severityRank(a.severity))
-    .map((f) => ({
-      findingId: f.id,
-      severity: f.severity,
-      verificationStatus: f.verificationStatus,
-    }))
+  const blockingReasons = findBlockingReasons(input.findings)
 
   const evidenceSummary = summarizeEvidence(input.findings)
   const staleness = evaluateStaleness(input)
-
-  // This newly emitted scoped receipt records a known applicability limitation;
-  // it does not add a required scanner family or change historical missing-receipt expectations.
-  const incompleteWindowsApplicability = receipts.some(
-    (receipt) =>
-      receipt.controlId === "php-runtime:windows-brotli" &&
-      receipt.scanner === "php-windows-brotli" &&
-      receipt.status !== "COMPLETED" &&
-      receipt.status !== "NOT_APPLICABLE"
-  )
 
   // Resolution order: GATE-1 -> GATE-2/3 -> GATE-4 -> READY. GATE-5 annotates.
   if (
     !anyCompleted ||
     missingRequired.length > 0 ||
     assessmentIdentityIncomplete ||
-    incompleteWindowsApplicability
+    hasIncompleteWindowsApplicability(receipts)
   ) {
     return {
       standardVersion: GATE_STANDARD_VERSION,

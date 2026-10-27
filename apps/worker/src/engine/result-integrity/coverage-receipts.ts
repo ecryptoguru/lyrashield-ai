@@ -117,23 +117,59 @@ function scannerStatus(
   return { status: "COMPLETED" }
 }
 
+function buildPhpWindowsReceipts(coverageIssues: ScannerCoverageIssue[]): FamilyReceipt[] {
+  // Runtime package/configuration uncertainty does not mean unrelated IaC
+  // files were unread or that their deterministic rules did not run. Retain
+  // this limitation as a separately visible, checksum-bound receipt instead.
+  const phpWindowsIssues = coverageIssues
+    .filter(isPhpWindowsApplicabilityIssue)
+    .sort((left, right) =>
+      `${left.subject ?? ""}\u0000${left.reason}`.localeCompare(
+        `${right.subject ?? ""}\u0000${right.reason}`
+      )
+    )
+  const phpWindowsReceipts: FamilyReceipt[] = phpWindowsIssues.length
+    ? [
+        {
+          scanner: "php-windows-brotli",
+          controlId: "php-runtime:windows-brotli",
+          status: "BLOCKED",
+          reason: [...new Set(phpWindowsIssues.map((issue) => issue.reason))].sort().join("; "),
+          subject:
+            [
+              ...new Set(
+                phpWindowsIssues.flatMap((issue) => (issue.subject ? [issue.subject] : []))
+              ),
+            ]
+              .sort()
+              .join(", ") || undefined,
+          metadata: { issues: phpWindowsIssues, outcome: "INCONCLUSIVE" },
+        },
+      ]
+    : []
+  return phpWindowsReceipts
+}
+
+function engineCoverageStatus(input: ResultManifestInput, engineApplicable: boolean) {
+  return input.sourceExecution?.kind === "deterministic_retest"
+    ? {
+        status: "NOT_APPLICABLE" as const,
+        reason: "Model analysis was intentionally outside this deterministic retest scope.",
+        metadata: { outcome: "NOT_ASSESSED" },
+      }
+    : !engineApplicable
+      ? {
+          status: "NOT_APPLICABLE" as const,
+          reason: "Deterministic-only tier — the engine is part of STANDARD and DEEP reviews.",
+          metadata: { outcome: "NOT_ASSESSED" },
+        }
+      : scannerStatus("engine", true, input.coverageIssues)
+}
+
 export function buildCoverageReceipts(input: ResultManifestInput) {
   const repositoryTarget = input.target.type === "REPO"
   const engineApplicable = repositoryTarget || input.engineBacked === true
-  const engineStatus =
-    input.sourceExecution?.kind === "deterministic_retest"
-      ? {
-          status: "NOT_APPLICABLE" as const,
-          reason: "Model analysis was intentionally outside this deterministic retest scope.",
-          metadata: { outcome: "NOT_ASSESSED" },
-        }
-      : !engineApplicable
-        ? {
-            status: "NOT_APPLICABLE" as const,
-            reason: "Deterministic-only tier — the engine is part of STANDARD and DEEP reviews.",
-            metadata: { outcome: "NOT_ASSESSED" },
-          }
-        : scannerStatus("engine", true, input.coverageIssues)
+  const engineStatus = engineCoverageStatus(input, engineApplicable)
   const urlStatus = scannerStatus("url", Boolean(input.target.url), input.coverageIssues)
   const familyReceipts: FamilyReceipt[] = [
     {
@@ -278,34 +314,6 @@ export function buildCoverageReceipts(input: ResultManifestInput) {
     ? scopedCoverageReceipts(input.scopedCoverage.entries, input.scopedCoverage.gaps)
     : []
 
-  // Runtime package/configuration uncertainty does not mean unrelated IaC
-  // files were unread or that their deterministic rules did not run. Retain
-  // this limitation as a separately visible, checksum-bound receipt instead.
-  const phpWindowsIssues = input.coverageIssues
-    .filter(isPhpWindowsApplicabilityIssue)
-    .sort((left, right) =>
-      `${left.subject ?? ""}\u0000${left.reason}`.localeCompare(
-        `${right.subject ?? ""}\u0000${right.reason}`
-      )
-    )
-  const phpWindowsReceipts: FamilyReceipt[] = phpWindowsIssues.length
-    ? [
-        {
-          scanner: "php-windows-brotli",
-          controlId: "php-runtime:windows-brotli",
-          status: "BLOCKED",
-          reason: [...new Set(phpWindowsIssues.map((issue) => issue.reason))].sort().join("; "),
-          subject:
-            [
-              ...new Set(
-                phpWindowsIssues.flatMap((issue) => (issue.subject ? [issue.subject] : []))
-              ),
-            ]
-              .sort()
-              .join(", ") || undefined,
-          metadata: { issues: phpWindowsIssues, outcome: "INCONCLUSIVE" },
-        },
-      ]
-    : []
+  const phpWindowsReceipts = buildPhpWindowsReceipts(input.coverageIssues)
   return [...familyReceipts, ...controlReceipts, ...scopedReceipts, ...phpWindowsReceipts]
 }

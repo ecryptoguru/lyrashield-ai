@@ -346,36 +346,14 @@ function parseRuntimeDeclarations(
   return { findings, declarations, phpPresent }
 }
 
-function declaredRuntimeFindings(
+function appendWindowsBrotliFinding(
   path: string,
-  content: string,
   declaration: Declaration,
-  issues?: ScannerCoverageIssue[]
-): EngineVulnerability[] {
-  const findings: EngineVulnerability[] = []
-  const issue = (reason: string) =>
-    recordCoverageIssue(issues, { scanner: "iac", status: "partial", subject: path, reason })
-  const branch = branchOf(declaration.version)
-  const supported = PHP_RUNTIME_CATALOG.supportedBranches.includes(branch)
-  const metadata = {
-    runtime_version: declaration.version,
-    ...(declaration.composeService ? { compose_service: declaration.composeService } : {}),
-    evidence_scope: declaration.scope,
-    runtime_verified: false,
-    catalog_version: PHP_RUNTIME_CATALOG.catalogVersion,
-    sapi: declaration.sapi ?? "unknown",
-    extensions: declaration.extensions?.join(",").slice(0, 2048) ?? "unknown",
-    os: declaration.os ?? "unknown",
-    image: declaration.image ?? "unknown",
-    vendor_package: declaration.vendorPackage ?? "unknown",
-    replicas: declaration.replicas ?? "unknown",
-  }
-  const base = {
-    timestamp: new Date().toISOString(),
-    target: path,
-    scannerSource: "iac" as const,
-    code_locations: [{ file: path, start_line: declaration.line }],
-  }
+  issues: ScannerCoverageIssue[] | undefined,
+  findings: EngineVulnerability[],
+  base: Pick<EngineVulnerability, "timestamp" | "target" | "scannerSource" | "code_locations">,
+  metadata: NonNullable<EngineVulnerability["dependency_metadata"]>
+): void {
   const serviceSuffix = declaration.composeService ? ` (service ${declaration.composeService})` : ""
   const identitySuffix = declaration.composeService
     ? `-${encodeURIComponent(declaration.composeService)}`
@@ -433,6 +411,43 @@ function declaredRuntimeFindings(
       })
     }
   }
+}
+
+function declaredRuntimeFindings(
+  path: string,
+  content: string,
+  declaration: Declaration,
+  issues?: ScannerCoverageIssue[]
+): EngineVulnerability[] {
+  const findings: EngineVulnerability[] = []
+  const issue = (reason: string) =>
+    recordCoverageIssue(issues, { scanner: "iac", status: "partial", subject: path, reason })
+  const branch = branchOf(declaration.version)
+  const supported = PHP_RUNTIME_CATALOG.supportedBranches.includes(branch)
+  const metadata = {
+    runtime_version: declaration.version,
+    ...(declaration.composeService ? { compose_service: declaration.composeService } : {}),
+    evidence_scope: declaration.scope,
+    runtime_verified: false,
+    catalog_version: PHP_RUNTIME_CATALOG.catalogVersion,
+    sapi: declaration.sapi ?? "unknown",
+    extensions: declaration.extensions?.join(",").slice(0, 2048) ?? "unknown",
+    os: declaration.os ?? "unknown",
+    image: declaration.image ?? "unknown",
+    vendor_package: declaration.vendorPackage ?? "unknown",
+    replicas: declaration.replicas ?? "unknown",
+  }
+  const base = {
+    timestamp: new Date().toISOString(),
+    target: path,
+    scannerSource: "iac" as const,
+    code_locations: [{ file: path, start_line: declaration.line }],
+  }
+  const serviceSuffix = declaration.composeService ? ` (service ${declaration.composeService})` : ""
+  const identitySuffix = declaration.composeService
+    ? `-${encodeURIComponent(declaration.composeService)}`
+    : ""
+  appendWindowsBrotliFinding(path, declaration, issues, findings, base, metadata)
   const [major, minor] = branch.split(".").map(Number)
   if (major! < 8 || (major === 8 && minor! < 2)) {
     findings.push({
