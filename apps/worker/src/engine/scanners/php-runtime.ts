@@ -401,9 +401,14 @@ function declaredRuntimeFindings(
       rebuilt &&
       packageInfo.build === declaration.version &&
       !(declaration.image && officialImagePattern.test(declaration.image))
-    issue(
-      "Windows Brotli package and cURL configuration are user-reported or unknown; verify the serving package, bundled dependency and effective configuration independently"
-    )
+    recordCoverageIssue(issues, {
+      scanner: "iac",
+      status: "partial",
+      scope: "php_windows_brotli",
+      subject: path,
+      reason:
+        "Windows Brotli package and cURL configuration are user-reported or unknown; verify the serving package, bundled dependency and effective configuration independently",
+    })
     if (isOriginal) {
       findings.push({
         ...base,

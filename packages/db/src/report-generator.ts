@@ -251,8 +251,16 @@ export async function gatherReportData(
   // Partial scans remain conditional even with no retained findings.
   // Historical rows may carry lowercase enum spellings.
   const scanStatus = scanInfo?.status.toUpperCase()
-  const scanUsableForVerdict = scanInfo !== null && scanStatus === "COMPLETED"
-  const isPartialScan = scanStatus === "PARTIAL"
+  const hasIncompleteWindowsBrotli = scanCoverageReceipts.some(
+    (receipt) =>
+      receipt.controlId === "php-runtime:windows-brotli" &&
+      receipt.scanner === "php-windows-brotli" &&
+      !["COMPLETED", "NOT_APPLICABLE"].includes(receipt.status)
+  )
+  const scanUsableForVerdict =
+    scanInfo !== null && scanStatus === "COMPLETED" && !hasIncompleteWindowsBrotli
+  const isPartialScan =
+    scanStatus === "PARTIAL" || (scanStatus === "COMPLETED" && hasIncompleteWindowsBrotli)
   const verdict = !scanUsableForVerdict
     ? isPartialScan
       ? criticalCount > 0
@@ -269,7 +277,12 @@ export async function gatherReportData(
         ...new Set(
           scanCoverageReceipts
             .filter((receipt) => !["COMPLETED", "NOT_APPLICABLE"].includes(receipt.status))
-            .map((receipt) => receipt.scanner)
+            .map((receipt) =>
+              receipt.controlId === "php-runtime:windows-brotli" &&
+              receipt.scanner === "php-windows-brotli"
+                ? "PHP Windows Brotli package and cURL applicability"
+                : receipt.scanner
+            )
         ),
       ]
     : []
@@ -312,8 +325,9 @@ export async function gatherReportData(
   if (isPartialScan && scanInfo)
     priorityActions.push({
       label: "Complete coverage",
-      detail:
-        "Run the existing scan flow for this target after reviewing the recorded limitations.",
+      detail: hasIncompleteWindowsBrotli
+        ? "Determine whether the serving runtime is Windows; if so, independently verify its package and effective cURL configuration. Review any other recorded limitations."
+        : "Run the existing scan flow for this target after reviewing the recorded limitations.",
       severity: "MEDIUM",
     })
   if (retestCounts.failed > 0)

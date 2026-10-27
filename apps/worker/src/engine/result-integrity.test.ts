@@ -1,5 +1,10 @@
 import { createHash } from "node:crypto"
 import { isDeepStrictEqual } from "node:util"
+import { mkdtemp, writeFile, rm } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
+import { scanIac } from "./scanners/iac-scanner"
+import type { ScannerCoverageIssue } from "./scanner-coverage"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 vi.mock("@lyrashield/db", () => {
@@ -197,6 +202,45 @@ describe("result integrity", () => {
       status: "BLOCKED",
       metadata: expect.objectContaining({ outcome: "INCONCLUSIVE" }),
     })
+  })
+
+  it("does not allow scoped bounded or ordinary parse failures to clear IaC family coverage", () => {
+    for (const issue of [
+      { scanner: "iac", status: "bounded", scope: "php_windows_brotli", reason: "discovery limit" },
+      { scanner: "iac", status: "partial", reason: "malformed PHP runtime inventory" },
+    ] as const) {
+      const receipts = buildCoverageReceipts({
+        scanId: "scan-1",
+        target: { id: "target-1", type: "REPO" },
+        sourceCheckoutAvailable: true,
+        engineFindingCount: 0,
+        coverageIssues: [issue],
+      })
+      expect(receipts.find((receipt) => receipt.controlId === "iac")?.status).toBe("BLOCKED")
+    }
+  })
+
+  it("keeps real malformed PHP inventory a blocking IaC discovery error", async () => {
+    const repo = await mkdtemp(join(tmpdir(), "php-malformed-retest-"))
+    try {
+      await writeFile(join(repo, "php-runtime.json"), "{")
+      await writeFile(join(repo, "Dockerfile"), "FROM php:8.4.27-fpm\nUSER www-data\n")
+      const issues: ScannerCoverageIssue[] = []
+      await scanIac({ repoPath: repo, workspaceDir: repo, coverageIssues: issues })
+      const receipts = buildCoverageReceipts({
+        scanId: "scan-1",
+        target: { id: "target-1", type: "REPO" },
+        sourceCheckoutAvailable: true,
+        engineFindingCount: 0,
+        coverageIssues: issues,
+      })
+      expect(receipts.find((receipt) => receipt.controlId === "iac")).toMatchObject({
+        status: "BLOCKED",
+        reason: expect.stringMatching(/malformed/i),
+      })
+    } finally {
+      await rm(repo, { recursive: true, force: true })
+    }
   })
 
   it("records an engine timeout as blocked coverage", () => {
@@ -900,6 +944,93 @@ describe("result integrity", () => {
         )
       }
     )
+    it("validates an unrelated IaC fix while recording incomplete Windows applicability for mixed Linux PHP evidence", async () => {
+      const repo = await mkdtemp(join(tmpdir(), "php-brotli-retest-"))
+      try {
+        await writeFile(
+          join(repo, "composer.json"),
+          JSON.stringify({ config: { platform: { php: "8.4.27" } } })
+        )
+        await writeFile(join(repo, "Dockerfile"), "FROM php:8.4.27-fpm\nUSER root\n")
+        const baselineIssues: ScannerCoverageIssue[] = []
+        const baselineFindings = await scanIac({
+          repoPath: repo,
+          workspaceDir: repo,
+          coverageIssues: baselineIssues,
+        })
+        expect(
+          baselineFindings.some((finding) => finding.id.startsWith("iac-dockerfile-user-root"))
+        ).toBe(true)
+        await writeFile(join(repo, "Dockerfile"), "FROM php:8.4.27-fpm\nUSER www-data\n")
+        const retestIssues: ScannerCoverageIssue[] = []
+        const retestFindings = await scanIac({
+          repoPath: repo,
+          workspaceDir: repo,
+          coverageIssues: retestIssues,
+        })
+        expect(
+          retestFindings.some((finding) => finding.id.startsWith("iac-dockerfile-user-root"))
+        ).toBe(false)
+        expect(retestFindings.some((finding) => finding.cve === "CVE-2026-111497")).toBe(false)
+        vi.mocked(prisma.scanResultManifest.findUnique).mockResolvedValue(null)
+        for (const [scanId, revision, coverageIssues] of [
+          ["scan-1", REV_A, baselineIssues],
+          ["scan-2", REV_B, retestIssues],
+        ] as const) {
+          await persistResultManifest({
+            scanId,
+            target: { id: "target-1", type: "REPO" },
+            sourceCheckoutAvailable: true,
+            engineFindingCount: 0,
+            sourceExecution: { kind: "deterministic_retest", sourceRevision: revision },
+            terminalOutcome: { status: "COMPLETED", errorCategory: null, errorMessage: null },
+            coverageIssues,
+          })
+        }
+        const manifests = vi
+          .mocked(prisma.scanResultManifest.create)
+          .mock.calls.map(([args]) => (args as { data: ReturnType<typeof manifestRow> }).data)
+        const rows = vi
+          .mocked(prisma.scanCoverageReceipt.createMany)
+          .mock.calls.map(
+            ([args]) =>
+              (args as { data: Array<{ scanId: string; controlId: string; status: string }> }).data
+          )
+        expect(rows[0].find((row) => row.controlId === "iac")?.status).toBe("COMPLETED")
+        expect(rows[1].find((row) => row.controlId === "php-runtime:windows-brotli")).toMatchObject(
+          {
+            status: "BLOCKED",
+            subject: "composer.json",
+          }
+        )
+        expect(JSON.stringify(manifests[1].manifest)).toContain("Windows Brotli")
+        const receipts = (i: number) =>
+          rows[i].map((row, index) => ({ ...row, id: `${i}-${index}` }))
+        mockRepoRetestState({
+          baselineManifest: manifests[0],
+          retestManifest: manifests[1],
+          candidates: [
+            {
+              findingId: "finding-1",
+              scanId: "scan-1",
+              scannerSource: "iac",
+              payload: { findingClass: "iac_dockerfile" },
+            },
+          ],
+          baselineReceipts: receipts(0),
+          retestReceipts: receipts(1),
+        })
+        await completeRetestsForScan({ scanId: "scan-2", workspaceId: "workspace-1" })
+        expect(prisma.finding.update).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({ status: "FIXED", verificationStatus: "VALIDATED" }),
+          })
+        )
+      } finally {
+        await rm(repo, { recursive: true, force: true })
+      }
+    })
+
     it("keeps a Windows Brotli finding inconclusive after source-only retest", async () => {
       mockRepoRetestState({
         candidates: [

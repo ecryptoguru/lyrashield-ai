@@ -78,6 +78,12 @@ export function receiptIdentityCoverageIssues(input: ResultManifestInput): Scann
       ]
 }
 
+function isPhpWindowsApplicabilityIssue(issue: ScannerCoverageIssue): boolean {
+  return (
+    issue.scanner === "iac" && issue.status === "partial" && issue.scope === "php_windows_brotli"
+  )
+}
+
 function scannerStatus(
   scanner: string,
   applicable: boolean,
@@ -90,7 +96,9 @@ function scannerStatus(
 } {
   if (!applicable) return { status: "NOT_APPLICABLE", reason: "Not applicable to this target" }
   const issues = coverageIssues
-    .filter((candidate) => candidate.scanner === scanner)
+    .filter(
+      (candidate) => candidate.scanner === scanner && !isPhpWindowsApplicabilityIssue(candidate)
+    )
     .sort((left, right) =>
       `${left.subject ?? ""}\u0000${left.status}\u0000${left.reason}`.localeCompare(
         `${right.subject ?? ""}\u0000${right.status}\u0000${right.reason}`
@@ -270,5 +278,34 @@ export function buildCoverageReceipts(input: ResultManifestInput) {
     ? scopedCoverageReceipts(input.scopedCoverage.entries, input.scopedCoverage.gaps)
     : []
 
-  return [...familyReceipts, ...controlReceipts, ...scopedReceipts]
+  // Runtime package/configuration uncertainty does not mean unrelated IaC
+  // files were unread or that their deterministic rules did not run. Retain
+  // this limitation as a separately visible, checksum-bound receipt instead.
+  const phpWindowsIssues = input.coverageIssues
+    .filter(isPhpWindowsApplicabilityIssue)
+    .sort((left, right) =>
+      `${left.subject ?? ""}\u0000${left.reason}`.localeCompare(
+        `${right.subject ?? ""}\u0000${right.reason}`
+      )
+    )
+  const phpWindowsReceipts: FamilyReceipt[] = phpWindowsIssues.length
+    ? [
+        {
+          scanner: "php-windows-brotli",
+          controlId: "php-runtime:windows-brotli",
+          status: "BLOCKED",
+          reason: [...new Set(phpWindowsIssues.map((issue) => issue.reason))].sort().join("; "),
+          subject:
+            [
+              ...new Set(
+                phpWindowsIssues.flatMap((issue) => (issue.subject ? [issue.subject] : []))
+              ),
+            ]
+              .sort()
+              .join(", ") || undefined,
+          metadata: { issues: phpWindowsIssues, outcome: "INCONCLUSIVE" },
+        },
+      ]
+    : []
+  return [...familyReceipts, ...controlReceipts, ...scopedReceipts, ...phpWindowsReceipts]
 }

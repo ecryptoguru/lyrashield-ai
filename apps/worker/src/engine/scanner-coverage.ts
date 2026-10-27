@@ -30,6 +30,8 @@ export interface ScannerCoverageIssue {
     | "sast"
     | "iac"
   status: ScannerCoverageStatus
+  /** Runtime applicability is distinct from execution coverage of the IaC family. */
+  scope?: "php_windows_brotli"
   subject?: string
   reason: string
   metadata?: Record<string, unknown>
