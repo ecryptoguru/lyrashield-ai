@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 vi.mock("./client", () => ({
   prisma: {
+    $transaction: vi.fn(),
     auditLog: { create: vi.fn() },
     agentApproval: {
       create: vi.fn(),
@@ -21,6 +22,7 @@ import { prisma } from "./client"
 import {
   approveApproval,
   createApproval,
+  findOrCreatePendingApproval,
   claimApprovalExecution,
   completeApprovalExecution,
   consumeApproval,
@@ -286,5 +288,47 @@ describe("credential-authorized execution receipts", () => {
     vi.mocked(prisma.auditLog.create).mockRejectedValue(new Error("audit unavailable"))
     await expect(createApproval(input)).rejects.toThrow("audit unavailable")
     expect(prisma.agentApproval.updateMany).not.toHaveBeenCalled()
+  })
+})
+
+describe("pending fix approval reuse", () => {
+  it("serializes identical requests and replaces expired approvals", async () => {
+    const existing: Array<{ id: string; expiresAt: Date }> = []
+    let chain = Promise.resolve()
+    const tx = {
+      $executeRaw: vi.fn(),
+      agentApproval: {
+        findFirst: vi.fn(
+          async ({ where }: { where: { OR: Array<{ expiresAt: { gt: Date } }> } }) =>
+            existing.find((item) => item.expiresAt > where.OR[1]!.expiresAt.gt) ?? null
+        ),
+        create: vi.fn(async ({ data }: { data: { expiresAt: Date } }) => {
+          const row = { id: `approval-${existing.length + 1}`, expiresAt: data.expiresAt }
+          existing.push(row)
+          return row
+        }),
+      },
+    }
+    vi.mocked(prisma.$transaction).mockImplementation((fn: never) => {
+      const result = chain.then(() => (fn as (client: typeof tx) => unknown)(tx))
+      chain = result.then(() => undefined)
+      return result as never
+    })
+    const input = {
+      workspaceId: "ws-1",
+      actionName: "fix_pr.open",
+      input: { fixProposalId: "p1" },
+      requestedById: "u1",
+      expiresAt: new Date(Date.now() + 60_000),
+    }
+    const [first, second] = await Promise.all([
+      findOrCreatePendingApproval(input),
+      findOrCreatePendingApproval(input),
+    ])
+    expect(first.id).toBe(second.id)
+    expect(tx.agentApproval.create).toHaveBeenCalledTimes(1)
+    expect(tx.$executeRaw).toHaveBeenCalledTimes(6)
+    existing[0]!.expiresAt = new Date(0)
+    expect((await findOrCreatePendingApproval(input)).id).not.toBe(first.id)
   })
 })

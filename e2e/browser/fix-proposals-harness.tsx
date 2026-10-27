@@ -12,12 +12,16 @@ export default function FixProposalsHarness() {
       <TooltipProvider>
         <FixesClient
           workspaceId="workspace-test"
-          initialNextCursor={null}
+          canCreatePr={new URLSearchParams(location.search).get("noPermission") !== "1"}
+          initialNextCursor={
+            new URLSearchParams(location.search).has("withMore") ? "cursor-test" : null
+          }
           initialData={[
             {
               id: "composer-ready",
               kind: "composer_update",
               status: "ready",
+              hasStoredPatch: true,
               safetyScore: 95,
               summary:
                 "Update the affected Composer package after reviewing its advisory and locked release.\n\n" +
@@ -32,6 +36,21 @@ export default function FixProposalsHarness() {
                 title: "Affected Composer dependency requiring application compatibility review",
                 severity: "HIGH",
                 status: "FIX_READY",
+              },
+            },
+            {
+              id: "summary-only",
+              kind: "patch",
+              status: "ready",
+              hasStoredPatch: false,
+              summary: "Review this guidance.",
+              createdAt: "2026-10-23T00:00:00Z",
+              pullRequests: [],
+              finding: {
+                id: "summary-finding",
+                title: "Summary only",
+                severity: "LOW",
+                status: "OPEN",
               },
             },
             {

@@ -9,9 +9,11 @@ import { InlineConfirm } from "@/components/ui/inline-confirm"
 export function CreateFixPrAction({
   workspaceId,
   proposalId,
+  prominent = false,
 }: {
   workspaceId: string
   proposalId: string
+  prominent?: boolean
 }) {
   const [pending, setPending] = useState(false)
   const [approvalId, setApprovalId] = useState<string | null>(null)
@@ -41,13 +43,14 @@ export function CreateFixPrAction({
     <div className="space-y-2">
       {approvalId ? (
         <p role="status">
-          Approval {approvalId} is awaiting review.{" "}
+          Approval {approvalId} is awaiting review by an authorized workspace member.{" "}
           <Link href="/dashboard/approvals" className="text-primary underline">
-            Review approval
+            View approval
           </Link>
         </p>
       ) : (
         <InlineConfirm
+          triggerVariant={prominent ? "outline" : "ghost"}
           triggerLabel={pending ? "Requesting approval…" : "Create pull request"}
           disabled={pending}
           message="Request approval for the stored patch? Your code changes only after approval."

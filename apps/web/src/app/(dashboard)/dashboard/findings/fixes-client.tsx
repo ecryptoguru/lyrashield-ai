@@ -12,6 +12,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { severityLabel, humanizeToken } from "@/lib/labels"
 import { SEVERITY_BADGE } from "@/lib/severity-badge"
 import { findingsHref } from "@/lib/finding-list-params"
+import { CreateFixPrAction } from "@/components/create-fix-pr-action"
 
 type BadgeVariant = "default" | "success" | "danger" | "warning" | "info" | "muted"
 
@@ -35,6 +36,7 @@ interface FixProposalItem {
   kind: string
   summary: string
   status: string
+  hasStoredPatch?: boolean
   safetyScore?: number | null
   generatedByModel?: string | null
   createdAt: string
@@ -64,6 +66,7 @@ const fixProposalItemSchema = z
     kind: z.string(),
     summary: z.string(),
     status: z.string(),
+    hasStoredPatch: z.boolean().optional(),
     safetyScore: z.number().nullable().optional(),
     generatedByModel: z.string().nullable().optional(),
     createdAt: z.string().datetime().or(z.string()),
@@ -134,12 +137,14 @@ function ProposalReviewDetails({ kind, summary }: Pick<FixProposalItem, "kind" |
  */
 export function FixesClient({
   workspaceId,
+  canCreatePr = false,
   targetId,
   observedInScanId,
   initialData,
   initialNextCursor,
 }: {
   workspaceId: string
+  canCreatePr?: boolean
   targetId?: string
   observedInScanId?: string
   initialData: FixProposalItem[]
@@ -231,6 +236,12 @@ export function FixesClient({
                   <span>{formatDate(proposal.createdAt)}</span>
                 </div>
 
+                <ProposalAction
+                  proposal={proposal}
+                  workspaceId={workspaceId}
+                  canCreatePr={canCreatePr}
+                />
+
                 {/* Deep link to the finding this proposal patches — the drawer's
                     `?finding=` contract, same as everywhere else in this app. */}
                 <Link
@@ -282,25 +293,7 @@ export function FixesClient({
           <LoadMore
             key={`${workspaceId}:${observedInScanId ?? ""}:${targetId ?? ""}`}
             cursor={nextCursor}
-            onLoadMore={async (cursor) => {
-              try {
-                const res = await apiGetPaginated<FixProposalItem>(
-                  `/api/fix-proposals`,
-                  {
-                    workspaceId,
-                    cursor,
-                    ...(targetId ? { targetId } : {}),
-                    ...(observedInScanId ? { observedInScanId } : {}),
-                  },
-                  { schema: fixProposalsPaginatedSchema }
-                )
-                return { items: res.items, nextCursor: res.nextCursor }
-              } catch {
-                // Same error pattern as the scans list: a friendly message in
-                // LoadMore's alert instead of a raw API or Zod error string.
-                throw new Error("Failed to load more fix proposals. Try again.")
-              }
-            }}
+            onLoadMore={(cursor) => loadMoreFixes(cursor, workspaceId, targetId, observedInScanId)}
             onItems={(items) => setProposals((prev) => [...prev, ...items])}
             onNextCursor={setNextCursor}
           />
@@ -308,4 +301,44 @@ export function FixesClient({
       )}
     </div>
   )
+}
+
+function ProposalAction({
+  proposal,
+  workspaceId,
+  canCreatePr,
+}: {
+  proposal: FixProposalItem
+  workspaceId: string
+  canCreatePr: boolean
+}) {
+  if (!canCreatePr || proposal.status !== "ready" || !proposal.hasStoredPatch) return null
+  return (
+    <div className="mt-3">
+      <CreateFixPrAction workspaceId={workspaceId} proposalId={proposal.id} prominent />
+    </div>
+  )
+}
+
+async function loadMoreFixes(
+  cursor: string,
+  workspaceId: string,
+  targetId?: string,
+  observedInScanId?: string
+) {
+  try {
+    const res = await apiGetPaginated<FixProposalItem>(
+      "/api/fix-proposals",
+      {
+        workspaceId,
+        cursor,
+        ...(targetId ? { targetId } : {}),
+        ...(observedInScanId ? { observedInScanId } : {}),
+      },
+      { schema: fixProposalsPaginatedSchema }
+    )
+    return { items: res.items, nextCursor: res.nextCursor }
+  } catch {
+    throw new Error("Failed to load more fix proposals. Try again.")
+  }
 }

@@ -47,6 +47,22 @@ describe("GET /api/fix-proposals", () => {
     })
   })
 
+  it("returns patch availability without disclosing storage references", async () => {
+    mocks.listFixProposals.mockResolvedValue({
+      items: [
+        { id: "stored", diffRef: "s3://private/patch" },
+        { id: "summary", diffRef: null },
+      ],
+      nextCursor: null,
+    })
+    const response = await GET(new Request("http://localhost/api/fix-proposals?workspaceId=ws-1"))
+    const body = await response.json()
+    expect(body.data.items).toEqual([
+      { id: "stored", hasStoredPatch: true },
+      { id: "summary", hasStoredPatch: false },
+    ])
+  })
+
   it("rejects an unavailable scope before listing fixes", async () => {
     mocks.validateFindingScope.mockResolvedValue({ available: false, target: null, scanId: null })
 
