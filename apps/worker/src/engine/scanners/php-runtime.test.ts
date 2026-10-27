@@ -364,3 +364,96 @@ it("keeps case-sensitive Compose file paths distinct for the same service", () =
   )
   expect(normalizeFindings(findings, "target", generateDedupeKey)).toHaveLength(2)
 })
+
+describe("PHP Windows bundled Brotli package identity", () => {
+  const inventory = (overrides: Record<string, unknown> = {}) =>
+    JSON.stringify({ schemaVersion: 1, version: "8.4.27", os: "windows", ...overrides })
+
+  it("reports an unrebuilt official Windows package as a conditional candidate without an automatic edit", async () => {
+    const { findings, issues } = await scan({
+      "php-runtime.json": inventory({ windowsPackage: { origin: "php.net", build: "8.4.27" } }),
+    })
+    const finding = findings.find((f) => f.cve === "CVE-2026-111497")
+    expect(finding).toMatchObject({
+      finding_class: "php_runtime_windows_brotli",
+      dependency_metadata: { evidence_scope: "user_reported", runtime_verified: false },
+    })
+    expect(finding?.description).toMatch(/curl/i)
+    expect(finding?.remediation_steps).toMatch(/8\.4\.27-1/)
+    expect(finding?.code_locations?.[0]?.fix_after).toBeUndefined()
+    expect(issues.some((i) => /Brotli.*verify/i.test(i.reason))).toBe(true)
+  })
+
+  it.each(["8.2.35", "8.3.36", "8.4.27", "8.5.12"])(
+    "only associates the %s original Windows package with its matching rebuild",
+    async (version) => {
+      const { findings } = await scan({
+        "php-runtime.json": inventory({
+          version,
+          extensions: [],
+          windowsPackage: { origin: "php.net", build: version },
+        }),
+      })
+      const candidate = findings.find((f) => f.cve === "CVE-2026-111497")
+      expect(candidate?.remediation_steps).toContain(`${version}-1`)
+      expect(candidate?.description).toMatch(/may be reachable/i)
+    }
+  )
+
+  it("never treats a reported official rebuild as verified runtime remediation", async () => {
+    const { findings, issues } = await scan({
+      "php-runtime.json": inventory({ windowsPackage: { origin: "php.net", build: "8.4.27-1" } }),
+    })
+    expect(findings.some((f) => f.cve === "CVE-2026-111497")).toBe(false)
+    expect(issues.some((i) => /Brotli.*verify/i.test(i.reason))).toBe(true)
+  })
+
+  it.each([
+    {},
+    { windowsPackage: { origin: "other", build: "8.4.27" } },
+    { windowsPackage: { origin: "php.net", build: "8.4.27-2" } },
+    { windowsPackage: { origin: "php.net", build: "8.3.36" } },
+    { extensions: [] },
+    { windowsPackage: { origin: "php.net", build: "8.4.27" }, image: "php:8.4.27-fpm" },
+  ])(
+    "keeps missing, vendor, unknown or conflicting Windows package evidence incomplete: %j",
+    async (extra) => {
+      const { findings, issues } = await scan({ "php-runtime.json": inventory(extra) })
+      expect(findings.some((f) => f.cve === "CVE-2026-111497")).toBe(false)
+      expect(issues.some((i) => /Brotli|inventory/i.test(i.reason))).toBe(true)
+    }
+  )
+
+  it("does not treat a Composer PHP version as evidence of the operating system or Windows package", async () => {
+    const { findings, issues } = await scan({
+      "composer.json": '{"config":{"platform":{"php":"8.4.27"}}}',
+    })
+    expect(findings.some((f) => f.cve === "CVE-2026-111497")).toBe(false)
+    expect(issues.some((i) => /Windows Brotli.*unknown/i.test(i.reason))).toBe(true)
+  })
+
+  it("does not apply the Windows package rule to a Linux image or a non-PHP project", async () => {
+    const linux = await scan({ Dockerfile: "FROM php:8.4.27-fpm\nUSER www-data\n" })
+    const other = await scan({ "package.json": '{"name":"example"}' })
+    expect([...linux.findings, ...other.findings].some((f) => f.cve === "CVE-2026-111497")).toBe(
+      false
+    )
+    expect([...linux.issues, ...other.issues].some((i) => /Windows Brotli/i.test(i.reason))).toBe(
+      false
+    )
+  })
+})
+
+it("keeps case-distinct Windows service inventory candidates separate", () => {
+  const content = JSON.stringify({
+    schemaVersion: 1,
+    version: "8.4.27",
+    os: "windows",
+    windowsPackage: { origin: "php.net", build: "8.4.27" },
+  })
+  const findings = ["Api/php-runtime.json", "api/php-runtime.json"].flatMap((path) =>
+    inspectPhpRuntimeInput(path, content, null).findings.filter((f) => f.cve === "CVE-2026-111497")
+  )
+  expect(findings).toHaveLength(2)
+  expect(normalizeFindings(findings, "target", generateDedupeKey)).toHaveLength(2)
+})

@@ -50,6 +50,36 @@ describe("PHP analysis uses existing repository discovery", () => {
     ).toBe(true)
   })
 
+  it.each(["STANDARD", "DEEP"])(
+    "isolates Windows package evidence to its PHP service in %s",
+    async (mode) => {
+      const dir = await repo({
+        "services/api/php-runtime.json": JSON.stringify({
+          schemaVersion: 1,
+          version: "8.4.27",
+          os: "windows",
+          windowsPackage: { origin: "php.net", build: "8.4.27" },
+        }),
+        "services/api/index.php": "<?php echo 1;",
+        "services/web/Dockerfile": "FROM node:24\n",
+      })
+      const coverageIssues: ScannerCoverageIssue[] = []
+      const findings = (
+        await Promise.all([
+          scanSast({ repoPath: dir, workspaceDir: dir, mode, coverageIssues }),
+          scanIac({ repoPath: dir, workspaceDir: dir, coverageIssues }),
+        ])
+      ).flat()
+      const result = findings.filter((finding) => finding.cve === "CVE-2026-111497")
+      expect(result).toHaveLength(1)
+      expect(result[0]).toMatchObject({
+        target: "services/api/php-runtime.json",
+        finding_class: "php_runtime_windows_brotli",
+      })
+      expect(coverageIssues.some((issue) => /Brotli.*verify/i.test(issue.reason))).toBe(true)
+    }
+  )
+
   it("does not invoke PHP runtime analysis for non-PHP infrastructure or documentation mentions", async () => {
     const inspect = vi.spyOn(runtime, "inspectPhpRuntimeInput")
     const dir = await repo({

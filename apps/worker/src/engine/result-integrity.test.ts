@@ -900,6 +900,25 @@ describe("result integrity", () => {
         )
       }
     )
+    it("keeps a Windows Brotli finding inconclusive after source-only retest", async () => {
+      mockRepoRetestState({
+        candidates: [
+          {
+            findingId: "finding-1",
+            scanId: "scan-1",
+            scannerSource: "iac",
+            payload: { findingClass: "php_runtime_windows_brotli" },
+          },
+        ],
+        baselineReceipts: [{ id: "baseline-iac", controlId: "iac", status: "COMPLETED" }],
+        retestReceipts: [{ id: "retest-iac", controlId: "iac", status: "COMPLETED" }],
+      })
+      await completeRetestsForScan({ scanId: "scan-2", workspaceId: "workspace-1" })
+      expect(prisma.finding.update).not.toHaveBeenCalled()
+      expect(prisma.findingVerification.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({ create: expect.objectContaining({ status: "INCONCLUSIVE" }) })
+      )
+    })
     it("validates a same-revision repository retest against stored manifests", async () => {
       mockRepoRetestState({ baselineRevision: REV_A, retestRevision: REV_A })
 

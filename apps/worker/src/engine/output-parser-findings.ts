@@ -486,10 +486,12 @@ export function generateDedupeKey(vuln: EngineVulnerability, targetId: string): 
         }
       : {
           findingClass: vuln.finding_class,
-          ...(vuln.finding_class?.startsWith("php_runtime_") &&
-          typeof dependency?.compose_service === "string"
-            ? { runtimeService: dependency.compose_service }
-            : {}),
+          ...(vuln.finding_class === "php_runtime_windows_brotli" && location?.file
+            ? { runtimeService: location.file }
+            : vuln.finding_class?.startsWith("php_runtime_") &&
+                typeof dependency?.compose_service === "string"
+              ? { runtimeService: dependency.compose_service }
+              : {}),
           cve: vuln.cve,
           cwe: vuln.cwe,
           endpoint: vuln.endpoint,
