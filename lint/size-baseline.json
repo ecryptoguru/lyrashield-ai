@@ -102,8 +102,8 @@
     },
     "apps/web/src/app/(dashboard)/dashboard/approvals/approvals-client.tsx|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 62,
-      "maxExcess": 62
+      "totalExcess": 52,
+      "maxExcess": 52
     },
     "apps/web/src/app/(dashboard)/dashboard/billing/page.tsx|max-lines-per-function": {
       "count": 1,
@@ -117,8 +117,8 @@
     },
     "apps/web/src/app/(dashboard)/dashboard/findings/finding-detail-drawer.tsx|max-lines": {
       "count": 1,
-      "totalExcess": 46,
-      "maxExcess": 46
+      "totalExcess": 24,
+      "maxExcess": 24
     },
     "apps/web/src/app/(dashboard)/dashboard/findings/finding-detail-drawer.tsx|max-lines-per-function": {
       "count": 1,
@@ -137,13 +137,13 @@
     },
     "apps/web/src/app/(dashboard)/dashboard/findings/fixes-client.tsx|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 19,
-      "maxExcess": 19
+      "totalExcess": 10,
+      "maxExcess": 10
     },
     "apps/web/src/app/(dashboard)/dashboard/findings/page.tsx|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 113,
-      "maxExcess": 113
+      "totalExcess": 95,
+      "maxExcess": 95
     },
     "apps/web/src/app/(dashboard)/dashboard/integrations/cli-integration.tsx|max-lines-per-function": {
       "count": 1,
@@ -664,11 +664,6 @@
       "count": 1,
       "totalExcess": 62,
       "maxExcess": 62
-    },
-    "packages/db/src/finding-service.ts|max-lines": {
-      "count": 1,
-      "totalExcess": 28,
-      "maxExcess": 28
     },
     "packages/db/src/fix-pr-merge-service.ts|max-lines-per-function": {
       "count": 1,

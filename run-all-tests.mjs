@@ -138,6 +138,7 @@ if (coreReportPath && coreResult?.code === 0) {
       "retrieves the expected public source in the top five for at least 90% of 60 questions",
       "executes atomic cleanup, count, TTL, and one warmed EVALSHA per operation",
       "denies a changed input under the same idempotency key without altering the ledger",
+      "returns one live approval for concurrent identical requests, then replaces it after expiry",
     ])
   } catch (error) {
     console.error("\n==> core environment-gated test guard failed:", error)

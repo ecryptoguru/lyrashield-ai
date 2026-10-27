@@ -17,7 +17,7 @@ import {
   completeApprovalExecution,
   createApproval,
   failApprovalExecution,
-  findPendingApprovalByHash,
+  findOrCreatePendingApproval,
   getFixProposal,
   hashInput,
   createPullRequestRecord,
@@ -151,21 +151,16 @@ export async function requestFixPrApproval(
         }
       : {}),
   }
-  const inputHash = hashInput(APPROVAL_ACTION, input)
-
-  const existing = req.authorization
-    ? null
-    : await findPendingApprovalByHash(req.workspaceId, APPROVAL_ACTION, inputHash)
-  const approval =
-    existing ??
-    (await createApproval({
-      workspaceId: req.workspaceId,
-      actionName: APPROVAL_ACTION,
-      input,
-      requestedById: req.requestedById,
-      authorization: req.authorization,
-      expiresAt: new Date(Date.now() + APPROVAL_TTL_MINUTES * 60 * 1000),
-    }))
+  const approvalParams = {
+    workspaceId: req.workspaceId,
+    actionName: APPROVAL_ACTION,
+    input,
+    requestedById: req.requestedById,
+    expiresAt: new Date(Date.now() + APPROVAL_TTL_MINUTES * 60 * 1000),
+  }
+  const approval = req.authorization
+    ? await createApproval({ ...approvalParams, authorization: req.authorization })
+    : await findOrCreatePendingApproval(approvalParams)
 
   if (req.authorization) return executeApprovedFixPr({ ...req, approvalId: approval.id })
 

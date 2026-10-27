@@ -45,3 +45,100 @@ for (const width of [390, 1280])
       expect(errors).toEqual([])
     })
   }
+
+for (const width of [390, 1280]) {
+  test(`approval request is accessible and bound to the proposal at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 })
+    let body: unknown
+    await page.route("**/api/fix-proposals/composer-ready/create-pr", async (route) => {
+      body = route.request().postDataJSON()
+      await route.fulfill({
+        json: { success: true, data: { status: "pending_approval", approvalId: "approval-test" } },
+      })
+    })
+    await page.goto("?fixProposals")
+    const ready = page.getByRole("article", { name: /requiring application compatibility review/ })
+    await expect(
+      page
+        .getByRole("article", { name: /Summary only/ })
+        .getByRole("button", { name: "Create pull request" })
+    ).toHaveCount(0)
+    const button = ready.getByRole("button", { name: "Create pull request" })
+    await button.focus()
+    await page.keyboard.press("Enter")
+    const confirm = ready.getByRole("button", { name: "Request approval" })
+    await expect(confirm).toBeFocused()
+    await page.keyboard.press("Enter")
+    await expect(ready.getByRole("status")).toContainText("awaiting review")
+    await expect(ready.getByRole("link", { name: "View approval" })).toHaveAttribute(
+      "href",
+      "/dashboard/approvals"
+    )
+    expect(body).toEqual({ workspaceId: "workspace-test" })
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)
+    ).toBe(true)
+  })
+}
+
+test("proposal approval is hidden without permission", async ({ page }) => {
+  await page.goto("?fixProposals&noPermission=1")
+  await expect(page.getByRole("button", { name: "Create pull request" })).toHaveCount(0)
+})
+
+test("approval request failure remains visible and can be retried", async ({ page }) => {
+  await page.route("**/api/fix-proposals/composer-ready/create-pr", async (route) => {
+    await route.fulfill({
+      status: 409,
+      json: {
+        success: false,
+        error: { code: "NO_REPOSITORY_LINK", message: "Connect a repository first." },
+      },
+    })
+  })
+  await page.goto("?fixProposals")
+  const ready = page.getByRole("article", { name: /requiring application compatibility review/ })
+  await ready.getByRole("button", { name: "Create pull request" }).click()
+  await ready.getByRole("button", { name: "Request approval" }).click()
+  await expect(ready.getByRole("alert")).toContainText("Connect a repository first.")
+  await expect(ready.getByRole("button", { name: "Create pull request" })).toBeEnabled()
+})
+
+test("later pages preserve stored-patch action eligibility", async ({ page }) => {
+  await page.route("**/api/fix-proposals?**", async (route) => {
+    await route.fulfill({
+      json: {
+        success: true,
+        data: {
+          items: [
+            {
+              id: "later-proposal",
+              kind: "patch",
+              summary: "Review the generated patch.",
+              status: "ready",
+              hasStoredPatch: true,
+              createdAt: "2026-10-23T00:00:00Z",
+              finding: {
+                id: "later-finding",
+                title: "Later proposal",
+                severity: "HIGH",
+                status: "OPEN",
+              },
+              pullRequests: [],
+            },
+          ],
+          nextCursor: null,
+        },
+      },
+    })
+  })
+  await page.goto("?fixProposals&withMore")
+  await page.getByRole("button", { name: "Load more" }).click()
+  await expect(
+    page
+      .getByRole("article", { name: "Proposed fix for Later proposal" })
+      .getByRole("button", { name: "Create pull request" })
+  ).toBeVisible()
+})

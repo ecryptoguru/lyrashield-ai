@@ -18,11 +18,12 @@ const proposal = {
   pullRequests: [],
 }
 
-function render(overrides = {}) {
+function render(overrides = {}, canCreatePr = false) {
   return renderToString(
     <TooltipProvider>
       <FixesClient
         workspaceId="workspace-test"
+        canCreatePr={canCreatePr}
         initialData={[{ ...proposal, ...overrides }]}
         initialNextCursor={null}
       />
@@ -57,6 +58,20 @@ describe("proposed fix review clarity", () => {
     expect(render({ status: "failed", kind: "patch" })).toContain("Generation failed")
     expect(render({ status: "failed", kind: "patch" })).not.toContain(
       "Application compatibility is unverified."
+    )
+  })
+})
+
+describe("pull request approval from a proposal", () => {
+  it("offers the existing approval action for an authorized member with a ready stored patch", () => {
+    expect(render({ hasStoredPatch: true }, true)).toContain("Create pull request")
+  })
+
+  it("hides the action without permission, a stored patch, or a ready proposal", () => {
+    expect(render({ hasStoredPatch: true }, false)).not.toContain("Create pull request")
+    expect(render({ hasStoredPatch: false }, true)).not.toContain("Create pull request")
+    expect(render({ hasStoredPatch: true, status: "failed" }, true)).not.toContain(
+      "Create pull request"
     )
   })
 })

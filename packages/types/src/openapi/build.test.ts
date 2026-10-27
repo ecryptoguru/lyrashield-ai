@@ -62,6 +62,13 @@ describe("openapi workflow/provenance contract", () => {
     expect(props.attachmentIds).toBeDefined()
   })
 
+  it("documents patch availability without a storage reference on the versioned proposal list", () => {
+    const schema = JSON.stringify(responseSchema("/fix-proposals", "get", "200"))
+    expect(schema).toContain("hasStoredPatch")
+    expect(schema).not.toContain("diffRef")
+    expect(schema).toContain("does not verify patch provenance or compatibility")
+  })
+
   it("returns typed Scan results from scan endpoints", () => {
     const scanRef = { $ref: "#/components/schemas/Scan" }
     for (const [path, method, status] of [

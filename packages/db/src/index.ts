@@ -408,6 +408,7 @@ export {
   createApproval,
   getApproval,
   findPendingApprovalByHash,
+  findOrCreatePendingApproval,
   listApprovals,
   approveApproval,
   denyApproval,

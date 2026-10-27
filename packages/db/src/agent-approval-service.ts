@@ -1,4 +1,5 @@
 import { prisma } from "./client"
+import { withWorkspaceRLS } from "./rls"
 import type { AgentApproval, ApprovalStatus } from "./generated/prisma"
 import { logger } from "@lyrashield/logger"
 import { createHash } from "node:crypto"
@@ -93,6 +94,38 @@ export async function findPendingApprovalByHash(
 ): Promise<AgentApproval | null> {
   return prisma.agentApproval.findFirst({
     where: { workspaceId, actionName, inputHash, status: "PENDING" },
+  })
+}
+
+/** Serialize reuse of a pending human approval for the same workspace and input. */
+export async function findOrCreatePendingApproval(
+  params: Omit<CreateApprovalParams, "authorization">
+): Promise<AgentApproval> {
+  const inputHash = hashInput(params.actionName, params.input)
+  return withWorkspaceRLS(params.workspaceId, async (tx) => {
+    const lockKey = `pending-approval:${params.workspaceId}:${params.actionName}:${inputHash}`
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`
+    const now = new Date()
+    const existing = await tx.agentApproval.findFirst({
+      where: {
+        workspaceId: params.workspaceId,
+        actionName: params.actionName,
+        inputHash,
+        status: "PENDING",
+        OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+      },
+    })
+    if (existing) return existing
+    return tx.agentApproval.create({
+      data: {
+        workspaceId: params.workspaceId,
+        actionName: params.actionName,
+        inputHash,
+        input: params.input,
+        requestedById: params.requestedById,
+        expiresAt: params.expiresAt ?? new Date(now.getTime() + 15 * 60 * 1000),
+      },
+    })
   })
 }
 

@@ -11,6 +11,8 @@ describe("approval input disclosure", () => {
     const html = renderToStaticMarkup(
       createElement(ApprovalsClient, {
         workspaceId: "ws-1",
+        canDecide: true,
+        canApproveFix: true,
         hasProposals: false,
         approvals: [
           {
@@ -37,4 +39,25 @@ describe("approval input disclosure", () => {
     expect(html).toContain(">Approve</button>")
     expect(html).not.toContain(">Approve action</button>")
   })
+})
+
+it("shows pending requests without decision controls to members who cannot approve", () => {
+  const html = renderToStaticMarkup(
+    createElement(ApprovalsClient, {
+      workspaceId: "ws-1",
+      canDecide: false,
+      hasProposals: false,
+      approvals: [
+        {
+          id: "a",
+          actionName: "fix_pr.open",
+          input: {},
+          expiresAt: null,
+        } as unknown as ApprovalListItem,
+      ],
+    })
+  )
+  expect(html).not.toContain(">Approve</button>")
+  expect(html).not.toContain(">Deny</button>")
+  expect(html).toContain("Ask an authorized workspace member")
 })

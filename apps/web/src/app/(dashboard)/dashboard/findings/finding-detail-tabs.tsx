@@ -1,6 +1,6 @@
 "use client"
 
-import { CreateFixPrAction } from "@/components/create-fix-pr-action"
+import { HistoryProposalAction } from "./history-proposal-action"
 import Link from "next/link"
 import { z } from "zod"
 import { Badge, Button, Spinner } from "@lyrashield/ui"
@@ -365,12 +365,12 @@ export function FindingHistoryTab({
               <div key={fp.id} className="space-y-2 text-sm">
                 <Badge variant="info">{humanizeToken(fp.status)}</Badge>
                 <span className="text-muted-foreground">{fp.summary}</span>
-                {canCreatePr &&
-                  (fp.status === "ready" ||
-                    (finding.status === "FIX_READY" &&
-                      ["draft", "approved"].includes(fp.status))) && (
-                    <CreateFixPrAction workspaceId={workspaceId} proposalId={fp.id} />
-                  )}
+                <HistoryProposalAction
+                  proposal={fp}
+                  findingStatus={finding.status}
+                  canCreatePr={canCreatePr}
+                  workspaceId={workspaceId}
+                />
               </div>
             ))}
           </div>

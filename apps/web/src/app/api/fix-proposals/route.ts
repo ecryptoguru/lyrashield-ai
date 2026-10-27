@@ -55,7 +55,11 @@ export async function GET(request: Request) {
       limit,
     })
 
-    return apiPaginated(result.items, result.nextCursor)
+    const items = result.items.map(({ diffRef, ...proposal }) => ({
+      ...proposal,
+      hasStoredPatch: Boolean(diffRef),
+    }))
+    return apiPaginated(items, result.nextCursor)
   } catch (error) {
     const authErr = authErrorResponse(error)
     if (authErr) return authErr

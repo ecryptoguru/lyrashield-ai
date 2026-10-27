@@ -220,45 +220,27 @@ export default async function FindingsPage({
   }
 
   if (tab === "fixes") {
+    const membership = await prisma.workspaceMember.findUnique({
+      where: { workspaceId_userId: { workspaceId, userId: session.userId } },
+      select: { role: true, status: true },
+    })
     const { items: fixProposals, nextCursor: fixProposalsCursor } = await listFixProposals({
       workspaceId,
       ...(effectiveTargetId ? { targetId: effectiveTargetId } : {}),
       ...(listParams.scanId ? { observedInScanId: listParams.scanId } : {}),
       limit: 20,
     })
-    const initialFixes = fixProposals.map((p) => ({
-      id: p.id,
-      kind: p.kind,
-      summary: p.summary,
-      status: p.status,
-      safetyScore: p.safetyScore,
-      generatedByModel: p.generatedByModel,
-      createdAt: p.createdAt.toISOString(),
-      finding: {
-        id: p.finding.id,
-        title: p.finding.title,
-        severity: p.finding.severity,
-        status: p.finding.status,
-        cwe: p.finding.cwe,
-        target: p.finding.target,
-      },
-      pullRequests: p.pullRequests.map((pr) => ({
-        id: pr.id,
-        provider: pr.provider,
-        repoOwner: pr.repoOwner,
-        repoName: pr.repoName,
-        branchName: pr.branchName,
-        prNumber: pr.prNumber,
-        prUrl: pr.prUrl,
-        status: pr.status,
-      })),
-    }))
+    const initialFixes = serializeFixProposals(fixProposals)
     return (
       <div>
         {renderHeader("Proposed fixes for these findings, with their pull requests.")}
         <FixesClient
           key={`${workspaceId}:${listParams.scanId}:${effectiveTargetId}`}
           workspaceId={workspaceId}
+          canCreatePr={
+            membership?.status === "active" &&
+            hasPermission(membership.role, PERMISSIONS.fix.createPr)
+          }
           {...(effectiveTargetId ? { targetId: effectiveTargetId } : {})}
           {...(listParams.scanId ? { observedInScanId: listParams.scanId } : {})}
           initialData={initialFixes}
@@ -395,4 +377,37 @@ export default async function FindingsPage({
       />
     </div>
   )
+}
+
+function serializeFixProposals(
+  fixProposals: Awaited<ReturnType<typeof listFixProposals>>["items"]
+) {
+  return fixProposals.map((p) => ({
+    id: p.id,
+    kind: p.kind,
+    summary: p.summary,
+    status: p.status,
+    hasStoredPatch: Boolean(p.diffRef),
+    safetyScore: p.safetyScore,
+    generatedByModel: p.generatedByModel,
+    createdAt: p.createdAt.toISOString(),
+    finding: {
+      id: p.finding.id,
+      title: p.finding.title,
+      severity: p.finding.severity,
+      status: p.finding.status,
+      cwe: p.finding.cwe,
+      target: p.finding.target,
+    },
+    pullRequests: p.pullRequests.map((pr) => ({
+      id: pr.id,
+      provider: pr.provider,
+      repoOwner: pr.repoOwner,
+      repoName: pr.repoName,
+      branchName: pr.branchName,
+      prNumber: pr.prNumber,
+      prUrl: pr.prUrl,
+      status: pr.status,
+    })),
+  }))
 }

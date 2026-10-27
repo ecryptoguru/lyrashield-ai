@@ -84,6 +84,32 @@ describe("validateFindingScope", () => {
 describe("getFinding", () => {
   beforeEach(() => vi.clearAllMocks())
 
+  it("returns only patch availability for initial proposal history", async () => {
+    vi.mocked(prisma.finding.findFirst).mockResolvedValue({
+      id: "finding-1",
+      evidence: [],
+      verificationReceipts: [],
+      fixProposals: [
+        {
+          id: "p1",
+          status: "ready",
+          summary: "Fix",
+          createdAt: new Date(),
+          diffRef: "s3://private/patch",
+        },
+        { id: "p2", status: "ready", summary: "Guidance", createdAt: new Date(), diffRef: null },
+      ],
+      retests: [],
+      _count: { evidence: 0, verificationReceipts: 0, fixProposals: 2, retests: 0 },
+    } as never)
+    const result = await getFinding("finding-1", "workspace-1")
+    expect(result?.fixProposals).toEqual([
+      expect.objectContaining({ id: "p1", hasStoredPatch: true }),
+      expect.objectContaining({ id: "p2", hasStoredPatch: false }),
+    ])
+    expect(JSON.stringify(result)).not.toContain("s3://private/patch")
+  })
+
   it("returns retest receipt identity without exposing raw storage URIs", async () => {
     vi.mocked(prisma.finding.findFirst).mockResolvedValue({
       id: "finding-1",
@@ -182,6 +208,23 @@ describe("getFindingHistoryPage", () => {
         redactionStatus: { not: "deleted" },
       },
     })
+  })
+
+  it("reports patch availability in paginated history without exposing storage references", async () => {
+    vi.mocked(prisma.finding.findFirst).mockResolvedValue({ id: "finding-1" } as never)
+    vi.mocked(prisma.fixProposal.findMany).mockResolvedValue([
+      {
+        id: "p1",
+        status: "ready",
+        summary: "Fix",
+        createdAt: new Date(),
+        diffRef: "s3://private/patch",
+      },
+    ] as never)
+    vi.mocked(prisma.fixProposal.count).mockResolvedValue(1)
+    const result = await getFindingHistoryPage("finding-1", "workspace-1", "fixProposals")
+    expect(result.items[0]).toMatchObject({ id: "p1", hasStoredPatch: true })
+    expect(JSON.stringify(result)).not.toContain("s3://private/patch")
   })
 
   it("binds fix proposal rows and counts to the finding's workspace", async () => {
