@@ -70,6 +70,8 @@ function asObject(value: unknown): Record<string, unknown> {
 
 interface ApprovalsClientProps {
   workspaceId: string
+  canDecide?: boolean
+  canApproveFix?: boolean
   approvals: ApprovalListItem[]
   hasProposals: boolean
   /** Recent durable operations (W1-09): status, result, and recovery. */
@@ -92,6 +94,8 @@ function approvalSummary(actionName: string, input: Record<string, unknown>): st
 
 export function ApprovalsClient({
   workspaceId,
+  canDecide = false,
+  canApproveFix = false,
   approvals,
   hasProposals,
   operations = [],
@@ -219,10 +223,9 @@ export function ApprovalsClient({
       )}
       {items.length > 0 && (
         <section>
-          <h2 className="text-lg font-semibold tracking-tight">Legacy approvals</h2>
+          <h2 className="text-lg font-semibold tracking-tight">Pending approvals</h2>
           <p className="text-muted-foreground text-sm">
-            These came from credentials created before automatic authorization. New connections do
-            not create these; approve or deny each exact input below.
+            Review each pending action and its exact input before a decision.
           </p>
           <div className="mt-3 grid gap-3">
             {items.map((approval) => (
@@ -264,25 +267,38 @@ export function ApprovalsClient({
                       {approval.expiresAt ? <LocalTime value={approval.expiresAt} /> : "Never"}
                     </p>
                   </div>
-                  <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleDeny(approval)}
-                      disabled={pending[approval.id]}
-                    >
-                      <X className="size-4" />
-                      Deny
-                    </Button>
-                    <InlineConfirm
-                      triggerLabel="Approve"
-                      triggerIcon={<Check className="size-4" />}
-                      disabled={pending[approval.id]}
-                      message="Approve this exact action input?"
-                      confirmLabel="Approve action"
-                      onConfirm={() => handleApprove(approval)}
-                    />
-                  </div>
+                  {canDecide ? (
+                    <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleDeny(approval)}
+                        disabled={pending[approval.id]}
+                      >
+                        <X className="size-4" />
+                        Deny
+                      </Button>
+                      {approval.actionName === "fix_pr.open" && !canApproveFix && (
+                        <p className="text-muted-foreground text-sm">
+                          Ask an authorized workspace member to approve this fix.
+                        </p>
+                      )}
+                      {(approval.actionName !== "fix_pr.open" || canApproveFix) && (
+                        <InlineConfirm
+                          triggerLabel="Approve"
+                          triggerIcon={<Check className="size-4" />}
+                          disabled={pending[approval.id]}
+                          message="Approve this exact action input?"
+                          confirmLabel="Approve action"
+                          onConfirm={() => handleApprove(approval)}
+                        />
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-muted-foreground text-sm">
+                      Ask a workspace owner or admin to review this request.
+                    </p>
+                  )}
                 </CardContent>
               </Card>
             ))}

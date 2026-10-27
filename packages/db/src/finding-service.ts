@@ -267,7 +267,13 @@ export async function getFinding(
         evidence: unknown
         createdAt: Date
       }[]
-      fixProposals: { id: string; status: string; summary: string; createdAt: Date }[]
+      fixProposals: {
+        id: string
+        status: string
+        summary: string
+        createdAt: Date
+        hasStoredPatch: boolean
+      }[]
       retests: { id: string; scanId: string; status: string; createdAt: Date }[]
       historyPagination: Record<
         FindingHistoryCollection,
@@ -312,6 +318,7 @@ export async function getFinding(
           status: true,
           summary: true,
           createdAt: true,
+          diffRef: true,
           // W3-03: PR rows are the receipts behind "PR opened" and "merged"
           // timeline events; creation alone never implies applied.
           pullRequests: {
@@ -392,7 +399,10 @@ export async function getFinding(
     ...baseFinding,
     evidence: evidence.items,
     verificationReceipts: verificationReceipts.items,
-    fixProposals: fixProposals.items,
+    fixProposals: fixProposals.items.map(({ diffRef, ...proposal }) => ({
+      ...proposal,
+      hasStoredPatch: Boolean(diffRef),
+    })),
     retests: retests.items,
     historyPagination: {
       evidence: evidence.pagination,
@@ -517,7 +527,7 @@ export async function getFindingHistoryPage(
       const [rows, total] = await Promise.all([
         prisma.fixProposal.findMany({
           where,
-          select: { id: true, status: true, summary: true, createdAt: true },
+          select: { id: true, status: true, summary: true, createdAt: true, diffRef: true },
           orderBy: [{ createdAt: "desc" }, { id: "desc" }],
           take: limit + 1,
         }),
@@ -525,7 +535,10 @@ export async function getFindingHistoryPage(
           where: { findingId, finding: { workspaceId }, deletedAt: null },
         }),
       ])
-      return page(rows, total)
+      return page(
+        rows.map(({ diffRef, ...proposal }) => ({ ...proposal, hasStoredPatch: Boolean(diffRef) })),
+        total
+      )
     }
     case "retests": {
       const where = { findingId, workspaceId, ...after }

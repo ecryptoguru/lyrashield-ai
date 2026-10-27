@@ -93,6 +93,7 @@ export interface FindingDetail {
     id: string
     status: string
     summary: string
+    hasStoredPatch?: boolean
     createdAt?: string
     pullRequests?: Array<{
       id: string
@@ -175,6 +176,7 @@ const fixProposalSchema = z
     id: z.string(),
     status: z.string(),
     summary: z.string(),
+    hasStoredPatch: z.boolean().optional(),
     createdAt: z.string().optional(),
     pullRequests: z
       .array(

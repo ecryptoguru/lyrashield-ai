@@ -486,7 +486,19 @@ export function buildOpenApiSpec(): Record<string, unknown> {
             { name: "limit", in: "query", required: false, schema: { type: "string" } },
           ],
           responses: {
-            200: paginatedResponse(genericItem, "List of fix proposals"),
+            200: paginatedResponse(
+              {
+                ...genericItem,
+                properties: {
+                  hasStoredPatch: {
+                    type: "boolean",
+                    description:
+                      "Whether a patch reference exists. The stored reference remains private; availability does not verify patch provenance or compatibility.",
+                  },
+                },
+              },
+              "List of fix proposals"
+            ),
             ...commonErrors,
           },
         },

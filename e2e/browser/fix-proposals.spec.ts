@@ -72,7 +72,7 @@ for (const width of [390, 1280]) {
     await expect(confirm).toBeFocused()
     await page.keyboard.press("Enter")
     await expect(ready.getByRole("status")).toContainText("awaiting review")
-    await expect(ready.getByRole("link", { name: "Review approval" })).toHaveAttribute(
+    await expect(ready.getByRole("link", { name: "View approval" })).toHaveAttribute(
       "href",
       "/dashboard/approvals"
     )

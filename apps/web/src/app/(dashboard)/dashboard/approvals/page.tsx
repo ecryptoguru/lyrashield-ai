@@ -27,7 +27,7 @@ export default async function ApprovalsPage() {
       <div>
         <PageHeader
           title="Activity"
-          description="Operation activity and recovery, plus any legacy approvals that still need a decision."
+          description="Operation activity and recovery, plus any approvals that need a decision."
         />
         <NoWorkspaceState
           icon={ClipboardCheck}
@@ -76,11 +76,15 @@ export default async function ApprovalsPage() {
     <div>
       <PageHeader
         title="Activity"
-        description="What automated operations did, what needs recovery and any legacy approvals that still require a decision."
+        description="What automated operations did, what needs recovery and any approvals that require a decision."
       />
 
       <ApprovalsClient
         workspaceId={workspaceId}
+        canDecide={!!active && hasPermission(active.role as MemberRole, PERMISSIONS.agent.approve)}
+        canApproveFix={
+          !!active && hasPermission(active.role as MemberRole, PERMISSIONS.fix.approve)
+        }
         approvals={approvals}
         hasProposals={hasProposals}
         operations={operations}

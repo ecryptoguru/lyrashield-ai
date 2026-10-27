@@ -43,9 +43,9 @@ export function CreateFixPrAction({
     <div className="space-y-2">
       {approvalId ? (
         <p role="status">
-          Approval {approvalId} is awaiting review.{" "}
+          Approval {approvalId} is awaiting review by an authorized workspace member.{" "}
           <Link href="/dashboard/approvals" className="text-primary underline">
-            Review approval
+            View approval
           </Link>
         </p>
       ) : (

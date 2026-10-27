@@ -366,6 +366,7 @@ export function FindingHistoryTab({
                 <Badge variant="info">{humanizeToken(fp.status)}</Badge>
                 <span className="text-muted-foreground">{fp.summary}</span>
                 {canCreatePr &&
+                  fp.hasStoredPatch &&
                   (fp.status === "ready" ||
                     (finding.status === "FIX_READY" &&
                       ["draft", "approved"].includes(fp.status))) && (

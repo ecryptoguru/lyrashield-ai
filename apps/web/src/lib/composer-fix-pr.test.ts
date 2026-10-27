@@ -15,7 +15,7 @@ vi.mock("@lyrashield/db", () => ({
   completeApprovalExecution: vi.fn(),
   createApproval: mocks.create,
   failApprovalExecution: mocks.fail,
-  findPendingApprovalByHash: vi.fn(),
+  findOrCreatePendingApproval: mocks.create,
   getFixProposal: vi.fn().mockResolvedValue({ id: "proposal-1" }),
   hashInput: (_action: string, input: unknown) => JSON.stringify(input),
   createPullRequestRecord: vi.fn(),
