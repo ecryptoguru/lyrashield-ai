@@ -230,34 +230,7 @@ export default async function FindingsPage({
       ...(listParams.scanId ? { observedInScanId: listParams.scanId } : {}),
       limit: 20,
     })
-    const initialFixes = fixProposals.map((p) => ({
-      id: p.id,
-      kind: p.kind,
-      summary: p.summary,
-      status: p.status,
-      hasStoredPatch: Boolean(p.diffRef),
-      safetyScore: p.safetyScore,
-      generatedByModel: p.generatedByModel,
-      createdAt: p.createdAt.toISOString(),
-      finding: {
-        id: p.finding.id,
-        title: p.finding.title,
-        severity: p.finding.severity,
-        status: p.finding.status,
-        cwe: p.finding.cwe,
-        target: p.finding.target,
-      },
-      pullRequests: p.pullRequests.map((pr) => ({
-        id: pr.id,
-        provider: pr.provider,
-        repoOwner: pr.repoOwner,
-        repoName: pr.repoName,
-        branchName: pr.branchName,
-        prNumber: pr.prNumber,
-        prUrl: pr.prUrl,
-        status: pr.status,
-      })),
-    }))
+    const initialFixes = serializeFixProposals(fixProposals)
     return (
       <div>
         {renderHeader("Proposed fixes for these findings, with their pull requests.")}
@@ -404,4 +377,37 @@ export default async function FindingsPage({
       />
     </div>
   )
+}
+
+function serializeFixProposals(
+  fixProposals: Awaited<ReturnType<typeof listFixProposals>>["items"]
+) {
+  return fixProposals.map((p) => ({
+    id: p.id,
+    kind: p.kind,
+    summary: p.summary,
+    status: p.status,
+    hasStoredPatch: Boolean(p.diffRef),
+    safetyScore: p.safetyScore,
+    generatedByModel: p.generatedByModel,
+    createdAt: p.createdAt.toISOString(),
+    finding: {
+      id: p.finding.id,
+      title: p.finding.title,
+      severity: p.finding.severity,
+      status: p.finding.status,
+      cwe: p.finding.cwe,
+      target: p.finding.target,
+    },
+    pullRequests: p.pullRequests.map((pr) => ({
+      id: pr.id,
+      provider: pr.provider,
+      repoOwner: pr.repoOwner,
+      repoName: pr.repoName,
+      branchName: pr.branchName,
+      prNumber: pr.prNumber,
+      prUrl: pr.prUrl,
+      status: pr.status,
+    })),
+  }))
 }

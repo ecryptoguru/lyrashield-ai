@@ -267,38 +267,14 @@ export function ApprovalsClient({
                       {approval.expiresAt ? <LocalTime value={approval.expiresAt} /> : "Never"}
                     </p>
                   </div>
-                  {canDecide ? (
-                    <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleDeny(approval)}
-                        disabled={pending[approval.id]}
-                      >
-                        <X className="size-4" />
-                        Deny
-                      </Button>
-                      {approval.actionName === "fix_pr.open" && !canApproveFix && (
-                        <p className="text-muted-foreground text-sm">
-                          Ask an authorized workspace member to approve this fix.
-                        </p>
-                      )}
-                      {(approval.actionName !== "fix_pr.open" || canApproveFix) && (
-                        <InlineConfirm
-                          triggerLabel="Approve"
-                          triggerIcon={<Check className="size-4" />}
-                          disabled={pending[approval.id]}
-                          message="Approve this exact action input?"
-                          confirmLabel="Approve action"
-                          onConfirm={() => handleApprove(approval)}
-                        />
-                      )}
-                    </div>
-                  ) : (
-                    <p className="text-muted-foreground text-sm">
-                      Ask an authorized workspace member to review this request.
-                    </p>
-                  )}
+                  <ApprovalDecisionControls
+                    approval={approval}
+                    canDecide={canDecide}
+                    canApproveFix={canApproveFix}
+                    pending={Boolean(pending[approval.id])}
+                    onDeny={() => handleDeny(approval)}
+                    onApprove={() => handleApprove(approval)}
+                  />
                 </CardContent>
               </Card>
             ))}
@@ -321,5 +297,49 @@ export function ApprovalsClient({
         </section>
       )}
     </div>
+  )
+}
+
+function ApprovalDecisionControls({
+  approval,
+  canDecide,
+  canApproveFix,
+  pending,
+  onDeny,
+  onApprove,
+}: {
+  approval: ApprovalItem
+  canDecide: boolean
+  canApproveFix: boolean
+  pending: boolean
+  onDeny: () => void
+  onApprove: () => void
+}) {
+  return canDecide ? (
+    <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
+      <Button variant="outline" size="sm" onClick={() => onDeny()} disabled={pending}>
+        <X className="size-4" />
+        Deny
+      </Button>
+      {approval.actionName === "fix_pr.open" && !canApproveFix && (
+        <p className="text-muted-foreground text-sm">
+          Ask an authorized workspace member to approve this fix.
+        </p>
+      )}
+      {(approval.actionName !== "fix_pr.open" || canApproveFix) && (
+        <InlineConfirm
+          triggerLabel="Approve"
+          triggerIcon={<Check className="size-4" />}
+          disabled={pending}
+          message="Approve this exact action input?"
+          confirmLabel="Approve action"
+          onConfirm={() => onApprove()}
+        />
+      )}
+    </div>
+  ) : (
+    <p className="text-muted-foreground text-sm">
+      Ask an authorized workspace member to review this request.
+    </p>
   )
 }

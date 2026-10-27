@@ -1,8 +1,12 @@
 import { prisma } from "./client"
 import type { Finding, FindingSeverity, FindingStatus } from "./generated/prisma"
 import { logger } from "@lyrashield/logger"
-
-const HISTORY_PREVIEW_LIMIT = 25
+import {
+  buildHistoryPreview,
+  HISTORY_PREVIEW_LIMIT,
+  decodeHistoryCursor,
+  encodeHistoryCursor,
+} from "./finding-history-cursor"
 
 export type FindingHistoryCollection =
   "evidence" | "verificationReceipts" | "fixProposals" | "retests"
@@ -11,47 +15,6 @@ export interface FindingHistoryPage<T = unknown> {
   items: T[]
   nextCursor: string | null
   total: number
-}
-
-interface HistoryCursor {
-  findingId: string
-  collection: FindingHistoryCollection
-  createdAt: string
-  id: string
-}
-
-function encodeHistoryCursor(cursor: HistoryCursor): string {
-  return Buffer.from(JSON.stringify(cursor)).toString("base64url")
-}
-
-function decodeHistoryCursor(
-  value: string | undefined,
-  findingId: string,
-  collection: FindingHistoryCollection
-): HistoryCursor | null {
-  if (!value) return null
-  try {
-    const parsed: unknown = JSON.parse(Buffer.from(value, "base64url").toString("utf8"))
-    if (
-      !parsed ||
-      typeof parsed !== "object" ||
-      Array.isArray(parsed) ||
-      !("findingId" in parsed) ||
-      !("collection" in parsed) ||
-      !("id" in parsed) ||
-      !("createdAt" in parsed) ||
-      parsed.findingId !== findingId ||
-      parsed.collection !== collection ||
-      typeof parsed.id !== "string" ||
-      typeof parsed.createdAt !== "string" ||
-      Number.isNaN(Date.parse(parsed.createdAt))
-    ) {
-      return null
-    }
-    return { findingId, collection, createdAt: parsed.createdAt, id: parsed.id }
-  } catch {
-    return null
-  }
 }
 
 export interface ListFindingsParams {
@@ -361,37 +324,25 @@ export async function getFinding(
   })
   if (!finding) return null
 
-  const buildPreview = <T extends { id: string; createdAt?: Date }>(
-    collection: FindingHistoryCollection,
-    rows: T[],
-    total: number
-  ) => {
-    const items = rows.slice(0, HISTORY_PREVIEW_LIMIT)
-    const last = items.at(-1)
-    const nextCursor =
-      rows.length > HISTORY_PREVIEW_LIMIT && last?.createdAt
-        ? encodeHistoryCursor({
-            findingId,
-            collection,
-            createdAt: last.createdAt.toISOString(),
-            id: last.id,
-          })
-        : null
-    return { items, pagination: { total, nextCursor } }
-  }
-
-  const evidence = buildPreview("evidence", finding.evidence, finding._count.evidence)
-  const verificationReceipts = buildPreview(
+  const evidence = buildHistoryPreview(
+    findingId,
+    "evidence",
+    finding.evidence,
+    finding._count.evidence
+  )
+  const verificationReceipts = buildHistoryPreview(
+    findingId,
     "verificationReceipts",
     finding.verificationReceipts,
     finding._count.verificationReceipts
   )
-  const fixProposals = buildPreview(
+  const fixProposals = buildHistoryPreview(
+    findingId,
     "fixProposals",
     finding.fixProposals,
     finding._count.fixProposals
   )
-  const retests = buildPreview("retests", finding.retests, finding._count.retests)
+  const retests = buildHistoryPreview(findingId, "retests", finding.retests, finding._count.retests)
 
   const { _count, ...baseFinding } = finding
   void _count

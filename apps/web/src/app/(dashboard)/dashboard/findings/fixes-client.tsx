@@ -236,15 +236,11 @@ export function FixesClient({
                   <span>{formatDate(proposal.createdAt)}</span>
                 </div>
 
-                {canCreatePr && proposal.status === "ready" && proposal.hasStoredPatch && (
-                  <div className="mt-3">
-                    <CreateFixPrAction
-                      workspaceId={workspaceId}
-                      proposalId={proposal.id}
-                      prominent
-                    />
-                  </div>
-                )}
+                <ProposalAction
+                  proposal={proposal}
+                  workspaceId={workspaceId}
+                  canCreatePr={canCreatePr}
+                />
 
                 {/* Deep link to the finding this proposal patches — the drawer's
                     `?finding=` contract, same as everywhere else in this app. */}
@@ -297,25 +293,7 @@ export function FixesClient({
           <LoadMore
             key={`${workspaceId}:${observedInScanId ?? ""}:${targetId ?? ""}`}
             cursor={nextCursor}
-            onLoadMore={async (cursor) => {
-              try {
-                const res = await apiGetPaginated<FixProposalItem>(
-                  `/api/fix-proposals`,
-                  {
-                    workspaceId,
-                    cursor,
-                    ...(targetId ? { targetId } : {}),
-                    ...(observedInScanId ? { observedInScanId } : {}),
-                  },
-                  { schema: fixProposalsPaginatedSchema }
-                )
-                return { items: res.items, nextCursor: res.nextCursor }
-              } catch {
-                // Same error pattern as the scans list: a friendly message in
-                // LoadMore's alert instead of a raw API or Zod error string.
-                throw new Error("Failed to load more fix proposals. Try again.")
-              }
-            }}
+            onLoadMore={(cursor) => loadMoreFixes(cursor, workspaceId, targetId, observedInScanId)}
             onItems={(items) => setProposals((prev) => [...prev, ...items])}
             onNextCursor={setNextCursor}
           />
@@ -323,4 +301,44 @@ export function FixesClient({
       )}
     </div>
   )
+}
+
+function ProposalAction({
+  proposal,
+  workspaceId,
+  canCreatePr,
+}: {
+  proposal: FixProposalItem
+  workspaceId: string
+  canCreatePr: boolean
+}) {
+  if (!canCreatePr || proposal.status !== "ready" || !proposal.hasStoredPatch) return null
+  return (
+    <div className="mt-3">
+      <CreateFixPrAction workspaceId={workspaceId} proposalId={proposal.id} prominent />
+    </div>
+  )
+}
+
+async function loadMoreFixes(
+  cursor: string,
+  workspaceId: string,
+  targetId?: string,
+  observedInScanId?: string
+) {
+  try {
+    const res = await apiGetPaginated<FixProposalItem>(
+      "/api/fix-proposals",
+      {
+        workspaceId,
+        cursor,
+        ...(targetId ? { targetId } : {}),
+        ...(observedInScanId ? { observedInScanId } : {}),
+      },
+      { schema: fixProposalsPaginatedSchema }
+    )
+    return { items: res.items, nextCursor: res.nextCursor }
+  } catch {
+    throw new Error("Failed to load more fix proposals. Try again.")
+  }
 }
