@@ -161,6 +161,17 @@ when unknown. This illustrative example is not a deployment receipt:
 - `image` and `vendorPackage`: optional nonempty strings, at most 256 characters.
   Preserve the actual image digest in `image` when available. The scanner does
   not resolve it against a registry.
+- `windowsPackage`: optional object with `origin` (`php.net` or `other`) and
+  the exact Windows package `build` (for example `8.4.27` or `8.4.27-1`). Use
+  `php.net` only for the official PHP Windows distribution; leave the object
+  out when provenance or package revision is unknown. Reported originals of
+  the four PHP releases named in the [26 October Windows notice](https://www.php.net/archive/2026.php#2026-10-26-1)
+  generate a conditional CVE-2026-111497 candidate. The official `-1` builds
+  include fixed Brotli, but the PHP version stays unchanged; a reported build
+  is not deployed-runtime proof. Other builds, vendors and contradictory
+  identities remain incomplete. Confirm the installed package and effective
+  cURL automatic response decompression configuration independently. There is
+  no automatic source edit for this package-specific issue.
 - `backports`: at most 64 CVE/GHSA identifiers. These are reported claims and
   trigger an independent-verification coverage issue.
 - `replicas`: integer 1–100000. This reports context; it does not count active

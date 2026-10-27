@@ -38,8 +38,13 @@ function sha256(value: unknown): string {
     .digest("hex")
 }
 
-/** Canonical evidence fingerprint. Arrays are sorted by stable identity first. */
-export function computeInputChecksum(input: GateEvidenceInput): string {
+/** Canonical evidence fingerprint. Pass the stored standard version when checking historical inputs.
+ * Arrays are sorted by stable identity first; this does not replay historical verdict rules.
+ */
+export function computeInputChecksum(
+  input: GateEvidenceInput,
+  standardVersion: string = GATE_STANDARD_VERSION
+): string {
   const findings = [...input.findings].sort((a, b) => a.id.localeCompare(b.id))
   const receipts = [...input.coverageReceipts].sort((a, b) =>
     JSON.stringify([a.scanner, a.controlId, a.status, a.reason ?? ""]).localeCompare(
@@ -48,7 +53,7 @@ export function computeInputChecksum(input: GateEvidenceInput): string {
   )
   return sha256({
     targetId: input.targetId,
-    standardVersion: GATE_STANDARD_VERSION,
+    standardVersion,
     latestCompletedScan: input.latestCompletedScan,
     requiredScanners: [...input.requiredScanners].sort(),
     targetTypeCovered: input.targetTypeCovered,

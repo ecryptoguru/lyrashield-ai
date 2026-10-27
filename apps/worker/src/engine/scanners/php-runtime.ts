@@ -34,6 +34,10 @@ const inventorySchema = z
     os: z.enum(["linux", "windows", "other"]).optional(),
     image: z.string().min(1).max(256).optional(),
     vendorPackage: z.string().min(1).max(256).optional(),
+    windowsPackage: z
+      .object({ origin: z.enum(["php.net", "other"]), build: z.string().min(1).max(64) })
+      .strict()
+      .optional(),
     backports: z
       .array(z.string().regex(/^(?:CVE-\d{4}-\d{4,8}|GHSA-[a-z0-9-]+)$/))
       .max(64)
@@ -342,6 +346,73 @@ function parseRuntimeDeclarations(
   return { findings, declarations, phpPresent }
 }
 
+function appendWindowsBrotliFinding(
+  path: string,
+  declaration: Declaration,
+  issues: ScannerCoverageIssue[] | undefined,
+  findings: EngineVulnerability[],
+  base: Pick<EngineVulnerability, "timestamp" | "target" | "scannerSource" | "code_locations">,
+  metadata: NonNullable<EngineVulnerability["dependency_metadata"]>
+): void {
+  const serviceSuffix = declaration.composeService ? ` (service ${declaration.composeService})` : ""
+  const identitySuffix = declaration.composeService
+    ? `-${encodeURIComponent(declaration.composeService)}`
+    : ""
+  // Windows PHP package rebuilds retain the same interpreter version. Never
+  // infer their Brotli build from a PHP version, extension list or image tag.
+  const windowsBuilds: Record<string, string> = {
+    "8.2.35": "8.2.35-1",
+    "8.3.36": "8.3.36-1",
+    "8.4.27": "8.4.27-1",
+    "8.5.12": "8.5.12-1",
+  }
+  if (
+    declaration.os === "windows" ||
+    !declaration.os ||
+    (declaration.scope === "user_reported" && declaration.windowsPackage)
+  ) {
+    const packageInfo = declaration.windowsPackage
+    const rebuilt = windowsBuilds[declaration.version]
+    const isOriginal =
+      declaration.os === "windows" &&
+      packageInfo?.origin === "php.net" &&
+      rebuilt &&
+      packageInfo.build === declaration.version &&
+      !(declaration.image && officialImagePattern.test(declaration.image))
+    recordCoverageIssue(issues, {
+      scanner: "iac",
+      status: "partial",
+      scope: "php_windows_brotli",
+      subject: path,
+      reason:
+        "Windows Brotli package and cURL configuration are user-reported or unknown; verify the serving package, bundled dependency and effective configuration independently",
+    })
+    if (isOriginal) {
+      findings.push({
+        ...base,
+        id: `php-windows-brotli-CVE-2026-111497-${path}-${declaration.line}${identitySuffix}`,
+        title: `Reported Windows PHP package ${declaration.version}: Brotli advisory${serviceSuffix}`,
+        severity: "high",
+        finding_class: "php_runtime_windows_brotli",
+        cve: "CVE-2026-111497",
+        description:
+          "An original official PHP Windows package is reported. The bundled Brotli decoder may be reachable through cURL when automatic response decompression is enabled. Package identity, installed dependency, configuration and exploitability are unverified.",
+        technical_analysis:
+          "https://www.php.net/archive/2026.php#2026-10-26-1\nPHP's rebuilt Windows packages include Brotli 1.2.1 without changing the PHP runtime version. cURL automatic response decompression is disabled by default but applications or HTTP client libraries can enable it.",
+        remediation_steps: `Obtain the official PHP Windows ${rebuilt} rebuilt package or a vendor-confirmed fixed Brotli package. Test compatibility, deploy and restart every affected instance, then independently verify the running package and effective cURL configuration. A source declaration or PHP version alone cannot prove remediation.`,
+        dependency_metadata: {
+          ...metadata,
+          advisory_id: "CVE-2026-111497",
+          advisory_url: "https://www.php.net/archive/2026.php#2026-10-26-1",
+          applicability: "conditional_unverified",
+          windows_package_origin: packageInfo.origin,
+          windows_package_build: packageInfo.build,
+        },
+      })
+    }
+  }
+}
+
 function declaredRuntimeFindings(
   path: string,
   content: string,
@@ -376,6 +447,7 @@ function declaredRuntimeFindings(
   const identitySuffix = declaration.composeService
     ? `-${encodeURIComponent(declaration.composeService)}`
     : ""
+  appendWindowsBrotliFinding(path, declaration, issues, findings, base, metadata)
   const [major, minor] = branch.split(".").map(Number)
   if (major! < 8 || (major === 8 && minor! < 2)) {
     findings.push({

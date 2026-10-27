@@ -29,6 +29,10 @@ const button = "inline-flex min-h-11 items-center justify-center rounded-lg bord
   <div id="php-results" role="region" aria-label="PHP assessment" tabindex="-1" class="hidden scroll-mt-24 space-y-4 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"></div>
   <p id="php-announcement" role="status" aria-live="polite" class="sr-only"></p>
   <div id="php-export" class="hidden"><div class="flex flex-wrap gap-3"><button id="php-copy" type="button" class={button}>Copy assessment</button><button id="php-download" type="button" class={button}>Download assessment</button></div><p id="php-export-status" role="status" class="mt-3 text-sm text-text-muted"></p><textarea id="php-copy-fallback" readonly class={`hidden ${field}`} rows="8" aria-label="Assessment text to copy manually"></textarea></div>
+  <aside aria-label="Windows Brotli notice" class="rounded-xl border border-border p-5">
+    <h2 class="text-lg font-semibold text-text">Using PHP on Windows?</h2>
+    <p class="mt-3 text-sm leading-6 text-text-muted">CVE-2026-111497 affects a Brotli decoder bundled with PHP Windows builds. PHP published rebuilt packages with updated Brotli; the PHP runtime version itself does not change. This separate issue is not assessed by this checker. Check the exact Windows package and effective cURL automatic response decompression configuration, then follow the <a href="https://www.php.net/archive/2026.php#2026-10-26-1" class="text-accent underline">PHP Windows build notice</a>.</p>
+  </aside>
   <aside class="rounded-xl border border-accent/40 p-5">
     <h2 class="text-lg font-semibold text-text">Check the rest of your PHP application</h2>
     <p class="mt-3 text-sm leading-6 text-text-muted">Standard and Deep repository scans run PHP runtime, Composer, configuration and supported source checks when a PHP project is detected. Deep adds the broader analysis available for your authorized target and plan. Deployed patch verification still needs runtime evidence.</p>

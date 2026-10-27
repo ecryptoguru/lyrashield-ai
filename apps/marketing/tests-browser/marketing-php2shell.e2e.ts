@@ -175,3 +175,17 @@ test("without JavaScript the checker cannot submit runtime details", async ({ br
   await expect(page.getByText("If the check button stays disabled", { exact: false })).toBeVisible()
   await context.close()
 })
+
+test("explains the separate Windows Brotli package risk without claiming assessment", async ({
+  page,
+}) => {
+  await page.goto("/tools/php2shell-checker")
+  const notice = page.getByRole("complementary", { name: "Windows Brotli notice" })
+  await expect(notice).toBeVisible()
+  await expect(notice).toContainText("CVE-2026-111497")
+  await expect(notice).toContainText("not assessed")
+  await expect(notice.getByRole("link", { name: "PHP Windows build notice" })).toHaveAttribute(
+    "href",
+    "https://www.php.net/archive/2026.php#2026-10-26-1"
+  )
+})

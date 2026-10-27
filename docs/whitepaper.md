@@ -324,7 +324,7 @@ A repository's inclusion of bounded IaC checks does not mean standalone cloud-ac
 
 ### 5.2 Launch Gate
 
-`lyrashield-gate/2.3.0` evaluates stored assessment evidence into:
+`lyrashield-gate/2.4.0` evaluates stored assessment evidence into:
 
 - **READY:** the implemented evidence rules are satisfied for the assessed scope.
 - **NOT_READY:** an unresolved Critical or High blocker remains after applicable resolution/disposition checks.
@@ -804,7 +804,7 @@ Document versions and executable methodology versions are separate. Expanding th
 | Contract                    | Version                                     |
 | --------------------------- | ------------------------------------------- |
 | Vibe Security 50            | `vibe-security-50/1.2.0`                    |
-| Launch Gate                 | `lyrashield-gate/2.3.0`                     |
+| Launch Gate                 | `lyrashield-gate/2.4.0`                     |
 | LyraShield Score            | `lyrashield-score/1.0.0`                    |
 | AI-Built Failure Taxonomy   | `ai-built-failure-taxonomy/1.0.0`           |
 | WebMCP detector / inventory | `webmcp-assurance/2` / `webmcp-inventory/1` |
