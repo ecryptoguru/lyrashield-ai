@@ -296,7 +296,7 @@ export function ApprovalsClient({
                     </div>
                   ) : (
                     <p className="text-muted-foreground text-sm">
-                      Ask a workspace owner or admin to review this request.
+                      Ask an authorized workspace member to review this request.
                     </p>
                   )}
                 </CardContent>

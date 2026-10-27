@@ -22,6 +22,7 @@ describe("approval decision permissions", () => {
     ["DEVELOPER", false],
     ["APPSEC_MANAGER", false],
     ["OWNER", true],
+    ["SECURITY_ADMIN", true],
     ["ADMIN", true],
   ])("passes decision permission for %s", async (role, expected) => {
     state.role = role

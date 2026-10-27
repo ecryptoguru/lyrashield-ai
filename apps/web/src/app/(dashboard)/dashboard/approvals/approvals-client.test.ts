@@ -59,5 +59,5 @@ it("shows pending requests without decision controls to members who cannot appro
   )
   expect(html).not.toContain(">Approve</button>")
   expect(html).not.toContain(">Deny</button>")
-  expect(html).toContain("Ask a workspace owner or admin")
+  expect(html).toContain("Ask an authorized workspace member")
 })
