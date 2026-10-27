@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 const state = vi.hoisted(() => ({
   workspaceId: "workspace-a",
   listFixProposals: vi.fn(),
+  findMember: vi.fn(),
   permanentRedirect: vi.fn((destination: string) => {
     throw new Error(`NEXT_REDIRECT:${destination}`)
   }),
@@ -15,7 +16,7 @@ vi.mock("@/lib/cache", () => ({
   getCachedWorkspaceId: async () => state.workspaceId,
 }))
 vi.mock("@lyrashield/db", () => ({
-  prisma: {},
+  prisma: { workspaceMember: { findUnique: state.findMember } },
   listFindings: vi.fn(),
   findingScopeWhere: vi.fn(),
   listFixProposals: state.listFixProposals,
@@ -43,11 +44,16 @@ async function listBoundary(tab: string, target?: string, scanId?: string) {
       isValidElement(node) && node.type === (tab === "evidence" ? EvidenceList : FixesClient)
   )
   expect(isValidElement(child)).toBe(true)
-  return child as ReactElement<{ targetId?: string; observedInScanId?: string }>
+  return child as ReactElement<{
+    targetId?: string
+    observedInScanId?: string
+    initialData?: unknown
+  }>
 }
 
 beforeEach(() => {
   state.workspaceId = "workspace-a"
+  state.findMember.mockResolvedValue(null)
   state.listFixProposals.mockResolvedValue({ items: [], nextCursor: null })
 })
 
@@ -99,4 +105,36 @@ describe.each(["evidence", "fixes"])("%s list navigation", (tab) => {
     expect(unscoped.props.targetId).toBeUndefined()
     expect(unscoped.props.observedInScanId).toBeUndefined()
   })
+})
+
+it("passes only active authorized membership and patch availability to proposal cards", async () => {
+  state.findMember.mockResolvedValue({ role: "OWNER", status: "active" })
+  state.listFixProposals.mockResolvedValue({
+    items: [
+      {
+        id: "proposal-a",
+        kind: "patch",
+        summary: "Fix",
+        status: "ready",
+        diffRef: "s3://private/patch",
+        createdAt: new Date("2026-10-23T00:00:00Z"),
+        finding: { id: "finding-a", title: "Finding", severity: "HIGH", status: "OPEN" },
+        pullRequests: [],
+      },
+    ],
+    nextCursor: null,
+  })
+  const authorized = await listBoundary("fixes")
+  expect(authorized.props).toMatchObject({
+    canCreatePr: true,
+    initialData: [{ hasStoredPatch: true }],
+  })
+  expect(JSON.stringify(authorized.props.initialData)).not.toContain("s3://private/patch")
+
+  state.findMember.mockResolvedValue({ role: "OWNER", status: "inactive" })
+  expect((await listBoundary("fixes")).props).toMatchObject({ canCreatePr: false })
+  state.findMember.mockResolvedValue({ role: "UNKNOWN", status: "active" })
+  expect((await listBoundary("fixes")).props).toMatchObject({ canCreatePr: false })
+  state.findMember.mockResolvedValue(null)
+  expect((await listBoundary("fixes")).props).toMatchObject({ canCreatePr: false })
 })

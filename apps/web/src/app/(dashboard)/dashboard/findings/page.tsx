@@ -220,6 +220,10 @@ export default async function FindingsPage({
   }
 
   if (tab === "fixes") {
+    const membership = await prisma.workspaceMember.findUnique({
+      where: { workspaceId_userId: { workspaceId, userId: session.userId } },
+      select: { role: true, status: true },
+    })
     const { items: fixProposals, nextCursor: fixProposalsCursor } = await listFixProposals({
       workspaceId,
       ...(effectiveTargetId ? { targetId: effectiveTargetId } : {}),
@@ -231,6 +235,7 @@ export default async function FindingsPage({
       kind: p.kind,
       summary: p.summary,
       status: p.status,
+      hasStoredPatch: Boolean(p.diffRef),
       safetyScore: p.safetyScore,
       generatedByModel: p.generatedByModel,
       createdAt: p.createdAt.toISOString(),
@@ -259,6 +264,10 @@ export default async function FindingsPage({
         <FixesClient
           key={`${workspaceId}:${listParams.scanId}:${effectiveTargetId}`}
           workspaceId={workspaceId}
+          canCreatePr={
+            membership?.status === "active" &&
+            hasPermission(membership.role, PERMISSIONS.fix.createPr)
+          }
           {...(effectiveTargetId ? { targetId: effectiveTargetId } : {})}
           {...(listParams.scanId ? { observedInScanId: listParams.scanId } : {})}
           initialData={initialFixes}

@@ -12,6 +12,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { severityLabel, humanizeToken } from "@/lib/labels"
 import { SEVERITY_BADGE } from "@/lib/severity-badge"
 import { findingsHref } from "@/lib/finding-list-params"
+import { CreateFixPrAction } from "@/components/create-fix-pr-action"
 
 type BadgeVariant = "default" | "success" | "danger" | "warning" | "info" | "muted"
 
@@ -35,6 +36,7 @@ interface FixProposalItem {
   kind: string
   summary: string
   status: string
+  hasStoredPatch?: boolean
   safetyScore?: number | null
   generatedByModel?: string | null
   createdAt: string
@@ -64,6 +66,7 @@ const fixProposalItemSchema = z
     kind: z.string(),
     summary: z.string(),
     status: z.string(),
+    hasStoredPatch: z.boolean().optional(),
     safetyScore: z.number().nullable().optional(),
     generatedByModel: z.string().nullable().optional(),
     createdAt: z.string().datetime().or(z.string()),
@@ -134,12 +137,14 @@ function ProposalReviewDetails({ kind, summary }: Pick<FixProposalItem, "kind" |
  */
 export function FixesClient({
   workspaceId,
+  canCreatePr = false,
   targetId,
   observedInScanId,
   initialData,
   initialNextCursor,
 }: {
   workspaceId: string
+  canCreatePr?: boolean
   targetId?: string
   observedInScanId?: string
   initialData: FixProposalItem[]
@@ -230,6 +235,16 @@ export function FixesClient({
                   )}
                   <span>{formatDate(proposal.createdAt)}</span>
                 </div>
+
+                {canCreatePr && proposal.status === "ready" && proposal.hasStoredPatch && (
+                  <div className="mt-3">
+                    <CreateFixPrAction
+                      workspaceId={workspaceId}
+                      proposalId={proposal.id}
+                      prominent
+                    />
+                  </div>
+                )}
 
                 {/* Deep link to the finding this proposal patches — the drawer's
                     `?finding=` contract, same as everywhere else in this app. */}
