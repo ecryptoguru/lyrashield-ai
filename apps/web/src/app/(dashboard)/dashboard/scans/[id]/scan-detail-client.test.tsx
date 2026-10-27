@@ -195,6 +195,40 @@ describe("scan detail guided states", () => {
     expect(html).not.toContain("Create an assurance report")
   })
 
+  it("shows the specific Windows Brotli applicability gap alongside completed IaC coverage", () => {
+    const html = renderDetail({
+      scan: {
+        ...scan,
+        target,
+        integrity: {
+          ...scan.integrity,
+          coverage: [
+            {
+              scanner: "iac",
+              controlId: "iac",
+              status: "COMPLETED",
+              reason: null,
+              subject: null,
+              metadata: null,
+            },
+            {
+              scanner: "php-windows-brotli",
+              controlId: "php-runtime:windows-brotli",
+              status: "BLOCKED",
+              reason: "Verify the serving Windows package",
+              subject: "composer.json",
+              metadata: null,
+            },
+          ],
+        },
+      },
+      findings: [],
+    })
+    expect(html).toContain("PHP Windows Brotli applicability")
+    expect(html).toContain("Verify the serving Windows package")
+    expect(html).toContain("Coverage: Partial")
+  })
+
   it("offers a scan-scoped report only after completed applicable coverage with no findings", () => {
     const html = renderDetail({
       scan: {

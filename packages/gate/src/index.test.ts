@@ -36,7 +36,16 @@ function baseInput(overrides: Partial<GateEvidenceInput> = {}): GateEvidenceInpu
 
 describe("gate standard versioning", () => {
   it("is named and versioned", () => {
-    expect(GATE_STANDARD_VERSION).toBe("lyrashield-gate/2.3.0")
+    expect(GATE_STANDARD_VERSION).toBe("lyrashield-gate/2.4.0")
+  })
+
+  it("retains the original 2.3.0 evidence checksum when explicitly verifying historical inputs", () => {
+    expect(computeInputChecksum(baseInput(), "lyrashield-gate/2.3.0")).toBe(
+      "e9e54b8fb2dc54c5df525a52d97d0d18e5d85e1c662e42b51380eb7cb084406e"
+    )
+    expect(computeInputChecksum(baseInput())).not.toBe(
+      computeInputChecksum(baseInput(), "lyrashield-gate/2.3.0")
+    )
   })
 
   it("derives required scanners per target type", () => {
@@ -68,6 +77,52 @@ describe("computeGateVerdict", () => {
     expect(result.nonCoverage).toEqual([])
     expect(result.coverageStatement.length).toBe(REPO_REQUIRED.length)
     expect(result.blockingReasons).toEqual([])
+  })
+
+  it.each([
+    ["BLOCKED", "INSUFFICIENT_EVIDENCE"],
+    ["FAILED", "INSUFFICIENT_EVIDENCE"],
+    ["NOT_RUN", "INSUFFICIENT_EVIDENCE"],
+    ["COMPLETED", "READY"],
+    ["NOT_APPLICABLE", "READY"],
+  ] as const)("handles scoped Windows applicability %s as %s", (status, expected) => {
+    const result = computeGateVerdict(
+      baseInput({
+        coverageReceipts: [
+          ...fullCoverage(),
+          {
+            controlId: "php-runtime:windows-brotli",
+            scanner: "php-windows-brotli",
+            status,
+            reason: "Package and cURL configuration require verification",
+          },
+        ],
+      })
+    )
+    expect(result.state).toBe(expected)
+    if (expected === "INSUFFICIENT_EVIDENCE") {
+      expect(result.nonCoverage).toContainEqual(
+        expect.objectContaining({
+          controlId: "php-runtime:windows-brotli",
+          status,
+        })
+      )
+    }
+  })
+
+  it.each([
+    ["php-windows-brotli", "other-control"],
+    ["other-scanner", "php-runtime:windows-brotli"],
+  ])("does not apply the scoped guard to unrelated receipt %s/%s", (scanner, controlId) => {
+    const result = computeGateVerdict(
+      baseInput({
+        coverageReceipts: [
+          ...fullCoverage(),
+          { scanner, controlId, status: "BLOCKED", reason: null },
+        ],
+      })
+    )
+    expect(result.state).toBe("READY")
   })
 
   it("INSUFFICIENT_EVIDENCE when no scanner completed (absence of evidence is not a clean result)", () => {

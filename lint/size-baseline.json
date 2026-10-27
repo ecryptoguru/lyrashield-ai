@@ -692,8 +692,8 @@
     },
     "packages/db/src/report-generator.ts|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 272,
-      "maxExcess": 272
+      "totalExcess": 268,
+      "maxExcess": 268
     },
     "packages/db/src/report-generator.validation.ts|max-lines": {
       "count": 1,
@@ -717,8 +717,8 @@
     },
     "packages/gate/src/index.ts|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 7,
-      "maxExcess": 7
+      "totalExcess": 2,
+      "maxExcess": 2
     },
     "packages/mcp/src/create-server.ts|max-lines-per-function": {
       "count": 1,

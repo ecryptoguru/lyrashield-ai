@@ -22,6 +22,32 @@ import type { ReportData, ReportWebMcpAssurance } from "./report-generator.valid
 export { isReportData, parseWebMcpAssurance }
 export type { ReportData, ReportWebMcpAssurance }
 
+type ReportCoverageReceipt = { controlId: string; scanner: string; status: string }
+
+function hasIncompleteWindowsReceipt(receipts: ReportCoverageReceipt[]): boolean {
+  return receipts.some(
+    (receipt) =>
+      receipt.controlId === "php-runtime:windows-brotli" &&
+      receipt.scanner === "php-windows-brotli" &&
+      !["COMPLETED", "NOT_APPLICABLE"].includes(receipt.status)
+  )
+}
+
+function getIncompleteScanners(receipts: ReportCoverageReceipt[]): string[] {
+  return [
+    ...new Set(
+      receipts
+        .filter((receipt) => !["COMPLETED", "NOT_APPLICABLE"].includes(receipt.status))
+        .map((receipt) =>
+          receipt.controlId === "php-runtime:windows-brotli" &&
+          receipt.scanner === "php-windows-brotli"
+            ? "PHP Windows Brotli package and cURL applicability"
+            : receipt.scanner
+        )
+    ),
+  ]
+}
+
 export async function gatherReportData(
   workspaceId: string,
   scanId?: string,
@@ -251,8 +277,11 @@ export async function gatherReportData(
   // Partial scans remain conditional even with no retained findings.
   // Historical rows may carry lowercase enum spellings.
   const scanStatus = scanInfo?.status.toUpperCase()
-  const scanUsableForVerdict = scanInfo !== null && scanStatus === "COMPLETED"
-  const isPartialScan = scanStatus === "PARTIAL"
+  const hasIncompleteWindowsBrotli = hasIncompleteWindowsReceipt(scanCoverageReceipts)
+  const scanUsableForVerdict =
+    scanInfo !== null && scanStatus === "COMPLETED" && !hasIncompleteWindowsBrotli
+  const isPartialScan =
+    scanStatus === "PARTIAL" || (scanStatus === "COMPLETED" && hasIncompleteWindowsBrotli)
   const verdict = !scanUsableForVerdict
     ? isPartialScan
       ? criticalCount > 0
@@ -264,15 +293,7 @@ export async function gatherReportData(
       : highCount > 0
         ? "GO_WITH_CONDITIONS"
         : "GO"
-  const incompleteScanners = isPartialScan
-    ? [
-        ...new Set(
-          scanCoverageReceipts
-            .filter((receipt) => !["COMPLETED", "NOT_APPLICABLE"].includes(receipt.status))
-            .map((receipt) => receipt.scanner)
-        ),
-      ]
-    : []
+  const incompleteScanners = isPartialScan ? getIncompleteScanners(scanCoverageReceipts) : []
   const coverageNarrative = isPartialScan
     ? incompleteScanners.length > 0
       ? `Coverage is incomplete; these checks did not complete: ${incompleteScanners.join(", ")}.`
@@ -312,8 +333,9 @@ export async function gatherReportData(
   if (isPartialScan && scanInfo)
     priorityActions.push({
       label: "Complete coverage",
-      detail:
-        "Run the existing scan flow for this target after reviewing the recorded limitations.",
+      detail: hasIncompleteWindowsBrotli
+        ? "Determine whether the serving runtime is Windows; if so, independently verify its package and effective cURL configuration. Review any other recorded limitations."
+        : "Run the existing scan flow for this target after reviewing the recorded limitations.",
       severity: "MEDIUM",
     })
   if (retestCounts.failed > 0)
