@@ -296,10 +296,10 @@ were subsequently checked; that negative control correctly left the finding
 open. On October 28, the GitHub App's Contents and Pull requests write
 permissions were explicitly approved and accepted for its existing installation.
 The controlled PR attempt then failed safely because the existing-file update
-omitted GitHub's blob SHA. The fix and related approval-revocation and expiry
-regressions are consolidated in PR #1045; its production deployment and the
-Composer draft PR → compatibility review → merge → trusted positive retest
-remain required. Preserve the failed receipt and unchanged orphan branch.
+omitted GitHub's blob SHA. The correction binds the update to the scanned blob and uses a distinct
+branch for each new approval. This recorded acceptance does not yet include
+a successful corrected release or the Composer draft PR → compatibility review
+→ merge → trusted positive retest. Preserve the failed receipt and unchanged orphan branch.
 No finding was marked fixed by these attempts.
 
 See [PRD §8](../PRD.md#8-current-production-evidence) for exact image/scan/run
