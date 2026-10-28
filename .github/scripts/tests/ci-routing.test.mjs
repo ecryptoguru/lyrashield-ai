@@ -685,6 +685,19 @@ test("Azure and marketing releases route the exact current merged SHA independen
   assert.match(productionRelease, /^  cancel-in-progress: false$/m)
   assert.match(productionRelease, /HEAD_SHA: \$\{\{ github\.sha \}\}/)
   assert.match(productionRelease, /classify-main-change-gap\.sh/)
+  const routing = productionRelease.split("  routing:\n")[1].split("\n  deploy-azure:")[0]
+  assert.match(routing, /timeout-minutes: 10/)
+  assert.match(routing, /checks: read/)
+  assert.match(routing, /pull-requests: read/)
+  assert.ok(
+    routing.indexOf("node .github/scripts/qualify-release-source.mjs") <
+      routing.indexOf("id: classify")
+  )
+  assert.doesNotMatch(routing, /continue-on-error:|if:.*always\(/)
+  assert.match(
+    workflow,
+    /name: "Detect changed paths \[source: pr=\$\{\{ github.event.pull_request.number \}\} base=\$\{\{ github.event.pull_request.base.sha \}\} head=\$\{\{ github.event.pull_request.head.sha \}\} merge=\$\{\{ github.sha \}\}\]"/
+  )
   for (const route of ["azure", "marketing"]) {
     const release = productionRelease.split(`  deploy-${route}:\n`)[1]?.split(/\n  [a-z-]+:\n/)[0]
     assert.ok(release)

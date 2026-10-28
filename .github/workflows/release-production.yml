@@ -7,8 +7,8 @@ on:
 permissions:
   contents: read
 
-# Protected main already requires the three PR checks with an up-to-date base.
-# Deploy the exact merge once; do not repeat the PR test/build pipeline.
+# Verify the exact merged source against genuine PR CI receipts before routing.
+# Deploy once without repeating the PR test/build pipeline on main.
 concurrency:
   group: release-production-${{ github.ref }}
   cancel-in-progress: false
@@ -17,10 +17,13 @@ jobs:
   routing:
     name: Route the current merged source
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       actions: read
       contents: read
       deployments: read
+      checks: read
+      pull-requests: read
     outputs:
       azure-deploy: ${{ steps.classify.outputs.azure-deploy }}
       marketing-deploy: ${{ steps.classify.outputs.marketing-deploy }}
@@ -32,6 +35,12 @@ jobs:
           ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
+
+      - name: Qualify merged source against required PR checks
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.sha }}
+        run: node .github/scripts/qualify-release-source.mjs
 
       - name: Classify changes since successful production releases
         id: classify

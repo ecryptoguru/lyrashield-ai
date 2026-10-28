@@ -65,7 +65,10 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   changes:
-    name: Detect changed paths
+    # Job names retain immutable event values; run.pull_requests can reflect a
+    # later PR head/base. Release qualification binds this receipt to the tree
+    # actually checked out by the required jobs (github.sha).
+    name: "Detect changed paths [source: pr=${{ github.event.pull_request.number }} base=${{ github.event.pull_request.base.sha }} head=${{ github.event.pull_request.head.sha }} merge=${{ github.sha }}]"
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
