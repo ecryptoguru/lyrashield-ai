@@ -92,6 +92,14 @@ function approvalSummary(actionName: string, input: Record<string, unknown>): st
   return actionLabel.charAt(0).toUpperCase() + actionLabel.slice(1)
 }
 
+function ApprovalExpiry({ expiresAt }: { expiresAt: ApprovalItem["expiresAt"] }) {
+  return (
+    <p className="text-muted-foreground mt-1 text-xs">
+      Expires {expiresAt ? <LocalTime value={expiresAt} withTime /> : "Never"}
+    </p>
+  )
+}
+
 export function ApprovalsClient({
   workspaceId,
   canDecide = false,
@@ -262,14 +270,7 @@ export function ApprovalsClient({
                         ))}
                       </dl>
                     </details>
-                    <p className="text-muted-foreground mt-1 text-xs">
-                      Expires{" "}
-                      {approval.expiresAt ? (
-                        <LocalTime value={approval.expiresAt} withTime />
-                      ) : (
-                        "Never"
-                      )}
-                    </p>
+                    <ApprovalExpiry expiresAt={approval.expiresAt} />
                   </div>
                   <ApprovalDecisionControls
                     approval={approval}

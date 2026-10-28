@@ -44,8 +44,8 @@ overrides:
   "@hono/node-server@<2.0.10": "^2.0.10"
   # GHSA-cg2g-xh64-v4q7 and GHSA-mrv2-3pqr-j5jr: patch DOMPurify 3.x.
   "dompurify@>=3 <3.4.17": "3.4.17"
-  # Kept pending auth-owner confirmation of the original pin in #273.
-  "@better-auth/core": "1.7.1"
+  # Keep the auth package family aligned for GHSA-965c-763c-88jm and GHSA-r4xp-prcw-77qf.
+  "@better-auth/core": "1.7.7"
   # GHSA-gv7w-rqvm-qjhr and GHSA-g7r4-m6w7-qqqr: keep affected esbuild below 0.28.1 out.
   "esbuild@<0.28.1": "^0.28.1"
   # fast-uri 3.x fixes: GHSA-v2hh-gcrm-f6hx, GHSA-7p8r-x3mc-p8w7,
