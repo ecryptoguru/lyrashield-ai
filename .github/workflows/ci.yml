@@ -94,6 +94,8 @@ jobs:
       egress-image: ${{ steps.classify.outputs.egress-image }}
       worker-image: ${{ steps.classify.outputs.worker-image }}
       web-image: ${{ steps.classify.outputs.web-image }}
+      web-component: ${{ steps.classify.outputs.web-component }}
+      worker-component: ${{ steps.classify.outputs.worker-component }}
     steps:
       - name: Configure git default branch
         run: git config --global init.defaultBranch main
@@ -220,18 +222,6 @@ jobs:
       - name: Serial-comma copy ratchet
         run: pnpm lint:copy-comma
 
-      # Advisory only: knip is installed and configured but was never run in CI.
-      # `--no-exit-code` makes findings non-fatal, and `continue-on-error` keeps
-      # a knip config or execution error from failing the required aggregate.
-      # The report is a maintenance signal, not a merge gate: standard mode
-      # reports 37 issues and production mode 105, and none of them have been
-      # reviewed for deletion yet.
-      - name: Dead-code report (knip, non-blocking)
-        if: needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true'
-        continue-on-error: true
-        timeout-minutes: 10
-        run: pnpm lint:knip
-
       - name: Size lint ratchet
         if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true' || needs.changes.outputs.marketing-tests == 'true' || needs.changes.outputs.motion-tests == 'true'
         run: pnpm lint:size
@@ -252,12 +242,12 @@ jobs:
           pnpm lint:ratchet-baselines
 
       - name: Lint
-        if: needs.changes.outputs.app == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')
-        run: node .github/scripts/ci-selection.mjs lint app
+        if: needs.changes.outputs.app == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true') || needs.changes.outputs.marketing-tests == 'true' || needs.changes.outputs.motion-tests == 'true' || needs.changes.outputs.desktop-frontend-tests == 'true'
+        run: node .github/scripts/ci-selection.mjs lint quality
 
       - name: Typecheck
-        if: needs.changes.outputs.app == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')
-        run: node .github/scripts/ci-selection.mjs typecheck app
+        if: needs.changes.outputs.app == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true') || needs.changes.outputs.marketing-tests == 'true' || needs.changes.outputs.motion-tests == 'true' || needs.changes.outputs.desktop-frontend-tests == 'true'
+        run: node .github/scripts/ci-selection.mjs typecheck quality
 
       - name: Typecheck web tests
         if: needs.changes.outputs.database-tests == 'true'
@@ -268,35 +258,11 @@ jobs:
         run: pnpm typecheck:e2e
 
       - name: Typecheck portable browser harness
-        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.database-tests == 'true'
+        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.database-tests == 'true' || needs.changes.outputs.desktop-frontend-tests == 'true'
         run: pnpm typecheck:browser-harness
 
       - name: Lint portable browser harness
-        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.database-tests == 'true'
-        run: pnpm lint:browser-harness
-
-      - name: Lint selected marketing workspaces
-        if: needs.changes.outputs.marketing-tests == 'true' || needs.changes.outputs.motion-tests == 'true'
-        run: node .github/scripts/ci-selection.mjs lint marketing
-
-      - name: Typecheck selected marketing workspaces
-        if: needs.changes.outputs.marketing-tests == 'true' || needs.changes.outputs.motion-tests == 'true'
-        run: node .github/scripts/ci-selection.mjs typecheck marketing
-
-      - name: Typecheck desktop frontend
-        if: needs.changes.outputs.desktop-frontend-tests == 'true'
-        run: pnpm --filter @lyrashield/desktop-frontend typecheck
-
-      - name: Lint desktop frontend
-        if: needs.changes.outputs.desktop-frontend-tests == 'true'
-        run: pnpm --filter @lyrashield/desktop-frontend lint
-
-      - name: Typecheck portable browser harness for Desktop
-        if: needs.changes.outputs.desktop-frontend-tests == 'true' && needs.changes.outputs.app != 'true' && needs.changes.outputs.shared != 'true'
-        run: pnpm typecheck:browser-harness
-
-      - name: Lint portable browser harness for Desktop
-        if: needs.changes.outputs.desktop-frontend-tests == 'true' && needs.changes.outputs.app != 'true' && needs.changes.outputs.shared != 'true'
+        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.database-tests == 'true' || needs.changes.outputs.desktop-frontend-tests == 'true'
         run: pnpm lint:browser-harness
 
   app-checks:
@@ -1022,7 +988,8 @@ jobs:
         if: needs.changes.outputs.engine-worker-contract != 'false'
         run: bash .github/scripts/verify-engine-worker-contract.sh lyrashield-engine "$GITHUB_WORKSPACE"
 
-  # PR gate: prove the production image targets build from this revision.
+  # Optional PR packaging qualification. Ordinary source uses required host
+  # checks; release still builds and verifies exact images before promotion.
   # push=false — nothing leaves the runner — so the job needs no registry
   # credentials, no environment and no OIDC. Plain pull_request (never
   # pull_request_target) keeps fork code out of a privileged context, and the
@@ -1038,7 +1005,7 @@ jobs:
   container-build:
     name: Container image build (no push)
     needs: changes
-    if: needs.changes.outputs.azure-deploy == 'true'
+    if: needs.changes.outputs.web-image == 'true' || needs.changes.outputs.worker-image == 'true' || needs.changes.outputs.egress-image == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     permissions:

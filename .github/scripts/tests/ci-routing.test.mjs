@@ -13,6 +13,7 @@ import { tmpdir } from "node:os"
 import path from "node:path"
 import test from "node:test"
 import { runInNewContext } from "node:vm"
+import { validateRouting } from "../ci-selection.mjs"
 
 const workflow = readFileSync(new URL("../../workflows/ci.yml", import.meta.url), "utf8")
 const lighthouseScript = readFileSync(
@@ -197,6 +198,7 @@ printf '<meta name="lyrashield-build-revision" content="%s">' "$CF_DEPLOYED_SHA"
       .split("\n")
       .map((line) => line.split("="))
   )
+  validateRouting(outputs)
   return { ...result, outputs }
 }
 
@@ -376,31 +378,6 @@ test("ops owns the webhook and Lighthouse assertions without duplicate early inv
     readFileSync(new URL("../../../run-all-tests.mjs", import.meta.url), "utf8"),
     /\.github\/scripts\/tests\/\*\.test\.mjs/
   )
-  // The dead-code report is advisory: it runs with --no-exit-code and
-  // continue-on-error so a knip finding or config error cannot fail the
-  // required aggregate. See the dedicated assertion below.
-  assert.doesNotMatch(workflow, /pnpm exec knip --no-exit-code/)
-})
-
-test("the dead-code report stays advisory and cannot fail the required aggregate", () => {
-  const block = workflow.match(
-    /\n      - name: Dead-code report \(knip, non-blocking\)\n([\s\S]*?)(?=\n      - name: )/
-  )
-  assert.ok(block, "ci.yml must carry the knip report step")
-  assert.match(block[0], /^ {8}continue-on-error: true$/m)
-  assert.match(
-    block[0],
-    /^ {8}if: needs\.changes\.outputs\.shared == 'true' && needs\.changes\.outputs\.tooling-only != 'true'$/m
-  )
-  assert.match(block[0], /^ {8}run: pnpm lint:knip$/m)
-  assert.match(block[0], /^ {8}timeout-minutes: 10$/m)
-  const root = JSON.parse(readFileSync(new URL("../../../package.json", import.meta.url), "utf8"))
-  assert.equal(root.scripts["lint:knip"], "knip --no-exit-code")
-  assert.ok(root.devDependencies.knip, "knip must stay a declared devDependency")
-  // The step lives in the required aggregate, so its non-blocking shape is what
-  // keeps it from gating a merge.
-  const quality = workflow.split("\n  code-quality:\n")[1].split("\n  app-checks:\n")[0]
-  assert.ok(quality.includes("- name: Dead-code report (knip, non-blocking)"))
 })
 
 test("known tooling retains executable operations checks without runtime suites", () => {
@@ -447,7 +424,10 @@ test("the PR image-build gate never pushes and never becomes a required check", 
   const nextJob = workflow.slice(start + 1).search(/\n  [a-z][a-z-]*:\n/)
   const job = workflow.slice(start, start + 1 + nextJob)
   assert.match(job, /^    name: Container image build \(no push\)$/m)
-  assert.match(job, /^    if: needs\.changes\.outputs\.azure-deploy == 'true'$/m)
+  assert.match(
+    job,
+    /^    if: needs\.changes\.outputs\.web-image == 'true' \|\| needs\.changes\.outputs\.worker-image == 'true' \|\| needs\.changes\.outputs\.egress-image == 'true'$/m
+  )
   assert.match(job, /^    permissions:\n      contents: read$/m)
   assert.doesNotMatch(job, /id-token|environment:|secrets\.(?!GITHUB_TOKEN)/)
   // Every build step is a no-push build of a release target.
@@ -811,18 +791,15 @@ test("cargo-only desktop harness quality generates its database client before ty
   const quality = workflow.split("\n  code-quality:\n")[1].split("\n  app-checks:\n")[0]
   assert.ok(
     quality.indexOf("Generate Prisma Client for static analysis") <
-      quality.indexOf("Typecheck portable browser harness for Desktop")
+      quality.indexOf("Typecheck portable browser harness")
   )
   assert.equal(
     runs("Generate Prisma Client for static analysis", ["apps/desktop/src-tauri/Cargo.lock"]),
     true
   )
   assert.equal(
-    runs("Typecheck portable browser harness for Desktop", ["apps/desktop/src-tauri/Cargo.lock"]),
+    runs("Typecheck portable browser harness", ["apps/desktop/src-tauri/Cargo.lock"]),
     true
   )
-  assert.equal(
-    runs("Typecheck portable browser harness for Desktop", ["packages/db/src/client.ts"]),
-    false
-  )
+  assert.equal(runs("Typecheck portable browser harness", ["packages/db/src/client.ts"]), true)
 })

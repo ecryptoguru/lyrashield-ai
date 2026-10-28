@@ -13,7 +13,8 @@
 #   database-tests — app/shared runtime changes require disposable PostgreSQL/Redis validation
 #   database-services — database-tests or a changed live DB/Redis fixture requires local services
 #   desktop-frontend-tests — Desktop sources, its fixture/toolchain inputs or unknown paths
-#   web-image / worker-image / egress-image — selected no-push image qualifications
+#   web-component / worker-component — source consumers, independent of packaging
+#   web-image / worker-image / egress-image — optional packaging qualifications
 #   marketing-deploy — marketing source or a dependency that changes its Worker artifact
 #   azure-deploy — app or shared change requiring an Azure production release
 #
@@ -78,6 +79,8 @@ database_runtime_seen=false
 
 desktop_frontend_tests=false
 runtime_app=false
+web_component=false
+worker_component=false
 web_image=false
 worker_image=false
 egress_image=false
@@ -88,6 +91,14 @@ desktop_frontend_pattern='^(apps/desktop/|packages/types/|package\.json$|pnpm-lo
 # Only non-executable web presentation inputs can skip live runtime proofs.
 # JSX/TSX remains conservative: server components may import DB/auth services.
 presentation_pattern='^(apps/web/public/.*\.(png|jpe?g|webp|avif|gif|ico|woff2?|ttf|otf)$|apps/web/.*\.css$)'
+
+# Required host checks own ordinary source, tests and static assets. Optional
+# images qualify packaging/build assumptions; release still builds and verifies
+# every exact image before promotion. Unknown inputs retain all image targets.
+image_packaging_pattern='(^|/)(Dockerfile[^/]*|\.dockerignore|package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|turbo\.json|tsconfig[^/]*\.json|[^/]*\.config\.(ts|js|mjs|cjs|json)|\.npmrc|\.pnpmfile\.cjs)$'
+image_build_workflow_pattern='^\.github/workflows/(ci|deploy-azure|release-tauri|verify-webhook-worker-image)\.yml$'
+source_input_pattern='\.(tsx?|jsx?|mjs|cjs|css|scss|sass|less|json|prisma|sql|astro|mdx|html|svg|png|jpe?g|webp|avif|gif|ico|woff2?|ttf|otf|mp4|webm|mp3|wav|snap|map)$'
+worker_host_pattern='^ops/worker/(run-worker\.sh|worker-env\.sh|webhook-cutover-(recovery|schema)\.mjs|refresh-(secrets|egress)\.sh|capture-stop-provenance\.sh|lyrashield-worker(-secrets|-egress|-egress-refresh)?\.(service|timer))$'
 
 while IFS= read -r f || [[ -n "$f" ]]; do
   [ -z "$f" ] && continue
@@ -135,14 +146,28 @@ while IFS= read -r f || [[ -n "$f" ]]; do
   if [[ "$f" =~ $ops_tests_pattern ]]; then ops_tests=true; fi
   if [[ "$f" =~ $database_runtime_pattern ]]; then database_runtime_seen=true; fi
   if [[ "$f" =~ $desktop_frontend_pattern ]]; then desktop_frontend_tests=true; fi
-  if [[ "$f" == apps/web/* ]]; then web_image=true; fi
-  if [[ "$f" == apps/worker/* || "$f" == ops/worker/* ]]; then worker_image=true; fi
-  # All shared, configuration, deployment and unknown inputs retain all image
-  # targets. Only app-local source changes have a proven narrower closure.
-  if [[ "$f" =~ $azure_deploy_pattern && "$f" != apps/web/* && "$f" != apps/worker/* && "$f" != ops/worker/* ]]; then
+  if [[ "$f" == apps/web/* ]]; then web_component=true; fi
+  if [[ "$f" == apps/worker/* ]]; then worker_component=true; fi
+  if [[ "$f" =~ $worker_host_pattern || "$f" == apps/worker/scripts/* ]]; then
+    worker_image=true
+  elif [[ "$f" =~ $image_build_workflow_pattern ]]; then
     web_image=true
     worker_image=true
     egress_image=true
+  elif [[ "$f" =~ $image_packaging_pattern ]]; then
+    if [[ "$f" == apps/web/* && "$f" != */package.json ]]; then web_image=true
+    elif [[ "$f" == apps/worker/* && "$f" != */package.json ]]; then worker_image=true
+    else
+      web_image=true
+      worker_image=true
+      egress_image=true
+    fi
+  elif [[ "$f" == apps/web/* || "$f" == apps/worker/* || "$f" == packages/* ]]; then
+    if ! [[ "$f" =~ $docs_pattern || "$f" =~ $source_input_pattern ]]; then
+      web_image=true
+      worker_image=true
+      egress_image=true
+    fi
   fi
   if [[ "$path_classified" == "false" ]]; then
     shared=true
@@ -162,6 +187,8 @@ if ! $tooling_seen || $marketing || $app || $desktop || $unknown; then tooling_o
 # An unknown path is fail-closed because its build impact is not yet classified.
 if [[ "$unknown" == "true" ]]; then
   desktop_frontend_tests=true
+  web_component=true
+  worker_component=true
   web_image=true
   worker_image=true
   egress_image=true
@@ -179,6 +206,8 @@ fi
 if $force_all; then
   desktop_frontend_tests=true
   runtime_app=true
+  web_component=true
+  worker_component=true
   web_image=true
   worker_image=true
   egress_image=true
@@ -224,6 +253,8 @@ emit_flags() {
     "engine-worker-contract=$engine_worker_contract" \
     "database-tests=$database_tests" \
     "database-services=$database_services" \
+    "web-component=$web_component" \
+    "worker-component=$worker_component" \
     "web-image=$web_image" \
     "worker-image=$worker_image" \
     "egress-image=$egress_image" \

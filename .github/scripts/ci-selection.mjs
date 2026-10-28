@@ -16,6 +16,8 @@ export const routingFlags = [
   "engine-worker-contract",
   "database-tests",
   "database-services",
+  "web-component",
+  "worker-component",
   "web-image",
   "worker-image",
   "egress-image",
@@ -42,6 +44,29 @@ export function workspaceFilters(outputs, group = "app", task) {
       ...(outputs["motion-tests"] === "true" ? ["--filter=@lyrashield/marketing-motion..."] : []),
     ]
   }
+  if (group === "quality") {
+    const marketing = outputs["marketing-tests"] === "true"
+    const motion = outputs["motion-tests"] === "true"
+    const desktop = outputs["desktop-frontend-tests"] === "true"
+    if (outputs.shared === "true" && outputs["tooling-only"] !== "true") {
+      // Exclude only unselected independent projects. Do not combine an
+      // unconditional negative filter with a positive selected-project filter:
+      // Turbo exclusions win and would silently discard that project's checks.
+      return [
+        "--filter=*",
+        ...(!marketing ? ["--filter=!@lyrashield/marketing"] : []),
+        ...(!motion ? ["--filter=!@lyrashield/marketing-motion"] : []),
+        ...(!desktop ? ["--filter=!@lyrashield/desktop-frontend"] : []),
+      ]
+    }
+    return [
+      ...new Set([
+        ...(outputs.app === "true" ? workspaceFilters(outputs, "app", task) : []),
+        ...workspaceFilters(outputs, "marketing", task),
+        ...(desktop ? ["--filter=@lyrashield/desktop-frontend..."] : []),
+      ]),
+    ]
+  }
   if (group !== "app") throw new Error(`Unknown workspace group: ${group}`)
   // Shared/unknown inputs retain all core consumers, including the SDK -> MCP
   // -> plugin -> CLI chain. App-local inputs select each app's dependency closure.
@@ -56,11 +81,11 @@ export function workspaceFilters(outputs, group = "app", task) {
   return [
     // Retained built-app browser proofs consume the web artifact even when
     // only worker sources changed. Image qualification remains independent.
-    ...(outputs["web-image"] === "true" ||
+    ...(outputs["web-component"] === "true" ||
     (task === "build" && outputs["database-tests"] === "true")
       ? ["--filter=@lyrashield/web..."]
       : []),
-    ...(outputs["worker-image"] === "true" ? ["--filter=@lyrashield/worker..."] : []),
+    ...(outputs["worker-component"] === "true" ? ["--filter=@lyrashield/worker..."] : []),
     // Core tests cover SDK/MCP/plugin/CLI consumers as well as the changed app.
     // Typechecks materialize their dist prerequisites on the quality runner;
     // the app runner prepares core imports through the plugin build closure.

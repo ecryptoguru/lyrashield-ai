@@ -135,7 +135,8 @@ test("only web CSS and public assets narrow runtime gates; mixed, renamed and se
     assert.equal(receipt.app, "true")
     assert.equal(receipt["database-tests"], "false")
     assert.equal(receipt["engine-worker-contract"], "false")
-    assert.equal(receipt["web-image"], "true")
+    assert.equal(receipt["web-component"], "true")
+    assert.equal(receipt["web-image"], "false")
     assert.equal(receipt["worker-image"], "false")
     assert.equal(receipt["egress-image"], "false")
     for (const mixed of [
@@ -152,7 +153,7 @@ test("only web CSS and public assets narrow runtime gates; mixed, renamed and se
   }
   // A rename supplies both paths through git diff --no-renames; deleted paths
   // are classified without consulting the current filesystem.
-  assert.equal(classify("apps/worker/removed.ts", "docs/moved.md")["worker-image"], "true")
+  assert.equal(classify("apps/worker/removed.ts", "docs/moved.md")["worker-component"], "true")
   assert.equal(classify("apps/web/src/app/page.tsx")["database-tests"], "true")
   for (const name of [
     "Lint",
@@ -193,19 +194,81 @@ test("only web CSS and public assets narrow runtime gates; mixed, renamed and se
   }
 })
 
-test("image selection retains all shared/unknown/root build inputs and narrows app-local changes", () => {
+test("optional images qualify packaging while required source consumers remain selected", () => {
   for (const file of [
     "Dockerfile",
+    ".dockerignore",
     "pnpm-lock.yaml",
-    "packages/db/prisma/schema.prisma",
+    "pnpm-workspace.yaml",
+    "package.json",
+    "turbo.json",
+    "packages/db/package.json",
+    "apps/worker/package.json",
+    ".github/workflows/deploy-azure.yml",
+    ".github/workflows/ci.yml",
+    ".github/workflows/release-tauri.yml",
     "unknown-file",
+    "packages/new/unknown-input",
+    "apps/web/unknown-build-input",
   ]) {
     for (const flag of ["web-image", "worker-image", "egress-image"])
-      assert.equal(classify(file)[flag], "true")
+      assert.equal(classify(file)[flag], "true", `${file}: ${flag}`)
   }
-  assert.equal(classify("apps/worker/src/index.ts")["web-image"], "false")
-  assert.equal(classify("apps/worker/src/index.ts")["worker-image"], "true")
+  for (const file of [
+    "apps/web/src/app/page.tsx",
+    "apps/web/src/app/page.test.tsx",
+    "apps/web/public/logo.webp",
+    "apps/web/src/app/globals.css",
+    "apps/worker/src/index.ts",
+    "apps/worker/src/index.test.ts",
+    "packages/db/prisma/schema.prisma",
+    "packages/db/prisma/migrations/001/migration.sql",
+    "packages/billing/src/index.ts",
+    ".github/scripts/tests/ci-selection.test.mjs",
+  ]) {
+    for (const flag of ["web-image", "worker-image", "egress-image"])
+      assert.equal(classify(file)[flag], "false", `${file}: ${flag}`)
+  }
+  for (const [file, expected] of [
+    ["apps/web/next.config.ts", ["true", "false", "false"]],
+    ["apps/worker/tsconfig.json", ["false", "true", "false"]],
+    ["ops/worker/run-worker.sh", ["false", "true", "false"]],
+    ["ops/worker/webhook-cutover-schema.mjs", ["false", "true", "false"]],
+    ["ops/worker/lyrashield-worker-egress-refresh.timer", ["false", "true", "false"]],
+    ["apps/worker/scripts/verify-worker-image.sh", ["false", "true", "false"]],
+    ["ops/deployment/readiness.sh", ["false", "false", "false"]],
+  ]) {
+    const receipt = classify(file)
+    assert.deepEqual(
+      [receipt["web-image"], receipt["worker-image"], receipt["egress-image"]],
+      expected,
+      file
+    )
+  }
+  // Read every actual copied host asset so adding a new COPY cannot silently
+  // bypass the optional packaging proof.
+  for (const [, file] of readFileSync("Dockerfile", "utf8").matchAll(/^COPY (ops\/worker\/\S+) /gm))
+    assert.equal(classify(file)["worker-image"], "true", file)
   const container = workflow.jobs["container-build"]
+  function selected(outputs) {
+    return runInNewContext(
+      container.if.replace(/needs\.changes\.outputs\.([\w-]+)/g, (_, key) =>
+        JSON.stringify(outputs[key])
+      )
+    )
+  }
+  assert.equal(selected(classify("apps/worker/src/index.ts")), false)
+  assert.equal(selected(classify("apps/web/next.config.ts")), true)
+  assert.equal(selected(classify("ops/worker/run-worker.sh")), true)
+  assert.equal(selected(classify("unknown-file")), true)
+  assert.equal(classify("apps/worker/src/index.ts")["azure-deploy"], "true")
+  assert.equal(classify("apps/web/src/app/page.tsx")["web-component"], "true")
+  assert.equal(classify("apps/worker/src/index.ts")["worker-component"], "true")
+  const mixed = classify("apps/web/src/app/page.tsx", "apps/worker/tsconfig.json")
+  assert.equal(mixed["web-component"], "true")
+  assert.equal(mixed["worker-component"], "true")
+  assert.equal(mixed["web-image"], "false")
+  assert.equal(mixed["worker-image"], "true")
   for (const [name, flag] of [
     ["web", "web-image"],
     ["worker", "worker-image"],
@@ -271,6 +334,90 @@ test("Turbo task graphs retain dependencies and SDK/MCP/plugin prerequisites wit
   assert.ok(marketing.packages.includes("@lyrashield/security"))
   assert.ok(marketing.tasks.some((task) => task.taskId === "@lyrashield/db#generate"))
   assert.ok(!marketing.packages.includes("@lyrashield/web"))
+  // Evaluate real Turbo task graphs for the union, including shared inputs
+  // where unconditional negative filters used to discard selected projects.
+  for (const task of ["lint", "typecheck"]) {
+    for (const [paths, selected, omitted] of [
+      [
+        ["apps/web/src/app/page.tsx"],
+        ["@lyrashield/web"],
+        ["@lyrashield/worker", "@lyrashield/marketing", "@lyrashield/desktop-frontend"],
+      ],
+      [
+        ["apps/worker/src/index.ts"],
+        ["@lyrashield/worker"],
+        ["@lyrashield/web", "@lyrashield/marketing", "@lyrashield/desktop-frontend"],
+      ],
+      [
+        ["apps/desktop/src-tauri/Cargo.lock"],
+        ["@lyrashield/desktop-frontend"],
+        ["@lyrashield/web", "@lyrashield/marketing", "lyrashield"],
+      ],
+      [
+        [
+          "apps/web/src/app/page.tsx",
+          "apps/marketing/src/pages/index.astro",
+          "apps/desktop/frontend/src/App.tsx",
+        ],
+        ["@lyrashield/web", "@lyrashield/marketing", "@lyrashield/desktop-frontend"],
+        ["@lyrashield/worker", "@lyrashield/marketing-motion"],
+      ],
+      [
+        ["packages/db/src/client.ts"],
+        ["@lyrashield/web", "@lyrashield/worker", "@lyrashield/marketing", "lyrashield"],
+        ["@lyrashield/marketing-motion", "@lyrashield/desktop-frontend"],
+      ],
+      [
+        ["pnpm-lock.yaml"],
+        [
+          "@lyrashield/web",
+          "@lyrashield/worker",
+          "@lyrashield/marketing",
+          "@lyrashield/marketing-motion",
+          "@lyrashield/desktop-frontend",
+          "lyrashield",
+        ],
+        [],
+      ],
+      [
+        ["unknown-file"],
+        [
+          "@lyrashield/web",
+          "@lyrashield/worker",
+          "@lyrashield/marketing",
+          "@lyrashield/marketing-motion",
+          "@lyrashield/desktop-frontend",
+          "lyrashield",
+        ],
+        [],
+      ],
+    ]) {
+      const union = graph(classify(...paths), "quality", task)
+      for (const name of selected)
+        assert.ok(
+          union.tasks.some(
+            (item) => item.taskId === `${name}#${task}` && item.command !== "<NONEXISTENT>"
+          ),
+          `${paths}: ${name}#${task}`
+        )
+      for (const name of omitted)
+        assert.ok(!union.packages.includes(name), `${paths}: unexpected ${name}#${task}`)
+      assert.equal(new Set(union.tasks.map((item) => item.taskId)).size, union.tasks.length)
+      if (task === "typecheck" && selected.includes("lyrashield")) {
+        for (const taskId of [
+          "@lyrashield/sdk#build",
+          "@lyrashield/mcp#build",
+          "@lyrashield/agent-plugin#build",
+          "@lyrashield/db#generate",
+        ])
+          assert.ok(
+            union.tasks.some((item) => item.taskId === taskId && item.command !== "<NONEXISTENT>"),
+            taskId
+          )
+      }
+    }
+  }
+  assert.deepEqual(workspaceFilters(classify("README.md"), "quality", "lint"), [])
   assert.deepEqual(workspaceFilters(classify("README.md"), "marketing"), [])
   assert.throws(() => workspaceFilters(classify("README.md"), "typo"))
 })
@@ -337,7 +484,8 @@ test("retained built-app browser proofs select an executable web build for worke
     "false",
     "built-app test dependency must not select the web image"
   )
-  assert.equal(worker["worker-image"], "true")
+  assert.equal(worker["worker-image"], "false")
+  assert.equal(worker["worker-component"], "true")
 })
 
 test("service integration proof rejects missing, skipped and undercounted fixtures", () => {
@@ -374,7 +522,6 @@ test("code quality starts independently and owns every lint and typecheck gate",
     "Format check",
     "Serial-comma copy ratchet",
     "Size lint ratchet",
-    "Dead-code report (knip, non-blocking)",
     "Lint CI tooling",
     "Lint",
     "Typecheck",
@@ -382,13 +529,38 @@ test("code quality starts independently and owns every lint and typecheck gate",
     "Typecheck browser fixtures",
     "Typecheck portable browser harness",
     "Lint portable browser harness",
-    "Lint selected marketing workspaces",
-    "Typecheck selected marketing workspaces",
   ])
     assert.ok(
       quality.steps.some((step) => step.name === name),
       name
     )
+  for (const task of ["lint", "typecheck"]) {
+    const packageSteps = quality.steps.filter((step) =>
+      step.run?.includes(`ci-selection.mjs ${task}`)
+    )
+    assert.equal(packageSteps.length, 1, `one package ${task} invocation`)
+    assert.equal(packageSteps[0].run, `node .github/scripts/ci-selection.mjs ${task} quality`)
+    for (const file of [
+      "apps/web/src/app/globals.css",
+      "apps/worker/src/index.ts",
+      "apps/desktop/src-tauri/Cargo.lock",
+      "apps/marketing/src/pages/index.astro",
+      "apps/marketing-motion/src/scene.ts",
+      "pnpm-lock.yaml",
+      "unknown-file",
+    ]) {
+      const outputs = classify(file)
+      const condition = packageSteps[0].if.replace(/needs\.changes\.outputs\.([\w-]+)/g, (_, key) =>
+        JSON.stringify(outputs[key])
+      )
+      assert.equal(runInNewContext(condition), true, `${file}: ${task}`)
+    }
+  }
+  assert.equal(
+    quality.steps.filter((step) => step.run === "pnpm typecheck:browser-harness").length,
+    1
+  )
+  assert.equal(quality.steps.filter((step) => step.run === "pnpm lint:browser-harness").length, 1)
   assert.ok(!quality.steps.some((step) => /docker run|migrate:deploy/.test(step.run)))
   const cacheKey = (job) => job.steps.find((step) => step.name === "Cache Turbo").with.key
   assert.notEqual(cacheKey(quality), cacheKey(app))
