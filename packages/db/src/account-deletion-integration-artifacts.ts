@@ -22,6 +22,7 @@ export async function stageIntegrations(
     WHERE "workspaceId" = ${workspaceId} AND "configRef" IS NOT NULL
     FOR UPDATE`
   const localEvidenceRoot = resolve(
+    /* turbopackIgnore: true */
     env.LYRASHIELD_LOCAL_EVIDENCE_DIR || join(process.cwd(), ".lyrashield", "evidence")
   )
   let unsupported = false

@@ -79,13 +79,17 @@ const oauthProviderPlugin = oauthProvider({
   consentPage: "/oauth/consent",
   scopes: oauthScopes,
   validAudiences: [OAUTH_RESOURCE, env.NEXT_PUBLIC_APP_URL],
-  resources: [
-    {
-      identifier: OAUTH_RESOURCE,
-      name: "LyraShield MCP",
-      allowedScopes: oauthScopes,
-    },
-  ],
+  // Next imports auth while collecting routes. Seed resources only in the running app.
+  resources:
+    process.env.NEXT_PHASE === "phase-production-build"
+      ? []
+      : [
+          {
+            identifier: OAUTH_RESOURCE,
+            name: "LyraShield MCP",
+            allowedScopes: oauthScopes,
+          },
+        ],
   // There is one hosted resource. Existing and dynamically registered MCP
   // clients may request it without a separate administrative link step.
   enforcePerClientResources: false,

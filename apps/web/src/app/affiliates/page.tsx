@@ -1,5 +1,7 @@
 import { loadActiveProgram } from "@lyrashield/affiliate"
 
+export const dynamic = "force-dynamic"
+
 export const metadata = {
   title: "Affiliate Program — LyraShield AI",
   description:
