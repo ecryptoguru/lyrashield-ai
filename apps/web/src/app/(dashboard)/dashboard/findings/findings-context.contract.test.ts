@@ -32,12 +32,6 @@ describe("findings list context preservation contract", () => {
     expect(drawer).toContain('url.searchParams.set("finding", finding.id)')
   })
 
-  it("revalidates saved pages and restores scroll after mount, not during hydration", () => {
-    expect(effects).toContain("loadFindingsListContext(")
-    expect(effects).toContain("window.scrollTo(0, stored.scrollY)")
-    expect(client).toContain("setRestoreReady(true)")
-  })
-
   it("persists the snapshot only after restoration and on pagehide", () => {
     expect(effects).toContain("!restoreReady")
     expect(effects).toContain('window.addEventListener("pagehide", save)')

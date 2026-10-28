@@ -1,11 +1,11 @@
-import { access, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises"
+import { access, cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises"
 import { createHash } from "node:crypto"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { execFile } from "node:child_process"
 import { promisify } from "node:util"
-import { afterEach, describe, expect, it, vi } from "vitest"
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest"
 import { parse } from "yaml"
 import { createAllTools, McpServer } from "@lyrashield/mcp"
 import { buildPlugin } from "../build.js"
@@ -34,6 +34,24 @@ afterEach(async () => {
     outputs.splice(0).map((directory) => rm(directory, { recursive: true, force: true }))
   )
 })
+
+// Artifact consumers get independent copies; the baseline is never returned to a test.
+// Source parity, provenance, publication, concurrency and determinism keep fresh exports.
+let validExport: string | undefined
+beforeAll(async () => {
+  validExport = await mkdtemp(path.join(tmpdir(), "lyrashield-marketplace-baseline-"))
+  await exportMarketplace(validExport)
+  await expect(runValidator(validExport)).resolves.toContain("Marketplace validation passed")
+}, 60000)
+
+afterAll(async () => {
+  if (validExport) await rm(validExport, { recursive: true, force: true })
+})
+
+async function copyValidExport(output: string): Promise<void> {
+  if (!validExport) throw new Error("Marketplace baseline was not initialized")
+  await cp(validExport, output, { recursive: true })
+}
 
 function splitSkillDocument(text: string): { frontmatter: string; body: string } {
   const match = text.match(/^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/)
@@ -105,7 +123,7 @@ describe("exportMarketplace", () => {
   it("does not let documented placeholders hide other credentials on the same line", async () => {
     const output = await mkdtemp(path.join(tmpdir(), "lyrashield-validator-"))
     outputs.push(output)
-    await exportMarketplace(output)
+    await copyValidExport(output)
     const probe = path.join(output, "README.md")
     const original = await readFile(probe, "utf8")
     await writeFile(probe, `${original}\nExamples: <YOUR_API_KEY> lsk_… lsk_...\n`)
@@ -123,8 +141,12 @@ describe("exportMarketplace", () => {
   it("rejects undeclared files added after export", async () => {
     const output = await mkdtemp(path.join(tmpdir(), "lyrashield-validator-"))
     outputs.push(output)
-    await exportMarketplace(output)
+    await copyValidExport(output)
     await writeFile(path.join(output, "probe.txt"), "untracked\n")
+    const untouched = await mkdtemp(path.join(tmpdir(), "lyrashield-validator-sibling-"))
+    outputs.push(untouched)
+    await copyValidExport(untouched)
+    await expect(runValidator(untouched)).resolves.toContain("Marketplace validation passed")
     await expect(
       execFileAsync(process.execPath, ["scripts/validate.mjs"], { cwd: output })
     ).rejects.toThrow(/file set or hash differs/)
@@ -133,7 +155,7 @@ describe("exportMarketplace", () => {
   it("preserves explicit API URL overrides for stored OAuth in npm and embedded Zed launchers", async () => {
     const output = await mkdtemp(path.join(tmpdir(), "lyrashield extension "))
     outputs.push(output)
-    await exportMarketplace(output)
+    await copyValidExport(output)
     const gemini = JSON.parse(await readFile(path.join(output, "gemini-extension.json"), "utf8"))
     const preloadOption = gemini.mcpServers.lyrashield.args[1].replace("${extensionPath}", output)
     const preload = await readFile(path.join(output, "zed-extension/mcp-env.cjs"), "utf8")
@@ -507,7 +529,7 @@ describe("exportMarketplace", () => {
   it("ships no dead relative links and no self-referential status in the exported markdown tree", async () => {
     const output = await mkdtemp(path.join(tmpdir(), "lyrashield-marketplace-"))
     outputs.push(output)
-    await exportMarketplace(output)
+    await copyValidExport(output)
 
     const markdownFiles: string[] = []
     async function collect(directory: string): Promise<void> {
@@ -560,7 +582,7 @@ describe("exportMarketplace", () => {
   it("runs the Zed WASI checks when either exported workflow changes", async () => {
     const output = await mkdtemp(path.join(tmpdir(), "lyrashield-marketplace-"))
     outputs.push(output)
-    await exportMarketplace(output)
+    await copyValidExport(output)
 
     const validateWorkflow = await readFile(
       path.join(output, ".github", "workflows", "validate.yml"),
@@ -591,7 +613,7 @@ describe("exported validator", () => {
   it("rejects a Gemini authored workflow that calls an excluded mutation", async () => {
     const output = await mkdtemp(path.join(tmpdir(), "lyrashield-marketplace-"))
     outputs.push(output)
-    await exportMarketplace(output)
+    await copyValidExport(output)
     const relative = "gemini-extension/commands/lyrashield/review-changes.toml"
     const text = await readFile(path.join(output, relative), "utf8")
     await writeFile(
@@ -674,7 +696,7 @@ describe("exported validator", () => {
   it("exports runnable verifier fixtures and the required client schema contract", async () => {
     const output = await mkdtemp(path.join(tmpdir(), "lyrashield-marketplace-"))
     outputs.push(output)
-    await exportMarketplace(output)
+    await copyValidExport(output)
     await expect(runValidator(output)).resolves.toContain("Marketplace validation passed")
     await execFileAsync(
       process.execPath,
@@ -699,7 +721,7 @@ describe("exported validator", () => {
   it("rejects published MCP verification with npm lifecycle scripts enabled", async () => {
     const output = await mkdtemp(path.join(tmpdir(), "lyrashield-marketplace-"))
     outputs.push(output)
-    await exportMarketplace(output)
+    await copyValidExport(output)
 
     const verifierFile = "scripts/verify-published-mcp.mjs"
     const verifierPath = path.join(output, verifierFile)
@@ -714,7 +736,7 @@ describe("exported validator", () => {
   it("rejects unreviewed read-only Codebuff tools after hashes are refreshed", async () => {
     const output = await mkdtemp(path.join(tmpdir(), "lyrashield-marketplace-"))
     outputs.push(output)
-    await exportMarketplace(output)
+    await copyValidExport(output)
 
     const codebuffFile = "codebuff/lyrashield-review.ts"
     const codebuffPath = path.join(output, codebuffFile)
@@ -757,7 +779,7 @@ describe("exported validator", () => {
   ])("rejects %s drift after hashes are refreshed", async (_label, file, before, after) => {
     const output = await mkdtemp(path.join(tmpdir(), "lyrashield-marketplace-"))
     outputs.push(output)
-    await exportMarketplace(output)
+    await copyValidExport(output)
     const target = path.join(output, file)
     const original = await readFile(target, "utf8")
     if (file === "manifest.json" && _label === "generator version") {
@@ -779,7 +801,7 @@ describe("exported validator", () => {
   ])("rejects a synthetic credential in %s after hashes are refreshed", async (file) => {
     const output = await mkdtemp(path.join(tmpdir(), "lyrashield-marketplace-"))
     outputs.push(output)
-    await exportMarketplace(output)
+    await copyValidExport(output)
     const secret = "lsk" + "_" + "A".repeat(24)
     await writeFile(
       path.join(output, file),
@@ -800,7 +822,7 @@ describe("exported validator", () => {
   ])("rejects unsafe distribution drift in %s", async (file, before, after) => {
     const output = await mkdtemp(path.join(tmpdir(), "lyrashield-marketplace-"))
     outputs.push(output)
-    await exportMarketplace(output)
+    await copyValidExport(output)
     const target = path.join(output, file)
     await writeFile(target, (await readFile(target, "utf8")).replace(before, after))
     await expect(
@@ -835,7 +857,7 @@ describe("exported validator", () => {
   it("rejects Antigravity MCP config that does not use its documented serverUrl after hash refresh", async () => {
     const output = await mkdtemp(path.join(tmpdir(), "lyrashield-marketplace-"))
     outputs.push(output)
-    await exportMarketplace(output)
+    await copyValidExport(output)
     const mcpPath = path.join(output, "antigravity", "mcp_config.json")
     const config = JSON.parse(await readFile(mcpPath, "utf8")) as {
       mcpServers: Record<string, Record<string, string>>
@@ -851,7 +873,7 @@ describe("exported validator", () => {
   it("rejects Kilo companion-skill list and frontmatter drift after hash refresh", async () => {
     const output = await mkdtemp(path.join(tmpdir(), "lyrashield-marketplace-"))
     outputs.push(output)
-    await exportMarketplace(output)
+    await copyValidExport(output)
 
     const mcpPath = path.join(output, "kilo/mcps/lyrashield/MCP.yaml")
     const mcpYaml = await readFile(mcpPath, "utf8")
@@ -869,7 +891,7 @@ describe("exported validator", () => {
   it("rejects a tag whose version differs from the export", async () => {
     const output = await mkdtemp(path.join(tmpdir(), "lyrashield-marketplace-"))
     outputs.push(output)
-    await exportMarketplace(output)
+    await copyValidExport(output)
     const validator = path.join(output, "scripts", "validate.mjs")
     await expect(
       execFileAsync(process.execPath, [validator], {
@@ -894,7 +916,7 @@ describe("exported validator", () => {
   it("ignores repository metadata while validating the exported tree", async () => {
     const output = await mkdtemp(path.join(tmpdir(), "lyrashield-marketplace-"))
     outputs.push(output)
-    await exportMarketplace(output)
+    await copyValidExport(output)
     const gitMetadata = path.join(output, ".git", "objects")
     await mkdir(gitMetadata, { recursive: true })
     await writeFile(path.join(gitMetadata, "probe"), "repository metadata\n", "utf8")
@@ -904,7 +926,7 @@ describe("exported validator", () => {
   it("fails when an artifact version drifts from the manifest", async () => {
     const output = await mkdtemp(path.join(tmpdir(), "lyrashield-marketplace-"))
     outputs.push(output)
-    await exportMarketplace(output)
+    await copyValidExport(output)
 
     const manifestPath = path.join(output, "manifest.json")
     const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as {
@@ -919,7 +941,7 @@ describe("exported validator", () => {
   it("fails when a nested forbidden credential file enters the export", async () => {
     const output = await mkdtemp(path.join(tmpdir(), "lyrashield-marketplace-"))
     outputs.push(output)
-    await exportMarketplace(output)
+    await copyValidExport(output)
 
     const nested = path.join(output, "reviewer-pack", "fixture")
     await mkdir(nested, { recursive: true })
@@ -931,7 +953,7 @@ describe("exported validator", () => {
   it("fails when the exported gemini excludeTools drift from the manifest", async () => {
     const output = await mkdtemp(path.join(tmpdir(), "lyrashield-marketplace-"))
     outputs.push(output)
-    await exportMarketplace(output)
+    await copyValidExport(output)
 
     const geminiPath = path.join(output, "gemini-extension", "gemini-extension.json")
     const gemini = JSON.parse(await readFile(geminiPath, "utf8")) as { excludeTools: string[] }

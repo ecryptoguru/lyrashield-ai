@@ -5,7 +5,7 @@ import { track } from "@/lib/analytics"
 import { getScanPresentation, isActiveScan } from "@/lib/scan-presentation"
 
 const ELAPSED_TIME_INTERVAL_MS = 1_000
-export const COMPLETION_NOTICE_DISMISS_MS = 6_000
+const COMPLETION_NOTICE_DISMISS_MS = 6_000
 /** Matches the service's event window cap (getScanWithEvents take: 200). */
 const MAX_EVENT_WINDOW = 200
 
@@ -22,8 +22,6 @@ export function useElapsedTime(startedAt: string | null): string {
   }, [startedAt])
   return elapsed
 }
-
-export { formatDuration } from "@/lib/date-format"
 
 export interface CompletionNotice {
   status: string

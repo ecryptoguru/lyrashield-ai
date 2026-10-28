@@ -12,6 +12,7 @@
     "lint:ratchet-baselines": "node lint/ratchet-baseline-shrink.mjs",
     "lint:md": "markdownlint-cli2",
     "lint:knip": "knip --no-exit-code",
+    "lint:knip:baseline": "node .github/scripts/check-knip-baseline.mjs",
     "typecheck": "turbo typecheck",
     "typecheck:web-tests": "pnpm --filter @lyrashield/web exec tsc --noEmit -p tsconfig.tests.json",
     "typecheck:e2e": "pnpm --filter @lyrashield/db exec tsc --noEmit -p ../../e2e/tsconfig.json",

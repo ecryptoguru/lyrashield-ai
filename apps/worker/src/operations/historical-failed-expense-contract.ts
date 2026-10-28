@@ -18,7 +18,7 @@ export const HISTORICAL_FAILED_EXPENSE_STAGE = "terminal_cost_legacy_expense_rev
 export const HISTORICAL_FAILED_EXPENSE_RECEIPT_TYPE = "terminal_failed_legacy_expense_review_v3"
 export const HISTORICAL_FAILED_EXPENSE_AUDIT_ACTION = "terminal_cost.legacy_expense_review_recorded"
 
-export const historicalExpenseEvidenceSchema = z
+const historicalExpenseEvidenceSchema = z
   .object({
     kind: z.literal("scan_bound_historical_engine_usage"),
     eventId: z.literal(HISTORICAL_FAILED_EXPENSE.eventId),
@@ -112,5 +112,4 @@ export const historicalExpenseReceiptSchema = z
     }
   })
 
-export type HistoricalExpenseReceipt = z.infer<typeof historicalExpenseReceiptSchema>
 export type HistoricalExpenseEvidence = z.infer<typeof historicalExpenseEvidenceSchema>

@@ -224,6 +224,16 @@ describe("runScannerOrchestrator", () => {
     expect(result.agentConfigFindings).toEqual([])
     expect(result.mlSupplyChainFindings).toEqual([])
     expect(result.allFindings.length).toBe(3)
+    const critical = result.allFindings.filter((f) => f.normalizedSeverity === "CRITICAL")
+    const high = result.allFindings.filter((f) => f.normalizedSeverity === "HIGH")
+    expect(critical.length).toBe(1) // github token
+    expect(high.length).toBe(2) // xss + sca
+
+    expect(result.stats.total).toBe(3)
+    expect(result.stats.bySeverity["CRITICAL"]).toBe(1)
+    expect(result.stats.bySeverity["HIGH"]).toBe(2)
+
+    expect(result.secretsFindings[0]?.scannerSource).toBe("secrets")
   })
 
   it("resolves and queries exact advisory packages once for SCA and AI-03", async () => {
@@ -419,41 +429,6 @@ describe("runScannerOrchestrator", () => {
       })
     ).rejects.toThrow("Production URL scans require the authenticated egress proxy")
     expect(scanUrl).not.toHaveBeenCalled()
-  })
-
-  it("normalizes all findings with correct severity", async () => {
-    const result = await runScannerOrchestrator({
-      scanId: "scan-1",
-      workspaceId: "ws-1",
-      targetId: "target-1",
-      target: { id: "target-1", type: "REPO", name: "Test" },
-      goal: "TEST_APP",
-      mode: "STANDARD",
-      engineFindings,
-      workspaceDir: sourceCheckout,
-    })
-
-    const critical = result.allFindings.filter((f) => f.normalizedSeverity === "CRITICAL")
-    const high = result.allFindings.filter((f) => f.normalizedSeverity === "HIGH")
-    expect(critical.length).toBe(1) // github token
-    expect(high.length).toBe(2) // xss + sca
-  })
-
-  it("calculates stats correctly", async () => {
-    const result = await runScannerOrchestrator({
-      scanId: "scan-1",
-      workspaceId: "ws-1",
-      targetId: "target-1",
-      target: { id: "target-1", type: "REPO", name: "Test" },
-      goal: "TEST_APP",
-      mode: "STANDARD",
-      engineFindings,
-      workspaceDir: sourceCheckout,
-    })
-
-    expect(result.stats.total).toBe(3)
-    expect(result.stats.bySeverity["CRITICAL"]).toBe(1)
-    expect(result.stats.bySeverity["HIGH"]).toBe(2)
   })
 
   it("handles empty engine findings", async () => {
@@ -819,21 +794,6 @@ describe("runScannerOrchestrator", () => {
         },
       })
     ).rejects.toThrow("Scanner phase cancelled")
-  })
-
-  it("tags detector provenance so secret findings receive the score cap", async () => {
-    const result = await runScannerOrchestrator({
-      scanId: "scan-1",
-      workspaceId: "ws-1",
-      targetId: "target-1",
-      target: { id: "target-1", type: "REPO", name: "Test" },
-      goal: "TEST_APP",
-      mode: "STANDARD",
-      engineFindings,
-      workspaceDir: sourceCheckout,
-    })
-
-    expect(result.secretsFindings[0]?.scannerSource).toBe("secrets")
   })
 
   it("keeps higher severity finding on cross-source dedupeKey collision", async () => {

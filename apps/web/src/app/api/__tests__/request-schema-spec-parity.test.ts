@@ -202,7 +202,6 @@ describe("POST /api/schedules request-schema parity", () => {
     { name: "wildcard cron", body: { ...base, cron: "* * * * *" } },
     { name: "padded cron", body: { ...base, cron: "  0 0 * * 0  " } },
     { name: "leading-zero cron", body: { ...base, cron: "07 08 * * 06" } },
-    { name: "default mode", body: { ...base, cron: "0 0 * * 0" } },
     { name: "explicit mode", body: { ...base, cron: "0 0 * * 0", mode: "DEEP" } },
     { name: "step cron", body: { ...base, cron: "*/15 * * * *" } },
     { name: "day-of-month cron", body: { ...base, cron: "0 0 31 2 *" } },

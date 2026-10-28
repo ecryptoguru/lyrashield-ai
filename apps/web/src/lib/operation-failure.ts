@@ -251,7 +251,7 @@ const SERVER_MESSAGE_REJECTIONS: readonly RegExp[] = [
   /[A-Za-z0-9_-]{40,}/,
 ]
 
-export function sanitizeServerMessage(message: unknown): string | null {
+function sanitizeServerMessage(message: unknown): string | null {
   if (typeof message !== "string") return null
   // A format character — a bidi override, an invisible separator, a
   // zero-width joiner — can reorder or hide the words a reader sees, so a

@@ -1,0 +1,121 @@
+{
+  "reviewed": "2026-10-28",
+  "purpose": "Exact advisory findings reviewed for retention; do not bulk regenerate to accept new issues.",
+  "usage": "pnpm lint:knip remains advisory. pnpm lint:knip:baseline runs Knip once and fails only on new file:type:name IDs; inspect new findings, fix or review an exact reason, and remove resolved IDs.",
+  "modelNotes": [
+    "Motion src/main.ts is the Vite HTML module entry; TS, HTML and CSS are included. Desktop includes its HTML entry and CSS with its Vite config auto-discovered.",
+    "Desktop tailwindcss is retained for src/styles/globals.css @import and the @tailwindcss/vite plugin. The exact workspace dependency exception covers Knip CSS import tracking.",
+    "Prisma uses the prisma-client-js generator, an ignored generated client entry and a generated runtime require of @prisma/client-runtime-utils. The two exact db dependency exceptions preserve generation/runtime dependencies even before client generation.",
+    "Browser React paths mirror e2e/browser/server.mjs webRequire aliases. Knip still attributes React to root for unlisted checks; those exact remaining fixture IDs are reviewed below without adding root dependencies."
+  ],
+  "issues": [
+    {
+      "id": ".github/scripts/tests/ci-selection.test.mjs:unlisted:yaml",
+      "reason": "createRequire resolves yaml from the agent-plugin workspace package.json, where it is declared."
+    },
+    {
+      "id": ".github/scripts/tests/verified-backup-client.test.mjs:binaries:openssl",
+      "reason": "External system executable prerequisite; intentionally not installed as an npm dependency."
+    },
+    {
+      "id": ".github/scripts/tests/webhook-catalog.runtime.test.mjs:unlisted:@prisma/adapter-pg",
+      "reason": "createRequire is deliberately anchored to packages/db/package.json, which owns pg/Prisma and the generated client."
+    },
+    {
+      "id": ".github/scripts/tests/webhook-catalog.runtime.test.mjs:unlisted:pg",
+      "reason": "createRequire is deliberately anchored to packages/db/package.json, which owns pg/Prisma and the generated client."
+    },
+    {
+      "id": ".github/scripts/tests/webhook-catalog.runtime.test.mjs:unresolved:./src/generated/prisma",
+      "reason": "createRequire is deliberately anchored to packages/db/package.json, which owns pg/Prisma and the generated client."
+    },
+    {
+      "id": ".github/scripts/tests/webhook-cutover-schema.postgres.test.mjs:unlisted:pg",
+      "reason": "createRequire is deliberately anchored to packages/db/package.json, which owns pg/Prisma and the generated client."
+    },
+    {
+      "id": ".github/scripts/tests/webhook-queue.runtime.test.mjs:unlisted:bullmq",
+      "reason": "createRequire resolves BullMQ from the integrations workspace package.json, where it is declared."
+    },
+    {
+      "id": "apps/marketing-motion/scripts/verify-determinism.mjs:binaries:ffmpeg",
+      "reason": "External system executable prerequisite; intentionally not installed as an npm dependency."
+    },
+    {
+      "id": "apps/marketing/scripts/prepare-motion-test-media.mjs:binaries:ffmpeg",
+      "reason": "External system executable prerequisite; intentionally not installed as an npm dependency."
+    },
+    {
+      "id": "apps/marketing/scripts/prepare-motion-test-media.mjs:unlisted:sharp",
+      "reason": "The synthetic media fixture uses createRequire anchored to marketing-motion/package.json, which owns sharp."
+    },
+    {
+      "id": "apps/marketing/src/pages/api/waitlist.ts:unlisted:cloudflare",
+      "reason": "cloudflare:workers is the Cloudflare Workers runtime module, supplied by the deployment runtime and Wrangler types."
+    },
+    {
+      "id": "apps/marketing/src/pages/api/waitlist/position.ts:unlisted:cloudflare",
+      "reason": "cloudflare:workers is the Cloudflare Workers runtime module, supplied by the deployment runtime and Wrangler types."
+    },
+    {
+      "id": "e2e/browser/approvals-harness.tsx:unlisted:react",
+      "reason": "Browser fixtures use the web workspace React runtime through explicit aliases in e2e/browser/server.mjs; no root dependency is needed."
+    },
+    {
+      "id": "e2e/browser/dashboard-ux-harness.tsx:unlisted:react",
+      "reason": "Browser fixtures use the web workspace React runtime through explicit aliases in e2e/browser/server.mjs; no root dependency is needed."
+    },
+    {
+      "id": "e2e/browser/desktop-harness.tsx:unlisted:react",
+      "reason": "Browser fixtures use the web workspace React runtime through explicit aliases in e2e/browser/server.mjs; no root dependency is needed."
+    },
+    {
+      "id": "e2e/browser/first-scan-harness.tsx:unlisted:react",
+      "reason": "Browser fixtures use the web workspace React runtime through explicit aliases in e2e/browser/server.mjs; no root dependency is needed."
+    },
+    {
+      "id": "e2e/browser/main.tsx:unlisted:react-dom",
+      "reason": "Browser fixtures use the web workspace React runtime through explicit aliases in e2e/browser/server.mjs; no root dependency is needed."
+    },
+    {
+      "id": "e2e/browser/next-image.tsx:unlisted:react",
+      "reason": "Browser fixtures use the web workspace React runtime through explicit aliases in e2e/browser/server.mjs; no root dependency is needed."
+    },
+    {
+      "id": "e2e/browser/next-link.tsx:unlisted:react",
+      "reason": "Browser fixtures use the web workspace React runtime through explicit aliases in e2e/browser/server.mjs; no root dependency is needed."
+    },
+    {
+      "id": "e2e/browser/notification-integrations-harness.tsx:unlisted:react",
+      "reason": "Browser fixtures use the web workspace React runtime through explicit aliases in e2e/browser/server.mjs; no root dependency is needed."
+    },
+    {
+      "id": "e2e/browser/polling-harness.tsx:unlisted:react",
+      "reason": "Browser fixtures use the web workspace React runtime through explicit aliases in e2e/browser/server.mjs; no root dependency is needed."
+    },
+    {
+      "id": "e2e/browser/polling-main.tsx:unlisted:react-dom",
+      "reason": "Browser fixtures use the web workspace React runtime through explicit aliases in e2e/browser/server.mjs; no root dependency is needed."
+    },
+    {
+      "id": "e2e/browser/ux-focus-harness.tsx:unlisted:react",
+      "reason": "Browser fixtures use the web workspace React runtime through explicit aliases in e2e/browser/server.mjs; no root dependency is needed."
+    },
+    {
+      "id": "packages/cli/src/installers/agent-plugin.ts:binaries:codex",
+      "reason": "External system executable prerequisite; intentionally not installed as an npm dependency."
+    },
+    {
+      "id": "packages/cli/src/installers/skills.ts:types:SkillAction",
+      "reason": "Retained named type in public CLI source; it describes actions in exported SkillInstallResult. Preserve compatibility rather than strip a package type."
+    },
+    {
+      "id": "packages/config/tsconfig/nextjs.json:unresolved:next",
+      "reason": "Shared Next.js TypeScript template consumed by the web workspace, which declares next; config package does not run Next.js."
+    },
+    {
+      "id": "packages/egress-proxy/src/relay.test.ts:binaries:openssl",
+      "reason": "External system executable prerequisite; intentionally not installed as an npm dependency."
+    }
+  ]
+}

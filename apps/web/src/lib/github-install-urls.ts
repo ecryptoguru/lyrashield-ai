@@ -3,7 +3,7 @@ import type { NextRequest } from "next/server"
 import { verifyOAuthOnboardingReturn } from "./oauth-onboarding-return"
 import type { InstallStateResult } from "./github-install-state"
 
-export function installReturnPath(returnTo: "onboarding" | "integrations" | "scan"): string {
+function installReturnPath(returnTo: "onboarding" | "integrations" | "scan"): string {
   return returnTo === "onboarding"
     ? "/onboarding"
     : returnTo === "scan"

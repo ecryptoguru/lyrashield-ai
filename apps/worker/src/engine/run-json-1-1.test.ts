@@ -59,8 +59,11 @@ describe("run.json 1.0 golden fixture", () => {
 })
 
 describe("run.json 1.1 golden fixture", () => {
-  it("parses the run-level evidence stamps", () => {
+  it("parses the complete schema-1.1 artifact tuple without promoting engine claims", () => {
     const result = parseEngineOutput(V1_1_VULNS(), V1_1_RUN(), artifacts())
+    const finding = result.vulnerabilities.find((v) => v.id === "vuln-1-1-0001")
+    const dep = result.vulnerabilities.find((v) => v.id === "vuln-1-1-0002")
+    // Parses the run-level evidence stamps.
     expect(result.runRecord).toMatchObject({
       schema_version: "1.1",
       run_id: "fixture-run-1-1",
@@ -75,11 +78,8 @@ describe("run.json 1.1 golden fixture", () => {
       report_artifacts_revision: 4,
       evidence_export: { status: "exported", exchanges: 2 },
     })
-  })
 
-  it("carries every additive finding evidence field verbatim", () => {
-    const result = parseEngineOutput(V1_1_VULNS(), V1_1_RUN(), artifacts())
-    const finding = result.vulnerabilities.find((v) => v.id === "vuln-1-1-0001")
+    // Carries every additive finding evidence field verbatim.
     expect(finding).toMatchObject({
       counterevidence: "A WAF rule could still block exploitation in production.",
       engine_confidence: "high",
@@ -115,11 +115,8 @@ describe("run.json 1.1 golden fixture", () => {
       evidence_contract_version: "1.1",
       engine_verification_state: "engine_asserted",
     })
-  })
 
-  it("never carries engine verification claims into the parsed finding", () => {
-    const result = parseEngineOutput(V1_1_VULNS(), V1_1_RUN(), artifacts())
-    const finding = result.vulnerabilities.find((v) => v.id === "vuln-1-1-0001")
+    // Never carries engine verification claims into the parsed finding.
     const keys = Object.keys(finding ?? {})
     for (const claim of [
       "verified",
@@ -134,36 +131,69 @@ describe("run.json 1.1 golden fixture", () => {
     }
     // The engine's declared state survives only as verbatim evidence.
     expect(finding?.engine_verification_state).toBe("engine_asserted")
-  })
 
-  it("normalizes a bare advisory_cvss score into the structured form", () => {
-    const result = parseEngineOutput(V1_1_VULNS(), V1_1_RUN(), artifacts())
-    const dep = result.vulnerabilities.find((v) => v.id === "vuln-1-1-0002")
+    // Normalizes a bare advisory_cvss score into the structured form.
     expect(dep?.advisory_cvss).toEqual({ score: 7.5 })
     expect(dep?.dependency_metadata?.advisory_cvss).toBe(7.5)
-  })
 
-  it("keeps structured dependency_metadata values without flattening", () => {
-    const result = parseEngineOutput(V1_1_VULNS(), V1_1_RUN(), artifacts())
-    const dep = result.vulnerabilities.find((v) => v.id === "vuln-1-1-0002")
+    // Keeps structured dependency_metadata values without flattening.
     expect(dep?.dependency_metadata).toMatchObject({
       package_name: "acme-orm",
       installed_version: "4.2.0",
       contextual_cvss_score: 6.1,
       cvss_breakdown: { attack_vector: "N", attack_complexity: "L" },
     })
-  })
 
-  it("validates http_exchange_ids against the exported exchange index", () => {
-    const result = parseEngineOutput(V1_1_VULNS(), V1_1_RUN(), artifacts())
-    const finding = result.vulnerabilities.find((v) => v.id === "vuln-1-1-0001")
+    // Validates http_exchange_ids against the exported exchange index.
     expect(finding?.http_exchange_ids).toEqual(["42", "43"])
     // Exchange 999999 is in missing_request_ids but never exported — the ref
     // is dropped and the drop is explicit.
-    const dep = result.vulnerabilities.find((v) => v.id === "vuln-1-1-0002")
     expect(dep?.http_exchange_ids).toBeUndefined()
     expect(dep?.http_exchange_refs_dropped).toBe(true)
     expect(result.ingestionIssues.some((i) => i.includes("999999"))).toBe(true)
+
+    // Parses the scoped coverage ledger into declared entries and gaps.
+    expect(result.scopedCoverage).not.toBeNull()
+    expect(result.scopedCoverage?.schemaVersion).toBe("1")
+    expect(result.scopedCoverage?.entries).toHaveLength(3)
+    expect(result.scopedCoverage?.entries[0]).toMatchObject({
+      id: "a1b2c3",
+      subject: "src/auth/login.ts — SQL injection",
+      outcome: "reported",
+      reason: "vuln-1-1-0001",
+      evidenceRefs: ["42"],
+      recordedBy: "vulnerability-scanner",
+      previousOutcomes: ["needs_follow_up"],
+    })
+    expect(result.scopedCoverage?.entries[2]?.outcome).toBe("needs_follow_up")
+    expect(result.scopedCoverage?.gaps).toEqual([
+      expect.objectContaining({ kind: "agent_recorded_no_coverage" }),
+    ])
+    expect(result.scopedCoverage?.completeness).toMatchObject({
+      complete: false,
+      caveats: ["Coverage reflects agent-reported entries only."],
+    })
+
+    // Parses the threat-model document into a bounded canonical artifact.
+    expect(result.threatModels?.models).toHaveLength(1)
+    expect(result.threatModels?.models[0]).toMatchObject({
+      target: "https://app.example.com",
+      writtenBy: "threat-model-agent",
+      amendments: [{ at: expect.any(String), by: "vulnerability-scanner" }],
+    })
+    const threatModelDocument = JSON.parse(result.threatModels!.document)
+    expect(threatModelDocument.models["https://app.example.com"].content).toContain(
+      "Trust Boundaries"
+    )
+    expect(threatModelDocument.models["https://app.example.com"].amendments).toHaveLength(1)
+
+    // Parses the exchange export into the cited-id index and canonical artifact.
+    expect(result.httpExchangeExport?.exchangeCount).toBe(2)
+    expect(result.httpExchangeExport?.knownIds).toEqual(new Set(["42", "43"]))
+    const exchangeDocument = JSON.parse(result.httpExchangeExport!.document)
+    expect(exchangeDocument.binding.run_id).toBe("fixture-run-1-1")
+    expect(exchangeDocument.missing_request_ids).toEqual(["999999"])
+    expect(exchangeDocument.exchanges[0].request.headers.authorization).toBe("[REDACTED]")
   })
 
   it("carries declared refs without validation when no artifact context exists", () => {
@@ -197,43 +227,6 @@ describe("run.json 1.1 golden fixture", () => {
     expect(result.ingestionIssues.some((i) => i.includes("http_exchanges.json unreadable"))).toBe(
       true
     )
-  })
-
-  it("parses the scoped coverage ledger into declared entries and gaps", () => {
-    const result = parseEngineOutput(V1_1_VULNS(), V1_1_RUN(), artifacts())
-    expect(result.scopedCoverage).not.toBeNull()
-    expect(result.scopedCoverage?.schemaVersion).toBe("1")
-    expect(result.scopedCoverage?.entries).toHaveLength(3)
-    expect(result.scopedCoverage?.entries[0]).toMatchObject({
-      id: "a1b2c3",
-      subject: "src/auth/login.ts — SQL injection",
-      outcome: "reported",
-      reason: "vuln-1-1-0001",
-      evidenceRefs: ["42"],
-      recordedBy: "vulnerability-scanner",
-      previousOutcomes: ["needs_follow_up"],
-    })
-    expect(result.scopedCoverage?.entries[2]?.outcome).toBe("needs_follow_up")
-    expect(result.scopedCoverage?.gaps).toEqual([
-      expect.objectContaining({ kind: "agent_recorded_no_coverage" }),
-    ])
-    expect(result.scopedCoverage?.completeness).toMatchObject({
-      complete: false,
-      caveats: ["Coverage reflects agent-reported entries only."],
-    })
-  })
-
-  it("parses the threat-model document into a bounded canonical artifact", () => {
-    const result = parseEngineOutput(V1_1_VULNS(), V1_1_RUN(), artifacts())
-    expect(result.threatModels?.models).toHaveLength(1)
-    expect(result.threatModels?.models[0]).toMatchObject({
-      target: "https://app.example.com",
-      writtenBy: "threat-model-agent",
-      amendments: [{ at: expect.any(String), by: "vulnerability-scanner" }],
-    })
-    const doc = JSON.parse(result.threatModels!.document)
-    expect(doc.models["https://app.example.com"].content).toContain("Trust Boundaries")
-    expect(doc.models["https://app.example.com"].amendments).toHaveLength(1)
   })
 
   it("reads the owned engine threat_model.json models array", () => {
@@ -330,16 +323,6 @@ describe("run.json 1.1 golden fixture", () => {
       threatModelsRaw: JSON.stringify(document),
     })
     expect(unbound.threatModels).toBeNull()
-  })
-
-  it("parses the exchange export into the cited-id index and canonical artifact", () => {
-    const result = parseEngineOutput(V1_1_VULNS(), V1_1_RUN(), artifacts())
-    expect(result.httpExchangeExport?.exchangeCount).toBe(2)
-    expect(result.httpExchangeExport?.knownIds).toEqual(new Set(["42", "43"]))
-    const doc = JSON.parse(result.httpExchangeExport!.document)
-    expect(doc.binding.run_id).toBe("fixture-run-1-1")
-    expect(doc.missing_request_ids).toEqual(["999999"])
-    expect(doc.exchanges[0].request.headers.authorization).toBe("[REDACTED]")
   })
 })
 

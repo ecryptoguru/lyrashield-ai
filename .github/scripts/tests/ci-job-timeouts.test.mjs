@@ -56,7 +56,7 @@ test("the required aggregate contexts keep their names and fail-closed guards", 
   const aggregate = jobs.get("lint-and-typecheck")
   assert.match(aggregate, /^ {4}if: \$\{\{ always\(\) \}\}$/m)
   assert.match(aggregate, /Workflow was cancelled before the required CI aggregate could run\./)
-  assert.match(aggregate, /Changed-path classification did not succeed\./)
+  assert.match(aggregate, /ci-selection\.mjs results/)
   assert.match(aggregate, /Workflow was cancelled while required CI checks were running\./)
 
   const contract = jobs.get("engine-worker-contract")
@@ -64,10 +64,8 @@ test("the required aggregate contexts keep their names and fail-closed guards", 
   assert.match(contract, /Changed-path classification did not succeed/)
 })
 
-test("the aggregate job keeps owning the full install, test and build work", () => {
-  // The timeout work is not a licence to split, parallelise or reorder the
-  // aggregate: it must still run the install, the suites and the build.
-  const aggregate = jobs.get("lint-and-typecheck")
+test("the aggregate waits for independent quality, app and marketing jobs", () => {
+  const aggregate = jobs.get("app-checks")
   for (const step of [
     "- name: Install dependencies",
     "- name: Test affected suites",
@@ -77,4 +75,9 @@ test("the aggregate job keeps owning the full install, test and build work", () 
     assert.ok(aggregate.includes(step), `aggregate must keep the step ${step}`)
   }
   assert.match(aggregate, /^ {4}needs: changes$/m)
+  assert.match(
+    jobs.get("lint-and-typecheck"),
+    /needs: \[changes, code-quality, app-checks, marketing-checks, desktop-frontend\]/
+  )
+  assert.match(jobs.get("marketing-checks"), /- name: Marketing browser E2E/)
 })

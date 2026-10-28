@@ -39,7 +39,7 @@ export const COMPARE_REVIEW_MAX_AGE_DAYS = 180
 export const COMPARE_SOURCE_MINIMUM = 3
 
 /** A compare page must carry competitor claims, so every page must cite sources. */
-export const COMPARE_SOURCES_REQUIRED = true
+const COMPARE_SOURCES_REQUIRED = true
 
 const extractLinks = (body) => [...body.matchAll(/\]\(([^)\s]+)/g)].map((match) => match[1])
 
@@ -113,14 +113,7 @@ export function competitorHostFromDisclaimer(data = {}) {
  * the page states it carries no competitor claims, and the floor is skipped;
  * any other value keeps the floor on, so silence is never an exemption.
  */
-export function validateCompetitorSources({
-  data,
-  body,
-  competitorHost,
-  minimum,
-  required,
-  declared,
-}) {
+function validateCompetitorSources({ data, body, competitorHost, minimum, required, declared }) {
   const errors = []
   if (required === false || declared === false) return errors
   if (declared !== undefined && typeof declared !== "boolean") {

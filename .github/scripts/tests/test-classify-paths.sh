@@ -213,7 +213,7 @@ assert_eq "agent-config: docs-only" "true" "$(get_field "$out" "docs-only")"
 
 # --- Test 8: root config files are docs-only ---
 out=$(run_classify $'.nvmrc\nLICENSE\n.gitignore')
-assert_eq "root-config: docs-only" "true" "$(get_field "$out" "docs-only")"
+assert_eq "root-config: docs-only" "false" "$(get_field "$out" "docs-only")"
 
 # --- Test 9: empty input → docs-only=true (vacuous truth, matches workflow) ---
 out=$(run_classify "")
