@@ -343,7 +343,9 @@ const learnItems = [
     #menu-toggle { display: inline-flex; }
   }
 
-  @media (max-width: 359px) {
+  /* Reflow with enlarged text as well as narrow physical viewports. Icon
+     controls retain 44 CSS pixels while the brand text is free to wrap. */
+  @container (width < 30em) {
     #site-header .header-beta-badge {
       display: none;
     }

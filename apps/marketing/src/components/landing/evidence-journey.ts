@@ -1,5 +1,6 @@
 /** One example accumulates context; it never upgrades a finding's evidence state. */
 class EvidenceJourney extends HTMLElement {
+  private world?: HTMLElement
   private observer?: IntersectionObserver
   private tops: number[] = []
   private navPositions: number[] = []
@@ -29,6 +30,11 @@ class EvidenceJourney extends HTMLElement {
     this.resizeObserver.observe(this.scene)
     this.reduced.addEventListener("change", this.handlePreference)
     document.addEventListener("visibilitychange", this.handleVisibility)
+    this.world = this.closest<HTMLElement>("scroll-world") ?? undefined
+    this.world?.addEventListener("world-frame", this.queueUpdate)
+    document.fonts.ready.then(() => {
+      if (this.isConnected) this.measure()
+    })
     this.measure()
     this.handlePreference()
     // Only track while the story is near the viewport. There is no idle loop,
@@ -50,6 +56,7 @@ class EvidenceJourney extends HTMLElement {
   }
 
   disconnectedCallback() {
+    this.world?.removeEventListener("world-frame", this.queueUpdate)
     this.observer?.disconnect()
     this.resizeObserver?.disconnect()
     cancelAnimationFrame(this.frame)
@@ -104,7 +111,13 @@ class EvidenceJourney extends HTMLElement {
           : Math.max(0, Math.min(1, (anchor - tops[active]!) / (nextTop - tops[active]!)))
       const progress = (active + fraction) / (this.chapters.length - 1)
       this.classList.toggle("is-flow", !this.fits)
-      this.setStage(active)
+      const presented = this.world?.dataset.worldChapter
+      const presentedIndex = this.chapters.findIndex(
+        (chapter) => chapter.id === `journey-${presented}`
+      )
+      this.setStage(
+        this.world?.dataset.worldState === "ready" && presentedIndex >= 0 ? presentedIndex : active
+      )
       this.scene?.style.setProperty("--journey-progress", String(Math.min(1, progress)))
     })
   }

@@ -68,6 +68,9 @@ class ScrollWorld extends HTMLElement {
     addEventListener("resize", this.geometry, { passive: true })
     this.resize = new ResizeObserver(this.measure)
     this.resize.observe(this)
+    this.querySelectorAll<HTMLElement>("[data-journey-chapter], .premium-hero").forEach((chapter) =>
+      this.resize!.observe(chapter)
+    )
     const header = document.querySelector("header")
     if (header) this.resize.observe(header)
     document.fonts.ready.then(() => {
@@ -80,11 +83,21 @@ class ScrollWorld extends HTMLElement {
           addEventListener("scroll", this.queue, { passive: true })
           this.measure()
           this.preference()
+          if (
+            this.ensureActiveMedia() &&
+            this.video.readyState >= 1 &&
+            (this.inFlight || this.priming)
+          ) {
+            this.observeFrame()
+            this.prime()
+            this.armDeadline(2000)
+          }
         } else {
           removeEventListener("scroll", this.queue)
           cancelAnimationFrame(this.frame)
           this.frame = 0
           this.clearDeadline()
+          this.video.pause()
         }
       },
       { rootMargin: "200px" }
@@ -177,7 +190,9 @@ class ScrollWorld extends HTMLElement {
       id: chapter.id,
       start: chapter.start,
       end: chapter.end,
-      top: tops[i]!,
+      // Start at the opening frame on arrival. The viewport sampling anchor
+      // must not seek several seconds into the film before the visitor scrolls.
+      top: i === 0 ? Math.max(tops[i]!, this.anchor) : tops[i]!,
       bottom: tops[i + 1] ?? tops[i]! + elements[i]!.offsetHeight,
     }))
     if (!validateBands(this.bands)) {
@@ -230,7 +245,7 @@ class ScrollWorld extends HTMLElement {
   private seeked = () => {
     if (!this.ensureActiveMedia()) return
     this.observeFrame()
-    if (this.inFlight && this.allowed() && !this.failed && !document.hidden) {
+    if (this.near && this.inFlight && this.allowed() && !this.failed && !document.hidden) {
       this.prime()
     }
     // A presentation callback may precede seeked. Resume the latest coalesced
@@ -239,6 +254,7 @@ class ScrollWorld extends HTMLElement {
   }
 
   private prime() {
+    if (!this.near || document.hidden) return
     const epoch = this.epoch
     void this.video.play().catch((error: unknown) => {
       // Our acknowledged frame pauses playback and can abort a pending play
@@ -250,7 +266,7 @@ class ScrollWorld extends HTMLElement {
   }
 
   private queue = () => {
-    if (this.frame || document.hidden || !this.bands.length) return
+    if (this.frame || !this.near || document.hidden || !this.bands.length) return
     this.frame = requestAnimationFrame((now) => {
       this.frame = 0
       const sample = sampleScroll(scrollY + this.anchor, this.bands)
@@ -315,7 +331,18 @@ class ScrollWorld extends HTMLElement {
       if (epoch !== this.epoch) return
       this.presentation = 0
       if (!this.ensureActiveMedia()) return
+      if (!this.near || document.hidden) {
+        this.video.pause()
+        return
+      }
       this.dataset.worldPresented = metadata.mediaTime.toFixed(3)
+      const presentedChapter = this.manifest.chapters.find(
+        (chapter) => metadata.mediaTime >= chapter.start && metadata.mediaTime < chapter.end
+      )
+      if (presentedChapter && this.dataset.worldChapter !== presentedChapter.id) {
+        this.dataset.worldChapter = presentedChapter.id
+        this.dispatchEvent(new Event("world-frame"))
+      }
       if (this.priming) {
         this.priming = false
         this.video.pause()
@@ -392,10 +419,14 @@ class ScrollWorld extends HTMLElement {
       cancelAnimationFrame(this.frame)
       this.frame = 0
       this.clearDeadline()
+      this.video.pause()
     } else {
       this.queue()
-      if (this.allowed() && !this.failed && this.near && (this.inFlight || this.priming))
+      if (this.allowed() && !this.failed && this.near && (this.inFlight || this.priming)) {
+        this.observeFrame()
+        this.prime()
         this.armDeadline(2000)
+      }
     }
   }
 }

@@ -108,7 +108,7 @@ describe("every blog collection consumer applies the shared gate", () => {
       "!entry.data.draft && isNotAfterBuildDate(entry.data)",
     ],
     [
-      "../pages/blog/tags/[tag].astro",
+      "../pages/blog/tags/[tag]/[...page].astro",
       "category hubs",
       "!entry.data.draft && isNotAfterBuildDate(entry.data)",
     ],

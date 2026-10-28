@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest"
 const read = (path: string) =>
   readFileSync(new URL(path, import.meta.url), "utf8").replace(/\s+/g, " ")
 const terms = read("../pages/terms-of-sale.astro")
-const metering = terms.match(/<h2>Metering<\/h2><p>(.*?)<\/p>/)?.[1] ?? ""
+const metering = terms.match(/<h2[^>]*>Metering<\/h2><p>(.*?)<\/p>/)?.[1] ?? ""
 const archiveUrl = new URL("../../public/legal/terms-of-sale-2026-08-24.txt", import.meta.url)
 const billing = read("../../../web/src/app/(dashboard)/dashboard/billing/page.tsx")
 const architecture = read("../../../../codebase.md")

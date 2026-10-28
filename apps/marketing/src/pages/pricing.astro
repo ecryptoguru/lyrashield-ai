@@ -157,7 +157,7 @@ const appUrl =
           aria-pressed="false"
           class="rounded-md px-4 py-2 text-sm font-medium transition-colors text-text-muted hover:text-text"
         >
-          Local
+          Local <span class="ml-1 text-xs text-text-muted">· Launching later</span>
         </button>
       </div>
     </div>
@@ -205,6 +205,12 @@ const appUrl =
       </div>
 
       <h2 id="cloud-plan-heading" class="mb-5 text-2xl font-bold text-text">Choose a starting point</h2>
+      <p class="mb-6 max-w-3xl text-sm leading-7 text-text-muted">
+        Capacity is measured in agent-minutes. Deep and Custom use a 3× multiplier:
+        10 elapsed agent-minutes consume 30 allowance units. Quick and Standard use 1×.
+        Positive partial minutes round up before the multiplier.
+        <a href="#minute-definition" class="text-accent underline underline-offset-4">How minutes are counted</a>
+      </p>
       <!-- Plan Cards: intent, price and capacity stay beside the choice. -->
       <div class="grid grid-cols-1 gap-6 md:grid-cols-3">
         {
@@ -244,7 +250,8 @@ const appUrl =
                   /yr
                 </span>
               </div>
-              <ul class="mt-4 space-y-2">
+              <p class="mt-4 text-xs leading-6 text-text-muted">Quick / Standard: 1× · Deep / Custom: 3× agent-minutes.</p>
+              <ul class="mt-3 space-y-2">
                 {plan.features.map((feature) => (
                   <li class="flex items-start gap-2 text-sm text-text-muted">
                     <svg
@@ -460,7 +467,7 @@ const appUrl =
 
     <!-- Agent-minute definition -->
     <div
-      class="mt-16 rounded-xl border border-border bg-bg-raised p-6"
+      id="minute-definition" class="mt-16 scroll-mt-24 rounded-xl border border-border bg-bg-raised p-6"
     >
       <h2 class="text-xl font-bold text-text">What is an agent-minute?</h2>
       <p class="mt-2 text-sm text-text-muted">

@@ -40,11 +40,8 @@ const startHerePosts = START_HERE_SLUGS.flatMap((slug) => {
 })
 
 const origin = Astro.site?.origin || "http://localhost:4321"
-// Paginated pages 2+ share the index's description with a page suffix, which
-// reads as near-duplicate content to crawlers. Canonical to /blog and keep the
-// pages crawlable via noindex, follow so internal links still resolve.
-const isPaginationPage = page.currentPage > 1
-const canonical = new URL("/blog", origin).toString()
+// Every page contains a distinct article list with a crawlable, stable URL.
+const canonical = new URL(page.currentPage === 1 ? "/blog" : `/blog/${page.currentPage}`, origin).toString()
 const title =
   page.currentPage === 1
     ? "AI App Security Resources | LyraShield AI"
@@ -53,7 +50,7 @@ const baseDescription = "Read LyraShield AI research and practical guidance on s
 const description =
   page.currentPage === 1
     ? baseDescription
-    : `${baseDescription} — Page ${page.currentPage}`
+    : `Browse practical security guides, evidence methodology and retest workflows for AI-built apps. Article archive page ${page.currentPage} of ${page.lastPage}.`
 const featuredPost = page.currentPage === 1 ? page.data[0] : undefined
 const remainingPosts = featuredPost ? page.data.slice(1) : page.data
 // All six categories with counts computed from the FULL published set —
@@ -69,12 +66,12 @@ const jsonLd = [
 ]
 ---
 
-<Base title={title} description={description} canonical={canonical} jsonLd={jsonLd} noindex={isPaginationPage}>
+<Base title={title} description={description} canonical={canonical} jsonLd={jsonLd}>
   <section class="blog-index">
     <header class="blog-index__hero">
       <div>
         <h1>Security guidance for AI-built apps.</h1>
-        <p>{description}</p>
+        <p>Practical guides to reviewing AI-built apps, understanding evidence and retesting fixes.</p>
       </div>
       <div class="blog-index__hero-links">
         <a class="link-underline" href="/rss.xml">Follow via RSS <span aria-hidden="true">↗</span></a>
@@ -86,8 +83,8 @@ const jsonLd = [
     <div data-blog-browse>
     {featuredPost && (
       <section aria-labelledby="featured-heading" class="blog-index__featured" data-reveal>
-        <p id="featured-heading">Latest resource</p>
-        <BlogCard post={featuredPost} heroImage={imagesByPost.get(featuredPost.id)} featured />
+        <h2 id="featured-heading" class="sr-only">Latest resource</h2>
+        <BlogCard post={featuredPost} heroImage={imagesByPost.get(featuredPost.id)} headingLevel="h3" featured />
       </section>
     )}
 
@@ -119,7 +116,7 @@ const jsonLd = [
         {categories.map((category) => (
           <li data-reveal="scale">
             <a class="category-card lift" href={categoryHref(category.id)}>
-              <span class="category-card__eyebrow">{category.eyebrow}</span>
+
               <span class="category-card__label">{category.label}</span>
               <span class="category-card__description">{category.description}</span>
               <span class="category-card__count">
@@ -174,9 +171,13 @@ const jsonLd = [
 </Base>
 
 <style>
-  .blog-index { width: min(100% - 2rem, 76rem); margin-inline: auto; padding-block: clamp(4rem, 9vw, 8rem); }
-  .blog-index__hero { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 3rem; align-items: end; padding-bottom: clamp(3rem, 7vw, 6rem); }
-  .blog-index__hero h1 { max-width: 58rem; margin: 0; font-family: "Bricolage Grotesque Variable", sans-serif; font-size: clamp(3.25rem, 8vw, 7.25rem); font-weight: 800; line-height: .88; letter-spacing: -.06em; }
+  .blog-index h1, .blog-index h2, .blog-index__start-here-list a > span:first-child, .category-card__label { min-width: 0; overflow-wrap: anywhere; }
+  .blog-index__start-here-list li { min-width: 0; }
+  .blog-index__start-here-list a > span:first-child { flex: 1; }
+
+  .blog-index { width: min(100% - 2rem, 76rem); margin-inline: auto; padding-block: clamp(2.5rem, 5vw, 4.5rem); }
+  .blog-index__hero { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 3rem; align-items: end; padding-bottom: 1.5rem; }
+  .blog-index__hero h1 { max-width: 58rem; margin: 0; font-family: "Bricolage Grotesque Variable", sans-serif; font-size: clamp(2.4rem, 5.5vw, 4.5rem); font-weight: 800; line-height: .88; letter-spacing: -.035em; }
   .blog-index__hero p { max-width: 48rem; margin: 2rem 0 0; color: var(--color-text-muted); font-size: clamp(1.05rem, 2vw, 1.25rem); line-height: 1.7; }
   .blog-index__hero-links { display: grid; justify-items: end; gap: .25rem; }
   .blog-index__hero-links > a { display: inline-flex; min-height: 2.75rem; align-items: center; gap: .5rem; color: var(--color-accent); font-size: .9rem; font-weight: 700; text-decoration: none; }
@@ -190,7 +191,7 @@ const jsonLd = [
   .blog-index__start-here-list { display: grid; gap: .5rem; margin: 1.5rem 0 0; padding: 0; list-style: none; counter-reset: start-here; }
   .blog-index__start-here-list li { counter-increment: start-here; }
   .blog-index__start-here-list a { display: flex; min-height: 2.75rem; align-items: center; justify-content: space-between; gap: 1rem; border: 1px solid var(--color-border); border-radius: .75rem; background: var(--color-bg-raised); padding: .85rem 1.1rem; color: var(--color-text); font-weight: 600; text-decoration: none; }
-  .blog-index__start-here-list a::before { content: counter(start-here, decimal-leading-zero); margin-right: .9rem; color: var(--color-accent); font-family: "JetBrains Mono Variable", monospace; font-size: .75rem; font-weight: 600; }
+  .blog-index__start-here-list a::before { display: none; content: counter(start-here, decimal-leading-zero); margin-right: .9rem; color: var(--color-accent); font-family: "JetBrains Mono Variable", monospace; font-size: .75rem; font-weight: 600; }
   .blog-index__start-here-list a:hover { border-color: var(--color-accent); }
   .blog-index__start-here-list a:focus-visible { border-radius: .25rem; outline: 2px solid var(--color-accent); outline-offset: 4px; }
   .blog-index__category-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; margin: 0; padding: 0; list-style: none; }
@@ -205,7 +206,7 @@ const jsonLd = [
   .category-card__arrow { color: var(--color-accent); transition: transform 200ms cubic-bezier(.22, 1, .36, 1); }
   .category-card:hover .category-card__arrow { transform: translateX(4px); }
   .blog-index__latest { margin-top: clamp(4rem, 9vw, 8rem); }
-  .blog-index__section-heading { display: flex; align-items: end; justify-content: space-between; gap: 2rem; margin-bottom: 1rem; }
+  .blog-index__section-heading { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 2rem; margin-bottom: 1rem; }
   .blog-index__section-heading h2, .blog-index__empty h2 { margin: 0; font-family: "Bricolage Grotesque Variable", sans-serif; font-size: clamp(2rem, 4vw, 3.5rem); letter-spacing: -.04em; }
   .blog-index__section-heading span { color: var(--color-text-muted); font-family: "JetBrains Mono Variable", monospace; font-size: .74rem; letter-spacing: .06em; text-transform: uppercase; }
   .blog-index__empty { display: grid; grid-template-columns: minmax(0, 1fr) minmax(18rem, .75fr); gap: clamp(2rem, 6vw, 6rem); align-items: start; border-block: 1px solid var(--color-border); padding-block: clamp(3rem, 7vw, 6rem); margin-top: clamp(4rem, 9vw, 8rem); }
@@ -216,9 +217,9 @@ const jsonLd = [
   .blog-index__starting-points a:hover span:first-child { color: var(--color-accent); }
   .blog-index__starting-points span:first-child { font-weight: 750; }
   .blog-index__starting-points span:last-child { color: var(--color-text-muted); font-size: .88rem; line-height: 1.55; }
-  .blog-index__pagination { display: flex; align-items: center; justify-content: space-between; border-top: 1px solid var(--color-border); padding-top: 2rem; margin-top: 4rem; color: var(--color-text-muted); font-size: .85rem; }
+  .blog-index__pagination { display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; justify-content: space-between; border-top: 1px solid var(--color-border); padding-top: 2rem; margin-top: 4rem; color: var(--color-text-muted); font-size: .85rem; }
   .blog-index__pagination a { min-height: 2.75rem; display: inline-flex; align-items: center; color: var(--color-accent); font-weight: 700; text-decoration: none; }
   @media (max-width: 960px) { .blog-index__category-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-  @media (max-width: 720px) { .blog-index__hero, .blog-index__empty { grid-template-columns: 1fr; } .blog-index__hero { gap: 1rem; } .blog-index__hero-links { justify-items: start; } }
-  @media (max-width: 600px) { .blog-index__category-grid { grid-template-columns: 1fr; } .category-card { min-height: 0; } }
+  @media (max-width: 720px) { .blog-index__hero, .blog-index__empty { grid-template-columns: minmax(0, 1fr); } .blog-index__hero { gap: 1rem; } .blog-index__hero-links { justify-items: start; } }
+  @media (max-width: 600px) { .blog-index__category-grid { grid-template-columns: minmax(0, 1fr); } .category-card { min-height: 0; } }
 </style>

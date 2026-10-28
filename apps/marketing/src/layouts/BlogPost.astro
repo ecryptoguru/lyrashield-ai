@@ -1,4 +1,8 @@
 ---
+import { blogImageSrcset } from "../lib/blog-images"
+import { formatBlogDate } from "../lib/blog-date"
+import { primaryBlogTopic, type BlogTopic } from "../lib/blog-topics"
+import { getCategoryLabel } from "../lib/blog-categories"
 import Base from "@layouts/Base.astro"
 import BlogCta from "@components/BlogCta.astro"
 import Php2ShellGuides from "@components/Php2ShellGuides.astro"
@@ -53,6 +57,8 @@ const {
   wordCount,
   heroImage,
 } = Astro.props
+
+const primaryTopic = primaryBlogTopic({ tags: tags as BlogTopic[], heroImage })
 
 const siteOrigin = Astro.site?.origin || "http://localhost:4321"
 const pageUrl = canonical ?? new URL(Astro.url.pathname, siteOrigin).toString()
@@ -130,7 +136,7 @@ const jsonLd: unknown[] = [
     inLanguage: "en-US",
     wordCount,
     timeRequired: `PT${readingMinutes}M`,
-    articleSection: tags,
+    articleSection: getCategoryLabel(primaryTopic),
     keywords: tags.join(", "),
   },
   {
@@ -170,7 +176,7 @@ if (faq && faq.length > 0) {
   jsonLd={jsonLd}
 >
   <div class="blog-post-shell">
-    <article class="blog-post">
+    <article class="blog-post" data-blog-primary-topic={primaryTopic}>
       <header class="blog-post__header">
         {/* Visible breadcrumb (Spec item 6.7). The layout already emitted
             BreadcrumbList JSON-LD; this surfaces the same trail to readers. */}
@@ -192,11 +198,11 @@ if (faq && faq.length > 0) {
         <p class="blog-post__summary">{description}</p>
         <p class="blog-post__meta">
           <time datetime={pubDate.toISOString()}>
-            {pubDate.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric", timeZone: "Asia/Kolkata" })}
+            {formatBlogDate(pubDate, "long")}
           </time>
           {updatedDate && (
             <span class="ml-2 text-sm">
-              Updated <time datetime={updatedDate.toISOString()}>{updatedDate.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric", timeZone: "Asia/Kolkata" })}</time>
+              Updated <time datetime={updatedDate.toISOString()}>{formatBlogDate(updatedDate, "long")}</time>
             </span>
           )}
           {author && (
@@ -210,27 +216,12 @@ if (faq && faq.length > 0) {
               ) : (
                 reviewer.data.name
               )}{" "}
-              on <time datetime={reviewedDate.toISOString().slice(0, 10)}>{reviewedDate.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric", timeZone: "UTC" })}</time>
+              on <time datetime={reviewedDate.toISOString().slice(0, 10)}>{formatBlogDate(reviewedDate, "long")}</time>
             </span>
           )}
           <span class="ml-2">· {readingMinutes} min read</span>
         </p>
       </header>
-
-      <picture class="blog-post__hero">
-        <source srcset={heroImage.data.avif} type="image/avif" />
-        <source srcset={heroImage.data.webp} type="image/webp" />
-        <img
-          src={heroImage.data.jpeg}
-          alt={heroImage.data.alt}
-          width="1600"
-          height="900"
-          loading="eager"
-          fetchpriority="high"
-          decoding="async"
-          sizes="(min-width: 1024px) 784px, calc(100vw - 2rem)"
-        />
-      </picture>
 
       {tocHeadings.length > 0 && (
         <details class="blog-post__mobile-toc">
@@ -246,6 +237,20 @@ if (faq && faq.length > 0) {
       <div class="blog-post__content prose max-w-none prose-a:text-accent prose-headings:tracking-tight prose-headings:text-text">
         <slot />
       </div>
+
+      <picture class="blog-post__hero">
+        <source srcset={blogImageSrcset(heroImage.data.avif)} sizes="(min-width: 1024px) 640px, calc(100vw - 2rem)" type="image/avif" />
+        <source srcset={blogImageSrcset(heroImage.data.webp)} sizes="(min-width: 1024px) 640px, calc(100vw - 2rem)" type="image/webp" />
+        <img
+          src={heroImage.data.jpeg}
+          alt={heroImage.data.alt}
+          width="1600"
+          height="900"
+          loading="lazy"
+          decoding="async"
+          sizes="(min-width: 1024px) 784px, calc(100vw - 2rem)"
+        />
+      </picture>
 
       {author && (
         <section class="blog-post__author" aria-labelledby="author-heading">
@@ -286,7 +291,8 @@ if (faq && faq.length > 0) {
       {tags.length > 0 && (
         <footer class="mt-12 border-t border-border pt-6">
           <p class="text-sm text-text-muted">
-            Tags:
+            Primary topic: <a href={`/blog/tags/${primaryTopic}`} class="text-accent underline underline-offset-4">{getCategoryLabel(primaryTopic)}</a>.
+            Related topics:
             {tags.map((tag, index) => (
               <span>
                 <a href={`/blog/tags/${tag.toLowerCase().replace(/\s+/g, "-")}`} class="text-accent hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
@@ -316,7 +322,7 @@ if (faq && faq.length > 0) {
       )}
 
       {PHP2SHELL_GUIDE_SLUGS.includes(Astro.url.pathname.split("/").filter(Boolean).at(-1) ?? "") && <Php2ShellGuides />}
-      <BlogCta />
+      <BlogCta tags={tags} />
     </article>
 
     {tocHeadings.length > 0 && (
@@ -341,15 +347,15 @@ if (faq && faq.length > 0) {
 <style>
   .blog-post-shell { width: min(100% - 2rem, 76rem); margin-inline: auto; padding-block: clamp(4rem, 9vw, 8rem); }
   .blog-post { min-width: 0; max-width: 49rem; }
-  .blog-post__header { border-bottom: 1px solid var(--color-border); padding-bottom: clamp(2.5rem, 6vw, 4.5rem); }
+  .blog-post__header { border-bottom: 1px solid var(--color-border); padding-bottom: clamp(1.5rem, 3vw, 2.5rem); }
   .blog-post__draft { display: inline-flex; margin-bottom: 1rem; border: 1px solid var(--color-border); border-radius: 999px; padding: .3rem .7rem; color: var(--color-accent); font: 600 .72rem/1.2 "JetBrains Mono Variable", monospace; text-transform: uppercase; }
-  .blog-post__header h1 { margin: 0; font-family: "Bricolage Grotesque Variable", sans-serif; font-size: clamp(3rem, 7.2vw, 6.3rem); font-weight: 800; line-height: .92; letter-spacing: -.055em; }
+  .blog-post__header h1 { margin: 0; font-family: "Bricolage Grotesque Variable", sans-serif; font-size: clamp(2.15rem, 4.6vw, 4.1rem); font-weight: 800; line-height: .92; letter-spacing: -.035em; }
   .blog-post__summary { max-width: 44rem; margin: 1.75rem 0 0; color: var(--color-text-muted); font-size: clamp(1.1rem, 2vw, 1.3rem); line-height: 1.65; }
   .blog-post__meta { display: flex; flex-wrap: wrap; gap: .35rem .65rem; margin: 1.5rem 0 0; color: var(--color-text-muted); font-family: "JetBrains Mono Variable", monospace; font-size: .72rem; line-height: 1.7; text-transform: uppercase; }
   .blog-post__meta .ml-2 { margin-left: 0; }
   .blog-post__hero { display: block; margin-top: clamp(2rem, 5vw, 3.5rem); overflow: hidden; border: 1px solid var(--color-border); border-radius: 1rem; background: var(--color-bg-raised); }
   .blog-post__hero img { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; object-fit: cover; }
-  .blog-post__content { margin-top: clamp(2.5rem, 6vw, 4.5rem); color: var(--color-text); font-size: 1.04rem; line-height: 1.8; }
+  .blog-post__content { max-width: 72ch; margin-top: clamp(1.5rem, 3vw, 2.5rem); color: var(--color-text); font-size: 1.04rem; line-height: 1.8; }
   .blog-post__content :global(h2) { scroll-margin-top: 6rem; margin-top: 3.25rem; font-size: clamp(1.8rem, 4vw, 2.6rem); }
   .blog-post__content :global(h3) { scroll-margin-top: 6rem; margin-top: 2.5rem; font-size: 1.5rem; }
   .blog-post__content :global(pre) { overflow-x: auto; border: 1px solid var(--color-border); border-radius: .75rem; background: var(--color-bg-raised); }

@@ -133,6 +133,7 @@ function contentLastmod() {
   // here keeps the sitemap lastmod equal to the date the page displays —
   // a git-derived date would disagree with it (the Oct 2026 drift).
   for (const [pageFile, route] of [
+    ["index", "/"],
     ["webmcp", "/webmcp"],
     ["methodology", "/methodology"],
     ["about", "/about"],
@@ -217,7 +218,7 @@ function contentLastmod() {
   ]) {
     setIfAbsent(
       `/blog/tags/${tag}`,
-      "src/pages/blog/tags/[tag].astro",
+      "src/pages/blog/tags/[tag]/[...page].astro",
       "src/content/blog/",
       "src/lib/blog-categories.ts"
     )
@@ -476,8 +477,6 @@ export default defineConfig({
           pathname !== "/terms" &&
           pathname !== "/terms-of-sale" &&
           pathname !== "/docs" &&
-          // Pagination remains crawlable, but declares noindex and canonical /blog.
-          !/^\/blog\/[1-9]\d*\/?$/.test(pathname) &&
           (Boolean(scannerUrlForBuild) || pathname !== "/scan")
         )
       },
@@ -493,7 +492,9 @@ export default defineConfig({
         // crawler anyway. SeoHead's canonical stays the trailing-slash form.
         const rawPathname = new URL(item.url).pathname.replace(/\/$/, "")
         const pathname = rawPathname === "" ? "/" : rawPathname
-        const lastmod = LASTMOD.get(pathname)
+        // Archive pages inherit the owning collection's actual content date.
+        const collectionPath = pathname.replace(/\/\d+$/, "")
+        const lastmod = LASTMOD.get(pathname) || LASTMOD.get(collectionPath)
         const image = SITEMAP_IMAGES.get(pathname)
         const serialized = { ...item }
         if (lastmod) serialized.lastmod = lastmod.toISOString().slice(0, 10)

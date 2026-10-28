@@ -90,10 +90,10 @@ for (const route of paths) {
 
     const sidebar = page.locator(".docs-sidebar")
     if (testInfo.project.name === "mobile") {
-      await expect(sidebar.locator("summary")).toBeVisible()
+      await expect(sidebar.locator(".docs-sidebar__summary")).toBeVisible()
       await expect(sidebar.locator("nav")).toBeHidden()
     } else {
-      await expect(sidebar.locator("summary")).toBeHidden()
+      await expect(sidebar.locator(".docs-sidebar__summary")).toBeHidden()
       await expect(sidebar.locator("nav")).toBeVisible()
     }
 
@@ -124,7 +124,7 @@ test("mobile docs browse disclosure is keyboard accessible and keeps the title i
   await page.goto("/docs/integrations/kiro")
 
   const browse = page.locator(".docs-sidebar__browse")
-  const summary = browse.locator("summary")
+  const summary = browse.locator(":scope > summary")
   const title = page.locator("h1")
   await expect(summary).toBeVisible()
   await expect(summary).toHaveText("Browse documentation")
@@ -148,7 +148,7 @@ test("mobile docs browse disclosure is keyboard accessible and keeps the title i
   await page.keyboard.press("Enter")
   await expect(browse).toHaveAttribute("open", "")
   await expect(page.locator(".docs-sidebar nav")).toBeVisible()
-  await expect(page.locator('.docs-sidebar a[aria-current="page"]')).toBeVisible()
+  await expect(page.locator(".docs-sidebar__current")).toBeVisible()
 
   await page.keyboard.press("Space")
   await expect(browse).not.toHaveAttribute("open", "")

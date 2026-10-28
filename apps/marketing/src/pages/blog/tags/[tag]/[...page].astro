@@ -1,4 +1,6 @@
 ---
+import type { GetStaticPathsOptions } from "astro"
+import { primaryBlogTopic } from "../../../../lib/blog-topics"
 import Base from "@layouts/Base.astro"
 import BlogSearch from "@components/BlogSearch.astro"
 import { getCollection } from "astro:content"
@@ -6,34 +8,30 @@ import {
   BLOG_CATEGORIES,
   categoryHref,
   getCategoriesWithCounts,
-} from "../../../lib/blog-categories"
-import { isNotAfterBuildDate } from "../../../lib/blog-publishing"
+} from "../../../../lib/blog-categories"
+import { isNotAfterBuildDate } from "../../../../lib/blog-publishing"
 
-export async function getStaticPaths() {
+export async function getStaticPaths({ paginate }: GetStaticPathsOptions) {
   const posts = await getCollection(
     "blog",
     (entry) => !entry.data.draft && isNotAfterBuildDate(entry.data)
   )
 
-  // One hub page per category — every category renders even with zero posts,
-  // so the index "Browse by category" cards never point at a missing page.
-  return BLOG_CATEGORIES.map((category) => ({
-    params: { tag: category.id },
-    props: {
-      category,
-      posts: posts.filter((post) => post.data.tags.includes(category.id)),
-    },
-  }))
+  return BLOG_CATEGORIES.flatMap((category) => {
+    const categoryPosts = posts.filter((post) => primaryBlogTopic(post.data) === category.id)
+      .sort((a, b) => b.data.pubDate.getTime() - a.data.pubDate.getTime())
+    return paginate(categoryPosts, { pageSize: 20, params: { tag: category.id }, props: { category, posts: categoryPosts } })
+  })
 }
 
-const { category, posts } = Astro.props
-const sortedPosts = posts.sort((a, b) => b.data.pubDate.getTime() - a.data.pubDate.getTime())
+const { category, posts: sortedPosts, page } = Astro.props
+
 const otherCategories = (await getCategoriesWithCounts()).filter(
   (entry) => entry.id !== category.id
 )
 
-const title = `${category.label} — AI App Security | LyraShield AI`
-const description = `${category.description} Practical guidance with honest limitations.`
+const title = `${category.label}${page.currentPage > 1 ? ` — Page ${page.currentPage}` : ""} | LyraShield AI`
+const description = `${category.description}${page.currentPage > 1 ? ` Page ${page.currentPage} of ${page.lastPage}.` : ""}`
 const origin = Astro.site?.origin || "http://localhost:4321"
 const canonical = new URL(Astro.url.pathname, origin).toString()
 const jsonLd = [
@@ -48,10 +46,10 @@ const jsonLd = [
     isPartOf: { "@id": `${origin}/#website` },
     mainEntity: {
       "@type": "ItemList",
-      numberOfItems: sortedPosts.length,
-      itemListElement: sortedPosts.map((post, index) => ({
+      numberOfItems: page.data.length,
+      itemListElement: page.data.map((post, index) => ({
         "@type": "ListItem",
-        position: index + 1,
+        position: (page.currentPage - 1) * page.size + index + 1,
         url: new URL(`/blog/${post.id}`, origin).toString(),
         name: post.data.title,
       })),
@@ -73,12 +71,12 @@ const jsonLd = [
   <section class="tag-index">
     <header data-reveal>
       <a class="tag-index__back link-underline" href="/blog">← All resources</a>
-      <p class="tag-index__eyebrow">{category.eyebrow}</p>
+
       <h1>{category.label}</h1>
       <p class="tag-index__description">{category.description}</p>
       <p class="tag-index__count">
         <span data-countup={String(sortedPosts.length)}>{sortedPosts.length}</span>
-        {sortedPosts.length === 1 ? "published article" : "published articles"}
+        {sortedPosts.length === 1 ? "primary guide" : "primary guides"}
       </p>
     </header>
 
@@ -86,7 +84,19 @@ const jsonLd = [
       <p class="tag-index__empty">No published posts for this category yet. New guidance lands here as soon as it clears editorial review.</p>
     )}
 
-    <BlogSearch posts={sortedPosts} showAll />
+    <BlogSearch posts={sortedPosts} scope="category" />
+    <div data-blog-browse>
+      <h2 class="mt-10 text-xl font-semibold text-text">Guides in this category</h2>
+      <p class="mt-2 text-sm text-text-muted">Grouped by primary topic. Related topics remain linked within each article.</p>
+      <ul class="tag-index__articles">
+        {page.data.map((post) => <li><a href={`/blog/${post.id}`}><h3>{post.data.title}</h3><p>{post.data.description}</p><span>Read article <span aria-hidden="true">→</span></span></a></li>)}
+      </ul>
+      <nav aria-label="Category pages" class="tag-index__pagination">
+        {page.url.prev && <a href={page.url.prev} rel="prev">← Previous page</a>}
+        <span>Page {page.currentPage} of {page.lastPage}</span>
+        {page.url.next && <a href={page.url.next} rel="next">Next page →</a>}
+      </nav>
+    </div>
 
     <nav class="tag-index__more" aria-label="Other categories" data-reveal="fade">
       <p>More categories</p>
@@ -105,11 +115,21 @@ const jsonLd = [
 </Base>
 
 <style>
+  .tag-index__articles { list-style: none; padding: 0; margin: 1.5rem 0; }
+  .tag-index__articles li { border-top: 1px solid var(--color-border); }
+  .tag-index__articles a { display: block; padding: 1.5rem 0; text-decoration: none; color: var(--color-text); }
+  .tag-index__articles h3 { margin: 0; font-size: clamp(1.2rem, 3vw, 1.65rem); font-weight: 700; line-height: 1.3; }
+  .tag-index__articles p { margin: .65rem 0; color: var(--color-text-muted); line-height: 1.7; max-width: 70ch; }
+  .tag-index__articles a > span { color: var(--color-accent); font-size: .85rem; font-weight: 600; }
+  .tag-index__articles a:hover h3 { color: var(--color-accent); }
+  .tag-index__pagination { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 1rem; border-top: 1px solid var(--color-border); padding-top: 1rem; font-size: .9rem; }
+  .tag-index__pagination a { display: inline-flex; min-height: 2.75rem; align-items: center; color: var(--color-accent); }
+
   .tag-index { width: min(100% - 2rem, 64rem); margin-inline: auto; padding-block: clamp(4rem, 9vw, 8rem); }
   .tag-index header { border-bottom: 1px solid var(--color-border); padding-bottom: clamp(2.5rem, 6vw, 5rem); }
   .tag-index__back { display: inline-flex; min-height: 2.75rem; align-items: center; color: var(--color-accent); font-size: .85rem; font-weight: 700; text-decoration: none; }
   .tag-index__eyebrow { margin: 1.75rem 0 0; color: var(--color-accent); font-family: "JetBrains Mono Variable", monospace; font-size: .72rem; letter-spacing: .1em; text-transform: uppercase; }
-  .tag-index h1 { margin: .75rem 0 0; font-family: "Bricolage Grotesque Variable", sans-serif; font-size: clamp(3.25rem, 8.5vw, 6.5rem); font-weight: 800; line-height: .92; letter-spacing: -.055em; }
+  .tag-index h1 { margin: .75rem 0 0; font-family: "Bricolage Grotesque Variable", sans-serif; font-size: clamp(2.5rem, 6vw, 4.5rem); font-weight: 800; line-height: .92; letter-spacing: -.035em; }
   .tag-index__description { max-width: 45rem; margin: 1.5rem 0 0; color: var(--color-text-muted); font-size: 1.08rem; line-height: 1.7; }
   .tag-index__count { display: inline-flex; align-items: baseline; gap: .5rem; margin: 1.75rem 0 0; color: var(--color-text-muted); font-family: "JetBrains Mono Variable", monospace; font-size: .74rem; letter-spacing: .06em; text-transform: uppercase; }
   .tag-index__count > span { color: var(--color-text); font-size: 1.2rem; font-weight: 700; }
@@ -117,9 +137,9 @@ const jsonLd = [
   .tag-index a:focus-visible { border-radius: .25rem; outline: 2px solid var(--color-accent); outline-offset: 4px; }
   .tag-index__more { border-top: 1px solid var(--color-border); padding-top: clamp(2rem, 5vw, 3.5rem); margin-top: clamp(3rem, 7vw, 5rem); }
   .tag-index__more > p { margin: 0 0 1.25rem; color: var(--color-text-muted); font-family: "JetBrains Mono Variable", monospace; font-size: .7rem; letter-spacing: .08em; text-transform: uppercase; }
-  .tag-index__more ul { display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: .75rem; margin: 0; padding: 0; list-style: none; }
-  .tag-index__more a { display: flex; min-height: 3rem; align-items: center; justify-content: space-between; gap: 1rem; border: 1px solid var(--color-border); border-radius: .75rem; padding: .85rem 1.1rem; color: var(--color-text); text-decoration: none; }
+  .tag-index__more ul { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 15rem), 1fr)); gap: .75rem; margin: 0; padding: 0; list-style: none; }
+  .tag-index__more a { min-width: 0; flex-wrap: wrap; overflow-wrap: anywhere; display: flex; min-height: 3rem; align-items: center; justify-content: space-between; gap: 1rem; border: 1px solid var(--color-border); border-radius: .75rem; padding: .85rem 1.1rem; color: var(--color-text); text-decoration: none; }
   .tag-index__more a:hover { border-color: color-mix(in srgb, var(--color-accent) 45%, var(--color-border)); }
   .tag-index__more a span:first-child { font-weight: 700; font-size: .95rem; }
-  .tag-index__more a span:last-child { color: var(--color-text-muted); font-family: "JetBrains Mono Variable", monospace; font-size: .7rem; letter-spacing: .05em; text-transform: uppercase; white-space: nowrap; }
+  .tag-index__more a span:last-child { color: var(--color-text-muted); font-family: "JetBrains Mono Variable", monospace; font-size: .7rem; letter-spacing: .05em; text-transform: uppercase; white-space: normal; }
 </style>

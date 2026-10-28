@@ -44,8 +44,8 @@ const primary = shots[0]!
 
 <section id="product-preview" class="hero-frame" aria-labelledby="hero-frame-caption">
   <header class="hero-frame__intro">
-    <h2 id="hero-frame-caption">Explore the current evidence console.</h2>
-    <p>From the next decision to the recorded review. Choose a view to see how the workflow fits together.</p>
+    <h2 id="hero-frame-caption">The evidence, in view.</h2>
+    <p>Explore the console your team uses to review findings and decide what comes next.</p>
   </header>
   <div class="hero-frame__views" role="group" aria-label="Dashboard views" hidden>
     {shots.map((shot) => <button type="button" data-product-select={shot.id} aria-controls={`product-view-${shot.id}`} aria-pressed={shot.id === "overview" ? "true" : "false"}>{shot.label}</button>)}
@@ -59,13 +59,13 @@ const primary = shots[0]!
             <img class="hero-frame__img hero-frame__img--dark" src={`/product/current-${shot.asset}-dark.webp`} alt={shot.alt} width={shot.width} height={shot.height} loading="lazy" decoding="async" />
             <img class="hero-frame__img hero-frame__img--light" src={`/product/current-${shot.asset}-light.webp`} alt={`${shot.alt} Light theme.`} width={shot.width} height={shot.height} loading="lazy" decoding="async" />
           </div>
-          <button class="hero-frame__expand" type="button" data-product-expand data-product-view={shot.id} data-product-title={shot.title} aria-label={`Expand ${shot.title} preview`} hidden>Expand preview</button>
+          <button class="hero-frame__expand" type="button" data-product-expand data-product-view={shot.id} data-product-title={shot.title} aria-label={`Expand preview: ${shot.title}`} hidden>Expand preview</button>
         </div>
         <figcaption class="hero-frame__caption"><h3>{shot.heading}</h3><p>{shot.description}</p></figcaption>
       </figure>
     ))}
   </div>
-  <p class="hero-frame__provenance">Actual dashboard captures from the demo workspace, supplied on October 9, 2026. Private identities and finding details are redacted. Counts and evidence states describe the captured example.</p>
+  <p class="hero-frame__provenance">Demo workspace · October 9, 2026 · Private details redacted. Counts and states describe this captured example.</p>
   <dialog class="product-preview" aria-labelledby="product-preview-title">
     <div class="product-preview__toolbar"><h2 id="product-preview-title">Current dashboard preview</h2><button type="button" data-product-close>Close preview</button></div>
     <p>Demo workspace capture · Private details redacted</p>
@@ -112,6 +112,10 @@ const primary = shots[0]!
   :global(:root[data-theme="light"]) .hero-frame__stage { background: #f5faff; }
   :global(:root[data-theme="light"]) .hero-frame__img--dark { display: none; }
   :global(:root[data-theme="light"]) .hero-frame__img--light { display: block; }
+  @media (prefers-reduced-motion: no-preference) {
+    .is-arrived .hero-frame__window { animation: console-arrive 420ms cubic-bezier(.16,1,.3,1); }
+    @keyframes console-arrive { from { opacity: .75; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+  }
   @media (max-width: 600px) {
     .hero-frame__views { gap: .4rem; }
     .hero-frame__views button { padding: .6rem .75rem; font-size: .8rem; }

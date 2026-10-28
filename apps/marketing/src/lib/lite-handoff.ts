@@ -1,19 +1,7 @@
 import { normalizePublicHttpUrl } from "./public-url"
 
-/**
- * The one Lite Check handoff.
- *
- * Both the hero field and the Lite Check section lower on the page hand the
- * visitor's URL to /scan the same way: validate it, put it in sessionStorage
- * under one key and navigate to /scan?start=1. /scan then reads the key, fills
- * its own field and clears the key, so the typed URL never enters the query
- * string, the referrer or any log.
- *
- * This module is deliberately the single implementation. A second copy is how
- * the two forms would drift apart. A second copy is also how a typed URL
- * would end up somewhere it must not be.
- */
-
+/** Validate and privately hand the authorized URL to /scan through sessionStorage.
+ * The target never enters the query string, referrer or analytics. */
 /** Where the handoff parks the target between pages. */
 export const LITE_TARGET_KEY = "lyrashield-lite-target"
 
@@ -55,8 +43,7 @@ export function submitLiteHandoff(
 }
 
 /**
- * Wire one form to the handoff. Used by the hero field and by the Lite Check
- * section, so neither carries its own copy of this logic.
+ * Wire the homepage Lite Check form to the shared private handoff.
  */
 export function bindLiteHandoff(options: {
   formId: string

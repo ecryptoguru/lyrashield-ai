@@ -12,7 +12,8 @@
  * per marketing run. Outside CI we always rebuild: a reused local artifact
  * could be stale, and the marker is only honored under CI anyway.
  */
-import { execSync } from "node:child_process"
+import { execSync, execFileSync } from "node:child_process"
+import { generateBlogResponsive } from "./generate-blog-responsive.mjs"
 import { existsSync, writeFileSync } from "node:fs"
 
 const MARKER = "dist/.local-preview"
@@ -23,5 +24,10 @@ if (!reusable) {
     stdio: "inherit",
     env: { ...process.env, LYRASHIELD_LOCAL_PREVIEW: "1" },
   })
+}
+if (!reusable) {
+  await generateBlogResponsive()
+  execFileSync(process.execPath, ["scripts/apply-worker-scheme-guard.mjs"], { stdio: "inherit" })
+  execFileSync(process.execPath, ["scripts/validate-csp.mjs"], { stdio: "inherit" })
 }
 if (!existsSync(MARKER)) writeFileSync(MARKER, "1\n")

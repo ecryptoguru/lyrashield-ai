@@ -27,7 +27,7 @@ for (const theme of ["dark", "light"] as const) {
     }
     await expect(page.locator(".journey__report")).toBeVisible()
     await expect(page.locator(".journey__report")).toContainText("Insufficient evidence")
-    await expect(page.locator(".journey__report")).toContainText("Approval required")
+    await expect(page.locator(".journey__artifact")).toContainText("Proposal awaiting review")
     await expect(page.locator(".journey__report")).toContainText("Retest coverage incomplete")
     await expect(page.locator("[data-receipt-stage].is-collected")).toHaveCount(5)
     await page.locator(".journey__report").evaluate(async (element) => {
@@ -77,43 +77,20 @@ for (const theme of ["dark", "light"] as const) {
   })
 }
 
-test("tabs interrupt cleanly and copy feedback handles denied clipboard access", async ({
+test("product view selection interrupts cleanly and remains keyboard operable", async ({
   page,
 }) => {
   await page.goto("/")
-  await page.getByRole("tab", { name: "Web app", exact: true }).focus()
-  await page.keyboard.press("ArrowRight")
-  const cli = page.getByRole("tab", { name: "CLI", exact: true })
-  await expect(cli).toBeFocused()
-  await expect(cli).toHaveAttribute("aria-selected", "true")
-  await page.evaluate(() =>
-    Object.defineProperty(navigator, "clipboard", {
-      configurable: true,
-      value: {
-        writeText: async () => {
-          throw new Error("denied")
-        },
-      },
-    })
-  )
-  await page.getByRole("button", { name: "Copy login command" }).click()
-  await expect(page.locator("[data-copy-status]")).toHaveText(
-    "Copy unavailable. Select the command below to copy it."
-  )
-  await page.evaluate(() =>
-    Object.defineProperty(navigator, "clipboard", {
-      configurable: true,
-      value: { writeText: async () => {} },
-    })
-  )
-  await page.getByRole("button", { name: "Copy login command" }).click()
-  await expect(page.locator("[data-copy-status]")).toHaveText("Copied")
-  await cli.focus()
-  await page.keyboard.press("End")
-  await expect(page.getByRole("tab", { name: "Coding agents", exact: true })).toBeFocused()
-  await page.keyboard.press("Home")
-  await expect(page.getByRole("tab", { name: "Web app", exact: true })).toBeFocused()
-  await expect(page.locator('[role="tabpanel"]:visible')).toHaveCount(1)
+  const views = page.getByRole("group", { name: "Dashboard views" })
+  const findings = views.getByRole("button", { name: "Findings", exact: true })
+  await findings.focus()
+  await page.keyboard.press("Enter")
+  await expect(findings).toHaveAttribute("aria-pressed", "true")
+  await expect(page.locator('[data-product-panel="findings"]')).toBeVisible()
+  await views.getByRole("button", { name: "Overview", exact: true }).click()
+  await findings.click()
+  await expect(page.locator("[data-product-panel]:visible")).toHaveCount(1)
+  await expect(page.locator('[data-product-panel="findings"]')).toBeVisible()
 })
 
 test("switching reduced motion at runtime keeps the record and removes travel", async ({

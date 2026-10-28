@@ -168,10 +168,19 @@ export const GET: APIRoute = async (context) => {
       label: `LyraShield AI and ${page.data.competitor}`,
       url: `${origin}/compare/${page.id}`,
     }))
-  const tagLinks = (await getCategoriesWithCounts()).map((category) => ({
-    label: `${category.label} articles`,
-    url: `${origin}${categoryHref(category.id)}`,
-  }))
+  const archiveLinks = Array.from(
+    { length: Math.max(0, Math.ceil(sortedPosts.length / 10) - 1) },
+    (_, index) => ({
+      label: `Article archive, page ${index + 2}`,
+      url: `${origin}/blog/${index + 2}`,
+    })
+  )
+  const tagLinks = (await getCategoriesWithCounts()).flatMap((category) =>
+    Array.from({ length: Math.max(1, Math.ceil(category.count / 20)) }, (_, index) => ({
+      label: `${category.label} primary guides${index ? `, page ${index + 1}` : ""}`,
+      url: `${origin}${categoryHref(category.id)}${index ? `/${index + 1}` : ""}`,
+    }))
+  )
 
   const publicLinks = [
     { label: "LyraShield AI", url: `${origin}/` },
@@ -200,6 +209,7 @@ export const GET: APIRoute = async (context) => {
     { label: "Security and launch-readiness guides", url: `${origin}/blog` },
     { label: "Editorial policy", url: `${origin}/blog/editorial-policy` },
     ...tagLinks,
+    ...archiveLinks,
     ...docsLinks
       .map(({ label, path }) => ({ label, url: `${origin}${path}` }))
       .filter(({ url }) => !excludedPathnames.has(new URL(url).pathname)),
