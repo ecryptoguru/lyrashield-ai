@@ -10,9 +10,9 @@ import { apiError, apiSuccess } from "@/lib/api-response"
 import { authErrorResponse } from "@/lib/api-auth"
 import { z } from "zod"
 
-export const ACTION = "billing.webhook-track.retry"
-export const MAX_EXPECTED_GENERATION = 2_147_483_646
-export const MAX_OPERATOR_RECOVERIES = 3
+const ACTION = "billing.webhook-track.retry"
+const MAX_EXPECTED_GENERATION = 2_147_483_646
+const MAX_OPERATOR_RECOVERIES = 3
 export const PRIVATE_HEADERS = {
   "Cache-Control": "private, no-store",
   "Referrer-Policy": "no-referrer",

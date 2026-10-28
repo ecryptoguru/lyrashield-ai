@@ -421,7 +421,7 @@ Hosted OAuth is read-only by default. A user can grant a connection a bounded se
 
 ## 7. API surface
 
-The web app currently contains 170 route-handler files (154 under `app/api`). Grouped surfaces:
+The web app currently contains 170 route-handler files (164 under `app/api`). Grouped surfaces:
 
 - auth, OAuth metadata/consent/device approval, MCP;
 - workspaces, onboarding, team, and reviewed account-deletion requests;
@@ -499,6 +499,8 @@ git diff --check
 Database changes also require fresh migration replay, drift check, RLS tests, and additive/backward-compatible review. Worker/engine changes require image build, OCI-label/digest verification, engine controlled-derivative gate, local sandbox proof, and relevant production proof. Marketing changes require Worker-backed browser/crawl verification. Desktop changes require frontend, Rust, updater, signing/notarization checks as applicable.
 
 Current command output is authoritative; never copy historical test counts forward as proof.
+
+CI runs code quality, app/core/operations and selected marketing/motion work independently, then validates their results in the existing required aggregate. `.github/scripts/ci-selection.mjs` validates complete routing receipts, selects source consumers independently of image flags and combines selected quality dependency closures into one lint and one typecheck invocation; the app runner prepares SDK/MCP/plugin exports through the canonical plugin build closure before the full core suite. Optional PR image qualification covers packaging/build-environment inputs and copied worker host assets; ordinary source/test/style changes keep required host checks. Unknown inputs select all image targets. Release independently builds and verifies exact images before deployment, so an undeclared source packaging assumption may fail at release build before promotion. Knip remains manual reviewed maintenance (`pnpm lint:knip`, `pnpm lint:knip:baseline`), with no CI report step. Code quality has no dependency on runtime or image jobs and uses generated Prisma types without live services; marketing runtime separately generates its own schema exports. Static web presentation changes still compile and run the portable browser harness, while server/executable/unknown changes retain disposable-service proofs. `.github/scripts/qualify-release-source.mjs` binds successful required GitHub Actions checks and immutable PR base/head/merge evidence to the exact merged source tree before production routing. The latest genuine workflow attempt may still have optional jobs running or failed after all three required contexts succeed; queued, cancelled, malformed or unsupported outer states and incomplete required evidence fail closed. Both normal and squash merges require current main; unsupported or missing receipts fail closed. GitHub branch protection independently requires the three checks with strict base freshness and administrator enforcement.
 
 ## 11. Production topology and accepted evidence
 

@@ -40,7 +40,7 @@ export interface LaunchAssuranceRunContext {
   storageContainerNames: string[]
 }
 
-export function apiFetch(
+function apiFetch(
   ctx: LaunchAssuranceRunContext,
   path: string,
   init?: RequestInit

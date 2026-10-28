@@ -16,7 +16,7 @@ export {
   type CalendarEventResult,
   type CalendarEventSpec,
 } from "./types"
-export { zonedParts, zonedWallToUtc, type ZonedParts } from "./time"
+export { zonedParts, zonedWallToUtc } from "./time"
 
 export function getCalendarAdapter(): CalendarAdapter {
   // The schema fails closed in production: when writes are enabled it refuses

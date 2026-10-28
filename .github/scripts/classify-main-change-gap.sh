@@ -211,7 +211,10 @@ read_field() {
   printf '%s\n' "$value"
 }
 
-for field in docs-only tooling-only marketing app desktop shared; do
+for field in docs-only tooling-only marketing app desktop shared \
+  marketing-tests motion-tests ops-tests engine-worker-contract database-tests \
+  database-services desktop-frontend-tests web-component worker-component \
+  web-image worker-image egress-image; do
   if ! value="$(read_field "$validation_output" "$field")"; then
     echo "::warning::Classifier output is incomplete; selecting all validation and release routes."
     write_conservative_outputs true validation-classification-incomplete

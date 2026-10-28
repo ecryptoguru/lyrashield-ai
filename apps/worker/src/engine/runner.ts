@@ -51,7 +51,6 @@ export {
   redactEngineTailLine,
 } from "./runner-tail"
 export { runEngineTriage } from "./triage-runner"
-export type { EngineTriageRunParams } from "./triage-runner"
 
 export interface EngineRunResult {
   exitCode: number

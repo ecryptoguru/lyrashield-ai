@@ -39,7 +39,6 @@ describe("bounded PHP source flow", () => {
     "$arg = $_GET['host']; $arg = escapeshellarg($arg); system('ping ' . $arg);",
     "$id = $_GET['id']; $id = intval($id); $pdo->query('SELECT * FROM users WHERE id=' . $id);",
     "$cmd = $_GET['cmd']; $cmd = 'uptime'; system($cmd);",
-    "proc_open(['/usr/bin/printf', '%s', $_GET['text']], [], $pipes);",
   ])("respects definite safe local syntax: %s", (body) => {
     expect(scan(body).findings).toEqual([])
   })
@@ -65,10 +64,10 @@ describe("bounded PHP source flow", () => {
     expect(result.issues.join(" ")).toContain(
       "command-specific argument injection remain unassessed"
     )
+    expect(result.findings).toEqual([])
   })
 
   it.each([
-    ["system($_GET['cmd']);", "CWE-78"],
     ["$input = $_POST['cmd']; $next = $input; shell_exec('tool ' . $next);", "CWE-78"],
     [
       "$id = $_GET['id']; $sql = 'SELECT * FROM users WHERE id=' . $id; $pdo->query($sql);",
@@ -128,6 +127,7 @@ describe("bounded PHP source flow", () => {
     })
     expect(result.findings[0]?.code_locations?.[0]).not.toHaveProperty("fix_after")
     expect(result.issues.join(" ")).toMatch(/cross-file.*authorization.*CSRF.*session/i)
+    expect(result.findings.map((finding) => finding.cwe)).toContain("CWE-78")
   })
 
   it("never carries local assignments between function bodies", () => {

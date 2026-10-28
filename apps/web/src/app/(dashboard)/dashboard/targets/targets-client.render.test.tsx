@@ -13,6 +13,8 @@ vi.mock("next/navigation", () => ({
 
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { TargetsClient } from "./targets-client"
+import { RepoTargetForm } from "./targets-form"
+import { EMPTY_REPO_FORM } from "./targets-model"
 import type { Target } from "./targets-model"
 
 const existingTarget: Target = {
@@ -81,4 +83,32 @@ it("starts source setup inline without the target management page", () => {
   expect(html).toContain('id="url-input"')
   expect(html).not.toContain("No targets yet")
   expect(html).not.toContain("Create Target")
+})
+
+it("allows cancelling an incomplete repository form but blocks cancellation while saving", () => {
+  for (const creating of [false, true]) {
+    const html = renderToStaticMarkup(
+      <RepoTargetForm
+        picker={{
+          connected: false,
+          accountLogin: null,
+          mode: "manual",
+          onModeChange: vi.fn(),
+          loading: false,
+          repos: [],
+          selectedRepoId: "",
+          onSelectRepo: vi.fn(),
+        }}
+        repoForm={EMPTY_REPO_FORM}
+        onRepoFormChange={vi.fn()}
+        creating={creating}
+        onSubmit={vi.fn()}
+        onCancel={vi.fn()}
+      />
+    )
+    const cancel = html.match(/<button[^>]*>Cancel<\/button>/)?.[0]
+    expect(cancel).toBeDefined()
+    expect(cancel?.includes('disabled=""')).toBe(creating)
+    expect(html.match(/<button[^>]*type="submit"[^>]*>/)?.[0]).toContain('disabled=""')
+  }
 })

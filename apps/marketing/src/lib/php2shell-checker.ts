@@ -12,7 +12,7 @@ export type PhpCheckInput = {
   switchesHandler?: Answer
 }
 
-export const PHP_CHECK_RULES = "php2shell-guided/2026-10-24.1"
+const PHP_CHECK_RULES = "php2shell-guided/2026-10-24.1"
 export const PHP_CHECK_SOURCE = "https://www.php.net/archive/2026.php"
 
 export function assessSessionNotice(

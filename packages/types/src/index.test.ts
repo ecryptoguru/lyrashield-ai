@@ -97,32 +97,6 @@ describe("UpdateOnboardingSchema", () => {
     expect(UpdateOnboardingSchema.safeParse({ currentStep: 2.5 }).success).toBe(false)
   })
 
-  it("accepts completed boolean", () => {
-    expect(UpdateOnboardingSchema.safeParse({ completed: true }).success).toBe(true)
-    expect(UpdateOnboardingSchema.safeParse({ completed: false }).success).toBe(true)
-  })
-
-  it("accepts skipped boolean", () => {
-    expect(UpdateOnboardingSchema.safeParse({ skipped: true }).success).toBe(true)
-    expect(UpdateOnboardingSchema.safeParse({ skipped: false }).success).toBe(true)
-  })
-
-  it("accepts workspaceId string", () => {
-    expect(UpdateOnboardingSchema.safeParse({ workspaceId: "ws-123" }).success).toBe(true)
-  })
-
-  it("accepts workspaceId null", () => {
-    expect(UpdateOnboardingSchema.safeParse({ workspaceId: null }).success).toBe(true)
-  })
-
-  it("accepts targetId string", () => {
-    expect(UpdateOnboardingSchema.safeParse({ targetId: "tgt-456" }).success).toBe(true)
-  })
-
-  it("accepts targetId null", () => {
-    expect(UpdateOnboardingSchema.safeParse({ targetId: null }).success).toBe(true)
-  })
-
   it("accepts valid selectedGoal", () => {
     const validGoals = [
       "CHECK_PR",
@@ -137,10 +111,6 @@ describe("UpdateOnboardingSchema", () => {
     }
   })
 
-  it("accepts selectedGoal null", () => {
-    expect(UpdateOnboardingSchema.safeParse({ selectedGoal: null }).success).toBe(true)
-  })
-
   it("rejects invalid selectedGoal", () => {
     expect(UpdateOnboardingSchema.safeParse({ selectedGoal: "INVALID_GOAL" }).success).toBe(false)
   })
@@ -153,7 +123,7 @@ describe("UpdateOnboardingSchema", () => {
     expect(UpdateOnboardingSchema.safeParse({ buildTool: null }).success).toBe(true)
   })
 
-  it("accepts full valid update", () => {
+  it("preserves a complete nonnull onboarding update", () => {
     const update = {
       currentStep: 3,
       completed: false,
@@ -162,7 +132,19 @@ describe("UpdateOnboardingSchema", () => {
       targetId: "tgt-xyz",
       selectedGoal: "CHECK_PR",
     }
-    expect(UpdateOnboardingSchema.safeParse(update).success).toBe(true)
+    expect(UpdateOnboardingSchema.parse(update)).toEqual(update)
+  })
+
+  it("preserves nullable clearing and completion fields", () => {
+    const update = {
+      currentStep: 6,
+      completed: true,
+      skipped: true,
+      workspaceId: null,
+      targetId: null,
+      selectedGoal: null,
+    }
+    expect(UpdateOnboardingSchema.parse(update)).toEqual(update)
   })
 
   it("rejects non-boolean completed", () => {

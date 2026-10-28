@@ -312,11 +312,6 @@ describe("interpretExitCode", () => {
     const result = interpretExitCode(-1)
     expect(result.status).toBe("FAILED")
     expect(result.category).toBe("ENGINE_ERROR")
-  })
-
-  it("maps exit -1 (timeout) to FAILED", () => {
-    const result = interpretExitCode(-1)
-    expect(result.status).toBe("FAILED")
     expect(result.message).toContain("code -1")
   })
 
@@ -640,16 +635,6 @@ describe("buildEngineEnv", () => {
 
     expect(engineEnv.LYRASHIELD_PROMPT_CACHE_EXPLICIT).toBe("1")
     expect(engineEnv.LYRASHIELD_PROMPT_CACHE).toBe("1")
-  })
-
-  it("keeps engine checkouts on the worker's host-visible temporary root", () => {
-    const engineEnv = buildEngineEnv({
-      model: "azure/gpt-6-luna",
-      reasoningEffort: "medium",
-      delegateModel: "azure/gpt-6-luna",
-      delegateReasoningEffort: "medium",
-    })
-
     expect(engineEnv.TMPDIR).toBe(tmpdir())
   })
 

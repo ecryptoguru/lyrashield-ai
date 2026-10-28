@@ -50,17 +50,36 @@ describe("scanSecrets", () => {
   })
 
   it("detects AWS Access Key IDs", async () => {
+    // Deterministic pattern-only fixture, never provider-issued key material.
+    // Assemble segments so the test source contains no complete key-shaped literal.
+    const syntheticKey = ["AK", "IA", "Q7M3", "N8P2", "R6S4", "V9W5"].join("")
+    const exampleKey = ["AKIA", "IOSFODNN7", "EXAMPLE"].join("")
     const dir = await setupRepo({
-      "config.ts": `const AWS_KEY = "AKIAIOSFODNN7EXAMPLE"\nconst AWS_SECRET = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"`,
+      "config.ts": [
+        `const AWS_KEY = "${syntheticKey}"`,
+        `const AWS_DOC_KEY = "${exampleKey}"`,
+      ].join("\n"),
     })
     const findings = await scanSecrets({ repoPath: dir, workspaceDir: dir })
-    // AKIAIOSFODNN7EXAMPLE contains "EXAMPLE" which is a false positive hint
-    const awsKey = findings.find((f) => f.id.startsWith("aws-access-key"))
-    // The example key should be filtered as false positive
-    if (awsKey) {
-      expect(awsKey.severity).toBe("critical")
-      expect(awsKey.cwe).toBe("CWE-798")
-    }
+    const awsKeys = findings.filter((finding) => finding.id.startsWith("aws-access-key"))
+    const awsKey = awsKeys.find((finding) => finding.id === "aws-access-key-config.ts-1")
+
+    expect(awsKey).toBeDefined()
+    // The documentation sentinel on line 2 must never become a second finding.
+    expect(awsKeys.map((finding) => finding.id)).toEqual(["aws-access-key-config.ts-1"])
+    expect(awsKey!.severity).toBe("critical")
+    expect(awsKey!.cwe).toBe("CWE-798")
+    expect(awsKey!.control_ids).toEqual([3])
+    expect(awsKey!.code_locations).toEqual([
+      {
+        file: "config.ts",
+        start_line: 1,
+        label: "AWS Access Key ID",
+        snippet: "[REDACTED: AWS Access Key ID detected on this line]",
+      },
+    ])
+    expect(awsKey!.poc_description).toContain("redacted")
+    expect(JSON.stringify(awsKey)).not.toContain(syntheticKey)
   })
 
   it("detects GitHub tokens", async () => {
@@ -75,6 +94,11 @@ describe("scanSecrets", () => {
     expect(githubToken!.control_ids).toEqual([3])
     expect(githubToken!.code_locations).toBeDefined()
     expect(githubToken!.code_locations![0]!.file).toBe(".env")
+    expect(githubToken!.poc_description).not.toContain("ghp_")
+    expect(githubToken!.poc_description).toContain("redacted")
+    const snippet = githubToken!.code_locations![0]!.snippet
+    expect(snippet).toContain("REDACTED")
+    expect(snippet).not.toContain("ghp_")
   })
 
   it("detects private keys (PEM)", async () => {
@@ -280,29 +304,6 @@ describe("scanSecrets", () => {
     expect(tokenFinding).toBeDefined()
     expect(tokenFinding!.code_locations![0]!.start_line).toBe(3)
     expect(tokenFinding!.code_locations![0]!.file).toBe("app.ts")
-  })
-
-  it("redacts poc_description — does not leak secret prefix", async () => {
-    const dir = await setupRepo({
-      ".env": "GITHUB_TOKEN=ghp_1234567890abcdefghijklmnopqrstuvwxyzABCD",
-    })
-    const findings = await scanSecrets({ repoPath: dir, workspaceDir: dir })
-    const tokenFinding = findings.find((f) => f.id.startsWith("github-token"))
-    expect(tokenFinding).toBeDefined()
-    expect(tokenFinding!.poc_description).not.toContain("ghp_")
-    expect(tokenFinding!.poc_description).toContain("redacted")
-  })
-
-  it("redacts code_locations snippet — does not store full secret line", async () => {
-    const dir = await setupRepo({
-      ".env": "GITHUB_TOKEN=ghp_1234567890abcdefghijklmnopqrstuvwxyzABCD",
-    })
-    const findings = await scanSecrets({ repoPath: dir, workspaceDir: dir })
-    const tokenFinding = findings.find((f) => f.id.startsWith("github-token"))
-    expect(tokenFinding).toBeDefined()
-    const snippet = tokenFinding!.code_locations![0]!.snippet
-    expect(snippet).toContain("REDACTED")
-    expect(snippet).not.toContain("ghp_")
   })
 
   it("handles empty repo gracefully", async () => {
