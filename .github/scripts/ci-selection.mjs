@@ -62,8 +62,8 @@ export function workspaceFilters(outputs, group = "app", task) {
       : []),
     ...(outputs["worker-image"] === "true" ? ["--filter=@lyrashield/worker..."] : []),
     // Core tests cover SDK/MCP/plugin/CLI consumers as well as the changed app.
-    // Their existing typecheck dependencies materialize the three dist exports
-    // before core imports them, including on a clean runner with no cache hit.
+    // Typechecks materialize their dist prerequisites on the quality runner;
+    // the app runner prepares core imports through the plugin build closure.
     ...(task === "typecheck" && outputs["database-tests"] === "true"
       ? ["--filter=lyrashield..."]
       : []),
@@ -77,9 +77,17 @@ export function validateResults(needs, cancelled = false) {
   if (needs.changes?.result !== "success")
     throw new Error("Changed-path classification did not succeed.")
   const outputs = validateRouting(needs.changes.outputs)
-  if (needs["app-checks"]?.result !== "success")
-    throw new Error("App/core/operations checks did not succeed")
+  if (needs["code-quality"]?.result !== "success")
+    throw new Error("Lint/typecheck checks did not succeed")
   for (const [job, selected] of [
+    [
+      "app-checks",
+      outputs.app === "true" ||
+        (outputs.shared === "true" && outputs["tooling-only"] !== "true") ||
+        outputs["database-tests"] === "true" ||
+        outputs["database-services"] === "true" ||
+        outputs["ops-tests"] === "true",
+    ],
     [
       "marketing-checks",
       outputs["marketing-tests"] === "true" || outputs["motion-tests"] === "true",

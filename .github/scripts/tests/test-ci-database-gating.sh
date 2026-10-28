@@ -79,7 +79,7 @@ if [[ "$last_step_name" != "Fail closed when cancelled during required CI checks
 fi
 assert_contains "aggregate validates dependency results" "run: node .github/scripts/ci-selection.mjs results"
 assert_contains "aggregate receives classifier and dependency results" 'CI_NEEDS: ${{ toJSON(needs) }}'
-assert_contains "aggregate has all required job dependencies" 'needs: [changes, app-checks, marketing-checks, desktop-frontend]'
+assert_contains "aggregate has all required job dependencies" 'needs: [changes, code-quality, app-checks, marketing-checks, desktop-frontend]'
 assert_contains "service startup is path-gated" "if: needs.changes.outputs.database-services == 'true'"
 assert_contains "service cleanup runs after failure/cancellation" "if: \${{ always() }}"
 assert_contains "core suite uses DB flag" 'if [ "$DATABASE_TESTS" = true ]; then'

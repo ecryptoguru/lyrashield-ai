@@ -399,8 +399,8 @@ test("the dead-code report stays advisory and cannot fail the required aggregate
   assert.ok(root.devDependencies.knip, "knip must stay a declared devDependency")
   // The step lives in the required aggregate, so its non-blocking shape is what
   // keeps it from gating a merge.
-  const app = workflow.split("\n  app-checks:\n")[1].split("\n  marketing-checks:\n")[0]
-  assert.ok(app.includes("- name: Dead-code report (knip, non-blocking)"))
+  const quality = workflow.split("\n  code-quality:\n")[1].split("\n  app-checks:\n")[0]
+  assert.ok(quality.includes("- name: Dead-code report (knip, non-blocking)"))
 })
 
 test("known tooling retains executable operations checks without runtime suites", () => {
@@ -807,24 +807,22 @@ for (const current of [true, false]) {
   })
 }
 
-test("cargo-only desktop harness generates its database client before typechecking", () => {
-  const desktop = workflow.slice(workflow.indexOf("  desktop-frontend:"))
+test("cargo-only desktop harness quality generates its database client before typechecking", () => {
+  const quality = workflow.split("\n  code-quality:\n")[1].split("\n  app-checks:\n")[0]
   assert.ok(
-    desktop.indexOf("Generate Prisma Client for portable Desktop harness") <
-      desktop.indexOf("Typecheck portable browser harness")
-  )
-  assert.match(
-    desktop,
-    /name: Generate Prisma Client for portable Desktop harness\n        if: needs.changes.outputs.app != 'true' && needs.changes.outputs.shared != 'true'\n        run: pnpm db:generate/
+    quality.indexOf("Generate Prisma Client for static analysis") <
+      quality.indexOf("Typecheck portable browser harness for Desktop")
   )
   assert.equal(
-    runs("Generate Prisma Client for portable Desktop harness", [
-      "apps/desktop/src-tauri/Cargo.lock",
-    ]),
+    runs("Generate Prisma Client for static analysis", ["apps/desktop/src-tauri/Cargo.lock"]),
     true
   )
   assert.equal(
-    runs("Generate Prisma Client for portable Desktop harness", ["packages/db/src/client.ts"]),
+    runs("Typecheck portable browser harness for Desktop", ["apps/desktop/src-tauri/Cargo.lock"]),
+    true
+  )
+  assert.equal(
+    runs("Typecheck portable browser harness for Desktop", ["packages/db/src/client.ts"]),
     false
   )
 })

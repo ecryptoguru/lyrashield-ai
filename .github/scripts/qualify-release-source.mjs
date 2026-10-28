@@ -38,10 +38,14 @@ function successful(record) {
   return record?.status === "completed" && record.conclusion === "success"
 }
 
-function completedWorkflow(run) {
-  // Optional jobs may fail without adding required contexts. The three named
-  // checks below are authoritative; cancelled/incomplete runs cannot qualify.
-  return run?.status === "completed" && ["success", "failure"].includes(run.conclusion)
+function eligibleWorkflow(run) {
+  // Optional jobs may still run or fail after the three required contexts pass.
+  // Their bound terminal successes below remain authoritative; no other outer
+  // state (including cancellation or a queued rerun) may qualify.
+  return (
+    (run?.status === "in_progress" && run.conclusion === null) ||
+    (run?.status === "completed" && ["success", "failure"].includes(run.conclusion))
+  )
 }
 
 export function qualifyReleaseSource({ repository, sha, api }) {
@@ -94,7 +98,7 @@ export function qualifyReleaseSource({ repository, sha, api }) {
     "workflow_runs"
   )
   requireEvidence(runs.length > 0, "missing CI run")
-  // Never fall back to an older success when the latest run failed or is pending.
+  // Never fall back to an older success when the latest run lacks required evidence.
   requireEvidence(
     runs.every((run) => Number.isSafeInteger(run.id)),
     "invalid CI run identity"
@@ -113,8 +117,8 @@ export function qualifyReleaseSource({ repository, sha, api }) {
       Number.isSafeInteger(run.run_attempt) &&
       run.run_attempt > 0 &&
       Number.isSafeInteger(run.check_suite_id) &&
-      completedWorkflow(run),
-    "latest CI run is not a completed repository PR workflow"
+      eligibleWorkflow(run),
+    "latest CI run is not an eligible repository PR workflow"
   )
   const jobs = list(api, `${root}/actions/runs/${run.id}/attempts/${run.run_attempt}/jobs`, "jobs")
   const receipts = jobs.filter((job) => RECEIPT.test(job.name))
@@ -173,7 +177,7 @@ export function qualifyReleaseSource({ repository, sha, api }) {
   }
   const latestRun = api(`${root}/actions/runs/${run.id}`)
   requireEvidence(
-    latestRun.run_attempt === run.run_attempt && completedWorkflow(latestRun),
+    latestRun.run_attempt === run.run_attempt && eligibleWorkflow(latestRun),
     "CI attempt changed during qualification"
   )
   const latestRuns = list(

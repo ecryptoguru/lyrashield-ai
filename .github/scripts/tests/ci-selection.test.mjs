@@ -35,7 +35,17 @@ function classify(...paths) {
 function results(outputs = classify("README.md")) {
   return {
     changes: { result: "success", outputs },
-    "app-checks": { result: "success" },
+    "code-quality": { result: "success" },
+    "app-checks": {
+      result:
+        outputs.app === "true" ||
+        (outputs.shared === "true" && outputs["tooling-only"] !== "true") ||
+        outputs["database-tests"] === "true" ||
+        outputs["database-services"] === "true" ||
+        outputs["ops-tests"] === "true"
+          ? "success"
+          : "skipped",
+    },
     "desktop-frontend": {
       result: outputs["desktop-frontend-tests"] === "true" ? "success" : "skipped",
     },
@@ -81,7 +91,9 @@ test("aggregate rejects every failed, skipped, missing or cancelled selected dep
       assert.throws(() =>
         validateResults({ ...needs, changes: { ...needs.changes, result: status } })
       )
-      assert.throws(() => validateResults({ ...needs, "app-checks": { result: status } }))
+      assert.throws(() => validateResults({ ...needs, "code-quality": { result: status } }))
+      if (needs["app-checks"].result === "success" || status !== "skipped")
+        assert.throws(() => validateResults({ ...needs, "app-checks": { result: status } }))
       if (needs["marketing-checks"].result === "success") {
         assert.throws(() => validateResults({ ...needs, "marketing-checks": { result: status } }))
       }
@@ -106,6 +118,7 @@ test("aggregate rejects every failed, skipped, missing or cancelled selected dep
   assert.equal(aggregate.if, "${{ always() }}")
   assert.deepEqual(aggregate.needs, [
     "changes",
+    "code-quality",
     "app-checks",
     "marketing-checks",
     "desktop-frontend",
@@ -151,7 +164,10 @@ test("only web CSS and public assets narrow runtime gates; mixed, renamed and se
     "Install Playwright browser",
     "Portable browser harness",
   ]) {
-    const step = workflow.jobs["app-checks"].steps.find((step) => step.name === name)
+    const step = [
+      ...workflow.jobs["app-checks"].steps,
+      ...workflow.jobs["code-quality"].steps,
+    ].find((step) => step.name === name)
     assert.ok(step.if.includes("needs.changes.outputs.app == 'true'"), name)
   }
   assert.equal(classify("apps/web/src/app/api/billing/route.ts")["database-tests"], "true")
@@ -336,4 +352,120 @@ test("service integration proof rejects missing, skipped and undercounted fixtur
   const skipped = structuredClone(report)
   skipped.testResults[0].assertionResults[0].status = "pending"
   assert.throws(() => assertFileCounts(skipped, [["a.test.ts", 2]]))
+})
+
+test("code quality starts independently and owns every lint and typecheck gate", () => {
+  const quality = workflow.jobs["code-quality"]
+  assert.ok(quality, "missing independent code-quality job")
+  assert.equal(quality.name, "Lint & Typecheck")
+  assert.equal(quality.needs, "changes")
+  assert.equal(quality.if, undefined)
+  assert.ok(quality["timeout-minutes"] > 0)
+  assert.equal(quality.services, undefined)
+  assert.equal(quality.env.LYRASHIELD_TEST_DB_DISPOSABLE, "0")
+  const app = workflow.jobs["app-checks"]
+  assert.equal(app.needs, "changes")
+  assert.ok(
+    !app.steps.some((step) =>
+      /^(Lint|Typecheck|Format check|Serial-comma|Size lint|Dead-code)/.test(step.name)
+    )
+  )
+  for (const name of [
+    "Format check",
+    "Serial-comma copy ratchet",
+    "Size lint ratchet",
+    "Dead-code report (knip, non-blocking)",
+    "Lint CI tooling",
+    "Lint",
+    "Typecheck",
+    "Typecheck web tests",
+    "Typecheck browser fixtures",
+    "Typecheck portable browser harness",
+    "Lint portable browser harness",
+    "Lint selected marketing workspaces",
+    "Typecheck selected marketing workspaces",
+  ])
+    assert.ok(
+      quality.steps.some((step) => step.name === name),
+      name
+    )
+  assert.ok(!quality.steps.some((step) => /docker run|migrate:deploy/.test(step.run)))
+  const cacheKey = (job) => job.steps.find((step) => step.name === "Cache Turbo").with.key
+  assert.notEqual(cacheKey(quality), cacheKey(app))
+})
+
+test("app job and aggregate agree on intentional skips for every path class", () => {
+  for (const [path, expectedSelection] of [
+    ["README.md", false],
+    [".github/scripts/ci-selection.mjs", true],
+    ["apps/marketing/src/pages/index.astro", false],
+    ["apps/web/src/app/globals.css", true],
+    ["apps/worker/src/index.ts", true],
+    ["packages/billing/src/index.ts", true],
+    ["unknown-input", true],
+    ["apps/desktop/src-tauri/Cargo.lock", false],
+  ]) {
+    const outputs = classify(path)
+    const expression = workflow.jobs["app-checks"].if.replace(
+      /needs\.changes\.outputs\.([\w-]+)/g,
+      (_, key) => JSON.stringify(outputs[key])
+    )
+    const selected = runInNewContext(expression, {}, { timeout: 100 })
+    assert.equal(selected, expectedSelection, path)
+    const needs = results(outputs)
+    assert.equal(needs["app-checks"].result, selected ? "success" : "skipped", path)
+    assert.doesNotThrow(() => validateResults(needs), path)
+    assert.throws(
+      () =>
+        validateResults({ ...needs, "app-checks": { result: selected ? "skipped" : "success" } }),
+      path
+    )
+    for (const result of ["failure", "cancelled", "skipped", undefined])
+      assert.throws(() => validateResults({ ...needs, "code-quality": { result } }), path)
+  }
+})
+
+test("core imports get canonical plugin build prerequisites on their own runner", () => {
+  const steps = workflow.jobs["app-checks"].steps
+  const prepare = steps.find((step) => step.name === "Build core test export prerequisites")
+  assert.ok(prepare)
+  assert.equal(prepare.if, "needs.changes.outputs.database-tests == 'true'")
+  assert.equal(
+    prepare.run,
+    "pnpm exec turbo run build --filter=@lyrashield/agent-plugin... --concurrency=2"
+  )
+  assert.ok(
+    steps.indexOf(prepare) < steps.findIndex((step) => step.name === "Test affected suites")
+  )
+  const graph = JSON.parse(
+    execFileSync(
+      "pnpm",
+      ["exec", "turbo", "run", "build", "--filter=@lyrashield/agent-plugin...", "--dry=json"],
+      { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }
+    )
+  )
+  for (const taskId of [
+    "@lyrashield/sdk#build",
+    "@lyrashield/mcp#build",
+    "@lyrashield/agent-plugin#build",
+  ])
+    assert.ok(
+      graph.tasks.some((task) => task.taskId === taskId && task.command !== "<NONEXISTENT>"),
+      taskId
+    )
+  for (const name of [
+    "@lyrashield/web",
+    "@lyrashield/worker",
+    "@lyrashield/marketing",
+    "@lyrashield/desktop-frontend",
+  ])
+    assert.ok(!graph.packages.includes(name), name)
+})
+
+test("marketing runtime prepares Prisma independently of the quality runner", () => {
+  const steps = workflow.jobs["marketing-checks"].steps
+  const generate = steps.findIndex((step) => step.run === "pnpm db:generate")
+  const tests = steps.findIndex((step) => ["Test marketing", "Test motion"].includes(step.name))
+  assert.ok(generate >= 0, "marketing runtime needs its own generated Prisma client")
+  assert.ok(tests > generate, "Prisma must be available before runtime imports")
 })

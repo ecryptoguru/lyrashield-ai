@@ -64,7 +64,7 @@ test("the required aggregate contexts keep their names and fail-closed guards", 
   assert.match(contract, /Changed-path classification did not succeed/)
 })
 
-test("the aggregate waits for the bounded app and independent marketing jobs", () => {
+test("the aggregate waits for independent quality, app and marketing jobs", () => {
   const aggregate = jobs.get("app-checks")
   for (const step of [
     "- name: Install dependencies",
@@ -77,7 +77,7 @@ test("the aggregate waits for the bounded app and independent marketing jobs", (
   assert.match(aggregate, /^ {4}needs: changes$/m)
   assert.match(
     jobs.get("lint-and-typecheck"),
-    /needs: \[changes, app-checks, marketing-checks, desktop-frontend\]/
+    /needs: \[changes, code-quality, app-checks, marketing-checks, desktop-frontend\]/
   )
   assert.match(jobs.get("marketing-checks"), /- name: Marketing browser E2E/)
 })

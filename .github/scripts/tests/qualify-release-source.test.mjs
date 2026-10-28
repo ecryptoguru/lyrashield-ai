@@ -117,10 +117,6 @@ for (const mapping of ["merge", "squash"]) {
 }
 
 const rejectionCases = {
-  "pending run": (f) => {
-    f.run.status = "in_progress"
-    f.run.conclusion = null
-  },
   "failed run": (f) => {
     f.run.conclusion = "failure"
     f.jobs[1].conclusion = "failure"
@@ -315,3 +311,93 @@ test("rejects a new CI run started during qualification", () => {
   )
   assert.throws(f.qualify, /latest CI run changed/)
 })
+
+test("optional running work does not block three successful required source checks", () => {
+  const f = fixture()
+  f.run.status = "in_progress"
+  f.run.conclusion = null
+  assert.equal(f.qualify().sha, sha)
+})
+
+for (const state of [
+  { status: "queued", conclusion: null },
+  { status: "waiting", conclusion: null },
+  { status: "requested", conclusion: null },
+  { status: "in_progress", conclusion: "success" },
+  { status: "in_progress", conclusion: undefined },
+  { status: "completed", conclusion: null },
+  { status: "completed", conclusion: "skipped" },
+])
+  test(`rejects unsupported outer workflow state: ${JSON.stringify(state)}`, () => {
+    const f = fixture()
+    Object.assign(f.run, state)
+    assert.throws(f.qualify)
+  })
+
+for (const name of names) {
+  for (const kind of ["job", "check"]) {
+    for (const state of [
+      { status: "in_progress", conclusion: null },
+      { status: "queued", conclusion: null },
+      { status: "completed", conclusion: "failure" },
+      { status: "completed", conclusion: "skipped" },
+      { status: "completed", conclusion: "cancelled" },
+    ])
+      test(`active optional work rejects ${kind} ${name} ${JSON.stringify(state)}`, () => {
+        const f = fixture()
+        Object.assign(f.run, { status: "in_progress", conclusion: null })
+        const job = f.jobs.find((job) => job.name === name)
+        Object.assign(
+          kind === "job" ? job : f.responses.get(`${root}/check-runs/${job.id + 100}`),
+          state
+        )
+        assert.throws(f.qualify)
+      })
+  }
+}
+
+for (const conclusion of ["success", "failure", "cancelled"]) {
+  test(`optional active run transitions to completed ${conclusion} during recheck`, () => {
+    const f = fixture()
+    let reads = 0
+    f.responses.set(`${root}/actions/runs/20`, () => ({
+      ...f.run,
+      ...(++reads === 1
+        ? { status: "in_progress", conclusion: null }
+        : { status: "completed", conclusion }),
+    }))
+    if (conclusion === "cancelled") assert.throws(f.qualify, /attempt changed/)
+    else assert.equal(f.qualify().sha, sha)
+  })
+}
+
+for (const name of names) {
+  test(`optional active work cannot cover a missing required job: ${name}`, () => {
+    const f = fixture()
+    Object.assign(f.run, { status: "in_progress", conclusion: null })
+    f.jobs.splice(
+      f.jobs.findIndex((job) => job.name === name),
+      1
+    )
+    f.responses.get(`${root}/actions/runs/20/attempts/1/jobs?per_page=100&page=1`).total_count--
+    assert.throws(f.qualify, /required check unavailable/)
+  })
+}
+
+for (const state of [
+  { status: "queued", conclusion: null },
+  { status: "waiting", conclusion: null },
+  { status: "requested", conclusion: null },
+  { status: "in_progress", conclusion: "success" },
+  { status: "completed", conclusion: "skipped" },
+]) {
+  test(`final run recheck rejects unsupported state: ${JSON.stringify(state)}`, () => {
+    const f = fixture()
+    let reads = 0
+    f.responses.set(`${root}/actions/runs/20`, () => ({
+      ...f.run,
+      ...(++reads === 1 ? { status: "in_progress", conclusion: null } : state),
+    }))
+    assert.throws(f.qualify, /attempt changed/)
+  })
+}
