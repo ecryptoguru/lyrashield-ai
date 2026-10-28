@@ -500,6 +500,8 @@ Database changes also require fresh migration replay, drift check, RLS tests, an
 
 Current command output is authoritative; never copy historical test counts forward as proof.
 
+CI runs app/core/operations and selected marketing/motion work independently, then validates their results in the existing required aggregate. `.github/scripts/ci-selection.mjs` validates routing and selects workspace dependency closures; the full core suite retains its SDK/MCP/plugin build prerequisites. Static web presentation changes still compile and run the portable browser harness, while server/executable/unknown changes retain disposable-service proofs. `.github/scripts/qualify-release-source.mjs` binds successful required GitHub Actions checks and immutable PR base/head/merge evidence to the exact merged source tree before production routing. Both normal and squash merges require current main; unsupported or missing receipts fail closed. GitHub branch protection independently requires the three checks with strict base freshness and administrator enforcement.
+
 ## 11. Production topology and accepted evidence
 
 ### Live topology
