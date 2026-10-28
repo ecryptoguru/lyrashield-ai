@@ -257,7 +257,8 @@ describe("fix PR patch provenance with disposable encrypted artifacts", () => {
       "src/a.ts",
       "const insecure = false\n",
       expect.any(String),
-      expect.any(String)
+      expect.any(String),
+      "74063c928e3a962eb0a8eb60c71bd99c821e6ede"
     )
     expect(mocks.pr).toHaveBeenCalledOnce()
   })
