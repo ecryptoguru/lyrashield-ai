@@ -4,7 +4,7 @@ test("search finds guides outside the current pagination slice and recovers from
   page,
 }) => {
   await page.goto("/blog")
-  const search = page.getByLabel("Search all published guides")
+  const search = page.getByLabel("Search published guides")
   await search.fill("Supabase")
   await expect(page.locator("#guide-results a[href='/blog/supabase-security-guide']")).toBeVisible()
   await expect(page.locator("[data-blog-browse]")).toBeHidden()
@@ -26,7 +26,9 @@ test("category browsing is compact, searchable and restores all guides", async (
   await page.getByLabel("Search this category").fill("Supabase")
   await expect(page.locator("#guide-results a[href='/blog/supabase-security-guide']")).toBeVisible()
   await page.getByRole("button", { name: "Clear search" }).click()
-  expect(await rows.filter({ visible: true }).count()).toBe(total)
+  await expect(page.locator("#guide-results")).toBeHidden()
+  await expect(page.locator("[data-blog-browse]")).toBeVisible()
+  await expect(page.locator(".tag-index__articles li")).toHaveCount(20)
 })
 
 test("article TOC leaves the destination below the fixed header", async ({ page }) => {
