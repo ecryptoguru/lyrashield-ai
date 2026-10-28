@@ -182,41 +182,98 @@ test("target loading errors stay distinct from an empty workspace and can be ret
   await expect(page.getByRole("link", { name: "Manage targets" })).toBeVisible()
 })
 
-test("schedule creation keeps its accessible name during a delayed request and restores focus", async ({
-  page,
-}) => {
-  let release!: () => void
-  const pending = new Promise<void>((resolve) => {
-    release = resolve
-  })
-  await page.route("**/api/targets?*", (route) =>
-    route.fulfill({
-      json: {
-        success: true,
-        data: {
-          items: [{ id: "target-1", name: "Checkout", type: "URL", apiSpecUrl: null }],
-          nextCursor: null,
-        },
-      },
+for (const width of [390, 1280]) {
+  for (const populated of [false, true]) {
+    test(`schedule creation restores focus after a delayed ${populated ? "populated" : "empty"} refresh at ${width}px`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 800 })
+      let release!: () => void
+      let releaseRefresh!: () => void
+      let markRefreshStarted!: () => void
+      let listRequests = 0
+      const pending = new Promise<void>((resolve) => {
+        release = resolve
+      })
+      const refreshPending = new Promise<void>((resolve) => {
+        releaseRefresh = resolve
+      })
+      const refreshStarted = new Promise<void>((resolve) => {
+        markRefreshStarted = resolve
+      })
+      await page.route("**/api/targets?*", (route) =>
+        route.fulfill({
+          json: {
+            success: true,
+            data: {
+              items: [{ id: "target-1", name: "Checkout", type: "URL", apiSpecUrl: null }],
+              nextCursor: null,
+            },
+          },
+        })
+      )
+      await page.route("**/api/schedules*", async (route) => {
+        if (route.request().method() === "POST") {
+          await pending
+          await route.fulfill({ json: { success: true, data: { id: "schedule-1" } } })
+        } else {
+          listRequests++
+          if (listRequests > 1) {
+            markRefreshStarted()
+            await refreshPending
+          }
+          await route.fulfill({
+            json: {
+              success: true,
+              data: {
+                items:
+                  populated && listRequests > 1
+                    ? [
+                        {
+                          id: "schedule-1",
+                          targetId: "target-1",
+                          cron: "0 0 * * 0",
+                          goal: "SECURITY_AUDIT",
+                          mode: "QUICK",
+                          enabled: true,
+                          lastRunAt: null,
+                          nextRunAt: null,
+                          createdAt: "2026-10-28T00:00:00.000Z",
+                          target: {
+                            id: "target-1",
+                            name: "Checkout",
+                            type: "URL",
+                            url: "https://example.test",
+                            apiSpecUrl: null,
+                          },
+                        },
+                      ]
+                    : [],
+                nextCursor: null,
+              },
+            },
+          })
+        }
+      })
+      await page.goto("?dashboard-ux=schedules")
+      await expect(page.getByRole("button", { name: "New Schedule" })).toHaveCount(1)
+      await page.getByRole("button", { name: "New Schedule" }).click()
+      await page.getByLabel("Target", { exact: true }).selectOption("target-1")
+      await page.getByRole("button", { name: "Create", exact: true }).click()
+      const creating = page.getByRole("button", { name: "Creating schedule…" })
+      await expect(creating).toBeDisabled()
+      await expect(creating).toHaveAttribute("aria-busy", "true")
+      release()
+      await refreshStarted
+      try {
+        await expect(creating).toBeVisible()
+      } finally {
+        releaseRefresh()
+      }
+      await expect(page.getByRole("button", { name: "New Schedule" })).toBeFocused()
     })
-  )
-  await page.route("**/api/schedules*", async (route) => {
-    if (route.request().method() === "POST") {
-      await pending
-      await route.fulfill({ json: { success: true, data: { id: "schedule-1" } } })
-    } else await route.fulfill({ json: { success: true, data: { items: [], nextCursor: null } } })
-  })
-  await page.goto("?dashboard-ux=schedules")
-  await expect(page.getByRole("button", { name: "New Schedule" })).toHaveCount(1)
-  await page.getByRole("button", { name: "New Schedule" }).click()
-  await page.getByLabel("Target", { exact: true }).selectOption("target-1")
-  await page.getByRole("button", { name: "Create", exact: true }).click()
-  const creating = page.getByRole("button", { name: "Creating schedule…" })
-  await expect(creating).toBeDisabled()
-  await expect(creating).toHaveAttribute("aria-busy", "true")
-  release()
-  await expect(page.getByRole("button", { name: "New Schedule" })).toBeFocused()
-})
+  }
+}
 
 test("license continuation links retain submitted filters and reset the cursor on the first page", async ({
   page,
