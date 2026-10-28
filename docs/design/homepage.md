@@ -31,6 +31,11 @@ the shared catalog.
 ## Motion thesis
 
 - Focal moment: one continuous architectural film follows native scrolling.
+- Presentation: a paused decoder seeks toward the latest scroll position. Completed
+  frames are copied to a canvas below the readability overlay. Keep the previous
+  frame visible during a seek; never use autoplay to advance the story.
+- Mobile controls: chapter navigation has a separate sticky row below the motion
+  toggle so enlarged text does not collapse navigation or cover its links.
 - Continuity: chapter navigation follows presented frames, with a stable example
   accumulating scope and review context without upgrading its evidence state.
 - Feedback: brief button and link states, native FAQ disclosure feedback, product
