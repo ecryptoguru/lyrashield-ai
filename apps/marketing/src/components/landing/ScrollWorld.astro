@@ -26,7 +26,8 @@ const opening = manifest.chapters[0]!
   .scroll-world__stage picture, .scroll-world__stage img, .scroll-world__stage video, .scroll-world__scrim { position: absolute; inset: 0; width: 100%; height: 100%; }
   .scroll-world__stage img, .scroll-world__stage video { object-fit: cover; }
   .scroll-world__stage video { opacity: 0; }
-  scroll-world[data-world-painted="true"] .scroll-world__stage video { opacity: 1; }
+  :global(.scroll-world__canvas) { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; }
+  :global(scroll-world[data-world-painted="true"] .scroll-world__canvas) { opacity: 1; }
   scroll-world[data-world-painted="true"] .scroll-world__stage picture { opacity: 0; }
   .scroll-world__scrim { background: linear-gradient(90deg, rgba(8,17,28,.96), rgba(8,17,28,.8) 34%, rgba(8,17,28,.1) 65%); }
   .scroll-world__content { position: relative; z-index: 1; }
@@ -49,7 +50,8 @@ const opening = manifest.chapters[0]!
     .scroll-world__stage img, .scroll-world__stage video { object-fit: cover; }
     .scroll-world__scrim { background: linear-gradient(180deg, rgba(8,17,28,.06) 30%, rgba(8,17,28,.24) 70%, rgba(8,17,28,.48)); }
     :global(scroll-world[data-world-state] .journey__layout) { display: block; }
-    :global(scroll-world[data-world-state] .journey__nav) { width: 100%; box-shadow: none; }
+    :global(scroll-world[data-world-state] .journey__nav) { top: calc(var(--world-top, 4rem) + 3.5rem); width: 100%; box-shadow: none; }
+    :global(scroll-world[data-world-state] .journey__chapter) { scroll-margin-top: calc(var(--world-top, 4rem) + 8rem); }
     :global(scroll-world[data-world-state] .journey__intro) { padding: 1.25rem 1rem; background: rgba(8,17,28,.9); border-radius: 1rem; }
     :global(scroll-world[data-world-state] .journey__chapter) { min-height: max(360px, 58svh); max-width: 40rem; margin-inline: auto; justify-content: end; padding: 2rem 1rem; background: linear-gradient(180deg, transparent, rgba(8,17,28,.92) 48%, rgba(8,17,28,.98)); }
   }
