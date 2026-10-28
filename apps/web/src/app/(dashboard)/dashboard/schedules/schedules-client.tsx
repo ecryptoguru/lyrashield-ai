@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { z } from "zod"
 import Link from "next/link"
 import { Calendar, Plus, Trash2, Power, ChevronDown } from "lucide-react"
@@ -25,6 +25,7 @@ import { getManualScanOptions } from "@/lib/scan-presets"
 import { scheduleTargetOptionLabel } from "@/lib/schedule-labels"
 import { InlineConfirm } from "@/components/ui/inline-confirm"
 import { DashboardErrorCard } from "@/components/dashboard-error-card"
+import { useScheduleFormFocus } from "./use-schedule-form-focus"
 
 interface ScheduleItem {
   id: string
@@ -262,7 +263,7 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
   const [targetsLoading, setTargetsLoading] = useState(true)
   const [targetsError, setTargetsError] = useState(false)
   const [targetsRetry, setTargetsRetry] = useState(0)
-  const formTriggerRef = useRef<HTMLButtonElement>(null)
+  const formTriggerRef = useScheduleFormFocus(showCreateForm, loading, targetsLoading)
   const [selectedTargetId, setSelectedTargetId] = useState("")
   const [cron, setCron] = useState("0 0 * * 0")
   const [presetId, setPresetId] = useState("")
@@ -388,14 +389,13 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
         goal: selectedOption.goal,
         mode: selectedOption.mode,
       })
+      await loadSchedules()
       setShowCreateForm(false)
       setSelectedTargetId("")
       setCron("0 0 * * 0")
       setPresetId("")
       setFrequency("WEEKLY")
       setShowAdvanced(false)
-      await loadSchedules()
-      requestAnimationFrame(() => formTriggerRef.current?.focus())
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create schedule.")
     } finally {
@@ -433,6 +433,7 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
           <Button
             ref={formTriggerRef}
             size="sm"
+            disabled={creating}
             aria-expanded={showCreateForm}
             aria-controls="schedule-create-form"
             onClick={() => setShowCreateForm(!showCreateForm)}
@@ -480,7 +481,6 @@ export function SchedulesClient({ workspaceId }: { workspaceId: string }) {
           onCreate={() => void handleCreate()}
           onCancel={() => {
             setShowCreateForm(false)
-            requestAnimationFrame(() => formTriggerRef.current?.focus())
           }}
         />
       )}

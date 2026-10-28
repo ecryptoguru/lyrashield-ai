@@ -252,8 +252,8 @@
     },
     "apps/web/src/app/(dashboard)/dashboard/schedules/schedules-client.tsx|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 196,
-      "maxExcess": 196
+      "totalExcess": 195,
+      "maxExcess": 195
     },
     "apps/web/src/app/(dashboard)/dashboard/settings/api-keys.tsx|max-lines-per-function": {
       "count": 1,
