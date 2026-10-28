@@ -3,6 +3,7 @@ import { execFileSync } from "node:child_process"
 import { readFileSync } from "node:fs"
 import { createRequire } from "node:module"
 import test from "node:test"
+import { runInNewContext } from "node:vm"
 import {
   routingFlags,
   validateRouting,
@@ -256,6 +257,71 @@ test("Turbo task graphs retain dependencies and SDK/MCP/plugin prerequisites wit
   assert.ok(!marketing.packages.includes("@lyrashield/web"))
   assert.deepEqual(workspaceFilters(classify("README.md"), "marketing"), [])
   assert.throws(() => workspaceFilters(classify("README.md"), "typo"))
+})
+
+test("retained built-app browser proofs select an executable web build for worker-only changes", () => {
+  const appSteps = workflow.jobs["app-checks"].steps
+  const browser = appSteps.find((step) => step.name.startsWith("Browser E2E ("))
+  const build = appSteps.find((step) => step.name === "Build app and shared packages")
+  const portable = appSteps.find((step) => step.name === "Portable browser harness")
+  assert.equal(build.run, "node .github/scripts/ci-selection.mjs build app")
+  function selected(step, outputs) {
+    const expression = step.if.replace(/needs\.changes\.outputs\.([\w-]+)/g, (_, key) => {
+      assert.ok(key in outputs, `Unknown routing output: ${key}`)
+      return JSON.stringify(outputs[key])
+    })
+    return runInNewContext(expression, {}, { timeout: 100 })
+  }
+  for (const [source, builtBrowserSelected] of [
+    ["apps/worker/src/index.ts", true],
+    ["apps/web/src/app/api/scans/route.ts", true],
+    ["packages/db/prisma/schema.prisma", true],
+    ["unknown-runtime-input", true],
+    ["apps/web/src/app/globals.css", false],
+    ["apps/web/public/logo.webp", false],
+  ]) {
+    const outputs = classify(source)
+    assert.equal(selected(browser, outputs), builtBrowserSelected, source)
+    assert.equal(selected(portable, outputs), true, source)
+    assert.equal(selected(build, outputs), true, source)
+    const graph = JSON.parse(
+      execFileSync(
+        "pnpm",
+        [
+          "exec",
+          "turbo",
+          "run",
+          "build",
+          ...workspaceFilters(outputs, "app", "build"),
+          "--dry=json",
+        ],
+        {
+          encoding: "utf8",
+          stdio: ["ignore", "pipe", "pipe"],
+        }
+      )
+    )
+    assert.ok(
+      graph.tasks.some(
+        (task) => task.taskId === "@lyrashield/web#build" && task.command !== "<NONEXISTENT>"
+      ),
+      `${source}: retained browser proof requires an executable web build`
+    )
+    for (const name of [
+      "@lyrashield/marketing",
+      "@lyrashield/marketing-motion",
+      "@lyrashield/desktop-frontend",
+    ]) {
+      assert.ok(!graph.packages.includes(name), `${source}: unrelated ${name} build`)
+    }
+  }
+  const worker = classify("apps/worker/src/index.ts")
+  assert.equal(
+    worker["web-image"],
+    "false",
+    "built-app test dependency must not select the web image"
+  )
+  assert.equal(worker["worker-image"], "true")
 })
 
 test("service integration proof rejects missing, skipped and undercounted fixtures", () => {

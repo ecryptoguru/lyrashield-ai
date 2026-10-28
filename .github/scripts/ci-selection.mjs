@@ -54,7 +54,12 @@ export function workspaceFilters(outputs, group = "app", task) {
     ]
   }
   return [
-    ...(outputs["web-image"] === "true" ? ["--filter=@lyrashield/web..."] : []),
+    // Retained built-app browser proofs consume the web artifact even when
+    // only worker sources changed. Image qualification remains independent.
+    ...(outputs["web-image"] === "true" ||
+    (task === "build" && outputs["database-tests"] === "true")
+      ? ["--filter=@lyrashield/web..."]
+      : []),
     ...(outputs["worker-image"] === "true" ? ["--filter=@lyrashield/worker..."] : []),
     // Core tests cover SDK/MCP/plugin/CLI consumers as well as the changed app.
     // Their existing typecheck dependencies materialize the three dist exports
