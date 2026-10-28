@@ -16,11 +16,12 @@ const faq = [
 const fieldClass =
   "mt-3 w-full rounded-xl border border-border bg-bg p-3 font-mono text-sm text-text shadow-sm transition-colors placeholder:text-text-muted focus:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
 const buttonClass =
-  "lift mt-4 inline-flex min-h-11 items-center gap-2 rounded-lg bg-accent px-5 text-sm font-semibold text-bg hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-raised"
+  "lift mt-4 inline-flex min-h-11 items-center gap-2 rounded-lg bg-accent px-5 text-sm font-semibold text-bg hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-raised"
 const labelClass = "block text-sm font-medium text-text"
-const exampleButtonClass = "mt-3 inline-flex min-h-11 items-center rounded-lg border border-border px-3 text-sm font-medium text-text-muted hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+const exampleButtonClass = "disabled:cursor-not-allowed disabled:opacity-60 mt-3 inline-flex min-h-11 items-center rounded-lg border border-border px-3 text-sm font-medium text-text-muted hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
 ---
 <ToolLayout tool={tool} faq={faq}>
+  <noscript><p class="mb-6 rounded-lg border border-border bg-bg-raised p-4 text-sm leading-7 text-text-muted">Interactive checks need JavaScript to run locally in your browser. Enable it and reload to use the controls. You can still read the guidance below; input is never uploaded by these local checks.</p></noscript>
   {tool.slug === "ai-app-security-checklist" && (
     <>
       <form id="checklist" class="space-y-4" data-version={LAUNCH_CHECKLIST_VERSION}>
@@ -39,27 +40,27 @@ const exampleButtonClass = "mt-3 inline-flex min-h-11 items-center rounded-lg bo
             </label>
           ))}
         </div>
-        <button class={buttonClass} type="submit">Prioritize next steps</button>
+        <button class={buttonClass} type="submit" disabled data-local-control>Prioritize next steps</button>
       </form>
-      <output id="tool-result" class="mt-6 block" aria-live="polite"></output>
+      <output id="tool-result" class="mt-6 block" aria-live="polite"><p class="rounded-lg border border-dashed border-border px-4 py-6 text-sm text-text-muted">Results appear here. This check runs in your browser; nothing is uploaded.</p></output>
     </>
   )}
   {tool.slug === "secret-exposure-scanner" && (
     <>
       <label class={labelClass} for="secret-files">Choose text files to scan locally</label>
-      <input id="secret-files" type="file" multiple accept=".env,.txt,.js,.ts,.tsx,.json,.yaml,.yml,.toml,.md,.sql,.sh,.py,.go,.java,.rb,.php" class="mt-3 block w-full cursor-pointer rounded-xl border border-dashed border-border bg-bg p-4 text-sm text-text-muted transition-colors hover:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent file:mr-4 file:cursor-pointer file:rounded-lg file:border-0 file:bg-accent file:px-4 file:py-2 file:text-sm file:font-semibold file:text-bg hover:file:opacity-90" />
+      <input id="secret-files" disabled data-local-control type="file" multiple accept=".env,.txt,.js,.ts,.tsx,.json,.yaml,.yml,.toml,.md,.sql,.sh,.py,.go,.java,.rb,.php" class="mt-3 block w-full disabled:cursor-not-allowed disabled:opacity-60 cursor-pointer rounded-xl border border-dashed border-border bg-bg p-4 text-sm text-text-muted transition-colors hover:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent file:mr-4 file:cursor-pointer file:rounded-lg file:border-0 file:bg-accent file:px-4 file:py-2 file:text-sm file:font-semibold file:text-bg hover:file:opacity-90" />
       <p class="mt-3 text-sm text-text-muted">Files over 1 MB and non-text files are skipped. Matches are redacted before display.</p>
-      <output id="tool-result" class="mt-6 block" aria-live="polite"></output>
+      <output id="tool-result" class="mt-6 block" aria-live="polite"><p class="rounded-lg border border-dashed border-border px-4 py-6 text-sm text-text-muted">Results appear here. This check runs in your browser; nothing is uploaded.</p></output>
     </>
   )}
   {tool.slug === "supabase-rls-checker" && (
     <>
       <label class={labelClass} for="sql-input">Paste a policy migration or table policy SQL</label>
       <textarea id="sql-input" rows="12" class={fieldClass} placeholder="alter table public.projects enable row level security;"></textarea>
-      <button id="load-rls-example" class={exampleButtonClass} type="button">Load example SQL</button>
+      <button id="load-rls-example" disabled data-local-control class={exampleButtonClass} type="button">Load example SQL</button>
       <p class="mt-2 text-xs text-text-muted">Synthetic example. Review policy behavior with two accounts before using it in an app.</p>
-      <button id="run-rls" class={buttonClass} type="button">Review SQL locally</button>
-      <output id="tool-result" class="mt-6 block" aria-live="polite"></output>
+      <button id="run-rls" disabled data-local-control class={buttonClass} type="button">Review SQL locally</button>
+      <output id="tool-result" class="mt-6 block" aria-live="polite"><p class="rounded-lg border border-dashed border-border px-4 py-6 text-sm text-text-muted">Results appear here. This check runs in your browser; nothing is uploaded.</p></output>
     </>
   )}
   {tool.slug === "jwt-session-inspector" && (
@@ -68,20 +69,20 @@ const exampleButtonClass = "mt-3 inline-flex min-h-11 items-center rounded-lg bo
       <textarea id="jwt-input" rows="4" class={fieldClass} placeholder="eyJ..."></textarea>
       <label class={`mt-4 ${labelClass}`} for="cookie-input">Optional: paste a Set-Cookie response header</label>
       <textarea id="cookie-input" rows="3" class={fieldClass} placeholder="session=...; Secure; HttpOnly; SameSite=Lax"></textarea>
-      <button id="load-jwt-example" class={exampleButtonClass} type="button">Load example JWT and cookie</button>
+      <button id="load-jwt-example" disabled data-local-control class={exampleButtonClass} type="button">Load example JWT and cookie</button>
       <p class="mt-2 text-xs text-text-muted">Synthetic token with a placeholder signature. This tool does not verify signatures.</p>
-      <button id="run-jwt" class={buttonClass} type="button">Inspect locally</button>
-      <output id="tool-result" class="mt-6 block" aria-live="polite"></output>
+      <button id="run-jwt" disabled data-local-control class={buttonClass} type="button">Inspect locally</button>
+      <output id="tool-result" class="mt-6 block" aria-live="polite"><p class="rounded-lg border border-dashed border-border px-4 py-6 text-sm text-text-muted">Results appear here. This check runs in your browser; nothing is uploaded.</p></output>
     </>
   )}
   {tool.slug === "security-headers-checker" && (
     <>
       <label class={labelClass} for="headers-input">Paste response headers from your browser network panel</label>
       <textarea id="headers-input" rows="10" class={fieldClass} placeholder="content-security-policy: default-src 'self'&#10;strict-transport-security: max-age=31536000"></textarea>
-      <button id="load-headers-example" class={exampleButtonClass} type="button">Load example headers</button>
+      <button id="load-headers-example" disabled data-local-control class={exampleButtonClass} type="button">Load example headers</button>
       <p class="mt-2 text-xs text-text-muted">Synthetic example, not a configuration recommendation for every route.</p>
-      <button id="run-headers" class={buttonClass} type="button">Review headers locally</button>
-      <output id="tool-result" class="mt-6 block" aria-live="polite"></output>
+      <button id="run-headers" disabled data-local-control class={buttonClass} type="button">Review headers locally</button>
+      <output id="tool-result" class="mt-6 block" aria-live="polite"><p class="rounded-lg border border-dashed border-border px-4 py-6 text-sm text-text-muted">Results appear here. This check runs in your browser; nothing is uploaded.</p></output>
     </>
   )}
   {tool.slug === "php2shell-checker" && <Php2ShellChecker />}
@@ -90,7 +91,8 @@ const exampleButtonClass = "mt-3 inline-flex min-h-11 items-center rounded-lg bo
 </ToolLayout>
 
 <script>
-  import { checkHeaders, reviewRlsSql, checkSetCookie, inspectJwt, scanTextForSecrets, type ToolObservation } from "../../lib/tool-checks"
+  import { checkHeaders, reviewRlsSql, checkSetCookie, inspectJwt, type ToolObservation } from "../../lib/tool-checks"
+  import { reviewSecretFiles } from "../../lib/local-secret-files"
   import { TOOL_EXAMPLES } from "../../lib/tool-examples"
 
   type Severity = ToolObservation["intent"]
@@ -163,7 +165,7 @@ const exampleButtonClass = "mt-3 inline-flex min-h-11 items-center rounded-lg bo
       const sev = typeof item === "string" ? severityOf(item) : item.intent
       const row = document.createElement("li")
       row.className = "flex gap-3 rounded-lg border border-border bg-bg p-3 text-sm text-text"
-      row.style.borderLeftWidth = "4px"
+      row.style.borderLeftWidth = "1px"
       row.style.borderLeftColor = COLOR[sev]
       const glyph = document.createElement("span")
       glyph.className = "mt-px shrink-0 font-mono font-bold"
@@ -214,19 +216,17 @@ const exampleButtonClass = "mt-3 inline-flex min-h-11 items-center rounded-lg bo
   document.querySelector<HTMLInputElement>("#secret-files")?.addEventListener("change", async (event) => {
     const input = event.currentTarget
     if (!(input instanceof HTMLInputElement)) return
-    const files = [...(input.files ?? [])].slice(0, 20)
-    const findings: string[] = []
-    for (const file of files) {
-      if (file.size > 1_000_000) {
-        findings.push(`${file.name}: skipped because it exceeds 1 MB.`)
-        continue
-      }
-      const text = await file.text()
-      for (const observation of scanTextForSecrets(text)) {
-        findings.push(`${file.name}: possible ${observation.kind} ${observation.preview}; rotate it if real.`)
-      }
+    const files = [...(input.files ?? [])]
+    input.disabled = true
+    const result = document.querySelector("#tool-result")
+    result?.setAttribute("aria-busy", "true")
+    show([`Reviewing ${files.length} selected files locally…`])
+    try {
+      show(await reviewSecretFiles(files))
+    } finally {
+      input.disabled = false
+      result?.removeAttribute("aria-busy")
     }
-    show(findings.length ? findings : ["No high-confidence patterns found in the selected files."])
   })
 
   document.querySelector<HTMLButtonElement>("#run-rls")?.addEventListener("click", () => {
@@ -267,4 +267,7 @@ const exampleButtonClass = "mt-3 inline-flex min-h-11 items-center rounded-lg bo
       document.getElementById(fields[0][0])?.focus()
     })
   }
+  // Keep controls inert until their local handlers exist.
+  document.querySelectorAll<HTMLButtonElement | HTMLInputElement>("[data-local-control]")
+    .forEach((control) => { control.disabled = false })
 </script>

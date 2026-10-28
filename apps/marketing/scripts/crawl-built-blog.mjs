@@ -229,6 +229,7 @@ export function inspectHtml(html, pageUrl, { siteOrigin = new URL(pageUrl).origi
     localHrefs,
     mailtoLinks: unique(mailtoLinks),
     tagUrls,
+    primaryTopic: openingTags(html, "article").map((tag) => attributes(tag).get("data-blog-primary-topic")).find(Boolean),
     anchorTargets,
     anchorErrors: unique(anchorErrors),
     imageUrls: unique(imageUrls),
@@ -435,7 +436,13 @@ export async function crawlBuiltBlog({
       errors.push(`${articleUrl}: article has no tag archive links`)
       continue
     }
-    for (const tagUrl of facts.tagUrls) {
+    const membershipUrls = facts.primaryTopic
+      ? [new URL(`/blog/tags/${facts.primaryTopic}`, localOrigin).href]
+      : facts.tagUrls
+    if (facts.primaryTopic && !facts.tagUrls.includes(membershipUrls[0])) {
+      errors.push(`${articleUrl}: primary topic has no visible archive link`)
+    }
+    for (const tagUrl of membershipUrls) {
       const tagFacts = pageFacts.get(tagUrl)
       if (!tagFacts) {
         errors.push(`${sanitizeReportUrl(tagUrl)}: tag archive missing from sitemap`)

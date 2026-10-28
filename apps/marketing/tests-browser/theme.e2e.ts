@@ -320,16 +320,17 @@ test("keeps desktop navigation labels on one line at the compact desktop width",
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(1159)
 })
 
-test("chapter detail lists follow the reading order and remain available", async ({ page }) => {
-  await page.setViewportSize({ width: 1280, height: 900 })
+test("FAQ answers follow native keyboard reading order", async ({ page }) => {
   await page.goto("/")
-  for (const index of [0, 3]) {
-    const detail = page.locator('[data-journey-chapter="' + index + '"] details')
-    await detail.locator("summary").click()
-    expect(await detail.locator("li").count()).toBeGreaterThan(0)
-    for (const item of await detail.locator("li").all()) {
-      await expect(item).toBeVisible()
-      await expect(item).toHaveCSS("text-align", "start")
-    }
+  const answers = page.locator("#faq details")
+  await expect(answers).toHaveCount(4)
+  for (const answer of await answers.all()) {
+    const summary = answer.locator("summary")
+    await summary.focus()
+    await page.keyboard.press("Enter")
+    await expect(answer).toHaveAttribute("open", "")
+    await expect(answer.locator("p")).toBeVisible()
+    await page.keyboard.press("Enter")
+    await expect(answer).not.toHaveAttribute("open", "")
   }
 })

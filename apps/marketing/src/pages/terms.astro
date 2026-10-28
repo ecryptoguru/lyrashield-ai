@@ -1,4 +1,5 @@
 ---
+import PolicyContents from "@components/PolicyContents.astro"
 import Base from "@layouts/Base.astro"
 import { buildDateFor } from "../lib/build-date"
 
@@ -165,6 +166,7 @@ const clauses: Array<{ id: string; heading: string; body: string }> = [
       LyraShield AI is in open beta.
     </p>
 
+    <PolicyContents items={[...clauses.map((clause) => ({ id: clause.id, label: clause.heading })), { id: "abuse-contact", label: "Report suspected abuse" }]} />
     <div class="prose mt-12 max-w-none">
       {
         clauses.map((clause) => (

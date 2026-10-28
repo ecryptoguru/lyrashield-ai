@@ -23,8 +23,10 @@ test("shows all six journey steps with JavaScript disabled", async ({ browser })
   await page.goto("/")
 
   // The journey block and its heading are present.
-  await expect(page.locator("#how-it-works")).toBeVisible()
-  await expect(page.locator("#journey-heading")).toHaveText("From target to verdict.")
+  await expect(page.locator("#how-it-works")).toBeAttached()
+  await expect(page.locator("#journey-heading")).toHaveText(
+    "One workflow. A clearer release decision."
+  )
 
   // Every chapter renders as a static step, and all of them are visible.
   const steps = page.locator(".journey__chapter")

@@ -1,22 +1,25 @@
 ---
+import { formatBlogDate } from "../lib/blog-date"
 import type { CollectionEntry } from "astro:content"
 
 interface Props {
   posts: CollectionEntry<"blog">[]
   showAll?: boolean
+  scope?: "library" | "category"
 }
-const { posts, showAll = false } = Astro.props
+const { posts, showAll = false, scope = "library" } = Astro.props
 ---
 
-<section data-guide-search data-show-all={String(showAll)} class="guide-search">
+<section data-guide-search data-show-all={String(showAll)} data-search-scope={scope} class="guide-search">
   <form role="search">
-    <label for="guide-query">{showAll ? "Search this category" : "Search all published guides"}</label>
+    <label for="guide-query">{scope === "category" ? "Search this category" : "Search published guides"}</label>
     <div class="guide-search__controls">
-      <input id="guide-query" type="search" name="q" placeholder="Search by title or topic" autocomplete="off" aria-controls="guide-results" />
-      <button type="reset">Clear search</button>
+      <input id="guide-query" type="search" name="q" disabled placeholder="Search by title or topic" autocomplete="off" aria-controls="guide-results" />
+      <button type="reset" disabled>Clear search</button>
     </div>
   </form>
-  <p data-guide-count role="status">{showAll ? `${posts.length} published articles` : "Search across the full article library."}</p>
+  <noscript><p>Search needs JavaScript. Browse the linked guides and pages below instead.</p></noscript>
+  <p data-guide-count role="status">{showAll ? `${posts.length} published articles` : scope === "category" ? "Search all guides in this category." : "Search across the full article library."}</p>
   <div id="guide-results" hidden={!showAll}>
     <h2>{showAll ? "Articles in this category" : "Search results"}</h2>
     <p data-guide-empty hidden>No guides match your search. Try a broader topic or clear the search to browse.</p>
@@ -26,7 +29,7 @@ const { posts, showAll = false } = Astro.props
           <a href={`/blog/${post.id}`}>
             <h3>{post.data.title}</h3>
             <p>{post.data.description}</p>
-            <span>{post.data.pubDate.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric", timeZone: "UTC" })} <span aria-hidden="true">→</span></span>
+            <span>{formatBlogDate(post.data.pubDate, "short")} <span aria-hidden="true">→</span></span>
           </a>
         </li>
       ))}
@@ -43,6 +46,9 @@ const { posts, showAll = false } = Astro.props
     const empty = root.querySelector<HTMLElement>("[data-guide-empty]")!
     const entries = Array.from(root.querySelectorAll<HTMLElement>("[data-guide-entry]"))
     const showAll = root.dataset.showAll === "true"
+    const scope = root.dataset.searchScope
+    input.disabled = false
+    form.querySelector<HTMLButtonElement>("button")!.disabled = false
     const apply = () => {
       const query = input.value.trim().toLowerCase()
       let matches = 0
@@ -53,7 +59,7 @@ const { posts, showAll = false } = Astro.props
       }
       results.hidden = !showAll && !query
       empty.hidden = matches > 0
-      count.textContent = query ? `${matches} ${matches === 1 ? "guide" : "guides"} match “${input.value.trim()}”.` : showAll ? `${entries.length} published articles` : "Search across the full article library."
+      count.textContent = query ? `${matches} ${matches === 1 ? "guide" : "guides"} match “${input.value.trim()}”.` : showAll ? `${entries.length} published articles` : scope === "category" ? "Search all guides in this category." : "Search across the full article library."
       document.querySelector<HTMLElement>("[data-blog-browse]")?.toggleAttribute("hidden", Boolean(query))
     }
     input.addEventListener("input", apply)

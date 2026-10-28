@@ -3,6 +3,7 @@ import { createReadStream, existsSync, statSync } from "node:fs"
 import { dirname, resolve } from "node:path"
 import { spawn, spawnSync } from "node:child_process"
 import { Readable } from "node:stream"
+import { createBrotliCompress, createGzip, constants } from "node:zlib"
 import { createRequire } from "node:module"
 
 // Development-only proxy: Wrangler's local assets ignore Range. Production
@@ -104,9 +105,40 @@ const server = createServer(async (request, response) => {
         /;?\s*upgrade-insecure-requests/g,
         ""
       )
+    // Match the production edge's text compression. MP4 ranges above stay
+    // byte-for-byte, so decoder and transfer measurements remain meaningful.
+    const accepted = new Set(
+      (request.headers["accept-encoding"] ?? "").split(",").map((value) => value.trim())
+    )
+    const text = /^(?:text\/|application\/(?:javascript|json|xml))/.test(
+      outgoing["content-type"] ?? ""
+    )
+    const encoding =
+      text && upstream.status === 200 && request.method !== "HEAD"
+        ? accepted.has("br")
+          ? "br"
+          : accepted.has("gzip")
+            ? "gzip"
+            : undefined
+        : undefined
+    if (encoding) {
+      outgoing["content-encoding"] = encoding
+      outgoing.vary = outgoing.vary ? `${outgoing.vary}, Accept-Encoding` : "Accept-Encoding"
+      if (outgoing.etag && !outgoing.etag.startsWith("W/")) outgoing.etag = `W/${outgoing.etag}`
+    }
     response.writeHead(upstream.status, outgoing)
-    if (upstream.body && request.method !== "HEAD") Readable.fromWeb(upstream.body).pipe(response)
-    else response.end()
+    if (upstream.body && request.method !== "HEAD") {
+      const stream = Readable.fromWeb(upstream.body)
+      stream.on("error", () => response.destroy())
+      if (encoding) {
+        const encoder =
+          encoding === "br"
+            ? createBrotliCompress({ params: { [constants.BROTLI_PARAM_QUALITY]: 4 } })
+            : createGzip()
+        encoder.on("error", () => response.destroy())
+        stream.pipe(encoder).pipe(response)
+      } else stream.pipe(response)
+    } else response.end()
   } catch {
     response.writeHead(503)
     response.end("Preview is starting")

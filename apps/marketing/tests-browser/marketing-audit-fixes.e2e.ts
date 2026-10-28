@@ -4,7 +4,7 @@ test("search finds guides outside the current pagination slice and recovers from
   page,
 }) => {
   await page.goto("/blog")
-  const search = page.getByLabel("Search all published guides")
+  const search = page.getByLabel("Search published guides")
   await search.fill("Supabase")
   await expect(page.locator("#guide-results a[href='/blog/supabase-security-guide']")).toBeVisible()
   await expect(page.locator("[data-blog-browse]")).toBeHidden()
@@ -26,7 +26,9 @@ test("category browsing is compact, searchable and restores all guides", async (
   await page.getByLabel("Search this category").fill("Supabase")
   await expect(page.locator("#guide-results a[href='/blog/supabase-security-guide']")).toBeVisible()
   await page.getByRole("button", { name: "Clear search" }).click()
-  expect(await rows.filter({ visible: true }).count()).toBe(total)
+  await expect(page.locator("#guide-results")).toBeHidden()
+  await expect(page.locator("[data-blog-browse]")).toBeVisible()
+  await expect(page.locator(".tag-index__articles li")).toHaveCount(20)
 })
 
 test("article TOC leaves the destination below the fixed header", async ({ page }) => {
@@ -47,9 +49,9 @@ test("homepage has one authorized Lite URL entry and a sample explanation", asyn
   await page.goto("/")
   await expect(page.locator("#hero-lite-form")).toHaveCount(1)
   await expect(page.locator("#home-lite-scan-form")).toHaveCount(0)
-  await expect(page.getByRole("link", { name: "See a sample Lite result" })).toHaveAttribute(
+  await expect(page.getByRole("link", { name: "Explore the workflow" })).toHaveAttribute(
     "href",
-    "#free-scan"
+    "#how-it-works"
   )
   await expect(page.locator("#hero-scan-authorized")).toBeAttached()
 })
@@ -174,7 +176,7 @@ test("product captures retain their full aspect ratios and phone previews explai
   }
   await page.setViewportSize({ width: 320, height: 844 })
   await page.getByRole("button", { name: "Findings", exact: true }).click()
-  await page.getByRole("button", { name: "Expand Findings preview" }).click()
+  await page.getByRole("button", { name: "Expand preview: Findings" }).click()
   await expect(page.getByRole("heading", { name: "Findings preview", exact: true })).toBeVisible()
   await expect(page.locator("#product-preview-hint")).toBeVisible()
   const region = page.getByRole("region", { name: "Enlarged product image" })
@@ -182,7 +184,7 @@ test("product captures retain their full aspect ratios and phone previews explai
   await page.keyboard.press("ArrowRight")
   await expect.poll(() => region.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0)
   await page.keyboard.press("Escape")
-  await expect(page.getByRole("button", { name: "Expand Findings preview" })).toBeFocused()
+  await expect(page.getByRole("button", { name: "Expand preview: Findings" })).toBeFocused()
 })
 
 test("mobile sticky signup yields to the visible final signup action", async ({ page }) => {
@@ -225,7 +227,7 @@ test("translucent supporting bands preserve text contrast against any film brigh
       .context()
       .addCookies([{ name: "lyrashield-theme", value: theme, domain: "127.0.0.1", path: "/" }])
     await page.goto("/")
-    for (const selector of ["#different", "#free-scan"]) {
+    for (const selector of ["#free-scan", ".journey__intro"]) {
       const ratios = await page.locator(selector).evaluate((surface) => {
         const canvas = document.createElement("canvas")
         canvas.width = canvas.height = 1

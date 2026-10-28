@@ -164,3 +164,36 @@ test("a retired frame callback cannot erase the current decoder cancellation han
   expect(canceled).toBe(true)
   await expect(world).toHaveAttribute("data-world-state", "static")
 })
+
+test("leaving the cinema suspends decoding and returning resumes the current target", async ({
+  page,
+}) => {
+  await page.goto("/")
+  const world = page.locator("scroll-world")
+  await expect(world).toHaveAttribute("data-world-painted", "true")
+  await page.locator("#faq").evaluate((node) => node.scrollIntoView({ behavior: "instant" }))
+  await expect
+    .poll(() => world.evaluate((node) => node.getBoundingClientRect().bottom))
+    .toBeLessThan(-200)
+  await expect
+    .poll(() =>
+      page.locator("[data-world-video]").evaluate((node) => (node as HTMLVideoElement).paused)
+    )
+    .toBe(true)
+  const pausedFrame = await world.getAttribute("data-world-presented")
+  await page.mouse.wheel(0, 200)
+  await page.waitForTimeout(250)
+  expect(await world.getAttribute("data-world-presented")).toBe(pausedFrame)
+  await page.locator("#journey-scan").scrollIntoViewIfNeeded()
+  await expect
+    .poll(() =>
+      world.evaluate((node) =>
+        Math.abs(
+          Number((node as HTMLElement).dataset.worldTime) -
+            Number((node as HTMLElement).dataset.worldPresented)
+        )
+      )
+    )
+    .toBeLessThan(0.04)
+  await expect(world).toHaveAttribute("data-world-state", "ready")
+})

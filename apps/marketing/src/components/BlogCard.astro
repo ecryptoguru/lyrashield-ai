@@ -1,4 +1,6 @@
 ---
+import { blogImageSrcset } from "../lib/blog-images"
+import { formatBlogDate } from "../lib/blog-date"
 import { getEntry, type CollectionEntry } from "astro:content"
 import { readingMinutes } from "../lib/blog-content"
 import { categoryHref, getCategoryLabel } from "../lib/blog-categories"
@@ -17,26 +19,10 @@ const heroImage = suppliedHeroImage ?? await getEntry(post.data.heroImage)
 ---
 
 <article class:list={["blog-card", { "blog-card--featured": featured }]}>
-  {heroImage && (
-    <a class="blog-card__image" href={`/blog/${post.id}`} aria-label={`Read ${post.data.title}`}>
-      <picture>
-        <source srcset={heroImage.data.avif} type="image/avif" />
-        <source srcset={heroImage.data.webp} type="image/webp" />
-        <img
-          src={heroImage.data.jpeg}
-          alt={heroImage.data.alt}
-          width="1600"
-          height="900"
-          loading="lazy"
-          decoding="async"
-          sizes={featured ? "(min-width: 1280px) 1152px, calc(100vw - 4rem)" : "(min-width: 1024px) 768px, calc(100vw - 2rem)"}
-        />
-      </picture>
-    </a>
-  )}
+  <div class="blog-card__story">
   <div class="blog-card__meta">
     <time datetime={post.data.pubDate.toISOString()}>
-      {post.data.pubDate.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric", timeZone: "Asia/Kolkata" })}
+      {formatBlogDate(post.data.pubDate, "short")}
     </time>
     <span aria-hidden="true">·</span>
     <span>{minutes} min read</span>
@@ -54,13 +40,39 @@ const heroImage = suppliedHeroImage ?? await getEntry(post.data.heroImage)
         ))}
       </ul>
     )}
-    <a class="blog-card__read link-underline" href={`/blog/${post.id}`} aria-label={`Read ${post.data.title}`}>
+    <a class="blog-card__read link-underline" href={`/blog/${post.id}`} aria-label={`Read article: ${post.data.title}`}>
       Read article <span aria-hidden="true">→</span>
     </a>
   </div>
+  </div>
+  {heroImage && (
+    <a class="blog-card__image" href={`/blog/${post.id}`} aria-label={`Read ${post.data.title}`}>
+      <picture>
+        <source srcset={blogImageSrcset(heroImage.data.avif)} sizes="(min-width: 1024px) 640px, calc(100vw - 2rem)" type="image/avif" />
+        <source srcset={blogImageSrcset(heroImage.data.webp)} sizes="(min-width: 1024px) 640px, calc(100vw - 2rem)" type="image/webp" />
+        <img
+          src={heroImage.data.jpeg}
+          alt={heroImage.data.alt}
+          width="1600"
+          height="900"
+          loading="lazy"
+          decoding="async"
+          sizes={featured ? "(min-width: 768px) 520px, calc(100vw - 4rem)" : "(min-width: 768px) 320px, calc(100vw - 2rem)"}
+        />
+      </picture>
+    </a>
+  )}
+
 </article>
 
 <style>
+  .blog-card__story { display: grid; gap: .9rem; min-width: 0; }
+  @media (min-width: 768px) {
+    .blog-card { grid-template-columns: minmax(0, 1fr) minmax(12rem, 30%); gap: 2rem; align-items: center; }
+    .blog-card--featured { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: clamp(1.5rem, 4vw, 3rem); }
+    .blog-card__image { margin: 0; }
+  }
+
   .blog-card {
     display: grid;
     gap: 0.9rem;
@@ -127,6 +139,7 @@ const heroImage = suppliedHeroImage ?? await getEntry(post.data.heroImage)
   .blog-card :global(h2),
   .blog-card :global(h3) {
     max-width: 48rem;
+    overflow-wrap: anywhere;
     margin: 0;
     font-family: "Bricolage Grotesque Variable", sans-serif;
     font-size: clamp(1.65rem, 3.2vw, 2.45rem);
@@ -158,7 +171,7 @@ const heroImage = suppliedHeroImage ?? await getEntry(post.data.heroImage)
     outline-offset: 4px;
   }
 
-  .blog-card > p {
+  .blog-card__story > p {
     max-width: 45rem;
     margin: 0;
     color: var(--color-text-muted);
@@ -181,7 +194,7 @@ const heroImage = suppliedHeroImage ?? await getEntry(post.data.heroImage)
 
   .blog-card__footer li a {
     display: inline-flex;
-    min-height: 2rem;
+    min-height: 2.75rem;
     align-items: center;
     border: 1px solid var(--color-border);
     border-radius: 999px;
@@ -197,6 +210,9 @@ const heroImage = suppliedHeroImage ?? await getEntry(post.data.heroImage)
   }
 
   .blog-card__read {
+    display: inline-flex;
+    align-items: center;
+    min-height: 2.75rem;
     color: var(--color-text);
     font-size: 0.88rem;
     font-weight: 700;
@@ -204,9 +220,9 @@ const heroImage = suppliedHeroImage ?? await getEntry(post.data.heroImage)
   }
 
   .blog-card--featured {
-    min-height: 24rem;
+    align-items: center;
     border: 1px solid color-mix(in srgb, var(--color-accent) 30%, var(--color-border));
-    border-radius: 1.25rem;
+    border-radius: 1rem;
     padding: clamp(1.5rem, 5vw, 3.5rem);
     background:
       radial-gradient(circle at 85% 15%, color-mix(in srgb, var(--color-accent) 18%, transparent), transparent 35%),
@@ -215,7 +231,7 @@ const heroImage = suppliedHeroImage ?? await getEntry(post.data.heroImage)
   }
 
   .blog-card--featured :global(h2) {
-    font-size: clamp(2.2rem, 5vw, 4.25rem);
+    font-size: clamp(1.85rem, 3.3vw, 3.1rem);
     max-width: 58rem;
   }
 
@@ -232,7 +248,7 @@ const heroImage = suppliedHeroImage ?? await getEntry(post.data.heroImage)
     }
 
     .blog-card--featured {
-      min-height: 27rem;
+      padding: 1.25rem;
     }
   }
 </style>

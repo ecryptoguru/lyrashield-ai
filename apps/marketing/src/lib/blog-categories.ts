@@ -1,4 +1,5 @@
 import { getCollection, type CollectionEntry } from "astro:content"
+import { primaryBlogTopic } from "./blog-topics"
 import { isNotAfterBuildDate } from "./blog-publishing"
 
 /**
@@ -108,6 +109,6 @@ export async function getCategoriesWithCounts(): Promise<BlogCategoryWithCount[]
   const posts = await getPublishedPosts()
   return BLOG_CATEGORIES.map((category) => ({
     ...category,
-    count: posts.filter((post) => post.data.tags.includes(category.id)).length,
+    count: posts.filter((post) => primaryBlogTopic(post.data) === category.id).length,
   }))
 }

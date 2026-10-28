@@ -139,10 +139,11 @@ for (const slug of slugs) {
     const hero = (await image.count())
       ? image
       : page.locator('img[src*="/images/blog/library/php2shell-"]').first()
+    await hero.scrollIntoViewIfNeeded()
     await expect(hero).toBeVisible()
-    expect(await hero.evaluate((el: HTMLImageElement) => el.complete && el.naturalWidth > 0)).toBe(
-      true
-    )
+    await expect
+      .poll(() => hero.evaluate((el: HTMLImageElement) => el.complete && el.naturalWidth > 0))
+      .toBe(true)
     await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
       "href",
       `https://lyrashieldai.com/blog/${slug}`

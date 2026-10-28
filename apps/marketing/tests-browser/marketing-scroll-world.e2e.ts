@@ -35,6 +35,14 @@ test("startup presents its first frame before accepting scroll seeks", async ({ 
   expect(await world.getAttribute("data-early-seek")).toBeNull()
 })
 
+test("the opening frame remains at the start until the visitor scrolls", async ({ page }) => {
+  await page.goto("/")
+  const world = page.locator("scroll-world")
+  await expect(world).toHaveAttribute("data-world-painted", "true")
+  await expect(world).toHaveAttribute("data-world-time", "0.000")
+  expect(Number(await world.getAttribute("data-world-presented"))).toBeLessThan(1.1 / MOTION_FPS)
+})
+
 test("wheel-sized steps ease the video in both directions while the page moves immediately", async ({
   page,
 }) => {
@@ -143,8 +151,8 @@ test("an observed media failure enters bounded fallback and retains working cont
   await expect.poll(() => requests).toBeGreaterThan(0)
   await expect(page.locator("scroll-world")).toHaveAttribute("data-world-state", "fallback")
   await expect(page.locator("h1")).toBeVisible()
-  await page.getByRole("link", { name: "See a sample Lite result" }).click()
-  await expect(page.locator("#free-scan")).toBeInViewport()
+  await page.getByRole("link", { name: "Explore the workflow", exact: true }).click()
+  await expect(page.locator("#journey-heading")).toBeInViewport()
   await page.unroute("**/assurance-world/v3/**/*.mp4")
   await page.getByRole("button", { name: "Motion unavailable" }).click()
   await expect(page.locator("scroll-world")).toHaveAttribute("data-world-state", "ready")
@@ -167,8 +175,8 @@ test("metadata without a presented frame reaches the watchdog fallback", async (
     timeout: 7000,
   })
   await expect(page.locator("[data-world-video]")).not.toHaveAttribute("src", /.+/)
-  await page.getByRole("link", { name: "See a sample Lite result" }).click()
-  await expect(page.locator("#free-scan")).toBeInViewport()
+  await page.getByRole("link", { name: "Explore the workflow", exact: true }).click()
+  await expect(page.locator("#journey-heading")).toBeInViewport()
 })
 
 test("a late presented frame corrects drift and completes the pending seek", async ({ page }) => {
@@ -275,7 +283,7 @@ test("mobile hero exposes the scene while keeping signup in the first viewport",
     const stage = await page.locator(".scroll-world__stage").boundingBox()
     const title = await page.locator("#premium-hero-title").boundingBox()
     const action = await page.locator(".premium-hero__primary").boundingBox()
-    expect(stage && title && title.y - stage.y >= Math.floor(viewport.height * 0.2)).toBe(true)
+    expect(stage && title && title.y - stage.y >= 32).toBe(true)
     expect(action && action.y + action.height <= viewport.height).toBe(true)
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
       viewport.width
@@ -293,8 +301,7 @@ test("Save-Data requests no film and retains interactive chapter content", async
   })
   await page.goto("/")
   await expect(page.locator("scroll-world")).toHaveAttribute("data-world-state", "static")
-  await page.locator("#journey-report summary").click()
-  await expect(page.locator("#journey-report details")).toHaveAttribute("open", "")
+  await expect(page.locator("#journey-report")).toContainText("Share the result and its limits")
   expect(requests).toEqual([])
 })
 
@@ -304,8 +311,7 @@ test("the complete story and conversion links work without JavaScript", async ({
   await page.goto("/")
   await expect(page.locator("h1")).toBeVisible()
   await expect(page.locator("[data-world-toggle]")).toBeHidden()
-  await page.locator("#journey-report summary").click()
-  await expect(page.locator("#journey-report details")).toHaveAttribute("open", "")
+  await expect(page.locator("#journey-report")).toContainText("Share the result and its limits")
   await expect(page.locator("#journey-report")).toContainText("limits")
   await expect(
     page.getByRole("link", { name: "Start free trial", exact: true }).first()

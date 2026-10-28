@@ -1,0 +1,12 @@
+---
+interface Props { items: { id: string; label: string }[] }
+const { items } = Astro.props
+---
+<details class="my-8 rounded-lg border border-border bg-bg-raised px-5">
+  <summary class="flex min-h-12 cursor-pointer items-center font-semibold text-text">On this page</summary>
+  <nav aria-label="Policy sections" class="pb-4">
+    <ul class="grid gap-1 text-sm sm:grid-cols-2">
+      {items.map((item) => <li><a class="inline-flex min-h-11 items-center text-accent underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-accent" href={`#${item.id}`}>{item.label}</a></li>)}
+    </ul>
+  </nav>
+</details>

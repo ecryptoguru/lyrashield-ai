@@ -9,9 +9,9 @@ const description =
 const title = "Book a demo | LyraShield AI"
 // Last content change to this page — the explicit freshness input for the
 // WebPage dateModified (same convention as about.astro's updatedDate).
-const updatedDate = "2026-10-09"
+const updatedDate = "2026-10-28"
 const supportEmail = (import.meta.env.PUBLIC_SUPPORT_EMAIL as string | undefined) || "support@lyrashieldai.com"
-const demoRequestHref = `mailto:${supportEmail}?subject=LyraShield%20demo%20request`
+const demoRequestHref = `mailto:${supportEmail}?subject=${encodeURIComponent("LyraShield demo request")}&body=${encodeURIComponent("My timezone:\nPreferred dates and times:\nWhat I am building:\n")}`
 const jsonLd: unknown[] = [
   {
     "@context": "https://schema.org",
@@ -95,6 +95,12 @@ const jsonLd: unknown[] = [
           class="mt-4 inline-flex min-h-11 items-center rounded-lg bg-accent px-5 text-sm font-semibold text-bg hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-raised"
           >Request a time</a
         >
+        <div class="mt-5 flex flex-wrap items-center gap-3 text-sm">
+          <a href={`mailto:${supportEmail}`} class="break-all text-accent underline underline-offset-4" data-demo-contact>{supportEmail}</a>
+          <button type="button" data-copy-demo-contact hidden class="min-h-11 rounded-lg border border-border px-3 text-text hover:border-accent focus-visible:outline-2 focus-visible:outline-accent">Copy email address</button>
+          <a href="/support" class="inline-flex min-h-11 items-center text-text-muted underline underline-offset-4">Support options</a>
+        </div>
+        <p data-demo-copy-status role="status" class="mt-2 text-sm text-text-muted"></p>
       </section>
 
       <section id="demo-step-slot" hidden aria-labelledby="demo-slot-heading">
@@ -365,6 +371,27 @@ const jsonLd: unknown[] = [
     </div>
   </article>
 </Base>
+
+<script>
+  const contactCopy = document.querySelector<HTMLButtonElement>("[data-copy-demo-contact]")
+  const contact = document.querySelector<HTMLElement>("[data-demo-contact]")
+  if (contactCopy && contact) {
+    contactCopy.hidden = false
+    contactCopy.addEventListener("click", async () => {
+      const status = document.querySelector<HTMLElement>("[data-demo-copy-status]")
+      try {
+        await navigator.clipboard.writeText(contact.textContent?.trim() ?? "")
+        if (status) status.textContent = "Email address copied. Include your timezone and preferred times."
+      } catch {
+        const range = document.createRange()
+        range.selectNodeContents(contact)
+        window.getSelection()?.removeAllRanges()
+        window.getSelection()?.addRange(range)
+        if (status) status.textContent = "Email address selected. Use your device’s Copy command."
+      }
+    })
+  }
+</script>
 
 <script>
   import { createMyraClient, MYRA_COPY, MYRA_LIMITS } from "@lyrashield/myra"

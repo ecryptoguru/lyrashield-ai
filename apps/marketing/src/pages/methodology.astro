@@ -94,24 +94,18 @@ const jsonLd = [
 >
   <section class="mx-auto max-w-5xl px-4 py-14 sm:px-6 lg:py-24">
     <header class="max-w-3xl" data-reveal-group>
-      <p class="font-mono text-xs font-semibold tracking-wider text-accent uppercase" data-reveal="fade">Methodology</p>
+
       <h1 class="mt-4 text-4xl font-semibold tracking-tight text-text sm:text-5xl" data-reveal>
         A security result should say what it knows—and what it does not.
       </h1>
       <p class="mt-6 text-lg leading-8 text-text-muted" data-reveal>
-        An evidence state records how strongly a security finding is supported. Three states ship
-        today. Detected means a scanner saw a signal. Retest-confirmed means a server-owned
-        retest found the condition absent after a fix. Inconclusive means the evidence cannot
-        establish the condition is gone. A fourth state, independently verified, is defined for a
-        future separate verification step and no finding is in it today. These are never blended
-        into a single score.
+        Every finding keeps its scope, coverage and evidence state. A scanner signal is
+        detected; a complete deterministic retest can confirm a fix. Missing proof stays inconclusive.
       </p>
-      <div class="mt-6 rounded-xl border border-border bg-bg-raised p-5 text-sm leading-7 text-text-muted" data-reveal="fade">
-        <p class="font-semibold text-text">TL;DR</p>
-        <p class="mt-2">
-          Every finding carries one of three shipped evidence states: <strong>detected</strong> (a scanner signal that needs review), <strong>retest-confirmed</strong> (a deterministic retest found the condition absent) or <strong>inconclusive</strong> (the retained evidence cannot establish resolution). A fourth state, independently verified, is defined for a future separate verification step; no finding is in it today. A score or clean result never overrides these facts.
-        </p>
-      </div>
+      <p class="mt-4 text-sm leading-7 text-text-muted">
+        Independently verified is reserved for a future separate verification step; no finding is in it today.
+        A score or clean result never overrides the retained evidence.
+      </p>
       <p class="mt-4 text-sm text-text-muted" data-reveal="fade">Last reviewed: <time datetime={reviewed}>{reviewedLabel}</time> · Maintained by LyraShield Security + Engineering</p>
     </header>
 
