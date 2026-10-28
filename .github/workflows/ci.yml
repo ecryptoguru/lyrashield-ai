@@ -90,6 +90,10 @@ jobs:
       engine-worker-contract: ${{ steps.classify.outputs.engine-worker-contract }}
       database-tests: ${{ steps.classify.outputs.database-tests }}
       database-services: ${{ steps.classify.outputs.database-services }}
+      desktop-frontend-tests: ${{ steps.classify.outputs.desktop-frontend-tests }}
+      egress-image: ${{ steps.classify.outputs.egress-image }}
+      worker-image: ${{ steps.classify.outputs.worker-image }}
+      web-image: ${{ steps.classify.outputs.web-image }}
     steps:
       - name: Configure git default branch
         run: git config --global init.defaultBranch main
@@ -158,22 +162,14 @@ jobs:
           # See .github/scripts/tests/test-classify-paths.sh.
           printf '%s\n' "$files" | bash .github/scripts/classify-paths.sh
 
-  lint-and-typecheck:
-    name: Lint, Typecheck, Test & Build
+  app-checks:
+    name: App, Core & Operations
     needs: changes
-    # Keep the required aggregate context alive after failed/skipped dependencies.
-    # Early and late cancellation guards fail the aggregate instead of skipping green.
-    if: ${{ always() }}
     runs-on: ubuntu-latest
-    # This job is the single required aggregate and runs the full serial chain:
-    # install, format, ratchets, typechecks, lint, suites, build and the browser
-    # harnesses. Steps carry their own tighter limits; this bound keeps a hang
-    # outside those steps from burning the 360-minute runner default. PR #850
-    # failed on the 15-minute "Install Playwright browser" step timeout, so the
-    # realistic failure is one stuck step, not a day-long run.
     timeout-minutes: 120
 
     env:
+      CI_ROUTING: ${{ toJSON(needs.changes.outputs) }}
       # Vitest validates every database/Redis URL against the local disposable
       # services before loading integration suites. The marker is false when the
       # classifier skips these services for a change set.
@@ -200,49 +196,6 @@ jobs:
       LYRASHIELD_REQUIRE_EMAIL_VERIFICATION: "0"
 
     steps:
-      - name: Fail closed when the workflow was cancelled before this gate started
-        if: ${{ cancelled() }}
-        run: |
-          echo "::error::Workflow was cancelled before the required CI aggregate could run."
-          exit 1
-
-      - name: Fail closed when changed-path classification is untrusted
-        if: ${{ always() }}
-        env:
-          CHANGES_RESULT: ${{ needs.changes.result }}
-          CLASSIFIED_DOCS_ONLY: ${{ needs.changes.outputs.docs-only }}
-          CLASSIFIED_TOOLING_ONLY: ${{ needs.changes.outputs.tooling-only }}
-          CLASSIFIED_MARKETING: ${{ needs.changes.outputs.marketing }}
-          CLASSIFIED_APP: ${{ needs.changes.outputs.app }}
-          CLASSIFIED_DESKTOP: ${{ needs.changes.outputs.desktop }}
-          CLASSIFIED_SHARED: ${{ needs.changes.outputs.shared }}
-          CLASSIFIED_MARKETING_DEPLOY: ${{ needs.changes.outputs.marketing-deploy }}
-          CLASSIFIED_AZURE_DEPLOY: ${{ needs.changes.outputs.azure-deploy }}
-          CLASSIFIED_MARKETING_TESTS: ${{ needs.changes.outputs.marketing-tests }}
-          CLASSIFIED_MOTION_TESTS: ${{ needs.changes.outputs.motion-tests }}
-          CLASSIFIED_OPS_TESTS: ${{ needs.changes.outputs.ops-tests }}
-          CLASSIFIED_ENGINE_WORKER_CONTRACT: ${{ needs.changes.outputs.engine-worker-contract }}
-          CLASSIFIED_DATABASE_TESTS: ${{ needs.changes.outputs.database-tests }}
-          CLASSIFIED_DATABASE_SERVICES: ${{ needs.changes.outputs.database-services }}
-        run: |
-          set -euo pipefail
-          if [[ "$CHANGES_RESULT" != success ]]; then
-            echo "::error::Changed-path classification did not succeed."
-            exit 1
-          fi
-          for flag in \
-            "$CLASSIFIED_DOCS_ONLY" "$CLASSIFIED_TOOLING_ONLY" "$CLASSIFIED_MARKETING" \
-            "$CLASSIFIED_APP" "$CLASSIFIED_DESKTOP" "$CLASSIFIED_SHARED" \
-            "$CLASSIFIED_MARKETING_DEPLOY" "$CLASSIFIED_AZURE_DEPLOY" \
-            "$CLASSIFIED_MARKETING_TESTS" "$CLASSIFIED_MOTION_TESTS" "$CLASSIFIED_OPS_TESTS" \
-            "$CLASSIFIED_ENGINE_WORKER_CONTRACT" "$CLASSIFIED_DATABASE_TESTS" \
-            "$CLASSIFIED_DATABASE_SERVICES"; do
-            if [[ "$flag" != true && "$flag" != false ]]; then
-              echo "::error::Changed-path classification omitted or corrupted a required routing flag."
-              exit 1
-            fi
-          done
-
       - name: Configure git default branch
         run: git config --global init.defaultBranch main
 
@@ -327,7 +280,7 @@ jobs:
       # reports 37 issues and production mode 105, and none of them have been
       # reviewed for deletion yet.
       - name: Dead-code report (knip, non-blocking)
-        if: needs.changes.outputs.docs-only != 'true'
+        if: needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true'
         continue-on-error: true
         timeout-minutes: 10
         run: pnpm lint:knip
@@ -423,7 +376,7 @@ jobs:
           done
 
       - name: Size lint ratchet
-        if: needs.changes.outputs.database-tests == 'true' || needs.changes.outputs.marketing == 'true'
+        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.shared == 'true'
         run: pnpm lint:size
 
       - name: Smoke-test production-equivalent account and workspace grants
@@ -454,20 +407,12 @@ jobs:
           pnpm lint:ratchet-baselines
 
       - name: Lint
-        if: needs.changes.outputs.database-tests == 'true'
-        run: pnpm lint
-
-      - name: Lint marketing
-        if: needs.changes.outputs.marketing-tests == 'true' && needs.changes.outputs.app != 'true' && needs.changes.outputs.shared != 'true'
-        run: pnpm --filter @lyrashield/marketing lint
-
-      - name: Lint motion
-        if: needs.changes.outputs.motion-tests == 'true' && needs.changes.outputs.app != 'true' && needs.changes.outputs.shared != 'true'
-        run: pnpm --filter @lyrashield/marketing-motion lint
+        if: needs.changes.outputs.app == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')
+        run: node .github/scripts/ci-selection.mjs lint app
 
       - name: Typecheck
-        if: needs.changes.outputs.database-tests == 'true'
-        run: pnpm typecheck
+        if: needs.changes.outputs.app == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')
+        run: node .github/scripts/ci-selection.mjs typecheck app
 
       - name: Typecheck web tests
         if: needs.changes.outputs.database-tests == 'true'
@@ -478,63 +423,20 @@ jobs:
         run: pnpm typecheck:e2e
 
       - name: Typecheck portable browser harness
-        if: needs.changes.outputs.database-tests == 'true'
+        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.database-tests == 'true'
         run: pnpm typecheck:browser-harness
 
       - name: Lint portable browser harness
-        if: needs.changes.outputs.database-tests == 'true'
+        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.database-tests == 'true'
         run: pnpm lint:browser-harness
 
-      - name: Typecheck marketing
-        if: needs.changes.outputs.marketing-tests == 'true' && needs.changes.outputs.app != 'true' && needs.changes.outputs.shared != 'true'
-        run: pnpm --filter @lyrashield/marketing typecheck
-
-      - name: Typecheck motion
-        if: needs.changes.outputs.motion-tests == 'true' && needs.changes.outputs.app != 'true' && needs.changes.outputs.shared != 'true'
-        run: pnpm --filter @lyrashield/marketing-motion typecheck
-
-      # Deterministic, offline blog gates. These ran only by hand before, which is
-      # how an unterminated code span reached the build stage: MDX compiled the
-      # leaked expression fine and only failed while prerendering, with no file
-      # name in the error. blog:check-links is deliberately NOT gated here — it
-      # calls ~50 third-party URLs and would make merges depend on their uptime.
-      - name: Validate blog content
-        if: needs.changes.outputs.marketing-tests == 'true'
-        run: pnpm --filter @lyrashield/marketing blog:validate
-
-      - name: Validate blog images
-        if: needs.changes.outputs.marketing-tests == 'true'
-        run: pnpm --filter @lyrashield/marketing blog:validate:images
-
-      - name: Validate blog MDX
-        if: needs.changes.outputs.marketing-tests == 'true'
-        run: pnpm --filter @lyrashield/marketing blog:validate:mdx
-
-      - name: Validate blog offline gates
-        if: needs.changes.outputs.marketing-tests == 'true'
-        run: pnpm --filter @lyrashield/marketing blog:validate:offline
-
-      - name: Validate compare content
-        if: needs.changes.outputs.marketing-tests == 'true'
-        run: pnpm --filter @lyrashield/marketing compare:validate
-
-      - name: Validate redirects coverage
-        # Drift guard for the asset-layer trailing-slash 301s (PR #592
-        # architecture): every prerendered route must carry an explicit
-        # _redirects rule or its slash variant silently falls back to the
-        # platform 307. Runs the same enumeration the e2e suite asserts.
-        if: needs.changes.outputs.marketing-tests == 'true'
-        run: pnpm --filter @lyrashield/marketing validate-redirects
-
       - name: Test affected suites
-        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.marketing == 'true' || needs.changes.outputs.shared == 'true'
+        if: needs.changes.outputs.database-tests == 'true' || needs.changes.outputs.ops-tests == 'true'
         # The core suite includes the general restricted-role RLS tests against
         # the disposable main database. Fixed-name regressions below use their
         # own migrated databases because their guards require those names.
         env:
           DATABASE_TESTS: ${{ needs.changes.outputs.database-tests }}
-          MARKETING_TESTS: ${{ needs.changes.outputs.marketing-tests }}
-          MOTION_TESTS: ${{ needs.changes.outputs.motion-tests }}
           OPS_TESTS: ${{ needs.changes.outputs.ops-tests }}
           LYRASHIELD_OPS_RUNTIME_ALREADY_VERIFIED: "1"
         shell: bash
@@ -545,8 +447,6 @@ jobs:
             suites+=(core)
           fi
           if [ "$OPS_TESTS" = true ]; then suites+=(ops); fi
-          if [ "$MARKETING_TESTS" = true ]; then suites+=(marketing); fi
-          if [ "$MOTION_TESTS" = true ]; then suites+=(motion); fi
           LYRASHIELD_TEST_SUITES="$(IFS=,; echo "${suites[*]}")" pnpm test
 
       - name: Prove metering and queue invariants with disposable services
@@ -554,9 +454,23 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          BILLING_METER_POSTGRES_TEST=1 pnpm exec vitest run packages/billing/src/usage/meter.postgres.test.ts
-          WEBHOOK_TRACK_POSTGRES_REDIS_TEST=1 pnpm exec vitest run apps/worker/src/jobs/webhook-track-retry.postgres-redis.test.ts
-          BULLMQ_PRODUCER_REDIS_TEST=1 BULLMQ_TEST_REDIS_URL="$REDIS_URL" pnpm exec vitest run packages/integrations/src/queue.producer.redis.test.ts
+          # Keep process-level isolation: the attempted combined batch did not
+          # prove equivalent webhook claim behavior against disposable services.
+          BILLING_METER_POSTGRES_TEST=1 pnpm exec vitest run --maxWorkers=2 \
+            packages/billing/src/usage/meter.postgres.test.ts \
+            --reporter=default --reporter=json --outputFile="$RUNNER_TEMP/metering.json"
+          WEBHOOK_TRACK_POSTGRES_REDIS_TEST=1 pnpm exec vitest run --maxWorkers=2 \
+            apps/worker/src/jobs/webhook-track-retry.postgres-redis.test.ts \
+            --reporter=default --reporter=json --outputFile="$RUNNER_TEMP/webhook-retry.json"
+          BULLMQ_PRODUCER_REDIS_TEST=1 BULLMQ_TEST_REDIS_URL="$REDIS_URL" pnpm exec vitest run --maxWorkers=2 \
+            packages/integrations/src/queue.producer.redis.test.ts \
+            --reporter=default --reporter=json --outputFile="$RUNNER_TEMP/queue-producer.json"
+          node .github/scripts/assert-vitest-file-counts.mjs "$RUNNER_TEMP/metering.json" \
+            packages/billing/src/usage/meter.postgres.test.ts=17
+          node .github/scripts/assert-vitest-file-counts.mjs "$RUNNER_TEMP/webhook-retry.json" \
+            apps/worker/src/jobs/webhook-track-retry.postgres-redis.test.ts=14
+          node .github/scripts/assert-vitest-file-counts.mjs "$RUNNER_TEMP/queue-producer.json" \
+            packages/integrations/src/queue.producer.redis.test.ts=6
 
       # The TRIAL_INTEGRATION_TEST suites assert their DATABASE_URL is a
       # localhost, non-superuser, NOBYPASSRLS role — the app_runtime_ci role
@@ -695,11 +609,148 @@ jobs:
         run: sh ops/worker/capture-stop-provenance.test.sh
 
       - name: Build app and shared packages
+        if: needs.changes.outputs.app == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')
+        run: node .github/scripts/ci-selection.mjs build app
+
+      - name: Cache Playwright browser
+        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.database-tests == 'true'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          # Hash the installed @playwright/test version out of the lockfile so
+          # a Playwright upgrade invalidates the cache automatically.
+          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            playwright-${{ runner.os }}-
+
+      - name: Install Playwright browser
+        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.database-tests == 'true'
+        timeout-minutes: 15
+        run: |
+          # Playwright needs Ubuntu packages, not GitHub's preconfigured Google
+          # Chrome repository. Disable that unrelated repository so an upstream
+          # metadata publication race cannot break apt update.
+          for source in /etc/apt/sources.list.d/google-chrome.list /etc/apt/sources.list.d/google-chrome.sources; do
+            if [ -f "$source" ]; then
+              sudo mv "$source" "$source.disabled"
+            fi
+          done
+          pnpm exec playwright install --with-deps chromium
+
+      - name: Browser E2E (includes functional mobile shell at 390px)
         if: needs.changes.outputs.database-tests == 'true'
-        run: pnpm build
+        timeout-minutes: 15
+        # DATABASE_URL: the NOBYPASSRLS runtime role — the app under test runs
+        # with RLS enforced, so e2e exercises the real RLS posture.
+        # DATABASE_SYSTEM_URL: the privileged (owner) role for cross-workspace
+        # system operations (e.g. license activation's workspace-less global
+        # key-hash lookup). getSystemPrisma() uses this; without it the license
+        # activation/connect/renew/verify flows can't read NULL-workspaceId or
+        # cross-workspace License rows under FORCE RLS.
+        # This deterministic value is only for the disposable CI database; it
+        # is not a production secret or a deploy configuration source.
+        run: |
+          IP_HASH_SALT='ci-only-nonproduction-ip-hash-salt-32chars' \
+            DATABASE_URL="$RLS_RUNTIME_DATABASE_URL" \
+            DATABASE_SYSTEM_URL="postgresql://lyrashield:lyrashield@localhost:5432/lyrashield?schema=public" \
+            pnpm exec playwright test
+
+      - name: Portable browser harness
+        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.database-tests == 'true'
+        timeout-minutes: 10
+        run: pnpm test:browser-harness
+
+      - name: Disposable reset mail browser proof
+        if: needs.changes.outputs.database-tests == 'true'
+        timeout-minutes: 5
+        run: |
+          DATABASE_URL="$RLS_RUNTIME_DATABASE_URL" \
+            DATABASE_SYSTEM_URL="postgresql://lyrashield:lyrashield@localhost:5432/lyrashield?schema=public" \
+            pnpm test:auth-mail-browser
+
+      - name: Remove disposable database containers
+        if: ${{ always() }}
+        run: docker rm --force ci-postgres ci-redis >/dev/null 2>&1 || true
+
+  marketing-checks:
+    name: Marketing & Motion
+    needs: changes
+    if: needs.changes.outputs.marketing-tests == 'true' || needs.changes.outputs.motion-tests == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      CI_ROUTING: ${{ toJSON(needs.changes.outputs) }}
+      LYRASHIELD_TEST_DB_DISPOSABLE: "0"
+      # Shared imports validate the same production env schema, but this job
+      # has no database service and must never reach a real developer database.
+      DATABASE_URL: "postgresql://vitest:vitest@127.0.0.1:1/lyrashield_test"
+      TRUSTED_PROXY_IP_HEADER: "x-forwarded-for"
+      PLATFORM_ADMIN_EMAILS: "ecryptoguru@gmail.com,ankit@lyrashieldai.com"
+      BETTER_AUTH_SECRET: dummy-ci-only-secret-not-a-real-credential-32chars
+      BETTER_AUTH_URL: "http://127.0.0.1:3100"
+      NEXT_PUBLIC_APP_URL: "http://127.0.0.1:3100"
+      LYRASHIELD_REQUIRE_EMAIL_VERIFICATION: "0"
+    steps:
+      - name: Configure git default branch
+        run: git config --global init.defaultBranch main
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup pnpm
+        uses: pnpm/setup@c9883cc79df532ad1a7b81bf9ab944ceb090d65c # v2.0.0
+        with:
+          # Every workflow runs pnpm install as an explicit step; the
+          # successor action's install default is true, so opt out.
+          install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Cache Turbo
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .turbo
+          key: turbo-marketing-${{ runner.os }}-${{ github.base_ref || github.ref_name }}-${{ github.sha }}
+          restore-keys: |
+            turbo-marketing-${{ runner.os }}-${{ github.base_ref || github.ref_name }}-
+            turbo-marketing-${{ runner.os }}-main-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint selected marketing workspaces
+        run: node .github/scripts/ci-selection.mjs lint marketing
+
+      - name: Typecheck selected marketing workspaces
+        run: node .github/scripts/ci-selection.mjs typecheck marketing
+
+      - name: Size lint ratchet
+        run: pnpm lint:size
+
+      - name: Validate marketing content
+        if: needs.changes.outputs.marketing-tests == 'true'
+        run: |
+          pnpm --filter @lyrashield/marketing blog:validate
+          pnpm --filter @lyrashield/marketing blog:validate:images
+          pnpm --filter @lyrashield/marketing blog:validate:mdx
+          pnpm --filter @lyrashield/marketing blog:validate:offline
+          pnpm --filter @lyrashield/marketing compare:validate
+          pnpm --filter @lyrashield/marketing validate-redirects
+
+      - name: Test marketing
+        if: needs.changes.outputs.marketing-tests == 'true'
+        run: pnpm --filter @lyrashield/marketing exec vitest run --maxWorkers=2
+
+      - name: Test motion
+        if: needs.changes.outputs.motion-tests == 'true'
+        run: pnpm test:motion
 
       - name: Build marketing
-        if: needs.changes.outputs.marketing-tests == 'true' && needs.changes.outputs.app != 'true' && needs.changes.outputs.shared != 'true'
+        if: needs.changes.outputs.marketing-tests == 'true'
         run: |
           # The browser suite's webServer serves this exact artifact, so this
           # build carries the local-preview flag (measured ~15s of astro work
@@ -712,7 +763,7 @@ jobs:
           touch apps/marketing/dist/.local-preview
 
       - name: Build motion
-        if: needs.changes.outputs.motion-tests == 'true' && needs.changes.outputs.app != 'true' && needs.changes.outputs.shared != 'true'
+        if: needs.changes.outputs.motion-tests == 'true'
         run: pnpm --filter @lyrashield/marketing-motion build
 
       # Cache the Playwright browser binary so the install step does not
@@ -721,8 +772,9 @@ jobs:
       # download is skipped (only --with-deps system packages run), which is
       # what makes the install step reliably fit its timeout. Added after the
       # step timed out at 8 minutes three runs in a row (2026-08-19/20).
+
       - name: Cache Playwright browser
-        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.marketing-tests == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')
+        if: needs.changes.outputs.marketing-tests == 'true'
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ms-playwright
@@ -733,7 +785,7 @@ jobs:
             playwright-${{ runner.os }}-
 
       - name: Install Playwright browser
-        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.marketing-tests == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')
+        if: needs.changes.outputs.marketing-tests == 'true'
         timeout-minutes: 15
         run: |
           # Playwright needs Ubuntu packages, not GitHub's preconfigured Google
@@ -747,7 +799,7 @@ jobs:
           pnpm exec playwright install --with-deps chromium
 
       - name: Install FFmpeg for synthetic motion controller fixtures
-        if: needs.changes.outputs.marketing == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')
+        if: needs.changes.outputs.marketing-tests == 'true'
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
 
       - name: Marketing browser E2E
@@ -769,40 +821,29 @@ jobs:
           retention-days: 3
           if-no-files-found: warn
 
-      - name: Browser E2E (includes functional mobile shell at 390px)
-        if: needs.changes.outputs.database-tests == 'true'
-        timeout-minutes: 15
-        # DATABASE_URL: the NOBYPASSRLS runtime role — the app under test runs
-        # with RLS enforced, so e2e exercises the real RLS posture.
-        # DATABASE_SYSTEM_URL: the privileged (owner) role for cross-workspace
-        # system operations (e.g. license activation's workspace-less global
-        # key-hash lookup). getSystemPrisma() uses this; without it the license
-        # activation/connect/renew/verify flows can't read NULL-workspaceId or
-        # cross-workspace License rows under FORCE RLS.
-        # This deterministic value is only for the disposable CI database; it
-        # is not a production secret or a deploy configuration source.
+  lint-and-typecheck:
+    name: Lint, Typecheck, Test & Build
+    needs: [changes, app-checks, marketing-checks, desktop-frontend]
+    # always() keeps dependency failure, skip and cancellation visible here.
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Fail closed when the workflow was cancelled before this gate started
+        if: ${{ cancelled() }}
         run: |
-          IP_HASH_SALT='ci-only-nonproduction-ip-hash-salt-32chars' \
-            DATABASE_URL="$RLS_RUNTIME_DATABASE_URL" \
-            DATABASE_SYSTEM_URL="postgresql://lyrashield:lyrashield@localhost:5432/lyrashield?schema=public" \
-            pnpm exec playwright test
+          echo "::error::Workflow was cancelled before the required CI aggregate could run."
+          exit 1
 
-      - name: Portable browser harness
-        if: needs.changes.outputs.database-tests == 'true'
-        timeout-minutes: 10
-        run: pnpm test:browser-harness
+      - name: Checkout
+        if: ${{ !cancelled() }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Disposable reset mail browser proof
-        if: needs.changes.outputs.database-tests == 'true'
-        timeout-minutes: 5
-        run: |
-          DATABASE_URL="$RLS_RUNTIME_DATABASE_URL" \
-            DATABASE_SYSTEM_URL="postgresql://lyrashield:lyrashield@localhost:5432/lyrashield?schema=public" \
-            pnpm test:auth-mail-browser
-
-      - name: Remove disposable database containers
-        if: ${{ always() }}
-        run: docker rm --force ci-postgres ci-redis >/dev/null 2>&1 || true
+      - name: Validate all selected CI results and routing
+        if: ${{ always() && !cancelled() }}
+        env:
+          CI_NEEDS: ${{ toJSON(needs) }}
+        run: node .github/scripts/ci-selection.mjs results
 
       - name: Fail closed when cancelled during required CI checks
         if: ${{ cancelled() }}
@@ -935,6 +976,7 @@ jobs:
       # deploy-azure.yml so the PR gate cannot drift from production. Do not
       # bump the pin here.
       - name: Read pinned engine revision
+        if: needs.changes.outputs.worker-image == 'true'
         id: engine
         shell: bash
         run: |
@@ -948,6 +990,7 @@ jobs:
       # The worker target embeds the engine source, so it needs the named
       # `engine` build context. The web and egress-proxy targets do not.
       - name: Checkout pinned engine
+        if: needs.changes.outputs.worker-image == 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ github.repository_owner }}/lyrashield-engine
@@ -961,6 +1004,7 @@ jobs:
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
       - name: Build web image (no push)
+        if: needs.changes.outputs.web-image == 'true'
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
@@ -979,6 +1023,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=container-build-web
 
       - name: Build worker image (no push)
+        if: needs.changes.outputs.worker-image == 'true'
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
@@ -992,6 +1037,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=container-build-worker
 
       - name: Build egress-proxy image (no push)
+        if: needs.changes.outputs.egress-image == 'true'
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
@@ -1056,7 +1102,7 @@ jobs:
   desktop-frontend:
     name: Desktop Frontend (Vite/React)
     needs: [changes]
-    if: needs.changes.outputs.desktop == 'true'
+    if: needs.changes.outputs.desktop-frontend-tests == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:

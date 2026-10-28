@@ -321,17 +321,14 @@ test("marketing routing covers its current transitive workspace dependency graph
   assert.ok(seen.size > 0)
 })
 
-test("motion-only changes check their own artifact without duplicating broad builds", () => {
-  for (const name of ["Lint motion", "Typecheck motion", "Build motion"]) {
-    assert.equal(runs(name, ["apps/marketing-motion/src/scene.ts"]), true, name)
-    assert.equal(runs(name, ["apps/marketing/src/pages/index.astro"]), false, name)
-    assert.equal(runs(name, ["pnpm-lock.yaml"]), false, name)
-    assert.equal(
-      runs(name, ["apps/marketing-motion/src/scene.ts", "apps/web/src/app/page.tsx"]),
-      false,
-      name
-    )
-  }
+test("motion builds stay selected when app and root dependencies also change", () => {
+  for (const paths of [
+    ["apps/marketing-motion/src/scene.ts"],
+    ["pnpm-lock.yaml"],
+    ["apps/marketing-motion/src/scene.ts", "apps/web/src/app/page.tsx"],
+  ])
+    assert.equal(runs("Build motion", paths), true, String(paths))
+  assert.equal(runs("Build motion", ["apps/marketing/src/pages/index.astro"]), false)
 })
 
 test("ops and native service tests select their dependency closure without ordinary UI changes", () => {
@@ -370,7 +367,7 @@ test("ops and native service tests select their dependency closure without ordin
 })
 
 test("ops owns the webhook and Lighthouse assertions without duplicate early invocations", () => {
-  const classifierJob = workflow.split("  changes:")[1].split("  lint-and-typecheck:")[0]
+  const classifierJob = workflow.split("  changes:")[1].split("  app-checks:")[0]
   assert.doesNotMatch(
     classifierJob,
     /webhook-cutover-verification\.workflow\.test|webhook-deploy-dispatch\.test|lighthouse-production\.test/
@@ -391,7 +388,10 @@ test("the dead-code report stays advisory and cannot fail the required aggregate
   )
   assert.ok(block, "ci.yml must carry the knip report step")
   assert.match(block[0], /^ {8}continue-on-error: true$/m)
-  assert.match(block[0], /^ {8}if: needs\.changes\.outputs\.docs-only != 'true'$/m)
+  assert.match(
+    block[0],
+    /^ {8}if: needs\.changes\.outputs\.shared == 'true' && needs\.changes\.outputs\.tooling-only != 'true'$/m
+  )
   assert.match(block[0], /^ {8}run: pnpm lint:knip$/m)
   assert.match(block[0], /^ {8}timeout-minutes: 10$/m)
   const root = JSON.parse(readFileSync(new URL("../../../package.json", import.meta.url), "utf8"))
@@ -399,8 +399,8 @@ test("the dead-code report stays advisory and cannot fail the required aggregate
   assert.ok(root.devDependencies.knip, "knip must stay a declared devDependency")
   // The step lives in the required aggregate, so its non-blocking shape is what
   // keeps it from gating a merge.
-  const aggregate = workflow.split("\n  lint-and-typecheck:\n")[1]
-  assert.ok(aggregate.includes("- name: Dead-code report (knip, non-blocking)"))
+  const app = workflow.split("\n  app-checks:\n")[1].split("\n  marketing-checks:\n")[0]
+  assert.ok(app.includes("- name: Dead-code report (knip, non-blocking)"))
 })
 
 test("known tooling retains executable operations checks without runtime suites", () => {

@@ -4,7 +4,7 @@
 # Reads file paths from stdin (one per line) and outputs boolean routing flags
 # to GITHUB_OUTPUT (or stdout when run outside a workflow):
 #   tooling-only — only known CI/deployment tooling and optional docs changed
-#   docs-only  — every changed file is a docs/config/agent-rules file
+#   docs-only  — every changed file is a non-executable documentation/agent-rules file
 #   marketing  — at least one file is under apps/marketing or apps/marketing-motion
 #   app        — at least one file is under apps/web or apps/worker
 #   desktop    — at least one file is under apps/desktop
@@ -12,6 +12,8 @@
 #   engine-worker-contract — worker/desktop/shared or unknown paths require the pinned contract gate
 #   database-tests — app/shared runtime changes require disposable PostgreSQL/Redis validation
 #   database-services — database-tests or a changed live DB/Redis fixture requires local services
+#   desktop-frontend-tests — Desktop sources, its fixture/toolchain inputs or unknown paths
+#   web-image / worker-image / egress-image — selected no-push image qualifications
 #   marketing-deploy — marketing source or a dependency that changes its Worker artifact
 #   azure-deploy — app or shared change requiring an Azure production release
 #
@@ -33,11 +35,11 @@ fi
 #   agent/tool config directories — they are NOT code and do not enter the
 #   build. If executable scripts are later added under these dirs that DO
 #   affect the product, narrow this pattern rather than broadening it.
-docs_pattern='^(\.gitignore|\.prettierignore|\.prettierrc\.json|\.editorconfig|\.gitattributes|\.nvmrc|\.python-version|LICENSE|renovate\.json|.*\.md|\.devin/|\.claude/|\.codeium/|\.cursor/|\.agents/|\.windsurf/)$'
+docs_pattern='^(\.gitignore|\.gitattributes|LICENSE|renovate\.json|.*\.md|\.devin/|\.claude/|\.codeium/|\.cursor/|\.agents/|\.windsurf/)$'
 marketing_pattern='^apps/(marketing|marketing-motion)/'
 app_pattern='^apps/(web|worker)/'
 desktop_pattern='^apps/desktop/'
-shared_pattern='^(packages/|package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|turbo\.json|tsconfig\.json|tsconfig\.tsbuildinfo|eslint\.config\.mjs|vitest\.config\.ts|playwright\.config\.ts|docker-compose\.yml|Dockerfile|action\.yml|\.gitleaks\.toml|\.env\.example|ops/|e2e/|lint/serial-comma-baseline\.json|run-all-tests\.mjs|\.github/)'
+shared_pattern='^(docs/marketplace/|packages/|package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|turbo\.json|tsconfig\.json|tsconfig\.tsbuildinfo|eslint\.config\.mjs|vitest\.config\.ts|playwright\.config\.ts|docker-compose\.yml|Dockerfile|action\.yml|\.gitleaks\.toml|\.env\.example|ops/|e2e/|lint/serial-comma-baseline\.json|run-all-tests\.mjs|\.github/)'
 # CI validation is deliberately broader than release routing. Workflow, test,
 # Action, and tooling changes must be checked, but do not alter a production
 # artifact. Unknown paths remain fail-closed below.
@@ -74,48 +76,74 @@ engine_worker_contract=false
 database_tests=false
 database_runtime_seen=false
 
-while IFS= read -r f; do
+desktop_frontend_tests=false
+runtime_app=false
+web_image=false
+worker_image=false
+egress_image=false
+
+# Desktop imports the scan-depth fixture directly; it has no workspace package
+# dependency on types. Root JS build/toolchain inputs also affect its frontend.
+desktop_frontend_pattern='^(apps/desktop/|packages/types/|package\.json$|pnpm-lock\.yaml$|pnpm-workspace\.yaml$|turbo\.json$|tsconfig\.json$|eslint\.config\.mjs$|vitest\.config\.ts$)'
+# Only non-executable web presentation inputs can skip live runtime proofs.
+# JSX/TSX remains conservative: server components may import DB/auth services.
+presentation_pattern='^(apps/web/public/.*\.(png|jpe?g|webp|avif|gif|ico|woff2?|ttf|otf)$|apps/web/.*\.css$)'
+
+while IFS= read -r f || [[ -n "$f" ]]; do
   [ -z "$f" ] && continue
-  if echo "$f" | grep -qE "$tooling_pattern"; then
+  if [[ "$f" =~ $tooling_pattern ]]; then
     tooling_seen=true
-  elif ! echo "$f" | grep -qE "$docs_pattern"; then
+  elif ! [[ "$f" =~ $docs_pattern ]]; then
     tooling_only=false
   fi
   path_classified=false
-  if echo "$f" | grep -qE "$docs_pattern"; then
+  if [[ "$f" =~ $docs_pattern ]]; then
     path_classified=true
   else
     docs_only=false
   fi
-  if echo "$f" | grep -qE "$marketing_pattern"; then
+  if [[ "$f" =~ $marketing_pattern ]]; then
     marketing=true
     path_classified=true
   fi
-  if echo "$f" | grep -qE "$app_pattern"; then
+  if [[ "$f" =~ $app_pattern ]]; then
     app=true
-    engine_worker_contract=true
+    if ! [[ "$f" =~ $presentation_pattern ]]; then
+      runtime_app=true
+      engine_worker_contract=true
+    fi
     path_classified=true
   fi
-  if echo "$f" | grep -qE "$desktop_pattern"; then
+  if [[ "$f" =~ $desktop_pattern ]]; then
     desktop=true
     engine_worker_contract=true
     path_classified=true
   fi
-  if echo "$f" | grep -qE "$shared_pattern"; then
+  if [[ "$f" =~ $shared_pattern ]]; then
     shared=true
     engine_worker_contract=true
     path_classified=true
   fi
-  if echo "$f" | grep -qE "$marketing_deploy_pattern"; then
+  if [[ "$f" =~ $marketing_deploy_pattern ]]; then
     marketing_deploy=true
   fi
-  if echo "$f" | grep -qE "$azure_deploy_pattern"; then
+  if [[ "$f" =~ $azure_deploy_pattern ]]; then
     azure_deploy=true
   fi
-  if echo "$f" | grep -qE "$marketing_tests_pattern"; then marketing_tests=true; fi
-  if echo "$f" | grep -qE "$motion_tests_pattern"; then motion_tests=true; fi
-  if echo "$f" | grep -qE "$ops_tests_pattern"; then ops_tests=true; fi
-  if echo "$f" | grep -qE "$database_runtime_pattern"; then database_runtime_seen=true; fi
+  if [[ "$f" =~ $marketing_tests_pattern ]]; then marketing_tests=true; fi
+  if [[ "$f" =~ $motion_tests_pattern ]]; then motion_tests=true; fi
+  if [[ "$f" =~ $ops_tests_pattern ]]; then ops_tests=true; fi
+  if [[ "$f" =~ $database_runtime_pattern ]]; then database_runtime_seen=true; fi
+  if [[ "$f" =~ $desktop_frontend_pattern ]]; then desktop_frontend_tests=true; fi
+  if [[ "$f" == apps/web/* ]]; then web_image=true; fi
+  if [[ "$f" == apps/worker/* || "$f" == ops/worker/* ]]; then worker_image=true; fi
+  # All shared, configuration, deployment and unknown inputs retain all image
+  # targets. Only app-local source changes have a proven narrower closure.
+  if [[ "$f" =~ $azure_deploy_pattern && "$f" != apps/web/* && "$f" != apps/worker/* && "$f" != ops/worker/* ]]; then
+    web_image=true
+    worker_image=true
+    egress_image=true
+  fi
   if [[ "$path_classified" == "false" ]]; then
     shared=true
     unknown=true
@@ -133,6 +161,10 @@ if ! $tooling_seen || $marketing || $app || $desktop || $unknown; then tooling_o
 # desktop have their own delivery paths; docs-only changes need no deployment.
 # An unknown path is fail-closed because its build impact is not yet classified.
 if [[ "$unknown" == "true" ]]; then
+  desktop_frontend_tests=true
+  web_image=true
+  worker_image=true
+  egress_image=true
   marketing_deploy=true
   azure_deploy=true
   marketing_tests=true
@@ -145,6 +177,11 @@ fi
 # and route both artifacts. Callers use this mode when they cannot prove what
 # is currently deployed; it is intentionally broader than an unknown path.
 if $force_all; then
+  desktop_frontend_tests=true
+  runtime_app=true
+  web_image=true
+  worker_image=true
+  egress_image=true
   docs_only=false
   tooling_only=false
   marketing=true
@@ -162,7 +199,7 @@ fi
 # Full database suites follow app/shared runtime changes. Only the webhook
 # verifier and queue-helper sources keep narrowly scoped live fixtures when
 # changed as tooling. Unknown paths fall back to shared and stay fail-closed.
-if [[ "$app" == "true" || ( "$shared" == "true" && "$tooling_only" == "false" ) ]]; then
+if [[ "$runtime_app" == "true" || ( "$shared" == "true" && "$tooling_only" == "false" ) ]]; then
   database_tests=true
 fi
 database_services="$database_tests"
@@ -170,36 +207,30 @@ if [[ "$database_runtime_seen" == "true" ]]; then
   database_services=true
 fi
 
+# Emit one complete receipt, using the same format locally and on Actions.
+emit_flags() {
+  printf '%s\n' \
+    "docs-only=$docs_only" \
+    "tooling-only=$tooling_only" \
+    "marketing=$marketing" \
+    "app=$app" \
+    "desktop=$desktop" \
+    "shared=$shared" \
+    "marketing-deploy=$marketing_deploy" \
+    "azure-deploy=$azure_deploy" \
+    "marketing-tests=$marketing_tests" \
+    "motion-tests=$motion_tests" \
+    "ops-tests=$ops_tests" \
+    "engine-worker-contract=$engine_worker_contract" \
+    "database-tests=$database_tests" \
+    "database-services=$database_services" \
+    "web-image=$web_image" \
+    "worker-image=$worker_image" \
+    "egress-image=$egress_image" \
+    "desktop-frontend-tests=$desktop_frontend_tests"
+}
 if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
-  {
-    echo "docs-only=$docs_only"
-    echo "tooling-only=$tooling_only"
-    echo "marketing=$marketing"
-    echo "app=$app"
-    echo "desktop=$desktop"
-    echo "shared=$shared"
-    echo "marketing-deploy=$marketing_deploy"
-    echo "azure-deploy=$azure_deploy"
-    echo "marketing-tests=$marketing_tests"
-    echo "motion-tests=$motion_tests"
-    echo "ops-tests=$ops_tests"
-    echo "engine-worker-contract=$engine_worker_contract"
-    echo "database-tests=$database_tests"
-    echo "database-services=$database_services"
-  } >> "$GITHUB_OUTPUT"
+  emit_flags >> "$GITHUB_OUTPUT"
 else
-  echo "docs-only=$docs_only"
-  echo "tooling-only=$tooling_only"
-  echo "marketing=$marketing"
-  echo "app=$app"
-  echo "desktop=$desktop"
-  echo "shared=$shared"
-  echo "marketing-deploy=$marketing_deploy"
-  echo "azure-deploy=$azure_deploy"
-  echo "marketing-tests=$marketing_tests"
-  echo "motion-tests=$motion_tests"
-  echo "ops-tests=$ops_tests"
-  echo "engine-worker-contract=$engine_worker_contract"
-  echo "database-tests=$database_tests"
-  echo "database-services=$database_services"
+  emit_flags
 fi

@@ -17,7 +17,12 @@ const coreCommand = ["vitest", "run", "--exclude", "**/dist/**"]
 if (coreReportPath) {
   // Keep Vitest's native diagnostics: JSON can replace timeout details with
   // STACK_TRACE_ERROR. The JSON report still powers the named-test guard.
-  coreCommand.push("--reporter=default", "--reporter=json", `--outputFile=${coreReportPath}`)
+  coreCommand.push(
+    "--maxWorkers=2",
+    "--reporter=default",
+    "--reporter=json",
+    `--outputFile=${coreReportPath}`
+  )
 }
 if (process.env.LYRASHIELD_TEST_COVERAGE === "1") {
   coreCommand.push("--coverage")
@@ -95,10 +100,9 @@ function run(name, command) {
   })
 }
 
-// The combined run starts four independent test processes at once. Two local
-// combined-run timeouts passed when isolated; contention during imports and
-// database setup is plausible but not proven. Run suites sequentially first
-// and report their wall times while retaining every suite and assertion.
+// Keep heavy suites sequential within each runner to bound import, service
+// and build contention. Independent CI jobs may select separate suites; each
+// invocation still reports its requested results and fails on any error.
 const results = []
 for (const suite of suites) {
   results.push(await run(suite.name, suite.command))

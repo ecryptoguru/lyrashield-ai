@@ -4,7 +4,7 @@ set -euo pipefail
 
 WORKFLOW="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/workflows/ci.yml"
 WORKFLOW_CONTENT="$(cat "$WORKFLOW")"
-JOB="$(sed -n '/^  lint-and-typecheck:/,/^  engine-worker-contract:/p' "$WORKFLOW")"
+JOB="$(sed -n '/^  app-checks:/,/^  engine-worker-contract:/p' "$WORKFLOW")"
 failures=0
 
 assert_contains() {
@@ -77,9 +77,9 @@ if [[ "$last_step_name" != "Fail closed when cancelled during required CI checks
   echo "FAIL: late cancellation guard must remain the final aggregate step" >&2
   failures=$((failures + 1))
 fi
-assert_not_contains "job does not skip green on cancellation" "if: \${{ always() && !cancelled() }}"
-assert_contains "untrusted classifier fails closed" 'if [[ "$CHANGES_RESULT" != success ]]'
-assert_contains "missing or invalid flags fail closed" 'if [[ "$flag" != true && "$flag" != false ]]; then'
+assert_contains "aggregate validates dependency results" "run: node .github/scripts/ci-selection.mjs results"
+assert_contains "aggregate receives classifier and dependency results" 'CI_NEEDS: ${{ toJSON(needs) }}'
+assert_contains "aggregate has all required job dependencies" 'needs: [changes, app-checks, marketing-checks, desktop-frontend]'
 assert_contains "service startup is path-gated" "if: needs.changes.outputs.database-services == 'true'"
 assert_contains "service cleanup runs after failure/cancellation" "if: \${{ always() }}"
 assert_contains "core suite uses DB flag" 'if [ "$DATABASE_TESTS" = true ]; then'
@@ -100,11 +100,14 @@ for step in \
   "Trial integration tests (restricted runtime role)" \
   "Agent operation workspace foreign key test" \
   "Run required PostgreSQL regression tests" \
-  "Browser E2E (includes functional mobile shell at 390px)" \
-  "Portable browser harness"; do
+  "Browser E2E (includes functional mobile shell at 390px)"; do
   assert_step_gated "$step"
 done
 
+if [[ "$(step_condition "Portable browser harness")" != "needs.changes.outputs.app == 'true' || needs.changes.outputs.database-tests == 'true'" ]]; then
+  echo "FAIL: portable rendered checks must include presentation-only app changes" >&2
+  failures=$((failures + 1))
+fi
 assert_step_gated "Start disposable PostgreSQL and Redis" database-services
 assert_step_gated "Generate Prisma Client" database-services
 if [[ "$(step_condition "Test webhook catalog Prisma compatibility")" != "needs.changes.outputs.ops-tests == 'true' && needs.changes.outputs.database-services == 'true'" ]]; then
