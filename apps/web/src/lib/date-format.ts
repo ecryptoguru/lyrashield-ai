@@ -75,7 +75,7 @@ const localTimeFormatter = new Intl.DateTimeFormat("en-US", {
 
 /** The viewer's own zone name (for example "GMT-4" or "IST"), or "local" when
  * the browser cannot name it. Never empty, so the zone is always stated. */
-export function localZoneName(): string {
+function localZoneName(): string {
   try {
     const parts = new Intl.DateTimeFormat("en-US", { timeZoneName: "short" }).formatToParts(
       new Date()

@@ -45,7 +45,7 @@ type ScanPresentationResult = ReturnType<typeof getScanPresentation>
 
 type CoverageReceipt = ScanData["integrity"]["coverage"][number]
 
-export function ScanCoverageDetail({
+function ScanCoverageDetail({
   scan,
   familyCoverage,
   controlCoverage,
@@ -175,7 +175,7 @@ export function ScanCoverageDetail({
   )
 }
 
-export function ScanFindingsSection({
+function ScanFindingsSection({
   currentFindings,
   sortedFindings,
   scan,
@@ -505,7 +505,7 @@ export function ScanRefreshPausedBanner({
   )
 }
 
-export function ScanCompletionNotice({
+function ScanCompletionNotice({
   notice,
   onDismiss,
 }: {
@@ -540,7 +540,7 @@ export function ScanCompletionNotice({
   )
 }
 
-export function ScanStatGrid({
+function ScanStatGrid({
   scan,
   findingsCount,
   verifiedCount,

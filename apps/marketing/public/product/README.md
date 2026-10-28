@@ -59,8 +59,9 @@ regeneration, inspect both themes at full size and verify their dimensions,
 redaction and UI readability. Keep factual alt text and captions aligned with
 the content actually included in the crop.
 
-## Legacy assets
+## Retired assets
 
-The console-*.webp files predate these captures. They are retained as historical
-assets and are no longer referenced by the homepage or methodology. Do not
-reuse them as current dashboard UI or copy their old route names into captions.
+The earlier console screenshots were removed after the current captures
+superseded them and repository references were checked. Recover historical
+assets from Git history; use the current paired captures and their provenance
+for published product previews.

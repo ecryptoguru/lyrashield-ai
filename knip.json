@@ -7,7 +7,12 @@
     ".": {
       "entry": ["e2e/**/*.{js,mjs,ts,tsx}"],
       "project": ["e2e/**/*.{js,mjs,ts,tsx}"],
-      "playwright": false
+      "playwright": false,
+      "paths": {
+        "react": ["./apps/web/node_modules/react"],
+        "react/*": ["./apps/web/node_modules/react/*"],
+        "react-dom/*": ["./apps/web/node_modules/react-dom/*"]
+      }
     },
     "apps/desktop": {
       "entry": [],
@@ -28,8 +33,8 @@
       ]
     },
     "apps/marketing-motion": {
-      "entry": ["tests/**/*.test.mjs"],
-      "project": ["scripts/**/*.mjs", "src/**/*.css", "tests/**/*.mjs"]
+      "entry": ["src/main.ts", "tests/**/*.test.mjs"],
+      "project": ["index.html", "src/**/*.{ts,css}", "scripts/**/*.mjs", "tests/**/*.mjs"]
     },
     "apps/web": {
       "entry": [
@@ -41,6 +46,7 @@
     },
     "apps/worker": {
       "entry": [
+        "src/index.ts",
         "src/operations/verify-evidence-storage.ts",
         "src/operations/verify-evidence-storage-fail-closed.ts",
         "src/**/*.test.{ts,tsx}"
@@ -88,8 +94,9 @@
       "project": ["src/**/*.ts"]
     },
     "packages/db": {
-      "entry": ["src/**/*.test.ts"],
-      "project": ["src/**/*.{js,mjs,ts}", "scripts/**/*.ts"]
+      "entry": ["src/**/*.test.ts", "src/generated/prisma/index.js"],
+      "project": ["src/**/*.{js,mjs,ts}", "scripts/**/*.ts"],
+      "ignoreDependencies": ["@prisma/client", "@prisma/client-runtime-utils"]
     },
     "packages/egress-proxy": {
       "entry": ["src/**/*.test.ts"],
@@ -152,8 +159,9 @@
       "project": ["src/**/*.{ts,tsx}"]
     },
     "apps/desktop/frontend": {
-      "entry": [],
-      "project": ["src/**/*.{ts,tsx}"]
+      "entry": ["src/main.tsx"],
+      "project": ["index.html", "src/**/*.{ts,tsx,css}"],
+      "ignoreDependencies": ["tailwindcss"]
     }
   }
 }

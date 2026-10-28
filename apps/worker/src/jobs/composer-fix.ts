@@ -18,7 +18,7 @@ const runDocker = promisify(execFile)
 const COMPOSER_CONSTRAINT_EXIT_CODE = 42
 export class ComposerFixUnavailableError extends Error {}
 /** Reviewed multiarchitecture Composer 2.10.3 identity; never target-controlled. */
-export const COMPOSER_RESOLVER_IMAGE =
+const COMPOSER_RESOLVER_IMAGE =
   "composer@sha256:b6dcd72ca98fa19d0e5b8476de179859704891fad06dd9e0b96833d4c430a5fc"
 const RequestSchema = z.object({
   originalManifest: z.string().max(COMPOSER_FIX_MAX_BYTES),

@@ -1,7 +1,7 @@
 import { logger } from "@lyrashield/logger"
 import { findOldestTerminalUnreconciledCost } from "./operational-health"
 
-export const TERMINAL_COST_HEALTH_INTERVAL_MS = 5 * 60_000
+const TERMINAL_COST_HEALTH_INTERVAL_MS = 5 * 60_000
 
 type TerminalCostObservation = {
   code: "terminal_cost_unreconciled"

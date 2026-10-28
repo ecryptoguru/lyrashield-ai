@@ -10,8 +10,8 @@ import {
 export const AI_RESULT_CACHE_TTL_SECONDS = 24 * 60 * 60
 export const AI_RESULT_CACHE_MAX_BYTES = 128 * 1024
 export const AI_RESULT_CACHE_COMMAND_TIMEOUT_MS = 500
-export const AI_RESULT_CACHE_FAILURE_THRESHOLD = 3
-export const AI_RESULT_CACHE_CIRCUIT_OPEN_MS = 60_000
+const AI_RESULT_CACHE_FAILURE_THRESHOLD = 3
+const AI_RESULT_CACHE_CIRCUIT_OPEN_MS = 60_000
 const CACHE_KEY_PREFIX = "lyrashield:ai-cache:v1:triage:"
 const CACHE_VALUE_VERSION = "ai-result-cache-entry/1.0"
 
