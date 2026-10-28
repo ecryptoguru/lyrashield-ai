@@ -11,6 +11,61 @@ vi.mock("../../../../packages/auth/src/server", () => ({
   requireWorkspaceAccess: vi.fn(),
 }))
 
+function assertAliasParity(path: string, alias: string, twin: string | undefined): string[] {
+  if (!twin) throw new Error(`Missing unversioned route for ${path}`)
+  const reexport = alias.trim().match(/^export \{ ([A-Z, ]+) \} from "([^"]+)";?$/)
+  if (!reexport) throw new Error(`Expected direct method re-export in ${path}`)
+  const expectedSource = posix
+    .relative(posix.dirname(path), path.replace("/api/v1/", "/api/"))
+    .replace(/\.ts$/, "")
+  expect(reexport[2], `${path}: source route`).toBe(expectedSource)
+  // v1 scan deletion was never exposed; changing that public contract needs separate review.
+  const omitted = path === "../app/api/v1/scans/[id]/route.ts" ? ["DELETE"] : []
+  const exportedMethods = [
+    ...twin.matchAll(
+      /\bexport (?:async )?(?:function|const) (GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\b/g
+    ),
+  ].map((match) => match[1]!)
+  const aliasMethods = reexport[1]!.split(", ").sort()
+  expect(aliasMethods, `${path}: HTTP methods`).toEqual(
+    [...new Set(exportedMethods)].filter((method) => !omitted.includes(method)).sort()
+  )
+  return aliasMethods
+}
+
+const aliasContract: Record<string, string[]> = {
+  "agent-approvals": ["GET", "POST"],
+  "agent-approvals/[id]/approve": ["POST"],
+  "agent-approvals/[id]/deny": ["POST"],
+  "agent-operations/[id]": ["GET"],
+  findings: ["GET"],
+  "findings/[id]": ["GET", "PATCH"],
+  "findings/[id]/fix-proposals": ["POST"],
+  "findings/[id]/retests": ["POST"],
+  "fix-proposals": ["GET"],
+  "fix-proposals/[id]/create-pr": ["POST"],
+  "gate/[targetId]": ["GET", "POST"],
+  "launch-readiness": ["GET"],
+  projects: ["GET", "POST"],
+  reports: ["GET", "POST"],
+  "reports/[id]": ["GET", "POST"],
+  "reports/[id]/download": ["GET"],
+  retests: ["GET"],
+  scans: ["GET", "POST"],
+  "scans/[id]": ["GET", "POST"],
+  "scans/[id]/artifacts/sarif": ["POST"],
+  "scans/[id]/quality": ["GET"],
+  "scans/attachments": ["GET", "POST"],
+  "scans/attachments/[id]": ["DELETE"],
+  "scans/eligibility": ["GET"],
+  schedules: ["GET", "POST"],
+  "schedules/[id]": ["DELETE", "GET", "PATCH"],
+  "target-domain-verifications": ["GET", "POST", "PUT"],
+  targets: ["GET", "POST"],
+  "targets/[id]": ["DELETE", "PATCH"],
+  workspaces: ["GET", "POST"],
+}
+
 // Each v1 route must re-export the same HTTP method handlers as its unversioned twin.
 
 describe("/api/v1 parity", () => {
@@ -25,200 +80,77 @@ describe("/api/v1 parity", () => {
       import: "default",
       eager: true,
     }) as Record<string, string>
-    const methods = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"]
-    expect(Object.keys(aliases).length).toBeGreaterThan(1)
+    const discovered = Object.keys(aliases)
+      .filter((path) => !path.endsWith("/v1/openapi.json/route.ts"))
+      .map((path) => path.replace("../app/api/v1/", "").replace("/route.ts", ""))
+    expect(discovered.sort()).toEqual(Object.keys(aliasContract).sort())
 
     for (const [path, alias] of Object.entries(aliases)) {
       if (path.endsWith("/v1/openapi.json/route.ts")) continue
-      const twinPath = path.replace("/api/v1/", "/api/")
-      const twin = routes[twinPath]
-      if (!twin) throw new Error(`Missing unversioned route for ${path}`)
-      const reexport = alias.trim().match(/^export \{ ([A-Z, ]+) \} from "([^"]+)";?$/)
-      if (!reexport) throw new Error(`Expected direct method re-export in ${path}`)
-      const expectedSource = posix.relative(posix.dirname(path), twinPath).replace(/\.ts$/, "")
-      expect(reexport[2], path).toBe(expectedSource)
-      // v1 scan deletion was never exposed; changing that public contract needs separate review.
-      const omitted = path === "../app/api/v1/scans/[id]/route.ts" ? ["DELETE"] : []
-      const exportedMethods = new Set(
-        [
-          ...twin.matchAll(
-            /\bexport (?:async )?(?:function|const) (GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\b/g
-          ),
-        ].map((match) => match[1])
-      )
-      expect(reexport[1]!.split(", ").sort(), path).toEqual(
-        methods.filter((method) => exportedMethods.has(method) && !omitted.includes(method)).sort()
-      )
+      const route = path.replace("../app/api/v1/", "").replace("/route.ts", "")
+      expect(
+        assertAliasParity(path, alias, routes[path.replace("/api/v1/", "/api/")]),
+        path
+      ).toEqual(aliasContract[route])
     }
   })
 
-  it("target-domain-verifications (GET, POST, PUT)", async () => {
-    const v1 = await import("../app/api/v1/target-domain-verifications/route")
-    const twin = await import("../app/api/target-domain-verifications/route")
-    expect(v1.GET).toBe(twin.GET)
-    expect(v1.POST).toBe(twin.POST)
-    expect(v1.PUT).toBe(twin.PUT)
-  })
-  it("scans (GET, POST)", async () => {
-    const v1 = await import("../app/api/v1/scans/route")
-    const twin = await import("../app/api/scans/route")
-    expect(v1.GET).toBe(twin.GET)
-    expect(v1.POST).toBe(twin.POST)
+  it("rejects an alias that points at the wrong source route", () => {
+    expect(() =>
+      assertAliasParity(
+        "../app/api/v1/scans/route.ts",
+        'export { GET, POST } from "../../targets/route"',
+        "export function GET() {}\nexport const POST = handler"
+      )
+    ).toThrow(/source route/)
   })
 
-  it("scans/eligibility (GET)", async () => {
-    const v1 = await import("../app/api/v1/scans/eligibility/route")
-    const twin = await import("../app/api/scans/eligibility/route")
-    expect(v1.GET).toBe(twin.GET)
+  it("rejects an alias missing a supported method", () => {
+    expect(() =>
+      assertAliasParity(
+        "../app/api/v1/scans/route.ts",
+        'export { GET } from "../../scans/route"',
+        "export function GET() {}\nexport const POST = handler"
+      )
+    ).toThrow(/HTTP methods/)
   })
 
-  it("scans/[id] (GET, POST)", async () => {
+  it("rejects an alias exporting the wrong method", () => {
+    expect(() =>
+      assertAliasParity(
+        "../app/api/v1/scans/route.ts",
+        'export { GET, PUT } from "../../scans/route"',
+        "export function GET() {}\nexport const POST = handler"
+      )
+    ).toThrow(/HTTP methods/)
+  })
+
+  it("rejects exposing scan deletion through v1", () => {
+    expect(() =>
+      assertAliasParity(
+        "../app/api/v1/scans/[id]/route.ts",
+        'export { GET, POST, DELETE } from "../../../scans/[id]/route"',
+        "export function GET() {}\nexport const POST = handler\nexport async function DELETE() {}"
+      )
+    ).toThrow(/HTTP methods/)
+  })
+
+  it("rejects an alias whose unversioned twin is missing", () => {
+    expect(() =>
+      assertAliasParity(
+        "../app/api/v1/scans/route.ts",
+        'export { GET } from "../../scans/route"',
+        undefined
+      )
+    ).toThrow(/Missing unversioned route/)
+  })
+
+  it("re-exports the scan handlers at runtime while omitting DELETE", async () => {
     const v1 = await import("../app/api/v1/scans/[id]/route")
     const twin = await import("../app/api/scans/[id]/route")
     expect(v1.GET).toBe(twin.GET)
     expect(v1.POST).toBe(twin.POST)
-  })
-
-  it("scans/attachments (GET, POST)", async () => {
-    const v1 = await import("../app/api/v1/scans/attachments/route")
-    const twin = await import("../app/api/scans/attachments/route")
-    expect(v1.GET).toBe(twin.GET)
-    expect(v1.POST).toBe(twin.POST)
-  })
-
-  it("scans/attachments/[id] (DELETE)", async () => {
-    const v1 = await import("../app/api/v1/scans/attachments/[id]/route")
-    const twin = await import("../app/api/scans/attachments/[id]/route")
-    expect(v1.DELETE).toBe(twin.DELETE)
-  })
-
-  it("agent-operations/[id] (GET)", async () => {
-    const v1 = await import("../app/api/v1/agent-operations/[id]/route")
-    const twin = await import("../app/api/agent-operations/[id]/route")
-    expect(v1.GET).toBe(twin.GET)
-  })
-
-  it("findings (GET)", async () => {
-    const v1 = await import("../app/api/v1/findings/route")
-    const twin = await import("../app/api/findings/route")
-    expect(v1.GET).toBe(twin.GET)
-  })
-
-  it("findings/[id] (GET, PATCH)", async () => {
-    const v1 = await import("../app/api/v1/findings/[id]/route")
-    const twin = await import("../app/api/findings/[id]/route")
-    expect(v1.GET).toBe(twin.GET)
-    expect(v1.PATCH).toBe(twin.PATCH)
-  })
-
-  it("findings/[id]/fix-proposals (POST)", async () => {
-    const v1 = await import("../app/api/v1/findings/[id]/fix-proposals/route")
-    const twin = await import("../app/api/findings/[id]/fix-proposals/route")
-    expect(v1.POST).toBe(twin.POST)
-  })
-
-  it("findings/[id]/retests (POST)", async () => {
-    const v1 = await import("../app/api/v1/findings/[id]/retests/route")
-    const twin = await import("../app/api/findings/[id]/retests/route")
-    expect(v1.POST).toBe(twin.POST)
-  })
-
-  it("targets (GET, POST)", async () => {
-    const v1 = await import("../app/api/v1/targets/route")
-    const twin = await import("../app/api/targets/route")
-    expect(v1.GET).toBe(twin.GET)
-    expect(v1.POST).toBe(twin.POST)
-  })
-
-  it("fix-proposals (GET)", async () => {
-    const v1 = await import("../app/api/v1/fix-proposals/route")
-    const twin = await import("../app/api/fix-proposals/route")
-    expect(v1.GET).toBe(twin.GET)
-  })
-
-  it("fix-proposals/[id]/create-pr (POST)", async () => {
-    const v1 = await import("../app/api/v1/fix-proposals/[id]/create-pr/route")
-    const twin = await import("../app/api/fix-proposals/[id]/create-pr/route")
-    expect(v1.POST).toBe(twin.POST)
-  })
-
-  it("retests (GET)", async () => {
-    const v1 = await import("../app/api/v1/retests/route")
-    const twin = await import("../app/api/retests/route")
-    expect(v1.GET).toBe(twin.GET)
-  })
-
-  it("reports (GET, POST)", async () => {
-    const v1 = await import("../app/api/v1/reports/route")
-    const twin = await import("../app/api/reports/route")
-    expect(v1.GET).toBe(twin.GET)
-    expect(v1.POST).toBe(twin.POST)
-  })
-
-  it("reports/[id] (GET, POST)", async () => {
-    const v1 = await import("../app/api/v1/reports/[id]/route")
-    const twin = await import("../app/api/reports/[id]/route")
-    expect(v1.GET).toBe(twin.GET)
-    expect(v1.POST).toBe(twin.POST)
-  })
-
-  it("reports/[id]/download (GET)", async () => {
-    const v1 = await import("../app/api/v1/reports/[id]/download/route")
-    const twin = await import("../app/api/reports/[id]/download/route")
-    expect(v1.GET).toBe(twin.GET)
-  })
-
-  it("launch-readiness (GET)", async () => {
-    const v1 = await import("../app/api/v1/launch-readiness/route")
-    const twin = await import("../app/api/launch-readiness/route")
-    expect(v1.GET).toBe(twin.GET)
-  })
-
-  it("workspaces (GET, POST)", async () => {
-    const v1 = await import("../app/api/v1/workspaces/route")
-    const twin = await import("../app/api/workspaces/route")
-    expect(v1.GET).toBe(twin.GET)
-    expect(v1.POST).toBe(twin.POST)
-  })
-
-  it("schedules (GET, POST)", async () => {
-    const v1 = await import("../app/api/v1/schedules/route")
-    const twin = await import("../app/api/schedules/route")
-    expect(v1.GET).toBe(twin.GET)
-    expect(v1.POST).toBe(twin.POST)
-  })
-
-  it("schedules/[id] (GET, PATCH, DELETE)", async () => {
-    const v1 = await import("../app/api/v1/schedules/[id]/route")
-    const twin = await import("../app/api/schedules/[id]/route")
-    expect(v1.GET).toBe(twin.GET)
-    expect(v1.PATCH).toBe(twin.PATCH)
-    expect(v1.DELETE).toBe(twin.DELETE)
-  })
-
-  it("projects (GET, POST)", async () => {
-    const v1 = await import("../app/api/v1/projects/route")
-    const twin = await import("../app/api/projects/route")
-    expect(v1.GET).toBe(twin.GET)
-    expect(v1.POST).toBe(twin.POST)
-  })
-
-  it("agent-approvals (GET, POST)", async () => {
-    const v1 = await import("../app/api/v1/agent-approvals/route")
-    const twin = await import("../app/api/agent-approvals/route")
-    expect(v1.GET).toBe(twin.GET)
-    expect(v1.POST).toBe(twin.POST)
-  })
-
-  it("agent-approvals/[id]/approve (POST)", async () => {
-    const v1 = await import("../app/api/v1/agent-approvals/[id]/approve/route")
-    const twin = await import("../app/api/agent-approvals/[id]/approve/route")
-    expect(v1.POST).toBe(twin.POST)
-  })
-
-  it("agent-approvals/[id]/deny (POST)", async () => {
-    const v1 = await import("../app/api/v1/agent-approvals/[id]/deny/route")
-    const twin = await import("../app/api/agent-approvals/[id]/deny/route")
-    expect(v1.POST).toBe(twin.POST)
+    expect(twin.DELETE).toBeTypeOf("function")
+    expect(v1).not.toHaveProperty("DELETE")
   })
 })
