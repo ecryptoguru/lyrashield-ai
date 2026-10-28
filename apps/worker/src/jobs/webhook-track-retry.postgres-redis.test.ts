@@ -315,6 +315,48 @@ describe.skipIf(!enabled)("durable webhook retries on PostgreSQL and Redis", () 
     expect(handler).toHaveBeenCalledTimes(3)
   })
 
+  it("claims initial tracks using the database clock despite client skew and preserves duplicate schedules", async () => {
+    const f = await fixture()
+    vi.useFakeTimers({ toFake: ["Date"] })
+    vi.setSystemTime(new Date("2100-01-01T00:00:00.000Z"))
+    try {
+      await billing.ensureWebhookTrackRows(f.id, ["billing"])
+      const claim = await billing.claimWebhookTrack(f.id, "billing")
+      expect(claim.outcome).toBe("claimed")
+      if (claim.outcome !== "claimed")
+        throw new Error("Expected the initial track to be immediately due")
+      expect(await billing.claimWebhookTrack(f.id, "billing")).toEqual({ outcome: "busy" })
+      expect(await billing.markTrackSucceeded(claim.claim)).toBe(true)
+
+      // A second ingress must preserve both the terminal billing receipt and
+      // the affiliate retry's exact future due time, generation and budget.
+      await owner.$executeRaw`
+        UPDATE "WebhookEventTrack" SET status = 'failed', attempts = 2, generation = 2,
+          "nextAttemptAtUtc" = now() + INTERVAL '1 hour',
+          "nextAttemptAt" = (now() AT TIME ZONE current_setting('TimeZone')) + INTERVAL '1 hour'
+        WHERE "webhookEventId" = ${f.id} AND track = 'affiliate'
+      `
+      const before = await owner.webhookEventTrack.findMany({
+        where: { webhookEventId: f.id },
+        orderBy: { track: "asc" },
+      })
+      await billing.ensureWebhookTrackRows(f.id, ["billing", "affiliate"])
+      expect(
+        await owner.webhookEventTrack.findMany({
+          where: { webhookEventId: f.id },
+          orderBy: { track: "asc" },
+        })
+      ).toEqual(before)
+      expect(await billing.claimWebhookTrack(f.id, "affiliate")).toEqual({ outcome: "busy" })
+      expect(await billing.claimWebhookTrack(f.id, "billing")).toEqual({
+        outcome: "terminal",
+        status: "succeeded",
+      })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it("ingress and retry contend for one claim and never downgrade a terminal result", async () => {
     const f = await fixture()
     let release!: () => void
