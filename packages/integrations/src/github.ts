@@ -420,7 +420,8 @@ export async function createOrUpdateFile(
   path: string,
   content: string,
   message: string,
-  branch: string
+  branch: string,
+  sha: string
 ): Promise<void> {
   const token = await getInstallationToken(installationId)
   const encodedContent = Buffer.from(content).toString("base64")
@@ -436,6 +437,7 @@ export async function createOrUpdateFile(
         message,
         content: encodedContent,
         branch,
+        sha,
       }),
     }
   )

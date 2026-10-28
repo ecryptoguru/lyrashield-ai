@@ -119,7 +119,8 @@ describe("approval-bound Composer updates", () => {
       "composer.lock",
       after,
       expect.any(String),
-      expect.any(String)
+      expect.any(String),
+      "b36883a9da85972c84cf4ede2a9e3ea0a337020c"
     )
     expect(mocks.pr).toHaveBeenCalledWith(
       1,

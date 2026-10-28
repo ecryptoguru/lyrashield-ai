@@ -91,6 +91,24 @@ describe("approved fix PR execution", () => {
       prUrl: "https://github.com/owner/repo/pull/42",
     })
   })
+  it("binds an existing-file update to the blob read at the scanned commit", async () => {
+    expect((await executeApprovedFixPr(request)).status).toBe("opened")
+    expect(mocks.write).toHaveBeenCalledWith(
+      1,
+      "owner",
+      "repo",
+      "src/app.ts",
+      "patched",
+      expect.any(String),
+      expect.any(String),
+      "489ce0f857e7634a0eb9f328265a3e91fad49f61"
+    )
+  })
+  it("uses a separate branch for each new approval after a failed attempt", async () => {
+    await executeApprovedFixPr(request)
+    await executeApprovedFixPr({ ...request, approvalId: "approval-2" })
+    expect(mocks.branch.mock.calls[0]?.[3]).not.toBe(mocks.branch.mock.calls[1]?.[3])
+  })
   it.each(["expired"])("does not touch the provider when claim refuses %s", async () => {
     mocks.claim.mockResolvedValue(false)
     expect((await executeApprovedFixPr(request)).status).toBe("failed")
