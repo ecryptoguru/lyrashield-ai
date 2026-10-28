@@ -421,7 +421,7 @@ Hosted OAuth is read-only by default. A user can grant a connection a bounded se
 
 ## 7. API surface
 
-The web app currently contains 170 route-handler files (154 under `app/api`). Grouped surfaces:
+The web app currently contains 170 route-handler files (164 under `app/api`). Grouped surfaces:
 
 - auth, OAuth metadata/consent/device approval, MCP;
 - workspaces, onboarding, team, and reviewed account-deletion requests;

@@ -21,10 +21,12 @@ export interface RepoPickerState {
 
 function TargetFormActions({
   disabled,
+  creating,
   onCancel,
   label,
 }: {
   disabled: boolean
+  creating: boolean
   onCancel: () => void
   label: string
 }) {
@@ -33,7 +35,7 @@ function TargetFormActions({
       <Button type="submit" disabled={disabled}>
         {label}
       </Button>
-      <Button type="button" variant="secondary" disabled={disabled} onClick={onCancel}>
+      <Button type="button" variant="secondary" disabled={creating} onClick={onCancel}>
         Cancel
       </Button>
     </div>
@@ -220,6 +222,7 @@ export function RepoTargetForm({
         </>
       )}
       <TargetFormActions
+        creating={creating}
         disabled={
           creating ||
           (!repoForm.name && !picker.selectedRepoId) ||

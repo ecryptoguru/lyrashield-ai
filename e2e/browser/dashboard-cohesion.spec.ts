@@ -296,3 +296,22 @@ for (const compatible of [true, false]) {
     }
   })
 }
+
+for (const width of [390, 1440]) {
+  test(`incomplete repository setup can be cancelled at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 })
+    await page.goto("?dashboard-ux=first-scan")
+    await page.getByRole("button", { name: "Repository", exact: true }).click()
+    await expect(page.getByRole("button", { name: "Continue to scan setup" })).toBeDisabled()
+    await page.evaluate(() => {
+      window.addEventListener("test:navigate", (event) => {
+        document.body.dataset.cancelDestination = (event as CustomEvent<string>).detail
+      })
+    })
+    await page.getByRole("button", { name: "Cancel", exact: true }).click()
+    await expect(page.locator("body")).toHaveAttribute(
+      "data-cancel-destination",
+      "/dashboard/scans"
+    )
+  })
+}
