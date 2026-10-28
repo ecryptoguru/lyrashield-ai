@@ -78,7 +78,8 @@
       "dependsOn": []
     },
     "typecheck": {
-      "dependsOn": ["^generate", "generate"]
+      "dependsOn": ["^generate", "generate"],
+      "passThroughEnv": ["WRANGLER_SEND_METRICS", "DO_NOT_TRACK", "ASTRO_TELEMETRY_DISABLED"]
     },
     "@lyrashield/web#build": {
       "dependsOn": ["^build", "^generate"],

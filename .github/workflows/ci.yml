@@ -171,6 +171,9 @@ jobs:
     timeout-minutes: 45
     env:
       CI_ROUTING: ${{ toJSON(needs.changes.outputs) }}
+      WRANGLER_SEND_METRICS: "false"
+      DO_NOT_TRACK: "1"
+      ASTRO_TELEMETRY_DISABLED: "1"
       LYRASHIELD_TEST_DB_DISPOSABLE: "0"
       # Static analysis needs schema types, never a listening database or Redis.
       DATABASE_URL: "postgresql://vitest:vitest@127.0.0.1:1/lyrashield_test"
