@@ -16,19 +16,19 @@ Design specificity: evidence states, coverage limits, approvals, version control
 
 Assessment A scored the sampled visual experience independently, before receiving Assessment B's detector findings. Scale: 0–4 per heuristic; a design judgment, not a compliance percentage.
 
-| Heuristic | Score | Main observation |
-| --- | ---: | --- |
-| Visibility of status | 3 | Evidence and availability states are generally honest; some tool scope and copy feedback need work. |
-| Match with readers' language | 2 | Pricing units and evidence terminology need earlier, concrete explanations. |
-| User control | 3 | Working disclosures and local controls; mobile navigation becomes cumbersome. |
-| Consistency | 3 | Cohesive themes; dates and documentation feedback vary. |
-| Error prevention | 3 | Useful boundaries; file selection cap needs explicit handling. |
-| Recognition over recall | 3 | Breadcrumbs and TOCs help; definitions are sometimes distant from decisions. |
-| Efficiency | 3 | Full-library blog search works; docs filtering and mobile browsing need clearer scope. |
-| Minimalist presentation | 2 | Blog imagery, repeated copy and expansive navigation delay the main task. |
-| Error recovery | 3 | Generally useful states; clipboard and script-unavailable recovery need attention. |
-| Help and documentation | 3 | Substantial guides and examples, with opportunities to improve finding them. |
-| **Total** | **28/40** | |
+| Heuristic                    |     Score | Main observation                                                                                    |
+| ---------------------------- | --------: | --------------------------------------------------------------------------------------------------- |
+| Visibility of status         |         3 | Evidence and availability states are generally honest; some tool scope and copy feedback need work. |
+| Match with readers' language |         2 | Pricing units and evidence terminology need earlier, concrete explanations.                         |
+| User control                 |         3 | Working disclosures and local controls; mobile navigation becomes cumbersome.                       |
+| Consistency                  |         3 | Cohesive themes; dates and documentation feedback vary.                                             |
+| Error prevention             |         3 | Useful boundaries; file selection cap needs explicit handling.                                      |
+| Recognition over recall      |         3 | Breadcrumbs and TOCs help; definitions are sometimes distant from decisions.                        |
+| Efficiency                   |         3 | Full-library blog search works; docs filtering and mobile browsing need clearer scope.              |
+| Minimalist presentation      |         2 | Blog imagery, repeated copy and expansive navigation delay the main task.                           |
+| Error recovery               |         3 | Generally useful states; clipboard and script-unavailable recovery need attention.                  |
+| Help and documentation       |         3 | Substantial guides and examples, with opportunities to improve finding them.                        |
+| **Total**                    | **28/40** |                                                                                                     |
 
 ## Coverage and verification
 
@@ -39,11 +39,11 @@ Assessment A scored the sampled visual experience independently, before receivin
 - This is representative template and interaction review, not a manual read of all 160 articles or every docs/comparison page.
 - Local Lighthouse 13.6 measurements used the compressed preview and a separate Chrome profile. These are lab samples, not production field metrics.
 
-| Local page | Performance | Accessibility score | Best practices | SEO score | LCP |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| `/blog` | 100 | 100 | 96 | 100 | 1.1s |
-| `/blog/ai-app-prelaunch-security-checklist` | 98 | 100 | 96 | 100 | 2.4s |
-| `/pricing` | 100 | 100 | 96 | 100 | 0.9s |
+| Local page                                  | Performance | Accessibility score | Best practices | SEO score |  LCP |
+| ------------------------------------------- | ----------: | ------------------: | -------------: | --------: | ---: |
+| `/blog`                                     |         100 |                 100 |             96 |       100 | 1.1s |
+| `/blog/ai-app-prelaunch-security-checklist` |          98 |                 100 |             96 |       100 | 2.4s |
+| `/pricing`                                  |         100 |                 100 |             96 |       100 | 0.9s |
 
 The 96 best-practices results include local-preview CORS errors against production Myra/account-preferences services; they do not establish a production outage and are not a reason to broaden production CORS. The aggregate accessibility score does not mean every accessibility audit passed: the blog label/name mismatch below was separately reported.
 
@@ -92,19 +92,19 @@ The 96 best-practices results include local-preview CORS errors against producti
 
 ## Recommendations by page family
 
-| Page family | Recommended direction | Evidence boundary |
-| --- | --- | --- |
-| Blog index, categories, articles | Editorial hierarchy, direct answers, selective categories, bounded archives, purposeful imagery, contextual endings and accurate dates. | Concrete hierarchy and interaction findings above; no exhaustive factual audit of all posts. |
-| Pricing | Explain units/multipliers beside the decision; shorten repeated caveats; retain full terms and shared data. | Mobile/desktop and light/dark samples; no purchase or entitlement changes. |
-| Agents and docs | Lead with the supported workflow; compact client discovery; improve search/copy feedback; place a copyable setup example early. | Registry and representative client docs checked; not every client installation executed. |
-| Methodology, evidence vault, Vibe Security 50 | Show one labeled evidence example, then explain states and coverage. Use concrete scope/receipt callouts and link deeper details. | Preserve actual limitations; avoid implying illustrative examples are customer evidence. |
-| WebMCP and tools | Show a concrete local example, result scope and recovery. Prioritize accuracy over adding motion. | Synthetic local inputs only; no real secrets, uploads or paid scans. |
-| Comparisons | Add a short “choose this when” summary and source/date any changeable competitor facts; use a compact shared comparison structure. | Sampled Snyk page; competitor claims were not all externally fact-checked. |
-| Research, AI safety, About | State current availability early, reduce repeated qualifications, add real authorship/product artifacts, use restrained status styling. | No invented customers, certifications, awards or planned capabilities presented as shipped. |
-| Demo and support | Keep one clear primary contact path with selectable details and useful fallback states. | Booking/provider delivery and real support response times unverified. |
-| Privacy, terms, terms of sale, security reporting | Add compact summaries/TOCs where length warrants; keep full readable policy text, contacts and real dates. | Readability recommendation only; no legal-validity opinion or policy shortening without owner review. |
-| Scan | Preserve the explicit local “Scanner API not connected” state; disable unavailable actions and retain helpful navigation. | Expected local configuration, not evidence of a production defect. |
-| 404 | Retain current useful recovery links and compact presentation. | No issue established in the desktop sample. |
+| Page family                                       | Recommended direction                                                                                                                   | Evidence boundary                                                                                     |
+| ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Blog index, categories, articles                  | Editorial hierarchy, direct answers, selective categories, bounded archives, purposeful imagery, contextual endings and accurate dates. | Concrete hierarchy and interaction findings above; no exhaustive factual audit of all posts.          |
+| Pricing                                           | Explain units/multipliers beside the decision; shorten repeated caveats; retain full terms and shared data.                             | Mobile/desktop and light/dark samples; no purchase or entitlement changes.                            |
+| Agents and docs                                   | Lead with the supported workflow; compact client discovery; improve search/copy feedback; place a copyable setup example early.         | Registry and representative client docs checked; not every client installation executed.              |
+| Methodology, evidence vault, Vibe Security 50     | Show one labeled evidence example, then explain states and coverage. Use concrete scope/receipt callouts and link deeper details.       | Preserve actual limitations; avoid implying illustrative examples are customer evidence.              |
+| WebMCP and tools                                  | Show a concrete local example, result scope and recovery. Prioritize accuracy over adding motion.                                       | Synthetic local inputs only; no real secrets, uploads or paid scans.                                  |
+| Comparisons                                       | Add a short “choose this when” summary and source/date any changeable competitor facts; use a compact shared comparison structure.      | Sampled Snyk page; competitor claims were not all externally fact-checked.                            |
+| Research, AI safety, About                        | State current availability early, reduce repeated qualifications, add real authorship/product artifacts, use restrained status styling. | No invented customers, certifications, awards or planned capabilities presented as shipped.           |
+| Demo and support                                  | Keep one clear primary contact path with selectable details and useful fallback states.                                                 | Booking/provider delivery and real support response times unverified.                                 |
+| Privacy, terms, terms of sale, security reporting | Add compact summaries/TOCs where length warrants; keep full readable policy text, contacts and real dates.                              | Readability recommendation only; no legal-validity opinion or policy shortening without owner review. |
+| Scan                                              | Preserve the explicit local “Scanner API not connected” state; disable unavailable actions and retain helpful navigation.               | Expected local configuration, not evidence of a production defect.                                    |
+| 404                                               | Retain current useful recovery links and compact presentation.                                                                          | No issue established in the desktop sample.                                                           |
 
 ## SEO, AEO and GEO recommendations
 

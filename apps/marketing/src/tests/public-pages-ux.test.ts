@@ -36,14 +36,14 @@ describe("bounded local secret file review", () => {
     expect(result.at(-1)).toContain("scanned text files")
   })
   it("redacts patterns while including dot-env and UTF-8 source files", async () => {
-    const secret = "SYNTHETICFIXTURE0123456789"
+    const fixtureValue = "SYNTHETICFIXTURE0123456789"
     const result = await reviewSecretFiles([
-      file(".env.local", `password=${secret}`),
+      file(".env.local", `password=${fixtureValue}`),
       file("app.ts", "const label = 'café'"),
     ])
     expect(result[0]).toBe("2 selected; 2 scanned; 0 skipped.")
     expect(result.join(" ")).toContain("possible Assigned credential")
-    expect(result.join(" ")).not.toContain(secret)
+    expect(result.join(" ")).not.toContain(fixtureValue)
     expect(result.join(" ")).not.toContain("No high-confidence")
   })
   it("does not describe an unreviewed selection as clear", async () => {

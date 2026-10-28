@@ -84,3 +84,16 @@ scan-execution changes were introduced by this marketing work.
 
 Retain the localhost approval gate. Recommended next work is a focused responsive
 and interaction repair followed by the corrected tests and final visual polish.
+
+## Repair verification and GitHub review
+
+All three findings are repaired. Category headings also wrap at 200% text in
+WebKit. The strengthened browser run passed 74 Chromium/mobile tests (21 matrix
+duplicates skipped) and six focused WebKit tests. Fresh unit and motion suites
+passed 626 and 30 tests. Production/preview builds, lint, Astro/E2E typechecks,
+and the 283-page SEO and 160-article blog crawls passed.
+
+Draft PR #1049 is open. The first CI run found one unformatted review document
+and flagged the synthetic redaction fixture as a secret. The fixture was renamed;
+its exact historical fingerprint is documented in the existing ignore file.
+No real credential was found. Localhost approval remains required before merge.

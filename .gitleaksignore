@@ -51,3 +51,6 @@ b8b0c672fef24eeeec71c0d08a5494cedaad54c9:packages/sdk/README.md:generic-api-key:
 # Historical worker PEM validation delimiters only; no encoded key body.
 # Current source constructs public markers from the supported key kinds.
 fa3f24b6b714229d29387b3781578e494ea9bd76:ops/worker/refresh-secrets.sh:private-key:108
+
+# Synthetic redaction-test value only; renamed in current source.
+5f63271c29f63d0ffa4cf9af550a4be9f737f399:apps/marketing/src/tests/public-pages-ux.test.ts:generic-api-key:39
