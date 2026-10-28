@@ -1,12 +1,12 @@
 "use client"
 
 import { useCallback, useState } from "react"
-import { Button, Card, CardContent, Badge } from "@lyrashield/ui"
-import { Check, X, ShieldCheck, AlertCircle, Activity } from "lucide-react"
+import { Card, CardContent, Badge } from "@lyrashield/ui"
+import { ShieldCheck, AlertCircle, Activity } from "lucide-react"
 import Link from "next/link"
 import { apiPost } from "@/lib/api-client"
 import { type ApprovalListItem } from "@lyrashield/db"
-import { InlineConfirm } from "@/components/ui/inline-confirm"
+import { ApprovalDecisionControls } from "./approval-decision-controls"
 import { formatDateTimeUtc } from "@/lib/date-format"
 import { LocalTime } from "@/components/local-time"
 import type { AgentOperationListItem } from "@lyrashield/db"
@@ -264,7 +264,11 @@ export function ApprovalsClient({
                     </details>
                     <p className="text-muted-foreground mt-1 text-xs">
                       Expires{" "}
-                      {approval.expiresAt ? <LocalTime value={approval.expiresAt} /> : "Never"}
+                      {approval.expiresAt ? (
+                        <LocalTime value={approval.expiresAt} withTime />
+                      ) : (
+                        "Never"
+                      )}
                     </p>
                   </div>
                   <ApprovalDecisionControls
@@ -297,49 +301,5 @@ export function ApprovalsClient({
         </section>
       )}
     </div>
-  )
-}
-
-function ApprovalDecisionControls({
-  approval,
-  canDecide,
-  canApproveFix,
-  pending,
-  onDeny,
-  onApprove,
-}: {
-  approval: ApprovalItem
-  canDecide: boolean
-  canApproveFix: boolean
-  pending: boolean
-  onDeny: () => void
-  onApprove: () => void
-}) {
-  return canDecide ? (
-    <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
-      <Button variant="outline" size="sm" onClick={() => onDeny()} disabled={pending}>
-        <X className="size-4" />
-        Deny
-      </Button>
-      {approval.actionName === "fix_pr.open" && !canApproveFix && (
-        <p className="text-muted-foreground text-sm">
-          Ask an authorized workspace member to approve this fix.
-        </p>
-      )}
-      {(approval.actionName !== "fix_pr.open" || canApproveFix) && (
-        <InlineConfirm
-          triggerLabel="Approve"
-          triggerIcon={<Check className="size-4" />}
-          disabled={pending}
-          message="Approve this exact action input?"
-          confirmLabel="Approve action"
-          onConfirm={() => onApprove()}
-        />
-      )}
-    </div>
-  ) : (
-    <p className="text-muted-foreground text-sm">
-      Ask an authorized workspace member to review this request.
-    </p>
   )
 }

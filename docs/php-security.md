@@ -280,7 +280,7 @@ coverage through the workspace-bound RLS transaction. Incomplete provenance stay
 inconclusive; a failed scan or failed proposal never establishes a fix. Failed
 proposal generation stays in history, and the finding offers a new proposal.
 
-## Production acceptance — 2026-10-25
+## Production acceptance — recorded through 2026-10-28
 
 Controlled private Standard and Deep scans at fixture revision
 `901f928a82a9bdbfea457870bf242599eebcb627` completed on product `d62303b1`.
@@ -289,16 +289,21 @@ reported and all nine paired controls were excluded from the corresponding
 checks. Scoped runtime and Composer controls passed; source-flow and runtime
 identity limitations remained incomplete.
 
-The current deployed runtime is `b21aefe8`. PR #1035 merged the retest RLS,
-exact-repository credential and failed-proposal recovery corrections as
-`e079eee9`, with all exact-head CI gates green. Its production release was
-blocked before execution by GitHub account billing/Actions admission. The
-historical proposal and unchanged-source retest failures remain recorded;
-production Composer proposal → draft PR → merge → trusted retest acceptance
-is pending. No finding was marked fixed by those failed attempts.
+The verified runtime is `2d4e168d`, deployed by release `40538483543`.
+The earlier billing-blocked release was superseded by successful guarded
+releases. A cold-cache Composer proposal and unchanged-source negative retest
+were subsequently checked; that negative control correctly left the finding
+open. On October 28, the GitHub App's Contents and Pull requests write
+permissions were explicitly approved and accepted for its existing installation.
+The controlled PR attempt then failed safely because the existing-file update
+omitted GitHub's blob SHA. The fix and related approval-revocation and expiry
+regressions are consolidated in PR #1045; its production deployment and the
+Composer draft PR → compatibility review → merge → trusted positive retest
+remain required. Preserve the failed receipt and unchanged orphan branch.
+No finding was marked fixed by these attempts.
 
 See [PRD §8](../PRD.md#8-current-production-evidence) for exact image/scan/run
-identities and [operations](./operations.md#current-production-readback--2026-10-25)
+identities and [operations](./operations.md#current-production-readback--2026-10-27)
 for guarded continuation. These controls do not establish universal detection,
 customer deployed-runtime patching, vendor-backport status, earlier compromise
 or application compatibility.

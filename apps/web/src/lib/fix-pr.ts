@@ -13,6 +13,7 @@
  */
 
 import { createHash } from "node:crypto"
+import { hasActiveFixPrConnection } from "./fix-pr-connection"
 
 import {
   claimApprovalExecution,
@@ -207,6 +208,9 @@ export async function executeApprovedFixPr(
     return { status: "rejected", reason: validation.reason }
   }
 
+  if (!(await hasActiveFixPrConnection(req.workspaceId, req.installationId))) {
+    return { status: "rejected", reason: "The GitHub connection is no longer active." }
+  }
   const claimed = await claimApprovalExecution(req.approvalId, req.workspaceId, inputHash)
   if (!claimed) {
     return {

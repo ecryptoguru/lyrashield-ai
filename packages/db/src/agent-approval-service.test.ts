@@ -30,6 +30,7 @@ import {
   expireStaleApprovals,
   failApprovalExecution,
   hashInput,
+  listApprovals,
   MAX_APPROVAL_EXECUTION_ATTEMPTS,
   saveApprovalResult,
   verifyInputHash,
@@ -330,5 +331,39 @@ describe("pending fix approval reuse", () => {
     expect(tx.$executeRaw).toHaveBeenCalledTimes(6)
     existing[0]!.expiresAt = new Date(0)
     expect((await findOrCreatePendingApproval(input)).id).not.toBe(first.id)
+  })
+})
+
+describe("pending approval listing", () => {
+  it("excludes expired and deadline-equal requests before applying the page limit", async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-10-28T00:00:00Z"))
+    const rows = [
+      { id: "expired", expiresAt: new Date("2026-10-27T23:59:59Z") },
+      { id: "deadline", expiresAt: new Date("2026-10-28T00:00:00Z") },
+      { id: "valid", expiresAt: new Date("2026-10-28T00:01:00Z") },
+      { id: "never", expiresAt: null },
+    ]
+    vi.mocked(prisma.agentApproval.findMany).mockImplementation(async (args) => {
+      const where = args?.where as { OR?: Array<{ expiresAt: null | { gt: Date } }> }
+      return rows
+        .filter(
+          (row) =>
+            !where.OR ||
+            where.OR.some((condition) =>
+              condition.expiresAt === null
+                ? row.expiresAt === null
+                : row.expiresAt !== null && row.expiresAt > condition.expiresAt.gt
+            )
+        )
+        .slice(0, args?.take ?? rows.length) as never
+    })
+    try {
+      const result = await listApprovals({ workspaceId: "ws", status: "PENDING", limit: 2 })
+      expect(result.items.map((row) => row.id)).toEqual(["valid", "never"])
+      expect(result.nextCursor).toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

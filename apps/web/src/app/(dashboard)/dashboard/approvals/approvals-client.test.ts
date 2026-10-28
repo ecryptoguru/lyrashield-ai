@@ -61,3 +61,25 @@ it("shows pending requests without decision controls to members who cannot appro
   expect(html).not.toContain(">Deny</button>")
   expect(html).toContain("Ask an authorized workspace member")
 })
+
+it("does not offer a decision for an expired request", () => {
+  const html = renderToStaticMarkup(
+    createElement(ApprovalsClient, {
+      workspaceId: "ws-1",
+      canDecide: true,
+      canApproveFix: true,
+      hasProposals: false,
+      approvals: [
+        {
+          id: "expired",
+          actionName: "fix_pr.open",
+          input: {},
+          expiresAt: new Date(0),
+        } as unknown as ApprovalListItem,
+      ],
+    })
+  )
+  expect(html).not.toContain(">Approve</button>")
+  expect(html).not.toContain(">Deny</button>")
+  expect(html).toContain("Request expired")
+})

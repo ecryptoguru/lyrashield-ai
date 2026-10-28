@@ -5,6 +5,7 @@ const checksum = createHash("sha256").update("diff --git ...").digest("hex")
 const generatedRef = `s3://bucket/evidence/workspace-1/finding-1/fix-patch/fix-proposal-1-${checksum}`
 
 const requirePermission = vi.fn()
+const hasActiveFixPrConnection = vi.fn()
 const getFixProposal = vi.fn()
 const readEncryptedArtifact = vi.fn()
 const requestFixPrApproval = vi.fn()
@@ -41,6 +42,7 @@ vi.mock("@lyrashield/logger", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }))
 vi.mock("@lyrashield/config", () => ({ env: { NEXT_PUBLIC_APP_URL: "https://app.test" } }))
+vi.mock("@/lib/fix-pr-connection", () => ({ hasActiveFixPrConnection }))
 vi.mock("@/lib/fix-pr", () => ({ requestFixPrApproval }))
 
 const { POST } = await import("./route")
@@ -62,6 +64,7 @@ function call(body: unknown = { workspaceId: "workspace-1" }, idempotencyKey?: s
 describe("POST /api/fix-proposals/[id]/create-pr", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    hasActiveFixPrConnection.mockResolvedValue(true)
     failAgentOperation.mockResolvedValue({})
     requirePermission.mockResolvedValue({ session: { userId: "user-1" } })
   })
@@ -111,6 +114,30 @@ describe("POST /api/fix-proposals/[id]/create-pr", () => {
     expect(response.status).toBe(409)
     await expect(response.json()).resolves.toMatchObject({ error: { code: "NO_REPOSITORY_LINK" } })
     expect(requestFixPrApproval).not.toHaveBeenCalled()
+  })
+
+  it("rejects a disabled GitHub connection before requesting an approval", async () => {
+    getFixProposal.mockResolvedValue({
+      id: "proposal-1",
+      findingId: "finding-1",
+      diffRef: generatedRef,
+    })
+    prisma.finding.findFirst.mockResolvedValue({
+      id: "finding-1",
+      targetId: "target-1",
+      implicatedFiles: ["src/a.ts"],
+      baseCommit: "abc123",
+      target: { repoOwner: "acme", repoName: "app", installationId: "42", deletedAt: null },
+    })
+    prisma.workspace.findUnique.mockResolvedValue({ plan: "PRO" })
+    hasActiveFixPrConnection.mockResolvedValue(false)
+    const response = await call()
+    expect(response.status).toBe(409)
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: "GITHUB_CONNECTION_INACTIVE" },
+    })
+    expect(requestFixPrApproval).not.toHaveBeenCalled()
+    expect(readEncryptedArtifact).not.toHaveBeenCalled()
   })
 
   it.each([

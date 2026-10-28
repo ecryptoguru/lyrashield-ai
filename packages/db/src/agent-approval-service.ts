@@ -152,6 +152,9 @@ export async function listApprovals(params: ListApprovalsParams): Promise<{
   const where: Record<string, unknown> = {
     workspaceId: params.workspaceId,
     ...(params.status ? { status: params.status } : {}),
+    ...(params.status === "PENDING"
+      ? { OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] }
+      : {}),
   }
 
   const approvals = await prisma.agentApproval.findMany({

@@ -3,6 +3,7 @@ import { readEncryptedArtifact } from "@lyrashield/evidence-storage"
 import { resolveAccountBilling } from "@lyrashield/billing"
 import type { WorkspacePlan } from "@lyrashield/types"
 import type { FixPrRequest } from "./fix-pr"
+import { hasActiveFixPrConnection } from "./fix-pr-connection"
 import { env } from "@lyrashield/config"
 import { resolve } from "node:path"
 import { fileURLToPath } from "node:url"
@@ -79,6 +80,11 @@ export async function resolveFixPrRequest(
   const installationId = Number(target.installationId)
   if (!Number.isInteger(installationId) || installationId <= 0)
     throw new FixPrContextError("NO_REPOSITORY_LINK", "Invalid GitHub installation on this target.")
+  if (!(await hasActiveFixPrConnection(workspaceId, installationId)))
+    throw new FixPrContextError(
+      "GITHUB_CONNECTION_INACTIVE",
+      "The GitHub connection is no longer active. Reconnect it before requesting a fix."
+    )
   const artifact = await readEncryptedArtifact(proposal.diffRef, workspaceId)
   // Decryption proves storage ownership/integrity, not who produced the bytes.
   // Only fix-generate writes this finding/proposal-bound, content-addressed key;

@@ -5,6 +5,7 @@ import { join } from "node:path"
 import { fileURLToPath } from "node:url"
 
 const mocks = vi.hoisted(() => ({
+  connection: vi.fn(),
   proposal: vi.fn(),
   finding: vi.fn(),
   workspace: vi.fn(),
@@ -20,6 +21,7 @@ const mocks = vi.hoisted(() => ({
     BETTER_AUTH_SECRET: "disposable-test-only-evidence-secret",
   },
 }))
+vi.mock("./fix-pr-connection", () => ({ hasActiveFixPrConnection: mocks.connection }))
 vi.mock("@lyrashield/config", () => ({ env: mocks.env }))
 vi.mock("@lyrashield/db", () => ({
   getFixProposal: mocks.proposal,
@@ -90,6 +92,7 @@ describe("fix PR patch provenance with disposable encrypted artifacts", () => {
   })
   beforeEach(() => {
     vi.clearAllMocks()
+    mocks.connection.mockResolvedValue(true)
     mocks.finding.mockResolvedValue({
       id: "finding-1",
       targetId: "target-1",
@@ -261,6 +264,16 @@ describe("fix PR patch provenance with disposable encrypted artifacts", () => {
       "74063c928e3a962eb0a8eb60c71bd99c821e6ede"
     )
     expect(mocks.pr).toHaveBeenCalledOnce()
+  })
+
+  it("rechecks a connection disabled after generating a proposal", async () => {
+    const artifact = await storePatch()
+    reference(artifact.storageUri)
+    await expect(resolve()).resolves.toMatchObject({ installationId: 42 })
+    mocks.connection.mockResolvedValue(false)
+    await expect(resolve()).rejects.toMatchObject({ code: "GITHUB_CONNECTION_INACTIVE" })
+    expect(mocks.branch).not.toHaveBeenCalled()
+    expect(mocks.write).not.toHaveBeenCalled()
   })
 
   it("rejects authenticated bytes that do not match the producer key's digest", async () => {
