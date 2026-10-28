@@ -2,11 +2,11 @@
 
 Method: dual-agent (A: /root/visual_review · B: /root/technical_review).
 
-Target: all public marketing page families beyond the homepage, including the blog. Review only; no application changes, media publication, merge, or deployment. The existing localhost preview remains the review target. Homepage release approval remains pending.
+Target: all public marketing page families beyond the homepage, including the blog. Review only; no application changes, media publication, merge or deployment. The existing localhost preview remains the review target. Homepage release approval remains pending.
 
 ## Assessment
 
-The public site has a credible evidence-first foundation and strong measured local performance. Its largest design weakness is the time it takes to reach useful content: oversized blog artwork, long mobile documentation navigation, repeated methodology qualifications, and late pricing definitions. The most important behavioral improvements concern accurate tool scope and accessible, truthful feedback.
+The public site has a credible evidence-first foundation and strong measured local performance. Its largest design weakness is the time it takes to reach useful content: oversized blog artwork, long mobile documentation navigation, repeated methodology qualifications and late pricing definitions. The most important behavioral improvements concern accurate tool scope and accessible, truthful feedback.
 
 No P0 or P1 blocker was established in this bounded review. P2 items below should form the next focused improvement batch; P3 items are polish or further design opportunities. This is not a release certification or a factual/legal audit of every article and policy.
 
@@ -51,15 +51,15 @@ The 96 best-practices results include local-preview CORS errors against producti
 
 ### P2 — confirmed behavior and accessibility defects
 
-1. **Make secret-file result scope exact.** The introduction documents a 20-file cap, but selecting 21 files silently slices the selection. A safe synthetic test with a detectable pattern only in file 21 returned “No high-confidence patterns found in the selected files”; selecting that final file alone detected the pattern. Show selected/scanned/skipped counts, omitted filenames and a partial-review state, or reject the oversized selection before running. Also implement the promised non-text filtering and explicit per-file read errors. Keep all analysis local. Add regression coverage for the cap and skipped/error states. Source: `apps/marketing/src/pages/tools/[slug].astro:217–229`.
+1. **Make secret-file result scope exact.** The introduction documents a 20-file cap, but selecting 21 files silently slices the selection. A safe synthetic test with a detectable pattern only in file 21 returned “No high-confidence patterns found in the selected files”; selecting that final file alone detected the pattern. Show selected/scanned/skipped counts, omitted filenames and a partial-review state or reject the oversized selection before running. Also implement the promised non-text filtering and explicit per-file read errors. Keep all analysis local. Add regression coverage for the cap and skipped/error states. Source: `apps/marketing/src/pages/tools/[slug].astro:217–229`.
 
-2. **Include visible blog-link text in its accessible name.** “Read article” links use `aria-label="Read {title}"`, omitting “article”. Lighthouse flagged ten instances under `label-content-name-mismatch`. Use `Read article: {title}`, or retain visible wording and add a screen-reader-only title. This supports voice navigation and WCAG 2.5.3 Label in Name. Source: `apps/marketing/src/components/BlogCard.astro:57–58`. Reference: [W3C Label in Name](https://www.w3.org/WAI/WCAG22/Understanding/label-in-name.html).
+2. **Include visible blog-link text in its accessible name.** “Read article” links use `aria-label="Read {title}"`, omitting “article”. Lighthouse flagged ten instances under `label-content-name-mismatch`. Use `Read article: {title}` or retain visible wording and add a screen-reader-only title. This supports voice navigation and WCAG 2.5.3 Label in Name. Source: `apps/marketing/src/components/BlogCard.astro:57–58`. Reference: [W3C Label in Name](https://www.w3.org/WAI/WCAG22/Understanding/label-in-name.html).
 
 3. **Announce docs copy success and provide real recovery.** After copying, visible text becomes “Copied” but the accessible name remains “Copy code to clipboard” and there is no status announcement. Add a polite shared status. The source-only failure path says “Press Ctrl+C” without selecting code; make recovery selectable and platform appropriate. Copy success was observed; clipboard failure was source-inspected, not forced. Source: `apps/marketing/src/layouts/DocsLayout.astro:176–196`.
 
-4. **Describe documentation search honestly.** The field says “Search documentation” but filters navigation labels only. Entering “OAuth” returned “No matching page” while the current guide contained OAuth. Immediately relabel it “Find a guide or integration” and state its scope, or implement article-content search with useful excerpts. Source: `apps/marketing/src/layouts/DocsLayout.astro:85–93,145–160`.
+4. **Describe documentation search honestly.** The field says “Search documentation” but filters navigation labels only. Entering “OAuth” returned “No matching page” while the current guide contained OAuth. Immediately relabel it “Find a guide or integration” and state its scope or implement article-content search with useful excerpts. Source: `apps/marketing/src/layouts/DocsLayout.astro:85–93,145–160`.
 
-5. **Give browser-local tools a script-unavailable state.** With JavaScript disabled, the RLS check button remains enabled and does nothing; even the initial output hint is script-added. Server-render the hint and a useful `noscript` explanation, and enable controls after handlers initialize. Preserve readable educational content and the local-only processing boundary. Source: `apps/marketing/src/pages/tools/[slug].astro:55–84,183–185,232–234`.
+5. **Give browser-local tools a script-unavailable state.** With JavaScript disabled, the RLS check button remains enabled and does nothing; even the initial output hint is script-added. Server-render the hint and a useful `noscript` explanation and enable controls after handlers initialize. Preserve readable educational content and the local-only processing boundary. Source: `apps/marketing/src/pages/tools/[slug].astro:55–84,183–185,232–234`.
 
 6. **Unify publication-date formatting.** Blog cards and articles use Asia/Kolkata while search uses UTC. The PHP2Shell sample changes from October 24 to October 23 when searched. Centralize the editorial date formatter across cards, search, article metadata and relevant schema. Preserve the real timestamp and only update modification dates for substantive edits. Sources: `BlogSearch.astro:29`, `BlogCard.astro:40`, `BlogPost.astro:195`.
 
@@ -67,7 +67,7 @@ The 96 best-practices results include local-preview CORS errors against producti
 
 7. **Put blog titles and usefulness ahead of decorative artwork.** The desktop featured image can occupy an entire screen before its title is visible. Mobile article titles and 16:9 artwork similarly delay the answer. Use a desktop split feature with title, category, concise summary and reading time beside a smaller image. Put text before imagery in DOM order. On articles, follow the title/metadata with a direct answer or short takeaway and compact contents; use diagrams or smaller figures when they explain the topic. Reduce the article H1's current maximum size and extreme negative tracking without shrinking body text. Sources: `BlogCard.astro:18,84,205`, `BlogPost.astro:220,346`, `pages/blog/[...page].astro:178`.
 
-8. **Explain pricing units before the plan decision.** Cards emphasize 210/850/4500 minutes and Deep/Custom capacity before the 3× definition; the full definition is near the end. Add one plain definition above the cards, show the applicable multiplier beside the relevant capacity, and give a transparent example such as 10 elapsed minutes × 3 = 30 units. Avoid converting capacity into speculative scans/month. Make Local's “Launching later” state visible before someone selects it. Preserve shared prices and entitlements. Source: `pages/pricing.astro:128,151,341,465`.
+8. **Explain pricing units before the plan decision.** Cards emphasize 210/850/4500 minutes and Deep/Custom capacity before the 3× definition; the full definition is near the end. Add one plain definition above the cards, show the applicable multiplier beside the relevant capacity and give a transparent example such as 10 elapsed minutes × 3 = 30 units. Avoid converting capacity into speculative scans/month. Make Local's “Launching later” state visible before someone selects it. Preserve shared prices and entitlements. Source: `pages/pricing.astro:128,151,341,465`.
 
 9. **Replace the mobile docs link wall.** Expanded navigation exposes 57 links: 9 general and 48 client workflows. They wrap into chips and push the article far below the viewport. Use a compact general list, a separate integrations disclosure/filter, a visible current location and an easy collapse control. Keep snippets and educational copy available without script. Source: `layouts/DocsLayout.astro:57,94,601`.
 
@@ -77,14 +77,14 @@ The 96 best-practices results include local-preview CORS errors against producti
 
 12. **Revisit blog pagination canonical policy.** Pages 2+ deliberately canonicalize to `/blog` and use `noindex,follow`, although they contain distinct article lists. If archives should be discoverable, provide unique titles/descriptions and self-referencing canonicals for distinct pages, with ordinary crawlable links. Decide indexability intentionally; do not treat different article lists as duplicate pages merely because their descriptions match. Google recommends unique URLs and canonicals for paginated pages. Source: `pages/blog/[...page].astro:44–49`; [Google pagination guidance](https://developers.google.com/search/docs/specialty/ecommerce/pagination-and-incremental-page-loading).
 
-13. **Make article endings task-specific.** The shared ending prioritizes a multi-field product-updates form, followed by four generic next-step cards. Put one relevant action first: try the related tool, inspect the methodology, follow the client setup guide, or view a product example. Keep the optional newsletter compact; make role/project details optional and secondary. This is a design recommendation, not evidence of a measured conversion loss. Source: `components/BlogCta.astro`, `components/WaitlistForm.astro`.
+13. **Make article endings task-specific.** The shared ending prioritizes a multi-field product-updates form, followed by four generic next-step cards. Put one relevant action first: try the related tool, inspect the methodology, follow the client setup guide or view a product example. Keep the optional newsletter compact; make role/project details optional and secondary. This is a design recommendation, not evidence of a measured conversion loss. Source: `components/BlogCta.astro`, `components/WaitlistForm.astro`.
 
 14. **Make demo fallback usable without a mail application.** When booking is unavailable, the page relies on a `mailto` action. Display a selectable support address with a copy control, useful alternative contact route and a prefilled subject/body requesting timezone and preferred times. Reflect the actual availability in the introduction. This review did not test a live booking provider. Source: `pages/demo.astro:14,56,86`.
 
 ### P3 — polish and editorial consistency
 
 - **Responsive article images:** AVIF/WebP `srcset` currently supplies one 1600px candidate; `sizes` alone cannot select a smaller width. At 390px the sampled 356px image used the 1600px, 83,678-byte AVIF. Generate sensible width candidates if traffic justifies it, preserving dimensions, alt text, lazy cards and prioritized article heroes. This is bandwidth polish; the sample does not demonstrate a failing Core Web Vital. Sources: `BlogCard.astro:23–33`, `BlogPost.astro:221–232`.
-- **Client count:** shared blog CTA says “Claude Code, Cursor, Codex and 23 more clients”, while the current registry contains 48 documented workflows. These may be different units; use an accurate labeled count derived from the owning source, or remove the hardcoded number.
+- **Client count:** shared blog CTA says “Claude Code, Cursor, Codex and 23 more clients”, while the current registry contains 48 documented workflows. These may be different units; use an accurate labeled count derived from the owning source or remove the hardcoded number.
 - **Authorship:** first-person founder articles currently attributed to LyraShield Team should name the actual author when factually appropriate, with an optional team reviewer. Add consistent author bios and visible revision notes for substantive technical updates.
 - **Docs reading measure:** constrain prose to roughly 70–80 characters while letting code and tables use more space. Keep local horizontal scrollers.
 - **Research status:** use a neutral informational treatment for “planned” rather than a red warning, unless an actual failure or risk is being conveyed.
@@ -127,12 +127,12 @@ Keep the established homepage motion vocabulary: short button/link feedback, one
 ## Reader perspectives and strengths to preserve
 
 - A newcomer needs a plain explanation and concrete example before unfamiliar evidence taxonomy or pricing arithmetic.
-- A phone reader needs the answer before a large illustration, and a guide before dozens of navigation chips.
+- A phone reader needs the answer before a large illustration and a guide before dozens of navigation chips.
 - An evaluator needs actual scope and outcome examples, truthful tool limits, clear availability and a usable next step.
 
-The emotional journey is calm and credible, then sometimes slows under repeated qualification or generic imagery, and becomes strongest at real artifacts, local tools and copyable setup. Bring those useful moments earlier.
+The emotional journey is calm and credible, then sometimes slows under repeated qualification or generic imagery and becomes strongest at real artifacts, local tools and copyable setup. Bring those useful moments earlier.
 
-Preserve honest limits and status language, full-library search and result announcements, article breadcrumbs/TOCs, readable light/dark typography, contained code/table scrolling, browser-local tool processing, useful empty states, and 404 recovery.
+Preserve honest limits and status language, full-library search and result announcements, article breadcrumbs/TOCs, readable light/dark typography, contained code/table scrolling, browser-local tool processing, useful empty states and 404 recovery.
 
 ## Suggested implementation sequence
 

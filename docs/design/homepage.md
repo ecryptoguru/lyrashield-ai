@@ -18,7 +18,7 @@ inconclusive retest. Never present illustrative output as customer evidence.
 ## Typography and layout
 
 The homepage intentionally uses a fluid display scale capped at 6rem, section
-headings at 2–3.5rem, body text at 1–1.2rem, and supporting controls and metadata
+headings at 2–3.5rem, body text at 1–1.2rem and supporting controls and metadata
 at .8–.95rem. Tracking never exceeds -.04em. These surface-specific sizes extend
 the existing design system; they do not change dashboard typography.
 
@@ -34,7 +34,7 @@ the shared catalog.
 - Continuity: chapter navigation follows presented frames, with a stable example
   accumulating scope and review context without upgrading its evidence state.
 - Feedback: brief button and link states, native FAQ disclosure feedback, product
-  view selection, and one console arrival. Critical text is visible by default.
+  view selection and one console arrival. Critical text is visible by default.
 - Budget: one decoder, one pending seek, coalesced scroll requests, cached geometry,
   and no offscreen or hidden-tab playback. No runtime 3D or new animation library.
 - Accessibility: reduced motion and Save-Data keep a complete poster/text

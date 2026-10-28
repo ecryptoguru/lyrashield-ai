@@ -13,7 +13,7 @@ Open <http://localhost:8787/>. The range-capable preview is also available at
 
 Review the hero, scroll slowly through the workflow, reverse direction and make
 fast chapter jumps. Check both themes, the motion toggle, dashboard view buttons
-and expanded previews, FAQ keyboard interaction, and the phone layout. The Lite
+and expanded previews, FAQ keyboard interaction and the phone layout. The Lite
 Check deliberately shows its disconnected state locally; no real target scan or
 paid acceptance was run. Its private handoff and consent contracts have separate
 regression coverage.
@@ -29,7 +29,7 @@ media publication or deployment. A merge can trigger production deployment.
 - Replaced repeated feature/coverage prose with concise workflow chapters and
   links to existing methodology, coverage, agent and evidence-vault pages.
 - Kept shared pricing, one illustrative detected finding, inconclusive retest
-  limits, and real demo-workspace screenshot provenance.
+  limits and real demo-workspace screenshot provenance.
 - Added restrained button/link feedback, native FAQ transitions and one console
   arrival; content remains visible without JavaScript and spatial effects honor
   reduced motion.
@@ -93,7 +93,7 @@ production bytes:
 Cold-film profile: 4 Mbit/s, 150ms RTT, empty browser cache; phone CPU at 4×.
 Continuous-film and wheel profiles use 4× CPU. All 12 existing actual-film gates
 pass, without unexpected fallback. Wheel traces contain no recorded long tasks.
-rAF scheduling is not compositor FPS, and emulation is not physical-phone proof.
+rAF scheduling is not compositor FPS and emulation is not physical-phone proof.
 Raw timing files are under `output/playwright/premium-landing/after/performance/`.
 
 ## Verification

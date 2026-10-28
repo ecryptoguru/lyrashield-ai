@@ -25,7 +25,7 @@ Location: `apps/marketing/src/pages/blog/tags/[tag]/[...page].astro:140`.
 The More categories grid retains a 15rem minimum. At a 390px viewport with the
 root font confirmed at 32px, `/blog/tags/verification` has 512px document width.
 The enlarged cards force horizontal page scrolling. Use a container-bounded
-minimum, permit labels/counts to wrap, and add category archives to enlarged-text
+minimum, permit labels/counts to wrap and add category archives to enlarged-text
 coverage. This is a reflow/accessibility regression in the replacement archive.
 
 ### P2: Category search promises the entire library
@@ -53,7 +53,7 @@ keep matching groups open while a query is present.
 asserting that the computed font size changed. Immediate measurements intermittently
 returned 16px; waiting for 32px gave stable evidence. The initial suspicion that
 CSP blocked this was disproved: no CSP bypass is needed. Add an explicit computed
-font-size assertion before geometry checks, and include category archives.
+font-size assertion before geometry checks and include category archives.
 With that wait, the existing blog, docs, pricing and SQL-tool routes each remain
 390px wide at 200% text. Local code/table scroll regions are not page overflow.
 
