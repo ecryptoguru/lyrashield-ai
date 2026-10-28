@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 const mocks = vi.hoisted(() => ({
+  connection: vi.fn(),
   create: vi.fn(),
   proposal: vi.fn(),
   claim: vi.fn(),
@@ -22,6 +23,7 @@ vi.mock("@lyrashield/db", () => ({
   hashInput: (action: string, input: unknown) => JSON.stringify({ action, input }),
   createPullRequestRecord: mocks.record,
 }))
+vi.mock("./fix-pr-connection", () => ({ hasActiveFixPrConnection: mocks.connection }))
 vi.mock("@lyrashield/integrations", () => ({
   createBranch: mocks.branch,
   createOrUpdateFile: mocks.write,
@@ -61,6 +63,7 @@ describe("approved fix PR execution", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.validate.mockReturnValue({ ok: true, filesTouched: ["src/app.ts"] })
+    mocks.connection.mockResolvedValue(true)
     mocks.claim.mockResolvedValue(true)
     mocks.head.mockResolvedValue("scanned-sha")
     mocks.pr.mockResolvedValue({ number: 42, url: "https://github.com/owner/repo/pull/42" })
@@ -90,6 +93,32 @@ describe("approved fix PR execution", () => {
       prNumber: 42,
       prUrl: "https://github.com/owner/repo/pull/42",
     })
+  })
+  it("binds an existing-file update to the blob read at the scanned commit", async () => {
+    expect((await executeApprovedFixPr(request)).status).toBe("opened")
+    expect(mocks.write).toHaveBeenCalledWith(
+      1,
+      "owner",
+      "repo",
+      "src/app.ts",
+      "patched",
+      expect.any(String),
+      expect.any(String),
+      "489ce0f857e7634a0eb9f328265a3e91fad49f61"
+    )
+  })
+  it("uses a separate branch for each new approval after a failed attempt", async () => {
+    await executeApprovedFixPr(request)
+    await executeApprovedFixPr({ ...request, approvalId: "approval-2" })
+    expect(mocks.branch.mock.calls[0]?.[3]).not.toBe(mocks.branch.mock.calls[1]?.[3])
+  })
+  it("refuses an approved patch after the GitHub connection is disabled", async () => {
+    mocks.connection.mockResolvedValue(false)
+    expect((await executeApprovedFixPr(request)).status).toBe("rejected")
+    expect(mocks.claim).not.toHaveBeenCalled()
+    expect(mocks.branch).not.toHaveBeenCalled()
+    expect(mocks.write).not.toHaveBeenCalled()
+    expect(mocks.pr).not.toHaveBeenCalled()
   })
   it.each(["expired"])("does not touch the provider when claim refuses %s", async () => {
     mocks.claim.mockResolvedValue(false)

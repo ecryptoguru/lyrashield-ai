@@ -12,6 +12,9 @@
  * and is structurally true here — this module has no merge call.
  */
 
+import { createHash } from "node:crypto"
+import { hasActiveFixPrConnection } from "./fix-pr-connection"
+
 import {
   claimApprovalExecution,
   completeApprovalExecution,
@@ -205,6 +208,9 @@ export async function executeApprovedFixPr(
     return { status: "rejected", reason: validation.reason }
   }
 
+  if (!(await hasActiveFixPrConnection(req.workspaceId, req.installationId))) {
+    return { status: "rejected", reason: "The GitHub connection is no longer active." }
+  }
   const claimed = await claimApprovalExecution(req.approvalId, req.workspaceId, inputHash)
   if (!claimed) {
     return {
@@ -213,7 +219,8 @@ export async function executeApprovedFixPr(
     }
   }
 
-  const branchName = `lyrashield/fix-${req.fixProposalId.slice(0, 12)}`
+  const branchSuffix = createHash("sha256").update(req.approvalId).digest("hex").slice(0, 12)
+  const branchName = `lyrashield/fix-${req.fixProposalId.slice(0, 12)}-${branchSuffix}`
   try {
     const baseBranch = await getDefaultBranch(req.installationId, req.repoOwner, req.repoName)
     const fromSha = await getBranchRefSha(
@@ -231,7 +238,7 @@ export async function executeApprovedFixPr(
     // commit, apply the unified diff (fail-closed on any hunk mismatch), write
     // the result to the fix branch. A file with no readable content is a hard
     // failure — we never write a partial patch.
-    const preparedFiles: Array<{ file: string; content: string }> = []
+    const preparedFiles: Array<{ file: string; content: string; sha: string }> = []
     for (const file of validation.filesTouched) {
       const current = await getFileContent(
         req.installationId,
@@ -253,10 +260,12 @@ export async function executeApprovedFixPr(
       const newContent = applyUnifiedDiff(current, extractFileDiff(req.diff, file))
       if (req.composerFix && newContent !== req.composerFix.after)
         throw new Error("Composer patch result differs from the resolver output")
-      preparedFiles.push({ file, content: newContent })
+      const bytes = Buffer.from(current, "utf8")
+      const sha = createHash("sha1").update(`blob ${bytes.length}\0`).update(bytes).digest("hex")
+      preparedFiles.push({ file, content: newContent, sha })
     }
     await createBranch(req.installationId, req.repoOwner, req.repoName, branchName, fromSha)
-    for (const { file, content } of preparedFiles) {
+    for (const { file, content, sha } of preparedFiles) {
       await createOrUpdateFile(
         req.installationId,
         req.repoOwner,
@@ -264,7 +273,8 @@ export async function executeApprovedFixPr(
         file,
         content,
         `fix: ${req.fixProposalId}`,
-        branchName
+        branchName,
+        sha
       )
     }
 

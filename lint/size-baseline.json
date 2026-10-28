@@ -102,8 +102,8 @@
     },
     "apps/web/src/app/(dashboard)/dashboard/approvals/approvals-client.tsx|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 52,
-      "maxExcess": 52
+      "totalExcess": 49,
+      "maxExcess": 49
     },
     "apps/web/src/app/(dashboard)/dashboard/billing/page.tsx|max-lines-per-function": {
       "count": 1,

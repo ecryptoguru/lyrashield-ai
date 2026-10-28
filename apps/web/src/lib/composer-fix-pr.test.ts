@@ -20,6 +20,9 @@ vi.mock("@lyrashield/db", () => ({
   hashInput: (_action: string, input: unknown) => JSON.stringify(input),
   createPullRequestRecord: vi.fn(),
 }))
+vi.mock("./fix-pr-connection", () => ({
+  hasActiveFixPrConnection: vi.fn().mockResolvedValue(true),
+}))
 vi.mock("@lyrashield/integrations", () => ({
   createBranch: mocks.branch,
   createOrUpdateFile: mocks.write,
@@ -119,7 +122,8 @@ describe("approval-bound Composer updates", () => {
       "composer.lock",
       after,
       expect.any(String),
-      expect.any(String)
+      expect.any(String),
+      "b36883a9da85972c84cf4ede2a9e3ea0a337020c"
     )
     expect(mocks.pr).toHaveBeenCalledWith(
       1,

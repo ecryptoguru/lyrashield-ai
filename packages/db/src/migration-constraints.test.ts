@@ -155,17 +155,13 @@ describe("P2-16 migration structure", () => {
     expect(auditedDir).toMatch(/^[0-9]{14}_[a-z0-9_]+$/)
   })
 
-  it("places the audited migration after every migration that already exists", () => {
+  it("places the audited migration after its recorded predecessor", () => {
     const integrationConfigOutboxDir = "20261011000000_integration_config_deletion_outbox"
-    const preexisting = all.filter(
-      (name) => name !== auditedDir && name !== integrationConfigOutboxDir
-    )
-    const highestPreexisting = preexisting[preexisting.length - 1] ?? ""
-    expect(auditedDir > highestPreexisting).toBe(true)
+    const predecessor = "20261007170000_myra_public_session_rls_boundary"
+    expect(all).toContain(predecessor)
+    expect(auditedDir > predecessor).toBe(true)
     expect(integrationConfigOutboxDir > auditedDir).toBe(true)
-    // PR #964 owns this one. The audited migration must sort after it so the
-    // Myra RLS boundary always applies first.
-    expect(auditedDir > "20261007170000_myra_public_session_rls_boundary").toBe(true)
+    // Later migrations must remain possible without changing this historical ordering proof.
   })
 
   it("ships no webhook-index migration", () => {

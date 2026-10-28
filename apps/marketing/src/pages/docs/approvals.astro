@@ -6,7 +6,7 @@ const origin = Astro.site?.origin || "http://localhost:4321"
 const title = "Agent Authorization"
 const description =
   "How mutating agent actions are authorized in LyraShield: a connected OAuth client is the grant. API keys and legacy bearers get one connect_required response."
-const updatedDate = "2026-09-13"
+const updatedDate = "2026-10-28"
 
 const { canonical, techArticle, breadcrumbList } = buildDocsJsonLd({
   origin,
@@ -74,6 +74,11 @@ const jsonLd: unknown[] = [techArticle, breadcrumbList]
     </li>
     <li><code>POST /api/v1/agent-approvals/&lt;id&gt;/deny</code> — deny an action</li>
   </ul>
+  <p>
+    An expired request cannot run. Request a fresh approval from the proposed fix. A fix also
+    requires its GitHub connection to remain active when it executes; disabling the connection
+    prevents a previously prepared proposal from opening a pull request.
+  </p>
 
   <h2>Local stdio server</h2>
   <p>
