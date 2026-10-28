@@ -179,10 +179,14 @@ describe("nav-items title lookup", () => {
     expect(new Set(hrefs).size).toBe(hrefs.length)
   })
 
-  it("names the nav-less routes the audit found titling themselves Home (UF-25)", () => {
+  it("resolves exact titles for real routes, including nav-less destinations (UF-25)", () => {
     expect(resolvePageTitle("/dashboard/agents")).toBe("Coding Agents")
     expect(resolvePageTitle("/dashboard/integrations")).toBe("Integrations")
     expect(resolvePageTitle("/dashboard/projects")).toBe("Projects")
+    expect(resolvePageTitle("/dashboard/billing")).toBe("Billing")
+    expect(resolvePageTitle("/dashboard/launch-readiness")).toBe("Launch Readiness")
+    expect(resolvePageTitle("/dashboard/fixes")).toBe("Proposed fixes")
+    expect(resolvePageTitle("/dashboard/ai-assurance")).toBe("Evidence Vault")
   })
 
   it("never resolves a non-root route to the Home label", () => {

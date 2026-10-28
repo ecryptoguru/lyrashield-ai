@@ -75,6 +75,11 @@ describe("scanSecrets", () => {
     expect(githubToken!.control_ids).toEqual([3])
     expect(githubToken!.code_locations).toBeDefined()
     expect(githubToken!.code_locations![0]!.file).toBe(".env")
+    expect(githubToken!.poc_description).not.toContain("ghp_")
+    expect(githubToken!.poc_description).toContain("redacted")
+    const snippet = githubToken!.code_locations![0]!.snippet
+    expect(snippet).toContain("REDACTED")
+    expect(snippet).not.toContain("ghp_")
   })
 
   it("detects private keys (PEM)", async () => {
@@ -280,29 +285,6 @@ describe("scanSecrets", () => {
     expect(tokenFinding).toBeDefined()
     expect(tokenFinding!.code_locations![0]!.start_line).toBe(3)
     expect(tokenFinding!.code_locations![0]!.file).toBe("app.ts")
-  })
-
-  it("redacts poc_description — does not leak secret prefix", async () => {
-    const dir = await setupRepo({
-      ".env": "GITHUB_TOKEN=ghp_1234567890abcdefghijklmnopqrstuvwxyzABCD",
-    })
-    const findings = await scanSecrets({ repoPath: dir, workspaceDir: dir })
-    const tokenFinding = findings.find((f) => f.id.startsWith("github-token"))
-    expect(tokenFinding).toBeDefined()
-    expect(tokenFinding!.poc_description).not.toContain("ghp_")
-    expect(tokenFinding!.poc_description).toContain("redacted")
-  })
-
-  it("redacts code_locations snippet — does not store full secret line", async () => {
-    const dir = await setupRepo({
-      ".env": "GITHUB_TOKEN=ghp_1234567890abcdefghijklmnopqrstuvwxyzABCD",
-    })
-    const findings = await scanSecrets({ repoPath: dir, workspaceDir: dir })
-    const tokenFinding = findings.find((f) => f.id.startsWith("github-token"))
-    expect(tokenFinding).toBeDefined()
-    const snippet = tokenFinding!.code_locations![0]!.snippet
-    expect(snippet).toContain("REDACTED")
-    expect(snippet).not.toContain("ghp_")
   })
 
   it("handles empty repo gracefully", async () => {

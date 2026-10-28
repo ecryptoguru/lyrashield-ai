@@ -22,7 +22,7 @@ describe("rule renderers", () => {
 
   for (const info of formats) {
     for (const file of info.defaultFiles) {
-      it(`${info.format} (${file}) produces non-empty output`, () => {
+      it(`${info.format} (${file}) produces a complete managed rule with the honesty clause`, () => {
         const rule = renderRule({
           format: info.format,
           file,
@@ -34,15 +34,6 @@ describe("rule renderers", () => {
         expect(rule.content).toContain("lyrashield:begin")
         expect(rule.content).toContain("lyrashield:end")
         expect(rule.sha).toMatch(/^[0-9a-f]{12}$/)
-      })
-
-      it(`${info.format} (${file}) includes the honesty clause`, () => {
-        const rule = renderRule({
-          format: info.format,
-          file,
-          agentId: "test-agent",
-          agentDisplayName: info.label,
-        })
         expect(rule.inner).toMatch(/clean check result does not guarantee/i)
         expect(rule.inner).toMatch(/passing check is not a guarantee/i)
       })

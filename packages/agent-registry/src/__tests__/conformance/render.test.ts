@@ -51,6 +51,9 @@ describe("conformance: renderConfig round-trips through the format parser", () =
   for (const agent of configFileAgents) {
     for (const transport of agent.transports) {
       const caseName = `${agent.id} × ${transport}`
+      // JSONC refuses before entry/transport handling; the real writer is
+      // covered by CLI installer conformance. Keep one refusal diagnostic.
+      if (agent.format === "jsonc" && caseName !== "kilo-code × stdio") continue
 
       it(`${caseName} — interpolated secret is safe`, () => {
         if (agent.format === "jsonc") {

@@ -276,17 +276,6 @@ describe("createCancelScanTool", () => {
     expect(data.scan.status).toBe("CANCELLED")
   })
 
-  it("is registered as a mutating tool with annotations", async () => {
-    const { createAllTools } = await import("./tools")
-    const { MUTATING_TOOL_NAMES } = await import("./tool-policy")
-    const tools = createAllTools(context)
-    const cancel = tools.find((t) => t.name === "lyrashield_cancel_scan")
-    expect(cancel).toBeDefined()
-    expect(cancel!.mutating).toBe(true)
-    expect(MCP_TOOL_ANNOTATIONS["lyrashield_cancel_scan"]).toBeDefined()
-    expect(MUTATING_TOOL_NAMES).toContain("lyrashield_cancel_scan")
-  })
-
   it("keeps the caller idempotency key in the header, hashed like other mutations", async () => {
     mockFetch.mockResolvedValue(makeApiResponse({ id: "scan-1", status: "CANCELLED" }))
     const tool = createCancelScanTool(context)

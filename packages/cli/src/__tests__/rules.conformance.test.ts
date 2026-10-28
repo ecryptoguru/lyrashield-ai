@@ -30,7 +30,7 @@ describe("rules command conformance", () => {
     }
   }
 
-  it("adds claude-code rules files", async () => {
+  it("adds, checks and removes claude-code rules files", async () => {
     const output = mockOutput()
     const code = await handleRules(["add", "claude-code", "--project-root", tmp], output)
     expect(code).toBe(0)
@@ -39,6 +39,13 @@ describe("rules command conformance", () => {
     const content = await readFile(claudeMd, "utf-8")
     expect(content).toContain("lyrashield:begin")
     expect(content).toContain("lyrashield:end")
+    const checkOutput = mockOutput()
+    expect(await handleRules(["check", "claude-code", "--project-root", tmp], checkOutput)).toBe(0)
+    expect(checkOutput.lines.some((line) => line.includes("valid"))).toBe(true)
+    expect(await handleRules(["remove", "claude-code", "--project-root", tmp], mockOutput())).toBe(
+      0
+    )
+    await expect(stat(claudeMd)).rejects.toBeDefined()
   })
 
   it("dry-run does not create files", async () => {
@@ -49,22 +56,6 @@ describe("rules command conformance", () => {
     )
     expect(code).toBe(0)
     expect(output.lines.some((l) => l.includes("would-add"))).toBe(true)
-    await expect(stat(path.join(tmp, "CLAUDE.md"))).rejects.toBeDefined()
-  })
-
-  it("check reports valid after add", async () => {
-    await handleRules(["add", "claude-code", "--project-root", tmp], mockOutput())
-    const output = mockOutput()
-    const code = await handleRules(["check", "claude-code", "--project-root", tmp], output)
-    expect(code).toBe(0)
-    expect(output.lines.some((l) => l.includes("valid"))).toBe(true)
-  })
-
-  it("remove deletes the rule file", async () => {
-    await handleRules(["add", "claude-code", "--project-root", tmp], mockOutput())
-    const output = mockOutput()
-    const code = await handleRules(["remove", "claude-code", "--project-root", tmp], output)
-    expect(code).toBe(0)
     await expect(stat(path.join(tmp, "CLAUDE.md"))).rejects.toBeDefined()
   })
 

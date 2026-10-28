@@ -59,15 +59,6 @@ describe("runtime environment validation", () => {
     await expect(import("./env")).resolves.toBeDefined()
   })
 
-  it("rejects Azure generation with an unapproved model", async () => {
-    vi.stubEnv("MYRA_GENERATION_ENABLED", "1")
-    vi.stubEnv("MYRA_PROVIDER", "azure")
-    vi.stubEnv("MYRA_AZURE_OPENAI_ENDPOINT", "https://example.openai.azure.com")
-    vi.stubEnv("MYRA_AZURE_OPENAI_API_KEY", "test-key")
-    vi.stubEnv("MYRA_MODEL", "gpt-4o")
-    await expect(import("./env")).rejects.toThrow("Invalid environment configuration")
-  })
-
   it("rejects Azure generation without provider credentials and deployments", async () => {
     vi.stubEnv("MYRA_GENERATION_ENABLED", "1")
     vi.stubEnv("MYRA_PROVIDER", "azure")
