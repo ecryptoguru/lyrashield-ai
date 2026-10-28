@@ -16,6 +16,7 @@ import { buildMicrosoftSocialProvider, isOAuthProviderConfigured } from "./oauth
 import { needsOAuthWorkspaceSelection } from "./oauth-workspace"
 import { resourcesMatch } from "./oauth-resource"
 import { hasPermission, PERMISSIONS } from "./permissions"
+import { accountIssuerCompatibility } from "./account-issuer"
 
 const GITHUB_CLIENT_ID = env.GITHUB_CLIENT_ID
 const GITHUB_CLIENT_SECRET = env.GITHUB_CLIENT_SECRET
@@ -324,6 +325,7 @@ async function sendPlatformAdminSecurityAlert(subject: string, htmlContent: stri
 }
 
 export const auth = betterAuth({
+  ...accountIssuerCompatibility,
   database: prismaAdapter(prisma, {
     provider: "postgresql",
   }),

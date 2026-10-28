@@ -24,10 +24,20 @@ test("password reset is single-use and revokes the prior authenticated session",
   await expect(
     await request.post("/api/auth/sign-up/email", {
       headers,
-      data: { email, password: oldPassword, name: "Reset fixture" },
+      data: {
+        email,
+        password: oldPassword,
+        name: "Reset fixture",
+        issuer: "https://untrusted.example",
+      },
     })
   ).toBeOK()
   const user = await prisma.user.findUniqueOrThrow({ where: { email }, select: { id: true } })
+  const account = await prisma.account.findFirstOrThrow({
+    where: { userId: user.id, providerId: "credential" },
+    select: { issuer: true },
+  })
+  expect(account.issuer).toBe("local:credential")
   const before = await request.get("/api/auth/get-session", { headers })
   expect((await before.json())?.user?.id).toBe(user.id)
   await expect(
