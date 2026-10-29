@@ -4,6 +4,9 @@ import {
   MOTION_CHAPTER_DURATION,
   MOTION_VARIANTS,
   MOTION_FPS,
+  MOTION_CLIP_DURATION,
+  MOTION_CLIP_COUNT,
+  motionClipRelativePath,
 } from "../../../marketing-motion/scripts/motion-media-contract.mjs"
 
 export type EvidenceChapterId =
@@ -14,6 +17,9 @@ export interface MotionTrack {
   width: number
   height: number
   duration: number
+  budgetBytes: number
+  clipDuration: number
+  clips: string[]
 }
 
 export interface EvidenceWorldChapter {
@@ -156,12 +162,24 @@ export function createMotionMediaManifest(
     renderHash,
     desktop: {
       src: `${root}/desktop/assurance-world.mp4`,
+      clipDuration: MOTION_CLIP_DURATION,
+      clips: Array.from(
+        { length: MOTION_CLIP_COUNT },
+        (_, i) => `${root}/${motionClipRelativePath("desktop", i)}`
+      ),
+      budgetBytes: MOTION_VARIANTS.desktop.budgetBytes,
       width: MOTION_VARIANTS.desktop.width,
       height: MOTION_VARIANTS.desktop.height,
       duration: MOTION_DURATION,
     },
     portrait: {
       src: `${root}/portrait/assurance-world.mp4`,
+      clipDuration: MOTION_CLIP_DURATION,
+      clips: Array.from(
+        { length: MOTION_CLIP_COUNT },
+        (_, i) => `${root}/${motionClipRelativePath("portrait", i)}`
+      ),
+      budgetBytes: MOTION_VARIANTS.portrait.budgetBytes,
       width: MOTION_VARIANTS.portrait.width,
       height: MOTION_VARIANTS.portrait.height,
       duration: MOTION_DURATION,

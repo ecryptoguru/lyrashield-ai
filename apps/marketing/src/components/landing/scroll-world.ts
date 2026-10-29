@@ -4,6 +4,7 @@ import {
   validateBands,
   type ChapterBand,
 } from "../../lib/scroll-world-mapping"
+import { ScrollClipStream } from "./scroll-world-clips"
 import type { MotionMediaManifest } from "../../lib/motion-manifest"
 
 /** Native scrolling owns position; the media layer is a bounded follower. */
@@ -20,8 +21,7 @@ class ScrollWorld extends HTMLElement {
   private frame = 0
   private canvas!: HTMLCanvasElement
   private context!: CanvasRenderingContext2D
-  private download?: AbortController
-  private objectUrl = ""
+  private clips?: ScrollClipStream
   private deadline = 0
   private variant = ""
   private width = 0
@@ -99,13 +99,14 @@ class ScrollWorld extends HTMLElement {
             (this.inFlight || this.priming)
           ) {
             this.present()
-            if (this.inFlight || this.priming) this.armDeadline(2000)
+            if (this.inFlight || this.priming) this.armDeadline(this.priming ? 15000 : 2000)
           }
         } else {
           removeEventListener("scroll", this.queue)
           cancelAnimationFrame(this.frame)
           this.frame = 0
           this.clearDeadline()
+          this.suspendDownloads()
           this.video.pause()
         }
       },
@@ -172,8 +173,7 @@ class ScrollWorld extends HTMLElement {
       this.release()
       this.dataset.worldState = "static"
       this.queue()
-    } else if (this.near && !this.failed && !this.video.getAttribute("src") && !this.download)
-      void this.loadVariant()
+    } else if (this.near && !this.failed && !this.clips) void this.loadVariant()
   }
 
   private geometry = () => {
@@ -220,51 +220,33 @@ class ScrollWorld extends HTMLElement {
     this.queue()
   }
 
-  private async loadVariant() {
-    if (this.download) return
-    const epoch = this.epoch
-    const download = new AbortController()
-    this.download = download
-    const timeout = window.setTimeout(() => download.abort(), 15000)
+  private loadVariant() {
+    if (!ScrollClipStream.supported()) {
+      this.fail()
+      return
+    }
     this.variant = this.mediaVariant()
     const track = this.variant === "portrait" ? this.manifest.portrait : this.manifest.desktop
     this.dataset.worldState = "loading"
+    this.priming = true
     const status = this.querySelector("[data-world-status]")
     if (status) status.textContent = ""
-    // readyState can change before loadedmetadata is dispatched. Block scroll
-    // seeks until the first frame has completed the startup handshake.
-    this.priming = true
-    // Fetch one bounded file before scrubbing: range round trips must never sit
-    // between the visitor's scroll position and its corresponding frame.
-    try {
-      const response = await fetch(track.src, { signal: download.signal })
-      if (!response.ok || !response.body) throw new Error("Motion download unavailable")
-      const reader = response.body.getReader()
-      const chunks: Uint8Array<ArrayBuffer>[] = []
-      let bytes = 0
-      while (true) {
-        const { value, done } = await reader.read()
-        if (done) break
-        bytes += value.byteLength
-        if (bytes > 3 * 1024 * 1024) {
-          await reader.cancel()
-          throw new Error("Motion download exceeds budget")
-        }
-        chunks.push(value)
+    const epoch = this.epoch
+    this.clips = new ScrollClipStream(
+      this.video,
+      track.clips,
+      track.clipDuration,
+      track.duration,
+      track.budgetBytes,
+      () => {
+        if (epoch === this.epoch) this.queue()
+      },
+      () => {
+        if (epoch === this.epoch) this.fail()
       }
-      if (epoch !== this.epoch || !this.isConnected || !this.allowed()) return
-      this.objectUrl = URL.createObjectURL(new Blob(chunks, { type: "video/mp4" }))
-      this.video.pause()
-      this.video.src = this.objectUrl
-      this.video.preload = "auto"
-      this.video.load()
-      this.armDeadline(5000)
-    } catch {
-      if (epoch === this.epoch && this.isConnected && this.allowed()) this.fail()
-    } finally {
-      clearTimeout(timeout)
-      if (this.download === download) this.download = undefined
-    }
+    )
+    this.armDeadline(15000)
+    this.queue()
   }
 
   private metadata = () => {
@@ -273,8 +255,11 @@ class ScrollWorld extends HTMLElement {
       this.fail()
       return
     }
-    this.canvas.width = this.video.videoWidth
-    this.canvas.height = this.video.videoHeight
+    // Assigning canvas dimensions erases its bitmap. Preserve it across clip seams.
+    if (this.canvas.width !== this.video.videoWidth) this.canvas.width = this.video.videoWidth
+    if (this.canvas.height !== this.video.videoHeight) this.canvas.height = this.video.videoHeight
+    // A deep link can begin with a discontiguous buffered range.
+    if (this.clips?.has(this.desired)) this.video.currentTime = this.desired
   }
 
   private seeked = () => {
@@ -302,12 +287,11 @@ class ScrollWorld extends HTMLElement {
     this.priming = false
     this.inFlight = false
     this.clearDeadline()
-    this.dataset.worldPresented = this.video.currentTime.toFixed(3)
+    const presented = this.video.currentTime
+    this.dataset.worldPresented = presented.toFixed(3)
     this.dataset.worldPainted = "true"
     this.dataset.worldState = "ready"
-    const chapter = this.manifest.chapters.find(
-      (c) => this.video.currentTime >= c.start && this.video.currentTime < c.end
-    )
+    const chapter = this.manifest.chapters.find((c) => presented >= c.start && presented < c.end)
     if (chapter && chapter.id !== this.dataset.worldChapter) {
       this.dataset.worldChapter = chapter.id
       this.dispatchEvent(new Event("world-frame"))
@@ -334,7 +318,8 @@ class ScrollWorld extends HTMLElement {
         this.updatePoster()
       }
       this.dataset.worldTime = this.desired.toFixed(3)
-      if (this.ensureActiveMedia()) {
+      if (this.allowed() && !this.failed && this.clips) {
+        this.clips.request(this.desired)
         this.flush()
         if (Math.abs(this.eased - this.desired) > 0.001) this.queue()
       }
@@ -348,6 +333,7 @@ class ScrollWorld extends HTMLElement {
   }
 
   private flush() {
+    const target = Math.round(this.eased * this.fps) / this.fps
     if (
       !this.near ||
       document.hidden ||
@@ -356,14 +342,14 @@ class ScrollWorld extends HTMLElement {
       this.video.readyState < 1 ||
       this.video.seeking ||
       this.inFlight ||
-      this.priming
+      this.clips?.busy ||
+      !this.clips?.has(target)
     )
       return
-    const target = Math.round(this.eased * this.fps) / this.fps
     if (Math.abs(this.video.currentTime - target) < 0.5 / this.fps) return
     this.inFlight = true
     this.video.currentTime = target
-    if (!this.deadline) this.armDeadline(2000)
+    if (!this.deadline) this.armDeadline(this.priming ? 15000 : 2000)
   }
 
   private armDeadline(ms: number) {
@@ -377,18 +363,20 @@ class ScrollWorld extends HTMLElement {
     clearTimeout(this.deadline)
     this.deadline = 0
   }
+  private suspendDownloads() {
+    this.clips?.suspend()
+  }
+
   private release() {
     this.epoch++
-    this.download?.abort()
-    this.download = undefined
+    this.clips?.dispose()
+    this.clips = undefined
     this.clearDeadline()
     if (!this.video) return
     this.video.pause()
     this.video.removeAttribute("src")
     this.video.preload = "none"
     this.video.load()
-    if (this.objectUrl) URL.revokeObjectURL(this.objectUrl)
-    this.objectUrl = ""
     this.inFlight = false
     this.priming = false
     delete this.dataset.worldPainted
@@ -408,12 +396,13 @@ class ScrollWorld extends HTMLElement {
       cancelAnimationFrame(this.frame)
       this.frame = 0
       this.clearDeadline()
+      this.suspendDownloads()
       this.video.pause()
     } else {
       this.queue()
       if (this.allowed() && !this.failed && this.near && (this.inFlight || this.priming)) {
         this.present()
-        if (this.inFlight || this.priming) this.armDeadline(2000)
+        if (this.inFlight || this.priming) this.armDeadline(this.priming ? 15000 : 2000)
       }
     }
   }

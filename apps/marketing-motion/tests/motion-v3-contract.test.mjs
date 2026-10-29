@@ -15,8 +15,8 @@ test("continuous v3 media has one shared eight-second chapter contract", () => {
   assert.equal(motionPublishRoot("0123456789abcdef"), "assurance-world/v3/0123456789abcdef")
 })
 test("desktop and portrait delivery have variant decode budgets", () => {
-  assert.deepEqual([MOTION_VARIANTS.desktop.width, MOTION_VARIANTS.desktop.height], [800, 450])
-  assert.equal(MOTION_VARIANTS.desktop.gop, 15)
-  assert.equal(MOTION_VARIANTS.portrait.gop, 15)
+  assert.deepEqual([MOTION_VARIANTS.desktop.width, MOTION_VARIANTS.desktop.height], [1920, 1080])
+  assert.equal(MOTION_VARIANTS.desktop.gop, 8)
+  assert.equal(MOTION_VARIANTS.portrait.gop, 4)
   assert.ok(MOTION_VARIANTS.portrait.width < MOTION_VARIANTS.portrait.height)
 })
