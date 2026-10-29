@@ -91,6 +91,20 @@ test("cold buffered startup on a 4 Mbit/s connection", async ({ page }, info) =>
     if (mediaRequests.has(requestId)) mediaBytes += encodedDataLength
   })
   await page.addInitScript(() => {
+    new PerformanceObserver((list) => {
+      const world = document.querySelector<HTMLElement>("scroll-world")
+      const last = list.getEntries().at(-1)
+      if (world && last) world.dataset.labLcp = String(last.startTime)
+    }).observe({ type: "largest-contentful-paint", buffered: true })
+    new PerformanceObserver((list) => {
+      const world = document.querySelector<HTMLElement>("scroll-world")
+      if (!world) return
+      for (const entry of list.getEntries()) {
+        const shift = entry as PerformanceEntry & { hadRecentInput: boolean; value: number }
+        if (!shift.hadRecentInput)
+          world.dataset.labCls = String(Number(world.dataset.labCls ?? 0) + shift.value)
+      }
+    }).observe({ type: "layout-shift", buffered: true })
     const observer = new MutationObserver(() => {
       const world = document.querySelector<HTMLElement>("scroll-world")
       if (world?.dataset.worldState === "loading" && !world.dataset.labStart)
@@ -109,6 +123,13 @@ test("cold buffered startup on a 4 Mbit/s connection", async ({ page }, info) =>
       Number((element as HTMLElement).dataset.labStart)
   )
   const startupBytes = mediaBytes
+  const vitals = await world.evaluate((element) => ({
+    lcp: Number((element as HTMLElement).dataset.labLcp),
+    cls: Number((element as HTMLElement).dataset.labCls ?? 0),
+  }))
+  expect(vitals.lcp).toBeGreaterThan(0)
+  expect(vitals.lcp).toBeLessThanOrEqual(2500)
+  expect(vitals.cls).toBeLessThanOrEqual(0.1)
   await page
     .getByRole("navigation", { name: "Evidence journey chapters" })
     .getByRole("link")
@@ -132,6 +153,7 @@ test("cold buffered startup on a 4 Mbit/s connection", async ({ page }, info) =>
       {
         startupMs,
         startupBytes,
+        ...vitals,
         mediaBytes,
         requests: mediaRequests.size,
         profile: "4 Mbit/s, 150 ms RTT, empty cache",
