@@ -42,6 +42,11 @@ test("wheel-sized steps ease the video in both directions while the page moves i
   const world = page.locator("scroll-world")
   await expect(world).toHaveAttribute("data-world-painted", "true")
   await page.locator("#journey-scan").scrollIntoViewIfNeeded()
+  // WebKit can resolve the scroll operation before dispatching its scroll event.
+  // Wait for the scan target before comparing target/presented frame equality.
+  await expect
+    .poll(async () => Number(await world.getAttribute("data-world-time")))
+    .toBeGreaterThan(16)
   await expect
     .poll(() =>
       world.evaluate((el) =>
