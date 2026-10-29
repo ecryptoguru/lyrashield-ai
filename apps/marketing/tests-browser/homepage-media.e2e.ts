@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test"
 const productImage =
   /\/product\/current-(?:posture|findings|agents|readiness|scan)-(?:dark|light)\.webp$/
 const heroImage = /assurance-world\/v3\/[^/]+\/posters\/gateway-(?:desktop|portrait)\.webp$/
-const motionVideo = /assurance-world\.(?:mp4|webm)$/
+const motionVideo = /\.(?:mp4|webm)(?:\?|$)/
 const productImageDimensions = new Map([
   ["/product/current-posture-dark.webp", [1600, 597]],
   ["/product/current-posture-light.webp", [1600, 597]],
@@ -138,7 +138,10 @@ test("the evidence artifact adds no second decoder and reduced motion downloads 
   browser,
 }) => {
   for (const reducedMotion of ["reduce", "no-preference"] as const) {
-    const context = await browser.newContext({ reducedMotion })
+    const context = await browser.newContext({
+      reducedMotion,
+      viewport: { width: 1440, height: 900 },
+    })
     const page = await context.newPage()
     const videos: string[] = []
     page.on("request", (request) => {
@@ -148,11 +151,24 @@ test("the evidence artifact adds no second decoder and reduced motion downloads 
     await page.locator("#assurance-world").scrollIntoViewIfNeeded()
     await expect(page.locator("#assurance-world video")).toHaveCount(0)
     await expect(page.locator(".journey__artifact")).toContainText("Finding EX-014")
-    if (reducedMotion === "reduce") expect(videos).toEqual([])
-    else {
+    const world = page.locator("scroll-world")
+    await expect(world.locator("video")).toHaveCount(1)
+    if (reducedMotion === "reduce") {
+      await expect(world).toHaveAttribute("data-world-state", "static")
+      expect(videos).toEqual([])
+    } else {
       await expect(page.locator("scroll-world")).toHaveAttribute("data-world-state", "ready")
       expect(videos.length).toBeGreaterThan(0)
-      expect(new Set(videos).size).toBe(1)
+      const manifest = JSON.parse((await world.getAttribute("data-world-manifest"))!)
+      const clips = new Set(
+        manifest.desktop.clips.map((src: string) => new URL(src, page.url()).href)
+      )
+      expect(videos.every((url) => clips.has(url))).toBe(true)
+      // Requests are chunks of one film, not independent video decoders.
+      const source = await world.locator("video").getAttribute("src")
+      expect(source).toMatch(/^blob:/)
+      await page.locator("#journey-retest").scrollIntoViewIfNeeded()
+      await expect(world.locator("video")).toHaveAttribute("src", source!)
     }
     await context.close()
   }
