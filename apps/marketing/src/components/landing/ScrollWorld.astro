@@ -37,6 +37,7 @@ const opening = manifest.chapters[0]!
   :global(scroll-world[data-world-state] #different), :global(scroll-world[data-world-state] #free-scan) { background: color-mix(in srgb, var(--bg-raised) 92%, transparent); }
   :global(:root[data-theme="light"] scroll-world[data-world-state] #different), :global(:root[data-theme="light"] scroll-world[data-world-state] #free-scan) { background: color-mix(in srgb, var(--bg-raised) 96%, transparent); }
   :global(scroll-world[data-world-state] evidence-journey) { --text: #edf6fb; --text-muted: #c3d8e6; --bg-raised: #172a3b; --border: #526778; --accent: #89dfeb; background: transparent; }
+  :global(scroll-world[data-world-state] .journey__intro) { padding: 1.5rem; background: rgba(8,17,28,.94); border-radius: .75rem; }
   :global(scroll-world[data-world-state] .journey__intro), :global(scroll-world[data-world-state] .journey__chapters) { color: #edf6fb; }
   :global(scroll-world[data-world-state] .journey__chapter > p), :global(scroll-world[data-world-state] .journey__intro p) { color: #c3d8e6; }
   :global(scroll-world[data-world-state] .journey__layout) { grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); }

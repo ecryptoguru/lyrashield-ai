@@ -258,7 +258,7 @@ test("translucent supporting bands preserve text contrast against any film brigh
           )
         })
       })
-      expect(Math.min(...ratios)).toBeGreaterThanOrEqual(4.5)
+      expect(Math.min(...ratios), `${theme} ${selector}`).toBeGreaterThanOrEqual(4.5)
     }
   }
 })

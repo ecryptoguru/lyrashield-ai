@@ -33,11 +33,10 @@ describe("homepage journey and plan summary", () => {
     // retest: an engine-only finding ends inconclusive.
     expect(different).toContain("ends inconclusive")
 
-    // Block 8: the FAQ opens its first five questions and keeps all eight in
-    // the FAQPage data, so collapsing one hides nothing from an answer engine.
+    // Retain native FAQ disclosures and all eight crawlable schema answers.
     const faq = readFileSync(new URL("../components/landing/Faq.astro", import.meta.url), "utf8")
-    expect(faq).toContain("open={index < OPEN_BY_DEFAULT}")
-    expect(faq).toContain("const OPEN_BY_DEFAULT = 5")
+    expect(faq).toContain('aria-labelledby="faq-heading"')
+    expect(faq).toContain("<details")
     expect(page).toContain("mainEntity: faqItems.map")
     expect(page.match(/^  \{$/gm)?.length ?? 0).toBeGreaterThanOrEqual(8)
     // Block 9 is the single closer: the separate demo block is gone and its

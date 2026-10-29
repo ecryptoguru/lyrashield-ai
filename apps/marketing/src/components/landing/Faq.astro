@@ -10,30 +10,23 @@ interface Props {
 
 const { items } = Astro.props
 
-/**
- * The first five questions are the ones a first-time visitor actually asks, so
- * they start open (spec section 8 block 8). Every item still renders and all
- * of them stay in the FAQPage JSON-LD, so collapsing one hides nothing from a
- * search engine or an answer engine.
- */
-const OPEN_BY_DEFAULT = 5
 ---
 
-<section id="faq" aria-labelledby="faq-heading" class="px-4 py-14 sm:px-6 sm:py-16 lg:px-8">
+<section id="faq" aria-labelledby="faq-heading" class="px-4 py-10 sm:px-6 sm:py-12 lg:px-8">
   <div class="mx-auto max-w-3xl">
-    <h2 id="faq-heading" data-reveal class="text-center text-3xl font-semibold tracking-tight text-text sm:text-4xl">
+    <h2 id="faq-heading" class="text-center text-3xl font-semibold tracking-tight text-text sm:text-4xl">
       Questions
     </h2>
-    <div class="mt-12 space-y-4" data-reveal-group>
+    <div class="mt-8">
       {items.map((item, index) => (
-        <details data-reveal open={index < OPEN_BY_DEFAULT} class="group rounded-lg border border-border bg-bg-raised transition-colors duration-200 hover:border-accent/50" data-question-id={`question_${index + 1}`}>
+        <details class="group border-b border-border" data-question-id={`question_${index + 1}`}>
           <summary class="min-h-11 cursor-pointer list-none rounded-lg p-4 font-medium text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
             <span class="flex min-w-0 items-center justify-between gap-4">
               <span class="min-w-0 break-words">{item.q}</span>
               <svg viewBox="0 0 20 20" class="size-5 shrink-0 transition-transform group-open:rotate-180" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true"><path d="m5 7.5 5 5 5-5" /></svg>
             </span>
           </summary>
-          <div class="border-t border-border px-4 pt-3 pb-4 text-text-muted">
+          <div class="faq-answer px-4 pb-5 text-text-muted">
             <p class="leading-7">{item.a}</p>
           </div>
         </details>
@@ -41,3 +34,13 @@ const OPEN_BY_DEFAULT = 5
     </div>
   </div>
 </section>
+
+<style>
+  h2 { font-family: "Bricolage Grotesque Variable", sans-serif; letter-spacing: -.03em; }
+  summary::-webkit-details-marker { display: none; }
+  summary:hover { color: var(--accent); }
+  @media (prefers-reduced-motion: no-preference) {
+    details[open] .faq-answer { animation: answer-arrive 180ms cubic-bezier(.16,1,.3,1); }
+    @keyframes answer-arrive { from { opacity: .6; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+  }
+</style>

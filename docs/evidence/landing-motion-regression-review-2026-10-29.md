@@ -38,6 +38,8 @@ confirmation, mobile scene reveal, original scroll spacing and immutable media
 720×1280 / GOP 4 / CRF 24. Reduced-motion and Save-Data poster modes remain.
 
 Unrelated application fixes, shared navigation fixes and blog changes are retained.
+The current native FAQ keyboard behavior and the opaque journey-intro contrast
+protection are also retained; neither changes cinematic timing or media delivery.
 Homepage regression tests are aligned with the recovered behavior. Tests specific
 to the retired segmented/canvas renderer are replaced by the earlier controller's
 startup, priming, reversal, resize and stale-callback regression checks. The mobile
