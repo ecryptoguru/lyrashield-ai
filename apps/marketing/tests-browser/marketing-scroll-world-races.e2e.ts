@@ -1,266 +1,166 @@
 import { expect, test } from "@playwright/test"
+import {
+  delayMotionNotifications,
+  type DelayedMotionWindow,
+} from "./helpers/delayed-motion-notifications"
 
-test("offscreen suspension returns to scroll scrubbing with one paused decoder", async ({
-  page,
-}) => {
-  await page.goto("/")
-  const video = page.locator("[data-world-video]")
-  await expect(page.locator("scroll-world")).toHaveAttribute("data-world-state", "ready", {
-    timeout: 15000,
-  })
-  await page.locator("#faq").scrollIntoViewIfNeeded()
-  await expect.poll(() => video.evaluate((v) => (v as HTMLVideoElement).paused)).toBe(true)
-  await page.locator("#journey-scan").scrollIntoViewIfNeeded()
-  await expect.poll(() => video.evaluate((v) => (v as HTMLVideoElement).paused)).toBe(true)
-  await expect(video).toHaveCount(1)
-  await expect
-    .poll(() =>
-      page
-        .locator("scroll-world")
-        .evaluate((el) =>
-          Math.abs(
-            Number((el as HTMLElement).dataset.worldTime) -
-              Number((el as HTMLElement).dataset.worldPresented)
-          )
-        )
-    )
-    .toBeLessThan(0.04)
-})
+// Controlled event-order regressions must also pass on the first attempt in CI.
+test.describe.configure({ retries: 0 })
 
-test("media failure preserves readable story and poster", async ({ page }) => {
-  await page.route("**/*.mp4", (route) => route.abort())
-  await page.goto("/")
-  await expect(page.locator("scroll-world")).toHaveAttribute("data-world-state", "fallback", {
-    timeout: 15000,
-  })
-  await expect(page.locator("[data-world-poster] img")).toBeVisible()
-  await expect(page.getByRole("link", { name: "Explore the workflow" })).toHaveAttribute(
-    "href",
-    "#how-it-works"
-  )
-})
+type Frame = {
+  video: HTMLVideoElement
+  callback: VideoFrameRequestCallback
+  id: number
+}
+type RaceWindow = Window & { framesForTest: Frame[]; canceledForTest: number[] }
 
-test("height-only resize preserves the decoder", async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 })
-  await page.goto("/")
-  await expect(page.locator("scroll-world")).toHaveAttribute("data-world-state", "ready", {
-    timeout: 15000,
-  })
-  const video = page.locator("[data-world-video]")
-  const source = await video.getAttribute("src")
-  await page.setViewportSize({ width: 390, height: 740 })
-  await expect(video).toHaveAttribute("src", source!)
-  await expect(page.locator("scroll-world")).toHaveAttribute("data-world-state", "ready")
-})
-
-test("a failed media load can be retried without retaining the failed frame", async ({ page }) => {
-  await page.route("**/*.mp4", (route) => route.abort())
-  await page.goto("/")
-  const world = page.locator("scroll-world")
-  await expect(world).toHaveAttribute("data-world-state", "fallback", { timeout: 15000 })
-  await page.unroute("**/*.mp4")
-  await page.locator("[data-world-toggle]").click()
-  await expect(world).toHaveAttribute("data-world-state", "ready", { timeout: 15000 })
-  await expect(page.locator(".scroll-world__canvas")).toHaveCSS("opacity", "1")
-})
-
-test("changing orientation replaces the film and preserves scroll position", async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 })
-  await page.goto("/")
-  const world = page.locator("scroll-world")
-  await expect(world).toHaveAttribute("data-world-state", "ready", { timeout: 15000 })
-  await page.locator("#journey-scan").scrollIntoViewIfNeeded()
-  const oldSource = await page.locator("[data-world-video]").getAttribute("src")
-  await page.setViewportSize({ width: 844, height: 390 })
-  await expect(page.locator("[data-world-video]")).not.toHaveAttribute("src", oldSource!)
-  await expect(world).toHaveAttribute("data-world-state", "ready", { timeout: 15000 })
-  await expect
-    .poll(() =>
-      world.evaluate((el) =>
-        Math.abs(
-          Number((el as HTMLElement).dataset.worldTime) -
-            Number((el as HTMLElement).dataset.worldPresented)
-        )
-      )
-    )
-    .toBeLessThan(0.04)
-})
-
-test("motion off cancels an unfinished download without late activation", async ({ page }) => {
-  let release!: () => void
-  const pending = new Promise<void>((resolve) => {
-    release = resolve
-  })
-  await page.route("**/*.mp4", async (route) => {
-    await pending
-    await route.abort().catch(() => {})
-  })
-  await page.goto("/")
-  const world = page.locator("scroll-world")
-  await expect(world).toHaveAttribute("data-world-state", "loading")
-  await page.locator("[data-world-toggle]").click()
-  release()
-  await expect(world).toHaveAttribute("data-world-state", "static")
-  await expect(page.locator("[data-world-video]")).not.toHaveAttribute("src", /.+/)
-  await expect(world).not.toHaveAttribute("data-world-painted", "true")
-})
-
-test("oversized clip falls back before decoder activation", async ({ page }) => {
-  await page.route("**/*.mp4", (route) =>
-    route.fulfill({
-      contentType: "video/mp4",
-      body: Buffer.alloc(2 * 1024 * 1024 + 1),
-    })
-  )
-  await page.goto("/")
-  await expect(page.locator("scroll-world")).toHaveAttribute("data-world-state", "fallback")
-  await expect(page.locator("[data-world-video]")).not.toHaveAttribute("src", /.+/)
-})
-
-test("first frame does not wait for the rest of the film", async ({ page }) => {
-  const requests: string[] = []
-  await page.route("**/*.mp4", async (route) => {
-    requests.push(route.request().url())
-    if (route.request().url().endsWith("/clips/00.mp4")) await route.continue()
-    else await route.abort()
-  })
-  await page.goto("/")
-  await expect(page.locator("scroll-world")).toHaveAttribute("data-world-state", "ready", {
-    timeout: 15000,
-  })
-  await expect(page.locator(".scroll-world__canvas")).toHaveCSS("opacity", "1")
-  expect(requests.every((url) => url.includes("/clips/"))).toBe(true)
-})
-
-test("rapid distant jumps retain one decoder and the latest scroll target", async ({ page }) => {
-  await page.goto("/")
-  const world = page.locator("scroll-world")
-  await expect(world).toHaveAttribute("data-world-state", "ready", { timeout: 15000 })
-  const source = await page.locator("[data-world-video]").getAttribute("src")
-  for (const id of ["report", "target", "retest", "scan"]) {
-    await page
-      .locator(`#journey-${id}`)
-      .evaluate((el) =>
-        scrollTo({ top: el.getBoundingClientRect().top + scrollY - 200, behavior: "instant" })
-      )
-    await page.waitForTimeout(30)
-  }
-  await expect
-    .poll(() =>
-      world.evaluate((el) =>
-        Math.abs(
-          Number((el as HTMLElement).dataset.worldTime) -
-            Number((el as HTMLElement).dataset.worldPresented)
-        )
-      )
-    )
-    .toBeLessThan(0.04)
-  await expect(page.locator("[data-world-video]")).toHaveAttribute("src", source!)
-  await expect(world).toHaveAttribute("data-world-state", "ready")
-})
-
-test("unsupported streaming keeps the complete static story", async ({ page }) => {
-  await page.addInitScript(() => {
-    Object.defineProperty(globalThis, "MediaSource", { value: undefined })
-    Object.defineProperty(globalThis, "ManagedMediaSource", { value: undefined })
-  })
-  const requests: string[] = []
-  page.on("request", (request) => {
-    if (request.url().endsWith(".mp4")) requests.push(request.url())
-  })
-  await page.goto("/")
-  await expect(page.locator("scroll-world")).toHaveAttribute("data-world-state", "fallback")
-  await expect(page.locator("[data-world-poster] img")).toBeVisible()
-  expect(requests).toHaveLength(0)
-})
-
-test("deep links begin at the requested chapter without loading preceding clips", async ({
-  page,
-}) => {
-  await page.goto("/#journey-retest")
-  const world = page.locator("scroll-world")
-  await expect(world).toHaveAttribute("data-world-state", "ready", { timeout: 15000 })
-  await expect
-    .poll(async () => Number(await world.getAttribute("data-world-time")))
-    .toBeGreaterThan(35)
-  await expect
-    .poll(() =>
-      world.evaluate((el) =>
-        Math.abs(
-          Number((el as HTMLElement).dataset.worldTime) -
-            Number((el as HTMLElement).dataset.worldPresented)
-        )
-      )
-    )
-    .toBeLessThan(0.04)
-})
-
-test("a requested nearby frame takes priority over a stalled prefetch", async ({ page }) => {
-  let release!: () => void
-  let prefetched = false
-  const pending = new Promise<void>((resolve) => {
-    release = resolve
-  })
-  await page.route("**/clips/01.mp4", async (route) => {
-    prefetched = true
-    await pending
-    await route.abort().catch(() => {})
-  })
-  try {
+for (const initial of ["reduce", "no-preference"] as const) {
+  test(`reduced motion keeps a decoded full-width poster from ${initial}`, async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: initial })
     await page.goto("/")
     const world = page.locator("scroll-world")
-    await expect(world).toHaveAttribute("data-world-state", "ready", { timeout: 15000 })
-    await expect.poll(() => prefetched).toBe(true)
-    await page.evaluate(() => {
-      const boundary =
-        document.querySelector("#journey-target")!.getBoundingClientRect().top + scrollY
-      const anchor = Math.min(innerHeight * 0.48, 360)
-      scrollTo({ top: (boundary - anchor) * 0.4, behavior: "instant" })
-    })
-    await expect
-      .poll(async () => Number(await world.getAttribute("data-world-time")))
-      .toBeGreaterThanOrEqual(2)
-    expect(Number(await world.getAttribute("data-world-time"))).toBeLessThan(5)
+    if (initial === "no-preference") {
+      await expect(world).toHaveAttribute("data-world-painted", "true", { timeout: 10000 })
+      await page.emulateMedia({ reducedMotion: "reduce" })
+    }
+    await expect(world).toHaveAttribute("data-world-state", "static")
+    const poster = page.locator("[data-world-poster] img")
+    await poster.evaluate((image) => (image as HTMLImageElement).decode())
+    await expect(poster).toBeVisible()
     await expect
       .poll(() =>
-        world.evaluate((el) =>
-          Math.abs(
-            Number((el as HTMLElement).dataset.worldTime) -
-              Number((el as HTMLElement).dataset.worldPresented)
-          )
+        poster.evaluate(
+          (image) =>
+            image.getBoundingClientRect().width /
+            image.closest("scroll-world")!.getBoundingClientRect().width
         )
       )
-      .toBeLessThan(0.04)
-    await expect(world).toHaveAttribute("data-world-state", "ready")
-  } finally {
-    release()
-  }
-})
-
-test("background warming is bounded and does not advance a stationary scene", async ({ page }) => {
-  const active = new Set<string>()
-  let peak = 0
-  page.on("request", (request) => {
-    if (!request.url().endsWith(".mp4")) return
-    active.add(request.url())
-    peak = Math.max(peak, active.size)
+      .toBeGreaterThan(0.99)
+    await expect(page.locator("[data-world-video]")).not.toHaveAttribute("src", /.+/)
   })
-  page.on("requestfinished", (request) => active.delete(request.url()))
-  page.on("requestfailed", (request) => active.delete(request.url()))
+}
+
+for (const trigger of ["seek", "deadline", "scroll"]) {
+  test(`${trigger} reconciles reduced motion before a delayed preference notification`, async ({
+    page,
+  }) => {
+    await page.addInitScript(delayMotionNotifications)
+    await page.goto("/")
+    const world = page.locator("scroll-world")
+    await expect(world).toHaveAttribute("data-world-painted", "true", { timeout: 10000 })
+    await page.emulateMedia({ reducedMotion: "reduce" })
+    await page.evaluate((trigger) => {
+      if (trigger === "seek")
+        document.querySelector("[data-world-video]")!.dispatchEvent(new Event("seeked"))
+      else if (trigger === "scroll") window.dispatchEvent(new Event("scroll"))
+      else (window as unknown as DelayedMotionWindow).deadlineForTest!()
+    }, trigger)
+    await expect(world).toHaveAttribute("data-world-state", "static")
+    await expect(page.locator("[data-world-video]")).not.toHaveAttribute("src", /.+/)
+    await page.emulateMedia({ reducedMotion: "no-preference" })
+    await page.evaluate(() => (window as unknown as DelayedMotionWindow).deliverMotionForTest())
+    await expect(world).toHaveAttribute("data-world-painted", "true")
+  })
+}
+
+test("a retired decoder watchdog cannot fail the replacement video", async ({ page }) => {
+  await page.addInitScript(delayMotionNotifications)
   await page.goto("/")
   const world = page.locator("scroll-world")
-  await expect(world).toHaveAttribute("data-world-state", "ready", { timeout: 15000 })
-  const presented = await world.getAttribute("data-world-presented")
-  await expect
-    .poll(
-      () =>
-        page.locator("[data-world-video]").evaluate((element) => {
-          const ranges = (element as HTMLVideoElement).buffered
-          return ranges.length === 1 ? ranges.end(0) : 0
-        }),
-      { timeout: 15000 }
-    )
-    .toBeGreaterThan(55.9)
-  expect(peak).toBeLessThanOrEqual(3)
-  await expect(world).toHaveAttribute("data-world-presented", presented!)
+  await expect(world).toHaveAttribute("data-world-painted", "true", { timeout: 10000 })
+  await page.getByRole("button", { name: "Motion on" }).click()
+  await expect(world).toHaveAttribute("data-world-state", "static")
+  await page.getByRole("button", { name: "Motion off" }).click()
+  await expect(world).toHaveAttribute("data-world-painted", "true")
+  await page.evaluate(() => (window as unknown as DelayedMotionWindow).deadlineForTest!())
+  await expect(world).toHaveAttribute("data-world-state", "ready")
+  await expect(world).toHaveAttribute("data-world-painted", "true")
+})
+
+test("late seek events cannot resume frame observation after reduced motion", async ({ page }) => {
+  await page.goto("/")
+  const world = page.locator("scroll-world")
+  await expect(world).toHaveAttribute("data-world-painted", "true", { timeout: 10000 })
+  await page.emulateMedia({ reducedMotion: "reduce" })
+  await expect(world).toHaveAttribute("data-world-state", "static")
+  const requests = await page.evaluate(() => {
+    const world = document.querySelector<HTMLElement>("scroll-world")!
+    const video = world.querySelector<HTMLVideoElement>("video")!
+    const callbacks: VideoFrameRequestCallback[] = []
+    const original = video.requestVideoFrameCallback
+    video.requestVideoFrameCallback = (callback) => {
+      callbacks.push(callback)
+      return 999999 + callbacks.length
+    }
+    // A seek event already queued by the retired decoder can still be delivered.
+    video.dispatchEvent(new Event("seeked"))
+    callbacks[0]?.(performance.now(), {
+      mediaTime: Number(world.dataset.worldTime),
+    } as VideoFrameCallbackMetadata)
+    video.requestVideoFrameCallback = original
+    return callbacks.length
+  })
+  expect(requests).toBe(0)
+  await expect(world).toHaveAttribute("data-world-state", "static")
+  await expect(page.locator("[data-world-video]")).not.toHaveAttribute("src", /.+/)
+  await page.emulateMedia({ reducedMotion: "no-preference" })
+  await expect(world).toHaveAttribute("data-world-painted", "true")
+})
+
+for (const event of ["loadedmetadata", "error"])
+  test(`late ${event} cannot turn reduced motion into a media failure`, async ({ page }) => {
+    await page.goto("/")
+    const world = page.locator("scroll-world")
+    await expect(world).toHaveAttribute("data-world-painted", "true", { timeout: 10000 })
+    await page.emulateMedia({ reducedMotion: "reduce" })
+    await expect(world).toHaveAttribute("data-world-state", "static")
+    await page
+      .locator("[data-world-video]")
+      .evaluate((video, event) => video.dispatchEvent(new Event(event)), event)
+    await expect(world).toHaveAttribute("data-world-state", "static")
+    await expect(page.getByRole("button", { name: "Motion off" })).toBeVisible()
+    await page.emulateMedia({ reducedMotion: "no-preference" })
+    await expect(world).toHaveAttribute("data-world-painted", "true")
+  })
+
+test("a retired frame callback cannot erase the current decoder cancellation handle", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    const state = window as unknown as RaceWindow
+    state.framesForTest = []
+    state.canceledForTest = []
+    const request = HTMLVideoElement.prototype.requestVideoFrameCallback
+    const cancel = HTMLVideoElement.prototype.cancelVideoFrameCallback
+    HTMLVideoElement.prototype.requestVideoFrameCallback = function (callback) {
+      const id = request.call(this, callback)
+      state.framesForTest.push({ video: this, callback, id })
+      return id
+    }
+    HTMLVideoElement.prototype.cancelVideoFrameCallback = function (id) {
+      state.canceledForTest.push(id)
+      cancel.call(this, id)
+    }
+  })
+  await page.goto("/")
+  const world = page.locator("scroll-world")
+  await expect(world).toHaveAttribute("data-world-painted", "true", { timeout: 10000 })
+  const oldIndex = await page.evaluate(
+    () => (window as unknown as RaceWindow).framesForTest.length - 1
+  )
+  await page.getByRole("button", { name: "Motion on" }).click()
+  await expect(world).toHaveAttribute("data-world-state", "static")
+  await page.getByRole("button", { name: "Motion off" }).click()
+  await expect(world).toHaveAttribute("data-world-painted", "true")
+  const canceled = await page.evaluate((oldIndex) => {
+    const state = window as unknown as RaceWindow
+    const old = state.framesForTest[oldIndex]!
+    const current = state.framesForTest.at(-1)!
+    // Deliver an already queued callback after cancellation and a new load.
+    old.callback(performance.now(), { mediaTime: 0 } as VideoFrameCallbackMetadata)
+    document.querySelector<HTMLButtonElement>("[data-world-toggle]")!.click()
+    return state.canceledForTest.includes(current.id)
+  }, oldIndex)
+  expect(canceled).toBe(true)
+  await expect(world).toHaveAttribute("data-world-state", "static")
 })

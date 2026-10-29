@@ -2,9 +2,6 @@ import { existsSync, readFileSync, statSync } from "node:fs"
 import { resolve } from "node:path"
 import { spawnSync } from "node:child_process"
 import {
-  MOTION_CLIP_COUNT,
-  MOTION_CLIP_DURATION,
-  motionClipRelativePath,
   MOTION_CHAPTERS,
   MOTION_DURATION,
   MOTION_FPS,
@@ -70,36 +67,6 @@ for (const [variant, contract] of Object.entries(MOTION_VARIANTS)) {
     throw new Error(`${file} unexpectedly contains audio`)
   assertFaststart(file)
   assertShortGop(file, contract.gop)
-}
-
-// Verify every delivery frame against the continuous encode, not just metadata.
-function frameHashes(file) {
-  return capture("ffmpeg", ["-v", "error", "-i", file, "-map", "0:v:0", "-f", "framemd5", "-"])
-    .split("\n")
-    .filter((line) => line && !line.startsWith("#"))
-    .map((line) => line.split(",").at(-1).trim())
-}
-for (const variant of Object.keys(MOTION_VARIANTS)) {
-  const continuous = frameHashes(resolve(output, motionTrackRelativePath(variant)))
-  const clipped = []
-  for (let i = 0; i < MOTION_CLIP_COUNT; i++) {
-    const file = resolve(output, motionClipRelativePath(variant, i))
-    if (statSync(file).size > 2 * 1024 * 1024) throw new Error(`${file} exceeds the clip budget`)
-    const details = probe(file)
-    assertDuration(Number(details.format.duration), MOTION_CLIP_DURATION, MOTION_FPS)
-    assertFaststart(file)
-    const hashes = frameHashes(file)
-    if (hashes.length !== MOTION_CLIP_DURATION * MOTION_FPS) throw new Error(`${file} lost frames`)
-    clipped.push(...hashes)
-  }
-  if (JSON.stringify(continuous) !== JSON.stringify(clipped))
-    throw new Error(`${variant} clip seams change decoded frames`)
-}
-if (process.argv.includes("--web-only")) {
-  console.log(
-    "Web media verified: dimensions, codecs, GOPs, byte budgets and every decoded clip frame match."
-  )
-  process.exit(0)
 }
 
 for (const [variant, contract] of Object.entries(MOTION_VARIANTS)) {

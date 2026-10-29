@@ -1,9 +1,7 @@
-import { deriveClips } from "./derive-clips.mjs"
 import { mkdirSync, rmSync } from "node:fs"
 import { dirname, resolve } from "node:path"
 import { spawnSync } from "node:child_process"
 import {
-  MOTION_CLIP_DURATION,
   MOTION_CHAPTERS,
   MOTION_CHAPTER_DURATION,
   MOTION_DURATION,
@@ -46,10 +44,6 @@ function encodeTrack(input, target, contract) {
     String(contract.gop),
     "-keyint_min",
     String(contract.gop),
-    "-bf",
-    "0",
-    "-force_key_frames",
-    `expr:gte(t,n_forced*${MOTION_CLIP_DURATION})`,
     "-sc_threshold",
     "0",
     "-movflags",
@@ -98,7 +92,6 @@ for (const [variant, contract] of Object.entries(MOTION_VARIANTS)) {
   const input = resolve(masters, contract.master)
   const target = resolve(output, motionTrackRelativePath(variant))
   encodeTrack(input, target, contract)
-  deriveClips(target, resolve(output, variant, "clips"))
 
   MOTION_CHAPTERS.forEach((chapter, index) => {
     const poster = resolve(output, motionPosterRelativePath(chapter, variant, "webp"))
@@ -110,8 +103,6 @@ for (const [variant, contract] of Object.entries(MOTION_VARIANTS)) {
     )
   })
 }
-
-if (process.argv.includes("--web-only")) process.exit(0)
 
 mkdirSync(resolve(output, "launch"), { recursive: true })
 run("ffmpeg", [

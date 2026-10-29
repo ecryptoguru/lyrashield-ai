@@ -116,7 +116,7 @@ describe("marketing SEO metadata", () => {
     expect(methodology).toContain('const reviewed = "')
     expect(methodology).toContain("dateModified: reviewed")
     expect(methodology).toContain('const reviewed = "2026-10-24"')
-    expect(hero).toContain("retest before you ship.")
+    expect(hero).toContain("A fresh retest checks each fix.")
     expect(hero).not.toContain("A fresh retest confirms each fix")
     expect(kiloGuide).toContain("staging-web")
     expect(kiloGuide).not.toContain("staging-lyrafin-web")
@@ -340,9 +340,9 @@ describe("marketing SEO metadata", () => {
     // The hero primary CTA now jumps to the on-page Lite Check form instead of the
     // canonical page (founder-approved). The canonical page must still be reachable
     // from the homepage, so assert that rather than dropping the guarantee.
-    expect(premiumHero).toContain('href="#how-it-works"')
+    expect(premiumHero).toContain('href="#free-scan" data-cta-id="premium-hero-lite-check"')
     expect(source("../components/landing/HomeLiteScan.astro")).toContain('href="/scan"')
-    expect(source("../components/landing/HomeLiteScan.astro")).toContain('action="/scan"')
+    expect(premiumHero).toContain('action="/scan"')
     // The closing CTA is the single closer now and carries no methodology
     // button, so the guarantee is asserted where the homepage actually offers
     // it: block 2's evidence-states card.

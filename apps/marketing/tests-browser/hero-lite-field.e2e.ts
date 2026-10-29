@@ -46,7 +46,7 @@ test("stacks the field and button at 390px with touch-sized targets", async ({ p
   await page.goto("/")
 
   const input = await page.locator(URL_INPUT).boundingBox()
-  const button = await page.locator(".lite-entry__field-button").boundingBox()
+  const button = await page.locator(".premium-hero__field-button").boundingBox()
   expect(input).not.toBeNull()
   expect(button).not.toBeNull()
   // 44px minimum touch target.
@@ -141,7 +141,8 @@ test("keeps the hero field and sample card readable in the light theme", async (
   // Transparent cinematic surfaces need their composited pixel background,
   // rather than treating transparent CSS as opaque black.
   const measured = await page.evaluate(() => {
-    const hero = document.querySelector(".lite-entry") as HTMLElement
+    const hero = document.querySelector(".premium-hero") as HTMLElement
+    const card = document.querySelector(".premium-hero__artifact-card") as HTMLElement
     const rows: {
       selector: string
       color: string
@@ -168,15 +169,16 @@ test("keeps the hero field and sample card readable in the light theme", async (
           : {}),
       })
     }
-    const button = document.querySelector(".lite-entry__field-button") as HTMLElement
-    pick(".lite-entry__field-button", button)
-    pick(".lite-entry__field-label", hero)
+    const button = document.querySelector(".premium-hero__field-button") as HTMLElement
+    pick(".premium-hero__field-button", button)
+    pick(".premium-hero__field-label", hero)
     pick(
-      ".lite-entry__field-input",
-      document.querySelector(".lite-entry__field-input") as HTMLElement
+      ".premium-hero__field-input",
+      document.querySelector(".premium-hero__field-input") as HTMLElement
     )
-    pick(".lite-entry__field-consent", hero)
-    pick(".lite-entry__field-status", hero)
+    pick(".premium-hero__field-consent", hero)
+    pick(".premium-hero__field-status", hero)
+    pick(".premium-hero__artifact-findings li", card)
     return rows
   })
 
@@ -198,18 +200,18 @@ test("keeps the hero field and sample card readable in the light theme", async (
 
   // The input must actually read as a light control on the light hero rather
   // than a heavy dark box.
-  await expect(page.locator(URL_INPUT)).toHaveCSS("background-color", "rgb(245, 249, 252)")
+  await expect(page.locator(URL_INPUT)).toHaveCSS("background-color", "rgb(255, 255, 255)")
 
   // The error text is hidden until a validation failure, so its colour is read
   // from the stylesheet rather than a computed style.
   const errorRatio = await page.evaluate(() => {
-    const hero = document.querySelector(".lite-entry") as HTMLElement
-    const node = document.querySelector(".lite-entry__field-error") as HTMLElement
+    const hero = document.querySelector(".premium-hero") as HTMLElement
+    const node = document.querySelector(".premium-hero__field-error") as HTMLElement
     return {
       color: getComputedStyle(node).color,
       background: getComputedStyle(hero).backgroundColor,
       sample: (() => {
-        const rect = document.querySelector(".lite-entry__field-label")!.getBoundingClientRect()
+        const rect = document.querySelector(".premium-hero__field-label")!.getBoundingClientRect()
         return {
           left: Math.max(0, Math.floor(rect.left - 2)),
           top: Math.floor(rect.top + rect.height / 2),

@@ -1,118 +1,184 @@
----
-const scannerAvailable = Boolean(__MARKETING_SCANNER_URL__.replace(/\/$/, ""))
----
-<section id="free-scan" aria-labelledby="free-scan-heading" class="lite-entry">
-  <div>
-    <h2 id="free-scan-heading">Start with a Lite Check.</h2>
-    <p class="lite-entry__intro">A free, passive check of your public URL for exposed secrets, browser protections and HTTPS.</p>
-    <p class="lite-entry__limit">Surface signals only. It cannot prove your app is secure.</p>
-    <a class="lite-entry__link" href="/scan">See coverage and limits<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M4 12h15m-6-6 6 6-6 6" /></svg></a>
+<section id="free-scan" aria-labelledby="free-scan-heading" class="overflow-x-clip border-y border-border bg-bg-raised/55 px-4 py-10 sm:px-6 sm:py-12 lg:px-8 lg:py-14">
+  <div class="mx-auto min-w-0 max-w-6xl" data-reveal-group>
+    <div class="min-w-0 max-w-xl" data-reveal>
+      <p class="font-mono text-xs font-semibold tracking-[.2em] text-accent uppercase">Passive and read-only</p>
+      <h2 id="free-scan-heading" class="mt-4 text-3xl font-semibold tracking-tight text-text sm:text-4xl">Understand your Lite Check result.</h2>
+      <p class="mt-5 text-lg leading-8 text-text-muted">The free Lite Check above reviews exposed secrets, browser protections, frontend data-layer signals and HTTPS at the public URL you authorize. Here is how to read its results.</p>
+      <p class="mt-4 text-sm leading-6 text-text-muted">For checks that never leave your browser, use the <a href="/tools/webmcp-security-checker" class="font-semibold text-accent underline decoration-accent/40 underline-offset-4">WebMCP Security Checker</a> or other <a href="/tools" class="font-semibold text-accent underline decoration-accent/40 underline-offset-4">browser-local tools</a>.</p>
+      <a href="/scan" class="mt-5 inline-flex min-h-11 items-center text-sm font-semibold text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">What it covers / what it cannot prove</a>
+    </div>
+
   </div>
-  <div>
-    <form id="hero-lite-form" class="lite-entry__field" action="/scan" method="get" novalidate>
-      <label class="lite-entry__field-label" for="hero-scan-url">Public app URL</label>
-      <div class="lite-entry__field-row">
-        <input
-          id="hero-scan-url"
-          type="text"
-          inputmode="url"
-          autocomplete="url"
-          maxlength="2048"
-          placeholder="example.com or https://your-app.com"
-          disabled={!scannerAvailable}
-          class="lite-entry__field-input"
-        />
-        <button
-          type="submit"
-          disabled={!scannerAvailable}
-          data-cta-id="hero_lite_check_submit"
-          class="lite-entry__field-button"
-        >
-          Run Lite Check
-        </button>
-      </div>
-      <label class="lite-entry__field-consent">
-        <input
-          id="hero-scan-authorized"
-          type="checkbox"
-          disabled={!scannerAvailable}
-          class="lite-entry__field-check"
-        />
-        <span
-          >I own this app or have permission to test it. The check is passive and read-only. By
-          scanning I agree to the <a href="/terms">Terms</a>.</span
-        >
-      </label>
-      {
-        !scannerAvailable && (
-          <p class="lite-entry__field-status" role="status">
-            The separately protected scanner API is not connected in this environment.
-          </p>
-        )
-      }
-      <p id="hero-scan-error" class="lite-entry__field-error hidden" role="alert"></p>
-      <noscript>
-        <p class="lite-entry__field-status">
-          <a href="/scan">Open the free Lite Check</a> to run the check without JavaScript.
-        </p>
-      </noscript>
-    </form>
-  </div>
+
+  {/* Shows the shape of a Lite Check result before the visitor runs one. Sample
+      values, real check names and the honest closing line: a passive check
+      cannot prove absence. All text, so it stays crawlable. */}
+  <figure class="lite-sample mx-auto mt-12 max-w-6xl" data-reveal="scale">
+    <figcaption class="lite-sample__head">
+      <span class="lite-sample__eyebrow">What a result looks like</span>
+      <span class="lite-sample__note">Sample values · your result depends on your app</span>
+    </figcaption>
+    <ul class="lite-sample__list">
+      <li class="lite-sample__row">
+        <i class="lite-sample__dot is-warn" aria-hidden="true"></i>
+        <span class="lite-sample__name">Security headers</span>
+        <span class="lite-sample__verdict is-warn">3 missing</span>
+        <span class="lite-sample__detail">No Content-Security-Policy, no HSTS, no X-Content-Type-Options.</span>
+      </li>
+      <li class="lite-sample__row">
+        <i class="lite-sample__dot is-warn" aria-hidden="true"></i>
+        <span class="lite-sample__name">Frontend data-layer signals</span>
+        <span class="lite-sample__verdict is-warn">1 to review</span>
+        <span class="lite-sample__detail">A client bundle references a key-shaped string. Worth a look before launch.</span>
+      </li>
+      <li class="lite-sample__row">
+        <i class="lite-sample__dot is-pass" aria-hidden="true"></i>
+        <span class="lite-sample__name">HTTPS and redirects</span>
+        <span class="lite-sample__verdict is-pass">Clean</span>
+        <span class="lite-sample__detail">Valid certificate, HTTP redirects to HTTPS.</span>
+      </li>
+      <li class="lite-sample__row">
+        <i class="lite-sample__dot is-muted" aria-hidden="true"></i>
+        <span class="lite-sample__name">CORS policy</span>
+        <span class="lite-sample__verdict is-muted">Not applicable</span>
+        <span class="lite-sample__detail">No cross-origin API surface was reachable from the public page.</span>
+      </li>
+    </ul>
+    <p class="lite-sample__foot">
+      A passive check reads what your app already exposes publicly. It can show you what is missing;
+      it cannot prove that nothing is wrong. The deeper questions — auth flows, logic and whether a fix
+      actually held — need the full loop.{" "}
+      <a href="/scan">What the Lite Check covers and what it cannot prove</a>
+    </p>
+  </figure>
 </section>
-<script>
-  import { bindLiteHandoff } from "../../lib/lite-handoff"
-  import { sanitizeMarketingProperties } from "../../lib/posthog-privacy"
-
-  // The dedicated form never fetches a target. It validates, privately parks
-  // the authorized URL for /scan, and navigates through the shared handoff.
-  //
-  // Analytics carry the CTA id and a boolean only. The typed URL is never a
-  // property, so it cannot leave this component.
-  const capture = (valid: boolean) =>
-    window.posthog?.capture(
-      "hero_lite_check_submit",
-      sanitizeMarketingProperties("hero_lite_check_submit", {
-        cta_id: "hero_lite_check_submit",
-        valid,
-      }) ?? {}
-    )
-
-  const error = () => document.querySelector<HTMLElement>("#hero-scan-error")
-  bindLiteHandoff({
-    formId: "hero-lite-form",
-    inputId: "hero-scan-url",
-    errorId: "hero-scan-error",
-    consentId: "hero-scan-authorized",
-    onClear: () => error()?.classList.add("hidden"),
-    onError: (message) => {
-      const node = error()
-      if (!node) return
-      node.textContent = message
-      node.classList.remove("hidden")
-      capture(false)
-    },
-    onSuccess: () => capture(true),
-  })
-</script>
 
 <style>
-  .lite-entry { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: clamp(2rem, 6vw, 6rem); padding: clamp(3rem, 6vw, 5rem) max(1.25rem, calc((100% - 1200px) / 2)); border-block: 1px solid var(--border); background: var(--bg-raised); scroll-margin-top: 5rem; }
-  h2 { margin: 0; font: 750 clamp(2rem, 4vw, 3rem)/1.1 "Bricolage Grotesque Variable", sans-serif; letter-spacing: -.03em; text-wrap: balance; }
-  .lite-entry__intro { max-width: 40ch; margin-top: 1rem; color: var(--text-muted); line-height: 1.7; }
-  .lite-entry__limit { margin-top: .75rem; font-size: .875rem; color: var(--text-muted); }
-  .lite-entry__link { display: inline-flex; align-items: center; gap: .5rem; min-height: 44px; margin-top: .75rem; color: var(--accent); font-size: .875rem; font-weight: 600; }
-  .lite-entry__field { margin: 0; min-width: 0; }
-  .lite-entry__field-label { display: block; margin-bottom: .6rem; font-weight: 600; font-size: .875rem; }
-  .lite-entry__field-row { display: flex; flex-wrap: wrap; gap: .6rem; }
-  .lite-entry__field-input { flex: 1 1 12rem; min-width: 0; max-width: 100%; min-height: 52px; padding: .75rem 1rem; border: 1px solid var(--border); border-radius: .5rem; background: var(--bg); color: var(--text); font-size: 1rem; }
-  .lite-entry__field-input::placeholder { color: var(--text-muted); opacity: 1; }
-  .lite-entry__field-button { min-height: 52px; padding: .75rem 1.1rem; border-radius: .5rem; background: var(--accent); color: var(--bg); font-weight: 650; cursor: pointer; }
-  .lite-entry__field-button:disabled { background: var(--bg); color: var(--text-muted); border: 1px solid var(--border); cursor: not-allowed; }
-  .lite-entry__field-consent { display: flex; align-items: start; gap: .65rem; margin-top: 1rem; min-height: 44px; font-size: .8rem; line-height: 1.65; color: var(--text-muted); cursor: pointer; }
-  .lite-entry__field-check { flex: none; width: 1.1rem; height: 1.1rem; margin-top: .15rem; accent-color: var(--accent); }
-  .lite-entry__field-consent a, noscript a { color: var(--accent); text-decoration: underline; text-underline-offset: .2em; }
-  .lite-entry__field-status { margin-top: .75rem; color: var(--text-muted); font-size: .8rem; line-height: 1.6; }
-  .lite-entry__field-error { margin-top: .5rem; color: var(--terminal-warning-text); font-size: .875rem; line-height: 1.6; }
-  input:focus-visible, button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
-  @media (max-width: 767px) { .lite-entry { grid-template-columns: minmax(0, 1fr); } }
+  .lite-sample {
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: 0.75rem;
+    background: var(--bg);
+  }
+
+  .lite-sample__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem 1rem;
+    border-bottom: 1px solid var(--border);
+    padding: 0.9rem 1.15rem;
+    background: color-mix(in srgb, var(--bg-raised) 70%, transparent);
+    font-family: "JetBrains Mono Variable", monospace;
+    font-size: 0.72rem;
+  }
+
+  .lite-sample__eyebrow {
+    color: var(--accent);
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .lite-sample__note {
+    color: var(--text-muted);
+  }
+
+  .lite-sample__list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .lite-sample__row {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 0.35rem 0.75rem;
+    padding: 0.95rem 1.15rem;
+  }
+
+  .lite-sample__row + .lite-sample__row {
+    border-top: 1px solid var(--border);
+  }
+
+  .lite-sample__dot {
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 50%;
+    background: currentColor;
+  }
+
+  .lite-sample__name {
+    color: var(--text);
+    font-weight: 600;
+  }
+
+  .lite-sample__verdict {
+    font-family: "JetBrains Mono Variable", monospace;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-align: right;
+  }
+
+  .lite-sample__detail {
+    grid-column: 2 / -1;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    line-height: 1.55;
+  }
+
+  /* Under 480px the name and the right-aligned verdict crowd each other, so the
+     verdict drops onto its own line under the check name. */
+  @media (max-width: 479px) {
+    .lite-sample__row {
+      grid-template-columns: auto 1fr;
+    }
+
+    .lite-sample__verdict {
+      grid-column: 2 / -1;
+      text-align: left;
+    }
+  }
+
+  /* Theme-aware state colours: darker in light mode so the text keeps its
+     contrast ratio, brighter on the dark surface. */
+  .lite-sample {
+    --sample-pass: #1f7a4d;
+    --sample-warn: var(--terminal-warning-text);
+  }
+
+  :root[data-theme="dark"] .lite-sample {
+    --sample-pass: #5cdb95;
+    --sample-warn: #f5b84b;
+  }
+
+  .is-pass {
+    color: var(--sample-pass);
+  }
+
+  .is-warn {
+    color: var(--sample-warn);
+  }
+
+  .is-muted {
+    color: var(--text-muted);
+  }
+
+  .lite-sample__foot {
+    margin: 0;
+    border-top: 1px solid var(--border);
+    padding: 0.95rem 1.15rem 1.1rem;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    line-height: 1.6;
+  }
+
+  .lite-sample__foot a {
+    color: var(--accent);
+    font-weight: 600;
+    text-decoration: underline;
+    text-underline-offset: 4px;
+  }
 </style>
