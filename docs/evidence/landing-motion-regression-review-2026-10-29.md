@@ -52,3 +52,26 @@ Motion pipeline tests: 30 passed. Device-profile screenshots show the restored
 mobile scene window, touch-sized CTAs and an operable mobile menu on Android Chrome
 and iPhone WebKit profiles. These are emulated browser profiles; physical-device
 acceptance remains unverified. Browser and CI results are recorded in the recovery PR.
+
+## Production follow-up
+
+The recovery shipped as `1a219c12fc7d93557f4b1a577ec1c89c44815ec6` through
+[release 40861647131](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/40861647131).
+The public revision and original media hash were read back. Unmodified live tests
+passed cold startup, continuous scrolling and wheel reversal. The continuous-frame
+p95 was 32.6 ms desktop and 31.8 ms mobile under 4× CPU throttling. A separate
+cold-navigation probe at 4 Mbit/s, 150 ms latency and 4× CPU throttling measured
+first-frame times of 1498 ms desktop and 1538 ms mobile.
+
+Rapid distant jumps still failed the catch-up target. One desktop trace contained
+145 media range requests across 40 jumps; network waits for uncached ranges were
+commonly 160–200 ms. Easing a large jump decoded intermediate scenes and caused
+extra requests. The focused follow-up seeks directly when one scroll update changes
+the target by more than four seconds, retaining easing for ordinary movement.
+No encoding, resolution, preload or delivery architecture is changed.
+
+Candidate browser tests using the actual media host measured 40-jump p95 of 367 ms
+for the iPhone 13 WebKit profile and 258 ms for the Pixel 7 Chromium profile.
+These candidate tests substitute the local HTML and script assets at the canonical
+origin; they are not proof of the follow-up being deployed. Production acceptance
+must read back the follow-up revision and rerun against the unmodified public page.

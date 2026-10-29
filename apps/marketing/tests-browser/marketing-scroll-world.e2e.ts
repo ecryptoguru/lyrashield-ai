@@ -85,6 +85,29 @@ test("wheel-sized steps ease the video in both directions while the page moves i
   }
 })
 
+test("distant jumps seek the destination without decoding intervening scenes", async ({ page }) => {
+  await page.goto("/")
+  const world = page.locator("scroll-world")
+  await expect(world).toHaveAttribute("data-world-painted", "true")
+  for (const id of ["retest", "target", "report", "scan"]) {
+    const result = await page.evaluate(async (id) => {
+      const world = document.querySelector<HTMLElement>("scroll-world")!
+      const video = world.querySelector<HTMLVideoElement>("video")!
+      const requests: number[] = []
+      const record = () => requests.push(video.currentTime)
+      video.addEventListener("seeking", record)
+      document.getElementById(`journey-${id}`)!.scrollIntoView({ behavior: "instant" })
+      await new Promise((resolve) => setTimeout(resolve, 500))
+      video.removeEventListener("seeking", record)
+      return { requests, target: Number(world.dataset.worldTime) }
+    }, id)
+    expect(result.requests.length).toBeGreaterThan(0)
+    for (const requested of result.requests)
+      expect(Math.abs(requested - result.target)).toBeLessThan(1.1 / MOTION_FPS)
+    await expect(world).toHaveAttribute("data-world-state", "ready")
+  }
+})
+
 test("full animation presents the correct frames through forward and reverse navigation", async ({
   page,
 }) => {

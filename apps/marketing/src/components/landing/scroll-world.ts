@@ -258,6 +258,9 @@ class ScrollWorld extends HTMLElement {
       this.eased = easeVideoTime(this.motionFrom, this.desired, now - this.motionStart)
       const next = Math.round(time * this.fps) / this.fps
       if (next !== this.desired) {
+        // A distant anchor/scrollbar jump must not fetch intermediate scenes.
+        // Keep easing ordinary wheel/touch movement; seek large jumps directly.
+        if (Math.abs(next - this.desired) > 4) this.eased = next
         this.motionFrom = this.eased
         this.motionStart = now
         this.desired = next
