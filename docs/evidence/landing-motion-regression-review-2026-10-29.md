@@ -10,6 +10,17 @@ substantially unchanged through the recent product PRs, including #1039 and #104
 The recovery source is `bb4c6c3c3387c4b73c9d02322efa9e96aa68f885` (PR #1048).
 This is a source recovery baseline, not a new claim that every phone has been tested.
 
+## Earlier motion lineage
+
+- #88 introduced the original scroll-world landing.
+- #290 introduced responsive Motion V2 and its shared media contract.
+- #291 and #292 revised the mobile story layout and scroll behavior.
+- #979 introduced the current continuous V3 world and native-video controller,
+  including the mobile reveal fix in `f48daa0d0`.
+- #996 changed hero copy; it did not replace that controller.
+- #1021 added lifecycle guards and static-poster protection. Those guards are
+  included in the recovered #1048 source.
+
 ## Confirmed regressions
 
 | Change                               | Evidence and effect                                                                                                                                                                                                            |

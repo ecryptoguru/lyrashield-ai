@@ -49,9 +49,9 @@ test("homepage has one authorized Lite URL entry and a sample explanation", asyn
   await page.goto("/")
   await expect(page.locator("#hero-lite-form")).toHaveCount(1)
   await expect(page.locator("#home-lite-scan-form")).toHaveCount(0)
-  await expect(page.getByRole("link", { name: "Explore the workflow" })).toHaveAttribute(
+  await expect(page.getByRole("link", { name: "See a sample Lite result" })).toHaveAttribute(
     "href",
-    "#how-it-works"
+    "#free-scan"
   )
   await expect(page.locator("#hero-scan-authorized")).toBeAttached()
 })
