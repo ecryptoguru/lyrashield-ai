@@ -75,3 +75,33 @@ for the iPhone 13 WebKit profile and 258 ms for the Pixel 7 Chromium profile.
 These candidate tests substitute the local HTML and script assets at the canonical
 origin; they are not proof of the follow-up being deployed. Production acceptance
 must read back the follow-up revision and rerun against the unmodified public page.
+
+## Deployed follow-up and edge-cache verification
+
+PR #1056 shipped as `6c4fb264973a5b807bf6fa10ca220be7dc41cc21` through successful
+[release 40864406341](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/40864406341).
+Required checks passed before the normal protected merge: 627 marketing unit tests
+and 291 browser checks passed. Public readback confirmed the merged revision.
+Live iPhone 13 WebKit, Pixel 7 Chromium and desktop Chromium profiles passed
+navigation, both themes, motion preferences, orientation, FAQ and empty form
+validation. Seven Android touch-input gestures at 4× CPU converged without fallback.
+These remain emulated profiles, not physical-phone acceptance.
+
+After authenticated inspection showed zero cache rules, the operator-authorized
+media repair added rule `4c688df13f824e998f7010d79cb94961`. Only the two current
+immutable MP4 paths are eligible. Origin TTL is respected; there is no application
+or API cache change. Both files then returned `CF-Cache-Status: HIT` with valid
+HTTP 206 range responses. The motion README records scope and rollback.
+
+The subsequent unmodified live performance suite passed 7 of 12 checks. Both cold
+startup checks, both wheel-reversal checks and both continuous-frame checks passed.
+Mobile 4× CPU catch-up passed; the other five cold distant-jump profiles missed
+their p95 limits. Continuous new-frame p95/max were 32.8/109 ms desktop and
+25.0/125.9 ms mobile. Excluding the first four cold scene requests, buffered-jump
+p95 ranged from 17.4 to 123.1 ms across the six CPU profiles. This buffered subset
+does not replace the failed cold-jump acceptance gate.
+
+The trace still showed network waits on uncached browser ranges even when the edge
+reported HIT. Cache eligibility is therefore confirmed, but it has not resolved
+all cold-jump latency targets. Preserve that distinction; do not claim every
+production performance gate passes or introduce a full-download startup barrier.

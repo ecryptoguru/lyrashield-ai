@@ -54,3 +54,23 @@ No production upload, DNS change, homepage promotion, merge, or Cloudflare deplo
 The approved brighter desktop and portrait films were finalized on October 10, 2026. Web delivery uses 1440×810 / CRF 28 / two-frame GOP for desktop and 720×1280 / CRF 24 / four-frame GOP for portrait, within the 16 MiB and 10 MiB budgets. Native masters retain 1920×1080 and 1080×1920 resolution. The current canvas-only compositions have identical native and website pixels, so this release derives both web tracks from the full-resolution native masters.
 
 Release media lives at `https://media.lyrashieldai.com/assurance-world/v3/74787c7fe35196b2/`. Codec, GOP, duration, silence, faststart, byte-budget and poster checks passed; two software renders per aspect ratio produced matching sampled source-frame hashes. Browser evidence includes 24 WebKit desktop/iPhone-sized checks, 12 actual-film Chromium performance checks, and a native macOS Safari smoke covering frame presentation, forward/reverse chapter navigation and the motion toggle. A physical iPhone was not tested. HyperFrames remains pinned to `0.7.107`; a renderer update must pass composition checks and rendered-frame verification before it is retained.
+
+## Production edge caching
+
+The October 29 recovery uses Cloudflare cache rule
+`4c688df13f824e998f7010d79cb94961`, named
+`Cache immutable landing motion 74787c7fe35196b2`. It matches only `GET`/`HEAD`
+requests on `media.lyrashieldai.com` for the desktop and portrait
+`assurance-world.mp4` objects under the current immutable hash. Responses are
+eligible for cache; Edge TTL uses the origin cache-control header and bypasses
+cache when that header is absent. Browser TTL and cache keys use their defaults.
+
+Both object paths were read back as HTTP 206 with correct Content-Range and
+`CF-Cache-Status: HIT`. Cache eligibility alone does not establish a latency
+guarantee. See the dated [production evidence](../../docs/evidence/landing-motion-regression-review-2026-10-29.md).
+
+When approving a new render hash, extend the rule to the new exact public MP4
+paths before promotion and verify range delivery, CORS and cache hits. Retain the
+previous paths for rollback. Never broaden this rule to the application or API.
+To reverse this operational setting, disable this single rule in Cloudflare Cache
+Rules; no media object or deployment needs to be overwritten.
