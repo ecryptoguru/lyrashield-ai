@@ -74,3 +74,18 @@ paths before promotion and verify range delivery, CORS and cache hits. Retain th
 previous paths for rollback. Never broaden this rule to the application or API.
 To reverse this operational setting, disable this single rule in Cloudflare Cache
 Rules; no media object or deployment needs to be overwritten.
+
+## Buffered motion startup
+
+The current homepage downloads the selected original-quality film before enabling
+motion. The founder approved a longer loading phase on October 29 to remove cold
+scene network waits. A poster and progress message remain visible, and native
+scrolling plus page actions stay usable. No media is re-encoded or republished.
+The native player uses a bounded local Blob; download failure leaves the complete
+static story available. Motion Off, reduced motion, Save-Data, hidden tabs and
+retired sources cancel pending work. Decoder watchdogs apply after buffering.
+
+The cold-start benchmark now permits up to 90 seconds at 4 Mbit/s and 150 ms RTT.
+This replaces the former three-second motion-start requirement by explicit approval.
+The desktop/mobile seek p95 limits remain 250/500 ms, continuous-frame p95 remains
+60 ms and maximum frame gap remains 150 ms. Page LCP and CLS targets are unchanged.

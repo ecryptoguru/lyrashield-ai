@@ -5,6 +5,8 @@ import {
   type ChapterBand,
 } from "../../lib/scroll-world-mapping"
 import type { MotionMediaManifest } from "../../lib/motion-manifest"
+import { bufferMotion } from "../../lib/buffer-motion"
+import { MOTION_VARIANTS } from "../../../../marketing-motion/scripts/motion-media-contract.mjs"
 
 /** Native scrolling owns position; the media layer is a bounded follower. */
 class ScrollWorld extends HTMLElement {
@@ -36,6 +38,8 @@ class ScrollWorld extends HTMLElement {
   private epoch = 0
   private anchor = 0
   private fps = 30
+  private download?: AbortController
+  private objectUrl = ""
 
   private mediaVariant() {
     return innerWidth < 1024 && innerHeight > innerWidth ? "portrait" : "desktop"
@@ -81,6 +85,10 @@ class ScrollWorld extends HTMLElement {
           this.measure()
           this.preference()
         } else {
+          if (this.download) {
+            this.release()
+            this.dataset.worldState = "poster"
+          }
           removeEventListener("scroll", this.queue)
           cancelAnimationFrame(this.frame)
           this.frame = 0
@@ -148,7 +156,14 @@ class ScrollWorld extends HTMLElement {
       this.release()
       this.dataset.worldState = "static"
       this.queue()
-    } else if (this.near && !this.failed && !this.video.getAttribute("src")) this.loadVariant()
+    } else if (
+      this.near &&
+      !document.hidden &&
+      !this.failed &&
+      !this.video.getAttribute("src") &&
+      !this.download
+    )
+      void this.loadVariant()
   }
 
   private geometry = () => {
@@ -193,14 +208,50 @@ class ScrollWorld extends HTMLElement {
     this.queue()
   }
 
-  private loadVariant() {
+  private async loadVariant() {
     if (!("requestVideoFrameCallback" in this.video)) {
       this.fail()
       return
     }
     this.variant = this.mediaVariant()
+    this.dataset.worldVariant = this.variant
     const track = this.variant === "portrait" ? this.manifest.portrait : this.manifest.desktop
     this.dataset.worldState = "loading"
+    const epoch = this.epoch
+    const controller = new AbortController()
+    this.download = controller
+    const timeout = window.setTimeout(() => controller.abort(), 120000)
+    const status = this.querySelector<HTMLElement>("[data-world-status]")
+    let lastProgress = -1
+    if (status) status.textContent = "Preparing smooth motion…"
+    try {
+      const blob = await bufferMotion(
+        track.src,
+        controller.signal,
+        MOTION_VARIANTS[this.variant === "portrait" ? "portrait" : "desktop"].budgetBytes,
+        (percent) => {
+          const step = Math.floor(percent / 10) * 10
+          if (epoch !== this.epoch || step === lastProgress) return
+          lastProgress = step
+          if (status) status.textContent = `Preparing smooth motion… ${step}%`
+        }
+      )
+      if (
+        epoch !== this.epoch ||
+        !this.isConnected ||
+        !this.allowed() ||
+        document.hidden ||
+        !this.near
+      )
+        return
+      this.objectUrl = URL.createObjectURL(blob)
+    } catch {
+      if (epoch === this.epoch) this.fail()
+      return
+    } finally {
+      clearTimeout(timeout)
+      if (this.download === controller) this.download = undefined
+    }
     // readyState can change before loadedmetadata is dispatched. Block scroll
     // seeks until the first frame has completed the startup handshake.
     this.priming = true
@@ -208,7 +259,7 @@ class ScrollWorld extends HTMLElement {
     // A brief, slow prime makes occluded portrait frames reach the compositor
     // without advancing past the requested frame before it can be acknowledged.
     this.video.defaultPlaybackRate = 0.25
-    this.video.src = track.src
+    this.video.src = this.objectUrl
     this.video.preload = "auto"
     this.video.load()
     this.armDeadline(5000)
@@ -338,6 +389,8 @@ class ScrollWorld extends HTMLElement {
         if (correctChapter) {
           this.dataset.worldPainted = "true"
           this.dataset.worldState = "ready"
+          const status = this.querySelector("[data-world-status]")
+          if (status) status.textContent = ""
         }
       } else if (
         this.inFlight &&
@@ -368,6 +421,8 @@ class ScrollWorld extends HTMLElement {
   }
   private release() {
     this.epoch++
+    this.download?.abort()
+    this.download = undefined
     this.clearDeadline()
     if (!this.video) return
     if (this.presentation) this.video.cancelVideoFrameCallback(this.presentation)
@@ -376,6 +431,10 @@ class ScrollWorld extends HTMLElement {
     this.video.removeAttribute("src")
     this.video.preload = "none"
     this.video.load()
+    if (this.objectUrl) URL.revokeObjectURL(this.objectUrl)
+    this.objectUrl = ""
+    const status = this.querySelector("[data-world-status]")
+    if (status) status.textContent = ""
     this.inFlight = false
     this.priming = false
     delete this.dataset.worldPainted
@@ -392,10 +451,15 @@ class ScrollWorld extends HTMLElement {
   }
   private documentVisibility = () => {
     if (document.hidden) {
+      if (this.download) {
+        this.release()
+        this.dataset.worldState = "poster"
+      }
       cancelAnimationFrame(this.frame)
       this.frame = 0
       this.clearDeadline()
     } else {
+      this.preference()
       this.queue()
       if (this.allowed() && !this.failed && this.near && (this.inFlight || this.priming))
         this.armDeadline(2000)
