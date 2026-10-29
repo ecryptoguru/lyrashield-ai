@@ -337,10 +337,13 @@ test("homepage reflows at common widths and with 200 percent root text sizing", 
       return rect ? { left: rect.left, right: rect.right } : undefined
     })(),
   }))
+  // scrollWidth rounds fractional layout differently across browser platforms.
+  // Allow one pixel, as in the other viewport checks; control bounds below
+  // still have to fit within the viewport.
   expect(
     zoomedLayout.documentWidth,
     `document overflow at 200% text: ${JSON.stringify(zoomedLayout.overflowingElements)}`
-  ).toBeLessThanOrEqual(320)
+  ).toBeLessThanOrEqual(321)
   expect(zoomedLayout.heroClip).toBeDefined()
   expect(zoomedLayout.heroClip!.overflowX).toBe("hidden")
   expect(
