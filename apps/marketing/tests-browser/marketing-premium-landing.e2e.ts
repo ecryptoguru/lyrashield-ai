@@ -3,7 +3,9 @@ import { mkdirSync, writeFileSync } from "node:fs"
 
 // Capture both sides at identical widths. Baseline mode is opt-in and never
 // changes expected production behavior or substitutes synthetic media evidence.
-test("premium homepage visual and content budget", async ({ page }, info) => {
+test("recovered homepage reveals cinema and keeps mobile controls usable", async ({
+  page,
+}, info) => {
   test.skip(info.project.name !== "chromium", "The matrix supplies its own viewports")
   test.setTimeout(120000)
   const phase = process.env.LANDING_BASELINE === "1" ? "before" : "after"
@@ -37,15 +39,15 @@ test("premium homepage visual and content budget", async ({ page }, info) => {
       results.push({ theme, ...metrics })
       expect(metrics.overflow).toBeLessThanOrEqual(1)
       if (phase === "after") {
-        const baselineHeight: Record<number, number> = {
-          360: 20227,
-          390: 19664,
-          768: 15575,
-          1280: 14138,
-          1440: 14265,
+        // Recovery restores the original scroll distance; compression budgets
+        // from the withdrawn redesign must not shorten the cinematic timeline.
+        if (width < 1024) {
+          const window = await page
+            .locator(".premium-hero__content")
+            .evaluate((el) => parseFloat(getComputedStyle(el).paddingTop))
+          expect(window).toBeGreaterThanOrEqual(112)
+          await expect(page.locator(".premium-hero__veil")).toHaveCSS("background-image", "none")
         }
-        expect(metrics.visibleWordsExcludingPricing).toBeLessThanOrEqual(782)
-        expect(metrics.pageHeight).toBeLessThanOrEqual(baselineHeight[width]! * 0.75)
         if (width === 390) expect(metrics.ctaBottom).toBeLessThan(844)
       }
       await page.screenshot({ path: `${output}/${width}-${theme}.png`, fullPage: true })
@@ -62,7 +64,6 @@ test("homepage answers and structured data agree without JavaScript", async ({ b
   await page.goto("http://127.0.0.1:8787/")
   await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1)
   const faq = page.locator("#faq details")
-  await expect(faq).toHaveCount(4)
   const entities = await page.locator('script[type="application/ld+json"]').allTextContents()
   const flatten = (value: unknown): Record<string, unknown>[] => {
     if (Array.isArray(value)) return value.flatMap(flatten)
@@ -73,7 +74,8 @@ test("homepage answers and structured data agree without JavaScript", async ({ b
   const nodes = entities.flatMap((entity) => flatten(JSON.parse(entity)))
   const faqSchema = nodes.find((node) => node["@type"] === "FAQPage")!
   const questions = faqSchema.mainEntity as { name: string; acceptedAnswer: { text: string } }[]
-  expect(questions).toHaveLength(4)
+  expect(questions.length).toBeGreaterThan(0)
+  await expect(faq).toHaveCount(questions.length)
   for (const [index, question] of questions.entries()) {
     await expect(faq.nth(index).locator("summary")).toHaveText(question.name)
     expect(await faq.nth(index).locator("p").textContent()).toBe(question.acceptedAnswer.text)

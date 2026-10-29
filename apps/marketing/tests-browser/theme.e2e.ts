@@ -323,7 +323,7 @@ test("keeps desktop navigation labels on one line at the compact desktop width",
 test("FAQ answers follow native keyboard reading order", async ({ page }) => {
   await page.goto("/")
   const answers = page.locator("#faq details")
-  await expect(answers).toHaveCount(4)
+  await expect(answers).toHaveCount(8)
   for (const answer of await answers.all()) {
     const summary = answer.locator("summary")
     await summary.focus()

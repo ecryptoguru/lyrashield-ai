@@ -4,7 +4,6 @@ import {
   validateBands,
   type ChapterBand,
 } from "../../lib/scroll-world-mapping"
-import { ScrollClipStream } from "./scroll-world-clips"
 import type { MotionMediaManifest } from "../../lib/motion-manifest"
 
 /** Native scrolling owns position; the media layer is a bounded follower. */
@@ -19,9 +18,7 @@ class ScrollWorld extends HTMLElement {
   private resize?: ResizeObserver
   private visibility?: IntersectionObserver
   private frame = 0
-  private canvas!: HTMLCanvasElement
-  private context!: CanvasRenderingContext2D
-  private clips?: ScrollClipStream
+  private presentation = 0
   private deadline = 0
   private variant = ""
   private width = 0
@@ -31,6 +28,7 @@ class ScrollWorld extends HTMLElement {
   private motionStart = 0
   private inFlight = false
   private priming = false
+  private requested = 0
   private activeChapter = "gateway"
   private near = false
   private enabled = true
@@ -55,13 +53,6 @@ class ScrollWorld extends HTMLElement {
     this.source = this.querySelector<HTMLSourceElement>("[data-world-poster] source") ?? undefined
     this.toggle = this.querySelector<HTMLButtonElement>("[data-world-toggle]")!
     if (!this.video || !this.poster || !this.toggle) return
-    this.canvas = document.createElement("canvas")
-    this.canvas.setAttribute("aria-hidden", "true")
-    this.canvas.className = "scroll-world__canvas"
-    this.video.parentElement!.insertBefore(this.canvas, this.video.nextSibling)
-    const context = this.canvas.getContext("2d", { alpha: false })
-    if (!context) return
-    this.context = context
     this.toggle.hidden = false
     try {
       this.enabled = localStorage.getItem("lyra-motion") !== "off"
@@ -72,15 +63,11 @@ class ScrollWorld extends HTMLElement {
     this.reduced.addEventListener("change", this.preference)
     this.video.addEventListener("loadedmetadata", this.metadata)
     this.video.addEventListener("seeked", this.seeked)
-    this.video.addEventListener("loadeddata", this.present)
     this.video.addEventListener("error", this.mediaError)
     document.addEventListener("visibilitychange", this.documentVisibility)
     addEventListener("resize", this.geometry, { passive: true })
     this.resize = new ResizeObserver(this.measure)
     this.resize.observe(this)
-    this.querySelectorAll<HTMLElement>("[data-journey-chapter], .premium-hero").forEach((chapter) =>
-      this.resize!.observe(chapter)
-    )
     const header = document.querySelector("header")
     if (header) this.resize.observe(header)
     document.fonts.ready.then(() => {
@@ -93,21 +80,11 @@ class ScrollWorld extends HTMLElement {
           addEventListener("scroll", this.queue, { passive: true })
           this.measure()
           this.preference()
-          if (
-            this.ensureActiveMedia() &&
-            this.video.readyState >= 1 &&
-            (this.inFlight || this.priming)
-          ) {
-            this.present()
-            if (this.inFlight || this.priming) this.armDeadline(this.priming ? 15000 : 2000)
-          }
         } else {
           removeEventListener("scroll", this.queue)
           cancelAnimationFrame(this.frame)
           this.frame = 0
           this.clearDeadline()
-          this.suspendDownloads()
-          this.video.pause()
         }
       },
       { rootMargin: "200px" }
@@ -127,8 +104,6 @@ class ScrollWorld extends HTMLElement {
     this.toggle?.removeEventListener("click", this.toggleMotion)
     this.video?.removeEventListener("loadedmetadata", this.metadata)
     this.video?.removeEventListener("seeked", this.seeked)
-    this.video?.removeEventListener("loadeddata", this.present)
-    this.canvas?.remove()
     this.video?.removeEventListener("error", this.mediaError)
     cancelAnimationFrame(this.frame)
     this.release()
@@ -173,7 +148,7 @@ class ScrollWorld extends HTMLElement {
       this.release()
       this.dataset.worldState = "static"
       this.queue()
-    } else if (this.near && !this.failed && !this.clips) void this.loadVariant()
+    } else if (this.near && !this.failed && !this.video.getAttribute("src")) this.loadVariant()
   }
 
   private geometry = () => {
@@ -202,9 +177,7 @@ class ScrollWorld extends HTMLElement {
       id: chapter.id,
       start: chapter.start,
       end: chapter.end,
-      // Start at the opening frame on arrival. The viewport sampling anchor
-      // must not seek several seconds into the film before the visitor scrolls.
-      top: i === 0 ? Math.max(tops[i]!, this.anchor) : tops[i]!,
+      top: tops[i]!,
       bottom: tops[i + 1] ?? tops[i]! + elements[i]!.offsetHeight,
     }))
     if (!validateBands(this.bands)) {
@@ -221,32 +194,24 @@ class ScrollWorld extends HTMLElement {
   }
 
   private loadVariant() {
-    if (!ScrollClipStream.supported()) {
+    if (!("requestVideoFrameCallback" in this.video)) {
       this.fail()
       return
     }
     this.variant = this.mediaVariant()
     const track = this.variant === "portrait" ? this.manifest.portrait : this.manifest.desktop
     this.dataset.worldState = "loading"
+    // readyState can change before loadedmetadata is dispatched. Block scroll
+    // seeks until the first frame has completed the startup handshake.
     this.priming = true
-    const status = this.querySelector("[data-world-status]")
-    if (status) status.textContent = ""
-    const epoch = this.epoch
-    this.clips = new ScrollClipStream(
-      this.video,
-      track.clips,
-      track.clipDuration,
-      track.duration,
-      track.budgetBytes,
-      () => {
-        if (epoch === this.epoch) this.queue()
-      },
-      () => {
-        if (epoch === this.epoch) this.fail()
-      }
-    )
-    this.armDeadline(15000)
-    this.queue()
+    this.requested = 0
+    // A brief, slow prime makes occluded portrait frames reach the compositor
+    // without advancing past the requested frame before it can be acknowledged.
+    this.video.defaultPlaybackRate = 0.25
+    this.video.src = track.src
+    this.video.preload = "auto"
+    this.video.load()
+    this.armDeadline(5000)
   }
 
   private metadata = () => {
@@ -255,52 +220,37 @@ class ScrollWorld extends HTMLElement {
       this.fail()
       return
     }
-    // Assigning canvas dimensions erases its bitmap. Preserve it across clip seams.
-    if (this.canvas.width !== this.video.videoWidth) this.canvas.width = this.video.videoWidth
-    if (this.canvas.height !== this.video.videoHeight) this.canvas.height = this.video.videoHeight
-    // A deep link can begin with a discontiguous buffered range.
-    if (this.clips?.has(this.desired)) this.video.currentTime = this.desired
+    // Register only after load() has reset the media resource. Pause after an
+    // actual presented frame, not when the play promise merely resolves.
+    this.priming = true
+    this.observeFrame()
+    this.prime()
   }
 
   private seeked = () => {
     if (!this.ensureActiveMedia()) return
-    this.present()
+    this.observeFrame()
+    if (this.inFlight && this.allowed() && !this.failed && !document.hidden) {
+      this.prime()
+    }
+    // A presentation callback may precede seeked. Resume the latest coalesced
+    // request after decoder completion even if the preceding rAF saw seeking.
     this.queue()
   }
 
-  /** Copy a completed paused seek; never play forward to force a compositor callback. */
-  private present = () => {
-    if (
-      !this.ensureActiveMedia() ||
-      !this.near ||
-      document.hidden ||
-      this.video.seeking ||
-      this.video.readyState < 2
-    )
-      return
-    try {
-      this.context.drawImage(this.video, 0, 0, this.canvas.width, this.canvas.height)
-    } catch {
-      this.fail()
-      return
-    }
-    this.priming = false
-    this.inFlight = false
-    this.clearDeadline()
-    const presented = this.video.currentTime
-    this.dataset.worldPresented = presented.toFixed(3)
-    this.dataset.worldPainted = "true"
-    this.dataset.worldState = "ready"
-    const chapter = this.manifest.chapters.find((c) => presented >= c.start && presented < c.end)
-    if (chapter && chapter.id !== this.dataset.worldChapter) {
-      this.dataset.worldChapter = chapter.id
-      this.dispatchEvent(new Event("world-frame"))
-    }
-    this.queue()
+  private prime() {
+    const epoch = this.epoch
+    void this.video.play().catch((error: unknown) => {
+      // Our acknowledged frame pauses playback and can abort a pending play
+      // promise. The presentation watchdog still catches an actual stall.
+      if (epoch !== this.epoch || (error instanceof DOMException && error.name === "AbortError"))
+        return
+      if (this.ensureActiveMedia()) this.fail()
+    })
   }
 
   private queue = () => {
-    if (this.frame || !this.near || document.hidden || !this.bands.length) return
+    if (this.frame || document.hidden || !this.bands.length) return
     this.frame = requestAnimationFrame((now) => {
       this.frame = 0
       const sample = sampleScroll(scrollY + this.anchor, this.bands)
@@ -318,8 +268,7 @@ class ScrollWorld extends HTMLElement {
         this.updatePoster()
       }
       this.dataset.worldTime = this.desired.toFixed(3)
-      if (this.allowed() && !this.failed && this.clips) {
-        this.clips.request(this.desired)
+      if (this.ensureActiveMedia()) {
         this.flush()
         if (Math.abs(this.eased - this.desired) > 0.001) this.queue()
       }
@@ -333,7 +282,6 @@ class ScrollWorld extends HTMLElement {
   }
 
   private flush() {
-    const target = Math.round(this.eased * this.fps) / this.fps
     if (
       !this.near ||
       document.hidden ||
@@ -342,14 +290,66 @@ class ScrollWorld extends HTMLElement {
       this.video.readyState < 1 ||
       this.video.seeking ||
       this.inFlight ||
-      this.clips?.busy ||
-      !this.clips?.has(target)
+      this.priming
     )
       return
+    const target = Math.round(this.eased * this.fps) / this.fps
     if (Math.abs(this.video.currentTime - target) < 0.5 / this.fps) return
     this.inFlight = true
+    this.requested = target
+    this.observeFrame()
     this.video.currentTime = target
-    if (!this.deadline) this.armDeadline(this.priming ? 15000 : 2000)
+    if (!this.deadline) this.armDeadline(2000)
+  }
+
+  private observeFrame() {
+    if (
+      this.presentation ||
+      !this.ensureActiveMedia() ||
+      !("requestVideoFrameCallback" in this.video)
+    )
+      return
+    const epoch = this.epoch
+    this.presentation = this.video.requestVideoFrameCallback((_now, metadata) => {
+      // A retired callback must not clear the replacement decoder's handle.
+      if (epoch !== this.epoch) return
+      this.presentation = 0
+      if (!this.ensureActiveMedia()) return
+      this.dataset.worldPresented = metadata.mediaTime.toFixed(3)
+      if (this.priming) {
+        this.priming = false
+        this.video.pause()
+        this.clearDeadline()
+      }
+      const currentChapter = this.manifest.chapters.find(
+        (chapter) => this.desired >= chapter.start && this.desired < chapter.end
+      )
+      const correctChapter =
+        currentChapter &&
+        metadata.mediaTime >= currentChapter.start - 1 / this.fps &&
+        metadata.mediaTime < currentChapter.end
+      if (Math.abs(metadata.mediaTime - this.requested) <= 1.1 / this.fps) {
+        this.video.pause()
+        this.inFlight = false
+        this.clearDeadline()
+        if (correctChapter) {
+          this.dataset.worldPainted = "true"
+          this.dataset.worldState = "ready"
+        }
+      } else if (
+        this.inFlight &&
+        !this.video.seeking &&
+        metadata.mediaTime > this.requested + 1.1 / this.fps
+      ) {
+        // A busy main thread may deliver the first frame after playback has
+        // already passed our target. Stop drift and correct the same seek;
+        // keep its original deadline so a genuine stall remains bounded.
+        this.video.pause()
+        this.video.currentTime = this.requested
+      }
+      this.queue()
+      this.observeFrame()
+    })
   }
 
   private armDeadline(ms: number) {
@@ -363,16 +363,12 @@ class ScrollWorld extends HTMLElement {
     clearTimeout(this.deadline)
     this.deadline = 0
   }
-  private suspendDownloads() {
-    this.clips?.suspend()
-  }
-
   private release() {
     this.epoch++
-    this.clips?.dispose()
-    this.clips = undefined
     this.clearDeadline()
     if (!this.video) return
+    if (this.presentation) this.video.cancelVideoFrameCallback(this.presentation)
+    this.presentation = 0
     this.video.pause()
     this.video.removeAttribute("src")
     this.video.preload = "none"
@@ -396,14 +392,10 @@ class ScrollWorld extends HTMLElement {
       cancelAnimationFrame(this.frame)
       this.frame = 0
       this.clearDeadline()
-      this.suspendDownloads()
-      this.video.pause()
     } else {
       this.queue()
-      if (this.allowed() && !this.failed && this.near && (this.inFlight || this.priming)) {
-        this.present()
-        if (this.inFlight || this.priming) this.armDeadline(this.priming ? 15000 : 2000)
-      }
+      if (this.allowed() && !this.failed && this.near && (this.inFlight || this.priming))
+        this.armDeadline(2000)
     }
   }
 }

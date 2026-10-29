@@ -17,7 +17,7 @@ test("defines one continuous H.264 track per aspect ratio", () => {
   assert.equal(MOTION_VERSION, "3")
   assert.equal(MOTION_DURATION, 56)
   assert.equal(MOTION_FPS, 30)
-  assert.equal(MOTION_GOP, 8)
+  assert.equal(MOTION_GOP, 2)
   assert.equal(MOTION_CHAPTER_DURATION, 8)
   assert.deepEqual(
     Object.entries(MOTION_VARIANTS).map(
@@ -31,8 +31,8 @@ test("defines one continuous H.264 track per aspect ratio", () => {
       ]
     ),
     [
-      ["desktop", 1920, 1080, 48 * 1024 * 1024, 1920, 1080],
-      ["portrait", 720, 1280, 24 * 1024 * 1024, 1080, 1920],
+      ["desktop", 1440, 810, 16 * 1024 * 1024, 1920, 1080],
+      ["portrait", 720, 1280, 10 * 1024 * 1024, 1080, 1920],
     ]
   )
   assert.equal(motionTrackRelativePath("desktop"), "desktop/assurance-world.mp4")

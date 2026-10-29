@@ -3,11 +3,20 @@ import type { MotionMediaManifest } from "../../lib/motion-manifest"
 interface Props { manifest: MotionMediaManifest }
 const { manifest } = Astro.props
 const labels = ["Overview", "Target", "Review", "Evidence", "Approval", "Retest", "Report"]
+const receipts = [
+  "Authorized scope is stated",
+  "Target identity stays on record",
+  "The checks that ran are recorded",
+  "Detected is distinct from proven",
+  "A proposal still needs approval",
+  "Missing coverage stays inconclusive",
+  "Scope and limitations travel with the report",
+]
 ---
 
 <evidence-journey id="assurance-world" aria-labelledby="journey-heading">
   <header class="journey__intro">
-    <div><h2 id="journey-heading">One workflow. A clearer release decision.</h2><p>For builders and teams shipping AI-built software.</p></div>
+    <div><h2 id="journey-heading">From target to verdict.</h2><p>One finding, followed through the loop.</p></div>
     <a href="#product-preview">Skip to the product preview <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M6 18 18 6M6 6h12v12" /></svg></a>
   </header>
   <nav class="journey__nav" aria-label="Evidence journey chapters">
@@ -24,18 +33,25 @@ const labels = ["Overview", "Target", "Review", "Evidence", "Approval", "Retest"
           <h3 id={`chapter-${chapter.id}`}>{chapter.title}</h3>
           <p>{chapter.body}</p>
           {chapter.id === "evidence-state" && <ul class="journey__states"><li><i class="state-detected" />Detected</li><li><i class="state-confirmed" />Retest-confirmed</li><li><i class="state-inconclusive" />Inconclusive</li></ul>}
-
+          <p class="journey__receipt"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M6 3h9l3 3v15H6zM9 10h6M9 14h6M9 18h4" /></svg><span>Example EX-014 · {receipts[index]}</span></p>
+          {chapter.supportingCard && <details>
+            <summary>{chapter.supportingCard.title}</summary>
+            <p>{chapter.supportingCard.body}</p>
+            {chapter.supportingCard.items && <ul>{chapter.supportingCard.items.map(item => <li>{item}</li>)}</ul>}
+            {chapter.supportingCard.status && <p>{chapter.supportingCard.status}</p>}
+            {chapter.supportingCard.primaryCta && <div class="journey__actions"><a href={chapter.supportingCard.primaryCta.href} data-cta-id={chapter.supportingCard.primaryCta.id}>{chapter.supportingCard.primaryCta.label}</a>{chapter.supportingCard.secondaryCta && <a href={chapter.supportingCard.secondaryCta.href} data-cta-id={chapter.supportingCard.secondaryCta.id}>{chapter.supportingCard.secondaryCta.label}</a>}</div>}
+          </details>}
         </section>
       ))}
     </div>
     <aside class="journey__scene" aria-label="Illustrative finding and report" data-journey-scene data-stage="0">
-      <div class="journey__scene-heading"><span>Illustrative example · EX-014</span><span data-journey-progress>01 / 07</span></div>
+      <div class="journey__scene-heading"><span>Illustrative example</span><span data-journey-progress>01 / 07</span></div>
       <div class="journey__track" aria-hidden="true"><i></i><span></span></div>
       <article class="journey__artifact">
         <div class="journey__artifact-top"><span>Finding EX-014</span><span class="journey__badge">Detected</span></div>
         <h3>Missing rate limit on login route</h3>
-        <p>Example only. No real vulnerability is reported here.</p>
-        <dl><div><dt>Target scope</dt><dd>Authorized example route</dd></div><div><dt>Evidence coverage</dt><dd>Bounded to the checks that ran</dd></div></dl>
+        <p>An illustrative observation, not a real vulnerability report.</p>
+        <dl><div><dt>Target scope</dt><dd>Authorized example route</dd></div><div><dt>Evidence coverage</dt><dd>Bounded to the checks that ran</dd></div><div><dt>Latest evaluated review</dt><dd>Example only</dd></div></dl>
         <div class="journey__receipts">
           <p data-receipt-stage="1"><span>Scope</span>Target identity retained</p>
           <p data-receipt-stage="2"><span>Review</span>Check method recorded</p>
@@ -46,8 +62,8 @@ const labels = ["Overview", "Target", "Review", "Evidence", "Approval", "Retest"
       </article>
       <section class="journey__report" aria-labelledby="sample-report-heading">
         <div><h3 id="sample-report-heading">Assurance report</h3><span>Insufficient evidence</span></div>
-
-        <p>Retest coverage incomplete. The finding remains detected.</p>
+        <p>Example EX-014 remains on record.</p>
+        <ul><li>Authorized scope retained</li><li>Approval required</li><li>Retest coverage incomplete</li></ul>
         <p class="journey__report-limit">Missing proof stays visible. No security guarantee.</p>
       </section>
     </aside>
@@ -81,7 +97,6 @@ const labels = ["Overview", "Target", "Review", "Evidence", "Approval", "Retest"
     letter-spacing: -0.035em;
     line-height: 1.05;
   }
-  .journey__intro > div { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
   .journey__intro p {
     margin: 0.8rem 0 0;
     color: var(--text-muted);
@@ -187,6 +202,45 @@ const labels = ["Overview", "Target", "Review", "Evidence", "Approval", "Retest"
     border: 1px solid var(--border);
     border-radius: 0.25rem;
     padding: 0.3rem 0.5rem;
+  }
+  .journey__receipt {
+    display: flex;
+    align-items: start;
+    gap: 0.65rem;
+    font-size: 0.8rem;
+  }
+  .journey__receipt svg {
+    width: 20px;
+    height: 20px;
+    flex: none;
+    color: var(--accent);
+  }
+  .journey__chapter details {
+    margin-top: 1.5rem;
+    border-top: 1px solid var(--border);
+    font-size: 0.9rem;
+  }
+  .journey__chapter summary {
+    min-height: 44px;
+    padding-block: 0.8rem;
+    cursor: pointer;
+    font-weight: 600;
+  }
+  .journey__chapter details p,
+  .journey__chapter details ul {
+    color: var(--text-muted);
+    line-height: 1.7;
+  }
+  .journey__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+  }
+  .journey__actions a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    color: var(--accent);
   }
   .journey__scene {
     min-width: 0;

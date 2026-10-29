@@ -8,6 +8,10 @@ const homeScan = readFileSync(
   new URL("../components/landing/HomeLiteScan.astro", import.meta.url),
   "utf8"
 )
+const hero = readFileSync(
+  new URL("../components/landing/PremiumHero.astro", import.meta.url),
+  "utf8"
+)
 const motionManifest = readFileSync(new URL("../lib/motion-manifest.ts", import.meta.url), "utf8")
 const liteHandoff = readFileSync(new URL("../lib/lite-handoff.ts", import.meta.url), "utf8")
 const toolsIndex = readFileSync(new URL("../pages/tools/index.astro", import.meta.url), "utf8")
@@ -115,7 +119,7 @@ describe("Lite Check marketing surface", () => {
     expect(page).toContain('id="scan-url" name="url" type="text" inputmode="url"')
     expect(page).toContain("normalizePublicHttpUrl(input.value)")
     expect(page).toContain("example.com or https://your-app.com")
-    expect(homeScan).toContain("example.com or https://your-app.com")
+    expect(hero).toContain("example.com or https://your-app.com")
   })
 
   it("keeps every mobile text field readable without Safari focus zoom or page overflow", () => {
@@ -147,25 +151,26 @@ describe("Lite Check marketing surface", () => {
 
   it("distinguishes the live URL scan from browser-local analyzers", () => {
     expect(page).toContain("Live URL scan · passive and read-only")
-    expect(homeScan).toContain("passive check")
-    expect(homeScan).toContain("Surface signals only")
+    expect(homeScan).toContain("Passive and read-only")
+    expect(homeScan).toContain("browser-local tools")
     expect(toolsIndex).toContain("Local analyzer · {tool.privacy}")
     expect(toolLayout).toContain("Local analyzer:")
     expect(toolLayout).toContain("Runs entirely in this browser.")
   })
 
   it("keeps the control boundary and methodology handoff inside the story", () => {
-    expect(motionManifest).toContain("missing proof stays inconclusive")
-    expect(home).toContain('href="/methodology"')
-    expect(home).toContain('href="/vibe-security-50"')
+    expect(motionManifest).toContain("Vibe Security 50")
+    expect(motionManifest).toContain("43 code or URL review controls")
+    expect(motionManifest).toContain("7 evidence-required controls")
+    expect(motionManifest).toContain('href: "/methodology"')
   })
 
   it("starts the real Lite Check from the homepage without putting the target in the URL", () => {
     expect(home).toContain("<HomeLiteScan />")
     expect(homeScan).toContain('id="free-scan"')
-    expect(homeScan).toContain('href="/terms"')
+    expect(hero).toContain('href="/terms"')
     // The single homepage input retains the privacy-preserving shared handoff.
-    expect(homeScan).toContain('from "../../lib/lite-handoff"')
+    expect(hero).toContain('from "../../lib/lite-handoff"')
     expect(liteHandoff).toContain('export const LITE_TARGET_KEY = "lyrashield-lite-target"')
     expect(liteHandoff).toContain('export const LITE_SCAN_HREF = "/scan?start=1"')
     expect(liteHandoff).toContain("sessionStorage.setItem(LITE_TARGET_KEY, target)")
@@ -221,6 +226,6 @@ describe("Lite Check marketing surface", () => {
       }
     }
     expect(offenders, "unmeasured timing claims").toEqual([])
-    expect(homeScan).toContain("Start with a Lite Check.")
+    expect(homeScan).toContain("Understand your Lite Check result.")
   })
 })

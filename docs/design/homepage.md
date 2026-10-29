@@ -1,67 +1,34 @@
-# Homepage design brief
+# Homepage
 
-Mode: Persuade. Target: `apps/marketing/src/pages/index.astro`.
+The homepage uses the pre-#1049 layout and scroll configuration recovered from
+PR #1048 (`bb4c6c3c3387c4b73c9d02322efa9e96aa68f885`). The detailed regression
+review is in [the recovery evidence](../evidence/landing-motion-regression-review-2026-10-29.md).
 
-## Direction
+## Cinematic behavior
 
-Preserve LyraShield AI's navy/cyan identity, Bricolage display face, Inter body
-copy, light/dark themes and seven-stage scroll cinema. The primary task is to
-understand the review workflow and start a trial. The cinematic architecture is
-the focal visual; the actual console demonstrates the product.
+Native document scrolling controls a paused native video. The controller coalesces
+seeks and confirms presented frames. A short muted prime permits compositor
+presentation; it does not turn the journey into autoplay. A stale callback or
+retired watchdog must not control a replacement source.
 
-The page follows hero → cinematic workflow → console → Lite Check → pricing →
-four FAQs → closing trial action. Detailed coverage, agent setup and evidence
-methodology remain available through explicit first-party links. Keep one
-illustrative finding, labeled as an example, with a detected finding and an
-inconclusive retest. Never present illustrative output as customer evidence.
+Use immutable media `74787c7fe35196b2`: desktop 1440×810, GOP 2, CRF 28; native
+portrait 720×1280, GOP 4, CRF 24. Preserve the 56-second timeline and seven chapters.
+The native controller uses range-capable media delivery. No canvas or segmented
+MediaSource player is mounted.
 
-## Typography and layout
+Mobile reserves a visible scene window above readable hero content. The hero
+veil must not cover that window in either theme. The original mobile chapter
+minimum is `max(520px, 95svh)`; shortening this distance without retiming the film
+accelerates the camera relative to scrolling.
 
-The homepage intentionally uses a fluid display scale capped at 6rem, section
-headings at 2–3.5rem, body text at 1–1.2rem and supporting controls and metadata
-at .8–.95rem. Tracking never exceeds -.04em. These surface-specific sizes extend
-the existing design system; they do not change dashboard typography.
+Motion Off, reduced motion, Save-Data and unavailable media retain the static
+story. The primary action, consent-bound Lite Check, coverage limitations and
+shared pricing remain available independently of motion. All product claims
+must remain consistent with the retained evidence states and methodology.
 
-Use generous section separation, compact related content, fewer boxed groups,
-and opaque or sufficiently protected reading surfaces. Keep the primary trial
-CTA in the first 390 × 844 viewport. The dedicated Lite Check retains its
-consent, unavailable state and private URL handoff. Prices and limits come from
-the shared catalog.
+## Verification
 
-## Motion thesis
-
-- Focal moment: one continuous architectural film follows native scrolling.
-- Delivery: native 1080p desktop and 720-wide portrait encodes use one-second
-  fragmented MP4 clips. One persistent MediaSource decoder starts with the current
-  clip, prioritizes nearby clips in both directions and uses at most three
-  transfers to warm the remaining film while it is onscreen. Retain visited clips within the verified
-  48 MiB desktop / 24 MiB portrait budget, cap each download at 2 MiB and stop
-  downloads after fifteen seconds. Abort offscreen work and reject late completions. Release the object
-  URL when motion is disabled or removed. Unsupported browsers retain posters.
-- Presentation: a paused decoder seeks toward the latest scroll position. Completed
-  frames are copied to a canvas below the readability overlay. Keep the previous
-  frame visible during a seek; never use autoplay to advance the story.
-- Mobile controls: chapter navigation has a separate sticky row below the motion
-  toggle so enlarged text does not collapse navigation or cover its links.
-- Continuity: chapter navigation follows presented frames, with a stable example
-  accumulating scope and review context without upgrading its evidence state.
-- Feedback: brief button and link states, native FAQ disclosure feedback, product
-  view selection and one console arrival. Critical text is visible by default.
-- Budget: one decoder, one pending seek, coalesced scroll requests, cached geometry,
-  and no offscreen or hidden-tab playback. No runtime 3D or new animation library.
-- Accessibility: reduced motion and Save-Data keep a complete poster/text
-  experience. A failed video never blocks reading, navigation or form controls.
-
-## Content and search
-
-Keep a concise explanation of the product, audience, authorized targets, human
-approval and retest limits in server-rendered HTML. FAQs and structured data
-share one source. The homepage editorial date also drives sitemap freshness.
-Do not add hidden SEO copy or claim guaranteed indexing, rankings or AI citations.
-
-## Release gate
-
-This redesign requires explicit approval after localhost live testing before
-merge, media publication or deployment. Automated tests and screenshots alone
-are not the founder's approval. Physical-device and field performance need
-separate evidence.
+Check actual rendered phone profiles in both themes, including the mobile scene
+window, touch controls, native scrolling, chapter navigation and reversing direction.
+Also check orientation, browser-chrome resizing, no JavaScript and enlarged text.
+Synthetic CI media tests do not establish physical-device or production smoothness.
