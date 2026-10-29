@@ -1,6 +1,29 @@
 import { expect, test } from "@playwright/test"
 import { MOTION_FPS } from "../../marketing-motion/scripts/motion-media-contract.mjs"
 
+test("buffering keeps the page usable and motion-off retires an incomplete download", async ({
+  page,
+}) => {
+  await page.route("**/assurance-world.mp4", async (route) => {
+    const response = await route.fetch()
+    await new Promise((resolve) => setTimeout(resolve, 1500))
+    await route.fulfill({ response })
+  })
+  await page.goto("/")
+  const world = page.locator("scroll-world")
+  await expect(page.locator("[data-world-status]")).toContainText("Preparing smooth motion")
+  await expect(page.locator("[data-world-video]")).not.toHaveAttribute("src", /.+/)
+  await expect(page.locator(".premium-hero__primary")).toBeVisible()
+  await page.getByRole("button", { name: "Motion on" }).click()
+  await expect(world).toHaveAttribute("data-world-state", "static")
+  await page.waitForTimeout(1800)
+  await expect(world).toHaveAttribute("data-world-state", "static")
+  await expect(page.locator("[data-world-video]")).not.toHaveAttribute("src", /.+/)
+  await page.getByRole("button", { name: "Motion off" }).click()
+  await expect(world).toHaveAttribute("data-world-painted", "true", { timeout: 10000 })
+  await expect(page.locator("[data-world-video]")).toHaveAttribute("src", /^blob:/)
+})
+
 test("startup presents its first frame before accepting scroll seeks", async ({ page }) => {
   await page.addInitScript(() => {
     const original = HTMLVideoElement.prototype.addEventListener
@@ -121,11 +144,16 @@ test("full animation presents the correct frames through forward and reverse nav
   await expect(world).toHaveAttribute("data-world-state", "ready", { timeout: 10000 })
   await expect(world).toHaveAttribute("data-world-painted", "true")
   const video = page.locator("[data-world-video]")
+  await expect(video).toHaveAttribute("src", /^blob:/)
+  const laterDownloads: string[] = []
+  page.on("request", (request) => {
+    if (request.url().includes("assurance-world.mp4")) laterDownloads.push(request.url())
+  })
   expect(await video.evaluate((element: HTMLVideoElement) => element.videoWidth > 0)).toBe(true)
   const links = page
     .getByRole("navigation", { name: "Evidence journey chapters" })
     .getByRole("link")
-  for (const index of [1, 3, 6, 4, 2, 0]) {
+  for (const index of [1, 3, 6, 5, 4, 2, 0]) {
     await links.nth(index).click()
     await expect(links.nth(index)).toHaveAttribute("aria-current", "step")
     await expect
@@ -140,6 +168,7 @@ test("full animation presents the correct frames through forward and reverse nav
     await expect(world).toHaveAttribute("data-world-state", "ready")
     await expect(world).toHaveAttribute("data-world-painted", "true")
   }
+  expect(laterDownloads).toEqual([])
   if (test.info().project.name === "mobile") {
     await page.locator("#journey-report").scrollIntoViewIfNeeded()
     const motion = await page.getByRole("button", { name: "Motion on" }).boundingBox()
@@ -262,7 +291,7 @@ test("preference and orientation changes release the old decoder and recover", a
   await expect(world).toHaveAttribute("data-world-painted", "true")
   await page.locator("#journey-retest").scrollIntoViewIfNeeded()
   await page.setViewportSize({ width: 768, height: 1024 })
-  await expect(video).toHaveAttribute("src", /portrait\/assurance-world.mp4/)
+  await expect(world).toHaveAttribute("data-world-variant", "portrait")
   await expect(world).toHaveAttribute("data-world-state", "ready")
   expect(
     await video.evaluate((element: HTMLVideoElement) => element.videoHeight > element.videoWidth)
@@ -270,14 +299,14 @@ test("preference and orientation changes release the old decoder and recover", a
   await page.setViewportSize({ width: 844, height: 390 })
   // Native page reflow can move the chapter outside the viewport after rotation.
   await page.locator("#journey-retest").scrollIntoViewIfNeeded()
-  await expect(video).toHaveAttribute("src", /desktop\/assurance-world.mp4/)
+  await expect(world).toHaveAttribute("data-world-variant", "desktop")
   await expect(world).toHaveAttribute("data-world-painted", "true")
   expect(
     await video.evaluate((element: HTMLVideoElement) => element.videoWidth > element.videoHeight)
   ).toBe(true)
   await page.setViewportSize({ width: 390, height: 844 })
   await page.locator("#journey-retest").scrollIntoViewIfNeeded()
-  await expect(video).toHaveAttribute("src", /portrait\/assurance-world.mp4/)
+  await expect(world).toHaveAttribute("data-world-variant", "portrait")
   await expect(world).toHaveAttribute("data-world-painted", "true")
   await page.emulateMedia({ reducedMotion: "reduce" })
   await expect(world).toHaveAttribute("data-world-state", "static")

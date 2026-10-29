@@ -105,3 +105,28 @@ The trace still showed network waits on uncached browser ranges even when the ed
 reported HIT. Cache eligibility is therefore confirmed, but it has not resolved
 all cold-jump latency targets. Preserve that distinction; do not claim every
 production performance gate passes or introduce a full-download startup barrier.
+
+## Approved buffered-start candidate
+
+On October 29, the founder explicitly approved a longer loading phase so distant
+scenes are buffered before motion starts. The candidate fetches only the selected
+original film into a size-bounded Blob, then uses the same native decoder and
+scroll mapping. A visible progress label and chapter posters accompany loading;
+page controls and native scrolling remain usable. Downloads are cancelled on
+motion-off, hidden tabs, retired variants and component removal. Download errors
+leave static content available. Object URLs are revoked when a decoder is retired.
+
+The first candidate completed all six catch-up, both cold buffering and both wheel
+checks against the actual media host. The two continuous checks initially stopped
+at their old five-second loading setup timeout; after aligning setup waits with the
+approved loading phase, both continuous checks passed. All twelve performance
+cases therefore pass without changing seek or frame-interval thresholds. Desktop
+catch-up p95 at 1×/4×/6× CPU was 27.2/31.7/41.5 ms; mobile was 18.1/23.9/33.7 ms.
+Continuous-frame p95/max was 31.6/51.4 ms desktop and 24.9/34.9 ms mobile.
+Cold buffering at 4 Mbit/s and 150 ms RTT took 31.7s desktop and 16.5s portrait.
+These candidate tests substitute local HTML/scripts at the canonical origin while
+fetching the real immutable film. They do not establish a deployed-source result.
+
+The cold motion-start gate is now 90 seconds, reflecting the explicitly approved
+loading tradeoff. The 250/500 ms desktop/mobile seek p95, 60 ms continuous p95 and
+150 ms maximum interval gates are retained. LCP and CLS targets are unchanged.

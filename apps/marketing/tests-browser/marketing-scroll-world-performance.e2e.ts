@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test"
 
 test.beforeEach(({ browserName }) => {
+  test.setTimeout(120000)
   test.skip(
     browserName !== "chromium",
     "CPU and network profiling uses Chromium CDP; functional motion runs in every browser"
@@ -15,14 +16,15 @@ for (const rate of [1, 4, 6]) {
       Boolean(process.env.CI),
       "Actual-film performance requires the reviewed media; synthetic CI fixtures do not establish this gate"
     )
-    test.setTimeout(60000)
+    test.setTimeout(120000)
     const session = await page.context().newCDPSession(page)
     await session.send("Emulation.setCPUThrottlingRate", { rate })
     const start = Date.now()
     await page.goto("/")
     await expect(page.locator("scroll-world")).toHaveAttribute("data-world-painted", "true", {
-      timeout: 10000,
+      timeout: 90000,
     })
+    await expect(page.locator("[data-world-video]")).toHaveAttribute("src", /^blob:/)
     const startupMs = Date.now() - start
     const results = await page.evaluate(async (fps) => {
       const world = document.querySelector<HTMLElement>("scroll-world")!
@@ -65,9 +67,9 @@ for (const rate of [1, 4, 6]) {
   })
 }
 
-test("cold ranged startup on a 4 Mbit/s connection", async ({ page }, info) => {
+test("cold buffered startup on a 4 Mbit/s connection", async ({ page }, info) => {
   test.skip(Boolean(process.env.CI), "Requires the actual reviewed film")
-  test.setTimeout(60000)
+  test.setTimeout(120000)
   const session = await page.context().newCDPSession(page)
   await session.send("Network.enable")
   await session.send("Network.setCacheDisabled", { cacheDisabled: true })
@@ -89,6 +91,20 @@ test("cold ranged startup on a 4 Mbit/s connection", async ({ page }, info) => {
     if (mediaRequests.has(requestId)) mediaBytes += encodedDataLength
   })
   await page.addInitScript(() => {
+    new PerformanceObserver((list) => {
+      const world = document.querySelector<HTMLElement>("scroll-world")
+      const last = list.getEntries().at(-1)
+      if (world && last) world.dataset.labLcp = String(last.startTime)
+    }).observe({ type: "largest-contentful-paint", buffered: true })
+    new PerformanceObserver((list) => {
+      const world = document.querySelector<HTMLElement>("scroll-world")
+      if (!world) return
+      for (const entry of list.getEntries()) {
+        const shift = entry as PerformanceEntry & { hadRecentInput: boolean; value: number }
+        if (!shift.hadRecentInput)
+          world.dataset.labCls = String(Number(world.dataset.labCls ?? 0) + shift.value)
+      }
+    }).observe({ type: "layout-shift", buffered: true })
     const observer = new MutationObserver(() => {
       const world = document.querySelector<HTMLElement>("scroll-world")
       if (world?.dataset.worldState === "loading" && !world.dataset.labStart)
@@ -100,13 +116,20 @@ test("cold ranged startup on a 4 Mbit/s connection", async ({ page }, info) => {
   })
   await page.goto("/", { waitUntil: "domcontentloaded" })
   const world = page.locator("scroll-world")
-  await expect(world).toHaveAttribute("data-world-painted", "true", { timeout: 15000 })
+  await expect(world).toHaveAttribute("data-world-painted", "true", { timeout: 90000 })
   const startupMs = await world.evaluate(
     (element) =>
       Number((element as HTMLElement).dataset.labPresented) -
       Number((element as HTMLElement).dataset.labStart)
   )
   const startupBytes = mediaBytes
+  const vitals = await world.evaluate((element) => ({
+    lcp: Number((element as HTMLElement).dataset.labLcp),
+    cls: Number((element as HTMLElement).dataset.labCls ?? 0),
+  }))
+  expect(vitals.lcp).toBeGreaterThan(0)
+  expect(vitals.lcp).toBeLessThanOrEqual(2500)
+  expect(vitals.cls).toBeLessThanOrEqual(0.1)
   await page
     .getByRole("navigation", { name: "Evidence journey chapters" })
     .getByRole("link")
@@ -130,6 +153,7 @@ test("cold ranged startup on a 4 Mbit/s connection", async ({ page }, info) => {
       {
         startupMs,
         startupBytes,
+        ...vitals,
         mediaBytes,
         requests: mediaRequests.size,
         profile: "4 Mbit/s, 150 ms RTT, empty cache",
@@ -138,7 +162,8 @@ test("cold ranged startup on a 4 Mbit/s connection", async ({ page }, info) => {
       2
     )
   )
-  expect(startupMs).toBeLessThan(3000)
+  // The user approved full buffering before motion; the page/poster stays usable.
+  expect(startupMs).toBeLessThan(90000)
   expect(startupBytes).toBeGreaterThan(0)
   await session.detach()
 })
@@ -149,7 +174,7 @@ test("native wheel reversal catches up without losing controls", async ({ page }
   await session.send("Emulation.setCPUThrottlingRate", { rate: 4 })
   await page.goto("/")
   const world = page.locator("scroll-world")
-  await expect(world).toHaveAttribute("data-world-painted", "true")
+  await expect(world).toHaveAttribute("data-world-painted", "true", { timeout: 90000 })
   await page.locator("#journey-scan").scrollIntoViewIfNeeded()
   await page.evaluate(() => {
     const lab = { intervals: [] as number[], longTasks: [] as number[], stop: false }
@@ -220,7 +245,7 @@ test("continuous scrolling presents an even sequence of new video frames", async
   await session.send("Emulation.setCPUThrottlingRate", { rate: 4 })
   await page.goto("/")
   const world = page.locator("scroll-world")
-  await expect(world).toHaveAttribute("data-world-painted", "true")
+  await expect(world).toHaveAttribute("data-world-painted", "true", { timeout: 90000 })
   await page.locator("#journey-scan").scrollIntoViewIfNeeded()
   await expect
     .poll(() =>

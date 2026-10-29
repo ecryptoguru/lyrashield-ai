@@ -6,7 +6,11 @@ review is in [the recovery evidence](../evidence/landing-motion-regression-revie
 
 ## Cinematic behavior
 
-Native document scrolling controls a paused native video. The controller coalesces
+The selected immutable film is downloaded completely before motion starts, following
+the approved longer-loading policy. A visible progress message accompanies the
+poster while the page and controls remain usable. Downloads are bounded by the
+existing 16 MiB desktop / 10 MiB portrait limits and a two-minute deadline.
+Native document scrolling controls a paused native video backed by that local Blob. The controller coalesces
 seeks and confirms presented frames. A short muted prime permits compositor
 presentation; it does not turn the journey into autoplay. A stale callback or
 retired watchdog must not control a replacement source.
@@ -18,7 +22,8 @@ scrollbar jumps; it does not change native document scrolling or the film mappin
 
 Use immutable media `74787c7fe35196b2`: desktop 1440×810, GOP 2, CRF 28; native
 portrait 720×1280, GOP 4, CRF 24. Preserve the 56-second timeline and seven chapters.
-The native controller uses range-capable media delivery. No canvas or segmented
+The native controller seeks only within the completed local film. Cold distant
+seeks therefore do not fetch additional network ranges. No canvas or segmented
 MediaSource player is mounted.
 
 Mobile reserves a visible scene window above readable hero content. The hero
