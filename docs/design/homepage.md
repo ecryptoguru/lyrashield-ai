@@ -1,8 +1,25 @@
 # Homepage
 
-The homepage uses the pre-#1049 layout and scroll configuration recovered from
-PR #1048 (`bb4c6c3c3387c4b73c9d02322efa9e96aa68f885`). The detailed regression
-review is in [the recovery evidence](../evidence/landing-motion-regression-review-2026-10-29.md).
+The homepage keeps the scroll configuration recovered from PR #1048
+(`bb4c6c3c3387c4b73c9d02322efa9e96aa68f885`) and the subsequently verified
+buffered native player. The detailed regression review is in
+[the recovery evidence](../evidence/landing-motion-regression-review-2026-10-29.md).
+
+## Visual story
+
+The approved [visual-copy plan](landing-visual-copy-plan-2026-10-29.md) replaces
+repeated explanations with an evidence-state diagram, a concise illustrative
+Lite result and the existing redacted product captures. The consent-bound URL
+form lives in the Lite Check section; the hero keeps the trial action and a
+workflow link. The seven chapters use one heading and one sentence each. Their
+single illustrative finding ends with incomplete coverage and an inconclusive
+retest, never a fabricated confirmed fix.
+
+Shared prices, capacity limits and trial terms remain intact. Four closed FAQ
+answers match the page's structured data. Coverage and integration details stay
+reachable through a compact link rail and a native CLI disclosure. The opening
+three visual stages retain the recovered cinematic scroll span; later product
+and conversion sections are shorter. The chapter geometry remains part of the motion acceptance checks.
 
 ## Cinematic behavior
 

@@ -27,7 +27,7 @@ for (const theme of ["dark", "light"] as const) {
     }
     await expect(page.locator(".journey__report")).toBeVisible()
     await expect(page.locator(".journey__report")).toContainText("Insufficient evidence")
-    await expect(page.locator(".journey__artifact")).toContainText("Proposal awaiting review")
+    await expect(page.locator('[data-receipt-stage="4"]')).toContainText("Required")
     await expect(page.locator(".journey__report")).toContainText("Retest coverage incomplete")
     await expect(page.locator("[data-receipt-stage].is-collected")).toHaveCount(5)
     await page.locator(".journey__report").evaluate(async (element) => {
@@ -40,7 +40,7 @@ for (const theme of ["dark", "light"] as const) {
     await page.screenshot({
       path: `../../output/playwright/evidence-motion/report-${theme}-${page.viewportSize()!.width}.png`,
     })
-    await page.getByRole("link", { name: "Skip to the product preview" }).click()
+    await page.getByRole("link", { name: "Skip to product preview" }).click()
     await expect(page.locator("#product-preview")).toBeInViewport()
   })
 

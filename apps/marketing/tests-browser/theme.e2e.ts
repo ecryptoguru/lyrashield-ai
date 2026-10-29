@@ -111,7 +111,7 @@ for (const viewport of [
     await page.setViewportSize(viewport)
     await page.goto("/")
     const chapter = page.locator('[data-journey-chapter="0"]')
-    await chapter.scrollIntoViewIfNeeded()
+    await page.getByRole("link", { name: "Overview", exact: true }).click()
     await expect(chapter.getByRole("heading")).toBeVisible()
     await expect(chapter.getByRole("heading")).toBeInViewport()
     // Phone chapters reserve a scene-sized opening but stay within one viewport.
@@ -323,7 +323,7 @@ test("keeps desktop navigation labels on one line at the compact desktop width",
 test("FAQ answers follow native keyboard reading order", async ({ page }) => {
   await page.goto("/")
   const answers = page.locator("#faq details")
-  await expect(answers).toHaveCount(8)
+  await expect(answers).toHaveCount(4)
   for (const answer of await answers.all()) {
     const summary = answer.locator("summary")
     await summary.focus()

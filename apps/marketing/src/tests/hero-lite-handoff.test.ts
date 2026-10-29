@@ -11,9 +11,13 @@ const homeScan = readFileSync(
   new URL("../components/landing/HomeLiteScan.astro", import.meta.url),
   "utf8"
 )
+const form = readFileSync(
+  new URL("../components/landing/LiteCheckForm.astro", import.meta.url),
+  "utf8"
+)
 const handoff = readFileSync(new URL("../lib/lite-handoff.ts", import.meta.url), "utf8")
 
-describe("hero URL field handoff (item 3.1b)", () => {
+describe("homepage Lite Check handoff", () => {
   it("parks the target in sessionStorage and never in the query string", () => {
     const parked: Array<[string, string]> = []
     const navigated: string[] = []
@@ -76,7 +80,7 @@ describe("hero URL field handoff (item 3.1b)", () => {
       "hero-scan-authorized",
       "hero-scan-error",
     ]) {
-      expect(hero, `hero must own ${id}`).toContain(`id="${id}"`)
+      expect(form, `the Lite Check form must own ${id}`).toContain(`id="${id}"`)
     }
     for (const id of [
       "home-lite-scan-form",
@@ -86,20 +90,22 @@ describe("hero URL field handoff (item 3.1b)", () => {
     ]) {
       expect(homeScan, `the sample must not repeat ${id}`).not.toContain(`id="${id}"`)
     }
-    const heroIds = [...hero.matchAll(/id="([^"]+)"/g)].map((match) => match[1])
+    expect(hero).not.toContain("<form")
+    expect(homeScan.match(/<LiteCheckForm \/>/g)).toHaveLength(1)
+    const heroIds = [...form.matchAll(/id="([^"]+)"/g)].map((match) => match[1])
     const scanIds = [...homeScan.matchAll(/id="([^"]+)"/g)].map((match) => match[1])
     for (const id of heroIds) expect(scanIds).not.toContain(id)
   })
 
-  it("makes no network request from the hero", () => {
-    expect(hero).not.toContain("fetch(")
-    expect(hero).not.toContain("XMLHttpRequest")
-    expect(hero).not.toContain("sendBeacon")
+  it("makes no network request from the homepage form", () => {
+    expect(form).not.toContain("fetch(")
+    expect(form).not.toContain("XMLHttpRequest")
+    expect(form).not.toContain("sendBeacon")
   })
 
   it("shares one handoff implementation instead of forking it", () => {
     // The single homepage form uses the shared privacy-preserving handoff.
-    expect(hero).toContain('from "../../lib/lite-handoff"')
+    expect(form).toContain('from "../../lib/lite-handoff"')
     expect(homeScan).not.toContain("<form")
     expect(handoff).toContain('export const LITE_TARGET_KEY = "lyrashield-lite-target"')
     expect(handoff).toContain('export const LITE_SCAN_HREF = "/scan?start=1"')
@@ -109,23 +115,21 @@ describe("hero URL field handoff (item 3.1b)", () => {
   })
 
   it("requires consent before handing off", () => {
-    // /scan pre-checks its own box and auto-submits, so a hero form with no
+    // /scan pre-checks its own box and auto-submits, so a homepage form with no
     // recorded consent would start a scan the visitor never agreed to.
     expect(handoff).toContain("if (consent && !consent.checked)")
-    expect(hero).toContain('consentId: "hero-scan-authorized"')
-    expect(hero).toContain("I own this app or have permission to test it")
-    expect(hero).toContain('href="/terms"')
+    expect(form).toContain('consentId: "hero-scan-authorized"')
+    expect(form).toContain("I own this app or have permission to test it")
+    expect(form).toContain('href="/terms"')
   })
 
   it("degrades without JavaScript and when the scanner is not connected", () => {
     // With JS off the submit button does nothing, so the field must sit next to
     // a real link to /scan.
-    expect(hero).toContain('href="/scan"')
+    expect(form).toContain('href="/scan"')
     // The sole input retains a clear unavailable state.
-    expect(hero).toContain("disabled={!scannerAvailable}")
-    expect(hero).toContain(
-      "The separately protected scanner API is not connected in this environment."
-    )
+    expect(form).toContain("disabled={!scannerAvailable}")
+    expect(form).toContain("Lite Check is unavailable. Please try again later.")
     expect(homeScan).toContain('href="/scan"')
   })
 
@@ -140,6 +144,6 @@ describe("hero URL field handoff (item 3.1b)", () => {
     })
     expect(sanitized).toEqual({ cta_id: "hero_lite_check_submit", valid: true })
     // The typed value is not a property anywhere in the component.
-    expect(hero).not.toMatch(/capture\([^)]*input\.value/)
+    expect(form).not.toMatch(/capture\([^)]*input\.value/)
   })
 })

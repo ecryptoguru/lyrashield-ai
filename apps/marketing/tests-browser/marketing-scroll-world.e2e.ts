@@ -177,7 +177,8 @@ test("full animation presents the correct frames through forward and reverse nav
     const nav = await page
       .getByRole("navigation", { name: "Evidence journey chapters" })
       .boundingBox()
-    expect(motion && nav && motion.y + motion.height <= nav.y + nav.height).toBe(true)
+    // The motion control has its own row below the full-width chapter rail.
+    expect(motion && nav && nav.y + nav.height <= motion.y).toBe(true)
   }
   await expect(page.locator(".journey__nav a[aria-current]")).toHaveCSS("color", "rgb(17, 51, 59)")
   await page.getByRole("button", { name: "Motion on" }).click()
@@ -200,8 +201,8 @@ test("an observed media failure enters bounded fallback and retains working cont
   await expect.poll(() => requests).toBeGreaterThan(0)
   await expect(page.locator("scroll-world")).toHaveAttribute("data-world-state", "fallback")
   await expect(page.locator("h1")).toBeVisible()
-  await page.getByRole("link", { name: "See a sample Lite result" }).click()
-  await expect(page.locator("#free-scan")).toBeInViewport()
+  await page.getByRole("link", { name: "See the workflow" }).click()
+  await expect(page.locator("#how-it-works")).toBeInViewport()
   await page.unroute("**/assurance-world/v3/**/*.mp4")
   await page.getByRole("button", { name: "Motion unavailable" }).click()
   await expect(page.locator("scroll-world")).toHaveAttribute("data-world-state", "ready")
@@ -224,8 +225,8 @@ test("metadata without a presented frame reaches the watchdog fallback", async (
     timeout: 7000,
   })
   await expect(page.locator("[data-world-video]")).not.toHaveAttribute("src", /.+/)
-  await page.getByRole("link", { name: "See a sample Lite result" }).click()
-  await expect(page.locator("#free-scan")).toBeInViewport()
+  await page.getByRole("link", { name: "See the workflow" }).click()
+  await expect(page.locator("#how-it-works")).toBeInViewport()
 })
 
 test("a late presented frame corrects drift and completes the pending seek", async ({ page }) => {
@@ -280,7 +281,7 @@ test("reduced motion never requests the film and keeps the story usable", async 
   await page.goto("/")
   await page.locator("#journey-report").scrollIntoViewIfNeeded()
   await expect(page.locator("scroll-world")).toHaveAttribute("data-world-state", "static")
-  await expect(page.locator("#journey-report")).toContainText("limits")
+  await expect(page.locator("#journey-report")).toContainText("limitations")
   expect(requests).toEqual([])
 })
 
@@ -350,8 +351,12 @@ test("Save-Data requests no film and retains interactive chapter content", async
   })
   await page.goto("/")
   await expect(page.locator("scroll-world")).toHaveAttribute("data-world-state", "static")
-  await page.locator("#journey-report summary").click()
-  await expect(page.locator("#journey-report details")).toHaveAttribute("open", "")
+  await page.getByRole("link", { name: "Report", exact: true }).click()
+  await expect(page.locator("#journey-report")).toContainText("limitations")
+  const disclosure = page.locator("#faq details").first().locator("summary")
+  await disclosure.focus()
+  await disclosure.press("Enter")
+  await expect(page.locator("#faq details").first()).toHaveAttribute("open", "")
   expect(requests).toEqual([])
 })
 
@@ -361,9 +366,13 @@ test("the complete story and conversion links work without JavaScript", async ({
   await page.goto("/")
   await expect(page.locator("h1")).toBeVisible()
   await expect(page.locator("[data-world-toggle]")).toBeHidden()
-  await page.locator("#journey-report summary").click()
-  await expect(page.locator("#journey-report details")).toHaveAttribute("open", "")
-  await expect(page.locator("#journey-report")).toContainText("limits")
+  await page.getByRole("link", { name: "Report", exact: true }).click()
+  await expect(page.locator("#journey-report")).toContainText("limitations")
+  const disclosure = page.locator("#faq details").first().locator("summary")
+  await disclosure.focus()
+  await disclosure.press("Enter")
+  await expect(page.locator("#faq details").first()).toHaveAttribute("open", "")
+  await expect(page.locator("#journey-report")).toContainText("limitations")
   await expect(
     page.getByRole("link", { name: "Start free trial", exact: true }).first()
   ).toHaveAttribute("href", /sign-up/)

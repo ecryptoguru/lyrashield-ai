@@ -18,7 +18,7 @@ for (const width of [390, 1280]) {
   })
 }
 
-test("keeps signup in the first phone screen and the URL form below the hero actions", async ({
+test("keeps signup in the first phone screen and the URL form in its dedicated Lite Check section", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 390, height: 844 })
@@ -27,6 +27,6 @@ test("keeps signup in the first phone screen and the URL form below the hero act
     const box = await page.locator(selector).boundingBox()
     expect(box!.y + box!.height).toBeLessThan(844)
   }
-  await expect(page.locator(".premium-hero form")).toHaveCount(1)
-  await expect(page.locator("#free-scan form")).toHaveCount(0)
+  await expect(page.locator(".premium-hero form")).toHaveCount(0)
+  await expect(page.locator("#free-scan form")).toHaveCount(1)
 })

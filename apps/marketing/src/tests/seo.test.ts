@@ -116,7 +116,8 @@ describe("marketing SEO metadata", () => {
     expect(methodology).toContain('const reviewed = "')
     expect(methodology).toContain("dateModified: reviewed")
     expect(methodology).toContain('const reviewed = "2026-10-24"')
-    expect(hero).toContain("A fresh retest checks each fix.")
+    expect(hero).toContain("Approve proposed fixes and retest before you ship.")
+    expect(source("../lib/motion-manifest.ts")).toContain("missing proof stays inconclusive")
     expect(hero).not.toContain("A fresh retest confirms each fix")
     expect(kiloGuide).toContain("staging-web")
     expect(kiloGuide).not.toContain("staging-lyrafin-web")
@@ -337,16 +338,15 @@ describe("marketing SEO metadata", () => {
     expect(header).toContain('{ label: "Lite Check", href: "/scan", note: "Start here" }')
     expect(header.match(/\$\{appUrl\}\/sign-in/g)).toHaveLength(2)
     expect(header).not.toContain('href="/#free-scan"')
-    // The hero primary CTA now jumps to the on-page Lite Check form instead of the
-    // canonical page (founder-approved). The canonical page must still be reachable
-    // from the homepage, so assert that rather than dropping the guarantee.
-    expect(premiumHero).toContain('href="#free-scan" data-cta-id="premium-hero-lite-check"')
+    // The hero explores the workflow; the dedicated Lite section retains the
+    // canonical scanner destination and the consent-bound form.
+    expect(premiumHero).toContain('href="#how-it-works" data-cta-id="premium-hero-workflow"')
     expect(source("../components/landing/HomeLiteScan.astro")).toContain('href="/scan"')
-    expect(premiumHero).toContain('action="/scan"')
+    expect(source("../components/landing/LiteCheckForm.astro")).toContain('action="/scan"')
     // The closing CTA is the single closer now and carries no methodology
     // button, so the guarantee is asserted where the homepage actually offers
     // it: block 2's evidence-states card.
-    expect(source("../pages/index.astro")).toContain('href="/methodology"')
+    expect(source("../components/landing/EvidenceMap.astro")).toContain('href="/methodology"')
     expect(source("../components/Footer.astro")).toContain('href: "/methodology"')
     expect(source("../components/Header.astro")).toContain('href: "/methodology"')
     expect(scanner).toContain(

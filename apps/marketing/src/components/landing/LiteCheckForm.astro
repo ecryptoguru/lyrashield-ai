@@ -1,0 +1,107 @@
+---
+// Preserve the form IDs and analytics contract when moving it out of the hero.
+const scannerAvailable = Boolean(__MARKETING_SCANNER_URL__.replace(/\/$/, ""))
+---
+    <form id="hero-lite-form" class="premium-hero__field" action="/scan" method="get" novalidate>
+      <label class="premium-hero__field-label" for="hero-scan-url">Public app URL</label>
+      <div class="premium-hero__field-row">
+        <input
+          id="hero-scan-url"
+          type="text"
+          inputmode="url"
+          autocomplete="url"
+          maxlength="2048"
+          placeholder="example.com or https://your-app.com"
+          disabled={!scannerAvailable}
+          class="premium-hero__field-input"
+        />
+        <button
+          type="submit"
+          disabled={!scannerAvailable}
+          data-cta-id="hero_lite_check_submit"
+          class="premium-hero__field-button"
+        >
+          Run Lite Check
+        </button>
+      </div>
+      <label class="premium-hero__field-consent">
+        <input
+          id="hero-scan-authorized"
+          type="checkbox"
+          disabled={!scannerAvailable}
+          class="premium-hero__field-check"
+        />
+        <span
+          >I own this app or have permission to test it. The check is passive and read-only. By
+          scanning I agree to the <a href="/terms">Terms</a>.</span
+        >
+      </label>
+      {
+        !scannerAvailable && (
+          <p class="premium-hero__field-status" role="status">
+            Lite Check is unavailable. Please try again later.
+          </p>
+        )
+      }
+      <p id="hero-scan-error" class="premium-hero__field-error hidden" role="alert"></p>
+      <noscript>
+        <p class="premium-hero__field-status">
+          <a href="/scan">Open Lite Check</a>
+        </p>
+      </noscript>
+    </form>
+
+<style>
+.premium-hero__field { min-width: 0; margin: 1.5rem 0 0; }
+.premium-hero__field-label { display: block; color: var(--text); font-size: .875rem; font-weight: 600; }
+.premium-hero__field-row { display: flex; flex-wrap: wrap; gap: .65rem; margin-top: .65rem; }
+.premium-hero__field-input { flex: 1 1 13rem; min-width: 0; width: 100%; min-height: 3.25rem; padding: .8rem 1rem; border: 1px solid var(--border); border-radius: .75rem; background: var(--bg); color: var(--text); font: inherit; }
+.premium-hero__field-input::placeholder { color: var(--text-muted); }
+.premium-hero__field-button { flex: 0 1 auto; min-height: 3.25rem; padding: .8rem 1.2rem; border: 0; border-radius: .75rem; background: var(--accent); color: var(--bg); font: inherit; font-weight: 700; cursor: pointer; transition: transform 160ms, background-color 160ms; }
+.premium-hero__field-button:hover { transform: translateY(-1px); }
+.premium-hero__field-button:active { transform: translateY(1px); }
+.premium-hero__field-input:focus-visible, .premium-hero__field-button:focus-visible, .premium-hero__field-check:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+.premium-hero__field-input:disabled, .premium-hero__field-button:disabled { cursor: not-allowed; opacity: .65; transform: none; }
+.premium-hero__field-consent { display: flex; align-items: start; gap: .75rem; min-height: 44px; padding-block: .75rem; color: var(--text-muted); font-size: .8rem; line-height: 1.65; }
+.premium-hero__field-check { flex: none; width: 1.25rem; height: 1.25rem; margin-top: .1rem; accent-color: var(--accent); }
+.premium-hero__field-consent a { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+.premium-hero__field-status, .premium-hero__field-error { margin-top: .75rem; color: var(--text-muted); font-size: .875rem; }
+.premium-hero__field-error { color: var(--danger, var(--text)); }
+:global(:root[data-theme="light"]) .premium-hero__field-error { color: #c2251c; }
+@media(max-width:600px) { .premium-hero__field-row { display: grid; } }
+@media(prefers-reduced-motion:reduce) { .premium-hero__field-button { transition: none; transform: none; } }
+</style>
+<script>
+  import { bindLiteHandoff } from "../../lib/lite-handoff"
+  import { sanitizeMarketingProperties } from "../../lib/posthog-privacy"
+
+  // This field validates and parks the target for /scan without fetching it.
+  //
+  // Analytics carry the CTA id and a boolean only. The typed URL is never a
+  // property, so it cannot leave this component.
+  const capture = (valid: boolean) =>
+    window.posthog?.capture(
+      "hero_lite_check_submit",
+      sanitizeMarketingProperties("hero_lite_check_submit", {
+        cta_id: "hero_lite_check_submit",
+        valid,
+      }) ?? {}
+    )
+
+  const error = () => document.querySelector<HTMLElement>("#hero-scan-error")
+  bindLiteHandoff({
+    formId: "hero-lite-form",
+    inputId: "hero-scan-url",
+    errorId: "hero-scan-error",
+    consentId: "hero-scan-authorized",
+    onClear: () => error()?.classList.add("hidden"),
+    onError: (message) => {
+      const node = error()
+      if (!node) return
+      node.textContent = message
+      node.classList.remove("hidden")
+      capture(false)
+    },
+    onSuccess: () => capture(true),
+  })
+</script>

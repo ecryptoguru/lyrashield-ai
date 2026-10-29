@@ -1,0 +1,57 @@
+---
+import TargetGlyph from "./TargetGlyph.astro"
+---
+<section id="different" class="evidence-map" aria-labelledby="different-heading">
+  <div class="evidence-map__content">
+    <h2 id="different-heading">A verdict that shows its work.</h2>
+    <figure aria-label="Repositories, websites and APIs flow through evidence, human approval and retesting into a report">
+      <div class="evidence-map__targets">
+        <span><TargetGlyph kind="repo" />Repository</span>
+        <span><TargetGlyph kind="web" />Website</span>
+        <span><TargetGlyph kind="api" />API</span>
+      </div>
+      <div class="evidence-map__connector" aria-hidden="true"></div>
+      <div class="evidence-map__ledger">
+        <span class="evidence-map__label">Evidence</span>
+        <ul aria-label="Evidence states">
+          <li class="evidence-map__detected">Detected</li>
+          <li class="evidence-map__confirmed">Retest-confirmed</li>
+          <li class="evidence-map__inconclusive">Inconclusive</li>
+        </ul>
+      </div>
+      <div class="evidence-map__connector" aria-hidden="true"></div>
+      <div class="evidence-map__outcomes">
+        <span><TargetGlyph kind="approval" />Approval required</span>
+        <span><TargetGlyph kind="retest" />Retest</span>
+        <span><TargetGlyph kind="report" />Report</span>
+      </div>
+    </figure>
+    <div class="evidence-map__links">
+      <a href="/methodology" data-cta-id="homepage-different-methodology">How evidence works</a>
+      <a href="/demo" data-cta-id="homepage-path-agency">Reviewing client releases?</a>
+    </div>
+  </div>
+</section>
+<style>
+.evidence-map { display: grid; grid-template-columns: minmax(0, 1fr); align-content: center; padding: 4rem 1rem; scroll-margin-top: 5rem; }
+.evidence-map__content { container-type: inline-size; min-width: 0; width: min(100%, 880px); margin-inline: auto; padding: clamp(1.5rem, 4vw, 3.5rem); background: var(--bg); border-radius: 1rem; }
+h2 { max-width: 18ch; margin: 0 auto 2.5rem; text-align: center; font-size: clamp(1.8rem, 4vw, 3rem); line-height: 1.12; letter-spacing: -.03em; text-wrap: balance; color: var(--text); }
+figure { margin: 0; }
+.evidence-map__targets, .evidence-map__outcomes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; }
+.evidence-map__targets > span, .evidence-map__outcomes > span { display: flex; flex-direction: column; align-items: center; gap: .9rem; min-width: 0; overflow-wrap: anywhere; text-align: center; font-size: .875rem; color: var(--text); }
+.evidence-map__targets :global(svg), .evidence-map__outcomes :global(svg) { color: var(--accent); }
+.evidence-map__connector { width: 1px; height: 2rem; margin: .5rem auto; background: var(--border); }
+.evidence-map__ledger { padding: 1.5rem 1rem; background: var(--bg-raised); text-align: center; border-block: 1px solid var(--border); }
+.evidence-map__label { display: block; color: var(--text); font-weight: 600; margin-bottom: 1rem; }
+ul { display: flex; flex-wrap: wrap; justify-content: center; gap: .65rem; margin: 0; padding: 0; list-style: none; }
+li { padding: .4rem .65rem; border-radius: .4rem; font-size: .8rem; }
+.evidence-map__detected { color: var(--accent); background: var(--accent-dim); }
+.evidence-map__confirmed { color: var(--text); border: 1px solid var(--border); }
+.evidence-map__inconclusive { color: var(--terminal-warning-text); background: var(--terminal-warning-bg, var(--bg)); }
+:global(:root[data-theme="dark"]) .evidence-map__inconclusive { color: #f5bc69; }
+.evidence-map__links { display: flex; flex-wrap: wrap; justify-content: center; column-gap: 2rem; margin-top: 2rem; }
+a { display: inline-flex; align-items: center; min-height: 44px; color: var(--accent); font-size: .875rem; text-decoration: underline; text-underline-offset: 4px; }
+a:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+@media(max-width:480px) { .evidence-map__content { padding: 1.5rem 1rem; } .evidence-map__targets, .evidence-map__outcomes { gap: .6rem; } }
+@container(max-width:12rem) { .evidence-map__targets, .evidence-map__outcomes { grid-template-columns: minmax(0, 1fr); } .evidence-map__targets > span, .evidence-map__outcomes > span { flex-direction: row; justify-content: center; } }
+</style>

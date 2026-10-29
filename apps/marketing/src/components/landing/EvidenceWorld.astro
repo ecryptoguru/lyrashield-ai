@@ -3,21 +3,12 @@ import type { MotionMediaManifest } from "../../lib/motion-manifest"
 interface Props { manifest: MotionMediaManifest }
 const { manifest } = Astro.props
 const labels = ["Overview", "Target", "Review", "Evidence", "Approval", "Retest", "Report"]
-const receipts = [
-  "Authorized scope is stated",
-  "Target identity stays on record",
-  "The checks that ran are recorded",
-  "Detected is distinct from proven",
-  "A proposal still needs approval",
-  "Missing coverage stays inconclusive",
-  "Scope and limitations travel with the report",
-]
 ---
 
 <evidence-journey id="assurance-world" aria-labelledby="journey-heading">
   <header class="journey__intro">
-    <div><h2 id="journey-heading">From target to verdict.</h2><p>One finding, followed through the loop.</p></div>
-    <a href="#product-preview">Skip to the product preview <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M6 18 18 6M6 6h12v12" /></svg></a>
+    <div><h2 id="journey-heading">From target to report.</h2><p>One illustrative finding.</p></div>
+    <a href="#product-preview">Skip to product preview <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M6 18 18 6M6 6h12v12" /></svg></a>
   </header>
   <nav class="journey__nav" aria-label="Evidence journey chapters">
     {manifest.chapters.map((chapter, index) => (
@@ -33,7 +24,7 @@ const receipts = [
           <h3 id={`chapter-${chapter.id}`}>{chapter.title}</h3>
           <p>{chapter.body}</p>
           {chapter.id === "evidence-state" && <ul class="journey__states"><li><i class="state-detected" />Detected</li><li><i class="state-confirmed" />Retest-confirmed</li><li><i class="state-inconclusive" />Inconclusive</li></ul>}
-          <p class="journey__receipt"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M6 3h9l3 3v15H6zM9 10h6M9 14h6M9 18h4" /></svg><span>Example EX-014 · {receipts[index]}</span></p>
+
           {chapter.supportingCard && <details>
             <summary>{chapter.supportingCard.title}</summary>
             <p>{chapter.supportingCard.body}</p>
@@ -50,21 +41,20 @@ const receipts = [
       <article class="journey__artifact">
         <div class="journey__artifact-top"><span>Finding EX-014</span><span class="journey__badge">Detected</span></div>
         <h3>Missing rate limit on login route</h3>
-        <p>An illustrative observation, not a real vulnerability report.</p>
-        <dl><div><dt>Target scope</dt><dd>Authorized example route</dd></div><div><dt>Evidence coverage</dt><dd>Bounded to the checks that ran</dd></div><div><dt>Latest evaluated review</dt><dd>Example only</dd></div></dl>
+        <dl><div><dt>Target scope</dt><dd>Authorized example route</dd></div><div><dt>Evidence coverage</dt><dd>Incomplete</dd></div></dl>
         <div class="journey__receipts">
-          <p data-receipt-stage="1"><span>Scope</span>Target identity retained</p>
-          <p data-receipt-stage="2"><span>Review</span>Check method recorded</p>
-          <p data-receipt-stage="3"><span>Evidence</span>Detected · not independently proven</p>
-          <p data-receipt-stage="4"><span>Approval</span>Proposal awaiting review</p>
+          <p data-receipt-stage="1"><span>Scope</span>Recorded</p>
+          <p data-receipt-stage="2"><span>Review</span>Recorded</p>
+          <p data-receipt-stage="3"><span>Evidence</span>Detected</p>
+          <p data-receipt-stage="4"><span>Approval</span>Required</p>
           <p data-receipt-stage="5"><span>Retest</span>Incomplete coverage · inconclusive</p>
         </div>
       </article>
       <section class="journey__report" aria-labelledby="sample-report-heading">
-        <div><h3 id="sample-report-heading">Assurance report</h3><span>Insufficient evidence</span></div>
+        <div><h3 id="sample-report-heading">Report</h3><span>Insufficient evidence</span></div>
         <p>Example EX-014 remains on record.</p>
-        <ul><li>Authorized scope retained</li><li>Approval required</li><li>Retest coverage incomplete</li></ul>
-        <p class="journey__report-limit">Missing proof stays visible. No security guarantee.</p>
+        <ul><li>Scope retained</li><li>Approval required</li><li>Retest coverage incomplete</li></ul>
+        <p class="journey__report-limit">No security guarantee.</p>
       </section>
     </aside>
   </div>

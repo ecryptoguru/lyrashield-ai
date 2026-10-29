@@ -39,9 +39,9 @@ describe("premium assurance-world homepage", () => {
     // Nine-block order (spec section 8): hero, what is different, Lite Check,
     // journey, surfaces, coverage, pricing, FAQ, closing CTA.
     expect(homepage.indexOf("<PremiumHero cinematic />")).toBeLessThan(
-      homepage.indexOf('id="different"')
+      homepage.indexOf("<EvidenceMap />")
     )
-    expect(homepage.indexOf('id="different"')).toBeLessThan(homepage.indexOf("<HomeLiteScan"))
+    expect(homepage.indexOf("<EvidenceMap />")).toBeLessThan(homepage.indexOf("<HomeLiteScan"))
     expect(homepage.indexOf("<HomeLiteScan")).toBeLessThan(homepage.indexOf("<EvidenceWorld"))
     expect(homepage.indexOf("<EvidenceWorld")).toBeLessThan(
       homepage.indexOf("<HeroProductFrame />")
@@ -56,55 +56,31 @@ describe("premium assurance-world homepage", () => {
     expect(homepage).not.toContain("<Loop />")
   })
 
-  it("uses the approved D1 launch-gate copy and conversion anchors", () => {
-    // D1 Option 1, approved after the five-second test was skipped (2026-10-04).
-    expect(hero).toContain("Open beta · Security review for AI-built apps")
+  it("uses concise launch-gate copy and preserves conversion attribution", () => {
     expect(hero).toContain("The launch gate for AI-built apps.")
-    expect(heroCopy).toContain(
-      "Point LyraShield at a repository, URL or API you are authorized to test."
-    )
-    expect(heroCopy).toContain(
-      "It reviews what your coding agents shipped and returns one verdict: ready, not ready or insufficient evidence."
-    )
-    // The retired category line must not come back (D2 vocabulary lock).
+    expect(heroCopy).toContain("Review your repo, website or API.")
+    expect(heroCopy).toContain("Approve proposed fixes and retest before you ship.")
     expect(hero).not.toContain("Release assurance")
     expect(hero.indexOf("landing_hero&cta=start_trial")).toBeLessThan(
-      hero.indexOf('href="#free-scan"')
+      hero.indexOf('href="#how-it-works"')
     )
     expect(hero).toContain("app.lyrashieldai.com/sign-up")
   })
 
-  it("keeps the hero task-oriented and the sample verdict card honest", () => {
-    // One filled primary CTA and one secondary; the label comes from the single
-    // source so it can never drift from the rest of the site.
+  it("keeps one hero action pair and one honest illustrative finding in the journey", () => {
     expect(hero).toContain("CTA_LABEL.signUp")
     expect(hero).toContain("TRIAL_LINE")
     expect(hero).toContain('data-cta-id="premium-hero-primary"')
-    expect(hero).toContain("premium-hero__secondary")
-    expect(hero).toContain("See a sample Lite result")
+    expect(hero).toContain('data-cta-id="premium-hero-workflow"')
+    expect(hero).toContain("See the workflow")
     expect(hero).not.toContain("Create account")
-
-    // The artifact is a synthetic sample labelled as one, so it must never show
-    // a retest-confirmed or independently verified state.
-    expect(hero).toContain("Sample verdict card")
-    expect(hero).toContain("Verdict · Insufficient evidence")
-    expect(hero).toContain("Server credential referenced by client build")
-    expect(hero).toContain("Missing rate limit on login route")
-    expect(hero).toContain("7 controls need your evidence")
-    expect(hero).toContain("bounded to the checks that ran")
-    // Scope the ban to the rendered artifact: the component's own CSS comment
-    // explains that no verified state may appear, so a whole-file match would
-    // flag the warning itself.
-    const artifactMarkup = hero.slice(
-      hero.indexOf('class="premium-hero__artifact"'),
-      hero.indexOf("</figure>")
-    )
-    expect(artifactMarkup).not.toMatch(/verified|retest-confirmed/i)
-
-    // Both sample findings read Detected and nothing else.
-    const states = hero.match(/premium-hero__artifact-state">([^<]+)</g) ?? []
-    expect(states).toHaveLength(2)
-    for (const state of states) expect(state).toContain(">Detected<")
+    expect(hero).not.toContain("<figure")
+    expect(hero).not.toContain("<form")
+    expect(world).toContain("Illustrative example")
+    expect(world).toContain("Finding EX-014")
+    expect(world).toContain("Insufficient evidence")
+    const artifact = world.slice(world.indexOf('class="journey__artifact"'))
+    expect(artifact).not.toMatch(/state-verified|state-confirmed/)
   })
 
   it("tells the review loop through the journey block, not a static list", () => {
@@ -128,10 +104,11 @@ describe("premium assurance-world homepage", () => {
     expect(homepage).not.toMatch(/independent verification|verified fixes/i)
   })
 
-  it("keeps agent setup subordinate to existing homepage conversions", () => {
-    const agentLink = hero.indexOf("premium-hero-agent-setup")
-    expect(agentLink).toBeGreaterThan(hero.indexOf("premium-hero-lite-check"))
-    expect(agentLink).toBeGreaterThan(hero.indexOf("premium-hero-primary"))
+  it("keeps agent setup reachable after the main homepage conversions", () => {
+    const agentLink = homepage.indexOf('href="/agents"')
+    expect(agentLink).toBeGreaterThan(homepage.indexOf("<PremiumHero cinematic />"))
+    expect(agentLink).toBeGreaterThan(homepage.indexOf("<HomeLiteScan />"))
+    expect(homepage).toContain("cliLoginCommand")
   })
 
   it("builds one immutable desktop and portrait track with seven timed chapters", () => {
@@ -151,7 +128,11 @@ describe("premium assurance-world homepage", () => {
       duration: 56,
     })
     expect(ids).toHaveLength(7)
-    expect(manifest.chapters.filter((chapter) => chapter.supportingCard)).toHaveLength(5)
+    expect(manifest.chapters.filter((chapter) => chapter.supportingCard)).toHaveLength(0)
+    for (const chapter of manifest.chapters) {
+      expect(chapter.title.length).toBeLessThan(35)
+      expect(chapter.body.length).toBeLessThan(115)
+    }
     expect(new Set(ids).size).toBe(7)
     expect(ids).toEqual([
       "gateway",
