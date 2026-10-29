@@ -162,8 +162,8 @@ export function createMotionMediaManifest(
     },
     portrait: {
       src: `${root}/portrait/assurance-world.mp4`,
-      width: 720,
-      height: 1280,
+      width: MOTION_VARIANTS.portrait.width,
+      height: MOTION_VARIANTS.portrait.height,
       duration: MOTION_DURATION,
     },
     chapters: chapterCopy.map((chapter) => ({

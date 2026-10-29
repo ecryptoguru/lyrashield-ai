@@ -31,6 +31,9 @@ the shared catalog.
 ## Motion thesis
 
 - Focal moment: one continuous architectural film follows native scrolling.
+- Delivery: download one file with a 3 MiB cap and a 15-second deadline before
+  activating the decoder. Abort on release and reject late completions. Revoke
+  the object URL when motion is disabled or the component is removed.
 - Presentation: a paused decoder seeks toward the latest scroll position. Completed
   frames are copied to a canvas below the readability overlay. Keep the previous
   frame visible during a seek; never use autoplay to advance the story.

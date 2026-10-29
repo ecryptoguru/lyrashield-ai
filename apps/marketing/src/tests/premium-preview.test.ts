@@ -98,14 +98,14 @@ describe("premium assurance-world homepage", () => {
     expect(manifest.version).toBe("3")
     expect(manifest.desktop).toEqual({
       src: "/media-local/assurance-world/v3/test-render/desktop/assurance-world.mp4",
-      width: 1440,
-      height: 810,
+      width: 800,
+      height: 450,
       duration: 56,
     })
     expect(manifest.portrait).toEqual({
       src: "/media-local/assurance-world/v3/test-render/portrait/assurance-world.mp4",
-      width: 720,
-      height: 1280,
+      width: 450,
+      height: 800,
       duration: 56,
     })
     expect(ids).toHaveLength(7)

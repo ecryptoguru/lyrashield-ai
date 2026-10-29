@@ -20,6 +20,8 @@ class ScrollWorld extends HTMLElement {
   private frame = 0
   private canvas!: HTMLCanvasElement
   private context!: CanvasRenderingContext2D
+  private download?: AbortController
+  private objectUrl = ""
   private deadline = 0
   private variant = ""
   private width = 0
@@ -170,7 +172,8 @@ class ScrollWorld extends HTMLElement {
       this.release()
       this.dataset.worldState = "static"
       this.queue()
-    } else if (this.near && !this.failed && !this.video.getAttribute("src")) this.loadVariant()
+    } else if (this.near && !this.failed && !this.video.getAttribute("src") && !this.download)
+      void this.loadVariant()
   }
 
   private geometry = () => {
@@ -217,7 +220,12 @@ class ScrollWorld extends HTMLElement {
     this.queue()
   }
 
-  private loadVariant() {
+  private async loadVariant() {
+    if (this.download) return
+    const epoch = this.epoch
+    const download = new AbortController()
+    this.download = download
+    const timeout = window.setTimeout(() => download.abort(), 15000)
     this.variant = this.mediaVariant()
     const track = this.variant === "portrait" ? this.manifest.portrait : this.manifest.desktop
     this.dataset.worldState = "loading"
@@ -226,13 +234,37 @@ class ScrollWorld extends HTMLElement {
     // readyState can change before loadedmetadata is dispatched. Block scroll
     // seeks until the first frame has completed the startup handshake.
     this.priming = true
-    // Decode while paused. Only completed frames are copied to the canvas.
-    this.video.pause()
-    this.video.crossOrigin = "anonymous"
-    this.video.src = track.src
-    this.video.preload = "auto"
-    this.video.load()
-    this.armDeadline(5000)
+    // Fetch one bounded file before scrubbing: range round trips must never sit
+    // between the visitor's scroll position and its corresponding frame.
+    try {
+      const response = await fetch(track.src, { signal: download.signal })
+      if (!response.ok || !response.body) throw new Error("Motion download unavailable")
+      const reader = response.body.getReader()
+      const chunks: Uint8Array<ArrayBuffer>[] = []
+      let bytes = 0
+      while (true) {
+        const { value, done } = await reader.read()
+        if (done) break
+        bytes += value.byteLength
+        if (bytes > 3 * 1024 * 1024) {
+          await reader.cancel()
+          throw new Error("Motion download exceeds budget")
+        }
+        chunks.push(value)
+      }
+      if (epoch !== this.epoch || !this.isConnected || !this.allowed()) return
+      this.objectUrl = URL.createObjectURL(new Blob(chunks, { type: "video/mp4" }))
+      this.video.pause()
+      this.video.src = this.objectUrl
+      this.video.preload = "auto"
+      this.video.load()
+      this.armDeadline(5000)
+    } catch {
+      if (epoch === this.epoch && this.isConnected && this.allowed()) this.fail()
+    } finally {
+      clearTimeout(timeout)
+      if (this.download === download) this.download = undefined
+    }
   }
 
   private metadata = () => {
@@ -347,12 +379,16 @@ class ScrollWorld extends HTMLElement {
   }
   private release() {
     this.epoch++
+    this.download?.abort()
+    this.download = undefined
     this.clearDeadline()
     if (!this.video) return
     this.video.pause()
     this.video.removeAttribute("src")
     this.video.preload = "none"
     this.video.load()
+    if (this.objectUrl) URL.revokeObjectURL(this.objectUrl)
+    this.objectUrl = ""
     this.inFlight = false
     this.priming = false
     delete this.dataset.worldPainted
