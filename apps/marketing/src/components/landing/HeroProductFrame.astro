@@ -7,36 +7,36 @@ const shots = [
     id: "overview", label: "Overview", title: "Evidence overview", asset: "posture",
     route: "dashboard", width: 1600, height: 597,
     alt: "LyraShield dashboard showing one next action, authorized target scope, partial coverage and an insufficient evidence state. Private review identity is redacted.",
-    heading: "Know what needs your attention.",
-    description: "Start with one next action. Keep assessed scope, incomplete coverage and the current evidence state in view.",
+    heading: "Your review, in view.",
+    description: "Scope, coverage and evidence together.",
   },
   {
     id: "findings", label: "Findings", title: "Findings", asset: "findings",
     route: "dashboard/findings", width: 960, height: 834,
     alt: "A current finding detail panel with Critical severity, Open status, Inconclusive evidence and actions to review evidence or create a fix proposal. The private finding title is redacted.",
-    heading: "Review the evidence before proposing a fix.",
-    description: "Severity, status and evidence state stay separate. The next step leads to retained evidence and an approval-gated fix proposal.",
+    heading: "Evidence before action.",
+    description: "Review findings and proposed fixes.",
   },
   {
     id: "scan", label: "Scan record", title: "Scan record", asset: "scan",
     route: "dashboard/scans", width: 1600, height: 640,
     alt: "A completed, sealed scan record showing its duration, retained findings, a zero-count reserved verification column, coverage state and Create an assurance report action. The target name is redacted.",
-    heading: "Turn a recorded review into an assurance report.",
-    description: "Keep scan completion, findings and coverage distinct when packaging the recorded scope for your team.",
+    heading: "From review to report.",
+    description: "Retain the scope and coverage.",
   },
   {
     id: "readiness", label: "Launch readiness", title: "Launch readiness", asset: "readiness",
     route: "dashboard/launch-readiness", width: 1600, height: 604,
     alt: "Current Launch Readiness view showing insufficient current evidence, a review-findings action and a triage score explicitly labeled as separate from readiness.",
-    heading: "Keep missing evidence visible at release time.",
-    description: "Readiness explains the evidence limits. Triage helps prioritize open findings without becoming a launch verdict.",
+    heading: "Know what is missing.",
+    description: "Readiness includes the limits.",
   },
   {
     id: "agents", label: "Coding agents", title: "Coding Agents", asset: "agents",
     route: "dashboard/agents", width: 1600, height: 690,
     alt: "Current Coding Agents view with search, setup methods and Devin, GitHub Copilot and Cline installation cards, each with Set up, Docs and expandable setup details.",
-    heading: "Connect the coding agent you already use.",
-    description: "Find your client, choose its setup method and open the installation guidance. Technical setup details stay available when you need them.",
+    heading: "Work with your agent.",
+    description: "Choose your client and setup.",
   },
 ]
 const primary = shots[0]!
@@ -44,8 +44,7 @@ const primary = shots[0]!
 
 <section id="product-preview" class="hero-frame" aria-labelledby="hero-frame-caption">
   <header class="hero-frame__intro">
-    <h2 id="hero-frame-caption">The evidence, in view.</h2>
-    <p>Explore the console your team uses to review findings and decide what comes next.</p>
+    <h2 id="hero-frame-caption">See the product.</h2>
   </header>
   <div class="hero-frame__views" role="group" aria-label="Dashboard views" hidden>
     {shots.map((shot) => <button type="button" data-product-select={shot.id} aria-controls={`product-view-${shot.id}`} aria-pressed={shot.id === "overview" ? "true" : "false"}>{shot.label}</button>)}
@@ -65,9 +64,9 @@ const primary = shots[0]!
       </figure>
     ))}
   </div>
-  <p class="hero-frame__provenance">Demo workspace · October 9, 2026 · Private details redacted. Counts and states describe this captured example.</p>
+  <p class="hero-frame__provenance">Demo workspace · Captured October 9, 2026 · Private details redacted.</p>
   <dialog class="product-preview" aria-labelledby="product-preview-title">
-    <div class="product-preview__toolbar"><h2 id="product-preview-title">Current dashboard preview</h2><button type="button" data-product-close>Close preview</button></div>
+    <div class="product-preview__toolbar"><h2 id="product-preview-title">Dashboard preview</h2><button type="button" data-product-close>Close preview</button></div>
     <p>Demo workspace capture · Private details redacted</p>
     <p id="product-preview-hint" class="product-preview__hint">Swipe or use the arrow keys to inspect the full screen.</p>
     <div class="product-preview__scroll" tabindex="0" role="region" aria-label="Enlarged product image" aria-describedby="product-preview-hint"><img data-product-image src={`/product/current-${primary.asset}-dark.webp`} alt={primary.alt} width={primary.width} height={primary.height} loading="lazy" /></div>

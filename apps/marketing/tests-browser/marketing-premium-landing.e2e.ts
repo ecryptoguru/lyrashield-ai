@@ -23,14 +23,27 @@ test("recovered homepage reveals cinema and keeps mobile controls usable", async
       await page.evaluate(() => document.fonts.ready)
       const metrics = await page.evaluate(() => {
         const main = document.querySelector("main")!
-        const text = (main as HTMLElement).innerText.replace(
-          main.querySelector<HTMLElement>("#cloud-plans")?.innerText ?? "",
-          ""
-        )
+        const walker = document.createTreeWalker(main, NodeFilter.SHOW_TEXT)
+        let text = ""
+        while (walker.nextNode()) {
+          const element = walker.currentNode.parentElement
+          if (
+            !element ||
+            element.closest(
+              'nav,footer,script,style,[hidden],[aria-hidden="true"],#cloud-plans,[data-world-status]'
+            )
+          )
+            continue
+          const details = element.closest("details")
+          if (details && !details.open && !element.closest("summary")) continue
+          if (!element.getClientRects().length || getComputedStyle(element).visibility === "hidden")
+            continue
+          text += ` ${walker.currentNode.textContent}`
+        }
         return {
           width: innerWidth,
           pageHeight: document.documentElement.scrollHeight,
-          visibleWordsExcludingPricing: text.trim().split(/\s+/).length,
+          visibleWordsExcludingPricing: text.match(/\b[\w]+(?:['’-][\w]+)*\b/g)?.length ?? 0,
           overflow: document.documentElement.scrollWidth - innerWidth,
           ctaBottom: document.querySelector(".premium-hero__primary")!.getBoundingClientRect()
             .bottom,
@@ -39,6 +52,7 @@ test("recovered homepage reveals cinema and keeps mobile controls usable", async
       results.push({ theme, ...metrics })
       expect(metrics.overflow).toBeLessThanOrEqual(1)
       if (phase === "after") {
+        expect(metrics.visibleWordsExcludingPricing).toBeLessThanOrEqual(550)
         // Recovery restores the original scroll distance; compression budgets
         // from the withdrawn redesign must not shorten the cinematic timeline.
         if (width < 1024) {
@@ -74,7 +88,7 @@ test("homepage answers and structured data agree without JavaScript", async ({ b
   const nodes = entities.flatMap((entity) => flatten(JSON.parse(entity)))
   const faqSchema = nodes.find((node) => node["@type"] === "FAQPage")!
   const questions = faqSchema.mainEntity as { name: string; acceptedAnswer: { text: string } }[]
-  expect(questions.length).toBeGreaterThan(0)
+  expect(questions).toHaveLength(4)
   await expect(faq).toHaveCount(questions.length)
   for (const [index, question] of questions.entries()) {
     await expect(faq.nth(index).locator("summary")).toHaveText(question.name)
@@ -111,4 +125,30 @@ test("local text compression preserves HTML and leaves video ranges byte-identic
   expect(ranged.headers()["content-encoding"]).toBeUndefined()
   expect((await ranged.body()).length).toBe(1024)
   expect(await ranged.body()).toEqual(await original.body())
+})
+
+test("chapter navigation and motion controls have separate touch areas", async ({ page }) => {
+  for (const width of [360, 390, 768, 1280, 1440]) {
+    await page.setViewportSize({ width, height: 844 })
+    await page.goto("/")
+    await page.evaluate(() => document.fonts.ready)
+    await page
+      .locator("#journey-gateway")
+      .evaluate((chapter) => chapter.scrollIntoView({ behavior: "instant" }))
+    const toggle = page.locator("[data-world-toggle]")
+    await expect(toggle).toBeVisible()
+    const button = await toggle.boundingBox()
+    const rail = await page.locator(".journey__nav").boundingBox()
+    const overlapWidth = Math.max(
+      0,
+      Math.min(rail!.x + rail!.width, button!.x + button!.width) - Math.max(rail!.x, button!.x)
+    )
+    const overlapHeight = Math.max(
+      0,
+      Math.min(rail!.y + rail!.height, button!.y + button!.height) - Math.max(rail!.y, button!.y)
+    )
+    expect(overlapWidth * overlapHeight).toBe(0)
+    await page.getByRole("link", { name: "Report", exact: true }).click()
+    await expect(page.locator("[data-journey-link='6']")).toHaveAttribute("aria-current", "step")
+  }
 })

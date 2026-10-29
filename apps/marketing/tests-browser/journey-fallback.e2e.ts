@@ -24,7 +24,7 @@ test("shows all six journey steps with JavaScript disabled", async ({ browser })
 
   // The journey block and its heading are present.
   await expect(page.locator("#how-it-works")).toBeAttached()
-  await expect(page.locator("#journey-heading")).toHaveText("From target to verdict.")
+  await expect(page.locator("#journey-heading")).toHaveText("From target to report.")
 
   // Every chapter renders as a static step, and all of them are visible.
   const steps = page.locator(".journey__chapter")

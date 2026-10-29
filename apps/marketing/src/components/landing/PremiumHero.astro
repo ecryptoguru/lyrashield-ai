@@ -4,10 +4,6 @@ import { CTA_LABEL, TRIAL_LINE } from "../../lib/site-copy"
 interface Props { cinematic?: boolean }
 const { cinematic = false } = Astro.props
 
-// Same flag the Lite Check section uses: with no scanner configured the field
-// is disabled and shows the same status line, so the hero never offers a
-// control that cannot work.
-const scannerAvailable = Boolean(__MARKETING_SCANNER_URL__.replace(/\/$/, ""))
 import premiumHeroAvif from "../../assets/premium-hero.avif"
 import premiumHeroJpeg from "../../assets/premium-hero.jpg"
 import premiumHeroWebp from "../../assets/premium-hero.webp"
@@ -31,15 +27,9 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
   <div class="premium-hero__content">
     <h1 id="premium-hero-title">The launch gate for AI-built apps.</h1>
     <p class="premium-hero__lede">
-      Point LyraShield at a repository, URL or API you are authorized to test. It reviews what
-      your coding agents shipped and returns one verdict: ready, not ready or insufficient
-      evidence.
+      Review your repo, website or API. Approve proposed fixes and retest before you ship.
     </p>
-    <ul class="premium-hero__proof">
-      <li>Every finding shows its evidence</li>
-      <li>Fixes are proposals you approve</li>
-      <li>A fresh retest checks each fix.</li>
-    </ul>
+    <p class="premium-hero__proof">Evidence attached. Fixes need approval.</p>
 
     <div class="premium-hero__actions">
       <a
@@ -51,99 +41,16 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
       </a>
       <a
         class="premium-hero__secondary"
-        href="#free-scan" data-cta-id="premium-hero-lite-check"
+        href="#how-it-works" data-cta-id="premium-hero-workflow"
       >
-        See a sample Lite result
+        See the workflow
       </a>
     </div>
 
-    <form id="hero-lite-form" class="premium-hero__field" action="/scan" method="get" novalidate>
-      <label class="premium-hero__field-label" for="hero-scan-url">Public app URL</label>
-      <div class="premium-hero__field-row">
-        <input
-          id="hero-scan-url"
-          type="text"
-          inputmode="url"
-          autocomplete="url"
-          maxlength="2048"
-          placeholder="example.com or https://your-app.com"
-          disabled={!scannerAvailable}
-          class="premium-hero__field-input"
-        />
-        <button
-          type="submit"
-          disabled={!scannerAvailable}
-          data-cta-id="hero_lite_check_submit"
-          class="premium-hero__field-button"
-        >
-          Run Lite Check
-        </button>
-      </div>
-      <label class="premium-hero__field-consent">
-        <input
-          id="hero-scan-authorized"
-          type="checkbox"
-          disabled={!scannerAvailable}
-          class="premium-hero__field-check"
-        />
-        <span
-          >I own this app or have permission to test it. The check is passive and read-only. By
-          scanning I agree to the <a href="/terms">Terms</a>.</span
-        >
-      </label>
-      {
-        !scannerAvailable && (
-          <p class="premium-hero__field-status" role="status">
-            The separately protected scanner API is not connected in this environment.
-          </p>
-        )
-      }
-      <p id="hero-scan-error" class="premium-hero__field-error hidden" role="alert"></p>
-      <noscript>
-        <p class="premium-hero__field-status">
-          <a href="/scan">Open the free Lite Check</a> to run the check without JavaScript.
-        </p>
-      </noscript>
-    </form>
+
     <p class="premium-hero__trial-note">{TRIAL_LINE}</p>
-    <a
-      class="premium-hero__agent-link"
-      href="/agents"
-      data-cta-id="premium-hero-agent-setup"
-    >
-      Set up LyraShield in your coding agent →
-    </a>
-    <p class="premium-hero__boundary">
-      Open beta · Security review for AI-built apps.
-      Evidence is limited to the authorized scope and the checks that ran. No security guarantee.
-    </p>
   </div>
 
-  <figure class="premium-hero__artifact" aria-labelledby="premium-hero-artifact-caption">
-    <figcaption id="premium-hero-artifact-caption" class="premium-hero__artifact-sample">
-      Sample verdict card
-    </figcaption>
-    <div class="premium-hero__artifact-card" data-evidence-arrival>
-      <div class="premium-hero__artifact-header">
-        <span class="premium-hero__artifact-dot"></span>
-        <span class="premium-hero__artifact-status">Verdict · Insufficient evidence</span>
-      </div>
-      <ul class="premium-hero__artifact-findings">
-        <li>
-          <span class="premium-hero__artifact-state">Detected</span>{" "}
-          Server credential referenced by client build
-        </li>
-        <li>
-          <span class="premium-hero__artifact-state">Detected</span>{" "}
-          Missing rate limit on login route{" "}
-          <small class="premium-hero__example-id">Example EX-014 · followed in the evidence journey</small>
-        </li>
-      </ul>
-      <dl class="premium-hero__artifact-scope"><div><dt>Target scope</dt><dd>Authorized example route</dd></div><div><dt>Evidence coverage</dt><dd>Partial · retest pending</dd></div></dl>
-      <p class="premium-hero__artifact-meta">7 controls need your evidence</p>
-      <p class="premium-hero__artifact-meta">Evidence: bounded to the checks that ran</p>
-    </div>
-  </figure>
 </section>
 
 <style>
@@ -739,6 +646,11 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
     .premium-hero--cinematic .premium-hero__actions { order: 2; }
     .premium-hero--cinematic .premium-hero__lede { order: 3; }
   }
+  .premium-hero--cinematic { align-content: start; }
+  .premium-hero--cinematic .premium-hero__content { align-self: start; }
+  h1 { font-size: clamp(3.8rem, 7.4vw, 6rem); letter-spacing: -.04em; }
+  @media(max-width:720px) { h1 { font-size: clamp(3.25rem, 15vw, 5.2rem); } }
+  @media(max-width:480px) { h1 { font-size: clamp(2.35rem, 10.5vw, 2.9rem); } }
 </style>
 
 <style>
@@ -871,41 +783,11 @@ import premiumHeroWebp from "../../assets/premium-hero.webp"
       );
     }
   }
+  .premium-hero--cinematic { align-content: start; }
+  .premium-hero--cinematic .premium-hero__content { align-self: start; }
+  h1 { font-size: clamp(3.8rem, 7.4vw, 6rem); letter-spacing: -.04em; }
+  @media(max-width:720px) { h1 { font-size: clamp(3.25rem, 15vw, 5.2rem); } }
+  @media(max-width:480px) { h1 { font-size: clamp(2.35rem, 10.5vw, 2.9rem); } }
 </style>
 
-<script>
-  import "./landing-effects"
-  import { bindLiteHandoff } from "../../lib/lite-handoff"
-  import { sanitizeMarketingProperties } from "../../lib/posthog-privacy"
-
-  // The hero field never fetches anything. It validates, parks the target for
-  // /scan and navigates, exactly like the Lite Check section further down.
-  //
-  // Analytics carry the CTA id and a boolean only. The typed URL is never a
-  // property, so it cannot leave this component.
-  const capture = (valid: boolean) =>
-    window.posthog?.capture(
-      "hero_lite_check_submit",
-      sanitizeMarketingProperties("hero_lite_check_submit", {
-        cta_id: "hero_lite_check_submit",
-        valid,
-      }) ?? {}
-    )
-
-  const error = () => document.querySelector<HTMLElement>("#hero-scan-error")
-  bindLiteHandoff({
-    formId: "hero-lite-form",
-    inputId: "hero-scan-url",
-    errorId: "hero-scan-error",
-    consentId: "hero-scan-authorized",
-    onClear: () => error()?.classList.add("hidden"),
-    onError: (message) => {
-      const node = error()
-      if (!node) return
-      node.textContent = message
-      node.classList.remove("hidden")
-      capture(false)
-    },
-    onSuccess: () => capture(true),
-  })
-</script>
+<script>import "./landing-effects"</script>

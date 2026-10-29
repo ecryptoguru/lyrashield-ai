@@ -49,9 +49,9 @@ test("homepage has one authorized Lite URL entry and a sample explanation", asyn
   await page.goto("/")
   await expect(page.locator("#hero-lite-form")).toHaveCount(1)
   await expect(page.locator("#home-lite-scan-form")).toHaveCount(0)
-  await expect(page.getByRole("link", { name: "See a sample Lite result" })).toHaveAttribute(
+  await expect(page.getByRole("link", { name: "See the workflow" })).toHaveAttribute(
     "href",
-    "#free-scan"
+    "#how-it-works"
   )
   await expect(page.locator("#hero-scan-authorized")).toBeAttached()
 })
@@ -219,7 +219,7 @@ test("methodology uses the supplied scan and finding captures in both themes", a
   }
 })
 
-test("translucent supporting bands preserve text contrast against any film brightness", async ({
+test("readable content panels preserve text contrast against any film brightness", async ({
   page,
 }) => {
   for (const theme of ["light", "dark"]) {
@@ -227,7 +227,7 @@ test("translucent supporting bands preserve text contrast against any film brigh
       .context()
       .addCookies([{ name: "lyrashield-theme", value: theme, domain: "127.0.0.1", path: "/" }])
     await page.goto("/")
-    for (const selector of ["#free-scan", ".journey__intro"]) {
+    for (const selector of [".evidence-map__content", ".lite-console__layout", ".journey__intro"]) {
       const ratios = await page.locator(selector).evaluate((surface) => {
         const canvas = document.createElement("canvas")
         canvas.width = canvas.height = 1
