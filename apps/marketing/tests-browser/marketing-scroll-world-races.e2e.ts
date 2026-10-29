@@ -236,3 +236,31 @@ test("a requested nearby frame takes priority over a stalled prefetch", async ({
     release()
   }
 })
+
+test("background warming is bounded and does not advance a stationary scene", async ({ page }) => {
+  const active = new Set<string>()
+  let peak = 0
+  page.on("request", (request) => {
+    if (!request.url().endsWith(".mp4")) return
+    active.add(request.url())
+    peak = Math.max(peak, active.size)
+  })
+  page.on("requestfinished", (request) => active.delete(request.url()))
+  page.on("requestfailed", (request) => active.delete(request.url()))
+  await page.goto("/")
+  const world = page.locator("scroll-world")
+  await expect(world).toHaveAttribute("data-world-state", "ready", { timeout: 15000 })
+  const presented = await world.getAttribute("data-world-presented")
+  await expect
+    .poll(
+      () =>
+        page.locator("[data-world-video]").evaluate((element) => {
+          const ranges = (element as HTMLVideoElement).buffered
+          return ranges.length === 1 ? ranges.end(0) : 0
+        }),
+      { timeout: 15000 }
+    )
+    .toBeGreaterThan(55.9)
+  expect(peak).toBeLessThanOrEqual(3)
+  await expect(world).toHaveAttribute("data-world-presented", presented!)
+})

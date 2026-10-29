@@ -33,7 +33,8 @@ the shared catalog.
 - Focal moment: one continuous architectural film follows native scrolling.
 - Delivery: native 1080p desktop and 720-wide portrait encodes use one-second
   fragmented MP4 clips. One persistent MediaSource decoder starts with the current
-  clip, then prefetches nearby clips in both directions. Retain visited clips within the verified
+  clip, prioritizes nearby clips in both directions and uses at most three
+  transfers to warm the remaining film while it is onscreen. Retain visited clips within the verified
   48 MiB desktop / 24 MiB portrait budget, cap each download at 2 MiB and stop
   downloads after fifteen seconds. Abort offscreen work and reject late completions. Release the object
   URL when motion is disabled or removed. Unsupported browsers retain posters.
