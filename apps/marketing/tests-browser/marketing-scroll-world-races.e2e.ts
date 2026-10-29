@@ -194,3 +194,45 @@ test("deep links begin at the requested chapter without loading preceding clips"
     )
     .toBeLessThan(0.04)
 })
+
+test("a requested nearby frame takes priority over a stalled prefetch", async ({ page }) => {
+  let release!: () => void
+  let prefetched = false
+  const pending = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  await page.route("**/clips/01.mp4", async (route) => {
+    prefetched = true
+    await pending
+    await route.abort().catch(() => {})
+  })
+  try {
+    await page.goto("/")
+    const world = page.locator("scroll-world")
+    await expect(world).toHaveAttribute("data-world-state", "ready", { timeout: 15000 })
+    await expect.poll(() => prefetched).toBe(true)
+    await page.evaluate(() => {
+      const boundary =
+        document.querySelector("#journey-target")!.getBoundingClientRect().top + scrollY
+      const anchor = Math.min(innerHeight * 0.48, 360)
+      scrollTo({ top: (boundary - anchor) * 0.4, behavior: "instant" })
+    })
+    await expect
+      .poll(async () => Number(await world.getAttribute("data-world-time")))
+      .toBeGreaterThanOrEqual(2)
+    expect(Number(await world.getAttribute("data-world-time"))).toBeLessThan(5)
+    await expect
+      .poll(() =>
+        world.evaluate((el) =>
+          Math.abs(
+            Number((el as HTMLElement).dataset.worldTime) -
+              Number((el as HTMLElement).dataset.worldPresented)
+          )
+        )
+      )
+      .toBeLessThan(0.04)
+    await expect(world).toHaveAttribute("data-world-state", "ready")
+  } finally {
+    release()
+  }
+})

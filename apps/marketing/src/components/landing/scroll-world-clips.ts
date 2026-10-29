@@ -5,6 +5,11 @@ export class ScrollClipStream {
   private media: MediaSource
   private buffer?: SourceBuffer
   private lifetime = new AbortController()
+  private pending?: {
+    index: number
+    controller: AbortController
+    promise: Promise<Uint8Array<ArrayBuffer>>
+  }
   private download?: AbortController
   private downloading = -1
   private wanted = 0
@@ -56,6 +61,10 @@ export class ScrollClipStream {
     video.src = this.url
     video.preload = "auto"
     video.load()
+    // Transfer the opening clip while the browser opens its media pipeline.
+    void this.load(0).promise.catch(() => {
+      /* pump handles download failure */
+    })
   }
 
   get busy() {
@@ -74,8 +83,8 @@ export class ScrollClipStream {
   request(time: number) {
     this.wanted = Math.min(this.sources.length - 1, Math.floor(time / this.clipDuration))
     this.suspended = false
-    if (this.downloading >= 0 && Math.abs(this.downloading - this.wanted) > 4)
-      this.download?.abort()
+    if (this.downloading >= 0 && this.downloading !== this.wanted && !this.has(time))
+      this.download?.abort("superseded")
     void this.pump()
   }
 
@@ -102,6 +111,21 @@ export class ScrollClipStream {
     ].filter((i) => i >= 0 && i < this.sources.length)
   }
 
+  private load(index: number) {
+    if (this.pending?.index === index && !this.pending.controller.signal.aborted)
+      return this.pending
+    this.download?.abort("superseded")
+    const controller = new AbortController()
+    this.download = controller
+    this.downloading = index
+    this.pending = {
+      index,
+      controller,
+      promise: this.fetchClip(this.sources[index]!, controller, index === this.wanted),
+    }
+    return this.pending
+  }
+
   private async pump() {
     if (this.running || !this.buffer || this.suspended || this.lifetime.signal.aborted) return
     this.running = true
@@ -113,16 +137,17 @@ export class ScrollClipStream {
             (!this.unavailable.has(i) || i === this.wanted)
         )
         if (index === undefined) break
-        const download = new AbortController()
-        this.download = download
-        this.downloading = index
+        const pending = this.load(index)
+        const download = pending.controller
         let data: Uint8Array<ArrayBuffer>
         try {
-          data = await this.fetchClip(this.sources[index]!, download)
+          data = await pending.promise
         } catch (error) {
           if (
             download.signal.aborted &&
-            (this.suspended || this.lifetime.signal.aborted || Math.abs(index - this.wanted) > 4)
+            (this.suspended ||
+              this.lifetime.signal.aborted ||
+              download.signal.reason === "superseded")
           )
             continue
           if (index !== this.wanted) {
@@ -131,6 +156,7 @@ export class ScrollClipStream {
           }
           throw error
         } finally {
+          if (this.pending === pending) this.pending = undefined
           this.downloading = -1
         }
         if (this.suspended || this.lifetime.signal.aborted) break
@@ -181,10 +207,13 @@ export class ScrollClipStream {
     })
   }
 
-  private async fetchClip(source: string, controller: AbortController) {
+  private async fetchClip(source: string, controller: AbortController, urgent: boolean) {
     const timeout = setTimeout(() => controller.abort(), 15000)
     try {
-      const response = await fetch(source, { signal: controller.signal })
+      const response = await fetch(source, {
+        signal: controller.signal,
+        priority: urgent ? "high" : "low",
+      })
       if (!response.ok || !response.body) throw new Error("Motion download unavailable")
       const reader = response.body.getReader()
       const chunks: Uint8Array<ArrayBuffer>[] = []
