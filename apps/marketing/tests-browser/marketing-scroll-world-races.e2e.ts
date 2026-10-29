@@ -86,3 +86,34 @@ test("changing orientation replaces the film and preserves scroll position", asy
     )
     .toBeLessThan(0.04)
 })
+
+test("motion off cancels an unfinished download without late activation", async ({ page }) => {
+  let release!: () => void
+  const pending = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  await page.route("**/*.mp4", async (route) => {
+    await pending
+    await route.abort().catch(() => {})
+  })
+  await page.goto("/")
+  const world = page.locator("scroll-world")
+  await expect(world).toHaveAttribute("data-world-state", "loading")
+  await page.locator("[data-world-toggle]").click()
+  release()
+  await expect(world).toHaveAttribute("data-world-state", "static")
+  await expect(page.locator("[data-world-video]")).not.toHaveAttribute("src", /.+/)
+  await expect(world).not.toHaveAttribute("data-world-painted", "true")
+})
+
+test("oversized film falls back before decoder activation", async ({ page }) => {
+  await page.route("**/*.mp4", (route) =>
+    route.fulfill({
+      contentType: "video/mp4",
+      body: Buffer.alloc(3 * 1024 * 1024 + 1),
+    })
+  )
+  await page.goto("/")
+  await expect(page.locator("scroll-world")).toHaveAttribute("data-world-state", "fallback")
+  await expect(page.locator("[data-world-video]")).not.toHaveAttribute("src", /.+/)
+})
