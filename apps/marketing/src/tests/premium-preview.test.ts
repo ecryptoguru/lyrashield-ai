@@ -96,18 +96,28 @@ describe("premium assurance-world homepage", () => {
     const manifest = createMotionMediaManifest("/media-local/", "test-render")
     const ids = manifest.chapters.map((chapter) => chapter.id)
     expect(manifest.version).toBe("3")
-    expect(manifest.desktop).toEqual({
+    expect(manifest.desktop).toMatchObject({
       src: "/media-local/assurance-world/v3/test-render/desktop/assurance-world.mp4",
-      width: 800,
-      height: 450,
+      width: 1920,
+      height: 1080,
       duration: 56,
     })
-    expect(manifest.portrait).toEqual({
+    expect(manifest.portrait).toMatchObject({
       src: "/media-local/assurance-world/v3/test-render/portrait/assurance-world.mp4",
-      width: 450,
-      height: 800,
+      width: 720,
+      height: 1280,
       duration: 56,
     })
+    for (const variant of ["desktop", "portrait"] as const) {
+      expect(manifest[variant].clipDuration).toBe(1)
+      expect(manifest[variant].clips).toEqual(
+        Array.from(
+          { length: 56 },
+          (_, i) =>
+            `/media-local/assurance-world/v3/test-render/${variant}/clips/${String(i).padStart(2, "0")}.mp4`
+        )
+      )
+    }
     expect(ids).toHaveLength(7)
     expect(manifest.chapters.filter((chapter) => chapter.supportingCard)).toHaveLength(0)
     expect(new Set(ids).size).toBe(7)

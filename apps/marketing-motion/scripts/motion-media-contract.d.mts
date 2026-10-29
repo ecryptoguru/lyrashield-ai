@@ -2,6 +2,8 @@ export const MOTION_VERSION: string
 export const MOTION_DURATION: number
 export const MOTION_FPS: number
 export const MOTION_GOP: number
+export const MOTION_CLIP_DURATION: number
+export const MOTION_CLIP_COUNT: number
 export const MOTION_CHAPTER_DURATION: number
 export const MOTION_CHAPTERS: readonly [
   "gateway",
@@ -29,3 +31,4 @@ export const MOTION_VARIANTS: Record<
 export function motionPublishRoot(hash: string): string
 export function motionPosterRelativePath(chapter: string, variant: string, format?: string): string
 export function motionTrackRelativePath(variant: string): string
+export function motionClipRelativePath(variant: string, index: number): string

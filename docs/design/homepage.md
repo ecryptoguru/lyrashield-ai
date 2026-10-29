@@ -31,9 +31,13 @@ the shared catalog.
 ## Motion thesis
 
 - Focal moment: one continuous architectural film follows native scrolling.
-- Delivery: download one file with a 3 MiB cap and a 15-second deadline before
-  activating the decoder. Abort on release and reject late completions. Revoke
-  the object URL when motion is disabled or the component is removed.
+- Delivery: native 1080p desktop and 720-wide portrait encodes use one-second
+  fragmented MP4 clips. One persistent MediaSource decoder starts with the current
+  clip, prioritizes nearby clips in both directions and uses at most three
+  transfers to warm the remaining film while it is onscreen. Retain visited clips within the verified
+  48 MiB desktop / 24 MiB portrait budget, cap each download at 2 MiB and stop
+  downloads after fifteen seconds. Abort offscreen work and reject late completions. Release the object
+  URL when motion is disabled or removed. Unsupported browsers retain posters.
 - Presentation: a paused decoder seeks toward the latest scroll position. Completed
   frames are copied to a canvas below the readability overlay. Keep the previous
   frame visible during a seek; never use autoplay to advance the story.

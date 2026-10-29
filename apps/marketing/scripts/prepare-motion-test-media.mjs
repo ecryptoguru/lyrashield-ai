@@ -1,8 +1,10 @@
+import { deriveClips } from "../../marketing-motion/scripts/derive-clips.mjs"
 import { createRequire } from "node:module"
 import { mkdirSync, existsSync } from "node:fs"
 import { resolve, dirname } from "node:path"
 import { spawnSync } from "node:child_process"
 import {
+  MOTION_CLIP_DURATION,
   MOTION_CHAPTERS,
   MOTION_DURATION,
   MOTION_FPS,
@@ -46,6 +48,10 @@ for (const [variant, contract] of Object.entries(MOTION_VARIANTS)) {
         String(contract.gop),
         "-keyint_min",
         String(contract.gop),
+        "-bf",
+        "0",
+        "-force_key_frames",
+        `expr:gte(t,n_forced*${MOTION_CLIP_DURATION})`,
         "-sc_threshold",
         "0",
         "-movflags",
@@ -56,6 +62,7 @@ for (const [variant, contract] of Object.entries(MOTION_VARIANTS)) {
     )
     if (result.status !== 0) throw new Error("CI motion fixtures require ffmpeg")
   }
+  deriveClips(track, resolve(output, variant, "clips"))
   for (const chapter of MOTION_CHAPTERS) {
     const poster = resolve(output, "posters", `${chapter}-${variant}.webp`)
     if (existsSync(poster)) continue
