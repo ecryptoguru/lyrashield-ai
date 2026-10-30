@@ -32,6 +32,12 @@ seeks and confirms presented frames. A short muted prime permits compositor
 presentation; it does not turn the journey into autoplay. A stale callback or
 retired watchdog must not control a replacement source.
 
+A failed network/CORS fetch refreshes the browser cache once before entering the
+poster fallback. This recovers older cached responses without CORS headers while
+retaining the existing abort deadline, byte budget and normal warm-cache path.
+The closed Myra launcher clears the whole final conversion section, including
+its heading; closing an open panel there returns focus to the visible trial CTA.
+
 Wheel and touch movement retain the 180 ms easing. A single scroll update that
 changes the target by more than four seconds of film seeks directly to its final
 position. This avoids fetching intermediate scenes during distant chapter or

@@ -404,3 +404,30 @@ test("ordinary scrolling settles within one frame at arbitrary chapter positions
     )
     .toBeLessThan(1.1 / MOTION_FPS)
 })
+
+test("a failed cached film request refreshes once and still presents scroll frames", async ({
+  page,
+}) => {
+  let requests = 0
+  await page.route("**/assurance-world.mp4", async (route) => {
+    requests++
+    if (requests === 1) await route.abort("failed")
+    else await route.continue()
+  })
+  await page.goto("/")
+  const world = page.locator("scroll-world")
+  await expect(world).toHaveAttribute("data-world-painted", "true", { timeout: 10000 })
+  expect(requests).toBe(2)
+  await page.getByRole("link", { name: "Report", exact: true }).click()
+  await expect
+    .poll(() =>
+      world.evaluate((e) =>
+        Math.abs(
+          Number((e as HTMLElement).dataset.worldTime) -
+            Number((e as HTMLElement).dataset.worldPresented)
+        )
+      )
+    )
+    .toBeLessThan(1.1 / MOTION_FPS)
+  await expect(world).toHaveAttribute("data-world-state", "ready")
+})

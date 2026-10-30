@@ -144,6 +144,18 @@ import { MYRA_COPY } from "@lyrashield/myra"
   const launcher = document.getElementById("myra-launcher")
   let pending: Promise<{ open: () => void }> | null = null
 
+  // Clear the whole conversion section, including its heading before the
+  // button enters view. Do not alter the open panel's visibility or state.
+  const conversions = new Set<Element>()
+  const conversionObserver = new IntersectionObserver((entries) => {
+    for (const entry of entries) {
+      if (entry.isIntersecting) conversions.add(entry.target)
+      else conversions.delete(entry.target)
+    }
+    launcher?.toggleAttribute("data-conversion-visible", conversions.size > 0)
+  })
+  document.querySelectorAll(".final-cta").forEach((section) => conversionObserver.observe(section))
+
   // The launcher is a dead affordance whenever the app's public Myra surface
   // is off — reveal it only after the status probe confirms it is live. Any
   // probe failure resolves to public:false and the launcher stays hidden.
@@ -175,6 +187,7 @@ import { MYRA_COPY } from "@lyrashield/myra"
   #myra-launcher[hidden] {
     display: none;
   }
+  #myra-launcher[data-conversion-visible] { visibility: hidden; pointer-events: none; }
 
   /* The mobile evidence tour uses the entire lower viewport for its active
      explanation; lift support clear of it while that chapter is pinned. */

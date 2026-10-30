@@ -352,3 +352,36 @@ test("public support case verification omits browser cookies", async ({ page }) 
     ])
   )
 })
+
+test("Myra clears the entire final conversion section and returns above it", async ({ page }) => {
+  await mockMyra(page)
+  for (const width of [360, 390, 768, 1280, 1440]) {
+    await page.setViewportSize({ width, height: 844 })
+    await page.goto("/")
+    const launcher = page.locator("#myra-launcher")
+    await expect(launcher).toBeVisible()
+    await page.locator(".final-cta").scrollIntoViewIfNeeded()
+    await expect(launcher).not.toBeVisible()
+    if (width === 390 || width === 1440)
+      await page.screenshot({
+        path: `../../output/playwright/motion-myra-final/final-cta-${test.info().project.name}-${width}.png`,
+      })
+    await page
+      .getByRole("heading", { name: "The launch gate for AI-built apps." })
+      .scrollIntoViewIfNeeded()
+    await expect(launcher).toBeVisible()
+  }
+})
+
+test("closing Myra near the final conversion restores focus to the visible CTA", async ({
+  page,
+}) => {
+  await mockMyra(page)
+  await page.setViewportSize({ width: 1280, height: 900 })
+  await page.goto("/")
+  await page.getByRole("button", { name: "Ask Myra" }).click()
+  await page.locator(".final-cta").scrollIntoViewIfNeeded()
+  await expect(page.locator("#myra-launcher")).toHaveAttribute("data-conversion-visible", "")
+  await page.getByRole("button", { name: "Close Myra" }).click()
+  await expect(page.locator('[data-cta-id="final-cta-create-account"]')).toBeFocused()
+})

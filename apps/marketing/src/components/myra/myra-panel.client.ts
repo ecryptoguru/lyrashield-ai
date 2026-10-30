@@ -201,7 +201,11 @@ export function initMyraPanel() {
   function openPanel() {
     if (open) return
     open = true
-    restoredFocus = (document.activeElement as HTMLElement) ?? launcherEl
+    // Safari does not always focus a button on pointer activation.
+    restoredFocus =
+      document.activeElement instanceof HTMLElement && document.activeElement !== document.body
+        ? document.activeElement
+        : launcherEl
     panelEl.hidden = false
     launcherEl.hidden = true
     launcherEl.setAttribute("aria-expanded", "true")
@@ -230,7 +234,10 @@ export function initMyraPanel() {
     launcherEl.setAttribute("aria-expanded", "false")
     positionChallengeHost()
     updateModal()
-    ;(restoredFocus ?? launcherEl).focus()
+    const focusTarget = launcherEl.hasAttribute("data-conversion-visible")
+      ? document.querySelector<HTMLElement>('[data-cta-id="final-cta-create-account"]')
+      : (restoredFocus ?? launcherEl)
+    focusTarget?.focus()
     announce("Myra panel closed.")
   }
 
