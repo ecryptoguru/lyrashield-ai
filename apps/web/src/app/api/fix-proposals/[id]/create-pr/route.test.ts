@@ -9,6 +9,7 @@ const hasActiveFixPrConnection = vi.fn()
 const getFixProposal = vi.fn()
 const readEncryptedArtifact = vi.fn()
 const requestFixPrApproval = vi.fn()
+const getFixPrStatus = vi.fn()
 const claimOrGetAgentOperation = vi.fn()
 const completeAgentOperation = vi.fn()
 const failAgentOperation = vi.fn()
@@ -43,9 +44,9 @@ vi.mock("@lyrashield/logger", () => ({
 }))
 vi.mock("@lyrashield/config", () => ({ env: { NEXT_PUBLIC_APP_URL: "https://app.test" } }))
 vi.mock("@/lib/fix-pr-connection", () => ({ hasActiveFixPrConnection }))
-vi.mock("@/lib/fix-pr", () => ({ requestFixPrApproval }))
+vi.mock("@/lib/fix-pr", () => ({ requestFixPrApproval, getFixPrStatus }))
 
-const { POST } = await import("./route")
+const { POST, GET } = await import("./route")
 
 function call(body: unknown = { workspaceId: "workspace-1" }, idempotencyKey?: string) {
   return POST(
@@ -330,4 +331,62 @@ describe("POST /api/fix-proposals/[id]/create-pr", () => {
       })
     )
   })
+})
+
+it("status uses the current actor and performs no approval or repository mutation", async () => {
+  requirePermission.mockResolvedValue({ session: { userId: "reader-1" } })
+  getFixProposal.mockResolvedValue({
+    id: "proposal-1",
+    findingId: "finding-1",
+    diffRef: generatedRef,
+  })
+  prisma.finding.findFirst.mockResolvedValue({
+    id: "finding-1",
+    targetId: "target-1",
+    implicatedFiles: ["src/a.ts"],
+    baseCommit: "abc123",
+    target: { repoOwner: "acme", repoName: "app", installationId: "42", deletedAt: null },
+  })
+  prisma.workspace.findUnique.mockResolvedValue({ plan: "PRO" })
+  readEncryptedArtifact.mockResolvedValue({ content: Buffer.from("diff --git ..."), checksum })
+  hasActiveFixPrConnection.mockResolvedValue(true)
+  getFixPrStatus.mockResolvedValue({ status: "recovery_required" })
+  requestFixPrApproval.mockClear()
+  const response = await GET(
+    new Request(
+      "http://localhost/api/fix-proposals/proposal-1/create-pr?workspaceId=workspace-1&approvalId=approval-1"
+    ),
+    { params: Promise.resolve({ id: "proposal-1" }) }
+  )
+  expect(response.status).toBe(200)
+  expect(getFixPrStatus).toHaveBeenCalledWith(
+    expect.objectContaining({ requestedById: "reader-1", workspaceId: "workspace-1" }),
+    "approval-1"
+  )
+  expect(requestFixPrApproval).not.toHaveBeenCalled()
+})
+
+it.each([
+  { patch: "injected" },
+  { branch: "injected" },
+  { title: "injected" },
+  { body: "injected" },
+])("rejects extra PR execution fields %j", async (extra) => {
+  requestFixPrApproval.mockClear()
+  const response = await call({ workspaceId: "workspace-1", ...extra })
+  expect(response.status).toBe(400)
+  expect(requestFixPrApproval).not.toHaveBeenCalled()
+})
+
+it("rejects malformed JSON as a client error before resolving any proposal", async () => {
+  getFixProposal.mockClear()
+  const response = await POST(
+    new Request("http://localhost/api/fix-proposals/proposal-1/create-pr", {
+      method: "POST",
+      body: "{",
+    }),
+    { params: Promise.resolve({ id: "proposal-1" }) }
+  )
+  expect(response.status).toBe(400)
+  expect(getFixProposal).not.toHaveBeenCalled()
 })

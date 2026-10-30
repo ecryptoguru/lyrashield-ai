@@ -1194,19 +1194,26 @@ model FixProposal {
 }
 
 model PullRequest {
-  id            String    @id @default(cuid())
-  fixProposalId String
-  provider      String
-  repoOwner     String
-  repoName      String
-  branchName    String
-  prNumber      Int?
-  prUrl         String?
-  status        String    @default("open")
-  deletedAt     DateTime?
-  createdAt     DateTime  @default(now())
-  mergedAt      DateTime?
-  closedAt      DateTime?
+  /// Durable proposal/repository/base/patch identity; independent of approvals and actors.
+  executionKey    String?   @unique
+  baseCommit      String?
+  diffChecksum    String?
+  approvalId      String?
+  requestedById   String?
+  credentialActor Json?
+  id              String    @id @default(cuid())
+  fixProposalId   String
+  provider        String
+  repoOwner       String
+  repoName        String
+  branchName      String
+  prNumber        Int?
+  prUrl           String?
+  status          String    @default("open")
+  deletedAt       DateTime?
+  createdAt       DateTime  @default(now())
+  mergedAt        DateTime?
+  closedAt        DateTime?
 
   fixProposal FixProposal @relation(fields: [fixProposalId], references: [id], onDelete: Cascade)
 

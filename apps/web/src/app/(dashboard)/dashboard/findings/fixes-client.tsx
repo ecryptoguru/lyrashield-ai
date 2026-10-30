@@ -280,7 +280,16 @@ export function FixesClient({
                           className="text-muted-foreground inline-flex items-center gap-2 text-xs"
                         >
                           <GitPullRequest className="h-3.5 w-3.5" aria-hidden="true" />
-                          {label} · Link pending
+                          {label} ·{" "}
+                          {pr.status === "recovery"
+                            ? "Recovery needed"
+                            : pr.status === "opening"
+                              ? "Opening"
+                              : pr.status === "stale"
+                                ? "Stale patch"
+                                : pr.status === "failed"
+                                  ? "Execution failed"
+                                  : "Link pending"}
                         </span>
                       )
                     })}
@@ -315,7 +324,12 @@ function ProposalAction({
   if (!canCreatePr || proposal.status !== "ready" || !proposal.hasStoredPatch) return null
   return (
     <div className="mt-3">
-      <CreateFixPrAction workspaceId={workspaceId} proposalId={proposal.id} prominent />
+      <CreateFixPrAction
+        workspaceId={workspaceId}
+        proposalId={proposal.id}
+        hasExecution={Boolean(proposal.pullRequests?.length)}
+        prominent
+      />
     </div>
   )
 }

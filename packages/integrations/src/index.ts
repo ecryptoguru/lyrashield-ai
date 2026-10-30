@@ -120,3 +120,5 @@ export {
   enqueueFixGenerate,
   type FixGenerateJobData,
 } from "./queue"
+
+export { inspectFixPrRemote } from "./github-fix-pr"

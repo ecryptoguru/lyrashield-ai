@@ -22,13 +22,18 @@ import {
   failApprovalExecution,
   findOrCreatePendingApproval,
   getFixProposal,
+  getApproval,
   hashInput,
   createPullRequestRecord,
+  beginFixPrExecution,
+  getFixPrExecution,
+  markFixPrRecovery,
 } from "@lyrashield/db"
 import {
   createBranch,
   createOrUpdateFile,
   createPullRequest,
+  inspectFixPrRemote,
   getDefaultBranch,
   getBranchRefSha,
   getFileContent,
@@ -75,7 +80,18 @@ export interface FixPrRequest {
 }
 
 interface FixPrOutcome {
-  status: "pending_approval" | "opened" | "rejected" | "failed"
+  status:
+    | "pending_approval"
+    | "opening"
+    | "opened"
+    | "closed"
+    | "merged"
+    | "recovery_required"
+    | "rejected"
+    | "failed"
+    | "ready"
+    | "expired"
+    | "stale"
   approvalId?: string
   approvalUrl?: string
   prNumber?: number
@@ -137,23 +153,10 @@ export async function requestFixPrApproval(
     return { status: "rejected", reason: validation.reason }
   }
 
-  const checksum = diffChecksum(req.diff)
-  const input = {
-    actionName: APPROVAL_ACTION,
-    fixProposalId: req.fixProposalId,
-    diffChecksum: checksum,
-    baseCommit: req.baseCommit,
-    targetRepo: `${req.repoOwner}/${req.repoName}`,
-    ...(req.composerFix
-      ? {
-          composerReceiptChecksum: diffChecksum(JSON.stringify(req.composerFix)),
-          title: "Open draft Composer update PR: compatibility tests required",
-          compatibility:
-            "Application compatibility is unverified; open a draft PR for customer CI and review.",
-          prMode: "draft",
-        }
-      : {}),
-  }
+  const input = buildFixPrApprovalInput(req)
+  const { executionKey } = fixPrIdentity(req)
+  const existing = await getFixPrExecution(req.workspaceId, req.fixProposalId, executionKey)
+  if (existing) return reconcileFixPr(req, existing)
   const approvalParams = {
     workspaceId: req.workspaceId,
     actionName: APPROVAL_ACTION,
@@ -183,23 +186,7 @@ export async function executeApprovedFixPr(
   req: FixPrRequest & { approvalId: string }
 ): Promise<FixPrOutcome> {
   const checksum = diffChecksum(req.diff)
-  const input = {
-    actionName: APPROVAL_ACTION,
-    fixProposalId: req.fixProposalId,
-    diffChecksum: checksum,
-    baseCommit: req.baseCommit,
-    targetRepo: `${req.repoOwner}/${req.repoName}`,
-    ...(req.composerFix
-      ? {
-          composerReceiptChecksum: diffChecksum(JSON.stringify(req.composerFix)),
-          title: "Open draft Composer update PR: compatibility tests required",
-          compatibility:
-            "Application compatibility is unverified; open a draft PR for customer CI and review.",
-          prMode: "draft",
-        }
-      : {}),
-  }
-  const inputHash = hashInput(APPROVAL_ACTION, input)
+  const inputHash = hashInput(APPROVAL_ACTION, buildFixPrApprovalInput(req))
 
   // Re-validate at execution time: the approval binds to this exact hash, but
   // defense-in-depth says re-check the diff against scope before any write.
@@ -219,9 +206,28 @@ export async function executeApprovedFixPr(
     }
   }
 
-  const branchSuffix = createHash("sha256").update(req.approvalId).digest("hex").slice(0, 12)
-  const branchName = `lyrashield/fix-${req.fixProposalId.slice(0, 12)}-${branchSuffix}`
+  const { executionKey, branchName } = fixPrIdentity(req)
+  let remoteMutationStarted = false
+  let failureStatus: "failed" | "stale" = "failed"
   try {
+    const intent = await beginFixPrExecution({
+      workspaceId: req.workspaceId,
+      proposalId: req.fixProposalId,
+      executionKey,
+      branchName,
+      repoOwner: req.repoOwner,
+      repoName: req.repoName,
+      baseCommit: req.baseCommit,
+      diffChecksum: checksum,
+      approvalId: req.approvalId,
+      requestedById: req.requestedById,
+      authorization: req.authorization,
+    })
+    if (!intent.created) {
+      const outcome = await reconcileFixPr(req, intent.record)
+      await completeApprovalExecution(req.approvalId, req.workspaceId, { ...outcome })
+      return outcome
+    }
     const baseBranch = await getDefaultBranch(req.installationId, req.repoOwner, req.repoName)
     const fromSha = await getBranchRefSha(
       req.installationId,
@@ -230,6 +236,7 @@ export async function executeApprovedFixPr(
       baseBranch
     )
     if (fromSha !== req.baseCommit) {
+      failureStatus = "stale"
       throw new Error(
         "The repository changed since this scan. Retest and request a new fix approval."
       )
@@ -264,6 +271,7 @@ export async function executeApprovedFixPr(
       const sha = createHash("sha1").update(`blob ${bytes.length}\0`).update(bytes).digest("hex")
       preparedFiles.push({ file, content: newContent, sha })
     }
+    remoteMutationStarted = true
     await createBranch(req.installationId, req.repoOwner, req.repoName, branchName, fromSha)
     for (const { file, content, sha } of preparedFiles) {
       await createOrUpdateFile(
@@ -283,14 +291,15 @@ export async function executeApprovedFixPr(
       req.repoOwner,
       req.repoName,
       `LyraShield fix proposal ${req.fixProposalId.slice(0, 8)}`,
-      prBody(req, checksum),
+      `${prBody(req, checksum)}\n\n<!-- lyrashield-fix:${executionKey} -->`,
       branchName,
       baseBranch,
       req.composerFix ? { draft: true } : undefined
     )
 
-    await createPullRequestRecord(req.fixProposalId, req.workspaceId, {
+    const persisted = await createPullRequestRecord(req.fixProposalId, req.workspaceId, {
       provider: "github",
+      executionKey,
       repoOwner: req.repoOwner,
       repoName: req.repoName,
       branchName,
@@ -303,23 +312,41 @@ export async function executeApprovedFixPr(
       prUrl: pr.url,
     })
 
-    return { status: "opened", approvalId: req.approvalId, prNumber: pr.number, prUrl: pr.url }
-  } catch (error) {
+    return {
+      status:
+        persisted.status === "open"
+          ? "opened"
+          : persisted.status === "merged"
+            ? "merged"
+            : "closed",
+      approvalId: req.approvalId,
+      prNumber: pr.number,
+      prUrl: pr.url,
+    }
+  } catch {
+    await markFixPrRecovery(
+      req.workspaceId,
+      req.fixProposalId,
+      executionKey,
+      remoteMutationStarted ? "recovery" : failureStatus
+    ).catch(() => undefined)
     await failApprovalExecution(
       req.approvalId,
       req.workspaceId,
       {
-        error: error instanceof Error ? error.message : String(error),
+        error: remoteMutationStarted ? "FIX_PR_RECOVERY_REQUIRED" : "FIX_PR_FAILED",
       },
       false
-    )
+    ).catch(() => undefined)
     logger.error("Fix PR execution failed", {
       fixProposalId: req.fixProposalId,
-      error: error instanceof Error ? error.message : String(error),
+      code: remoteMutationStarted ? "FIX_PR_RECOVERY_REQUIRED" : "FIX_PR_FAILED",
     })
     return {
-      status: "failed",
-      reason: error instanceof Error ? error.message : "Fix PR execution failed.",
+      status: remoteMutationStarted ? "recovery_required" : failureStatus,
+      reason: remoteMutationStarted
+        ? "The GitHub outcome is uncertain. Check PR status to reconcile before any retry."
+        : "The pull request could not be opened. Check the repository revision and connection before retrying.",
     }
   }
 }
@@ -343,4 +370,157 @@ function prBody(req: FixPrRequest, checksum: string): string {
         ]
       : []),
   ].join("\n")
+}
+
+/** Shared by approval creation, pre-approval validation, and the atomic execution claim. */
+export function buildFixPrApprovalInput(req: FixPrRequest) {
+  const checksum = diffChecksum(req.diff)
+  return {
+    actionName: APPROVAL_ACTION,
+    fixProposalId: req.fixProposalId,
+    diffChecksum: checksum,
+    baseCommit: req.baseCommit,
+    targetRepo: `${req.repoOwner}/${req.repoName}`,
+    ...(req.composerFix
+      ? {
+          composerReceiptChecksum: diffChecksum(JSON.stringify(req.composerFix)),
+          title: "Open draft Composer update PR: compatibility tests required",
+          compatibility:
+            "Application compatibility is unverified; open a draft PR for customer CI and review.",
+          prMode: "draft",
+        }
+      : {}),
+  }
+}
+
+function fixPrIdentity(req: FixPrRequest) {
+  const executionKey = createHash("sha256")
+    .update(
+      JSON.stringify([
+        req.workspaceId,
+        req.fixProposalId,
+        req.repoOwner.toLowerCase(),
+        req.repoName.toLowerCase(),
+        req.baseCommit,
+        diffChecksum(req.diff),
+      ])
+    )
+    .digest("hex")
+  return { executionKey, branchName: `lyrashield/fix-${executionKey}` }
+}
+
+/** Recovery is read-only at GitHub. Partial branches require operator review, never replay. */
+async function reconcileFixPr(
+  req: FixPrRequest,
+  record: {
+    status: string
+    createdAt?: Date
+    executionKey?: string | null
+    prNumber?: number | null
+    prUrl?: string | null
+  }
+): Promise<FixPrOutcome> {
+  const storedStatus = record.status
+  if (record.executionKey === null)
+    return {
+      status:
+        storedStatus === "closed" || storedStatus === "merged" ? storedStatus : "recovery_required",
+      ...(record.prNumber ? { prNumber: record.prNumber } : {}),
+      ...(record.prUrl ? { prUrl: record.prUrl } : {}),
+      reason:
+        "This earlier pull request has no execution identity. Review its recorded GitHub link before creating another proposal.",
+    }
+  if (storedStatus === "stale")
+    return {
+      status: "stale",
+      reason: "The repository changed since the scan. Retest and generate a new proposal.",
+    }
+  if (storedStatus === "failed")
+    return {
+      status: "failed",
+      reason: "Execution stopped before GitHub writes. Review the proposal and generate a new one.",
+    }
+  const { executionKey, branchName } = fixPrIdentity(req)
+  try {
+    const remote = await inspectFixPrRemote(
+      req.installationId,
+      req.repoOwner,
+      req.repoName,
+      branchName,
+      `<!-- lyrashield-fix:${executionKey} -->`
+    )
+    if (!remote.pullRequest)
+      return {
+        status:
+          storedStatus === "opening" &&
+          !remote.branchExists &&
+          (!record.createdAt || Date.now() - record.createdAt.getTime() < 120_000)
+            ? "opening"
+            : "recovery_required",
+        reason:
+          "An execution already exists. Check status; uncertain GitHub writes are never replayed.",
+      }
+    const pr = remote.pullRequest
+    const persisted = await createPullRequestRecord(req.fixProposalId, req.workspaceId, {
+      provider: "github",
+      executionKey,
+      repoOwner: req.repoOwner,
+      repoName: req.repoName,
+      branchName,
+      prNumber: pr.number,
+      prUrl: pr.url,
+      status: pr.status,
+    })
+    return {
+      status:
+        persisted.status === "open"
+          ? "opened"
+          : persisted.status === "merged"
+            ? "merged"
+            : "closed",
+      prNumber: pr.number,
+      prUrl: pr.url,
+    }
+  } catch {
+    return {
+      status: "recovery_required",
+      reason: "Unable to confirm the GitHub outcome. Check status again before retrying.",
+    }
+  }
+}
+
+/** Status checks never claim approval or replay GitHub mutations. */
+export async function getFixPrStatus(
+  req: FixPrRequest,
+  approvalId?: string
+): Promise<FixPrOutcome> {
+  const { executionKey } = fixPrIdentity(req)
+  const execution = await getFixPrExecution(req.workspaceId, req.fixProposalId, executionKey)
+  if (execution) return reconcileFixPr(req, execution)
+  if (!approvalId) return { status: "ready" }
+  const approval = await getApproval(approvalId, req.workspaceId)
+  if (
+    !approval ||
+    approval.actionName !== APPROVAL_ACTION ||
+    approval.inputHash !== hashInput(APPROVAL_ACTION, buildFixPrApprovalInput(req))
+  )
+    return {
+      status: "stale",
+      reason: "The approval no longer matches this stored patch. Request a new approval.",
+    }
+  if (
+    ["EXPIRED", "PENDING", "APPROVED"].includes(approval.status) &&
+    approval.expiresAt &&
+    approval.expiresAt <= new Date()
+  )
+    return { status: "expired" }
+  if (approval.status === "PENDING") return { status: "pending_approval", approvalId }
+  if (approval.status === "EXPIRED") return { status: "expired" }
+  if (["APPROVED", "EXECUTING"].includes(approval.status)) return { status: "opening", approvalId }
+  return {
+    status:
+      approval.status === "EXECUTION_FAILED" || approval.status === "EXECUTED"
+        ? "recovery_required"
+        : "failed",
+  }
 }

@@ -85,13 +85,68 @@ export async function resolveFixPrRequest(
       "GITHUB_CONNECTION_INACTIVE",
       "The GitHub connection is no longer active. Reconnect it before requesting a fix."
     )
-  const artifact = await readEncryptedArtifact(proposal.diffRef, workspaceId)
+  // Validate the producer namespace before any storage access. Malformed and
+  // cross-tenant references are user-actionable conflicts, never storage 500s.
+  let uri: URL
+  try {
+    uri = new URL(proposal.diffRef)
+    if (uri.search || uri.hash || uri.username || uri.password) throw new Error("Invalid reference")
+    if (uri.protocol === "s3:" && env.S3_BUCKET && uri.hostname !== env.S3_BUCKET)
+      throw new Error("Invalid reference")
+    const prefix = `evidence/${workspaceId}/${finding.id}/fix-patch/fix-${proposal.id}-`
+    const path =
+      uri.protocol === "s3:"
+        ? uri.pathname.slice(1)
+        : uri.protocol === "file:"
+          ? fileURLToPath(uri)
+              .slice(
+                resolve(
+                  env.LYRASHIELD_LOCAL_EVIDENCE_DIR || `${process.cwd()}/.lyrashield/evidence`
+                ).length + 1
+              )
+              .replace(/\\/g, "/")
+              .replace(/\.enc$/, "")
+          : ""
+    if (!path.startsWith(prefix) || !/^[a-f0-9]{64}$/.test(path.slice(prefix.length)))
+      throw new Error("Invalid reference")
+    if (
+      uri.protocol === "file:" &&
+      fileURLToPath(uri) !==
+        resolve(
+          env.LYRASHIELD_LOCAL_EVIDENCE_DIR || `${process.cwd()}/.lyrashield/evidence`,
+          `${path}.enc`
+        )
+    )
+      throw new Error("Invalid reference")
+  } catch {
+    throw new FixPrContextError(
+      "PROPOSAL_PATCH_PROVENANCE_REQUIRED",
+      "This proposal's stored patch reference is invalid. Generate a new fix proposal."
+    )
+  }
+  let artifact
+  try {
+    artifact = await readEncryptedArtifact(proposal.diffRef, workspaceId)
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      (("code" in error && error.code === "ENOENT") ||
+        error.name === "NoSuchKey" ||
+        error.name === "NotFound")
+    ) {
+      throw new FixPrContextError(
+        "PROPOSAL_PATCH_UNAVAILABLE",
+        "This proposal's stored patch is unavailable. Generate a new fix proposal."
+      )
+    }
+    // Credential, encryption-key, permission and service failures remain infrastructure errors.
+    throw error
+  }
   // Decryption proves storage ownership/integrity, not who produced the bytes.
   // Only fix-generate writes this finding/proposal-bound, content-addressed key;
   // caller-uploaded evidence uses other namespaces and must never execute as a fix.
   // Check stored references too (including legacy drafts and pending approvals).
   const key = `evidence/${workspaceId}/${finding.id}/fix-patch/fix-${proposal.id}-${artifact.checksum}`
-  const uri = new URL(proposal.diffRef)
   const producerBound =
     /^[a-f0-9]{64}$/.test(artifact.checksum) &&
     (uri.protocol === "s3:"

@@ -20,6 +20,7 @@ type FixPrMergeReevaluationOptions = {
     tx: ScopedTransaction
   ) => Promise<void>
   repoFullName: string | undefined
+  recoveryIdentity?: { headRepoFullName: string; body: string }
   assertRetestWorkerAvailable: () => Promise<void>
 }
 
@@ -50,6 +51,7 @@ export async function handleFixPrMergedAndReevaluate({
   prNumber,
   assertRetestAllowed,
   repoFullName,
+  recoveryIdentity,
   assertRetestWorkerAvailable,
 }: FixPrMergeReevaluationOptions): Promise<FixPrMergeOutcome | null> {
   if (typeof assertRetestAllowed !== "function") {
@@ -115,7 +117,13 @@ export async function handleFixPrMergedAndReevaluate({
   const { handleFixPrMerged } = await import("./fix-proposal-service")
   // This helper commits merge state separately so failed retest creation can
   // resume on redelivery. It takes the same advisory lock in its transaction.
-  const result = await handleFixPrMerged({ workspaceId, branchName, prNumber, repoFullName })
+  const result = await handleFixPrMerged({
+    workspaceId,
+    branchName,
+    prNumber,
+    repoFullName,
+    ...(recoveryIdentity ? { recoveryIdentity } : {}),
+  })
   if (!result) return null
 
   await checkRetestWorkerAvailable(assertRetestWorkerAvailable)

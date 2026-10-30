@@ -24,7 +24,14 @@ const GitHubPullRequestEventSchema = z.object({
   }),
   pull_request: z.object({
     number: z.number().int().positive(),
-    head: z.object({ ref: z.string().min(1).max(255) }),
+    head: z.object({
+      ref: z.string().min(1).max(255),
+      repo: z
+        .object({ full_name: z.string().min(1).max(255) })
+        .nullable()
+        .optional(),
+    }),
+    body: z.string().max(65536).nullable().optional(),
     base: z.object({ ref: z.string().min(1).max(255) }),
     merged: z.boolean().optional(),
   }),
@@ -264,6 +271,14 @@ async function handleMergedFixPullRequest(
         if (!entitlement.allowed) throw new Error(entitlement.code ?? "RETEST_NOT_ENTITLED")
       },
       repoFullName,
+      ...(pullRequest.head.repo && pullRequest.body
+        ? {
+            recoveryIdentity: {
+              headRepoFullName: pullRequest.head.repo.full_name,
+              body: pullRequest.body,
+            },
+          }
+        : {}),
       assertRetestWorkerAvailable: assertScanWorkerAvailable,
     })
     if (outcome) {

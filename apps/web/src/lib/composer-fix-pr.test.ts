@@ -8,7 +8,7 @@ const mocks = vi.hoisted(() => ({
   read: vi.fn(),
   write: vi.fn(),
   pr: vi.fn(),
-  fail: vi.fn(),
+  fail: vi.fn().mockResolvedValue("TERMINAL"),
 }))
 vi.mock("@lyrashield/db", () => ({
   claimApprovalExecution: mocks.claim,
@@ -18,7 +18,10 @@ vi.mock("@lyrashield/db", () => ({
   findOrCreatePendingApproval: mocks.create,
   getFixProposal: vi.fn().mockResolvedValue({ id: "proposal-1" }),
   hashInput: (_action: string, input: unknown) => JSON.stringify(input),
-  createPullRequestRecord: vi.fn(),
+  createPullRequestRecord: vi.fn().mockResolvedValue({ status: "open" }),
+  beginFixPrExecution: vi.fn().mockResolvedValue({ created: true, record: { status: "opening" } }),
+  getFixPrExecution: vi.fn().mockResolvedValue(null),
+  markFixPrRecovery: vi.fn().mockResolvedValue(undefined),
 }))
 vi.mock("./fix-pr-connection", () => ({
   hasActiveFixPrConnection: vi.fn().mockResolvedValue(true),

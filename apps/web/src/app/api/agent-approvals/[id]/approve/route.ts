@@ -11,7 +11,8 @@ import { logger } from "@lyrashield/logger"
 import { authErrorResponse } from "../../../../../lib/api-auth"
 import { apiError, apiSuccess } from "../../../../../lib/api-response"
 import { FixPrContextError, resolveFixPrRequest } from "@/lib/fix-pr-context"
-import { executeApprovedFixPr } from "@/lib/fix-pr"
+import { z } from "zod"
+import { buildFixPrApprovalInput, executeApprovedFixPr } from "@/lib/fix-pr"
 
 async function post(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id: approvalId } = await params
@@ -22,15 +23,13 @@ async function post(request: Request, { params }: { params: Promise<{ id: string
     return apiError("INVALID_JSON", "Request body must be valid JSON", 400)
   }
 
-  const typedBody = body as { workspaceId?: string; input?: Record<string, unknown> }
-  const workspaceId = typedBody?.workspaceId
-  const input = typedBody?.input
-  if (!workspaceId) {
-    return apiError("VALIDATION_ERROR", "workspaceId is required", 400)
-  }
-  if (!input || typeof input !== "object" || Array.isArray(input)) {
-    return apiError("VALIDATION_ERROR", "input is required and must be an object", 400)
-  }
+  const parsed = z
+    .object({ workspaceId: z.string().min(1), input: z.record(z.string(), z.unknown()) })
+    .strict()
+    .safeParse(body)
+  if (!parsed.success)
+    return apiError("VALIDATION_ERROR", "Expected workspaceId and input only", 400)
+  const { workspaceId, input } = parsed.data
 
   try {
     const { session } = await requirePermission(workspaceId, PERMISSIONS.agent.approve)
@@ -58,6 +57,19 @@ async function post(request: Request, { params }: { params: Promise<{ id: string
         return apiError("INVALID_FIX_APPROVAL", "Approval has no stored fix proposal", 409)
       }
       fixContext = await resolveFixPrRequest(workspaceId, stored.fixProposalId, session.userId)
+      if (
+        !verifyInputHash(
+          approval.actionName,
+          buildFixPrApprovalInput(fixContext),
+          approval.inputHash
+        )
+      ) {
+        return apiError(
+          "INPUT_HASH_MISMATCH",
+          "The stored patch changed. Request a new approval.",
+          422
+        )
+      }
     }
     const updated = await approveApproval(approvalId, workspaceId, session.userId)
     if (fixContext) {
