@@ -2,6 +2,10 @@ import { randomUUID } from "node:crypto"
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 import { PrismaClient } from "../../../packages/db/src/generated/prisma"
 import { createBoundedPgAdapter } from "../../../packages/db/src/pool"
+import {
+  assertUserScanSlotRedisFixture,
+  withUserScanSlotQueueFixture,
+} from "./user-scan-slot.fixture"
 
 vi.mock("@lyrashield/config", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@lyrashield/config")>()
@@ -59,6 +63,10 @@ describe.skipIf(!enabled)("nonfinancial user admission with PostgreSQL RLS and R
       redisUrl.hostname !== "127.0.0.1"
     )
       throw new Error("requires same-database task3_admission_test disposable local services")
+    await assertUserScanSlotRedisFixture(
+      redisUrl.toString(),
+      process.env.USER_SCAN_SLOT_REDIS_FIXTURE_ID
+    )
     owner = new PrismaClient({ adapter: createBoundedPgAdapter(ownerUrl.toString()) })
     db = await import("@lyrashield/db")
     integrations = await import("@lyrashield/integrations")
@@ -89,6 +97,18 @@ describe.skipIf(!enabled)("nonfinancial user admission with PostgreSQL RLS and R
     }
     await db?.prisma.$disconnect()
     await db?.getSystemPrisma().$disconnect()
+  })
+
+  it("rejects missing and mismatched Redis ownership without mutating fixture keys", async () => {
+    const redis = integrations.getRedis()!
+    const before = (await redis.keys("*")).sort()
+    await expect(assertUserScanSlotRedisFixture(process.env.REDIS_URL!, undefined)).rejects.toThrow(
+      "requires explicit task-owned Redis fixture identity"
+    )
+    await expect(
+      assertUserScanSlotRedisFixture(process.env.REDIS_URL!, randomUUID())
+    ).rejects.toThrow("Redis fixture identity does not match the task-owned service")
+    expect((await redis.keys("*")).sort()).toEqual(before)
   })
 
   it("admits exactly one simultaneous request for one user across workspaces", async () => {
@@ -261,8 +281,7 @@ describe.skipIf(!enabled)("nonfinancial user admission with PostgreSQL RLS and R
     const scan = await db.createScan(input)
     await owner.scan.update({ where: { id: scan.id }, data: { updatedAt: new Date(0) } })
     const workerId = `slot-test-${randomUUID()}`
-    await integrations.registerScanWorker(workerId)
-    try {
+    await withUserScanSlotQueueFixture(integrations, workerId, scan.id, async () => {
       await integrations.enqueueScan({
         scanId: scan.id,
         workspaceId: input.workspaceId,
@@ -277,10 +296,27 @@ describe.skipIf(!enabled)("nonfinancial user admission with PostgreSQL RLS and R
       })
       expect(await owner.userScanSlot.count({ where: { scanId: scan.id } })).toBe(1)
       await expect(db.createScan(input)).rejects.toMatchObject({ code: "SCAN_ALREADY_ACTIVE" })
-      await (await integrations.getScanQueue().getJob(scan.id))!.remove()
-    } finally {
-      await integrations.unregisterScanWorker(workerId)
-    }
+    })
+  })
+
+  it("removes the exact queued job and unregisters its worker after an assertion failure", async () => {
+    const input = await fixture()
+    const scan = await db.createScan(input)
+    const workerId = `slot-failure-${randomUUID()}`
+    await expect(
+      withUserScanSlotQueueFixture(integrations, workerId, scan.id, async () => {
+        await integrations.enqueueScan({
+          scanId: scan.id,
+          workspaceId: input.workspaceId,
+          targetId: input.targetId,
+          goal: "TEST_APP",
+          mode: "SAFE",
+        })
+        throw new Error("injected fixture assertion failure")
+      })
+    ).rejects.toThrow("injected fixture assertion failure")
+    expect(await integrations.getScanQueue().getJob(scan.id)).toBeUndefined()
+    expect(await integrations.getRedis()!.zscore("lyrashield:scan-workers", workerId)).toBeNull()
   })
 
   it("reconciles missing queue jobs without replay and retains uncertain execution ownership", async () => {
