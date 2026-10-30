@@ -361,8 +361,7 @@ jobs:
 
           # Per-job synthetic credentials; never print them or put them in argv.
           export POSTGRES_PASSWORD="$(openssl rand -hex 32)"
-          printf '::add-mask::%s\n' "$POSTGRES_PASSWORD"
-          printf 'RESTORE_DB_PASSWORD=%s\n' "$POSTGRES_PASSWORD" >> "$GITHUB_ENV"
+          printf '%s' "$POSTGRES_PASSWORD" > "$RUNNER_TEMP/restore-db-password"
           docker run -d --name lyrashield-restore-postgres \
             -e POSTGRES_USER=restore -e POSTGRES_PASSWORD -e POSTGRES_DB=lyrashield_restore \
             -p "${ISOLATED_RESTORE_BIND:-127.0.0.1:}5433:5432" postgres@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73 >/dev/null
@@ -540,6 +539,7 @@ jobs:
             docker exec lyrashield-restore-redis redis-cli ping | grep -qx PONG && break
             sleep 1
           done
+          RESTORE_DB_PASSWORD="$(cat "$RUNNER_TEMP/restore-db-password")"
           # All restore modes bind loopback and record process-group identity.
           web_command=(setsid bash -c 'bash .github/scripts/isolated-restore-private.sh record-web "$$" || exit 1; exec pnpm --filter @lyrashield/web dev --port 3100 --hostname 127.0.0.1')
           DATABASE_URL="postgresql://restore:${RESTORE_DB_PASSWORD:?}@127.0.0.1:5433/lyrashield_restore?schema=public" \

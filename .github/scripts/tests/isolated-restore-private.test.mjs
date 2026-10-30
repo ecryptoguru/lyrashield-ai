@@ -156,7 +156,16 @@ for (const scenario of [
       (call) => call.command === "docker" && call.args[0] === "run" && call.args.includes("-d")
     )
     assert.equal(Boolean(launch), ["valid", "restore failure"].includes(scenario))
-    if (launch) assert.equal(launch.args[launch.args.indexOf("-p") + 1], "127.0.0.1:5433:5432")
+    if (launch) {
+      assert.equal(launch.args[launch.args.indexOf("-p") + 1], "127.0.0.1:5433:5432")
+      const password = readFileSync(join(f.directory, "restore-db-password"), "utf8")
+      assert.match(password, /^[a-f0-9]{64}$/)
+      assert.equal(
+        launch.args.some((arg) => arg.includes(password)),
+        false
+      )
+      assert.equal(readFileSync(join(f.root, "github-env"), "utf8").includes(password), false)
+    }
     const restore = calls.find(
       (call) =>
         call.command === "docker" &&
