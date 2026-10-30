@@ -69,11 +69,14 @@ const schedules = Array.from({ length: 101 }, (_, index) => ({
   },
 }))
 
+const pendingOperations: Array<() => void> = []
+
 function deferred() {
   let resolve!: () => void
   const promise = new Promise<void>((done) => {
     resolve = done
   })
+  pendingOperations.push(resolve)
   return { promise, resolve }
 }
 
@@ -96,22 +99,38 @@ describe("schedule runner polling (isolated admission)", () => {
     mocks.enqueueScan.mockResolvedValue("synthetic-scan")
   })
 
-  afterEach(() => {
+  afterEach(async () => {
     if (timer) clearInterval(timer)
     timer = undefined
-    vi.useRealTimers()
-    expect(mocks.entitlement).not.toHaveBeenCalled()
+    try {
+      // Settle delayed polls even when an assertion throws; do not leak old work
+      // across module resets or leave cleanup dependent on a passing test.
+      for (const resolve of pendingOperations.splice(0)) resolve()
+      await vi.advanceTimersByTimeAsync(0)
+      expect(mocks.entitlement).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
-  it("keeps slow polls from rewinding the cursor and revisiting earlier due rows", async () => {
+  it("keeps healthy polls live while an older due query remains pending", async () => {
     const slowRead = deferred()
-    mocks.assertScanWorkerAvailable.mockImplementationOnce(() => slowRead.promise)
+    mocks.getDueSchedules.mockImplementationOnce(async () => {
+      await slowRead.promise
+      return schedules.slice(0, 50)
+    })
     const { startScheduleRunner } = await import("./schedules")
     timer = startScheduleRunner()
     await vi.advanceTimersByTimeAsync(125_000)
+    expect(mocks.getDueSchedules).toHaveBeenCalledTimes(3)
+    expect(mocks.count).toHaveBeenCalledTimes(100)
+
+    // The old read returns after its cooperative row budget expired. It must
+    // execute no stale rows and leave healthy polls' completed cursor intact.
     slowRead.resolve()
     await vi.advanceTimersByTimeAsync(0)
-    await vi.advanceTimersByTimeAsync(115_000)
+    expect(mocks.count).toHaveBeenCalledTimes(100)
+    await vi.advanceTimersByTimeAsync(55_000)
 
     const cursors = mocks.getDueSchedules.mock.calls.map(([, afterId]) => afterId ?? null)
     const targetVisits = mocks.count.mock.calls.map(([input]) => input.where.targetId)
@@ -122,7 +141,7 @@ describe("schedule runner polling (isolated admission)", () => {
       uniqueTargets: new Set(targetVisits).size,
       lastTarget: targetVisits.at(-1),
     })
-    expect(cursors).toEqual([null, "schedule-001", "schedule-051"])
+    expect(cursors).toEqual([null, null, "schedule-050", "schedule-100"])
     expect(targetVisits).toHaveLength(101)
     expect(new Set(targetVisits).size).toBe(101)
     expect(targetVisits.at(-1)).toBe("target-100")
@@ -130,21 +149,27 @@ describe("schedule runner polling (isolated admission)", () => {
     expect(mocks.enqueueScan).not.toHaveBeenCalled()
   })
 
-  it("waits for the next interval after a slow poll without replaying skipped ticks", async () => {
+  it("allows a restarted runner to progress while the stopped runner's query is pending", async () => {
     const slowRead = deferred()
     mocks.getDueSchedules.mockImplementationOnce(async () => {
       await slowRead.promise
-      return []
+      return schedules.slice(0, 50)
     })
     const { startScheduleRunner } = await import("./schedules")
     timer = startScheduleRunner()
-    await vi.advanceTimersByTimeAsync(125_000)
+    await vi.advanceTimersByTimeAsync(30_000)
     expect(mocks.getDueSchedules).toHaveBeenCalledTimes(1)
+    clearInterval(timer)
+    timer = startScheduleRunner()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(mocks.getDueSchedules).toHaveBeenCalledTimes(2)
+    expect(mocks.count).toHaveBeenCalledTimes(50)
     slowRead.resolve()
     await vi.advanceTimersByTimeAsync(0)
-    expect(mocks.getDueSchedules).toHaveBeenCalledTimes(1)
-    await vi.advanceTimersByTimeAsync(55_000)
-    expect(mocks.getDueSchedules).toHaveBeenCalledTimes(2)
+    expect(mocks.count).toHaveBeenCalledTimes(50)
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(mocks.getDueSchedules).toHaveBeenLastCalledWith(expect.any(Date), "schedule-050")
+    expect(mocks.count).toHaveBeenCalledTimes(100)
   })
 
   it("continues polling after a failed due-row read", async () => {
@@ -192,6 +217,24 @@ describe("schedule runner polling (isolated admission)", () => {
     expect(mocks.createScheduledScan).toHaveBeenCalledTimes(1)
     expect(mocks.enqueueScan).not.toHaveBeenCalled()
     expect(mocks.advanceBlockedSchedule).not.toHaveBeenCalled()
+    expect(mocks.restoreUnsubmittedScheduleOccurrence).not.toHaveBeenCalled()
+  })
+
+  it("continues to another due row after a row fails", async () => {
+    mocks.getDueSchedules.mockResolvedValue(schedules.slice(0, 2))
+    mocks.count.mockResolvedValue(0)
+    mocks.createScheduledScan.mockRejectedValueOnce(new Error("synthetic row failure"))
+    const { startScheduleRunner } = await import("./schedules")
+    timer = startScheduleRunner()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(mocks.createScheduledScan).toHaveBeenCalledTimes(2)
+    expect(mocks.enqueueScan).toHaveBeenCalledExactlyOnceWith({
+      scanId: "synthetic-scan",
+      workspaceId: "workspace-1",
+      targetId: "target-1",
+      goal: "WEEKLY_MONITOR",
+      mode: "SAFE",
+    })
     expect(mocks.restoreUnsubmittedScheduleOccurrence).not.toHaveBeenCalled()
   })
 })

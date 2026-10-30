@@ -71,7 +71,6 @@ async function scheduledScanAdmission(schedule: DueSchedule): Promise<ScheduleAd
 
 // A restart may revisit rows safely: occurrence CAS is the durable authority.
 let dueScheduleCursor: string | undefined
-let schedulePollRunning = false
 const SCHEDULE_POLL_BUDGET_MS = 15_000
 
 export async function processDueSchedules(now = new Date()): Promise<number> {
@@ -186,19 +185,11 @@ export async function processDueSchedules(now = new Date()): Promise<number> {
 }
 
 function runSchedulePoll(): void {
-  // A slow read may outlive the interval. Keep one owner of the shared cursor
-  // and skip elapsed ticks instead of building a backlog of catch-up polls.
-  if (schedulePollRunning) return
-  schedulePollRunning = true
-  void processDueSchedules()
-    .catch((error) => {
-      logger.error("Schedule runner poll failed", {
-        error: error instanceof Error ? error.message : String(error),
-      })
+  void processDueSchedules().catch((error) => {
+    logger.error("Schedule runner poll failed", {
+      error: error instanceof Error ? error.message : String(error),
     })
-    .finally(() => {
-      schedulePollRunning = false
-    })
+  })
 }
 
 export function startScheduleRunner(intervalMs = 60_000): NodeJS.Timeout {
