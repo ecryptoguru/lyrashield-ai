@@ -51,6 +51,9 @@ if (!enabled)
 
 describe.skipIf(!enabled)("nonfinancial user admission with PostgreSQL RLS and Redis", () => {
   beforeAll(async () => {
+    const { assertDisposableDatabasePair } =
+      await import("../../../.github/scripts/vitest-database-env.mjs")
+    assertDisposableDatabasePair(process.env)
     const ownerUrl = new URL(process.env.DATABASE_URL!)
     const runtimeUrl = new URL(process.env.RLS_RUNTIME_DATABASE_URL!)
     const redisUrl = new URL(process.env.REDIS_URL!)

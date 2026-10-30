@@ -9,6 +9,15 @@ import {
 } from "./fix-pr-execution-service"
 import { createPullRequestRecord } from "./fix-proposal-service"
 
+// Hoisting runs this guard before imports can construct the runtime client.
+await vi.hoisted(async () => {
+  if (process.env.LYRASHIELD_TEST_DB_DISPOSABLE === "1" && process.env.RLS_RUNTIME_DATABASE_URL) {
+    const { assertDisposableDatabasePair } =
+      await import("../../../.github/scripts/vitest-database-env.mjs")
+    assertDisposableDatabasePair(process.env)
+  }
+})
+
 vi.mock("@lyrashield/config", async (original) => {
   const actual = await original<typeof import("@lyrashield/config")>()
   return {
@@ -118,6 +127,8 @@ beforeAll(async () => {
   await owner.fixProposal.create({ data: { id: proposalId, findingId, summary: "Patch" } })
 })
 afterAll(async () => {
+  await owner.userScanSlot.deleteMany({ where: { userId: `fix-user-${suffix}` } })
+  await owner.scanCapacityReservation.deleteMany({ where: { userId: `fix-user-${suffix}` } })
   await owner.workspace.delete({ where: { id: workspaceId } })
   await owner.user.delete({ where: { id: `fix-user-${suffix}` } })
   await owner.$disconnect()
