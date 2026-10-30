@@ -6,6 +6,16 @@ import { chooseOrCreateOnboardingWorkspace, listOnboardingWorkspaces } from "./o
 import { getOrCreateOnboardingState } from "./onboarding-state"
 
 const progressSession = vi.hoisted(() => ({ userId: "" }))
+vi.mock("@lyrashield/config", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@lyrashield/config")>()
+  return {
+    ...actual,
+    env: {
+      ...actual.env,
+      DATABASE_URL: process.env.RLS_RUNTIME_DATABASE_URL ?? actual.env.DATABASE_URL,
+    },
+  }
+})
 vi.mock("@lyrashield/auth/server", () => ({
   getSession: async () => progressSession,
   getWorkspaceMembership: vi.fn(),

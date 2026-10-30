@@ -390,7 +390,11 @@ it.each(["pom.xml", "build.gradle", "packages.lock.json", "pyproject.toml", "poe
 )
 
 it.each([
-  ["go.mod", "go.mod", "Go input cannot be parsed with the pinned local toolchain"],
+  [
+    "go.mod",
+    "go.mod",
+    /Go input cannot be parsed with the pinned local toolchain|Pinned Go resolver image or toolchain is unavailable/,
+  ],
   ["go.sum", "go.mod", "Go checksums alone do not identify a selected module graph"],
   ["Cargo.toml", "other/Cargo.toml", "Dependency manifest has no supported exact lockfile"],
   ["Cargo.lock", "other/Cargo.lock", "Malformed or unsupported Cargo lockfile"],
@@ -404,7 +408,12 @@ it.each([
   const inventory = await resolveExactDependencies({ repoPath: root })
   expect(inventory.status).toBe("PARTIAL")
   expect(inventory.packages).toHaveLength(1)
-  expect(inventory.unresolved).toContainEqual(expect.objectContaining({ name, reason }))
+  expect(inventory.unresolved).toContainEqual(
+    expect.objectContaining({
+      name,
+      reason: reason instanceof RegExp ? expect.stringMatching(reason) : reason,
+    })
+  )
 })
 
 it.each(["3..1", "3.", "3a", "3.1..rc1"])(

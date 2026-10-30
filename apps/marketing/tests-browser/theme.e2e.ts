@@ -167,9 +167,9 @@ test("scrolls the mobile menu inside the viewport and reaches every destination"
     }
   })
   expect(styles.overflowY).toBe("auto")
-  // max-height: 100dvh resolves to the viewport height; the source form is
-  // asserted in src/tests/header-nav-layout.test.ts.
-  expect(parseFloat(styles.maxHeight)).toBe(styles.viewportHeight)
+  // The available height excludes the menu's top offset and bottom safe area.
+  expect(parseFloat(styles.maxHeight)).toBeLessThan(styles.viewportHeight)
+  expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(styles.viewportHeight)
 
   // Every desktop destination is present, one accordion per menu.
   for (const label of ["Product", "Free tools", "Learn"]) {
