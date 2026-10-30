@@ -44,11 +44,15 @@ docker run --rm --network none --entrypoint node --workdir /app/apps/worker \
 # Execute the standalone web server from this exact digest without external
 # network access. Readiness may be 503 with synthetic credentials; its compiled
 # route must expose the protocol imported from the actual admission module.
+dummy_ip_salt=$(node -e 'process.stdout.write(require("node:crypto").randomBytes(32).toString("hex"))')
 web_probe="lyrashield-v26-web-$$"
 cleanup_web_probe() { docker rm -f "$web_probe" >/dev/null 2>&1 || true; }
 trap cleanup_web_probe EXIT HUP INT TERM
 docker run -d --name "$web_probe" --network none \
   --env NODE_ENV=production --env HOSTNAME=127.0.0.1 --env PORT=3100 \
+  --env PLATFORM_ADMIN_EMAILS=ecryptoguru@gmail.com,ankit@lyrashieldai.com \
+  --env TRUSTED_PROXY_IP_HEADER=x-forwarded-for \
+  --env "IP_HASH_SALT=$dummy_ip_salt" \
   --env DATABASE_URL=postgresql://example@127.0.0.1:1/example \
   --env BETTER_AUTH_URL=http://127.0.0.1:3100 \
   --env NEXT_PUBLIC_APP_URL=http://127.0.0.1:3100 \
