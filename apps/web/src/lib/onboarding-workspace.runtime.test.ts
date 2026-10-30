@@ -5,6 +5,12 @@ import * as creation from "./workspace-creation"
 import { chooseOrCreateOnboardingWorkspace, listOnboardingWorkspaces } from "./onboarding-workspace"
 import { getOrCreateOnboardingState } from "./onboarding-state"
 
+const progressSession = vi.hoisted(() => ({ userId: "" }))
+vi.mock("@lyrashield/auth/server", () => ({
+  getSession: async () => progressSession,
+  getWorkspaceMembership: vi.fn(),
+}))
+
 const enabled = process.env.LYRASHIELD_TEST_DB_DISPOSABLE === "1"
 describe.skipIf(!enabled)("atomic onboarding workspace selection", () => {
   beforeAll(async () => {
@@ -17,6 +23,77 @@ describe.skipIf(!enabled)("atomic onboarding workspace selection", () => {
     await prisma.user.create({ data: { id, email: `${id}@example.test`, name: "Onboarding" } })
     return { id, state: await getOrCreateOnboardingState(id) }
   }
+  it("durably clears a missing target on an explicit progress PATCH with its optimistic timestamp", async () => {
+    const owner = await user()
+    const workspace = await creation.createWorkspaceWithTrial({
+      userId: owner.id,
+      name: `Progress ${randomUUID()}`,
+      mode: "VIBE",
+    })
+    const original = await prisma.onboardingState.update({
+      where: { userId: owner.id },
+      data: { workspaceId: workspace.id, targetId: "deleted-target", currentStep: 3 },
+    })
+    progressSession.userId = owner.id
+    const { PATCH } = await import("../app/api/onboarding/route")
+    const response = await PATCH(
+      new Request("http://localhost:3000/api/onboarding", {
+        method: "PATCH",
+        body: JSON.stringify({
+          buildTool: "cursor",
+          targetId: null,
+          currentStep: 1,
+          expectedUpdatedAt: original.updatedAt.toISOString(),
+        }),
+      })
+    )
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({
+      data: { targetId: null, buildTool: "cursor", currentStep: 1 },
+    })
+    expect(await prisma.onboardingState.findUnique({ where: { userId: owner.id } })).toMatchObject({
+      targetId: null,
+      currentStep: 1,
+      buildTool: "cursor",
+    })
+  })
+  it("rejects a recovery PATCH when another tab already changed the target and progress", async () => {
+    const owner = await user()
+    const workspace = await creation.createWorkspaceWithTrial({
+      userId: owner.id,
+      name: `Conflict ${randomUUID()}`,
+      mode: "VIBE",
+    })
+    const original = await prisma.onboardingState.update({
+      where: { userId: owner.id },
+      data: { workspaceId: workspace.id, targetId: "deleted-target", currentStep: 3 },
+    })
+    const newer = await prisma.onboardingState.update({
+      where: { userId: owner.id },
+      data: {
+        targetId: "newer-tab-target",
+        currentStep: 3,
+        selectedGoal: "LAUNCH_REVIEW",
+        updatedAt: new Date(original.updatedAt.getTime() + 1000),
+      },
+    })
+    progressSession.userId = owner.id
+    const { PATCH } = await import("../app/api/onboarding/route")
+    const response = await PATCH(
+      new Request("http://localhost:3000/api/onboarding", {
+        method: "PATCH",
+        body: JSON.stringify({
+          buildTool: "cursor",
+          targetId: null,
+          currentStep: 1,
+          expectedUpdatedAt: original.updatedAt.toISOString(),
+        }),
+      })
+    )
+    expect(response.status).toBe(409)
+    expect(await response.json()).toMatchObject({ error: { code: "ONBOARDING_CHANGED" } })
+    expect(await prisma.onboardingState.findUnique({ where: { userId: owner.id } })).toEqual(newer)
+  })
   it("concurrent tabs create one workspace, policy, membership, trial and selection", async () => {
     const owner = await user()
     const choose = () =>

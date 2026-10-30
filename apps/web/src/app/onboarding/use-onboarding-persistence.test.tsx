@@ -91,3 +91,58 @@ describe("onboarding workspace choice", () => {
     expect(api.refresh).not.toHaveBeenCalled()
   })
 })
+
+it("carries the displayed missing-target reset on the first explicit save with its optimistic version", async () => {
+  const normalized = { ...initialState, workspaceId: "ws-valid" }
+  let stored: OnboardingData = { ...normalized, currentStep: 3, targetId: "deleted-target" }
+  api.patch.mockImplementation(async (_url: string, body: Partial<OnboardingData>) => {
+    stored = { ...stored, ...body }
+    return stored
+  })
+  const persistence = useOnboardingPersistence({ initialState: normalized })
+  await expect(persistence.persist({ buildTool: "cursor" })).resolves.toMatchObject({
+    workspaceId: "ws-valid",
+    targetId: null,
+    currentStep: 1,
+    buildTool: "cursor",
+  })
+  expect(api.patch).toHaveBeenCalledWith(
+    "/api/onboarding",
+    expect.objectContaining({ targetId: null, expectedUpdatedAt: "2026-10-30T00:00:00.000Z" }),
+    expect.any(Object)
+  )
+})
+
+it("does not overwrite a newer target when missing-target recovery conflicts", async () => {
+  const normalized = { ...initialState, workspaceId: "ws-valid" }
+  const newer = {
+    ...normalized,
+    targetId: "other-tab-target",
+    currentStep: 3,
+    updatedAt: "2026-10-30T00:00:00.001Z",
+  }
+  api.patch.mockImplementation(
+    async (_url: string, body: Partial<OnboardingData> & { expectedUpdatedAt?: string }) => {
+      if (body.expectedUpdatedAt !== newer.updatedAt)
+        throw new ApiError("ONBOARDING_CHANGED", "Setup changed in another tab", 409)
+      throw new Error("The stale write must not be applied")
+    }
+  )
+  const persistence = useOnboardingPersistence({ initialState: normalized })
+  await expect(persistence.persist({ buildTool: "cursor" })).rejects.toMatchObject({
+    code: "ONBOARDING_CHANGED",
+  })
+  expect(newer).toMatchObject({ targetId: "other-tab-target", currentStep: 3 })
+})
+
+it("allows an explicit freshly bound target to override missing-target recovery", async () => {
+  const normalized = { ...initialState, workspaceId: "ws-valid" }
+  api.patch.mockImplementation(async (_url: string, body: Partial<OnboardingData>) => ({
+    ...normalized,
+    ...body,
+  }))
+  const persistence = useOnboardingPersistence({ initialState: normalized })
+  await expect(
+    persistence.persist({ targetId: "new-target", currentStep: 3 })
+  ).resolves.toMatchObject({ targetId: "new-target", currentStep: 3 })
+})

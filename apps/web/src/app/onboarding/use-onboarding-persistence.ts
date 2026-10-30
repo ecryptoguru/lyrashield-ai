@@ -38,7 +38,16 @@ export function useOnboardingPersistence({
     try {
       next = await apiPatch(
         "/api/onboarding",
-        { ...updates, expectedUpdatedAt: persistedState.current.updatedAt },
+        {
+          // A read-only page may hide a missing stored target. Persist that
+          // normalized binding and step on the next explicit write, guarded by the
+          // original version, so a partial response cannot resurrect its ID.
+          ...(persistedState.current.targetId === null
+            ? { targetId: null, currentStep: persistedState.current.currentStep }
+            : {}),
+          ...updates,
+          expectedUpdatedAt: persistedState.current.updatedAt,
+        },
         { schema: onboardingDataSchema }
       )
     } catch (cause) {

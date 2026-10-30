@@ -1144,3 +1144,90 @@ it("reports an invalid URL without creating a target after workspace selection",
     tree().some((element) => element.props.children === "Enter a name and a valid URL to continue.")
   ).toBe(true)
 })
+
+it("clears a deleted stored target on build-context save and scans the replacement URL", async () => {
+  const storage = new Map<string, string>()
+  vi.stubGlobal("window", {
+    sessionStorage: {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => storage.set(key, value),
+      removeItem: (key: string) => storage.delete(key),
+    },
+  })
+  const normalized = {
+    currentStep: 1,
+    completed: false,
+    skipped: false,
+    workspaceId: "ws-valid",
+    targetId: null,
+    selectedGoal: null,
+    targetName: null,
+    updatedAt: "2026-10-30T00:00:00.000Z",
+  }
+  let stored: Record<string, unknown> = {
+    ...normalized,
+    currentStep: 3,
+    targetId: "deleted-target",
+  }
+  api.patch.mockImplementation(async (_url: string, body: Record<string, unknown>) => {
+    const { expectedUpdatedAt, ...updates } = body
+    if (expectedUpdatedAt !== stored.updatedAt)
+      throw new ApiError("ONBOARDING_CHANGED", "Setup changed in another tab", 409)
+    stored = {
+      ...stored,
+      ...updates,
+      updatedAt: new Date(new Date(stored.updatedAt as string).getTime() + 1).toISOString(),
+    }
+    return { ...stored }
+  })
+  api.post.mockImplementation(async (url: string) => {
+    if (url === "/api/targets") return { id: "replacement-target" }
+    if (url === "/api/scans") return { id: "replacement-scan" }
+    throw new Error(`unexpected POST ${url}`)
+  })
+  const tree = () => render(null, normalized, "url")
+  tree().find((element) => element.props.id === "url-input")!.props.onChange!({
+    target: { value: "https://replacement.example.test" },
+  })
+  tree().find((element) => element.props.id === "ownership-check")!.props.onChange!({
+    target: { checked: true },
+  })
+  // Return to the visible path chooser to save optional build context. The URL stays entered.
+  await tree().find(
+    (element) => element.type === Button && textOf(element.props.children).includes("Back")
+  )!.props.onClick!()
+  await tree().find(
+    (element) => element.type === "button" && textOf(element.props.children) === "Cursor"
+  )!.props.onClick!()
+  await new Promise<void>((resolve) => setTimeout(resolve, 0))
+  await tree().find(
+    (element) =>
+      element.type === "button" && textOf(element.props.children).includes("Add an app URL")
+  )!.props.onClick!()
+  await new Promise<void>((resolve) => setTimeout(resolve, 0))
+  await tree().find((element) => element.type === "form")!.props.onSubmit!({
+    preventDefault: vi.fn(),
+  })
+  await new Promise<void>((resolve) => setTimeout(resolve, 0))
+  await tree().find(
+    (element) =>
+      textOf(element.props.children).includes("Start surface review") && element.type === Button
+  )!.props.onClick!()
+  await new Promise<void>((resolve) => setTimeout(resolve, 0))
+  await new Promise<void>((resolve) => setTimeout(resolve, 0))
+  expect(api.post.mock.calls.filter(([url]) => url === "/api/targets")).toEqual([
+    [
+      "/api/targets",
+      expect.objectContaining({ workspaceId: "ws-valid", url: "https://replacement.example.test" }),
+      expect.any(Object),
+    ],
+  ])
+  expect(api.post.mock.calls.filter(([url]) => url === "/api/scans")[0]?.[1]).toMatchObject({
+    workspaceId: "ws-valid",
+    targetId: "replacement-target",
+  })
+  expect(stored.targetId).toBe("replacement-target")
+  expect(tree().some((element) => element.props.href === "/dashboard/scans/replacement-scan")).toBe(
+    true
+  )
+})

@@ -203,3 +203,92 @@ test("skips without creating a workspace or claiming a trial", async ({ page }) 
   expect(requests).toEqual(["/api/onboarding"])
   release()
 })
+
+for (const width of [390, 1440]) {
+  test(`recovered deleted target stays cleared through a build-context save at ${width}px`, async ({
+    page,
+  }) => {
+    // Next inlines public analytics env; this portable Vite fixture supplies an empty one.
+    await page.addInitScript(() => Object.defineProperty(window, "process", { value: { env: {} } }))
+    let stored = {
+      currentStep: 3,
+      completed: false,
+      skipped: false,
+      workspaceId: "ws-selected",
+      targetId: "deleted-target" as string | null,
+      selectedGoal: null,
+      updatedAt: "2026-10-09T00:00:00.000Z",
+    }
+    const targets: unknown[] = []
+    const scans: unknown[] = []
+    await page.route("**/api/**", async (route) => {
+      const path = new URL(route.request().url()).pathname
+      if (path === "/api/onboarding") {
+        const { expectedUpdatedAt, ...updates } = route.request().postDataJSON()
+        if (expectedUpdatedAt !== stored.updatedAt)
+          return route.fulfill({
+            status: 409,
+            json: {
+              success: false,
+              error: { code: "ONBOARDING_CHANGED", message: "Setup changed in another tab." },
+            },
+          })
+        stored = {
+          ...stored,
+          ...updates,
+          updatedAt: new Date(Date.parse(stored.updatedAt) + 1).toISOString(),
+        }
+        return route.fulfill({ json: { success: true, data: stored } })
+      }
+      if (path === "/api/targets") {
+        targets.push(route.request().postDataJSON())
+        return route.fulfill({ json: { success: true, data: { id: "replacement-target" } } })
+      }
+      if (path === "/api/scans" && route.request().method() === "POST") {
+        scans.push(route.request().postDataJSON())
+        return route.fulfill({ json: { success: true, data: { id: "replacement-scan" } } })
+      }
+      if (path === "/api/scans/eligibility")
+        return route.fulfill({
+          json: {
+            success: true,
+            data: {
+              allowed: true,
+              code: null,
+              message: null,
+              plan: "TRIAL",
+              isTrial: true,
+              remainingMinutes: 60,
+            },
+          },
+        })
+      return route.fulfill({
+        status: 500,
+        json: { success: false, error: { code: "UNEXPECTED_REQUEST", message: path } },
+      })
+    })
+    await page.setViewportSize({ width, height: 844 })
+    await page.goto("?onboarding=url&onboarding-recovery=1")
+    await page.getByLabel("URL", { exact: true }).fill("https://replacement.example.test")
+    await page.getByLabel("I own or am authorized to scan this target.").check()
+    await page.getByRole("button", { name: "Back", exact: true }).click()
+    await page.getByRole("button", { name: "Cursor", exact: true }).click()
+    await page.getByRole("button", { name: /Add an app URL/ }).click()
+    await expect(page.getByLabel("URL", { exact: true })).toHaveValue(
+      "https://replacement.example.test"
+    )
+    await page.getByRole("button", { name: "Continue", exact: true }).click()
+    await page.getByRole("button", { name: "Start surface review", exact: true }).click()
+    await expect(page.getByRole("link", { name: /View scan/ })).toBeVisible()
+    expect(targets).toEqual([
+      expect.objectContaining({
+        workspaceId: "ws-selected",
+        url: "https://replacement.example.test",
+      }),
+    ])
+    expect(scans).toEqual([
+      expect.objectContaining({ workspaceId: "ws-selected", targetId: "replacement-target" }),
+    ])
+    expect(stored.targetId).toBe("replacement-target")
+  })
+}
