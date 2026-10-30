@@ -1,4 +1,5 @@
 import { resolve } from "node:path"
+import { randomUUID } from "node:crypto"
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { logger } from "@lyrashield/logger"
 
@@ -1321,10 +1322,11 @@ describe("processScanJob", () => {
     mockStoredScanAuthority({ accountingVersion: 2 })
     vi.mocked(reserveScanCapacity).mockResolvedValueOnce({ state: "WAITING" })
     const moveToDelayed = vi.fn().mockResolvedValue(undefined)
+    const leaseToken = randomUUID()
     await expect(
-      processScanJob({ ...mockJobFixture, token: "worker-token", moveToDelayed } as never)
+      processScanJob({ ...mockJobFixture, token: leaseToken, moveToDelayed } as never)
     ).rejects.toThrow()
-    expect(moveToDelayed).toHaveBeenCalledWith(expect.any(Number), "worker-token")
+    expect(moveToDelayed).toHaveBeenCalledWith(expect.any(Number), leaseToken)
     expect(runEngine).not.toHaveBeenCalled()
     expect(recordAgentMinutes).not.toHaveBeenCalled()
   })

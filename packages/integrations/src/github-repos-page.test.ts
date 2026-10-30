@@ -21,7 +21,10 @@ function cachedToken() {
   const nonce = randomBytes(12)
   const cipher = createCipheriv("aes-256-gcm", key, nonce)
   cipher.setAAD(Buffer.from(identity))
-  const data = JSON.stringify({ token: "synthetic", expiresAt: Date.now() + 3600000 })
+  const data = JSON.stringify({
+    token: randomBytes(16).toString("hex"),
+    expiresAt: Date.now() + 3600000,
+  })
   const encrypted = Buffer.concat([cipher.update(data, "utf8"), cipher.final()])
   return `v1:${Buffer.concat([nonce, cipher.getAuthTag(), encrypted]).toString("base64url")}`
 }

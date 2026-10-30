@@ -26,7 +26,7 @@ vi.mock("../../integrations/src/index", () => ({
   inspectFixPrRemote: provider.inspect,
   getDefaultBranch: vi.fn().mockResolvedValue("main"),
   getBranchRefSha: vi.fn().mockResolvedValue("a".repeat(40)),
-  getFileContent: vi.fn().mockResolvedValue("const insecure = true\n"),
+  getFileContent: vi.fn().mockResolvedValue("const example = true\n"),
 }))
 vi.mock("./index", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./index")>()
@@ -162,7 +162,7 @@ describe("durable fix PR persistence", () => {
       workspaceId,
       targetId: `fix-target-${suffix}`,
       fixProposalId: proposalId,
-      diff: buildUnifiedDiff("src/a.ts", "const insecure = true\n", "const insecure = false\n"),
+      diff: buildUnifiedDiff("src/a.ts", "const example = true\n", "const example = false\n"),
       anchorFile: "src/a.ts",
       implicatedFiles: ["src/a.ts"],
       plan: "PRO",
@@ -239,7 +239,7 @@ describe("durable fix PR persistence", () => {
       workspaceId,
       targetId: `fix-target-${suffix}`,
       fixProposalId: proposal.id,
-      diff: buildUnifiedDiff("src/a.ts", "const insecure = true\n", "const insecure = false\n"),
+      diff: buildUnifiedDiff("src/a.ts", "const example = true\n", "const example = false\n"),
       anchorFile: "src/a.ts",
       implicatedFiles: ["src/a.ts"],
       plan: "PRO",
@@ -362,7 +362,7 @@ describe("durable fix PR persistence", () => {
       workspaceId,
       targetId: `fix-target-${suffix}`,
       fixProposalId: proposal.id,
-      diff: buildUnifiedDiff("src/a.ts", "const insecure = true\n", "const insecure = false\n"),
+      diff: buildUnifiedDiff("src/a.ts", "const example = true\n", "const example = false\n"),
       anchorFile: "src/a.ts",
       implicatedFiles: ["src/a.ts"],
       plan: "PRO",
