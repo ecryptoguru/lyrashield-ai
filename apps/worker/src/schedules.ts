@@ -70,20 +70,33 @@ async function scheduledScanAdmission(schedule: DueSchedule): Promise<ScheduleAd
 }
 
 // A restart may revisit rows safely: occurrence CAS is the durable authority.
-let dueScheduleCursor: string | undefined
+// Replace the object on progress so a stale poll cannot regain ownership after
+// the cursor wraps back to the same value. Starting a poll claims no ownership.
+let dueScheduleCursor: Readonly<{ afterId: string | undefined }> = { afterId: undefined }
 const SCHEDULE_POLL_BUDGET_MS = 15_000
 
 export async function processDueSchedules(now = new Date()): Promise<number> {
   const deadline = Date.now() + SCHEDULE_POLL_BUDGET_MS
-  let schedules = await getDueSchedules(now, dueScheduleCursor)
-  if (!schedules.length && dueScheduleCursor) {
-    dueScheduleCursor = undefined
+  let cursor = dueScheduleCursor
+  const advanceCursor = (afterId: string | undefined): boolean => {
+    if (dueScheduleCursor !== cursor) return false
+    if (cursor.afterId !== afterId) {
+      cursor = { afterId }
+      dueScheduleCursor = cursor
+    }
+    return true
+  }
+  let schedules = await getDueSchedules(now, cursor.afterId)
+  if (dueScheduleCursor !== cursor) return 0
+  if (!schedules.length && cursor.afterId) {
+    advanceCursor(undefined)
     schedules = await getDueSchedules(now)
+    if (dueScheduleCursor !== cursor) return 0
   }
   let enqueued = 0
   let processed = 0
   for (const schedule of schedules) {
-    if (Date.now() >= deadline) break
+    if (Date.now() >= deadline || dueScheduleCursor !== cursor) break
     let workerUnavailable = false
     await runWithWorkspaceContext(schedule.workspaceId, async () => {
       try {
@@ -177,10 +190,12 @@ export async function processDueSchedules(now = new Date()): Promise<number> {
       }
     })
     processed += 1
-    dueScheduleCursor = schedule.id
+    // Finish the entire started row, including publication/cleanup, before
+    // relinquishing stale traversal. Never interrupt or replay its scan work.
+    if (!advanceCursor(schedule.id)) return enqueued
     if (workerUnavailable) break
   }
-  if (processed === schedules.length && schedules.length < 50) dueScheduleCursor = undefined
+  if (processed === schedules.length && schedules.length < 50) advanceCursor(undefined)
   return enqueued
 }
 

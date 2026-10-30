@@ -30,7 +30,14 @@ vi.mock("@lyrashield/billing", () => ({ evaluateScanEntitlement: mocks.entitleme
 vi.mock("@lyrashield/types", () => ({ MAX_CONCURRENT_WORKSPACE_SCANS: 3 }))
 vi.mock("@lyrashield/integrations", () => ({
   resolveAvailableUrlReview: async () => ({ ok: true, engineBacked: false }),
-  ScanEnqueueNotSubmittedError: class extends Error {},
+  ScanEnqueueNotSubmittedError: class extends Error {
+    constructor(
+      readonly scanId: string,
+      cause: unknown
+    ) {
+      super("Synthetic publication was not submitted", { cause })
+    }
+  },
 }))
 vi.mock("@lyrashield/logger", () => ({
   logger: { error: mocks.error, info: vi.fn(), warn: vi.fn() },
@@ -70,6 +77,12 @@ const schedules = Array.from({ length: 101 }, (_, index) => ({
 }))
 
 const pendingOperations: Array<() => void> = []
+const pendingPolls: Promise<number>[] = []
+
+function trackPoll(poll: Promise<number>): Promise<number> {
+  pendingPolls.push(poll)
+  return poll
+}
 
 function deferred() {
   let resolve!: () => void
@@ -85,7 +98,10 @@ describe("schedule runner polling (isolated admission)", () => {
 
   beforeEach(() => {
     vi.resetModules()
-    vi.clearAllMocks()
+    vi.resetAllMocks()
+    mocks.entitlement.mockImplementation(() => {
+      throw new Error("Entitlement execution is outside this polling test")
+    })
     vi.useFakeTimers()
     vi.setSystemTime(origin)
     mocks.getDueSchedules.mockImplementation(async (_now: Date, afterId?: string) =>
@@ -107,6 +123,7 @@ describe("schedule runner polling (isolated admission)", () => {
       // across module resets or leave cleanup dependent on a passing test.
       for (const resolve of pendingOperations.splice(0)) resolve()
       await vi.advanceTimersByTimeAsync(0)
+      await Promise.allSettled(pendingPolls.splice(0))
       expect(mocks.entitlement).not.toHaveBeenCalled()
     } finally {
       vi.useRealTimers()
@@ -236,5 +253,313 @@ describe("schedule runner polling (isolated admission)", () => {
       mode: "SAFE",
     })
     expect(mocks.restoreUnsubmittedScheduleOccurrence).not.toHaveBeenCalled()
+  })
+
+  it("rejects the original delayed row's rewind after healthy later polls progress", async () => {
+    const slowRow = deferred()
+    mocks.assertScanWorkerAvailable.mockImplementationOnce(() => slowRow.promise)
+    const { startScheduleRunner } = await import("./schedules")
+    timer = startScheduleRunner()
+    await vi.advanceTimersByTimeAsync(125_000)
+    slowRow.resolve()
+    await vi.advanceTimersByTimeAsync(55_000)
+
+    const cursors = mocks.getDueSchedules.mock.calls.map(([, cursor]) => cursor ?? null)
+    const targets = mocks.count.mock.calls.map(([input]) => input.where.targetId)
+    console.info("stale row fence timing evidence", {
+      elapsedMs: Date.now() - origin.getTime(),
+      cursors,
+      visits: targets.length,
+      uniqueTargets: new Set(targets).size,
+      lastTarget: targets.at(-1),
+    })
+    expect(cursors).toEqual([null, null, "schedule-050", "schedule-100"])
+    expect(targets).toHaveLength(102)
+    expect(new Set(targets).size).toBe(101)
+    expect(targets.at(-1)).toBe("target-100")
+    expect(mocks.createScheduledScan).not.toHaveBeenCalled()
+  })
+
+  it("does not start rows returned by an initial query that lost cursor ownership", async () => {
+    const read = deferred()
+    mocks.getDueSchedules.mockImplementationOnce(async () => {
+      await read.promise
+      return schedules.slice(0, 50)
+    })
+    const { processDueSchedules } = await import("./schedules")
+    const old = trackPoll(processDueSchedules())
+    await vi.advanceTimersByTimeAsync(0)
+    await processDueSchedules()
+    read.resolve()
+    await old
+    expect(mocks.count).toHaveBeenCalledTimes(50)
+    await processDueSchedules()
+    expect(mocks.getDueSchedules).toHaveBeenLastCalledWith(expect.any(Date), "schedule-050")
+  })
+
+  it.each([false, true])(
+    "does not wrap a stale empty query (nonempty initial cursor: %s)",
+    async (seed) => {
+      const { processDueSchedules } = await import("./schedules")
+      if (seed) await processDueSchedules()
+      const read = deferred()
+      mocks.getDueSchedules.mockImplementationOnce(async () => {
+        await read.promise
+        return []
+      })
+      const old = trackPoll(processDueSchedules())
+      await vi.advanceTimersByTimeAsync(0)
+      await processDueSchedules()
+      const queryCount = mocks.getDueSchedules.mock.calls.length
+      read.resolve()
+      await old
+      expect(mocks.getDueSchedules).toHaveBeenCalledTimes(queryCount)
+      await processDueSchedules()
+      expect(mocks.getDueSchedules).toHaveBeenLastCalledWith(
+        expect.any(Date),
+        seed ? "schedule-100" : "schedule-050"
+      )
+    }
+  )
+
+  it("discards a fallback head query when another poll has advanced since the wrap", async () => {
+    const { processDueSchedules } = await import("./schedules")
+    await processDueSchedules()
+    const read = deferred()
+    mocks.getDueSchedules.mockResolvedValueOnce([]).mockImplementationOnce(async () => {
+      await read.promise
+      return schedules.slice(0, 50)
+    })
+    const old = trackPoll(processDueSchedules())
+    await vi.advanceTimersByTimeAsync(0)
+    await processDueSchedules()
+    const visits = mocks.count.mock.calls.length
+    read.resolve()
+    await old
+    expect(mocks.count).toHaveBeenCalledTimes(visits)
+    await processDueSchedules()
+    expect(mocks.getDueSchedules).toHaveBeenLastCalledWith(expect.any(Date), "schedule-050")
+  })
+
+  it("does not let an old short page reset another poll's cursor", async () => {
+    const row = deferred()
+    mocks.getDueSchedules.mockResolvedValueOnce([schedules[0]])
+    mocks.assertScanWorkerAvailable.mockImplementationOnce(() => row.promise)
+    const { processDueSchedules } = await import("./schedules")
+    const old = trackPoll(processDueSchedules())
+    await vi.advanceTimersByTimeAsync(0)
+    await processDueSchedules()
+    row.resolve()
+    await old
+    await processDueSchedules()
+    expect(mocks.getDueSchedules).toHaveBeenLastCalledWith(expect.any(Date), "schedule-050")
+  })
+
+  it("rejects stale ownership after the cursor wraps back to the same head value (ABA)", async () => {
+    const row = deferred()
+    mocks.assertScanWorkerAvailable.mockImplementationOnce(() => row.promise)
+    const { processDueSchedules } = await import("./schedules")
+    const old = trackPoll(processDueSchedules())
+    await vi.advanceTimersByTimeAsync(0)
+    await processDueSchedules()
+    await processDueSchedules()
+    await processDueSchedules()
+    // Healthy polls completed all 101 rows and reset the cursor to undefined.
+    row.resolve()
+    await old
+    expect(mocks.count).toHaveBeenCalledTimes(102)
+    expect(
+      mocks.count.mock.calls.filter(([input]) => input.where.targetId === "target-1")
+    ).toHaveLength(1)
+    mocks.getDueSchedules.mockResolvedValueOnce([])
+    await processDueSchedules()
+    expect(mocks.getDueSchedules).toHaveBeenLastCalledWith(expect.any(Date), undefined)
+  })
+
+  it("does not revoke a healthy older poll merely because a newer query hangs", async () => {
+    const row = deferred()
+    const read = deferred()
+    mocks.assertScanWorkerAvailable.mockImplementationOnce(() => row.promise)
+    const { processDueSchedules } = await import("./schedules")
+    const old = trackPoll(processDueSchedules())
+    await vi.advanceTimersByTimeAsync(0)
+    mocks.getDueSchedules.mockImplementationOnce(async () => {
+      await read.promise
+      return []
+    })
+    const newer = trackPoll(processDueSchedules())
+    await vi.advanceTimersByTimeAsync(0)
+    row.resolve()
+    await old
+    expect(mocks.count).toHaveBeenCalledTimes(50)
+    await processDueSchedules()
+    expect(mocks.getDueSchedules).toHaveBeenLastCalledWith(expect.any(Date), "schedule-050")
+    const queries = mocks.getDueSchedules.mock.calls.length
+    read.resolve()
+    await newer
+    expect(mocks.getDueSchedules).toHaveBeenCalledTimes(queries)
+  })
+
+  it("does not invalidate active work for an empty head query that makes no cursor progress", async () => {
+    const row = deferred()
+    mocks.assertScanWorkerAvailable.mockImplementationOnce(() => row.promise)
+    const { processDueSchedules } = await import("./schedules")
+    const old = trackPoll(processDueSchedules())
+    await vi.advanceTimersByTimeAsync(0)
+    mocks.getDueSchedules.mockResolvedValueOnce([])
+    await processDueSchedules()
+    row.resolve()
+    await old
+    expect(mocks.count).toHaveBeenCalledTimes(50)
+    await processDueSchedules()
+    expect(mocks.getDueSchedules).toHaveBeenLastCalledWith(expect.any(Date), "schedule-050")
+  })
+
+  it("finishes a started creation and publication after losing cursor ownership", async () => {
+    const creation = deferred()
+    mocks.count.mockResolvedValue(0)
+    mocks.getDueSchedules.mockResolvedValueOnce(schedules.slice(0, 2))
+    // The DB authority is mocked: only this invocation wins its occurrence CAS.
+    mocks.createScheduledScan.mockResolvedValue(null).mockImplementationOnce(async () => {
+      await creation.promise
+      return { id: "owned-scan" }
+    })
+    const { processDueSchedules } = await import("./schedules")
+    const old = trackPoll(processDueSchedules())
+    await vi.advanceTimersByTimeAsync(0)
+    await processDueSchedules()
+    expect(mocks.enqueueScan).not.toHaveBeenCalled()
+    creation.resolve()
+    expect(await old).toBe(1)
+    expect(mocks.enqueueScan).toHaveBeenCalledExactlyOnceWith({
+      scanId: "owned-scan",
+      workspaceId: "workspace-0",
+      targetId: "target-0",
+      goal: "WEEKLY_MONITOR",
+      mode: "SAFE",
+    })
+    expect(mocks.createScheduledScan).toHaveBeenCalledTimes(51)
+    expect(mocks.restoreUnsubmittedScheduleOccurrence).not.toHaveBeenCalled()
+    await processDueSchedules()
+    expect(mocks.getDueSchedules).toHaveBeenLastCalledWith(expect.any(Date), "schedule-050")
+  })
+
+  it("finishes ambiguous publication without replay or cleanup after losing cursor ownership", async () => {
+    const publication = deferred()
+    mocks.count.mockResolvedValue(0)
+    mocks.getDueSchedules.mockResolvedValueOnce(schedules.slice(0, 2))
+    mocks.createScheduledScan.mockResolvedValue(null).mockResolvedValueOnce({ id: "owned-scan" })
+    mocks.enqueueScan.mockImplementationOnce(async () => {
+      await publication.promise
+      throw new Error("Synthetic acknowledgement loss")
+    })
+    const { processDueSchedules } = await import("./schedules")
+    const old = trackPoll(processDueSchedules())
+    await vi.advanceTimersByTimeAsync(0)
+    await processDueSchedules()
+    publication.resolve()
+    expect(await old).toBe(0)
+    expect(mocks.enqueueScan).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ scanId: "owned-scan" })
+    )
+    expect(mocks.createScheduledScan).toHaveBeenCalledTimes(51)
+    expect(mocks.updateScanStatus).not.toHaveBeenCalled()
+    expect(mocks.releaseUnstartedScanSlot).not.toHaveBeenCalled()
+    expect(mocks.restoreUnsubmittedScheduleOccurrence).not.toHaveBeenCalled()
+    await processDueSchedules()
+    expect(mocks.getDueSchedules).toHaveBeenLastCalledWith(expect.any(Date), "schedule-050")
+  })
+
+  it.each(["status", "release", "restore"])(
+    "finishes proven no-add cleanup paused at %s despite losing cursor ownership",
+    async (stage) => {
+      const cleanup = deferred()
+      const order: string[] = []
+      mocks.count.mockResolvedValue(0)
+      mocks.getDueSchedules.mockResolvedValueOnce(schedules.slice(0, 2))
+      mocks.createScheduledScan.mockResolvedValue(null).mockResolvedValueOnce({ id: "owned-scan" })
+      const { ScanEnqueueNotSubmittedError } = await import("@lyrashield/integrations")
+      mocks.enqueueScan.mockRejectedValueOnce(
+        new ScanEnqueueNotSubmittedError("owned-scan", new Error("Synthetic worker loss"))
+      )
+      for (const [name, fn] of [
+        ["status", mocks.updateScanStatus],
+        ["release", mocks.releaseUnstartedScanSlot],
+        ["restore", mocks.restoreUnsubmittedScheduleOccurrence],
+      ] as const) {
+        fn.mockImplementation(async () => {
+          order.push(name)
+          if (name === stage) await cleanup.promise
+          return true
+        })
+      }
+      const { processDueSchedules } = await import("./schedules")
+      const old = trackPoll(processDueSchedules())
+      await vi.advanceTimersByTimeAsync(0)
+      expect(order.at(-1)).toBe(stage)
+      await processDueSchedules()
+      cleanup.resolve()
+      expect(await old).toBe(0)
+      expect(order).toEqual(["status", "release", "restore"])
+      expect(mocks.updateScanStatus).toHaveBeenCalledExactlyOnceWith(
+        "owned-scan",
+        "FAILED",
+        expect.objectContaining({ errorCategory: "QUEUE" }),
+        "workspace-0"
+      )
+      expect(mocks.releaseUnstartedScanSlot).toHaveBeenCalledExactlyOnceWith(
+        "workspace-0",
+        "owned-scan"
+      )
+      expect(mocks.restoreUnsubmittedScheduleOccurrence).toHaveBeenCalledExactlyOnceWith(
+        schedules[0],
+        "owned-scan",
+        origin,
+        nextRun
+      )
+      expect(mocks.enqueueScan).toHaveBeenCalledTimes(1)
+      expect(mocks.createScheduledScan).toHaveBeenCalledTimes(51)
+      await processDueSchedules()
+      expect(mocks.getDueSchedules).toHaveBeenLastCalledWith(expect.any(Date), "schedule-050")
+    }
+  )
+
+  it("recovers after a failed fallback query without reserving cursor ownership", async () => {
+    const { processDueSchedules, startScheduleRunner } = await import("./schedules")
+    await processDueSchedules()
+    mocks.getDueSchedules
+      .mockResolvedValueOnce([])
+      .mockRejectedValueOnce(new Error("Synthetic fallback failure"))
+    timer = startScheduleRunner()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(mocks.error).toHaveBeenCalledWith("Schedule runner poll failed", {
+      error: "Synthetic fallback failure",
+    })
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(mocks.getDueSchedules).toHaveBeenLastCalledWith(expect.any(Date), undefined)
+    expect(mocks.count).toHaveBeenCalledTimes(100)
+  })
+
+  it("finishes a started publication after its interval is stopped without scheduling more work", async () => {
+    const publication = deferred()
+    mocks.getDueSchedules.mockResolvedValueOnce(schedules.slice(0, 2))
+    mocks.count.mockResolvedValue(0)
+    mocks.enqueueScan.mockImplementationOnce(async () => {
+      await publication.promise
+      return "synthetic-scan"
+    })
+    const { startScheduleRunner } = await import("./schedules")
+    timer = startScheduleRunner()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(mocks.enqueueScan).toHaveBeenCalledTimes(1)
+    clearInterval(timer)
+    timer = undefined
+    await vi.advanceTimersByTimeAsync(120_000)
+    expect(mocks.getDueSchedules).toHaveBeenCalledTimes(1)
+    publication.resolve()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(mocks.enqueueScan).toHaveBeenCalledTimes(1)
+    expect(mocks.createScheduledScan).toHaveBeenCalledTimes(1)
+    expect(mocks.updateScanStatus).not.toHaveBeenCalled()
   })
 })
