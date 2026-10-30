@@ -18,7 +18,7 @@ const description =
   "Cloud plans from $29 a month with a free trial of 60 agent-minutes and no card. Prepaid minute packs and annual billing are available; Local launches later."
 // Last content change to this page — the explicit freshness input for the
 // WebPage dateModified (same convention as about.astro's updatedDate).
-const updatedDate = "2026-10-11"
+const updatedDate = "2026-10-30"
 
 const cloudPlans = CLOUD_PLANS.filter((plan) => plan.selfServe)
 const enterprisePlan = getPlan("ENTERPRISE")
@@ -26,7 +26,7 @@ const enterprisePlan = getPlan("ENTERPRISE")
 const pricingFaqs = [
   {
     q: "What is an agent-minute?",
-    a: 'An agent-minute is a unit of wall-clock time — the real elapsed time from when a scan phase starts to when it ends, measured on the server clock. It is not "active-loop time" or "thinking time"; it includes all processing, network I/O and model calls within that phase. Deep and Custom scans consume agent-minutes at 3× the standard rate.',
+    a: 'An agent-minute is a unit of wall-clock time — the real elapsed time from when a scan phase starts to when it ends, measured on the server clock. It is not "active-loop time" or "thinking time"; it includes all processing, network I/O and model calls within that phase. Positive partial minutes round up before the multiplier. Deep and Custom scans consume agent-minutes at 3× the standard rate on plans that include them.',
   },
   {
     q: "Is there a free trial?",
@@ -208,7 +208,7 @@ const appUrl =
       <p class="mb-6 max-w-3xl text-sm leading-7 text-text-muted">
         Capacity is measured in agent-minutes. Deep and Custom use a 3× multiplier:
         10 elapsed agent-minutes consume 30 allowance units. Quick and Standard use 1×.
-        Positive partial minutes round up before the multiplier.
+        Positive partial minutes round up before the multiplier.{" "}
         <a href="#minute-definition" class="text-accent underline underline-offset-4">How minutes are counted</a>
       </p>
       <!-- Plan Cards: intent, price and capacity stay beside the choice. -->
@@ -250,7 +250,7 @@ const appUrl =
                   /yr
                 </span>
               </div>
-              <p class="mt-4 text-xs leading-6 text-text-muted">Quick / Standard: 1× · Deep / Custom: 3× agent-minutes.</p>
+              <p class="mt-4 text-xs leading-6 text-text-muted">{plan.deepAllowed ? "Quick / Standard: 1× · Deep / Custom: 3× agent-minutes." : "Quick / Standard: 1× agent-minutes."}</p>
               <ul class="mt-3 space-y-2">
                 {plan.features.map((feature) => (
                   <li class="flex items-start gap-2 text-sm text-text-muted">
@@ -345,7 +345,7 @@ const appUrl =
           </table>
         </div>
         <p class="mt-3 text-xs text-text-muted">
-          Deep and Custom scans use agent-minutes at 3× the standard rate. Eligible accounts can buy prepaid minute packs. Accounts with an expired free trial must subscribe first.
+          Deep and Custom scans use agent-minutes at 3× the standard rate on plans that include them. Eligible accounts can buy prepaid minute packs. Accounts with an expired free trial must subscribe first.
         </p>
       </div>
 
@@ -406,6 +406,7 @@ const appUrl =
             >From ₹{enterprisePlan.price.inr.monthly.toLocaleString("en-IN")}/mo</span
           >
         </p>
+        <p class="mt-3 text-sm text-text-muted">Availability and delivery terms are agreed with Sales; features marked “on request” require that agreement.</p>
         <ul class="mt-4 space-y-2">
           {enterprisePlan.features.map((feature) => (
             <li class="flex items-start gap-2 text-sm text-text-muted">
@@ -474,7 +475,7 @@ const appUrl =
         An agent-minute is a unit of wall-clock time — the real elapsed time from when a scan phase
         starts to when it ends, measured on the server clock. It is not "active-loop time" or
         "thinking time"; it includes all processing, network I/O and model calls within that phase.
-        Deep and Custom scans consume agent-minutes at 3× the standard rate.
+        Positive partial minutes round up before the multiplier. Deep and Custom scans consume agent-minutes at 3× the standard rate on plans that include them.
       </p>
       <p class="mt-3 text-sm text-text-muted">
         Overage (when all included minutes and packs are exhausted) is billed at $0.15/min for
