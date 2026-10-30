@@ -1,3 +1,5 @@
+import { targetReadScopeWhere, type ListScansParams } from "./read-query-scope"
+export type { ListScansParams } from "./read-query-scope"
 import { prisma } from "./client"
 import { Prisma } from "./generated/prisma"
 import type {
@@ -715,16 +717,6 @@ export async function getScanForWorkspace(
   })
 }
 
-export interface ListScansParams {
-  workspaceId: string
-  scanIds?: string[]
-  targetId?: string
-  status?: ScanStatus
-  statuses?: ScanStatus[]
-  cursor?: string
-  limit?: number
-}
-
 /**
  * List-view projection for a scan row.
  *
@@ -806,7 +798,7 @@ export async function listScans(params: ListScansParams): Promise<{
     workspaceId: params.workspaceId,
     deletedAt: null,
     ...(params.scanIds?.length ? { id: { in: params.scanIds } } : {}),
-    ...(params.targetId ? { targetId: params.targetId } : {}),
+    ...targetReadScopeWhere(params),
     ...statusFilter,
   }
 

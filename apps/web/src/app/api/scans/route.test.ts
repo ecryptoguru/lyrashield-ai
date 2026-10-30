@@ -1,3 +1,4 @@
+import { resolveOAuthReadScope } from "../../../../../../packages/auth/src/oauth-read-scope"
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
 const configMocks = vi.hoisted(() => ({
@@ -81,6 +82,7 @@ vi.mock("@lyrashield/db", () => {
 })
 
 vi.mock("@lyrashield/auth/server", () => ({
+  resolveOAuthReadScope,
   assertOAuthDelegatedScope: vi.fn(),
   requirePermission: vi.fn().mockResolvedValue({
     session: { userId: "user-1" },
@@ -1836,5 +1838,35 @@ describe("FREE-plan URL scan per-IP limit", () => {
       expect(res.status).toBe(201)
       expect(createScan).toHaveBeenCalledWith(expect.objectContaining({ attachmentIds: ["att-1"] }))
     })
+  })
+})
+
+describe("OAuth scan list scope", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(requirePermission).mockResolvedValue({
+      session: {
+        userId: "user-1",
+        oauth: {
+          connectionId: "conn-1",
+          allTargets: false,
+          allowedTargetIds: ["target-1"],
+        },
+      },
+    } as never)
+    vi.mocked(listScans).mockResolvedValue({ items: [], nextCursor: null })
+  })
+
+  it("rejects an explicit target outside the grant", async () => {
+    const response = await GET(makeGetRequest({ workspaceId: "ws-1", targetId: "target-2" }))
+    expect(response.status).toBe(403)
+    expect(listScans).not.toHaveBeenCalled()
+  })
+
+  it("intersects scan IDs and cursors with the delegated targets", async () => {
+    await GET(makeGetRequest({ workspaceId: "ws-1", ids: "scan-2", cursor: "scan-1" }))
+    expect(listScans).toHaveBeenCalledWith(
+      expect.objectContaining({ targetIds: ["target-1"], scanIds: ["scan-2"], cursor: "scan-1" })
+    )
   })
 })

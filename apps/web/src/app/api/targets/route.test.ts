@@ -1,3 +1,4 @@
+import { resolveOAuthReadScope } from "../../../../../../packages/auth/src/oauth-read-scope"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const dbMocks = vi.hoisted(() => ({
@@ -30,6 +31,7 @@ vi.mock("@lyrashield/db", () => ({
 
 const requireWorkspaceAccess = vi.fn()
 vi.mock("@lyrashield/auth/server", () => ({
+  resolveOAuthReadScope,
   getSession: vi.fn(),
   requirePermission: vi.fn().mockResolvedValue({ session: { userId: "user-1" } }),
   requireWorkspaceAccess: (...args: unknown[]) => requireWorkspaceAccess(...args),
@@ -320,4 +322,28 @@ describe("POST /api/targets", () => {
     expect(assertTargetAllowed).toHaveBeenCalledWith("ws-1", "user-1", expect.any(Object))
     expect(prisma.target.create).toHaveBeenCalledOnce()
   })
+})
+
+it("bounds OAuth target pages inside the database query", async () => {
+  requireWorkspaceAccess.mockResolvedValueOnce({
+    session: {
+      userId: "user-1",
+      oauth: {
+        connectionId: "conn-1",
+        allTargets: false,
+        allowedTargetIds: ["target-1"],
+      },
+    },
+  })
+  vi.mocked(prisma.target.findMany).mockResolvedValueOnce([])
+  const response = await GET(
+    new Request("http://localhost/api/targets?workspaceId=ws-1&cursor=target-1")
+  )
+  expect(response.status).toBe(200)
+  expect(prisma.target.findMany).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      where: expect.objectContaining({ id: { in: ["target-1"] } }),
+      cursor: { id: "target-1" },
+    })
+  )
 })

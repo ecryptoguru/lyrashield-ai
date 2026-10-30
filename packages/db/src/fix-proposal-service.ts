@@ -86,6 +86,7 @@ export async function getFixProposal(
 export async function listFixProposals(params: {
   workspaceId: string
   targetId?: string
+  targetIds?: string[]
   observedInScanId?: string
   findingId?: string
   status?: string

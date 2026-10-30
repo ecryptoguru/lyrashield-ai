@@ -4,7 +4,7 @@ vi.mock("./client", () => ({
   prisma: {
     scan: { findFirst: vi.fn() },
     target: { findFirst: vi.fn() },
-    finding: { findFirst: vi.fn(), findMany: vi.fn(), update: vi.fn() },
+    finding: { findFirst: vi.fn(), findMany: vi.fn(), update: vi.fn(), groupBy: vi.fn() },
     evidence: { findMany: vi.fn(), count: vi.fn() },
     findingVerification: { findMany: vi.fn(), count: vi.fn() },
     fixProposal: { findMany: vi.fn(), count: vi.fn() },
@@ -21,6 +21,7 @@ import {
   acceptRisk,
   getFinding,
   getFindingHistoryPage,
+  getFindingStats,
   listEvidenceFindings,
   listFindings,
   markFalsePositive,
@@ -540,5 +541,56 @@ describe("updateFindingStatus", () => {
       updateFindingStatus("finding-1", "workspace-1", "DUPLICATE", undefined, "finding-2")
     ).rejects.toThrow("Canonical finding not found on this target")
     expect(prisma.finding.update).not.toHaveBeenCalled()
+  })
+})
+
+describe("OAuth target bounds in finding queries", () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it.each([{ targetIds: [] }, { targetIds: ["allowed-target"] }])(
+    "bounds lists, evidence, and stats with target IDs $targetIds",
+    async ({ targetIds }) => {
+      vi.mocked(prisma.finding.findMany).mockResolvedValue([])
+      vi.mocked(prisma.finding.groupBy).mockResolvedValue([])
+      await listFindings({ workspaceId: "ws-1", targetIds, cursor: "finding-1" })
+      await listEvidenceFindings({ workspaceId: "ws-1", targetIds })
+      await getFindingStats("ws-1", undefined, undefined, targetIds)
+      for (const method of [prisma.finding.findMany, prisma.finding.groupBy]) {
+        expect(method).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: expect.objectContaining({ workspaceId: "ws-1", targetId: { in: targetIds } }),
+          })
+        )
+      }
+    }
+  )
+
+  it("bounds observed scan validation to the same grant", async () => {
+    vi.mocked(prisma.scan.findFirst).mockResolvedValue(null)
+    await expect(
+      validateFindingScope({
+        workspaceId: "ws-1",
+        observedInScanId: "denied-scan",
+        targetIds: ["allowed-target"],
+      })
+    ).resolves.toMatchObject({ available: false })
+    expect(prisma.scan.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ targetId: { in: ["allowed-target"] } }),
+      })
+    )
+  })
+
+  it("rejects history before reading child rows when its finding is outside the grant", async () => {
+    vi.mocked(prisma.finding.findFirst).mockResolvedValue(null)
+    await expect(
+      getFindingHistoryPage("denied-finding", "ws-1", "evidence", { targetIds: ["allowed-target"] })
+    ).rejects.toThrow("Finding not found")
+    expect(prisma.finding.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ targetId: { in: ["allowed-target"] } }),
+      })
+    )
+    expect(prisma.evidence.findMany).not.toHaveBeenCalled()
   })
 })

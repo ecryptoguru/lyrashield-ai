@@ -1,6 +1,6 @@
 import { releaseUnstartedScanSlot, UserScanAlreadyActiveError } from "@lyrashield/db"
 import { withCookieMutation, authErrorResponse } from "../../../lib/api-auth"
-import { createHash } from "crypto"
+import { serializeScanListItem, scanListEtag } from "./scan-list-response"
 import {
   prisma,
   createScan,
@@ -15,9 +15,12 @@ import {
   LiveAiSafetyError,
   ScanAttachmentError,
   WorkspaceScanConcurrencyLimitError,
-  type ScanListItem,
 } from "@lyrashield/db"
-import { assertOAuthDelegatedScope, requirePermission } from "@lyrashield/auth/server"
+import {
+  assertOAuthDelegatedScope,
+  requirePermission,
+  resolveOAuthReadScope,
+} from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import {
   CreateScanInputSchema,
@@ -78,40 +81,6 @@ const ScanIdQuerySchema = z
  * commits model spend, so this bounds both blast radius and cost while leaving
  * normal multi-product use unaffected.
  */
-
-/**
- * Serialize a scan list row for the client. Dates become ISO strings so the
- * polled payload matches the SSR-rendered shape exactly (the client's ScanItem
- * type expects strings, and `findingCount` is already flattened by listScans).
- */
-function serializeScanListItem(scan: ScanListItem) {
-  return {
-    ...scan,
-    startedAt: scan.startedAt ? scan.startedAt.toISOString() : null,
-    endedAt: scan.endedAt ? scan.endedAt.toISOString() : null,
-    createdAt: scan.createdAt.toISOString(),
-  }
-}
-
-/**
- * ETag over the entire response representation. The active-scan poll re-requests
- * this list on an interval; when nothing has moved the client gets a 304 with no
- * body to parse.
- *
- * Hashing the full payload (not a subset of fields) is deliberate: a summary,
- * error message, or target rename can change while status and counts stay put,
- * and a partial hash would then serve a 304 and freeze stale data on screen.
- */
-function scanListEtag(
-  items: ReturnType<typeof serializeScanListItem>[],
-  nextCursor: string | null
-): string {
-  // Hash the exact response representation, envelope included: the body is
-  // { success, data: { items, nextCursor } }, so any envelope change also
-  // invalidates the tag instead of serving a stale-shaped 304.
-  const payload = JSON.stringify({ success: true, data: { items, nextCursor } })
-  return `"${createHash("sha256").update(payload).digest("hex")}"`
-}
 
 async function post(request: Request) {
   let body: unknown
@@ -892,7 +861,8 @@ export async function GET(request: Request) {
       }
     }
 
-    await requirePermission(workspaceId, PERMISSIONS.scan.view)
+    const { session } = await requirePermission(workspaceId, PERMISSIONS.scan.view)
+    const readScope = resolveOAuthReadScope(session, targetId)
 
     const { cursor, limit } = parsePaginationParams(searchParams, 25)
 
@@ -916,7 +886,7 @@ export async function GET(request: Request) {
     const { items, nextCursor } = await listScans({
       workspaceId,
       ...(scanIds ? { scanIds } : {}),
-      ...(targetId ? { targetId } : {}),
+      ...readScope,
       ...(effectiveStatuses
         ? { statuses: effectiveStatuses as Parameters<typeof listScans>[0]["statuses"] }
         : statusFilter

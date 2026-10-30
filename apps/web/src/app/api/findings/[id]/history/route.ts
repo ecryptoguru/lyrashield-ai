@@ -1,4 +1,4 @@
-import { requirePermission } from "@lyrashield/auth/server"
+import { requirePermission, resolveOAuthReadScope } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { getFindingHistoryPage, validateFindingScope } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
@@ -26,10 +26,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     }
 
     const { workspaceId, targetId, observedInScanId, collection, cursor, limit } = parsed.data
-    await requirePermission(workspaceId, PERMISSIONS.finding.view)
+    const { session } = await requirePermission(workspaceId, PERMISSIONS.finding.view)
+    const readScope = resolveOAuthReadScope(session, targetId)
     const scope = await validateFindingScope({
       workspaceId,
-      ...(targetId ? { targetId } : {}),
+      ...readScope,
       ...(observedInScanId ? { observedInScanId } : {}),
     })
     if (!scope.available) {
@@ -38,7 +39,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     const page = await getFindingHistoryPage(id, workspaceId, collection, {
       cursor,
       limit,
-      ...(targetId ? { targetId } : {}),
+      ...readScope,
       ...(observedInScanId ? { observedInScanId } : {}),
     })
     return apiSuccess(page)

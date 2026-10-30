@@ -1,3 +1,9 @@
+import {
+  findingScopeWhere,
+  targetReadScopeWhere,
+  type FindingScopeParams,
+} from "./read-query-scope"
+export { findingScopeWhere, type FindingScopeParams } from "./read-query-scope"
 import { prisma } from "./client"
 import type { Finding, FindingSeverity, FindingStatus } from "./generated/prisma"
 import { logger } from "@lyrashield/logger"
@@ -20,6 +26,7 @@ export interface FindingHistoryPage<T = unknown> {
 export interface ListFindingsParams {
   workspaceId: string
   targetId?: string
+  targetIds?: string[]
   /** Filter findings observed in a scan candidate receipt. `scanId` below remains the origin scan. */
   observedInScanId?: string
   scanId?: string
@@ -33,39 +40,18 @@ export interface ListFindingsParams {
   limit?: number
 }
 
-export interface FindingScopeParams {
-  workspaceId: string
-  targetId?: string
-  observedInScanId?: string
-}
-
-export function findingScopeWhere({ workspaceId, targetId, observedInScanId }: FindingScopeParams) {
-  return {
-    workspaceId,
-    deletedAt: null,
-    ...(targetId ? { targetId } : {}),
-    ...(observedInScanId
-      ? {
-          candidates: {
-            some: {
-              workspaceId,
-              scanId: observedInScanId,
-              ...(targetId ? { targetId } : {}),
-            },
-          },
-        }
-      : {}),
-  }
-}
-
 export async function validateFindingScope({
   workspaceId,
   targetId,
+  targetIds,
   observedInScanId,
 }: FindingScopeParams): Promise<
   | { available: true; target: { id: string; name: string } | null; scanId: string | null }
   | { available: false; target: null; scanId: null }
 > {
+  if (targetId && targetIds !== undefined && !targetIds.includes(targetId)) {
+    return { available: false, target: null, scanId: null }
+  }
   const [target, scan] = await Promise.all([
     targetId
       ? prisma.target.findFirst({
@@ -79,7 +65,7 @@ export async function validateFindingScope({
             id: observedInScanId,
             workspaceId,
             deletedAt: null,
-            ...(targetId ? { targetId } : {}),
+            ...targetReadScopeWhere({ targetId, targetIds }),
           },
           select: { id: true, targetId: true },
         })
@@ -215,7 +201,7 @@ export async function listEvidenceFindings(
 export async function getFinding(
   findingId: string,
   workspaceId: string,
-  scope: Pick<FindingScopeParams, "targetId" | "observedInScanId"> = {}
+  scope: Pick<FindingScopeParams, "targetId" | "targetIds" | "observedInScanId"> = {}
 ): Promise<
   | (Finding & {
       evidence: { id: string; type: string; redactionStatus: string }[]
@@ -379,6 +365,7 @@ export async function getFindingHistoryPage(
     cursor?: string
     limit?: number
     targetId?: string
+    targetIds?: string[]
     observedInScanId?: string
   } = {}
 ): Promise<FindingHistoryPage> {
@@ -392,6 +379,7 @@ export async function getFindingHistoryPage(
       ...findingScopeWhere({
         workspaceId,
         ...(options.targetId ? { targetId: options.targetId } : {}),
+        ...(options.targetIds !== undefined ? { targetIds: options.targetIds } : {}),
         ...(options.observedInScanId ? { observedInScanId: options.observedInScanId } : {}),
       }),
     },
@@ -603,11 +591,13 @@ export async function acceptRisk(
 export async function getFindingStats(
   workspaceId: string,
   targetId?: string,
-  observedInScanId?: string
+  observedInScanId?: string,
+  targetIds?: string[]
 ): Promise<FindingStats> {
   const where: Record<string, unknown> = findingScopeWhere({
     workspaceId,
     ...(targetId ? { targetId } : {}),
+    ...(targetIds !== undefined ? { targetIds } : {}),
     ...(observedInScanId ? { observedInScanId } : {}),
   })
 

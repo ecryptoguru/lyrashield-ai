@@ -1,6 +1,6 @@
 import { listFindings, getFindingStats, validateFindingScope } from "@lyrashield/db"
 import { FindingQuerySchema } from "@lyrashield/types"
-import { requirePermission } from "@lyrashield/auth/server"
+import { requirePermission, resolveOAuthReadScope } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
 import { authErrorResponse } from "../../../lib/api-auth"
@@ -40,11 +40,12 @@ export async function GET(request: Request) {
     } = parsed.data
     const stats = parsed.data.stats === "true"
 
-    await requirePermission(workspaceId, PERMISSIONS.finding.view)
+    const { session } = await requirePermission(workspaceId, PERMISSIONS.finding.view)
+    const readScope = resolveOAuthReadScope(session, targetId)
 
     const scope = await validateFindingScope({
       workspaceId,
-      ...(targetId ? { targetId } : {}),
+      ...readScope,
       ...(observedInScanId ? { observedInScanId } : {}),
     })
     if (!scope.available) {
@@ -56,7 +57,12 @@ export async function GET(request: Request) {
     }
 
     if (stats) {
-      const findingStats = await getFindingStats(workspaceId, targetId, observedInScanId)
+      const findingStats = await getFindingStats(
+        workspaceId,
+        targetId,
+        observedInScanId,
+        readScope.targetIds
+      )
       return apiSuccess(findingStats)
     }
 
@@ -64,7 +70,7 @@ export async function GET(request: Request) {
 
     const { items, nextCursor } = await listFindings({
       workspaceId,
-      ...(targetId ? { targetId } : {}),
+      ...readScope,
       ...(observedInScanId ? { observedInScanId } : {}),
       ...(scanId ? { scanId } : {}),
       ...(severity ? { severity } : {}),

@@ -332,8 +332,8 @@
     },
     "apps/web/src/app/api/scans/route.ts|max-lines": {
       "count": 1,
-      "totalExcess": 209,
-      "maxExcess": 209
+      "totalExcess": 198,
+      "maxExcess": 198
     },
     "apps/web/src/app/api/scans/route.ts|max-lines-per-function": {
       "count": 1,
@@ -697,8 +697,8 @@
     },
     "packages/db/src/scan-service.ts|max-lines": {
       "count": 1,
-      "totalExcess": 44,
-      "maxExcess": 44
+      "totalExcess": 37,
+      "maxExcess": 37
     },
     "packages/egress-proxy/src/index.ts|max-lines-per-function": {
       "count": 1,

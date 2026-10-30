@@ -6,7 +6,11 @@ import {
   withWorkspaceRLS,
   type ScopedTransaction,
 } from "@lyrashield/db"
-import { requirePermission, requireWorkspaceAccess } from "@lyrashield/auth/server"
+import {
+  requirePermission,
+  requireWorkspaceAccess,
+  resolveOAuthReadScope,
+} from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { CreateRepoTargetSchema, CreateUrlTargetSchema } from "@lyrashield/types"
 import { revalidateDashboardAggregates } from "../../../lib/cache"
@@ -390,7 +394,8 @@ export async function GET(request: Request) {
       return apiError("MISSING_PARAM", "workspaceId is required", 400)
     }
 
-    await requireWorkspaceAccess(workspaceId)
+    const { session } = await requireWorkspaceAccess(workspaceId)
+    const readScope = resolveOAuthReadScope(session)
 
     const { cursor, limit } = parsePaginationParams(searchParams)
 
@@ -399,6 +404,7 @@ export async function GET(request: Request) {
         workspaceId,
         deletedAt: null,
         ...(projectId ? { projectId } : {}),
+        ...(readScope.targetIds !== undefined ? { id: { in: readScope.targetIds } } : {}),
       },
       include: {
         project: { select: { id: true, name: true } },

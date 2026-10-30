@@ -1,3 +1,4 @@
+import { resolveOAuthReadScope } from "../../../../../../../packages/auth/src/oauth-read-scope"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 vi.mock("next/cache", () => ({
@@ -33,7 +34,7 @@ vi.mock("@lyrashield/db", () => ({
 vi.mock("@lyrashield/evidence-storage", () => ({
   readEncryptedArtifact: vi.fn(),
 }))
-vi.mock("@lyrashield/auth/server", () => ({ requirePermission }))
+vi.mock("@lyrashield/auth/server", () => ({ resolveOAuthReadScope, requirePermission }))
 vi.mock("@lyrashield/auth", () => ({
   PERMISSIONS: {
     finding: {
@@ -274,4 +275,37 @@ describe("PATCH /api/findings/[id]", () => {
     expect(acceptRisk).not.toHaveBeenCalled()
     expect(auditLogCreate).not.toHaveBeenCalled()
   })
+})
+
+it("rejects explicit ungranted OAuth targets before reading details", async () => {
+  vi.clearAllMocks()
+  requirePermission.mockResolvedValueOnce({
+    session: {
+      oauth: { connectionId: "conn-1", allTargets: false, allowedTargetIds: ["target-1"] },
+    },
+  })
+  const response = await GET(
+    new Request("http://localhost/api/findings/finding-1?workspaceId=ws-1&targetId=target-2"),
+    { params: Promise.resolve({ id: "finding-1" }) }
+  )
+  expect(response.status).toBe(403)
+  expect(getFinding).not.toHaveBeenCalled()
+})
+
+it("bounds a finding ID lookup before reading evidence and history", async () => {
+  vi.clearAllMocks()
+  requirePermission.mockResolvedValueOnce({
+    session: {
+      oauth: { connectionId: "conn-1", allTargets: false, allowedTargetIds: ["target-1"] },
+    },
+  })
+  validateFindingScope.mockResolvedValueOnce({ available: true, target: null, scanId: null })
+  getFinding.mockResolvedValueOnce(null)
+  const response = await GET(
+    new Request("http://localhost/api/findings/finding-2?workspaceId=ws-1"),
+    { params: Promise.resolve({ id: "finding-2" }) }
+  )
+  expect(response.status).toBe(404)
+  expect(getFinding).toHaveBeenCalledWith("finding-2", "ws-1", { targetIds: ["target-1"] })
+  expect(prisma.evidence.findFirst).not.toHaveBeenCalled()
 })

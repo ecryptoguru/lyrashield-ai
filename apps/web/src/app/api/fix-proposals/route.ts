@@ -1,5 +1,5 @@
 import { listFixProposals } from "@lyrashield/db"
-import { requirePermission } from "@lyrashield/auth/server"
+import { requirePermission, resolveOAuthReadScope } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
 import { validateFindingScope } from "@lyrashield/db"
@@ -28,11 +28,12 @@ export async function GET(request: Request) {
     }
     const { workspaceId, findingId, targetId, observedInScanId, status } = parsed.data
 
-    await requirePermission(workspaceId, PERMISSIONS.finding.view)
+    const { session } = await requirePermission(workspaceId, PERMISSIONS.finding.view)
+    const readScope = resolveOAuthReadScope(session, targetId)
 
     const scope = await validateFindingScope({
       workspaceId,
-      ...(targetId ? { targetId } : {}),
+      ...readScope,
       ...(observedInScanId ? { observedInScanId } : {}),
     })
     if (!scope.available) {
@@ -47,7 +48,7 @@ export async function GET(request: Request) {
 
     const result = await listFixProposals({
       workspaceId,
-      ...(targetId ? { targetId } : {}),
+      ...readScope,
       ...(observedInScanId ? { observedInScanId } : {}),
       ...(findingId ? { findingId } : {}),
       ...(status ? { status } : {}),

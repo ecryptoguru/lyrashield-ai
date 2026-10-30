@@ -634,3 +634,36 @@ describe("requeueScanForRetry (W2.2)", () => {
     ).rejects.toThrow(/workspace/)
   })
 })
+
+describe("delegated target scope in scan lists", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockPrisma.$transaction.mockImplementation(async (callback) => callback(mockPrisma))
+    mockPrisma.scan.findMany.mockResolvedValue([])
+  })
+
+  it.each([{ targetIds: [] }, { targetIds: ["target-1"] }])(
+    "bounds paginated scan IDs with $targetIds",
+    async ({ targetIds }) => {
+      const result = await listScans({
+        workspaceId: "ws-1",
+        targetIds,
+        scanIds: ["scan-2"],
+        cursor: "scan-1",
+      })
+      expect(result).toEqual({ items: [], nextCursor: null })
+      expect(mockPrisma.scan.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            workspaceId: "ws-1",
+            deletedAt: null,
+            targetId: { in: targetIds },
+            id: { in: ["scan-2"] },
+          },
+          cursor: { id: "scan-1" },
+          skip: 1,
+        })
+      )
+    }
+  )
+})
