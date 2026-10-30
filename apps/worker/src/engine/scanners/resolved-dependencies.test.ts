@@ -370,19 +370,33 @@ it("ignores Composer documentation and fixture files while retaining JavaScript 
   expect(inventory.unresolved).toEqual([])
 })
 
+it.each(["pom.xml", "build.gradle", "packages.lock.json", "pyproject.toml", "poetry.lock"])(
+  "keeps mixed-repository coverage incomplete for unsupported %s",
+  async (manifest) => {
+    const root = await repo({
+      "requirements.txt": "flask==3.0.0\n",
+      [`other/${manifest}`]: "unsupported",
+    })
+    const inventory = await resolveExactDependencies({ repoPath: root })
+    expect(inventory.status).toBe("PARTIAL")
+    expect(inventory.packages).toHaveLength(1)
+    expect(inventory.unresolved).toContainEqual(
+      expect.objectContaining({
+        name: `other/${manifest}`,
+        reason: expect.stringMatching(/unsupported/i),
+      })
+    )
+  }
+)
+
 it.each([
-  "go.mod",
-  "go.sum",
-  "Cargo.toml",
-  "Cargo.lock",
-  "Gemfile",
-  "Gemfile.lock",
-  "pom.xml",
-  "build.gradle",
-  "packages.lock.json",
-  "pyproject.toml",
-  "poetry.lock",
-])("keeps mixed-repository coverage incomplete for unsupported %s", async (manifest) => {
+  ["go.mod", "go.mod", "Go input cannot be parsed with the pinned local toolchain"],
+  ["go.sum", "go.mod", "Go checksums alone do not identify a selected module graph"],
+  ["Cargo.toml", "other/Cargo.toml", "Dependency manifest has no supported exact lockfile"],
+  ["Cargo.lock", "other/Cargo.lock", "Malformed or unsupported Cargo lockfile"],
+  ["Gemfile", "other/Gemfile", "Dependency manifest has no supported exact lockfile"],
+  ["Gemfile.lock", "other/Gemfile.lock", "Ruby lockfile contains no package identities"],
+])("keeps mixed-repository coverage incomplete for invalid %s", async (manifest, name, reason) => {
   const root = await repo({
     "requirements.txt": "flask==3.0.0\n",
     [`other/${manifest}`]: "unsupported",
@@ -390,10 +404,5 @@ it.each([
   const inventory = await resolveExactDependencies({ repoPath: root })
   expect(inventory.status).toBe("PARTIAL")
   expect(inventory.packages).toHaveLength(1)
-  expect(inventory.unresolved).toContainEqual(
-    expect.objectContaining({
-      name: `other/${manifest}`,
-      reason: expect.stringMatching(/unsupported/i),
-    })
-  )
+  expect(inventory.unresolved).toContainEqual(expect.objectContaining({ name, reason }))
 })

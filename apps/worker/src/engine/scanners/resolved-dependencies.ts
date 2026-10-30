@@ -1,7 +1,7 @@
 /* eslint-disable security/detect-non-literal-fs-filename */
 import { lstat, readFile, readdir } from "fs/promises"
 import { createHash } from "node:crypto"
-import { dirname, join, relative } from "path"
+import { basename, dirname, join, relative } from "path"
 import type { OsvQueryPackage } from "@lyrashield/db"
 import { parsePackageLock, parsePnpmLock, parseYarnLock } from "./dependency-lock-parsers"
 import {
@@ -189,7 +189,9 @@ async function readAdditionalInput(
   filePath: string,
   size: number,
   context: DependencyInputs
-): Promise<void> {
+): Promise<boolean> {
+  if (!ADDITIONAL_DEPENDENCY_INPUTS.has(basename(fullPath))) return false
+  context.foundSupported = true
   const { unresolved } = context
   try {
     if (
@@ -212,6 +214,7 @@ async function readAdditionalInput(
       reason: "Dependency input is unreadable or exceeds the byte limit",
     })
   }
+  return true
 }
 
 async function walkDependencyInputs(
@@ -278,11 +281,7 @@ async function walkDependencyInputs(
     if (!stat.isFile() && !stat.isSymbolicLink()) continue
     const filePath = relative(repoPath, fullPath)
     if (reportUnsupportedInput(entry.name, filePath, stat.isSymbolicLink(), unresolved)) continue
-    if (ADDITIONAL_DEPENDENCY_INPUTS.has(entry.name)) {
-      context.foundSupported = true
-      await readAdditionalInput(fullPath, filePath, stat.size, context)
-      continue
-    }
+    if (await readAdditionalInput(fullPath, filePath, stat.size, context)) continue
     const isComposerFile = entry.name === "composer.json" || entry.name === "composer.lock"
     if (isComposerFile && stat.size > MAX_COMPOSER_FILE_BYTES) {
       unresolved.push({
