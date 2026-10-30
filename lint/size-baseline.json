@@ -525,11 +525,6 @@
       "totalExcess": 8,
       "maxExcess": 8
     },
-    "apps/worker/src/engine/scanners/sast-scanner.ts|max-lines-per-function": {
-      "count": 1,
-      "totalExcess": 12,
-      "maxExcess": 12
-    },
     "apps/worker/src/index.ts|max-lines-per-function": {
       "count": 1,
       "totalExcess": 91,
