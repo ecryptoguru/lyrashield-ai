@@ -21,16 +21,59 @@ jobs:
         id: probe
         run: |
           set -euo pipefail
-          response=$(curl --silent --show-error --max-time 15 --retry 2 --retry-all-errors --retry-delay 5 \
-            --write-out $'\n%{http_code}' \
-            https://app.lyrashieldai.com/api/ready/scans || printf '\n000')
-          http_status=$(printf '%s\n' "$response" | tail -n 1)
-          body=$(printf '%s\n' "$response" | sed '$d')
-          {
-            echo "http_status=$http_status"
-            echo "body=$body"
-          } >> "$GITHUB_OUTPUT"
-          printf '%s\n' "$body" | grep -Fqx '{"status":"ready","checks":{"worker":true}}'
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+          import subprocess
+          import tempfile
+          import time
+
+          limit = 16384
+          ready = False
+          for attempt in range(3):
+              # Each attempt owns a fresh body file; curl never appends retry bodies.
+              with tempfile.NamedTemporaryFile() as response:
+                  try:
+                      result = subprocess.run([
+                          "curl", "--silent", "--show-error", "--max-time", "15",
+                          "--connect-timeout", "5", "--max-filesize", str(limit),
+                          "--output", response.name, "--write-out", "%{http_code}",
+                          "https://app.lyrashieldai.com/api/ready/scans",
+                      ], capture_output=True, timeout=20)
+                  except subprocess.TimeoutExpired:
+                      result = subprocess.CompletedProcess([], 124, b"000", b"probe process timed out")
+                  status = result.stdout.decode("ascii", errors="replace")
+                  status = status if re.fullmatch(r"[0-9]{3}", status) else "000"
+                  body = response.read(limit + 1)
+              diagnostic = f"HTTP {status}"
+              if result.returncode:
+                  error = result.stderr.decode("utf-8", errors="replace")[:512].strip()
+                  diagnostic += f"; curl failure (exit {result.returncode}): {error}"
+              elif len(body) > limit:
+                  diagnostic += "; response exceeds size limit"
+              elif status == "200":
+                  try:
+                      payload = json.loads(body)
+                      ready = (payload == {"status": "ready", "checks": {"worker": True}}
+                               and payload["checks"]["worker"] is True)
+                      diagnostic += "; ready" if ready else "; unexpected readiness contract"
+                  except (ValueError, UnicodeError, RecursionError):
+                      diagnostic += "; empty or invalid JSON response"
+              if ready or attempt == 2:
+                  break
+              time.sleep(5)
+
+          # JSON encoding bounds previews and escapes newlines/control characters so
+          # untrusted response bytes cannot create outputs or runner commands.
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              output.write(f"http_status={status}\n")
+              output.write("body=" + json.dumps(body[:2048].decode("utf-8", errors="replace")) + "\n")
+              output.write("diagnostic=" + json.dumps(diagnostic) + "\n")
+          if not ready:
+              print("Readiness probe failed; see the sanitized step summary.")
+              raise SystemExit(1)
+          PY
 
       # No external notification channel exists in this repository yet, so a
       # failure writes the probe status and body to the step summary where the
@@ -40,13 +83,20 @@ jobs:
         env:
           PROBE_STATUS: ${{ steps.probe.outputs.http_status }}
           PROBE_BODY: ${{ steps.probe.outputs.body }}
+          PROBE_DIAGNOSTIC: ${{ steps.probe.outputs.diagnostic }}
         run: |
-          {
-            echo "### Production scan readiness probe failed"
-            echo ""
-            echo "- HTTP status: \`${PROBE_STATUS:-unavailable}\`"
-            echo "- Response body: \`${PROBE_BODY:-unavailable}\`"
-            echo ""
-            echo "The scan worker is not ready. Restart lyrashield-worker.service on the VM"
-            echo "and check the last Release production run before rerunning this probe."
-          } >> "$GITHUB_STEP_SUMMARY"
+          python3 - <<'PY'
+          import html
+          import os
+
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as summary:
+              summary.write("### Production scan readiness probe failed\n\n")
+              for label, key in [("HTTP status", "PROBE_STATUS"),
+                                 ("Diagnostic", "PROBE_DIAGNOSTIC"),
+                                 ("Response body (bounded preview)", "PROBE_BODY")]:
+                  value = html.escape(os.environ.get(key) or "unavailable")
+                  summary.write(f"{label}:<pre>{value}</pre>\n\n")
+              summary.write("Inspect the current Release production deployment and any owned maintenance "
+                            "before taking action. Follow the approved recovery runbook in docs/operations.md; "
+                            "a failed probe alone does not establish that a worker restart is appropriate.\n")
+          PY
