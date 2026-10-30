@@ -10,6 +10,7 @@ import { createHash } from "node:crypto"
 import { logger } from "@lyrashield/logger"
 import {
   getAdvisoryCache,
+  normalizeAdvisoryPackageName,
   type AdvisoryCache,
   type AdvisoryEcosystem,
   type AdvisoryEntry,
@@ -64,7 +65,7 @@ function ecosystemToOsv(ecosystem: AdvisoryEcosystem): string {
 }
 
 function packageKey(pkg: OsvQueryPackage): string {
-  return `${pkg.ecosystem}:${pkg.name.trim().toLowerCase()}@${pkg.version}`
+  return `${pkg.ecosystem}:${normalizeAdvisoryPackageName(pkg.ecosystem, pkg.name)}@${pkg.version}`
 }
 
 function checksum(value: unknown): string {
@@ -309,7 +310,7 @@ export async function queryOsvWithCache(
   const snapshotChecksum = checksum(
     ordered.map(({ package: pkg, vulns }) => ({
       ecosystem: pkg.ecosystem,
-      name: pkg.name.trim().toLowerCase(),
+      name: normalizeAdvisoryPackageName(pkg.ecosystem, pkg.name),
       version: pkg.version,
       vulns,
     }))
