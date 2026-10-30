@@ -31,7 +31,7 @@
     "@lyrashield/security": "workspace:*",
     "@lyrashield/types": "workspace:*",
     "@sentry/node": "^10.75.2",
-    "bullmq": "6.2.0",
+    "bullmq": "6.4.0",
     "ioredis": "^5.11.1",
     "tsx": "catalog:",
     "yaml": "catalog:",
