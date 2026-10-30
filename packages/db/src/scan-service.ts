@@ -20,6 +20,11 @@ import {
 import { computeScanExecutionPlanHash } from "./scan-execution-plan"
 import { isTerminalScanStatus, isValidTransition } from "./scan-transitions"
 import { withWorkspaceRLS } from "./rls"
+import {
+  releaseUnstartedScanSlot,
+  lockUserScanAdmission,
+  UserScanAlreadyActiveError,
+} from "./scan-slot"
 import { getWorkspaceContext } from "./extension"
 
 export interface CreateScanParams {
@@ -68,6 +73,17 @@ export class WorkspaceScanConcurrencyLimitError extends Error {
 }
 
 export interface ScanWithEvents extends Scan {
+  capacity?: {
+    state: string
+    executionStopped: boolean
+    admissionHeld: boolean
+    multiplier: number
+    fundedMinutes: number
+    runtimeLimitMs: number
+    observedMs: number
+    chargedMinutes: number
+    absorbedMinutes: number
+  } | null
   events: ScanEvent[]
   /**
    * When an incremental event window was applied (a valid `eventsAfter` cursor
@@ -134,6 +150,9 @@ export async function createScan(
 ): Promise<Scan> {
   const determinismMode = DeterminismModeSchema.parse(params.determinismMode ?? "default")
   const create = async (tx: ScanTransaction) => {
+    await lockUserScanAdmission(tx, params.createdById)
+    const slot = await tx.userScanSlot.findUnique({ where: { userId: params.createdById } })
+    if (slot) throw new UserScanAlreadyActiveError()
     // The workspace lock makes the shared concurrency cap atomic across manual,
     // scheduled, retest, and agent-created scans on different targets.
     await lockWorkspaceScanAdmission(tx, params.workspaceId)
@@ -196,6 +215,7 @@ export async function createScan(
         mode: (params.mode ?? "QUICK") as Scan["mode"],
         policyId: params.policyId ?? null,
         status: "QUEUED",
+        accountingVersion: 2,
         triggerType: params.triggerType ?? "manual",
         determinismMode,
         createdById: params.createdById,
@@ -204,6 +224,21 @@ export async function createScan(
         delegatedAuthorizationVersion: params.delegatedConnection?.authorizationVersion ?? null,
         executionPlan: executionPlan as Prisma.InputJsonValue,
         executionPlanHash,
+      },
+    })
+    await tx.userScanSlot.create({
+      data: { userId: params.createdById, scanId: scan.id, workspaceId: params.workspaceId },
+    })
+    const accountId = scan.sponsorAccountId ?? scan.createdById
+    await tx.$executeRaw`SELECT set_config('app.current_account_id', ${accountId}, true)`
+    await tx.scanCapacityReservation.create({
+      data: {
+        scanId: scan.id,
+        accountId,
+        state: executionPlan.capabilities.includes("engine") ? "WAITING" : "RESERVED",
+        workspaceId: scan.workspaceId,
+        userId: scan.createdById,
+        multiplier: scan.mode === "DEEP" || scan.mode === "CUSTOM" ? 3 : 1,
       },
     })
     await tx.scanEvent.create({
@@ -532,9 +567,35 @@ export async function getScanWithEvents(
       },
     })
     if (!scan) return null
-
+    let capacity: ScanWithEvents["capacity"] = null
+    if (scan.accountingVersion === 2) {
+      const accountId = scan.sponsorAccountId ?? scan.createdById
+      await tx.$executeRaw`SELECT set_config('app.current_account_id', ${accountId}, true)`
+      const reservation = await tx.scanCapacityReservation.findFirst({
+        where: { scanId, workspaceId, accountId },
+        select: {
+          state: true,
+          multiplier: true,
+          fundedMinutes: true,
+          runtimeLimitMs: true,
+          observedMs: true,
+          chargedMinutes: true,
+          absorbedMinutes: true,
+          stoppedAt: true,
+        },
+      })
+      if (reservation) {
+        const { stoppedAt, ...usage } = reservation
+        capacity = {
+          ...usage,
+          executionStopped: Boolean(stoppedAt),
+          admissionHeld: !scan.accountingSettledAt,
+        }
+      }
+    }
     return {
       ...scan,
+      capacity,
       events: scan.events.reverse(),
       // Echoed only when an incremental window was actually applied, so the
       // API layer can distinguish "full list" (initial load, no cursor, or
@@ -787,6 +848,7 @@ export async function cancelScan(scanId: string, workspaceId: string): Promise<S
       finalizationStartedAt: null,
     })
   })
+  await releaseUnstartedScanSlot(workspaceId, scanId)
   logger.info("Scan status updated", { scanId, from: currentStatus, to: "CANCELLED" })
   return updated
 }
@@ -797,10 +859,14 @@ export async function removeScan(scanId: string, workspaceId: string): Promise<P
   return withWorkspaceRLS(workspaceId, async (tx) => {
     const scan = await tx.scan.findFirst({
       where: { id: validatedScanId, workspaceId, deletedAt: null },
-      select: { id: true, status: true },
+      select: { id: true, status: true, accountingVersion: true, accountingSettledAt: true },
     })
     if (!scan) throw new Error(`Scan not found: ${validatedScanId}`)
-    if (!isTerminalScanStatus(scan.status)) throw new Error("Cannot remove an active scan")
+    if (
+      !isTerminalScanStatus(scan.status) ||
+      (scan.accountingVersion === 2 && !scan.accountingSettledAt)
+    )
+      throw new Error("Cannot remove an active scan")
 
     return tx.scan.update({
       where: { id: scan.id },

@@ -43,6 +43,10 @@ vi.mock("@lyrashield/db", () => {
     auditLog: { create: vi.fn() },
   }
   return {
+    UserScanAlreadyActiveError: class UserScanAlreadyActiveError extends Error {
+      readonly code = "SCAN_ALREADY_ACTIVE"
+    },
+    releaseUnstartedScanSlot: vi.fn().mockResolvedValue(undefined),
     findCurrentDomainProof: vi.fn(async (workspaceId: string, url: string | null | undefined) => {
       const domain = url ? new URL(url).hostname.toLowerCase() : null
       if (!domain) return { domain, verified: false }
@@ -596,6 +600,23 @@ describe("POST /api/scans", () => {
     // Dates serialize to ISO strings, matching the SSR-rendered payload.
     expect(data.createdAt).toBe("2026-08-03T00:00:00.000Z")
     expect(prisma.auditLog.create).toHaveBeenCalled()
+  })
+
+  it("returns an opaque active-user conflict without exposing another workspace's scan", async () => {
+    const { UserScanAlreadyActiveError } = await import("@lyrashield/db")
+    vi.mocked(prisma.target.findFirst).mockResolvedValue({
+      id: "t1",
+      type: "REPO",
+      repoFullName: "fixture/repo",
+    } as never)
+    vi.mocked(createScan).mockRejectedValueOnce(new UserScanAlreadyActiveError())
+    const response = await POST(
+      makeRequest({ workspaceId: "ws-user-slot", targetId: "t1", goal: "TEST_APP", mode: "SAFE" })
+    )
+    expect(response.status).toBe(409)
+    const body = await response.json()
+    expect(body.error.code).toBe("SCAN_ALREADY_ACTIVE")
+    expect(JSON.stringify(body)).not.toContain("activeScanId")
   })
 
   it("returns 409 when the transactional workspace scan cap wins a race", async () => {

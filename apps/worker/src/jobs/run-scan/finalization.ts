@@ -595,13 +595,17 @@ export async function finalizeScanLifecycle(params: {
     // billable results, DB-only finalization must finish before money commits.
     const initialTerminalError = params.terminalErrorAfterMeter()
     await meterEngineRun(
-      budgetExceeded || initialTerminalError?.status === "STOPPED_BUDGET"
+      budgetExceeded
         ? "failed"
-        : initialTerminalError?.status === "PARTIAL"
+        : initialTerminalError?.errorCategory === "CAPACITY_EXHAUSTED"
           ? "partial"
-          : initialTerminalError
+          : initialTerminalError?.status === "STOPPED_BUDGET"
             ? "failed"
-            : "completed",
+            : initialTerminalError?.status === "PARTIAL"
+              ? "partial"
+              : initialTerminalError
+                ? "failed"
+                : "completed",
       async () => {
         finished = await finishEvidence()
         onDurableResult(

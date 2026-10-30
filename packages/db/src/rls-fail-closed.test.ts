@@ -267,7 +267,12 @@ describe.skipIf(!runtimeUrl)("strict workspace RLS fails closed", () => {
       WebhookEventRejection:
         "Bounded authentic catalog-rejection receipts, system-owned, no tenant access",
     }
-    const accountTables = ["account_acquisitions", "account_preferences"]
+    const accountTables = [
+      "account_acquisitions",
+      "account_preferences",
+      "ScanCapacityReservation",
+      "UserScanSlot",
+    ]
     // Myra support-agent tables (20260915000000_myra_support_agent): dual-owner
     // (accountId/publicSessionId) tables plus child/append-only/system tables.
     // All FORCE RLS like account/tenant tables — unbound is the trusted path.

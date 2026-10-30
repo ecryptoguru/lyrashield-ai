@@ -31,6 +31,11 @@ const prisma = {
 }
 
 vi.mock("@lyrashield/db", () => ({
+  UserScanAlreadyActiveError: class UserScanAlreadyActiveError extends Error {
+    readonly code = "SCAN_ALREADY_ACTIVE"
+  },
+  releaseUnstartedScanSlot: vi.fn().mockResolvedValue(undefined),
+
   findCurrentDomainProof,
   getFindingReference,
   createScan,

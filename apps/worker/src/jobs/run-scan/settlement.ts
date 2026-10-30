@@ -130,7 +130,11 @@ export function createEngineMinuteMeter(params: {
           ? { settleOverage: (tx, minutes) => settleOverage(minutes, tx) }
           : {}),
       })
-      if (billingOutcome === "cancelled" && metering.overageMinutes > 0) {
+      if (
+        billingOutcome === "cancelled" &&
+        metering.accountingVersion !== 2 &&
+        metering.overageMinutes > 0
+      ) {
         await settleOverage(metering.overageMinutes)
       }
     } catch (meterError) {

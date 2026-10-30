@@ -3,11 +3,12 @@ import { randomUUID } from "node:crypto"
 import { prisma } from "./client"
 import { isDatabaseRLSContextBound, runWithWorkspaceContext } from "./scoping"
 import { withWorkspaceRLS } from "./rls"
-import { createScan } from "./scan-service"
+import { cancelScan, createScan } from "./scan-service"
 
 const suffix = randomUUID().replace(/-/g, "")
 const workspaceId = `soft-delete-workspace-${suffix}`
 let targetId = ""
+let scanId = ""
 
 describe("Prisma extension soft delete", () => {
   beforeAll(async () => {
@@ -26,6 +27,7 @@ describe("Prisma extension soft delete", () => {
   })
 
   afterAll(async () => {
+    if (scanId) await cancelScan(scanId, workspaceId)
     if (targetId) {
       await withWorkspaceRLS(
         workspaceId,
@@ -40,9 +42,10 @@ describe("Prisma extension soft delete", () => {
       workspaceId,
       targetId,
       goal: "LAUNCH_REVIEW",
-      createdById: "strict-rls-test-user",
+      createdById: `strict-rls-test-user-${suffix}`,
     })
 
+    scanId = scan.id
     expect(scan.workspaceId).toBe(workspaceId)
     const eventCount = await withWorkspaceRLS(workspaceId, (tx) =>
       tx.scanEvent.count({ where: { scanId: scan.id } })

@@ -1,3 +1,4 @@
+import { releaseUnstartedScanSlot } from "@lyrashield/db"
 import {
   ACTIVE_SCAN_STATUSES,
   createScan,
@@ -213,6 +214,7 @@ export async function processDueSchedules(now = new Date()): Promise<number> {
             },
             schedule.workspaceId
           )
+          await releaseUnstartedScanSlot(schedule.workspaceId, scan.id)
         }
       } catch (error) {
         logger.error("Failed to process scheduled scan", {

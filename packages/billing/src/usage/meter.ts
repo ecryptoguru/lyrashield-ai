@@ -15,12 +15,18 @@
  * Deep/Custom scans consume minutes at 3× the standard rate (DEEP_SCAN_MULTIPLIER).
  */
 
-import { bindAccountRLSContext, withWorkspaceRLS, type ScopedTransaction } from "@lyrashield/db"
+import {
+  lockUserScanAdmission,
+  bindAccountRLSContext,
+  withWorkspaceRLS,
+  type ScopedTransaction,
+} from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 import { DEEP_SCAN_MULTIPLIER } from "@lyrashield/pricing"
 import type { ScanMode } from "@lyrashield/types"
 import { resolveAccountBilling } from "../account"
 import { resolveBalanceCycleStart } from "./balance"
+import { settleReservedCapacity } from "./capacity"
 import { readRetainedScanAccounting } from "./retained-scan"
 
 export interface RecordAgentMinutesOptions {
@@ -54,6 +60,7 @@ export interface RecordAgentMinutesOptions {
 }
 
 export interface RecordAgentMinutesResult {
+  accountingVersion?: number
   /** Whether a new usage record was created (false = idempotent replay). */
   created: boolean
   /** Minutes recorded (after multiplier, 0 on replay). */
@@ -300,6 +307,20 @@ export async function recordAgentMinutes(
       return await withWorkspaceRLS(
         workspaceId,
         async (tx) => {
+          const initiatingScan = await tx.scan.findFirst({
+            where: { id: scanId, workspaceId },
+            select: { createdById: true, accountingVersion: true },
+          })
+          const retainedCapacity = !initiatingScan
+            ? await tx.scanCapacityReservation.findFirst({
+                where: { scanId, workspaceId, accountId: sponsorAccountId },
+              })
+            : null
+          const capacityUserId =
+            initiatingScan?.accountingVersion === 2
+              ? initiatingScan.createdById
+              : retainedCapacity?.userId
+          if (capacityUserId) await lockUserScanAdmission(tx, capacityUserId)
           // Dual advisory locks, fixed order (workspace then account): the
           // previous image serializes on the workspace lock alone, so a
           // rolled-back binary cannot race this settlement; the account lock
@@ -318,6 +339,9 @@ export async function recordAgentMinutes(
             await opts.beforeCommit?.()
             return {
               created: false,
+              ...(initiatingScan?.accountingVersion === 2 || retainedCapacity
+                ? { accountingVersion: 2 }
+                : {}),
               minutes: 0,
               idempotencyKey,
               overageMinutes: recordedOverageMinutes(existing.metadata),
@@ -325,6 +349,26 @@ export async function recordAgentMinutes(
             }
           }
 
+          if (retainedCapacity) throw new Error("retained_capacity_requires_review")
+          if (initiatingScan?.accountingVersion === 2) {
+            const settlement = await settleReservedCapacity(tx, {
+              scanId,
+              workspaceId,
+              accountId: sponsorAccountId,
+              ms,
+              idempotencyKey,
+            })
+            if (!settlement) throw new Error("capacity_receipt_missing")
+            finalizationStarted = Boolean(opts.beforeCommit)
+            await opts.beforeCommit?.()
+            return {
+              created: true,
+              ...settlement,
+              idempotencyKey,
+              accountId: sponsorAccountId,
+              accountingVersion: 2,
+            }
+          }
           const overageMinutes = await recordMinutesAndDebitIncrementalSpillover(tx, {
             accountId: sponsorAccountId,
             workspaceId,
@@ -445,29 +489,29 @@ async function recordMinutesAndDebitIncrementalSpillover(
 
   const [grantRecords, priorConsumeRecords] = cycleStart
     ? await Promise.all([
-        tx.usageRecord.findMany({
+        tx.usageRecord.aggregate({
           where: {
             accountId: input.accountId,
             kind: { in: ["pool_grant", "trial_grant"] },
             deletedAt: null,
             cycleStart: { gte: cycleStart },
           },
-          select: { quantity: true },
+          _sum: { quantity: true },
         }),
-        tx.usageRecord.findMany({
+        tx.usageRecord.aggregate({
           where: {
             accountId: input.accountId,
             kind: "agent_minutes",
             deletedAt: null,
             cycleStart: { gte: cycleStart },
           },
-          select: { quantity: true },
+          _sum: { quantity: true },
         }),
       ])
-    : [[], []]
+    : [{ _sum: { quantity: null } }, { _sum: { quantity: null } }]
 
-  const poolMinutes = grantRecords.reduce((sum, record) => sum + record.quantity, 0)
-  const priorConsumed = priorConsumeRecords.reduce((sum, record) => sum + record.quantity, 0)
+  const poolMinutes = grantRecords._sum.quantity ?? 0
+  const priorConsumed = priorConsumeRecords._sum.quantity ?? 0
   const priorSpillover = Math.max(0, priorConsumed - poolMinutes)
   const nextSpillover = Math.max(0, priorConsumed + input.minutes - poolMinutes)
   const incrementalSpillover = nextSpillover - priorSpillover

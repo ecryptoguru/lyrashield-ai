@@ -122,6 +122,8 @@ describe("createScan execution plan persistence", () => {
 
   function makeTx(targetType: string) {
     const tx = {
+      userScanSlot: { findUnique: vi.fn().mockResolvedValue(null), create: vi.fn() },
+      scanCapacityReservation: { create: vi.fn() },
       $executeRaw: vi.fn().mockResolvedValue(undefined),
       target: { findFirst: vi.fn().mockResolvedValue({ id: "target-1", type: targetType }) },
       scan: {

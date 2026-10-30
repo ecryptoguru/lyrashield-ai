@@ -163,6 +163,7 @@ export function useScanDetailPolling(initialScan: ScanData, initialFindings: Fin
             // full replacement.
             updated.eventsCursorApplied === eventCursor && eventCursor !== null
           ),
+          capacity: updated.capacity ?? null,
           integrity: {
             ...scanRef.current.integrity,
             manifestChecksum: updated.resultManifest?.checksum ?? null,

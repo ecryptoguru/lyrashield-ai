@@ -23,6 +23,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@lyrashield/integrations", () => ({ getRedis: () => mocks.redis }))
 vi.mock("@lyrashield/db", () => ({
+  releaseUnstartedScanSlot: vi.fn().mockResolvedValue(undefined),
   getSystemPrisma: () => mocks.prisma,
   prisma: mocks.prisma,
   TERMINAL_SCAN_STATUSES: new Set([

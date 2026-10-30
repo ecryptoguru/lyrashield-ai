@@ -20,6 +20,7 @@ export interface StoredScanAuthority {
   determinismMode: string | null
   startedAt: Date | null
   createdById: string
+  accountingVersion?: number | null
   sponsorAccountId: string | null
   triggerType: string | null
   /**
@@ -130,6 +131,7 @@ export async function verifyScanJobAuthority(
         startedAt: true,
         createdById: true,
         sponsorAccountId: true,
+        accountingVersion: true,
         triggerType: true,
         delegatedConnectionId: true,
         delegatedAuthorizationVersion: true,

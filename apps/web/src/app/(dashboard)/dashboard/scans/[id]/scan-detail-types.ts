@@ -1,3 +1,15 @@
+export interface ScanCapacityData {
+  state: string
+  executionStopped: boolean
+  admissionHeld: boolean
+  multiplier: number
+  fundedMinutes: number
+  runtimeLimitMs: number
+  observedMs: number
+  chargedMinutes: number
+  absorbedMinutes: number
+}
+
 export interface ScanEvent {
   id: string
   stage: string
@@ -21,6 +33,7 @@ export interface ScanData {
   errorMessage: string | null
   createdAt: string
   /** The scan's place in the run queue while QUEUED (1-based + total waiting). */
+  capacity?: ScanCapacityData | null
   queuePosition?: { position: number; waiting: number } | null
   target: {
     id: string
@@ -130,6 +143,7 @@ export interface ScanPollData {
   /** Echoed when an incremental event window was applied to this response. */
   eventsCursorApplied?: string
   /** The scan's place in the run queue while QUEUED (1-based + total waiting). */
+  capacity?: ScanCapacityData | null
   queuePosition?: { position: number; waiting: number } | null
   resultManifest?: { checksum?: string | null } | null
   coverageReceipts?: Array<{

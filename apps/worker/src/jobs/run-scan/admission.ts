@@ -202,7 +202,12 @@ export async function verifyScanAdmission(params: {
 
   if (!admissionError) {
     const entitlement = await runWithAccountContext(scanRecord.createdById, () =>
-      evaluateScanEntitlement({ workspaceId, mode, sponsorAccountId: scanRecord.createdById })
+      evaluateScanEntitlement({
+        workspaceId,
+        mode,
+        sponsorAccountId: scanRecord.createdById,
+        ...(scanRecord.accountingVersion === 2 ? { deferCapacityCheck: true } : {}),
+      })
     )
     if (!entitlement.allowed) {
       admissionError = {

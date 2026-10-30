@@ -27,6 +27,7 @@ function scanEtag(
     updatedAt: scan.updatedAt,
     executionPlanHash: publicScanProvenance(scan.executionPlan).executionPlanHash,
     queuePosition,
+    capacity: scan.capacity ?? null,
     eventsCount: events.length,
     lastEventAt: lastEvent?.createdAt,
     // Included so a cursor-scoped response can never collide with the full
@@ -88,6 +89,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
           id: scan.id,
           workspaceId: scan.workspaceId,
           status: scan.status,
+          capacity: scan.capacity ?? null,
           goal: scan.goal,
           mode: scan.mode,
           triggerType: scan.triggerType,

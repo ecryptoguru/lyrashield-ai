@@ -1,3 +1,5 @@
+import { confirmScanCapacityStopped } from "../../billing/src/usage/capacity"
+import { releaseStoppedScanSlot } from "./scan-slot"
 import { createHash, randomUUID } from "node:crypto"
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 import { PrismaPg } from "@prisma/adapter-pg"
@@ -224,6 +226,8 @@ describe.skipIf(!process.env.RLS_RUNTIME_DATABASE_URL)("automatic retest real RL
       where: { id: outcomes[0]!.retestScanId },
       data: { status: "COMPLETED" },
     })
+    await confirmScanCapacityStopped(id, outcomes[0]!.retestScanId, true)
+    await releaseStoppedScanSlot(id, outcomes[0]!.retestScanId)
     expect(await handleFixPrMergedAndReevaluate(options)).toBeNull()
   })
   it("persists PARTIAL elapsed minutes under RLS without charging a failed outcome", async () => {

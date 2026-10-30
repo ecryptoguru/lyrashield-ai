@@ -837,6 +837,8 @@ model Scan {
   determinismMode               String?    @default("default")
   durationMs                    Int?
   finalizationStartedAt         DateTime?
+  accountingVersion             Int?
+  accountingSettledAt           DateTime?
   // Immutable server-owned execution plan snapshot + its canonical-JSON sha256.
   // Written once at creation; NULL on scans created before the column existed.
   executionPlan                 Json?
@@ -2899,4 +2901,41 @@ model MyraGenerationReservation {
   @@index([monthStart, status])
   @@index([status, createdAt])
   @@map("myra_generation_reservations")
+}
+
+// Durable initiating-user admission; no expiry can authorize overlapping execution.
+model UserScanSlot {
+  userId      String   @id
+  scanId      String   @unique
+  workspaceId String
+  createdAt   DateTime @default(now())
+}
+
+// Retained account-owned funding receipt. No cascading FK: deletion must not erase accounting.
+model ScanCapacityReservation {
+  scanId             String   @id
+  accountId          String
+  workspaceId        String
+  userId             String
+  state              String   @default("WAITING")
+  accountingVersion  Int      @default(2)
+  multiplier         Int
+  cycleStart         DateTime?
+  billingAccountId   String?
+  poolMinutes        Int      @default(0)
+  packMinutes        Int      @default(0)
+  packAllocations    Json     @default("[]")
+  graceMinutes       Int      @default(0)
+  overageMinutes     Int      @default(0)
+  fundedMinutes      Int      @default(0)
+  runtimeLimitMs     Int      @default(0)
+  observedMs         Int      @default(0)
+  chargedMinutes     Int      @default(0)
+  absorbedMinutes    Int      @default(0)
+  stoppedAt          DateTime?
+  settledAt          DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([accountId, state, createdAt, scanId])
 }

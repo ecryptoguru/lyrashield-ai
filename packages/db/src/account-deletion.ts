@@ -1,3 +1,4 @@
+import { lockUserScanAdmission } from "./scan-slot"
 import { createId } from "@paralleldrive/cuid2"
 import { prisma } from "./client"
 import { computeAuditHash } from "./audit-hash"
@@ -318,6 +319,9 @@ export async function deleteUserAccount(
 
   const deletionResult = await prisma.$transaction(
     async (tx) => {
+      await lockUserScanAdmission(tx, userId)
+      if (await tx.userScanSlot.findUnique({ where: { userId } }))
+        throw new AccountDeletionActiveScanError([])
       // The preview is advisory. Lock every affected workspace in a stable order,
       // then reclassify ownership before any deletion or attribution mutation.
       const lockedPlan: AccountDeletionPlan = { deletable: [], blocked: [], retained: [] }
@@ -389,7 +393,10 @@ export async function deleteUserAccount(
               where: {
                 workspaceId: workspace.id,
                 deletedAt: null,
-                status: { in: ACTIVE_SCAN_STATUSES },
+                OR: [
+                  { status: { in: ACTIVE_SCAN_STATUSES } },
+                  { accountingVersion: 2, accountingSettledAt: null },
+                ],
               },
             }),
             tx.evidence.findMany({
@@ -423,6 +430,18 @@ export async function deleteUserAccount(
         await stageIntegrations(tx, workspace, integrationUris, unsupportedArtifactWorkspaces)
       }
 
+      await tx.$executeRaw`SELECT set_config('app.current_account_id', ${userId}, true)`
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`account:${userId}`}, 0))`
+      const sponsoredHolds = await tx.scanCapacityReservation.count({
+        where: {
+          accountId: userId,
+          OR: [
+            { state: { in: ["WAITING", "RESERVED", "RUNNING", "REVIEW_REQUIRED"] } },
+            { state: "SETTLED", stoppedAt: null },
+          ],
+        },
+      })
+      if (sponsoredHolds > 0) throw new AccountDeletionActiveScanError(activeScanWorkspaces)
       if (activeScanWorkspaces.length > 0) {
         throw new AccountDeletionActiveScanError(activeScanWorkspaces)
       }

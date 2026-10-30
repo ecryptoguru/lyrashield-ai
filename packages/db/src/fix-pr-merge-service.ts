@@ -1,3 +1,4 @@
+import { lockUserScanAdmission } from "./scan-slot"
 import { logger } from "@lyrashield/logger"
 import {
   resolveRetestProfile,
@@ -122,6 +123,7 @@ export async function handleFixPrMergedAndReevaluate({
   const outcome = await withWorkspaceRLS(
     workspaceId,
     async (lockTx) => {
+      await lockUserScanAdmission(lockTx, result.actedById)
       // Serialize redeliveries through scan creation and durable retest association.
       await lockTx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${advisoryKey}, 0))`
       const anchor = await findAnchor(lockTx)

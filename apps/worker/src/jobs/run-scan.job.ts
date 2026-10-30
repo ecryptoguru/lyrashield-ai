@@ -1,4 +1,12 @@
-import type { Job } from "bullmq"
+import { DelayedError, type Job } from "bullmq"
+import {
+  reserveScanCapacity,
+  startUnmeteredScanCapacity,
+  resetUnstartedScanCapacity,
+  confirmScanCapacityStopped,
+  ScanCapacityWaitingError,
+} from "@lyrashield/billing"
+import { releaseStoppedScanSlot, releaseUnstartedScanSlot } from "@lyrashield/db"
 import { boundedCleanup, finalizationGrace, scanElapsedClock } from "../engine/scan-deadline"
 import { prisma, runWithWorkspaceContext } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
@@ -91,6 +99,9 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
     let globalScanTimeoutReached = false
     let scanRuntimeBudgetMs = MAX_SCAN_RUNTIME_MS
     let billablePhaseStarted = false
+    let executorReturned = false
+    let noBillableWork = true
+    let recoveringPreviousExecution = Boolean(scanRecord.startedAt)
     let urlProfile: UrlScanProfile | undefined
     let engineProfile: ReturnType<typeof resolveEngineProfile> | undefined
     let engineModel: string | undefined
@@ -103,7 +114,10 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         workspaceId,
         targetId,
       })
-      if (resumedFinalization) return resumedFinalization
+      if (resumedFinalization) {
+        recoveringPreviousExecution = true
+        return resumedFinalization
+      }
 
       const preparation = await prepareScanExecution({
         scanId,
@@ -116,9 +130,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       const { target } = preparation
       urlProfile = preparation.urlProfile
 
-      // 3. Run the scan engine
-      await updateScanStatus(scanId, "RUNNING" as ScanStatus)
-      await markRetestsRunning(scanId)
+      // 3. Prepare the scan engine; capacity waits remain queued.
 
       const policy = policyId
         ? await prisma.policy.findFirst({
@@ -222,7 +234,21 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       })
       if (!admission.ok) return admission.result
 
+      if (scanRecord.accountingVersion === 2 && engineBacked && !deterministicRetest) {
+        const capacity = await reserveScanCapacity({
+          workspaceId,
+          scanId,
+          maxRuntimeMs: scanRuntimeBudgetMs,
+        })
+        if (capacity.state === "WAITING") throw new ScanCapacityWaitingError()
+      }
+      if (scanRecord.accountingVersion === 2 && (!engineBacked || deterministicRetest)) {
+        await startUnmeteredScanCapacity(workspaceId, scanId)
+      }
+      await updateScanStatus(scanId, "RUNNING" as ScanStatus)
+      await markRetestsRunning(scanId)
       const execution = await executeScanTarget({
+        accountingVersion: scanRecord.accountingVersion,
         scanId,
         workspaceId,
         goal,
@@ -249,6 +275,8 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       if (!execution.ok) {
         return await finalizeExecutionDenial(scanId, workspaceId, targetId, execution.result)
       }
+      executorReturned =
+        !engineBacked || deterministicRetest || execution.engineResult.sandboxRemoved === true
       engineResult = execution.engineResult
       deterministicCheckout = execution.deterministicCheckout
       engineProfile = execution.engineProfile
@@ -273,6 +301,12 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         )
       }
 
+      const capacityStopped =
+        execution.capacityLimited === true &&
+        ((engineResult.timedOut === true &&
+          engineResult.timeoutReason !== "INACTIVITY" &&
+          engineResult.timeoutReason !== "LLM_STALL") ||
+          engineResult.output.runRecord?.terminal_reason === "runtime_deadline")
       const runRecord = engineResult.output.runRecord
       const routingCoverageIssue =
         engineBacked && engineProfile ? engineRoutingCoverageIssue(engineProfile, runRecord) : null
@@ -282,6 +316,15 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       )
       const exitInterpretation = interpretExitCode(engineResult.exitCode)
       const cancelled = engineResult.cancelled === true
+      noBillableWork =
+        !engineBacked ||
+        deterministicRetest ||
+        !shouldRecordAgentMinutes(
+          scanId,
+          exitInterpretation.status === "COMPLETED" ? "COMPLETED" : "PARTIAL",
+          runRecord,
+          { cancelled: true }
+        )
       const engineWorkObserved =
         engineBacked &&
         shouldRecordAgentMinutes(scanId, exitInterpretation.status, runRecord, { cancelled })
@@ -402,7 +445,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         })
       }
 
-      if (engineResult.timedOut) {
+      if (engineResult.timedOut && !capacityStopped) {
         const inactive = engineResult.timeoutReason === "INACTIVITY"
         const llmStalled = engineResult.timeoutReason === "LLM_STALL"
         const timeoutMessage = inactive
@@ -444,6 +487,14 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         exitInterpretation,
         priorError: agentMinuteTerminalError,
       })
+
+      if (capacityStopped)
+        engineTerminalError = {
+          status: "STOPPED_BUDGET",
+          errorCategory: "CAPACITY_EXHAUSTED",
+          errorMessage:
+            "Available review minutes reached. Partial evidence is preserved; unused reserved minutes are released.",
+        }
 
       // 4. Run scanner orchestrator (SCA + secrets + normalization)
       await updateScanStatus(scanId, "VERIFYING" as ScanStatus)
@@ -623,6 +674,23 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         summary: scanSummary,
       }
     } catch (error) {
+      if (error instanceof ScanCapacityWaitingError && !billablePhaseStarted) {
+        await requeueScanForRetry({
+          scanId,
+          workspaceId,
+          attempt: 1,
+          maxAttempts: 1,
+          errorCategory: "WAITING_CAPACITY",
+          errorMessage: "Waiting for account review capacity",
+        })
+        // A capacity wait is not analysis time and does not consume an attempt.
+        await prisma.scan.updateMany({
+          where: { id: scanId, workspaceId, status: "QUEUED" },
+          data: { startedAt: null },
+        })
+        await job.moveToDelayed(Date.now() + 5_000, job.token)
+        throw new DelayedError()
+      }
       const isTerminalPrerequisiteFailure = error instanceof EvidenceStorageConfigurationError
       const timedOut = globalScanTimeoutReached || isTimeoutError(error)
       const finalErrorCategory = timedOut
@@ -705,6 +773,13 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
           errorCategory: finalErrorCategory,
           errorMessage: finalErrorMessage,
         })
+        if (
+          requeue.requeued &&
+          scanRecord.accountingVersion === 2 &&
+          !recoveringPreviousExecution
+        ) {
+          await resetUnstartedScanCapacity(workspaceId, scanId)
+        }
         if (!requeue.requeued) {
           log.warn("Scan left an active status before retry requeue", {
             scanId,
@@ -739,6 +814,39 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         errorMessage: finalErrorMessage,
       }
     } finally {
+      if (
+        scanRecord.accountingVersion === 2 &&
+        !recoveringPreviousExecution &&
+        (!billablePhaseStarted || executorReturned)
+      ) {
+        try {
+          await confirmScanCapacityStopped(workspaceId, scanId, noBillableWork)
+          await releaseStoppedScanSlot(workspaceId, scanId)
+        } catch (accountingError) {
+          log.error("Scan admission remains held pending accounting review", {
+            scanId,
+            errorType: accountingError instanceof Error ? accountingError.name : "UNKNOWN",
+          })
+        }
+      }
+      if (recoveringPreviousExecution && scanRecord.accountingVersion === 2) {
+        // A prior executor may have committed stoppedAt before dying during
+        // slot release. Only that durable proof permits this recovery.
+        await releaseStoppedScanSlot(workspaceId, scanId).catch((error: unknown) => {
+          log.warn("Stopped scan slot recovery remains pending", {
+            scanId,
+            errorType: error instanceof Error ? error.name : "UNKNOWN",
+          })
+        })
+      }
+      if (scanRecord.accountingVersion === 2) {
+        await releaseUnstartedScanSlot(workspaceId, scanId).catch((error: unknown) => {
+          log.warn("Unstarted scan slot remains held", {
+            scanId,
+            errorType: error instanceof Error ? error.name : "UNKNOWN",
+          })
+        })
+      }
       try {
         await failTerminalRetestsForScan(scanId)
       } catch (retestError) {

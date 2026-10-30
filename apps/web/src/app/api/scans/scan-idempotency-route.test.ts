@@ -10,6 +10,11 @@ vi.mock("next/cache", () => ({
 }))
 
 vi.mock("@lyrashield/db", () => ({
+  UserScanAlreadyActiveError: class UserScanAlreadyActiveError extends Error {
+    readonly code = "SCAN_ALREADY_ACTIVE"
+  },
+  releaseUnstartedScanSlot: vi.fn().mockResolvedValue(undefined),
+
   WorkspaceScanConcurrencyLimitError: class WorkspaceScanConcurrencyLimitError extends Error {},
   prisma: {
     target: { findFirst: vi.fn() },

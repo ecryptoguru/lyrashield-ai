@@ -57,6 +57,8 @@ export interface ScanEntitlementInput {
    * (GET /api/scans/eligibility) must never mutate state.
    */
   mutateOnTrialExpiry?: boolean
+  /** Worker-only: an admitted v2 scan waits on the durable capacity scheduler. */
+  deferCapacityCheck?: boolean
   /** Caller-owned transaction — must already carry the account context. */
   tx?: DbTx
 }
@@ -248,7 +250,7 @@ export async function evaluateScanEntitlement(
       })
     : await getUsageBalance(sponsorAccountId, { billing, trialStartedAt: trialState.startedAt })
 
-  if (balance.totalRemaining <= 0) {
+  if (balance.totalRemaining <= 0 && !input.deferCapacityCheck) {
     // Overage is available only to Launch Assurance accounts with a limit.
     const overagePlanEligible =
       billing?.effectivePlan === "LAUNCH_ASSURANCE" && (billing.spendLimitCents ?? 0) > 0

@@ -60,6 +60,8 @@ vi.mock("@lyrashield/db", async () => {
     typeof import("@lyrashield/db/src/manifest-checksum")
   >("@lyrashield/db/src/manifest-checksum")
   const db = {
+    releaseStoppedScanSlot: vi.fn().mockResolvedValue(true),
+    releaseUnstartedScanSlot: vi.fn().mockResolvedValue(undefined),
     verifyStoredScanExecutionPlan: planModule.verifyStoredScanExecutionPlan,
     verifyStoredManifestChecksum: manifestModule.verifyStoredManifestChecksum,
     resolveAuthenticatedAssessmentAuthorization: vi.fn(),
@@ -134,6 +136,13 @@ vi.mock("@lyrashield/logger", () => ({
 }))
 
 vi.mock("@lyrashield/billing", () => ({
+  ScanCapacityWaitingError: class ScanCapacityWaitingError extends Error {},
+  reserveScanCapacity: vi
+    .fn()
+    .mockResolvedValue({ state: "RUNNING", fundedMinutes: 2, runtimeLimitMs: 115_000 }),
+  confirmScanCapacityStopped: vi.fn().mockResolvedValue(undefined),
+  startUnmeteredScanCapacity: vi.fn().mockResolvedValue(undefined),
+  resetUnstartedScanCapacity: vi.fn().mockResolvedValue(undefined),
   evaluateScanEntitlement: vi.fn().mockResolvedValue({ allowed: true, accountId: "user-1" }),
   hasUnsettledScanIntent: vi.fn().mockResolvedValue(false),
   recordAgentMinutes: vi
@@ -291,6 +300,8 @@ import {
   resolveScannerPhaseTimeoutMs,
   shouldRecordAgentMinutes,
 } from "./run-scan.job"
+import { reserveScanCapacity, confirmScanCapacityStopped } from "@lyrashield/billing"
+import { releaseStoppedScanSlot } from "@lyrashield/db"
 import { extractActualCostUsd, extractUsageSummary } from "./run-scan/usage"
 import { resolveEngineRuntimeBudgetMs } from "./run-scan/lifecycle-utils"
 import { runPreflight } from "./preflight.job"
@@ -353,6 +364,7 @@ const mockJob = mockJobFixture as never
 
 function mockStoredScanAuthority(
   overrides: Partial<{
+    accountingVersion: number | null
     workspaceId: string
     targetId: string
     goal: string
@@ -1300,6 +1312,67 @@ describe("processScanJob", () => {
       expect(runEngine).not.toHaveBeenCalled()
     }
   )
+  it("delays a capacity waiter without provider work or consuming its user slot", async () => {
+    mockStoredScanAuthority({ accountingVersion: 2 })
+    vi.mocked(reserveScanCapacity).mockResolvedValueOnce({ state: "WAITING" })
+    const moveToDelayed = vi.fn().mockResolvedValue(undefined)
+    await expect(
+      processScanJob({ ...mockJobFixture, token: "worker-token", moveToDelayed } as never)
+    ).rejects.toThrow()
+    expect(moveToDelayed).toHaveBeenCalledWith(expect.any(Number), "worker-token")
+    expect(runEngine).not.toHaveBeenCalled()
+    expect(recordAgentMinutes).not.toHaveBeenCalled()
+  })
+
+  it("bills independently observed partial work at a capacity stop", async () => {
+    mockStoredScanAuthority({ accountingVersion: 2 })
+    vi.mocked(runEngine).mockResolvedValueOnce({
+      exitCode: 1,
+      cancelled: false,
+      timedOut: true,
+      timeoutReason: "DURATION",
+      sandboxRemoved: true,
+      sourceCheckoutPath: null,
+      output: {
+        ingestionIssues: [],
+        vulnerabilities: [],
+        findingsComplete: true,
+        findingCount: 0,
+        runRecord: {
+          run_id: "scan-1",
+          run_name: "scan-1",
+          status: "failed",
+          llm_usage: completeUsage,
+        },
+      },
+    } as never)
+    await expect(processScanJob(mockJob)).resolves.toMatchObject({
+      errorCategory: "CAPACITY_EXHAUSTED",
+    })
+    expect(recordAgentMinutes).toHaveBeenCalledWith(
+      "ws-1",
+      "scan-1",
+      expect.any(Number),
+      expect.objectContaining({ outcome: "partial" })
+    )
+    expect(runEngine).toHaveBeenCalledWith(
+      expect.anything(),
+      "scan-1",
+      115_000,
+      expect.any(Function),
+      undefined
+    )
+    expect(confirmScanCapacityStopped).toHaveBeenCalledWith("ws-1", "scan-1", false)
+    expect(releaseStoppedScanSlot).toHaveBeenCalledWith("ws-1", "scan-1")
+  })
+
+  it("holds the user slot if sandbox termination cannot be confirmed", async () => {
+    mockStoredScanAuthority({ accountingVersion: 2 })
+    await processScanJob(mockJob)
+    expect(confirmScanCapacityStopped).not.toHaveBeenCalled()
+    expect(releaseStoppedScanSlot).not.toHaveBeenCalled()
+  })
+
   it("fails closed when deterministic retest lineage is invalid", async () => {
     mockStoredScanAuthority({ determinismMode: "targeted_scanner" })
     vi.mocked(authorizeDeterministicRetest).mockRejectedValueOnce(new Error("Invalid lineage"))

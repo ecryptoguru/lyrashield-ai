@@ -1,3 +1,4 @@
+import { reserveScanCapacity, ScanCapacityWaitingError } from "@lyrashield/billing"
 import { prepareRepositoryAuth } from "../../engine/repository-auth"
 import { uploadEncryptedArtifact } from "@lyrashield/evidence-storage"
 import {
@@ -69,6 +70,7 @@ export type ScanExecutionResult =
       engineProfile?: ReturnType<typeof resolveEngineProfile>
       engineModel?: string
       maxBudgetUsd: number
+      capacityLimited?: boolean
       engineStartedAtMs: number | null
       /** Checksum-verified attachment staging receipt for the result manifest. */
       stagedAttachments?: {
@@ -342,6 +344,7 @@ export async function executeScanTarget(params: {
   scanProfile: { canonicalMode: string } | null
   /** Hash-verified stored execution plan; null on legacy pre-plan rows. */
   executionPlan?: ScanExecutionPlan | null
+  accountingVersion?: number | null
 }): Promise<ScanExecutionResult> {
   const {
     scanId,
@@ -365,6 +368,7 @@ export async function executeScanTarget(params: {
   } = params
 
   let engineResult: EngineRunResult
+  let capacityLimited = false
   let engineStartedAtMs: number | null = null
   let maxBudgetUsd = 0
   let deterministicCheckout: Awaited<ReturnType<typeof checkoutDeterministicRetest>> | undefined
@@ -578,11 +582,10 @@ export async function executeScanTarget(params: {
     // Once the external engine begins, an automatic BullMQ replay could
     // spend twice for the same scan. Preflight remains retryable; the
     // billable phase is terminal and any rerun requires a fresh scan.
-    await enterEngineBillablePhase(scanId, markBillablePhaseStarted)
 
     // Keep the profile's deterministic-scanner reserve available even when
     // the model is healthy until its own wall-clock cap.
-    const engineTimeoutMs = Math.min(
+    let engineTimeoutMs = Math.min(
       resolveEngineRuntimeBudgetMs(mode, target.type, scanRuntimeBudgetMs, elapsedScanMs()),
       // The engine can never exceed the recorded plan's budget.
       executionPlan ? executionPlan.limits.maxEngineMs : Number.POSITIVE_INFINITY
@@ -592,6 +595,19 @@ export async function executeScanTarget(params: {
       throw new Error("Scan analysis deadline exhausted before engine execution")
     }
 
+    if (params.accountingVersion === 2) {
+      const capacity = await reserveScanCapacity({
+        workspaceId,
+        scanId,
+        maxRuntimeMs: engineTimeoutMs,
+        start: true,
+      })
+      if (capacity.state === "WAITING") throw new ScanCapacityWaitingError()
+      if (capacity.state === "LEGACY") throw new Error("capacity_version_mismatch")
+      capacityLimited = capacity.runtimeLimitMs < engineTimeoutMs
+      engineTimeoutMs = Math.min(engineTimeoutMs, capacity.runtimeLimitMs)
+    }
+    await enterEngineBillablePhase(scanId, markBillablePhaseStarted)
     engineStartedAtMs = Date.now()
     try {
       engineResult = await runEngine(
@@ -717,6 +733,7 @@ export async function executeScanTarget(params: {
     ...(engineModel ? { engineModel } : {}),
     maxBudgetUsd,
     engineStartedAtMs,
+    capacityLimited,
     ...(stagedAttachments
       ? {
           stagedAttachments: {

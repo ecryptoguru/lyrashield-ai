@@ -553,3 +553,10 @@ export {
 } from "./notification-integration-service"
 
 export { hydrateOsvDetails, hasOsvDetails, OsvVulnerabilitySchema } from "./osv-details"
+
+export {
+  lockUserScanAdmission,
+  releaseStoppedScanSlot,
+  releaseUnstartedScanSlot,
+  UserScanAlreadyActiveError,
+} from "./scan-slot"

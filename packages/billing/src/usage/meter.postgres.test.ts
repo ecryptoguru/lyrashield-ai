@@ -136,6 +136,39 @@ async function fixture(pool = 0, pack = 0) {
   return { accountId, workspaceId, workspaceIds, scanId, scanIds, idempotencyKey }
 }
 
+async function enableCapacity(
+  f: Awaited<ReturnType<typeof fixture>>,
+  mode: "STANDARD" | "DEEP" = "STANDARD"
+) {
+  const now = new Date()
+  await owner.billingAccount.updateMany({
+    where: { accountId: f.accountId },
+    data: { currentPeriodStart: now, graceCycleStart: now },
+  })
+  await owner.usageRecord.updateMany({
+    where: { accountId: f.accountId },
+    data: { cycleStart: now },
+  })
+  await owner.scan.updateMany({
+    where: { id: { in: f.scanIds } },
+    data: { accountingVersion: 2, mode },
+  })
+  for (const [index, scanId] of f.scanIds.entries())
+    await owner.scanCapacityReservation.create({
+      data: {
+        scanId,
+        accountId: f.accountId,
+        userId: f.accountId,
+        workspaceId: f.workspaceIds[index]!,
+        multiplier: mode === "DEEP" ? 3 : 1,
+        // Deterministic FIFO order across separate physical workspaces.
+        createdAt: new Date(now.getTime() + index),
+      },
+    })
+  const { reserveScanCapacity } = await import("./capacity")
+  return { reserveScanCapacity, now }
+}
+
 type Fixture = Awaited<ReturnType<typeof fixture>>
 async function insertReceipt(
   f: Fixture,
@@ -235,6 +268,8 @@ describe.skipIf(!enabled)("agent-minute metering against disposable PostgreSQL",
     try {
       if (owner && accounts.length) {
         // Cleanup is limited to this run's random fixture IDs.
+        await owner.userScanSlot.deleteMany({ where: { userId: { in: accounts } } })
+        await owner.scanCapacityReservation.deleteMany({ where: { accountId: { in: accounts } } })
         await owner.usageRecord.deleteMany({ where: { accountId: { in: accounts } } })
         await owner.minutePack.deleteMany({ where: { accountId: { in: accounts } } })
         await owner.billingAccount.deleteMany({ where: { accountId: { in: accounts } } })
@@ -245,6 +280,561 @@ describe.skipIf(!enabled)("agent-minute metering against disposable PostgreSQL",
       await owner?.$disconnect()
       await db?.prisma.$disconnect()
     }
+  })
+
+  it("preserves covered usage when the last grace minute is consumed", async () => {
+    const f = await fixture(1, 1)
+    await owner.billingAccount.updateMany({
+      where: { accountId: f.accountId },
+      data: { graceUsedMs: 14 * 60_000 },
+    })
+    const { reserveScanCapacity } = await enableCapacity(f)
+    expect(
+      await reserveScanCapacity({
+        workspaceId: f.workspaceId,
+        scanId: f.scanId,
+        maxRuntimeMs: 180_000,
+        start: true,
+      })
+    ).toMatchObject({ state: "RUNNING", runtimeLimitMs: 175_000, fundedMinutes: 3 })
+    const { enterGrace } = await import("../grace")
+    const result = await recordAgentMinutes(f.workspaceId, f.scanId, 3 * 60_000, {
+      phase: "engine_run",
+      cycleStart,
+      settleOverage: async (tx, minutes) => {
+        const grace = await enterGrace(f.accountId, minutes * 60_000, tx)
+        if (!grace.shouldContinue) throw new Error("AGENT_MINUTES_EXHAUSTED")
+      },
+    })
+    expect(result.minutes).toBe(3)
+    expect((await ledger(f)).usage).toHaveLength(1)
+    expect((await ledger(f)).packs[0]?.remainingMinutes).toBe(0)
+  })
+
+  it("serializes real cross-workspace reservations and leaves a capacity waiter unfunded", async () => {
+    const f = await fixture(2)
+    await owner.billingAccount.updateMany({
+      where: { accountId: f.accountId },
+      data: { graceUsedMs: 900_000 },
+    })
+    const { reserveScanCapacity } = await enableCapacity(f)
+    const results = await Promise.all(
+      f.scanIds.map((scanId, i) =>
+        reserveScanCapacity({
+          scanId,
+          workspaceId: f.workspaceIds[i]!,
+          maxRuntimeMs: 120_000,
+          start: true,
+        })
+      )
+    )
+    expect(results[0]).toMatchObject({
+      state: "RUNNING",
+      fundedMinutes: 2,
+      runtimeLimitMs: 115_000,
+    })
+    expect(results[1]).toEqual({ state: "WAITING" })
+    const waiting = await owner.scanCapacityReservation.findUniqueOrThrow({
+      where: { scanId: f.scanIds[1] },
+    })
+    expect(waiting.fundedMinutes).toBe(0)
+    expect(waiting.state).toBe("WAITING")
+  })
+
+  it("reserves the same sponsor across different initiating users and respects FIFO", async () => {
+    const f = await fixture(2)
+    const { reserveScanCapacity } = await enableCapacity(f)
+    const otherUser = `meter-account-${randomUUID()}`
+    accounts.push(otherUser)
+    await owner.user.create({
+      data: { id: otherUser, name: otherUser, email: `${otherUser}@example.test` },
+    })
+    await owner.scan.update({
+      where: { id: f.scanIds[1] },
+      data: { createdById: otherUser, sponsorAccountId: f.accountId },
+    })
+    await owner.scanCapacityReservation.update({
+      where: { scanId: f.scanIds[1] },
+      data: { userId: otherUser },
+    })
+    expect(
+      await reserveScanCapacity({
+        scanId: f.scanIds[1]!,
+        workspaceId: f.workspaceIds[1]!,
+        maxRuntimeMs: 120_000,
+      })
+    ).toEqual({ state: "WAITING" })
+    expect(
+      await reserveScanCapacity({
+        scanId: f.scanId,
+        workspaceId: f.workspaceId,
+        maxRuntimeMs: 120_000,
+        start: true,
+      })
+    ).toMatchObject({ fundedMinutes: 2 })
+    expect(
+      await reserveScanCapacity({
+        scanId: f.scanIds[1]!,
+        workspaceId: f.workspaceIds[1]!,
+        maxRuntimeMs: 60_000,
+        start: true,
+      })
+    ).toMatchObject({ state: "RUNNING", fundedMinutes: 1 })
+  })
+
+  it("Deep uses whole-minute rounding before its multiplier and absorbs stop latency", async () => {
+    const f = await fixture(5)
+    await owner.billingAccount.updateMany({
+      where: { accountId: f.accountId },
+      data: { graceUsedMs: 900_000 },
+    })
+    const { reserveScanCapacity } = await enableCapacity(f, "DEEP")
+    expect(
+      await reserveScanCapacity({
+        scanId: f.scanId,
+        workspaceId: f.workspaceId,
+        maxRuntimeMs: 120_000,
+        start: true,
+      })
+    ).toMatchObject({ fundedMinutes: 3, runtimeLimitMs: 55_000 })
+    const result = await recordAgentMinutes(f.workspaceId, f.scanId, 60_001, {
+      phase: "engine_run",
+      mode: "DEEP",
+      outcome: "partial",
+    })
+    expect(result.minutes).toBe(3)
+    const row = await owner.scanCapacityReservation.findUniqueOrThrow({
+      where: { scanId: f.scanId },
+    })
+    expect(row.absorbedMinutes).toBe(3)
+    expect(row.state).toBe("SETTLED")
+    const replay = await recordAgentMinutes(f.workspaceId, f.scanId, 60_001, {
+      phase: "engine_run",
+      mode: "DEEP",
+      outcome: "partial",
+    })
+    expect(replay.created).toBe(false)
+    expect((await ledger(f)).usage).toHaveLength(1)
+  })
+
+  it("reserves remaining eligible overage without adding grace", async () => {
+    const f = await fixture(1)
+    const { reserveScanCapacity, now } = await enableCapacity(f)
+    await owner.billingAccount.updateMany({
+      where: { accountId: f.accountId },
+      data: { currentPlan: "LAUNCH_ASSURANCE", spendLimitCents: 45 },
+    })
+    await owner.usageRecord.create({
+      data: {
+        accountId: f.accountId,
+        workspaceId: f.workspaceId,
+        kind: "overage_minutes",
+        quantity: 2,
+        cycleStart: now,
+        idempotencyKey: `${f.accountId}:prior-overage`,
+      },
+    })
+    expect(
+      await reserveScanCapacity({
+        scanId: f.scanId,
+        workspaceId: f.workspaceId,
+        maxRuntimeMs: 600_000,
+        start: true,
+      })
+    ).toMatchObject({ fundedMinutes: 2, runtimeLimitMs: 115_000 })
+    await recordAgentMinutes(f.workspaceId, f.scanId, 115_000, { phase: "engine_run" })
+    const row = await owner.scanCapacityReservation.findUniqueOrThrow({
+      where: { scanId: f.scanId },
+    })
+    expect(row.graceMinutes).toBe(0)
+    expect(row.overageMinutes).toBe(1)
+    const billing = await owner.billingAccount.findFirstOrThrow({
+      where: { accountId: f.accountId },
+    })
+    expect(billing.graceUsedMs).toBe(0)
+  })
+
+  it("rolls back reservation settlement if evidence finalization fails, without replaying engine work", async () => {
+    const f = await fixture(2, 2)
+    const { reserveScanCapacity } = await enableCapacity(f)
+    await reserveScanCapacity({
+      scanId: f.scanId,
+      workspaceId: f.workspaceId,
+      maxRuntimeMs: 180_000,
+      start: true,
+    })
+    await expect(
+      recordAgentMinutes(f.workspaceId, f.scanId, 180_000, {
+        phase: "engine_run",
+        beforeCommit: async () => {
+          throw new Error("evidence unavailable")
+        },
+      })
+    ).rejects.toThrow("evidence unavailable")
+    expect((await ledger(f)).usage).toHaveLength(0)
+    expect((await ledger(f)).packs[0]?.remainingMinutes).toBe(2)
+    expect(
+      (await owner.scanCapacityReservation.findUniqueOrThrow({ where: { scanId: f.scanId } })).state
+    ).toBe("RUNNING")
+    await expect(
+      reserveScanCapacity({
+        scanId: f.scanId,
+        workspaceId: f.workspaceId,
+        maxRuntimeMs: 180_000,
+        start: true,
+      })
+    ).rejects.toThrow("capacity_execution_already_started")
+    expect(await hasUnsettledScanIntent(f.workspaceId, f.scanId)).toBe(true)
+  })
+
+  it("holds terminal slots until stopped and durably settled; ambiguous commits remain held", async () => {
+    const f = await fixture(2)
+    const { reserveScanCapacity } = await enableCapacity(f)
+    const { confirmScanCapacityStopped } = await import("./capacity")
+    await owner.userScanSlot.create({
+      data: { userId: f.accountId, scanId: f.scanId, workspaceId: f.workspaceId },
+    })
+    await reserveScanCapacity({
+      scanId: f.scanId,
+      workspaceId: f.workspaceId,
+      maxRuntimeMs: 120_000,
+      start: true,
+    })
+    await owner.scan.update({ where: { id: f.scanId }, data: { status: "COMPLETED" } })
+    expect(await db.releaseStoppedScanSlot(f.workspaceId, f.scanId)).toBe(false)
+    await confirmScanCapacityStopped(f.workspaceId, f.scanId)
+    expect(
+      (await owner.scanCapacityReservation.findUniqueOrThrow({ where: { scanId: f.scanId } })).state
+    ).toBe("REVIEW_REQUIRED")
+    expect(await db.releaseStoppedScanSlot(f.workspaceId, f.scanId)).toBe(false)
+    expect(await owner.userScanSlot.count({ where: { userId: f.accountId } })).toBe(1)
+  })
+
+  it("enforces one user slot across workspaces using real shared createScan transactions", async () => {
+    const f = await fixture()
+    await owner.scan.updateMany({ where: { id: { in: f.scanIds } }, data: { status: "COMPLETED" } })
+    const targetIds: string[] = []
+    for (const workspaceId of f.workspaceIds) {
+      const target = await owner.target.create({
+        data: { workspaceId, name: "admission", type: "REPO", repoFullName: "fixture/repo" },
+      })
+      targetIds.push(target.id)
+    }
+    const results = await Promise.allSettled(
+      f.workspaceIds.map((workspaceId, i) =>
+        db.createScan({
+          workspaceId,
+          targetId: targetIds[i]!,
+          createdById: f.accountId,
+          mode: "STANDARD",
+          goal: "LAUNCH_REVIEW",
+        })
+      )
+    )
+    expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1)
+    const denied = results.find((r) => r.status === "rejected") as PromiseRejectedResult
+    expect(denied.reason.code).toBe("SCAN_ALREADY_ACTIVE")
+    expect(await owner.userScanSlot.count({ where: { userId: f.accountId } })).toBe(1)
+  })
+
+  it("keeps slot and reservation RLS closed without their owner context", async () => {
+    const f = await fixture(2)
+    await enableCapacity(f)
+    await owner.userScanSlot.create({
+      data: { userId: f.accountId, scanId: f.scanId, workspaceId: f.workspaceId },
+    })
+    const result = await db.withWorkspaceRLS(f.workspaceId, async (tx) => ({
+      slots: await tx.userScanSlot.count(),
+      reservations: await tx.scanCapacityReservation.count(),
+    }))
+    expect(result).toEqual({ slots: 0, reservations: 0 })
+  })
+
+  it("releases a queued cancellation atomically without freeing a running cancellation", async () => {
+    const f = await fixture(2)
+    const { reserveScanCapacity } = await enableCapacity(f)
+    await owner.userScanSlot.create({
+      data: { userId: f.accountId, scanId: f.scanId, workspaceId: f.workspaceId },
+    })
+    await owner.scan.update({ where: { id: f.scanId }, data: { status: "QUEUED" } })
+    await db.cancelScan(f.scanId, f.workspaceId)
+    expect(await owner.userScanSlot.count({ where: { userId: f.accountId } })).toBe(0)
+    expect(
+      (await owner.scanCapacityReservation.findUniqueOrThrow({ where: { scanId: f.scanId } })).state
+    ).toBe("RELEASED")
+    const scanId = f.scanIds[1]!,
+      workspaceId = f.workspaceIds[1]!
+    await owner.userScanSlot.create({ data: { userId: f.accountId, scanId, workspaceId } })
+    await reserveScanCapacity({ scanId, workspaceId, maxRuntimeMs: 120_000, start: true })
+    await db.cancelScan(scanId, workspaceId)
+    expect(await owner.userScanSlot.count({ where: { userId: f.accountId } })).toBe(1)
+    await recordAgentMinutes(workspaceId, scanId, 20_000, {
+      phase: "engine_run",
+      outcome: "cancelled",
+    })
+    const { confirmScanCapacityStopped } = await import("./capacity")
+    await confirmScanCapacityStopped(workspaceId, scanId)
+    expect(await db.releaseStoppedScanSlot(workspaceId, scanId)).toBe(true)
+    expect((await ledger(f)).usage[0]?.quantity).toBe(1)
+  })
+
+  it("revalidates expired packs and a new allowance cycle before provider admission", async () => {
+    const f = await fixture(1, 2)
+    await owner.billingAccount.updateMany({
+      where: { accountId: f.accountId },
+      data: { graceUsedMs: 900_000 },
+    })
+    const { reserveScanCapacity } = await enableCapacity(f)
+    expect(
+      await reserveScanCapacity({
+        scanId: f.scanId,
+        workspaceId: f.workspaceId,
+        maxRuntimeMs: 180_000,
+      })
+    ).toMatchObject({ fundedMinutes: 3 })
+    await owner.minutePack.updateMany({
+      where: { accountId: f.accountId },
+      data: { expiresAt: new Date(0) },
+    })
+    const nextCycle = new Date(Date.now() + 1_000)
+    await owner.billingAccount.updateMany({
+      where: { accountId: f.accountId },
+      data: { currentPeriodStart: nextCycle },
+    })
+    expect(
+      await reserveScanCapacity({
+        scanId: f.scanId,
+        workspaceId: f.workspaceId,
+        maxRuntimeMs: 180_000,
+        start: true,
+      })
+    ).toEqual({ state: "WAITING" })
+    const row = await owner.scanCapacityReservation.findUniqueOrThrow({
+      where: { scanId: f.scanId },
+    })
+    expect(row.fundedMinutes).toBe(0)
+  })
+
+  it("keeps genuine failed and pre-provider work free and releases its stopped capacity", async () => {
+    const f = await fixture(2)
+    const { reserveScanCapacity } = await enableCapacity(f)
+    await reserveScanCapacity({
+      scanId: f.scanId,
+      workspaceId: f.workspaceId,
+      maxRuntimeMs: 120_000,
+      start: true,
+    })
+    await recordAgentMinutes(f.workspaceId, f.scanId, 70_000, {
+      phase: "engine_run",
+      outcome: "failed",
+    })
+    await owner.scan.update({ where: { id: f.scanId }, data: { status: "FAILED" } })
+    const { confirmScanCapacityStopped } = await import("./capacity")
+    await confirmScanCapacityStopped(f.workspaceId, f.scanId)
+    expect((await ledger(f)).usage).toHaveLength(0)
+    expect(
+      (await owner.scanCapacityReservation.findUniqueOrThrow({ where: { scanId: f.scanId } })).state
+    ).toBe("RELEASED")
+    expect(
+      await reserveScanCapacity({
+        scanId: f.scanIds[1]!,
+        workspaceId: f.workspaceIds[1]!,
+        maxRuntimeMs: 120_000,
+        start: true,
+      })
+    ).toMatchObject({ fundedMinutes: 2 })
+  })
+
+  it("never unlocks a running scan solely because cancellation or a terminal status was written", async () => {
+    const f = await fixture(2)
+    const { reserveScanCapacity } = await enableCapacity(f)
+    await owner.userScanSlot.create({
+      data: { userId: f.accountId, scanId: f.scanId, workspaceId: f.workspaceId },
+    })
+    await reserveScanCapacity({
+      scanId: f.scanId,
+      workspaceId: f.workspaceId,
+      maxRuntimeMs: 120_000,
+      start: true,
+    })
+    await owner.scan.update({ where: { id: f.scanId }, data: { status: "FAILED" } })
+    await db.releaseUnstartedScanSlot(f.workspaceId, f.scanId)
+    expect(await db.releaseStoppedScanSlot(f.workspaceId, f.scanId)).toBe(false)
+    expect(await owner.userScanSlot.count({ where: { userId: f.accountId } })).toBe(1)
+  })
+
+  it.each([
+    [0, 15],
+    [840_000, 1],
+    [840_001, 0],
+    [900_000, 0],
+    [960_000, 0],
+  ])(
+    "reserves only whole grace units with %i milliseconds already used",
+    async (used, expected) => {
+      const f = await fixture()
+      const { reserveScanCapacity } = await enableCapacity(f)
+      await owner.billingAccount.updateMany({
+        where: { accountId: f.accountId },
+        data: { graceUsedMs: used },
+      })
+      const result = await reserveScanCapacity({
+        scanId: f.scanId,
+        workspaceId: f.workspaceId,
+        maxRuntimeMs: 900_000,
+        start: true,
+      })
+      if (expected) expect(result).toMatchObject({ state: "RUNNING", fundedMinutes: expected })
+      else expect(result).toEqual({ state: "WAITING" })
+    }
+  )
+
+  it("retains the v2 slot after a genuine PostgreSQL serialization failure following durable evidence", async () => {
+    const f = await fixture(0, 5)
+    const { reserveScanCapacity } = await enableCapacity(f)
+    await owner.userScanSlot.create({
+      data: { userId: f.accountId, scanId: f.scanId, workspaceId: f.workspaceId },
+    })
+    await reserveScanCapacity({
+      scanId: f.scanId,
+      workspaceId: f.workspaceId,
+      maxRuntimeMs: 180_000,
+      start: true,
+    })
+    const finalize = vi.fn(async () => {
+      await owner.$transaction(
+        async (tx) => {
+          // A real SSI cycle: meter read Scan and writes MinutePack; this
+          // independent transaction reads MinutePack and durably writes Scan.
+          await tx.minutePack.findMany({ where: { accountId: f.accountId } })
+          await tx.scan.update({ where: { id: f.scanId }, data: { status: "PARTIAL" } })
+        },
+        { isolationLevel: "Serializable" }
+      )
+    })
+    await expect(
+      recordAgentMinutes(f.workspaceId, f.scanId, 175_000, {
+        phase: "engine_run",
+        beforeCommit: finalize,
+      })
+    ).rejects.toMatchObject({ name: "DriverAdapterError" })
+    expect(finalize).toHaveBeenCalledTimes(1)
+    expect((await ledger(f)).usage).toHaveLength(0)
+    expect((await ledger(f)).packs[0]?.remainingMinutes).toBe(5)
+    expect(await hasUnsettledScanIntent(f.workspaceId, f.scanId)).toBe(true)
+    const { confirmScanCapacityStopped } = await import("./capacity")
+    await confirmScanCapacityStopped(f.workspaceId, f.scanId)
+    expect(
+      (await owner.scanCapacityReservation.findUniqueOrThrow({ where: { scanId: f.scanId } })).state
+    ).toBe("REVIEW_REQUIRED")
+    expect(await db.releaseStoppedScanSlot(f.workspaceId, f.scanId)).toBe(false)
+  })
+
+  it("keeps deterministic execution in the user slot without blocking account funding FIFO", async () => {
+    const f = await fixture()
+    await owner.scan.updateMany({ where: { id: { in: f.scanIds } }, data: { status: "COMPLETED" } })
+    const target = await owner.target.create({
+      data: {
+        workspaceId: f.workspaceId,
+        name: "surface",
+        type: "WEB_APP",
+        url: "https://example.test",
+      },
+    })
+    const scan = await db.createScan({
+      workspaceId: f.workspaceId,
+      targetId: target.id,
+      createdById: f.accountId,
+      mode: "SAFE",
+      goal: "LAUNCH_REVIEW",
+    })
+    const reservation = await owner.scanCapacityReservation.findUniqueOrThrow({
+      where: { scanId: scan.id },
+    })
+    expect(reservation).toMatchObject({ state: "RESERVED", fundedMinutes: 0 })
+    const { startUnmeteredScanCapacity, confirmScanCapacityStopped } = await import("./capacity")
+    await startUnmeteredScanCapacity(f.workspaceId, scan.id)
+    await db.cancelScan(scan.id, f.workspaceId)
+    expect(await owner.userScanSlot.count({ where: { userId: f.accountId } })).toBe(1)
+    await confirmScanCapacityStopped(f.workspaceId, scan.id, true)
+    expect(await db.releaseStoppedScanSlot(f.workspaceId, scan.id)).toBe(true)
+    expect((await ledger(f)).usage).toHaveLength(0)
+  })
+
+  it("drops a provisional reservation when another scan requires accounting review before provider start", async () => {
+    const f = await fixture(10)
+    const { reserveScanCapacity } = await enableCapacity(f)
+    expect(
+      await reserveScanCapacity({
+        scanId: f.scanId,
+        workspaceId: f.workspaceId,
+        maxRuntimeMs: 180_000,
+      })
+    ).toMatchObject({ state: "RESERVED", fundedMinutes: 3 })
+    await owner.scanCapacityReservation.update({
+      where: { scanId: f.scanIds[1] },
+      data: { state: "REVIEW_REQUIRED" },
+    })
+    expect(
+      await reserveScanCapacity({
+        scanId: f.scanId,
+        workspaceId: f.workspaceId,
+        maxRuntimeMs: 180_000,
+        start: true,
+      })
+    ).toEqual({ state: "WAITING" })
+    expect(
+      await owner.scanCapacityReservation.findUniqueOrThrow({ where: { scanId: f.scanId } })
+    ).toMatchObject({ state: "WAITING", fundedMinutes: 0, packAllocations: [] })
+  })
+
+  it("returns funding to WAITING for a worker-proven pre-provider retry while retaining the user slot", async () => {
+    const f = await fixture(5)
+    const now = new Date()
+    await owner.scan.updateMany({ where: { id: { in: f.scanIds } }, data: { status: "COMPLETED" } })
+    await owner.billingAccount.updateMany({
+      where: { accountId: f.accountId },
+      data: { currentPeriodStart: now },
+    })
+    await owner.usageRecord.updateMany({
+      where: { accountId: f.accountId },
+      data: { cycleStart: now },
+    })
+    const target = await owner.target.create({
+      data: {
+        workspaceId: f.workspaceId,
+        name: "retry",
+        type: "REPO",
+        repoFullName: "fixture/retry",
+      },
+    })
+    const scan = await db.createScan({
+      workspaceId: f.workspaceId,
+      targetId: target.id,
+      createdById: f.accountId,
+      mode: "STANDARD",
+      goal: "LAUNCH_REVIEW",
+    })
+    const { reserveScanCapacity, resetUnstartedScanCapacity } = await import("./capacity")
+    await reserveScanCapacity({
+      scanId: scan.id,
+      workspaceId: f.workspaceId,
+      maxRuntimeMs: 120_000,
+      start: true,
+    })
+    await resetUnstartedScanCapacity(f.workspaceId, scan.id)
+    expect(
+      await owner.scanCapacityReservation.findUniqueOrThrow({ where: { scanId: scan.id } })
+    ).toMatchObject({ state: "WAITING", fundedMinutes: 0 })
+    expect(await owner.userScanSlot.count({ where: { userId: f.accountId } })).toBe(1)
+    expect(
+      await reserveScanCapacity({
+        scanId: scan.id,
+        workspaceId: f.workspaceId,
+        maxRuntimeMs: 120_000,
+        start: true,
+      })
+    ).toMatchObject({ state: "RUNNING", fundedMinutes: 2 })
   })
 
   it("settles concurrent phases across workspaces against one account and retries real serialization contention", async () => {

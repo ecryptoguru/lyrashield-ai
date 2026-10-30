@@ -1,3 +1,4 @@
+import { releaseUnstartedScanSlot, UserScanAlreadyActiveError } from "@lyrashield/db"
 import { recordedOperation } from "@/lib/recorded-operation"
 import { withCookieMutation } from "../../../../../lib/api-auth"
 import {
@@ -275,6 +276,10 @@ async function post(request: Request, { params }: { params: Promise<{ id: string
               : {}),
           })
         } catch (error) {
+          if (error instanceof UserScanAlreadyActiveError) {
+            confirmNotSubmitted()
+            return apiError(error.code, error.message, 409)
+          }
           if (error instanceof WorkspaceScanConcurrencyLimitError) {
             return apiError(
               "SCAN_CONCURRENCY_LIMIT",
@@ -308,6 +313,7 @@ async function post(request: Request, { params }: { params: Promise<{ id: string
             errorCategory: "RETEST_SETUP",
             errorMessage: "Retest could not be prepared before queueing",
           })
+          await releaseUnstartedScanSlot(workspaceId, scan.id)
           throw error
         }
 
@@ -329,6 +335,7 @@ async function post(request: Request, { params }: { params: Promise<{ id: string
             where: { id: retest.id },
             data: { status: "error", resultAfter: "Retest could not be queued." },
           })
+          await releaseUnstartedScanSlot(workspaceId, scan.id)
           logger.error("Failed to enqueue retest scan", {
             findingId: id,
             scanId: scan.id,

@@ -1,3 +1,4 @@
+import { releaseUnstartedScanSlot, UserScanAlreadyActiveError } from "@lyrashield/db"
 import { withCookieMutation, authErrorResponse } from "../../../lib/api-auth"
 import { createHash } from "crypto"
 import {
@@ -671,6 +672,7 @@ async function post(request: Request) {
         errorCategory: "QUEUE",
         errorMessage: "Scan worker became unavailable while queueing the scan",
       })
+      await releaseUnstartedScanSlot(workspaceId, scan.id)
       revalidateDashboardAggregates(workspaceId)
       return refuseScan({
         workspaceId,
@@ -750,6 +752,19 @@ async function post(request: Request) {
       201
     )
   } catch (error) {
+    if (error instanceof UserScanAlreadyActiveError) {
+      return refuseScan({
+        workspaceId,
+        actorUserId,
+        reason: "scan_in_progress",
+        code: error.code,
+        message: error.message,
+        status: 409,
+        targetId: data.targetId,
+        mode: data.mode,
+        workflow: data.workflow,
+      })
+    }
     if (error instanceof WorkspaceScanConcurrencyLimitError) {
       return refuseScan({
         workspaceId,
