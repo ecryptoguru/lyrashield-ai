@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { prisma } from "@lyrashield/db"
+import { prisma, SCAN_ACCOUNTING_PROTOCOL } from "@lyrashield/db"
 import { getRedis } from "@lyrashield/integrations"
 import { logger } from "@lyrashield/logger"
 
@@ -14,7 +14,13 @@ export async function GET() {
   if (!redis) {
     return NextResponse.json(
       { status: "not_ready", checks: { database: false, redis: false } },
-      { status: 503, headers: { "Cache-Control": "no-store" } }
+      {
+        status: 503,
+        headers: {
+          "Cache-Control": "no-store",
+          "X-LyraShield-Accounting-Protocol": SCAN_ACCOUNTING_PROTOCOL,
+        },
+      }
     )
   }
 
@@ -31,6 +37,12 @@ export async function GET() {
   if (!ready) logger.error("Readiness check failed", checks)
   return NextResponse.json(
     { status: ready ? "ready" : "not_ready", checks },
-    { status: ready ? 200 : 503, headers: { "Cache-Control": "no-store" } }
+    {
+      status: ready ? 200 : 503,
+      headers: {
+        "Cache-Control": "no-store",
+        "X-LyraShield-Accounting-Protocol": SCAN_ACCOUNTING_PROTOCOL,
+      },
+    }
   )
 }

@@ -275,16 +275,26 @@ test("deployment step order, recovery conditions and app/scanner env key sets st
   )
   assert.equal(
     normalizedIf("Roll back production traffic on health failure"),
-    "inputs.held_recovery != true && inputs.webhook_claims_cutover != true && failure() && (steps.promote.outcome == 'failure' || steps.smoke-public.outcome == 'failure' || steps.ordinary-worker-login.outcome == 'failure' || steps.worker-vm.outcome == 'failure')"
+    "inputs.held_recovery != true && inputs.webhook_claims_cutover != true && env.V26_CUTOVER != 'true' && failure() && (steps.promote.outcome == 'failure' || steps.smoke-public.outcome == 'failure' || steps.ordinary-worker-login.outcome == 'failure' || steps.worker-vm.outcome == 'failure')"
   )
   assert.equal(
     normalizedIf("Restore prior ingress mode after failed rollout"),
-    "inputs.held_recovery != true && inputs.webhook_claims_cutover != true && failure() && steps.deploy-app.outputs.previous_client_cert_mode != '' && (steps.deploy-app.outcome == 'failure' || steps.deploy-scanner.outcome == 'failure' || steps.deploy-egress-proxy.outcome == 'failure' || steps.smoke-candidates.outcome == 'failure' || steps.worker-preflight.outcome == 'failure' || steps.promote.outcome == 'failure' || steps.smoke-public.outcome == 'failure' || steps.ordinary-worker-login.outcome == 'failure' || steps.worker-vm.outcome == 'failure')"
+    "inputs.held_recovery != true && inputs.webhook_claims_cutover != true && env.V26_CUTOVER != 'true' && failure() && steps.deploy-app.outputs.previous_client_cert_mode != '' && (steps.deploy-app.outcome == 'failure' || steps.deploy-scanner.outcome == 'failure' || steps.deploy-egress-proxy.outcome == 'failure' || steps.smoke-candidates.outcome == 'failure' || steps.worker-preflight.outcome == 'failure' || steps.promote.outcome == 'failure' || steps.smoke-public.outcome == 'failure' || steps.ordinary-worker-login.outcome == 'failure' || steps.worker-vm.outcome == 'failure')"
   )
   assert.equal(
     normalizedIf("Deactivate zero-traffic candidates after failed rollout"),
-    "inputs.held_recovery != true && inputs.webhook_claims_cutover != true && failure() && (steps.deploy-app.outcome == 'failure' || steps.deploy-scanner.outcome == 'failure' || steps.deploy-egress-proxy.outcome == 'failure' || steps.smoke-candidates.outcome == 'failure' || steps.worker-preflight.outcome == 'failure' || steps.promote.outcome == 'failure' || steps.smoke-public.outcome == 'failure' || steps.ordinary-worker-login.outcome == 'failure' || steps.worker-vm.outcome == 'failure')"
+    "inputs.held_recovery != true && inputs.webhook_claims_cutover != true && env.V26_CUTOVER != 'true' && failure() && (steps.deploy-app.outcome == 'failure' || steps.deploy-scanner.outcome == 'failure' || steps.deploy-egress-proxy.outcome == 'failure' || steps.smoke-candidates.outcome == 'failure' || steps.worker-preflight.outcome == 'failure' || steps.promote.outcome == 'failure' || steps.smoke-public.outcome == 'failure' || steps.ordinary-worker-login.outcome == 'failure' || steps.worker-vm.outcome == 'failure')"
   )
+
+  for (const name of [
+    "Roll back production traffic on health failure",
+    "Restore prior ingress mode after failed rollout",
+    "Deactivate zero-traffic candidates after failed rollout",
+  ])
+    assert.ok(
+      normalizedIf(name).includes("env.V26_CUTOVER != 'true'"),
+      `${name} must exclude one-time v26 maintenance`
+    )
 
   const app = functionBody(rollout, "deploy-app-container-app")
   const scanner = functionBody(rollout, "deploy-scanner-container-app")
@@ -411,8 +421,9 @@ test("deployment step order, recovery conditions and app/scanner env key sets st
     "ops/deployment/containerapp.sh",
   ]) {
     const lineCount = readFileSync(file, "utf8").split("\n").length - 1
-    // Preserve the original budget for every other deploy file.
-    const limit = file === ".github/workflows/deploy-azure-runtime.yml" ? 1045 : 900
+    // The reviewed one-time v26 cutover adds explicit maintenance steps.
+    // Its runtime-only budget is 1150; every other file retains its 900-line cap.
+    const limit = file === ".github/workflows/deploy-azure-runtime.yml" ? 1150 : 900
     assert.ok(lineCount < limit, `${file} has ${lineCount} lines; expected fewer than ${limit}`)
   }
 

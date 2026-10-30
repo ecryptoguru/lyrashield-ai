@@ -242,8 +242,13 @@ if [ "${1:-}" = "--preflight" ]; then
 fi
 
 webhook_cutover=0
+v26_cutover=0
 webhook_recovery=0
 case "${1:-}" in
+  --v26-cutover)
+    v26_cutover=1
+    shift
+    ;;
   --webhook-claims-cutover)
     webhook_cutover=1
     shift
@@ -254,6 +259,9 @@ case "${1:-}" in
     shift
     ;;
 esac
+
+maintenance_cutover=0
+if [ "$webhook_cutover" -eq 1 ] || [ "$v26_cutover" -eq 1 ]; then maintenance_cutover=1; fi
 
 target=${1:?worker image digest reference is required}
 expected_app=${2:?product revision is required}
@@ -298,7 +306,7 @@ fi
 old_image=$(sed -n 's/^LYRASHIELD_WORKER_IMAGE=//p' "$config")
 [ -n "$old_image" ]
 backup="${config}.rollback-${expected_app}"
-if [ "$webhook_cutover" -eq 1 ]; then
+if [ "$maintenance_cutover" -eq 1 ]; then
   # Each stopped image keeps its own forensic config; a rerun must not replace
   # the original legacy snapshot with a compatible candidate's configuration.
   backup="${config}.cutover-prior-${expected_app}-${old_image##*@sha256:}"
@@ -324,6 +332,23 @@ redis_eval() {
 }
 
 assert_cutover_receipt() {
+  if [ "$v26_cutover" -eq 1 ]; then
+    receipt_file=${LYRASHIELD_V26_RECEIPT_FILE:-/var/lib/lyrashield/v26-cutover.json}
+    [ ! -L "$receipt_file" ] && [ "$(stat -c '%u:%a' "$receipt_file")" = 0:600 ] || return 1
+    : "${LYRASHIELD_V26_REQUEST_BASE64:?}" "${LYRASHIELD_V26_IDENTITY_MODULE_BASE64:?}"
+    saved_config=$config
+    capability_config=$(mktemp "${config}.v26-capability.XXXXXX")
+    sed "s|^LYRASHIELD_WORKER_IMAGE=.*|LYRASHIELD_WORKER_IMAGE=$target|" "$config" > "$capability_config"
+    config=$capability_config
+    verified_status=0
+    verified=$(worker_candidate_oneshot 'const {assertV26WorkerIdentity}=await import("data:text/javascript;base64,"+process.argv[1]); const {SCAN_ACCOUNTING_PROTOCOL}=await import("@lyrashield/db"); const receipt=JSON.parse(process.argv[2]); const request=JSON.parse(Buffer.from(process.argv[3],"base64").toString()); const stop=assertV26WorkerIdentity({receipt,request,image:process.argv[4],environment:process.env,protocol:SCAN_ACCOUNTING_PROTOCOL}); if(process.argv[5]&&Object.entries(JSON.parse(process.argv[5])).some(([key,value])=>receipt.baseline.worker[key]!==value))throw new Error("v26 candidate live environment mismatch"); const {default:Redis}=await import("ioredis"); const redis=new Redis(process.env.REDIS_URL,{maxRetriesPerRequest:1}); try { if(await redis.get("lyrashield:scan-admission:stopped")!==stop)throw new Error("v26 owned stop changed"); console.log("MATCH"); }finally{await redis.quit();}' "$LYRASHIELD_V26_IDENTITY_MODULE_BASE64" "$(cat "$receipt_file")" "$LYRASHIELD_V26_REQUEST_BASE64" "$target" "${1:-}") || verified_status=$?
+    config=$saved_config
+    rm -f "$capability_config"
+    capability_config=
+    [ "$verified_status" = 0 ] || return 1
+    [ "$verified" = MATCH ] || return 1
+    return 0
+  fi
   receipt_file=${LYRASHIELD_WEBHOOK_CUTOVER_RECEIPT_FILE:-/var/lib/lyrashield/webhook-claims-cutover.json}
   if [ "$webhook_recovery" -eq 1 ]; then
     : "${LYRASHIELD_WEBHOOK_CUTOVER_ORIGINAL_RUN_ID:?}" \
@@ -498,7 +523,7 @@ cleanup_host_assets() {
 rollback() {
   status=$?
   trap - EXIT HUP INT TERM
-  if [ "$promotion_complete" -ne 1 ] && [ "$webhook_cutover" -eq 1 ]; then
+  if [ "$promotion_complete" -ne 1 ] && [ "$maintenance_cutover" -eq 1 ]; then
     # Schema cutover is forward-only. Never restore or restart legacy writers.
     systemctl disable --now "$timer" || true
     systemctl disable --now "$service" || true
@@ -541,7 +566,7 @@ systemctl is-active --quiet lyrashield-worker-egress-refresh.service && {
   exit 1
 }
 promotion_step=checking-current-worker
-if [ "$webhook_cutover" -eq 1 ]; then
+if [ "$maintenance_cutover" -eq 1 ]; then
   systemctl disable --now "$timer"
   assert_cutover_timer_stopped
   if [ "$webhook_recovery" -eq 1 ]; then
@@ -560,14 +585,16 @@ fi
 # Normal promotions refresh Key Vault values before read-only checks. Held
 # recovery preserves the original cutover's connection identity and must not
 # sync or rotate those values.
-if [ "$webhook_recovery" -eq 0 ]; then
+if [ "$webhook_recovery" -eq 0 ] && [ "$v26_cutover" -eq 0 ]; then
   refresh_worker_secrets
 fi
 
 # JavaScript template literal is passed verbatim to the container.
 # shellcheck disable=SC2016
 promotion_step=claiming-admission-stop
-if [ "$webhook_cutover" -eq 1 ]; then
+if [ "$v26_cutover" -eq 1 ]; then
+  : "${LYRASHIELD_V26_REQUEST_BASE64:?}"
+elif [ "$maintenance_cutover" -eq 1 ]; then
   assert_cutover_receipt
 else
   # shellcheck disable=SC2016
@@ -647,6 +674,17 @@ app_label=$(docker image inspect "$target" --format '{{index .Config.Labels "org
 engine_label=$(docker image inspect "$target" --format '{{index .Config.Labels "io.lyrashield.engine.revision"}}')
 [ "$app_label" = "$expected_app" ]
 [ "$engine_label" = "$expected_engine" ]
+if [ "$v26_cutover" -eq 1 ] || [ -f /var/lib/lyrashield/v26-cutover.json ]; then
+  [ "$(docker image inspect "$target" --format '{{index .Config.Labels "io.lyrashield.accounting.protocol"}}')" = reservations/2 ] || exit 1
+  protocol=$(worker_candidate_oneshot 'const {SCAN_ACCOUNTING_PROTOCOL}=await import("@lyrashield/db");console.log(SCAN_ACCOUNTING_PROTOCOL)')
+  [ "$protocol" = reservations/2 ] || exit 1
+  # An ordinary release may restore only an actually compatible prior worker.
+  if [ "$v26_cutover" -eq 0 ]; then
+    [ "$(docker image inspect "$old_image" --format '{{index .Config.Labels "io.lyrashield.accounting.protocol"}}')" = reservations/2 ] || exit 1
+    old_protocol=$(worker_oneshot 'const {SCAN_ACCOUNTING_PROTOCOL}=await import("@lyrashield/db");console.log(SCAN_ACCOUNTING_PROTOCOL)')
+    [ "$old_protocol" = reservations/2 ] || exit 1
+  fi
+fi
 if [ "$webhook_cutover" -eq 1 ]; then
   promotion_step=checking-webhook-claim-capability
   # The exported protocol belongs to the digest-pinned candidate, never the old image.
@@ -668,6 +706,11 @@ if [ "$webhook_cutover" -eq 1 ]; then
   else
     assert_legacy_worker_stopped
   fi
+fi
+
+if [ "$v26_cutover" -eq 1 ]; then
+  assert_cutover_receipt
+  assert_recovery_worker_stopped
 fi
 
 # Host scripts and units are release assets bound to the same reviewed image
@@ -772,7 +815,7 @@ console.log(JSON.stringify(appendWebhookRecoveryCandidate(receipt,candidate)));'
   sync -f "$(dirname "$receipt_file")"
 fi
 
-if [ "$webhook_cutover" -eq 0 ] || [ ! -e "$backup" ]; then
+if [ "$maintenance_cutover" -eq 0 ] || [ ! -e "$backup" ]; then
   cp -p "$config" "$backup"
 fi
 temporary=$(mktemp "${config}.XXXXXX")
@@ -801,7 +844,7 @@ wait_healthy
 [ "$(docker exec "$container" printenv LYRASHIELD_ENGINE_REVISION)" = "$expected_engine" ]
 [ "$(docker exec "$container" printenv LYRASHIELD_WORKER_IMAGE_DIGEST)" = "${target##*@}" ]
 
-if [ "$webhook_cutover" -eq 1 ]; then
+if [ "$maintenance_cutover" -eq 1 ]; then
   promotion_step=checking-held-cutover
   # The pipeline alone releases this receipt after compatible app/scanner health.
   # Readback uses the pre-promotion image retained by the maintenance receipt.
@@ -817,7 +860,11 @@ if [ "$webhook_cutover" -eq 1 ]; then
   promotion_complete=1
   trap - EXIT HUP INT TERM
   cleanup_host_assets
-  echo "Worker webhook cutover passed for ${target##*@}; scan admission held"
+  if [ "$v26_cutover" -eq 1 ]; then
+    echo "Worker v26 cutover passed for ${target##*@}; scan admission held"
+  else
+    echo "Worker webhook cutover passed for ${target##*@}; scan admission held"
+  fi
   exit 0
 fi
 

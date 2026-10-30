@@ -559,6 +559,7 @@ export {
 export { hydrateOsvDetails, hasOsvDetails, OsvVulnerabilitySchema } from "./osv-details"
 
 export {
+  SCAN_ACCOUNTING_PROTOCOL,
   lockUserScanAdmission,
   releaseStoppedScanSlot,
   releaseUnstartedScanSlot,

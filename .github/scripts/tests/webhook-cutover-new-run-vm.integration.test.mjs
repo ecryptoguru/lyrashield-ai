@@ -799,12 +799,24 @@ test("held recovery skips migration execution and keeps promotion failure forwar
   assert.match(migrationStep, /if: inputs\.held_recovery != true/)
 
   const promoter = readFileSync(".github/scripts/promote-worker-vm.sh", "utf8")
+  assert.match(
+    promoter,
+    /if \[ "\$webhook_cutover" -eq 1 \] \|\| \[ "\$v26_cutover" -eq 1 \]; then maintenance_cutover=1; fi/
+  )
+  assert.match(
+    promoter,
+    /if \[ "\$webhook_cutover" -eq 1 \]; then\n  promotion_step=recording-webhook-candidate/
+  )
+  assert.match(
+    promoter,
+    /if \[ "\$v26_cutover" -eq 1 \]; then\n    receipt_file=\$\{LYRASHIELD_V26_RECEIPT_FILE/
+  )
   const recoveryBranch = promoter.indexOf("promotion_step=recording-webhook-candidate")
   const recoverySchema = promoter.indexOf("assert_recovery_schema", recoveryBranch)
   const restart = promoter.indexOf('systemctl restart "$service"', recoverySchema)
   assert.ok(recoveryBranch >= 0 && recoverySchema > recoveryBranch && restart > recoverySchema)
   const heldFailureStart = promoter.indexOf(
-    'if [ "$promotion_complete" -ne 1 ] && [ "$webhook_cutover" -eq 1 ];'
+    'if [ "$promotion_complete" -ne 1 ] && [ "$maintenance_cutover" -eq 1 ];'
   )
   const genericRollbackStart = promoter.indexOf(
     'if [ "$promotion_complete" -ne 1 ];',
@@ -839,6 +851,8 @@ set +e
 timer=lyrashield-worker-egress-refresh.timer
 service=lyrashield-worker.service
 webhook_cutover=1
+v26_cutover=0
+maintenance_cutover=1
 promotion_complete=0
 promotion_step=checking-restarted-worker
 systemctl(){ printf 'systemctl %s\\n' "$*" >> "$PROMOTER_TEST_CALLS"; }

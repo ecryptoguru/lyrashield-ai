@@ -52,8 +52,12 @@ permissions:
   actions: read
   contents: read
   id-token: write
+  packages: read
 env:
   DEPLOY_SHA: ${{ inputs.source_sha }}
+  V26_CUTOVER: "false"
+  WEB_DIGEST: ${{ inputs.web_digest }}
+  WORKER_DIGEST: ${{ inputs.worker_digest }}
   WEBHOOK_CLAIMS_CUTOVER: ${{ inputs.webhook_claims_cutover && 'true' || 'false' }}
   WEBHOOK_CUTOVER_RECOVERY: ${{ inputs.held_recovery && 'true' || 'false' }}
   LYRASHIELD_ADMISSION_STOP_OWNER: ${{ github.run_id }}:${{ github.run_attempt }}
@@ -188,6 +192,7 @@ jobs:
     permissions:
       actions: read
       contents: read
+      packages: read
       # v16 4.3: production Azure login moved from the long-lived
       # AZURE_CREDENTIALS service-principal secret to federated OIDC, the
       # same model the desktop release already uses. Requires the
@@ -254,6 +259,12 @@ jobs:
 
       - name: Ensure Container Apps extension
         run: az extension add --name containerapp --yes --only-show-errors
+
+      - name: Recheck v26 maintenance before any production mutation
+        env:
+          RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+          WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
+        run: bash .github/scripts/assert-no-held-v26.sh
 
       - name: Revalidate original held cutover before recovery mutations
         if: inputs.held_recovery == true
@@ -338,52 +349,6 @@ jobs:
           CLOUDFLARE_AOP_CERT_SHA256: ${{ env.CLOUDFLARE_AOP_CERT_SHA256 }}
         run: node .github/scripts/verify-billing-deployment-config.mjs
 
-      - name: Ensure app and scanner system identities
-        if: inputs.held_recovery != true
-        env:
-          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
-          AZURE_APP_CONTAINER_APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
-          AZURE_SCANNER_CONTAINER_APP_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
-        run: bash .github/scripts/deploy-azure-preflight.sh ensure-app-and-scanner-system-identities
-      - name: Prepare private registry and zero-downtime rollout
-        if: inputs.held_recovery != true
-        id: rollout
-        env:
-          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
-          AZURE_KEY_VAULT_NAME: ${{ vars.AZURE_KEY_VAULT_NAME || 'lyrashieldprodsecrets' }}
-          AZURE_APP_CONTAINER_APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
-          AZURE_SCANNER_CONTAINER_APP_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
-          AZURE_EGRESS_PROXY_CONTAINER_APP_NAME: ${{ vars.AZURE_EGRESS_PROXY_CONTAINER_APP_NAME }}
-          GHCR_USERNAME: ${{ github.repository_owner }}
-          WEB_IMAGE: ${{ inputs.web_image }}
-          WEB_DIGEST: ${{ inputs.web_digest }}
-          EGRESS_PROXY_IMAGE: ${{ inputs.egress_proxy_image }}
-          EGRESS_PROXY_DIGEST: ${{ inputs.egress_proxy_digest }}
-        run: bash .github/scripts/deploy-azure-preflight.sh prepare-private-registry-and-zero-downtime-rollout
-      - name: Verify retained registry and revision configuration for held recovery
-        if: inputs.held_recovery == true
-        env:
-          RG: ${{ vars.AZURE_RESOURCE_GROUP }}
-          APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
-          SCANNER_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
-          EGRESS_NAME: ${{ vars.AZURE_EGRESS_PROXY_CONTAINER_APP_NAME }}
-        run: |
-          set -euo pipefail
-          for name in "$APP_NAME" "$SCANNER_NAME" "$EGRESS_NAME"; do
-            [ -n "$name" ] || continue
-            mode=$(az containerapp show --name "$name" --resource-group "$RG" --query properties.configuration.activeRevisionsMode --output tsv)
-            identity=$(az containerapp show --name "$name" --resource-group "$RG" --query identity.type --output tsv)
-            registry=$(az containerapp registry list --name "$name" --resource-group "$RG" --query "[?server=='ghcr.io'].server | [0]" --output tsv)
-            [[ "$mode" = Multiple && "$identity" = *SystemAssigned* && "$registry" = ghcr.io ]] || {
-              echo "::error::Held recovery requires existing multiple-revision, system identity and GHCR registry configuration."
-              exit 1
-            }
-          done
-      # Schema first, then code. Migrations previously ran only in CI against a throwaway
-      # database and never against production, so a release needing a schema change served
-      # 500s until someone remembered to run this by hand. Ordering matters: new code must
-      # never meet an old schema, which means migrations must be additive and
-      # backward-compatible with the currently running image.
       - name: Configure git default branch
         run: git config --global init.defaultBranch main
 
@@ -438,6 +403,71 @@ jobs:
           NODE
           tar -xzf "$archive" --no-same-owner -C "$GITHUB_WORKSPACE"
 
+      - name: Authenticate exact image qualification
+        if: inputs.held_recovery != true
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Classify actual v26 schema and complete writer fleet
+        if: inputs.held_recovery != true
+        id: v26-prepare
+        env:
+          RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+          APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
+          SCANNER_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
+          WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
+          DATABASE_DIRECT_URL: ${{ secrets.DATABASE_DIRECT_URL }}
+          BULLMQ_REDIS_URL: ${{ secrets.BULLMQ_REDIS_URL }}
+        run: node .github/scripts/v26-cutover.mjs prepare
+      - name: Ensure app and scanner system identities
+        if: inputs.held_recovery != true
+        env:
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          AZURE_APP_CONTAINER_APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
+          AZURE_SCANNER_CONTAINER_APP_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
+        run: bash .github/scripts/deploy-azure-preflight.sh ensure-app-and-scanner-system-identities
+      - name: Prepare private registry and zero-downtime rollout
+        if: inputs.held_recovery != true
+        id: rollout
+        env:
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          AZURE_KEY_VAULT_NAME: ${{ vars.AZURE_KEY_VAULT_NAME || 'lyrashieldprodsecrets' }}
+          AZURE_APP_CONTAINER_APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
+          AZURE_SCANNER_CONTAINER_APP_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
+          AZURE_EGRESS_PROXY_CONTAINER_APP_NAME: ${{ vars.AZURE_EGRESS_PROXY_CONTAINER_APP_NAME }}
+          GHCR_USERNAME: ${{ github.repository_owner }}
+          WEB_IMAGE: ${{ inputs.web_image }}
+          WEB_DIGEST: ${{ inputs.web_digest }}
+          EGRESS_PROXY_IMAGE: ${{ inputs.egress_proxy_image }}
+          EGRESS_PROXY_DIGEST: ${{ inputs.egress_proxy_digest }}
+        run: bash .github/scripts/deploy-azure-preflight.sh prepare-private-registry-and-zero-downtime-rollout
+      - name: Verify retained registry and revision configuration for held recovery
+        if: inputs.held_recovery == true
+        env:
+          RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+          APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
+          SCANNER_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
+          EGRESS_NAME: ${{ vars.AZURE_EGRESS_PROXY_CONTAINER_APP_NAME }}
+        run: |
+          set -euo pipefail
+          for name in "$APP_NAME" "$SCANNER_NAME" "$EGRESS_NAME"; do
+            [ -n "$name" ] || continue
+            mode=$(az containerapp show --name "$name" --resource-group "$RG" --query properties.configuration.activeRevisionsMode --output tsv)
+            identity=$(az containerapp show --name "$name" --resource-group "$RG" --query identity.type --output tsv)
+            registry=$(az containerapp registry list --name "$name" --resource-group "$RG" --query "[?server=='ghcr.io'].server | [0]" --output tsv)
+            [[ "$mode" = Multiple && "$identity" = *SystemAssigned* && "$registry" = ghcr.io ]] || {
+              echo "::error::Held recovery requires existing multiple-revision, system identity and GHCR registry configuration."
+              exit 1
+            }
+          done
+      # Schema first, then code. Migrations previously ran only in CI against a throwaway
+      # database and never against production, so a release needing a schema change served
+      # 500s until someone remembered to run this by hand. Ordering matters: new code must
+      # never meet an old schema, which means migrations must be additive and
+      # backward-compatible with the currently running image.
       - name: Verify migration database continuity before maintenance
         if: inputs.held_recovery != true && inputs.webhook_claims_cutover == true
         env:
@@ -473,12 +503,52 @@ jobs:
         run: |
           bash .github/scripts/webhook-claims-maintenance.sh verify
           bash .github/scripts/webhook-claims-maintenance.sh database
+      - name: Persist and claim v26 admission ownership
+        if: env.V26_CUTOVER == 'true'
+        id: v26-stop
+        env:
+          RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+          APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
+          SCANNER_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
+          WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
+          DATABASE_DIRECT_URL: ${{ secrets.DATABASE_DIRECT_URL }}
+          BULLMQ_REDIS_URL: ${{ secrets.BULLMQ_REDIS_URL }}
+        run: node .github/scripts/v26-cutover.mjs claim
+      - name: Drain every v26 producer consumer and child
+        if: env.V26_CUTOVER == 'true'
+        env:
+          RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+          APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
+          SCANNER_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
+          WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
+          DATABASE_DIRECT_URL: ${{ secrets.DATABASE_DIRECT_URL }}
+          BULLMQ_REDIS_URL: ${{ secrets.BULLMQ_REDIS_URL }}
+        run: node .github/scripts/v26-cutover.mjs quiesce
       - name: Run database migrations
         if: inputs.held_recovery != true
         id: database-migration
         env:
           DATABASE_URL: ${{ secrets.DATABASE_DIRECT_URL }}
-        run: bash .github/scripts/deploy-azure-preflight.sh run-database-migrations
+          RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+          APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
+          SCANNER_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
+          WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
+          DATABASE_DIRECT_URL: ${{ secrets.DATABASE_DIRECT_URL }}
+          BULLMQ_REDIS_URL: ${{ secrets.BULLMQ_REDIS_URL }}
+        run: |
+          set -euo pipefail
+          if [ "$V26_CUTOVER" = true ]; then node .github/scripts/v26-cutover.mjs before-migrate; fi
+          bash .github/scripts/deploy-azure-preflight.sh run-database-migrations
+      - name: Grant observed runtime principals and verify v26 migration
+        if: env.V26_CUTOVER == 'true'
+        env:
+          RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+          APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
+          SCANNER_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
+          WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
+          DATABASE_DIRECT_URL: ${{ secrets.DATABASE_DIRECT_URL }}
+          BULLMQ_REDIS_URL: ${{ secrets.BULLMQ_REDIS_URL }}
+        run: node .github/scripts/v26-cutover.mjs after-migrate
       - name: Verify shared rate-limiting credentials
         env:
           UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
@@ -753,7 +823,7 @@ jobs:
         run: bash .github/scripts/deploy-azure-rollout.sh smoke-candidate-revisions
       - name: Verify worker queues are empty before traffic promotion
         timeout-minutes: 5
-        if: inputs.held_recovery != true && inputs.webhook_claims_cutover != true
+        if: inputs.held_recovery != true && inputs.webhook_claims_cutover != true && env.V26_CUTOVER != 'true'
         id: worker-preflight
         env:
           RG: ${{ vars.AZURE_RESOURCE_GROUP }}
@@ -762,14 +832,14 @@ jobs:
       # The prepared candidate path can itself follow a long deployment
       # preflight. Refresh before its VM promotion and subsequent Azure calls.
       - name: Refresh Azure OIDC login before webhook worker boot
-        if: inputs.webhook_claims_cutover == true || inputs.held_recovery == true
+        if: inputs.webhook_claims_cutover == true || inputs.held_recovery == true || env.V26_CUTOVER == 'true'
         uses: Azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
         with:
           client-id: ${{ secrets.AZURE_DEPLOY_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_DEPLOY_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_DEPLOY_SUBSCRIPTION_ID }}
       - name: Boot compatible worker before opening webhook ingress
-        if: inputs.webhook_claims_cutover == true || inputs.held_recovery == true
+        if: inputs.webhook_claims_cutover == true || inputs.held_recovery == true || env.V26_CUTOVER == 'true'
         id: webhook-worker
         env:
           RG: ${{ vars.AZURE_RESOURCE_GROUP }}
@@ -833,7 +903,7 @@ jobs:
       # with the image, restores prior configuration on failure and rolls app
       # traffic back through the guarded cleanup steps below.
       - name: Refresh Azure OIDC login before ordinary worker promotion
-        if: ${{ !cancelled() && steps.smoke-public.outcome == 'success' && inputs.held_recovery != true && inputs.webhook_claims_cutover != true }}
+        if: ${{ !cancelled() && steps.smoke-public.outcome == 'success' && inputs.held_recovery != true && inputs.webhook_claims_cutover != true && env.V26_CUTOVER != 'true' }}
         id: ordinary-worker-login
         uses: Azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
         with:
@@ -841,7 +911,7 @@ jobs:
           tenant-id: ${{ secrets.AZURE_DEPLOY_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_DEPLOY_SUBSCRIPTION_ID }}
       - name: Promote verified worker digest on VM
-        if: ${{ !cancelled() && steps.ordinary-worker-login.outcome == 'success' && inputs.held_recovery != true && inputs.webhook_claims_cutover != true }}
+        if: ${{ !cancelled() && steps.ordinary-worker-login.outcome == 'success' && inputs.held_recovery != true && inputs.webhook_claims_cutover != true && env.V26_CUTOVER != 'true' }}
         id: worker-vm
         env:
           RG: ${{ vars.AZURE_RESOURCE_GROUP }}
@@ -854,7 +924,7 @@ jobs:
       # changes traffic only, after every candidate had already passed readiness.
       - name: Refresh Azure OIDC login before ordinary failure cleanup
         if: >
-          inputs.held_recovery != true && inputs.webhook_claims_cutover != true && failure() &&
+          inputs.held_recovery != true && inputs.webhook_claims_cutover != true && env.V26_CUTOVER != 'true' && failure() &&
           (steps.deploy-app.outcome == 'failure' || steps.deploy-scanner.outcome == 'failure' ||
           steps.deploy-egress-proxy.outcome == 'failure' || steps.smoke-candidates.outcome == 'failure' ||
           steps.worker-preflight.outcome == 'failure' ||
@@ -866,7 +936,7 @@ jobs:
           tenant-id: ${{ secrets.AZURE_DEPLOY_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_DEPLOY_SUBSCRIPTION_ID }}
       - name: Roll back production traffic on health failure
-        if: inputs.held_recovery != true && inputs.webhook_claims_cutover != true && failure() && (steps.promote.outcome == 'failure' || steps.smoke-public.outcome == 'failure' || steps.ordinary-worker-login.outcome == 'failure' || steps.worker-vm.outcome == 'failure')
+        if: inputs.held_recovery != true && inputs.webhook_claims_cutover != true && env.V26_CUTOVER != 'true' && failure() && (steps.promote.outcome == 'failure' || steps.smoke-public.outcome == 'failure' || steps.ordinary-worker-login.outcome == 'failure' || steps.worker-vm.outcome == 'failure')
         env:
           APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
           APP_PREVIOUS: ${{ steps.rollout.outputs.app_previous }}
@@ -881,7 +951,7 @@ jobs:
         run: bash .github/scripts/deploy-azure-rollout.sh roll-back-production-traffic-on-health-failure
       - name: Restore prior ingress mode after failed rollout
         if: >
-          inputs.held_recovery != true && inputs.webhook_claims_cutover != true && failure() && steps.deploy-app.outputs.previous_client_cert_mode != '' &&
+          inputs.held_recovery != true && inputs.webhook_claims_cutover != true && env.V26_CUTOVER != 'true' && failure() && steps.deploy-app.outputs.previous_client_cert_mode != '' &&
           (steps.deploy-app.outcome == 'failure' || steps.deploy-scanner.outcome == 'failure' ||
           steps.deploy-egress-proxy.outcome == 'failure' || steps.smoke-candidates.outcome == 'failure' ||
           steps.worker-preflight.outcome == 'failure' ||
@@ -894,7 +964,7 @@ jobs:
         run: bash .github/scripts/deploy-azure-rollout.sh restore-prior-ingress-mode-after-failed-rollout
       - name: Deactivate zero-traffic candidates after failed rollout
         if: >
-          inputs.held_recovery != true && inputs.webhook_claims_cutover != true && failure() &&
+          inputs.held_recovery != true && inputs.webhook_claims_cutover != true && env.V26_CUTOVER != 'true' && failure() &&
           (steps.deploy-app.outcome == 'failure' || steps.deploy-scanner.outcome == 'failure' ||
           steps.deploy-egress-proxy.outcome == 'failure' || steps.smoke-candidates.outcome == 'failure' ||
           steps.worker-preflight.outcome == 'failure' ||
@@ -946,6 +1016,26 @@ jobs:
           client-id: ${{ secrets.AZURE_DEPLOY_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_DEPLOY_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_DEPLOY_SUBSCRIPTION_ID }}
+      - name: Verify actual v26 candidate fleet with admission held
+        if: env.V26_CUTOVER == 'true'
+        env:
+          RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+          APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
+          SCANNER_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
+          WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
+          DATABASE_DIRECT_URL: ${{ secrets.DATABASE_DIRECT_URL }}
+          BULLMQ_REDIS_URL: ${{ secrets.BULLMQ_REDIS_URL }}
+        run: node .github/scripts/v26-cutover.mjs verify
+      - name: Release only the exact owned v26 admission stop
+        if: env.V26_CUTOVER == 'true'
+        env:
+          RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+          APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
+          SCANNER_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
+          WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
+          DATABASE_DIRECT_URL: ${{ secrets.DATABASE_DIRECT_URL }}
+          BULLMQ_REDIS_URL: ${{ secrets.BULLMQ_REDIS_URL }}
+        run: node .github/scripts/v26-cutover.mjs release
       - name: Resume only owned admission after compatible cutover
         if: inputs.webhook_claims_cutover == true
         env:
@@ -1033,3 +1123,22 @@ jobs:
           else
             echo 'Recovery failed while the original admission stop remains held. Writers are disabled.' >> "$GITHUB_STEP_SUMMARY"
           fi
+
+      - name: Refresh Azure login for failed one-time v26 maintenance
+        if: (failure() || cancelled()) && env.V26_CUTOVER == 'true' && steps.v26-stop.outcome != 'skipped'
+        uses: Azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ secrets.AZURE_DEPLOY_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_DEPLOY_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_DEPLOY_SUBSCRIPTION_ID }}
+
+      - name: Retain v26 admission and deactivate failed candidate producers
+        if: (failure() || cancelled()) && env.V26_CUTOVER == 'true' && steps.v26-stop.outcome != 'skipped'
+        env:
+          RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+          APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
+          SCANNER_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
+          WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
+          DATABASE_DIRECT_URL: ${{ secrets.DATABASE_DIRECT_URL }}
+          BULLMQ_REDIS_URL: ${{ secrets.BULLMQ_REDIS_URL }}
+        run: node .github/scripts/v26-cutover.mjs hold

@@ -3,6 +3,9 @@ import type { Prisma, ScanStatus } from "./generated/prisma"
 import type { ScopedTransaction } from "./rls"
 import { withWorkspaceRLS } from "./rls"
 
+/** Reservation-aware admission and settlement protocol used by release qualification. */
+export const SCAN_ACCOUNTING_PROTOCOL = "reservations/2" as const
+
 export class UserScanAlreadyActiveError extends Error {
   readonly code = "SCAN_ALREADY_ACTIVE"
   constructor() {

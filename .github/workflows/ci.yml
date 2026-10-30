@@ -385,6 +385,12 @@ jobs:
         if: needs.changes.outputs.ops-tests == 'true' && needs.changes.outputs.database-services == 'true'
         run: node --test .github/scripts/tests/webhook-catalog.runtime.test.mjs .github/scripts/tests/webhook-queue.runtime.test.mjs
 
+      - name: Test v26 accounting diagnostic with disposable PostgreSQL
+        if: needs.changes.outputs.ops-tests == 'true' && needs.changes.outputs.database-services == 'true'
+        env:
+          V26_ACCOUNTING_DIAGNOSTIC_TEST_POSTGRES_URL: postgresql://lyrashield:lyrashield@localhost:5432/lyrashield
+        run: node --test .github/scripts/tests/v26-accounting-diagnostic.postgres.test.mjs .github/scripts/tests/v26-post-migration-readback.postgres.test.mjs
+
       - name: Create shadow database
         if: needs.changes.outputs.database-tests == 'true'
         run: docker exec "ci-postgres" psql -U lyrashield -d postgres -c 'CREATE DATABASE lyrashield_shadow;'

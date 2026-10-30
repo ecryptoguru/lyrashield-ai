@@ -383,7 +383,7 @@ step_verify-worker-queues-are-empty-before-traffic-promotion() {
 step_promote-healthy-candidate-revisions() {
   source ops/deployment/containerapp.sh
   restore_previous() {
-    if [ "${WEBHOOK_CLAIMS_CUTOVER:-false}" = true ] || [ "${WEBHOOK_CUTOVER_RECOVERY:-false}" = true ]; then
+    if [ "${V26_CUTOVER:-false}" = true ] || [ "${WEBHOOK_CLAIMS_CUTOVER:-false}" = true ] || [ "${WEBHOOK_CUTOVER_RECOVERY:-false}" = true ]; then
       echo "::error::Maintenance or held recovery keeps previous webhook writers disabled."
       return 0
     fi
@@ -527,7 +527,13 @@ step_promote-verified-worker-digest-on-vm() {
   worker_ref="${WORKER_IMAGE%@*}@${WORKER_DIGEST}"
   promotion_prefix=""
   promotion_flag=""
-  if [ "${WEBHOOK_CUTOVER_RECOVERY:-false}" = true ]; then
+  if [ "${V26_CUTOVER:-false}" = true ]; then
+    state_file="$RUNNER_TEMP/lyrashield-v26-controller.json"
+    request_payload=$(node -e 'const fs=require("node:fs");console.log(Buffer.from(JSON.stringify(JSON.parse(fs.readFileSync(process.argv[1],"utf8")).request)).toString("base64"))' "$state_file")
+    identity_payload=$(base64 --wrap=0 ops/worker/v26-cutover-identity.mjs)
+    promotion_prefix="LYRASHIELD_V26_REQUEST_BASE64='$request_payload' LYRASHIELD_V26_IDENTITY_MODULE_BASE64='$identity_payload' "
+    promotion_flag="--v26-cutover "
+  elif [ "${WEBHOOK_CUTOVER_RECOVERY:-false}" = true ]; then
     : "${LYRASHIELD_WEBHOOK_CUTOVER_ORIGINAL_RUN_ID:?}" \
       "${LYRASHIELD_WEBHOOK_CUTOVER_ORIGINAL_OWNER:?}" \
       "${LYRASHIELD_WEBHOOK_CUTOVER_OWNER_SOURCE_SHA:?}" \
@@ -566,7 +572,9 @@ step_promote-verified-worker-digest-on-vm() {
     --query 'value[0].message' \
     --output tsv)
   printf '%s\n' "$result"
-  if [ "${WEBHOOK_CUTOVER_RECOVERY:-false}" = true ] || [ "${WEBHOOK_CLAIMS_CUTOVER:-false}" = true ]; then
+  if [ "${V26_CUTOVER:-false}" = true ]; then
+    grep -q "Worker v26 cutover passed for ${WORKER_DIGEST}; scan admission held" <<< "$result"
+  elif [ "${WEBHOOK_CUTOVER_RECOVERY:-false}" = true ] || [ "${WEBHOOK_CLAIMS_CUTOVER:-false}" = true ]; then
     grep -q "Worker webhook cutover passed for ${WORKER_DIGEST}; scan admission held" <<< "$result"
   else
     grep -q "Worker promotion passed for ${WORKER_DIGEST}" <<< "$result"

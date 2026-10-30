@@ -86,7 +86,7 @@ case "$command:$unit" in
     fi
     [ "$quiet" = 1 ] || printf 'inactive\n'; exit 3 ;;
   is-active:lyrashield-worker-egress-refresh.service)
-    exit 1 ;;
+    [ "$quiet" = 1 ] || printf 'inactive\n'; exit 3 ;;
   is-active:lyrashield-worker.service)
     if [ "$(cat "$MOCK_SERVICE_ACTIVE")" = 1 ]; then
       [ "$quiet" = 1 ] || printf 'active\n'
@@ -95,7 +95,10 @@ case "$command:$unit" in
     [ "$quiet" = 1 ] || printf 'inactive\n'
     exit 3 ;;
   is-enabled:lyrashield-worker.service)
-    [ "$(cat "$MOCK_SERVICE_ENABLED")" = 1 ] ;;
+    if [ "$(cat "$MOCK_SERVICE_ENABLED")" = 1 ]; then
+      [ "$quiet" = 1 ] || printf 'enabled\n'; exit 0
+    fi
+    [ "$quiet" = 1 ] || printf 'disabled\n'; exit 1 ;;
   is-enabled:lyrashield-worker-egress-refresh.timer)
     if [ "$(cat "$MOCK_TIMER_ENABLED")" = 1 ]; then
       [ "$quiet" = 1 ] || printf 'enabled\n'; exit 0
@@ -186,8 +189,9 @@ case "$1:$2" in
     export REDIS_URL="$(sed -n 's/^REDIS_URL=//p' "$MOCK_WORKER_ENV_FILE" | head -n 1)"
     export LYRASHIELD_PRODUCT_REVISION="$MOCK_APP_REVISION"
     export LYRASHIELD_ENGINE_REVISION="$MOCK_ENGINE_REVISION"
+    export LYRASHIELD_WORKER_IMAGE_DIGEST="${MOCK_TARGET##*@}"
     case "$*" in
-      *'const [raw,owner,product,currentImage,durable,runId,engine,live]'*|*'candidateWorkerImage:target'*)
+      *'const [raw,owner,product,currentImage,durable,runId,engine,live]'*|*'candidateWorkerImage:target'*|*assertV26WorkerIdentity*)
         while [ "$1" != -e ]; do shift; done
         shift
         code=$1
@@ -203,10 +207,11 @@ globalThis.readAdmission = () => {
   return fs.readFileSync(process.env.MOCK_ADMISSION_STOP, "utf8");
 };
 const billing = `Promise.resolve({WEBHOOK_TRACK_CLAIM_PROTOCOL:${JSON.stringify(process.env.MOCK_CLAIM_PROTOCOL || "durable-claims/2")}})`;
-const source = code.replace('import("ioredis")', replacement).replace('import("@lyrashield/billing")', billing);
+const source = code.replace('import("ioredis")', replacement).replace('import("@lyrashield/billing")', billing).replace('import("@lyrashield/db")', `Promise.resolve({SCAN_ACCOUNTING_PROTOCOL:${JSON.stringify(process.env.MOCK_SCAN_PROTOCOL || "reservations/2")}})`);
 await import(`data:text/javascript;base64,${Buffer.from(source).toString("base64")}`);
 NODE
         ;;
+      *SCAN_ACCOUNTING_PROTOCOL*) printf '%s\n' "${MOCK_SCAN_PROTOCOL:-reservations/2}" ;;
       *WEBHOOK_TRACK_CLAIM_PROTOCOL*) printf '%s\n' "${MOCK_CLAIM_PROTOCOL:-durable-claims/2}" ;;
       *'cjson.decode'*)
         promotion_stop='{"operator":"github-actions","reason":"worker-promotion"}'
@@ -282,6 +287,7 @@ NODE
         printf '1000\n' ;;
       *org.opencontainers.image.revision*) printf '%s\n' "$MOCK_APP_REVISION" ;;
       *io.lyrashield.engine.revision*) printf '%s\n' "$MOCK_ENGINE_REVISION" ;;
+      *io.lyrashield.accounting.protocol*) printf '%s\n' "${MOCK_SCAN_PROTOCOL:-reservations/2}" ;;
       *) exit 1 ;;
     esac ;;
   *) echo "unexpected docker call: $*" >&2; exit 1 ;;
@@ -370,7 +376,7 @@ run_case() {
     printf 'legacy maintenance source\n' > "$case_dir/host/assets/backfill-clear-wrong-trial-claims.ts"
   fi
 
-  local mode_arg=""
+  local mode_arg="" request_payload="" identity_payload=""
   local owned_stop=''
   local durable=''
   if [ "$cutover" = 1 ]; then
@@ -403,6 +409,16 @@ run_case() {
         ;;
     esac
   fi
+  if [ "$cutover" = v26 ]; then
+    mode_arg=--v26-cutover
+    request_payload=$(node -e 'const hash=value=>require("node:crypto").createHash("sha256").update(value).digest("hex"); console.log(Buffer.from(JSON.stringify({runId:"123",attempt:1,owner:"123:1",sourceRevision:process.argv[1],engineRevision:process.argv[2],workerDigest:process.argv[3],webDigest:process.argv[3],databaseIdentity:hash("database"),redisIdentity:hash("rediss://current@redis.test:6379")})).toString("base64"))' "$app_revision" "$engine_revision" "$digest")
+    identity_payload=$(base64 < "$repo/ops/worker/v26-cutover-identity.mjs" | tr -d '\n')
+    durable=$(node -e 'const identity=JSON.parse(Buffer.from(process.argv[1],"base64").toString());const hash=value=>require("node:crypto").createHash("sha256").update(value).digest("hex");const stop=JSON.stringify({operator:"github-actions",reason:"v26-accounting-cutover",owner:identity.owner,runId:identity.runId,productRevision:identity.sourceRevision});console.log(JSON.stringify({version:1,kind:"v26-accounting-cutover",identity,stop,phase:"MIGRATED",recoveryPolicy:"REPAIR_FORWARD_ONLY",baseline:{worker:{databaseUrlSha256:hash("postgresql://current@database.test:5432/lyrashield"),databaseSystemUrlSha256:hash(""),redisUrlSha256:hash("rediss://current@redis.test:6379")}}}))' "$request_payload")
+    printf '%s' "$durable" > "$case_dir/v26.json"
+    owned_stop=$(node -e 'console.log(JSON.parse(process.argv[1]).stop)' "$durable")
+    printf '%s' "$owned_stop" > "$case_dir/admission-stop"
+    if [ "$receipt_mode" = foreign ]; then printf 'foreign-owner' > "$case_dir/admission-stop"; fi
+  fi
   local configured_image
   configured_image=$(sed -n 's/^LYRASHIELD_WORKER_IMAGE=//p' "$case_dir/runtime.conf")
   set +e
@@ -410,6 +426,10 @@ run_case() {
     PATH="$case_dir/bin:$PATH" \
       LYRASHIELD_WORKER_GITHUB_CREDENTIAL_VAULT=app-only-vault \
       MOCK_TARGET="$target" \
+      LYRASHIELD_V26_RECEIPT_FILE="$case_dir/v26.json" \
+      LYRASHIELD_V26_REQUEST_BASE64="$request_payload" \
+      LYRASHIELD_V26_IDENTITY_MODULE_BASE64="$identity_payload" \
+      MOCK_SCAN_PROTOCOL="${MOCK_SCAN_PROTOCOL:-reservations/2}" \
       MOCK_CLAIM_PROTOCOL="$protocol" \
       MOCK_UNHEALTHY="$unhealthy" \
       MOCK_DOCKER_PS_FAIL="$docker_ps_fail" \
@@ -454,6 +474,17 @@ run_case() {
   status=$?
   set -e
 
+  if [ "$cutover" = v26 ]; then
+    [ -s "$case_dir/admission-stop" ]
+    ! grep -Fq 'worker-promotion' "$case_dir/admission-stop"
+    if [ "$expected" = success ]; then
+      grep -Fq 'Worker v26 cutover passed' <<< "$output"
+    else
+      [ "$(cat "$case_dir/service-active")" = 0 ]
+      ! grep -Fq 'prior digest restored' <<< "$output"
+    fi
+    return 0
+  fi
   if [ "$cutover" = 1 ]; then
     if [ "$expected" = success ]; then
       [ "$status" -eq 0 ] || { printf '%s\n' "$output"; exit 1; }
@@ -666,6 +697,10 @@ run_case resumes-owned-stop-on-rollback 1 1 1 failure 1 '' 1
 run_case preserves-existing-stop-on-rollback 1 1 1 failure 1 '{"operator":"on-call","reason":"evidence-kek-rotation"}' 1
 run_case rolls-back-maintenance-assets 1 1 1 failure 1 '' 0 '' 9999999000 1 1 '' env 1
 run_case insufficient-disk 1 1 1 failure 1 '' 0 '' 1000
+
+run_case v26-held-success 0 0 0 success 0 '' 0 '' 9999999000 0 1 '' env 0 v26
+run_case v26-held-start-failure 0 0 0 failure 0 '' 0 '' 9999999000 0 1 '' env 1 v26
+run_case v26-foreign-stop 0 0 0 failure 0 '' 0 '' 9999999000 0 1 '' env 0 v26 foreign
 
 preflight_dir="$tmp/preflight"
 write_mocks "$preflight_dir"
