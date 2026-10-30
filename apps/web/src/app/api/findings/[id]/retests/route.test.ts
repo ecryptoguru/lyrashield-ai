@@ -127,7 +127,11 @@ describe("POST /api/findings/[id]/retests", () => {
       new Request("http://localhost/api/findings/finding-1/retests", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ workspaceId: "workspace-1", scanId: "attacker-selected-scan" }),
+        body: JSON.stringify({
+          workspaceId: "workspace-1",
+          scanId: "attacker-selected-scan",
+          createdById: "attacker-selected-user",
+        }),
       }),
       { params: Promise.resolve({ id: "finding-1" }) }
     )
@@ -139,6 +143,7 @@ describe("POST /api/findings/[id]/retests", () => {
         goal: "TEST_APP",
         mode: "SAFE",
         triggerType: "retest",
+        createdById: "user-1",
       })
     )
     expect(enqueueScanJob).toHaveBeenCalledWith(
@@ -147,6 +152,26 @@ describe("POST /api/findings/[id]/retests", () => {
     expect(prisma.retest.create).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ scanId: "retest-scan" }) })
     )
+  })
+
+  it("returns an opaque user-slot conflict without creating or enqueueing a retest", async () => {
+    const { UserScanAlreadyActiveError } = await import("@lyrashield/db")
+    createScan.mockRejectedValueOnce(new UserScanAlreadyActiveError())
+    const response = await POST(
+      new Request("http://localhost/api/findings/finding-1/retests", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ workspaceId: "workspace-1" }),
+      }),
+      { params: Promise.resolve({ id: "finding-1" }) }
+    )
+    expect(response.status).toBe(409)
+    const body = await response.json()
+    expect(body.error.code).toBe("SCAN_ALREADY_ACTIVE")
+    expect(body.error.details).toBeUndefined()
+    expect(JSON.stringify(body)).not.toContain("source-scan")
+    expect(prisma.retest.create).not.toHaveBeenCalled()
+    expect(enqueueScanJob).not.toHaveBeenCalled()
   })
 
   it("fails the retest record when queue submission fails", async () => {
