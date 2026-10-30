@@ -128,6 +128,13 @@ const BOUNDARY_GROUPS = {
       "workspaces#POST",
     ],
   },
+  browserOnboardingWorkspace: {
+    description:
+      "The signed-in browser chooses or creates an eligible onboarding workspace; the service rechecks membership/permissions in its atomic transaction.",
+    marker: "browserSession",
+    additionalMarkers: ["chooseOrCreateOnboardingWorkspace"],
+    routes: ["onboarding/workspace#POST"],
+  },
   memberGovernanceHelper: {
     description:
       "The shared changeMember operation applies the workspace membership and role policy to the selected member.",
@@ -523,7 +530,7 @@ describe("API mutation route boundary manifest", () => {
       []
     )
     expect(stale, "Remove or correct classifications for deleted/renamed mutations").toEqual([])
-    expect(boundaries.size + Object.keys(VERSIONED_ROUTE_ALIASES).length).toBe(131)
+    expect(boundaries.size + Object.keys(VERSIONED_ROUTE_ALIASES).length).toBe(132)
     expect(
       [...Object.values(BOUNDARY_GROUPS)].every((group) => group.description.trim().length > 0)
     ).toBe(true)

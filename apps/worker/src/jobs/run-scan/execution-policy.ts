@@ -1,19 +1,21 @@
-import { prisma, updateScanStatus, type ScanStatus } from "@lyrashield/db"
+import { withWorkspaceRLS, updateScanStatus, type ScanStatus } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 import { notifyScanFailed } from "../../notifications"
 
 export async function readExecutionPolicy(policyId: string | undefined, workspaceId: string) {
   return policyId
-    ? await prisma.policy.findFirst({
-        where: { id: policyId, workspaceId, deletedAt: null },
-        select: {
-          maxBudgetUsd: true,
-          maxDurationMinutes: true,
-          blockedPaths: true,
-          allowedDomains: true,
-          destructiveTestsAllowed: true,
-        },
-      })
+    ? await withWorkspaceRLS(workspaceId, (tx) =>
+        tx.policy.findFirst({
+          where: { id: policyId, workspaceId, deletedAt: null },
+          select: {
+            maxBudgetUsd: true,
+            maxDurationMinutes: true,
+            blockedPaths: true,
+            allowedDomains: true,
+            destructiveTestsAllowed: true,
+          },
+        })
+      )
     : null
 }
 
