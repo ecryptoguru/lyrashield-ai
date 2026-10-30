@@ -4,7 +4,7 @@ test("empty connected repository list settles and supports manual entry", async 
   let requests = 0
   await page.route("**/api/integrations/github/repos?**", (route) => {
     requests++
-    return route.fulfill({ json: { success: true, data: [] } })
+    return route.fulfill({ json: { success: true, data: { items: [], nextPage: null } } })
   })
   await page.goto("?dashboard-ux=first-scan&github-connected")
   await expect(page.getByText("No repositories found.")).toBeVisible()
@@ -28,18 +28,21 @@ test("connected repository setup finishes loading and recovers after changing so
     await route.fulfill({
       json: {
         success: true,
-        data: [
-          {
-            id: 42,
-            fullName: "example/app",
-            name: "app",
-            owner: "example",
-            defaultBranch: "main",
-            private: true,
-            htmlUrl: "https://github.com/example/app",
-            installationId: "installation-1",
-          },
-        ],
+        data: {
+          items: [
+            {
+              id: 42,
+              fullName: "example/app",
+              name: "app",
+              owner: "example",
+              defaultBranch: "main",
+              private: true,
+              htmlUrl: "https://github.com/example/app",
+              installationId: "installation-1",
+            },
+          ],
+          nextPage: null,
+        },
       },
     })
   })
