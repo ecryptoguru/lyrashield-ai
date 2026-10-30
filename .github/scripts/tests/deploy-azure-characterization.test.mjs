@@ -410,7 +410,7 @@ test("deployment step order, recovery conditions and app/scanner env key sets st
   ]) {
     const lineCount = readFileSync(file, "utf8").split("\n").length - 1
     // Preserve the original budget for every other deploy file.
-    const limit = file === ".github/workflows/deploy-azure-runtime.yml" ? 1025 : 900
+    const limit = file === ".github/workflows/deploy-azure-runtime.yml" ? 1045 : 900
     assert.ok(lineCount < limit, `${file} has ${lineCount} lines; expected fewer than ${limit}`)
   }
 

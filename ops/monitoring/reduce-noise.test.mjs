@@ -182,3 +182,18 @@ test("applies only approved property updates and rejects changed state before mu
     )
   )
 })
+
+test("CLI failures emit only a bounded reason code", async () => {
+  const { spawnSync } = await import("node:child_process")
+  const result = spawnSync(
+    process.execPath,
+    [
+      new URL("./reduce-noise.mjs", import.meta.url).pathname,
+      "--PRIVATE_SENTINEL=PRIVATE_CREDENTIAL",
+    ],
+    { encoding: "utf8" }
+  )
+  assert.equal(result.status, 1)
+  assert.match(result.stderr, /monitoring\/arguments/)
+  assert.doesNotMatch(result.stderr + result.stdout, /PRIVATE_SENTINEL|PRIVATE_CREDENTIAL/)
+})

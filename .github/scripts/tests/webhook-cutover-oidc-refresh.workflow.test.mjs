@@ -99,7 +99,7 @@ test("ordinary worker promotion and failure cleanup renew the same OIDC identity
   }
   assert.match(
     promoteLogin.body,
-    /if: inputs\.held_recovery != true && inputs\.webhook_claims_cutover != true/
+    /if: \$\{\{ !cancelled\(\) && steps\.smoke-public\.outcome == 'success' && inputs\.held_recovery != true && inputs\.webhook_claims_cutover != true \}\}/
   )
   assert.equal(promoteLogin.index + 1, promote.index)
   assert.equal(cleanupLogin.index + 1, rollback.index)

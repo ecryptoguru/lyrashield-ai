@@ -107,6 +107,7 @@ jobs:
   prepare-dependencies:
     name: Prepare migration dependencies without production credentials
     runs-on: ubuntu-24.04
+    timeout-minutes: 60
     permissions:
       contents: read
     if: >
@@ -179,10 +180,10 @@ jobs:
     name: Deploy Azure Container Apps
     needs: prepare-dependencies
     runs-on: ubuntu-24.04
+    timeout-minutes: 45
     # This budget covers migrations, parallel bounded candidate health checks,
     # production smoke, and bounded traffic recovery. Individual Azure
     # control-plane calls still have their own tighter limits below.
-    timeout-minutes: 90
     permissions:
       actions: read
       contents: read
@@ -798,6 +799,8 @@ jobs:
           WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
         run: bash .github/scripts/deploy-azure-rollout.sh smoke-production-traffic
       - name: Deactivate superseded Container App revisions
+        id: revision-cleanup
+        continue-on-error: true
         if: steps.smoke-public.outcome == 'success' && inputs.held_recovery != true
         env:
           RG: ${{ vars.AZURE_RESOURCE_GROUP }}
@@ -810,9 +813,18 @@ jobs:
           EGRESS_NAME: ${{ vars.AZURE_EGRESS_PROXY_CONTAINER_APP_NAME }}
           EGRESS_CURRENT: ${{ steps.deploy-egress-proxy.outputs.revision }}
           EGRESS_ROLLBACK: ${{ steps.rollout.outputs.egress_previous }}
+        run: bash .github/scripts/deploy-azure-rollout.sh deactivate-superseded-container-app-revisions
+      - name: Remove excess scanner secrets
+        id: scanner-secret-removal
+        if: steps.smoke-public.outcome == 'success' && inputs.held_recovery != true && vars.AZURE_SCANNER_CONTAINER_APP_NAME != ''
+        env:
+          RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+          SCANNER_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
+        run: bash .github/scripts/deploy-azure-rollout.sh remove-excess-scanner-secrets
+      - name: Report scanner secret remediation failure
+        if: failure() && steps.scanner-secret-removal.outcome == 'failure'
         run: |
-          bash .github/scripts/deploy-azure-rollout.sh deactivate-superseded-container-app-revisions || echo "::warning::Deactivate superseded Container App revisions failed; production traffic remains active."
-          if [ -n "$SCANNER_NAME" ]; then bash .github/scripts/deploy-azure-rollout.sh remove-excess-scanner-secrets || echo "::warning::Remove excess scanner secrets failed; the promoted scanner revision remains active."; fi
+          echo '::error title=Scanner secret removal failed::Production traffic is unchanged. Inspect scanner-secret-removal and retry the scoped secret removal after readback; do not rerun traffic promotion as cleanup.'
       # Queues drain before app traffic promotion. The early guard proves durable
       # billing claims for every writer and rollback image; engine pins alone do not.
       # CI enforces both ENGINE_REVISION and the reverse engine worker contract.
@@ -820,7 +832,7 @@ jobs:
       # with the image, restores prior configuration on failure and rolls app
       # traffic back through the guarded cleanup steps below.
       - name: Refresh Azure OIDC login before ordinary worker promotion
-        if: inputs.held_recovery != true && inputs.webhook_claims_cutover != true
+        if: ${{ !cancelled() && steps.smoke-public.outcome == 'success' && inputs.held_recovery != true && inputs.webhook_claims_cutover != true }}
         id: ordinary-worker-login
         uses: Azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
         with:
@@ -828,7 +840,7 @@ jobs:
           tenant-id: ${{ secrets.AZURE_DEPLOY_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_DEPLOY_SUBSCRIPTION_ID }}
       - name: Promote verified worker digest on VM
-        if: inputs.held_recovery != true && inputs.webhook_claims_cutover != true
+        if: ${{ !cancelled() && steps.ordinary-worker-login.outcome == 'success' && inputs.held_recovery != true && inputs.webhook_claims_cutover != true }}
         id: worker-vm
         env:
           RG: ${{ vars.AZURE_RESOURCE_GROUP }}

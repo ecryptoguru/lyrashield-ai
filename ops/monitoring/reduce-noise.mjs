@@ -3,6 +3,8 @@ import { parseArgs } from "node:util"
 import { pathToFileURL } from "node:url"
 import { terminalCostHealthQuery } from "./terminal-cost-health-query.mjs"
 
+let failureStage = "arguments"
+
 const PRIMARY = "ankit@lyrashieldai.com"
 const LEGACY = "ecryptoguru@gmail.com"
 const PROTECTED = [
@@ -216,13 +218,17 @@ async function main() {
       cost,
     }
   }
+  failureStage = "read-state"
   const before = await read()
+  failureStage = "plan"
   const plan = planMonitoringNoiseReduction(before, context)
   console.log(JSON.stringify({ mode: values.apply ? "apply" : "plan", changes: plan }, null, 2))
   if (!values.apply) return
+  failureStage = "apply"
   await applyMonitoringNoiseReduction(plan, context, read, async (args) => {
     az(args)
   })
+  failureStage = "readback"
   const after = await read()
   if (
     planMonitoringNoiseReduction(after, context).length ||
@@ -244,7 +250,7 @@ async function main() {
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   main().catch(() => {
     console.error(
-      "Monitoring update failed; no credentials or raw Azure error were printed. Inspect live state before retrying."
+      `Monitoring update failed (monitoring/${failureStage}); no credentials or raw Azure error were printed. Inspect live state before retrying.`
     )
     process.exitCode = 1
   })
