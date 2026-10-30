@@ -1,7 +1,7 @@
 import { hasPermission, PERMISSIONS } from "@lyrashield/auth"
 import { redirect } from "next/navigation"
-import { getWorkspaceMembership, getSession } from "@lyrashield/auth/server"
-import { prisma, withWorkspaceRLS } from "@lyrashield/db"
+import { getSession } from "@lyrashield/auth/server"
+import { withWorkspaceRLS } from "@lyrashield/db"
 import { ShieldCheck } from "lucide-react"
 import { OnboardingWizard } from "./onboarding-wizard"
 import { ReferralClaim } from "./referral-claim"
@@ -15,6 +15,7 @@ import { parsePlanIntent, planIntentPath, PLAN_INTENT_COOKIE } from "@/lib/plan-
 import { verifyOAuthOnboardingReturn } from "@/lib/oauth-onboarding-return"
 import { ACQUISITION_COOKIE, parseAcquisitionCookie } from "@/lib/analytics"
 import { analyticsAllowedForRequest } from "@/lib/analytics-preference"
+import { listOnboardingWorkspaces } from "@/lib/onboarding-workspace"
 import { claimAccountAcquisition } from "@/lib/account-acquisition"
 
 export default async function OnboardingPage({
@@ -59,40 +60,18 @@ export default async function OnboardingPage({
   )
   const claimedHint = acquisitionClaim.hint
 
-  let state = await getOrCreateOnboardingState(session.userId)
+  const state = await getOrCreateOnboardingState(session.userId)
 
   if (state?.completed) {
     if (oauthReturnQuery) redirect(`/oauth/consent?${oauthReturnQuery}`)
     redirect(selectedPlan ? planIntentPath("/dashboard/billing", selectedPlan) : "/dashboard")
   }
 
-  // W2-01: workspace naming is not part of the critical setup path. Reuse an
-  // authorized active workspace when one exists. When none exists, the wizard
-  // creates a default lazily — at the moment the user picks a target path —
-  // so merely visiting onboarding (or skipping it) never creates a workspace
-  // or trial the user did not ask for.
-  let workspaceId = state.workspaceId
-  if (workspaceId && !(await getWorkspaceMembership(workspaceId, session.userId))) {
-    workspaceId = null
-    state = await prisma.onboardingState.update({
-      where: { userId: session.userId },
-      data: { workspaceId: null, targetId: null, currentStep: 0 },
-    })
-  }
-  if (!workspaceId) {
-    const memberships = await prisma.workspaceMember.findMany({
-      where: { userId: session.userId, status: "active", workspace: { deletedAt: null } },
-      orderBy: { createdAt: "asc" },
-      select: { workspaceId: true },
-    })
-    if (memberships.length > 0) {
-      workspaceId = memberships[0]!.workspaceId
-      state = await prisma.onboardingState.update({
-        where: { userId: session.userId },
-        data: { workspaceId, currentStep: Math.max(state.currentStep, 1) },
-      })
-    }
-  }
+  // Only a previously explicit, still eligible selection may be resumed.
+  // Visiting this page never chooses a membership or creates a trial.
+  const workspaceChoices = await listOnboardingWorkspaces(session.userId)
+  const membership = workspaceChoices.find((workspace) => workspace.id === state.workspaceId)
+  const workspaceId = membership?.id ?? null
 
   const target =
     state.targetId && workspaceId
@@ -104,20 +83,12 @@ export default async function OnboardingPage({
         )
       : null
 
-  if (state.targetId && !target) {
-    state = await prisma.onboardingState.update({
-      where: { userId: session.userId },
-      data: { targetId: null, currentStep: workspaceId ? 1 : 0 },
-    })
-  }
-
-  const membership = workspaceId ? await getWorkspaceMembership(workspaceId, session.userId) : null
   const initialState = {
-    currentStep: state.workspaceId ? state.currentStep : Math.max(state.currentStep, 1),
+    currentStep: workspaceId && (!state.targetId || target) ? state.currentStep : 1,
     completed: state.completed,
     skipped: state.skipped,
     workspaceId,
-    targetId: state.targetId,
+    targetId: target ? state.targetId : null,
     selectedGoal: state.selectedGoal,
     buildTool: state.buildTool,
     targetType: target?.type ?? null,
@@ -146,6 +117,7 @@ export default async function OnboardingPage({
       <OnboardingWizard
         key={state.updatedAt.toISOString()}
         principalId={session.userId}
+        workspaceChoices={workspaceChoices}
         githubStatus={params.github}
         canManageGitHub={
           !!membership && hasPermission(membership.role, PERMISSIONS.integration.manage)

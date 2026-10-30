@@ -7,6 +7,10 @@ export default function OnboardingHarness() {
       <OnboardingWizard
         principalId="browser-onboarding-user"
         targetTypeHint={hint}
+        workspaceChoices={[
+          { id: "ws-first", name: "Alpha", role: "OWNER" },
+          { id: "ws-selected", name: "Beta", role: "DEVELOPER" },
+        ]}
         initialState={{
           currentStep: 1,
           completed: false,

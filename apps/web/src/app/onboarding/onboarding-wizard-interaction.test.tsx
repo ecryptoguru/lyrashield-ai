@@ -40,7 +40,8 @@ vi.mock("@/lib/api-client", () => ({
   },
 }))
 import { OnboardingConnectionAlerts } from "./onboarding-connection-alerts"
-import { OnboardingWizard } from "./onboarding-wizard"
+import { OnboardingWorkspaceChooser } from "./onboarding-workspace-chooser"
+import { OnboardingWizard, OnboardingTargetWizard } from "./onboarding-wizard"
 import { OnboardingScanRecovery } from "./onboarding-scan-recovery"
 import { Button } from "@lyrashield/ui"
 import { getOnboardingReviewOptions } from "./onboarding-flow.utils"
@@ -70,12 +71,14 @@ type Element = ReactElement<{
   onContinue?: () => void
   onBack?: () => void
   onChoosePath?: (path: string) => void
+  onChoose?: (choice: { kind: "create"; name: string }) => Promise<string>
 }>
 
 // Onboarding views are plain presentational functions (no hooks). Descend into
 // exactly those so assertions still see the inputs they render; library
 // components (Button/Input/etc.) stay opaque leaf elements.
 const VIEW_COMPONENTS = new Set<unknown>([
+  OnboardingTargetWizard,
   OnboardingConnectionAlerts,
   OnboardingAlerts,
   OnboardingScanRecovery,
@@ -970,7 +973,12 @@ it("takes a hinted, workspace-less user from the URL form to a started scan (P1-
     updatedAt: "2026-09-27T00:00:00.000Z",
   }
   api.post.mockImplementation(async (url: string) => {
-    if (url === "/api/workspaces") return { id: "ws-new", trialStarted: true }
+    if (url === "/api/onboarding/workspace")
+      return {
+        state: { ...freshAccount, workspaceId: "ws-new" },
+        workspace: { id: "ws-new", name: "Mine", role: "OWNER", canManageGitHub: true },
+        trialStarted: true,
+      }
     if (url === "/api/targets") return { id: "target-new" }
     if (url === "/api/scans") return { id: "scan-new" }
     throw new Error(`unexpected POST ${url}`)
@@ -982,7 +990,13 @@ it("takes a hinted, workspace-less user from the URL form to a started scan (P1-
 
   const tree = () => render(null, freshAccount, "url")
 
-  // 1. The hinted user lands on the URL form (step 1), not the details step.
+  // The target hint never silently chooses a workspace.
+  expect(tree().find((element) => element.type === UrlTargetView)).toBeUndefined()
+  await tree().find((element) => element.type === OnboardingWorkspaceChooser)!.props.onChoose!({
+    kind: "create",
+    name: "Mine",
+  })
+  // The chosen target hint survives workspace preparation.
   expect(tree().find((element) => element.type === UrlTargetView)).toBeDefined()
   expect(tree().find((element) => element.type === TargetDetailsView)).toBeUndefined()
 
@@ -1001,8 +1015,12 @@ it("takes a hinted, workspace-less user from the URL form to a started scan (P1-
   })
   await new Promise<void>((resolve) => setTimeout(resolve, 0))
 
-  // The workspace was created on submit — not merely by visiting onboarding.
-  expect(api.post).toHaveBeenCalledWith("/api/workspaces", expect.any(Object), expect.any(Object))
+  // The workspace and selection were saved by the explicit choice.
+  expect(api.post).toHaveBeenCalledWith(
+    "/api/onboarding/workspace",
+    expect.objectContaining({ kind: "create", name: "Mine" }),
+    expect.any(Object)
+  )
   // ...and the user reached the details step rather than an error card.
   const details = tree()
   expect(details.find((element) => element.type === TargetDetailsView)).toBeDefined()
@@ -1031,15 +1049,7 @@ it("takes a hinted, workspace-less user from the URL form to a started scan (P1-
   expect(started.some((element) => element.props.href === "/dashboard/scans/scan-new")).toBe(true)
 })
 
-it("does not create a second workspace or target when Continue is double-tapped (P1-1)", async () => {
-  const storage = new Map<string, string>()
-  vi.stubGlobal("window", {
-    sessionStorage: {
-      getItem: (key: string) => storage.get(key) ?? null,
-      setItem: (key: string, value: string) => storage.set(key, value),
-      removeItem: (key: string) => storage.delete(key),
-    },
-  })
+it("coalesces repeated workspace choices and advances to target details without creating a target", async () => {
   const freshAccount = {
     currentStep: 1,
     completed: false,
@@ -1047,71 +1057,61 @@ it("does not create a second workspace or target when Continue is double-tapped 
     workspaceId: null,
     targetId: null,
     selectedGoal: null,
-    targetType: null,
-    targetName: null,
     updatedAt: "2026-09-27T00:00:00.000Z",
   }
   let releaseWorkspace!: () => void
   const workspaceHeld = new Promise<void>((resolve) => {
     releaseWorkspace = resolve
   })
-  api.get.mockResolvedValueOnce({ data: [] })
   let workspaceCalls = 0
+  let targetCalls = 0
   api.post.mockImplementation(async (url: string) => {
-    if (url === "/api/workspaces") {
+    if (url === "/api/onboarding/workspace") {
       workspaceCalls++
       await workspaceHeld
-      return { id: "ws-new" }
+      return {
+        state: { ...freshAccount, workspaceId: "ws-new" },
+        workspace: { id: "ws-new", name: "Mine", role: "OWNER", canManageGitHub: true },
+        trialStarted: false,
+      }
     }
-    if (url === "/api/targets") return { id: "target-new" }
+    if (url === "/api/targets") {
+      targetCalls++
+      return { id: "target-new" }
+    }
     throw new Error(`unexpected POST ${url}`)
   })
-  api.patch.mockImplementation(async (_url: string, body: Record<string, unknown>) => ({
-    ...freshAccount,
-    ...body,
-  }))
-
   const tree = () => render(null, freshAccount, "url")
-  tree().find((element) => element.props.id === "url-name")!.props.onChange!({
-    target: { value: "example.com" },
-  })
+  const choice = tree().find((element) => element.type === OnboardingWorkspaceChooser)!.props
+    .onChoose!
+  const firstChoice = choice({ kind: "create", name: "Mine" })
+  const secondChoice = choice({ kind: "create", name: "Mine" })
+  expect(workspaceCalls).toBe(1)
+  releaseWorkspace()
+  await Promise.all([firstChoice, secondChoice])
   tree().find((element) => element.props.id === "url-input")!.props.onChange!({
     target: { value: "https://example.com" },
   })
   tree().find((element) => element.props.id === "ownership-check")!.props.onChange!({
     target: { checked: true },
   })
-
   const submit = tree().find((element) => element.type === "form")!.props.onSubmit!
-  // Two taps before the first workspace call resolves.
   const first = submit({ preventDefault: vi.fn() })
   const second = submit({ preventDefault: vi.fn() })
-  const waiting = tree()
-  expect(waiting.find((element) => element.type === UrlTargetView)?.props).toMatchObject({
-    loading: true,
-  })
-  expect(
-    waiting.find(
-      (element) => element.type === Button && textOf(element.props.children).includes("Back")
-    )?.props.disabled
-  ).toBe(true)
-  expect(waiting.find((element) => element.props.id === "url-input")?.props.disabled).toBe(true)
-  releaseWorkspace()
   await Promise.all([first, second])
   await new Promise<void>((resolve) => setTimeout(resolve, 0))
-
-  expect(workspaceCalls).toBe(1)
+  expect(targetCalls).toBe(0)
   expect(tree().find((element) => element.type === TargetDetailsView)?.props).toMatchObject({
     loading: false,
   })
 })
 
-it("reports an invalid URL without creating a workspace (P1-1)", async () => {
+it("reports an invalid URL without creating a target after workspace selection", async () => {
   const freshAccount = {
     currentStep: 1,
     completed: false,
     skipped: false,
-    workspaceId: null,
+    workspaceId: "ws-existing",
     targetId: null,
     selectedGoal: null,
     targetType: null,

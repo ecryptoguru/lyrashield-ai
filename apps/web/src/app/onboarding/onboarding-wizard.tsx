@@ -29,20 +29,62 @@ import { useOnboardingTargetBinding } from "./use-onboarding-target-binding"
 import { useOnboardingNavigation } from "./use-onboarding-navigation"
 import { useOnboardingStepActions } from "./use-onboarding-step-actions"
 import { useOnboardingEntryEffects } from "./use-onboarding-entry-effects"
+import { OnboardingWorkspaceChooser } from "./onboarding-workspace-chooser"
 
-export function OnboardingWizard({
+export function OnboardingWizard(props: OnboardingWizardProps) {
+  const router = useRouter()
+  useOnboardingEntryEffects(props)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const persistence = useOnboardingPersistence({
+    initialState: props.initialState,
+    canManageGitHub: props.canManageGitHub,
+  })
+  if (persistence.data.workspaceId)
+    return <OnboardingTargetWizard {...props} persistence={persistence} />
+  return (
+    <div className="w-full max-w-2xl">
+      {error && (
+        <p role="alert" className="text-destructive mb-4 text-sm">
+          {error}
+        </p>
+      )}
+      <OnboardingWorkspaceChooser
+        choices={props.workspaceChoices ?? []}
+        suggestedName={props.suggestedWorkspaceName?.trim() || "My workspace"}
+        loading={loading}
+        onChoose={(choice) => {
+          setError(null)
+          return persistence.chooseWorkspace(choice)
+        }}
+        onSkip={async () => {
+          setLoading(true)
+          setError(null)
+          try {
+            await persistence.persist({ skipped: true, currentStep: 0 })
+            router.push(onboardingCompletionPath(props.oauthReturnQuery, props.selectedPlan))
+            router.refresh()
+          } catch (cause) {
+            setError(cause instanceof Error ? cause.message : "Could not skip setup.")
+            setLoading(false)
+          }
+        }}
+      />
+    </div>
+  )
+}
+
+export function OnboardingTargetWizard({
   principalId,
   initialState,
   selectedPlan,
-  suggestedWorkspaceName,
+  persistence,
   oauthReturnQuery,
   oauthReturnState,
-  acquisitionCookiePresent,
   targetTypeHint,
   ...connectionRecovery
-}: OnboardingWizardProps) {
+}: OnboardingWizardProps & { persistence: ReturnType<typeof useOnboardingPersistence> }) {
   const router = useRouter()
-  useOnboardingEntryEffects({ selectedPlan, acquisitionCookiePresent })
   const completionPath = onboardingCompletionPath(oauthReturnQuery, selectedPlan)
   const initialSelection = initialOnboardingSelection(initialState, targetTypeHint)
   const [step, setStep] = useState(initialSelection.step)
@@ -68,11 +110,7 @@ export function OnboardingWizard({
   const [urlForm, setUrlForm] = useState({ url: "", ownershipAttested: false })
   const [buildTool, setBuildTool] = useState<string | null>(initialState.buildTool ?? null)
 
-  const { data, persist, ensureWorkspace } = useOnboardingPersistence({
-    initialState,
-    step,
-    suggestedWorkspaceName,
-  })
+  const { data, persist, ensureWorkspace, workspaceCanManageGitHub } = persistence
   const {
     repos,
     reposLoaded,
@@ -167,8 +205,7 @@ export function OnboardingWizard({
   // The progress list and the current-step indicator both derive from the step
   // model in onboarding-flow.utils (v16 3.1) — the same definitions the
   // wizard's step transitions use, so the highlight and the "Step N of M"
-  // announcement cannot drift from the rendered list. Workspace naming is not
-  // a step (W2-01): the server provisions the workspace.
+  // announcement cannot drift from the rendered list.
   const steps = stepModelForPath(path, step)
   const displayStep = displayStepForPath(step, path)
   const eyebrow = onboardingStepEyebrow(step, path)
@@ -183,6 +220,7 @@ export function OnboardingWizard({
         loading={busy}
         setFailure={setFailure}
         {...connectionRecovery}
+        canManageGitHub={workspaceCanManageGitHub}
         onConnect={connectGitHub}
         onSkip={skipOnboarding}
       />

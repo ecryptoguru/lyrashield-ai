@@ -23,13 +23,20 @@ for (const width of [390, 1440]) {
       }
       await page.route("**/api/**", async (route) => {
         const path = new URL(route.request().url()).pathname
-        if (path === "/api/workspaces" && route.request().method() === "GET") {
+        if (path === "/api/onboarding/workspace" && route.request().method() === "GET") {
           await route.fulfill({ json: { success: true, data: [] } })
-        } else if (path === "/api/workspaces" && route.request().method() === "POST") {
+        } else if (path === "/api/onboarding/workspace" && route.request().method() === "POST") {
           workspaceCalls++
           await workspaceHeld
           await route.fulfill({
-            json: { success: true, data: { id: "ws-browser", trialStarted: false } },
+            json: {
+              success: true,
+              data: {
+                state: { ...state, workspaceId: "ws-browser" },
+                workspace: { id: "ws-browser", name: "Mine", role: "OWNER", canManageGitHub: true },
+                trialStarted: false,
+              },
+            },
           })
         } else if (path === "/api/onboarding") {
           Object.assign(state, route.request().postDataJSON())
@@ -46,16 +53,16 @@ for (const width of [390, 1440]) {
       })
       await page.setViewportSize({ width, height: 844 })
       await page.goto(`?onboarding=${hint}`)
+      await expect(page.getByRole("button", { name: "Use workspace", exact: true })).toBeDisabled()
+      await page.getByLabel("Workspace", { exact: true }).selectOption("create")
+      await page.getByLabel("Workspace name", { exact: true }).fill("Mine")
+      await page.getByRole("button", { name: "Use workspace", exact: true }).click()
+      await expect(page.getByLabel("Workspace name", { exact: true })).toBeDisabled()
+      expect(workspaceCalls).toBe(1)
+      releaseWorkspace()
       await page.getByLabel("URL", { exact: true }).fill("https://example.com")
       await page.getByLabel("I own or am authorized to scan this target.").check()
       await page.getByRole("button", { name: "Continue", exact: true }).click()
-      await expect(page.getByRole("button", { name: "Back", exact: true })).toBeDisabled()
-      await expect(page.getByLabel("URL", { exact: true })).toBeDisabled()
-      await expect(
-        page.getByRole("button", { name: "Skip / finish later", exact: true })
-      ).toBeDisabled()
-      expect(workspaceCalls).toBe(1)
-      releaseWorkspace()
       await expect(
         page.getByRole("button", {
           name: hint === "api" ? "Start endpoint review" : "Start surface review",
@@ -71,3 +78,128 @@ for (const width of [390, 1440]) {
     })
   }
 }
+
+for (const width of [390, 1440]) {
+  test(`explicitly selects the second eligible workspace at ${width}px`, async ({
+    page,
+  }, testInfo) => {
+    const selections: unknown[] = []
+    const errors: string[] = []
+    page.on("pageerror", (error) => errors.push(error.message))
+    await page.route("**/api/**", async (route) => {
+      expect(new URL(route.request().url()).pathname).toBe("/api/onboarding/workspace")
+      const input = route.request().postDataJSON()
+      selections.push(input)
+      await route.fulfill({
+        json: {
+          success: true,
+          data: {
+            state: {
+              currentStep: 1,
+              completed: false,
+              skipped: false,
+              workspaceId: "ws-selected",
+              targetId: null,
+              selectedGoal: null,
+              updatedAt: "2026-10-30T00:00:00.001Z",
+            },
+            workspace: {
+              id: "ws-selected",
+              name: "Beta",
+              role: "DEVELOPER",
+              canManageGitHub: false,
+            },
+            trialStarted: false,
+          },
+        },
+      })
+    })
+    await page.setViewportSize({ width, height: 844 })
+    await page.goto("?onboarding=url")
+    await expect(page.getByLabel("Workspace", { exact: true })).toHaveValue("")
+    await expect(page.getByRole("option", { name: "Alpha · OWNER" })).toHaveCount(1)
+    await expect(page.getByRole("option", { name: "Beta · DEVELOPER" })).toHaveCount(1)
+    expect(selections).toEqual([])
+    await page.screenshot({ path: testInfo.outputPath(`workspace-chooser-${width}px.png`) })
+    await page.getByLabel("Workspace", { exact: true }).selectOption("ws-selected")
+    await page.getByRole("button", { name: "Use workspace", exact: true }).click()
+    await expect(page.getByLabel("URL", { exact: true })).toBeVisible()
+    expect(selections).toEqual([
+      { kind: "select", workspaceId: "ws-selected", expectedUpdatedAt: "2026-10-09T00:00:00.000Z" },
+    ])
+    expect(errors).toEqual([])
+    await expect
+      .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
+      .toBe(true)
+  })
+}
+
+test("recovers changed access without choosing another membership or losing an entered name", async ({
+  page,
+}) => {
+  const selections: unknown[] = []
+  await page.route("**/api/onboarding/workspace", async (route) => {
+    if (route.request().method() === "GET")
+      return route.fulfill({
+        json: { success: true, data: [{ id: "ws-first", name: "Alpha", role: "OWNER" }] },
+      })
+    selections.push(route.request().postDataJSON())
+    return route.fulfill({
+      status: selections.length === 1 ? 403 : 500,
+      json: {
+        success: false,
+        error: {
+          code: selections.length === 1 ? "WORKSPACE_UNAVAILABLE" : "INTERNAL_ERROR",
+          message:
+            selections.length === 1 ? "Choose another workspace or create one." : "Please retry.",
+        },
+      },
+    })
+  })
+  await page.goto("?onboarding=url")
+  await page.getByLabel("Workspace", { exact: true }).selectOption("ws-selected")
+  await page.getByRole("button", { name: "Use workspace", exact: true }).click()
+  await expect(page.getByRole("alert")).toContainText("Choose another workspace")
+  await expect(page.getByLabel("Workspace", { exact: true })).toHaveValue("ws-selected")
+  await expect(page.getByRole("button", { name: "Use workspace", exact: true })).toBeDisabled()
+  expect(selections).toHaveLength(1)
+  await page.getByLabel("Workspace", { exact: true }).selectOption("create")
+  await page.getByLabel("Workspace name", { exact: true }).fill("Keep this input")
+  await page.getByRole("button", { name: "Use workspace", exact: true }).click()
+  await expect(page.getByRole("alert")).toContainText("Please retry")
+  await expect(page.getByLabel("Workspace name", { exact: true })).toHaveValue("Keep this input")
+  expect(selections).toHaveLength(2)
+})
+
+test("skips without creating a workspace or claiming a trial", async ({ page }) => {
+  const requests: string[] = []
+  let release!: () => void
+  const held = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  await page.route("**/api/**", async (route) => {
+    requests.push(new URL(route.request().url()).pathname)
+    await held
+    await route.fulfill({
+      json: {
+        success: true,
+        data: {
+          currentStep: 0,
+          completed: false,
+          skipped: true,
+          workspaceId: null,
+          targetId: null,
+          selectedGoal: null,
+          updatedAt: "2026-10-30T00:00:00.000Z",
+        },
+      },
+    })
+  })
+  await page.goto("?onboarding=url")
+  await page.getByRole("button", { name: "Skip / finish later", exact: true }).click()
+  await expect(
+    page.getByRole("button", { name: "Skip / finish later", exact: true })
+  ).toBeDisabled()
+  expect(requests).toEqual(["/api/onboarding"])
+  release()
+})
