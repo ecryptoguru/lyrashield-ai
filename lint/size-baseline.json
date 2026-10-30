@@ -352,8 +352,8 @@
     },
     "apps/web/src/app/api/team/route.ts|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 50,
-      "maxExcess": 50
+      "totalExcess": 24,
+      "maxExcess": 24
     },
     "apps/web/src/app/billing/webhook/route.ts|max-lines-per-function": {
       "count": 1,
