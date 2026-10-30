@@ -105,4 +105,26 @@ describe("additional exact dependency inventory", () => {
       "unsupported"
     )
   })
+  it("does not assume a nested Cargo manifest belongs to an ancestor workspace", async () => {
+    const inventory = await resolveExactDependencies({
+      repoPath: await repo({
+        "Cargo.lock": cargo,
+        "unrelated/Cargo.toml": '[dependencies]\ntokio="1"\n',
+      }),
+    })
+    expect(inventory.status).toBe("PARTIAL")
+    expect(inventory.unresolved).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: "unrelated/Cargo.toml" })])
+    )
+  })
+  it("preserves exact package-name identity rather than folding case", async () => {
+    const inventory = await resolveExactDependencies({
+      repoPath: await repo({
+        "Gemfile.lock": ruby.replace("    rack (3.1.8)", "    rack (3.1.8)\n    Rack (3.1.8)"),
+      }),
+    })
+    expect(
+      inventory.packages.filter((pkg) => pkg.name.toLowerCase() === "rack").map((pkg) => pkg.name)
+    ).toEqual(["rack", "Rack"])
+  })
 })

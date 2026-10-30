@@ -45,10 +45,8 @@ export async function resolveAdditionalDependencies(
     }
     if (name === "Cargo.toml" || name === "Gemfile") {
       const lock = name === "Cargo.toml" ? "Cargo.lock" : "Gemfile.lock"
-      // Cargo workspace members may share an ancestor lockfile; Gemfiles may not.
-      let directory = dirname(path)
-      while (lock === "Cargo.lock" && directory !== "." && !inputs.has(join(directory, lock)))
-        directory = dirname(directory)
+      // An ancestor lockfile is not proof of workspace membership.
+      const directory = dirname(path)
       if (!inputs.has(join(directory, lock)))
         result.unresolved.push({
           ecosystem: name === "Cargo.toml" ? "crates.io" : "RubyGems",

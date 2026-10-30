@@ -108,6 +108,8 @@ export function buildGoSandboxArgs(config: {
   command: string[]
   workspace?: string
 }): string[] {
+  const uid = process.getuid?.()
+  if (!uid) throw new Error("Go resolver requires a non-root worker user")
   return [
     "run",
     "--rm",
@@ -117,7 +119,7 @@ export function buildGoSandboxArgs(config: {
     "--read-only",
     "--cap-drop=ALL",
     "--security-opt=no-new-privileges",
-    "--user=65534:65534",
+    `--user=${uid}:${uid}`,
     "--pids-limit=64",
     "--memory=256m",
     "--cpus=1",
@@ -339,15 +341,15 @@ export async function resolveGoModules(
     root = await mkdtemp(join(tmpdir(), "lyrashield-go-resolver-"))
     const input = join(root, "input"),
       proxy = join(root, "proxy")
-    await mkdir(input, { mode: 0o777 })
-    await chmod(input, 0o777)
-    await mkdir(proxy, { mode: 0o755 })
+    await mkdir(input, { mode: 0o700 })
+    await chmod(input, 0o700)
+    await mkdir(proxy, { mode: 0o700 })
     for (const [path, content] of inputs) {
       const destination = join(input, path)
-      await mkdir(dirname(destination), { recursive: true, mode: 0o777 })
-      await chmod(dirname(destination), 0o777)
-      await writeFile(destination, content, { mode: 0o666 })
-      await chmod(destination, 0o666)
+      await mkdir(dirname(destination), { recursive: true, mode: 0o700 })
+      await chmod(dirname(destination), 0o700)
+      await writeFile(destination, content, { mode: 0o600 })
+      await chmod(destination, 0o600)
     }
     const run = (directory: string, command: string[], workspace?: string) =>
       runSandbox(
@@ -390,8 +392,8 @@ export async function resolveGoModules(
         for (const path of missing) {
           const content = await broker.get(path)
           const destination = join(proxy, path)
-          await mkdir(dirname(destination), { recursive: true, mode: 0o755 })
-          await writeFile(destination, content, { mode: 0o644 })
+          await mkdir(dirname(destination), { recursive: true, mode: 0o700 })
+          await writeFile(destination, content, { mode: 0o600 })
           downloaded.add(path)
         }
       }

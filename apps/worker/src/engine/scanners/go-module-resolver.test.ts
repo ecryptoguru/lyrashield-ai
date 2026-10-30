@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import {
   buildGoSandboxArgs,
   parseGoJsonStream,
@@ -30,6 +30,7 @@ describe("isolated Go resolver boundaries", () => {
       "GOENV=off",
     ])
       expect(args).toContain(value)
+    expect(args).toContain(`--user=${process.getuid!()}:${process.getuid!()}`)
     expect(args).not.toContain("--privileged")
     expect(args).not.toContain("GITHUB_TOKEN")
   })
@@ -71,6 +72,22 @@ describe("isolated Go resolver boundaries", () => {
       expect(result.receipt.status).toBe("UNSUPPORTED")
       expect(result.receipt.toolchain).toBeNull()
       expect(result.unresolved.length).toBeGreaterThan(0)
+    }
+  })
+  it("refuses a root worker instead of broadening snapshot permissions", () => {
+    const uid = vi.spyOn(process, "getuid").mockReturnValue(0)
+    try {
+      expect(() =>
+        buildGoSandboxArgs({
+          name: "test",
+          input: "/tmp/input",
+          proxy: "/tmp/proxy",
+          directory: ".",
+          command: ["go", "version"],
+        })
+      ).toThrow("non-root")
+    } finally {
+      uid.mockRestore()
     }
   })
 })

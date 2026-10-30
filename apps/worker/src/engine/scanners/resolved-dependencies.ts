@@ -531,7 +531,7 @@ export async function resolveExactDependencies({
       packages.map((pkg) => [
         JSON.stringify([
           pkg.ecosystem,
-          pkg.name.toLowerCase(),
+          pkg.name,
           pkg.version,
           pkg.filePath,
           pkg.source,

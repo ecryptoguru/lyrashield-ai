@@ -659,6 +659,14 @@ test("preflight environment loads @lyrashield/config in production and matches t
       } catch {
         continue
       }
+      // The separately qualified Go capsule has its own minimal environment;
+      // these variables must never become worker/preflight environment settings.
+      if (file === "ops/worker/run-worker.sh") {
+        text = text.replace(
+          /# BEGIN GO RESOLVER QUALIFICATION[\s\S]*?# END GO RESOLVER QUALIFICATION/,
+          ""
+        )
+      }
       for (const match of text.matchAll(/--env ([A-Z_]+)=/g)) workerNames.add(match[1])
     }
     const passedNames = new Set()
