@@ -17,7 +17,7 @@ const MAX_BYTES = 512 * 1024
 const MAX_PACKAGES = 500
 const cargoPackage = z.object({
   name: z.string().regex(/^[A-Za-z0-9_-]+$/),
-  version: z.string().regex(/^\d+\.\d+\.\d+[A-Za-z0-9.+-]*$/),
+  version: z.string().refine(isCargoVersion),
   source: z.string().optional(),
   dependencies: z.array(z.string()).optional(),
   checksum: z
@@ -34,6 +34,41 @@ const CARGO_REGISTRIES = new Set([
   "sparse+https://index.crates.io/",
 ])
 
+function isCargoVersion(version: string): boolean {
+  if (/[^A-Za-z0-9.+-]/.test(version)) return false
+  const [release, build, ...extra] = version.split("+")
+  if (!release || extra.length > 0) return false
+  const separator = release.indexOf("-")
+  const core = (separator === -1 ? release : release.slice(0, separator)).split(".")
+  const prerelease = separator === -1 ? undefined : release.slice(separator + 1)
+  // Cargo's semver parser stores each core number as u64; prerelease numbers are unbounded.
+  const coreValid =
+    core.length === 3 &&
+    core.every(
+      (number) =>
+        /^(0|[1-9][0-9]*)$/.test(number) &&
+        (number.length < 20 || (number.length === 20 && number <= "18446744073709551615"))
+    )
+  const prereleaseValid =
+    prerelease === undefined ||
+    prerelease.split(".").every((id) => id.length > 0 && !/^0[0-9]+$/.test(id))
+  const buildValid = build === undefined || build.split(".").every((id) => id.length > 0)
+  return coreValid && prereleaseValid && buildValid
+}
+
+function cargoReferenceKey(reference: string): string | null {
+  const identity = reference.split(" ")
+  const [name, version, source] = identity
+  if (identity.length > 3 || !name || /[^A-Za-z0-9_-]/.test(name)) return null
+  if (version !== undefined && !isCargoVersion(version)) return null
+  if (source !== undefined) {
+    if (!source.startsWith("(") || !source.endsWith(")") || source.length <= 2 || /\s/.test(source))
+      return null
+    identity[2] = source.slice(1, -1)
+  }
+  return JSON.stringify(identity)
+}
+
 export function parseCargoLock(content: string, filePath: string): EcosystemResolution {
   const result: EcosystemResolution = { packages: [], unresolved: [] }
   const issue = (reason: string, name = filePath) =>
@@ -48,12 +83,15 @@ export function parseCargoLock(content: string, filePath: string): EcosystemReso
     if (!lock.package.length) issue("Cargo lockfile contains no package identities")
     if (lock.package.length > MAX_PACKAGES) issue("Cargo lockfile exceeds the package limit")
     const entries = lock.package.slice(0, MAX_PACKAGES).map((raw) => cargoPackage.safeParse(raw))
-    const names = new Set(entries.flatMap((entry) => (entry.success ? [entry.data.name] : [])))
-    const versions = new Set(
-      entries.flatMap((entry) =>
-        entry.success ? [`${entry.data.name} ${entry.data.version}`] : []
-      )
-    )
+    const references = new Map<string, number>()
+    for (const entry of entries) {
+      if (!entry.success) continue
+      const { name, version, source } = entry.data
+      for (const identity of [[name], [name, version], [name, version, source]]) {
+        const key = JSON.stringify(identity)
+        references.set(key, (references.get(key) ?? 0) + 1)
+      }
+    }
     for (const parsed of entries) {
       if (!parsed.success) {
         issue("Malformed Cargo package identity")
@@ -68,9 +106,9 @@ export function parseCargoLock(content: string, filePath: string): EcosystemReso
         continue
       }
       for (const reference of pkg.dependencies ?? []) {
-        const [name, version] = reference.split(" ")
-        const found = version ? versions.has(`${name} ${version}`) : names.has(name!)
-        if (!found) issue("Cargo dependency has no corresponding exact lock entry", name)
+        const key = cargoReferenceKey(reference)
+        if (key === null || references.get(key) !== 1)
+          issue("Cargo dependency has no unambiguous corresponding exact lock entry", reference)
       }
       result.packages.push({
         name: pkg.name,

@@ -42,6 +42,20 @@ DEPENDENCIES
   ffi
 `
 describe("additional exact dependency inventory", () => {
+  it.each([
+    cargo.replace('version = "1.0.219"', 'version = "1.0.219garbage"'),
+    `${cargo}dependencies = ["child 1.0.0 (registry+https://private.example/index)"]\n${cargo.replace('name = "serde"', 'name = "child"').replace('version = "1.0.219"', 'version = "1.0.0"').replace("version = 4\n", "")}`,
+  ])(
+    "never qualifies malformed Cargo versions or missing source identities as complete",
+    async (lock) => {
+      const inventory = await resolveExactDependencies({
+        repoPath: await repo({ "Cargo.lock": lock }),
+      })
+      expect(inventory.status).not.toBe("COMPLETE")
+      expect(inventory.unresolved.length).toBeGreaterThan(0)
+    }
+  )
+
   it("preserves source/platform/path identity and checksum-bound evidence", async () => {
     const inventory = await resolveExactDependencies({
       repoPath: await repo({
