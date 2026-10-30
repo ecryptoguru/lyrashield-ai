@@ -64,16 +64,68 @@ interface Direction {
   standalone?: boolean
 }
 
+/** Mask only comments in code state; strings remain available for resource/type matching. */
+function* terraformLines(
+  content: string
+): Generator<{ index: number; code: string; structure: string }> {
+  let state: "code" | "string" | "lineComment" | "blockComment" = "code"
+  let escaped = false
+  let index = 0
+  let code: string[] = []
+  let structure: string[] = []
+  for (let offset = 0; offset < content.length; offset++) {
+    const char = content[offset]!
+    const next = content[offset + 1]
+    if (char === "\n") {
+      yield { index: index++, code: code.join(""), structure: structure.join("") }
+      code = []
+      structure = []
+      if (state === "lineComment") state = "code"
+      escaped = false
+      continue
+    }
+    if (state === "blockComment") {
+      if (char === "*" && next === "/") {
+        code.push("  ")
+        structure.push("  ")
+        offset++
+        state = "code"
+      } else {
+        code.push(" ")
+        structure.push(" ")
+      }
+    } else if (state === "lineComment") {
+      code.push(" ")
+      structure.push(" ")
+    } else if (state === "string") {
+      code.push(char)
+      structure.push(" ")
+      if (escaped) escaped = false
+      else if (char === "\\") escaped = true
+      else if (char === '"') state = "code"
+    } else if (char === '"') {
+      code.push(char)
+      structure.push(" ")
+      state = "string"
+    } else if (char === "#" || (char === "/" && (next === "/" || next === "*"))) {
+      state = next === "*" && char === "/" ? "blockComment" : "lineComment"
+      const marker = char === "/" ? "  " : " "
+      code.push(marker)
+      structure.push(marker)
+      if (char === "/") offset++
+    } else {
+      code.push(char)
+      structure.push(char)
+    }
+  }
+  yield { index, code: code.join(""), structure: structure.join("") }
+}
+
 /** Brace/string/comment aware block context; a standalone rule's type may follow its CIDRs. */
 export function terraformIngressLines(content: string): Set<number> {
-  const clean = content.replace(/\/\*[\s\S]*?\*\//g, (comment) => comment.replace(/[^\n]/g, " "))
   const stack: Array<Direction | undefined> = []
   const candidates: Array<{ index: number; direction?: Direction }> = []
-  for (const [index, line] of clean.split("\n").entries()) {
-    const code = line.replace(/"(?:\\.|[^"\\])*"|#[^\n]*|\/\/[^\n]*/g, (token) =>
-      token.startsWith('"') ? token : ""
-    )
-    const structure = code.replace(/"(?:\\.|[^"\\])*"/g, (value) => " ".repeat(value.length))
+  for (const { index, code, structure } of terraformLines(content)) {
     const inspect = (segment: string) => {
       const direction = stack.at(-1)
       const type = /\btype\s*=\s*"(ingress|egress)"/.exec(segment)?.[1]

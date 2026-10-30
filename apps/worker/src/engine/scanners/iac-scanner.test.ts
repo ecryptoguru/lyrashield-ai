@@ -383,3 +383,67 @@ it("recognizes quoted Compose credential keys without treating quoted _FILE keys
     cleanupRepo()
   }
 })
+
+it.each([
+  ["quoted", 'description = "Accept /* traffic"', 'tags = { Note = "until */" }'],
+  ["escaped quote", 'description = "Accept \\" /* traffic"', 'tags = { Note = "until */" }'],
+  ["hash line comment", "# Documentation /*", "# Documentation */"],
+  ["slash line comment", "// Documentation /*", "// Documentation */"],
+])(
+  "retains public ingress between block-comment markers in %s context",
+  async (_kind, opening, closing) => {
+    cleanupRepo()
+    try {
+      const dir = await setupRepo({
+        "main.tf": [
+          'resource "aws_security_group" "app" {',
+          `  ${opening}`,
+          "  ingress {",
+          '    cidr_blocks = ["0.0.0.0/0"]',
+          "  }",
+          `  ${closing}`,
+          "}",
+        ].join("\n"),
+      })
+      const findings = await scanIac({ repoPath: dir, workspaceDir: dir })
+      expect(
+        findings
+          .filter((f) => f.id.startsWith("iac-tf-open-ingress"))
+          .map((f) => ({ id: f.id, line: f.code_locations?.[0]?.start_line }))
+      ).toEqual([{ id: "iac-tf-open-ingress-main.tf-4", line: 4 }])
+    } finally {
+      cleanupRepo()
+    }
+  }
+)
+
+it.each(["/*", "/*/"])(
+  "ignores actual block-comment ingress with opening %s while preserving later source lines",
+  async (opening) => {
+    cleanupRepo()
+    try {
+      const dir = await setupRepo({
+        "main.tf": [
+          'resource "aws_security_group" "app" {',
+          `  ${opening}`,
+          "  ingress {",
+          '    cidr_blocks = ["0.0.0.0/0"]',
+          "  }",
+          "  */",
+          "  ingress {",
+          '    cidr_blocks = ["0.0.0.0/0"]',
+          "  }",
+          "}",
+        ].join("\n"),
+      })
+      const findings = await scanIac({ repoPath: dir, workspaceDir: dir })
+      expect(
+        findings
+          .filter((f) => f.id.startsWith("iac-tf-open-ingress"))
+          .map((f) => ({ id: f.id, line: f.code_locations?.[0]?.start_line }))
+      ).toEqual([{ id: "iac-tf-open-ingress-main.tf-8", line: 8 }])
+    } finally {
+      cleanupRepo()
+    }
+  }
+)
