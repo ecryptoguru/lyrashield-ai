@@ -4,6 +4,7 @@ import { lstat, readFile, readdir } from "fs/promises"
 import { basename, join, relative } from "path"
 import { logger } from "@lyrashield/logger"
 import type { EngineVulnerability } from "../output-parser"
+import { dockerContext, composeEnvironmentLines, terraformIngressLines } from "./iac-context"
 import { IAC_RULES, K8S_MISSING_SECURITY_CONTEXT, type IacFileKind } from "./iac-rules"
 import { isPhpRuntimeInput } from "./php-runtime"
 import { createPhpRuntimeDiscovery } from "./php-runtime-discovery"
@@ -191,12 +192,15 @@ function inspectIacContent(
   signal: AbortSignal | undefined,
   initialFindingsInFile: number
 ): boolean {
+  const lines = content.split("\n")
+  const docker = kind === "dockerfile" ? dockerContext(lines) : undefined
+  const environment = kind === "compose" ? composeEnvironmentLines(lines) : undefined
+  const ingress = kind === "terraform" ? terraformIngressLines(content) : undefined
   let findingsInFile = initialFindingsInFile
   let findingLimitReached = false
-  // File-level absence rules: a Dockerfile with no USER directive runs as
-  // root by default; a workload with containers but no securityContext has
-  // no declared privilege boundaries.
-  if (kind === "dockerfile" && !/^USER\s+\S+/im.test(content)) {
+  // Absence rules inspect the final stage's declared user and workload
+  // privilege boundaries. An external base image's user requires independent review.
+  if (docker?.implicitRoot && docker.rootLine === undefined) {
     const rule = IAC_RULES.find((r) => r.id === "iac-dockerfile-user-root")
     if (rule && findingsInFile < MAX_FINDINGS_PER_FILE) {
       findingsInFile++
@@ -208,10 +212,10 @@ function inspectIacContent(
         target: relPath,
         cwe: rule.cwe,
         description: rule.description,
-        technical_analysis: `${rule.name} — ${relPath} never sets a USER; the image runs as root by default.`,
+        technical_analysis: `${rule.name} — ${relPath} has no effective non-root USER in the final stage; review the inherited base-image user.`,
         impact: rule.impact,
         remediation_steps: rule.remediation,
-        poc_description: `Inspect ${relPath}: no USER directive is present.`,
+        poc_description: `Inspect ${relPath}: no effective non-root USER is declared in the final stage.`,
         ...(rule.controlIds ? { control_ids: rule.controlIds } : {}),
         code_locations: [{ file: relPath, start_line: 1, label: rule.name }],
       })
@@ -243,7 +247,6 @@ function inspectIacContent(
     }
   }
 
-  const lines = content.split("\n")
   const variableContexts = kind === "terraform" ? terraformVariableContexts(content) : []
   for (const [index, line] of lines.entries()) {
     if (findingsInFile >= MAX_FINDINGS_PER_FILE || findings.length >= MAX_TOTAL_FINDINGS) {
@@ -258,6 +261,10 @@ function inspectIacContent(
       }
       throwIfAborted(signal)
       if (rule.id === K8S_MISSING_SECURITY_CONTEXT) continue
+      if (rule.id === "iac-dockerfile-latest-base" && !docker?.unpinned.has(index)) continue
+      if (rule.id === "iac-dockerfile-user-root" && docker?.rootLine !== index) continue
+      if (rule.id === "iac-compose-secret-env" && !environment?.has(index)) continue
+      if (rule.id === "iac-tf-open-ingress" && !ingress?.has(index)) continue
       if (!kind || !rule.kinds.includes(kind)) continue
       if (rule.fileContext && !rule.fileContext.test(content)) continue
       if (rule.variableContext && !rule.variableContext.test(variableContexts[index] ?? ""))

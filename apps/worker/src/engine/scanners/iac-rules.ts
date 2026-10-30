@@ -27,8 +27,7 @@ export const IAC_RULES: IacRule[] = [
     id: "iac-dockerfile-latest-base",
     name: "Unpinned or :latest base image",
     kinds: ["dockerfile"],
-    pattern: /^FROM\s+(?!scratch\b)[^\s:@#]+(?::latest)?(?:\s+AS\s+\S+)?\s*$/im,
-    suppressIf: /:(?!latest\b)[0-9a-zA-Z@]/,
+    pattern: /^FROM\s+.+$/im,
     severity: "medium",
     cwe: "CWE-1104",
     description:
@@ -45,6 +44,7 @@ export const IAC_RULES: IacRule[] = [
     kinds: ["dockerfile"],
     pattern:
       /^(?:ENV|ARG)\s+\S*(?:PASSWORD|SECRET|TOKEN|API_KEY|PRIVATE_KEY|ACCESS_KEY)\S*\s*=\s*\S+/im,
+    suppressIf: /^(?:ENV|ARG)\s+[A-Z_]+_FILE\s*=/i,
     severity: "high",
     cwe: "CWE-798",
     description:
@@ -87,7 +87,7 @@ export const IAC_RULES: IacRule[] = [
     id: "iac-dockerfile-user-root",
     name: "Container runs as root — no USER directive",
     kinds: ["dockerfile"],
-    pattern: /^USER\s+root\b(?:\s+#.*)?$/im,
+    pattern: /^USER\s+(?:root|0)(?::\S+)?\s*$/im,
     severity: "medium",
     cwe: "CWE-250",
     description:
@@ -140,10 +140,10 @@ export const IAC_RULES: IacRule[] = [
     name: "Hard-coded secret in compose environment",
     kinds: ["compose"],
     pattern: new RegExp(
-      `^\\s*[-A-Z_]*(?:PASSWORD|SECRET|TOKEN|API_KEY|PRIVATE_KEY|ACCESS_KEY)[A-Z_]*\\s*[:=]\\s*["']?[^"'\\s$][^"'\\n]*`,
+      `^\\s*(?:-\\s*)?["']?[A-Z_]*(?:PASSWORD|SECRET|TOKEN|API_KEY|PRIVATE_KEY|ACCESS_KEY)[A-Z_]*["']?\\s*[:=]\\s*["']?[^"'\\s$][^"'\\n]*`,
       "im"
     ),
-    suppressIf: /\$\{|\$[A-Z_]/,
+    suppressIf: /\$\{|\$[A-Z_]|^[\s"'\-]*[A-Z_]+_FILE["']?\s*[:=]/,
     severity: "high",
     cwe: "CWE-798",
     description:

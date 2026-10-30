@@ -462,7 +462,8 @@ function declaredRuntimeFindings(
     : ""
   appendWindowsBrotliFinding(path, declaration, issues, findings, base, metadata)
   const [major, minor] = branch.split(".").map(Number)
-  if (major! < 8 || (major === 8 && minor! < 2)) {
+  const [firstMajor, firstMinor] = PHP_RUNTIME_CATALOG.endOfLifeBeforeBranch.split(".").map(Number)
+  if (major! < firstMajor! || (major === firstMajor && minor! < firstMinor!)) {
     findings.push({
       ...base,
       id: `php-eol-${path}-${declaration.line}${identitySuffix}`,

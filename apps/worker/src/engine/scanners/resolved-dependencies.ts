@@ -44,6 +44,24 @@ const LOCKFILES = new Set([
   "requirements.lock",
   "composer.lock",
 ])
+const UNSUPPORTED_INPUTS = new Map([
+  ["go.mod", "Go"],
+  ["go.sum", "Go"],
+  ["Cargo.toml", "crates.io"],
+  ["Cargo.lock", "crates.io"],
+  ["Gemfile", "RubyGems"],
+  ["Gemfile.lock", "RubyGems"],
+  ["pom.xml", "Maven"],
+  ["build.gradle", "Maven"],
+  ["build.gradle.kts", "Maven"],
+  ["packages.lock.json", "NuGet"],
+  ["packages.config", "NuGet"],
+  ["pyproject.toml", "PyPI"],
+  ["poetry.lock", "PyPI"],
+  ["Pipfile", "PyPI"],
+  ["Pipfile.lock", "PyPI"],
+  ["uv.lock", "PyPI"],
+])
 const MAX_WALK_ENTRIES = 50_000
 const MAX_WALK_DEPTH = 40
 const MAX_DEPENDENCIES = 500
@@ -130,6 +148,32 @@ function eligibleDependencyEntries<T extends { name: string }>(
   )
 }
 
+function reportUnsupportedInput(
+  filename: string,
+  path: string,
+  symbolicLink: boolean,
+  unresolved: ResolvedDependencyInventory["unresolved"]
+): boolean {
+  const ecosystem =
+    UNSUPPORTED_INPUTS.get(filename) ??
+    (/\.(?:cs|fs|vb)proj$/i.test(filename) ? "NuGet" : undefined)
+  if (ecosystem) {
+    unresolved.push({
+      ecosystem,
+      name: path,
+      reason: "unsupported dependency input; exact installed releases were not assessed",
+    })
+    return true
+  }
+  if (symbolicLink && ["composer.json", "composer.lock"].includes(filename))
+    unresolved.push({
+      ecosystem: "Packagist",
+      name: path,
+      reason: "Composer dependency path is a symbolic link and was not read",
+    })
+  return symbolicLink
+}
+
 async function walkDependencyInputs(
   directory: string,
   depth: number,
@@ -186,23 +230,14 @@ async function walkDependencyInputs(
       })
       continue
     }
-    if (stat.isSymbolicLink()) {
-      if (entry.name === "composer.json" || entry.name === "composer.lock") {
-        unresolved.push({
-          ecosystem: "Packagist",
-          name: relative(repoPath, fullPath),
-          reason: "Composer dependency path is a symbolic link and was not read",
-        })
-      }
-      continue
-    }
     if (stat.isDirectory()) {
       if (!IGNORED_DIRECTORIES.has(entry.name))
         await walkDependencyInputs(fullPath, depth + 1, state, context)
       continue
     }
-    if (!stat.isFile()) continue
+    if (!stat.isFile() && !stat.isSymbolicLink()) continue
     const filePath = relative(repoPath, fullPath)
+    if (reportUnsupportedInput(entry.name, filePath, stat.isSymbolicLink(), unresolved)) continue
     const isComposerFile = entry.name === "composer.json" || entry.name === "composer.lock"
     if (isComposerFile && stat.size > MAX_COMPOSER_FILE_BYTES) {
       unresolved.push({

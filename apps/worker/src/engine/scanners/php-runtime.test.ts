@@ -457,3 +457,18 @@ it("keeps case-distinct Windows service inventory candidates separate", () => {
   expect(findings).toHaveLength(2)
   expect(normalizeFindings(findings, "target", generateDedupeKey)).toHaveLength(2)
 })
+
+it("takes end-of-life boundaries from the dated catalog", async () => {
+  const { PHP_RUNTIME_CATALOG } = await import("@lyrashield/security/php-security")
+  const original = { ...PHP_RUNTIME_CATALOG }
+  try {
+    Object.assign(PHP_RUNTIME_CATALOG, {
+      endOfLifeBeforeBranch: "8.3",
+      supportedBranches: ["8.3", "8.4", "8.5"],
+    })
+    const { findings } = await scan({ Dockerfile: "FROM php:8.2.35-fpm\nUSER www-data\n" })
+    expect(findings.filter((f) => f.finding_class === "php_runtime_eol")).toHaveLength(1)
+  } finally {
+    Object.assign(PHP_RUNTIME_CATALOG, original)
+  }
+})

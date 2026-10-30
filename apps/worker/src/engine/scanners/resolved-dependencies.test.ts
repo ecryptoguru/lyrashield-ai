@@ -369,3 +369,31 @@ it("ignores Composer documentation and fixture files while retaining JavaScript 
   ])
   expect(inventory.unresolved).toEqual([])
 })
+
+it.each([
+  "go.mod",
+  "go.sum",
+  "Cargo.toml",
+  "Cargo.lock",
+  "Gemfile",
+  "Gemfile.lock",
+  "pom.xml",
+  "build.gradle",
+  "packages.lock.json",
+  "pyproject.toml",
+  "poetry.lock",
+])("keeps mixed-repository coverage incomplete for unsupported %s", async (manifest) => {
+  const root = await repo({
+    "requirements.txt": "flask==3.0.0\n",
+    [`other/${manifest}`]: "unsupported",
+  })
+  const inventory = await resolveExactDependencies({ repoPath: root })
+  expect(inventory.status).toBe("PARTIAL")
+  expect(inventory.packages).toHaveLength(1)
+  expect(inventory.unresolved).toContainEqual(
+    expect.objectContaining({
+      name: `other/${manifest}`,
+      reason: expect.stringMatching(/unsupported/i),
+    })
+  )
+})

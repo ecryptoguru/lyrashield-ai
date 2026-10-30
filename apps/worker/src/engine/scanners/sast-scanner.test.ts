@@ -66,7 +66,7 @@ describe("scanSast", () => {
     const findings = await scanSast({ repoPath: dir, workspaceDir: dir, coverageIssues })
     expect(findings.filter((f) => f.finding_class === "php_source_flow")).toHaveLength(1)
     expect(findings[0]?.dependency_metadata).toMatchObject({
-      rule_version: "php-source-local-flow/1.0.2",
+      rule_version: "php-source-local-flow/1.0.3",
     })
     expect(coverageIssues).toContainEqual(
       expect.objectContaining({ scanner: "sast", status: "partial", subject: "public/run.php" })

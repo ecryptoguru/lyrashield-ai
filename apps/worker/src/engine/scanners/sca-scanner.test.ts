@@ -91,7 +91,12 @@ describe("scanSca", () => {
           id: "GHSA-1234",
           summary: "Prototype pollution in lodash",
           database_specific: { severity: "high" },
-          affected: [{ ranges: [{ events: [{ introduced: "0" }, { fixed: "4.17.21" }] }] }],
+          affected: [
+            {
+              package: { name: "lodash", ecosystem: "npm" },
+              ranges: [{ type: "SEMVER", events: [{ introduced: "0" }, { fixed: "4.17.21" }] }],
+            },
+          ],
         },
       ],
     })
@@ -526,7 +531,14 @@ describe("Composer SCA", () => {
               id: "GHSA-r39x-jcww-82v6",
               severity: [{ type: "CVSS_V3", score: vector }],
               database_specific: { severity: "MODERATE", cwe_ids: ["CWE-88"] },
-              affected: [{ ranges: [{ events: [{ introduced: "6.4" }, { fixed: "6.4.33" }] }] }],
+              affected: [
+                {
+                  package: { name: "symfony/process", ecosystem: "Packagist" },
+                  ranges: [
+                    { type: "ECOSYSTEM", events: [{ introduced: "6.4" }, { fixed: "6.4.33" }] },
+                  ],
+                },
+              ],
             },
           ],
         }),
@@ -1072,6 +1084,94 @@ it.each([
         }),
       })
       expect(findings[0]?.dependency_metadata?.fixed_version).toBe(fixed)
+    } finally {
+      cleanupRepo()
+    }
+  }
+)
+
+it.each([
+  ["1.5.0", "1.9.0"],
+  ["2.5.0", "2.8.0"],
+  ["2.8.0", undefined],
+])("selects package/ecosystem/installed npm interval for %s", async (version, expected) => {
+  cleanupRepo()
+  const dir = await setupRepo({
+    "package.json": JSON.stringify({ dependencies: { widget: version } }),
+  })
+  const vulnerability = {
+    id: "GHSA-accuracy-npm",
+    affected: [
+      {
+        package: { name: "other", ecosystem: "npm" },
+        ranges: [{ type: "SEMVER", events: [{ introduced: "0" }, { fixed: "0.1.0" }] }],
+      },
+      {
+        package: { name: "widget", ecosystem: "PyPI" },
+        ranges: [{ type: "ECOSYSTEM", events: [{ introduced: "0" }, { fixed: "9.0.0" }] }],
+      },
+      {
+        package: { name: "widget", ecosystem: "npm" },
+        ranges: [
+          {
+            type: "SEMVER",
+            events: [
+              { introduced: "1.0.0" },
+              { fixed: "1.9.0" },
+              { introduced: "2.0.0" },
+              { fixed: "2.8.0" },
+            ],
+          },
+        ],
+      },
+    ],
+  }
+  try {
+    const result = await scanSca({
+      repoPath: dir,
+      workspaceDir: dir,
+      fetchFn: makeMockFetch({ [`widget@${version}`]: [vulnerability] }),
+    })
+    expect(result[0]?.dependency_metadata?.fixed_version).toBe(expected)
+  } finally {
+    cleanupRepo()
+  }
+})
+
+it.each([
+  ["PyPI", "1.5", "ECOSYSTEM", "1.9", "1.9"],
+  ["PyPI", "1.5rc1", "ECOSYSTEM", "1.9", undefined],
+  ["npm", "1.5.0", "GIT", "1.9.0", undefined],
+  ["npm", "1.5.0", "ECOSYSTEM", "1.9.0", undefined],
+])(
+  "withholds uncertain recommendation for %s %s %s",
+  async (ecosystem, version, type, fixed, expected) => {
+    cleanupRepo()
+    const name = "widget"
+    const files =
+      ecosystem === "PyPI"
+        ? { "requirements.txt": `${name}==${version}` }
+        : { "package.json": JSON.stringify({ dependencies: { widget: version } }) }
+    const dir = await setupRepo(files)
+    try {
+      const result = await scanSca({
+        repoPath: dir,
+        workspaceDir: dir,
+        fetchFn: makeMockFetch({
+          [`${name}@${version}`]: [
+            {
+              id: "GHSA-accuracy-range",
+              affected: [
+                {
+                  package: { name, ecosystem },
+                  ranges: [{ type, events: [{ introduced: "0" }, { fixed }] }],
+                },
+              ],
+            },
+          ],
+        }),
+      })
+      expect(result[0]?.dependency_metadata?.fixed_version).toBe(expected)
     } finally {
       cleanupRepo()
     }

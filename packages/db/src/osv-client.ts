@@ -1,3 +1,4 @@
+import { boundedOsvFetch, fetchOsvBatch } from "./osv-request-budget"
 import {
   OSV_CACHE_SCHEMA_VERSION,
   hydrateOsvDetails,
@@ -44,6 +45,7 @@ export interface AdvisoryBatchResult {
 
 export interface OsvQueryOptions {
   fetchFn?: typeof fetch
+  signal?: AbortSignal
   now?: Date
   /**
    * Optional cache instance. Tests pass a dedicated cache to avoid the
@@ -53,7 +55,6 @@ export interface OsvQueryOptions {
   cache?: AdvisoryCache
 }
 
-const OSV_BATCH_URL = "https://api.osv.dev/v1/querybatch"
 const OSV_TIMEOUT_MS = 15_000
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000
 const SCHEMA_VERSION = OSV_CACHE_SCHEMA_VERSION
@@ -83,9 +84,6 @@ function toAdvisoryEntry(
       id: v.id,
       summary: v.summary,
       severity: v.database_specific?.severity ?? v.severity?.[0]?.score ?? "unknown",
-      fixed: v.affected
-        ?.flatMap((a) => a.ranges?.flatMap((r) => r.events) ?? [])
-        .find((event) => event.fixed)?.fixed,
     })),
     source: "osv",
     fetchedAt,
@@ -126,7 +124,12 @@ async function resolveFreshOsvResults(
   const results: OsvQueryResult[] = []
   for (const [index, pkg] of packages.entries()) {
     const row = rows[index]
-    if (!row || (row.vulns !== undefined && !Array.isArray(row.vulns)))
+    if (
+      !row ||
+      typeof row !== "object" ||
+      Array.isArray(row) ||
+      (row.vulns !== undefined && !Array.isArray(row.vulns))
+    )
       return { results: [], reason: "OSV returned malformed advisory data" }
     results.push({ package: pkg, vulns: row.vulns ?? [] })
   }
@@ -231,92 +234,75 @@ export async function queryOsvWithCache(
   if (uncached.length > 0) {
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), OSV_TIMEOUT_MS)
+    const signal = options.signal
+      ? AbortSignal.any([controller.signal, options.signal])
+      : controller.signal
+    const fetchFn = boundedOsvFetch(options.fetchFn ?? fetch, signal)
+    const unresolved: AdvisoryBatchResult["unresolved"] = []
+    let nextChunk = 0
+    const chunks: OsvQueryPackage[][] = []
+    for (let start = 0; start < uncached.length; start += 100)
+      chunks.push(uncached.slice(start, start + 100))
+    const run = async () => {
+      while (nextChunk < chunks.length) {
+        const chunk = chunks[nextChunk++]!
+        let reason: string | undefined
+        try {
+          const response = await fetchOsvBatch(
+            fetchFn,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                queries: chunk.map((pkg) => ({
+                  package: { name: pkg.name, ecosystem: ecosystemToOsv(pkg.ecosystem) },
+                  version: pkg.version,
+                })),
+              }),
+              signal,
+            },
+            signal
+          )
+          if (!response.ok) throw new Error(`OSV returned HTTP ${response.status}`)
+          const data = (await response.json()) as {
+            results?: Array<{ vulns?: OsvVulnerability[]; next_page_token?: unknown }>
+          }
+          if (!Array.isArray(data.results) || data.results.length !== chunk.length)
+            throw new Error("OSV returned an incomplete batch")
+          const fresh = await resolveFreshOsvResults(data.results, chunk, fetchFn, signal)
+          results.push(...fresh.results)
+          reason = fresh.reason
+          if (!reason) {
+            // A failed chunk never poisons validated complete data from another chunk.
+            await Promise.all(
+              fresh.results.map((result) =>
+                cache.set(toAdvisoryEntry(result.package, result.vulns, now)).catch((error) => {
+                  logger.warn("OSV response cache write failed", {
+                    error: error instanceof Error ? error.message : String(error),
+                  })
+                })
+              )
+            )
+          }
+        } catch (error) {
+          reason = signal.aborted
+            ? "OSV request cancelled or timed out"
+            : error instanceof Error
+              ? error.message
+              : "OSV request failed"
+        }
+        if (reason)
+          unresolved.push(
+            ...chunk.map((pkg) => ({ ecosystem: pkg.ecosystem, name: pkg.name, reason }))
+          )
+      }
+    }
     try {
-      const response = await (options.fetchFn ?? fetch)(OSV_BATCH_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          queries: uncached.map((pkg) => ({
-            package: { name: pkg.name, ecosystem: ecosystemToOsv(pkg.ecosystem) },
-            version: pkg.version,
-          })),
-        }),
-        signal: controller.signal,
-      })
-      if (!response.ok) {
-        return unavailable(
-          unique,
-          results,
-          uncached.map((pkg) => ({
-            ecosystem: pkg.ecosystem,
-            name: pkg.name,
-            reason: `OSV returned HTTP ${response.status}`,
-          })),
-          now
-        )
-      }
-      const data = (await response.json()) as {
-        results?: Array<{ vulns?: OsvVulnerability[]; next_page_token?: unknown }>
-      }
-      if (!Array.isArray(data.results) || data.results.length !== uncached.length) {
-        return unavailable(
-          unique,
-          results,
-          uncached.map((pkg) => ({
-            ecosystem: pkg.ecosystem,
-            name: pkg.name,
-            reason: "OSV returned an incomplete batch",
-          })),
-          now
-        )
-      }
-      const fresh = await resolveFreshOsvResults(
-        data.results,
-        uncached,
-        options.fetchFn ?? fetch,
-        controller.signal
-      )
-      if (fresh.reason)
-        return unavailable(
-          unique,
-          [...results, ...fresh.results],
-          uncached.map((pkg) => ({
-            ecosystem: pkg.ecosystem,
-            name: pkg.name,
-            reason: fresh.reason!,
-          })),
-          now
-        )
-      const freshResults = fresh.results
-      // Cache only a verified complete response; an individual cache write is
-      // non-authoritative and does not change the just-received OSV result.
-      await Promise.all(
-        freshResults.map((result) =>
-          cache.set(toAdvisoryEntry(result.package, result.vulns, now)).catch((error) => {
-            logger.warn("OSV response cache write failed", {
-              error: error instanceof Error ? error.message : String(error),
-            })
-          })
-        )
-      )
-      results.push(...freshResults)
-    } catch (error) {
-      return unavailable(
-        unique,
-        results,
-        uncached.map((pkg) => ({
-          ecosystem: pkg.ecosystem,
-          name: pkg.name,
-          reason:
-            error instanceof Error && error.name === "AbortError"
-              ? "OSV request timed out"
-              : "OSV request failed",
-        })),
-        now
-      )
+      await Promise.all([run(), run()])
     } finally {
       clearTimeout(timer)
     }
+    if (unresolved.length) return unavailable(unique, results, unresolved, now)
   }
 
   const ordered = results.sort((a, b) => packageKey(a.package).localeCompare(packageKey(b.package)))

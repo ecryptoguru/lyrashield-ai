@@ -497,8 +497,8 @@
     },
     "apps/worker/src/engine/scanners/ai-app-security.ts|max-lines": {
       "count": 1,
-      "totalExcess": 40,
-      "maxExcess": 40
+      "totalExcess": 34,
+      "maxExcess": 34
     },
     "apps/worker/src/engine/scanners/ai-app-security.ts|max-lines-per-function": {
       "count": 1,
@@ -519,11 +519,6 @@
       "count": 1,
       "totalExcess": 194,
       "maxExcess": 194
-    },
-    "apps/worker/src/engine/scanners/resolved-dependencies.ts|max-lines-per-function": {
-      "count": 1,
-      "totalExcess": 8,
-      "maxExcess": 8
     },
     "apps/worker/src/index.ts|max-lines-per-function": {
       "count": 1,

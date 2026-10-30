@@ -53,8 +53,9 @@ export function* tokenizePhpChunks(source: string, issues: string[]): Generator<
       inPhp = false
     } else if (/^\s/.test(rest)) {
       text = /^\s+/.exec(rest)![0]
-    } else if (/^(?:\/\/|#)/.test(rest)) {
-      text = rest.split("\n", 1)[0]!
+    } else if (/^(?:\/\/|#(?!\[))/.test(rest)) {
+      const end = /\r?\n|\?>/.exec(rest)?.index ?? rest.length
+      text = rest.slice(0, end)
     } else if (rest.startsWith("/*")) {
       const end = rest.indexOf("*/", 2)
       text = end < 0 ? rest : rest.slice(0, end + 2)

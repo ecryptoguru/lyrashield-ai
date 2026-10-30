@@ -282,3 +282,104 @@ describe("scanIac", () => {
     expect(discovery.iac?.skippedByReason.findingLimit).toBe(51)
   })
 })
+
+describe("contextual IaC accuracy", () => {
+  afterEach(cleanupRepo)
+  beforeEach(cleanupRepo)
+  it.each([
+    "FROM node:24 AS build\nUSER root\nFROM build AS final\nUSER app\n",
+    "ARG BASE_IMAGE\nFROM ${BASE_IMAGE}\nUSER app\n",
+    "FROM node:24 AS build\nUSER app\nFROM build\n",
+  ])(
+    "does not call a stage alias, unresolved image or superseded root user unsafe: %s",
+    async (content) => {
+      const dir = await setupRepo({ Dockerfile: content })
+      const findings = await scanIac({ repoPath: dir, workspaceDir: dir })
+      expect(
+        findings.filter(
+          (f) =>
+            f.id.startsWith("iac-dockerfile-latest-base") ||
+            f.id.startsWith("iac-dockerfile-user-root")
+        )
+      ).toEqual([])
+    }
+  )
+  it("resets USER for an independent final stage", async () => {
+    const dir = await setupRepo({ Dockerfile: "FROM node:24 AS build\nUSER app\nFROM node:24\n" })
+    const findings = await scanIac({ repoPath: dir, workspaceDir: dir })
+    expect(findings.filter((f) => f.id.startsWith("iac-dockerfile-user-root"))).toHaveLength(1)
+  })
+  it("detects list/mapping credential literals but excludes secret-file paths and non-environment keys", async () => {
+    const dir = await setupRepo({
+      "compose.yml":
+        "services:\n  app:\n    environment:\n      - PASSWORD=value123\n      - TOKEN_FILE=/run/secrets/token\n  other:\n    environment:\n      API_KEY: literal123\n      PASSWORD_FILE: /run/secrets/pwd\n    labels:\n      SECRET: harmless-label\n",
+    })
+    const findings = await scanIac({ repoPath: dir, workspaceDir: dir })
+    expect(
+      findings
+        .filter((f) => f.id.startsWith("iac-compose-secret-env"))
+        .map((f) => f.code_locations?.[0]?.start_line)
+    ).toEqual([4, 8])
+  })
+  it("reports inbound public CIDRs without mislabeling outbound access", async () => {
+    const dir = await setupRepo({
+      "main.tf":
+        'resource "aws_security_group" "app" {\n  ingress {\n    cidr_blocks = ["0.0.0.0/0"]\n  }\n  egress {\n    cidr_blocks = ["0.0.0.0/0"]\n  }\n}\nresource "aws_security_group_rule" "out" {\n  type = "egress"\n  cidr_blocks = ["0.0.0.0/0"]\n}\nresource "aws_security_group_rule" "in" {\n  cidr_blocks = ["0.0.0.0/0"]\n  type = "ingress"\n}\n',
+    })
+    const findings = await scanIac({ repoPath: dir, workspaceDir: dir })
+    expect(
+      findings
+        .filter((f) => f.id.startsWith("iac-tf-open-ingress"))
+        .map((f) => f.code_locations?.[0]?.start_line)
+    ).toEqual([3, 14])
+  })
+})
+
+it("does not lose the absence of a non-root user when the final stage inherits a stage alias", async () => {
+  cleanupRepo()
+  try {
+    const dir = await setupRepo({
+      Dockerfile: "FROM node:24 AS build\nRUN echo build\nFROM build\n",
+    })
+    const findings = await scanIac({ repoPath: dir, workspaceDir: dir })
+    expect(findings.filter((f) => f.id.startsWith("iac-dockerfile-user-root"))).toHaveLength(1)
+  } finally {
+    cleanupRepo()
+  }
+})
+
+it.each([
+  ["FROM node:24 AS build\nUSER app\nFROM 0\n", []],
+  ["FROM localhost:5000/image\nUSER app\n", ["iac-dockerfile-latest-base"]],
+  ["FROM node:24\nENV TOKEN_FILE=/run/secrets/token\nUSER app\n", []],
+])(
+  "keeps stage indices and registry ports distinct from image tags: %s",
+  async (content, expected) => {
+    cleanupRepo()
+    try {
+      const dir = await setupRepo({ Dockerfile: content })
+      const findings = await scanIac({ repoPath: dir, workspaceDir: dir })
+      expect(findings.map((f) => f.id.split("-Dockerfile")[0])).toEqual(expected)
+    } finally {
+      cleanupRepo()
+    }
+  }
+)
+
+it("recognizes quoted Compose credential keys without treating quoted _FILE keys as credentials", async () => {
+  cleanupRepo()
+  try {
+    const dir = await setupRepo({
+      "compose.yml":
+        'services:\n  app:\n    environment:\n      "PASSWORD": literal123\n      "TOKEN_FILE": /run/secrets/token\n',
+    })
+    const findings = await scanIac({ repoPath: dir, workspaceDir: dir })
+    expect(
+      findings
+        .filter((f) => f.id.startsWith("iac-compose-secret-env"))
+        .map((f) => f.code_locations?.[0]?.start_line)
+    ).toEqual([4])
+  } finally {
+    cleanupRepo()
+  }
+})

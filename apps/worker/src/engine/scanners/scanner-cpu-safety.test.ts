@@ -219,3 +219,12 @@ describe("scanner CPU safety", () => {
     expect(result.findings).toBeGreaterThan(0)
   })
 })
+
+it("bounds repeated unterminated Terraform comment starts during context discovery", async () => {
+  const result = await isolated(`
+    import { terraformIngressLines } from ${JSON.stringify(scanner("iac-context"))};
+    const lines = terraformIngressLines('/*'.repeat(120000));
+    console.log(JSON.stringify([...lines]));
+  `)
+  expect(result).toEqual([])
+})
