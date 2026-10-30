@@ -8,6 +8,9 @@ export default defineConfig({
   // machines as well as on the two-core CI runner.
   workers: 2,
   retries: process.env.CI ? 2 : 0,
+  // Stop promptly if the preview server dies; the runner can then inspect
+  // Wrangler's logs and retry the entire suite only for its known crash.
+  maxFailures: process.env.CI ? 1 : undefined,
   use: {
     baseURL: "http://127.0.0.1:8787",
     trace: "retain-on-failure",

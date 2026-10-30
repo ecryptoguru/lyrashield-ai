@@ -874,7 +874,7 @@ jobs:
       - name: Marketing browser E2E
         id: marketing_browser
         if: needs.changes.outputs.marketing-tests == 'true'
-        timeout-minutes: 10
+        timeout-minutes: 20
         env:
           WRANGLER_LOG_PATH: ${{ github.workspace }}/artifacts/marketing-preview
         run: pnpm --filter @lyrashield/marketing test:browser
