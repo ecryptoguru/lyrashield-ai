@@ -390,3 +390,33 @@ it("rejects malformed JSON as a client error before resolving any proposal", asy
   expect(response.status).toBe(400)
   expect(getFixProposal).not.toHaveBeenCalled()
 })
+
+it("preserves terminal next action in an execution failure response", async () => {
+  requirePermission.mockResolvedValue({ session: { userId: "user-1" } })
+  getFixProposal.mockResolvedValue({
+    id: "proposal-1",
+    findingId: "finding-1",
+    diffRef: generatedRef,
+  })
+  prisma.finding.findFirst.mockResolvedValue({
+    id: "finding-1",
+    targetId: "target-1",
+    implicatedFiles: ["src/a.ts"],
+    baseCommit: "abc123",
+    target: { repoOwner: "acme", repoName: "app", installationId: "42", deletedAt: null },
+  })
+  prisma.workspace.findUnique.mockResolvedValue({ plan: "PRO" })
+  readEncryptedArtifact.mockResolvedValue({ content: Buffer.from("diff --git ..."), checksum })
+  hasActiveFixPrConnection.mockResolvedValue(true)
+  const outcome = {
+    status: "failed",
+    nextAction: "regenerate_proposal",
+    reason: "Execution stopped before GitHub writes. Review the proposal and generate a new one.",
+  }
+  requestFixPrApproval.mockResolvedValue(outcome)
+  const response = await call()
+  expect(response.status).toBe(502)
+  await expect(response.json()).resolves.toMatchObject({
+    error: { code: "FIX_PR_FAILED", details: outcome },
+  })
+})

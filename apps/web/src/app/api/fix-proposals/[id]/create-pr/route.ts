@@ -57,13 +57,21 @@ async function post(request: Request, { params }: { params: Promise<{ id: string
         )
         if (outcome.status === "rejected") {
           confirmNotSubmitted()
-          return apiError("PATCH_REJECTED", outcome.reason ?? "Patch failed validation", 422)
+          return apiError(
+            "PATCH_REJECTED",
+            outcome.reason ?? "Patch failed validation",
+            422,
+            undefined,
+            outcome
+          )
         }
         if (outcome.status === "failed") {
           return apiError(
             "FIX_PR_FAILED",
             "Fix PR execution did not complete. Inspect the operation status before retrying.",
-            502
+            502,
+            undefined,
+            outcome
           )
         }
         return apiSuccess(outcome)

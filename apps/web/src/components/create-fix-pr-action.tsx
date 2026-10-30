@@ -26,6 +26,16 @@ const outcomeSchema = z
     prNumber: z.number().int().positive().optional(),
     prUrl: z.string().url().optional(),
     reason: z.string().optional(),
+    nextAction: z
+      .enum([
+        "request_approval",
+        "check_status",
+        "retest",
+        "regenerate_proposal",
+        "review_pull_request",
+        "reconnect",
+      ])
+      .optional(),
   })
   .superRefine((outcome, ctx) => {
     if (outcome.status === "opened" && (!outcome.prNumber || !outcome.prUrl))
@@ -67,6 +77,8 @@ export function CreateFixPrAction({
       setOutcome(result)
     } catch (error) {
       if (error instanceof ApiError) {
+        const reportedOutcome = outcomeSchema.safeParse(error.details)
+        if (reportedOutcome.success) setOutcome(reportedOutcome.data)
         if (["GITHUB_CONNECTION_INACTIVE", "NO_REPOSITORY_LINK"].includes(error.code))
           setBlocked("inactive")
         if (
@@ -86,7 +98,10 @@ export function CreateFixPrAction({
   }
   const canRequest =
     !blocked &&
-    (!outcome || ["ready", "expired", "stale", "rejected", "failed"].includes(outcome.status))
+    (!outcome ||
+      (["ready", "expired", "stale", "failed"].includes(outcome.status) &&
+        outcome.nextAction === "request_approval") ||
+      (!outcome.nextAction && ["ready", "expired"].includes(outcome.status)))
   return (
     <div className="space-y-2">
       {outcome && (
@@ -120,9 +135,10 @@ export function CreateFixPrAction({
           {outcome.status === "merged" &&
             "This pull request was merged. Review the retest receipt before treating the finding as fixed."}
           {outcome.status === "expired" &&
-            "Approval expired. Request a new approval for this stored patch."}
+            (outcome.reason ?? "Approval expired. Request a new approval for this stored patch.")}
           {outcome.status === "stale" &&
-            "This approval no longer matches the patch. Request a new approval."}
+            (outcome.reason ??
+              "The stored patch or approval is stale. Check status for the required next step.")}
           {outcome.status === "recovery_required" &&
             "This pull request needs recovery. Check status to reconcile GitHub; uncertain writes will not be repeated."}
           {["rejected", "failed"].includes(outcome.status) &&

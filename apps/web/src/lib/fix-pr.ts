@@ -97,6 +97,13 @@ interface FixPrOutcome {
   prNumber?: number
   prUrl?: string
   reason?: string
+  nextAction?:
+    | "request_approval"
+    | "check_status"
+    | "retest"
+    | "regenerate_proposal"
+    | "review_pull_request"
+    | "reconnect"
 }
 
 function approvalUrl(base: string, approvalId: string): string {
@@ -140,7 +147,12 @@ export async function requestFixPrApproval(
   appUrl: string
 ): Promise<FixPrOutcome> {
   const proposal = await getFixProposal(req.fixProposalId, req.workspaceId)
-  if (!proposal) return { status: "rejected", reason: "Fix proposal not found." }
+  if (!proposal)
+    return {
+      status: "rejected",
+      reason: "Fix proposal not found.",
+      nextAction: "regenerate_proposal",
+    }
 
   // Validate the diff against the plan-tiered scope policy before any approval
   // exists — an unsound or out-of-scope patch must never be presented as viable.
@@ -150,7 +162,7 @@ export async function requestFixPrApproval(
       fixProposalId: req.fixProposalId,
       code: "code" in validation ? validation.code : "COMPOSER_SCOPE_MISMATCH",
     })
-    return { status: "rejected", reason: validation.reason }
+    return { status: "rejected", reason: validation.reason, nextAction: "regenerate_proposal" }
   }
 
   const input = buildFixPrApprovalInput(req)
@@ -172,6 +184,7 @@ export async function requestFixPrApproval(
 
   return {
     status: "pending_approval",
+    nextAction: "check_status",
     approvalId: approval.id,
     approvalUrl: approvalUrl(appUrl, approval.id),
   }
@@ -192,21 +205,28 @@ export async function executeApprovedFixPr(
   // defense-in-depth says re-check the diff against scope before any write.
   const validation = validateRequestPatch(req)
   if (!validation.ok) {
-    return { status: "rejected", reason: validation.reason }
+    return { status: "rejected", reason: validation.reason, nextAction: "regenerate_proposal" }
   }
 
   if (!(await hasActiveFixPrConnection(req.workspaceId, req.installationId))) {
-    return { status: "rejected", reason: "The GitHub connection is no longer active." }
+    return {
+      status: "rejected",
+      reason: "The GitHub connection is no longer active.",
+      nextAction: "reconnect",
+    }
   }
   const claimed = await claimApprovalExecution(req.approvalId, req.workspaceId, inputHash)
   if (!claimed) {
     return {
       status: "failed",
+      nextAction: "check_status",
+      approvalId: req.approvalId,
       reason: "Approval is missing, expired, already executed or does not match this patch.",
     }
   }
 
   const { executionKey, branchName } = fixPrIdentity(req)
+  let ownsIntent = false
   let remoteMutationStarted = false
   let failureStatus: "failed" | "stale" = "failed"
   try {
@@ -223,9 +243,17 @@ export async function executeApprovedFixPr(
       requestedById: req.requestedById,
       authorization: req.authorization,
     })
-    if (!intent.created) {
+    ownsIntent = intent.created
+    if (!ownsIntent) {
       const outcome = await reconcileFixPr(req, intent.record)
-      await completeApprovalExecution(req.approvalId, req.workspaceId, { ...outcome })
+      // This caller owns only its approval receipt, never the shared intent.
+      // An unknown bookkeeping commit must not terminalize the active owner.
+      await completeApprovalExecution(req.approvalId, req.workspaceId, { ...outcome }).catch(() => {
+        logger.warn("Fix PR approval result persistence requires reconciliation", {
+          approvalId: req.approvalId,
+          fixProposalId: req.fixProposalId,
+        })
+      })
       return outcome
     }
     const baseBranch = await getDefaultBranch(req.installationId, req.repoOwner, req.repoName)
@@ -319,34 +347,45 @@ export async function executeApprovedFixPr(
           : persisted.status === "merged"
             ? "merged"
             : "closed",
+      nextAction: "review_pull_request",
       approvalId: req.approvalId,
       prNumber: pr.number,
       prUrl: pr.url,
     }
   } catch {
-    await markFixPrRecovery(
-      req.workspaceId,
-      req.fixProposalId,
-      executionKey,
-      remoteMutationStarted ? "recovery" : failureStatus
-    ).catch(() => undefined)
+    const recoveryRequired = remoteMutationStarted || !ownsIntent
+    if (ownsIntent)
+      await markFixPrRecovery(
+        req.workspaceId,
+        req.fixProposalId,
+        executionKey,
+        req.approvalId,
+        remoteMutationStarted ? "recovery" : failureStatus
+      ).catch(() => undefined)
     await failApprovalExecution(
       req.approvalId,
       req.workspaceId,
       {
-        error: remoteMutationStarted ? "FIX_PR_RECOVERY_REQUIRED" : "FIX_PR_FAILED",
+        error: recoveryRequired ? "FIX_PR_RECOVERY_REQUIRED" : "FIX_PR_FAILED",
       },
       false
     ).catch(() => undefined)
     logger.error("Fix PR execution failed", {
       fixProposalId: req.fixProposalId,
-      code: remoteMutationStarted ? "FIX_PR_RECOVERY_REQUIRED" : "FIX_PR_FAILED",
+      code: recoveryRequired ? "FIX_PR_RECOVERY_REQUIRED" : "FIX_PR_FAILED",
     })
     return {
-      status: remoteMutationStarted ? "recovery_required" : failureStatus,
-      reason: remoteMutationStarted
+      status: recoveryRequired ? "recovery_required" : failureStatus,
+      nextAction: recoveryRequired
+        ? "check_status"
+        : failureStatus === "stale"
+          ? "retest"
+          : "regenerate_proposal",
+      reason: recoveryRequired
         ? "The GitHub outcome is uncertain. Check PR status to reconcile before any retry."
-        : "The pull request could not be opened. Check the repository revision and connection before retrying.",
+        : failureStatus === "stale"
+          ? "The repository changed since the scan. Retest and generate a new proposal."
+          : "Execution stopped before GitHub writes. Review the proposal and generate a new one.",
     }
   }
 }
@@ -425,6 +464,10 @@ async function reconcileFixPr(
     return {
       status:
         storedStatus === "closed" || storedStatus === "merged" ? storedStatus : "recovery_required",
+      nextAction:
+        storedStatus === "closed" || storedStatus === "merged"
+          ? "review_pull_request"
+          : "check_status",
       ...(record.prNumber ? { prNumber: record.prNumber } : {}),
       ...(record.prUrl ? { prUrl: record.prUrl } : {}),
       reason:
@@ -433,11 +476,13 @@ async function reconcileFixPr(
   if (storedStatus === "stale")
     return {
       status: "stale",
+      nextAction: "retest",
       reason: "The repository changed since the scan. Retest and generate a new proposal.",
     }
   if (storedStatus === "failed")
     return {
       status: "failed",
+      nextAction: "regenerate_proposal",
       reason: "Execution stopped before GitHub writes. Review the proposal and generate a new one.",
     }
   const { executionKey, branchName } = fixPrIdentity(req)
@@ -457,6 +502,7 @@ async function reconcileFixPr(
           (!record.createdAt || Date.now() - record.createdAt.getTime() < 120_000)
             ? "opening"
             : "recovery_required",
+        nextAction: "check_status",
         reason:
           "An execution already exists. Check status; uncertain GitHub writes are never replayed.",
       }
@@ -478,12 +524,14 @@ async function reconcileFixPr(
           : persisted.status === "merged"
             ? "merged"
             : "closed",
+      nextAction: "review_pull_request",
       prNumber: pr.number,
       prUrl: pr.url,
     }
   } catch {
     return {
       status: "recovery_required",
+      nextAction: "check_status",
       reason: "Unable to confirm the GitHub outcome. Check status again before retrying.",
     }
   }
@@ -497,7 +545,7 @@ export async function getFixPrStatus(
   const { executionKey } = fixPrIdentity(req)
   const execution = await getFixPrExecution(req.workspaceId, req.fixProposalId, executionKey)
   if (execution) return reconcileFixPr(req, execution)
-  if (!approvalId) return { status: "ready" }
+  if (!approvalId) return { status: "ready", nextAction: "request_approval" }
   const approval = await getApproval(approvalId, req.workspaceId)
   if (
     !approval ||
@@ -506,6 +554,7 @@ export async function getFixPrStatus(
   )
     return {
       status: "stale",
+      nextAction: "request_approval",
       reason: "The approval no longer matches this stored patch. Request a new approval.",
     }
   if (
@@ -513,11 +562,26 @@ export async function getFixPrStatus(
     approval.expiresAt &&
     approval.expiresAt <= new Date()
   )
-    return { status: "expired" }
-  if (approval.status === "PENDING") return { status: "pending_approval", approvalId }
-  if (approval.status === "EXPIRED") return { status: "expired" }
-  if (["APPROVED", "EXECUTING"].includes(approval.status)) return { status: "opening", approvalId }
+    return {
+      status: "expired",
+      nextAction: "request_approval",
+      reason: "Approval expired. Request a new approval for this stored patch.",
+    }
+  if (approval.status === "PENDING")
+    return { status: "pending_approval", approvalId, nextAction: "check_status" }
+  if (approval.status === "EXPIRED")
+    return {
+      status: "expired",
+      nextAction: "request_approval",
+      reason: "Approval expired. Request a new approval for this stored patch.",
+    }
+  if (["APPROVED", "EXECUTING"].includes(approval.status))
+    return { status: "opening", approvalId, nextAction: "check_status" }
   return {
+    nextAction:
+      approval.status === "EXECUTION_FAILED" || approval.status === "EXECUTED"
+        ? "check_status"
+        : "request_approval",
     status:
       approval.status === "EXECUTION_FAILED" || approval.status === "EXECUTED"
         ? "recovery_required"

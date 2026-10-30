@@ -24,6 +24,7 @@ vi.mock("@lyrashield/db", () => ({
   failApprovalExecution: mocks.fail,
   createApproval: mocks.create,
   findPendingApprovalByHash: vi.fn(),
+  findOrCreatePendingApproval: mocks.create,
   getFixProposal: mocks.proposal,
   getApproval: mocks.approval,
   hashInput: (action: string, input: unknown) => JSON.stringify({ action, input }),
@@ -81,6 +82,7 @@ describe("approved fix PR execution", () => {
     mocks.validate.mockReturnValue({ ok: true, filesTouched: ["src/app.ts"] })
     mocks.connection.mockResolvedValue(true)
     mocks.claim.mockResolvedValue(true)
+    mocks.complete.mockResolvedValue(true)
     mocks.head.mockResolvedValue("scanned-sha")
     mocks.pr.mockResolvedValue({ number: 42, url: "https://github.com/owner/repo/pull/42" })
     mocks.branch.mockResolvedValue(undefined)
@@ -207,6 +209,12 @@ describe("approved fix PR execution", () => {
     expect(mocks.branch).not.toHaveBeenCalled()
     expect(mocks.fail).toHaveBeenCalledOnce()
   })
+  it("keeps unknown intent commit outcomes in recovery without an unowned failure update", async () => {
+    mocks.begin.mockRejectedValueOnce(new Error("Intent commit outcome unknown"))
+    expect((await executeApprovedFixPr(request)).status).toBe("recovery_required")
+    expect(mocks.recovery).not.toHaveBeenCalled()
+    expect(mocks.branch).not.toHaveBeenCalled()
+  })
   it("records provider failure without retrying writes", async () => {
     mocks.branch.mockRejectedValue(new Error("provider unavailable"))
     expect((await executeApprovedFixPr(request)).status).toBe("recovery_required")
@@ -239,7 +247,10 @@ describe("read-only Fix PR status", () => {
         }),
         expiresAt: new Date(0),
       })
-      expect((await getFixPrStatus(request, "approval-1")).status).toBe("expired")
+      expect(await getFixPrStatus(request, "approval-1")).toMatchObject({
+        status: "expired",
+        nextAction: "request_approval",
+      })
       expect(mocks.claim).not.toHaveBeenCalled()
       expect(mocks.pr).not.toHaveBeenCalled()
     }
@@ -248,6 +259,45 @@ describe("read-only Fix PR status", () => {
     mocks.approval.mockResolvedValue({ actionName: "fix_pr.open", inputHash: "old" })
     expect((await getFixPrStatus(request, "approval-1")).status).toBe("stale")
     expect(mocks.claim).not.toHaveBeenCalled()
+  })
+  it.each([
+    [
+      "stale",
+      "retest",
+      "The repository changed since the scan. Retest and generate a new proposal.",
+    ],
+    [
+      "failed",
+      "regenerate_proposal",
+      "Execution stopped before GitHub writes. Review the proposal and generate a new one.",
+    ],
+  ])(
+    "keeps terminal %s execution guidance distinct from renewable approval",
+    async (status, nextAction, reason) => {
+      mocks.existing.mockResolvedValue({ status })
+      mocks.proposal.mockResolvedValue({ id: request.fixProposalId })
+      expect(await getFixPrStatus(request)).toMatchObject({ status, nextAction, reason })
+      expect(await requestFixPrApproval(request, "https://app.test")).toMatchObject({
+        status,
+        nextAction,
+        reason,
+      })
+      expect(mocks.create).not.toHaveBeenCalled()
+    }
+  )
+  it("allows a fresh approval only for mismatched approval without an execution", async () => {
+    mocks.proposal.mockResolvedValue({ id: request.fixProposalId })
+    mocks.create.mockResolvedValue({ id: "fresh-approval" })
+    mocks.approval.mockResolvedValue({ actionName: "fix_pr.open", inputHash: "old" })
+    expect(await getFixPrStatus(request, "old-approval")).toMatchObject({
+      status: "stale",
+      nextAction: "request_approval",
+    })
+    expect(await requestFixPrApproval(request, "https://app.test")).toMatchObject({
+      status: "pending_approval",
+      approvalId: "fresh-approval",
+    })
+    expect(mocks.create).toHaveBeenCalledOnce()
   })
   it("keeps a stale base distinguishable from an infrastructure failure", async () => {
     mocks.existing.mockResolvedValue({ status: "stale" })

@@ -206,7 +206,7 @@ test("shows recovery without claiming an uncertain PR was opened", async ({ page
 for (const [status, text] of [
   ["opening", "pending or opening"],
   ["expired", "Approval expired"],
-  ["stale", "no longer matches"],
+  ["stale", "is stale"],
   ["closed", "will not be reopened"],
   ["merged", "Review the retest receipt"],
   ["failed", "could not be opened"],
@@ -234,4 +234,70 @@ test("does not report success for an opened result missing PR identity", async (
   await ready.getByRole("button", { name: "Request approval", exact: true }).click()
   await expect(ready.getByRole("alert")).toBeVisible()
   await expect(ready.getByRole("link", { name: "View pull request" })).toHaveCount(0)
+})
+
+for (const outcome of [
+  {
+    status: "stale",
+    nextAction: "retest",
+    reason: "The repository changed since the scan. Retest and generate a new proposal.",
+  },
+  {
+    status: "failed",
+    nextAction: "regenerate_proposal",
+    reason: "Execution stopped before GitHub writes. Review the proposal and generate a new one.",
+  },
+  {
+    status: "stale",
+    nextAction: "request_approval",
+    reason: "The approval no longer matches this stored patch. Request a new approval.",
+  },
+  {
+    status: "expired",
+    nextAction: "request_approval",
+    reason: "Approval expired. Request a new approval for this stored patch.",
+  },
+] as const) {
+  test(`follows backend ${outcome.status}/${outcome.nextAction} guidance`, async ({ page }) => {
+    await page.route("**/api/fix-proposals/composer-ready/create-pr", async (route) =>
+      route.fulfill({ json: { success: true, data: outcome } })
+    )
+    await page.goto("?fixProposals")
+    const ready = page.getByRole("article", { name: /requiring application compatibility review/ })
+    await ready.getByRole("button", { name: "Create pull request" }).click()
+    await ready.getByRole("button", { name: "Request approval", exact: true }).click()
+    await expect(ready.getByRole("status")).toContainText(outcome.reason)
+    const approvalAction = ready.getByRole("button", { name: "Create pull request" })
+    if (outcome.nextAction === "request_approval") await expect(approvalAction).toBeEnabled()
+    else await expect(approvalAction).toHaveCount(0)
+    await expect(ready.getByRole("button", { name: "Check PR status" })).toBeEnabled()
+  })
+}
+
+test("keeps terminal failure guidance from the POST error response", async ({ page }) => {
+  const outcome = {
+    status: "failed",
+    nextAction: "regenerate_proposal",
+    reason: "Execution stopped before GitHub writes. Review the proposal and generate a new one.",
+  }
+  await page.route("**/api/fix-proposals/composer-ready/create-pr", async (route) =>
+    route.fulfill({
+      status: 502,
+      json: {
+        success: false,
+        error: {
+          code: "FIX_PR_FAILED",
+          message: "Fix PR execution did not complete.",
+          details: outcome,
+        },
+      },
+    })
+  )
+  await page.goto("?fixProposals")
+  const ready = page.getByRole("article", { name: /requiring application compatibility review/ })
+  await ready.getByRole("button", { name: "Create pull request" }).click()
+  await ready.getByRole("button", { name: "Request approval", exact: true }).click()
+  await expect(ready.getByRole("status")).toContainText(outcome.reason)
+  await expect(ready.getByRole("button", { name: "Create pull request" })).toHaveCount(0)
+  await expect(ready.getByRole("button", { name: "Check PR status" })).toBeEnabled()
 })

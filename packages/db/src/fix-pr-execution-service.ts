@@ -93,12 +93,14 @@ export async function markFixPrRecovery(
   workspaceId: string,
   proposalId: string,
   executionKey: string,
+  approvalId: string,
   status: "recovery" | "failed" | "stale" = "recovery"
 ) {
   return withWorkspaceRLS(workspaceId, (tx) =>
     tx.pullRequest.updateMany({
       where: {
         executionKey,
+        approvalId,
         fixProposalId: proposalId,
         status: "opening",
         deletedAt: null,

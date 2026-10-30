@@ -1,11 +1,16 @@
 import { randomUUID } from "node:crypto"
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 import { prisma } from "./client"
-import { beginFixPrExecution, getFixPrExecution } from "./fix-pr-execution-service"
+import {
+  beginFixPrExecution,
+  getFixPrExecution,
+  markFixPrRecovery,
+} from "./fix-pr-execution-service"
 import { createPullRequestRecord } from "./fix-proposal-service"
 
 const provider = vi.hoisted(() => ({
   persistFailure: false,
+  completeFailureApprovalId: "",
   branch: vi.fn(),
   write: vi.fn(),
   pr: vi.fn(),
@@ -27,6 +32,13 @@ vi.mock("./index", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./index")>()
   return {
     ...actual,
+    completeApprovalExecution: async (
+      ...args: Parameters<typeof actual.completeApprovalExecution>
+    ) => {
+      if (args[0] === provider.completeFailureApprovalId)
+        throw new Error("Injected approval completion failure")
+      return actual.completeApprovalExecution(...args)
+    },
     createPullRequestRecord: async (...args: Parameters<typeof actual.createPullRequestRecord>) => {
       if (provider.persistFailure) throw new Error("Injected database persistence failure")
       return actual.createPullRequestRecord(...args)
@@ -35,7 +47,11 @@ vi.mock("./index", async (importOriginal) => {
 })
 import { handleFixPrMergedAndReevaluate } from "./fix-pr-merge-service"
 import { buildUnifiedDiff } from "../../fix/src/index"
-import { buildFixPrApprovalInput, executeApprovedFixPr } from "../../../apps/web/src/lib/fix-pr"
+import {
+  buildFixPrApprovalInput,
+  executeApprovedFixPr,
+  getFixPrStatus,
+} from "../../../apps/web/src/lib/fix-pr"
 import { hashInput } from "./agent-approval-service"
 
 const suffix = randomUUID()
@@ -213,6 +229,103 @@ describe("durable fix PR persistence", () => {
     })
     expect(rows).toHaveLength(1)
     expect(rows[0]?.status).toBe("open")
+  })
+
+  it("keeps the winner recoverable when loser bookkeeping and winner persistence both fail", async () => {
+    const proposal = await prisma.fixProposal.create({
+      data: { findingId, summary: "Concurrent failure recovery" },
+    })
+    const request = {
+      workspaceId,
+      targetId: `fix-target-${suffix}`,
+      fixProposalId: proposal.id,
+      diff: buildUnifiedDiff("src/a.ts", "const insecure = true\n", "const insecure = false\n"),
+      anchorFile: "src/a.ts",
+      implicatedFiles: ["src/a.ts"],
+      plan: "PRO",
+      installationId: 1,
+      repoOwner: "owner",
+      repoName: "repo",
+      baseCommit: "a".repeat(40),
+      requestedById: `fix-user-${suffix}`,
+    }
+    const input = buildFixPrApprovalInput(request)
+    const approvals = await Promise.all(
+      ["winner", "loser"].map((actor) =>
+        prisma.agentApproval.create({
+          data: {
+            workspaceId,
+            actionName: "fix_pr.open",
+            inputHash: hashInput("fix_pr.open", input),
+            input,
+            status: "APPROVED",
+            requestedById: actor,
+            expiresAt: new Date(Date.now() + 60000),
+          },
+        })
+      )
+    )
+    let entered!: () => void
+    let release!: () => void
+    const enteredBranch = new Promise<void>((resolve) => {
+      entered = resolve
+    })
+    const releaseBranch = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    provider.branch.mockClear().mockImplementationOnce(async () => {
+      entered()
+      await releaseBranch
+    })
+    provider.pr
+      .mockClear()
+      .mockResolvedValue({ number: 47, url: "https://github.com/owner/repo/pull/47" })
+    provider.inspect.mockResolvedValue({ branchExists: false, pullRequest: null })
+    provider.persistFailure = true
+    provider.completeFailureApprovalId = approvals[1]!.id
+    const winner = executeApprovedFixPr({ ...request, approvalId: approvals[0]!.id })
+    await Promise.race([
+      enteredBranch,
+      winner.then((outcome) => {
+        throw new Error(`Winner stopped before branch: ${JSON.stringify(outcome)}`)
+      }),
+    ])
+    try {
+      const loser = await executeApprovedFixPr({ ...request, approvalId: approvals[1]!.id })
+      expect(loser.status).toBe("opening")
+      const intent = await prisma.pullRequest.findFirstOrThrow({
+        where: { fixProposalId: proposal.id },
+      })
+      expect(intent.status).toBe("opening")
+      expect(
+        (
+          await markFixPrRecovery(
+            workspaceId,
+            proposal.id,
+            intent.executionKey!,
+            approvals[1]!.id,
+            "failed"
+          )
+        ).count
+      ).toBe(0)
+    } finally {
+      release()
+      await winner
+      provider.persistFailure = false
+      provider.completeFailureApprovalId = ""
+    }
+    const intent = await prisma.pullRequest.findFirstOrThrow({
+      where: { fixProposalId: proposal.id },
+    })
+    expect(intent.status).toBe("recovery")
+    provider.inspect.mockResolvedValueOnce({
+      branchExists: true,
+      pullRequest: { number: 47, url: "https://github.com/owner/repo/pull/47", status: "open" },
+    })
+    expect((await getFixPrStatus(request)).status).toBe("opened")
+    expect(provider.branch).toHaveBeenCalledOnce()
+    expect(provider.pr).toHaveBeenCalledOnce()
+    expect(await prisma.pullRequest.count({ where: { fixProposalId: proposal.id } })).toBe(1)
   })
 
   it("keeps legacy PR history from opening a second branch automatically", async () => {
