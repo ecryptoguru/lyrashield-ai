@@ -80,6 +80,8 @@ function asObject(value: unknown): Record<string, unknown> {
 
 interface ApprovalsClientProps {
   workspaceId: string
+  /** Validated pending-approval cursor; independent of the operation page. */
+  pendingCursor?: string | null
   canDecide?: boolean
   canApproveFix?: boolean
   approvals: ApprovalListItem[]
@@ -112,7 +114,17 @@ function ApprovalExpiry({ expiresAt }: { expiresAt: ApprovalItem["expiresAt"] })
   )
 }
 
-export function ApprovalsClient({
+/** New pending pages reset their local rows; operation-only navigation retains decisions. */
+export function ApprovalsClient(props: ApprovalsClientProps) {
+  return (
+    <ApprovalPageState
+      key={JSON.stringify([props.workspaceId, props.pendingCursor ?? null])}
+      {...props}
+    />
+  )
+}
+
+function ApprovalPageState({
   workspaceId,
   canDecide = false,
   canApproveFix = false,

@@ -100,12 +100,23 @@ export function useTargetRepositoryPicker({
     })
   }
 
+  function handleSearchRepos(value: string) {
+    setReposSearch(value)
+    const selected = githubRepos.find((repo) => String(repo.id) === selectedRepoId)
+    if (
+      selectedRepoId &&
+      (!selected || !selected.fullName.toLowerCase().includes(value.trim().toLowerCase()))
+    ) {
+      handleSelectRepo("")
+    }
+  }
+
   return {
     githubRepos,
     reposNextPage,
     reposError,
     reposSearch,
-    setReposSearch,
+    setReposSearch: handleSearchRepos,
     reposLoading,
     repoMode,
     setRepoMode,

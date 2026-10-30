@@ -290,3 +290,65 @@ test("members without integration management cannot load private repository choi
   await expect(page.getByRole("button", { name: "Reconnect GitHub" })).toHaveCount(0)
   expect(requests).toEqual([])
 })
+
+test("changing repository search clears a hidden selection before target creation", async ({
+  page,
+}) => {
+  await page.route("**/api/integrations/github/repos?**", (route) =>
+    route.fulfill({ json: { success: true, data: { items: [repo(1), repo(2)], nextPage: null } } })
+  )
+  const created: Array<Record<string, unknown>> = []
+  await page.route("**/api/targets", (route) => {
+    created.push(route.request().postDataJSON())
+    return route.fulfill({
+      json: { success: true, data: { id: "target-filtered", name: "example/repo-2" } },
+    })
+  })
+  await page.route("**/api/targets?**", (route) =>
+    route.fulfill({ json: { success: true, data: { items: [], nextCursor: null } } })
+  )
+  await page.goto("?v26-dashboard=targets&add=1")
+  await page.getByLabel("Select repository").selectOption("1")
+  await expect(page.getByRole("button", { name: /^Create target$/i })).toBeEnabled()
+  await page.getByRole("textbox", { name: "Search loaded repositories" }).fill("repo-2")
+  await expect(page.getByLabel("Select repository")).toHaveValue("")
+  await expect(page.getByRole("button", { name: /^Create target$/i })).toBeDisabled()
+  expect(created).toEqual([])
+  await page.getByLabel("Select repository").selectOption("2")
+  await page.getByRole("button", { name: /^Create target$/i }).click()
+  await expect(page.getByRole("status")).toContainText("ready for scan setup")
+  expect(created).toHaveLength(1)
+  expect(created[0]).toMatchObject({
+    name: "example/repo-2",
+    repoOwner: "example",
+    repoName: "repo-2",
+  })
+})
+
+test("approval page identity follows pending pagination and retains decisions on operation-only navigation", async ({
+  page,
+}) => {
+  let denied = 0
+  await page.route("**/api/agent-approvals/approval-first/deny", (route) => {
+    denied++
+    return route.fulfill({ json: { success: true, data: {} } })
+  })
+  await page.goto("?v26-dashboard=approvals-pages")
+  await expect(page.locator("#approval-approval-first")).toBeVisible()
+  await page
+    .locator("#approval-approval-first")
+    .getByRole("button", { name: "Deny", exact: true })
+    .click()
+  await expect(page.locator("#approval-approval-first")).toHaveCount(0)
+  await expect(page.locator("#approval-approval-another")).toBeVisible()
+  await page.getByRole("button", { name: "Older operations fixture" }).click()
+  await expect(page.locator("#approval-approval-first")).toHaveCount(0)
+  await expect(page.locator("#approval-approval-another")).toBeVisible()
+  await page.getByRole("button", { name: "More pending approvals fixture" }).click()
+  await expect(page.locator("#approval-approval-second")).toBeVisible()
+  await expect(page.locator("#approval-approval-another")).toHaveCount(0)
+  await page.getByRole("button", { name: "Latest activity fixture" }).click()
+  await expect(page.locator("#approval-approval-latest")).toBeVisible()
+  await expect(page.locator("#approval-approval-second")).toHaveCount(0)
+  expect(denied).toBe(1)
+})

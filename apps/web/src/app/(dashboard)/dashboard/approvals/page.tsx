@@ -101,6 +101,7 @@ export default async function ApprovalsPage({
       />
 
       <ApprovalsClient
+        pendingCursor={approvalsCursor.success ? approvalsCursor.data : null}
         workspaceId={workspaceId}
         canDecide={!!active && hasPermission(active.role as MemberRole, PERMISSIONS.agent.approve)}
         canApproveFix={
