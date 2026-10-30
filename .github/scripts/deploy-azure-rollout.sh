@@ -81,6 +81,7 @@ step_deploy-app-container-app() {
     --set-env-vars \
       "NEXT_PUBLIC_APP_URL=${APP_URL}" \
       "NEXT_PUBLIC_MARKETING_URL=${MARKETING_URL}" \
+      "TURNSTILE_ENFORCE_ACTION=${TURNSTILE_ENFORCE_ACTION:-0}" \
       "BETTER_AUTH_URL=${APP_URL}" \
       "PLATFORM_ADMIN_EMAILS=${PLATFORM_ADMIN_EMAILS}" \
       "IP_HASH_SALT=secretref:ip-hash-salt" \
@@ -190,6 +191,7 @@ step_deploy-scanner-container-app() {
     --set-env-vars \
       "NEXT_PUBLIC_APP_URL=${SCANNER_URL}" \
       "NEXT_PUBLIC_MARKETING_URL=${MARKETING_URL}" \
+      "TURNSTILE_ENFORCE_ACTION=${TURNSTILE_ENFORCE_ACTION:-0}" \
       "BETTER_AUTH_URL=${APP_URL}" \
       "PLATFORM_ADMIN_EMAILS=${PLATFORM_ADMIN_EMAILS}" \
       "IP_HASH_SALT=secretref:ip-hash-salt" \

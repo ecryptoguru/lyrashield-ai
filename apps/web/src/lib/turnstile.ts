@@ -24,6 +24,7 @@ type DiagnosticContext = {
   attempt: number
   providerMode: "documented-test" | "unclassified"
   expectedHostname: string
+  enforceAction: boolean
 }
 type VerificationMetadata = {
   success?: boolean
@@ -170,7 +171,9 @@ async function verifyTurnstileOnce(
     const outcome =
       verification.ok &&
       result.success === true &&
-      ((result.hostname === context.expectedHostname && result.action === "lyrashield-public") ||
+      ((result.hostname === context.expectedHostname &&
+        (result.action === "lyrashield-public" ||
+          (!context.enforceAction && (result.action === undefined || result.action === "")))) ||
         (context.providerMode === "documented-test" &&
           process.env.NODE_ENV !== "production" &&
           result.hostname === "localhost" &&
@@ -191,6 +194,8 @@ export async function verifyTurnstile(token: string | undefined): Promise<boolea
   const secret = process.env.TURNSTILE_SECRET_KEY
   if (!secret || (process.env.NODE_ENV === "production" && /^[123]x0{31}AA$/.test(secret)))
     return false
+  const actionMode = process.env.TURNSTILE_ENFORCE_ACTION ?? "0"
+  if (actionMode !== "0" && actionMode !== "1") return false
   let expectedHostname: string
   try {
     const origin = new URL(process.env.NEXT_PUBLIC_MARKETING_URL ?? "")
@@ -215,6 +220,7 @@ export async function verifyTurnstile(token: string | undefined): Promise<boolea
       attempt: attempt + 1,
       providerMode,
       expectedHostname,
+      enforceAction: actionMode === "1",
     })
     if (outcome === "success") return true
     if (outcome === "failed") return false

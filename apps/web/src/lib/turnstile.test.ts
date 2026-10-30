@@ -47,6 +47,7 @@ beforeEach(() => {
   })
   vi.useFakeTimers()
   vi.setSystemTime(now)
+  vi.stubEnv("TURNSTILE_ENFORCE_ACTION", "1")
   vi.stubEnv("NEXT_PUBLIC_MARKETING_URL", "https://lyrashieldai.com")
   vi.stubEnv("TURNSTILE_SECRET_KEY", secret)
   vi.stubEnv("UPSTASH_REDIS_REST_URL", "https://redis.example.test")
@@ -418,4 +419,42 @@ it("supports documented dummy metadata only outside production", async () => {
   mocks.set.mockClear()
   await expect(verifyTurnstile("different-proof")).resolves.toBe(false)
   expect(mocks.set).not.toHaveBeenCalled()
+})
+
+describe("staged action enforcement", () => {
+  it.each([undefined, ""])(
+    "accepts a legacy widget action=%s only during staged rollout, retaining one-use proof consumption",
+    async (action) => {
+      vi.stubEnv("TURNSTILE_ENFORCE_ACTION", "0")
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => response({ success: true, action }))
+      )
+      await expect(verifyTurnstile(proof)).resolves.toBe(true)
+      await expect(verifyTurnstile(proof)).resolves.toBe(false)
+    }
+  )
+  it.each(["0", "1"])(
+    "rejects a wrong hostname or wrong nonempty action in mode %s",
+    async (mode) => {
+      vi.stubEnv("TURNSTILE_ENFORCE_ACTION", mode)
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () =>
+          response({ success: true, hostname: "attacker.invalid", action: undefined })
+        )
+      )
+      await expect(verifyTurnstile(proof)).resolves.toBe(false)
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => response({ success: true, action: "another-workflow" }))
+      )
+      await expect(verifyTurnstile("fresh-proof")).resolves.toBe(false)
+    }
+  )
+  it("rejects invalid enforcement configuration before proof reservation", async () => {
+    vi.stubEnv("TURNSTILE_ENFORCE_ACTION", "yes")
+    await expect(verifyTurnstile(proof)).resolves.toBe(false)
+    expect(mocks.set).not.toHaveBeenCalled()
+  })
 })

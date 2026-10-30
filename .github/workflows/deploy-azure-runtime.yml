@@ -74,6 +74,7 @@ env:
   APP_URL: ${{ vars.LYRASHIELD_APP_URL || 'https://app.lyrashieldai.com' }}
   SCANNER_URL: ${{ vars.LYRASHIELD_SCANNER_URL || 'https://scanner.lyrashieldai.com' }}
   REQUIRE_EMAIL_VERIFICATION: ${{ vars.LYRASHIELD_REQUIRE_EMAIL_VERIFICATION || '1' }}
+  TURNSTILE_ENFORCE_ACTION: ${{ vars.TURNSTILE_ENFORCE_ACTION || '0' }}
   TARGET_RELAY_ENABLED: ${{ vars.LYRASHIELD_TARGET_RELAY_ENABLED || '0' }}
   PLATFORM_ADMIN_EMAILS: ecryptoguru@gmail.com,ankit@lyrashieldai.com
   # Scanner-only deployments remain closed; app deployments replace these

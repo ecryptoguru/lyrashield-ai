@@ -324,6 +324,7 @@ test("deployment step order, recovery conditions and app/scanner env key sets st
   assert.deepEqual(envKeys(app, "--set-env-vars"), [
     "NEXT_PUBLIC_APP_URL",
     "NEXT_PUBLIC_MARKETING_URL",
+    "TURNSTILE_ENFORCE_ACTION",
     "BETTER_AUTH_URL",
     "PLATFORM_ADMIN_EMAILS",
     "IP_HASH_SALT",
@@ -379,6 +380,7 @@ test("deployment step order, recovery conditions and app/scanner env key sets st
   assert.deepEqual(envKeys(scanner, "--set-env-vars"), [
     "NEXT_PUBLIC_APP_URL",
     "NEXT_PUBLIC_MARKETING_URL",
+    "TURNSTILE_ENFORCE_ACTION",
     "BETTER_AUTH_URL",
     "PLATFORM_ADMIN_EMAILS",
     "IP_HASH_SALT",

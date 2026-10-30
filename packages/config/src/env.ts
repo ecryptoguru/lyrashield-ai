@@ -190,6 +190,8 @@ const envSchema = z
     NEXT_PUBLIC_POSTHOG_KEY: z.string().optional().or(z.literal("")),
     NEXT_PUBLIC_POSTHOG_HOST: z.string().url().optional().or(z.literal("")),
     // Cloudflare Turnstile secret (server-side). Public site key lives in apps/marketing/.env.example.
+    // Stage action enforcement independently from the browser widget rollout.
+    TURNSTILE_ENFORCE_ACTION: z.enum(["0", "1"]).default("0"),
     TURNSTILE_SECRET_KEY: z.string().optional().or(z.literal("")),
     TRUSTED_PROXY_IP_HEADER: z
       .enum(["cf-connecting-ip", "true-client-ip", "x-real-ip", "x-forwarded-for"])

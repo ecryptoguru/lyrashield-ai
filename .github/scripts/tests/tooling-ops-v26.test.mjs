@@ -50,10 +50,30 @@ test("backup and restore keep credentials out of command arguments and bind loop
   assert.match(source, /export PG_URL="\$pg_dump_url"/)
   assert.match(source, /--env PG_URL \\\n/)
   assert.doesNotMatch(source, /--env PG_URL=/)
+  assert.match(source, /\$RUNNER_TEMP\/restore-db-password/)
+  assert.doesNotMatch(source, /RESTORE_DB_PASSWORD=.*GITHUB_ENV/)
   assert.doesNotMatch(
     source,
     /POSTGRES_PASSWORD=restore|restore:restore@|cat "\$RUNNER_TEMP\/restore-web.log"/
   )
   assert.match(source, /\$\{ISOLATED_RESTORE_BIND:-127\.0\.0\.1:\}5433:5432/)
   assert.match(source, /\$\{ISOLATED_RESTORE_BIND:-127\.0\.0\.1:\}6379:6379/)
+})
+
+test("Turnstile action enforcement defaults to a separately controlled staged rollout", () => {
+  const source = read(".github/workflows/deploy-azure-runtime.yml")
+  assert.match(
+    source,
+    /TURNSTILE_ENFORCE_ACTION: \$\{\{ vars\.TURNSTILE_ENFORCE_ACTION \|\| '0' \}\}/
+  )
+  assert.match(
+    read("packages/config/src/env.ts"),
+    /TURNSTILE_ENFORCE_ACTION: z\.enum\(\["0", "1"\]\)\.default\("0"\)/
+  )
+  assert.equal(
+    read(".github/scripts/deploy-azure-rollout.sh").match(
+      /"TURNSTILE_ENFORCE_ACTION=\$\{TURNSTILE_ENFORCE_ACTION:-0\}"/g
+    )?.length,
+    2
+  )
 })
