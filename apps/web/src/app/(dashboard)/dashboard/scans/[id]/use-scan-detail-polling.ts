@@ -86,6 +86,7 @@ export function useScanDetailPolling(initialScan: ScanData, initialFindings: Fin
   const [refreshing, setRefreshing] = useState(false)
   const [refreshError, setRefreshError] = useState(false)
   const isActive = isActiveScan(scan.status)
+  const shouldPoll = isActive || scan.capacity?.admissionHeld === true
   const etagRef = useRef<string | undefined>(undefined)
   const activeRequestRef = useRef<{ controller: AbortController; promise: Promise<void> } | null>(
     null
@@ -185,7 +186,7 @@ export function useScanDetailPolling(initialScan: ScanData, initialFindings: Fin
   // The poll loop itself lives in ./scan-poll-loop; the visibility handling and
   // backoff intervals are unchanged, only their home is.
   useScanPollLoop({
-    isActive,
+    isActive: shouldPoll,
     startedAt: scan.startedAt,
     runRefresh,
     abortActiveRequest,
@@ -211,7 +212,7 @@ export function useScanDetailPolling(initialScan: ScanData, initialFindings: Fin
    * time the server returned are written; nothing is inferred from the click.
    * Any poll already in flight is aborted first, so a response that was issued
    * before the cancel cannot write the previous status back over it. The poll
-   * loop sees a terminal status and stops on its own.
+   * loop keeps refreshing any held capacity until the server confirms release.
    */
   function applyCancelledScan(status: string, endedAt: string | null) {
     activeRequestRef.current?.controller.abort()

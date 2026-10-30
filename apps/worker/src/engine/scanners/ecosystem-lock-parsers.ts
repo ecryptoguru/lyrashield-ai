@@ -125,6 +125,14 @@ export function parseCargoLock(content: string, filePath: string): EcosystemReso
   return result
 }
 
+/** Supported RubyGems dotted grammar; unknown platform/hyphen identities stay unresolved. */
+function isRubyVersion(version: string): boolean {
+  const [first, ...components] = version.split(".")
+  return (
+    !!first && /^[0-9]+$/.test(first) && components.every((part) => /^[A-Za-z0-9]+$/.test(part))
+  )
+}
+
 export function parseGemfileLock(content: string, filePath: string): EcosystemResolution {
   const result: EcosystemResolution = { packages: [], unresolved: [] }
   const issue = (reason: string, name = filePath) =>
@@ -233,7 +241,7 @@ export function parseGemfileLock(content: string, filePath: string): EcosystemRe
     const platform =
       platformCandidates.find((p) => p !== "ruby" && identity.endsWith(`-${p}`)) ?? "ruby"
     const version = platform === "ruby" ? identity : identity.slice(0, -platform.length - 1)
-    if (!/^\d+[A-Za-z0-9.]*$/.test(version) || !platforms.size) {
+    if (!isRubyVersion(version) || !platforms.size) {
       issue("Ruby version or platform identity could not be resolved", name)
       continue
     }

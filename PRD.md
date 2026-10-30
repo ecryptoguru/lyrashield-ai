@@ -372,7 +372,7 @@ This is the approved public launch schedule. Revisit it after sufficient paid ut
 - Approval is atomic, single-use, expiry-aware, and bound to exact action name plus input hash.
 - Remote OAuth is read-only by default. A browser-confirmed, connection-bound delegation may authorize selected workflows, targets, and scan profiles without repeated review-queue prompts; execution still rechecks current membership, permission, scope, expiry, and idempotency. Nondelegated hosted remote MCP mutations, including write-scoped API-key calls and legacy `approvalId` requests, receive `connect_required`; out-of-grant delegated calls are denied.
 - Fresh GitHub callback state alone cannot create an integration.
-- Repository acquisition and deterministic retest use fresh repository-specific contents:read installation tokens and recheck the active integration. This read path has no local/Redis token cache; the separate authorized write-token path remains scoped and encrypted.
+- Repository acquisition and deterministic retest use fresh repository-specific contents:read installation tokens and recheck the active integration. This read path has no local/Redis token cache; the separate authorized installation-default token cache is encrypted and scoped by app identity, installation and grant.
 - No automatic merge or client-authored patch execution.
 
 ## 7. Architecture summary

@@ -406,3 +406,42 @@ it.each([
   expect(inventory.packages).toHaveLength(1)
   expect(inventory.unresolved).toContainEqual(expect.objectContaining({ name, reason }))
 })
+
+it.each(["3..1", "3.", "3a", "3.1..rc1"])(
+  "cannot declare exact inventory COMPLETE for malformed Ruby version %s",
+  async (version) => {
+    const root = await repo({
+      "Gemfile.lock": `GEM\n  remote: https://rubygems.org/\n  specs:\n    rack (${version})\n\nPLATFORMS\n  ruby\n\nDEPENDENCIES\n  rack\n`,
+    })
+    const inventory = await resolveExactDependencies({ repoPath: root })
+    expect(inventory.status).toBe("UNSUPPORTED")
+    expect(inventory.packages).toEqual([])
+    expect(inventory.unresolved).toContainEqual(
+      expect.objectContaining({ ecosystem: "RubyGems", name: "rack" })
+    )
+  }
+)
+
+it("qualifies supported dotted Ruby prereleases while retaining platform and source", async () => {
+  const root = await repo({
+    "Gemfile.lock":
+      "GEM\n  remote: https://rubygems.org/\n  specs:\n    rack (3.1.rc1)\n    native (1.2.beta.3-x86_64-linux-gnu)\n\nPLATFORMS\n  ruby\n  x86_64-linux-gnu\n\nDEPENDENCIES\n  rack\n  native\n",
+  })
+  const inventory = await resolveExactDependencies({ repoPath: root })
+  expect(inventory.status).toBe("COMPLETE")
+  expect(inventory.unresolved).toEqual([])
+  expect(inventory.packages).toEqual([
+    expect.objectContaining({
+      name: "rack",
+      version: "3.1.rc1",
+      platform: "ruby",
+      source: "https://rubygems.org/",
+    }),
+    expect.objectContaining({
+      name: "native",
+      version: "1.2.beta.3",
+      platform: "x86_64-linux-gnu",
+      source: "https://rubygems.org/",
+    }),
+  ])
+})

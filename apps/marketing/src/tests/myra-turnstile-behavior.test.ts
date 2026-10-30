@@ -20,6 +20,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 interface TurnstileOptions {
   sitekey: string
+  action?: string
   size?: string
   appearance?: string
   execution?: string

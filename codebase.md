@@ -356,7 +356,7 @@ the strict artifact validator. Scope rejections retain bounded user guidance.
 
 `fix-pr-execution-service.ts` persists the immutable-proposal execution key before remote mutation. `fix-pr.ts` prepares and writes files under that ownership and reconciles deterministic remote identity after uncertain local persistence/completion; losing callers cannot change the winning intent. `fix-pr-context.ts` validates producer-bound storage references before access. `fix-pr-merge-service.ts` takes the initiating-user then Fix PR advisory lock before `findFixPrMergeAnchor`, account binding, retest association and canonical scan creation in the same caller transaction. Exact scanned/default-head equality remains mandatory.
 
-Repository acquisition uses the separate fresh contents:read checkout wrapper in integrations; deterministic retest shares active-integration/repository validation. Remaining authorized shared token caching is encrypted and repository/permission scoped. Callback replay fixtures use real signed state with simulated provider exchange; they are not live GitHub acceptance.
+Repository acquisition and deterministic retest use fresh, uncached, repository-specific contents:read credentials through the separate checkout wrapper in integrations, with active-integration/repository validation. The remaining authorized installation-default token cache is encrypted and scoped by app identity, installation and grant; it is not repository scoped. Callback replay fixtures use real signed state with simulated provider exchange; they are not live GitHub acceptance.
 
 ### Public sharing
 

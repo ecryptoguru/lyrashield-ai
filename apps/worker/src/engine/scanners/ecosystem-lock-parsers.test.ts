@@ -127,3 +127,45 @@ dependencies=["missing 1.0.0"]
     expect(ruby.unresolved.length).toBeGreaterThan(0)
   })
 })
+
+it.each(["3..1", "3.", "3a", "3.1..rc1", "3.1-", "3.1-rc..1"])(
+  "keeps malformed Ruby version %s unresolved instead of querying an exact release",
+  (version) => {
+    const parsed = parseGemfileLock(
+      `GEM\n  remote: https://rubygems.org/\n  specs:\n    rack (${version})\n\nPLATFORMS\n  ruby\n\nDEPENDENCIES\n  rack\n`,
+      "Gemfile.lock"
+    )
+    expect(parsed.packages).toEqual([])
+    expect(parsed.unresolved).toContainEqual(
+      expect.objectContaining({
+        name: "rack",
+        reason: "Ruby version or platform identity could not be resolved",
+      })
+    )
+  }
+)
+
+it.each(["3.1.rc1", "3.1.a2"])(
+  "preserves supported Ruby prerelease %s and its platform identity",
+  (version) => {
+    const parsed = parseGemfileLock(
+      `GEM\n  remote: https://rubygems.org/\n  specs:\n    rack (${version})\n    native (${version}-x86_64-linux-gnu)\n\nPLATFORMS\n  ruby\n  x86_64-linux-gnu\n\nDEPENDENCIES\n  rack\n  native\n`,
+      "Gemfile.lock"
+    )
+    expect(parsed.unresolved).toEqual([])
+    expect(parsed.packages).toEqual([
+      expect.objectContaining({
+        name: "rack",
+        version,
+        platform: "ruby",
+        source: "https://rubygems.org/",
+      }),
+      expect.objectContaining({
+        name: "native",
+        version,
+        platform: "x86_64-linux-gnu",
+        source: "https://rubygems.org/",
+      }),
+    ])
+  }
+)

@@ -1,6 +1,5 @@
 "use client"
 
-
 import { useEffect, useState } from "react"
 import { getScanPresentation, isActiveScan } from "@/lib/scan-presentation"
 import { apiPost, ApiError } from "@/lib/api-client"
