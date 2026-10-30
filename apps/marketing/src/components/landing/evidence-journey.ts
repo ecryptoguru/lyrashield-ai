@@ -1,5 +1,3 @@
-import { chapterProgress } from "../../lib/motion-loading"
-
 /** One example accumulates context; it never upgrades a finding's evidence state. */
 class EvidenceJourney extends HTMLElement {
   private observer?: IntersectionObserver
@@ -122,7 +120,7 @@ class EvidenceJourney extends HTMLElement {
     })
     if (nav) nav.scrollLeft = navLeft
     this.scene.dataset.stage = String(index)
-    if (this.progress) this.progress.textContent = chapterProgress(index, this.chapters.length)
+    if (this.progress) this.progress.textContent = String(index + 1).padStart(2, "0") + " / 07"
     this.receipts.forEach((receipt) => {
       receipt.classList.toggle("is-collected", Number(receipt.dataset.receiptStage) <= index)
       receipt.classList.toggle("is-current", Number(receipt.dataset.receiptStage) === index)

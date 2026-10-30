@@ -1,5 +1,4 @@
 ---
-import { chapterProgress } from "../../lib/motion-loading"
 import type { MotionMediaManifest } from "../../lib/motion-manifest"
 interface Props { manifest: MotionMediaManifest }
 const { manifest } = Astro.props
@@ -37,7 +36,7 @@ const labels = ["Overview", "Target", "Review", "Evidence", "Approval", "Retest"
       ))}
     </div>
     <aside class="journey__scene" aria-label="Illustrative finding and report" data-journey-scene data-stage="0">
-      <div class="journey__scene-heading"><span>Illustrative example</span><span data-journey-progress>{chapterProgress(0, manifest.chapters.length)}</span></div>
+      <div class="journey__scene-heading"><span>Illustrative example</span><span data-journey-progress>01 / 07</span></div>
       <div class="journey__track" aria-hidden="true"><i></i><span></span></div>
       <article class="journey__artifact">
         <div class="journey__artifact-top"><span>Finding EX-014</span><span class="journey__badge">Detected</span></div>

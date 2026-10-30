@@ -504,6 +504,8 @@ Runtime product `2d4e168da544306bf6cc9958a55f14bbfcb717e3` passed production rel
 
 ### Local v26 implementation — 2026-10-30
 
+The latest user instruction defers D5 and all landing motion/layout changes to preserve working production behavior. The candidate restores the five changed landing motion/runtime/layout files and existing motion browser tests exactly from main `284523ca381ee0d6ffa62ce22e855f7ecae9518f`. One static light-theme text-color accessibility fix in `EvidenceMap.astro` remains, with no motion or geometry change. Independent header/mobile-menu, CLI copy, claims and Turnstile fixes remain. No film regeneration, media change, production deployment or new loading-policy qualification is performed.
+
 All eleven local packages have scoped review approval and are integrated through runtime source `cbc2f165c`. Final frozen-tree suites/builds, rebuilt worker-image qualification, rendered acceptance and whole-branch review remain pending. The [v26 source/disposition record](./docs/handoffs/v26-implementation-2026-10-30.md) preserves original issue IDs, intermediate local proofs and unperformed qualifications. This does not change §8's dated production evidence. Production cutover additionally requires the [admission/capacity runbook](./docs/operations.md#v26-admissioncapacity-cutover-and-compatible-rollback), including legacy drain, grants and a reservation-compatible rollback image. Routing/model selection is unchanged.
 
 ### Delivered features and bounded proofs

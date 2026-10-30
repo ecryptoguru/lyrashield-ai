@@ -1,5 +1,4 @@
 import { expect, test } from "@playwright/test"
-import { fastMotionConnection } from "./helpers/motion-connection"
 
 // Keep local UX tests independent of authenticated production services.
 test.beforeEach(async ({ page }) => {
@@ -24,16 +23,9 @@ test.beforeEach(async ({ page }) => {
   )
 })
 
-const unknownConnection = () =>
-  Object.defineProperty(navigator, "connection", {
-    configurable: true,
-    value: undefined,
-  })
-
 test("CLI copy preserves the displayed command and reports clipboard rejection", async ({
   page,
 }) => {
-  await page.addInitScript(unknownConnection)
   await page.addInitScript(() => {
     const state = { text: "", fail: false }
     Object.assign(window, { clipboardForTest: state })
@@ -71,7 +63,6 @@ test("desktop disclosures dismiss on Escape, outside pointer and focus departure
   page,
 }) => {
   await page.setViewportSize({ width: 1440, height: 900 })
-  await page.addInitScript(unknownConnection)
   await page.goto("/")
   const details = page.locator('details[name="desktop-navigation"]').first()
   const summary = details.locator("summary")
@@ -93,156 +84,6 @@ test("desktop disclosures dismiss on Escape, outside pointer and focus departure
   await expect(details).not.toHaveAttribute("open", "")
 })
 
-test("unknown network shows film size and Play; leaving releases resources and return loads once", async ({
-  page,
-}) => {
-  await page.addInitScript(unknownConnection)
-  const requests: string[] = []
-  page.on("request", (request) => {
-    if (request.url().endsWith("assurance-world.mp4")) requests.push(request.url())
-  })
-  await page.addInitScript(() => {
-    const revoked: string[] = []
-    Object.assign(window, { revokedForTest: revoked })
-    const original = URL.revokeObjectURL
-    URL.revokeObjectURL = (url) => {
-      revoked.push(url)
-      original(url)
-    }
-  })
-  await page.goto("/")
-  const world = page.locator("scroll-world")
-  await expect(world).toHaveAttribute("data-world-state", "poster")
-  await expect(
-    page.getByRole("button", { name: /Play motion \(up to (10|16) MiB\)/ })
-  ).toBeVisible()
-  await page.waitForTimeout(300)
-  expect(requests).toHaveLength(0)
-  await page.locator("[data-world-status]").evaluate((status) => {
-    const changes: string[] = []
-    Object.assign(window, { statusForTest: changes })
-    new MutationObserver(() => changes.push(status.textContent ?? "")).observe(status, {
-      childList: true,
-      subtree: true,
-      characterData: true,
-    })
-  })
-  await page.getByRole("button", { name: /Play motion/ }).click()
-  await expect(world).toHaveAttribute("data-world-painted", "true", { timeout: 15000 })
-  expect(requests).toHaveLength(1)
-  const statuses = await page.evaluate(
-    () => (window as unknown as { statusForTest: string[] }).statusForTest
-  )
-  expect(statuses).toContain("Preparing smooth motion…")
-  expect(statuses.some((text) => /[0-9]+%/.test(text))).toBe(false)
-  const blob = await page.locator("[data-world-video]").getAttribute("src")
-  await page.locator("#faq").scrollIntoViewIfNeeded()
-  await expect(page.locator("[data-world-video]")).not.toHaveAttribute("src", /.+/)
-  await expect(world).not.toHaveAttribute("data-world-painted", "true")
-  expect(
-    await page.evaluate(() => (window as unknown as { revokedForTest: string[] }).revokedForTest)
-  ).toContain(blob)
-  await page.evaluate(() => scrollTo({ top: 0, behavior: "instant" }))
-  await expect(world).toHaveAttribute("data-world-painted", "true", { timeout: 15000 })
-  expect(requests).toHaveLength(2)
-})
-
-for (const preference of ["save-data", "reduced-motion"] as const) {
-  test(`${preference} blocks even explicit play requests`, async ({ page }) => {
-    await page.addInitScript(fastMotionConnection)
-    if (preference === "save-data")
-      await page.addInitScript(() =>
-        Object.assign((navigator as Navigator & { connection: object }).connection, {
-          saveData: true,
-        })
-      )
-    else await page.emulateMedia({ reducedMotion: "reduce" })
-    let requests = 0
-    page.on("request", (request) => {
-      if (request.url().endsWith("assurance-world.mp4")) requests++
-    })
-    await page.goto("/")
-    await expect(page.locator("scroll-world")).toHaveAttribute("data-world-state", "static")
-    await expect(page.locator("[data-world-toggle]")).toBeDisabled()
-    await page
-      .locator("[data-world-toggle]")
-      .evaluate((button) => button.dispatchEvent(new MouseEvent("click")))
-    await page.waitForTimeout(300)
-    expect(requests).toBe(0)
-    await expect(page.locator("[data-world-video]")).not.toHaveAttribute("src", /.+/)
-  })
-}
-
-test("fast hints wait for window load and idle; leaving cancels queued idle work", async ({
-  page,
-}) => {
-  await page.addInitScript(fastMotionConnection)
-  await page.addInitScript(() => {
-    const pending = new Map<number, IdleRequestCallback>()
-    let next = 0
-    const retired: IdleRequestCallback[] = []
-    window.requestIdleCallback = (callback) => {
-      pending.set(++next, callback)
-      return next
-    }
-    window.cancelIdleCallback = (id) => {
-      const callback = pending.get(id)
-      if (callback) retired.push(callback)
-      pending.delete(id)
-    }
-    Object.assign(window, {
-      idleCountForTest: () => pending.size,
-      runRetiredIdleForTest: () =>
-        retired.forEach((callback) => callback({ didTimeout: false, timeRemaining: () => 50 })),
-      runIdleForTest: () => {
-        const callbacks = [...pending.values()]
-        pending.clear()
-        callbacks.forEach((callback) => callback({ didTimeout: false, timeRemaining: () => 50 }))
-        return callbacks.length
-      },
-    })
-  })
-  let releaseImage!: () => void
-  const held = new Promise<void>((resolve) => {
-    releaseImage = resolve
-  })
-  await page.route("**/logo.svg", async (route) => {
-    await held
-    await route.continue()
-  })
-  let requests = 0
-  page.on("request", (request) => {
-    if (request.url().endsWith("assurance-world.mp4")) requests++
-  })
-  await page.goto("/", { waitUntil: "domcontentloaded" })
-  const runIdle = () =>
-    page.evaluate(() => (window as unknown as { runIdleForTest: () => number }).runIdleForTest())
-  expect(await runIdle()).toBe(0)
-  expect(requests).toBe(0)
-  releaseImage()
-  await page.waitForLoadState("load")
-  expect(requests).toBe(0)
-  await page.locator("#faq").scrollIntoViewIfNeeded()
-  await expect(page.locator("scroll-world")).toHaveAttribute("data-world-state", "poster")
-  await expect
-    .poll(() =>
-      page.evaluate(() =>
-        (window as unknown as { idleCountForTest: () => number }).idleCountForTest()
-      )
-    )
-    .toBe(0)
-  expect(await runIdle()).toBe(0)
-  await page.evaluate(() => scrollTo({ top: 0, behavior: "instant" }))
-  await page.evaluate(() =>
-    (window as unknown as { runRetiredIdleForTest: () => void }).runRetiredIdleForTest()
-  )
-  await expect.poll(runIdle).toBeGreaterThan(0)
-  await expect(page.locator("scroll-world")).toHaveAttribute("data-world-painted", "true", {
-    timeout: 15000,
-  })
-  expect(requests).toBe(1)
-})
-
 for (const viewport of [
   { width: 360, height: 640 },
   { width: 390, height: 844 },
@@ -254,7 +95,6 @@ for (const viewport of [
     page,
   }) => {
     await page.setViewportSize(viewport)
-    await page.addInitScript(unknownConnection)
     const errors: string[] = []
     page.on("pageerror", (error) => errors.push(error.message))
     await page.goto("/")
@@ -266,9 +106,6 @@ for (const viewport of [
     const primary = await page.locator(".premium-hero__primary").boundingBox()
     expect(primary && primary.x >= 0 && primary.x + primary.width <= viewport.width).toBe(true)
     if (viewport.width < 1024) {
-      const motion = await page.locator("[data-world-toggle]").boundingBox()
-      const title = await page.locator("h1").boundingBox()
-      expect(motion && title && motion.y + motion.height <= title.y).toBe(true)
       await page.getByRole("button", { name: "Open navigation menu" }).click()
       const menu = page.getByRole("dialog", { name: "Mobile navigation" })
       await menu.getByText("Learn", { exact: true }).click()
@@ -280,12 +117,6 @@ for (const viewport of [
       expect(support && support.y >= 0 && support.y + support.height <= viewport.height).toBe(true)
       await page.keyboard.press("Escape")
       await expect(menu).not.toBeVisible()
-      await page.locator("#journey-report").scrollIntoViewIfNeeded()
-      const rail = await page
-        .getByRole("navigation", { name: "Evidence journey chapters" })
-        .boundingBox()
-      const control = await page.locator("[data-world-toggle]").boundingBox()
-      expect(rail && control && rail.y + rail.height <= control.y).toBe(true)
     }
     await expect(page.locator("astro-error-overlay, #vite-error-overlay")).toHaveCount(0)
     expect(errors).toEqual([])
@@ -296,7 +127,6 @@ test("enlarged text and 200 percent CSS zoom retain usable navigation and action
   page,
 }) => {
   await page.setViewportSize({ width: 1440, height: 900 })
-  await page.addInitScript(unknownConnection)
   await page.goto("/")
   await page.evaluate(() => {
     document.documentElement.style.zoom = "2"
@@ -316,27 +146,4 @@ test("enlarged text and 200 percent CSS zoom retain usable navigation and action
   await menu.getByRole("link", { name: "Support", exact: true }).scrollIntoViewIfNeeded()
   const bounds = await menu.boundingBox()
   expect(bounds && bounds.y >= 0 && bounds.y + bounds.height <= 900).toBe(true)
-})
-
-test("leaving during download aborts it and ignores its late response", async ({ page }) => {
-  await page.addInitScript(fastMotionConnection)
-  let requests = 0
-  await page.route("**/assurance-world.mp4", async (route) => {
-    requests++
-    const response = await route.fetch()
-    await new Promise((resolve) => setTimeout(resolve, 1000))
-    await route.fulfill({ response }).catch(() => {})
-  })
-  await page.goto("/")
-  await expect(page.locator("[data-world-status]")).toHaveText("Preparing smooth motion…")
-  await page.locator("#faq").scrollIntoViewIfNeeded()
-  await expect(page.locator("scroll-world")).toHaveAttribute("data-world-state", "poster")
-  await page.waitForTimeout(1200)
-  await expect(page.locator("[data-world-video]")).not.toHaveAttribute("src", /.+/)
-  await expect(page.locator("scroll-world")).not.toHaveAttribute("data-world-state", "fallback")
-  await page.evaluate(() => scrollTo({ top: 0, behavior: "instant" }))
-  await expect(page.locator("scroll-world")).toHaveAttribute("data-world-painted", "true", {
-    timeout: 15000,
-  })
-  expect(requests).toBe(2)
 })

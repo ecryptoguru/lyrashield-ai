@@ -1,7 +1,4 @@
 import { expect, test } from "@playwright/test"
-import { fastMotionConnection } from "./helpers/motion-connection"
-
-test.beforeEach(async ({ page }) => page.addInitScript(fastMotionConnection))
 import {
   delayMotionNotifications,
   type DelayedMotionWindow,

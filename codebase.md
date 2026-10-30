@@ -436,7 +436,7 @@ Hosted OAuth is read-only by default. A user can grant a connection a bounded se
 - Deploy generated `apps/marketing/dist/server/wrangler.json`.
 - `apps/marketing/src/pages/robots.txt.ts`, `llms.txt.ts`, `agents.md.ts`, sitemap configuration, canonical/schema helpers, comparison/research pages, and integration docs form the SEO/AEO/GEO surface. Production indexability gates crawler output; external indexing and citation still require separate receipts.
 
-`PremiumHero.astro` film scheduling requires known qualifying connection signals plus load, idle and proximity; unknown/constrained quality retains poster/explicit Play. Resource cleanup has a bounded reload path. Chapter counts come from the manifest. Actual-media local transfer/decode measurements are distinct from eligibility fixtures and production CWV.
+The latest user instruction defers D5 film-loading and all landing motion/layout changes. The five changed landing motion/runtime/layout files (`ScrollWorld.astro`, `scroll-world.ts`, `PremiumHero.astro`, `EvidenceWorld.astro`, `evidence-journey.ts`) are byte-identical to main `284523ca381ee0d6ffa62ce22e855f7ecae9518f`; existing motion browser tests are restored unchanged. Film scheduling, runtime mapping, chapter counters, styles, media and generation retain that baseline. One static light-theme text-color accessibility fix in `EvidenceMap.astro` remains; it changes no motion, scrolling or geometry. Independent header dismissal/mobile-menu and CLI copy fixes remain in the candidate. No new loading policy or production performance improvement is claimed.
 
 ## 7. API surface
 

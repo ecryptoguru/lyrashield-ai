@@ -44,7 +44,7 @@ Elapsed versus charged whole/3x minutes, capacity/stop/finalizing states and per
 
 ## Task 10: D3 marketing UX
 
-Stable exact copy command+failure status tests. Desktop details escape/outside/focusout; safe-area/dynamic mobile height. Fast connection 4g and supplied downlink >=5Mbps: load only load+idle+near. Unknown/constrained: poster+Play with film size; SaveData/reduced motion never download. Release decoder/objectURL/cancel offscreen; bounded reload on return. Meaningful status only, manifest chapter counts. Remove only proven dead CSS/branches; preserve themes/mobile/static behavior. Browser matrix Chromium/Firefox/WebKit 360x640,390x844,768x1024,1280x800,1440x900,200% zoom, keyboard, motion/data preferences. No clipped actions/overflow or serious accessibility violations; real film measurements distinct from stubs.
+Stable exact copy command+failure status tests. Desktop details escape/outside/focusout; safe-area/dynamic mobile menu height. Latest user instruction defers D5 and all landing motion/layout changes: restore the five changed landing motion/runtime/layout files and existing motion browser regressions byte-for-byte from main `284523ca381ee0d6ffa62ce22e855f7ecae9518f`. Remove unused new loading/network helpers and D5-specific tests; retain independent header/copy acceptance. No new film scheduling, decoder cleanup, chapter counters or layout policy is implemented or claimed. One static light-theme text-color accessibility fix in `EvidenceMap.astro` remains, changing no motion or geometry. Film/runtime mapping, media and generation remain unchanged. Browser matrix qualifies preserved motion separately from header/copy behavior.
 
 ## Task 11: E tooling/ops/claims
 

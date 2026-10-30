@@ -5,7 +5,6 @@ import {
   type ChapterBand,
 } from "../../lib/scroll-world-mapping"
 import type { MotionMediaManifest } from "../../lib/motion-manifest"
-import { canAutoLoadMotion, type MotionConnection } from "../../lib/motion-loading"
 import { bufferMotion } from "../../lib/buffer-motion"
 import { MOTION_VARIANTS } from "../../../../marketing-motion/scripts/motion-media-contract.mjs"
 
@@ -41,17 +40,12 @@ class ScrollWorld extends HTMLElement {
   private fps = 30
   private download?: AbortController
   private objectUrl = ""
-  private explicitPlay = false
-  private pageLoaded = document.readyState === "complete"
-  private cancelScheduled?: () => void
-  private connection = (navigator as Navigator & { connection?: MotionConnection }).connection
 
   private mediaVariant() {
     return innerWidth < 1024 && innerHeight > innerWidth ? "portrait" : "desktop"
   }
 
   connectedCallback() {
-    this.pageLoaded = document.readyState === "complete"
     try {
       this.manifest = JSON.parse(this.dataset.worldManifest ?? "")
     } catch {
@@ -71,8 +65,6 @@ class ScrollWorld extends HTMLElement {
     }
     this.toggle.addEventListener("click", this.toggleMotion)
     this.reduced.addEventListener("change", this.preference)
-    this.connection?.addEventListener?.("change", this.preference)
-    addEventListener("load", this.loaded, { once: true })
     this.video.addEventListener("loadedmetadata", this.metadata)
     this.video.addEventListener("seeked", this.seeked)
     this.video.addEventListener("error", this.mediaError)
@@ -93,8 +85,10 @@ class ScrollWorld extends HTMLElement {
           this.measure()
           this.preference()
         } else {
-          this.release()
-          if (this.allowed()) this.dataset.worldState = "poster"
+          if (this.download) {
+            this.release()
+            this.dataset.worldState = "poster"
+          }
           removeEventListener("scroll", this.queue)
           cancelAnimationFrame(this.frame)
           this.frame = 0
@@ -115,8 +109,6 @@ class ScrollWorld extends HTMLElement {
     removeEventListener("resize", this.geometry)
     document.removeEventListener("visibilitychange", this.documentVisibility)
     this.reduced.removeEventListener("change", this.preference)
-    this.connection?.removeEventListener?.("change", this.preference)
-    removeEventListener("load", this.loaded)
     this.toggle?.removeEventListener("click", this.toggleMotion)
     this.video?.removeEventListener("loadedmetadata", this.metadata)
     this.video?.removeEventListener("seeked", this.seeked)
@@ -126,7 +118,9 @@ class ScrollWorld extends HTMLElement {
   }
 
   private allowed() {
-    return this.enabled && !this.reduced.matches && !this.connection?.saveData
+    const saveData = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection
+      ?.saveData
+    return this.enabled && !this.reduced.matches && !saveData
   }
 
   private ensureActiveMedia() {
@@ -144,8 +138,7 @@ class ScrollWorld extends HTMLElement {
   }
 
   private toggleMotion = () => {
-    this.enabled = this.failed || !this.allowed() || !this.authorized()
-    this.explicitPlay = this.enabled
+    this.enabled = this.failed || !this.allowed()
     this.failed = false
     try {
       localStorage.setItem("lyra-motion", this.enabled ? "on" : "off")
@@ -155,72 +148,22 @@ class ScrollWorld extends HTMLElement {
     this.preference()
   }
 
-  private authorized() {
-    return this.allowed() && (this.explicitPlay || canAutoLoadMotion(this.connection))
-  }
-
-  private loaded = () => {
-    this.pageLoaded = true
-    this.preference()
-  }
-
   private preference = () => {
-    const on = this.authorized()
-    const blocked = this.reduced.matches || Boolean(this.connection?.saveData)
-    this.toggle.disabled = blocked
-    this.toggle.setAttribute("aria-pressed", String(on && !this.failed))
-    const budget = MOTION_VARIANTS[this.mediaVariant()].budgetBytes / (1024 * 1024)
-    this.querySelector("[data-world-toggle-label]")!.textContent = this.failed
-      ? "Motion unavailable"
-      : !this.allowed()
-        ? "Motion off"
-        : on
-          ? "Motion on"
-          : `Play motion (up to ${budget} MiB)`
+    const on = this.allowed()
+    this.toggle.setAttribute("aria-pressed", String(on))
+    this.querySelector("[data-world-toggle-label]")!.textContent = on ? "on" : "off"
     if (!on) {
       this.release()
-      this.dataset.worldState = this.allowed() ? "poster" : "static"
+      this.dataset.worldState = "static"
       this.queue()
-    } else this.scheduleMedia()
-  }
-
-  private scheduleMedia() {
-    if (
-      !this.isConnected ||
-      !this.pageLoaded ||
-      !this.near ||
-      document.hidden ||
-      !this.authorized() ||
-      this.failed ||
-      this.video.getAttribute("src") ||
-      this.download ||
-      this.cancelScheduled
+    } else if (
+      this.near &&
+      !document.hidden &&
+      !this.failed &&
+      !this.video.getAttribute("src") &&
+      !this.download
     )
-      return
-    // Downloads start only after window load and an idle turn, even when the
-    // network hint or an explicit play request permits them.
-    const epoch = this.epoch
-    const run = () => {
-      if (epoch !== this.epoch) return
-      this.cancelScheduled = undefined
-      if (
-        this.isConnected &&
-        this.near &&
-        !document.hidden &&
-        this.authorized() &&
-        !this.failed &&
-        !this.download &&
-        !this.video.getAttribute("src")
-      )
-        void this.loadVariant()
-    }
-    if (typeof window.requestIdleCallback === "function") {
-      const idle = window.requestIdleCallback(run)
-      this.cancelScheduled = () => window.cancelIdleCallback(idle)
-    } else {
-      const timeout = window.setTimeout(run, 200)
-      this.cancelScheduled = () => clearTimeout(timeout)
-    }
+      void this.loadVariant()
   }
 
   private geometry = () => {
@@ -260,9 +203,8 @@ class ScrollWorld extends HTMLElement {
     if (this.variant && next !== this.variant) {
       this.release()
       this.variant = ""
-      this.scheduleMedia()
+      if (this.near && this.allowed() && !this.failed) this.loadVariant()
     }
-    this.preference()
     this.queue()
   }
 
@@ -280,18 +222,24 @@ class ScrollWorld extends HTMLElement {
     this.download = controller
     const timeout = window.setTimeout(() => controller.abort(), 120000)
     const status = this.querySelector<HTMLElement>("[data-world-status]")
+    let lastProgress = -1
     if (status) status.textContent = "Preparing smooth motion…"
     try {
       const blob = await bufferMotion(
         track.src,
         controller.signal,
         MOTION_VARIANTS[this.variant === "portrait" ? "portrait" : "desktop"].budgetBytes,
-        () => {} // Byte progress is intentionally quiet in the live region.
+        (percent) => {
+          const step = Math.floor(percent / 10) * 10
+          if (epoch !== this.epoch || step === lastProgress) return
+          lastProgress = step
+          if (status) status.textContent = `Preparing smooth motion… ${step}%`
+        }
       )
       if (
         epoch !== this.epoch ||
         !this.isConnected ||
-        !this.authorized() ||
+        !this.allowed() ||
         document.hidden ||
         !this.near
       )
@@ -473,10 +421,6 @@ class ScrollWorld extends HTMLElement {
   }
   private release() {
     this.epoch++
-    this.cancelScheduled?.()
-    this.cancelScheduled = undefined
-    cancelAnimationFrame(this.frame)
-    this.frame = 0
     this.download?.abort()
     this.download = undefined
     this.clearDeadline()
@@ -500,15 +444,17 @@ class ScrollWorld extends HTMLElement {
     this.release()
     this.dataset.worldState = "fallback"
     this.toggle.setAttribute("aria-pressed", "false")
-    this.querySelector("[data-world-toggle-label]")!.textContent = "Motion unavailable"
+    this.querySelector("[data-world-toggle-label]")!.textContent = "unavailable"
     const status = this.querySelector("[data-world-status]")
     if (status)
       status.textContent = "Animation unavailable. The complete evidence story remains available."
   }
   private documentVisibility = () => {
     if (document.hidden) {
-      this.release()
-      if (this.allowed()) this.dataset.worldState = "poster"
+      if (this.download) {
+        this.release()
+        this.dataset.worldState = "poster"
+      }
       cancelAnimationFrame(this.frame)
       this.frame = 0
       this.clearDeadline()
