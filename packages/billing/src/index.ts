@@ -265,5 +265,6 @@ export {
   resetUnstartedScanCapacity,
   reserveScanCapacity,
   confirmScanCapacityStopped,
+  type ScanBillingDisposition,
   fundedRuntimeMs,
 } from "./usage/capacity"

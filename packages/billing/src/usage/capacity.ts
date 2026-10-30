@@ -340,11 +340,14 @@ export async function settleReservedCapacity(
   return { minutes, overageMinutes }
 }
 
+export type ScanBillingDisposition = "nonbillable" | "settlement_required"
+
 /** Only executor/queue proof of termination may call this. Uncertain money retains the slot. */
 export async function confirmScanCapacityStopped(
   workspaceId: string,
   scanId: string,
-  noBillableWork = false
+  noBillableWork = false,
+  billingDisposition?: ScanBillingDisposition
 ): Promise<void> {
   await withWorkspaceRLS(workspaceId, async (tx) => {
     const { scan } = await lockedScan(tx, workspaceId, scanId)
@@ -363,8 +366,9 @@ export async function confirmScanCapacityStopped(
       },
     })
     const nonbillable =
-      noBillableWork ||
-      scan.status === "FAILED" ||
+      billingDisposition === "nonbillable" ||
+      (billingDisposition !== "settlement_required" &&
+        (noBillableWork || scan.status === "FAILED")) ||
       reservation.state === "WAITING" ||
       reservation.state === "RESERVED"
     const state =
@@ -411,7 +415,7 @@ export async function resetUnstartedScanCapacity(
     if (scan.accountingVersion !== 2 || scan.status !== "QUEUED") return
     const plan = scan.executionPlan as { capabilities?: string[] } | null
     if (!plan) throw new Error("capacity_scan_plan_missing")
-    await tx.scanCapacityReservation.updateMany({
+    const reset = await tx.scanCapacityReservation.updateMany({
       where: { scanId, accountId, state: { in: ["WAITING", "RESERVED", "RUNNING"] } },
       data: {
         state: plan.capabilities?.includes("engine") ? "WAITING" : "RESERVED",
@@ -426,5 +430,10 @@ export async function resetUnstartedScanCapacity(
         billingAccountId: null,
       },
     })
+    if (reset.count === 1)
+      await tx.scan.updateMany({
+        where: { id: scanId, workspaceId, status: "QUEUED" },
+        data: { startedAt: null },
+      })
   })
 }

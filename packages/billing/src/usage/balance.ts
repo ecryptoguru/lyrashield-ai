@@ -18,6 +18,7 @@ import { withAccountRLS, type ScopedTransaction } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 import { resolveAccountBilling, type ResolvedAccountBilling } from "../account"
 import { resolveAllowanceCycle } from "./allowance-cycle"
+import { readReservedFundingProjection } from "./funding-projection"
 
 export interface MinutePackBalance {
   id: string
@@ -112,7 +113,7 @@ export async function getUsageBalanceForTx(
     at: now,
   })
 
-  const [packs, grantRecords, consumeRecords] = await Promise.all([
+  const [packs, grantRecords, consumeRecords, reservedFunding] = await Promise.all([
     tx.minutePack.findMany({
       where: {
         accountId: input.accountId,
@@ -152,10 +153,13 @@ export async function getUsageBalanceForTx(
           _sum: { quantity: true },
         })
       : Promise.resolve([] as { kind: string; _sum: { quantity: number | null } }[]),
+    readReservedFundingProjection(tx, input.accountId, cycleStart),
   ])
 
   const poolMinutes = grantRecords._sum.quantity ?? 0
-  const poolConsumed = consumeRecords.find((r) => r.kind === "agent_minutes")?._sum.quantity ?? 0
+  const poolConsumed =
+    (consumeRecords.find((r) => r.kind === "agent_minutes")?._sum.quantity ?? 0) -
+    reservedFunding.nonPoolMinutes
   const overageConsumed =
     consumeRecords.find((r) => r.kind === "overage_minutes")?._sum.quantity ?? 0
 
@@ -165,7 +169,7 @@ export async function getUsageBalanceForTx(
   // Pack consumption spills in only after the pool is exhausted. The
   // MinutePack.remainingMinutes column (decremented atomically by
   // recordAgentMinutes) is the source of truth — not cycle-scoped records.
-  const packConsumed = Math.max(0, poolConsumed - poolMinutes)
+  const packConsumed = Math.max(0, poolConsumed - poolMinutes) + reservedFunding.packMinutes
   const totalPackMinutes = packs.reduce((sum, p) => sum + p.minutes, 0)
   const packRemaining = packs.reduce((sum, p) => sum + Math.max(0, p.remainingMinutes), 0)
 

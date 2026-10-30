@@ -27,6 +27,7 @@ import type { ScanMode } from "@lyrashield/types"
 import { resolveAccountBilling } from "../account"
 import { resolveBalanceCycleStart } from "./balance"
 import { settleReservedCapacity } from "./capacity"
+import { readReservedFundingProjection } from "./funding-projection"
 import { readRetainedScanAccounting } from "./retained-scan"
 
 export interface RecordAgentMinutesOptions {
@@ -511,7 +512,8 @@ async function recordMinutesAndDebitIncrementalSpillover(
     : [{ _sum: { quantity: null } }, { _sum: { quantity: null } }]
 
   const poolMinutes = grantRecords._sum.quantity ?? 0
-  const priorConsumed = priorConsumeRecords._sum.quantity ?? 0
+  const reservedFunding = await readReservedFundingProjection(tx, input.accountId, cycleStart)
+  const priorConsumed = (priorConsumeRecords._sum.quantity ?? 0) - reservedFunding.nonPoolMinutes
   const priorSpillover = Math.max(0, priorConsumed - poolMinutes)
   const nextSpillover = Math.max(0, priorConsumed + input.minutes - poolMinutes)
   const incrementalSpillover = nextSpillover - priorSpillover

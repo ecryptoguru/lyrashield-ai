@@ -382,6 +382,152 @@ describe.skipIf(!enabled)("agent-minute metering against disposable PostgreSQL",
     ).toMatchObject({ state: "RUNNING", fundedMinutes: 1 })
   })
 
+  it.each([
+    ["pack", "partial"],
+    ["pack", "failed"],
+    ["grace", "partial"],
+    ["grace", "failed"],
+    ["overage", "partial"],
+    ["overage", "failed"],
+  ] as const)(
+    "returns unused pool after a second user settles %s before the pool holder is %s",
+    async (source, outcome) => {
+      const f = await fixture(10, source === "pack" ? 5 : 0)
+      const { reserveScanCapacity } = await enableCapacity(f)
+      if (source === "overage")
+        await owner.billingAccount.updateMany({
+          where: { accountId: f.accountId },
+          data: { currentPlan: "LAUNCH_ASSURANCE", spendLimitCents: 75 },
+        })
+      const otherUser = `meter-account-${randomUUID()}`
+      accounts.push(otherUser)
+      await owner.user.create({
+        data: { id: otherUser, name: otherUser, email: `${otherUser}@example.test` },
+      })
+      await owner.scan.update({
+        where: { id: f.scanIds[1] },
+        data: { createdById: otherUser, sponsorAccountId: f.accountId },
+      })
+      await owner.scanCapacityReservation.update({
+        where: { scanId: f.scanIds[1] },
+        data: { userId: otherUser },
+      })
+      await reserveScanCapacity({
+        workspaceId: f.workspaceId,
+        scanId: f.scanId,
+        maxRuntimeMs: 600_000,
+        start: true,
+      })
+      await reserveScanCapacity({
+        workspaceId: f.workspaceIds[1]!,
+        scanId: f.scanIds[1]!,
+        maxRuntimeMs: 300_000,
+        start: true,
+      })
+      const second = await owner.scanCapacityReservation.findUniqueOrThrow({
+        where: { scanId: f.scanIds[1] },
+      })
+      expect(second).toMatchObject({ poolMinutes: 0, fundedMinutes: 5, [`${source}Minutes`]: 5 })
+      await recordAgentMinutes(f.workspaceIds[1]!, f.scanIds[1]!, 300_000, { phase: "engine_run" })
+      const { confirmScanCapacityStopped } = await import("./capacity")
+      await owner.scan.update({ where: { id: f.scanIds[1] }, data: { status: "COMPLETED" } })
+      await confirmScanCapacityStopped(f.workspaceIds[1]!, f.scanIds[1]!)
+      if (outcome === "partial")
+        await recordAgentMinutes(f.workspaceId, f.scanId, 300_000, { phase: "engine_run" })
+      await owner.scan.update({
+        where: { id: f.scanId },
+        data: { status: outcome === "partial" ? "PARTIAL" : "FAILED" },
+      })
+      await confirmScanCapacityStopped(f.workspaceId, f.scanId)
+      const { getUsageBalance } = await import("./balance")
+      expect(await getUsageBalance(f.accountId)).toMatchObject({
+        poolRemaining: outcome === "partial" ? 5 : 10,
+        poolConsumed: outcome === "partial" ? 5 : 0,
+        packConsumed: source === "pack" ? 5 : 0,
+        overageConsumed: source === "overage" ? 5 : 0,
+      })
+      const receipts = await ledger(f)
+      expect(receipts.usage.reduce((n, row) => n + row.quantity, 0)).toBe(
+        outcome === "partial" ? 10 : 5
+      )
+      // The next real admission can fund its entire runtime from the released pool.
+      const next = await owner.scan.create({
+        data: {
+          workspaceId: f.workspaceId,
+          createdById: f.accountId,
+          sponsorAccountId: f.accountId,
+          goal: "LAUNCH_REVIEW",
+          mode: "STANDARD",
+          accountingVersion: 2,
+        },
+      })
+      await owner.scanCapacityReservation.create({
+        data: {
+          scanId: next.id,
+          accountId: f.accountId,
+          userId: f.accountId,
+          workspaceId: f.workspaceId,
+          multiplier: 1,
+        },
+      })
+      await reserveScanCapacity({
+        workspaceId: f.workspaceId,
+        scanId: next.id,
+        maxRuntimeMs: 300_000,
+        start: true,
+      })
+      expect(
+        await owner.scanCapacityReservation.findUniqueOrThrow({ where: { scanId: next.id } })
+      ).toMatchObject({ poolMinutes: 5, packMinutes: 0, graceMinutes: 0, overageMinutes: 0 })
+    }
+  )
+
+  it("projects mixed legacy and v2 funding without rewriting history or double-debiting packs", async () => {
+    const f = await fixture(12, 5)
+    const { reserveScanCapacity, now } = await enableCapacity(f)
+    const old = await insertReceipt(f, {
+      quantity: 2,
+      cycleStart: now,
+      idempotencyKey: `${f.idempotencyKey}:legacy-before`,
+      metadata: { historical: true },
+    })
+    await reserveScanCapacity({
+      workspaceId: f.workspaceId,
+      scanId: f.scanId,
+      maxRuntimeMs: 600_000,
+      start: true,
+    })
+    await reserveScanCapacity({
+      workspaceId: f.workspaceIds[1]!,
+      scanId: f.scanIds[1]!,
+      maxRuntimeMs: 300_000,
+      start: true,
+    })
+    await recordAgentMinutes(f.workspaceIds[1]!, f.scanIds[1]!, 300_000, { phase: "engine_run" })
+    await recordAgentMinutes(f.workspaceId, f.scanId, 300_000, { phase: "engine_run" })
+    const legacy = await owner.scan.create({
+      data: {
+        workspaceId: f.workspaceId,
+        createdById: f.accountId,
+        goal: "LAUNCH_REVIEW",
+        mode: "STANDARD",
+      },
+    })
+    expect(
+      await recordAgentMinutes(f.workspaceId, legacy.id, 120_000, {
+        phase: "engine_run",
+        cycleStart: now,
+      })
+    ).toMatchObject({ minutes: 2, overageMinutes: 0 })
+    const { getUsageBalance } = await import("./balance")
+    expect(await getUsageBalance(f.accountId)).toMatchObject({
+      poolRemaining: 3,
+      poolConsumed: 9,
+      packConsumed: 5,
+    })
+    expect(await owner.usageRecord.findUnique({ where: { id: old.id } })).toEqual(old)
+  })
+
   it("Deep uses whole-minute rounding before its multiplier and absorbs stop latency", async () => {
     const f = await fixture(5)
     await owner.billingAccount.updateMany({
@@ -615,6 +761,48 @@ describe.skipIf(!enabled)("agent-minute metering against disposable PostgreSQL",
     expect(row.fundedMinutes).toBe(0)
   })
 
+  it.each([
+    ["BUDGET_EXCEEDED", "nonbillable", "RELEASED"],
+    ["CAPACITY_EXHAUSTED", "settlement_required", "REVIEW_REQUIRED"],
+  ] as const)(
+    "releases only authoritative nonbilling at a stopped %s outcome",
+    async (errorCategory, disposition, expectedState) => {
+      const f = await fixture(5)
+      const { reserveScanCapacity } = await enableCapacity(f)
+      await owner.userScanSlot.create({
+        data: { userId: f.accountId, scanId: f.scanId, workspaceId: f.workspaceId },
+      })
+      await reserveScanCapacity({
+        scanId: f.scanId,
+        workspaceId: f.workspaceId,
+        maxRuntimeMs: 120_000,
+        start: true,
+      })
+      await owner.scan.update({
+        where: { id: f.scanId },
+        data: { status: "STOPPED_BUDGET", errorCategory },
+      })
+      const { confirmScanCapacityStopped } = await import("./capacity")
+      await confirmScanCapacityStopped(f.workspaceId, f.scanId, false, disposition)
+      await db.releaseStoppedScanSlot(f.workspaceId, f.scanId)
+      expect(
+        await owner.scanCapacityReservation.findUniqueOrThrow({ where: { scanId: f.scanId } })
+      ).toMatchObject({ state: expectedState, stoppedAt: expect.any(Date) })
+      expect(await owner.userScanSlot.count({ where: { userId: f.accountId } })).toBe(
+        disposition === "nonbillable" ? 0 : 1
+      )
+      expect(
+        await reserveScanCapacity({
+          scanId: f.scanIds[1]!,
+          workspaceId: f.workspaceIds[1]!,
+          maxRuntimeMs: 60_000,
+          start: true,
+        })
+      ).toMatchObject({ state: disposition === "nonbillable" ? "RUNNING" : "WAITING" })
+      expect((await ledger(f)).usage).toHaveLength(0)
+    }
+  )
+
   it("keeps genuine failed and pre-provider work free and releases its stopped capacity", async () => {
     const f = await fixture(2)
     const { reserveScanCapacity } = await enableCapacity(f)
@@ -822,7 +1010,9 @@ describe.skipIf(!enabled)("agent-minute metering against disposable PostgreSQL",
       maxRuntimeMs: 120_000,
       start: true,
     })
+    await owner.scan.update({ where: { id: scan.id }, data: { startedAt: new Date() } })
     await resetUnstartedScanCapacity(f.workspaceId, scan.id)
+    expect((await owner.scan.findUniqueOrThrow({ where: { id: scan.id } })).startedAt).toBeNull()
     expect(
       await owner.scanCapacityReservation.findUniqueOrThrow({ where: { scanId: scan.id } })
     ).toMatchObject({ state: "WAITING", fundedMinutes: 0 })

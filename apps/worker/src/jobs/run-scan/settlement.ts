@@ -3,6 +3,7 @@ import {
   enterGrace,
   recordAgentMinutes,
   resolveAccountBilling,
+  type ScanBillingDisposition,
 } from "@lyrashield/billing"
 import {
   prisma,
@@ -38,6 +39,7 @@ export function createEngineMinuteMeter(params: {
   exitStatus: "COMPLETED" | "PARTIAL" | "FAILED"
   runRecord: EngineRunRecord | null
   onTerminalError: (error: ScanTerminalError) => void
+  onBillingDisposition?: (disposition: ScanBillingDisposition) => void
 }): (billingOutcome: EngineBillingOutcome, finishEvidence?: () => Promise<void>) => Promise<void> {
   const {
     scanId,
@@ -65,7 +67,12 @@ export function createEngineMinuteMeter(params: {
         runRecord,
         { cancelled: billingOutcome === "cancelled" }
       )
-    if (!billableWork || billingOutcome === "failed") return
+    if (!billableWork || billingOutcome === "failed") {
+      params.onBillingDisposition?.("nonbillable")
+      return
+    }
+    // A failed/unknown settlement is not an intentional nonbilling decision.
+    params.onBillingDisposition?.("settlement_required")
 
     let finalizationAttempted = false
     try {

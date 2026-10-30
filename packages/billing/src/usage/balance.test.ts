@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest"
 
 const withAccountRLSMock = vi.hoisted(() => vi.fn())
 const db = vi.hoisted(() => ({
+  $queryRaw: vi.fn().mockResolvedValue([]),
   billingAccount: { findMany: vi.fn() },
   user: { findUnique: vi.fn() },
   minutePack: { findMany: vi.fn() },

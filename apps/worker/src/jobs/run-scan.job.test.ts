@@ -300,7 +300,11 @@ import {
   resolveScannerPhaseTimeoutMs,
   shouldRecordAgentMinutes,
 } from "./run-scan.job"
-import { reserveScanCapacity, confirmScanCapacityStopped } from "@lyrashield/billing"
+import {
+  reserveScanCapacity,
+  confirmScanCapacityStopped,
+  resetUnstartedScanCapacity,
+} from "@lyrashield/billing"
 import { releaseStoppedScanSlot } from "@lyrashield/db"
 import { extractActualCostUsd, extractUsageSummary } from "./run-scan/usage"
 import { resolveEngineRuntimeBudgetMs } from "./run-scan/lifecycle-utils"
@@ -365,6 +369,7 @@ const mockJob = mockJobFixture as never
 function mockStoredScanAuthority(
   overrides: Partial<{
     accountingVersion: number | null
+    startedAt: Date | null
     workspaceId: string
     targetId: string
     goal: string
@@ -1362,8 +1367,147 @@ describe("processScanJob", () => {
       expect.any(Function),
       undefined
     )
-    expect(confirmScanCapacityStopped).toHaveBeenCalledWith("ws-1", "scan-1", false)
+    expect(confirmScanCapacityStopped).toHaveBeenCalledWith(
+      "ws-1",
+      "scan-1",
+      false,
+      "settlement_required"
+    )
     expect(releaseStoppedScanSlot).toHaveBeenCalledWith("ws-1", "scan-1")
+  })
+
+  it("releases a successful second attempt with a retained pre-provider timestamp", async () => {
+    mockStoredScanAuthority({ accountingVersion: 2 })
+    const authority = await systemScanFindUnique()
+    const persisted: {
+      status: string
+      startedAt: Date | null
+      reservation: string
+      stopped: boolean
+      slotHeld: boolean
+    } = {
+      status: "QUEUED",
+      startedAt: null,
+      reservation: "WAITING",
+      stopped: false,
+      slotHeld: true,
+    }
+    systemScanFindUnique.mockImplementation(async () => ({
+      ...authority,
+      startedAt: persisted.startedAt,
+    }))
+    vi.mocked(prisma.scan.findUnique).mockImplementation(async () => {
+      const row = { status: persisted.status, createdById: "user-1" }
+      return row as never
+    })
+    vi.mocked(updateScanStatus).mockImplementation(async (_id, status) => {
+      persisted.status = status
+      if (status === "PREFLIGHT" && !persisted.startedAt) persisted.startedAt = new Date()
+      const row = { id: "scan-1" }
+      return row as never
+    })
+    vi.mocked(requeueScanForRetry).mockImplementationOnce(async () => {
+      persisted.status = "QUEUED"
+      const result = { requeued: true, fromStatus: "PREFLIGHT" }
+      return result as never
+    })
+    vi.mocked(runPreflight).mockRejectedValueOnce(new Error("temporary database error"))
+    const retryJobFixture = { ...mockJobFixture, attemptsMade: 0, opts: { attempts: 3 } }
+    const retryJob = retryJobFixture as never
+    await expect(processScanJob(retryJob)).rejects.toThrow("temporary database error")
+    expect(resetUnstartedScanCapacity).toHaveBeenCalledWith("ws-1", "scan-1")
+    // Also accept an already-queued retry written by the prior image: it retained
+    // startedAt, but never claimed external execution. The new claim must win.
+    expect(persisted.startedAt).not.toBeNull()
+    expect(persisted.slotHeld).toBe(true)
+    const successfulEngine = vi.mocked(runEngine).getMockImplementation()!
+    vi.mocked(runEngine).mockImplementationOnce(async (...args) => ({
+      ...(await successfulEngine(...args)),
+      sandboxRemoved: true,
+    }))
+    vi.mocked(recordAgentMinutes).mockImplementationOnce(async (_ws, _scan, _ms, options) => {
+      await options?.beforeCommit?.()
+      persisted.reservation = "SETTLED"
+      return {
+        created: true,
+        minutes: 1,
+        idempotencyKey: "fixture",
+        overageMinutes: 0,
+        accountId: "user-1",
+        accountingVersion: 2,
+      }
+    })
+    vi.mocked(completeScanWithScore).mockImplementationOnce(async () => {
+      persisted.status = "COMPLETED"
+      const row = {}
+      return row as never
+    })
+    vi.mocked(confirmScanCapacityStopped).mockImplementationOnce(
+      async (_ws, _scan, _noWork, disposition) => {
+        expect(disposition).toBe("settlement_required")
+        expect(persisted.reservation).toBe("SETTLED")
+        persisted.stopped = true
+      }
+    )
+    vi.mocked(releaseStoppedScanSlot).mockImplementationOnce(async () => {
+      if (persisted.stopped) persisted.slotHeld = false
+      return !persisted.slotHeld
+    })
+    await expect(
+      processScanJob({ ...mockJobFixture, attemptsMade: 1, opts: { attempts: 3 } } as never)
+    ).resolves.toMatchObject({ status: "completed" })
+    expect(runEngine).toHaveBeenCalledOnce()
+    expect(persisted).toMatchObject({ stopped: true, slotHeld: false, reservation: "SETTLED" })
+  })
+
+  it("retains an unknown crashed executor instead of claiming its stopped proof", async () => {
+    mockStoredScanAuthority({ accountingVersion: 2, startedAt: new Date() })
+    vi.mocked(reserveScanCapacity).mockRejectedValueOnce(
+      new Error("capacity_execution_already_started")
+    )
+    await processScanJob(mockJob)
+    expect(runEngine).not.toHaveBeenCalled()
+    expect(confirmScanCapacityStopped).not.toHaveBeenCalled()
+    expect(resetUnstartedScanCapacity).not.toHaveBeenCalled()
+  })
+
+  it("keeps a capacity-stop monetary uncertainty distinct from intentional nonbilling", async () => {
+    mockStoredScanAuthority({ accountingVersion: 2 })
+    vi.mocked(runEngine).mockResolvedValueOnce({
+      exitCode: 1,
+      timedOut: true,
+      timeoutReason: "DURATION",
+      sandboxRemoved: true,
+      output: {
+        ingestionIssues: [],
+        vulnerabilities: [],
+        findingsComplete: true,
+        findingCount: 0,
+        runRecord: {
+          run_id: "scan-1",
+          run_name: "scan-1",
+          status: "failed",
+          llm_usage: completeUsage,
+        },
+      },
+    } as never)
+    vi.mocked(recordAgentMinutes).mockImplementationOnce(async (_ws, _scan, _ms, options) => {
+      await options?.beforeCommit?.()
+      throw new Error("commit acknowledgement lost")
+    })
+    await expect(processScanJob(mockJob)).resolves.toMatchObject({
+      errorCategory: "CAPACITY_EXHAUSTED",
+    })
+    expect(confirmScanCapacityStopped).toHaveBeenCalledWith(
+      "ws-1",
+      "scan-1",
+      false,
+      "settlement_required"
+    )
+    expect(logger.error).toHaveBeenCalledWith(
+      "billing.scan_settlement_commit_uncertain",
+      expect.objectContaining({ automaticReplayAllowed: false })
+    )
   })
 
   it("holds the user slot if sandbox termination cannot be confirmed", async () => {
@@ -1964,89 +2108,104 @@ describe("processScanJob", () => {
     )
   })
 
-  it("stops an over-budget scan and caps its recorded bill", async () => {
-    vi.mocked(runEngine).mockResolvedValue({
-      exitCode: 0,
-      output: {
-        ingestionIssues: [],
-        vulnerabilities: [],
-        findingsComplete: true,
-        runRecord: {
-          run_id: "scan-1",
-          run_name: "scan-1",
-          status: "completed",
-          llm_usage: {
-            model: "azure_ai/gpt-6-luna",
-            accountingComplete: true,
-            request_count: 1,
-            input_tokens: 17_500_000,
-            cached_input_tokens: 0,
-            cache_write_input_tokens: 0,
-            output_tokens: 0,
-            standard_input_tokens: 17_500_000,
-            standard_cached_input_tokens: 0,
-            standard_cache_write_input_tokens: 0,
-            standard_output_tokens: 0,
-            long_input_tokens: 0,
-            long_cached_input_tokens: 0,
-            long_cache_write_input_tokens: 0,
-            long_output_tokens: 0,
-            total_cost_usd: 3.5,
-            model_usage_buckets: [
-              {
-                model: "azure_ai/gpt-6-luna",
-                standard_input_tokens: 0,
-                standard_cached_input_tokens: 0,
-                standard_cache_write_input_tokens: 0,
-                standard_output_tokens: 0,
-                long_input_tokens: 17_500_000,
-                long_cached_input_tokens: 0,
-                long_cache_write_input_tokens: 0,
-                long_output_tokens: 0,
-              },
-            ],
+  it.each([null, 2])(
+    "stops an over-budget scan and caps its recorded bill (accounting %s)",
+    async (accountingVersion) => {
+      mockStoredScanAuthority({ accountingVersion })
+      vi.mocked(runEngine).mockResolvedValue({
+        exitCode: 0,
+        sandboxRemoved: true,
+        output: {
+          ingestionIssues: [],
+          vulnerabilities: [],
+          findingsComplete: true,
+          runRecord: {
+            run_id: "scan-1",
+            run_name: "scan-1",
+            status: "completed",
+            llm_usage: {
+              model: "azure_ai/gpt-6-luna",
+              accountingComplete: true,
+              request_count: 1,
+              input_tokens: 17_500_000,
+              cached_input_tokens: 0,
+              cache_write_input_tokens: 0,
+              output_tokens: 0,
+              standard_input_tokens: 17_500_000,
+              standard_cached_input_tokens: 0,
+              standard_cache_write_input_tokens: 0,
+              standard_output_tokens: 0,
+              long_input_tokens: 0,
+              long_cached_input_tokens: 0,
+              long_cache_write_input_tokens: 0,
+              long_output_tokens: 0,
+              total_cost_usd: 3.5,
+              model_usage_buckets: [
+                {
+                  model: "azure_ai/gpt-6-luna",
+                  standard_input_tokens: 0,
+                  standard_cached_input_tokens: 0,
+                  standard_cache_write_input_tokens: 0,
+                  standard_output_tokens: 0,
+                  long_input_tokens: 17_500_000,
+                  long_cached_input_tokens: 0,
+                  long_cache_write_input_tokens: 0,
+                  long_output_tokens: 0,
+                },
+              ],
+            },
           },
+          summary: "Engine completed above budget",
+          findingCount: 0,
         },
-        summary: "Engine completed above budget",
-        findingCount: 0,
-      },
-    } as never)
+      } as never)
 
-    await expect(processScanJob(mockJob)).resolves.toEqual({
-      status: "failed",
-      errorCategory: "BUDGET_EXCEEDED",
-      errorMessage: "Protected run limit reached",
-    })
+      await expect(processScanJob(mockJob)).resolves.toEqual({
+        status: "failed",
+        errorCategory: "BUDGET_EXCEEDED",
+        errorMessage: "Protected run limit reached",
+      })
 
-    expect(prisma.scan.update).toHaveBeenCalledWith({
-      where: { id: "scan-1" },
-      data: {
-        providerCostUsd: "3.5000000000",
-        billedCostUsd: "1.2000000000",
-        actualCostCents: 120,
-        llmRequestCount: 1,
-        llmInputTokens: 17_500_000,
-        llmCachedInputTokens: 0,
-        llmOutputTokens: 0,
-      },
-    })
-    expect(prisma.scan.update).toHaveBeenCalledWith({
-      where: { id: "scan-1" },
-      data: {
+      expect(prisma.scan.update).toHaveBeenCalledWith({
+        where: { id: "scan-1" },
+        data: {
+          providerCostUsd: "3.5000000000",
+          billedCostUsd: "1.2000000000",
+          actualCostCents: 120,
+          llmRequestCount: 1,
+          llmInputTokens: 17_500_000,
+          llmCachedInputTokens: 0,
+          llmOutputTokens: 0,
+        },
+      })
+      expect(prisma.scan.update).toHaveBeenCalledWith({
+        where: { id: "scan-1" },
+        data: {
+          errorCategory: "BUDGET_EXCEEDED",
+          errorMessage: "Protected run limit reached",
+          actualCostCents: 120,
+        },
+      })
+      expect(updateScanStatus).toHaveBeenCalledWith("scan-1", "STOPPED_BUDGET", {
         errorCategory: "BUDGET_EXCEEDED",
         errorMessage: "Protected run limit reached",
         actualCostCents: 120,
-      },
-    })
-    expect(updateScanStatus).toHaveBeenCalledWith("scan-1", "STOPPED_BUDGET", {
-      errorCategory: "BUDGET_EXCEEDED",
-      errorMessage: "Protected run limit reached",
-      actualCostCents: 120,
-    })
-    expect(persistFindings).toHaveBeenCalled()
-    expect(persistResultManifest).toHaveBeenCalled()
-    expect(completeScanWithScore).not.toHaveBeenCalled()
-  })
+      })
+      expect(persistFindings).toHaveBeenCalled()
+      expect(persistResultManifest).toHaveBeenCalled()
+      expect(completeScanWithScore).not.toHaveBeenCalled()
+      expect(recordAgentMinutes).not.toHaveBeenCalled()
+      if (accountingVersion === 2) {
+        expect(confirmScanCapacityStopped).toHaveBeenCalledWith(
+          "ws-1",
+          "scan-1",
+          false,
+          "nonbillable"
+        )
+        expect(releaseStoppedScanSlot).toHaveBeenCalledWith("ws-1", "scan-1")
+      }
+    }
+  )
 
   it("uses complete GPT-6 model buckets when provider cost is unavailable", async () => {
     vi.mocked(runEngine).mockResolvedValue({

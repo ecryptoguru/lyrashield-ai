@@ -5,6 +5,7 @@ import {
   resetUnstartedScanCapacity,
   confirmScanCapacityStopped,
   ScanCapacityWaitingError,
+  type ScanBillingDisposition,
 } from "@lyrashield/billing"
 import { releaseStoppedScanSlot, releaseUnstartedScanSlot } from "@lyrashield/db"
 import { boundedCleanup, finalizationGrace, scanElapsedClock } from "../engine/scan-deadline"
@@ -101,6 +102,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
     let billablePhaseStarted = false
     let executorReturned = false
     let noBillableWork = true
+    let billingDisposition: ScanBillingDisposition | undefined
     let recoveringPreviousExecution = Boolean(scanRecord.startedAt)
     let urlProfile: UrlScanProfile | undefined
     let engineProfile: ReturnType<typeof resolveEngineProfile> | undefined
@@ -348,6 +350,9 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         sponsorAccountId: scanRecord.sponsorAccountId ?? scanRecord.createdById,
         exitStatus: exitInterpretation.status,
         runRecord,
+        onBillingDisposition: (disposition) => {
+          billingDisposition = disposition
+        },
         onTerminalError: (error) => {
           agentMinuteTerminalError = error
         },
@@ -816,11 +821,10 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
     } finally {
       if (
         scanRecord.accountingVersion === 2 &&
-        !recoveringPreviousExecution &&
-        (!billablePhaseStarted || executorReturned)
+        ((!recoveringPreviousExecution && !billablePhaseStarted) || executorReturned)
       ) {
         try {
-          await confirmScanCapacityStopped(workspaceId, scanId, noBillableWork)
+          await confirmScanCapacityStopped(workspaceId, scanId, noBillableWork, billingDisposition)
           await releaseStoppedScanSlot(workspaceId, scanId)
         } catch (accountingError) {
           log.error("Scan admission remains held pending accounting review", {
@@ -829,7 +833,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
           })
         }
       }
-      if (recoveringPreviousExecution && scanRecord.accountingVersion === 2) {
+      if (recoveringPreviousExecution && !executorReturned && scanRecord.accountingVersion === 2) {
         // A prior executor may have committed stoppedAt before dying during
         // slot release. Only that durable proof permits this recovery.
         await releaseStoppedScanSlot(workspaceId, scanId).catch((error: unknown) => {
