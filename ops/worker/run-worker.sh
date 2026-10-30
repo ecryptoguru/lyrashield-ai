@@ -158,6 +158,29 @@ for image in "$LYRASHIELD_WORKER_IMAGE" "$LYRASHIELD_SANDBOX_IMAGE"; do
   fi
 done
 
+# BEGIN GO RESOLVER QUALIFICATION
+# This public metadata-only toolchain is a release asset, never a scan-time pull.
+# The checked-in pin must match GO_RESOLVER_IMAGE; CI checks that binding.
+go_resolver_image='golang:1.26.8-alpine@sha256:8ac98ca534ac3f51e1f420a1dd2c15e74c75cfa0f23f3ad27eb5d7236c349a0c'
+if ! timeout --foreground 5s docker image inspect "$go_resolver_image" >/dev/null 2>&1; then
+  timeout --foreground 60s docker pull "$go_resolver_image" >/dev/null
+fi
+go_qualification_name="lyrashield-go-qualification-$$"
+if ! go_resolver_version=$(timeout --foreground 15s docker run --rm --pull=never --name "$go_qualification_name" \
+  --network=none --read-only --cap-drop=ALL --security-opt=no-new-privileges \
+  --user=65534:65534 --pids-limit=32 --memory=128m --cpus=1 \
+  --env GOTOOLCHAIN=local --env GOENV=off --env GOTELEMETRY=off \
+  --entrypoint go "$go_resolver_image" version); then
+  timeout --foreground 5s docker rm --force "$go_qualification_name" >/dev/null 2>&1 || true
+  echo "Pinned Go dependency resolver qualification failed" >&2
+  exit 1
+fi
+case "$go_resolver_version" in
+  'go version go1.26.8 linux/'*) ;;
+  *) echo "Pinned Go dependency resolver toolchain mismatch" >&2; exit 1 ;;
+esac
+# END GO RESOLVER QUALIFICATION
+
 worker_shared_root=/var/lib/lyrashield/worker
 # Computing the argument list here keeps the image-label provenance validation
 # ahead of the privileged shared-root chown below.
