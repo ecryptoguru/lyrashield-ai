@@ -167,6 +167,7 @@ function revisions(name) {
     name,
     "--resource-group",
     env.RG,
+    "--all",
   ])
   if (
     !Array.isArray(list) ||
@@ -227,9 +228,24 @@ async function observeFleet(databaseIdentity, current, held) {
   }
   return { fleet, principals: [...new Set(principals)] }
 }
-function assertInactive() {
-  for (const name of [env.APP_NAME, env.SCANNER_NAME])
-    for (const row of revisions(name)) {
+function revisionsToInspect(inventory, state, name) {
+  const baseline = new Set(
+    state.baseline.fleet.filter((row) => row.name === name).map((row) => row.revision)
+  )
+  if ([...baseline].some((revision) => !inventory.some((row) => row.name === revision)))
+    throw new Error("v26 baseline revision unavailable")
+  return inventory.filter((row) => {
+    if (!Number.isSafeInteger(row.properties.replicas) || row.properties.replicas < 0)
+      throw new Error("v26 replica count unavailable")
+    return baseline.has(row.name) || row.properties.replicas > 0
+  })
+}
+function assertInactive(state) {
+  for (const name of [env.APP_NAME, env.SCANNER_NAME]) {
+    const inventory = revisions(name)
+    if (inventory.some((row) => row.properties.active))
+      throw new Error("v26 old producer remains active")
+    for (const row of revisionsToInspect(inventory, state, name)) {
       if (row.properties.active) throw new Error("v26 old producer remains active")
       const replicas = azure([
         "containerapp",
@@ -245,9 +261,10 @@ function assertInactive() {
       if (!Array.isArray(replicas) || replicas.length !== 0)
         throw new Error("v26 old producer replicas remain")
     }
+  }
 }
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
-async function deactivate() {
+async function deactivate(state) {
   for (const name of [env.APP_NAME, env.SCANNER_NAME])
     for (const row of revisions(name).filter((row) => row.properties.active))
       azure([
@@ -263,7 +280,7 @@ async function deactivate() {
       ])
   for (let attempt = 0; attempt < 12; attempt++) {
     try {
-      assertInactive()
+      assertInactive(state)
       return
     } catch (error) {
       if (attempt === 11) throw error
@@ -302,7 +319,9 @@ async function assertCandidateFleet(state) {
       active[0].properties.template.containers[0].image !== state.webImage
     )
       throw new Error("v26 candidate fleet image mismatch")
-    for (const row of inventory.filter((row) => !row.properties.active)) {
+    for (const row of revisionsToInspect(inventory, state, name).filter(
+      (row) => !row.properties.active
+    )) {
       const replicas = azure([
         "containerapp",
         "replica",
@@ -432,8 +451,8 @@ async function main() {
     await runFirstV26Phase(command, {
       claim: () => vm("claim", state.request, state.baseline),
       owned: () => vm("owned", state.request),
-      deactivate,
-      inactive: assertInactive,
+      deactivate: () => deactivate(state),
+      inactive: () => assertInactive(state),
       async drain() {
         // Keep the old worker alive while admitted work finishes naturally.
         // Ten minutes is a maintenance bound, never an age-based release proof.

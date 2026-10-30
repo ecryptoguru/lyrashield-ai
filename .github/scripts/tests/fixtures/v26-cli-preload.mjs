@@ -346,21 +346,41 @@ child.execFileSync = function (file, args, options) {
     return "{}"
   }
   if (args.includes("revision") && args.includes("list"))
-    return JSON.stringify([
-      {
-        name: `${app}-old1`,
-        properties: {
-          active: s.active && !s.candidate,
-          template: { containers: [{ ...runtime, image: s.oldWeb }] },
+    return JSON.stringify(
+      [
+        {
+          name: `${app}-old1`,
+          properties: {
+            active: s.active && !s.candidate,
+            replicas: s.active && !s.candidate ? 1 : 0,
+            template: { containers: [{ ...runtime, image: s.oldWeb }] },
+          },
         },
-      },
-      {
-        name: `${app}-current`,
-        properties: { active: s.active, template: { containers: [runtime] } },
-      },
-    ])
+        {
+          name: `${app}-current`,
+          properties: {
+            active: s.active,
+            replicas: s.active ? 1 : 0,
+            template: { containers: [runtime] },
+          },
+        },
+        ...(s.orphanReplica
+          ? [
+              {
+                name: `${app}-historic`,
+                properties: { active: false, replicas: 1, template: { containers: [runtime] } },
+              },
+            ]
+          : []),
+      ].filter((revision) => args.includes("--all") || revision.properties.active)
+    )
   if (args.includes("replica"))
-    return JSON.stringify(s.active && get("--revision").endsWith("current") ? [{}] : [])
+    return JSON.stringify(
+      (s.active && get("--revision").endsWith("current")) ||
+        (s.orphanReplica && get("--revision").endsWith("historic"))
+        ? [{}]
+        : []
+    )
   if (args.includes("secret"))
     return JSON.stringify([{ name: "runtime-url", value: process.env.V26_APP_TEST_URL }])
   if (args.includes("traffic"))

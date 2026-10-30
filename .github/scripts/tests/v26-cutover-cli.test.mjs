@@ -120,6 +120,15 @@ test("actual controller and VM-state CLIs complete with distinct derived runtime
   assert.ok(f.get().grantedSql.some((sql) => sql.includes('TO "app_runtime"')))
   assert.ok(f.get().grantedSql.some((sql) => sql.includes('TO "worker_runtime"')))
 })
+test("candidate verification rejects replicas on an inactive historical revision", (t) => {
+  const f = fixture(t)
+  beforeMigration(f)
+  f.set({ schema: true })
+  f.pass("after-migrate")
+  f.set({ candidate: true, active: true, worker: true, orphanReplica: true })
+  assert.notEqual(f.run("verify").status, 0)
+  assert.notEqual(f.get().stop, null)
+})
 test("actual CLI migration failure, candidate failure and foreign stop retain ownership without restoring old writers", (t) => {
   const f = fixture(t)
   beforeMigration(f)
