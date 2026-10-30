@@ -104,6 +104,58 @@ describe("scanner CPU safety", () => {
     expect(result.issues.join(" ")).toContain("statement token visit limit (100000)")
   })
 
+  it.each([
+    ['simplexml_load_string("safe", ', ")"],
+    ["curl_setopt($handle, ", ', "safe")'],
+  ])("charges flag-absent argument traversals before returning: %s", async (opening, closing) => {
+    const result = await isolated(`
+      import { analyzePhpSource } from ${JSON.stringify(scanner("php-source"))};
+      import { PhpWork } from ${JSON.stringify(scanner("php-source-work"))};
+      let active = false, traversals = 0, maximum = 0;
+      const token = value => value && typeof value.position === 'number' && typeof value.kind === 'string';
+      const begin = PhpWork.prototype.beginStatement;
+      PhpWork.prototype.beginStatement = function () {
+        maximum = Math.max(maximum, traversals);
+        traversals = 0; active = true;
+        return begin.call(this);
+      };
+      for (const method of ['slice', 'flat']) {
+        const original = Array.prototype[method];
+        Array.prototype[method] = function (...args) {
+          const result = original.apply(this, args);
+          if (active) for (let i = 0; i < result.length; i++) if (token(result[i])) traversals++;
+          return result;
+        };
+      }
+      const some = Array.prototype.some;
+      Array.prototype.some = function (callback, receiver) {
+        return some.call(this, (value, index, array) => {
+          if (active && token(value)) traversals++;
+          return callback.call(receiver, value, index, array);
+        });
+      };
+      const push = Array.prototype.push;
+      Array.prototype.push = function (...values) {
+        if (active) for (let i = 0; i < values.length; i++) if (token(values[i])) traversals++;
+        return push.apply(this, values);
+      };
+      Array.prototype[Symbol.iterator] = function* () {
+        for (let i = 0; i < this.length; i++) {
+          const value = this[i];
+          if (active && token(value)) traversals++;
+          yield value;
+        }
+      };
+      const source = '<?php ' + ${JSON.stringify(opening)}.repeat(200) + '"safe"' + ${JSON.stringify(closing)}.repeat(200) + ';';
+      const result = analyzePhpSource(source, 'endpoint.php');
+      maximum = Math.max(maximum, traversals);
+      console.log(JSON.stringify({maximum, issues:result.issues}));
+    `)
+    // These observed array traversals are a lower bound on actual parser visits.
+    expect(result.maximum).toBeLessThanOrEqual(100_000)
+    expect(result.issues.join(" ")).toContain("statement token visit limit (100000)")
+  })
+
   it("enforces exact statement and file token visit ceilings", () => {
     const work = new PhpWork()
     for (let i = 0; i < 10; i++) {

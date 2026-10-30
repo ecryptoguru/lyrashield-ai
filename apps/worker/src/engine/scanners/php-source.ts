@@ -102,17 +102,33 @@ const RULES: Rule[] = [
   },
 ]
 
-function ruleArgument(rule: Rule, name: string, args: PhpToken[][]): PhpToken[] | undefined {
-  if (
-    rule.context === "xml" &&
-    !args
-      .slice(1)
-      .flat()
-      .some((t) => ["LIBXML_NOENT", "LIBXML_DTDLOAD"].includes(t.text))
-  )
-    return
+function ruleArgument(
+  rule: Rule,
+  name: string,
+  args: PhpToken[][],
+  work: PhpWork
+): PhpToken[] | undefined {
+  if (rule.context === "xml") {
+    let hasUnsafeFlags = false
+    // Charge even when the flags are absent and expression analysis never runs.
+    // Avoid copying/flattening overlapping nested argument suffixes.
+    for (let i = 1; i < args.length && !hasUnsafeFlags; i++) {
+      for (const token of args[i]!) {
+        work.visit()
+        if (["LIBXML_NOENT", "LIBXML_DTDLOAD"].includes(token.text)) {
+          hasUnsafeFlags = true
+          break
+        }
+      }
+    }
+    if (!hasUnsafeFlags) return
+  }
   if (rule.context === "ssrf" && name === "curl_setopt") {
-    return args[1]?.some((t) => t.text === "CURLOPT_URL") ? args[2] : undefined
+    for (const token of args[1] ?? []) {
+      work.visit()
+      if (token.text === "CURLOPT_URL") return args[2]
+    }
+    return
   }
   if (rule.context === "upload") return args[1]
   if (rule.context === "sql" && ["mysqli_query", "pg_query"].includes(name))
@@ -154,7 +170,8 @@ function commandArgumentFlows(
   allowBareSanitizers: boolean
 ): boolean {
   const command = args[0] ?? []
-  work.visit(command.length * 2)
+  // Reserve the slice, argument iteration and token writes before argv parsing.
+  work.visit(command.length * 3)
   if (command[0]?.text !== "[" || closingToken(command, 0) !== command.length - 1) {
     const flow = phpExpressionFlow(command, locals, issues, work, allowBareSanitizers)
     return flow.has("command") || flow.has("executable")
@@ -223,10 +240,11 @@ function inspectStatement(
       issues.push("Unsupported unbalanced PHP sink call")
       continue
     }
-    work.visit((end - i) * 2)
+    // Account for copying the slice, visiting it and writing tokens into arguments.
+    work.visit((end - i) * 3)
     const args = hasParens ? splitPhpArguments(tokens.slice(i + 2, end)) : [tokens.slice(i + 1)]
     for (const rule of rules) {
-      const argument = ruleArgument(rule, name, args)
+      const argument = ruleArgument(rule, name, args, work)
       const flows =
         rule.context === "command"
           ? commandArgumentFlows(args, locals, issues, work, allowBareSanitizers)
