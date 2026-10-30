@@ -21,7 +21,14 @@ const now = new Date("2026-10-13T14:50:00Z")
 
 function response(body: unknown, status = 200, headers?: HeadersInit) {
   const payload =
-    body && typeof body === "object" ? { challenge_ts: now.toISOString(), ...body } : body
+    body && typeof body === "object"
+      ? {
+          challenge_ts: now.toISOString(),
+          hostname: "lyrashieldai.com",
+          action: "lyrashield-public",
+          ...body,
+        }
+      : body
   return new Response(JSON.stringify(payload), { status, headers })
 }
 
@@ -40,6 +47,7 @@ beforeEach(() => {
   })
   vi.useFakeTimers()
   vi.setSystemTime(now)
+  vi.stubEnv("NEXT_PUBLIC_MARKETING_URL", "https://lyrashieldai.com")
   vi.stubEnv("TURNSTILE_SECRET_KEY", secret)
   vi.stubEnv("UPSTASH_REDIS_REST_URL", "https://redis.example.test")
   vi.stubEnv("UPSTASH_REDIS_REST_TOKEN", randomUUID())
@@ -374,4 +382,40 @@ describe("Turnstile outcome diagnostics", () => {
     expect(fetchMock).not.toHaveBeenCalled()
     expect(mocks.info).not.toHaveBeenCalled()
   })
+})
+
+describe("expected widget binding", () => {
+  it.each([
+    { hostname: "attacker.example", action: "lyrashield-public" },
+    { hostname: "www.lyrashieldai.com", action: "lyrashield-public" },
+    { hostname: "lyrashieldai.com", action: "other-workflow" },
+    { hostname: undefined, action: "lyrashield-public" },
+    { hostname: "lyrashieldai.com", action: undefined },
+  ])("rejects a successful fresh proof with mismatched metadata: %j", async (metadata) => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => response({ success: true, ...metadata }))
+    )
+    await expect(verifyTurnstile(proof)).resolves.toBe(false)
+    expect(mocks.set).toHaveBeenCalledTimes(1)
+  })
+  it("fails closed before reserving a proof when the trusted origin is missing", async () => {
+    vi.stubEnv("NEXT_PUBLIC_MARKETING_URL", "")
+    await expect(verifyTurnstile(proof)).resolves.toBe(false)
+    expect(mocks.set).not.toHaveBeenCalled()
+  })
+})
+
+it("supports documented dummy metadata only outside production", async () => {
+  vi.stubEnv("TURNSTILE_SECRET_KEY", "1x" + "0".repeat(31) + "AA")
+  vi.stubEnv("NODE_ENV", "test")
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => response({ success: true, hostname: "localhost", action: "test" }))
+  )
+  await expect(verifyTurnstile(proof)).resolves.toBe(true)
+  vi.stubEnv("NODE_ENV", "production")
+  mocks.set.mockClear()
+  await expect(verifyTurnstile("different-proof")).resolves.toBe(false)
+  expect(mocks.set).not.toHaveBeenCalled()
 })

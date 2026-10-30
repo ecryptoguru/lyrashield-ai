@@ -816,6 +816,7 @@ const jsonLd = [
       }
       turnstileWidget = turnstile.render("#turnstile-container", {
         sitekey: turnstileSiteKey,
+          action: "lyrashield-public",
         size: "flexible",
         appearance: "interaction-only",
         callback: (token: string) => {

@@ -182,6 +182,7 @@ describe("Turnstile challenge lifecycle", () => {
     await tick()
     const call = turnstile.renders[0]
     expect(call?.options.appearance).toBe("interaction-only")
+    expect(call?.options.action).toBe("lyrashield-public")
     expect(call?.options.execution).toBe("execute")
     expect(call?.options.size).toBe("flexible")
     expect(call?.options.sitekey).toBe("test-site-key")

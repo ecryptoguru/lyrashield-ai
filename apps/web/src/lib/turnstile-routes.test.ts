@@ -87,7 +87,14 @@ beforeEach(() => {
   vi.stubEnv("NEXT_PUBLIC_MARKETING_URL", "https://lyrashieldai.com")
   vi.stubGlobal(
     "fetch",
-    vi.fn(async () => Response.json({ success: true, challenge_ts: new Date().toISOString() }))
+    vi.fn(async () =>
+      Response.json({
+        success: true,
+        hostname: "lyrashieldai.com",
+        action: "lyrashield-public",
+        challenge_ts: new Date().toISOString(),
+      })
+    )
   )
 })
 afterEach(() => {

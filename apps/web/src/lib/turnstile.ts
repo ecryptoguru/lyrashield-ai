@@ -23,6 +23,7 @@ type DiagnosticContext = {
   invocationId: string
   attempt: number
   providerMode: "documented-test" | "unclassified"
+  expectedHostname: string
 }
 type VerificationMetadata = {
   success?: boolean
@@ -126,7 +127,9 @@ function recordOutcome(
       /^[a-f\d]{16,32}$/i.test(rayParts[0] ?? "") &&
       (rayParts.length === 1 || /^[A-Z]{3}$/i.test(rayParts[1] ?? ""))
     logger.info("Turnstile verification outcome", {
-      ...context,
+      invocationId: context.invocationId,
+      attempt: context.attempt,
+      providerMode: context.providerMode,
       outcome,
       httpStatus: Number.isInteger(status) && status! >= 100 && status! <= 599 ? status : null,
       errorCodes,
@@ -165,7 +168,14 @@ async function verifyTurnstileOnce(
     })
     const result = (await verification.json()) as VerificationMetadata
     const outcome =
-      verification.ok && result.success === true && freshChallenge(result.challenge_ts)
+      verification.ok &&
+      result.success === true &&
+      ((result.hostname === context.expectedHostname && result.action === "lyrashield-public") ||
+        (context.providerMode === "documented-test" &&
+          process.env.NODE_ENV !== "production" &&
+          result.hostname === "localhost" &&
+          result.action === "test")) &&
+      freshChallenge(result.challenge_ts)
         ? "success"
         : "failed"
     recordOutcome(context, outcome, verification, result)
@@ -179,7 +189,17 @@ async function verifyTurnstileOnce(
 
 export async function verifyTurnstile(token: string | undefined): Promise<boolean> {
   const secret = process.env.TURNSTILE_SECRET_KEY
-  if (!secret) return false
+  if (!secret || (process.env.NODE_ENV === "production" && /^[123]x0{31}AA$/.test(secret)))
+    return false
+  let expectedHostname: string
+  try {
+    const origin = new URL(process.env.NEXT_PUBLIC_MARKETING_URL ?? "")
+    if (!["https:", "http:"].includes(origin.protocol) || origin.username || origin.password)
+      return false
+    expectedHostname = origin.hostname
+  } catch {
+    return false
+  }
   const proof = token?.trim()
   if (!proof || proof.length > 2048) return false
   if (!(await reserveProof(proof))) return false
@@ -194,6 +214,7 @@ export async function verifyTurnstile(token: string | undefined): Promise<boolea
       invocationId,
       attempt: attempt + 1,
       providerMode,
+      expectedHostname,
     })
     if (outcome === "success") return true
     if (outcome === "failed") return false
