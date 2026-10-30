@@ -95,6 +95,9 @@ class Client {
           accountId: "text",
           kind: "text",
           idempotencyKey: "text",
+          quantity: "int4",
+          createdAt: "timestamp",
+          cycleStart: "timestamp",
           deletedAt: "timestamp",
           metadata: "jsonb",
         },
@@ -242,6 +245,71 @@ fs.fsyncSync = function (fd) {
     throw new Error("final fsync unavailable")
   return originalFsync(fd)
 }
+function mockRevisionProbe(args, s) {
+  const get = (flag) => args[args.indexOf(flag) + 1]
+  if (args[0] === "containerapp" && ["revision", "replica"].includes(args[1])) {
+    s.revisionProbes ??= []
+    s.revisionProbes.push(args.slice(0, -3))
+    save(s)
+    if (s.deletedBaseline && get("--revision")?.endsWith("-old1")) {
+      const mode = args[1] === "revision" ? s.deletionShowMode : s.deletionReplicaMode
+      if (mode === "present")
+        return JSON.stringify({ name: get("--revision"), properties: { active: false } })
+      if (mode === "empty") return "[]"
+      if (mode === "replicas") return "[{}]"
+      const code =
+        mode === "auth"
+          ? "AuthorizationFailed"
+          : mode === "resource"
+            ? "ResourceNotFound"
+            : "RevisionNotFound"
+      throw Object.assign(new Error("private provider failure"), {
+        status: mode === "timeout" ? null : mode === "wrong-exit" ? 2 : 1,
+        ...(mode === "buffer" ? { code: "ENOBUFS" } : {}),
+        ...(mode === "signal" ? { signal: "SIGTERM" } : {}),
+        stderr: `ERROR: (${code}) ${process.env.V26_APP_TEST_URL}${mode === "mixed" ? "\nERROR: (AuthorizationFailed) private" : ""}`,
+      })
+    }
+  }
+}
+function mockRevisionInventory(args, s, app, runtime) {
+  return JSON.stringify(
+    [
+      {
+        name: `${app}-old1`,
+        properties: {
+          active: s.active && !s.candidate,
+          replicas: s.active && !s.candidate ? 1 : 0,
+          template: { containers: [{ ...runtime, image: s.oldWeb }] },
+        },
+      },
+      {
+        name: `${app}-current`,
+        properties: {
+          active: s.active,
+          replicas: Object.hasOwn(s, "invalidReplicaCount")
+            ? s.invalidReplicaCount
+            : s.active
+              ? 1
+              : 0,
+          template: { containers: [runtime] },
+        },
+      },
+      ...(s.orphanReplica || s.orphanReplicaReportedOnly
+        ? [
+            {
+              name: `${app}-historic`,
+              properties: { active: false, replicas: 1, template: { containers: [runtime] } },
+            },
+          ]
+        : []),
+    ].filter(
+      (revision) =>
+        (!s.deletedBaseline || !revision.name.endsWith("-old1")) &&
+        (args.includes("--all") || revision.properties.active)
+    )
+  )
+}
 const originalExec = child.execFileSync
 child.execFileSync = function (file, args, options) {
   const s = state()
@@ -273,6 +341,8 @@ child.execFileSync = function (file, args, options) {
   if (file !== "az") return originalExec.call(this, file, args, options)
   const get = (flag) => args[args.indexOf(flag) + 1]
   const app = get("--name")
+  const revisionProbe = mockRevisionProbe(args, s)
+  if (revisionProbe !== undefined) return revisionProbe
   if (args[0] === "vm") {
     const matches = get("--scripts").match(/v26-vm\.sh" '([^']+)' '([^']+)' '([^']+)'$/)
     if (!matches) throw new Error("Unknown VM transport")
@@ -346,21 +416,14 @@ child.execFileSync = function (file, args, options) {
     return "{}"
   }
   if (args.includes("revision") && args.includes("list"))
-    return JSON.stringify([
-      {
-        name: `${app}-old1`,
-        properties: {
-          active: s.active && !s.candidate,
-          template: { containers: [{ ...runtime, image: s.oldWeb }] },
-        },
-      },
-      {
-        name: `${app}-current`,
-        properties: { active: s.active, template: { containers: [runtime] } },
-      },
-    ])
+    return mockRevisionInventory(args, s, app, runtime)
   if (args.includes("replica"))
-    return JSON.stringify(s.active && get("--revision").endsWith("current") ? [{}] : [])
+    return JSON.stringify(
+      (s.active && get("--revision").endsWith("current")) ||
+        (s.orphanReplica && get("--revision").endsWith("historic"))
+        ? [{}]
+        : []
+    )
   if (args.includes("secret"))
     return JSON.stringify([{ name: "runtime-url", value: process.env.V26_APP_TEST_URL }])
   if (args.includes("traffic"))

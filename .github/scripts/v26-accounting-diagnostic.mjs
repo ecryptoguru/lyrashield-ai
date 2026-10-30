@@ -2,6 +2,8 @@
 // stopped, either BullMQ queue drained, or that a collector could see all rows.
 // This function never authorizes a migration, admission release or replay.
 const LIMIT = 10_000
+// Conservative historical format boundary, not a billing or deployment attestation.
+const LEGACY_HISTORY_CUTOFF = "2026-08-29T00:00:00.000Z"
 const ACTIVE = new Set(["QUEUED", "PREFLIGHT", "RUNNING", "VERIFYING", "REQUIRES_APPROVAL"])
 const TERMINAL = new Set([
   "COMPLETED",
@@ -35,12 +37,41 @@ function emptyResult() {
       unsettledIntents: 0,
       unboundReceipts: 0,
       failedScanReceipts: 0,
+      legacyHistoricalReceipts: 0,
+      legacyFailedReceipts: 0,
       receiptWithoutIntent: 0,
       orphanHistoryReceipts: 0,
       unknownDisposition: 0,
       settledReceipts: 0,
     },
   }
+}
+
+// Recognize only pre-policy evidence. This never declares settlement, correct
+// charging, or nonbilling; an explicit intent always requires today's checks.
+function isLegacyHistoricalReceipt(scan, receipt, hasIntent) {
+  const account = scan.sponsorAccountId ?? scan.createdById
+  return (
+    !hasIntent &&
+    TERMINAL.has(scan.status) &&
+    scan.deletedAt === null &&
+    scan.endedAt < LEGACY_HISTORY_CUTOFF &&
+    receipt.createdAt !== null &&
+    timestamp(receipt.createdAt) &&
+    receipt.createdAt < LEGACY_HISTORY_CUTOFF &&
+    receipt.createdAt <= scan.endedAt &&
+    Number.isSafeInteger(receipt.quantity) &&
+    receipt.quantity > 0 &&
+    receipt.cycleStart === null &&
+    receipt.kind === "agent_minutes" &&
+    receipt.deletedAt === null &&
+    receipt.workspaceId === scan.workspaceId &&
+    receipt.accountId === account &&
+    receipt.idempotencyKey === `${scan.workspaceId}:${scan.id}:engine_run` &&
+    object(receipt.metadata) &&
+    receipt.metadata.scanId === scan.id &&
+    !Object.hasOwn(receipt.metadata, "accountId")
+  )
 }
 
 /**
@@ -116,6 +147,7 @@ export function diagnoseLegacyAccountingSnapshot(snapshot) {
 
   const matchedScans = new Set()
   const checkedIntents = new Set()
+  const intentScans = new Set(snapshot.intents.filter(object).map((intent) => intent.scanId))
   const matchedReceipts = new Set()
   for (const intent of snapshot.intents) {
     const scan = object(intent) && id(intent.scanId) ? scans.get(intent.scanId) : undefined
@@ -164,7 +196,10 @@ export function diagnoseLegacyAccountingSnapshot(snapshot) {
       : undefined
     const scan = scanFromMetadata ?? expectedScanKeys.get(key)
     const account = scan?.sponsorAccountId ?? scan?.createdById
-    if (
+    if (scan && isLegacyHistoricalReceipt(scan, receipt, intentScans.has(scan.id))) {
+      counts.legacyHistoricalReceipts++
+      if (scan.status === "FAILED") counts.legacyFailedReceipts++
+    } else if (
       scan &&
       !checkedIntents.has(key) &&
       key === `${scan.workspaceId}:${scan.id}:engine_run` &&
@@ -194,6 +229,8 @@ export function diagnoseLegacyAccountingSnapshot(snapshot) {
       key !== "unknownDisposition" &&
       key !== "settledReceipts" &&
       key !== "receiptWithoutIntent" &&
+      key !== "legacyHistoricalReceipts" &&
+      key !== "legacyFailedReceipts" &&
       key !== "orphanHistoryReceipts" &&
       value > 0
   )
@@ -236,6 +273,9 @@ const REQUIRED_COLUMNS = {
     accountId: "text",
     kind: "text",
     idempotencyKey: "text",
+    quantity: "int4",
+    createdAt: "timestamp",
+    cycleStart: "timestamp",
     deletedAt: "timestamp",
     metadata: "jsonb",
   },
@@ -316,7 +356,8 @@ export async function collectLegacyAccountingDiagnostic(client) {
         left(s."createdById", 513) AS "createdById", left(s."sponsorAccountId", 513) AS "sponsorAccountId", s.status::text,
         to_char(s."startedAt", 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "startedAt",
         to_char(s."endedAt", 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "endedAt",
-        to_char(s."finalizationStartedAt", 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "finalizationStartedAt"
+        to_char(s."finalizationStartedAt", 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "finalizationStartedAt",
+        to_char(s."deletedAt", 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "deletedAt"
       FROM public."Scan" s ORDER BY s.id LIMIT $1`,
       [LIMIT + 1]
     )
@@ -349,10 +390,14 @@ export async function collectLegacyAccountingDiagnostic(client) {
       SELECT left(u."workspaceId", 513) AS "workspaceId", left(u."accountId", 513) AS "accountId",
         left(u."idempotencyKey", 513) AS "idempotencyKey", left(u.kind, 513) AS kind,
         to_char(u."deletedAt", 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "deletedAt",
+        u.quantity,
+        to_char(u."createdAt", 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "createdAt",
+        to_char(u."cycleStart", 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "cycleStart",
         CASE WHEN jsonb_typeof(u.metadata) = 'object' THEN jsonb_build_object(
-          'scanId', CASE WHEN jsonb_typeof(u.metadata -> 'scanId') = 'string' THEN left(u.metadata ->> 'scanId', 513) END,
+          'scanId', CASE WHEN jsonb_typeof(u.metadata -> 'scanId') = 'string' THEN left(u.metadata ->> 'scanId', 513) END
+        ) || CASE WHEN u.metadata ? 'accountId' THEN jsonb_build_object(
           'accountId', CASE WHEN jsonb_typeof(u.metadata -> 'accountId') = 'string' THEN left(u.metadata ->> 'accountId', 513) END
-        ) ELSE NULL END AS metadata
+        ) ELSE '{}'::jsonb END ELSE NULL END AS metadata
       FROM public."UsageRecord" u
       WHERE u.kind = 'agent_minutes' OR u."idempotencyKey" = ANY($1::text[])
       ORDER BY u.id LIMIT $2`,

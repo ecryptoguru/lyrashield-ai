@@ -120,6 +120,96 @@ test("actual controller and VM-state CLIs complete with distinct derived runtime
   assert.ok(f.get().grantedSql.some((sql) => sql.includes('TO "app_runtime"')))
   assert.ok(f.get().grantedSql.some((sql) => sql.includes('TO "worker_runtime"')))
 })
+test("candidate verification rejects replicas on an inactive historical revision", (t) => {
+  const f = fixture(t)
+  beforeMigration(f)
+  f.set({ schema: true })
+  f.pass("after-migrate")
+  f.set({ candidate: true, active: true, worker: true, orphanReplica: true })
+  assert.notEqual(f.run("verify").status, 0)
+  assert.notEqual(f.get().stop, null)
+})
+test("actual CLI completes when Azure deletes an inactive saved baseline with both authoritative proofs", (t) => {
+  const f = fixture(t)
+  for (const phase of ["prepare", "claim", "quiesce"]) f.pass(phase)
+  f.set({ deletedBaseline: true })
+  f.pass("before-migrate")
+  f.set({ schema: true })
+  f.pass("after-migrate")
+  f.set({ candidate: true, active: true, worker: true })
+  f.pass("verify")
+  f.pass("release")
+  assert.equal(f.get().stop, null)
+  for (const app of [f.env.APP_NAME, f.env.SCANNER_NAME]) {
+    const calls = f.get().revisionProbes.filter((args) => args.includes(`${app}-old1`))
+    assert.ok(calls.some((args) => args[1] === "revision" && args[2] === "show"))
+    assert.ok(calls.some((args) => args[1] === "replica" && args[2] === "list"))
+  }
+  assert.ok(
+    f
+      .get()
+      .revisionProbes.filter((args) => args[1] === "revision" && args[2] === "list")
+      .every((args) => args.includes("--all"))
+  )
+})
+test("actual CLI missing baseline cannot use ambiguous or inaccessible revision observations", async (t) => {
+  for (const options of [
+    { deletionShowMode: "auth" },
+    { deletionShowMode: "resource" },
+    { deletionShowMode: "present" },
+    { deletionShowMode: "timeout" },
+    { deletionShowMode: "buffer" },
+    { deletionShowMode: "signal" },
+    { deletionShowMode: "wrong-exit" },
+    { deletionShowMode: "mixed" },
+    { deletionReplicaMode: "auth" },
+    { deletionReplicaMode: "empty" },
+    { deletionReplicaMode: "replicas" },
+  ])
+    await t.test(JSON.stringify(options), (t) => {
+      const f = fixture(t)
+      for (const phase of ["prepare", "claim", "quiesce"]) f.pass(phase)
+      f.set({ deletedBaseline: true, ...options })
+      const held = f.get().stop
+      const result = f.run("before-migrate")
+      assert.notEqual(result.status, 0)
+      assert.doesNotMatch(
+        result.stdout + result.stderr,
+        /postgresql:|AuthorizationFailed|private provider/
+      )
+      assert.equal(f.get().stop, held)
+      assert.equal(f.get().schema, false)
+      assert.equal(f.get().active, false)
+    })
+})
+test("deleted baseline proof never excuses unexpected live replicas or invalid full inventory counts", async (t) => {
+  for (const options of [
+    { orphanReplica: true },
+    { orphanReplicaReportedOnly: true },
+    { invalidReplicaCount: null },
+    { invalidReplicaCount: -1 },
+    { invalidReplicaCount: "0" },
+  ])
+    await t.test(JSON.stringify(options), (t) => {
+      const f = fixture(t)
+      for (const phase of ["prepare", "claim", "quiesce"]) f.pass(phase)
+      f.set({ deletedBaseline: true, ...options })
+      assert.notEqual(f.run("before-migrate").status, 0)
+      assert.notEqual(f.get().stop, null)
+      assert.equal(f.get().schema, false)
+    })
+})
+test("candidate verification rereads deletion evidence and preserves admission on an ambiguous replica probe", (t) => {
+  const f = fixture(t)
+  for (const phase of ["prepare", "claim", "quiesce"]) f.pass(phase)
+  f.set({ deletedBaseline: true })
+  f.pass("before-migrate")
+  f.set({ schema: true })
+  f.pass("after-migrate")
+  f.set({ candidate: true, active: true, worker: true, deletionReplicaMode: "empty" })
+  assert.notEqual(f.run("verify").status, 0)
+  assert.notEqual(f.get().stop, null)
+})
 test("actual CLI migration failure, candidate failure and foreign stop retain ownership without restoring old writers", (t) => {
   const f = fixture(t)
   beforeMigration(f)
