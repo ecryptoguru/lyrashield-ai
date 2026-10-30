@@ -1,4 +1,5 @@
-/* eslint-disable security/detect-non-literal-fs-filename, security/detect-unsafe-regex */
+import { parsePomXml } from "./maven-dependencies"
+/* eslint-disable security/detect-non-literal-fs-filename */
 import { lstat, readFile, readdir } from "fs/promises"
 import { basename, join, relative } from "path"
 import { logger } from "@lyrashield/logger"
@@ -41,7 +42,6 @@ const IGNORED_DIRECTORIES = new Set([
 const MAX_WALK_ENTRIES = 50_000
 const MAX_WALK_DEPTH = 40
 const MAX_MANIFEST_BYTES = 512 * 1024
-const MAX_POM_DEPENDENCY_BLOCKS = 5_000
 
 async function findDependencyFiles(
   repoPath: string,
@@ -148,6 +148,7 @@ function parsePackageJson(content: string, filePath: string): Dependency[] {
 function parseRequirementsTxt(content: string, filePath: string): Dependency[] {
   const deps: Dependency[] = []
   const lines = content.split("\n")
+  // eslint-disable-next-line security/detect-unsafe-regex -- anchored, delimiter-separated fields on byte-bounded input
   const pattern = /^([a-zA-Z0-9_-]+)\s*([=<>!~]+\s*)?([0-9][a-zA-Z0-9.\-+]*)/
   for (const line of lines) {
     const trimmed = line.trim()
@@ -214,6 +215,7 @@ function parseGemfile(content: string, filePath: string): Dependency[] {
   const lines = content.split("\n")
   for (const line of lines) {
     const trimmed = line.trim()
+    // eslint-disable-next-line security/detect-unsafe-regex -- anchored, delimiter-separated fields on byte-bounded input
     const match = /^(?:gem|dependency)\s+["']([^"']+)["']\s*,?\s*["']?([^"']*)?["']?/.exec(trimmed)
     if (match && match[1]) {
       deps.push({
@@ -225,116 +227,6 @@ function parseGemfile(content: string, filePath: string): Dependency[] {
     }
   }
   return deps
-}
-
-interface XmlBlock {
-  content: string
-  start: number
-  end: number
-}
-
-function findXmlBlocks(content: string, tag: string, maxBlocks: number): XmlBlock[] {
-  const open = `<${tag}>`
-  const close = `</${tag}>`
-  const blocks: XmlBlock[] = []
-  let offset = 0
-  while (blocks.length < maxBlocks) {
-    const start = content.indexOf(open, offset)
-    if (start < 0) break
-    const contentStart = start + open.length
-    const contentEnd = content.indexOf(close, contentStart)
-    if (contentEnd < 0) break
-    const end = contentEnd + close.length
-    blocks.push({ content: content.slice(contentStart, contentEnd), start, end })
-    offset = end
-  }
-  return blocks
-}
-
-function xmlTagValue(content: string, tag: string): string | undefined {
-  const open = `<${tag}>`
-  const close = `</${tag}>`
-  const start = content.indexOf(open)
-  if (start < 0) return undefined
-  const valueStart = start + open.length
-  const end = content.indexOf(close, valueStart)
-  return end < 0 ? undefined : content.slice(valueStart, end).trim() || undefined
-}
-
-function resolveMavenVersion(
-  value: string | undefined,
-  properties: XmlBlock | undefined
-): string | undefined {
-  if (!value) return undefined
-  const property = /^\$\{([\w.-]+)\}$/.exec(value)?.[1]
-  return property ? xmlTagValue(properties?.content ?? "", property) : value
-}
-
-function parsePomXml(
-  content: string,
-  filePath: string,
-  coverageIssues?: ScannerCoverageIssue[]
-): Dependency[] {
-  const dependencies: Dependency[] = []
-  const properties = findXmlBlocks(content, "properties", 1)[0]
-  const dependencyManagement = findXmlBlocks(content, "dependencyManagement", 10)
-  const managedRanges = dependencyManagement.map((block) => [block.start, block.end] as const)
-  const managedVersions = new Map<string, string>()
-  for (const management of dependencyManagement) {
-    for (const block of findXmlBlocks(
-      management.content,
-      "dependency",
-      MAX_POM_DEPENDENCY_BLOCKS
-    )) {
-      const groupId = xmlTagValue(block.content, "groupId")
-      const artifactId = xmlTagValue(block.content, "artifactId")
-      const version = resolveMavenVersion(xmlTagValue(block.content, "version"), properties)
-      if (groupId && artifactId && version) managedVersions.set(`${groupId}:${artifactId}`, version)
-    }
-  }
-
-  const blocks = findXmlBlocks(content, "dependency", MAX_POM_DEPENDENCY_BLOCKS)
-  const remainingDependency = content.indexOf("<dependency>", blocks.at(-1)?.end ?? 0)
-  if (blocks.length === MAX_POM_DEPENDENCY_BLOCKS && remainingDependency >= 0) {
-    recordCoverageIssue(coverageIssues, {
-      scanner: "sca",
-      status: "bounded",
-      subject: filePath,
-      reason: `POM dependency parsing is limited to ${MAX_POM_DEPENDENCY_BLOCKS} blocks`,
-    })
-  } else if (remainingDependency >= 0) {
-    recordCoverageIssue(coverageIssues, {
-      scanner: "sca",
-      status: "partial",
-      subject: filePath,
-      reason: "A malformed POM dependency block could not be parsed",
-    })
-  }
-  for (const block of blocks) {
-    if (managedRanges.some(([start, end]) => block.start >= start && block.end <= end)) continue
-    const groupId = xmlTagValue(block.content, "groupId")
-    const artifactId = xmlTagValue(block.content, "artifactId")
-    const directVersion = xmlTagValue(block.content, "version")
-    const version =
-      resolveMavenVersion(directVersion, properties) ??
-      managedVersions.get(`${groupId}:${artifactId}`)
-    if (!groupId || !artifactId || !version) {
-      recordCoverageIssue(coverageIssues, {
-        scanner: "sca",
-        status: "partial",
-        subject: filePath,
-        reason: "A Maven dependency version could not be resolved from the local POM",
-      })
-      continue
-    }
-    dependencies.push({
-      name: `${groupId}:${artifactId}`,
-      version,
-      ecosystem: "Maven",
-      filePath,
-    })
-  }
-  return dependencies
 }
 
 function resolveGradleVersion(value: string, variables: Map<string, string>): string | undefined {
@@ -349,10 +241,20 @@ function resolveGradleVersion(value: string, variables: Map<string, string>): st
 
 function parseGradleVariables(content: string): Map<string, string> {
   const variables = new Map<string, string>()
-  const assignment =
-    /(?:^|\n)\s*(?:def|val|final\s+String)?\s*([A-Za-z_]\w*)\s*=\s*["']([^"']+)["']/g
-  for (const match of content.matchAll(assignment)) {
-    if (match[1] && match[2]) variables.set(match[1], match[2])
+  // Consume each whitespace run once, including multiline assignments. A single
+  // anchored assignment never retries alternative optional whitespace prefixes.
+  let offset = 0
+  while (offset < content.length) {
+    const rest = content.slice(offset)
+    let value = rest.trimStart()
+    offset += rest.length - value.length
+    const declaration = /^(?:def|val|final\s+String)\s+/.exec(value)
+    const prefix = declaration?.[0].length ?? 0
+    if (prefix) value = value.slice(prefix)
+    const assignment = /^([A-Za-z_]\w*)\s*=\s*["']([^"']+)["']/.exec(value)
+    if (assignment?.[1] && assignment[2]) variables.set(assignment[1], assignment[2])
+    const next = content.indexOf("\n", offset + prefix + (assignment?.[0].length ?? 0))
+    offset = next < 0 ? content.length : next + 1
   }
   return variables
 }
@@ -365,9 +267,17 @@ async function parseGradle(
 ): Promise<Dependency[]> {
   const dependencies: Dependency[] = []
   const variables = parseGradleVariables(content)
+  // Preserve multiline declarations but remove empty/leading whitespace runs once.
+  // Otherwise a multiline ^\s* pattern can retry every blank line in the same run.
+  const declarations = content
+    .split("\n")
+    .map((line) => line.trimStart())
+    .filter(Boolean)
+    .join("\n")
   const pattern =
+    // eslint-disable-next-line security/detect-unsafe-regex -- anchored, delimiter-separated fields on byte-bounded input
     /^\s*(?:api|implementation|compileOnly|runtimeOnly|testImplementation|testRuntimeOnly)\s*(?:\(\s*)?["']([^:"']+):([^:"']+):([^"']+)["']/gm
-  for (const match of content.matchAll(pattern)) {
+  for (const match of declarations.matchAll(pattern)) {
     const [, groupId, artifactId, version] = match
     const resolvedVersion = version ? resolveGradleVersion(version, variables) : undefined
     if (!groupId || !artifactId || !resolvedVersion) {
@@ -389,7 +299,7 @@ async function parseGradle(
 
   const mapPattern =
     /^\s*(?:api|implementation|compileOnly|runtimeOnly|testImplementation|testRuntimeOnly)\s+group:\s*["']([^"']+)["']\s*,\s*name:\s*["']([^"']+)["']\s*,\s*version:\s*["']?([^\s,'")]+)["']?/gm
-  for (const match of content.matchAll(mapPattern)) {
+  for (const match of declarations.matchAll(mapPattern)) {
     const [, groupId, artifactId, version] = match
     const resolvedVersion = version ? resolveGradleVersion(version, variables) : undefined
     if (!groupId || !artifactId || !resolvedVersion) continue
@@ -407,9 +317,14 @@ async function parseGradle(
   const catalogPath = join(repoPath, "gradle/libs.versions.toml")
   let catalog = ""
   try {
+    const stat = await lstat(catalogPath)
+    if (stat.isSymbolicLink() || stat.size > MAX_MANIFEST_BYTES) throw new Error("bounded catalog")
     catalog = await readFile(catalogPath, "utf8")
+    if (Buffer.byteLength(catalog) > MAX_MANIFEST_BYTES) throw new Error("bounded catalog")
   } catch {
-    // A catalog is optional unless the build file references one.
+    catalog = ""
+    // A catalog is optional unless the build file references one. Unresolved calls below
+    // retain partial coverage when a missing, unreadable or bounded catalog is referenced.
   }
   const versions = new Map<string, string>()
   const libraries = new Map<string, { module: string; versionRef: string }>()
@@ -470,6 +385,15 @@ async function parseDependencyFile(
       return []
     }
     const content = await readFile(fullPath, "utf-8")
+    if (Buffer.byteLength(content) > MAX_MANIFEST_BYTES) {
+      recordCoverageIssue(coverageIssues, {
+        scanner: "sca",
+        status: "bounded",
+        subject: filePath,
+        reason: `Dependency manifest exceeds the ${MAX_MANIFEST_BYTES}-byte scanner limit`,
+      })
+      return []
+    }
     switch (basename(filePath)) {
       case "package.json":
         return parsePackageJson(content, filePath)

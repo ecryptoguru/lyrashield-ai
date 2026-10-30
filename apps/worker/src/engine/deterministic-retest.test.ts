@@ -11,23 +11,25 @@ vi.mock("node:child_process", async (importOriginal) => {
 vi.mock("@lyrashield/db", () => ({
   withWorkspaceRLS: vi.fn(),
   prisma: {
+    integration: { findFirst: vi.fn() },
     retest: { findMany: vi.fn() },
     findingCandidate: { findMany: vi.fn() },
     scanResultManifest: { findFirst: vi.fn() },
     scanCoverageReceipt: { findMany: vi.fn() },
   },
 }))
-vi.mock("@lyrashield/integrations", () => ({ getInstallationToken: vi.fn() }))
+vi.mock("@lyrashield/integrations", () => ({ getRepositoryReadToken: vi.fn() }))
 import { prisma, withWorkspaceRLS } from "@lyrashield/db"
-import { getInstallationToken } from "@lyrashield/integrations"
+import { getRepositoryReadToken } from "@lyrashield/integrations"
 import { listOwnedScanDirectories } from "./stale-resource-reaper"
 import {
   authorizeDeterministicRetest,
   assertRetestFilesystemCapacity,
   checkoutDeterministicRetest as checkout,
 } from "./deterministic-retest"
-const checkoutDeterministicRetest = (params: Omit<Parameters<typeof checkout>[0], "scanId">) =>
-  checkout({ ...params, scanId: "cabcdefghijklmnopqrstuvwx" })
+const checkoutDeterministicRetest = (
+  params: Omit<Parameters<typeof checkout>[0], "scanId" | "workspaceId">
+) => checkout({ ...params, workspaceId: "w", scanId: "cabcdefghijklmnopqrstuvwx" })
 
 describe("deterministic retest authority", () => {
   it("requires a finite production tmpfs cap rather than host-bind storage", () => {
@@ -47,6 +49,7 @@ describe("deterministic retest authority", () => {
   beforeEach(() => {
     vi.resetAllMocks()
     vi.mocked(withWorkspaceRLS).mockImplementation(async (_workspaceId, fn) => fn(prisma as never))
+    vi.mocked(prisma.integration.findFirst).mockResolvedValue({ id: "integration-1" } as never)
     gitMock.mockImplementation(async (_file: string, args: string[]) => {
       const init = args.indexOf("init")
       if (init >= 0) await mkdir(args[init + 1]!, { recursive: true })
@@ -180,8 +183,22 @@ describe("deterministic retest authority", () => {
       })
     ).rejects.toThrow("checkout failed")
   })
+  it("rejects a revoked integration before private retest transport", async () => {
+    vi.mocked(prisma.integration.findFirst).mockResolvedValue(null)
+    await expect(
+      checkoutDeterministicRetest({
+        repoFullName: "owner/repo",
+        branch: "main",
+        installationId: "123",
+        timeoutMs: 1000,
+        isCancelled: async () => false,
+      })
+    ).rejects.toThrow("checkout failed")
+    expect(getRepositoryReadToken).not.toHaveBeenCalled()
+    expect(gitMock).not.toHaveBeenCalled()
+  })
   it("bounds a stalled installation-token request", async () => {
-    vi.mocked(getInstallationToken).mockReturnValue(new Promise(() => {}))
+    vi.mocked(getRepositoryReadToken).mockReturnValue(new Promise(() => {}))
     await expect(
       checkoutDeterministicRetest({
         repoFullName: "owner/repo",
@@ -208,7 +225,7 @@ describe("deterministic retest authority", () => {
   )
   it("uses the existing exact-repository credential scope for private retest transport", async () => {
     const token = randomUUID()
-    vi.mocked(getInstallationToken).mockResolvedValue(token)
+    vi.mocked(getRepositoryReadToken).mockResolvedValue(token)
     const result = await checkoutDeterministicRetest({
       repoFullName: "owner/repo",
       branch: "main",
@@ -217,6 +234,8 @@ describe("deterministic retest authority", () => {
       isCancelled: async () => false,
     })
     try {
+      expect(getRepositoryReadToken).toHaveBeenCalledWith(123, "owner/repo")
+      expect(prisma.integration.findFirst).toHaveBeenCalledTimes(2)
       for (const call of gitMock.mock.calls) {
         const gitEnv = call[2].env
         expect(gitEnv).toMatchObject({

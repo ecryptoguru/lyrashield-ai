@@ -1,3 +1,4 @@
+import { claimBoundedEngineCapacity } from "./capacity-lifecycle"
 import { prepareRepositoryAuth } from "../../engine/repository-auth"
 import { uploadEncryptedArtifact } from "@lyrashield/evidence-storage"
 import {
@@ -69,6 +70,7 @@ export type ScanExecutionResult =
       engineProfile?: ReturnType<typeof resolveEngineProfile>
       engineModel?: string
       maxBudgetUsd: number
+      capacityLimited?: boolean
       engineStartedAtMs: number | null
       /** Checksum-verified attachment staging receipt for the result manifest. */
       stagedAttachments?: {
@@ -342,6 +344,7 @@ export async function executeScanTarget(params: {
   scanProfile: { canonicalMode: string } | null
   /** Hash-verified stored execution plan; null on legacy pre-plan rows. */
   executionPlan?: ScanExecutionPlan | null
+  accountingVersion?: number | null
 }): Promise<ScanExecutionResult> {
   const {
     scanId,
@@ -355,7 +358,6 @@ export async function executeScanTarget(params: {
     scanRuntimeBudgetMs,
     elapsedScanMs,
     isScanCancelled,
-    markGlobalScanTimeout,
     markBillablePhaseStarted,
     deterministicRetest,
     engineBacked,
@@ -365,6 +367,7 @@ export async function executeScanTarget(params: {
   } = params
 
   let engineResult: EngineRunResult
+  let capacityLimited = false
   let engineStartedAtMs: number | null = null
   let maxBudgetUsd = 0
   let deterministicCheckout: Awaited<ReturnType<typeof checkoutDeterministicRetest>> | undefined
@@ -379,12 +382,12 @@ export async function executeScanTarget(params: {
   const isAuthAssessment = executionPlan?.workflow === "AUTHENTICATED_ASSESSMENT"
 
   if (deterministicRetest) {
-    if (target.repoProvider !== "github") {
+    if (target.repoProvider !== "github")
       throw new Error("Deterministic repository retests require a GitHub source target")
-    }
     await authorizeDeterministicRetest(scanId, workspaceId, params.target.id)
     deterministicCheckout = await checkoutDeterministicRetest({
       scanId,
+      workspaceId,
       repoFullName: target.repoFullName,
       branch: target.branch,
       installationId: target.installationId,
@@ -578,20 +581,13 @@ export async function executeScanTarget(params: {
     // Once the external engine begins, an automatic BullMQ replay could
     // spend twice for the same scan. Preflight remains retryable; the
     // billable phase is terminal and any rerun requires a fresh scan.
-    await enterEngineBillablePhase(scanId, markBillablePhaseStarted)
 
     // Keep the profile's deterministic-scanner reserve available even when
     // the model is healthy until its own wall-clock cap.
-    const engineTimeoutMs = Math.min(
-      resolveEngineRuntimeBudgetMs(mode, target.type, scanRuntimeBudgetMs, elapsedScanMs()),
-      // The engine can never exceed the recorded plan's budget.
-      executionPlan ? executionPlan.limits.maxEngineMs : Number.POSITIVE_INFINITY
-    )
-    if (engineTimeoutMs <= 0) {
-      markGlobalScanTimeout()
-      throw new Error("Scan analysis deadline exhausted before engine execution")
-    }
-
+    const capacity = await claimBoundedEngineCapacity(params)
+    capacityLimited = capacity.capacityLimited
+    const engineTimeoutMs = capacity.runtimeLimitMs
+    await enterEngineBillablePhase(scanId, markBillablePhaseStarted)
     engineStartedAtMs = Date.now()
     try {
       engineResult = await runEngine(
@@ -717,6 +713,7 @@ export async function executeScanTarget(params: {
     ...(engineModel ? { engineModel } : {}),
     maxBudgetUsd,
     engineStartedAtMs,
+    capacityLimited,
     ...(stagedAttachments
       ? {
           stagedAttachments: {

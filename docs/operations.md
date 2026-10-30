@@ -273,6 +273,43 @@ promotion. Cloudflare retains generated-artifact validation and live route/
 revision checks. Production Lighthouse scores run nightly or on demand,
 with reports and unchanged thresholds, outside the deployment path.
 
+### v26 admission/capacity cutover and compatible rollback
+
+This is an operator procedure for a separately authorized release. Local v26 tests and a merged source commit do not authorize production migration, cancellation, financial reconciliation or paid acceptance. Record the exact candidate/rollback product revisions, worker digests, engine revision, runtime roles and a bounded maintenance window before starting. The [v26 source/disposition record](./handoffs/v26-implementation-2026-10-30.md) states local qualification limits.
+
+The protected Azure release implements the first transition through the separate `v26-accounting-cutover` protocol. Before claiming admission, it records a root-owned durable receipt after classifying the actual database, qualifying the exact images and observing app/scanner/worker database principals. The receipt remains separate from webhook maintenance. An incomplete or uncertain first-transition receipt blocks automatic redeployment before webhook retry classification; inspect that receipt and repair forward deliberately. Automatic cross-run recovery is not implemented. Before admission is released, failure retains the owned stop and excludes old writers. If admission removal succeeds but its acknowledgement or final receipt write is uncertain, cleanup preserves the qualified candidate fleet and does not recreate a stop or infer completion. A completed receipt retains the reservation-aware worker capability floor without pinning later releases to the original image.
+
+1. **Stop new admission and drain every writer.** Use the existing guarded promotion/admission-stop ownership protocol for `lyrashield:scan-admission:stopped`; preserve a foreign/newer owner and retain its receipt. Prove all app/API, schedule, webhook/retest and local operational producers see that stop. Let already admitted work finish under its existing accounting version. Inspect both scan and fix queues and DB executions; an empty queue or terminal Scan status alone does not prove execution stopped or money settled. `promote-worker-vm.sh --preflight` is queue-only and never restarts the worker; it is necessary evidence, not the complete v26 cutover check.
+2. **Inspect active work and obligations read-only.** Before applying new columns, read the existing Scan IDs/workspace/sponsor/creator/status/startedAt/endedAt, their persisted events/usage/finalization evidence and worker/child provenance. Include QUEUED, PREFLIGHT, RUNNING, VERIFYING and REQUIRES_APPROVAL scans and terminal scans with unresolved execution/accounting. Use scoped authorized clients or the bounded system read path; preserve RLS and audit boundaries. Do not cancel work, remove queue keys, rewrite receipts/versions, mark findings fixed or release slots/holds to manufacture an empty state. Unknown legacy execution or settlement needs separate scan-specific evidence and authorized reconciliation; keep admission stopped if that proof is absent.
+3. **Review the actual migration and grant plan.** With old producers/consumers drained and stopped, apply the additive forward-only migrations for `UserScanSlot`, `ScanCapacityReservation`, `Scan.accountingVersion/accountingSettledAt`, nullable Fix PR metadata and nullable schedule admission columns. The migration seeds one legacy active slot per creator and conservative REVIEW_REQUIRED sponsor holds for legacy active work; it does not rewrite historical financial/evidence receipts. Read back those seeds and reconcile against the preflight inventory. Grant the exact reviewed app/worker runtime roles the required SELECT/INSERT/UPDATE/DELETE access to the two new tables, retaining NOSUPERUSER/NOBYPASSRLS, ENABLE/FORCE RLS and their user/account policies. Verify existing app-schema/function grants rather than granting broad new system access. Never run down migrations on image rollback.
+4. **Read back lifecycle state after migration.** In a read-only transaction, inventory every `UserScanSlot` and every WAITING/RESERVED/RUNNING/REVIEW_REQUIRED reservation and every SETTLED reservation with `stoppedAt IS NULL`, plus terminal scans whose `accountingSettledAt` is null. Bind each to its stored creator/sponsor/workspace and original scan/usage/stop evidence. WAITING holds a user slot without funding; RESERVED/RUNNING and REVIEW_REQUIRED may consume account admission capacity. SETTLED rows without confirmed stop retain capacity and slot obligations until execution stop is durably confirmed. No age threshold is release proof. Legacy null accounting versions remain legacy. Resolve mismatches only through the shared guarded service with a separately reviewed receipt; do not use direct SQL UPDATE/DELETE. Retain failed and inconclusive receipts.
+5. **Promote one compatible fleet.** Do not run an old nonreserving worker alongside new reserving workers on the queue, even if both engine pins match. Confirm all producers use the new atomic admission and all consumers understand slots, reservations, accounting versions and stop/finalization holds. Install only image-owned host assets from the qualified digest; retain the protected TMPDIR, deny-by-default egress, sandbox checks and provenance/readiness contract. Ensure the pinned Go resolver image is present and its network-none/nonroot version check passes before queue consumption. Source pin or host unit success alone is insufficient.
+6. **Qualify before reopening.** Retain migration/grant/RLS readback, exact app/worker/engine provenance, readiness, empty-queue/drain evidence and slot/reservation/accounting consistency. Check that targeted OAuth reads fail outside grants, URL relay admission remains fail-closed and no legacy obligation was silently released. Keep production provider/paid acceptance separate and explicitly authorized. Remove only the admission stop owned by this operation after all required receipts match; preserve a newer stop.
+7. **Rollback remains contract-compatible.** Prepare a digest-qualified rollback image that understands the same reservation/slot/finalization schema and accounting versions before promotion. A previously deployed nonreserving image is not a compatible v26 rollback merely because it starts against additive schema. On failure, retain admission stop, stop/drain new execution, inspect outstanding obligations read-only and switch only to that compatible image. Preserve all tables, rows, receipts and forward migrations. If no compatible rollback is available, keep admission closed and repair forward; never release holds or replay ambiguous paid work automatically.
+
+For private inspection after migration, the minimum read-only inventory is:
+
+```sql
+BEGIN READ ONLY;
+SELECT "id", "workspaceId", "createdById", "sponsorAccountId", "status",
+       "accountingVersion", "accountingSettledAt", "startedAt", "endedAt"
+FROM "Scan"
+WHERE "status" IN ('QUEUED','PREFLIGHT','RUNNING','VERIFYING','REQUIRES_APPROVAL')
+   OR "accountingSettledAt" IS NULL;
+SELECT "userId", "scanId", "workspaceId", "createdAt" FROM "UserScanSlot";
+SELECT "scanId", "accountId", "workspaceId", "userId", "state",
+       "fundedMinutes", "observedMs", "chargedMinutes", "absorbedMinutes",
+       "stoppedAt", "settledAt"
+FROM "ScanCapacityReservation"
+WHERE "state" IN ('WAITING','RESERVED','RUNNING','REVIEW_REQUIRED')
+   OR ("state" = 'SETTLED' AND "stoppedAt" IS NULL);
+ROLLBACK;
+```
+
+Run only through the approved scoped/system read boundary; null legacy settlement timestamps are investigation candidates, not proof that every historical scan has a debt. Keep IDs, accounting data and evidence private. This query is an inventory, not an automatic repair or complete reconciliation algorithm.
+
+Revision deactivation and scanner-secret removal have separate cleanup policies: a revision-cleanup warning must not hide a failed secret-removal policy, and neither cleanup-only outcome sends healthy traffic back to an older image. Retain sanitized bounded reason codes and the fixed remediation guidance; never print raw Azure inventory or private web logs. The [low-rate error alert document](./low-rate-error-alert-draft.md) remains an unactivated proposal; preserve the approved receiver, telemetry-only app-any-5xx and intentionally disabled rules.
+
 ### Checkout rollback
 
 Set the affected `*_BILLING_ADMISSION` back to `off` and redeploy. Existing
@@ -428,8 +465,10 @@ removes private files and named backup containers; application cleanup validates
 group, session and start time before signalling its group. Cleanup refuses
 stale identity. Hard runner loss or orphaned/unverifiable processes rely on
 hosted-runner teardown, so explicit cleanup is not a secure-erasure guarantee.
-The backup and restore jobs have respective 20/25-minute timeouts; queue/setup
+The isolated backup and restore jobs have respective 20/25-minute timeouts; queue/setup
 waits mean this is not a 45-minute wall-clock limit.
+
+Restore additionally compares private per-table COPY row counts and order-independent SHA fingerprints derived from the same already-verified custom dump, with bounded sort spill and unconditional cleanup. Same-count content drift fails. This covers COPY contents/columns, not full physical/logical equivalence, sequences, large objects or extension semantics. Per-drill DB/auth credentials are random; the DB password stays only in a private 0600 file and never GITHUB_ENV/argv. Backup forwards the verified TLS URL by environment-variable name. These are current source contracts, not a fresh production drill receipt.
 
 Existing credentials authenticate only to their original production database
 and R2 endpoint; the passphrase is used locally. Full private production data

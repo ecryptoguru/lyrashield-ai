@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   write: vi.fn(),
   pr: vi.fn(),
   rls: vi.fn(),
+  begin: vi.fn(),
   env: {
     NODE_ENV: "test",
     LYRASHIELD_LOCAL_EVIDENCE_STORAGE: "1",
@@ -33,7 +34,10 @@ vi.mock("@lyrashield/db", () => ({
   claimApprovalExecution: vi.fn().mockResolvedValue(true),
   completeApprovalExecution: vi.fn(),
   failApprovalExecution: vi.fn(),
-  createPullRequestRecord: vi.fn(),
+  createPullRequestRecord: vi.fn().mockResolvedValue({ status: "open" }),
+  beginFixPrExecution: mocks.begin,
+  getFixPrExecution: vi.fn().mockResolvedValue(null),
+  markFixPrRecovery: vi.fn().mockResolvedValue(undefined),
   prisma: {
     finding: { findFirst: mocks.finding },
     workspace: { findUnique: mocks.workspace },
@@ -52,7 +56,11 @@ vi.mock("@lyrashield/billing", () => ({
   resolveAccountBilling: vi.fn().mockResolvedValue({ effectivePlan: "PRO" }),
 }))
 
-import { uploadEncryptedArtifact, readEncryptedArtifact } from "@lyrashield/evidence-storage"
+import {
+  uploadEncryptedArtifact,
+  readEncryptedArtifact,
+  EvidenceStorageConfigurationError,
+} from "@lyrashield/evidence-storage"
 import { buildUnifiedDiff, validatePatchDiff, patchScopeForPlan } from "@lyrashield/fix"
 import { resolveFixPrRequest } from "./fix-pr-context"
 import { requestFixPrApproval } from "./fix-pr"
@@ -93,6 +101,7 @@ describe("fix PR patch provenance with disposable encrypted artifacts", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.connection.mockResolvedValue(true)
+    mocks.begin.mockResolvedValue({ created: true, record: { status: "opening" } })
     mocks.finding.mockResolvedValue({
       id: "finding-1",
       targetId: "target-1",
@@ -287,6 +296,39 @@ describe("fix PR patch provenance with disposable encrypted artifacts", () => {
     await expect(resolve()).rejects.toMatchObject({ code: "PROPOSAL_PATCH_PROVENANCE_REQUIRED" })
   })
 
+  it.each([
+    "not a URI",
+    "https://storage.invalid/patch",
+    "s3://bucket/unrelated-key",
+    "file:///etc/passwd",
+  ])("returns a safe provenance conflict for invalid stored reference %s", async (uri) => {
+    reference(uri)
+    await expect(resolve()).rejects.toMatchObject({
+      code: "PROPOSAL_PATCH_PROVENANCE_REQUIRED",
+      status: 409,
+    })
+  })
+
+  it("returns a safe conflict when the generated artifact is missing", async () => {
+    const artifact = await storePatch()
+    await rm(fileURLToPath(artifact.storageUri))
+    reference(artifact.storageUri)
+    await expect(resolve()).rejects.toMatchObject({
+      code: "PROPOSAL_PATCH_UNAVAILABLE",
+      status: 409,
+    })
+  })
+
+  it("keeps evidence configuration outages as infrastructure errors", async () => {
+    reference((await storePatch()).storageUri)
+    mocks.env.LYRASHIELD_LOCAL_EVIDENCE_STORAGE = "0"
+    try {
+      await expect(resolve()).rejects.toBeInstanceOf(EvidenceStorageConfigurationError)
+    } finally {
+      mocks.env.LYRASHIELD_LOCAL_EVIDENCE_STORAGE = "1"
+    }
+  })
+
   it("retains the existing cross-workspace read guard", async () => {
     const artifact = await uploadEncryptedArtifact({
       workspaceId: "workspace-2",
@@ -296,6 +338,9 @@ describe("fix PR patch provenance with disposable encrypted artifacts", () => {
       content: diff,
     })
     reference(artifact.storageUri)
-    await expect(resolve()).rejects.toThrow("Evidence storage URI does not belong to workspace")
+    await expect(resolve()).rejects.toMatchObject({
+      code: "PROPOSAL_PATCH_PROVENANCE_REQUIRED",
+      status: 409,
+    })
   })
 })

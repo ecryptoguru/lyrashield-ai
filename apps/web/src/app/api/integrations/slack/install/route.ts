@@ -1,4 +1,4 @@
-import { withCookieMutation } from "../../../../../lib/api-auth"
+import { withApiRequest, withCookieMutation } from "../../../../../lib/api-auth"
 import { NextResponse, type NextRequest } from "next/server"
 import { env } from "@lyrashield/config"
 import { prisma, upsertConnectorConnection, ConnectorConnectionError } from "@lyrashield/db"
@@ -48,7 +48,7 @@ function slackRedirectUri(request: NextRequest): string {
   return new URL("/api/integrations/slack/install", getAppOrigin(request)).toString()
 }
 
-export async function GET(request: NextRequest) {
+async function get(request: NextRequest) {
   const session = await getSession()
   if (!session) {
     const loginUrl = new URL("/sign-in", getAppOrigin(request))
@@ -68,25 +68,13 @@ export async function GET(request: NextRequest) {
   const code = searchParams.get("code")
   const state = searchParams.get("state")
   if (!code || !state) {
-    return NextResponse.json(
-      {
-        success: false,
-        error: { code: "MISSING_PARAM", message: "code and state are required" },
-      },
-      { status: 400 }
-    )
+    return apiError("MISSING_PARAM", "code and state are required", 400)
   }
 
   const stateResult = verifyInstallState(state)
   if (!stateResult.valid) {
     logger.warn("Slack connect callback rejected — invalid state", { reason: stateResult.reason })
-    return NextResponse.json(
-      {
-        success: false,
-        error: { code: "INVALID_STATE", message: "Invalid or expired install state" },
-      },
-      { status: 400 }
-    )
+    return apiError("INVALID_STATE", "Invalid or expired install state", 400)
   }
   const workspaceId = stateResult.workspaceId
 
@@ -170,47 +158,26 @@ export async function GET(request: NextRequest) {
       error: error instanceof Error ? error.message : String(error),
       workspaceId,
     })
-    return NextResponse.json(
-      {
-        success: false,
-        error: { code: "INTERNAL_ERROR", message: "Failed to connect Slack" },
-      },
-      { status: 500 }
-    )
+    return apiError("INTERNAL_ERROR", "Failed to connect Slack", 500)
   }
 }
 
 async function post(request: NextRequest) {
   const session = await getSession()
   if (!session) {
-    return NextResponse.json(
-      { success: false, error: { code: "UNAUTHORIZED", message: "Authentication required" } },
-      { status: 401 }
-    )
+    return apiError("UNAUTHORIZED", "Authentication required", 401)
   }
 
   let body: unknown
   try {
     body = await request.json()
   } catch {
-    return NextResponse.json(
-      {
-        success: false,
-        error: { code: "INVALID_JSON", message: "Request body must be valid JSON" },
-      },
-      { status: 400 }
-    )
+    return apiError("INVALID_JSON", "Request body must be valid JSON", 400)
   }
 
   const parsed = InstallRequestSchema.safeParse(body)
   if (!parsed.success) {
-    return NextResponse.json(
-      {
-        success: false,
-        error: { code: "VALIDATION_ERROR", message: "workspaceId is required" },
-      },
-      { status: 400 }
-    )
+    return apiError("VALIDATION_ERROR", "workspaceId is required", 400)
   }
   const { workspaceId } = parsed.data
 
@@ -240,3 +207,5 @@ async function post(request: NextRequest) {
 }
 
 export const POST = withCookieMutation(post)
+
+export const GET = withApiRequest(get)

@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto"
 import { createId } from "@paralleldrive/cuid2"
-import { prisma, withWorkspaceRLS } from "@lyrashield/db"
+import { prisma, withWorkspaceRLS, type ScopedTransaction } from "@lyrashield/db"
 import { startTrial } from "@lyrashield/billing"
 import type { WorkspaceMode } from "@lyrashield/types"
 
@@ -46,6 +46,57 @@ export function isWorkspaceSlugUniqueError(error: unknown): boolean {
   )
 }
 
+/** Shared atomic defaults and account trial claim; caller owns the scoped transaction. */
+export async function createWorkspaceInTransaction(
+  tx: ScopedTransaction,
+  input: { userId: string; name: string; mode: WorkspaceMode },
+  workspaceId: string,
+  slug: string
+) {
+  const workspace = await tx.workspace.create({
+    data: {
+      id: workspaceId,
+      name: input.name,
+      slug,
+      mode: input.mode,
+      plan: "FREE",
+      members: {
+        create: {
+          userId: input.userId,
+          role: "OWNER",
+          status: "active",
+        },
+      },
+      policies: {
+        create: {
+          name: "Default Policy",
+          description: "Default scan policy with safe settings",
+          networkEgressPolicy: "target_only",
+          destructiveTestsAllowed: false,
+          approvalRequired: false,
+          maxDurationMinutes: 60,
+          piiRedactionEnabled: true,
+          evidenceRetentionDays: 30,
+        },
+      },
+    },
+  })
+
+  let trial: Awaited<ReturnType<typeof startTrial>>
+  try {
+    trial = await startTrial(workspace.id, input.userId, tx)
+  } catch (error) {
+    // A paid account may still create workspaces; it simply cannot claim a trial.
+    if (!(error instanceof Error) || error.message !== "TRIAL_PAID_PLAN") throw error
+    const owner = await tx.user.findUnique({
+      where: { id: input.userId },
+      select: { trialStartedAt: true },
+    })
+    trial = { started: false, alreadyUsed: Boolean(owner?.trialStartedAt), trialEndsAt: null }
+  }
+  return { result: workspace, trial }
+}
+
 /**
  * Create a workspace with its owner membership, default policy, and trial.
  *
@@ -67,48 +118,7 @@ export async function createWorkspaceWithTrial(input: {
     withWorkspaceRLS(
       workspaceId,
       async (tx) => {
-        const workspace = await tx.workspace.create({
-          data: {
-            id: workspaceId,
-            name: input.name,
-            slug,
-            mode: input.mode,
-            plan: "FREE",
-            members: {
-              create: {
-                userId: input.userId,
-                role: "OWNER",
-                status: "active",
-              },
-            },
-            policies: {
-              create: {
-                name: "Default Policy",
-                description: "Default scan policy with safe settings",
-                networkEgressPolicy: "target_only",
-                destructiveTestsAllowed: false,
-                approvalRequired: false,
-                maxDurationMinutes: 60,
-                piiRedactionEnabled: true,
-                evidenceRetentionDays: 30,
-              },
-            },
-          },
-        })
-
-        let trial: Awaited<ReturnType<typeof startTrial>>
-        try {
-          trial = await startTrial(workspace.id, input.userId, tx)
-        } catch (error) {
-          // A paid account may still create workspaces; it simply cannot claim a trial.
-          if (!(error instanceof Error) || error.message !== "TRIAL_PAID_PLAN") throw error
-          const owner = await tx.user.findUnique({
-            where: { id: input.userId },
-            select: { trialStartedAt: true },
-          })
-          trial = { started: false, alreadyUsed: Boolean(owner?.trialStartedAt), trialEndsAt: null }
-        }
-        return { result: workspace, trial }
+        return createWorkspaceInTransaction(tx, input, workspaceId, slug)
       },
       { accountId: input.userId }
     )

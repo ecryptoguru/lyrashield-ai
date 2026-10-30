@@ -5,12 +5,15 @@ const schedulerMocks = vi.hoisted(() => ({
   runWithAccountContext: vi.fn(),
   evaluateScanEntitlement: vi.fn(),
   notifyScheduleBlocked: vi.fn(),
+  relayAvailable: vi.fn(),
 }))
 
 vi.mock("@lyrashield/db", () => ({
+  releaseUnstartedScanSlot: vi.fn(),
   ACTIVE_SCAN_STATUSES: ["QUEUED", "PREFLIGHT", "RUNNING", "VERIFYING", "REQUIRES_APPROVAL"],
-  createScan: vi.fn(),
-  claimDueSchedule: vi.fn(),
+  createScheduledScan: vi.fn(),
+  advanceBlockedSchedule: vi.fn(),
+  restoreUnsubmittedScheduleOccurrence: vi.fn(),
   getDueSchedules: vi.fn(),
   getNextRunAt: vi.fn(),
   findCurrentDomainProof: schedulerMocks.findCurrentDomainProof,
@@ -23,9 +26,20 @@ vi.mock("@lyrashield/db", () => ({
     },
     schedule: {
       update: vi.fn(),
+      updateMany: vi.fn(),
     },
   },
 }))
+vi.mock("@lyrashield/integrations", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@lyrashield/integrations")>()
+  return {
+    ...actual,
+    resolveAvailableUrlReview: async (
+      input: Parameters<typeof actual.resolveAvailableUrlReview>[0]
+    ) => actual.resolveAvailableUrlReview(input, await schedulerMocks.relayAvailable()),
+  }
+})
+
 vi.mock("@lyrashield/billing", () => ({
   evaluateScanEntitlement: schedulerMocks.evaluateScanEntitlement,
 }))
@@ -47,8 +61,9 @@ vi.mock("./notifications", () => ({
 }))
 
 import {
-  createScan,
-  claimDueSchedule,
+  createScheduledScan,
+  advanceBlockedSchedule,
+  restoreUnsubmittedScheduleOccurrence,
   getDueSchedules,
   getNextRunAt,
   prisma,
@@ -61,6 +76,7 @@ import {
   runWithAccountContext as withAccountContext,
 } from "@lyrashield/db"
 import { notifyScheduleBlocked as sendScheduleBlockedNotice } from "./notifications"
+import { ScanEnqueueNotSubmittedError } from "@lyrashield/integrations"
 import { processDueSchedules } from "./schedules"
 
 const schedule = {
@@ -88,25 +104,28 @@ const schedule = {
 
 const mockPrisma = prisma as unknown as {
   scan: { count: ReturnType<typeof vi.fn> }
-  schedule: { update: ReturnType<typeof vi.fn> }
+  schedule: { update: ReturnType<typeof vi.fn>; updateMany: ReturnType<typeof vi.fn> }
 }
 
 describe("processDueSchedules", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    schedulerMocks.relayAvailable.mockResolvedValue(true)
     vi.mocked(getDueSchedules).mockResolvedValue([schedule] as never)
     vi.mocked(getNextRunAt).mockReturnValue(new Date("2026-01-04T00:00:00Z"))
-    vi.mocked(createScan).mockResolvedValue({ id: "scan-1" } as never)
+    vi.mocked(createScheduledScan).mockResolvedValue({ id: "scan-1" } as never)
     vi.mocked(enqueueScan).mockResolvedValue("scan-1")
     vi.mocked(assertScanWorkerAvailable).mockResolvedValue(undefined)
     vi.mocked(updateScanStatus).mockResolvedValue({ id: "scan-1" } as never)
-    vi.mocked(claimDueSchedule).mockResolvedValue(true)
+    vi.mocked(advanceBlockedSchedule).mockResolvedValue(true)
+    vi.mocked(restoreUnsubmittedScheduleOccurrence).mockResolvedValue(true)
     vi.mocked(lookupDomainProof).mockResolvedValue({ domain: "example.com", verified: true })
     vi.mocked(withAccountContext).mockImplementation(async (_accountId, fn) => fn())
     vi.mocked(evaluateEntitlement).mockResolvedValue({ allowed: true } as never)
     vi.mocked(sendScheduleBlockedNotice).mockResolvedValue(undefined)
     mockPrisma.scan.count.mockResolvedValue(0)
     mockPrisma.schedule.update.mockResolvedValue(schedule)
+    mockPrisma.schedule.updateMany.mockResolvedValue({ count: 1 })
   })
 
   it("creates and enqueues a scan for a due schedule", async () => {
@@ -115,19 +134,12 @@ describe("processDueSchedules", () => {
     const enqueued = await processDueSchedules(now)
 
     expect(enqueued).toBe(1)
-    expect(claimDueSchedule).toHaveBeenCalledWith(
-      "schedule-1",
+    expect(advanceBlockedSchedule).not.toHaveBeenCalled()
+    expect(createScheduledScan).toHaveBeenCalledWith(
+      schedule,
       now,
       new Date("2026-01-04T00:00:00Z")
     )
-    expect(createScan).toHaveBeenCalledWith({
-      workspaceId: "workspace-1",
-      targetId: "target-1",
-      goal: "WEEKLY_MONITOR",
-      mode: "SAFE",
-      createdById: "user-1",
-      triggerType: "schedule",
-    })
     expect(enqueueScan).toHaveBeenCalledWith({
       scanId: "scan-1",
       workspaceId: "workspace-1",
@@ -141,7 +153,47 @@ describe("processDueSchedules", () => {
       mode: "SAFE",
       sponsorAccountId: "user-1",
       mutateOnTrialExpiry: true,
+      deferCapacityCheck: true,
     })
+  })
+
+  it("retains the pending occurrence when entitlement cannot be read", async () => {
+    vi.mocked(evaluateEntitlement).mockRejectedValue(new Error("database timeout"))
+    expect(await processDueSchedules()).toBe(0)
+    expect(advanceBlockedSchedule).not.toHaveBeenCalled()
+    expect(sendScheduleBlockedNotice).not.toHaveBeenCalled()
+  })
+
+  it("retains the pending occurrence while the target is active", async () => {
+    mockPrisma.scan.count.mockResolvedValue(1)
+    expect(await processDueSchedules()).toBe(0)
+    expect(advanceBlockedSchedule).not.toHaveBeenCalled()
+  })
+
+  it("defers live relay loss without advancing or notifying", async () => {
+    schedulerMocks.relayAvailable.mockResolvedValue(false)
+    vi.mocked(getDueSchedules).mockResolvedValue([{ ...schedule, mode: "STANDARD" }] as never)
+    expect(await processDueSchedules()).toBe(0)
+    expect(advanceBlockedSchedule).not.toHaveBeenCalled()
+    expect(createScheduledScan).not.toHaveBeenCalled()
+    expect(sendScheduleBlockedNotice).not.toHaveBeenCalled()
+  })
+
+  it("defers user slot contention without consuming an occurrence", async () => {
+    vi.mocked(createScheduledScan).mockRejectedValue(
+      Object.assign(new Error("busy"), { code: "SCAN_ALREADY_ACTIVE" })
+    )
+    expect(await processDueSchedules()).toBe(0)
+    expect(advanceBlockedSchedule).not.toHaveBeenCalled()
+    expect(sendScheduleBlockedNotice).not.toHaveBeenCalled()
+    expect(enqueueScan).not.toHaveBeenCalled()
+  })
+
+  it("does not notify when another replica already advanced a blocked occurrence", async () => {
+    vi.mocked(evaluateEntitlement).mockResolvedValue({ allowed: false } as never)
+    vi.mocked(advanceBlockedSchedule).mockResolvedValue(false)
+    expect(await processDueSchedules()).toBe(0)
+    expect(sendScheduleBlockedNotice).not.toHaveBeenCalled()
   })
 
   it("keeps an expired-trial schedule enabled and sends one workspace notice", async () => {
@@ -152,8 +204,8 @@ describe("processDueSchedules", () => {
 
     expect(await processDueSchedules(new Date("2026-01-01T12:00:00Z"))).toBe(0)
 
-    expect(claimDueSchedule).toHaveBeenCalled()
-    expect(createScan).not.toHaveBeenCalled()
+    expect(advanceBlockedSchedule).toHaveBeenCalled()
+    expect(createScheduledScan).not.toHaveBeenCalled()
     expect(enqueueScan).not.toHaveBeenCalled()
     expect(mockPrisma.schedule.update).not.toHaveBeenCalled()
     expect(sendScheduleBlockedNotice).toHaveBeenCalledWith(
@@ -174,7 +226,7 @@ describe("processDueSchedules", () => {
     expect(await processDueSchedules(new Date("2026-01-01T12:00:00Z"))).toBe(0)
 
     expect(lookupDomainProof).toHaveBeenCalledWith("workspace-1", "https://example.com")
-    expect(createScan).not.toHaveBeenCalled()
+    expect(createScheduledScan).not.toHaveBeenCalled()
     expect(sendScheduleBlockedNotice).toHaveBeenCalledWith(
       "workspace-1",
       "schedule-1",
@@ -189,7 +241,7 @@ describe("processDueSchedules", () => {
 
     expect(await processDueSchedules()).toBe(0)
     expect(withAccountContext).not.toHaveBeenCalled()
-    expect(createScan).not.toHaveBeenCalled()
+    expect(createScheduledScan).not.toHaveBeenCalled()
     expect(sendScheduleBlockedNotice).toHaveBeenCalledWith(
       "workspace-1",
       "schedule-1",
@@ -205,17 +257,17 @@ describe("processDueSchedules", () => {
     const enqueued = await processDueSchedules()
 
     expect(enqueued).toBe(0)
-    expect(createScan).not.toHaveBeenCalled()
+    expect(createScheduledScan).not.toHaveBeenCalled()
     expect(enqueueScan).not.toHaveBeenCalled()
   })
 
   it("skips a schedule another worker has already claimed", async () => {
-    vi.mocked(claimDueSchedule).mockResolvedValue(false)
+    vi.mocked(createScheduledScan).mockResolvedValue(null)
 
     const enqueued = await processDueSchedules()
 
     expect(enqueued).toBe(0)
-    expect(createScan).not.toHaveBeenCalled()
+    expect(enqueueScan).not.toHaveBeenCalled()
   })
 
   it("does not advance a schedule when worker availability is lost", async () => {
@@ -227,8 +279,8 @@ describe("processDueSchedules", () => {
 
     expect(enqueued).toBe(0)
     expect(assertScanWorkerAvailable).toHaveBeenCalledTimes(1)
-    expect(claimDueSchedule).not.toHaveBeenCalled()
-    expect(createScan).not.toHaveBeenCalled()
+    expect(advanceBlockedSchedule).not.toHaveBeenCalled()
+    expect(createScheduledScan).not.toHaveBeenCalled()
   })
 
   it("disables schedules with unsupported cron expressions", async () => {
@@ -237,15 +289,21 @@ describe("processDueSchedules", () => {
     const enqueued = await processDueSchedules()
 
     expect(enqueued).toBe(0)
-    expect(mockPrisma.schedule.update).toHaveBeenCalledWith({
-      where: { id: "schedule-1" },
-      data: { enabled: false },
+    expect(mockPrisma.schedule.updateMany).toHaveBeenCalledWith({
+      where: { id: "schedule-1", workspaceId: "workspace-1", updatedAt: schedule.updatedAt },
+      data: {
+        enabled: false,
+        lastBlockedAt: expect.any(Date),
+        lastBlockedReason: "SCHEDULE_CRON_UNSUPPORTED",
+      },
     })
-    expect(createScan).not.toHaveBeenCalled()
+    expect(createScheduledScan).not.toHaveBeenCalled()
   })
 
   it("marks the created scan failed when queueing fails", async () => {
-    vi.mocked(enqueueScan).mockRejectedValue(new Error("redis unavailable"))
+    vi.mocked(enqueueScan).mockRejectedValue(
+      new ScanEnqueueNotSubmittedError("scan-1", new Error("redis unavailable"))
+    )
 
     const enqueued = await processDueSchedules()
 
@@ -261,6 +319,64 @@ describe("processDueSchedules", () => {
     )
   })
 
+  it("retains the scan and occurrence on an unknown publication failure", async () => {
+    vi.mocked(enqueueScan).mockRejectedValue(new Error("unknown publication state"))
+    expect(await processDueSchedules()).toBe(0)
+    expect(updateScanStatus).not.toHaveBeenCalled()
+    expect(restoreUnsubmittedScheduleOccurrence).not.toHaveBeenCalled()
+  })
+
+  it("reaches later due schedules after the first page remains deferred", async () => {
+    const deferred = Array.from({ length: 50 }, (_, i) => ({
+      ...schedule,
+      id: `deferred-${String(i).padStart(3, "0")}`,
+      targetId: `busy-${i}`,
+    }))
+    vi.mocked(getDueSchedules)
+      .mockResolvedValueOnce(deferred as never)
+      .mockResolvedValueOnce([{ ...schedule, id: "later-eligible" }] as never)
+    mockPrisma.scan.count.mockImplementation(async (args: { where?: { targetId?: string } }) =>
+      args?.where?.targetId?.startsWith("busy-") ? 1 : 0
+    )
+    expect(await processDueSchedules()).toBe(0)
+    expect(await processDueSchedules()).toBe(1)
+    expect(getDueSchedules).toHaveBeenLastCalledWith(expect.any(Date), "deferred-049")
+    expect(createScheduledScan).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "later-eligible" }),
+      expect.any(Date),
+      expect.any(Date)
+    )
+  })
+
+  it("continues after the last processed key when the poll time budget expires", async () => {
+    const first = { ...schedule, id: "budget-1" }
+    const second = { ...schedule, id: "budget-2" }
+    vi.mocked(getDueSchedules)
+      .mockResolvedValueOnce([first, second] as never)
+      .mockResolvedValueOnce([second] as never)
+    const clock = vi
+      .spyOn(Date, "now")
+      .mockReturnValueOnce(0)
+      .mockReturnValueOnce(0)
+      .mockReturnValue(16_000)
+    try {
+      expect(await processDueSchedules()).toBe(1)
+      expect(await processDueSchedules()).toBe(1)
+      expect(getDueSchedules).toHaveBeenLastCalledWith(expect.any(Date), "budget-1")
+    } finally {
+      clock.mockRestore()
+    }
+  })
+
+  it("does not reset an existing scan after a mismatched no-add proof", async () => {
+    vi.mocked(enqueueScan).mockRejectedValue(
+      new ScanEnqueueNotSubmittedError("previous-scan", new Error("not submitted"))
+    )
+    expect(await processDueSchedules()).toBe(0)
+    expect(updateScanStatus).not.toHaveBeenCalled()
+    expect(restoreUnsubmittedScheduleOccurrence).not.toHaveBeenCalled()
+  })
+
   it("allows scheduled WEB_APP STANDARD scans after surface review is implemented", async () => {
     vi.mocked(getDueSchedules).mockResolvedValue([
       { ...schedule, mode: "STANDARD", target: { ...schedule.target, type: "WEB_APP" } },
@@ -269,22 +385,28 @@ describe("processDueSchedules", () => {
     const enqueued = await processDueSchedules()
 
     expect(enqueued).toBe(1)
-    expect(createScan).toHaveBeenCalled()
+    expect(createScheduledScan).toHaveBeenCalled()
   })
 
-  it("disables and skips scheduled API DEEP scans without an OpenAPI spec", async () => {
+  it("advances and records unavailable profiles with a bounded notice", async () => {
     vi.mocked(getDueSchedules).mockResolvedValue([
       { ...schedule, mode: "DEEP", target: { ...schedule.target, type: "API" } },
     ] as never)
-
-    const enqueued = await processDueSchedules()
-
-    expect(enqueued).toBe(0)
-    expect(mockPrisma.schedule.update).toHaveBeenCalledWith({
-      where: { id: "schedule-1" },
-      data: { enabled: false },
-    })
-    expect(createScan).not.toHaveBeenCalled()
+    expect(await processDueSchedules(new Date("2026-01-01T12:00:00Z"))).toBe(0)
+    expect(advanceBlockedSchedule).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "schedule-1" }),
+      expect.any(Date),
+      expect.any(Date),
+      "SCAN_PROFILE_UNAVAILABLE"
+    )
+    expect(sendScheduleBlockedNotice).toHaveBeenCalledWith(
+      "workspace-1",
+      "schedule-1",
+      "Example",
+      "SCAN_PROFILE_UNAVAILABLE",
+      "2026-01-01"
+    )
+    expect(createScheduledScan).not.toHaveBeenCalled()
   })
 
   it("allows scheduled API STANDARD scans when an OpenAPI spec is configured", async () => {
@@ -303,24 +425,25 @@ describe("processDueSchedules", () => {
     const enqueued = await processDueSchedules()
 
     expect(enqueued).toBe(1)
-    expect(createScan).toHaveBeenCalled()
+    expect(createScheduledScan).toHaveBeenCalled()
   })
 
   it("continues processing other schedules when one schedule fails", async () => {
     const secondSchedule = { ...schedule, id: "schedule-2", targetId: "target-2" }
     vi.mocked(getDueSchedules).mockResolvedValue([schedule, secondSchedule] as never)
-    vi.mocked(claimDueSchedule)
+    vi.mocked(createScheduledScan)
       .mockRejectedValueOnce(new Error("database timeout") as never)
-      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce({ id: "scan-1" } as never)
 
     const enqueued = await processDueSchedules()
 
     expect(enqueued).toBe(1)
-    expect(createScan).toHaveBeenCalledWith(
+    expect(createScheduledScan).toHaveBeenCalledWith(
       expect.objectContaining({
         targetId: "target-2",
-        triggerType: "schedule",
-      })
+      }),
+      expect.any(Date),
+      expect.any(Date)
     )
     expect(enqueueScan).toHaveBeenCalledTimes(1)
   })
@@ -336,7 +459,7 @@ describe("processDueSchedules", () => {
     const enqueued = await processDueSchedules(new Date("2026-01-01T12:00:00Z"))
 
     expect(enqueued).toBe(1)
-    expect(createScan).toHaveBeenCalledTimes(1)
+    expect(createScheduledScan).toHaveBeenCalledTimes(1)
   })
 
   it("skips a scheduled scan when the workspace is at MAX_CONCURRENT_WORKSPACE_SCANS", async () => {
@@ -348,7 +471,7 @@ describe("processDueSchedules", () => {
     const enqueued = await processDueSchedules(new Date("2026-01-01T12:00:00Z"))
 
     expect(enqueued).toBe(0)
-    expect(createScan).not.toHaveBeenCalled()
+    expect(createScheduledScan).not.toHaveBeenCalled()
     expect(enqueueScan).not.toHaveBeenCalled()
   })
 })

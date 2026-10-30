@@ -27,6 +27,7 @@ function scanEtag(
     updatedAt: scan.updatedAt,
     executionPlanHash: publicScanProvenance(scan.executionPlan).executionPlanHash,
     queuePosition,
+    capacity: scan.capacity ?? null,
     eventsCount: events.length,
     lastEventAt: lastEvent?.createdAt,
     // Included so a cursor-scoped response can never collide with the full
@@ -64,11 +65,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     if (!scan) {
       return apiError("SCAN_NOT_FOUND", "Scan not found", 404)
     }
-    if (
-      session.oauth?.connectionId &&
-      session.oauth.scopes.includes("lyrashield.write") &&
-      !session.oauth.allTargets
-    ) {
+    if (session.oauth?.connectionId && !session.oauth.allTargets) {
       assertOAuthDelegatedScope(session, scan.targetId)
     }
 
@@ -88,6 +85,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
           id: scan.id,
           workspaceId: scan.workspaceId,
           status: scan.status,
+          capacity: scan.capacity ?? null,
           goal: scan.goal,
           mode: scan.mode,
           triggerType: scan.triggerType,

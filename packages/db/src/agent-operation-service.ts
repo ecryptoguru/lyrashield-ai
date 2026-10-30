@@ -479,14 +479,16 @@ export interface AgentOperationListItem {
  */
 export async function listRecentAgentOperations(
   workspaceId: string,
-  limit = 20
+  limit = 20,
+  cursor?: string
 ): Promise<AgentOperationListItem[]> {
   const boundedLimit = Math.max(1, Math.min(limit, 50))
   const rows = await withWorkspaceRLS(workspaceId, (tx) =>
     tx.agentOperation.findMany({
       where: { workspaceId },
-      orderBy: { createdAt: "desc" },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       take: boundedLimit,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
       select: {
         id: true,
         operationName: true,

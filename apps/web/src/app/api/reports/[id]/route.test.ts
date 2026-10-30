@@ -360,15 +360,15 @@ describe("GET /api/reports/[id] — authenticated private detail", () => {
     expect(assertOAuthDelegatedScope).not.toHaveBeenCalled()
   })
 
-  it("keeps read-only OAuth report reads workspace-wide", async () => {
+  it("denies read-only OAuth report reads outside selected targets", async () => {
     vi.mocked(requirePermission).mockResolvedValue({ session: readOnlySession } as never)
     resolveReportDelegationTarget.mockResolvedValue({ targetId: "target-b" })
 
     const response = await GET(getRequest(), { params: Promise.resolve({ id: "report-1" }) })
 
-    expect(response.status).toBe(200)
-    expect(resolveReportDelegationTarget).not.toHaveBeenCalled()
-    expect(assertOAuthDelegatedScope).not.toHaveBeenCalled()
+    expect(response.status).toBe(403)
+    expect(resolveReportDelegationTarget).toHaveBeenCalled()
+    expect(assertOAuthDelegatedScope).toHaveBeenCalledWith(readOnlySession, "target-b")
   })
 
   it("returns an ETag on 200 and a bodyless 304 for a matching If-None-Match (W2.4)", async () => {

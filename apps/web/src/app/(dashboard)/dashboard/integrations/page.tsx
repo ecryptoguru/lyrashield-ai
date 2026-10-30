@@ -53,7 +53,7 @@ export default async function IntegrationsPage({
   const integrations = await prisma.integration.findMany({
     where: { workspaceId, deletedAt: null },
   })
-  const githubIntegration = integrations.find((i) => i.type === "GITHUB")
+  const githubIntegration = integrations.find((i) => i.type === "GITHUB" && i.status === "active")
 
   return (
     <div>
@@ -61,6 +61,7 @@ export default async function IntegrationsPage({
 
       <div className="space-y-6">
         <GithubIntegration
+          key={workspaceId}
           workspaceId={workspaceId}
           githubStatus={params.github}
           canManage={!!membership && hasPermission(membership.role, PERMISSIONS.integration.manage)}

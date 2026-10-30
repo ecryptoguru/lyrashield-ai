@@ -1,3 +1,4 @@
+import { isRecoverableFixPrMerge } from "./fix-pr-merge-recovery"
 import { withWorkspaceRLS } from "./rls"
 import { findingScopeWhere } from "./finding-service"
 import type { FixProposal, PullRequest, Finding, Target } from "./generated/prisma"
@@ -86,6 +87,7 @@ export async function getFixProposal(
 export async function listFixProposals(params: {
   workspaceId: string
   targetId?: string
+  targetIds?: string[]
   observedInScanId?: string
   findingId?: string
   status?: string
@@ -178,6 +180,8 @@ export async function createPullRequestRecord(
     branchName: string
     prNumber?: number
     prUrl?: string
+    executionKey?: string
+    status?: "open" | "closed" | "merged"
   }
 ): Promise<PullRequest> {
   return withWorkspaceRLS(workspaceId, async (tx) => {
@@ -192,18 +196,43 @@ export async function createPullRequestRecord(
       throw new Error(`Fix proposal not found in workspace: ${proposalId}`)
     }
 
-    const pr = await tx.pullRequest.create({
-      data: {
-        fixProposalId: proposalId,
-        provider: data.provider,
-        repoOwner: data.repoOwner,
-        repoName: data.repoName,
-        branchName: data.branchName,
-        ...(data.prNumber ? { prNumber: data.prNumber } : {}),
-        ...(data.prUrl ? { prUrl: data.prUrl } : {}),
-        status: "open",
-      },
-    })
+    const create = {
+      fixProposalId: proposalId,
+      provider: data.provider,
+      repoOwner: data.repoOwner,
+      repoName: data.repoName,
+      branchName: data.branchName,
+      ...(data.executionKey ? { executionKey: data.executionKey } : {}),
+      ...(data.prNumber ? { prNumber: data.prNumber } : {}),
+      ...(data.prUrl ? { prUrl: data.prUrl } : {}),
+      status: data.status ?? "open",
+    }
+    // One unique identity survives unknown commit outcomes and concurrent recovery.
+    // Closed/merged records cannot be reopened by a stale provider response.
+    let pr: PullRequest
+    if (data.executionKey) {
+      await tx.pullRequest.createMany({ data: [create], skipDuplicates: true })
+      const existing = await tx.pullRequest.findFirst({
+        where: {
+          executionKey: data.executionKey,
+          fixProposalId: proposalId,
+          fixProposal: { finding: { workspaceId } },
+          deletedAt: null,
+        },
+      })
+      if (!existing) throw new Error("Fix PR identity belongs to another proposal")
+      if (!["closed", "merged"].includes(existing.status)) {
+        await tx.pullRequest.updateMany({
+          where: { id: existing.id, status: { notIn: ["closed", "merged"] } },
+          data: { status: create.status, prNumber: data.prNumber, prUrl: data.prUrl },
+        })
+      }
+      pr = (await tx.pullRequest.findFirst({
+        where: { id: existing.id, fixProposalId: proposalId },
+      }))!
+    } else {
+      pr = await tx.pullRequest.create({ data: create })
+    }
 
     logger.info("Pull request record created", {
       proposalId,
@@ -238,11 +267,19 @@ export async function handleFixPrMerged(params: {
   branchName: string
   prNumber?: number
   repoFullName?: string
+  recoveryIdentity?: { headRepoFullName: string; body: string }
 }): Promise<FixPrMergeResult | null> {
   const [repoOwner, repoName, ...extra] = params.repoFullName?.split("/") ?? []
   if (params.repoFullName && (!repoOwner || !repoName || extra.length > 0)) {
     throw new Error("Invalid GitHub repository identity")
   }
+  const canRecoverIntent = Boolean(
+    repoOwner &&
+    repoName &&
+    Number.isSafeInteger(params.prNumber) &&
+    params.prNumber! > 0 &&
+    /^lyrashield\/fix-[a-f0-9]{64}$/.test(params.branchName)
+  )
   return withWorkspaceRLS(params.workspaceId, async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`fix-loop:${params.workspaceId}:${params.branchName}`}, 0))`
     const pr = await tx.pullRequest.findFirst({
@@ -250,13 +287,15 @@ export async function handleFixPrMerged(params: {
         branchName: params.branchName,
         ...(repoOwner && repoName ? { repoOwner, repoName } : {}),
         ...(params.prNumber ? { OR: [{ prNumber: params.prNumber }, { prNumber: null }] } : {}),
-        status: { in: ["open", "merged"] },
+        status: { in: ["open", "merged", ...(canRecoverIntent ? ["opening", "recovery"] : [])] },
         deletedAt: null,
         fixProposal: { finding: { workspaceId: params.workspaceId, deletedAt: null } },
       },
       include: { fixProposal: { select: { id: true, findingId: true } } },
     })
     if (!pr) return null
+    const recovering = ["opening", "recovery"].includes(pr.status)
+    if (recovering && !(await isRecoverableFixPrMerge(tx, pr, params))) return null
 
     // createdById for the follow-on retest scan: the GitHub pusher is external,
     // so attribute the automated retest to the workspace OWNER (the account that
@@ -282,6 +321,9 @@ export async function handleFixPrMerged(params: {
         data: {
           status: "merged",
           mergedAt: new Date(),
+          ...(recovering && params.prNumber
+            ? { prUrl: `https://github.com/${pr.repoOwner}/${pr.repoName}/pull/${params.prNumber}` }
+            : {}),
           ...(params.prNumber ? { prNumber: params.prNumber } : {}),
         },
       })

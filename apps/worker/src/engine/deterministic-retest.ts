@@ -4,7 +4,7 @@ import { mkdtemp, rm, readdir, lstat, mkdir, open, statfs } from "node:fs/promis
 import { constants } from "node:fs"
 import { join } from "node:path"
 import { withWorkspaceRLS } from "@lyrashield/db"
-import { getInstallationToken } from "@lyrashield/integrations"
+import { prepareRepositoryAuth } from "./repository-auth"
 import { env } from "@lyrashield/config"
 import { repositoryAuthEnv } from "./runner-config"
 import { RETEST_CHECKOUT_ROOT, engineWorkspacePath } from "./workspace-path"
@@ -97,15 +97,18 @@ export async function authorizeDeterministicRetest(
   })
 }
 
-/** Separate checkout: fixed GitHub transport, no hooks/submodules, bounded lifetime and tree. */
-export async function checkoutDeterministicRetest(params: {
+interface DeterministicRetestCheckoutParams {
   scanId: string
+  workspaceId: string
   repoFullName: string | null
   branch: string | null
   installationId: string | null
   timeoutMs: number
   isCancelled: () => Promise<boolean>
-}) {
+}
+
+/** Separate checkout: fixed GitHub transport, no hooks/submodules, bounded lifetime and tree. */
+export async function checkoutDeterministicRetest(params: DeterministicRetestCheckoutParams) {
   if (!Number.isFinite(params.timeoutMs) || params.timeoutMs <= 0)
     throw new Error("Deterministic checkout deadline exhausted")
   if (
@@ -196,20 +199,21 @@ export async function checkoutDeterministicRetest(params: {
     })
     if (await Promise.race([params.isCancelled(), aborted]))
       throw new Error("Deterministic checkout cancelled")
-    const token = params.installationId
-      ? await Promise.race([
-          getInstallationToken(Number(params.installationId)),
-          new Promise<never>((_, reject) => {
-            if (abort.signal.aborted) reject(new Error("Checkout deadline exceeded"))
-            else
-              abort.signal.addEventListener(
-                "abort",
-                () => reject(new Error("Checkout deadline exceeded")),
-                { once: true }
-              )
-          }),
-        ])
-      : null
+    const auth = await Promise.race([
+      prepareRepositoryAuth({
+        workspaceId: params.workspaceId,
+        target: {
+          type: "REPO",
+          repoProvider: "github",
+          repoFullName: params.repoFullName,
+          installationId: params.installationId,
+        },
+        scanRuntimeBudgetMs: params.timeoutMs,
+        elapsedScanMs: () => 0,
+        isScanCancelled: params.isCancelled,
+      }),
+      aborted,
+    ])
     const gitEnv = {
       PATH: process.env.PATH,
       HOME: home,
@@ -217,7 +221,7 @@ export async function checkoutDeterministicRetest(params: {
       GIT_CONFIG_GLOBAL: "/dev/null",
       GIT_TERMINAL_PROMPT: "0",
       GIT_CONFIG_COUNT: "0",
-      ...(token ? repositoryAuthEnv({ repoFullName: params.repoFullName, token }) : {}),
+      ...(auth ? repositoryAuthEnv(auth) : {}),
     }
     const git = (args: string[]) =>
       execute(

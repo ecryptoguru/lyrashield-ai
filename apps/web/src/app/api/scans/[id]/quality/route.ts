@@ -32,11 +32,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   try {
     const { session } = await requirePermission(workspaceId, PERMISSIONS.scan.view)
     const connection = session.oauth
-    if (
-      connection?.connectionId &&
-      connection.scopes.includes("lyrashield.write") &&
-      !connection.allTargets
-    ) {
+    if (connection?.connectionId && !connection.allTargets) {
       const scan = await withWorkspaceRLS(workspaceId, (tx) =>
         tx.scan.findFirst({
           where: { id: parsedId.data, workspaceId, deletedAt: null },

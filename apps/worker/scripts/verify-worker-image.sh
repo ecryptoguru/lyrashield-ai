@@ -120,5 +120,12 @@ print(
     % (len(rows), hashlib.sha256(payload).hexdigest())
 )
 PY
+  node --input-type=module <<NODE
+    import {readFileSync} from "node:fs";
+    const resolver=readFileSync("/app/apps/worker/src/engine/scanners/go-module-resolver.ts","utf8");
+    const host=readFileSync("/opt/lyrashield-worker-host/run-worker.sh","utf8");
+    const pin=resolver.match(/GO_RESOLVER_IMAGE\s*=\s*"([^"]+)"/)?.[1];
+    if(!pin || !/^golang:1\.26\.8-alpine@sha256:[a-f0-9]{64}$/.test(pin) || !host.includes(pin)) throw new Error("Go resolver provisioning pin mismatch");
+NODE
   echo worker-image-policy=ok
 '

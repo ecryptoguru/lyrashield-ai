@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic"
 
 import Link from "next/link"
 import { useEffect, useState } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useSearchParams } from "next/navigation"
 import { ShieldCheck } from "lucide-react"
 import { authClient, getAuthErrorMessage } from "@lyrashield/auth"
 import { Button, FormField, Spinner } from "@lyrashield/ui"
@@ -16,8 +16,8 @@ import { PasswordInput } from "@/components/password-input"
 import { cleanResetTokenFromUrl } from "./reset-password-url"
 
 export default function ResetPasswordPage() {
-  const router = useRouter()
   const searchParams = useSearchParams()
+  const [completed, setCompleted] = useState(false)
   const [password, setPassword] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -44,8 +44,8 @@ export default function ResetPasswordPage() {
     try {
       const { error: resetError } = await authClient.resetPassword({ newPassword: password, token })
       if (resetError) throw resetError
-      router.push("/sign-in")
-      router.refresh()
+      setPassword("")
+      setCompleted(true)
     } catch (cause) {
       setError(getAuthErrorMessage(cause) ?? "Could not reset your password. Request a new link.")
     } finally {
@@ -62,11 +62,27 @@ export default function ResetPasswordPage() {
             <ShieldCheck className="text-primary-foreground h-7 w-7" aria-hidden="true" />
           </div>
           <h1 className="text-2xl font-bold tracking-tight">
-            {token ? "Choose a new password" : "Request a new reset link"}
+            {completed
+              ? "Password reset"
+              : token
+                ? "Choose a new password"
+                : "Request a new reset link"}
           </h1>
         </div>
         <div className="bg-card border p-6 shadow-sm sm:p-8">
-          {!token ? (
+          {completed ? (
+            <div className="space-y-4">
+              <p role="status" className="text-sm">
+                Password reset successfully. You can now sign in with your new password.
+              </p>
+              <Link
+                href="/sign-in"
+                className="text-primary font-medium underline underline-offset-4"
+              >
+                Continue to sign in
+              </Link>
+            </div>
+          ) : !token ? (
             <p role="status" className="text-muted-foreground text-sm">
               This reset link is invalid or has expired. Request a new link to reset your password.
             </p>
@@ -99,11 +115,13 @@ export default function ResetPasswordPage() {
             </form>
           )}
         </div>
-        <p className="text-muted-foreground mt-6 text-center text-sm">
-          <Link href="/forgot-password" className="text-primary font-medium hover:underline">
-            Request a new link
-          </Link>
-        </p>
+        {!completed && (
+          <p className="text-muted-foreground mt-6 text-center text-sm">
+            <Link href="/forgot-password" className="text-primary font-medium hover:underline">
+              Request a new link
+            </Link>
+          </p>
+        )}
       </div>
     </main>
   )

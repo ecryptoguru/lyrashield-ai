@@ -16,10 +16,18 @@ case "$1 ${2:-}" in
       '{{.Driver}}|{{.Internal}}|{{index .Options "com.docker.network.bridge.enable_icc"}}') printf 'bridge|true|false\n' ;;
       *) exit 90 ;;
     esac ;;
-  'image inspect'|'login ghcr.io'|'rm -f'|'run --rm'|'create --name') : ;;
+  'run --rm')
+    case "$*" in *'--entrypoint go '* ) printf 'go version go1.26.8 linux/amd64\n' ;; esac ;;
+  'image inspect'|'login ghcr.io'|'rm -f'|'create --name') : ;;
   'start --attach') printf 'consumer-started\n' ;;
   *) echo "Unexpected Docker operation: $*" >&2; exit 90 ;;
 esac
+MOCK
+cat > "$tmp/bin/timeout" <<'MOCK'
+#!/bin/sh
+[ "$1" = --foreground ] || exit 90
+shift 2
+exec "$@"
 MOCK
 cat > "$tmp/bin/install" <<'MOCK'
 #!/bin/sh

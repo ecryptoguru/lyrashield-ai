@@ -1,3 +1,4 @@
+import { STANDARD_OVERAGE_PER_MINUTE_USD, formatUSD } from "@lyrashield/pricing"
 import type { Metadata } from "next"
 import { CreditCard, Clock, Zap, AlertCircle } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle, Badge } from "@lyrashield/ui"
@@ -381,7 +382,7 @@ export default async function BillingPage({
             <CardContent className="space-y-3">
               <p className="text-sm text-muted-foreground">
                 Set a monthly spend limit for overage minutes (beyond your included pool). Overage
-                is billed at $0.15/min.
+                is billed at {formatUSD(STANDARD_OVERAGE_PER_MINUTE_USD)}/min.
               </p>
               <SpendLimitForm
                 workspaceId={workspaceId}

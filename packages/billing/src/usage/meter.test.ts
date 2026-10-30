@@ -13,7 +13,10 @@ vi.mock("@lyrashield/db", () => ({
 vi.mock("@lyrashield/logger", () => ({
   logger: { debug: vi.fn(), info: vi.fn(), warn: loggerWarnMock, error: vi.fn() },
 }))
-vi.mock("@lyrashield/pricing", () => ({ DEEP_SCAN_MULTIPLIER: 3 }))
+vi.mock("@lyrashield/pricing", () => ({
+  DEEP_SCAN_MULTIPLIER: 3,
+  STANDARD_OVERAGE_PER_MINUTE_USD: 0.15,
+}))
 
 import { recordAgentMinutes } from "./meter"
 
@@ -98,6 +101,7 @@ function configureDatabase(
   )
 
   const tx = {
+    scanCapacityReservation: { findFirst: vi.fn().mockResolvedValue(null) },
     scan: {
       findFirst: vi.fn().mockResolvedValue({
         id: "finished",
@@ -168,9 +172,9 @@ function configureDatabase(
     },
     usageRecord: {
       findUnique: receiptReadMock,
-      findMany: vi.fn(async ({ where }) => {
+      aggregate: vi.fn(async ({ where }) => {
         const kinds = Array.isArray(where.kind?.in) ? where.kind.in : [where.kind]
-        return usageRecords
+        const matching = usageRecords
           .filter(
             (record) =>
               (where.accountId === undefined || record.accountId === where.accountId) &&
@@ -180,6 +184,7 @@ function configureDatabase(
               record.cycleStart >= where.cycleStart.gte
           )
           .map(({ quantity }) => ({ quantity }))
+        return { _sum: { quantity: matching.reduce((sum, record) => sum + record.quantity, 0) } }
       }),
       create: usageCreateMock,
     },

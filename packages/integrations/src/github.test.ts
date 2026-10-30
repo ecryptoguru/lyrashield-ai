@@ -354,3 +354,10 @@ describe("install-callback ownership verification", () => {
     })
   })
 })
+
+describe("bounded interactive repository paging", () => {
+  it.each([0, -1, 1.5, 10001])("rejects page %s before token lookup", async (page) => {
+    const { listInstallationReposPage } = await import("./github")
+    await expect(listInstallationReposPage(42, page)).rejects.toThrow("Invalid repository page")
+  })
+})

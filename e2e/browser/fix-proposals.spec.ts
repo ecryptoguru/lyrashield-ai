@@ -88,7 +88,7 @@ test("proposal approval is hidden without permission", async ({ page }) => {
   await expect(page.getByRole("button", { name: "Create pull request" })).toHaveCount(0)
 })
 
-test("approval request failure remains visible and can be retried", async ({ page }) => {
+test("inactive repository failure remains visible with a status check", async ({ page }) => {
   await page.route("**/api/fix-proposals/composer-ready/create-pr", async (route) => {
     await route.fulfill({
       status: 409,
@@ -103,7 +103,8 @@ test("approval request failure remains visible and can be retried", async ({ pag
   await ready.getByRole("button", { name: "Create pull request" }).click()
   await ready.getByRole("button", { name: "Request approval" }).click()
   await expect(ready.getByRole("alert")).toContainText("Connect a repository first.")
-  await expect(ready.getByRole("button", { name: "Create pull request" })).toBeEnabled()
+  await expect(ready.getByRole("button", { name: "Check PR status" })).toBeEnabled()
+  await expect(ready.getByRole("status")).toContainText("connection is inactive")
 })
 
 test("later pages preserve stored-patch action eligibility", async ({ page }) => {
@@ -141,4 +142,162 @@ test("later pages preserve stored-patch action eligibility", async ({ page }) =>
       .getByRole("article", { name: "Proposed fix for Later proposal" })
       .getByRole("button", { name: "Create pull request" })
   ).toBeVisible()
+})
+
+for (const width of [390, 1280]) {
+  test(`shows confirmed PR success and reconciles pending approval at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 })
+    await page.route("**/api/fix-proposals/composer-ready/create-pr", async (route) => {
+      if (route.request().method() === "GET")
+        return route.fulfill({
+          json: {
+            success: true,
+            data: {
+              status: "opened",
+              prNumber: 42,
+              prUrl: "https://github.com/owner/repo/pull/42",
+            },
+          },
+        })
+      return route.fulfill({
+        json: { success: true, data: { status: "pending_approval", approvalId: "approval-test" } },
+      })
+    })
+    await page.route("**/api/fix-proposals/composer-ready/create-pr?*", async (route) =>
+      route.fulfill({
+        json: {
+          success: true,
+          data: { status: "opened", prNumber: 42, prUrl: "https://github.com/owner/repo/pull/42" },
+        },
+      })
+    )
+    await page.goto("?fixProposals")
+    const ready = page.getByRole("article", { name: /requiring application compatibility review/ })
+    await ready.getByRole("button", { name: "Create pull request" }).click()
+    await ready.getByRole("button", { name: "Request approval", exact: true }).click()
+    await expect(ready.getByRole("status")).toContainText("awaiting review")
+    await ready.getByRole("button", { name: "Check PR status" }).click()
+    await expect(ready.getByRole("status")).toContainText("Pull request #42 is open")
+    await expect(ready.getByRole("link", { name: "View pull request" })).toHaveAttribute(
+      "href",
+      "https://github.com/owner/repo/pull/42"
+    )
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)
+    ).toBe(true)
+  })
+}
+
+test("shows recovery without claiming an uncertain PR was opened", async ({ page }) => {
+  await page.route("**/api/fix-proposals/composer-ready/create-pr", async (route) =>
+    route.fulfill({ json: { success: true, data: { status: "recovery_required" } } })
+  )
+  await page.goto("?fixProposals")
+  const ready = page.getByRole("article", { name: /requiring application compatibility review/ })
+  await ready.getByRole("button", { name: "Create pull request" }).click()
+  await ready.getByRole("button", { name: "Request approval", exact: true }).click()
+  await expect(ready.getByRole("status")).toContainText("needs recovery")
+  await expect(ready.getByRole("button", { name: "Check PR status" })).toBeVisible()
+  await expect(ready.getByRole("link", { name: "View pull request" })).toHaveCount(0)
+})
+
+for (const [status, text] of [
+  ["opening", "pending or opening"],
+  ["expired", "Approval expired"],
+  ["stale", "is stale"],
+  ["closed", "will not be reopened"],
+  ["merged", "Review the retest receipt"],
+  ["failed", "could not be opened"],
+] as const) {
+  test(`renders honest ${status} state`, async ({ page }) => {
+    await page.route("**/api/fix-proposals/composer-ready/create-pr", async (route) =>
+      route.fulfill({ json: { success: true, data: { status } } })
+    )
+    await page.goto("?fixProposals")
+    const ready = page.getByRole("article", { name: /requiring application compatibility review/ })
+    await ready.getByRole("button", { name: "Create pull request" }).click()
+    await ready.getByRole("button", { name: "Request approval", exact: true }).click()
+    await expect(ready.getByRole("status")).toContainText(text)
+    await expect(ready.getByRole("link", { name: "View pull request" })).toHaveCount(0)
+  })
+}
+
+test("does not report success for an opened result missing PR identity", async ({ page }) => {
+  await page.route("**/api/fix-proposals/composer-ready/create-pr", async (route) =>
+    route.fulfill({ json: { success: true, data: { status: "opened" } } })
+  )
+  await page.goto("?fixProposals")
+  const ready = page.getByRole("article", { name: /requiring application compatibility review/ })
+  await ready.getByRole("button", { name: "Create pull request" }).click()
+  await ready.getByRole("button", { name: "Request approval", exact: true }).click()
+  await expect(ready.getByRole("alert")).toBeVisible()
+  await expect(ready.getByRole("link", { name: "View pull request" })).toHaveCount(0)
+})
+
+for (const outcome of [
+  {
+    status: "stale",
+    nextAction: "retest",
+    reason: "The repository changed since the scan. Retest and generate a new proposal.",
+  },
+  {
+    status: "failed",
+    nextAction: "regenerate_proposal",
+    reason: "Execution stopped before GitHub writes. Review the proposal and generate a new one.",
+  },
+  {
+    status: "stale",
+    nextAction: "request_approval",
+    reason: "The approval no longer matches this stored patch. Request a new approval.",
+  },
+  {
+    status: "expired",
+    nextAction: "request_approval",
+    reason: "Approval expired. Request a new approval for this stored patch.",
+  },
+] as const) {
+  test(`follows backend ${outcome.status}/${outcome.nextAction} guidance`, async ({ page }) => {
+    await page.route("**/api/fix-proposals/composer-ready/create-pr", async (route) =>
+      route.fulfill({ json: { success: true, data: outcome } })
+    )
+    await page.goto("?fixProposals")
+    const ready = page.getByRole("article", { name: /requiring application compatibility review/ })
+    await ready.getByRole("button", { name: "Create pull request" }).click()
+    await ready.getByRole("button", { name: "Request approval", exact: true }).click()
+    await expect(ready.getByRole("status")).toContainText(outcome.reason)
+    const approvalAction = ready.getByRole("button", { name: "Create pull request" })
+    if (outcome.nextAction === "request_approval") await expect(approvalAction).toBeEnabled()
+    else await expect(approvalAction).toHaveCount(0)
+    await expect(ready.getByRole("button", { name: "Check PR status" })).toBeEnabled()
+  })
+}
+
+test("keeps terminal failure guidance from the POST error response", async ({ page }) => {
+  const outcome = {
+    status: "failed",
+    nextAction: "regenerate_proposal",
+    reason: "Execution stopped before GitHub writes. Review the proposal and generate a new one.",
+  }
+  await page.route("**/api/fix-proposals/composer-ready/create-pr", async (route) =>
+    route.fulfill({
+      status: 502,
+      json: {
+        success: false,
+        error: {
+          code: "FIX_PR_FAILED",
+          message: "Fix PR execution did not complete.",
+          details: outcome,
+        },
+      },
+    })
+  )
+  await page.goto("?fixProposals")
+  const ready = page.getByRole("article", { name: /requiring application compatibility review/ })
+  await ready.getByRole("button", { name: "Create pull request" }).click()
+  await ready.getByRole("button", { name: "Request approval", exact: true }).click()
+  await expect(ready.getByRole("status")).toContainText(outcome.reason)
+  await expect(ready.getByRole("button", { name: "Create pull request" })).toHaveCount(0)
+  await expect(ready.getByRole("button", { name: "Check PR status" })).toBeEnabled()
 })

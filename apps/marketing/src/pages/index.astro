@@ -124,7 +124,7 @@ const jsonLd = [
       <h2 id="surfaces-heading">Fits your workflow.</h2>
       <div class="workflow-rail__integrations">
         <a href="#product-preview"><TargetGlyph kind="web" />Web app</a>
-        <details><summary><TargetGlyph kind="api" />CLI setup</summary><div class="workflow-rail__command"><pre><code>{cliLoginCommand}</code></pre><button type="button" data-copy-cli>Copy command</button><span data-copy-status role="status"></span></div></details>
+        <details><summary><TargetGlyph kind="api" />CLI setup</summary><div class="workflow-rail__command"><pre><code data-cli-command>{cliLoginCommand}</code></pre><button type="button" data-copy-cli>Copy command</button><span data-copy-status role="status"></span></div></details>
         <a href="/docs/integrations/github-action" data-cta-id="homepage-surface-action-docs"><TargetGlyph kind="repo" />GitHub Action</a>
         <a href="/agents" data-cta-id="homepage-surface-agents-setup"><TargetGlyph kind="approval" />Coding agents</a>
       </div>
@@ -185,14 +185,14 @@ const jsonLd = [
   const copyButton = document.querySelector<HTMLButtonElement>("[data-copy-cli]")
   const copyStatus = document.querySelector<HTMLElement>("[data-copy-status]")
   copyButton?.addEventListener("click", async () => {
-    const command = document.querySelector("#surface-panel-cli code")?.textContent
+    const command = document.querySelector("[data-cli-command]")?.textContent
     if (!command || !copyStatus) return
     copyButton.disabled = true
     try {
       await navigator.clipboard.writeText(command)
       copyStatus.textContent = "Copied"
     } catch {
-      copyStatus.textContent = "Copy unavailable. Select the command below to copy it."
+      copyStatus.textContent = "Copy unavailable. Select the command to copy it."
     } finally { copyButton.disabled = false }
   })
 </script>

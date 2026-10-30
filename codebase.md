@@ -132,6 +132,8 @@ The scans list revalidates its first page with an ETag. If pagination hides a lo
 scan, one workspace-scoped query refreshes only those IDs, bounded by the three-scan
 workspace concurrency limit, so terminal transitions do not become stale polling loops.
 
+The v26 dependency capability registry is `packages/types/src/dependency-capabilities.ts`. `resolved-dependencies.ts` dispatches supported Cargo/Ruby/Go inputs through `additional-dependencies.ts`; unsupported/malformed/bounded discovered inputs keep the receipt incomplete. `ecosystem-lock-parsers.ts` retains exact source/platform/checksum identities and strict Cargo SemVer/source edges. `go-module-resolver.ts` runs pinned native Go metadata-only in a nonroot, network-none container; `go-metadata-broker.ts` mediates fixed-host metadata with bounded provenance receipts. No build/test/generate/source/VCS/toolchain download is allowed. Public-network and amd64 qualification remain separate. Scanner work budgets and cooperative yields bound hostile PHP/IaC/OpenAPI traversal; missing inputs never become clean coverage. OSV retains ≤100-package batches, two active streamed requests, a shared 15s deadline, bounded retries and complete-only cache writes, with case-sensitive Go/Ruby identity normalization.
+
 ### URL/API scan
 
 - Target creation performs SSRF validation.
@@ -191,6 +193,8 @@ Platform administration is intentionally outside this workspace role order:
 - Child tables are scoped through parents and protected by fail-closed RLS policies. `GateVerdict` is RLS-protected directly (batch-3 permissive/strict pattern).
 - Production runtime role must be neither superuser nor `BYPASSRLS`.
 
+`UserScanSlot` is initiating-user-owned through `app.current_scan_user_id`; `ScanCapacityReservation` is sponsor-account-owned through `app.current_account_id`. `scan-slot.ts` owns the user advisory lock and safe release. Keep initiating-user lock before workspace/target/account admission and keep account context distinct from the initiating user's slot context. `scan-capacity.ts` receives the caller's transaction; it does not create a second transaction. New tables use forced RLS and need explicit runtime grants at rollout.
+
 ### Audit chain
 
 Use `prisma.auditLog.create()` through the extended client. Its advisory-locked transaction owns `prevHash`/`hash` serialization. Do not place audit creation inside a broader transaction. Any mutation of hashed audit fields requires a locked chain rebuild.
@@ -204,6 +208,8 @@ Use `prisma.auditLog.create()` through the extended client. Its advisory-locked 
 - BullMQ workers use a 10-minute idle `drainDelay` and one-minute stalled check. The modeled 30-day idle command count is 324,019 before and 132,495 after this pacing change (59.11% reduction); it is not live telemetry.
 - Reconciliation runs unconditionally at startup. Its five-minute timer reconciles when the DB has nonterminal scans, backs off to an hourly Redis inspection when idle, and reconciles fail-safe when the DB preflight is uncertain. Queue/database orphans fail after five minutes and are never auto-replayed.
 - Status changes go through guarded transitions, not direct updates.
+- `createScan` atomically creates the immutable execution plan, version-2 user slot, capacity reservation and queued event. `Scan.accountingSettledAt` distinguishes execution/accounting finalization from terminal status. `capacity-lifecycle.ts` owns preparation, wait/defer and final safe release; unknown executor or settlement outcome retains the hold.
+- `schedule-service.ts` uses exact version/occurrence CAS in that same admission transaction, including lastScanId. Shared URL admission lives in `packages/types/src/url-review-admission.ts` with integrations/web wrappers. Transient deferrals preserve one pending occurrence; permanent denials advance with bounded reasons. Due reads use 50-row stable ID keysets and an inter-operation 15s poll budget. `ScanEnqueueNotSubmittedError` proves only this invocation did not call add and restores only its freshly created exact identity; uncertain acknowledgements preserve the original scan/job.
 - Worker cancellation terminates registered engine processes and preserves auditable state.
 
 Lifecycle:
@@ -247,6 +253,8 @@ model-backed work occurred. Deterministic URL/API runs and pre-provider failures
 consume agent-minutes. Failed scans are not billed, even when provider usage was observed.
 Cancelled and partial scans may consume agent-minutes when scan-bound evidence establishes billable work.
 
+Version-2 capacity authority is `packages/billing/src/usage/capacity.ts`; account funding waits are FIFO. `fundedRuntimeMs` floors whole multiplied capacity to wall time and subtracts `CAPACITY_STOP_MARGIN_MS=5000`. `meter.ts` records exact-cap partial usage and absorbed excess with immutable receipt identity; the funding projection distinguishes legacy gross consumption from version-2 allocated pool/pack/grace/overage. Legacy grant/consume reads use account/cycle/deletedAt-scoped SQL sums, without truncating totals. `confirmScanCapacityStopped` and slot helpers require actual stop/billing disposition before release. `REVIEW_REQUIRED` is conservative, not a timer-expiry permission to replay paid work.
+
 ### Standards evidence
 
 `packages/security/src/standards` owns `standards-registry/1.1.0`; scan detail and report generation use the same renderer. Default entries pin OWASP Top 10 2021, API Top 10 2023, LLM Top 10 2025, CWE Top 25 2024, and selected ASVS 5.0.0 L1 requirements. Five unverified hidden mappings (ATLAS, CIS, AISVS, ISO 27001, and SLSA) are excluded until their identifiers, editions, and observable scope are reviewed. Family receipts provide bounded category evidence, not verification or certification. The renderer counts each finding once within a category and rejects explicit OWASP tags from a different edition. SAST completion credits its implemented crypto/TLS/JWT scope, not unrelated injection, memory-safety, or authorization categories.
@@ -254,9 +262,14 @@ Cancelled and partial scans may consume agent-minutes when scan-bound evidence e
 ### Findings and result integrity
 
 `engine/repository-auth.ts` binds a private GitHub scan to the stored target and
-active workspace integration before billable analysis. The bounded, cancellable
-preflight produces an exact clone-URL credential scope passed only to the engine
-host through explicit child configuration; the sandbox environment excludes it.
+active workspace integration before billable analysis. Its bounded, cancellable
+preflight obtains a fresh single-repository `contents:read` token and rechecks the
+same active integration after minting. Deterministic retest checkout uses the same
+workspace authorization path. Checkout tokens are never cached. The exact clone-URL
+credential scope passes only to the engine host through explicit child configuration;
+the sandbox environment excludes it. Authorized GitHub API/write helpers retain their
+installation grant; shared cache entries are encrypted and bound to app, installation,
+and grant identity.
 
 PHP detection reuses the existing `sca`, `iac`, `sast` and `url` families. Standard
 and Deep repository integration first detects PHP project scopes and gates
@@ -341,6 +354,10 @@ the strict artifact validator. Scope rejections retain bounded user guidance.
 - Fix PR route accepts no client-authored patch, branch, title, or body.
 - PR execution is fail-closed: privileged PR creation requires a content-addressed patch whose storage key binds the workspace, finding, proposal and decrypted-byte checksum to the server generator. Caller-supplied references may be recorded in drafts but cannot substitute for that binding, including in legacy proposals or pending approvals. The exact patch is bound to an authorization receipt: browser requests require human approval; API-key and delegated OAuth requests require verified credential permission and scope.
 
+`fix-pr-execution-service.ts` persists the immutable-proposal execution key before remote mutation. `fix-pr.ts` prepares and writes files under that ownership and reconciles deterministic remote identity after uncertain local persistence/completion; losing callers cannot change the winning intent. `fix-pr-context.ts` validates producer-bound storage references before access. `fix-pr-merge-service.ts` takes the initiating-user then Fix PR advisory lock before `findFixPrMergeAnchor`, account binding, retest association and canonical scan creation in the same caller transaction. Exact scanned/default-head equality remains mandatory.
+
+Repository acquisition and deterministic retest use fresh, uncached, repository-specific contents:read credentials through the separate checkout wrapper in integrations, with active-integration/repository validation. The remaining authorized installation-default token cache is encrypted and scoped by app identity, installation and grant; it is not repository scoped. Callback replay fixtures use real signed state with simulated provider exchange; they are not live GitHub acceptance.
+
 ### Public sharing
 
 - `buildScorecardPayload()` is the only public scorecard constructor.
@@ -419,6 +436,8 @@ Hosted OAuth is read-only by default. A user can grant a connection a bounded se
 - Deploy generated `apps/marketing/dist/server/wrangler.json`.
 - `apps/marketing/src/pages/robots.txt.ts`, `llms.txt.ts`, `agents.md.ts`, sitemap configuration, canonical/schema helpers, comparison/research pages, and integration docs form the SEO/AEO/GEO surface. Production indexability gates crawler output; external indexing and citation still require separate receipts.
 
+The latest user instruction defers D5 film-loading and all landing motion/layout changes. The five changed landing motion/runtime/layout files (`ScrollWorld.astro`, `scroll-world.ts`, `PremiumHero.astro`, `EvidenceWorld.astro`, `evidence-journey.ts`) are byte-identical to main `284523ca381ee0d6ffa62ce22e855f7ecae9518f`; existing motion browser tests are restored unchanged. Film scheduling, runtime mapping, chapter counters, styles, media and generation retain that baseline. One static light-theme text-color accessibility fix in `EvidenceMap.astro` remains; it changes no motion, scrolling or geometry. Independent header dismissal/mobile-menu and CLI copy fixes remain in the candidate. No new loading policy or production performance improvement is claimed.
+
 ## 7. API surface
 
 The web app currently contains 170 route-handler files (164 under `app/api`). Grouped surfaces:
@@ -460,6 +479,8 @@ Trust-boundary rules:
 - License: Key Vault and signing key identifiers.
 - Optional search: `LYRASHIELD_WEB_SEARCH_*`.
 
+`lint/env-ownership.mjs` checks literal production reads against the central schema or exact external owners; it is unconditional in CI code quality. `NEXT_PUBLIC_SENTRY_RELEASE` and `OPENAI_APPS_DOMAIN_VERIFICATION_TOKEN` are declared. `TURNSTILE_ENFORCE_ACTION=0` is the trusted staged default for independent widget/app rollouts: hostname, freshness, success and replay remain checked, wrong nonempty actions fail, and only missing/empty legacy actions remain compatible. Mode 1 requires the exact action. The Go resolver pin and host preparation live in `run-worker.sh`; startup qualifies availability before queue consumption.
+
 ### Desktop environment
 
 Public verification key and updater public key may ship. Private signing keys and LyraShield model keys may not.
@@ -480,6 +501,7 @@ Environment validation fails closed in production where a capability is required
 - Server components supply initial data; client components own interaction and typed mutations.
 - The dashboard is one adaptive surface: `lib/dashboard-overview.ts` is the typed server-side read model (scores bound to scans via `ScoreSnapshot.scanId`, per-target coverage from terminal-run receipts, workspace verdict gated on target coverage), and `lib/home-next-action.ts` derives the single next action. Progressive disclosure carries technical depth; presentation never changes authorization, data scope, or scan behavior.
 - Render and inspect real browser output for UI changes.
+- Onboarding explicitly chooses/creates a permission-eligible workspace in one server transaction. Repository selection is opt-in, paginated 50 at a time, with loaded-result search/reset and selected-form clearing. Approval and operation cursors remain independent; pending-page state is keyed by workspace/cursor while operation-only navigation preserves decisions. Scan capacity uses one stored-receipt `ScanCapacityBanner({scan})`, with elapsed time separate from charged minutes and conservative cancellation/finalization guidance. Error/empty/retention, missing-workspace and token-free password-reset recovery remain explicit.
 
 ## 10. Commands and verification
 
@@ -498,7 +520,9 @@ git diff --check
 
 Database changes also require fresh migration replay, drift check, RLS tests, and additive/backward-compatible review. Worker/engine changes require image build, OCI-label/digest verification, engine controlled-derivative gate, local sandbox proof, and relevant production proof. Marketing changes require Worker-backed browser/crawl verification. Desktop changes require frontend, Rust, updater, signing/notarization checks as applicable.
 
-Current command output is authoritative; never copy historical test counts forward as proof.
+Current command output is authoritative; never copy historical test counts forward as proof. `pnpm lint:env-ownership` checks configuration ownership. `pnpm lint:size` runs both TS and parser-aware Astro/MJS ratchets; baselines may only shrink. Presentation paths run their actual CSS/homepage source contracts; CI separately runs the real target-cap PostgreSQL fixture with named-case selection and restricted-role checks.
+
+Local v26 reviewed source and original issue dispositions are recorded in [the compact handoff](./docs/handoffs/v26-implementation-2026-10-30.md). The final correctness-fix rereview and separate motion-preservation review passed; local browser proof is 310 cases including 80 axe scans with zero reported violations. Full core, later targeted reruns, static/operations/database checks and remaining build/image/remote/manual qualifications are source-qualified in that record; §11 production identities are not changed by local implementation. See [the cutover runbook](./docs/operations.md#v26-admissioncapacity-cutover-and-compatible-rollback) before any production action.
 
 CI runs code quality, app/core/operations and selected marketing/motion work independently, then validates their results in the existing required aggregate. `.github/scripts/ci-selection.mjs` validates complete routing receipts, selects source consumers independently of image flags and combines selected quality dependency closures into one lint and one typecheck invocation; the app runner prepares SDK/MCP/plugin exports through the canonical plugin build closure before the full core suite. Optional PR image qualification covers packaging/build-environment inputs and copied worker host assets; ordinary source/test/style changes keep required host checks. Unknown inputs select all image targets. Release independently builds and verifies exact images before deployment, so an undeclared source packaging assumption may fail at release build before promotion. Knip remains manual reviewed maintenance (`pnpm lint:knip`, `pnpm lint:knip:baseline`), with no CI report step. Code quality has no dependency on runtime or image jobs and uses generated Prisma types without live services; marketing runtime separately generates its own schema exports. Static web presentation changes still compile and run the portable browser harness, while server/executable/unknown changes retain disposable-service proofs. `.github/scripts/qualify-release-source.mjs` binds successful required GitHub Actions checks and immutable PR base/head/merge evidence to the exact merged source tree before production routing. The latest genuine workflow attempt may still have optional jobs running or failed after all three required contexts succeed; queued, cancelled, malformed or unsupported outer states and incomplete required evidence fail closed. Both normal and squash merges require current main; unsupported or missing receipts fail closed. GitHub branch protection independently requires the three checks with strict base freshness and administrator enforcement.
 

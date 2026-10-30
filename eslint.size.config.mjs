@@ -22,6 +22,22 @@ export default [
     ],
   },
   {
+    files: [
+      "apps/**/*.mjs",
+      "packages/**/*.mjs",
+      "lint/**/*.mjs",
+      "ops/**/*.mjs",
+      ".github/scripts/**/*.mjs",
+    ],
+    ignores: ["**/*.test.mjs"],
+    plugins: { security: securityPlugin },
+    linterOptions: { reportUnusedDisableDirectives: "off" },
+    rules: {
+      "max-lines": ["warn", { max: 600, skipBlankLines: true, skipComments: true }],
+      "max-lines-per-function": ["warn", { max: 150, skipBlankLines: true, skipComments: true }],
+    },
+  },
+  {
     files: ["apps/**/src/**/*.{ts,tsx,mts,cts}", "packages/**/src/**/*.{ts,tsx,mts,cts}"],
     languageOptions: { parser: tsConfig.languageOptions.parser },
     plugins: { ...nextConfig.plugins, security: securityPlugin },

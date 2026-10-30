@@ -360,3 +360,22 @@ describe("unavailable live-review recovery", () => {
     expect(html).not.toContain("Start free trial")
   })
 })
+
+it("explains whole-minute and Deep charging separately from the elapsed estimate", () => {
+  hooks.values = []
+  const html = render({ selectedOption: { ...option, mode: "DEEP", usesAi: true } })
+  expect(html).toContain("Elapsed analysis time rounds up to whole minutes")
+  expect(html).toContain("3× multiplier")
+  expect(html).toContain("Available account capacity may shorten the review")
+})
+it("offers active-review recovery without suggesting a second scan or an irrelevant upgrade", () => {
+  hooks.values = []
+  const html = render({
+    errorCode: "SCAN_ALREADY_ACTIVE",
+    errorMessage: "You already have an active review.",
+    canManageBilling: false,
+  })
+  expect(html).toContain("Review active scans")
+  expect(html).toContain('href="/dashboard/scans"')
+  expect(html).not.toContain('href="/dashboard/billing"')
+})

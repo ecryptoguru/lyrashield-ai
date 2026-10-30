@@ -50,6 +50,7 @@ export const PHP_RUNTIME_CATALOG_SCHEMA = z
     catalogVersion: z.string(),
     asOf: z.string(),
     lifecycleSource: z.string().url(),
+    endOfLifeBeforeBranch: z.string().regex(/^\d+\.\d+$/),
     supportedBranches: z.array(z.string()),
     advisories: z.array(advisorySchema).max(100),
   })

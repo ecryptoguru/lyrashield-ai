@@ -3,6 +3,7 @@ import {
   enterGrace,
   recordAgentMinutes,
   resolveAccountBilling,
+  type ScanBillingDisposition,
 } from "@lyrashield/billing"
 import {
   prisma,
@@ -38,6 +39,7 @@ export function createEngineMinuteMeter(params: {
   exitStatus: "COMPLETED" | "PARTIAL" | "FAILED"
   runRecord: EngineRunRecord | null
   onTerminalError: (error: ScanTerminalError) => void
+  onBillingDisposition?: (disposition: ScanBillingDisposition) => void
 }): (billingOutcome: EngineBillingOutcome, finishEvidence?: () => Promise<void>) => Promise<void> {
   const {
     scanId,
@@ -65,7 +67,12 @@ export function createEngineMinuteMeter(params: {
         runRecord,
         { cancelled: billingOutcome === "cancelled" }
       )
-    if (!billableWork || billingOutcome === "failed") return
+    if (!billableWork || billingOutcome === "failed") {
+      params.onBillingDisposition?.("nonbillable")
+      return
+    }
+    // A failed/unknown settlement is not an intentional nonbilling decision.
+    params.onBillingDisposition?.("settlement_required")
 
     let finalizationAttempted = false
     try {
@@ -130,7 +137,11 @@ export function createEngineMinuteMeter(params: {
           ? { settleOverage: (tx, minutes) => settleOverage(minutes, tx) }
           : {}),
       })
-      if (billingOutcome === "cancelled" && metering.overageMinutes > 0) {
+      if (
+        billingOutcome === "cancelled" &&
+        metering.accountingVersion !== 2 &&
+        metering.overageMinutes > 0
+      ) {
         await settleOverage(metering.overageMinutes)
       }
     } catch (meterError) {
@@ -160,4 +171,21 @@ export function createEngineMinuteMeter(params: {
       // Cancellation remains best-effort; quota refusal is finalized below.
     }
   }
+}
+
+export function resolveEngineBillingOutcome(
+  budgetExceeded: boolean,
+  initialTerminalError: ScanTerminalError | null
+): EngineBillingOutcome {
+  return budgetExceeded
+    ? "failed"
+    : initialTerminalError?.errorCategory === "CAPACITY_EXHAUSTED"
+      ? "partial"
+      : initialTerminalError?.status === "STOPPED_BUDGET"
+        ? "failed"
+        : initialTerminalError?.status === "PARTIAL"
+          ? "partial"
+          : initialTerminalError
+            ? "failed"
+            : "completed"
 }

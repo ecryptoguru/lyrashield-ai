@@ -227,7 +227,7 @@ describe("/api/scans/[id] workspace boundary", () => {
     expect(assertOAuthDelegatedScope).not.toHaveBeenCalled()
   })
 
-  it("keeps read-only OAuth scan reads workspace-wide", async () => {
+  it("denies read-only OAuth scans outside the selected target grant", async () => {
     vi.mocked(requirePermission).mockResolvedValueOnce({ session: readOnlySession } as never)
     vi.mocked(getScanWithEvents).mockResolvedValueOnce({
       id: "scan-1",
@@ -240,8 +240,8 @@ describe("/api/scans/[id] workspace boundary", () => {
       routeParams
     )
 
-    expect(response.status).toBe(200)
-    expect(assertOAuthDelegatedScope).not.toHaveBeenCalled()
+    expect(response.status).toBe(403)
+    expect(assertOAuthDelegatedScope).toHaveBeenCalledWith(readOnlySession, "target-2")
   })
 
   it("omits cost fields and internal accounting events from the dashboard response", async () => {

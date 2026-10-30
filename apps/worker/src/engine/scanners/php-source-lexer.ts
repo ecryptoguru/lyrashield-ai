@@ -3,20 +3,41 @@ export interface PhpToken {
   text: string
   kind: "word" | "variable" | "string" | "symbol"
   line: number
+  position: number
+  closing?: number
 }
 
 const TOKEN_LIMIT = 40_000
 
 /** Small lexical subset, not a PHP parser. Unsupported syntax stays incomplete. */
-export function tokenizePhp(source: string, issues: string[]): PhpToken[] {
+export function* tokenizePhpChunks(source: string, issues: string[]): Generator<void, PhpToken[]> {
   const tokens: PhpToken[] = []
   let offset = 0
   let line = 1
   let inPhp = false
+  let chunkStart = 0
+  let chunkTokens = 0
+  const delimiters: PhpToken[] = []
+  const push = (text: string, kind: PhpToken["kind"]) => {
+    const token: PhpToken = { text, kind, line, position: tokens.length }
+    tokens.push(token)
+    if (kind !== "symbol") return
+    if (["(", "[", "{"].includes(text)) delimiters.push(token)
+    else if ([")", "]", "}"].includes(text)) {
+      const opening = delimiters.pop()
+      if (opening && "([{".indexOf(opening.text) === ")]}".indexOf(text))
+        opening.closing = token.position
+    }
+  }
   while (offset < source.length) {
     if (tokens.length >= TOKEN_LIMIT) {
       issues.push(`PHP source token limit (${TOKEN_LIMIT}) reached`)
       break
+    }
+    if (offset - chunkStart >= 16_384 || tokens.length - chunkTokens >= 256) {
+      yield
+      chunkStart = offset
+      chunkTokens = tokens.length
     }
     const rest = source.slice(offset)
     let text = ""
@@ -28,12 +49,13 @@ export function tokenizePhp(source: string, issues: string[]): PhpToken[] {
     } else if (rest.startsWith("?>")) {
       text = "?>"
       // PHP closes the preceding statement even when a template omits its semicolon.
-      tokens.push({ text: ";", kind: "symbol", line })
+      push(";", "symbol")
       inPhp = false
     } else if (/^\s/.test(rest)) {
       text = /^\s+/.exec(rest)![0]
-    } else if (/^(?:\/\/|#)/.test(rest)) {
-      text = rest.split("\n", 1)[0]!
+    } else if (/^(?:\/\/|#(?!\[))/.test(rest)) {
+      const end = /\r?\n|\?>/.exec(rest)?.index ?? rest.length
+      text = rest.slice(0, end)
     } else if (rest.startsWith("/*")) {
       const end = rest.indexOf("*/", 2)
       text = end < 0 ? rest : rest.slice(0, end + 2)
@@ -58,7 +80,7 @@ export function tokenizePhp(source: string, issues: string[]): PhpToken[] {
         text = match![0]
         kind = text.startsWith("$") ? "variable" : /^\w/.test(text) ? "word" : "symbol"
       }
-      tokens.push({ text, kind, line })
+      push(text, kind)
     }
     line += text.split("\n").length - 1
     offset += text.length
@@ -67,16 +89,17 @@ export function tokenizePhp(source: string, issues: string[]): PhpToken[] {
 }
 
 export function closingToken(tokens: PhpToken[], start: number): number {
-  const close = new Map([
-    ["(", ")"],
-    ["[", "]"],
-    ["{", "}"],
-  ]).get(tokens[start]?.text ?? "")
-  if (!close) return -1
-  let depth = 0
-  for (let i = start; i < tokens.length; i++) {
-    if (tokens[i]?.text === tokens[start]?.text) depth++
-    if (tokens[i]?.text === close && --depth === 0) return i
+  const closing = tokens[start]?.closing
+  if (closing === undefined) return -1
+  // Slices preserve source positions; flattened argument lists can omit comma tokens.
+  let low = start + 1
+  let high = tokens.length - 1
+  while (low <= high) {
+    const middle = (low + high) >>> 1
+    const position = tokens[middle]!.position
+    if (position === closing) return middle
+    if (position < closing) low = middle + 1
+    else high = middle - 1
   }
   return -1
 }

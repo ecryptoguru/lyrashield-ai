@@ -369,3 +369,88 @@ it("ignores Composer documentation and fixture files while retaining JavaScript 
   ])
   expect(inventory.unresolved).toEqual([])
 })
+
+it.each(["pom.xml", "build.gradle", "packages.lock.json", "pyproject.toml", "poetry.lock"])(
+  "keeps mixed-repository coverage incomplete for unsupported %s",
+  async (manifest) => {
+    const root = await repo({
+      "requirements.txt": "flask==3.0.0\n",
+      [`other/${manifest}`]: "unsupported",
+    })
+    const inventory = await resolveExactDependencies({ repoPath: root })
+    expect(inventory.status).toBe("PARTIAL")
+    expect(inventory.packages).toHaveLength(1)
+    expect(inventory.unresolved).toContainEqual(
+      expect.objectContaining({
+        name: `other/${manifest}`,
+        reason: expect.stringMatching(/unsupported/i),
+      })
+    )
+  }
+)
+
+it.each([
+  [
+    "go.mod",
+    "go.mod",
+    /Go input cannot be parsed with the pinned local toolchain|Pinned Go resolver image or toolchain is unavailable/,
+  ],
+  ["go.sum", "go.mod", "Go checksums alone do not identify a selected module graph"],
+  ["Cargo.toml", "other/Cargo.toml", "Dependency manifest has no supported exact lockfile"],
+  ["Cargo.lock", "other/Cargo.lock", "Malformed or unsupported Cargo lockfile"],
+  ["Gemfile", "other/Gemfile", "Dependency manifest has no supported exact lockfile"],
+  ["Gemfile.lock", "other/Gemfile.lock", "Ruby lockfile contains no package identities"],
+])("keeps mixed-repository coverage incomplete for invalid %s", async (manifest, name, reason) => {
+  const root = await repo({
+    "requirements.txt": "flask==3.0.0\n",
+    [`other/${manifest}`]: "unsupported",
+  })
+  const inventory = await resolveExactDependencies({ repoPath: root })
+  expect(inventory.status).toBe("PARTIAL")
+  expect(inventory.packages).toHaveLength(1)
+  expect(inventory.unresolved).toContainEqual(
+    expect.objectContaining({
+      name,
+      reason: reason instanceof RegExp ? expect.stringMatching(reason) : reason,
+    })
+  )
+})
+
+it.each(["3..1", "3.", "3a", "3.1..rc1"])(
+  "cannot declare exact inventory COMPLETE for malformed Ruby version %s",
+  async (version) => {
+    const root = await repo({
+      "Gemfile.lock": `GEM\n  remote: https://rubygems.org/\n  specs:\n    rack (${version})\n\nPLATFORMS\n  ruby\n\nDEPENDENCIES\n  rack\n`,
+    })
+    const inventory = await resolveExactDependencies({ repoPath: root })
+    expect(inventory.status).toBe("UNSUPPORTED")
+    expect(inventory.packages).toEqual([])
+    expect(inventory.unresolved).toContainEqual(
+      expect.objectContaining({ ecosystem: "RubyGems", name: "rack" })
+    )
+  }
+)
+
+it("qualifies supported dotted Ruby prereleases while retaining platform and source", async () => {
+  const root = await repo({
+    "Gemfile.lock":
+      "GEM\n  remote: https://rubygems.org/\n  specs:\n    rack (3.1.rc1)\n    native (1.2.beta.3-x86_64-linux-gnu)\n\nPLATFORMS\n  ruby\n  x86_64-linux-gnu\n\nDEPENDENCIES\n  rack\n  native\n",
+  })
+  const inventory = await resolveExactDependencies({ repoPath: root })
+  expect(inventory.status).toBe("COMPLETE")
+  expect(inventory.unresolved).toEqual([])
+  expect(inventory.packages).toEqual([
+    expect.objectContaining({
+      name: "rack",
+      version: "3.1.rc1",
+      platform: "ruby",
+      source: "https://rubygems.org/",
+    }),
+    expect.objectContaining({
+      name: "native",
+      version: "1.2.beta.3",
+      platform: "x86_64-linux-gnu",
+      source: "https://rubygems.org/",
+    }),
+  ])
+})

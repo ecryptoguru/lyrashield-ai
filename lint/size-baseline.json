@@ -80,11 +80,6 @@
       "totalExcess": 226,
       "maxExcess": 226
     },
-    "apps/web/src/app/(dashboard)/dashboard/agents/[agentId]/agent-wizard.tsx|max-lines-per-function": {
-      "count": 1,
-      "totalExcess": 16,
-      "maxExcess": 16
-    },
     "apps/web/src/app/(dashboard)/dashboard/agents/agents-grid.tsx|max-lines-per-function": {
       "count": 1,
       "totalExcess": 15,
@@ -135,11 +130,6 @@
       "totalExcess": 327,
       "maxExcess": 327
     },
-    "apps/web/src/app/(dashboard)/dashboard/findings/fixes-client.tsx|max-lines-per-function": {
-      "count": 1,
-      "totalExcess": 10,
-      "maxExcess": 10
-    },
     "apps/web/src/app/(dashboard)/dashboard/findings/page.tsx|max-lines-per-function": {
       "count": 1,
       "totalExcess": 95,
@@ -149,11 +139,6 @@
       "count": 1,
       "totalExcess": 45,
       "maxExcess": 45
-    },
-    "apps/web/src/app/(dashboard)/dashboard/integrations/github-integration.tsx|max-lines-per-function": {
-      "count": 1,
-      "totalExcess": 20,
-      "maxExcess": 20
     },
     "apps/web/src/app/(dashboard)/dashboard/integrations/mcp-integration.tsx|max-lines-per-function": {
       "count": 1,
@@ -172,8 +157,8 @@
     },
     "apps/web/src/app/(dashboard)/dashboard/notifications/notifications-client.tsx|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 23,
-      "maxExcess": 23
+      "totalExcess": 22,
+      "maxExcess": 22
     },
     "apps/web/src/app/(dashboard)/dashboard/page.tsx|max-lines-per-function": {
       "count": 1,
@@ -215,15 +200,10 @@
       "totalExcess": 41,
       "maxExcess": 41
     },
-    "apps/web/src/app/(dashboard)/dashboard/scans/[id]/use-scan-detail-polling.ts|max-lines-per-function": {
-      "count": 1,
-      "totalExcess": 3,
-      "maxExcess": 3
-    },
     "apps/web/src/app/(dashboard)/dashboard/scans/create-scan-sheet.tsx|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 354,
-      "maxExcess": 354
+      "totalExcess": 344,
+      "maxExcess": 344
     },
     "apps/web/src/app/(dashboard)/dashboard/scans/scan-list.tsx|max-lines-per-function": {
       "count": 1,
@@ -277,8 +257,8 @@
     },
     "apps/web/src/app/(dashboard)/dashboard/targets/targets-client.tsx|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 107,
-      "maxExcess": 107
+      "totalExcess": 90,
+      "maxExcess": 90
     },
     "apps/web/src/app/(dashboard)/dashboard/team/team-client.tsx|max-lines-per-function": {
       "count": 1,
@@ -307,8 +287,8 @@
     },
     "apps/web/src/app/api/findings/[id]/retests/route.ts|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 37,
-      "maxExcess": 37
+      "totalExcess": 27,
+      "maxExcess": 27
     },
     "apps/web/src/app/api/licenses/issue/route.ts|max-lines-per-function": {
       "count": 1,
@@ -332,13 +312,13 @@
     },
     "apps/web/src/app/api/scans/route.ts|max-lines": {
       "count": 1,
-      "totalExcess": 209,
-      "maxExcess": 209
+      "totalExcess": 192,
+      "maxExcess": 192
     },
     "apps/web/src/app/api/scans/route.ts|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 484,
-      "maxExcess": 484
+      "totalExcess": 482,
+      "maxExcess": 482
     },
     "apps/web/src/app/api/sync/findings/route.ts|max-lines-per-function": {
       "count": 1,
@@ -357,8 +337,8 @@
     },
     "apps/web/src/app/api/team/route.ts|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 50,
-      "maxExcess": 50
+      "totalExcess": 24,
+      "maxExcess": 24
     },
     "apps/web/src/app/billing/webhook/route.ts|max-lines-per-function": {
       "count": 1,
@@ -377,8 +357,8 @@
     },
     "apps/web/src/app/onboarding/onboarding-wizard.tsx|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 57,
-      "maxExcess": 57
+      "totalExcess": 52,
+      "maxExcess": 52
     },
     "apps/web/src/app/reports/shared/[id]/launch-report-view.tsx|max-lines-per-function": {
       "count": 1,
@@ -462,8 +442,8 @@
     },
     "apps/worker/src/engine/deterministic-retest.ts|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 55,
-      "maxExcess": 55
+      "totalExcess": 49,
+      "maxExcess": 49
     },
     "apps/worker/src/engine/finding-persister.ts|max-lines-per-function": {
       "count": 2,
@@ -497,8 +477,8 @@
     },
     "apps/worker/src/engine/scanners/ai-app-security.ts|max-lines": {
       "count": 1,
-      "totalExcess": 40,
-      "maxExcess": 40
+      "totalExcess": 34,
+      "maxExcess": 34
     },
     "apps/worker/src/engine/scanners/ai-app-security.ts|max-lines-per-function": {
       "count": 1,
@@ -520,16 +500,6 @@
       "totalExcess": 194,
       "maxExcess": 194
     },
-    "apps/worker/src/engine/scanners/resolved-dependencies.ts|max-lines-per-function": {
-      "count": 1,
-      "totalExcess": 8,
-      "maxExcess": 8
-    },
-    "apps/worker/src/engine/scanners/sast-scanner.ts|max-lines-per-function": {
-      "count": 1,
-      "totalExcess": 12,
-      "maxExcess": 12
-    },
     "apps/worker/src/index.ts|max-lines-per-function": {
       "count": 1,
       "totalExcess": 91,
@@ -537,38 +507,33 @@
     },
     "apps/worker/src/jobs/run-scan.job.ts|max-lines": {
       "count": 1,
-      "totalExcess": 90,
-      "maxExcess": 90
+      "totalExcess": 87,
+      "maxExcess": 87
     },
     "apps/worker/src/jobs/run-scan.job.ts|max-lines-per-function": {
       "count": 2,
-      "totalExcess": 932,
-      "maxExcess": 470
+      "totalExcess": 908,
+      "maxExcess": 458
     },
     "apps/worker/src/jobs/run-scan/admission.ts|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 23,
-      "maxExcess": 23
-    },
-    "apps/worker/src/jobs/run-scan/authority.ts|max-lines-per-function": {
-      "count": 1,
-      "totalExcess": 14,
-      "maxExcess": 14
+      "totalExcess": 21,
+      "maxExcess": 21
     },
     "apps/worker/src/jobs/run-scan/execution.ts|max-lines": {
       "count": 1,
-      "totalExcess": 185,
-      "maxExcess": 185
+      "totalExcess": 184,
+      "maxExcess": 184
     },
     "apps/worker/src/jobs/run-scan/execution.ts|max-lines-per-function": {
       "count": 2,
-      "totalExcess": 286,
-      "maxExcess": 212
+      "totalExcess": 283,
+      "maxExcess": 209
     },
     "apps/worker/src/jobs/run-scan/finalization.ts|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 43,
-      "maxExcess": 43
+      "totalExcess": 37,
+      "maxExcess": 37
     },
     "apps/worker/src/jobs/run-scan/usage.ts|max-lines-per-function": {
       "count": 1,
@@ -647,8 +612,8 @@
     },
     "packages/db/src/account-deletion.ts|max-lines-per-function": {
       "count": 2,
-      "totalExcess": 470,
-      "maxExcess": 269
+      "totalExcess": 468,
+      "maxExcess": 268
     },
     "packages/db/src/ai-assurance-service.ts|max-lines": {
       "count": 1,
@@ -664,11 +629,6 @@
       "count": 1,
       "totalExcess": 62,
       "maxExcess": 62
-    },
-    "packages/db/src/fix-pr-merge-service.ts|max-lines-per-function": {
-      "count": 1,
-      "totalExcess": 37,
-      "maxExcess": 37
     },
     "packages/db/src/gate-evaluation-service.ts|max-lines-per-function": {
       "count": 2,
@@ -702,8 +662,8 @@
     },
     "packages/db/src/scan-service.ts|max-lines": {
       "count": 1,
-      "totalExcess": 44,
-      "maxExcess": 44
+      "totalExcess": 28,
+      "maxExcess": 28
     },
     "packages/egress-proxy/src/index.ts|max-lines-per-function": {
       "count": 1,

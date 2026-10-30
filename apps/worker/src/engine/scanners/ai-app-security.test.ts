@@ -347,4 +347,52 @@ describe("scanAiAppSecurity", () => {
       })
     ).rejects.toThrow("AI App Security scan cancelled")
   })
+  it("uses the installed package interval instead of the first unrelated AI-03 advisory fix", async () => {
+    const { queryOsvWithCache } = await import("@lyrashield/db")
+    await writeFile(join(tempDir, "package.json"), PACKAGE_JSON)
+    await writeFile(join(tempDir, "package-lock.json"), PACKAGE_LOCK)
+    vi.mocked(queryOsvWithCache).mockResolvedValueOnce({
+      status: "COMPLETE",
+      source: "OSV",
+      requestedCount: 1,
+      resolvedCount: 1,
+      fetchedAt: new Date().toISOString(),
+      snapshotId: "fixture",
+      snapshotChecksum: "fixture",
+      cacheAgeSeconds: 0,
+      supportedEcosystems: ["npm"],
+      unresolved: [],
+      results: [
+        {
+          package: {
+            name: "lodash",
+            version: "4.17.0",
+            ecosystem: "npm",
+            filePath: "package-lock.json",
+          },
+          vulns: [
+            {
+              id: "GHSA-accuracy-ai03",
+              affected: [
+                {
+                  package: { name: "other", ecosystem: "npm" },
+                  ranges: [{ type: "SEMVER", events: [{ introduced: "0" }, { fixed: "1.0.0" }] }],
+                },
+                {
+                  package: { name: "lodash", ecosystem: "npm" },
+                  ranges: [
+                    { type: "SEMVER", events: [{ introduced: "4.0.0" }, { fixed: "4.17.21" }] },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    })
+    const result = await scanAiAppSecurity({ repoPath: tempDir, workspaceDir: tempDir })
+    const finding = result.findings.find((f) => f.id === "GHSA-accuracy-ai03")
+    expect(finding?.remediation_steps).toContain("4.17.21")
+    expect(finding?.remediation_steps).not.toContain("1.0.0")
+  })
 })

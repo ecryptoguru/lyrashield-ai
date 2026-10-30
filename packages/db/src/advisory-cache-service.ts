@@ -36,8 +36,13 @@ const TTL_MS = 24 * 60 * 60 * 1000
 export class InMemoryAdvisoryCache implements AdvisoryCache {
   private readonly store = new Map<string, AdvisoryEntry>()
 
-  private key(ecosystem: AdvisoryEcosystem, name: string, version: string): string {
-    return `${ecosystem}:${name}:${version}`
+  private key(
+    ecosystem: AdvisoryEcosystem,
+    name: string,
+    version: string,
+    schemaVersion = OSV_CACHE_SCHEMA_VERSION
+  ): string {
+    return `${schemaVersion}:${ecosystem}:${normalizeAdvisoryPackageName(ecosystem, name)}:${version}`
   }
 
   async get(
@@ -55,12 +60,14 @@ export class InMemoryAdvisoryCache implements AdvisoryCache {
   }
 
   async set(entry: AdvisoryEntry): Promise<void> {
-    this.store.set(this.key(entry.ecosystem, entry.name, entry.version), entry)
+    this.store.set(this.key(entry.ecosystem, entry.name, entry.version, entry.schemaVersion), entry)
   }
 }
 
-function normalizedName(name: string): string {
-  return name.trim().toLowerCase()
+/** Go module paths and Ruby gem identifiers retain their exact registry identity. */
+export function normalizeAdvisoryPackageName(ecosystem: AdvisoryEcosystem, name: string): string {
+  const trimmed = name.trim()
+  return ecosystem === "Go" || ecosystem === "RubyGems" ? trimmed : trimmed.toLowerCase()
 }
 
 /** PostgreSQL-backed default; the in-memory implementation is test-only. */
@@ -74,7 +81,7 @@ export class PostgresAdvisoryCache implements AdvisoryCache {
       where: {
         ecosystem_normalizedName_version_source_schemaVersion: {
           ecosystem,
-          normalizedName: normalizedName(name),
+          normalizedName: normalizeAdvisoryPackageName(ecosystem, name),
           version,
           source: "osv",
           schemaVersion: OSV_CACHE_SCHEMA_VERSION,
@@ -100,7 +107,7 @@ export class PostgresAdvisoryCache implements AdvisoryCache {
       where: {
         ecosystem_normalizedName_version_source_schemaVersion: {
           ecosystem: entry.ecosystem,
-          normalizedName: normalizedName(entry.name),
+          normalizedName: normalizeAdvisoryPackageName(entry.ecosystem, entry.name),
           version: entry.version,
           source: entry.source,
           schemaVersion: entry.schemaVersion,
@@ -108,7 +115,7 @@ export class PostgresAdvisoryCache implements AdvisoryCache {
       },
       create: {
         ecosystem: entry.ecosystem,
-        normalizedName: normalizedName(entry.name),
+        normalizedName: normalizeAdvisoryPackageName(entry.ecosystem, entry.name),
         version: entry.version,
         source: entry.source,
         schemaVersion: entry.schemaVersion,

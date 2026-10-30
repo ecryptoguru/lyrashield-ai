@@ -1,6 +1,16 @@
 import { env } from "@lyrashield/config"
 import { logger } from "@lyrashield/logger"
-import { createHmac, createSign, timingSafeEqual as cryptoTimingSafeEqual } from "crypto"
+import {
+  createHmac,
+  createSign,
+  timingSafeEqual as cryptoTimingSafeEqual,
+  createHash,
+  createCipheriv,
+  createDecipheriv,
+  hkdfSync,
+  randomBytes,
+} from "crypto"
+import { z } from "zod"
 import { getRedis } from "./redis"
 
 import { githubFetch, GITHUB_API_BASE, GITHUB_HEADERS } from "./github-http"
@@ -51,10 +61,41 @@ export function createAppJWT(): string {
 // The cache is stored in Redis when available so multiple instances/workers
 // share tokens; otherwise it falls back to a local Map.
 type CachedToken = { token: string; expiresAt: number }
-const localTokenCache = new Map<number, CachedToken>()
+const localTokenCache = new Map<string, CachedToken>()
 const TOKEN_SKEW_MS = 5 * 60 * 1000
 const TOKEN_TTL_MS = 55 * 60 * 1000
-const TOKEN_CACHE_KEY = (installationId: number) => `github:token:${installationId}`
+const TOKEN_CACHE_KEY = (installationId: number) => {
+  const { appId } = getAppCredentials()
+  const appIdentity = createHash("sha256").update(appId).digest("hex")
+  return `github:token:v2:${appIdentity}:${installationId}:installation-default`
+}
+
+function cacheEncryptionKey(): Buffer {
+  return Buffer.from(
+    hkdfSync("sha256", env.BETTER_AUTH_SECRET, "", "lyrashield-github-token-cache/v1", 32)
+  )
+}
+
+function encryptCachedToken(value: CachedToken, identity: string): string {
+  const nonce = randomBytes(12)
+  const cipher = createCipheriv("aes-256-gcm", cacheEncryptionKey(), nonce)
+  cipher.setAAD(Buffer.from(identity))
+  const ciphertext = Buffer.concat([cipher.update(JSON.stringify(value), "utf8"), cipher.final()])
+  return `v1:${Buffer.concat([nonce, cipher.getAuthTag(), ciphertext]).toString("base64url")}`
+}
+
+function decryptCachedToken(raw: string, identity: string): CachedToken | null {
+  // Old plaintext entries expire naturally; never read them into credentials.
+  if (!raw.startsWith("v1:")) return null
+  const encrypted = Buffer.from(raw.slice(3), "base64url")
+  if (encrypted.length <= 28) return null
+  const decipher = createDecipheriv("aes-256-gcm", cacheEncryptionKey(), encrypted.subarray(0, 12))
+  decipher.setAAD(Buffer.from(identity))
+  decipher.setAuthTag(encrypted.subarray(12, 28))
+  return parseCachedToken(
+    Buffer.concat([decipher.update(encrypted.subarray(28)), decipher.final()]).toString("utf8")
+  )
+}
 
 function validToken(value: unknown): value is string {
   return typeof value === "string" && value.length > 0 && !/\s/.test(value)
@@ -92,12 +133,13 @@ export function parseInstallationTokenResponse(value: unknown): CachedToken {
 }
 
 async function getCachedToken(installationId: number): Promise<CachedToken | null> {
+  const identity = TOKEN_CACHE_KEY(installationId)
   const redis = getRedis()
   if (redis) {
     try {
-      const raw = await redis.get(TOKEN_CACHE_KEY(installationId))
+      const raw = await redis.get(identity)
       if (raw) {
-        const parsed = parseCachedToken(raw)
+        const parsed = decryptCachedToken(raw, identity)
         if (parsed && parsed.expiresAt - Date.now() > TOKEN_SKEW_MS) {
           return parsed
         }
@@ -110,7 +152,7 @@ async function getCachedToken(installationId: number): Promise<CachedToken | nul
     }
   }
 
-  const local = localTokenCache.get(installationId)
+  const local = localTokenCache.get(identity)
   if (local && local.expiresAt - Date.now() > TOKEN_SKEW_MS) {
     return local
   }
@@ -122,16 +164,12 @@ async function setCachedToken(
   token: string,
   expiresAt: number
 ): Promise<void> {
+  const identity = TOKEN_CACHE_KEY(installationId)
   const redis = getRedis()
   if (redis) {
     try {
       const ttl = Math.max(0, expiresAt - Date.now() - TOKEN_SKEW_MS)
-      await redis.set(
-        TOKEN_CACHE_KEY(installationId),
-        JSON.stringify({ token, expiresAt }),
-        "PX",
-        ttl
-      )
+      await redis.set(identity, encryptCachedToken({ token, expiresAt }, identity), "PX", ttl)
       return
     } catch (err) {
       logger.warn("Failed to write GitHub token to Redis cache", {
@@ -141,7 +179,7 @@ async function setCachedToken(
     }
   }
 
-  localTokenCache.set(installationId, { token, expiresAt })
+  localTokenCache.set(identity, { token, expiresAt })
 }
 
 export async function getInstallationToken(installationId: number): Promise<string> {
@@ -175,6 +213,76 @@ export async function getInstallationToken(installationId: number): Promise<stri
   return data.token
 }
 
+const checkoutRepositorySchema = z
+  .string()
+  .regex(/^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}\/[A-Za-z0-9_.-]{1,100}$/)
+  .refine((value) => !value.split("/").some((part) => part === "." || part === ".."))
+
+/** Low-level mint; callers must authorize the workspace's active integration first.
+ * Never shares a token with installation-wide API/write helpers or a cache.
+ */
+export async function getRepositoryReadToken(
+  installationId: number,
+  repoFullName: string
+): Promise<string> {
+  z.number().int().positive().max(Number.MAX_SAFE_INTEGER).parse(installationId)
+  checkoutRepositorySchema.parse(repoFullName)
+  const jwt = createAppJWT()
+  const headers = { Authorization: `Bearer ${jwt}`, ...GITHUB_HEADERS }
+  const installationResponse = await githubFetch(
+    `${GITHUB_API_BASE}/repos/${repoFullName}/installation`,
+    { headers, redirect: "error" }
+  )
+  if (!installationResponse.ok)
+    throw new Error(`Repository installation is unavailable: ${installationResponse.status}`)
+  const installation = z
+    .object({ id: z.number().int().positive(), suspended_at: z.null().optional() })
+    .parse(await installationResponse.json())
+  if (installation.id !== installationId)
+    throw new Error("Repository installation identity mismatch")
+  const response = await githubFetch(
+    `${GITHUB_API_BASE}/app/installations/${installationId}/access_tokens`,
+    {
+      method: "POST",
+      headers: { ...headers, "Content-Type": "application/json" },
+      redirect: "error",
+      body: JSON.stringify({
+        repositories: [repoFullName.split("/")[1]],
+        permissions: { contents: "read" },
+      }),
+    },
+    0
+  )
+  if (!response.ok) throw new Error(`Failed to get repository read token: ${response.status}`)
+  const data = z
+    .object({
+      token: z.string(),
+      expires_at: z.string(),
+      permissions: z.record(z.string(), z.string()).optional(),
+      repositories: z.array(z.object({ full_name: z.string() })).optional(),
+      repository_selection: z.enum(["all", "selected"]).optional(),
+    })
+    .parse(await response.json())
+  // Explicit request scope is authoritative when optional metadata is omitted.
+  // If GitHub echoes scope, reject any contradiction rather than broadening it.
+  if (
+    data.permissions &&
+    (data.permissions.contents !== "read" ||
+      Object.entries(data.permissions).some(
+        ([name, access]) => !["contents", "metadata"].includes(name) || access !== "read"
+      ))
+  )
+    throw new Error("Repository token permissions mismatch")
+  if (
+    data.repository_selection === "all" ||
+    (data.repositories &&
+      (data.repositories.length !== 1 ||
+        data.repositories[0]!.full_name.toLowerCase() !== repoFullName.toLowerCase()))
+  )
+    throw new Error("Repository token identity mismatch")
+  return parseInstallationTokenResponse(data).token
+}
+
 export interface GitHubRepo {
   id: number
   full_name: string
@@ -183,6 +291,31 @@ export interface GitHubRepo {
   default_branch: string
   private: boolean
   html_url: string
+}
+
+/** One bounded provider request for interactive repository pickers. */
+export async function listInstallationReposPage(
+  installationId: number,
+  page: number
+): Promise<{ repositories: GitHubRepo[]; nextPage: number | null }> {
+  if (!Number.isSafeInteger(page) || page < 1 || page > 10_000)
+    throw new Error("Invalid repository page")
+  const token = await getInstallationToken(installationId)
+  const res = await githubFetch(
+    `${GITHUB_API_BASE}/installation/repositories?per_page=50&page=${page}`,
+    { headers: { Authorization: `Bearer ${token}`, ...GITHUB_HEADERS } }
+  )
+  if (!res.ok) throw new Error(`Failed to list repos: ${res.status}`)
+  const data = (await res.json()) as { repositories: GitHubRepo[]; total_count?: number }
+  return {
+    repositories: data.repositories.slice(0, 50),
+    nextPage:
+      data.repositories.length === 50 &&
+      (data.total_count === undefined || page * 50 < data.total_count) &&
+      page < 10_000
+        ? page + 1
+        : null,
+  }
 }
 
 export async function listInstallationRepos(installationId: number): Promise<GitHubRepo[]> {

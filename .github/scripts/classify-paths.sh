@@ -58,7 +58,7 @@ azure_deploy_pattern='^(apps/(web|worker)/|packages/|package\.json|pnpm-lock\.ya
 # Only explicitly covered tooling can skip runtime suites. Unknown and mixed
 # changes keep the existing broad classification and deployment decision.
 tooling_pattern='^(\.github/workflows/(ci|deploy-azure|deploy-azure-runtime|deploy-marketing|lighthouse-production|release-production)\.yml|\.github/scripts/(classify-paths|classify-main-change-gap)\.sh|\.github/scripts/(assert-named-vitest-tests\.mjs|migration-database-identity\.mjs|deploy-azure-(preflight|rollout)\.sh|promote-worker-vm\.sh|verify-engine-revision\.sh|verify-engine-worker-contract\.sh|validate-worker-provenance\.sh|azure_secret_set\.sh|webhook-claims-maintenance\.sh|webhook-claims-vm\.sh|validate-webhook-deploy-dispatch\.sh|verify-webhook-cutover(-preflight)?\.mjs)|\.github/scripts/tests/.*|ops/deployment/.*|ops/monitoring/.*|lint/serial-comma-baseline\.json|run-all-tests\.mjs)$'
-database_runtime_pattern='^(\.github/scripts/verify-webhook-cutover\.mjs|\.github/scripts/webhook-claims-vm\.sh|\.github/scripts/tests/webhook-(catalog|queue)\.runtime\.test\.mjs)$'
+database_runtime_pattern='^(\.github/scripts/verify-webhook-cutover\.mjs|\.github/scripts/webhook-claims-vm\.sh|\.github/scripts/v26-(accounting-diagnostic|post-migration-readback|schema-classifier|runtime-database)\.mjs|\.github/scripts/tests/v26-(accounting-diagnostic|post-migration-readback|schema-classifier)\.(postgres\.)?test\.mjs|\.github/scripts/tests/webhook-(catalog|queue)\.runtime\.test\.mjs)$'
 tooling_only=true
 tooling_seen=false
 
@@ -98,7 +98,7 @@ presentation_pattern='^(apps/web/public/.*\.(png|jpe?g|webp|avif|gif|ico|woff2?|
 image_packaging_pattern='(^|/)(Dockerfile[^/]*|\.dockerignore|package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|turbo\.json|tsconfig[^/]*\.json|[^/]*\.config\.(ts|js|mjs|cjs|json)|\.npmrc|\.pnpmfile\.cjs)$'
 image_build_workflow_pattern='^\.github/workflows/(ci|deploy-azure|release-tauri|verify-webhook-worker-image)\.yml$'
 source_input_pattern='\.(tsx?|jsx?|mjs|cjs|css|scss|sass|less|json|prisma|sql|astro|mdx|html|svg|png|jpe?g|webp|avif|gif|ico|woff2?|ttf|otf|mp4|webm|mp3|wav|snap|map)$'
-worker_host_pattern='^ops/worker/(run-worker\.sh|worker-env\.sh|webhook-cutover-(recovery|schema)\.mjs|refresh-(secrets|egress)\.sh|capture-stop-provenance\.sh|lyrashield-worker(-secrets|-egress|-egress-refresh)?\.(service|timer))$'
+worker_host_pattern='^ops/worker/(run-worker\.sh|worker-env\.sh|webhook-cutover-(recovery|schema)\.mjs|v26-cutover-identity\.mjs|refresh-(secrets|egress)\.sh|capture-stop-provenance\.sh|lyrashield-worker(-secrets|-egress|-egress-refresh)?\.(service|timer))$'
 
 while IFS= read -r f || [[ -n "$f" ]]; do
   [ -z "$f" ] && continue

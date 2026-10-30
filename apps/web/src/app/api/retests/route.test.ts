@@ -1,3 +1,5 @@
+import { resolveOAuthReadScope } from "../../../../../../packages/auth/src/oauth-read-scope"
+import { GET as V1GET } from "../v1/retests/route"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
@@ -6,7 +8,10 @@ const mocks = vi.hoisted(() => ({
   loggerError: vi.fn(),
 }))
 
-vi.mock("@lyrashield/auth/server", () => ({ requirePermission: mocks.requirePermission }))
+vi.mock("@lyrashield/auth/server", () => ({
+  resolveOAuthReadScope,
+  requirePermission: mocks.requirePermission,
+}))
 vi.mock("@lyrashield/auth", () => ({ PERMISSIONS: { retest: { view: "retest:view" } } }))
 vi.mock("@lyrashield/db", () => ({ listRetests: mocks.listRetests }))
 vi.mock("@lyrashield/logger", () => ({ logger: { error: mocks.loggerError } }))
@@ -70,4 +75,43 @@ describe("GET /api/retests", () => {
     expect(mocks.requirePermission).not.toHaveBeenCalled()
     expect(mocks.listRetests).not.toHaveBeenCalled()
   })
+})
+
+it.each([{ targetIds: ["target-1"] }, { targetIds: [] }])(
+  "bounds omitted target reads and pagination to $targetIds",
+  async ({ targetIds }) => {
+    vi.clearAllMocks()
+    mocks.requirePermission.mockResolvedValueOnce({
+      session: {
+        userId: "user-1",
+        oauth: {
+          connectionId: "conn-1",
+          scopes: ["lyrashield.read"],
+          allTargets: false,
+          allowedTargetIds: targetIds,
+        },
+      },
+    } as never)
+    mocks.listRetests.mockResolvedValueOnce({ items: [], nextCursor: null })
+    const response = await (targetIds.length ? GET : V1GET)(
+      new Request(
+        "http://localhost/api/retests?workspaceId=ws-1&cursor=cursor-1&findingId=finding-2"
+      )
+    )
+    expect(response.status).toBe(200)
+    expect(mocks.listRetests).toHaveBeenCalledWith(
+      expect.objectContaining({ workspaceId: "ws-1", targetIds, cursor: "cursor-1" })
+    )
+  }
+)
+
+it("preserves omitted-target all-target delegation reads", async () => {
+  vi.clearAllMocks()
+  mocks.requirePermission.mockResolvedValueOnce({
+    session: { oauth: { connectionId: "conn-1", allTargets: true, allowedTargetIds: [] } },
+  } as never)
+  mocks.listRetests.mockResolvedValueOnce({ items: [], nextCursor: null })
+  const response = await V1GET(new Request("http://localhost/api/retests?workspaceId=ws-1"))
+  expect(response.status).toBe(200)
+  expect(mocks.listRetests.mock.calls.at(-1)?.[0]).not.toHaveProperty("targetIds")
 })

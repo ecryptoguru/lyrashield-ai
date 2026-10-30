@@ -181,11 +181,17 @@ const envSchema = z
 
     // App
     NEXT_PUBLIC_APP_URL: z.string().url("NEXT_PUBLIC_APP_URL must be a valid URL"),
+    // Build-owned public revision tag; not a runtime credential.
+    NEXT_PUBLIC_SENTRY_RELEASE: z.string().max(200).optional().or(z.literal("")),
+    // Server-owned plain-text domain proof for the OpenAI Apps challenge route.
+    OPENAI_APPS_DOMAIN_VERIFICATION_TOKEN: z.string().max(4096).optional().or(z.literal("")),
     NEXT_PUBLIC_MARKETING_URL: z.string().url().optional().or(z.literal("")),
     // Product analytics (PostHog) — mirrors marketing privacy config
     NEXT_PUBLIC_POSTHOG_KEY: z.string().optional().or(z.literal("")),
     NEXT_PUBLIC_POSTHOG_HOST: z.string().url().optional().or(z.literal("")),
     // Cloudflare Turnstile secret (server-side). Public site key lives in apps/marketing/.env.example.
+    // Stage action enforcement independently from the browser widget rollout.
+    TURNSTILE_ENFORCE_ACTION: z.enum(["0", "1"]).default("0"),
     TURNSTILE_SECRET_KEY: z.string().optional().or(z.literal("")),
     TRUSTED_PROXY_IP_HEADER: z
       .enum(["cf-connecting-ip", "true-client-ip", "x-real-ip", "x-forwarded-for"])

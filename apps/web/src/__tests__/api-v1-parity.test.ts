@@ -43,7 +43,7 @@ const aliasContract: Record<string, string[]> = {
   "findings/[id]/fix-proposals": ["POST"],
   "findings/[id]/retests": ["POST"],
   "fix-proposals": ["GET"],
-  "fix-proposals/[id]/create-pr": ["POST"],
+  "fix-proposals/[id]/create-pr": ["GET", "POST"],
   "gate/[targetId]": ["GET", "POST"],
   "launch-readiness": ["GET"],
   projects: ["GET", "POST"],

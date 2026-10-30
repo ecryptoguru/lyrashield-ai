@@ -358,6 +358,10 @@ export {
   deleteSchedule,
   updateScheduleRunTimes,
   claimDueSchedule,
+  createScheduledScan,
+  advanceBlockedSchedule,
+  restoreUnsubmittedScheduleOccurrence,
+  type ScheduleBlockedReason,
   getDueSchedules,
   getNextRunAt,
   type ScheduleWithDetails,
@@ -553,3 +557,16 @@ export {
 } from "./notification-integration-service"
 
 export { hydrateOsvDetails, hasOsvDetails, OsvVulnerabilitySchema } from "./osv-details"
+
+export {
+  SCAN_ACCOUNTING_PROTOCOL,
+  lockUserScanAdmission,
+  releaseStoppedScanSlot,
+  releaseUnstartedScanSlot,
+  UserScanAlreadyActiveError,
+} from "./scan-slot"
+export {
+  beginFixPrExecution,
+  getFixPrExecution,
+  markFixPrRecovery,
+} from "./fix-pr-execution-service"

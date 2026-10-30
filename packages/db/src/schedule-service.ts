@@ -1,6 +1,10 @@
+import { targetReadScopeWhere } from "./read-query-scope"
 import { prisma } from "./client"
 import { getSystemPrisma } from "./system-client"
-import type { Schedule, ScanGoal, ScanMode } from "./generated/prisma"
+import type { Schedule, ScanGoal, ScanMode, Prisma } from "./generated/prisma"
+import { createScan } from "./scan-service"
+import { withWorkspaceRLS } from "./rls"
+import { lockUserScanAdmission } from "./scan-slot"
 import { logger } from "@lyrashield/logger"
 
 export interface ScheduleWithDetails extends Schedule {
@@ -85,10 +89,11 @@ export async function createSchedule(params: {
 
 export async function getSchedule(
   scheduleId: string,
-  workspaceId: string
+  workspaceId: string,
+  targetIds?: string[]
 ): Promise<ScheduleWithDetails | null> {
   const schedule = await prisma.schedule.findFirst({
-    where: { id: scheduleId, workspaceId, deletedAt: null },
+    where: { id: scheduleId, workspaceId, deletedAt: null, ...targetReadScopeWhere({ targetIds }) },
     include: {
       target: { select: { id: true, name: true, type: true, url: true, apiSpecUrl: true } },
     },
@@ -100,6 +105,7 @@ export async function getSchedule(
 export async function listSchedules(params: {
   workspaceId: string
   targetId?: string
+  targetIds?: string[]
   enabled?: boolean
   cursor?: string
   limit?: number
@@ -110,7 +116,7 @@ export async function listSchedules(params: {
     where: {
       workspaceId: params.workspaceId,
       deletedAt: null,
-      ...(params.targetId ? { targetId: params.targetId } : {}),
+      ...targetReadScopeWhere(params),
       ...(params.enabled !== undefined ? { enabled: params.enabled } : {}),
     },
     include: {
@@ -191,9 +197,137 @@ export async function updateScheduleRunTimes(
   })
 }
 
+export type ScheduleBlockedReason =
+  "SCAN_ELIGIBILITY_REQUIRED" | "DOMAIN_VERIFICATION_REQUIRED" | "SCAN_PROFILE_UNAVAILABLE"
+
+function pendingOccurrenceWhere(schedule: Schedule, now: Date): Prisma.ScheduleWhereInput {
+  return {
+    id: schedule.id,
+    workspaceId: schedule.workspaceId,
+    enabled: true,
+    deletedAt: null,
+    updatedAt: schedule.updatedAt,
+    nextRunAt: schedule.nextRunAt,
+    target: { deletedAt: null },
+    OR: [{ nextRunAt: null }, { nextRunAt: { lte: now } }],
+  }
+}
+
 /**
- * Atomically claim a due schedule before creating a scan. This prevents two
- * worker replicas from enqueueing the same run after reading it concurrently.
+ * One due timestamp is the pending occurrence; all missed cadence coalesces to
+ * this scan. The claim and shared scan/slot/reservation creation commit together.
+ * A crash before commit or any admission contention leaves the timestamp due.
+ */
+export async function createScheduledScan(schedule: Schedule, now: Date, nextRunAt: Date) {
+  if (nextRunAt <= now) throw new Error("schedule_next_run_must_be_future")
+  return withWorkspaceRLS(schedule.workspaceId, async (tx) => {
+    // Preserve the global user-first order before locking the occurrence row.
+    await lockUserScanAdmission(tx, schedule.createdById)
+    const claimed = await tx.schedule.updateMany({
+      where: pendingOccurrenceWhere(schedule, now),
+      data: {
+        lastRunAt: now,
+        nextRunAt,
+        lastBlockedAt: null,
+        lastBlockedReason: null,
+        updatedAt: now,
+      },
+    })
+    if (!claimed.count) return null
+    const scan = await createScan(
+      {
+        workspaceId: schedule.workspaceId,
+        targetId: schedule.targetId,
+        goal: schedule.goal,
+        mode: schedule.mode,
+        createdById: schedule.createdById,
+        triggerType: "schedule",
+      },
+      tx
+    )
+    await tx.schedule.update({
+      where: { id: schedule.id, workspaceId: schedule.workspaceId },
+      data: { lastScanId: scan.id, updatedAt: now },
+    })
+    return scan
+  })
+}
+
+/**
+ * Call only for a scan freshly created by this publication invocation, after
+ * typed proof queue.add was never called. This function alone cannot prove
+ * absence of an earlier publication. Unknown/previous jobs must stay held.
+ */
+export async function restoreUnsubmittedScheduleOccurrence(
+  schedule: Schedule,
+  scanId: string,
+  claimedAt: Date,
+  nextRunAt: Date
+): Promise<boolean> {
+  return withWorkspaceRLS(schedule.workspaceId, async (tx) => {
+    await lockUserScanAdmission(tx, schedule.createdById)
+    const scan = await tx.scan.findFirst({
+      where: {
+        id: scanId,
+        workspaceId: schedule.workspaceId,
+        createdById: schedule.createdById,
+        triggerType: "schedule",
+        accountingVersion: 2,
+        status: "FAILED",
+        startedAt: null,
+      },
+    })
+    if (!scan) return false
+    const accountId = scan.sponsorAccountId ?? scan.createdById
+    await tx.$executeRaw`SELECT set_config('app.current_account_id', ${accountId}, true)`
+    const reservation = await tx.scanCapacityReservation.findUnique({ where: { scanId } })
+    const slot = await tx.userScanSlot.findUnique({ where: { userId: schedule.createdById } })
+    if (
+      !reservation ||
+      reservation.state !== "RELEASED" ||
+      !reservation.stoppedAt ||
+      reservation.observedMs !== 0 ||
+      reservation.chargedMinutes !== 0 ||
+      slot?.scanId === scanId
+    )
+      return false
+    const result = await tx.schedule.updateMany({
+      where: {
+        id: schedule.id,
+        workspaceId: schedule.workspaceId,
+        enabled: true,
+        deletedAt: null,
+        updatedAt: claimedAt,
+        lastRunAt: claimedAt,
+        nextRunAt,
+        lastScanId: scanId,
+      },
+      data: { nextRunAt: schedule.nextRunAt, lastRunAt: schedule.lastRunAt },
+    })
+    return result.count === 1
+  })
+}
+
+/** Permanent denial advances one occurrence and keeps a bounded reason. */
+export async function advanceBlockedSchedule(
+  schedule: Schedule,
+  now: Date,
+  nextRunAt: Date,
+  reason: ScheduleBlockedReason
+): Promise<boolean> {
+  if (nextRunAt <= now) throw new Error("schedule_next_run_must_be_future")
+  return withWorkspaceRLS(schedule.workspaceId, async (tx) => {
+    const result = await tx.schedule.updateMany({
+      where: pendingOccurrenceWhere(schedule, now),
+      data: { lastRunAt: now, nextRunAt, lastBlockedAt: now, lastBlockedReason: reason },
+    })
+    return result.count === 1
+  })
+}
+
+/**
+ * Legacy timestamp-only helper. Scan admission must use createScheduledScan
+ * so an occurrence cannot commit without its scan and capacity reservation.
  */
 export async function claimDueSchedule(
   scheduleId: string,
@@ -213,13 +347,14 @@ export async function claimDueSchedule(
   return result.count === 1
 }
 
-export async function getDueSchedules(now: Date): Promise<ScheduleWithDetails[]> {
+export async function getDueSchedules(now: Date, afterId?: string): Promise<ScheduleWithDetails[]> {
   // The schedule runner is a cross-workspace background process. Use the
   // privileged system client so it can read due schedules from all tenants.
   const schedules = await getSystemPrisma().schedule.findMany({
     where: {
       enabled: true,
       deletedAt: null,
+      ...(afterId ? { id: { gt: afterId } } : {}),
       // The system client bypasses the extension's soft-delete guard, so the
       // join must name it: a schedule whose target was deleted must not fire.
       target: { deletedAt: null },
@@ -228,6 +363,7 @@ export async function getDueSchedules(now: Date): Promise<ScheduleWithDetails[]>
     include: {
       target: { select: { id: true, name: true, type: true, url: true, apiSpecUrl: true } },
     },
+    orderBy: { id: "asc" },
     take: 50,
   })
 

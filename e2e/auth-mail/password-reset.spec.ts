@@ -139,6 +139,9 @@ test("redeems a delivered local reset link once and revokes the previous session
   await navigateCapturedReset(page, resetLink)
   await page.locator("#password").fill(newPassword)
   await page.getByRole("button", { name: "Reset password", exact: true }).click()
+  await expect(page.getByRole("status")).toContainText("Password reset successfully")
+  expect(new URL(page.url()).searchParams.has("token")).toBe(false)
+  await page.getByRole("link", { name: "Continue to sign in" }).click()
   await expect(page).toHaveURL(/\/sign-in$/)
   expect(await (await request.get("/api/auth/get-session", { headers })).json()).toBeNull()
   expect(

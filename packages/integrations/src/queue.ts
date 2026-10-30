@@ -21,6 +21,19 @@ export class ScanWorkerUnavailableError extends Error {
   }
 }
 
+/** This invocation never called queue.add; it is NOT proof about earlier invocations. */
+export class ScanEnqueueNotSubmittedError extends ScanWorkerUnavailableError {
+  constructor(
+    readonly scanId: string,
+    cause: unknown
+  ) {
+    super()
+    this.name = "ScanEnqueueNotSubmittedError"
+    this.message = cause instanceof Error ? cause.message : "Scan queue submission did not start"
+    this.cause = cause
+  }
+}
+
 function requireRedis() {
   const redis = getRedis()
   if (!redis) throw new ScanWorkerUnavailableError()
@@ -266,8 +279,8 @@ export function getScanQueue(): Queue<ScanJobData, ScanJobResult> {
 }
 
 export async function enqueueScan(data: ScanJobData): Promise<string> {
-  const queue = getScanQueue()
   try {
+    const queue = getScanQueue()
     return await boundedQueueAdd(
       queue,
       data.scanId,
@@ -281,7 +294,8 @@ export async function enqueueScan(data: ScanJobData): Promise<string> {
       assertScanWorkerAvailable
     )
   } catch (error) {
-    if (!(error instanceof QueueEnqueueUncertainError)) throw error
+    if (!(error instanceof QueueEnqueueUncertainError))
+      throw new ScanEnqueueNotSubmittedError(data.scanId, error)
     // Admission already persisted this exact scan. Keep it QUEUED and return
     // its identity: failing it here could race a running job; retrying a new
     // scan could duplicate paid work. Existing reconciliation resolves absence.

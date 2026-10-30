@@ -1,9 +1,16 @@
+import { resolveOAuthReadScope } from "../../../../../../../../packages/auth/src/oauth-read-scope"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const getAiSecurityScoreSnapshot = vi.fn()
+const scanFindFirst = vi.fn()
 
-vi.mock("@lyrashield/db", () => ({ getAiSecurityScoreSnapshot }))
+vi.mock("@lyrashield/db", () => ({
+  getAiSecurityScoreSnapshot,
+  withWorkspaceRLS: (_workspaceId: string, callback: (tx: unknown) => unknown) =>
+    callback({ scan: { findFirst: scanFindFirst } }),
+}))
 vi.mock("@lyrashield/auth/server", () => ({
+  resolveOAuthReadScope,
   requirePermission: vi.fn().mockResolvedValue({ session: { userId: "user-1" } }),
 }))
 vi.mock("@lyrashield/auth", () => ({
@@ -76,4 +83,65 @@ describe("GET /api/scans/[id]/ai-score", () => {
     expect(second.status).toBe(200)
     expect(second.headers.get("ETag")).not.toBe(etag)
   })
+})
+
+it.each([{ targetIds: ["target-1"] }, { targetIds: [] }])(
+  "denies an ungranted stored scan before score/conditional reads $targetIds",
+  async ({ targetIds }) => {
+    vi.clearAllMocks()
+    const { requirePermission } = await import("@lyrashield/auth/server")
+    vi.mocked(requirePermission).mockResolvedValueOnce({
+      session: {
+        oauth: { connectionId: "conn-1", allTargets: false, allowedTargetIds: targetIds },
+      },
+    } as never)
+    scanFindFirst.mockResolvedValueOnce({ targetId: "target-2" })
+    getAiSecurityScoreSnapshot.mockResolvedValueOnce({ score: 82, breakdown: {} })
+    const response = await GET(request('"known-etag"'), routeParams)
+    expect(response.status).toBe(403)
+    expect(getAiSecurityScoreSnapshot).not.toHaveBeenCalled()
+  }
+)
+
+it.each([
+  {
+    name: "selected allowed target",
+    oauth: { connectionId: "conn-1", allTargets: false, allowedTargetIds: ["target-1"] },
+  },
+  {
+    name: "all-target connection",
+    oauth: { connectionId: "conn-1", allTargets: true, allowedTargetIds: [] },
+  },
+  { name: "browser session", oauth: undefined },
+])("preserves score and matching conditional reads for $name", async ({ oauth }) => {
+  vi.clearAllMocks()
+  const { requirePermission } = await import("@lyrashield/auth/server")
+  vi.mocked(requirePermission).mockResolvedValue({ session: { oauth } } as never)
+  scanFindFirst.mockReset().mockResolvedValue({ targetId: "target-1" })
+  getAiSecurityScoreSnapshot.mockReset().mockResolvedValue({ score: 82, breakdown: {} })
+  const first = await GET(request(), routeParams)
+  expect(first.status).toBe(200)
+  const second = await GET(request(first.headers.get("ETag")!), routeParams)
+  expect(second.status).toBe(304)
+  expect(await second.text()).toBe("")
+})
+
+it("rejects a cached score after a grant narrows to another target", async () => {
+  const { requirePermission } = await import("@lyrashield/auth/server")
+  vi.mocked(requirePermission).mockResolvedValueOnce({
+    session: { oauth: { connectionId: "conn-1", allTargets: true } },
+  } as never)
+  getAiSecurityScoreSnapshot.mockReset().mockResolvedValue({ score: 82, breakdown: {} })
+  const first = await GET(request(), routeParams)
+  expect(first.status).toBe(200)
+  vi.clearAllMocks()
+  vi.mocked(requirePermission).mockResolvedValueOnce({
+    session: {
+      oauth: { connectionId: "conn-1", allTargets: false, allowedTargetIds: ["target-1"] },
+    },
+  } as never)
+  scanFindFirst.mockResolvedValueOnce({ targetId: "target-2" })
+  const response = await GET(request(first.headers.get("ETag")!), routeParams)
+  expect(response.status).toBe(403)
+  expect(getAiSecurityScoreSnapshot).not.toHaveBeenCalled()
 })

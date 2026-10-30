@@ -1,3 +1,4 @@
+import type { PhpWork } from "./php-source-work"
 import { closingToken, splitPhpArguments, type PhpToken } from "./php-source-lexer"
 
 export type PhpContext =
@@ -102,11 +103,19 @@ export function phpExpressionFlow(
   tokens: PhpToken[],
   locals: PhpLocals,
   issues: string[],
+  work: PhpWork,
   allowBareSanitizers = true,
   depth = 0
 ): PhpFlow {
+  const key = `${tokens[0]?.position}:${tokens.at(-1)?.position}:${tokens.length}`
+  const cached = work.expressions.get(key)
+  if (cached) return new Set(cached)
+  // Reserve visits for the bounded slices, allowlist, main loop and prefix checks.
+  work.visit(tokens.length * 8)
+  const beforeNestingLimits = work.nestingLimits
   const flow: PhpFlow = new Set()
   if (depth > 32) {
+    work.nestingLimits++
     if (!issues.includes("PHP expression nesting limit reached"))
       issues.push("PHP expression nesting limit reached")
     return flow
@@ -124,6 +133,7 @@ export function phpExpressionFlow(
         tokens.slice(i + 1, end),
         locals,
         issues,
+        work,
         allowBareSanitizers,
         depth + 1
       ))
@@ -136,8 +146,16 @@ export function phpExpressionFlow(
         break
       }
       const name = token.text.toLowerCase()
+      work.visit((end - i) * 2)
       const args = splitPhpArguments(tokens.slice(i + 2, end))
-      const nested = phpExpressionFlow(args.flat(), locals, issues, allowBareSanitizers, depth + 1)
+      const nested = phpExpressionFlow(
+        args.flat(),
+        locals,
+        issues,
+        work,
+        allowBareSanitizers,
+        depth + 1
+      )
       if (
         name === "request" ||
         name === "filter_input" ||
@@ -168,6 +186,9 @@ export function phpExpressionFlow(
       }
     }
   }
+  work.visit(tokens.length)
   if (fixedShellExecutablePrefix(tokens)) flow.delete("executable")
+  // A depth-truncated result depends on the caller's depth; never reuse it elsewhere.
+  if (beforeNestingLimits === work.nestingLimits) work.expressions.set(key, new Set(flow))
   return flow
 }

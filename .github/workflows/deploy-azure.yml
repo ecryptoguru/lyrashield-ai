@@ -56,6 +56,7 @@ jobs:
     name: Validate emergency production dispatch
     if: github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
       - name: Checkout trusted main dispatch validator
         if: github.event_name == 'workflow_dispatch'
@@ -82,6 +83,7 @@ jobs:
       held_recovery_original_owner: ${{ steps.verify-held.outputs.held_recovery_original_owner }}
       held_recovery_original_source_sha: ${{ steps.verify-held.outputs.held_recovery_original_source_sha }}
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     environment:
       name: azure-production
     permissions:
@@ -119,6 +121,12 @@ jobs:
 
       - name: Ensure Container Apps extension
         run: az extension add --name containerapp --yes --only-show-errors
+
+      - name: Block automatic retry of incomplete v26 maintenance
+        env:
+          RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+          WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
+        run: bash .github/scripts/assert-no-held-v26.sh
 
       - name: Classify webhook baseline before image build
         if: inputs.held_recovery_original_run_id == ''
@@ -185,6 +193,7 @@ jobs:
       - preflight-compatible-baseline
     name: Build and push container images
     runs-on: ubuntu-24.04
+    timeout-minutes: 60
     if: ${{ !cancelled() &&
       inputs.held_recovery_original_run_id == '' &&
       github.ref == 'refs/heads/main' &&
@@ -310,6 +319,7 @@ jobs:
           tags: ${{ env.WEB_IMAGE }}:${{ env.DEPLOY_SHA }},${{ env.WEB_IMAGE }}:latest
           labels: |
             org.opencontainers.image.revision=${{ env.DEPLOY_SHA }}
+            io.lyrashield.accounting.protocol=reservations/2
           build-args: |
             BUILD_APP_URL=${{ env.APP_URL }}
             BUILD_PUBLIC_APP_URL=${{ env.SCANNER_URL }}
@@ -340,6 +350,7 @@ jobs:
           labels: |
             org.opencontainers.image.revision=${{ env.DEPLOY_SHA }}
             io.lyrashield.engine.revision=${{ env.ENGINE_REVISION }}
+            io.lyrashield.accounting.protocol=reservations/2
           cache-from: type=gha,scope=release-worker
           cache-to: type=gha,mode=max,scope=release-worker
 
@@ -360,9 +371,12 @@ jobs:
       - name: Verify pushed worker image
         run: |
           worker_ref="${{ env.WORKER_IMAGE }}@${{ steps.build-worker.outputs.digest }}"
+          web_ref="${{ env.WEB_IMAGE }}@${{ steps.build-web.outputs.digest }}"
           docker pull "$worker_ref"
           bash apps/worker/scripts/verify-worker-image.sh \
             "$worker_ref" "${{ env.DEPLOY_SHA }}" "${{ env.ENGINE_REVISION }}"
+          bash .github/scripts/verify-v26-images.sh \
+            "$web_ref" "$worker_ref" "${{ env.DEPLOY_SHA }}" "${{ env.ENGINE_REVISION }}"
 
       - name: Image digests and SBOM attestation references
         if: steps.build-worker.outcome == 'success'
@@ -410,6 +424,7 @@ jobs:
       needs.preflight-compatible-baseline.result == 'success' &&
       needs.preflight-compatible-baseline.outputs.held_recovery_verified == 'true' }}
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     permissions:
       actions: read
       contents: read
@@ -448,6 +463,7 @@ jobs:
     if: ${{ !cancelled() &&
       (needs.build.result == 'success' || needs.resolve-prepared-images.result == 'success') }}
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     outputs:
       web_image: ${{ steps.select.outputs.web_image }}
       web_digest: ${{ steps.select.outputs.web_digest }}
@@ -512,6 +528,7 @@ jobs:
     needs: [build, deploy]
     if: inputs.held_recovery_original_run_id == '' && needs.build.result == 'success' && needs.deploy.result == 'success'
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     permissions:
       packages: write
     steps:
@@ -622,6 +639,7 @@ jobs:
     permissions:
       actions: read
       contents: read
+      packages: read
       id-token: write
     uses: ./.github/workflows/deploy-azure-runtime.yml
     with:
@@ -645,6 +663,7 @@ jobs:
     needs: deploy
     if: ${{ !cancelled() && inputs.held_recovery_original_run_id != '' }}
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     permissions: {}
     steps:
       - name: Reject skipped or failed recovery deployment

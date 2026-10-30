@@ -584,3 +584,60 @@ it("preserves a verified MCP onboarding return through fresh GitHub proof", asyn
     "https://app.test/onboarding?oauth_return=signed-mcp-return&connected=github"
   )
 })
+
+it("replaying signed state with a spent provider code cannot create another integration", async () => {
+  vi.clearAllMocks()
+  exchangeInstallUserCode.mockReset()
+  const actualState = await vi.importActual<typeof import("@/lib/github-install-state")>(
+    "@/lib/github-install-state"
+  )
+  verifyInstallState.mockImplementation(actualState.verifyInstallState)
+  requirePermission.mockResolvedValue({ session: { userId: "user-1", sessionId: "session-1" } })
+  const state = actualState.createInstallState("ws-1", "integrations", Date.now(), undefined, {
+    purpose: "github-discover",
+    userId: "user-1",
+    sessionHash: createHash("sha256").update("session-1").digest("hex"),
+  })
+  exchangeInstallUserCode
+    .mockResolvedValueOnce("ephemeral")
+    .mockRejectedValueOnce(new Error("code already spent"))
+  getUserAdminInstallations.mockResolvedValue({
+    userId: 42,
+    installations: [{ id: 777, login: "acme" }],
+  })
+  getAppInstallations.mockResolvedValue([installation()])
+  integrationUpsert.mockResolvedValue({ id: "integration-once" })
+  listInstallationRepos.mockResolvedValue([])
+  const request = () =>
+    new NextRequest(
+      `https://attacker.invalid/api/integrations/github/install?state=${encodeURIComponent(state)}&code=one-use-provider-code`
+    )
+  const first = await GET(request())
+  expect(first.headers.get("location")).toBe(
+    "https://app.test/dashboard/integrations?connected=github"
+  )
+  const second = await GET(request())
+  expect(second.headers.get("location")).toBe(
+    "https://app.test/dashboard/integrations?github=verification_required"
+  )
+  expect(integrationUpsert).toHaveBeenCalledTimes(1)
+  expect(auditLogCreate).toHaveBeenCalledTimes(1)
+})
+
+it("expired real signed state fails before exchanging code or writing a binding", async () => {
+  vi.clearAllMocks()
+  const actualState = await vi.importActual<typeof import("@/lib/github-install-state")>(
+    "@/lib/github-install-state"
+  )
+  verifyInstallState.mockImplementation(actualState.verifyInstallState)
+  const state = actualState.createInstallState("ws-1", "integrations", Date.now() - 600_001)
+  const response = await GET(
+    new NextRequest(
+      `https://app.test/api/integrations/github/install?state=${encodeURIComponent(state)}&code=unused`
+    )
+  )
+  expect(response.status).toBe(400)
+  expect(exchangeInstallUserCode).not.toHaveBeenCalled()
+  expect(integrationUpsert).not.toHaveBeenCalled()
+  expect(auditLogCreate).not.toHaveBeenCalled()
+})

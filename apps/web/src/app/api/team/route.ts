@@ -1,4 +1,4 @@
-import { withCookieMutation } from "../../../lib/api-auth"
+import { withApiRequest, withCookieMutation } from "../../../lib/api-auth"
 import { NextResponse } from "next/server"
 import { prisma, withWorkspaceRLS, lockWorkspaceMembership, getSystemPrisma } from "@lyrashield/db"
 import { requirePermission, requireWorkspaceAccess } from "@lyrashield/auth/server"
@@ -190,21 +190,12 @@ async function post(request: Request) {
   try {
     body = await request.json()
   } catch {
-    return NextResponse.json(
-      {
-        success: false,
-        error: { code: "INVALID_JSON", message: "Request body must be valid JSON" },
-      },
-      { status: 400 }
-    )
+    return apiError("INVALID_JSON", "Request body must be valid JSON", 400)
   }
 
   const parsed = InviteMemberSchema.safeParse(body)
   if (!parsed.success) {
-    return NextResponse.json(
-      { success: false, error: { code: "VALIDATION_ERROR", message: parsed.error.message } },
-      { status: 400 }
-    )
+    return apiError("VALIDATION_ERROR", parsed.error.message, 400)
   }
 
   const { workspaceId, email, role } = parsed.data
@@ -217,32 +208,18 @@ async function post(request: Request) {
     // may grant anything). Without this, an ADMIN could invite a peer ADMIN or
     // otherwise escalate. (S6)
     if (!canGrantRole(workspace.role, role)) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: {
-            code: "FORBIDDEN",
-            message: "You cannot grant a role equal to or higher than your own",
-          },
-        },
-        { status: 403 }
-      )
+      return apiError("FORBIDDEN", "You cannot grant a role equal to or higher than your own", 403)
     }
 
     // Invitation creation mints a 7-day bearer token and triggers an outbound
     // email — bound it per workspace so a runaway client cannot flood either.
     const inviteRate = await checkInvitationCreateRateLimit(workspaceId)
     if (inviteRate.limited) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: {
-            code: "INVITE_RATE_LIMITED",
-            message:
-              "Too many invitations created in the last minute. Please wait a moment and try again.",
-          },
-        },
-        { status: 429, headers: { "Retry-After": String(Math.max(inviteRate.retryAfter, 1)) } }
+      return apiError(
+        "INVITE_RATE_LIMITED",
+        "Too many invitations created in the last minute. Please wait a moment and try again.",
+        429,
+        { "Retry-After": String(Math.max(inviteRate.retryAfter, 1)) }
       )
     }
 
@@ -402,14 +379,11 @@ async function post(request: Request) {
     const authErr = authErrorResponse(error)
     if (authErr) return authErr
     logger.error("Failed to invite member", { error: String(error) })
-    return NextResponse.json(
-      { success: false, error: { code: "INTERNAL_ERROR", message: "Failed to invite member" } },
-      { status: 500 }
-    )
+    return apiError("INTERNAL_ERROR", "Failed to invite member", 500)
   }
 }
 
-export async function GET(request: Request) {
+async function get(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
     const workspaceId = searchParams.get("workspaceId")
@@ -474,3 +448,5 @@ export async function GET(request: Request) {
 export const POST = withCookieMutation(post)
 export const PATCH = withCookieMutation(patch)
 export const DELETE = withCookieMutation(remove)
+
+export const GET = withApiRequest(get)

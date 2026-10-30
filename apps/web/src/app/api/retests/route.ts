@@ -1,5 +1,5 @@
 import { listRetests } from "@lyrashield/db"
-import { requirePermission } from "@lyrashield/auth/server"
+import { requirePermission, resolveOAuthReadScope } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
 import { authErrorResponse } from "../../../lib/api-auth"
@@ -16,12 +16,14 @@ export async function GET(request: Request) {
       return apiError("MISSING_PARAM", "workspaceId is required", 400)
     }
 
-    await requirePermission(workspaceId, PERMISSIONS.retest.view)
+    const { session } = await requirePermission(workspaceId, PERMISSIONS.retest.view)
+    const readScope = resolveOAuthReadScope(session)
 
     const { cursor, limit } = parsePaginationParams(searchParams)
 
     const result = await listRetests({
       workspaceId,
+      ...readScope,
       ...(findingId ? { findingId } : {}),
       ...(status ? { status } : {}),
       ...(cursor ? { cursor } : {}),

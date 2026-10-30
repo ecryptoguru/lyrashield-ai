@@ -73,6 +73,8 @@ describe("POST /api/lite-scan", () => {
         ok: true,
         json: vi.fn().mockImplementation(async () => ({
           success: true,
+          hostname: "localhost",
+          action: "lyrashield-public",
           challenge_ts: new Date().toISOString(),
         })),
       })
@@ -156,6 +158,8 @@ describe("POST /api/lite-scan", () => {
         ok: true,
         json: vi.fn().mockImplementation(async () => ({
           success: true,
+          hostname: "localhost",
+          action: "lyrashield-public",
           challenge_ts: new Date().toISOString(),
         })),
       })

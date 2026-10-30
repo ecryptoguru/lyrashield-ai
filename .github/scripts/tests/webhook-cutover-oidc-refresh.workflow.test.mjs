@@ -36,7 +36,7 @@ function foldedCondition(body) {
   return value.replace(/\s+/g, " ").trim()
 }
 
-function evaluateCondition(body, inputs, steps, failed) {
+function evaluateCondition(body, inputs, steps, failed, env = { V26_CUTOVER: "false" }) {
   const singleLine = body.match(/^        if: (.+)$/m)?.[1]
   const condition = singleLine === ">" ? foldedCondition(body) : singleLine
   assert.ok(condition, "Missing workflow condition")
@@ -48,8 +48,9 @@ function evaluateCondition(body, inputs, steps, failed) {
     "inputs",
     "steps",
     "failure",
+    "env",
     `return (${expression})`
-  )(inputs, steps, () => failed)
+  )(inputs, steps, () => failed, env)
 }
 
 test("fresh OIDC identity immediately precedes the late Key Vault verifier", () => {
@@ -99,7 +100,7 @@ test("ordinary worker promotion and failure cleanup renew the same OIDC identity
   }
   assert.match(
     promoteLogin.body,
-    /if: inputs\.held_recovery != true && inputs\.webhook_claims_cutover != true/
+    /if: \$\{\{ !cancelled\(\) && steps\.smoke-public\.outcome == 'success' && inputs\.held_recovery != true && inputs\.webhook_claims_cutover != true && env\.V26_CUTOVER != 'true' \}\}/
   )
   assert.equal(promoteLogin.index + 1, promote.index)
   assert.equal(cleanupLogin.index + 1, rollback.index)
@@ -133,6 +134,17 @@ test("a failed ordinary worker login triggers rollback and every applicable clea
       evaluateCondition(body, { held_recovery: false, webhook_claims_cutover: false }, steps, true),
       true,
       name
+    )
+    assert.equal(
+      evaluateCondition(
+        body,
+        { held_recovery: false, webhook_claims_cutover: false },
+        steps,
+        true,
+        { V26_CUTOVER: "true" }
+      ),
+      false,
+      `${name} must never run ordinary rollback during v26 maintenance`
     )
     assert.equal(
       evaluateCondition(body, { held_recovery: true, webhook_claims_cutover: false }, steps, true),
@@ -169,7 +181,13 @@ test("long cutover phases renew OIDC before VM boot, release, and archive", () =
   assert.ok(bootLogin.body.includes(mode))
   assert.equal(bootLogin.index + 1, boot.index)
   assert.ok(releaseLogin.body.includes(mode))
-  assert.equal(releaseLogin.index + 1, firstResume.index)
+  const v26Verify = step("Verify actual v26 candidate fleet with admission held")
+  const v26Release = step("Release only the exact owned v26 admission stop")
+  assert.equal(releaseLogin.index + 1, v26Verify.index)
+  assert.equal(v26Verify.index + 1, v26Release.index)
+  assert.equal(v26Release.index + 1, firstResume.index)
+  for (const candidate of [v26Verify, v26Release])
+    assert.match(candidate.body, /if: env\.V26_CUTOVER == 'true'/)
   assert.equal(firstResume.index + 1, heldRelease.index)
   assert.match(archiveLogin.body, /if: inputs\.held_recovery == true/)
   assert.equal(archiveLogin.index + 1, archive.index)

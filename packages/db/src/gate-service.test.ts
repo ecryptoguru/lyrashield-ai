@@ -162,9 +162,12 @@ describe("handleFixPrMergedAndReevaluate (WP3 loop-closure anchoring)", () => {
       await expect(
         handleFixPrMergedAndReevaluate("workspace-1", "lyrashield/fix-abc123", 42)
       ).resolves.not.toBeNull()
-      const advisoryKeys = mockPrisma.$executeRaw.mock.calls.map((call) => call[1])
+      const advisoryKeys = mockPrisma.$executeRaw.mock.calls
+        .filter((call) => String(call[0]).includes("pg_advisory_xact_lock"))
+        .map((call) => call[1])
       expect(advisoryKeys).toEqual([
         "fix-loop:workspace-1:lyrashield/fix-abc123",
+        "scan-user:owner-user",
         "fix-loop:workspace-1:lyrashield/fix-abc123",
       ])
     } finally {

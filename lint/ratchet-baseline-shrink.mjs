@@ -4,7 +4,11 @@ import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
-const baselineFiles = ["lint/size-baseline.json", "lint/serial-comma-baseline.json"]
+const baselineFiles = [
+  "lint/size-baseline.json",
+  "lint/serial-comma-baseline.json",
+  "lint/surface-size-baseline.json",
+]
 
 function compareMetrics(previous, current, label, fields) {
   const issues = []
@@ -90,7 +94,7 @@ async function run() {
     })
   }
 
-  const checks = [checkSizeBaselineShrink, checkCopyBaselineShrink]
+  const checks = [checkSizeBaselineShrink, checkCopyBaselineShrink, checkSizeBaselineShrink]
   const issues = []
   for (let index = 0; index < baselineFiles.length; index++) {
     const file = baselineFiles[index]

@@ -1,3 +1,4 @@
+import { resolveEngineBillingOutcome } from "./settlement"
 import {
   addScanEvent,
   assertEvidenceEncrypted,
@@ -595,13 +596,7 @@ export async function finalizeScanLifecycle(params: {
     // billable results, DB-only finalization must finish before money commits.
     const initialTerminalError = params.terminalErrorAfterMeter()
     await meterEngineRun(
-      budgetExceeded || initialTerminalError?.status === "STOPPED_BUDGET"
-        ? "failed"
-        : initialTerminalError?.status === "PARTIAL"
-          ? "partial"
-          : initialTerminalError
-            ? "failed"
-            : "completed",
+      resolveEngineBillingOutcome(budgetExceeded, initialTerminalError),
       async () => {
         finished = await finishEvidence()
         onDurableResult(

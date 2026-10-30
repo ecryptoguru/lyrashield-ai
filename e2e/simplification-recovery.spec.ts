@@ -172,7 +172,18 @@ test("connection recovery, concurrent onboarding and native WebMCP", async ({
       where: { userId: user.id },
     })
     expect(deletedTargetState.workspaceId).toBe(workspaceId)
-    expect(deletedTargetState.targetId).toBeNull()
+    // Rendering the recovery screen is read-only. An explicit user action
+    // persists the normalized target with optimistic concurrency protection.
+    expect(deletedTargetState.targetId).toBe(target.id)
+    await second.getByRole("button", { name: "Cursor", exact: true }).click()
+    await expect
+      .poll(async () =>
+        prisma.onboardingState.findUniqueOrThrow({
+          where: { userId: user.id },
+          select: { targetId: true, currentStep: true, buildTool: true },
+        })
+      )
+      .toEqual({ targetId: null, currentStep: 1, buildTool: "cursor" })
     await withWorkspaceRLS(workspaceId, (tx) =>
       tx.target.update({ where: { id: target.id, workspaceId }, data: { deletedAt: null } })
     )
@@ -199,11 +210,14 @@ test("connection recovery, concurrent onboarding and native WebMCP", async ({
     expect(JSON.stringify(rejected)).toMatch(/error|forbidden|access|permission/i)
     expect(await prisma.scan.count({ where: { workspaceId, targetId: target.id } })).toBe(0)
     await second.goto("/onboarding")
-    await expect(second.getByRole("heading", { name: "Add your first target" })).toBeVisible()
+    await expect(second.getByRole("heading", { name: "Choose your workspace" })).toBeVisible()
+    await expect(second.getByRole("combobox", { name: "Workspace" })).not.toContainText(
+      `Recovery ${suffix}`
+    )
     const recovered = await prisma.onboardingState.findUniqueOrThrow({ where: { userId: user.id } })
-    expect(recovered.workspaceId).toBeNull()
-    expect(recovered.targetId).toBeNull()
-    expect(recovered.currentStep).toBe(0)
+    expect(recovered.workspaceId).toBe(workspaceId)
+    expect(recovered.targetId).toBe(target.id)
+    expect(recovered.currentStep).toBe(3)
     console.info("Native WebMCP browser:", browser.version())
     await test.info().attach("native-browser", {
       body: JSON.stringify({ version: browser.version(), names, prepared, rejected }),

@@ -332,7 +332,7 @@ A repository's inclusion of bounded IaC checks does not mean standalone cloud-ac
 
 Coverage and identity sufficiency take precedence over readiness. The gate also requires scoped positive evidence or an applicable disposition for unresolved findings that would otherwise make READY unsupported. Medium/Low are not direct blocking severities, but their evidentiary state can still prevent a positive result.
 
-Historical verdicts are immutable. Applicability is evaluated separately: the assessment expires after 24 hours, and changed identity, policy, newer attempts or evidence drift can make its effective state insufficient.
+Verdicts retain a stored historical assessment. Applicability is evaluated separately: the assessment expires after 24 hours, and changed identity, policy, newer attempts or evidence drift can make its effective state insufficient.
 
 The CLI verdict gate exits `0` for READY, `1` for NOT_READY and `2` for insufficient evidence or error. This is distinct from the local severity/diff gate.
 
@@ -822,7 +822,7 @@ Named versions make interpretation traceable. They do not make a removed histori
 ## Appendix B — Glossary
 
 - **Agent-minute:** metered engine-backed elapsed time under the terminal-billing policy; not a count of findings or a provider-dollar amount.
-- **Applicability:** whether an immutable assessment can still describe the requested release and current policy/evidence.
+- **Applicability:** whether a stored historical assessment can still describe the requested release and current policy/evidence.
 - **Assessment:** a retained scope, identity and evidence record evaluated by the gate.
 - **BYOK:** supported customer-supplied provider credentials for Local/Desktop.
 - **Coverage receipt:** a recorded scanner/control observation and its limits.

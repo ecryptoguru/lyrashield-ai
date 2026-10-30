@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import { humanizeToken } from "@/lib/labels"
 import { useEffect, useRef, useState } from "react"
 import { Check, Copy, ExternalLink } from "lucide-react"
 import { Button } from "@lyrashield/ui"
@@ -116,6 +117,40 @@ function StepBody({
   )
 }
 
+function DistributionCard({ data }: { data: AgentWizardData }) {
+  return (
+    <div className="bg-card min-w-0 space-y-2 rounded-xl border p-4">
+      <h2 className="text-sm font-semibold">Distribution channel</h2>
+      <p className="text-sm">
+        State:{" "}
+        <span className="font-medium">
+          {data.distribution?.state ? humanizeToken(data.distribution.state) : "Not recorded"}
+        </span>
+      </p>
+      {data.distribution ? (
+        <p className="text-muted-foreground text-xs leading-5">
+          {humanizeToken(data.distribution.channel)}:{" "}
+          <a
+            href={data.distribution.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-foreground underline underline-offset-2 hover:no-underline"
+          >
+            view channel details
+          </a>
+        </p>
+      ) : (
+        <p className="text-muted-foreground text-xs leading-5">
+          No marketplace or direct-distribution state is recorded.
+        </p>
+      )}
+      <p className="text-muted-foreground text-xs leading-5">
+        Distribution status is separate from client compatibility.
+      </p>
+    </div>
+  )
+}
+
 export function AgentWizard({ data, docsUrl }: { data: AgentWizardData; docsUrl: string }) {
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
   const [copyError, setCopyError] = useState<string | null>(null)
@@ -152,7 +187,7 @@ export function AgentWizard({ data, docsUrl }: { data: AgentWizardData; docsUrl:
         <div className="bg-card min-w-0 space-y-2 rounded-xl border p-4">
           <h2 className="text-sm font-semibold">Compatibility evidence</h2>
           <p className="text-sm">
-            Support tier: <span className="font-medium">{data.supportTier}</span>
+            Support tier: <span className="font-medium">{humanizeToken(data.supportTier)}</span>
             {data.surface ? ` · ${data.surface} surface` : ""}
           </p>
           <p className="text-muted-foreground text-xs leading-5">
@@ -207,32 +242,7 @@ export function AgentWizard({ data, docsUrl }: { data: AgentWizardData; docsUrl:
           </p>
         </div>
 
-        <div className="bg-card min-w-0 space-y-2 rounded-xl border p-4">
-          <h2 className="text-sm font-semibold">Distribution channel</h2>
-          <p className="text-sm">
-            State: <span className="font-medium">{data.distribution?.state ?? "UNKNOWN"}</span>
-          </p>
-          {data.distribution ? (
-            <p className="text-muted-foreground text-xs leading-5">
-              {data.distribution.channel}:{" "}
-              <a
-                href={data.distribution.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-foreground underline underline-offset-2 hover:no-underline"
-              >
-                view channel details
-              </a>
-            </p>
-          ) : (
-            <p className="text-muted-foreground text-xs leading-5">
-              No marketplace or direct-distribution state is recorded.
-            </p>
-          )}
-          <p className="text-muted-foreground text-xs leading-5">
-            Distribution status is separate from client compatibility.
-          </p>
-        </div>
+        <DistributionCard data={data} />
       </section>
 
       <ol className="space-y-4">

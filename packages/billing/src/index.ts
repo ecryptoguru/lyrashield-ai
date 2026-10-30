@@ -258,3 +258,13 @@ export {
   resolveLaunchReportSigningPrivateKey,
   resolveLaunchReportSigningPublicKey,
 } from "./launch-report-keys"
+
+export {
+  ScanCapacityWaitingError,
+  startUnmeteredScanCapacity,
+  resetUnstartedScanCapacity,
+  reserveScanCapacity,
+  confirmScanCapacityStopped,
+  type ScanBillingDisposition,
+  fundedRuntimeMs,
+} from "./usage/capacity"

@@ -10,7 +10,7 @@ import {
 import { prisma } from "@lyrashield/db"
 import { PatchFindingSchema } from "@lyrashield/types"
 import { readEncryptedArtifact } from "@lyrashield/evidence-storage"
-import { requirePermission } from "@lyrashield/auth/server"
+import { requirePermission, resolveOAuthReadScope } from "@lyrashield/auth/server"
 import { PERMISSIONS, type Permission } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
 import { authErrorResponse } from "../../../../lib/api-auth"
@@ -116,14 +116,15 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       return apiError("INVALID_PARAM", "Invalid finding scope", 400)
     }
 
-    await requirePermission(workspaceId, PERMISSIONS.finding.view)
+    const { session } = await requirePermission(workspaceId, PERMISSIONS.finding.view)
+    const readScope = resolveOAuthReadScope(session, parsedScope.data.targetId)
 
-    const scope = await validateFindingScope({ workspaceId, ...parsedScope.data })
+    const scope = await validateFindingScope({ workspaceId, ...parsedScope.data, ...readScope })
     if (!scope.available) {
       return apiError("FINDING_NOT_FOUND", "Finding not found", 404)
     }
 
-    const finding = await getFinding(id, workspaceId, parsedScope.data)
+    const finding = await getFinding(id, workspaceId, { ...parsedScope.data, ...readScope })
     if (!finding) {
       return apiError("FINDING_NOT_FOUND", "Finding not found", 404)
     }

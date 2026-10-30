@@ -1,3 +1,4 @@
+import { resolveOAuthReadScope } from "../../../../../../packages/auth/src/oauth-read-scope"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
@@ -10,7 +11,10 @@ vi.mock("@lyrashield/db", () => ({
   listFixProposals: mocks.listFixProposals,
   validateFindingScope: mocks.validateFindingScope,
 }))
-vi.mock("@lyrashield/auth/server", () => ({ requirePermission: mocks.requirePermission }))
+vi.mock("@lyrashield/auth/server", () => ({
+  resolveOAuthReadScope,
+  requirePermission: mocks.requirePermission,
+}))
 vi.mock("@lyrashield/auth", () => ({ PERMISSIONS: { finding: { view: "finding:view" } } }))
 vi.mock("@lyrashield/logger", () => ({ setRequestId: vi.fn(), logger: { error: vi.fn() } }))
 
@@ -87,5 +91,46 @@ describe("GET /api/fix-proposals", () => {
       "GET"
     )
     expect(mocks.listFixProposals).not.toHaveBeenCalled()
+  })
+})
+
+describe("OAuth proposal read scope", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mocks.requirePermission.mockResolvedValue({
+      session: {
+        userId: "user-1",
+        oauth: {
+          connectionId: "conn-1",
+          allTargets: false,
+          allowedTargetIds: ["target-1"],
+        },
+      },
+    })
+    mocks.validateFindingScope.mockResolvedValue({ available: true, target: null, scanId: null })
+    mocks.listFixProposals.mockResolvedValue({ items: [], nextCursor: null })
+  })
+
+  it("rejects an explicit target outside the grant", async () => {
+    const response = await GET(
+      new Request("http://localhost/api/fix-proposals?workspaceId=ws-1&targetId=target-2")
+    )
+    expect(response.status).toBe(403)
+    expect(mocks.listFixProposals).not.toHaveBeenCalled()
+  })
+
+  it("intersects finding and pagination filters with the granted target IDs", async () => {
+    await GET(
+      new Request(
+        "http://localhost/api/fix-proposals?workspaceId=ws-1&findingId=finding-2&cursor=proposal-1"
+      )
+    )
+    expect(mocks.listFixProposals).toHaveBeenCalledWith(
+      expect.objectContaining({
+        targetIds: ["target-1"],
+        findingId: "finding-2",
+        cursor: "proposal-1",
+      })
+    )
   })
 })

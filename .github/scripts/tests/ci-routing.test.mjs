@@ -368,6 +368,28 @@ test("ops and native service tests select their dependency closure without ordin
   assert.match(runner, /: \["\.github\/scripts\/tests\/\*\.test\.mjs"\]/)
 })
 
+test("v26 accounting diagnostic changes run their isolated PostgreSQL proof", () => {
+  for (const path of [
+    ".github/scripts/v26-accounting-diagnostic.mjs",
+    ".github/scripts/tests/v26-accounting-diagnostic.test.mjs",
+    ".github/scripts/tests/v26-accounting-diagnostic.postgres.test.mjs",
+    ".github/scripts/v26-post-migration-readback.mjs",
+    ".github/scripts/tests/v26-post-migration-readback.postgres.test.mjs",
+    ".github/scripts/v26-schema-classifier.mjs",
+  ]) {
+    assert.equal(runs("Start disposable PostgreSQL and Redis", [path]), true, path)
+    assert.equal(
+      runs("Test v26 accounting diagnostic with disposable PostgreSQL", [path]),
+      true,
+      path
+    )
+  }
+  assert.equal(
+    runs("Test v26 accounting diagnostic with disposable PostgreSQL", ["README.md"]),
+    false
+  )
+})
+
 test("ops owns the webhook and Lighthouse assertions without duplicate early invocations", () => {
   const classifierJob = workflow.split("  changes:")[1].split("  app-checks:")[0]
   assert.doesNotMatch(

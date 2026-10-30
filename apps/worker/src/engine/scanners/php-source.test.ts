@@ -241,3 +241,22 @@ it.each([
 ])("retains provable global sanitizer controls: %s", (body) => {
   expect(ids(body)).toEqual([])
 })
+
+describe("PHP attribute and comment boundaries", () => {
+  it("retains one local command flow after a multiline attribute at its sink line", () => {
+    const result = scan("#[\n Example\n]\nfunction f() {}\n$x = $_GET['x'];\nsystem($x);")
+    expect(
+      result.findings.map((f) => ({ cwe: f.cwe, line: f.code_locations?.[0]?.start_line }))
+    ).toEqual([{ cwe: "CWE-78", line: 7 }])
+    expect(result.issues.join(" ")).not.toMatch(/unbalanced/)
+  })
+
+  it.each(["//", "#"])("ends %s comments at the PHP close tag, excluding HTML sinks", (comment) => {
+    const result = scan(
+      `$x = $_GET['x']; ${comment} comment ?>\nsystem($_GET['html']);\n<?php system($x);`
+    )
+    expect(
+      result.findings.map((f) => ({ cwe: f.cwe, line: f.code_locations?.[0]?.start_line }))
+    ).toEqual([{ cwe: "CWE-78", line: 4 }])
+  })
+})

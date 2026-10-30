@@ -258,34 +258,7 @@ export function FixesClient({
                   View the finding
                 </Link>
 
-                {proposal.pullRequests.length > 0 && (
-                  <div className="mt-3 space-y-1">
-                    {proposal.pullRequests.map((pr) => {
-                      const label = `${pr.repoOwner}/${pr.repoName}${pr.prNumber != null ? ` #${pr.prNumber}` : ""}`
-                      return pr.prUrl ? (
-                        <a
-                          key={pr.id}
-                          href={pr.prUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-primary inline-flex items-center gap-2 text-xs hover:underline"
-                        >
-                          <GitPullRequest className="h-3.5 w-3.5" aria-hidden="true" />
-                          {label}
-                          <ExternalLink className="h-3 w-3" aria-hidden="true" />
-                        </a>
-                      ) : (
-                        <span
-                          key={pr.id}
-                          className="text-muted-foreground inline-flex items-center gap-2 text-xs"
-                        >
-                          <GitPullRequest className="h-3.5 w-3.5" aria-hidden="true" />
-                          {label} · Link pending
-                        </span>
-                      )
-                    })}
-                  </div>
-                )}
+                <ProposalPullRequests pullRequests={proposal.pullRequests} />
               </div>
             </Card>
           ))}
@@ -303,6 +276,50 @@ export function FixesClient({
   )
 }
 
+function ProposalPullRequests({ pullRequests }: Pick<FixProposalItem, "pullRequests">) {
+  return (
+    <>
+      {pullRequests.length > 0 && (
+        <div className="mt-3 space-y-1">
+          {pullRequests.map((pr) => {
+            const label = `${pr.repoOwner}/${pr.repoName}${pr.prNumber != null ? ` #${pr.prNumber}` : ""}`
+            return pr.prUrl ? (
+              <a
+                key={pr.id}
+                href={pr.prUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary inline-flex items-center gap-2 text-xs hover:underline"
+              >
+                <GitPullRequest className="h-3.5 w-3.5" aria-hidden="true" />
+                {label}
+                <ExternalLink className="h-3 w-3" aria-hidden="true" />
+              </a>
+            ) : (
+              <span
+                key={pr.id}
+                className="text-muted-foreground inline-flex items-center gap-2 text-xs"
+              >
+                <GitPullRequest className="h-3.5 w-3.5" aria-hidden="true" />
+                {label} ·{" "}
+                {pr.status === "recovery"
+                  ? "Recovery needed"
+                  : pr.status === "opening"
+                    ? "Opening"
+                    : pr.status === "stale"
+                      ? "Stale patch"
+                      : pr.status === "failed"
+                        ? "Execution failed"
+                        : "Link pending"}
+              </span>
+            )
+          })}
+        </div>
+      )}
+    </>
+  )
+}
+
 function ProposalAction({
   proposal,
   workspaceId,
@@ -315,7 +332,12 @@ function ProposalAction({
   if (!canCreatePr || proposal.status !== "ready" || !proposal.hasStoredPatch) return null
   return (
     <div className="mt-3">
-      <CreateFixPrAction workspaceId={workspaceId} proposalId={proposal.id} prominent />
+      <CreateFixPrAction
+        workspaceId={workspaceId}
+        proposalId={proposal.id}
+        hasExecution={Boolean(proposal.pullRequests?.length)}
+        prominent
+      />
     </div>
   )
 }

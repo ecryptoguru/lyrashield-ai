@@ -158,6 +158,29 @@ for image in "$LYRASHIELD_WORKER_IMAGE" "$LYRASHIELD_SANDBOX_IMAGE"; do
   fi
 done
 
+# BEGIN GO RESOLVER QUALIFICATION
+# This public metadata-only toolchain is a release asset, never a scan-time pull.
+# The checked-in pin must match GO_RESOLVER_IMAGE; CI checks that binding.
+go_resolver_image='golang:1.26.8-alpine@sha256:8ac98ca534ac3f51e1f420a1dd2c15e74c75cfa0f23f3ad27eb5d7236c349a0c'
+if ! timeout --foreground 5s docker image inspect "$go_resolver_image" >/dev/null 2>&1; then
+  timeout --foreground 60s docker pull "$go_resolver_image" >/dev/null
+fi
+go_qualification_name="lyrashield-go-qualification-$$"
+if ! go_resolver_version=$(timeout --foreground 15s docker run --rm --pull=never --name "$go_qualification_name" \
+  --network=none --read-only --cap-drop=ALL --security-opt=no-new-privileges \
+  --user=65534:65534 --pids-limit=32 --memory=128m --cpus=1 \
+  --env GOTOOLCHAIN=local --env GOENV=off --env GOTELEMETRY=off \
+  --entrypoint go "$go_resolver_image" version); then
+  timeout --foreground 5s docker rm --force "$go_qualification_name" >/dev/null 2>&1 || true
+  echo "Pinned Go dependency resolver qualification failed" >&2
+  exit 1
+fi
+case "$go_resolver_version" in
+  'go version go1.26.8 linux/'*) ;;
+  *) echo "Pinned Go dependency resolver toolchain mismatch" >&2; exit 1 ;;
+esac
+# END GO RESOLVER QUALIFICATION
+
 worker_shared_root=/var/lib/lyrashield/worker
 # Computing the argument list here keeps the image-label provenance validation
 # ahead of the privileged shared-root chown below.
@@ -176,6 +199,19 @@ if [ -e "$cutover_receipt" ]; then
     --env TMPDIR=/tmp --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m \
     -w /app/apps/worker "$LYRASHIELD_WORKER_IMAGE" \
     node --import tsx --input-type=module -e 'import {createHash} from "node:crypto"; const [raw,image]=process.argv.slice(1); const receipt=JSON.parse(raw); const billing=await import("@lyrashield/billing"); const recovery=await import("file:///opt/lyrashield-worker-host/webhook-cutover-recovery.mjs").catch(error=>{if(error.code==="ERR_MODULE_NOT_FOUND") return null; throw error;}); if(recovery){recovery.assertWebhookCutoverWorkerIdentity({receipt,workerImage:image,productRevision:process.env.LYRASHIELD_PRODUCT_REVISION,engineRevision:process.env.LYRASHIELD_ENGINE_REVISION,workerDigest:process.env.LYRASHIELD_WORKER_IMAGE_DIGEST,protocol:billing.WEBHOOK_TRACK_CLAIM_PROTOCOL,environment:process.env});} else {const hash=value=>createHash("sha256").update(value??"").digest("hex"); const digest=image.match(/@sha256:([a-f0-9]{64})$/)?.[1]; if((receipt.recoveryCandidates??[]).length>0 || receipt.candidateWorkerImage!==image || receipt.productRevision!==process.env.LYRASHIELD_PRODUCT_REVISION || receipt.candidateProductRevision!==process.env.LYRASHIELD_PRODUCT_REVISION || receipt.candidateEngineRevision!==process.env.LYRASHIELD_ENGINE_REVISION || process.env.LYRASHIELD_WORKER_IMAGE_DIGEST!==`sha256:${digest}` || billing.WEBHOOK_TRACK_CLAIM_PROTOCOL!=="durable-claims/2" || receipt.candidateWebhookTrackClaimProtocol!=="durable-claims/2" || receipt.databaseUrlSha256!==hash(process.env.DATABASE_URL) || receipt.databaseSystemUrlSha256!==hash(process.env.DATABASE_SYSTEM_URL) || receipt.redisUrlSha256!==hash(process.env.REDIS_URL)) throw new Error("Legacy cutover worker does not match its recorded candidate");}' "$saved_cutover" "$LYRASHIELD_WORKER_IMAGE"
+fi
+
+# A held v26 receipt authorizes only its exact reservation-aware candidate.
+# Completed receipts retain the protocol floor for subsequent rollbacks.
+v26_receipt=${LYRASHIELD_V26_RECEIPT_FILE:-/var/lib/lyrashield/v26-cutover.json}
+if [ -e "$v26_receipt" ]; then
+  [ ! -L "$v26_receipt" ] && [ "$(stat -c '%u:%a' "$v26_receipt")" = 0:600 ] || exit 1
+  saved_v26=$(cat "$v26_receipt")
+  # shellcheck disable=SC2086,SC2016
+  docker run --rm --network none --env-file "$environment_file" $env_args \
+    --env TMPDIR=/tmp --tmpfs /tmp:rw,nosuid,nodev,noexec,size=64m \
+    -w /app/apps/worker "$LYRASHIELD_WORKER_IMAGE" \
+    node --import tsx --input-type=module -e 'const {assertV26WorkerIdentity}=await import("file:///opt/lyrashield-worker-host/v26-cutover-identity.mjs");const {SCAN_ACCOUNTING_PROTOCOL}=await import("@lyrashield/db");assertV26WorkerIdentity({receipt:JSON.parse(process.argv[1]),image:process.argv[2],environment:process.env,protocol:SCAN_ACCOUNTING_PROTOCOL,allowComplete:true});' "$saved_v26" "$LYRASHIELD_WORKER_IMAGE"
 fi
 
 socket_group=$(stat -c '%g' /var/run/docker.sock)

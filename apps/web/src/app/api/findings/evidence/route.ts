@@ -1,5 +1,5 @@
 import { listEvidenceFindings, validateFindingScope } from "@lyrashield/db"
-import { requirePermission } from "@lyrashield/auth/server"
+import { requirePermission, resolveOAuthReadScope } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
 import { z } from "zod"
@@ -27,11 +27,12 @@ export async function GET(request: Request) {
     }
 
     const { workspaceId, targetId, observedInScanId } = parsed.data
-    await requirePermission(workspaceId, PERMISSIONS.finding.view)
+    const { session } = await requirePermission(workspaceId, PERMISSIONS.finding.view)
+    const readScope = resolveOAuthReadScope(session, targetId)
 
     const scope = await validateFindingScope({
       workspaceId,
-      ...(targetId ? { targetId } : {}),
+      ...readScope,
       ...(observedInScanId ? { observedInScanId } : {}),
     })
     if (!scope.available) {
@@ -45,7 +46,7 @@ export async function GET(request: Request) {
     const { cursor, limit } = parsePaginationParams(searchParams, 25)
     const result = await listEvidenceFindings({
       workspaceId,
-      ...(targetId ? { targetId } : {}),
+      ...readScope,
       ...(observedInScanId ? { observedInScanId } : {}),
       ...(cursor ? { cursor } : {}),
       limit,

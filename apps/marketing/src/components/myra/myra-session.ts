@@ -65,6 +65,7 @@ interface TurnstileGlobal {
     container: HTMLElement,
     options: {
       sitekey: string
+      action?: string
       size?: "normal" | "compact" | "flexible"
       appearance?: "always" | "execute" | "interaction-only"
       execution?: "auto" | "execute"
@@ -204,6 +205,7 @@ async function requestTurnstileToken(): Promise<string | undefined> {
         const timer = setTimeout(() => settle(undefined), TURNSTILE_TIMEOUT_MS)
         widgetId = turnstile.render(host, {
           sitekey,
+          action: "lyrashield-public",
           size: "flexible",
           appearance: "interaction-only",
           execution: "execute",

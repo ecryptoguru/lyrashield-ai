@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   requirePermission: vi.fn(),
   integrationFindFirst: vi.fn(),
   listInstallationRepos: vi.fn(),
+  listInstallationReposPage: vi.fn(),
   loggerError: vi.fn(),
 }))
 
@@ -16,6 +17,7 @@ vi.mock("@lyrashield/db", () => ({
 }))
 vi.mock("@lyrashield/integrations", () => ({
   listInstallationRepos: mocks.listInstallationRepos,
+  listInstallationReposPage: mocks.listInstallationReposPage,
 }))
 vi.mock("@lyrashield/logger", () => ({ logger: { error: mocks.loggerError } }))
 
@@ -94,3 +96,24 @@ describe("GET /api/integrations/github/repos", () => {
     expect(mocks.listInstallationRepos).not.toHaveBeenCalled()
   })
 })
+
+it("opts in to a bounded provider page without changing legacy array responses", async () => {
+  mocks.requirePermission.mockResolvedValue({})
+  mocks.integrationFindFirst.mockResolvedValue({ externalId: "42" })
+  mocks.listInstallationReposPage.mockResolvedValue({ repositories: [], nextPage: 3 })
+  const response = await GET(
+    new Request("http://localhost/api/integrations/github/repos?workspaceId=ws-1&page=2")
+  )
+  expect(response.status).toBe(200)
+  expect(await response.json()).toEqual({ success: true, data: { items: [], nextPage: 3 } })
+  expect(mocks.listInstallationReposPage).toHaveBeenCalledWith(42, 2)
+})
+it.each(["0", "-1", "abc", "1.5", "10001"])(
+  "rejects invalid page %s before calling GitHub",
+  async (page) => {
+    const response = await GET(
+      new Request(`http://localhost/api/integrations/github/repos?workspaceId=ws-1&page=${page}`)
+    )
+    expect(response.status).toBe(400)
+  }
+)

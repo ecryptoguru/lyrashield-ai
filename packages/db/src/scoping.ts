@@ -126,6 +126,8 @@ export const WORKSPACE_SCOPED_MODELS = new Set<string>([
  * removed, or renamed without updating exactly one of the two sets.
  */
 export const WORKSPACE_SCOPE_EXCLUSIONS = new Set<string>([
+  "UserScanSlot", // initiating-user RLS, independent of selected workspace
+  "ScanCapacityReservation", // account-owned retained accounting
   "WorkspaceMember",
   "OnboardingState",
   "WebhookEventTrack",
@@ -152,6 +154,7 @@ export const WORKSPACE_SCOPE_EXCLUSIONS = new Set<string>([
 // into account-RLS binding exactly like BillingAccount; `workspaceId` stays
 // nullable context and is never auto-injected.
 export const ACCOUNT_OWNED_MODELS = new Set<string>([
+  "ScanCapacityReservation",
   "BillingAccount",
   "UsageRecord",
   "MinutePack",

@@ -17,6 +17,7 @@ const assertScanWorkerAvailable = vi.fn()
 const updateScanStatus = vi.fn()
 const assertScanAllowed = vi.fn()
 const findCurrentDomainProof = vi.fn()
+const isTargetRelayWorkerAvailable = vi.hoisted(() => vi.fn())
 const checkFreeUrlScanRateLimit = vi.fn()
 const checkScanCreateRateLimit = vi.fn()
 const clientIpFromRequest = vi.fn()
@@ -30,7 +31,17 @@ const prisma = {
   target: { findFirst: vi.fn() },
 }
 
+vi.mock("@lyrashield/integrations", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@lyrashield/integrations")>()),
+  isTargetRelayWorkerAvailable,
+}))
+
 vi.mock("@lyrashield/db", () => ({
+  UserScanAlreadyActiveError: class UserScanAlreadyActiveError extends Error {
+    readonly code = "SCAN_ALREADY_ACTIVE"
+  },
+  releaseUnstartedScanSlot: vi.fn().mockResolvedValue(undefined),
+
   findCurrentDomainProof,
   getFindingReference,
   createScan,
@@ -69,6 +80,7 @@ const { POST } = await import("./route")
 describe("POST /api/findings/[id]/retests", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    isTargetRelayWorkerAvailable.mockResolvedValue(true)
     requirePermission.mockResolvedValue({ session: { userId: "user-1" } })
     getFindingReference.mockResolvedValue({
       id: "finding-1",
@@ -208,6 +220,66 @@ describe("POST /api/findings/[id]/retests", () => {
     expect(createScan).not.toHaveBeenCalled()
     expect(prisma.retest.create).not.toHaveBeenCalled()
     expect(enqueueScanJob).not.toHaveBeenCalled()
+  })
+
+  it("rejects engine-backed URL retests before creating work when the relay is unavailable", async () => {
+    prisma.scan.findFirst.mockResolvedValue({
+      id: "source-scan",
+      targetId: "target-1",
+      goal: "TEST_APP",
+      mode: "STANDARD",
+      policyId: null,
+    })
+    prisma.target.findFirst.mockResolvedValue({
+      id: "target-1",
+      type: "WEB_APP",
+      url: "https://api.example.com",
+      apiSpecUrl: null,
+    })
+    findCurrentDomainProof.mockResolvedValue({ domain: "api.example.com", verified: true })
+    isTargetRelayWorkerAvailable.mockResolvedValue(false)
+    const response = await POST(
+      new Request("http://localhost/api/findings/finding-1/retests", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ workspaceId: "workspace-1" }),
+      }),
+      { params: Promise.resolve({ id: "finding-1" }) }
+    )
+    expect(response.status).toBe(503)
+    expect((await response.json()).error.code).toBe("TARGET_RELAY_UNAVAILABLE")
+    expect(createScan).not.toHaveBeenCalled()
+  })
+
+  it("keeps deterministic URL retests available without a live relay", async () => {
+    prisma.scan.findFirst.mockResolvedValue({
+      id: "source-scan",
+      targetId: "target-1",
+      goal: "TEST_APP",
+      mode: "STANDARD",
+      policyId: null,
+    })
+    prisma.findingCandidate.findMany.mockResolvedValue([{ scannerSource: "url" }])
+    prisma.target.findFirst.mockResolvedValue({
+      id: "target-1",
+      type: "WEB_APP",
+      url: "https://api.example.com",
+      apiSpecUrl: null,
+    })
+    isTargetRelayWorkerAvailable.mockResolvedValue(false)
+    const response = await POST(
+      new Request("http://localhost/api/findings/finding-1/retests", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ workspaceId: "workspace-1" }),
+      }),
+      { params: Promise.resolve({ id: "finding-1" }) }
+    )
+    expect(response.status).toBe(201)
+    expect(createScan).toHaveBeenCalledWith(
+      expect.objectContaining({ determinismMode: "targeted_scanner", mode: "SAFE" })
+    )
+    expect(isTargetRelayWorkerAvailable).not.toHaveBeenCalled()
   })
 
   it("requires current domain proof for an engine-backed URL retest", async () => {

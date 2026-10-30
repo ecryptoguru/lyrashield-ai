@@ -1,9 +1,16 @@
 // security-scan-skip-file: passive rules recognize dangerous PHP constructs
+import { setImmediate } from "node:timers/promises"
+import { PhpWork, PhpWorkLimit } from "./php-source-work"
 import type { EngineVulnerability } from "../output-parser"
-import { closingToken, splitPhpArguments, tokenizePhp, type PhpToken } from "./php-source-lexer"
+import {
+  closingToken,
+  splitPhpArguments,
+  tokenizePhpChunks,
+  type PhpToken,
+} from "./php-source-lexer"
 import { phpExpressionFlow, type PhpContext, type PhpLocals } from "./php-source-flow"
 
-export const PHP_SOURCE_RULE_VERSION = "php-source-local-flow/1.0.2"
+export const PHP_SOURCE_RULE_VERSION = "php-source-local-flow/1.0.3"
 const MAX_BYTES = 512 * 1024
 const LIMITATION =
   "PHP analysis covers bounded lexical request-to-sink and local-variable flows only; cross-file, function-return, authorization, CSRF and session behavior remain unassessed"
@@ -95,17 +102,33 @@ const RULES: Rule[] = [
   },
 ]
 
-function ruleArgument(rule: Rule, name: string, args: PhpToken[][]): PhpToken[] | undefined {
-  if (
-    rule.context === "xml" &&
-    !args
-      .slice(1)
-      .flat()
-      .some((t) => ["LIBXML_NOENT", "LIBXML_DTDLOAD"].includes(t.text))
-  )
-    return
+function ruleArgument(
+  rule: Rule,
+  name: string,
+  args: PhpToken[][],
+  work: PhpWork
+): PhpToken[] | undefined {
+  if (rule.context === "xml") {
+    let hasUnsafeFlags = false
+    // Charge even when the flags are absent and expression analysis never runs.
+    // Avoid copying/flattening overlapping nested argument suffixes.
+    for (let i = 1; i < args.length && !hasUnsafeFlags; i++) {
+      for (const token of args[i]!) {
+        work.visit()
+        if (["LIBXML_NOENT", "LIBXML_DTDLOAD"].includes(token.text)) {
+          hasUnsafeFlags = true
+          break
+        }
+      }
+    }
+    if (!hasUnsafeFlags) return
+  }
   if (rule.context === "ssrf" && name === "curl_setopt") {
-    return args[1]?.some((t) => t.text === "CURLOPT_URL") ? args[2] : undefined
+    for (const token of args[1] ?? []) {
+      work.visit()
+      if (token.text === "CURLOPT_URL") return args[2]
+    }
+    return
   }
   if (rule.context === "upload") return args[1]
   if (rule.context === "sql" && ["mysqli_query", "pg_query"].includes(name))
@@ -143,17 +166,21 @@ function commandArgumentFlows(
   args: PhpToken[][],
   locals: PhpLocals,
   issues: string[],
+  work: PhpWork,
   allowBareSanitizers: boolean
 ): boolean {
   const command = args[0] ?? []
+  // Reserve the slice, argument iteration and token writes before argv parsing.
+  work.visit(command.length * 3)
   if (command[0]?.text !== "[" || closingToken(command, 0) !== command.length - 1) {
-    const flow = phpExpressionFlow(command, locals, issues, allowBareSanitizers)
+    const flow = phpExpressionFlow(command, locals, issues, work, allowBareSanitizers)
     return flow.has("command") || flow.has("executable")
   }
   const argv = splitPhpArguments(command.slice(1, -1))
   const executable = argv[0] ?? []
   // Escaping a shell argument does not establish a trusted executable identity.
-  if (phpExpressionFlow(executable, locals, issues, allowBareSanitizers).has("path")) return true
+  if (phpExpressionFlow(executable, locals, issues, work, allowBareSanitizers).has("path"))
+    return true
   const name =
     executable.length === 1 && executable[0]?.kind === "string"
       ? executable[0].text.slice(1, -1)
@@ -162,7 +189,7 @@ function commandArgumentFlows(
     /(?:^|[\\/])(?:sh|bash|dash|zsh|ksh|fish|csh|tcsh|cmd(?:\.exe)?|powershell(?:\.exe)?|pwsh(?:\.exe)?)$/i
   // env can dispatch an attacker-selected executable, including a shell.
   if (shell.test(name ?? "") || /(?:^|[\\/])env$/.test(name ?? ""))
-    return phpExpressionFlow(command, locals, issues, allowBareSanitizers).has("path")
+    return phpExpressionFlow(command, locals, issues, work, allowBareSanitizers).has("path")
   issues.push(
     "PHP proc_open argv-array executable resolution and command-specific argument injection remain unassessed"
   )
@@ -174,10 +201,12 @@ function inspectStatement(
   locals: PhpLocals,
   path: string,
   issues: string[],
-  allowBareSanitizers: boolean
-): EngineVulnerability[] {
-  const findings: EngineVulnerability[] = []
+  work: PhpWork,
+  allowBareSanitizers: boolean,
+  findings: EngineVulnerability[]
+): void {
   for (let i = 0; i < tokens.length; i++) {
+    work.visit()
     const token = tokens[i]!
     if (token.kind !== "word") continue
     const name = token.text.toLowerCase()
@@ -211,18 +240,19 @@ function inspectStatement(
       issues.push("Unsupported unbalanced PHP sink call")
       continue
     }
+    // Account for copying the slice, visiting it and writing tokens into arguments.
+    work.visit((end - i) * 3)
     const args = hasParens ? splitPhpArguments(tokens.slice(i + 2, end)) : [tokens.slice(i + 1)]
     for (const rule of rules) {
-      const argument = ruleArgument(rule, name, args)
+      const argument = ruleArgument(rule, name, args, work)
       const flows =
         rule.context === "command"
-          ? commandArgumentFlows(args, locals, issues, allowBareSanitizers)
+          ? commandArgumentFlows(args, locals, issues, work, allowBareSanitizers)
           : argument &&
-            phpExpressionFlow(argument, locals, issues, allowBareSanitizers).has(rule.context)
+            phpExpressionFlow(argument, locals, issues, work, allowBareSanitizers).has(rule.context)
       if (flows) findings.push(buildFinding(rule, path, token))
     }
   }
-  return findings
 }
 
 function updateLocals(
@@ -230,11 +260,13 @@ function updateLocals(
   locals: PhpLocals,
   issues: string[],
   conditional: boolean,
+  work: PhpWork,
   allowBareSanitizers: boolean
 ): void {
   // An unbraced branch may assign a new value without executing on every path.
   // Strip only recognized control headers; retain the previous possible value.
   while (["if", "elseif", "else"].includes(tokens[0]?.text.toLowerCase() ?? "")) {
+    work.visit(tokens.length)
     conditional = true
     if (tokens[0]?.text.toLowerCase() === "else") tokens = tokens.slice(1)
     else {
@@ -245,7 +277,7 @@ function updateLocals(
     }
   }
   if (tokens[0]?.kind !== "variable" || !["=", ".="].includes(tokens[1]?.text ?? "")) return
-  const flow = phpExpressionFlow(tokens.slice(2), locals, issues, allowBareSanitizers)
+  const flow = phpExpressionFlow(tokens.slice(2), locals, issues, work, allowBareSanitizers)
   // Only definite straight-line replacement can remove a previous possible value.
   if (conditional || tokens[1]?.text === ".=") {
     for (const context of locals.get(tokens[0].text) ?? []) flow.add(context)
@@ -266,14 +298,15 @@ function hasCustomFunctionResolution(tokens: PhpToken[]): boolean {
   return false
 }
 
-export function analyzePhpSource(
+function* analyzePhpSourceChunks(
   source: string,
   path: string
-): { findings: EngineVulnerability[]; issues: string[] } {
+): Generator<void, { findings: EngineVulnerability[]; issues: string[] }> {
   const issues = [LIMITATION]
   if (Buffer.byteLength(source) > MAX_BYTES)
     return { findings: [], issues: [...issues, `PHP source byte limit (${MAX_BYTES}) exceeded`] }
-  const tokens = tokenizePhp(source, issues)
+  const tokens = yield* tokenizePhpChunks(source, issues)
+  const work = new PhpWork()
   const allowBareSanitizers = !hasCustomFunctionResolution(tokens)
   if (!allowBareSanitizers)
     issues.push(
@@ -286,18 +319,51 @@ export function analyzePhpSource(
   let conditionalDepth = 0
   let depth = 0
   let statementBounded = false
+  let fileBounded = false
+  const inspect = () => {
+    work.beginStatement()
+    try {
+      // Append findings as they are discovered so a later exhausted sink cannot erase them.
+      inspectStatement(statement, locals, path, issues, work, allowBareSanitizers, findings)
+      updateLocals(statement, locals, issues, conditionalDepth > 0, work, allowBareSanitizers)
+    } catch (error) {
+      if (!(error instanceof PhpWorkLimit)) throw error
+      issues.push(error.message)
+      fileBounded = error.scope === "file"
+      // An unassessed assignment cannot safely remove previous possible taint.
+    }
+  }
+  const reserveScope = (count: number) => {
+    try {
+      work.visit(count)
+      return true
+    } catch (error) {
+      if (!(error instanceof PhpWorkLimit)) throw error
+      issues.push(error.message)
+      // Scope state cannot be restored confidently after a bounded copy.
+      fileBounded = true
+      return false
+    }
+  }
+  let chunkTokens = 0
   for (const token of tokens) {
+    if (++chunkTokens >= 256) {
+      yield
+      chunkTokens = 0
+    }
     if (token.kind === "variable" && statement.at(-1)?.text === "$")
       issues.push("Unsupported PHP variable-variable flow")
     if (["(", "["].includes(token.text)) depth++
     if ([")", "]"].includes(token.text)) depth--
     if (["{", "}", ";"].includes(token.text) && depth === 0) {
       if (!statementBounded) {
-        findings.push(...inspectStatement(statement, locals, path, issues, allowBareSanitizers))
-        updateLocals(statement, locals, issues, conditionalDepth > 0, allowBareSanitizers)
+        inspect()
+        yield
+        if (fileBounded) break
       }
       if (token.text === "{") {
         const functionScope = statement.some((part) => part.text.toLowerCase() === "function")
+        if (functionScope && !reserveScope(locals.size)) break
         scopes.push({
           conditionalDepth,
           ...(functionScope ? { outerLocals: new Map(locals) } : {}),
@@ -310,6 +376,7 @@ export function analyzePhpSource(
         const scope = scopes.pop()
         conditionalDepth = scope?.conditionalDepth ?? 0
         if (scope?.outerLocals) {
+          if (!reserveScope(scope.outerLocals.size)) break
           locals.clear()
           for (const [name, flow] of scope.outerLocals) locals.set(name, flow)
         }
@@ -326,11 +393,29 @@ export function analyzePhpSource(
       issues.push("PHP statement token limit (2048) reached")
     }
   }
-  if (!statementBounded)
-    findings.push(...inspectStatement(statement, locals, path, issues, allowBareSanitizers))
+  if (!statementBounded && !fileBounded) inspect()
   if (depth !== 0) issues.push("Unsupported unbalanced PHP source syntax")
   return {
     findings: [...new Map(findings.map((f) => [f.id, f])).values()].slice(0, 100),
     issues: [...new Set(issues)],
   }
+}
+
+/** Synchronous compatibility API for small direct consumers and benchmark fixtures. */
+export function analyzePhpSource(source: string, path: string) {
+  const analysis = analyzePhpSourceChunks(source, path)
+  let step = analysis.next()
+  while (!step.done) step = analysis.next()
+  return step.value
+}
+
+/** Worker entry point: release the event loop between bounded lexical/statement chunks. */
+export async function analyzePhpSourceAsync(source: string, path: string) {
+  const analysis = analyzePhpSourceChunks(source, path)
+  let step = analysis.next()
+  while (!step.done) {
+    await setImmediate()
+    step = analysis.next()
+  }
+  return step.value
 }

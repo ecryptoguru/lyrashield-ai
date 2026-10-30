@@ -201,9 +201,7 @@ export async function verifyScanAdmission(params: {
   }
 
   if (!admissionError) {
-    const entitlement = await runWithAccountContext(scanRecord.createdById, () =>
-      evaluateScanEntitlement({ workspaceId, mode, sponsorAccountId: scanRecord.createdById })
-    )
+    const entitlement = await evaluateStoredScanEntitlement(scanRecord, workspaceId, mode)
     if (!entitlement.allowed) {
       admissionError = {
         errorCategory: entitlement.code ?? "SCAN_ENTITLEMENT_UNAVAILABLE",
@@ -223,4 +221,19 @@ export async function verifyScanAdmission(params: {
     return { ok: false, result: { status: "failed", ...admissionError } }
   }
   return { ok: true }
+}
+
+function evaluateStoredScanEntitlement(
+  scanRecord: StoredScanAuthority,
+  workspaceId: string,
+  mode: ScanJobData["mode"]
+) {
+  return runWithAccountContext(scanRecord.createdById, () =>
+    evaluateScanEntitlement({
+      workspaceId,
+      mode,
+      sponsorAccountId: scanRecord.createdById,
+      ...(scanRecord.accountingVersion === 2 ? { deferCapacityCheck: true } : {}),
+    })
+  )
 }

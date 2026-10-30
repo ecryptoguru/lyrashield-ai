@@ -4,7 +4,9 @@ export type { LogLevel, LogEntry } from "@lyrashield/logger"
 export {
   createAppJWT,
   getInstallationToken,
+  getRepositoryReadToken,
   listInstallationRepos,
+  listInstallationReposPage,
   getAppInstallations,
   exchangeInstallUserCode,
   userCanAdminInstallation,
@@ -99,6 +101,7 @@ export {
   isScanWorkerAvailable,
   assertScanWorkerAvailable,
   ScanWorkerUnavailableError,
+  ScanEnqueueNotSubmittedError,
   QueueEnqueueUncertainError,
   QUEUE_PRODUCER_TIMEOUT_MS,
   SCAN_ADMISSION_STOP_KEY,
@@ -119,3 +122,12 @@ export {
   enqueueFixGenerate,
   type FixGenerateJobData,
 } from "./queue"
+
+export { inspectFixPrRemote } from "./github-fix-pr"
+export {
+  resolveUrlReviewMode,
+  resolveAvailableUrlReview,
+  getTargetRelayAvailability,
+  TARGET_RELAY_UNAVAILABLE_MESSAGE,
+  type UrlReviewMode,
+} from "./url-review-admission"

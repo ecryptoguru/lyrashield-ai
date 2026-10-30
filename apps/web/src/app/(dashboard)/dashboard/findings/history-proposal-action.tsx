@@ -23,5 +23,11 @@ export function HistoryProposalAction({
     )
   )
     return null
-  return <CreateFixPrAction workspaceId={workspaceId} proposalId={proposal.id} />
+  return (
+    <CreateFixPrAction
+      workspaceId={workspaceId}
+      proposalId={proposal.id}
+      hasExecution={Boolean(proposal.pullRequests?.length)}
+    />
+  )
 }

@@ -66,7 +66,7 @@ describe("scanSast", () => {
     const findings = await scanSast({ repoPath: dir, workspaceDir: dir, coverageIssues })
     expect(findings.filter((f) => f.finding_class === "php_source_flow")).toHaveLength(1)
     expect(findings[0]?.dependency_metadata).toMatchObject({
-      rule_version: "php-source-local-flow/1.0.2",
+      rule_version: "php-source-local-flow/1.0.3",
     })
     expect(coverageIssues).toContainEqual(
       expect.objectContaining({ scanner: "sast", status: "partial", subject: "public/run.php" })
@@ -261,6 +261,23 @@ describe("scanSast", () => {
     expect(discovery.sast?.skippedByReason.unreadable).toBe(1)
     expect(coverageIssues).toContainEqual(
       expect.objectContaining({ scanner: "sast", status: "partial" })
+    )
+  })
+
+  it("checks the actual bytes again before parsing a file that grew after discovery", async () => {
+    const dir = await setupRepo({ "endpoint.php": "<?php // small at discovery" })
+    vi.mocked(fsPromises.readFile).mockResolvedValueOnce(
+      "<?php " + " ".repeat(524_288) + 'system($_GET["x"]);'
+    )
+    const coverageIssues: import("../scanner-coverage").ScannerCoverageIssue[] = []
+    const discovery: import("../scanner-coverage").ScannerDiscovery = {}
+    expect(await scanSast({ repoPath: dir, workspaceDir: dir, coverageIssues, discovery })).toEqual(
+      []
+    )
+    expect(discovery.sast?.filesScanned).toBe(0)
+    expect(discovery.sast?.skippedByReason.oversized).toBe(1)
+    expect(coverageIssues).toContainEqual(
+      expect.objectContaining({ scanner: "sast", status: "bounded", subject: "endpoint.php" })
     )
   })
 

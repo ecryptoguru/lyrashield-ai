@@ -1,3 +1,4 @@
+import { selectFixedVersion } from "./advisory-fixed-version"
 import { z } from "zod"
 import { logger } from "@lyrashield/logger"
 import { hydrateOsvDetails, OsvVulnerabilitySchema, type AdvisoryBatchResult } from "@lyrashield/db"
@@ -173,70 +174,6 @@ function extractCveId(vuln: OsvVulnerability): string | undefined {
   return vuln.references?.find((r) => r.url.includes("CVE-"))?.url.match(/CVE-\d{4}-\d+/)?.[0]
 }
 
-function stableRelease(version: string, allowPartial = false): number[] | undefined {
-  const parts = version.replace(/^v/, "").split(".")
-  if (
-    parts.length > 3 ||
-    parts.length < (allowPartial ? 1 : 3) ||
-    !parts.every((part) => /^\d{1,6}$/.test(part))
-  )
-    return undefined
-  return [Number(parts[0]), Number(parts[1] ?? 0), Number(parts[2] ?? 0)]
-}
-
-function compareRelease(left: number[], right: number[]): number {
-  for (let i = 0; i < 3; i++) {
-    const delta = left[i]! - right[i]!
-    if (delta) return delta
-  }
-  return 0
-}
-/** Only a fixed interval containing the exact installed Composer release is actionable. */
-function composerFixedVersion(vuln: OsvVulnerability, dependency: Dependency): string | undefined {
-  const installed = stableRelease(dependency.version)
-  if (!installed) return undefined
-  const fixes: string[] = []
-  for (const affected of vuln.affected ?? []) {
-    if (
-      affected.package &&
-      (affected.package.name !== dependency.name || affected.package.ecosystem !== "Packagist")
-    )
-      continue
-    for (const range of affected.ranges ?? []) {
-      if (range.type && !["SEMVER", "ECOSYSTEM"].includes(range.type)) continue
-      let introduced: number[] | undefined = [0, 0, 0]
-      for (const event of range.events) {
-        if (event.introduced !== undefined)
-          introduced = event.introduced === "0" ? [0, 0, 0] : stableRelease(event.introduced, true)
-        if (event.fixed !== undefined) {
-          const fixed = stableRelease(event.fixed)
-          if (
-            introduced &&
-            fixed &&
-            compareRelease(installed, introduced) >= 0 &&
-            compareRelease(installed, fixed) < 0
-          )
-            fixes.push(event.fixed)
-          introduced = undefined
-        }
-        if (event.last_affected !== undefined) introduced = undefined
-      }
-    }
-  }
-  return fixes.sort((left, right) => compareRelease(stableRelease(left)!, stableRelease(right)!))[0]
-}
-
-function extractFixedVersion(vuln: OsvVulnerability): string | undefined {
-  for (const affected of vuln.affected ?? []) {
-    for (const range of affected.ranges ?? []) {
-      for (const event of range.events) {
-        if (event.fixed) return event.fixed
-      }
-    }
-  }
-  return undefined
-}
-
 function formatThreatPriority(signal: ThreatSignal | undefined): string | null {
   if (!signal) return null
   const parts: string[] = []
@@ -331,8 +268,7 @@ export async function scanSca(config: ScaScanConfig): Promise<EngineVulnerabilit
       const severity = mapOsvSeverity(vuln)
       const advisoryCvss = osvCvss(vuln.severity)
       const cve = extractCveId(vuln)
-      const fixedVersion =
-        dep.ecosystem === "Packagist" ? composerFixedVersion(vuln, dep) : extractFixedVersion(vuln)
+      const fixedVersion = selectFixedVersion(vuln, dep)
 
       findings.push({
         id: vuln.id,
@@ -371,8 +307,8 @@ export async function scanSca(config: ScaScanConfig): Promise<EngineVulnerabilit
           `The dependency ${dep.name}@${dep.version} is affected by ${vuln.id}.`,
         impact: `The package ${dep.name}@${dep.version} has a known vulnerability (${vuln.id}). If this package is used in a production code path, it may expose the application to attack.`,
         remediation_steps: fixedVersion
-          ? `Upgrade ${dep.name} to version ${fixedVersion} or later. Update the dependency in ${dep.filePath}.`
-          : `Review ${vuln.id} for ${dep.name}@${dep.version}. No fix version is available — consider replacing the dependency or applying a workaround.`,
+          ? `Upgrade ${dep.name} to version ${fixedVersion} after reviewing compatibility and the advisory. Update the dependency in ${dep.filePath}.`
+          : `Review ${vuln.id} for ${dep.name}@${dep.version}. An automatic upgrade recommendation could not be established; review available fixes and workarounds.`,
         poc_description: `Check ${dep.name}@${dep.version} against the OSV database. Vulnerability ${vuln.id} is listed as affecting this version.`,
       })
     }

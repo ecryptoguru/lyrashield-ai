@@ -837,6 +837,8 @@ model Scan {
   determinismMode               String?    @default("default")
   durationMs                    Int?
   finalizationStartedAt         DateTime?
+  accountingVersion             Int?
+  accountingSettledAt           DateTime?
   // Immutable server-owned execution plan snapshot + its canonical-JSON sha256.
   // Written once at creation; NULL on scans created before the column existed.
   executionPlan                 Json?
@@ -1192,19 +1194,26 @@ model FixProposal {
 }
 
 model PullRequest {
-  id            String    @id @default(cuid())
-  fixProposalId String
-  provider      String
-  repoOwner     String
-  repoName      String
-  branchName    String
-  prNumber      Int?
-  prUrl         String?
-  status        String    @default("open")
-  deletedAt     DateTime?
-  createdAt     DateTime  @default(now())
-  mergedAt      DateTime?
-  closedAt      DateTime?
+  /// Durable proposal/repository/base/patch identity; independent of approvals and actors.
+  executionKey    String?   @unique
+  baseCommit      String?
+  diffChecksum    String?
+  approvalId      String?
+  requestedById   String?
+  credentialActor Json?
+  id              String    @id @default(cuid())
+  fixProposalId   String
+  provider        String
+  repoOwner       String
+  repoName        String
+  branchName      String
+  prNumber        Int?
+  prUrl           String?
+  status          String    @default("open")
+  deletedAt       DateTime?
+  createdAt       DateTime  @default(now())
+  mergedAt        DateTime?
+  closedAt        DateTime?
 
   fixProposal FixProposal @relation(fields: [fixProposalId], references: [id], onDelete: Cascade)
 
@@ -1635,19 +1644,22 @@ model Notification {
 }
 
 model Schedule {
-  id          String    @id @default(cuid())
-  workspaceId String
-  targetId    String
-  cron        String
-  goal        ScanGoal
-  mode        ScanMode  @default(SAFE)
-  enabled     Boolean   @default(true)
-  lastRunAt   DateTime?
-  nextRunAt   DateTime?
-  createdById String
-  deletedAt   DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id                String    @id @default(cuid())
+  workspaceId       String
+  targetId          String
+  cron              String
+  goal              ScanGoal
+  mode              ScanMode  @default(SAFE)
+  enabled           Boolean   @default(true)
+  lastRunAt         DateTime?
+  nextRunAt         DateTime?
+  lastScanId        String?
+  lastBlockedAt     DateTime?
+  lastBlockedReason String?   @db.VarChar(64)
+  createdById       String
+  deletedAt         DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   target    Target    @relation(fields: [targetId], references: [id], onDelete: Cascade)
@@ -2899,4 +2911,41 @@ model MyraGenerationReservation {
   @@index([monthStart, status])
   @@index([status, createdAt])
   @@map("myra_generation_reservations")
+}
+
+// Durable initiating-user admission; no expiry can authorize overlapping execution.
+model UserScanSlot {
+  userId      String   @id
+  scanId      String   @unique
+  workspaceId String
+  createdAt   DateTime @default(now())
+}
+
+// Retained account-owned funding receipt. No cascading FK: deletion must not erase accounting.
+model ScanCapacityReservation {
+  scanId             String   @id
+  accountId          String
+  workspaceId        String
+  userId             String
+  state              String   @default("WAITING")
+  accountingVersion  Int      @default(2)
+  multiplier         Int
+  cycleStart         DateTime?
+  billingAccountId   String?
+  poolMinutes        Int      @default(0)
+  packMinutes        Int      @default(0)
+  packAllocations    Json     @default("[]")
+  graceMinutes       Int      @default(0)
+  overageMinutes     Int      @default(0)
+  fundedMinutes      Int      @default(0)
+  runtimeLimitMs     Int      @default(0)
+  observedMs         Int      @default(0)
+  chargedMinutes     Int      @default(0)
+  absorbedMinutes    Int      @default(0)
+  stoppedAt          DateTime?
+  settledAt          DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([accountId, state, createdAt, scanId])
 }

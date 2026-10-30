@@ -35,7 +35,11 @@ const server = await createServer({
     dedupe: ["react", "react-dom"],
   },
   oxc: { jsx: { runtime: "automatic" } },
-  server: { host: "127.0.0.1", port: 3101, strictPort: true },
+  server: {
+    host: "127.0.0.1",
+    port: Number(process.env.BROWSER_HARNESS_PORT ?? 3101),
+    strictPort: true,
+  },
 })
 // The first desktop page pays a cold Tailwind transform that exceeds Playwright's
 // default assertion timeout. Warm it before the browser harness reports ready.

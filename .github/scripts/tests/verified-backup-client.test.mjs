@@ -134,7 +134,7 @@ const mount=args[args.indexOf('--mount')+1];
 assert.equal(mount,'type=bind,source='+process.env.EXPECTED_ROOT_CA_PATH+',target=/tmp/supabase-root-2021-ca.crt,readonly');
 const ca=new X509Certificate(fs.readFileSync(process.env.EXPECTED_ROOT_CA_PATH));
 assert.equal(ca.fingerprint256.replaceAll(':','').toLowerCase(),process.env.EXPECTED_ROOT_CA_FINGERPRINT);
-const url=new URL(args[args.indexOf('--env')+1].slice('PG_URL='.length));
+assert.equal(args[args.indexOf('--env')+1],'PG_URL');assert.ok(!args.some(arg=>arg.includes(process.env.PG_URL)));const url=new URL(process.env.PG_URL);
 assert.equal(url.href,process.env.EXPECTED_LIBPQ_URL);
 assert.equal(url.searchParams.get('sslmode'),'verify-full');
 assert.equal(url.searchParams.get('sslrootcert'),'/tmp/supabase-root-2021-ca.crt');

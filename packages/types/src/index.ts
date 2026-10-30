@@ -712,3 +712,11 @@ export * from "./plain-language"
 // service imports it through the package root.
 export * from "./scan-attachments"
 export * from "./scan-quality"
+
+export {
+  resolveUrlReviewMode,
+  resolveUrlReviewAvailability,
+  TARGET_RELAY_UNAVAILABLE_MESSAGE,
+  type UrlReviewMode,
+} from "./url-review-admission"
+export { DEPENDENCY_RESOLUTION_CAPABILITIES } from "./dependency-capabilities"

@@ -2,6 +2,7 @@
   "schemaVersion": 1,
   "catalogVersion": "php-maintainers-2026-10-23.1",
   "asOf": "2026-10-23",
+  "endOfLifeBeforeBranch": "8.2",
   "lifecycleSource": "https://www.php.net/supported-versions.php",
   "supportedBranches": ["8.2", "8.3", "8.4", "8.5"],
   "advisories": [

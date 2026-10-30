@@ -156,7 +156,16 @@ for (const scenario of [
       (call) => call.command === "docker" && call.args[0] === "run" && call.args.includes("-d")
     )
     assert.equal(Boolean(launch), ["valid", "restore failure"].includes(scenario))
-    if (launch) assert.equal(launch.args[launch.args.indexOf("-p") + 1], "127.0.0.1:5433:5432")
+    if (launch) {
+      assert.equal(launch.args[launch.args.indexOf("-p") + 1], "127.0.0.1:5433:5432")
+      const password = readFileSync(join(f.directory, "restore-db-password"), "utf8")
+      assert.match(password, /^[a-f0-9]{64}$/)
+      assert.equal(
+        launch.args.some((arg) => arg.includes(password)),
+        false
+      )
+      assert.equal(readFileSync(join(f.root, "github-env"), "utf8").includes(password), false)
+    }
     const restore = calls.find(
       (call) =>
         call.command === "docker" &&
@@ -346,8 +355,8 @@ test("opt-in reviewed-source binding runs the actual guard and rejects expanded 
   assert.match(workflow, /isolated_restore:\n[\s\S]*?default: false/)
   assert.match(step("Retain last N days of backups"), /if: \$\{\{ !inputs\.isolated_restore \}\}/)
   assert.match(workflow, /github\.event_name == 'workflow_dispatch' && inputs\.isolated_restore/)
-  assert.match(workflow, /timeout-minutes: \$\{\{ inputs\.isolated_restore && 20 \|\| 360 \}\}/)
-  assert.match(workflow, /timeout-minutes: \$\{\{ inputs\.isolated_restore && 25 \|\| 360 \}\}/)
+  assert.match(workflow, /timeout-minutes: \$\{\{ inputs\.isolated_restore && 20 \|\| 60 \}\}/)
+  assert.match(workflow, /timeout-minutes: \$\{\{ inputs\.isolated_restore && 25 \|\| 45 \}\}/)
 })
 
 test("sensitive phases capture logs before work; exact-object linkage and digest-only artifacts remain", () => {
@@ -383,16 +392,20 @@ test("sensitive phases capture logs before work; exact-object linkage and digest
     /BACKUP_ENCRYPTED_SHA256: \$\{\{ needs\.backup\.outputs\.encrypted_sha256 \}\}/
   )
   assert.match(workflow, /BACKUP_DUMP_SHA256: \$\{\{ needs\.backup\.outputs\.dump_sha256 \}\}/)
-  assert.match(workflow, /-p "\$\{ISOLATED_RESTORE_BIND:-\}5433:5432"/)
-  assert.match(workflow, /-p "\$\{ISOLATED_RESTORE_BIND:-\}6379:6379"/)
+  assert.match(workflow, /-p "\$\{ISOLATED_RESTORE_BIND:-127\.0\.0\.1:\}5433:5432"/)
+  assert.match(workflow, /-p "\$\{ISOLATED_RESTORE_BIND:-127\.0\.0\.1:\}6379:6379"/)
   assert.match(workflow, /web_command=\(setsid bash -c/)
   assert.match(workflow, /exec pnpm[^\n]*--hostname 127\.0\.0\.1/)
   assert.match(workflow, /isolated-restore-private\.sh record-web "\$\$" \|\| exit 1/)
-  for (const name of [
-    "Remove private isolated backup files",
-    "Remove private isolated restore files and process group",
-  ])
-    assert.match(step(name), /always\(\) && inputs\.isolated_restore/)
+  assert.match(
+    step("Remove private isolated backup files"),
+    /always\(\) && inputs\.isolated_restore/
+  )
+  assert.match(step("Remove private isolated restore files and process group"), /always\(\)/)
+  assert.doesNotMatch(
+    step("Prepare private isolated restore files"),
+    /if: inputs\.isolated_restore/
+  )
   const artifact = step("Publish digest-only restore provenance")
   assert.match(artifact, /path: \$\{\{ runner\.temp \}\}\/webhook-empty-state-restore-proof\.json/)
   assert.doesNotMatch(artifact, /audit\.json|backup\.dump|private-operation\.log|restore-web\.log/)
@@ -400,14 +413,8 @@ test("sensitive phases capture logs before work; exact-object linkage and digest
 
 test("first isolated container removal deletes anonymous restored-data volumes", () => {
   const firstCleanup = step("Clean up isolated restore services")
-  assert.match(
-    firstCleanup,
-    /if \[ "\$ISOLATED_RESTORE" = true \]; then\n[\s\S]*?docker rm -fv lyrashield-restore-postgres lyrashield-restore-redis/
-  )
-  assert.match(
-    firstCleanup,
-    /else\n\s+docker rm -f lyrashield-restore-postgres lyrashield-restore-redis/
-  )
+  assert.match(firstCleanup, /docker rm -fv lyrashield-restore-postgres lyrashield-restore-redis/)
+  assert.doesNotMatch(firstCleanup, /else\n\s+docker rm -f /)
   assert.ok(
     workflow.indexOf("Clean up isolated restore services") <
       workflow.indexOf("Remove private isolated restore files and process group")

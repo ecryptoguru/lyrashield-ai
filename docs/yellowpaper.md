@@ -511,7 +511,7 @@ Non-coverage remains disclosed even when it is outside required families. READY 
 
 The assessment snapshot retains scan identity, completed time, manifest checksum/version, policy fingerprint and a commit/artifact identity. Gate assessment version is 2.
 
-Applicability checks are separate from immutable history:
+Applicability checks are separate from the stored historical assessment:
 
 | Reason code              | Condition                                                 |
 | ------------------------ | --------------------------------------------------------- |
@@ -968,7 +968,7 @@ Operation access stays bound to the originating principal. Do not substitute a n
 - **Coverage family:** scanner execution class whose required receipt depends on target/profile.
 - **Exact checksum input:** original persisted JSON text, not a new JSONB serialization.
 - **Execution provenance:** product revision, immutable worker digest and engine revision bound to the result.
-- **Effective state:** current applicability result over immutable historical verdict.
+- **Effective state:** current applicability result over the stored historical assessment.
 - **Finding lifecycle:** issue/remediation workflow state, not verification tier.
 - **Idempotency key:** caller-retained request identity for identical retries, not an authorization grant.
 - **Model-declared scope:** bounded engine metadata, not independent coverage measurement.

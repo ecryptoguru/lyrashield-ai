@@ -1,7 +1,11 @@
 import { recordedOperation } from "@/lib/recorded-operation"
 import { withCookieMutation } from "../../../lib/api-auth"
 import { listReports, createReport, prisma } from "@lyrashield/db"
-import { assertOAuthDelegatedScope, requirePermission } from "@lyrashield/auth/server"
+import {
+  assertOAuthDelegatedScope,
+  requirePermission,
+  resolveOAuthReadScope,
+} from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
 import { authErrorResponse } from "../../../lib/api-auth"
@@ -19,10 +23,16 @@ export async function GET(request: Request) {
       return apiError("MISSING_PARAM", "workspaceId is required", 400)
     }
 
-    await requirePermission(workspaceId, PERMISSIONS.report.download)
+    const { session } = await requirePermission(workspaceId, PERMISSIONS.report.download)
+    const readScope = resolveOAuthReadScope(session)
 
     const { cursor, limit } = parsePaginationParams(searchParams)
-    const { items, nextCursor } = await listReports(workspaceId, cursor ?? undefined, limit)
+    const { items, nextCursor } = await listReports(
+      workspaceId,
+      cursor ?? undefined,
+      limit,
+      readScope.targetIds
+    )
 
     // W2.4: the report list keeps the paginated envelope, but its ETag is
     // bound to the serialized representation so a matching conditional GET

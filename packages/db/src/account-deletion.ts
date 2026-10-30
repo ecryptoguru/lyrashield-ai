@@ -1,3 +1,4 @@
+import { hasUserScanSlot, hasSponsoredCapacityHold, unsettledScanWhere } from "./scan-slot"
 import { createId } from "@paralleldrive/cuid2"
 import { prisma } from "./client"
 import { computeAuditHash } from "./audit-hash"
@@ -318,6 +319,7 @@ export async function deleteUserAccount(
 
   const deletionResult = await prisma.$transaction(
     async (tx) => {
+      if (await hasUserScanSlot(tx, userId)) throw new AccountDeletionActiveScanError([])
       // The preview is advisory. Lock every affected workspace in a stable order,
       // then reclassify ownership before any deletion or attribution mutation.
       const lockedPlan: AccountDeletionPlan = { deletable: [], blocked: [], retained: [] }
@@ -386,11 +388,7 @@ export async function deleteUserAccount(
         const [activeScans, evidence, legacyReports, legacySarifScans, attachments] =
           await Promise.all([
             tx.scan.count({
-              where: {
-                workspaceId: workspace.id,
-                deletedAt: null,
-                status: { in: ACTIVE_SCAN_STATUSES },
-              },
+              where: unsettledScanWhere(workspace.id, ACTIVE_SCAN_STATUSES),
             }),
             tx.evidence.findMany({
               where: { finding: { workspaceId: workspace.id } },
@@ -423,6 +421,8 @@ export async function deleteUserAccount(
         await stageIntegrations(tx, workspace, integrationUris, unsupportedArtifactWorkspaces)
       }
 
+      if (await hasSponsoredCapacityHold(tx, userId))
+        throw new AccountDeletionActiveScanError(activeScanWorkspaces)
       if (activeScanWorkspaces.length > 0) {
         throw new AccountDeletionActiveScanError(activeScanWorkspaces)
       }

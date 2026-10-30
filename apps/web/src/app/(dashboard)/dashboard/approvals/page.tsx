@@ -1,3 +1,5 @@
+import Link from "next/link"
+import { z } from "zod"
 import type { Metadata } from "next"
 import { getCachedSession, getCachedWorkspaceId, getCachedWorkspaces } from "@/lib/cache"
 import { listApprovals, listRecentAgentOperations, withWorkspaceRLS } from "@lyrashield/db"
@@ -13,7 +15,17 @@ export const metadata: Metadata = {
   title: "Activity",
 }
 
-export default async function ApprovalsPage() {
+export default async function ApprovalsPage({
+  searchParams,
+}: { searchParams?: Promise<{ approvalsCursor?: string; operationsCursor?: string }> } = {}) {
+  const query = await searchParams
+  const cursorSchema = z
+    .string()
+    .min(1)
+    .max(128)
+    .regex(/^[a-zA-Z0-9_-]+$/)
+  const approvalsCursor = cursorSchema.safeParse(query?.approvalsCursor)
+  const operationsCursor = cursorSchema.safeParse(query?.operationsCursor)
   const session = await getCachedSession()
   if (!session) return null
 
@@ -56,8 +68,13 @@ export default async function ApprovalsPage() {
 
   const [approvals, hasProposals, operations] = await Promise.all([
     workspaceId
-      ? listApprovals({ workspaceId, status: "PENDING", limit: 50 }).then((r) => r.items)
-      : [],
+      ? listApprovals({
+          workspaceId,
+          status: "PENDING",
+          limit: 50,
+          ...(approvalsCursor.success ? { cursor: approvalsCursor.data } : {}),
+        })
+      : { items: [], nextCursor: null },
     workspaceId
       ? withWorkspaceRLS(workspaceId, (tx) =>
           tx.fixProposal.count({
@@ -69,7 +86,11 @@ export default async function ApprovalsPage() {
           })
         ).then((count) => count > 0)
       : false,
-    listRecentAgentOperations(workspaceId, 20),
+    listRecentAgentOperations(
+      workspaceId,
+      21,
+      operationsCursor.success ? operationsCursor.data : undefined
+    ),
   ])
 
   return (
@@ -80,15 +101,42 @@ export default async function ApprovalsPage() {
       />
 
       <ApprovalsClient
+        pendingCursor={approvalsCursor.success ? approvalsCursor.data : null}
         workspaceId={workspaceId}
         canDecide={!!active && hasPermission(active.role as MemberRole, PERMISSIONS.agent.approve)}
         canApproveFix={
           !!active && hasPermission(active.role as MemberRole, PERMISSIONS.fix.approve)
         }
-        approvals={approvals}
+        approvals={approvals.items}
         hasProposals={hasProposals}
-        operations={operations}
+        operations={operations.slice(0, 20)}
       />
+      <nav aria-label="Activity pages" className="mt-6 flex flex-wrap gap-4 text-sm">
+        {approvals.nextCursor && (
+          <Link
+            className="text-primary min-h-11 inline-flex items-center underline underline-offset-4"
+            href={`/dashboard/approvals?${new URLSearchParams({ approvalsCursor: approvals.nextCursor, ...(operationsCursor.success ? { operationsCursor: operationsCursor.data } : {}) })}`}
+          >
+            More pending approvals
+          </Link>
+        )}
+        {operations.length > 20 && (
+          <Link
+            className="text-primary min-h-11 inline-flex items-center underline underline-offset-4"
+            href={`/dashboard/approvals?${new URLSearchParams({ operationsCursor: operations[19]!.id, ...(approvalsCursor.success ? { approvalsCursor: approvalsCursor.data } : {}) })}`}
+          >
+            Older operations
+          </Link>
+        )}
+        {(approvalsCursor.success || operationsCursor.success) && (
+          <Link
+            className="text-primary min-h-11 inline-flex items-center underline underline-offset-4"
+            href="/dashboard/approvals"
+          >
+            Latest activity
+          </Link>
+        )}
+      </nav>
     </div>
   )
 }

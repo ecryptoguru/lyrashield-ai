@@ -180,13 +180,19 @@ describe("worker Docker runtime", () => {
       .slice(1)
       .find((step) => step.startsWith("Deactivate superseded Container App revisions\n"))
     expect(housekeepingStep).toBeDefined()
+    expect(housekeepingStep).toContain("id: revision-cleanup")
+    expect(housekeepingStep).toContain("continue-on-error: true")
     expect(housekeepingStep).toContain(
-      'bash .github/scripts/deploy-azure-rollout.sh deactivate-superseded-container-app-revisions || echo "::warning::Deactivate superseded Container App revisions failed; production traffic remains active."'
+      "run: bash .github/scripts/deploy-azure-rollout.sh deactivate-superseded-container-app-revisions"
     )
-    expect(housekeepingStep).toContain(
-      'bash .github/scripts/deploy-azure-rollout.sh remove-excess-scanner-secrets || echo "::warning::Remove excess scanner secrets failed; the promoted scanner revision remains active."'
-    )
-    expect(housekeepingStep).not.toContain("continue-on-error: true")
+    expect(housekeepingStep).not.toContain("remove-excess-scanner-secrets")
+    const secretCleanupStep = deployRuntimeWorkflow
+      .split(/^      - name: /m)
+      .slice(1)
+      .find((step) => step.includes("id: scanner-secret-removal"))
+    expect(secretCleanupStep).toBeDefined()
+    expect(secretCleanupStep).toContain("remove-excess-scanner-secrets")
+    expect(secretCleanupStep).not.toContain("continue-on-error: true")
     const runtimeCheckouts = deployRuntimeWorkflow.match(/uses: actions\/checkout@/g) ?? []
     const runtimeCheckoutsWithoutPersistedCredentials =
       deployRuntimeWorkflow.match(/persist-credentials: false/g) ?? []

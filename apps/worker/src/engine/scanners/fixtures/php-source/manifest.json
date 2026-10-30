@@ -1,115 +1,209 @@
 {
   "schema": 1,
-  "ruleVersion": "php-source-local-flow/1.0.2",
+  "ruleVersion": "php-source-local-flow/1.0.3",
   "scope": "Passive built-in PHP lexical/local-variable rules only. These controls are rule-specific; a quiet patched fixture is not proof of whole-application safety. No Semgrep, Trivy or engine benchmark was run.",
   "cases": [
     {
       "file": "command.vulnerable.php",
       "expectedCwes": ["CWE-78"],
-      "kind": "vulnerable"
+      "kind": "vulnerable",
+      "expectedSinks": [
+        {
+          "cwe": "CWE-78",
+          "line": 5
+        }
+      ]
     },
     {
       "file": "command.patched.php",
       "expectedCwes": [],
-      "kind": "patched"
+      "kind": "patched",
+      "expectedSinks": []
     },
     {
       "file": "pdo-query.vulnerable.php",
       "expectedCwes": ["CWE-89"],
-      "kind": "vulnerable"
+      "kind": "vulnerable",
+      "expectedSinks": [
+        {
+          "cwe": "CWE-89",
+          "line": 5
+        }
+      ]
     },
     {
       "file": "pdo-query.patched.php",
       "expectedCwes": [],
-      "kind": "patched"
+      "kind": "patched",
+      "expectedSinks": []
     },
     {
       "file": "state-deserialization.vulnerable.php",
       "expectedCwes": ["CWE-502"],
-      "kind": "vulnerable"
+      "kind": "vulnerable",
+      "expectedSinks": [
+        {
+          "cwe": "CWE-502",
+          "line": 4
+        }
+      ]
     },
     {
       "file": "state-deserialization.patched.php",
       "expectedCwes": [],
-      "kind": "patched"
+      "kind": "patched",
+      "expectedSinks": []
     },
     {
       "file": "page-include.vulnerable.php",
       "expectedCwes": ["CWE-98"],
-      "kind": "vulnerable"
+      "kind": "vulnerable",
+      "expectedSinks": [
+        {
+          "cwe": "CWE-98",
+          "line": 4
+        }
+      ]
     },
     {
       "file": "page-include.patched.php",
       "expectedCwes": [],
-      "kind": "patched"
+      "kind": "patched",
+      "expectedSinks": []
     },
     {
       "file": "download-path.vulnerable.php",
       "expectedCwes": ["CWE-22"],
-      "kind": "vulnerable"
+      "kind": "vulnerable",
+      "expectedSinks": [
+        {
+          "cwe": "CWE-22",
+          "line": 4
+        }
+      ]
     },
     {
       "file": "download-path.patched.php",
       "expectedCwes": [],
-      "kind": "patched"
+      "kind": "patched",
+      "expectedSinks": []
     },
     {
       "file": "upload-destination.vulnerable.php",
       "expectedCwes": ["CWE-434"],
-      "kind": "vulnerable"
+      "kind": "vulnerable",
+      "expectedSinks": [
+        {
+          "cwe": "CWE-434",
+          "line": 4
+        }
+      ]
     },
     {
       "file": "upload-destination.patched.php",
       "expectedCwes": [],
-      "kind": "patched"
+      "kind": "patched",
+      "expectedSinks": []
     },
     {
       "file": "xml-import.vulnerable.php",
       "expectedCwes": ["CWE-611"],
-      "kind": "vulnerable"
+      "kind": "vulnerable",
+      "expectedSinks": [
+        {
+          "cwe": "CWE-611",
+          "line": 4
+        }
+      ]
     },
     {
       "file": "xml-import.patched.php",
       "expectedCwes": [],
-      "kind": "patched"
+      "kind": "patched",
+      "expectedSinks": []
     },
     {
       "file": "webhook-target.vulnerable.php",
       "expectedCwes": ["CWE-918"],
-      "kind": "vulnerable"
+      "kind": "vulnerable",
+      "expectedSinks": [
+        {
+          "cwe": "CWE-918",
+          "line": 4
+        }
+      ]
     },
     {
       "file": "webhook-target.patched.php",
       "expectedCwes": [],
-      "kind": "patched"
+      "kind": "patched",
+      "expectedSinks": []
     },
     {
       "file": "laravel-raw-sql.vulnerable.php",
       "expectedCwes": ["CWE-89"],
-      "kind": "vulnerable"
+      "kind": "vulnerable",
+      "expectedSinks": [
+        {
+          "cwe": "CWE-89",
+          "line": 4
+        }
+      ]
     },
     {
       "file": "laravel-raw-sql.patched.php",
       "expectedCwes": [],
-      "kind": "patched"
+      "kind": "patched",
+      "expectedSinks": []
     },
     {
       "file": "cross-file-source.php",
       "expectedCwes": [],
       "kind": "unassessed",
-      "limitation": "No cross-file or authorization, CSRF, session proof is produced."
+      "limitation": "No cross-file or authorization, CSRF, session proof is produced.",
+      "expectedSinks": []
     },
     {
       "file": "cross-file-sink.php",
       "expectedCwes": [],
       "kind": "unassessed",
-      "limitation": "No cross-file or authorization, CSRF, session proof is produced."
+      "limitation": "No cross-file or authorization, CSRF, session proof is produced.",
+      "expectedSinks": []
     },
     {
       "file": "authorization-csrf-session.php",
       "expectedCwes": [],
       "kind": "unassessed",
-      "limitation": "No cross-file or authorization, CSRF, session proof is produced."
+      "limitation": "No cross-file or authorization, CSRF, session proof is produced.",
+      "expectedSinks": []
+    },
+    {
+      "file": "attribute-command.vulnerable.php",
+      "expectedCwes": ["CWE-78"],
+      "kind": "vulnerable",
+      "expectedSinks": [
+        {
+          "cwe": "CWE-78",
+          "line": 8
+        }
+      ]
+    },
+    {
+      "file": "comment-close.vulnerable.php",
+      "expectedCwes": ["CWE-78"],
+      "kind": "vulnerable",
+      "expectedSinks": [
+        {
+          "cwe": "CWE-78",
+          "line": 5
+        }
+      ]
+    },
+    {
+      "file": "comment-close.patched.php",
+      "expectedCwes": [],
+      "kind": "patched",
+      "expectedSinks": []
     }
   ]
 }

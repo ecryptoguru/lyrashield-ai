@@ -1,4 +1,4 @@
-import { withCookieMutation } from "../../../lib/api-auth"
+import { withApiRequest, withCookieMutation } from "../../../lib/api-auth"
 import { NextResponse } from "next/server"
 import { prisma } from "@lyrashield/db"
 import { requirePermission, requireWorkspaceAccess } from "@lyrashield/auth/server"
@@ -13,21 +13,12 @@ async function post(request: Request) {
   try {
     body = await request.json()
   } catch {
-    return NextResponse.json(
-      {
-        success: false,
-        error: { code: "INVALID_JSON", message: "Request body must be valid JSON" },
-      },
-      { status: 400 }
-    )
+    return apiError("INVALID_JSON", "Request body must be valid JSON", 400)
   }
 
   const parsed = CreateProjectSchema.safeParse(body)
   if (!parsed.success) {
-    return NextResponse.json(
-      { success: false, error: { code: "VALIDATION_ERROR", message: parsed.error.message } },
-      { status: 400 }
-    )
+    return apiError("VALIDATION_ERROR", parsed.error.message, 400)
   }
 
   const { workspaceId, name, description } = parsed.data
@@ -69,14 +60,11 @@ async function post(request: Request) {
     const authErr = authErrorResponse(error)
     if (authErr) return authErr
     logger.error("Failed to create project", { error: String(error) })
-    return NextResponse.json(
-      { success: false, error: { code: "INTERNAL_ERROR", message: "Failed to create project" } },
-      { status: 500 }
-    )
+    return apiError("INTERNAL_ERROR", "Failed to create project", 500)
   }
 }
 
-export async function GET(request: Request) {
+async function get(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
     const workspaceId = searchParams.get("workspaceId")
@@ -125,3 +113,5 @@ export async function GET(request: Request) {
 }
 
 export const POST = withCookieMutation(post)
+
+export const GET = withApiRequest(get)

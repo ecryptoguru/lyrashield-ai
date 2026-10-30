@@ -245,6 +245,8 @@ register_approved_endpoint "$S3_ENDPOINT" 443
 register_approved_endpoint "https://github.com" 443
 register_approved_endpoint "https://api.github.com" 443
 register_approved_endpoint "https://api.osv.dev" 443
+# Only the host metadata broker can use this fixed HTTPS origin; Go capsules have no network.
+register_approved_endpoint "https://proxy.golang.org" 443
 register_approved_endpoint "https://api.first.org" 443
 register_approved_endpoint "https://api.polar.sh" 443
 register_approved_endpoint "https://api.razorpay.com" 443
@@ -278,6 +280,7 @@ append_endpoint_rules "$S3_ENDPOINT" 443
 append_endpoint_rules "https://github.com" 443
 append_endpoint_rules "https://api.github.com" 443
 append_endpoint_rules "https://api.osv.dev" 443
+append_endpoint_rules "https://proxy.golang.org" 443
 append_endpoint_rules "https://api.first.org" 443
 append_endpoint_rules "https://api.polar.sh" 443
 append_endpoint_rules "https://api.razorpay.com" 443

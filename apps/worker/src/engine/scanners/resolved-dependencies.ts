@@ -1,6 +1,7 @@
 /* eslint-disable security/detect-non-literal-fs-filename */
 import { lstat, readFile, readdir } from "fs/promises"
-import { dirname, join, relative } from "path"
+import { createHash } from "node:crypto"
+import { basename, dirname, join, relative } from "path"
 import type { OsvQueryPackage } from "@lyrashield/db"
 import { parsePackageLock, parsePnpmLock, parseYarnLock } from "./dependency-lock-parsers"
 import {
@@ -11,10 +12,17 @@ import {
 } from "./composer-dependencies"
 import { recordCoverageIssue, type ScannerCoverageIssue } from "../scanner-coverage"
 import { isExcludedPhpPath } from "./php-project"
+import {
+  ADDITIONAL_DEPENDENCY_INPUTS,
+  resolveAdditionalDependencies,
+} from "./additional-dependencies"
+import type { ResolvedPackageIdentity } from "./ecosystem-lock-parsers"
+import type { GoResolutionReceipt } from "./go-module-resolver"
 
 export interface ResolvedDependencyInventory {
   status: "COMPLETE" | "PARTIAL" | "UNSUPPORTED"
-  packages: OsvQueryPackage[]
+  packages: ResolvedPackageIdentity[]
+  goResolutionReceipt?: GoResolutionReceipt
   unresolved: Array<{ ecosystem: string; name: string; reason: string }>
   truncated: boolean
   evidenceFile: {
@@ -43,6 +51,18 @@ const LOCKFILES = new Set([
   "requirements.txt",
   "requirements.lock",
   "composer.lock",
+])
+const UNSUPPORTED_INPUTS = new Map([
+  ["pom.xml", "Maven"],
+  ["build.gradle", "Maven"],
+  ["build.gradle.kts", "Maven"],
+  ["packages.lock.json", "NuGet"],
+  ["packages.config", "NuGet"],
+  ["pyproject.toml", "PyPI"],
+  ["poetry.lock", "PyPI"],
+  ["Pipfile", "PyPI"],
+  ["Pipfile.lock", "PyPI"],
+  ["uv.lock", "PyPI"],
 ])
 const MAX_WALK_ENTRIES = 50_000
 const MAX_WALK_DEPTH = 40
@@ -112,6 +132,8 @@ interface DependencyInputs {
   composerManifests: Map<string, Record<string, unknown>>
   composerLocks: Map<string, unknown>
   evidenceFile: ResolvedDependencyInventory["evidenceFile"]
+  additionalInputBytes: number
+  additionalInputs: Map<string, string>
   foundSupported: boolean
   truncated: boolean
 }
@@ -128,6 +150,71 @@ function eligibleDependencyEntries<T extends { name: string }>(
         isExcludedPhpPath(relative(root, join(directory, entry.name)))
       )
   )
+}
+
+function reportUnsupportedInput(
+  filename: string,
+  path: string,
+  symbolicLink: boolean,
+  unresolved: ResolvedDependencyInventory["unresolved"]
+): boolean {
+  const ecosystem =
+    UNSUPPORTED_INPUTS.get(filename) ??
+    (/\.(?:cs|fs|vb)proj$/i.test(filename) ? "NuGet" : undefined)
+  if (ecosystem) {
+    unresolved.push({
+      ecosystem,
+      name: path,
+      reason: "unsupported dependency input; exact installed releases were not assessed",
+    })
+    return true
+  }
+  if (symbolicLink && ADDITIONAL_DEPENDENCY_INPUTS.has(filename))
+    unresolved.push({
+      ecosystem: "unknown",
+      name: path,
+      reason: "Dependency input is a symbolic link and was not read",
+    })
+  if (symbolicLink && ["composer.json", "composer.lock"].includes(filename))
+    unresolved.push({
+      ecosystem: "Packagist",
+      name: path,
+      reason: "Composer dependency path is a symbolic link and was not read",
+    })
+  return symbolicLink
+}
+
+async function readAdditionalInput(
+  fullPath: string,
+  filePath: string,
+  size: number,
+  context: DependencyInputs
+): Promise<boolean> {
+  if (!ADDITIONAL_DEPENDENCY_INPUTS.has(basename(fullPath))) return false
+  context.foundSupported = true
+  const { unresolved } = context
+  try {
+    if (
+      size > MAX_COMPOSER_FILE_BYTES ||
+      context.additionalInputs.size >= 2000 ||
+      context.additionalInputBytes + size > 50 * 1024 * 1024
+    )
+      throw new Error("bounded dependency input")
+    const content = await readFile(fullPath, "utf8")
+    if (Buffer.byteLength(content) > MAX_COMPOSER_FILE_BYTES)
+      throw new Error("bounded dependency input")
+    context.additionalInputBytes += Buffer.byteLength(content)
+    if (context.additionalInputBytes > 50 * 1024 * 1024) throw new Error("bounded dependency input")
+    context.additionalInputs.set(filePath, content)
+  } catch {
+    context.truncated = true
+    unresolved.push({
+      ecosystem: "unknown",
+      name: filePath,
+      reason: "Dependency input is unreadable or exceeds the byte limit",
+    })
+  }
+  return true
 }
 
 async function walkDependencyInputs(
@@ -186,23 +273,15 @@ async function walkDependencyInputs(
       })
       continue
     }
-    if (stat.isSymbolicLink()) {
-      if (entry.name === "composer.json" || entry.name === "composer.lock") {
-        unresolved.push({
-          ecosystem: "Packagist",
-          name: relative(repoPath, fullPath),
-          reason: "Composer dependency path is a symbolic link and was not read",
-        })
-      }
-      continue
-    }
     if (stat.isDirectory()) {
       if (!IGNORED_DIRECTORIES.has(entry.name))
         await walkDependencyInputs(fullPath, depth + 1, state, context)
       continue
     }
-    if (!stat.isFile()) continue
+    if (!stat.isFile() && !stat.isSymbolicLink()) continue
     const filePath = relative(repoPath, fullPath)
+    if (reportUnsupportedInput(entry.name, filePath, stat.isSymbolicLink(), unresolved)) continue
+    if (await readAdditionalInput(fullPath, filePath, stat.size, context)) continue
     const isComposerFile = entry.name === "composer.json" || entry.name === "composer.lock"
     if (isComposerFile && stat.size > MAX_COMPOSER_FILE_BYTES) {
       unresolved.push({
@@ -341,6 +420,34 @@ function checkComposerConsistency({
   }
 }
 
+function applyAdditionalResolution(
+  context: DependencyInputs,
+  additional: Awaited<ReturnType<typeof resolveAdditionalDependencies>>
+): void {
+  const { packages, unresolved } = context
+  packages.push(...additional.packages)
+  unresolved.push(...additional.unresolved)
+  if (additional.unresolved.some((issue) => /limit|budget|deadline/.test(issue.reason)))
+    context.truncated = true
+  const content = JSON.stringify({
+    ...JSON.parse(additional.evidence),
+    packages,
+    priorEvidence: context.evidenceFile.size
+      ? {
+          path: context.evidenceFile.path,
+          sha256: createHash("sha256").update(context.evidenceFile.content).digest("hex"),
+        }
+      : undefined,
+  })
+  context.evidenceFile = {
+    path: "dependency-resolution.json",
+    content,
+    size: Buffer.byteLength(content),
+    extension: ".json",
+    language: "json",
+  }
+}
+
 export async function resolveExactDependencies({
   repoPath,
   coverageIssues,
@@ -350,7 +457,8 @@ export async function resolveExactDependencies({
   coverageIssues?: ScannerCoverageIssue[]
   signal?: AbortSignal
 }): Promise<ResolvedDependencyInventory> {
-  const packages: OsvQueryPackage[] = []
+  const deadline = Date.now() + 90_000
+  const packages: ResolvedPackageIdentity[] = []
   const unresolved: ResolvedDependencyInventory["unresolved"] = []
   const packageJsonByDirectory = new Map<string, string[]>()
   const lockDirectories = new Set<string>()
@@ -375,10 +483,16 @@ export async function resolveExactDependencies({
     composerManifests,
     composerLocks,
     evidenceFile,
+    additionalInputBytes: 0,
+    additionalInputs: new Map(),
     foundSupported: false,
     truncated: false,
   }
   await walkDependencyInputs(repoPath, 0, { entries: 0 }, context)
+  const additional = context.additionalInputs.size
+    ? await resolveAdditionalDependencies(context.additionalInputs, { signal, deadline })
+    : undefined
+  if (additional) applyAdditionalResolution(context, additional)
   const { foundSupported } = context
   let { truncated } = context
   if (!foundSupported) {
@@ -416,9 +530,14 @@ export async function resolveExactDependencies({
       packages.map((pkg) => [
         JSON.stringify([
           pkg.ecosystem,
-          pkg.name.toLowerCase(),
+          pkg.name,
           pkg.version,
-          ...(pkg.ecosystem === "Packagist" ? [pkg.filePath] : []),
+          pkg.filePath,
+          pkg.source,
+          pkg.platform,
+          pkg.checksum,
+          pkg.replaces?.name,
+          pkg.replaces?.version,
         ]),
         pkg,
       ])
@@ -455,6 +574,7 @@ export async function resolveExactDependencies({
           ? "PARTIAL"
           : "UNSUPPORTED",
     packages: bounded,
+    ...(additional?.goReceipt ? { goResolutionReceipt: additional.goReceipt } : {}),
     unresolved,
     truncated,
     evidenceFile: context.evidenceFile,

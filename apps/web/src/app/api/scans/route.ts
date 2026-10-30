@@ -1,5 +1,7 @@
+import { scanCreationConflict } from "../../../lib/scan-admission-conflicts"
+import { releaseUnstartedScanSlot } from "@lyrashield/db"
 import { withCookieMutation, authErrorResponse } from "../../../lib/api-auth"
-import { createHash } from "crypto"
+import { serializeScanListItem, scanListEtag, ScanIdQuerySchema } from "./scan-list-response"
 import {
   prisma,
   createScan,
@@ -13,10 +15,12 @@ import {
   resolveAuthenticatedAssessmentAuthorization,
   LiveAiSafetyError,
   ScanAttachmentError,
-  WorkspaceScanConcurrencyLimitError,
-  type ScanListItem,
 } from "@lyrashield/db"
-import { assertOAuthDelegatedScope, requirePermission } from "@lyrashield/auth/server"
+import {
+  assertOAuthDelegatedScope,
+  requirePermission,
+  resolveOAuthReadScope,
+} from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import {
   CreateScanInputSchema,
@@ -27,7 +31,6 @@ import {
 import { parseScanStateFilter, scanStateStatuses } from "@/lib/scan-presentation"
 import { logger } from "@lyrashield/logger"
 import { NextResponse } from "next/server"
-import { z } from "zod"
 import { assertScanAllowed } from "@lyrashield/billing"
 import {
   authAssessmentAdmission,
@@ -66,10 +69,6 @@ async function resolveRepoRevision(
   if (FULL_GIT_OBJECT_ID.test(ref)) return ref
   return getBranchRefSha(installationId, owner, repo, ref)
 }
-const ScanIdQuerySchema = z
-  .array(z.string().trim().min(1).max(128))
-  .min(1)
-  .max(MAX_CONCURRENT_WORKSPACE_SCANS)
 
 /**
  * Concurrent in-flight reviews per workspace (shared with the scheduled-scan
@@ -77,40 +76,6 @@ const ScanIdQuerySchema = z
  * commits model spend, so this bounds both blast radius and cost while leaving
  * normal multi-product use unaffected.
  */
-
-/**
- * Serialize a scan list row for the client. Dates become ISO strings so the
- * polled payload matches the SSR-rendered shape exactly (the client's ScanItem
- * type expects strings, and `findingCount` is already flattened by listScans).
- */
-function serializeScanListItem(scan: ScanListItem) {
-  return {
-    ...scan,
-    startedAt: scan.startedAt ? scan.startedAt.toISOString() : null,
-    endedAt: scan.endedAt ? scan.endedAt.toISOString() : null,
-    createdAt: scan.createdAt.toISOString(),
-  }
-}
-
-/**
- * ETag over the entire response representation. The active-scan poll re-requests
- * this list on an interval; when nothing has moved the client gets a 304 with no
- * body to parse.
- *
- * Hashing the full payload (not a subset of fields) is deliberate: a summary,
- * error message, or target rename can change while status and counts stay put,
- * and a partial hash would then serve a 304 and freeze stale data on screen.
- */
-function scanListEtag(
-  items: ReturnType<typeof serializeScanListItem>[],
-  nextCursor: string | null
-): string {
-  // Hash the exact response representation, envelope included: the body is
-  // { success, data: { items, nextCursor } }, so any envelope change also
-  // invalidates the tag instead of serving a stale-shaped 304.
-  const payload = JSON.stringify({ success: true, data: { items, nextCursor } })
-  return `"${createHash("sha256").update(payload).digest("hex")}"`
-}
 
 async function post(request: Request) {
   let body: unknown
@@ -671,6 +636,7 @@ async function post(request: Request) {
         errorCategory: "QUEUE",
         errorMessage: "Scan worker became unavailable while queueing the scan",
       })
+      await releaseUnstartedScanSlot(workspaceId, scan.id)
       revalidateDashboardAggregates(workspaceId)
       return refuseScan({
         workspaceId,
@@ -750,19 +716,16 @@ async function post(request: Request) {
       201
     )
   } catch (error) {
-    if (error instanceof WorkspaceScanConcurrencyLimitError) {
+    const conflict = scanCreationConflict(error)
+    if (conflict)
       return refuseScan({
+        ...conflict,
         workspaceId,
         actorUserId,
-        reason: "concurrency_limit",
-        code: "SCAN_CONCURRENCY_LIMIT",
-        message: `This workspace already has ${MAX_CONCURRENT_WORKSPACE_SCANS} reviews running. Wait for one to finish before starting another.`,
-        status: 409,
         targetId: data.targetId,
         mode: data.mode,
         workflow: data.workflow,
       })
-    }
     if (
       (error && typeof error === "object" && (error as { code?: string }).code === "P2002") ||
       (error instanceof Error && error.message === "Target already has an active scan")
@@ -877,7 +840,8 @@ export async function GET(request: Request) {
       }
     }
 
-    await requirePermission(workspaceId, PERMISSIONS.scan.view)
+    const { session } = await requirePermission(workspaceId, PERMISSIONS.scan.view)
+    const readScope = resolveOAuthReadScope(session, targetId)
 
     const { cursor, limit } = parsePaginationParams(searchParams, 25)
 
@@ -901,7 +865,7 @@ export async function GET(request: Request) {
     const { items, nextCursor } = await listScans({
       workspaceId,
       ...(scanIds ? { scanIds } : {}),
-      ...(targetId ? { targetId } : {}),
+      ...readScope,
       ...(effectiveStatuses
         ? { statuses: effectiveStatuses as Parameters<typeof listScans>[0]["statuses"] }
         : statusFilter

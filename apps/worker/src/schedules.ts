@@ -1,67 +1,57 @@
 import {
   ACTIVE_SCAN_STATUSES,
-  createScan,
-  claimDueSchedule,
+  advanceBlockedSchedule,
+  restoreUnsubmittedScheduleOccurrence,
+  createScheduledScan,
   getDueSchedules,
   getNextRunAt,
   findCurrentDomainProof,
   prisma,
+  releaseUnstartedScanSlot,
   runWithAccountContext,
   runWithWorkspaceContext,
   updateScanStatus,
+  type ScheduleBlockedReason,
 } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
-import {
-  MAX_CONCURRENT_WORKSPACE_SCANS,
-  resolveScanProfile,
-  resolveTargetScanMode,
-} from "@lyrashield/types"
+import { MAX_CONCURRENT_WORKSPACE_SCANS } from "@lyrashield/types"
 import { evaluateScanEntitlement } from "@lyrashield/billing"
+import { resolveAvailableUrlReview, ScanEnqueueNotSubmittedError } from "@lyrashield/integrations"
 import { assertScanWorkerAvailable, enqueueScan } from "./queue"
 import { notifyScheduleBlocked } from "./notifications"
 
 type DueSchedule = Awaited<ReturnType<typeof getDueSchedules>>[number]
+type ScheduleAdmission =
+  { status: "eligible" | "defer" } | { status: "blocked"; reason: ScheduleBlockedReason }
 
-async function isScheduledScanEligible(schedule: DueSchedule, now: Date): Promise<boolean> {
-  let entitlement: Awaited<ReturnType<typeof evaluateScanEntitlement>> | null = null
-  let entitlementReadFailed = false
-  if (schedule.createdById) {
-    try {
-      entitlement = await runWithAccountContext(schedule.createdById, () =>
-        evaluateScanEntitlement({
-          workspaceId: schedule.workspaceId,
-          mode: schedule.mode,
-          sponsorAccountId: schedule.createdById,
-          mutateOnTrialExpiry: true,
-        })
-      )
-    } catch (error) {
-      entitlementReadFailed = true
-      logger.warn("Scheduled scan eligibility could not be confirmed", {
-        scheduleId: schedule.id,
-        workspaceId: schedule.workspaceId,
-        error: error instanceof Error ? error.message : String(error),
-      })
-    }
-  }
-  if (!entitlement?.allowed) {
-    const reason = entitlementReadFailed
-      ? "SCAN_ELIGIBILITY_UNAVAILABLE"
-      : "SCAN_ELIGIBILITY_REQUIRED"
-    logger.warn("Skipped scheduled scan because its creator is not currently eligible", {
-      scheduleId: schedule.id,
+async function scheduledScanAdmission(schedule: DueSchedule): Promise<ScheduleAdmission> {
+  if (!schedule.createdById) return { status: "blocked", reason: "SCAN_ELIGIBILITY_REQUIRED" }
+  // Read uncertainty, infrastructure loss and active work never consume cadence.
+  // Any thrown read leaves the one due timestamp pending for the next poll.
+  const entitlement = await runWithAccountContext(schedule.createdById, () =>
+    evaluateScanEntitlement({
       workspaceId: schedule.workspaceId,
-      reason:
-        entitlement?.code ?? (schedule.createdById ? "ENTITLEMENT_DENIED" : "CREATOR_MISSING"),
+      mode: schedule.mode,
+      sponsorAccountId: schedule.createdById,
+      mutateOnTrialExpiry: true,
+      deferCapacityCheck: true,
     })
-    await notifyScheduleBlocked(
-      schedule.workspaceId,
-      schedule.id,
-      schedule.target.name,
-      reason,
-      now.toISOString().slice(0, 10)
-    )
-    return false
+  )
+  if (!entitlement.allowed) return { status: "blocked", reason: "SCAN_ELIGIBILITY_REQUIRED" }
+
+  const review = await resolveAvailableUrlReview({
+    targetType: schedule.target.type,
+    mode: schedule.mode,
+    hasApiSpec: Boolean(schedule.target.apiSpecUrl),
+  })
+  if (!review.ok) {
+    return review.code === "TARGET_RELAY_UNAVAILABLE"
+      ? { status: "defer" }
+      : { status: "blocked", reason: "SCAN_PROFILE_UNAVAILABLE" }
+  }
+  if (review.engineBacked) {
+    const proof = await findCurrentDomainProof(schedule.workspaceId, schedule.target.url)
+    if (!proof.verified) return { status: "blocked", reason: "DOMAIN_VERIFICATION_REQUIRED" }
   }
 
   const activeScans = await prisma.scan.count({
@@ -71,119 +61,75 @@ async function isScheduledScanEligible(schedule: DueSchedule, now: Date): Promis
       status: { in: [...ACTIVE_SCAN_STATUSES] },
     },
   })
-  if (activeScans > 0) {
-    logger.info("Skipping scheduled scan because target already has an active scan", {
-      scheduleId: schedule.id,
-      targetId: schedule.targetId,
-    })
-    return false
-  }
-
+  if (activeScans > 0) return { status: "defer" }
   const activeWorkspaceScans = await prisma.scan.count({
     where: { workspaceId: schedule.workspaceId, status: { in: [...ACTIVE_SCAN_STATUSES] } },
   })
-  if (activeWorkspaceScans >= MAX_CONCURRENT_WORKSPACE_SCANS) {
-    logger.info("Skipping scheduled scan because workspace is at its concurrent scan cap", {
-      scheduleId: schedule.id,
-      workspaceId: schedule.workspaceId,
-      activeWorkspaceScans,
-      cap: MAX_CONCURRENT_WORKSPACE_SCANS,
-    })
-    return false
-  }
-
-  if (schedule.target.type !== "WEB_APP" && schedule.target.type !== "API") return true
-
-  const resolved = resolveTargetScanMode({
-    targetType: schedule.target.type,
-    mode: schedule.mode,
-    hasApiSpec: Boolean(schedule.target.apiSpecUrl),
-  })
-  if (!resolved.ok) {
-    await prisma.schedule.update({ where: { id: schedule.id }, data: { enabled: false } })
-    logger.warn("Disabled schedule with unavailable mode", {
-      scheduleId: schedule.id,
-      targetId: schedule.targetId,
-      targetType: schedule.target.type,
-      mode: schedule.mode,
-      reason: resolved.reason,
-      code: resolved.code,
-    })
-    return false
-  }
-
-  if (
-    resolved.profile &&
-    resolveScanProfile({ targetType: schedule.target.type, mode: schedule.mode }).usesAi
-  ) {
-    const proof = await findCurrentDomainProof(schedule.workspaceId, schedule.target.url)
-    if (!proof.verified) {
-      logger.warn("Skipped scheduled engine-backed URL review without domain proof", {
-        scheduleId: schedule.id,
-        workspaceId: schedule.workspaceId,
-        targetId: schedule.targetId,
-      })
-      await notifyScheduleBlocked(
-        schedule.workspaceId,
-        schedule.id,
-        schedule.target.name,
-        "DOMAIN_VERIFICATION_REQUIRED",
-        now.toISOString().slice(0, 10)
-      )
-      return false
-    }
-  }
-  return true
+  if (activeWorkspaceScans >= MAX_CONCURRENT_WORKSPACE_SCANS) return { status: "defer" }
+  return { status: "eligible" }
 }
 
-export async function processDueSchedules(now = new Date()): Promise<number> {
-  const schedules = await getDueSchedules(now)
-  let enqueued = 0
+// A restart may revisit rows safely: occurrence CAS is the durable authority.
+let dueScheduleCursor: string | undefined
+const SCHEDULE_POLL_BUDGET_MS = 15_000
 
+export async function processDueSchedules(now = new Date()): Promise<number> {
+  const deadline = Date.now() + SCHEDULE_POLL_BUDGET_MS
+  let schedules = await getDueSchedules(now, dueScheduleCursor)
+  if (!schedules.length && dueScheduleCursor) {
+    dueScheduleCursor = undefined
+    schedules = await getDueSchedules(now)
+  }
+  let enqueued = 0
+  let processed = 0
   for (const schedule of schedules) {
+    if (Date.now() >= deadline) break
     let workerUnavailable = false
     await runWithWorkspaceContext(schedule.workspaceId, async () => {
       try {
+        // Coalesce every missed interval into this single pending occurrence.
         const nextRunAt = getNextRunAt(schedule.cron, now)
         if (!nextRunAt) {
-          await prisma.schedule.update({
-            where: { id: schedule.id },
-            data: { enabled: false },
+          await prisma.schedule.updateMany({
+            where: {
+              id: schedule.id,
+              workspaceId: schedule.workspaceId,
+              updatedAt: schedule.updatedAt,
+            },
+            data: {
+              enabled: false,
+              lastBlockedAt: now,
+              lastBlockedReason: "SCHEDULE_CRON_UNSUPPORTED",
+            },
           })
           logger.warn("Disabled schedule with unsupported cron expression", {
             scheduleId: schedule.id,
-            workspaceId: schedule.workspaceId,
-            cron: schedule.cron,
           })
           return
         }
-
         try {
-          // Do not advance a schedule unless this worker can still accept its scan.
           await assertScanWorkerAvailable()
-        } catch (error) {
-          logger.warn("Scan worker unavailable; pausing scheduled scan processing", {
-            error: error instanceof Error ? error.message : String(error),
-          })
+        } catch {
           workerUnavailable = true
           return
         }
-
-        if (!(await claimDueSchedule(schedule.id, now, nextRunAt))) {
+        const admission = await scheduledScanAdmission(schedule)
+        if (admission.status === "defer") return
+        if (admission.status === "blocked") {
+          if (await advanceBlockedSchedule(schedule, now, nextRunAt, admission.reason)) {
+            await notifyScheduleBlocked(
+              schedule.workspaceId,
+              schedule.id,
+              schedule.target.name,
+              admission.reason,
+              now.toISOString().slice(0, 10)
+            )
+          }
           return
         }
-
-        if (!(await isScheduledScanEligible(schedule, now))) return
-
-        const scan = await createScan({
-          workspaceId: schedule.workspaceId,
-          targetId: schedule.targetId,
-          goal: schedule.goal,
-          mode: schedule.mode,
-          createdById: schedule.createdById,
-          triggerType: "schedule",
-        })
-
+        // User-slot/workspace/target contention rolls back the occurrence too.
+        const scan = await createScheduledScan(schedule, now, nextRunAt)
+        if (!scan) return
         try {
           await enqueueScan({
             scanId: scan.id,
@@ -193,17 +139,18 @@ export async function processDueSchedules(now = new Date()): Promise<number> {
             mode: schedule.mode,
           })
           enqueued += 1
-          logger.info("Scheduled scan enqueued", {
-            scheduleId: schedule.id,
-            scanId: scan.id,
-            targetId: schedule.targetId,
-          })
+          logger.info("Scheduled scan enqueued", { scheduleId: schedule.id, scanId: scan.id })
         } catch (error) {
-          logger.error("Failed to enqueue scheduled scan", {
-            scheduleId: schedule.id,
-            scanId: scan.id,
-            error: error instanceof Error ? error.message : String(error),
-          })
+          // This scan was freshly created by the winning occurrence CAS in
+          // THIS invocation. A no-add error says nothing about prior attempts;
+          // never apply this reset to recovered/reused queue identities.
+          if (!(error instanceof ScanEnqueueNotSubmittedError) || error.scanId !== scan.id) {
+            logger.error("Scheduled publication uncertain; retained original scan identity", {
+              scanId: scan.id,
+              error: String(error),
+            })
+            return
+          }
           await updateScanStatus(
             scan.id,
             "FAILED",
@@ -213,18 +160,27 @@ export async function processDueSchedules(now = new Date()): Promise<number> {
             },
             schedule.workspaceId
           )
+          await releaseUnstartedScanSlot(schedule.workspaceId, scan.id)
+          await restoreUnsubmittedScheduleOccurrence(schedule, scan.id, now, nextRunAt)
+          logger.error("Failed to enqueue scheduled scan", {
+            scheduleId: schedule.id,
+            scanId: scan.id,
+            error: String(error),
+          })
         }
       } catch (error) {
-        logger.error("Failed to process scheduled scan", {
+        logger.warn("Scheduled review processing could not finish", {
           scheduleId: schedule.id,
           workspaceId: schedule.workspaceId,
           error: error instanceof Error ? error.message : String(error),
         })
       }
     })
+    processed += 1
+    dueScheduleCursor = schedule.id
     if (workerUnavailable) break
   }
-
+  if (processed === schedules.length && schedules.length < 50) dueScheduleCursor = undefined
   return enqueued
 }
 

@@ -18,8 +18,17 @@ vi.mock("@lyrashield/config", async (importOriginal) => {
     },
   }
 })
-vi.mock("../../auth/src/server", () => ({
-  requirePermission: vi.fn().mockResolvedValue(undefined),
+vi.mock("../../auth/src/server", async () => ({
+  ...(await vi.importActual("../../auth/src/oauth-read-scope")),
+  requirePermission: vi.fn().mockResolvedValue({
+    session: {
+      userId: "rls-browser-user",
+      userEmail: "rls-browser@example.test",
+      userName: "RLS browser fixture",
+      userImage: null,
+      sessionId: "rls-browser-session",
+    },
+  }),
 }))
 const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
@@ -267,7 +276,12 @@ describe.skipIf(!runtimeUrl)("strict workspace RLS fails closed", () => {
       WebhookEventRejection:
         "Bounded authentic catalog-rejection receipts, system-owned, no tenant access",
     }
-    const accountTables = ["account_acquisitions", "account_preferences"]
+    const accountTables = [
+      "account_acquisitions",
+      "account_preferences",
+      "ScanCapacityReservation",
+      "UserScanSlot",
+    ]
     // Myra support-agent tables (20260915000000_myra_support_agent): dual-owner
     // (accountId/publicSessionId) tables plus child/append-only/system tables.
     // All FORCE RLS like account/tenant tables — unbound is the trusted path.
@@ -400,6 +414,12 @@ describe.skipIf(!runtimeUrl)("strict workspace RLS fails closed", () => {
       )
       expect(foreign.status).toBe(200)
       expect((await foreign.json()).data.verdict).toBe("NOT_EVALUATED")
+      const { requirePermission } = await import("../../auth/src/server")
+      vi.mocked(requirePermission).mockRejectedValueOnce(new Error("FORBIDDEN"))
+      const forbidden = await GET(
+        new Request(`http://localhost/api/launch-readiness?workspaceId=${workspaceId}`)
+      )
+      expect(forbidden.status).toBe(403)
       // A missing transaction wrapper must still fail closed for child rows.
       expect(await applicationPrisma.scanCoverageReceipt.count({ where: { id: receipt.id } })).toBe(
         0

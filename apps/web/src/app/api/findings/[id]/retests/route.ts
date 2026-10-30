@@ -1,3 +1,5 @@
+import { retestCreationError } from "@/lib/scan-admission-conflicts"
+import { releaseUnstartedScanSlot } from "@lyrashield/db"
 import { recordedOperation } from "@/lib/recorded-operation"
 import { withCookieMutation } from "../../../../../lib/api-auth"
 import {
@@ -6,7 +8,6 @@ import {
   getFindingReference,
   prisma,
   updateScanStatus,
-  WorkspaceScanConcurrencyLimitError,
 } from "@lyrashield/db"
 import { type ScanMode, resolveTargetScanMode } from "@lyrashield/types"
 import { assertOAuthDelegatedScope, requirePermission } from "@lyrashield/auth/server"
@@ -28,7 +29,10 @@ import {
   checkScanCreateRateLimit,
   clientIpFromRequest,
 } from "../../../../../lib/rate-limit"
-import { resolveSponsorScanPlan, resolveUrlReviewMode } from "../../../../../lib/scan-admission"
+import {
+  resolveSponsorScanPlan,
+  resolveAvailableUrlReview,
+} from "../../../../../lib/scan-admission"
 
 const CreateRetestSchema = z.object({
   workspaceId: z.string().min(1),
@@ -55,14 +59,18 @@ async function checkRetestAdmission({
   mode: ScanMode
   confirmNotSubmitted: () => void
 }) {
-  const urlAdmission = resolveUrlReviewMode({
+  const urlAdmission = await resolveAvailableUrlReview({
     targetType: target.type,
     mode,
     hasApiSpec: Boolean(target.apiSpecUrl),
   })
   if (!urlAdmission.ok) {
     confirmNotSubmitted()
-    return apiError(urlAdmission.code, "This retest profile is not available for the target.", 400)
+    return apiError(
+      urlAdmission.code,
+      urlAdmission.reason,
+      urlAdmission.code === "TARGET_RELAY_UNAVAILABLE" ? 503 : 400
+    )
   }
 
   const isRemoteUrlTarget = target.type === "WEB_APP" || target.type === "API"
@@ -275,20 +283,8 @@ async function post(request: Request, { params }: { params: Promise<{ id: string
               : {}),
           })
         } catch (error) {
-          if (error instanceof WorkspaceScanConcurrencyLimitError) {
-            return apiError(
-              "SCAN_CONCURRENCY_LIMIT",
-              "This workspace is at its concurrent review limit. Wait for one to finish before retesting.",
-              409
-            )
-          }
-          if (error instanceof Error && error.message === "Target already has an active scan") {
-            return apiError(
-              "RETEST_IN_PROGRESS",
-              "A retest is already in progress for this target",
-              409
-            )
-          }
+          const response = retestCreationError(error, confirmNotSubmitted)
+          if (response) return response
           throw error
         }
 
@@ -308,6 +304,7 @@ async function post(request: Request, { params }: { params: Promise<{ id: string
             errorCategory: "RETEST_SETUP",
             errorMessage: "Retest could not be prepared before queueing",
           })
+          await releaseUnstartedScanSlot(workspaceId, scan.id)
           throw error
         }
 
@@ -329,6 +326,7 @@ async function post(request: Request, { params }: { params: Promise<{ id: string
             where: { id: retest.id },
             data: { status: "error", resultAfter: "Retest could not be queued." },
           })
+          await releaseUnstartedScanSlot(workspaceId, scan.id)
           logger.error("Failed to enqueue retest scan", {
             findingId: id,
             scanId: scan.id,

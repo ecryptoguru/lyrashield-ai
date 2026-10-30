@@ -4,7 +4,7 @@ import { lstat, readFile, readdir } from "fs/promises"
 import { join, relative } from "path"
 import { logger } from "@lyrashield/logger"
 import type { EngineVulnerability } from "../output-parser"
-import { analyzePhpSource } from "./php-source"
+import { analyzePhpSourceAsync } from "./php-source"
 import { isExcludedPhpPath } from "./php-project"
 import {
   recordCoverageIssue,
@@ -363,6 +363,67 @@ function buildRuleFinding(
   }
 }
 
+function inspectSastLines(
+  content: string,
+  lines: string[],
+  relPath: string,
+  findings: EngineVulnerability[],
+  seenFindings: Set<string>,
+  signal: AbortSignal | undefined,
+  findingsInFile: number
+): boolean {
+  let findingLimitReached = false
+  for (const [index, line] of lines.entries()) {
+    if (findingsInFile >= MAX_FINDINGS_PER_FILE || findings.length >= MAX_TOTAL_FINDINGS) {
+      findingLimitReached = true
+      break
+    }
+    if (isCommentOrBlank(line)) continue
+
+    for (const rule of SAST_RULES) {
+      if (findingsInFile >= MAX_FINDINGS_PER_FILE || findings.length >= MAX_TOTAL_FINDINGS) {
+        findingLimitReached = true
+        break
+      }
+      throwIfAborted(signal)
+      if (rule.fileVeto?.(content)) continue
+
+      const match = rule.pattern.exec(line)
+      if (!match) continue
+
+      const matchedText = match[0]
+      if (rule.falsePositiveHints?.some((hint) => line.toLowerCase().includes(hint))) {
+        continue
+      }
+      // Security context is evaluated over a ±1-line window: `const token =`
+      // and `func sessionToken() {` live on the line adjacent to the sink.
+      const contextWindow = `${lines[index - 1] ?? ""} ${line} ${lines[index + 1] ?? ""}`
+      if (rule.requiresSecurityContext && !SECURITY_CONTEXT.test(contextWindow)) {
+        continue
+      }
+      // A weak hash used for etag/checksum purposes is not a security finding.
+      if (
+        rule.id.startsWith("weak-hash") &&
+        NON_SECURITY_HASH_CONTEXT.test(line) &&
+        !SECURITY_CONTEXT.test(contextWindow)
+      ) {
+        continue
+      }
+
+      const lineNum = index + 1
+      const findingId = `${rule.id}-${relPath}-${lineNum}`
+      if (seenFindings.has(findingId)) continue
+      seenFindings.add(findingId)
+
+      findingsInFile++
+      findings.push(
+        buildRuleFinding(rule, relPath, lineNum, line, matchedText, contextWindow, findingId)
+      )
+    }
+  }
+  return findingLimitReached
+}
+
 export async function scanSast(config: SastScanConfig): Promise<EngineVulnerability[]> {
   const { repoPath, workspaceDir, signal, coverageIssues, mode, discovery } = config
   throwIfAborted(signal)
@@ -438,6 +499,16 @@ export async function scanSast(config: SastScanConfig): Promise<EngineVulnerabil
       skippedByReason.testFixture++
       continue
     }
+    if (Buffer.byteLength(content) > MAX_FILE_SIZE) {
+      skippedByReason.oversized++
+      recordCoverageIssue(coverageIssues, {
+        scanner: "sast",
+        status: "bounded",
+        subject: relPath,
+        reason: `File exceeds the ${MAX_FILE_SIZE}-byte scanner limit`,
+      })
+      continue
+    }
     bytesScanned += Buffer.byteLength(content, "utf-8")
     filesScanned++
 
@@ -445,7 +516,7 @@ export async function scanSast(config: SastScanConfig): Promise<EngineVulnerabil
     let findingsInFile = 0
     let findingLimitReached = false
     if (/\.php$/i.test(filePath)) {
-      const result = analyzePhpSource(content, relPath)
+      const result = await analyzePhpSourceAsync(content, relPath)
       const available = Math.min(MAX_FINDINGS_PER_FILE, MAX_TOTAL_FINDINGS - findings.length)
       findings.push(...result.findings.slice(0, available))
       findingsInFile = Math.min(result.findings.length, available)
@@ -460,54 +531,9 @@ export async function scanSast(config: SastScanConfig): Promise<EngineVulnerabil
       }
     }
 
-    for (const [index, line] of lines.entries()) {
-      if (findingsInFile >= MAX_FINDINGS_PER_FILE || findings.length >= MAX_TOTAL_FINDINGS) {
-        findingLimitReached = true
-        break
-      }
-      if (isCommentOrBlank(line)) continue
-
-      for (const rule of SAST_RULES) {
-        if (findingsInFile >= MAX_FINDINGS_PER_FILE || findings.length >= MAX_TOTAL_FINDINGS) {
-          findingLimitReached = true
-          break
-        }
-        throwIfAborted(signal)
-        if (rule.fileVeto?.(content)) continue
-
-        const match = rule.pattern.exec(line)
-        if (!match) continue
-
-        const matchedText = match[0]
-        if (rule.falsePositiveHints?.some((hint) => line.toLowerCase().includes(hint))) {
-          continue
-        }
-        // Security context is evaluated over a ±1-line window: `const token =`
-        // and `func sessionToken() {` live on the line adjacent to the sink.
-        const contextWindow = `${lines[index - 1] ?? ""} ${line} ${lines[index + 1] ?? ""}`
-        if (rule.requiresSecurityContext && !SECURITY_CONTEXT.test(contextWindow)) {
-          continue
-        }
-        // A weak hash used for etag/checksum purposes is not a security finding.
-        if (
-          rule.id.startsWith("weak-hash") &&
-          NON_SECURITY_HASH_CONTEXT.test(line) &&
-          !SECURITY_CONTEXT.test(contextWindow)
-        ) {
-          continue
-        }
-
-        const lineNum = index + 1
-        const findingId = `${rule.id}-${relPath}-${lineNum}`
-        if (seenFindings.has(findingId)) continue
-        seenFindings.add(findingId)
-
-        findingsInFile++
-        findings.push(
-          buildRuleFinding(rule, relPath, lineNum, line, matchedText, contextWindow, findingId)
-        )
-      }
-    }
+    findingLimitReached =
+      inspectSastLines(content, lines, relPath, findings, seenFindings, signal, findingsInFile) ||
+      findingLimitReached
     if (findingLimitReached) {
       skippedByReason.findingLimit++
       recordCoverageIssue(coverageIssues, {

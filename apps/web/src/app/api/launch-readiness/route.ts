@@ -1,5 +1,5 @@
 import { withWorkspaceRLS } from "@lyrashield/db"
-import { requirePermission } from "@lyrashield/auth/server"
+import { requirePermission, resolveOAuthReadScope } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { authErrorResponse } from "../../../lib/api-auth"
 import { apiError, apiSuccess } from "../../../lib/api-response"
@@ -55,7 +55,8 @@ export async function GET(request: Request) {
     }
     const { workspaceId, targetId, commit, artifactDigest } = parsed.data
 
-    await requirePermission(workspaceId, PERMISSIONS.finding.view)
+    const { session } = await requirePermission(workspaceId, PERMISSIONS.finding.view)
+    resolveOAuthReadScope(session, targetId, true)
 
     const requestedIdentity: ReleaseIdentityInput | null = commit
       ? { kind: "COMMIT", value: commit }

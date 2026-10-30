@@ -20,6 +20,7 @@ export interface StoredScanAuthority {
   determinismMode: string | null
   startedAt: Date | null
   createdById: string
+  accountingVersion?: number | null
   sponsorAccountId: string | null
   triggerType: string | null
   /**
@@ -119,23 +120,7 @@ export async function verifyScanJobAuthority(
   try {
     scanRecord = await getSystemPrisma().scan.findUnique({
       where: { id: scanId },
-      select: {
-        id: true,
-        workspaceId: true,
-        targetId: true,
-        goal: true,
-        mode: true,
-        policyId: true,
-        determinismMode: true,
-        startedAt: true,
-        createdById: true,
-        sponsorAccountId: true,
-        triggerType: true,
-        delegatedConnectionId: true,
-        delegatedAuthorizationVersion: true,
-        executionPlan: true,
-        executionPlanHash: true,
-      },
+      select: storedScanAuthoritySelect,
     })
   } catch (err) {
     throw new Error("Failed to verify scan authority", { cause: err })
@@ -238,3 +223,22 @@ export async function verifyScanJobAuthority(
     executionPlan,
   }
 }
+
+const storedScanAuthoritySelect = {
+  id: true,
+  workspaceId: true,
+  targetId: true,
+  goal: true,
+  mode: true,
+  policyId: true,
+  determinismMode: true,
+  startedAt: true,
+  createdById: true,
+  sponsorAccountId: true,
+  accountingVersion: true,
+  triggerType: true,
+  delegatedConnectionId: true,
+  delegatedAuthorizationVersion: true,
+  executionPlan: true,
+  executionPlanHash: true,
+} as const

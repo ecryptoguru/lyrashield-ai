@@ -18,6 +18,20 @@ describe("versioned PHP source benchmark (passive, built-in only)", () => {
     expect([...new Set(result.findings.map((finding) => finding.cwe))].sort()).toEqual(
       [...fixture.expectedCwes].sort()
     )
+    const observed = result.findings.map((finding) => ({
+      cwe: finding.cwe,
+      line: finding.code_locations?.[0]?.start_line,
+    }))
+    // Exact sink identity/count catches both missed detections and extra detections of inert HTML.
+    expect(observed).toEqual(fixture.expectedSinks)
+    const truePositives = observed.filter((sink) =>
+      fixture.expectedSinks.some(
+        (expected) => expected.cwe === sink.cwe && expected.line === sink.line
+      )
+    ).length
+    const falsePositives = observed.length - truePositives
+    const falseNegatives = fixture.expectedSinks.length - truePositives
+    expect({ falsePositives, falseNegatives }).toEqual({ falsePositives: 0, falseNegatives: 0 })
     expect(result.issues.join(" ")).toContain("unassessed")
     // This is a reproducible local rule receipt, never exploit/runtime verification.
     console.info(
@@ -27,6 +41,16 @@ describe("versioned PHP source benchmark (passive, built-in only)", () => {
         fixture: fixture.file,
         fixtureSha256: createHash("sha256").update(source).digest("hex"),
         expectedCwes: fixture.expectedCwes,
+        expectedSinks: fixture.expectedSinks,
+        metrics: {
+          truePositives,
+          falsePositives,
+          falseNegatives,
+          precision: observed.length ? truePositives / observed.length : null,
+          recall: fixture.expectedSinks.length
+            ? truePositives / fixture.expectedSinks.length
+            : null,
+        },
         findings: result.findings.map((finding) => ({
           id: finding.id,
           cwe: finding.cwe,

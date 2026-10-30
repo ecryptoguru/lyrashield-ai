@@ -171,6 +171,8 @@ is a browser-local guided review of reported versions and conditions, with a
 separate dated CVE-2026-115560 notice. It sends no target requests, uploads no
 inputs and cannot verify deployment or compromise.
 
+Repository dependency coverage is format-specific. Exact supported lock inputs include npm package locks/pnpm/Yarn, pinned Python requirements, Composer, registry Cargo.lock and supported Gemfile.lock identities. Go module/workspace inputs use an isolated pinned native resolver and bounded metadata broker. Declarations alone, private/git/path/mutable/ambiguous sources, unsupported Maven/Gradle inputs and exhausted bounds retain incomplete coverage; lock inventory does not establish reachability. The capability registry is `packages/types/src/dependency-capabilities.ts`. These are local v26 source capabilities; final image and runtime qualification are separate.
+
 ### Model routing and budgets
 
 | Profile  | Root model | Specialist model | Reasoning                     | Provider cap |
@@ -222,7 +224,7 @@ Result integrity requirements:
 
 ### Onboarding
 
-1. Create account and workspace.
+1. Create an account, then explicitly choose an eligible workspace or create one. The server validates current permissions and commits the choice atomically across repeated tabs/requests; it does not adopt the oldest membership.
 2. Connect GitHub or create URL/API target.
 3. Choose goal and review profile.
 4. Run preflight.
@@ -241,6 +243,10 @@ Terminal alternatives: `FAILED`, `PARTIAL` (engine stopped with findings preserv
 
 Repository jobs are admitted only while a live worker heartbeat exists. Queue/database drift fails closed; paid work is never automatically replayed after an ambiguous failure. A mid-run spend ceiling is enforced both engine-side and by the worker polling live spend (SIGTERM at the grace-adjusted cap). After any terminal state the worker refreshes the target's gate verdict.
 
+New scans atomically claim one initiating-user slot across workspaces and create a sponsor-account capacity reservation. Funding is FIFO per account; waiting for capacity does not reserve minutes or permit a second user scan. Runtime is limited by funded whole agent-minutes with a five-second stop margin. Terminal status alone does not release a slot: execution stop and accounting completion must be proven. Unknown execution or settlement retains an explicit review hold. Failed/pre-provider runs are nonbillable; observed excess beyond reserved funding is recorded as absorbed rather than charged. Legacy receipts retain their original version.
+
+Interactive, retest and scheduled URL reviews use the same relay availability policy. Transient entitlement reads, worker/relay unavailability and user/target contention leave the scheduled occurrence pending. Permanent denial advances once with a bounded reason. The winning occurrence, scan, slot, reservation, event and lastScanId commit together. Unknown queue acknowledgement retains the same durable scan identity; only proven prepublication failure of that fresh identity can restore its occurrence.
+
 ### Remediation
 
 - User may create and inspect a fix proposal.
@@ -248,6 +254,7 @@ Repository jobs are admitted only while a live worker heartbeat exists. Queue/da
 - Fix PR endpoint accepts no client patch, branch, title, or body.
 - The full fix-PR pipeline is wired end to end (v14): proposal creation enqueues deterministic patch generation from the engine's structured fix (`fix-generate` job, plan-tiered scope validation, encrypted evidence storage); findings carry the scanned `baseCommit` so patches apply against exactly the commit analyzed; a merged `lyrashield/fix-` branch triggers loop-closure — the PR is marked merged, a REAL retest scan is created and queued (bound to the NEW scan, never the finding's original terminal scan). Nothing auto-merges; every PR is an approval-gated proposal.
 - Retest scope derives from the server-owned source scan, never a client-selected replacement.
+- A durable immutable-proposal execution identity precedes remote PR mutation. Status/retry reconciles that same remote branch/PR after local persistence or approval-completion failure; it does not open another PR. The exact approved base must still equal the default-branch head. Stale input directs retest/regeneration; pending approval is not an opened PR.
 
 ### Launch gate and assurance reporting
 
@@ -290,11 +297,11 @@ Two product lines (publishable schedule reaffirmed 2026-09-22; code authority is
 - Overage: $0.15/min, Agency only, with a user-set spend limit. Deep/Custom consume minutes at 3×.
 - GitHub repo connection, RBAC, shared reports, retests, Evidence Vault, versioned verdicts, launch reports, and scorecards are permission-gated, not plan-gated. The GitHub Action is account-less; CLI and MCP connections are available across plans subject to permissions and scan admission.
 - Repository MCP/WebMCP scanner findings are available on every plan. Starter and Pro allow one workspace member; Pro adds Deep/Custom scans. Agency sponsors one team workspace with up to five members including the buyer, sharing the buyer's 4,500 monthly minutes, plus higher limits and capped overage.
-- Failed scans are never billed; cancelled scans bill elapsed time only (no 1-minute floor).
+- Failed scans are never billed. A billable cancelled/partial model-backed run uses observed positive elapsed analysis rounded up to whole minutes, then the Deep/Custom 3× multiplier; displayed elapsed time is separate from charged agent-minutes.
 
 Minute packs: 100/$15, 250/$35, 500/$65; 180-day validity. Purchase availability depends on billing permission and a supported checkout provider for the account's region.
 
-Usage draw order: current monthly pool, oldest valid pack, then allowed overage. Every grant/debit/refund has an idempotency key. A scan that crosses zero may use at most 15 minutes of non-bankable mid-scan grace; a scan starting at zero is rejected.
+Usage draw order: current monthly pool, oldest valid pack, then allowed overage. Every grant/debit/refund has an idempotency key. A scan that crosses zero may use at most 15 agent-minutes of non-bankable mid-scan grace after pool/packs, or eligible capped overage; Deep/Custom use the same multiplied unit. Reservation excludes capacity held by concurrent sponsored scans. A scan starting at zero is rejected.
 
 Subscriptions, allowances, usage balances, packs, grace, and overage belong to the **account** (the user), not the workspace: one subscription follows the person across workspaces. In an Agency-sponsored workspace, up to five members draw from the persisted buyer's minute pool; other workspaces use each scanner's own account. The sponsor is recorded on each scan before execution. Annual plans receive a fresh monthly allowance each month of the term. Workspaces remain the resource/tenancy boundary and mirror plan state for display only.
 
@@ -332,6 +339,7 @@ This is the approved public launch schedule. Revisit it after sufficient paid ut
 - AsyncLocalStorage carries request context; `withWorkspaceRLS()` applies transaction-local DB context.
 - Production `DATABASE_URL` role must have `rolsuper=false` and `rolbypassrls=false`.
 - Direct workspace tables and child tables use fail-closed RLS; code-level scoping remains defense in depth.
+- Delegated OAuth reads also apply a shared selected-target predicate to rows, counts, cursors, detail, scores and downloads. Empty grants return no target data; target-scoped readiness requires an explicit authorized target. Workspace RLS does not replace this narrower credential boundary.
 - Platform administration is a separate global boundary: only the exact configured emails `ecryptoguru@gmail.com` and `ankit@lyrashieldai.com` may hold `PLATFORM_OPERATOR`; each account must be unique, email-verified, and TOTP-enrolled.
 - Admin reads require a server-confirmed browser-cookie session with recent server-stamped TOTP. Bearer/API-key credentials and workspace roles cannot cross the boundary; unauthorized routes return not found and carry noindex/noarchive metadata.
 - Critical admin mutations require a same-origin JSON request, fresh TOTP challenge, short-lived action-specific single-use nonce, authority revalidation inside the database transaction, and atomic platform audit. Affiliate mutations remain disabled until that full transaction boundary is connected.
@@ -364,6 +372,7 @@ This is the approved public launch schedule. Revisit it after sufficient paid ut
 - Approval is atomic, single-use, expiry-aware, and bound to exact action name plus input hash.
 - Remote OAuth is read-only by default. A browser-confirmed, connection-bound delegation may authorize selected workflows, targets, and scan profiles without repeated review-queue prompts; execution still rechecks current membership, permission, scope, expiry, and idempotency. Nondelegated hosted remote MCP mutations, including write-scoped API-key calls and legacy `approvalId` requests, receive `connect_required`; out-of-grant delegated calls are denied.
 - Fresh GitHub callback state alone cannot create an integration.
+- Repository acquisition and deterministic retest use fresh repository-specific contents:read installation tokens and recheck the active integration. This read path has no local/Redis token cache; the separate authorized installation-default token cache is encrypted and scoped by app identity, installation and grant.
 - No automatic merge or client-authored patch execution.
 
 ## 7. Architecture summary
@@ -492,6 +501,12 @@ The 2026-08-21 acceptance scan `cmt35aj1s000001hck9fmguzk` remains historical ev
 ## 9. Release status
 
 Runtime product `2d4e168da544306bf6cc9958a55f14bbfcb717e3` passed production release 40538483543 and independent worker/image/source/readiness checks. Controlled Standard and Deep PHP acceptance is recorded in §8 on its earlier image; a cold-cache Composer proposal and unchanged-source negative retest were subsequently observed, while the approval-bound PR and positive retest remain pending. Deployment, specific-fixture acceptance, customer runtime assurance and commercial readiness remain separate gates. The Desktop app has no signed release in this record.
+
+### Local v26 implementation — 2026-10-30
+
+The latest user instruction defers D5 and all landing motion/layout changes to preserve working production behavior. The candidate restores the five changed landing motion/runtime/layout files and existing motion browser tests exactly from main `284523ca381ee0d6ffa62ce22e855f7ecae9518f`. One static light-theme text-color accessibility fix in `EvidenceMap.astro` remains, with no motion or geometry change. Independent header/mobile-menu, CLI copy, claims and Turnstile fixes remain. No film regeneration, media change, production deployment or new loading-policy qualification is performed.
+
+The approved local scope is integrated through `bacb2674b`, with final correctness repairs independently approved and landing preservation separately reviewed. Local core/targeted, database, operations, static and Chromium/WebKit browser proofs are source-qualified in the handoff, including 310 rendered cases and 80 axe scans with zero reported violations. The completed 34-scenario real-film comparison supports keeping existing motion; it establishes no D5 loading/smoothness improvement and preserves the positive native-cache-hit caveat. The final web build passed at `bacb2674b`; the exact-label worker-image receipt follows the documentation freeze. Exact-head remote CI and live/manual release qualifications remain outstanding. The [v26 source/disposition record](./docs/handoffs/v26-implementation-2026-10-30.md) preserves original issue IDs, intermediate local proofs and unperformed qualifications. This does not change §8's dated production evidence. Production cutover additionally requires the [admission/capacity runbook](./docs/operations.md#v26-admissioncapacity-cutover-and-compatible-rollback), including legacy drain, grants and a reservation-compatible rollback image. Routing/model selection is unchanged.
 
 ### Delivered features and bounded proofs
 

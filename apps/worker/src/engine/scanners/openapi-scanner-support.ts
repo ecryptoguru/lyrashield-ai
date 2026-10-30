@@ -299,7 +299,20 @@ export function buildOperationUrl(
     }
   }
 
-  if (/\{[^}]+\}/.test(filledPath)) {
+  // One pass, including empty placeholders, without retries over unmatched openings.
+  let opening = -1
+  let unresolved = false
+  for (let i = 0; i < filledPath.length; i++) {
+    if (filledPath[i] === "{" && opening < 0) opening = i
+    if (filledPath[i] === "}" && opening >= 0) {
+      if (i > opening + 1) {
+        unresolved = true
+        break
+      }
+      opening = -1
+    }
+  }
+  if (unresolved) {
     issues.push({
       code: "PARAMETER_VALUE_UNAVAILABLE",
       subject: redactUrlForLogs(`${base.replace(/\/$/, "")}${pathTemplate}`),

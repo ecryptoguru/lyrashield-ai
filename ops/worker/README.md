@@ -134,3 +134,41 @@ The daily report-only billing reconciliation reads Polar orders and Razorpay pay
 The 2026-10-01 production readback found the report-only reconciliation incomplete: Polar's list request returned HTTP 403 `insufficient_scope`; the receipt reported `completed=false`, `polarChecked=0`, `razorpayChecked=0`, and `packCreditsVerified=0`. Code runs Polar and Razorpay sequentially, but the receipt does not retain provider response row counts, so zero Razorpay count alone does not prove it was skipped or establish response contents. At that time, the app-to-worker credential sync overwrote a worker-only token edit on the next release. No newer completed reconciliation receipt is recorded in this handoff; confirm the current credential grant and sync contract before acting. Use the guarded release/promotion procedure and retain a completed report-only receipt. Do not replay, clear exceptions, or reset the baseline to produce a green result.
 
 Non-secret tuning variables (`LYRASHIELD_WEB_SEARCH_MODE`, `LYRASHIELD_WEB_SEARCH_MAX_RESULTS`, `LYRASHIELD_WEB_SEARCH_MAX_CHARS_TOTAL`, `LYRASHIELD_WEB_SEARCH_MAX_CALLS_PER_SCAN`, `LYRASHIELD_WEB_SEARCH_BUDGET_USD`) may be added to `/etc/lyrashield/worker-runtime.conf` and are passed to the worker container by `run-worker.sh`. The engine redacts target hosts, secrets, and PII before sending a query and records web-search cost under a separate per-scan budget.
+
+### Isolated Go dependency resolution
+
+The worker launcher provisions the reviewed `golang:1.26.8-alpine` image at digest
+`sha256:8ac98ca534ac3f51e1f420a1dd2c15e74c75cfa0f23f3ad27eb5d7236c349a0c`
+and checks its actual Go version before starting the queue consumer. Provisioning
+is bounded (60-second pull, 15-second qualification); the resolver itself uses
+`--pull=never`. The worker-image contract checks that launcher and runtime pins
+match. Changing either pin requires the native Docker fixture suite and a reviewed
+release. This local qualification does not establish a production deployment.
+
+Go scans copy only `go.mod`, `go.sum`, `go.work` and `go.work.sum` into a private,
+host-visible temporary directory. A non-root, read-only-root, network-disabled
+container runs only Go metadata commands, with toolchain downloading, direct VCS,
+telemetry and inherited credentials disabled. A host-side file relay obtains only
+exact `.mod` and `.info` metadata from `https://proxy.golang.org`; shared SSRF
+validation pins DNS addresses and redirects are refused. No source archives,
+opaque CONNECT tunnel, build, test or repository script execution is permitted.
+
+The total resolution budget is 90 seconds, 500 selected modules and 50 MiB of
+metadata. The receipt records source input SHA-256 hashes, fetched metadata hashes,
+requested image digest, expected/observed toolchain and selected-output hash.
+Known `go.sum` checksums are checked by Go; the relay does not query the checksum
+database. A `go.sum` file alone is never an installed dependency inventory.
+Private or unavailable modules, mutable lookups, missing metadata, newer required
+Go versions, escaping paths and exhausted budgets remain incomplete. Contained
+local replacements preserve native graph selection but have no public release
+identity and remain partial. The shared capability contract names these limits.
+
+Local qualification (no model/provider calls):
+
+```sh
+RUN_GO_RESOLVER_FIXTURE=1 pnpm exec vitest run apps/worker/src/engine/scanners/go-module-resolver.fixture.test.ts
+node --test .github/scripts/tests/go-resolver-image-contract.test.mjs
+```
+
+The Docker fixtures use synthetic metadata through the same file relay; they do
+not fetch repository source or depend on live public module availability.

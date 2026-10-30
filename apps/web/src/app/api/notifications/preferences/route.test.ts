@@ -57,7 +57,7 @@ describe("GET /api/notifications/preferences", () => {
     getSession.mockResolvedValue({ userId: "user-1" })
     upsert.mockResolvedValue({ userId: "user-1", emailDigest: true })
 
-    const response = await GET()
+    const response = await GET(new Request("https://app.test/api/notifications/preferences"))
 
     expect(response.status).toBe(200)
   })

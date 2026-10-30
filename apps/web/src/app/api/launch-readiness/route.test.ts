@@ -1,3 +1,4 @@
+import { resolveOAuthReadScope } from "../../../../../../packages/auth/src/oauth-read-scope"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
@@ -13,6 +14,7 @@ vi.mock("@/lib/launch-readiness-server", () => ({
   getGateReadinessTargets: mocks.getGateReadinessTargets,
 }))
 vi.mock("@lyrashield/auth/server", () => ({
+  resolveOAuthReadScope,
   requirePermission: vi.fn().mockResolvedValue({
     session: { userId: "user-1" },
     workspace: { role: "OWNER", member: {} },
@@ -27,6 +29,7 @@ vi.mock("@lyrashield/logger", () => ({
 }))
 
 import { GET } from "./route"
+import { GET as V1GET } from "../v1/launch-readiness/route"
 import { requirePermission } from "@lyrashield/auth/server"
 import { expectPermissionDenied } from "@/__tests__/route-permission-manifest"
 
@@ -227,4 +230,59 @@ describe("GET /api/launch-readiness — release check contract", () => {
     )
     expect(mocks.getGateReadinessTargets).not.toHaveBeenCalled()
   })
+})
+
+describe("OAuth readiness read scope", () => {
+  it.each(["", "&targetId=target-2"])("rejects missing or ungranted target %s", async (query) => {
+    vi.mocked(requirePermission).mockResolvedValueOnce({
+      session: {
+        userId: "user-1",
+        oauth: {
+          connectionId: "conn-1",
+          allTargets: false,
+          allowedTargetIds: ["target-1"],
+        },
+      },
+    } as never)
+    const response = await GET(request(`workspaceId=ws-1${query}`))
+    expect(response.status).toBe(403)
+  })
+})
+
+it("applies selected-target readiness denial through the v1 alias", async () => {
+  vi.mocked(requirePermission).mockResolvedValueOnce({
+    session: {
+      userId: "user-1",
+      oauth: {
+        connectionId: "conn-1",
+        allTargets: false,
+        allowedTargetIds: ["target-1"],
+      },
+    },
+  } as never)
+  const response = await V1GET(request("workspaceId=ws-1"))
+  expect(response.status).toBe(403)
+})
+
+it("reads an explicitly allowed readiness target and limits aggregates to it", async () => {
+  vi.clearAllMocks()
+  vi.mocked(requirePermission).mockResolvedValueOnce({
+    session: {
+      userId: "user-1",
+      oauth: {
+        connectionId: "conn-1",
+        allTargets: false,
+        allowedTargetIds: ["target-1"],
+      },
+    },
+  } as never)
+  mocks.groupBy.mockResolvedValue([])
+  mocks.getGateReadinessTargets.mockResolvedValue([READY_TARGET])
+  const response = await V1GET(request("workspaceId=ws-1&targetId=target-1"))
+  expect(response.status).toBe(200)
+  expect(mocks.groupBy).toHaveBeenCalledWith(
+    expect.objectContaining({
+      where: { workspaceId: "ws-1", targetId: "target-1", deletedAt: null },
+    })
+  )
 })
