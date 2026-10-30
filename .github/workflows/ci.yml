@@ -222,6 +222,9 @@ jobs:
       - name: Format check
         run: pnpm format:check
 
+      - name: Runtime environment ownership audit
+        run: pnpm lint:env-ownership
+
       - name: Serial-comma copy ratchet
         run: pnpm lint:copy-comma
 
@@ -237,7 +240,6 @@ jobs:
         run: |
           pnpm exec eslint run-all-tests.mjs .github/scripts/*.mjs .github/scripts/tests/*.mjs
           if [ "$TOOLING_ONLY" = 'true' ]; then
-            pnpm lint:env-ownership
             pnpm exec vitest run --maxWorkers=2 lint/surface-size.test.mjs lint/env-ownership.test.mjs lint/size-ratchet.test.mjs lint/serial-comma-ratchet.test.mjs lint/ratchet-baseline-shrink.test.mjs
           fi
           bash .github/scripts/tests/test-verify-engine-revision-pagination.sh
