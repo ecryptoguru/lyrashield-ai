@@ -269,50 +269,10 @@ export async function executeApprovedFixPr(
         "The repository changed since this scan. Retest and request a new fix approval."
       )
     }
-    // Apply the validated diff file-by-file: fetch current content at the base
-    // commit, apply the unified diff (fail-closed on any hunk mismatch), write
-    // the result to the fix branch. A file with no readable content is a hard
-    // failure — we never write a partial patch.
-    const preparedFiles: Array<{ file: string; content: string; sha: string }> = []
-    for (const file of validation.filesTouched) {
-      const current = await getFileContent(
-        req.installationId,
-        req.repoOwner,
-        req.repoName,
-        file,
-        fromSha
-      )
-      if (current === null) {
-        throw new Error(
-          `Cannot read ${file} at the scanned commit — patch cannot be applied safely.`
-        )
-      }
-      if (req.composerFix && current !== req.composerFix.before) {
-        throw new Error(
-          "The Composer lock no longer matches its resolver receipt. Retest and regenerate the proposal."
-        )
-      }
-      const newContent = applyUnifiedDiff(current, extractFileDiff(req.diff, file))
-      if (req.composerFix && newContent !== req.composerFix.after)
-        throw new Error("Composer patch result differs from the resolver output")
-      const bytes = Buffer.from(current, "utf8")
-      const sha = createHash("sha1").update(`blob ${bytes.length}\0`).update(bytes).digest("hex")
-      preparedFiles.push({ file, content: newContent, sha })
-    }
+    const preparedFiles = await prepareFixPrFiles(req, validation.filesTouched, fromSha)
     remoteMutationStarted = true
     await createBranch(req.installationId, req.repoOwner, req.repoName, branchName, fromSha)
-    for (const { file, content, sha } of preparedFiles) {
-      await createOrUpdateFile(
-        req.installationId,
-        req.repoOwner,
-        req.repoName,
-        file,
-        content,
-        `fix: ${req.fixProposalId}`,
-        branchName,
-        sha
-      )
-    }
+    await writeFixPrFiles(req, branchName, preparedFiles)
 
     const pr = await createPullRequest(
       req.installationId,
@@ -387,6 +347,55 @@ export async function executeApprovedFixPr(
           ? "The repository changed since the scan. Retest and generate a new proposal."
           : "Execution stopped before GitHub writes. Review the proposal and generate a new one.",
     }
+  }
+}
+
+async function prepareFixPrFiles(req: FixPrRequest, filesTouched: string[], fromSha: string) {
+  // Prepare every file against the scanned base before any GitHub write.
+  // Unreadable content or a hunk mismatch fails closed, without a partial patch.
+  const preparedFiles: Array<{ file: string; content: string; sha: string }> = []
+  for (const file of filesTouched) {
+    const current = await getFileContent(
+      req.installationId,
+      req.repoOwner,
+      req.repoName,
+      file,
+      fromSha
+    )
+    if (current === null) {
+      throw new Error(`Cannot read ${file} at the scanned commit — patch cannot be applied safely.`)
+    }
+    if (req.composerFix && current !== req.composerFix.before) {
+      throw new Error(
+        "The Composer lock no longer matches its resolver receipt. Retest and regenerate the proposal."
+      )
+    }
+    const newContent = applyUnifiedDiff(current, extractFileDiff(req.diff, file))
+    if (req.composerFix && newContent !== req.composerFix.after)
+      throw new Error("Composer patch result differs from the resolver output")
+    const bytes = Buffer.from(current, "utf8")
+    const sha = createHash("sha1").update(`blob ${bytes.length}\0`).update(bytes).digest("hex")
+    preparedFiles.push({ file, content: newContent, sha })
+  }
+  return preparedFiles
+}
+
+async function writeFixPrFiles(
+  req: FixPrRequest,
+  branchName: string,
+  files: Array<{ file: string; content: string; sha: string }>
+) {
+  for (const { file, content, sha } of files) {
+    await createOrUpdateFile(
+      req.installationId,
+      req.repoOwner,
+      req.repoName,
+      file,
+      content,
+      `fix: ${req.fixProposalId}`,
+      branchName,
+      sha
+    )
   }
 }
 

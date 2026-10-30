@@ -62,57 +62,7 @@ export async function handleFixPrMergedAndReevaluate({
     throw new Error("Invalid GitHub repository identity")
   }
   const advisoryKey = `fix-loop:${workspaceId}:${branchName}`
-  const findAnchor = async (tx: ScopedTransaction) => {
-    const pr = await tx.pullRequest.findFirst({
-      where: {
-        branchName,
-        ...(repoOwner && repoName ? { repoOwner, repoName } : {}),
-        ...(prNumber ? { OR: [{ prNumber }, { prNumber: null }] } : {}),
-        status: { in: ["open", "merged"] },
-        deletedAt: null,
-        fixProposal: { finding: { workspaceId, deletedAt: null } },
-      },
-      select: {
-        fixProposal: {
-          select: {
-            finding: {
-              select: {
-                id: true,
-                targetId: true,
-                scan: {
-                  select: { id: true, goal: true, mode: true, policyId: true, targetId: true },
-                },
-              },
-            },
-          },
-        },
-      },
-    })
-    const finding = pr?.fixProposal?.finding
-    if (!finding?.targetId || !finding.scan) return null
-
-    const latestCompleted = await tx.scan.findFirst({
-      where: { workspaceId, targetId: finding.targetId, status: "COMPLETED", deletedAt: null },
-      orderBy: { createdAt: "desc" },
-      select: { id: true, goal: true, mode: true, policyId: true, targetId: true },
-    })
-    const template = latestCompleted ?? finding.scan
-    if (!template.targetId) return null
-    const retestTemplate: {
-      id: string
-      goal: ScanGoal
-      mode: ScanMode
-      policyId: string | null
-      targetId: string
-    } = { ...template, targetId: template.targetId }
-    return {
-      findingId: finding.id,
-      sourceScanId: finding.scan.id,
-      sourceMode: finding.scan.mode,
-      targetId: template.targetId,
-      template: retestTemplate,
-    }
-  }
+  const anchorContext = { workspaceId, branchName, prNumber, repoOwner, repoName }
 
   const { handleFixPrMerged } = await import("./fix-proposal-service")
   // This helper commits merge state separately so failed retest creation can
@@ -132,7 +82,7 @@ export async function handleFixPrMergedAndReevaluate({
     workspaceId,
     async (lockTx) => {
       await lockRetestAdmission(lockTx, result.actedById, advisoryKey)
-      const anchor = await findAnchor(lockTx)
+      const anchor = await findFixPrMergeAnchor(lockTx, anchorContext)
       if (!anchor) return null
 
       // The retest's sponsoring account is the recorded actor — bind the
@@ -260,6 +210,73 @@ export async function handleFixPrMergedAndReevaluate({
       })
     })
   return outcome
+}
+
+async function findFixPrMergeAnchor(
+  tx: ScopedTransaction,
+  {
+    workspaceId,
+    branchName,
+    prNumber,
+    repoOwner,
+    repoName,
+  }: {
+    workspaceId: string
+    branchName: string
+    prNumber?: number
+    repoOwner?: string
+    repoName?: string
+  }
+) {
+  const pr = await tx.pullRequest.findFirst({
+    where: {
+      branchName,
+      ...(repoOwner && repoName ? { repoOwner, repoName } : {}),
+      ...(prNumber ? { OR: [{ prNumber }, { prNumber: null }] } : {}),
+      status: { in: ["open", "merged"] },
+      deletedAt: null,
+      fixProposal: { finding: { workspaceId, deletedAt: null } },
+    },
+    select: {
+      fixProposal: {
+        select: {
+          finding: {
+            select: {
+              id: true,
+              targetId: true,
+              scan: {
+                select: { id: true, goal: true, mode: true, policyId: true, targetId: true },
+              },
+            },
+          },
+        },
+      },
+    },
+  })
+  const finding = pr?.fixProposal?.finding
+  if (!finding?.targetId || !finding.scan) return null
+
+  const latestCompleted = await tx.scan.findFirst({
+    where: { workspaceId, targetId: finding.targetId, status: "COMPLETED", deletedAt: null },
+    orderBy: { createdAt: "desc" },
+    select: { id: true, goal: true, mode: true, policyId: true, targetId: true },
+  })
+  const template = latestCompleted ?? finding.scan
+  if (!template.targetId) return null
+  const retestTemplate: {
+    id: string
+    goal: ScanGoal
+    mode: ScanMode
+    policyId: string | null
+    targetId: string
+  } = { ...template, targetId: template.targetId }
+  return {
+    findingId: finding.id,
+    sourceScanId: finding.scan.id,
+    sourceMode: finding.scan.mode,
+    targetId: template.targetId,
+    template: retestTemplate,
+  }
 }
 
 /** handleFixPrMergedAndReevaluate result: the merge outcome plus the retest scan to enqueue. */

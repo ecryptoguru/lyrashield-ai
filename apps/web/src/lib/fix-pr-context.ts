@@ -85,45 +85,7 @@ export async function resolveFixPrRequest(
       "GITHUB_CONNECTION_INACTIVE",
       "The GitHub connection is no longer active. Reconnect it before requesting a fix."
     )
-  // Validate the producer namespace before any storage access. Malformed and
-  // cross-tenant references are user-actionable conflicts, never storage 500s.
-  let uri: URL
-  try {
-    uri = new URL(proposal.diffRef)
-    if (uri.search || uri.hash || uri.username || uri.password) throw new Error("Invalid reference")
-    if (uri.protocol === "s3:" && env.S3_BUCKET && uri.hostname !== env.S3_BUCKET)
-      throw new Error("Invalid reference")
-    const prefix = `evidence/${workspaceId}/${finding.id}/fix-patch/fix-${proposal.id}-`
-    const path =
-      uri.protocol === "s3:"
-        ? uri.pathname.slice(1)
-        : uri.protocol === "file:"
-          ? fileURLToPath(uri)
-              .slice(
-                resolve(
-                  env.LYRASHIELD_LOCAL_EVIDENCE_DIR || `${process.cwd()}/.lyrashield/evidence`
-                ).length + 1
-              )
-              .replace(/\\/g, "/")
-              .replace(/\.enc$/, "")
-          : ""
-    if (!path.startsWith(prefix) || !/^[a-f0-9]{64}$/.test(path.slice(prefix.length)))
-      throw new Error("Invalid reference")
-    if (
-      uri.protocol === "file:" &&
-      fileURLToPath(uri) !==
-        resolve(
-          env.LYRASHIELD_LOCAL_EVIDENCE_DIR || `${process.cwd()}/.lyrashield/evidence`,
-          `${path}.enc`
-        )
-    )
-      throw new Error("Invalid reference")
-  } catch {
-    throw new FixPrContextError(
-      "PROPOSAL_PATCH_PROVENANCE_REQUIRED",
-      "This proposal's stored patch reference is invalid. Generate a new fix proposal."
-    )
-  }
+  const uri = validateFixPrPatchReference(proposal.diffRef, workspaceId, finding.id, proposal.id)
   let artifact
   try {
     artifact = await readEncryptedArtifact(proposal.diffRef, workspaceId)
@@ -189,4 +151,52 @@ export async function resolveFixPrRequest(
     baseCommit: finding.baseCommit,
     requestedById,
   }
+}
+
+function validateFixPrPatchReference(
+  diffRef: string,
+  workspaceId: string,
+  findingId: string,
+  proposalId: string
+): URL {
+  // Validate the producer namespace before any storage access. Malformed and
+  // cross-tenant references are user-actionable conflicts, never storage 500s.
+  let uri: URL
+  try {
+    uri = new URL(diffRef)
+    if (uri.search || uri.hash || uri.username || uri.password) throw new Error("Invalid reference")
+    if (uri.protocol === "s3:" && env.S3_BUCKET && uri.hostname !== env.S3_BUCKET)
+      throw new Error("Invalid reference")
+    const prefix = `evidence/${workspaceId}/${findingId}/fix-patch/fix-${proposalId}-`
+    const path =
+      uri.protocol === "s3:"
+        ? uri.pathname.slice(1)
+        : uri.protocol === "file:"
+          ? fileURLToPath(uri)
+              .slice(
+                resolve(
+                  env.LYRASHIELD_LOCAL_EVIDENCE_DIR || `${process.cwd()}/.lyrashield/evidence`
+                ).length + 1
+              )
+              .replace(/\\/g, "/")
+              .replace(/\.enc$/, "")
+          : ""
+    if (!path.startsWith(prefix) || !/^[a-f0-9]{64}$/.test(path.slice(prefix.length)))
+      throw new Error("Invalid reference")
+    if (
+      uri.protocol === "file:" &&
+      fileURLToPath(uri) !==
+        resolve(
+          env.LYRASHIELD_LOCAL_EVIDENCE_DIR || `${process.cwd()}/.lyrashield/evidence`,
+          `${path}.enc`
+        )
+    )
+      throw new Error("Invalid reference")
+  } catch {
+    throw new FixPrContextError(
+      "PROPOSAL_PATCH_PROVENANCE_REQUIRED",
+      "This proposal's stored patch reference is invalid. Generate a new fix proposal."
+    )
+  }
+  return uri
 }

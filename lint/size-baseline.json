@@ -135,11 +135,6 @@
       "totalExcess": 327,
       "maxExcess": 327
     },
-    "apps/web/src/app/(dashboard)/dashboard/findings/fixes-client.tsx|max-lines-per-function": {
-      "count": 1,
-      "totalExcess": 10,
-      "maxExcess": 10
-    },
     "apps/web/src/app/(dashboard)/dashboard/findings/page.tsx|max-lines-per-function": {
       "count": 1,
       "totalExcess": 95,
@@ -644,11 +639,6 @@
       "count": 1,
       "totalExcess": 62,
       "maxExcess": 62
-    },
-    "packages/db/src/fix-pr-merge-service.ts|max-lines-per-function": {
-      "count": 1,
-      "totalExcess": 37,
-      "maxExcess": 37
     },
     "packages/db/src/gate-evaluation-service.ts|max-lines-per-function": {
       "count": 2,
