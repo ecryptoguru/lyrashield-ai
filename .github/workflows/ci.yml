@@ -237,7 +237,8 @@ jobs:
         run: |
           pnpm exec eslint run-all-tests.mjs .github/scripts/*.mjs .github/scripts/tests/*.mjs
           if [ "$TOOLING_ONLY" = 'true' ]; then
-            pnpm exec vitest run lint/size-ratchet.test.mjs lint/serial-comma-ratchet.test.mjs lint/ratchet-baseline-shrink.test.mjs
+            pnpm lint:env-ownership
+            pnpm exec vitest run --maxWorkers=2 lint/surface-size.test.mjs lint/env-ownership.test.mjs lint/size-ratchet.test.mjs lint/serial-comma-ratchet.test.mjs lint/ratchet-baseline-shrink.test.mjs
           fi
           bash .github/scripts/tests/test-verify-engine-revision-pagination.sh
           find .github/scripts ops -type f -name '*.sh' -print0 | xargs -0 shellcheck --severity=warning
@@ -500,6 +501,21 @@ jobs:
           fi
           if [ "$OPS_TESTS" = true ]; then suites+=(ops); fi
           LYRASHIELD_TEST_SUITES="$(IFS=,; echo "${suites[*]}")" pnpm test
+
+      - name: Web presentation contracts
+        if: needs.changes.outputs.app == 'true'
+        run: pnpm exec vitest run --maxWorkers=2 apps/web/src/app/mobile-shell.contract.test.ts
+
+      - name: Target admission concurrency with disposable PostgreSQL
+        if: needs.changes.outputs.database-tests == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          DATABASE_URL="$RLS_RUNTIME_DATABASE_URL" TARGET_ADMISSION_RUNTIME_TEST=1 \
+            pnpm exec vitest run --maxWorkers=2 apps/web/src/app/api/targets/target-admission.runtime.test.ts \
+              --reporter=default --reporter=json --outputFile="$RUNNER_TEMP/target-admission.json"
+          node .github/scripts/assert-named-vitest-tests.mjs "$RUNNER_TEMP/target-admission.json" \
+            'admits one of two concurrent distinct target creates at the last slot and frees it on deletion'
 
       - name: Prove metering and queue invariants with disposable services
         if: needs.changes.outputs.database-tests == 'true'
@@ -787,6 +803,10 @@ jobs:
           pnpm --filter @lyrashield/marketing blog:validate:offline
           pnpm --filter @lyrashield/marketing compare:validate
           pnpm --filter @lyrashield/marketing validate-redirects
+
+      - name: Marketing deployment source contract
+        if: needs.changes.outputs.marketing-tests == 'true'
+        run: node --test .github/scripts/tests/marketing-deploy-smoke.test.mjs
 
       - name: Test marketing
         if: needs.changes.outputs.marketing-tests == 'true'

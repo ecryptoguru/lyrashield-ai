@@ -321,6 +321,12 @@ describe("POST /api/targets", () => {
     expect(lockWorkspaceScanAdmission).toHaveBeenCalledWith(expect.any(Object), "ws-1")
     expect(assertTargetAllowed).toHaveBeenCalledWith("ws-1", "user-1", expect.any(Object))
     expect(prisma.target.create).toHaveBeenCalledOnce()
+    expect(vi.mocked(lockWorkspaceScanAdmission).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(assertTargetAllowed).mock.invocationCallOrder[0]!
+    )
+    expect(vi.mocked(assertTargetAllowed).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(prisma.target.create).mock.invocationCallOrder[0]!
+    )
   })
 })
 

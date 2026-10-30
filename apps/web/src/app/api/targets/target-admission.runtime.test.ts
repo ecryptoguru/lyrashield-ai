@@ -34,7 +34,8 @@ describe.skipIf(!enabled)("workspace target-cap admission on PostgreSQL", () => 
     const database = decodeURIComponent(ownerAddress.pathname.slice(1))
     const disposableDatabase =
       /(?:^|[_-])(?:test|ci|disposable)(?:$|[_-])/i.test(database) ||
-      ["v15_product", "lyra_v18_ci", "v22_agent_fk_ci"].includes(database)
+      ["v15_product", "lyra_v18_ci", "v22_agent_fk_ci"].includes(database) ||
+      (database === "lyrashield" && process.env.LYRASHIELD_TEST_DB_DISPOSABLE === "1")
     if (
       !["127.0.0.1", "localhost"].includes(ownerAddress.hostname) ||
       !["127.0.0.1", "localhost"].includes(runtimeAddress.hostname) ||

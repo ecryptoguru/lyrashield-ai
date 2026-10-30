@@ -181,6 +181,10 @@ const envSchema = z
 
     // App
     NEXT_PUBLIC_APP_URL: z.string().url("NEXT_PUBLIC_APP_URL must be a valid URL"),
+    // Build-owned public revision tag; not a runtime credential.
+    NEXT_PUBLIC_SENTRY_RELEASE: z.string().max(200).optional().or(z.literal("")),
+    // Server-owned plain-text domain proof for the OpenAI Apps challenge route.
+    OPENAI_APPS_DOMAIN_VERIFICATION_TOKEN: z.string().max(4096).optional().or(z.literal("")),
     NEXT_PUBLIC_MARKETING_URL: z.string().url().optional().or(z.literal("")),
     // Product analytics (PostHog) — mirrors marketing privacy config
     NEXT_PUBLIC_POSTHOG_KEY: z.string().optional().or(z.literal("")),
