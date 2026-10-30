@@ -37,6 +37,23 @@ const migrations = [
   ),
 }))
 const shellQuote = (value) => "'" + String(value).replaceAll("'", "'\\''") + "'"
+class RevisionNotFound extends Error {}
+function isRevisionNotFound(file, args, error) {
+  const stderr = String(error.stderr ?? "").trim()
+  return (
+    file === "az" &&
+    error.status === 1 &&
+    error.code === undefined &&
+    error.signal == null &&
+    stderr.length <= 16384 &&
+    args[0] === "containerapp" &&
+    args.includes("--revision") &&
+    ((args[1] === "revision" && args[2] === "show") ||
+      (args[1] === "replica" && args[2] === "list")) &&
+    /^ERROR: \(RevisionNotFound\)(?:\s|$)/.test(stderr) &&
+    stderr.split(/\r?\n/).filter((line) => line.startsWith("ERROR:")).length === 1
+  )
+}
 function execute(file, args, timeout = 120000) {
   try {
     return execFileSync(file, args, {
@@ -45,7 +62,9 @@ function execute(file, args, timeout = 120000) {
       timeout,
       maxBuffer: 4 * 1024 * 1024,
     })
-  } catch {
+  } catch (error) {
+    // Preserve only the exact code from targeted read-only revision probes.
+    if (isRevisionNotFound(file, args, error)) throw new RevisionNotFound("v26 revision deleted")
     throw new Error("v26 authoritative service operation failed")
   }
 }
@@ -176,7 +195,9 @@ function revisions(name) {
       (row) =>
         typeof row?.name !== "string" ||
         !/^[A-Za-z0-9][A-Za-z0-9-]{0,62}$/.test(row.name) ||
-        typeof row?.properties?.active !== "boolean"
+        typeof row?.properties?.active !== "boolean" ||
+        !Number.isSafeInteger(row.properties.replicas) ||
+        row.properties.replicas < 0
     )
   )
     throw new Error("v26 writer inventory unavailable")
@@ -228,15 +249,37 @@ async function observeFleet(databaseIdentity, current, held) {
   }
   return { fleet, principals: [...new Set(principals)] }
 }
+function assertDeletedRevision(name, revision) {
+  for (const command of [
+    ["revision", "show"],
+    ["replica", "list"],
+  ]) {
+    try {
+      azure([
+        "containerapp",
+        ...command,
+        "--name",
+        name,
+        "--resource-group",
+        env.RG,
+        "--revision",
+        revision,
+      ])
+    } catch (error) {
+      if (error instanceof RevisionNotFound) continue
+      throw error
+    }
+    // An empty successful response cannot prove that a revision was deleted.
+    throw new Error("v26 baseline revision deletion unproven")
+  }
+}
 function revisionsToInspect(inventory, state, name) {
   const baseline = new Set(
     state.baseline.fleet.filter((row) => row.name === name).map((row) => row.revision)
   )
-  if ([...baseline].some((revision) => !inventory.some((row) => row.name === revision)))
-    throw new Error("v26 baseline revision unavailable")
+  for (const revision of baseline)
+    if (!inventory.some((row) => row.name === revision)) assertDeletedRevision(name, revision)
   return inventory.filter((row) => {
-    if (!Number.isSafeInteger(row.properties.replicas) || row.properties.replicas < 0)
-      throw new Error("v26 replica count unavailable")
     return baseline.has(row.name) || row.properties.replicas > 0
   })
 }
@@ -258,7 +301,11 @@ function assertInactive(state) {
         "--revision",
         row.name,
       ])
-      if (!Array.isArray(replicas) || replicas.length !== 0)
+      if (
+        !Array.isArray(replicas) ||
+        replicas.length !== row.properties.replicas ||
+        replicas.length !== 0
+      )
         throw new Error("v26 old producer replicas remain")
     }
   }
@@ -333,7 +380,12 @@ async function assertCandidateFleet(state) {
         "--revision",
         row.name,
       ])
-      if (!Array.isArray(replicas) || replicas.length) throw new Error("v26 old replica remains")
+      if (
+        !Array.isArray(replicas) ||
+        replicas.length !== row.properties.replicas ||
+        replicas.length
+      )
+        throw new Error("v26 old replica remains")
     }
     const traffic = azure([
       "containerapp",
