@@ -1,3 +1,4 @@
+import { targetReadScopeWhere } from "./read-query-scope"
 import { prisma } from "./client"
 import { getSystemPrisma } from "./system-client"
 import type { Schedule, ScanGoal, ScanMode } from "./generated/prisma"
@@ -85,10 +86,11 @@ export async function createSchedule(params: {
 
 export async function getSchedule(
   scheduleId: string,
-  workspaceId: string
+  workspaceId: string,
+  targetIds?: string[]
 ): Promise<ScheduleWithDetails | null> {
   const schedule = await prisma.schedule.findFirst({
-    where: { id: scheduleId, workspaceId, deletedAt: null },
+    where: { id: scheduleId, workspaceId, deletedAt: null, ...targetReadScopeWhere({ targetIds }) },
     include: {
       target: { select: { id: true, name: true, type: true, url: true, apiSpecUrl: true } },
     },
@@ -100,6 +102,7 @@ export async function getSchedule(
 export async function listSchedules(params: {
   workspaceId: string
   targetId?: string
+  targetIds?: string[]
   enabled?: boolean
   cursor?: string
   limit?: number
@@ -110,7 +113,7 @@ export async function listSchedules(params: {
     where: {
       workspaceId: params.workspaceId,
       deletedAt: null,
-      ...(params.targetId ? { targetId: params.targetId } : {}),
+      ...targetReadScopeWhere(params),
       ...(params.enabled !== undefined ? { enabled: params.enabled } : {}),
     },
     include: {

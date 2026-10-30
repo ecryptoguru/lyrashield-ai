@@ -65,11 +65,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     if (!scan) {
       return apiError("SCAN_NOT_FOUND", "Scan not found", 404)
     }
-    if (
-      session.oauth?.connectionId &&
-      session.oauth.scopes.includes("lyrashield.write") &&
-      !session.oauth.allTargets
-    ) {
+    if (session.oauth?.connectionId && !session.oauth.allTargets) {
       assertOAuthDelegatedScope(session, scan.targetId)
     }
 

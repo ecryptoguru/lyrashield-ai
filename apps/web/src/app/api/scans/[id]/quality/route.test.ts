@@ -202,7 +202,7 @@ describe("/api/scans/[id]/quality", () => {
     expect(getScanQualitySurface).not.toHaveBeenCalled()
   })
 
-  it("keeps workspace-wide read-only OAuth access without a target grant", async () => {
+  it("denies read-only OAuth quality access with an empty target grant", async () => {
     const session = {
       userId: "user-1",
       oauth: {
@@ -213,17 +213,14 @@ describe("/api/scans/[id]/quality", () => {
       },
     }
     vi.mocked(requirePermission).mockResolvedValueOnce({ session } as never)
-    vi.mocked(getScanQualitySurface).mockResolvedValueOnce({
-      version: "lyrashield-scan-quality/1.0.0",
-      surfaceChecksum: "workspace-read-surface",
-    } as never)
+    scanFindFirstMock.mockResolvedValueOnce({ targetId: "target-1" })
 
     const res = await GET(request("ws-1"), routeParams)
 
-    expect(res.status).toBe(200)
-    expect(withWorkspaceRLSMock).not.toHaveBeenCalled()
-    expect(assertOAuthDelegatedScopeMock).not.toHaveBeenCalled()
-    expect(getScanQualitySurface).toHaveBeenCalledWith("scan-1", "ws-1")
+    expect(res.status).toBe(403)
+    expect(withWorkspaceRLSMock).toHaveBeenCalled()
+    expect(assertOAuthDelegatedScopeMock).toHaveBeenCalledWith(session, "target-1")
+    expect(getScanQualitySurface).not.toHaveBeenCalled()
   })
 
   it("rejects a missing workspaceId", async () => {

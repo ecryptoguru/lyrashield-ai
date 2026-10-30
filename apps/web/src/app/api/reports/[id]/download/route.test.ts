@@ -1,6 +1,8 @@
+import { resolveOAuthReadScope } from "../../../../../../../../packages/auth/src/oauth-read-scope"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const {
+  resolveReportDelegationTarget,
   getShareableReport,
   generateLaunchReportHTML,
   isLaunchReportShareablePayload,
@@ -10,6 +12,7 @@ const {
   findFirst,
   update,
 } = vi.hoisted(() => ({
+  resolveReportDelegationTarget: vi.fn(),
   getShareableReport: vi.fn(),
   generateLaunchReportHTML: vi.fn(() => "<html>launch</html>"),
   isLaunchReportShareablePayload: vi.fn((value: unknown) => value !== null && value !== undefined),
@@ -21,6 +24,7 @@ const {
 }))
 
 vi.mock("@lyrashield/db", () => ({
+  resolveReportDelegationTarget,
   getShareableReport,
   generateLaunchReportHTML,
   isLaunchReportShareablePayload,
@@ -29,7 +33,10 @@ vi.mock("@lyrashield/db", () => ({
   isReportData,
   prisma: { report: { findFirst, update } },
 }))
-vi.mock("@lyrashield/auth/server", () => ({ requirePermission: vi.fn().mockResolvedValue({}) }))
+vi.mock("@lyrashield/auth/server", () => ({
+  resolveOAuthReadScope,
+  requirePermission: vi.fn().mockResolvedValue({ session: { userId: "user-1" } }),
+}))
 vi.mock("@lyrashield/auth", () => ({ PERMISSIONS: { report: { download: "report:download" } } }))
 vi.mock("@lyrashield/logger", () => ({
   logger: { error: vi.fn(), warn: vi.fn() },
@@ -309,3 +316,77 @@ describe("GET /api/reports/[id]/download", () => {
     expect(await second.text()).toBe("")
   })
 })
+
+it("denies a read-only ungranted report before download/conditional response", async () => {
+  vi.clearAllMocks()
+  vi.mocked(requirePermission).mockResolvedValueOnce({
+    session: {
+      oauth: { connectionId: "conn-1", allTargets: false, allowedTargetIds: ["target-1"] },
+    },
+  } as never)
+  resolveReportDelegationTarget.mockResolvedValueOnce({ targetId: "target-2" })
+  isLaunchReportShareablePayload.mockReturnValue(true)
+  getShareableReport.mockReset().mockResolvedValueOnce({ id: "report-2", title: "Private report" })
+  findFirst.mockReset().mockResolvedValueOnce({
+    title: "Private report",
+    type: "launch_readiness",
+    contentJson: {},
+    scanId: null,
+  })
+  update.mockReset().mockResolvedValueOnce({})
+  const response = await GET(
+    new Request("http://localhost/api/reports/report-2/download?workspaceId=ws-1", {
+      headers: { "If-None-Match": '"cached"' },
+    }),
+    { params: Promise.resolve({ id: "report-2" }) }
+  )
+  expect(response.status).toBe(403)
+  expect(getShareableReport).not.toHaveBeenCalled()
+  expect(findFirst).not.toHaveBeenCalled()
+  expect(update).not.toHaveBeenCalled()
+})
+
+it.each([
+  {
+    name: "allowed selected",
+    oauth: { connectionId: "conn-1", allTargets: false, allowedTargetIds: ["target-1"] },
+  },
+  { name: "all-target", oauth: { connectionId: "conn-1", allTargets: true, allowedTargetIds: [] } },
+])("allows immutable report download for $name grants", async ({ oauth }) => {
+  vi.clearAllMocks()
+  vi.mocked(requirePermission).mockResolvedValueOnce({ session: { oauth } } as never)
+  resolveReportDelegationTarget.mockReset().mockResolvedValueOnce({ targetId: "target-1" })
+  getShareableReport.mockReset().mockResolvedValueOnce({ id: "report-1", title: "Private report" })
+  findFirst.mockReset().mockResolvedValueOnce({
+    title: "Private report",
+    type: "launch_readiness",
+    contentJson: {},
+    scanId: null,
+  })
+  update.mockReset().mockResolvedValueOnce({})
+  isLaunchReportShareablePayload.mockReturnValue(true)
+  const response = await GET(
+    new Request("http://localhost/api/reports/report-1/download?workspaceId=ws-1"),
+    { params: Promise.resolve({ id: "report-1" }) }
+  )
+  expect(response.status).toBe(200)
+  expect(response.headers.get("ETag")).toMatch(/^"[0-9a-f]{64}"$/)
+  if (oauth.allTargets) expect(resolveReportDelegationTarget).not.toHaveBeenCalled()
+})
+
+it.each([null, { targetId: null }])(
+  "keeps missing/unbound reports unavailable to selected grants %j",
+  async (binding) => {
+    vi.clearAllMocks()
+    vi.mocked(requirePermission).mockResolvedValueOnce({
+      session: { oauth: { connectionId: "conn-1", allTargets: false, allowedTargetIds: [] } },
+    } as never)
+    resolveReportDelegationTarget.mockReset().mockResolvedValueOnce(binding)
+    const response = await GET(
+      new Request("http://localhost/api/reports/report-1/download?workspaceId=ws-1"),
+      { params: Promise.resolve({ id: "report-1" }) }
+    )
+    expect(response.status).toBe(binding ? 403 : 404)
+    expect(getShareableReport).not.toHaveBeenCalled()
+  }
+)

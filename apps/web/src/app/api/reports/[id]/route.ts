@@ -31,11 +31,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     if (!report) {
       return apiError("REPORT_NOT_FOUND", "Report not found", 404)
     }
-    if (
-      session.oauth?.connectionId &&
-      session.oauth.scopes.includes("lyrashield.write") &&
-      !session.oauth.allTargets
-    ) {
+    if (session.oauth?.connectionId && !session.oauth.allTargets) {
       const delegation = await resolveReportDelegationTarget(id, workspaceId)
       if (!delegation) {
         return apiError("REPORT_NOT_FOUND", "Report not found", 404)

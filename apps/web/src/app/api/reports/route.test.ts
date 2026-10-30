@@ -1,3 +1,5 @@
+import { resolveOAuthReadScope } from "../../../../../../packages/auth/src/oauth-read-scope"
+import { GET as V1GET } from "../v1/reports/route"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 vi.mock("@lyrashield/db", () => ({
@@ -7,6 +9,7 @@ vi.mock("@lyrashield/db", () => ({
 }))
 
 vi.mock("@lyrashield/auth/server", () => ({
+  resolveOAuthReadScope,
   assertOAuthDelegatedScope: vi.fn(),
   requirePermission: vi.fn().mockResolvedValue({ session: { userId: "user-1" } }),
 }))
@@ -197,4 +200,63 @@ describe("GET /api/reports — conditional GET (W2.4)", () => {
     expect(second.status).toBe(200)
     expect(second.headers.get("ETag")).not.toBe(etag)
   })
+})
+
+it.each([{ targetIds: ["target-1"] }, { targetIds: [] }])(
+  "bounds omitted target reads and pagination to $targetIds",
+  async ({ targetIds }) => {
+    vi.clearAllMocks()
+    vi.mocked(requirePermission).mockResolvedValueOnce({
+      session: {
+        userId: "user-1",
+        oauth: {
+          connectionId: "conn-1",
+          scopes: ["lyrashield.read"],
+          allTargets: false,
+          allowedTargetIds: targetIds,
+        },
+      },
+    } as never)
+    vi.mocked(listReports).mockResolvedValueOnce({ items: [], nextCursor: null })
+    const response = await (targetIds.length ? GET : V1GET)(
+      new Request("http://localhost/api/reports?workspaceId=ws-1&cursor=cursor-1")
+    )
+    expect(response.status).toBe(200)
+    expect(listReports).toHaveBeenCalledWith("ws-1", "cursor-1", 50, targetIds)
+  }
+)
+
+it("does not return a broad cached report page after a target grant narrows", async () => {
+  vi.clearAllMocks()
+  vi.mocked(requirePermission).mockResolvedValueOnce({
+    session: { oauth: { connectionId: "conn-1", allTargets: true } },
+  } as never)
+  vi.mocked(listReports).mockResolvedValueOnce({
+    items: [{ id: "workspace-report" }],
+    nextCursor: null,
+  } as never)
+  const url = "http://localhost/api/reports?workspaceId=ws-1"
+  const first = await GET(new Request(url))
+  expect(first.status).toBe(200)
+  vi.mocked(requirePermission).mockResolvedValueOnce({
+    session: { oauth: { connectionId: "conn-1", allTargets: false, allowedTargetIds: [] } },
+  } as never)
+  vi.mocked(listReports).mockResolvedValueOnce({ items: [], nextCursor: null })
+  const response = await GET(
+    new Request(url, { headers: { "If-None-Match": first.headers.get("ETag")! } })
+  )
+  expect(response.status).toBe(200)
+  expect((await response.json()).data).toEqual({ items: [], nextCursor: null })
+  expect(listReports).toHaveBeenLastCalledWith("ws-1", undefined, 50, [])
+})
+
+it("preserves omitted-target all-target delegation reads", async () => {
+  vi.clearAllMocks()
+  vi.mocked(requirePermission).mockResolvedValueOnce({
+    session: { oauth: { connectionId: "conn-1", allTargets: true, allowedTargetIds: [] } },
+  } as never)
+  vi.mocked(listReports).mockResolvedValueOnce({ items: [], nextCursor: null })
+  const response = await V1GET(new Request("http://localhost/api/reports?workspaceId=ws-1"))
+  expect(response.status).toBe(200)
+  expect(listReports).toHaveBeenLastCalledWith("ws-1", undefined, 50, undefined)
 })

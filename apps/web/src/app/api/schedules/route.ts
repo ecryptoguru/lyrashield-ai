@@ -1,7 +1,7 @@
 import { withCookieMutation } from "../../../lib/api-auth"
 import { listSchedules, createSchedule, prisma } from "@lyrashield/db"
 import { CreateScheduleSchema, resolveTargetScanMode } from "@lyrashield/types"
-import { requirePermission } from "@lyrashield/auth/server"
+import { requirePermission, resolveOAuthReadScope } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
 import { authErrorResponse } from "../../../lib/api-auth"
@@ -23,13 +23,14 @@ export async function GET(request: Request) {
       return apiError("MISSING_PARAM", "workspaceId is required", 400)
     }
 
-    await requirePermission(workspaceId, PERMISSIONS.schedule.view)
+    const { session } = await requirePermission(workspaceId, PERMISSIONS.schedule.view)
+    const readScope = resolveOAuthReadScope(session, targetId)
 
     const { cursor, limit } = parsePaginationParams(searchParams)
 
     const result = await listSchedules({
       workspaceId,
-      ...(targetId ? { targetId } : {}),
+      ...readScope,
       ...(enabled === "true" || enabled === "false" ? { enabled: enabled === "true" } : {}),
       ...(cursor ? { cursor } : {}),
       limit,

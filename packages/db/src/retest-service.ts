@@ -1,3 +1,4 @@
+import { targetReadScopeWhere } from "./read-query-scope"
 import { prisma } from "./client"
 import type { Retest, Finding, Scan } from "./generated/prisma"
 import { logger } from "@lyrashield/logger"
@@ -72,6 +73,7 @@ export async function getRetest(
 
 export async function listRetests(params: {
   workspaceId: string
+  targetIds?: string[]
   findingId?: string
   status?: string
   cursor?: string
@@ -82,8 +84,8 @@ export async function listRetests(params: {
   const retests = await prisma.retest.findMany({
     where: {
       workspaceId: params.workspaceId,
-      finding: { workspaceId: params.workspaceId },
-      scan: { workspaceId: params.workspaceId },
+      finding: { workspaceId: params.workspaceId, ...targetReadScopeWhere(params) },
+      scan: { workspaceId: params.workspaceId, ...targetReadScopeWhere(params) },
       ...(params.findingId ? { findingId: params.findingId } : {}),
       ...(params.status ? { status: params.status } : {}),
     },

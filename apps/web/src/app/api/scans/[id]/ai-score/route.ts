@@ -1,5 +1,5 @@
-import { getAiSecurityScoreSnapshot } from "@lyrashield/db"
-import { requirePermission } from "@lyrashield/auth/server"
+import { getAiSecurityScoreSnapshot, withWorkspaceRLS } from "@lyrashield/db"
+import { requirePermission, resolveOAuthReadScope } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
 import { authErrorResponse } from "../../../../../lib/api-auth"
@@ -22,7 +22,17 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const workspaceId = parsedWorkspace.data
 
   try {
-    await requirePermission(workspaceId, PERMISSIONS.scan.view)
+    const { session } = await requirePermission(workspaceId, PERMISSIONS.scan.view)
+    if (resolveOAuthReadScope(session).targetIds !== undefined) {
+      const scan = await withWorkspaceRLS(workspaceId, (tx) =>
+        tx.scan.findFirst({
+          where: { id, workspaceId, deletedAt: null },
+          select: { targetId: true },
+        })
+      )
+      if (!scan) return apiError("SCAN_NOT_FOUND", "Scan not found", 404)
+      resolveOAuthReadScope(session, scan.targetId, true)
+    }
     const snapshot = await getAiSecurityScoreSnapshot(id, workspaceId)
 
     const data = snapshot

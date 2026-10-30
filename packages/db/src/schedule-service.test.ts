@@ -329,3 +329,41 @@ describe("schedule-service", () => {
     })
   })
 })
+
+it.each([{ targetIds: [] }, { targetIds: ["target-1"] }])(
+  "restricts target-owned query relations before cursor pagination $targetIds",
+  async ({ targetIds }) => {
+    vi.clearAllMocks()
+    mockPrisma.schedule.findMany.mockResolvedValueOnce([])
+    const result = await listSchedules({
+      workspaceId: "ws-1",
+      targetIds,
+      cursor: "cursor-1",
+      limit: 1,
+    })
+    expect(result).toEqual({ items: [], nextCursor: null })
+    expect(mockPrisma.schedule.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ workspaceId: "ws-1", targetId: { in: targetIds } }),
+        cursor: { id: "cursor-1" },
+        skip: 1,
+        take: 2,
+      })
+    )
+  }
+)
+
+it("filters schedule detail by its stored target", async () => {
+  mockPrisma.schedule.findFirst.mockResolvedValueOnce(null)
+  expect(await getSchedule("schedule-2", "ws-1", ["target-1"])).toBeNull()
+  expect(mockPrisma.schedule.findFirst).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      where: {
+        id: "schedule-2",
+        workspaceId: "ws-1",
+        deletedAt: null,
+        targetId: { in: ["target-1"] },
+      },
+    })
+  )
+})
