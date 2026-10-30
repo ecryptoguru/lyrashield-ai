@@ -1,4 +1,4 @@
-/* eslint-disable security/detect-non-literal-fs-filename, security/detect-unsafe-regex */
+/* eslint-disable security/detect-non-literal-fs-filename */
 import { lstat, readFile, readdir } from "fs/promises"
 import { basename, join, relative } from "path"
 import { logger } from "@lyrashield/logger"
@@ -148,6 +148,7 @@ function parsePackageJson(content: string, filePath: string): Dependency[] {
 function parseRequirementsTxt(content: string, filePath: string): Dependency[] {
   const deps: Dependency[] = []
   const lines = content.split("\n")
+  // eslint-disable-next-line security/detect-unsafe-regex -- anchored, delimiter-separated fields on byte-bounded input
   const pattern = /^([a-zA-Z0-9_-]+)\s*([=<>!~]+\s*)?([0-9][a-zA-Z0-9.\-+]*)/
   for (const line of lines) {
     const trimmed = line.trim()
@@ -214,6 +215,7 @@ function parseGemfile(content: string, filePath: string): Dependency[] {
   const lines = content.split("\n")
   for (const line of lines) {
     const trimmed = line.trim()
+    // eslint-disable-next-line security/detect-unsafe-regex -- anchored, delimiter-separated fields on byte-bounded input
     const match = /^(?:gem|dependency)\s+["']([^"']+)["']\s*,?\s*["']?([^"']*)?["']?/.exec(trimmed)
     if (match && match[1]) {
       deps.push({
@@ -349,10 +351,20 @@ function resolveGradleVersion(value: string, variables: Map<string, string>): st
 
 function parseGradleVariables(content: string): Map<string, string> {
   const variables = new Map<string, string>()
-  const assignment =
-    /(?:^|\n)\s*(?:def|val|final\s+String)?\s*([A-Za-z_]\w*)\s*=\s*["']([^"']+)["']/g
-  for (const match of content.matchAll(assignment)) {
-    if (match[1] && match[2]) variables.set(match[1], match[2])
+  // Consume each whitespace run once, including multiline assignments. A single
+  // anchored assignment never retries alternative optional whitespace prefixes.
+  let offset = 0
+  while (offset < content.length) {
+    const rest = content.slice(offset)
+    let value = rest.trimStart()
+    offset += rest.length - value.length
+    const declaration = /^(?:def|val|final\s+String)\s+/.exec(value)
+    const prefix = declaration?.[0].length ?? 0
+    if (prefix) value = value.slice(prefix)
+    const assignment = /^([A-Za-z_]\w*)\s*=\s*["']([^"']+)["']/.exec(value)
+    if (assignment?.[1] && assignment[2]) variables.set(assignment[1], assignment[2])
+    const next = content.indexOf("\n", offset + prefix + (assignment?.[0].length ?? 0))
+    offset = next < 0 ? content.length : next + 1
   }
   return variables
 }
@@ -365,9 +377,17 @@ async function parseGradle(
 ): Promise<Dependency[]> {
   const dependencies: Dependency[] = []
   const variables = parseGradleVariables(content)
+  // Preserve multiline declarations but remove empty/leading whitespace runs once.
+  // Otherwise a multiline ^\s* pattern can retry every blank line in the same run.
+  const declarations = content
+    .split("\n")
+    .map((line) => line.trimStart())
+    .filter(Boolean)
+    .join("\n")
   const pattern =
+    // eslint-disable-next-line security/detect-unsafe-regex -- anchored, delimiter-separated fields on byte-bounded input
     /^\s*(?:api|implementation|compileOnly|runtimeOnly|testImplementation|testRuntimeOnly)\s*(?:\(\s*)?["']([^:"']+):([^:"']+):([^"']+)["']/gm
-  for (const match of content.matchAll(pattern)) {
+  for (const match of declarations.matchAll(pattern)) {
     const [, groupId, artifactId, version] = match
     const resolvedVersion = version ? resolveGradleVersion(version, variables) : undefined
     if (!groupId || !artifactId || !resolvedVersion) {
@@ -389,7 +409,7 @@ async function parseGradle(
 
   const mapPattern =
     /^\s*(?:api|implementation|compileOnly|runtimeOnly|testImplementation|testRuntimeOnly)\s+group:\s*["']([^"']+)["']\s*,\s*name:\s*["']([^"']+)["']\s*,\s*version:\s*["']?([^\s,'")]+)["']?/gm
-  for (const match of content.matchAll(mapPattern)) {
+  for (const match of declarations.matchAll(mapPattern)) {
     const [, groupId, artifactId, version] = match
     const resolvedVersion = version ? resolveGradleVersion(version, variables) : undefined
     if (!groupId || !artifactId || !resolvedVersion) continue
@@ -407,9 +427,14 @@ async function parseGradle(
   const catalogPath = join(repoPath, "gradle/libs.versions.toml")
   let catalog = ""
   try {
+    const stat = await lstat(catalogPath)
+    if (stat.isSymbolicLink() || stat.size > MAX_MANIFEST_BYTES) throw new Error("bounded catalog")
     catalog = await readFile(catalogPath, "utf8")
+    if (Buffer.byteLength(catalog) > MAX_MANIFEST_BYTES) throw new Error("bounded catalog")
   } catch {
-    // A catalog is optional unless the build file references one.
+    catalog = ""
+    // A catalog is optional unless the build file references one. Unresolved calls below
+    // retain partial coverage when a missing, unreadable or bounded catalog is referenced.
   }
   const versions = new Map<string, string>()
   const libraries = new Map<string, { module: string; versionRef: string }>()
@@ -470,6 +495,15 @@ async function parseDependencyFile(
       return []
     }
     const content = await readFile(fullPath, "utf-8")
+    if (Buffer.byteLength(content) > MAX_MANIFEST_BYTES) {
+      recordCoverageIssue(coverageIssues, {
+        scanner: "sca",
+        status: "bounded",
+        subject: filePath,
+        reason: `Dependency manifest exceeds the ${MAX_MANIFEST_BYTES}-byte scanner limit`,
+      })
+      return []
+    }
     switch (basename(filePath)) {
       case "package.json":
         return parsePackageJson(content, filePath)

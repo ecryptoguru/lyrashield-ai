@@ -4,7 +4,7 @@ import { lstat, readFile, readdir } from "fs/promises"
 import { join, relative } from "path"
 import { logger } from "@lyrashield/logger"
 import type { EngineVulnerability } from "../output-parser"
-import { analyzePhpSource } from "./php-source"
+import { analyzePhpSourceAsync } from "./php-source"
 import { isExcludedPhpPath } from "./php-project"
 import {
   recordCoverageIssue,
@@ -438,6 +438,16 @@ export async function scanSast(config: SastScanConfig): Promise<EngineVulnerabil
       skippedByReason.testFixture++
       continue
     }
+    if (Buffer.byteLength(content) > MAX_FILE_SIZE) {
+      skippedByReason.oversized++
+      recordCoverageIssue(coverageIssues, {
+        scanner: "sast",
+        status: "bounded",
+        subject: relPath,
+        reason: `File exceeds the ${MAX_FILE_SIZE}-byte scanner limit`,
+      })
+      continue
+    }
     bytesScanned += Buffer.byteLength(content, "utf-8")
     filesScanned++
 
@@ -445,7 +455,7 @@ export async function scanSast(config: SastScanConfig): Promise<EngineVulnerabil
     let findingsInFile = 0
     let findingLimitReached = false
     if (/\.php$/i.test(filePath)) {
-      const result = analyzePhpSource(content, relPath)
+      const result = await analyzePhpSourceAsync(content, relPath)
       const available = Math.min(MAX_FINDINGS_PER_FILE, MAX_TOTAL_FINDINGS - findings.length)
       findings.push(...result.findings.slice(0, available))
       findingsInFile = Math.min(result.findings.length, available)

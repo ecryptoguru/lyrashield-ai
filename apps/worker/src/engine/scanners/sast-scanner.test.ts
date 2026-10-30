@@ -264,6 +264,23 @@ describe("scanSast", () => {
     )
   })
 
+  it("checks the actual bytes again before parsing a file that grew after discovery", async () => {
+    const dir = await setupRepo({ "endpoint.php": "<?php // small at discovery" })
+    vi.mocked(fsPromises.readFile).mockResolvedValueOnce(
+      "<?php " + " ".repeat(524_288) + 'system($_GET["x"]);'
+    )
+    const coverageIssues: import("../scanner-coverage").ScannerCoverageIssue[] = []
+    const discovery: import("../scanner-coverage").ScannerDiscovery = {}
+    expect(await scanSast({ repoPath: dir, workspaceDir: dir, coverageIssues, discovery })).toEqual(
+      []
+    )
+    expect(discovery.sast?.filesScanned).toBe(0)
+    expect(discovery.sast?.skippedByReason.oversized).toBe(1)
+    expect(coverageIssues).toContainEqual(
+      expect.objectContaining({ scanner: "sast", status: "bounded", subject: "endpoint.php" })
+    )
+  })
+
   it("marks per-file finding caps as bounded coverage", async () => {
     const dir = await setupRepo({
       "app.ts": Array(101)

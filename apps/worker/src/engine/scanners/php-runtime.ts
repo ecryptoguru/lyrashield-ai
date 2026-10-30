@@ -1,5 +1,4 @@
 // security-scan-skip-file: passive version and configuration detection rules
-/* eslint-disable security/detect-unsafe-regex */
 import { basename } from "node:path"
 import {
   PHP_SESSION_UPLOAD_PROGRESS_NOTICE,
@@ -19,6 +18,7 @@ import type { EngineVulnerability } from "../output-parser"
 import { recordCoverageIssue, type ScannerCoverageIssue } from "../scanner-coverage"
 
 const officialImagePattern =
+  // eslint-disable-next-line security/detect-unsafe-regex -- anchored, delimiter-separated fields on byte-bounded input
   /^(?:(?:docker\.io\/)?library\/|docker\.io\/)?php:(\d+\.\d+\.\d+)(-(?:apache|fpm|cli|zts)(?:-(?:alpine(?:[1-9]\d?(?:\.(?:0|[1-9]\d?))?)?|bookworm|bullseye|trixie))?|-(?:alpine(?:[1-9]\d?(?:\.(?:0|[1-9]\d?))?)?|bookworm|bullseye|trixie))?(?:@sha256:[a-f0-9]{64})?$/
 
 const inventorySchema = z
@@ -75,6 +75,7 @@ function addImageDeclaration(
   composeService?: string
 ): boolean {
   let phpPresent = false
+  // eslint-disable-next-line security/detect-unsafe-regex -- anchored, delimiter-separated fields on byte-bounded input
   const official = /^(?:(?:docker\.io\/)?library\/|docker\.io\/)?php(?=:|@|$)/.test(image)
   if (!official) {
     if (/php/i.test(image)) {
@@ -129,10 +130,10 @@ function dockerImageDeclarations(content: string, issue: (reason: string) => voi
     }
     // Docker stops recognizing directives after a normal comment, blank or instruction.
     if (header) {
-      const directive = /^\s*#\s*(syntax|check|escape)[ \t]*=[ \t]*(.*?)\s*$/i.exec(line)
+      const directive = /^#\s*(syntax|check|escape)[ \t]*=/.exec(line.trimStart().toLowerCase())
       if (directive) {
         const key = directive[1]!.toLowerCase()
-        const value = directive[2]!
+        const value = line.trimStart().slice(directive[0].length).trim()
         if (directives.has(key) || (key === "escape" && value !== "\\" && value !== "`")) {
           issue("PHP runtime Dockerfile parser directive is invalid or duplicated")
           break
@@ -147,6 +148,7 @@ function dockerImageDeclarations(content: string, issue: (reason: string) => voi
     const wasContinued = continued
     continued = line.trimEnd().endsWith(escape)
     if (!wasContinued && !continued) {
+      // eslint-disable-next-line security/detect-unsafe-regex -- anchored, delimiter-separated fields on byte-bounded input
       const match = /^\s*FROM\s+(?:--platform=\S+\s+)?(\S+)/i.exec(line)
       if (match) result.push({ image: match[1]!, line: i + 1 })
     } else if (!wasContinued && /^\s*FROM\b/i.test(line)) {
@@ -179,6 +181,7 @@ function phpConfigurationFindings(
   const settings = new Map<string, { value: string; line: number }>()
   for (const [index, line] of content.split("\n").entries()) {
     const setting =
+      // eslint-disable-next-line security/detect-unsafe-regex -- anchored, delimiter-separated fields on byte-bounded input
       /^\s*(session\.(?:upload_progress\.enabled|serialize_handler))\s*=\s*["']?([a-z0-9_]+)["']?\s*(?:;.*)?$/i.exec(
         line
       )
@@ -227,6 +230,7 @@ function phpConfigurationFindings(
       })
       break
     }
+    // eslint-disable-next-line security/detect-unsafe-regex -- anchored, delimiter-separated fields on byte-bounded input
     const match = /^\s*(display_errors|allow_url_include)\s*=\s*(?:On|1|true)\s*(?:;.*)?$/i.exec(
       line
     )
@@ -262,6 +266,15 @@ function parseRuntimeDeclarations(
   let phpPresent = isPhpRuntimeInput(name)
   const issue = (reason: string) =>
     recordCoverageIssue(issues, { scanner: "iac", status: "partial", subject: path, reason })
+  if (Buffer.byteLength(content) > 512 * 1024) {
+    recordCoverageIssue(issues, {
+      scanner: "iac",
+      status: "bounded",
+      subject: path,
+      reason: "PHP runtime input exceeds the 524288-byte scanner limit",
+    })
+    return { findings, declarations, phpPresent }
+  }
   if (kind === "dockerfile") {
     for (const declaration of dockerImageDeclarations(content, issue))
       phpPresent =
@@ -586,6 +599,7 @@ export function phpRuntimeBannerFindings(
     .filter(([key]) => ["server", "x-powered-by"].includes(key.toLowerCase()))
     .map(([, v]) => v.slice(0, 512))
     .join(" ")
+  // eslint-disable-next-line security/detect-unsafe-regex -- bounded header values and delimiter-separated PHP version fields
   const match = /\bPHP\/(\d+\.\d+(?:\.\d+)?(?:[a-zA-Z0-9.+~-]{0,32})?)/.exec(value)
   if (!match) return []
   return [
