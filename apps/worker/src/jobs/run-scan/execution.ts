@@ -383,12 +383,12 @@ export async function executeScanTarget(params: {
   const isAuthAssessment = executionPlan?.workflow === "AUTHENTICATED_ASSESSMENT"
 
   if (deterministicRetest) {
-    if (target.repoProvider !== "github") {
+    if (target.repoProvider !== "github")
       throw new Error("Deterministic repository retests require a GitHub source target")
-    }
     await authorizeDeterministicRetest(scanId, workspaceId, params.target.id)
     deterministicCheckout = await checkoutDeterministicRetest({
       scanId,
+      workspaceId,
       repoFullName: target.repoFullName,
       branch: target.branch,
       installationId: target.installationId,

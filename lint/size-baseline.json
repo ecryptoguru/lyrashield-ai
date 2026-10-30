@@ -462,8 +462,8 @@
     },
     "apps/worker/src/engine/deterministic-retest.ts|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 55,
-      "maxExcess": 55
+      "totalExcess": 49,
+      "maxExcess": 49
     },
     "apps/worker/src/engine/finding-persister.ts|max-lines-per-function": {
       "count": 2,

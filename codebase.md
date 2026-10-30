@@ -254,9 +254,14 @@ Cancelled and partial scans may consume agent-minutes when scan-bound evidence e
 ### Findings and result integrity
 
 `engine/repository-auth.ts` binds a private GitHub scan to the stored target and
-active workspace integration before billable analysis. The bounded, cancellable
-preflight produces an exact clone-URL credential scope passed only to the engine
-host through explicit child configuration; the sandbox environment excludes it.
+active workspace integration before billable analysis. Its bounded, cancellable
+preflight obtains a fresh single-repository `contents:read` token and rechecks the
+same active integration after minting. Deterministic retest checkout uses the same
+workspace authorization path. Checkout tokens are never cached. The exact clone-URL
+credential scope passes only to the engine host through explicit child configuration;
+the sandbox environment excludes it. Authorized GitHub API/write helpers retain their
+installation grant; shared cache entries are encrypted and bound to app, installation,
+and grant identity.
 
 PHP detection reuses the existing `sca`, `iac`, `sast` and `url` families. Standard
 and Deep repository integration first detects PHP project scopes and gates

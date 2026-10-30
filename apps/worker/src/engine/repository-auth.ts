@@ -1,6 +1,6 @@
 import { repositoryAuthEnv } from "./runner-config"
 import { withWorkspaceRLS } from "@lyrashield/db"
-import { getInstallationToken } from "@lyrashield/integrations"
+import { getRepositoryReadToken } from "@lyrashield/integrations"
 
 export interface RepositoryAuth {
   repoFullName: string
@@ -65,23 +65,29 @@ export async function prepareRepositoryAuth(params: {
       deadline,
       (async () => {
         if (await params.isScanCancelled()) throw new Error("Repository authorization cancelled")
-        const integration = await withWorkspaceRLS(params.workspaceId, (tx) =>
-          tx.integration.findFirst({
-            where: {
-              workspaceId: params.workspaceId,
-              type: "GITHUB",
-              externalId: target.installationId,
-              status: "active",
-              deletedAt: null,
-            },
-            select: { id: true },
-          })
-        )
+        const activeIntegration = () =>
+          withWorkspaceRLS(params.workspaceId, (tx) =>
+            tx.integration.findFirst({
+              where: {
+                workspaceId: params.workspaceId,
+                type: "GITHUB",
+                externalId: target.installationId,
+                status: "active",
+                deletedAt: null,
+              },
+              select: { id: true },
+            })
+          )
+        const integration = await activeIntegration()
         if (!integration) throw new Error("Repository integration is unavailable")
         const auth = {
           repoFullName: target.repoFullName!,
-          token: await getInstallationToken(installation),
+          token: await getRepositoryReadToken(installation, target.repoFullName!),
         }
+        const currentIntegration = await activeIntegration()
+        if (currentIntegration?.id !== integration.id)
+          throw new Error("Repository integration is unavailable")
+        if (await params.isScanCancelled()) throw new Error("Repository authorization cancelled")
         repositoryAuthEnv(auth)
         return auth
       })(),

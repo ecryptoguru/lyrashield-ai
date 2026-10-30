@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { randomUUID } from "node:crypto"
 const mocks = vi.hoisted(() => ({ integration: vi.fn(), token: vi.fn(), rls: vi.fn() }))
 vi.mock("@lyrashield/db", () => ({ withWorkspaceRLS: mocks.rls }))
-vi.mock("@lyrashield/integrations", () => ({ getInstallationToken: mocks.token }))
+vi.mock("@lyrashield/integrations", () => ({ getRepositoryReadToken: mocks.token }))
 import { prepareRepositoryAuth } from "./repository-auth"
 const target = {
   type: "REPO",
@@ -44,7 +44,7 @@ describe("private repository authorization before the billable boundary", () => 
       },
       select: { id: true },
     })
-    expect(mocks.token).toHaveBeenCalledWith(123)
+    expect(mocks.token).toHaveBeenCalledWith(123, "owner/private")
     expect(mocks.integration.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.token.mock.invocationCallOrder[0]!
     )
@@ -53,6 +53,16 @@ describe("private repository authorization before the billable boundary", () => 
     mocks.integration.mockResolvedValue(null)
     await expect(prepareRepositoryAuth(input())).rejects.toThrow("integration is unavailable")
     expect(mocks.token).not.toHaveBeenCalled()
+  })
+  it("rejects revocation recorded while the checkout token is being minted", async () => {
+    mocks.integration.mockResolvedValueOnce({ id: "integration-1" }).mockResolvedValueOnce(null)
+    await expect(prepareRepositoryAuth(input())).rejects.toThrow("integration is unavailable")
+  })
+  it("rejects an integration replacement recorded while minting", async () => {
+    mocks.integration
+      .mockResolvedValueOnce({ id: "integration-1" })
+      .mockResolvedValueOnce({ id: "integration-2" })
+    await expect(prepareRepositoryAuth(input())).rejects.toThrow("integration is unavailable")
   })
   it("does not obtain credentials for public or URL targets", async () => {
     for (const candidate of [
