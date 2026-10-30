@@ -18,6 +18,8 @@ Use this index to find the owning document and avoid duplicating current truth.
 | Manifest integrity             | [`yellowpaper.md`](./yellowpaper.md#4-evidence-and-integrity), [`../codebase.md`](../codebase.md#5-core-contracts)                         | Worker writer and DB verifier; unit tests plus `packages/db/src/manifest-checksum.runtime.test.ts` with disposable `DATABASE_URL` and `RLS_RUNTIME_DATABASE_URL` for the same database. Null legacy inputs remain unavailable. |
 | Runtime and release evidence   | [`../PRD.md`](../PRD.md#8-current-production-evidence), [`../codebase.md`](../codebase.md#11-production-topology-and-accepted-evidence)    | Dated, revision-bound deployment/runtime claims and open gates. Refresh live state before reusing a dated claim.                                                                                                               |
 
+The [v26 local implementation/disposition record](./handoffs/v26-implementation-2026-10-30.md) maps original review IDs to reviewed source and pending final qualifications. It does not replace dated production evidence. The [admission/capacity cutover and compatible rollback procedure](./operations.md#v26-admissioncapacity-cutover-and-compatible-rollback) owns the new schema/drain/grant boundary.
+
 ## Papers (public + investor safe)
 
 Keep these three documents separate: the litepaper gives a short executive overview, the whitepaper explains the product and the yellowpaper provides technical reference. Product scope and release evidence belong to `PRD.md`; runtime and code ownership belong to `codebase.md`. The papers summarize those owners and must not establish a second release-status ledger.

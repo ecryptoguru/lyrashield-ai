@@ -1,10 +1,10 @@
 # LyraShield Deep Review v26 — validated revision
 
-Updated 2026-10-30 (Asia/Kolkata). Document version 5. This revision checks the supplied review against the local source, corrects its findings and replaces unsafe or unsupported fix instructions. Original finding IDs are retained for traceability. The D1–D5 decisions recorded in the supplied document are preserved below; technical corrections are distinguished from those decisions.
+Updated 2026-10-30 (Asia/Kolkata). Document version 6. This revision checks the supplied review against the local source, corrects its findings and replaces unsafe or unsupported fix instructions. Original finding IDs are retained for traceability. The D1–D5 decisions recorded in the supplied document are preserved below; technical corrections are distinguished from those decisions.
 
 ## Verdict and evidence boundary
 
-**Do not treat the original report or its fix plan as fully accurate.** The scanner CPU-exhaustion concern and settlement-refusal rollback concern are supported. The delegated OAuth read-scope gap also deserves P1 treatment under the recorded target-scope contract. No P0 was established by this validation. This is a source-review NO-GO recommendation until those issues are resolved, not a fresh assessment of the deployed service.
+**Do not treat the original report or its fix plan as fully accurate.** The scanner CPU-exhaustion concern and settlement-refusal rollback concern are supported. The delegated OAuth read-scope gap also deserves P1 treatment under the recorded target-scope contract. No P0 was established by this validation. This was the version-5 source-review NO-GO recommendation until those issues were resolved, not a fresh assessment of the deployed service. The subsequent local implementation status is recorded below; production/release acceptance remains separate.
 
 The original promise of “two small PRs” is withdrawn. Scanner work spans several parsers. Billing needs account-level concurrency, terminal-disposition and durable-receipt tests. Merely reducing a timer can leave scans unbilled under the current finalization policy.
 
@@ -19,7 +19,7 @@ The original promise of “two small PRs” is withdrawn. Scanner work spans sev
 
 The supplied baseline table (`b5451443`, engine `2e9ddd24`, marketplace `f51fe9d2`), “main green,” PR counts, six successful releases, 38 live routes, homepage metrics and deployed film sizes are **historical assertions from the supplied report, not revalidated live evidence**. A successful release workflow alone does not prove every component runs that source: routing can skip components. Deployment claims require component-specific image/revision and runtime readback. The original 728-file versus 685-file delta counts are inconsistent and are not retained as verified totals.
 
-This task changes only this review document. No application fix, migration, push, merge, deployment, provider scan, financial action or account cleanup was performed. Existing unrelated untracked files were preserved.
+The original version-5 validation changed only this review document and performed no application fix or operational action. The user's later full local implementation instruction supersedes that review-only scope. The eleven scoped-reviewed packages are now integrated locally through runtime source `cbc2f165c`; [the current disposition/evidence record](./docs/handoffs/v26-implementation-2026-10-30.md) maps every original ID to its local outcome and remaining qualification. Final combined gates and independent whole-branch review are pending. No push, merge, production migration/deployment, paid/provider scan, financial action, account cleanup or memory mutation is authorized by this update. The historical source findings and validation results below remain dated evidence, not claims about current deployed behavior.
 
 ### Validation performed
 
@@ -289,8 +289,8 @@ For future Go support, the [Go module reference](https://go.dev/ref/mod) states 
 ## Completion and follow-up requirements
 
 - Close each confirmed issue with its specific regression, reviewed diff and exact required CI evidence. Fixes proposed in this document are not implemented by editing this file.
-- Keep PostgreSQL reproduction and concurrent billing acceptance outstanding until executed. Do not infer production billing proof from mocks.
+- Local PostgreSQL reproduction and concurrent billing regressions have now run under the implementation work; see the linked disposition/evidence record. Final integrated qualification remains pending. Do not infer production billing proof from local services or mocks.
 - Obtain component-specific deployment/readiness proof after an authorized release. A harmless authorized smoke is separate from adversarial or paid acceptance.
 - Recheck the original fresh-account, Polar product, Lite Check device and Myra-admission questions only when that work is requested; their current states were not established here.
 - Do not disconnect the historically named acceptance connection or save the old queued memory draft automatically. Those entries in the original checklist are historical follow-ups, not authority to mutate accounts or memory.
-- The supplied document recorded no implementation go-ahead for Wave 1. This request authorizes review-document correction only. D1–D5 record design choices and do not authorize a push, merge, paid run or production action.
+- The original supplied document recorded no implementation go-ahead. The later full local implementation instruction supersedes that historical review-only boundary. D1–D5 and local implementation still authorize no push, merge, paid run or production action.
