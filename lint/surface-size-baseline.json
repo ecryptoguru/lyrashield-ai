@@ -42,8 +42,8 @@
     },
     "apps/marketing/src/components/landing/PremiumHero.astro|max-lines": {
       "count": 1,
-      "totalExcess": 82,
-      "maxExcess": 82
+      "totalExcess": 77,
+      "maxExcess": 77
     },
     "apps/marketing/src/components/tools/WebMcpSecurityLab.astro|max-lines": {
       "count": 1,

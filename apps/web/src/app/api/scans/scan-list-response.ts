@@ -1,5 +1,12 @@
 import { createHash } from "crypto"
+import { z } from "zod"
+import { MAX_CONCURRENT_WORKSPACE_SCANS } from "@lyrashield/types"
 import type { ScanListItem } from "@lyrashield/db"
+
+export const ScanIdQuerySchema = z
+  .array(z.string().trim().min(1).max(128))
+  .min(1)
+  .max(MAX_CONCURRENT_WORKSPACE_SCANS)
 
 /**
  * Serialize a scan list row for the client. Dates become ISO strings so the

@@ -672,8 +672,8 @@
     },
     "packages/db/src/scan-service.ts|max-lines": {
       "count": 1,
-      "totalExcess": 35,
-      "maxExcess": 35
+      "totalExcess": 28,
+      "maxExcess": 28
     },
     "packages/egress-proxy/src/index.ts|max-lines-per-function": {
       "count": 1,

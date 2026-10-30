@@ -1,7 +1,7 @@
 import { scanCreationConflict } from "../../../lib/scan-admission-conflicts"
 import { releaseUnstartedScanSlot } from "@lyrashield/db"
 import { withCookieMutation, authErrorResponse } from "../../../lib/api-auth"
-import { serializeScanListItem, scanListEtag } from "./scan-list-response"
+import { serializeScanListItem, scanListEtag, ScanIdQuerySchema } from "./scan-list-response"
 import {
   prisma,
   createScan,
@@ -31,7 +31,6 @@ import {
 import { parseScanStateFilter, scanStateStatuses } from "@/lib/scan-presentation"
 import { logger } from "@lyrashield/logger"
 import { NextResponse } from "next/server"
-import { z } from "zod"
 import { assertScanAllowed } from "@lyrashield/billing"
 import {
   authAssessmentAdmission,
@@ -70,10 +69,6 @@ async function resolveRepoRevision(
   if (FULL_GIT_OBJECT_ID.test(ref)) return ref
   return getBranchRefSha(installationId, owner, repo, ref)
 }
-const ScanIdQuerySchema = z
-  .array(z.string().trim().min(1).max(128))
-  .min(1)
-  .max(MAX_CONCURRENT_WORKSPACE_SCANS)
 
 /**
  * Concurrent in-flight reviews per workspace (shared with the scheduled-scan
