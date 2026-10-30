@@ -29,7 +29,10 @@ import {
   checkScanCreateRateLimit,
   clientIpFromRequest,
 } from "../../../../../lib/rate-limit"
-import { resolveSponsorScanPlan, resolveUrlReviewMode } from "../../../../../lib/scan-admission"
+import {
+  resolveSponsorScanPlan,
+  resolveAvailableUrlReview,
+} from "../../../../../lib/scan-admission"
 
 const CreateRetestSchema = z.object({
   workspaceId: z.string().min(1),
@@ -56,14 +59,18 @@ async function checkRetestAdmission({
   mode: ScanMode
   confirmNotSubmitted: () => void
 }) {
-  const urlAdmission = resolveUrlReviewMode({
+  const urlAdmission = await resolveAvailableUrlReview({
     targetType: target.type,
     mode,
     hasApiSpec: Boolean(target.apiSpecUrl),
   })
   if (!urlAdmission.ok) {
     confirmNotSubmitted()
-    return apiError(urlAdmission.code, "This retest profile is not available for the target.", 400)
+    return apiError(
+      urlAdmission.code,
+      urlAdmission.reason,
+      urlAdmission.code === "TARGET_RELAY_UNAVAILABLE" ? 503 : 400
+    )
   }
 
   const isRemoteUrlTarget = target.type === "WEB_APP" || target.type === "API"

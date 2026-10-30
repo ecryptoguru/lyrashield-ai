@@ -1644,19 +1644,22 @@ model Notification {
 }
 
 model Schedule {
-  id          String    @id @default(cuid())
-  workspaceId String
-  targetId    String
-  cron        String
-  goal        ScanGoal
-  mode        ScanMode  @default(SAFE)
-  enabled     Boolean   @default(true)
-  lastRunAt   DateTime?
-  nextRunAt   DateTime?
-  createdById String
-  deletedAt   DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id                String    @id @default(cuid())
+  workspaceId       String
+  targetId          String
+  cron              String
+  goal              ScanGoal
+  mode              ScanMode  @default(SAFE)
+  enabled           Boolean   @default(true)
+  lastRunAt         DateTime?
+  nextRunAt         DateTime?
+  lastScanId        String?
+  lastBlockedAt     DateTime?
+  lastBlockedReason String?   @db.VarChar(64)
+  createdById       String
+  deletedAt         DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   target    Target    @relation(fields: [targetId], references: [id], onDelete: Cascade)

@@ -8,6 +8,8 @@ import {
   SCAN_WORKER_TTL_MS,
 } from "./queue"
 
+import { resolveAvailableUrlReview } from "./url-review-admission"
+
 const SCAN_WORKER_REGISTRY_KEY = "lyrashield:scan-workers"
 const runRedisTests = process.env.CI === "true"
 
@@ -74,6 +76,26 @@ describe.runIf(runRedisTests)("scan worker Redis scripts", () => {
     } finally {
       sendCommand.mockRestore()
     }
+  })
+  it("shares live URL availability across interactive, retest and scheduled admission", async () => {
+    if (!redis) throw new Error("REDIS_URL is required")
+    await redis.del(SCAN_WORKER_REGISTRY_KEY)
+    const input = { targetType: "WEB_APP", mode: "STANDARD", hasApiSpec: false }
+    expect(await resolveAvailableUrlReview(input)).toMatchObject({
+      ok: false,
+      code: "TARGET_RELAY_UNAVAILABLE",
+    })
+    expect(await resolveAvailableUrlReview({ ...input, mode: "SAFE" })).toEqual({
+      ok: true,
+      engineBacked: false,
+    })
+    await registerScanWorker("admission-relay", Date.now(), true)
+    expect(await resolveAvailableUrlReview(input)).toEqual({ ok: true, engineBacked: true })
+    await registerScanWorker("admission-relay", Date.now(), false)
+    expect(await resolveAvailableUrlReview(input)).toMatchObject({
+      ok: false,
+      code: "TARGET_RELAY_UNAVAILABLE",
+    })
   })
   it("publishes positive and negative relay capability atomically in the ordinary lease key", async () => {
     if (!redis) throw new Error("REDIS_URL is required for Redis integration tests")
