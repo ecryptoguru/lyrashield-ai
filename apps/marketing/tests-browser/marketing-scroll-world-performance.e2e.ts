@@ -1,4 +1,7 @@
 import { expect, test } from "@playwright/test"
+import { fastMotionConnection } from "./helpers/motion-connection"
+
+test.beforeEach(async ({ page }) => page.addInitScript(fastMotionConnection))
 
 test.beforeEach(({ browserName }) => {
   test.setTimeout(120000)
@@ -68,6 +71,9 @@ for (const rate of [1, 4, 6]) {
 }
 
 test("cold buffered startup on a 4 Mbit/s connection", async ({ page }, info) => {
+  await page.addInitScript(() =>
+    Object.assign((navigator as Navigator & { connection: object }).connection, { downlink: 4 })
+  )
   test.skip(Boolean(process.env.CI), "Requires the actual reviewed film")
   test.setTimeout(120000)
   const session = await page.context().newCDPSession(page)
@@ -116,6 +122,8 @@ test("cold buffered startup on a 4 Mbit/s connection", async ({ page }, info) =>
   })
   await page.goto("/", { waitUntil: "domcontentloaded" })
   const world = page.locator("scroll-world")
+  await expect(world).toHaveAttribute("data-world-state", "poster")
+  await page.getByRole("button", { name: /Play motion/ }).click()
   await expect(world).toHaveAttribute("data-world-painted", "true", { timeout: 90000 })
   const startupMs = await world.evaluate(
     (element) =>

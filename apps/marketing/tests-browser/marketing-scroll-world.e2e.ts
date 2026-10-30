@@ -1,4 +1,7 @@
 import { expect, test } from "@playwright/test"
+import { fastMotionConnection } from "./helpers/motion-connection"
+
+test.beforeEach(async ({ page }) => page.addInitScript(fastMotionConnection))
 import { MOTION_FPS } from "../../marketing-motion/scripts/motion-media-contract.mjs"
 
 test("buffering keeps the page usable and motion-off retires an incomplete download", async ({

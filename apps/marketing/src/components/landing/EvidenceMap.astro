@@ -46,6 +46,7 @@ figure { margin: 0; }
 ul { display: flex; flex-wrap: wrap; justify-content: center; gap: .65rem; margin: 0; padding: 0; list-style: none; }
 li { padding: .4rem .65rem; border-radius: .4rem; font-size: .8rem; }
 .evidence-map__detected { color: var(--accent); background: var(--accent-dim); }
+:global(:root[data-theme="light"]) .evidence-map__detected { color: #076c66; }
 .evidence-map__confirmed { color: var(--text); border: 1px solid var(--border); }
 .evidence-map__inconclusive { color: var(--terminal-warning-text); background: var(--terminal-warning-bg, var(--bg)); }
 :global(:root[data-theme="dark"]) .evidence-map__inconclusive { color: #f5bc69; }

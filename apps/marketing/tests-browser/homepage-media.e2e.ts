@@ -140,6 +140,12 @@ test("the evidence artifact adds no second decoder and reduced motion downloads 
   for (const reducedMotion of ["reduce", "no-preference"] as const) {
     const context = await browser.newContext({ reducedMotion })
     const page = await context.newPage()
+    // This test exercises the decoder; unknown network hints require Play.
+    await page.addInitScript(() =>
+      Object.defineProperty(navigator, "connection", {
+        value: { effectiveType: "4g", downlink: 10, saveData: false },
+      })
+    )
     const videos: string[] = []
     page.on("request", (request) => {
       if (motionVideo.test(request.url())) videos.push(request.url())

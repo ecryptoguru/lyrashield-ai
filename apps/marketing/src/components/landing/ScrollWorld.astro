@@ -14,7 +14,7 @@ const opening = manifest.chapters[0]!
     <div class="scroll-world__scrim"></div>
   </div>
   <div class="scroll-world__controls">
-    <button type="button" data-world-toggle aria-pressed="true" hidden>Motion <span data-world-toggle-label>on</span></button>
+    <button type="button" data-world-toggle aria-pressed="true" hidden><span data-world-toggle-label>Motion on</span></button>
     <p data-world-status role="status" aria-live="polite"></p>
   </div>
   <div class="scroll-world__content"><slot /></div>
@@ -31,7 +31,7 @@ const opening = manifest.chapters[0]!
   .scroll-world__scrim { background: linear-gradient(90deg, rgba(8,17,28,.96), rgba(8,17,28,.8) 34%, rgba(8,17,28,.1) 65%); }
   .scroll-world__content { position: relative; z-index: 1; }
   .scroll-world__controls { position: sticky; top: calc(var(--world-top, 4rem) + 5rem); display: flex; justify-content: flex-end; padding: 0 1rem; pointer-events: none; height: 0; z-index: 3; }
-  .scroll-world__controls button { pointer-events: auto; align-self: start; min-height: 44px; max-width: 42vw; padding: .6rem 1rem; overflow-wrap: anywhere; background: #0e1a28; border: 1px solid #395466; border-radius: 12px; color: #edf6fb; font-size: .85rem; cursor: pointer; }
+  .scroll-world__controls button { pointer-events: auto; align-self: start; min-height: 44px; max-width: min(26rem, calc(100vw - 2rem)); padding: .6rem 1rem; overflow-wrap: anywhere; background: #0e1a28; border: 1px solid #395466; border-radius: 12px; color: #edf6fb; font-size: .85rem; cursor: pointer; }
   .scroll-world__controls button:focus-visible { outline: 2px solid #00bae6; outline-offset: 4px; }
   .scroll-world__controls [data-world-status] { position: absolute; right: 1rem; top: 3.5rem; max-width: min(19rem, calc(100vw - 2rem)); padding: .5rem .75rem; border-radius: .5rem; background: #0e1a28; color: #edf6fb; font-size: .8rem; }
   .scroll-world__controls [data-world-status]:empty { display: none; }
