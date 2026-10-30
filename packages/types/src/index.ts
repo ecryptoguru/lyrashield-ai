@@ -719,3 +719,4 @@ export {
   TARGET_RELAY_UNAVAILABLE_MESSAGE,
   type UrlReviewMode,
 } from "./url-review-admission"
+export { DEPENDENCY_RESOLUTION_CAPABILITIES } from "./dependency-capabilities"
