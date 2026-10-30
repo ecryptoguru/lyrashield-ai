@@ -1,7 +1,11 @@
 import { createRoot } from "react-dom/client"
 
 const root = createRoot(document.getElementById("root")!)
-if (new URLSearchParams(location.search).has("approvals")) {
+if (new URLSearchParams(location.search).has("v26-dashboard")) {
+  await import("../../apps/web/src/app/globals.css")
+  const { default: V26DashboardHarness } = await import("./v26-dashboard-harness")
+  root.render(<V26DashboardHarness />)
+} else if (new URLSearchParams(location.search).has("approvals")) {
   await import("../../apps/web/src/app/globals.css")
   const { default: ApprovalsHarness } = await import("./approvals-harness")
   root.render(<ApprovalsHarness />)

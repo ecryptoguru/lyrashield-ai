@@ -483,3 +483,55 @@ describe("scan detail — truthful scope and declared coverage", () => {
     expect(failedHtml).toContain("Example finding")
   })
 })
+
+it("distinguishes elapsed analysis from charged minutes using the stored capacity receipt", () => {
+  const capacity = {
+    state: "SETTLED",
+    executionStopped: true,
+    admissionHeld: false,
+    multiplier: 3,
+    fundedMinutes: 9,
+    runtimeLimitMs: 180000,
+    observedMs: 61000,
+    chargedMinutes: 6,
+    absorbedMinutes: 0,
+  }
+  const markup = renderDetail({ scan: { ...scan, capacity }, findings: [] })
+  expect(markup).toContain("Elapsed analysis: 1m 1s")
+  expect(markup).toContain("6 agent-minutes charged")
+  expect(markup).toContain("3×")
+  expect(markup).toContain("separate from elapsed time")
+})
+it("keeps cancellation finalizing until execution has stopped even if minutes are released", () => {
+  const capacity = {
+    state: "RELEASED",
+    executionStopped: false,
+    admissionHeld: true,
+    multiplier: 1,
+    fundedMinutes: 0,
+    runtimeLimitMs: 0,
+    observedMs: 0,
+    chargedMinutes: 0,
+    absorbedMinutes: 0,
+  }
+  const markup = renderDetail({ scan: { ...scan, status: "CANCELLED", capacity }, findings: [] })
+  expect(markup).toContain("Waiting for analysis to stop")
+  expect(markup).not.toContain("Reserved capacity has been released")
+})
+
+it("shows finalizing when execution stopped but the active slot is still held", () => {
+  const capacity = {
+    state: "RUNNING",
+    executionStopped: true,
+    admissionHeld: true,
+    multiplier: 1,
+    fundedMinutes: 5,
+    runtimeLimitMs: 300000,
+    observedMs: 1000,
+    chargedMinutes: 0,
+    absorbedMinutes: 0,
+  }
+  const markup = renderDetail({ scan: { ...scan, capacity }, findings: [] })
+  expect(markup).toContain("Finalizing this review")
+  expect(markup).not.toContain("Analysis stops within the available capacity")
+})

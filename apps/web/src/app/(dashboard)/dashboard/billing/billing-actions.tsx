@@ -66,19 +66,21 @@ export function BillingActions({
   const canStartSubscription = plan === "FREE" && purchasesAvailable
   const opensBillingSupport = managementProvider === "razorpay"
 
-  async function act(action: string, work: () => Promise<void>) {
+  async function act(action: string, work: () => Promise<void | "redirecting">) {
     if (!claim()) return
     setLoading(action)
     setError(null)
     try {
-      await work()
+      const outcome = await work()
+      if (outcome === "redirecting") return
+      release()
+      setLoading(null)
     } catch (cause) {
       setError(
         cause instanceof ApiError && cause.status < 500
           ? cause.message
           : "Could not complete this request. Please try again."
       )
-    } finally {
       release()
       setLoading(null)
     }
@@ -95,13 +97,19 @@ export function BillingActions({
       )
       if (data.url) {
         window.location.assign(data.url)
+        return "redirecting"
       } else if (data.subscriptionId && data.keyId) {
+        let authorized = false
         await openRazorpaySubscriptionCheckout({
           keyId: data.keyId,
           subscriptionId: data.subscriptionId,
-          onAuthorized: () => router.push("/dashboard/billing?checkout=processing"),
+          onAuthorized: () => {
+            authorized = true
+            router.push("/dashboard/billing?checkout=processing")
+          },
           onDismiss: () => {},
         })
+        if (authorized) return "redirecting"
       } else {
         throw new Error("Invalid checkout response")
       }

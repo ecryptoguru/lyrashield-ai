@@ -6,6 +6,7 @@ export {
   getInstallationToken,
   getRepositoryReadToken,
   listInstallationRepos,
+  listInstallationReposPage,
   getAppInstallations,
   exchangeInstallUserCode,
   userCanAdminInstallation,

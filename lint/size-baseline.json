@@ -80,11 +80,6 @@
       "totalExcess": 226,
       "maxExcess": 226
     },
-    "apps/web/src/app/(dashboard)/dashboard/agents/[agentId]/agent-wizard.tsx|max-lines-per-function": {
-      "count": 1,
-      "totalExcess": 16,
-      "maxExcess": 16
-    },
     "apps/web/src/app/(dashboard)/dashboard/agents/agents-grid.tsx|max-lines-per-function": {
       "count": 1,
       "totalExcess": 15,
@@ -145,11 +140,6 @@
       "totalExcess": 45,
       "maxExcess": 45
     },
-    "apps/web/src/app/(dashboard)/dashboard/integrations/github-integration.tsx|max-lines-per-function": {
-      "count": 1,
-      "totalExcess": 20,
-      "maxExcess": 20
-    },
     "apps/web/src/app/(dashboard)/dashboard/integrations/mcp-integration.tsx|max-lines-per-function": {
       "count": 1,
       "totalExcess": 49,
@@ -167,8 +157,8 @@
     },
     "apps/web/src/app/(dashboard)/dashboard/notifications/notifications-client.tsx|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 23,
-      "maxExcess": 23
+      "totalExcess": 22,
+      "maxExcess": 22
     },
     "apps/web/src/app/(dashboard)/dashboard/page.tsx|max-lines-per-function": {
       "count": 1,
@@ -212,8 +202,8 @@
     },
     "apps/web/src/app/(dashboard)/dashboard/scans/create-scan-sheet.tsx|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 354,
-      "maxExcess": 354
+      "totalExcess": 344,
+      "maxExcess": 344
     },
     "apps/web/src/app/(dashboard)/dashboard/scans/scan-list.tsx|max-lines-per-function": {
       "count": 1,
@@ -267,8 +257,8 @@
     },
     "apps/web/src/app/(dashboard)/dashboard/targets/targets-client.tsx|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 107,
-      "maxExcess": 107
+      "totalExcess": 90,
+      "maxExcess": 90
     },
     "apps/web/src/app/(dashboard)/dashboard/team/team-client.tsx|max-lines-per-function": {
       "count": 1,

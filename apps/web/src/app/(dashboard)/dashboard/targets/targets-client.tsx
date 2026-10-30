@@ -8,20 +8,20 @@ import Link from "next/link"
 import { z } from "zod"
 import { Plus, ArrowLeft } from "lucide-react"
 import { Button, Spinner, LoadMore } from "@lyrashield/ui"
-import { githubReposSchema, installUrlSchema } from "@/lib/api-schemas"
-import { ApiError, apiGet, apiGetPaginated, apiPost, apiDelete } from "@/lib/api-client"
+import { installUrlSchema } from "@/lib/api-schemas"
+import { ApiError, apiGetPaginated, apiPost, apiDelete } from "@/lib/api-client"
 import { TARGET_PLURAL, TARGET_SINGULAR } from "@/lib/terminology"
 import { DashboardErrorCard } from "@/components/dashboard-error-card"
 import {
   EMPTY_REPO_FORM,
   EMPTY_URL_FORM,
   targetsPaginatedSchema,
-  type GithubRepo,
   type RepoFormState,
   type Target,
   type UrlFormState,
 } from "./targets-model"
 import { RepoTargetForm, TargetCreatePanel, UrlTargetForm } from "./targets-form"
+import { useTargetRepositoryPicker } from "./use-target-repository-picker"
 import { TargetsEmptyState, TargetsTable } from "./targets-table"
 
 function TargetAddRouteSync({
@@ -97,6 +97,7 @@ function createTargetScanHandlers(args: {
   setUrlForm: Dispatch<SetStateAction<UrlFormState>>
   setCreatedTarget: Dispatch<SetStateAction<{ id: string; name: string } | null>>
   selectedRepoId: string
+  resetRepoSelection: () => void
 }) {
   const { scanSetup, workspaceId, router, repoForm, urlForm } = args
   async function save(body: Record<string, unknown>) {
@@ -157,6 +158,7 @@ function createTargetScanHandlers(args: {
       if (scanSetup)
         return router.replace(`/dashboard/scans?new=1&target=${encodeURIComponent(saved.id)}`)
       args.setShowForm(false)
+      args.resetRepoSelection()
       if (kind === "REPO") args.setRepoForm(EMPTY_REPO_FORM)
       else args.setUrlForm(EMPTY_URL_FORM)
       await args.fetchTargets()
@@ -289,53 +291,20 @@ export function TargetsClient({
   const [repoForm, setRepoForm] = useState<RepoFormState>(EMPTY_REPO_FORM)
   const [urlForm, setUrlForm] = useState<UrlFormState>(EMPTY_URL_FORM)
 
-  const [githubRepos, setGithubRepos] = useState<GithubRepo[]>([])
-  const [reposLoading, setReposLoading] = useState(false)
-  const [repoMode, setRepoMode] = useState<"picker" | "manual">("picker")
-  const [selectedRepoId, setSelectedRepoId] = useState<string>("")
-
-  useEffect(() => {
-    if (!githubConnected || formType !== "REPO" || !showForm) return
-    // Loading and results are outputs of this request, not effect dependencies.
-    // Otherwise setting loading cancels the very request that should clear it.
-    let cancelled = false
-    const abort = new AbortController()
-    void (async () => {
-      try {
-        setReposLoading(true)
-        const repos = await apiGet(`/api/integrations/github/repos?workspaceId=${workspaceId}`, {
-          schema: githubReposSchema,
-          signal: abort.signal,
-        })
-        if (cancelled) return
-        setGithubRepos(repos)
-      } catch {
-        if (cancelled) return
-        setRepoMode("manual")
-      } finally {
-        if (cancelled) return
-        setReposLoading(false)
-      }
-    })()
-    return () => {
-      cancelled = true
-      abort.abort()
-    }
-  }, [githubConnected, formType, showForm, workspaceId])
-
-  function handleSelectRepo(repoId: string) {
-    setSelectedRepoId(repoId)
-    const repo = githubRepos.find((r) => String(r.id) === repoId)
-    if (repo) {
-      setRepoForm({
-        name: repo.fullName,
-        repoOwner: repo.owner,
-        repoName: repo.name,
-        branch: repo.defaultBranch,
-        installationId: repo.installationId,
-      })
-    }
-  }
+  const {
+    githubRepos,
+    reposNextPage,
+    reposError,
+    reposSearch,
+    setReposSearch,
+    reposLoading,
+    repoMode,
+    setRepoMode,
+    selectedRepoId,
+    setSelectedRepoId,
+    handleSelectRepo,
+    loadMoreRepos,
+  } = useTargetRepositoryPicker({ workspaceId, githubConnected, formType, showForm, setRepoForm })
 
   const fetchTargets = useCallback(async () => {
     setLoading(true)
@@ -404,6 +373,10 @@ export function TargetsClient({
     setUrlForm,
     setCreatedTarget,
     selectedRepoId,
+    resetRepoSelection: () => {
+      setSelectedRepoId("")
+      setReposSearch("")
+    },
   })
 
   const loadMore = useCallback(
@@ -415,7 +388,7 @@ export function TargetsClient({
     [workspaceId, filterProjectId]
   )
 
-  if (loading) {
+  if (loading && targets.length === 0 && !createdTarget) {
     return (
       <div className="flex flex-col items-center justify-center gap-3 py-12" aria-busy="true">
         <Spinner className="h-6 w-6" />
@@ -424,12 +397,15 @@ export function TargetsClient({
     )
   }
 
-  if (fetchError) {
+  if (fetchError && targets.length === 0 && !initialData && !createdTarget) {
     return <DashboardErrorCard message={fetchError} onRetry={() => fetchTargets()} className="" />
   }
 
   return (
-    <div className="min-w-0 max-w-full">
+    <div className="min-w-0 max-w-full" aria-busy={loading}>
+      {fetchError && (
+        <DashboardErrorCard message={fetchError} onRetry={() => void fetchTargets()} />
+      )}
       {deletedNotice && (
         <p className="bg-primary/10 text-primary mb-4 rounded-lg px-4 py-3 text-sm" role="status">
           {deletedNotice} was deleted. Its scans, findings, verdicts and reports are retained.
@@ -480,6 +456,11 @@ export function TargetsClient({
                 onModeChange: setRepoMode,
                 selectedRepoId,
                 onSelectRepo: handleSelectRepo,
+                search: reposSearch,
+                onSearch: setReposSearch,
+                hasMore: reposNextPage !== null,
+                onLoadMore: () => void loadMoreRepos(),
+                error: reposError,
               }}
               submitLabel={scanSetup ? "Continue to scan setup" : undefined}
               repoForm={repoForm}
@@ -509,7 +490,7 @@ export function TargetsClient({
         </TargetCreatePanel>
       )}
 
-      {!scanSetup && targets.length === 0 && !showForm ? (
+      {!scanSetup && targets.length === 0 && !showForm && !fetchError ? (
         <TargetsEmptyState onAdd={() => setShowForm(true)} />
       ) : !scanSetup && targets.length > 0 ? (
         <TargetsTable targets={targets} onDelete={(t) => void handleDeleteTarget(t)} />

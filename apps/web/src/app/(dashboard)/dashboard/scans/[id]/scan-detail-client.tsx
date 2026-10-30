@@ -1,11 +1,11 @@
 "use client"
 
-import { ScanCapacityBanner } from "./scan-capacity-banner"
 
 import { useEffect, useState } from "react"
 import { getScanPresentation, isActiveScan } from "@/lib/scan-presentation"
 import { apiPost, ApiError } from "@/lib/api-client"
 import { scanCancelSchema } from "@/lib/api-schemas"
+import { ScanCapacityNotice } from "./scan-capacity-notice"
 import { ScanInProgress } from "./scan-in-progress"
 import {
   ScanDetailHeader,
@@ -129,7 +129,7 @@ export function ScanDetailClient({
         onCancel={() => void handleCancelScan()}
       />
 
-      <ScanCapacityBanner scan={scan} />
+      {scan.capacity && <ScanCapacityNotice capacity={scan.capacity} status={scan.status} />}
       <ScanEvidenceSummary
         scan={scan}
         isActive={isActive}

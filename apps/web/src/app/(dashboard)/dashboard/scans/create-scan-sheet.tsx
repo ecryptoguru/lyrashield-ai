@@ -22,6 +22,50 @@ import { ScanEligibilityRecovery } from "./scan-eligibility-recovery"
 import type { ScanEligibilityState, TargetItem } from "./scan-types"
 import type { ScanAttachmentItem } from "@/lib/api-schemas"
 
+function ScanMinuteDisclosure({ option }: { option: ManualScanOption }) {
+  return (
+    <p className="text-muted-foreground mt-2 text-xs">
+      {option.usesAi ? (
+        <>
+          Elapsed analysis time rounds up to whole minutes
+          {["DEEP", "CUSTOM"].includes(option.mode) ? ", then uses a 3× multiplier" : ""}. Charged
+          agent-minutes differ from elapsed time. Available account capacity may shorten the review;
+          unused reserved minutes are released.
+        </>
+      ) : (
+        "This deterministic review uses no agent-minutes."
+      )}
+    </p>
+  )
+}
+
+function ScanEligibilitySummary({
+  option,
+  remainingMinutes,
+  isTrial,
+}: {
+  option: ManualScanOption
+  remainingMinutes: number
+  isTrial: boolean
+}) {
+  return (
+    <div className="rounded-lg border p-3 text-sm">
+      <p className="flex flex-wrap items-center gap-x-4 gap-y-1">
+        <span className="flex items-center gap-1.5 font-medium">
+          <Clock className="text-muted-foreground size-4" aria-hidden="true" />
+          Est. time: {formatEstimate(option.estimate)}
+        </span>
+        <span className="text-muted-foreground">
+          Agent-minutes remaining:{" "}
+          <span className="text-foreground font-medium">{remainingMinutes}</span>
+          {isTrial ? " (trial)" : ""}
+        </span>
+      </p>
+      <ScanMinuteDisclosure option={option} />
+    </div>
+  )
+}
+
 function AddTargetLink() {
   return (
     <Link
@@ -450,21 +494,11 @@ export function CreateScanSheet({
                   </Button>
                 </div>
               ) : eligibility.status === "ready" && eligibility.eligibility.allowed ? (
-                <div className="rounded-lg border p-3 text-sm">
-                  <p className="flex flex-wrap items-center gap-x-4 gap-y-1">
-                    <span className="flex items-center gap-1.5 font-medium">
-                      <Clock className="text-muted-foreground size-4" aria-hidden="true" />
-                      Est. time: {formatEstimate(selectedOption.estimate)}
-                    </span>
-                    <span className="text-muted-foreground">
-                      Agent-minutes remaining:{" "}
-                      <span className="text-foreground font-medium">
-                        {eligibility.eligibility.remainingMinutes}
-                      </span>
-                      {eligibility.eligibility.isTrial ? " (trial)" : ""}
-                    </span>
-                  </p>
-                </div>
+                <ScanEligibilitySummary
+                  option={selectedOption}
+                  remainingMinutes={eligibility.eligibility.remainingMinutes}
+                  isTrial={eligibility.eligibility.isTrial}
+                />
               ) : eligibility.status === "ready" ? (
                 <ScanEligibilityRecovery
                   eligibility={eligibility}

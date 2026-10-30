@@ -293,6 +293,31 @@ export interface GitHubRepo {
   html_url: string
 }
 
+/** One bounded provider request for interactive repository pickers. */
+export async function listInstallationReposPage(
+  installationId: number,
+  page: number
+): Promise<{ repositories: GitHubRepo[]; nextPage: number | null }> {
+  if (!Number.isSafeInteger(page) || page < 1 || page > 10_000)
+    throw new Error("Invalid repository page")
+  const token = await getInstallationToken(installationId)
+  const res = await githubFetch(
+    `${GITHUB_API_BASE}/installation/repositories?per_page=50&page=${page}`,
+    { headers: { Authorization: `Bearer ${token}`, ...GITHUB_HEADERS } }
+  )
+  if (!res.ok) throw new Error(`Failed to list repos: ${res.status}`)
+  const data = (await res.json()) as { repositories: GitHubRepo[]; total_count?: number }
+  return {
+    repositories: data.repositories.slice(0, 50),
+    nextPage:
+      data.repositories.length === 50 &&
+      (data.total_count === undefined || page * 50 < data.total_count) &&
+      page < 10_000
+        ? page + 1
+        : null,
+  }
+}
+
 export async function listInstallationRepos(installationId: number): Promise<GitHubRepo[]> {
   const token = await getInstallationToken(installationId)
   const repos: GitHubRepo[] = []

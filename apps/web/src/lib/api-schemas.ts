@@ -322,3 +322,9 @@ export const launchReadinessReportSchema = z
     recommendations: z.array(z.string()),
   })
   .passthrough()
+
+/** Opt-in bounded GitHub picker response; the unpaged API retains its array shape. */
+export const githubReposPageSchema = z.object({
+  items: githubReposSchema,
+  nextPage: z.number().int().positive().nullable(),
+})

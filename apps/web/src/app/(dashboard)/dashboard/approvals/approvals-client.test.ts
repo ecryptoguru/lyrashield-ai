@@ -83,3 +83,25 @@ it("does not offer a decision for an expired request", () => {
   expect(html).not.toContain(">Deny</button>")
   expect(html).toContain("Request expired")
 })
+
+it("describes a pending fix PR as a request rather than an opened PR", () => {
+  const html = renderToStaticMarkup(
+    createElement(ApprovalsClient, {
+      workspaceId: "ws-1",
+      canDecide: false,
+      hasProposals: false,
+      approvals: [
+        {
+          id: "p",
+          actionName: "fix_pr.open",
+          status: "PENDING",
+          input: {},
+          expiresAt: null,
+        } as unknown as ApprovalListItem,
+      ],
+    })
+  )
+  expect(html).toContain("Open a Fix PR")
+  expect(html).not.toContain("Fix PR opened")
+  expect(html).not.toContain("Fix pr open")
+})

@@ -27,7 +27,17 @@ const OPERATION_STATUS_VARIANT: Record<
 }
 
 /** Human action label for a recorded operation ("report.create" -> "Report created"). */
-function operationLabel(operationName: string): string {
+function operationLabel(operationName: string, pending = false): string {
+  if (pending) {
+    const requestLabels: Record<string, string> = {
+      "fix_pr.open": "Open a Fix PR",
+      "scan.create": "Start a scan",
+      "report.create": "Create a report",
+      "retest.create": "Start a retest",
+      "fix_proposal.create": "Create a fix proposal",
+    }
+    if (requestLabels[operationName]) return requestLabels[operationName]!
+  }
   const verb: Record<string, string> = {
     "scan.create": "Scan started",
     "report.create": "Report created",
@@ -88,7 +98,9 @@ function toApprovalItem(approval: ApprovalListItem): ApprovalItem {
 function approvalSummary(actionName: string, input: Record<string, unknown>): string {
   const title = input.title ?? input.findingTitle ?? input.targetName
   if (typeof title === "string") return title as string
-  const actionLabel = actionName.replace(/[-_]/g, " ")
+  if (actionName === "fix_pr.open")
+    return "Review the server-generated patch before opening a Fix PR"
+  const actionLabel = actionName.replace(/[._-]/g, " ")
   return actionLabel.charAt(0).toUpperCase() + actionLabel.slice(1)
 }
 
@@ -245,7 +257,7 @@ export function ApprovalsClient({
                 <CardContent className="flex flex-wrap items-start justify-between gap-4 p-4">
                   <div className="min-w-0 flex-1 basis-64">
                     <p className="text-xs font-medium tracking-wide uppercase">
-                      {operationLabel(approval.actionName)}
+                      {operationLabel(approval.actionName, true)}
                     </p>
                     <p className="mt-1 wrap-break-word font-medium">
                       {approvalSummary(approval.actionName, approval.input)}
