@@ -193,7 +193,7 @@ class Redis {
     save(s)
     return "OK"
   }
-  async eval(_lua, _count, _key, value) {
+  eval = async (_lua, _count, _key, value) => {
     const s = state()
     if (s.stop !== value) return 0
     s.stop = null
@@ -274,7 +274,7 @@ child.execFileSync = function (file, args, options) {
   const get = (flag) => args[args.indexOf(flag) + 1]
   const app = get("--name")
   if (args[0] === "vm") {
-    const matches = /v26-vm\.sh" '([^']+)' '([^']+)' '([^']+)'$/.exec(get("--scripts"))
+    const matches = get("--scripts").match(/v26-vm\.sh" '([^']+)' '([^']+)' '([^']+)'$/)
     if (!matches) throw new Error("Unknown VM transport")
     let [, action, request, extra] = matches
     if (s.failure === action) throw new Error("simulated VM observation failure")
