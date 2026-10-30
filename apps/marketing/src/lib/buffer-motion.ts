@@ -5,7 +5,16 @@ export async function bufferMotion(
   maxBytes: number,
   progress: (percent: number) => void
 ): Promise<Blob> {
-  const response = await fetch(url, { signal })
+  let response: Response
+  try {
+    response = await fetch(url, { signal })
+  } catch (error) {
+    signal.throwIfAborted()
+    if (!(error instanceof TypeError)) throw error
+    // A previously cached non-CORS response can poison a later fetch of the
+    // same immutable film. Refresh once; keep CORS and all byte/deadline limits.
+    response = await fetch(url, { signal, cache: "reload" })
+  }
   if (!response.ok || !response.body) throw new Error("Motion download unavailable")
   const total = Number(response.headers.get("content-length"))
   const reader = response.body.getReader()
