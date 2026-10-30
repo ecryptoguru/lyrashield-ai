@@ -469,6 +469,10 @@ The implementation state remains defined by `AGENTS.md`, `PRD.md` and code under
 
 ## Owner-approved manual isolated restore
 
+Read-only observation on October 31 IST, at `2026-10-30T22:55Z`: the latest successful scheduled [backup 41023916654](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/41023916654) ran from `08:03:38Z` to `08:05:22Z` on October 30, source `284523ca381ee0d6ffa62ce22e855f7ecae9518f`; its restore job was skipped. The latest successful [restore 40172080687](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/40172080687) ran from `07:17:22Z` to `07:18:33Z` on October 25, source `a9bd70c79aaf1f0914c22a60b85bd46601c2d3c6`. Its digest-only artifact metadata remains available, expiring November 24; no backup object or artifact contents were downloaded in this observation. Both receipts predate v26 and establish no v26 restore coverage. Source schedules backups at `02:00 UTC` daily (`07:30 IST`), with the restore job selected on Sundays; observed scheduled runs started later than the cron time. Retention remains 30 days.
+
+At the same observation, [readiness workflow 41140312487](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/41140312487) succeeded (`22:46:31Z`–`22:46:43Z`, October 30) on deployed source `6739563df7dad585cef1be14cedcb978bc0a5219`. Fresh public `/api/ready` and `/api/ready/scans` probes also returned 200. This later healthy observation preserves the earlier [failed readiness run 41110605407](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/41110605407) and does not qualify subsequent probe-source changes. The operator owns backup/restore failure follow-up; a healthy readiness probe does not establish recoverability. The existing October 27 alert-delivery observation remains the last recorded delivery evidence, not a new alert inventory or per-rule test. Preserve the approved receiver and disabled rules.
+
 `production-backup.yml` has an opt-in manual `isolated_restore=true` mode. It
 requires `restore=true`, `expected_source_sha` equal to the reviewed current
 main SHA, and original run attempt 1 in both jobs. Dispatch only after separate
