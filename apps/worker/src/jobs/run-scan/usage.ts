@@ -441,3 +441,16 @@ export async function persistEngineUsageCheckpoint(params: {
         }),
   }
 }
+
+export function hasObservedScanWork(
+  scanId: string,
+  status: "COMPLETED" | "PARTIAL" | "FAILED",
+  runRecord: Parameters<typeof shouldRecordAgentMinutes>[2]
+): boolean {
+  return shouldRecordAgentMinutes(
+    scanId,
+    status === "COMPLETED" ? "COMPLETED" : "PARTIAL",
+    runRecord,
+    { cancelled: true }
+  )
+}

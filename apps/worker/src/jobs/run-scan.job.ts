@@ -1,15 +1,21 @@
-import { DelayedError, type Job } from "bullmq"
+import { notifyScanFailed } from "../notifications"
+import { readExecutionPolicy, failScanWithTimeout } from "./run-scan/execution-policy"
 import {
-  reserveScanCapacity,
-  startUnmeteredScanCapacity,
+  prepareScanCapacity,
+  finalizeScanCapacity,
+  deferScanCapacityWait,
+  isCapacityStop,
+  capacityStopError,
+} from "./run-scan/capacity-lifecycle"
+import { cleanupScanExecution } from "./run-scan/cleanup"
+import type { Job } from "bullmq"
+import {
   resetUnstartedScanCapacity,
-  confirmScanCapacityStopped,
   ScanCapacityWaitingError,
   type ScanBillingDisposition,
 } from "@lyrashield/billing"
-import { releaseStoppedScanSlot, releaseUnstartedScanSlot } from "@lyrashield/db"
-import { boundedCleanup, finalizationGrace, scanElapsedClock } from "../engine/scan-deadline"
-import { prisma, runWithWorkspaceContext } from "@lyrashield/db"
+import { finalizationGrace, scanElapsedClock } from "../engine/scan-deadline"
+import { runWithWorkspaceContext } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 import {
   env,
@@ -35,18 +41,11 @@ import {
 } from "@lyrashield/db"
 import { resolveScanProfile, type UrlScanProfile } from "@lyrashield/types"
 import { prepareScanExecution } from "./run-scan/preparation"
-import {
-  cleanupEngineWorkspace,
-  interpretExitCode,
-  resolveEngineProfile,
-  type EngineRunResult,
-} from "../engine/runner"
-import { engineWorkspacePath } from "../engine/workspace-path"
+import { interpretExitCode, resolveEngineProfile, type EngineRunResult } from "../engine/runner"
 import type { TargetType } from "../engine/command-builder"
 import { EvidenceStorageConfigurationError } from "../engine/evidence-storage"
 import { runScannerOrchestrator } from "../engine/scanner-orchestrator"
-import { failTerminalRetestsForScan, markRetestsRunning } from "../engine/result-integrity"
-import { notifyScanFailed } from "../notifications"
+import { markRetestsRunning } from "../engine/result-integrity"
 import { type ScanJobData, type ScanJobResult } from "../types"
 import { verifyScanJobAuthority } from "./run-scan/authority"
 import { verifyScanAdmission } from "./run-scan/admission"
@@ -70,6 +69,7 @@ import {
   engineTruncationCoverageIssue,
   persistEngineUsageCheckpoint,
   shouldRecordAgentMinutes,
+  hasObservedScanWork,
 } from "./run-scan/usage"
 
 export {
@@ -134,18 +134,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
 
       // 3. Prepare the scan engine; capacity waits remain queued.
 
-      const policy = policyId
-        ? await prisma.policy.findFirst({
-            where: { id: policyId, workspaceId, deletedAt: null },
-            select: {
-              maxBudgetUsd: true,
-              maxDurationMinutes: true,
-              blockedPaths: true,
-              allowedDomains: true,
-              destructiveTestsAllowed: true,
-            },
-          })
-        : null
+      const policy = await readExecutionPolicy(policyId, workspaceId)
       const policyMaxBudgetUsd = policy?.maxBudgetUsd?.toNumber()
       scanRuntimeBudgetMs = resolveScanRuntimeBudgetMs(
         mode,
@@ -172,23 +161,8 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         return isScanCancelled()
       }
 
-      const failWithScanTimeout = async (timeoutMessage: string) => {
-        await updateScanStatus(scanId, "FAILED" as ScanStatus, {
-          errorCategory: "TIMEOUT",
-          errorMessage: timeoutMessage,
-        })
-        try {
-          await notifyScanFailed(workspaceId, scanId, timeoutMessage)
-        } catch (notificationError) {
-          log.warn("Failed to send scan timeout notification", {
-            scanId,
-            error:
-              notificationError instanceof Error
-                ? notificationError.message
-                : String(notificationError),
-          })
-        }
-      }
+      const failWithScanTimeout = (message: string) =>
+        failScanWithTimeout(workspaceId, scanId, message)
 
       let engineResult: EngineRunResult
       let engineStartedAtMs: number | null = null
@@ -236,17 +210,14 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       })
       if (!admission.ok) return admission.result
 
-      if (scanRecord.accountingVersion === 2 && engineBacked && !deterministicRetest) {
-        const capacity = await reserveScanCapacity({
-          workspaceId,
-          scanId,
-          maxRuntimeMs: scanRuntimeBudgetMs,
-        })
-        if (capacity.state === "WAITING") throw new ScanCapacityWaitingError()
-      }
-      if (scanRecord.accountingVersion === 2 && (!engineBacked || deterministicRetest)) {
-        await startUnmeteredScanCapacity(workspaceId, scanId)
-      }
+      await prepareScanCapacity({
+        accountingVersion: scanRecord.accountingVersion,
+        workspaceId,
+        scanId,
+        engineBacked,
+        deterministicRetest,
+        scanRuntimeBudgetMs,
+      })
       await updateScanStatus(scanId, "RUNNING" as ScanStatus)
       await markRetestsRunning(scanId)
       const execution = await executeScanTarget({
@@ -303,12 +274,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         )
       }
 
-      const capacityStopped =
-        execution.capacityLimited === true &&
-        ((engineResult.timedOut === true &&
-          engineResult.timeoutReason !== "INACTIVITY" &&
-          engineResult.timeoutReason !== "LLM_STALL") ||
-          engineResult.output.runRecord?.terminal_reason === "runtime_deadline")
+      const capacityStopped = isCapacityStop(execution)
       const runRecord = engineResult.output.runRecord
       const routingCoverageIssue =
         engineBacked && engineProfile ? engineRoutingCoverageIssue(engineProfile, runRecord) : null
@@ -321,12 +287,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       noBillableWork =
         !engineBacked ||
         deterministicRetest ||
-        !shouldRecordAgentMinutes(
-          scanId,
-          exitInterpretation.status === "COMPLETED" ? "COMPLETED" : "PARTIAL",
-          runRecord,
-          { cancelled: true }
-        )
+        !hasObservedScanWork(scanId, exitInterpretation.status, runRecord)
       const engineWorkObserved =
         engineBacked &&
         shouldRecordAgentMinutes(scanId, exitInterpretation.status, runRecord, { cancelled })
@@ -493,13 +454,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         priorError: agentMinuteTerminalError,
       })
 
-      if (capacityStopped)
-        engineTerminalError = {
-          status: "STOPPED_BUDGET",
-          errorCategory: "CAPACITY_EXHAUSTED",
-          errorMessage:
-            "Available review minutes reached. Partial evidence is preserved; unused reserved minutes are released.",
-        }
+      if (capacityStopped) engineTerminalError = capacityStopError()
 
       // 4. Run scanner orchestrator (SCA + secrets + normalization)
       await updateScanStatus(scanId, "VERIFYING" as ScanStatus)
@@ -679,23 +634,8 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         summary: scanSummary,
       }
     } catch (error) {
-      if (error instanceof ScanCapacityWaitingError && !billablePhaseStarted) {
-        await requeueScanForRetry({
-          scanId,
-          workspaceId,
-          attempt: 1,
-          maxAttempts: 1,
-          errorCategory: "WAITING_CAPACITY",
-          errorMessage: "Waiting for account review capacity",
-        })
-        // A capacity wait is not analysis time and does not consume an attempt.
-        await prisma.scan.updateMany({
-          where: { id: scanId, workspaceId, status: "QUEUED" },
-          data: { startedAt: null },
-        })
-        await job.moveToDelayed(Date.now() + 5_000, job.token)
-        throw new DelayedError()
-      }
+      if (error instanceof ScanCapacityWaitingError && !billablePhaseStarted)
+        await deferScanCapacityWait(job, workspaceId, scanId)
       const isTerminalPrerequisiteFailure = error instanceof EvidenceStorageConfigurationError
       const timedOut = globalScanTimeoutReached || isTimeoutError(error)
       const finalErrorCategory = timedOut
@@ -819,71 +759,17 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         errorMessage: finalErrorMessage,
       }
     } finally {
-      if (
-        scanRecord.accountingVersion === 2 &&
-        ((!recoveringPreviousExecution && !billablePhaseStarted) || executorReturned)
-      ) {
-        try {
-          await confirmScanCapacityStopped(workspaceId, scanId, noBillableWork, billingDisposition)
-          await releaseStoppedScanSlot(workspaceId, scanId)
-        } catch (accountingError) {
-          log.error("Scan admission remains held pending accounting review", {
-            scanId,
-            errorType: accountingError instanceof Error ? accountingError.name : "UNKNOWN",
-          })
-        }
-      }
-      if (recoveringPreviousExecution && !executorReturned && scanRecord.accountingVersion === 2) {
-        // A prior executor may have committed stoppedAt before dying during
-        // slot release. Only that durable proof permits this recovery.
-        await releaseStoppedScanSlot(workspaceId, scanId).catch((error: unknown) => {
-          log.warn("Stopped scan slot recovery remains pending", {
-            scanId,
-            errorType: error instanceof Error ? error.name : "UNKNOWN",
-          })
-        })
-      }
-      if (scanRecord.accountingVersion === 2) {
-        await releaseUnstartedScanSlot(workspaceId, scanId).catch((error: unknown) => {
-          log.warn("Unstarted scan slot remains held", {
-            scanId,
-            errorType: error instanceof Error ? error.name : "UNKNOWN",
-          })
-        })
-      }
-      try {
-        await failTerminalRetestsForScan(scanId)
-      } catch (retestError) {
-        log.warn("Failed to finalize retest state", {
-          scanId,
-          error: retestError instanceof Error ? retestError.message : String(retestError),
-        })
-      }
-      try {
-        await boundedCleanup(
-          (async () => {
-            await deterministicCheckout?.cleanup()
-            await cleanupEngineWorkspace(engineWorkspacePath(scanId), scanId)
-          })()
-        )
-      } catch (cleanupError) {
-        const error = cleanupError instanceof Error ? cleanupError.message : String(cleanupError)
-        log.error("Engine workspace cleanup requires operator attention", { scanId, error })
-        try {
-          await addScanEvent(
-            scanId,
-            "cleanup_failed",
-            "error",
-            "Engine workspace cleanup requires operator attention",
-            { error }
-          )
-        } catch (eventError) {
-          log.error("Failed to persist cleanup failure event", {
-            scanId,
-            error: eventError instanceof Error ? eventError.message : String(eventError),
-          })
-        }
-      }
+      await finalizeScanCapacity({
+        accountingVersion: scanRecord.accountingVersion,
+        workspaceId,
+        scanId,
+        recoveringPreviousExecution,
+        billablePhaseStarted,
+        executorReturned,
+        noBillableWork,
+        billingDisposition,
+      })
+      await cleanupScanExecution(scanId, deterministicCheckout)
     }
   }) // end runWithWorkspaceContext
 }

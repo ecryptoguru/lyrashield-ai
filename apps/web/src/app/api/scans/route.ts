@@ -1,4 +1,5 @@
-import { releaseUnstartedScanSlot, UserScanAlreadyActiveError } from "@lyrashield/db"
+import { scanCreationConflict } from "../../../lib/scan-admission-conflicts"
+import { releaseUnstartedScanSlot } from "@lyrashield/db"
 import { withCookieMutation, authErrorResponse } from "../../../lib/api-auth"
 import { serializeScanListItem, scanListEtag } from "./scan-list-response"
 import {
@@ -14,7 +15,6 @@ import {
   resolveAuthenticatedAssessmentAuthorization,
   LiveAiSafetyError,
   ScanAttachmentError,
-  WorkspaceScanConcurrencyLimitError,
 } from "@lyrashield/db"
 import {
   assertOAuthDelegatedScope,
@@ -721,32 +721,16 @@ async function post(request: Request) {
       201
     )
   } catch (error) {
-    if (error instanceof UserScanAlreadyActiveError) {
+    const conflict = scanCreationConflict(error)
+    if (conflict)
       return refuseScan({
+        ...conflict,
         workspaceId,
         actorUserId,
-        reason: "scan_in_progress",
-        code: error.code,
-        message: error.message,
-        status: 409,
         targetId: data.targetId,
         mode: data.mode,
         workflow: data.workflow,
       })
-    }
-    if (error instanceof WorkspaceScanConcurrencyLimitError) {
-      return refuseScan({
-        workspaceId,
-        actorUserId,
-        reason: "concurrency_limit",
-        code: "SCAN_CONCURRENCY_LIMIT",
-        message: `This workspace already has ${MAX_CONCURRENT_WORKSPACE_SCANS} reviews running. Wait for one to finish before starting another.`,
-        status: 409,
-        targetId: data.targetId,
-        mode: data.mode,
-        workflow: data.workflow,
-      })
-    }
     if (
       (error && typeof error === "object" && (error as { code?: string }).code === "P2002") ||
       (error instanceof Error && error.message === "Target already has an active scan")

@@ -1,4 +1,4 @@
-import { reserveScanCapacity, ScanCapacityWaitingError } from "@lyrashield/billing"
+import { claimBoundedEngineCapacity } from "./capacity-lifecycle"
 import { prepareRepositoryAuth } from "../../engine/repository-auth"
 import { uploadEncryptedArtifact } from "@lyrashield/evidence-storage"
 import {
@@ -358,7 +358,6 @@ export async function executeScanTarget(params: {
     scanRuntimeBudgetMs,
     elapsedScanMs,
     isScanCancelled,
-    markGlobalScanTimeout,
     markBillablePhaseStarted,
     deterministicRetest,
     engineBacked,
@@ -585,28 +584,9 @@ export async function executeScanTarget(params: {
 
     // Keep the profile's deterministic-scanner reserve available even when
     // the model is healthy until its own wall-clock cap.
-    let engineTimeoutMs = Math.min(
-      resolveEngineRuntimeBudgetMs(mode, target.type, scanRuntimeBudgetMs, elapsedScanMs()),
-      // The engine can never exceed the recorded plan's budget.
-      executionPlan ? executionPlan.limits.maxEngineMs : Number.POSITIVE_INFINITY
-    )
-    if (engineTimeoutMs <= 0) {
-      markGlobalScanTimeout()
-      throw new Error("Scan analysis deadline exhausted before engine execution")
-    }
-
-    if (params.accountingVersion === 2) {
-      const capacity = await reserveScanCapacity({
-        workspaceId,
-        scanId,
-        maxRuntimeMs: engineTimeoutMs,
-        start: true,
-      })
-      if (capacity.state === "WAITING") throw new ScanCapacityWaitingError()
-      if (capacity.state === "LEGACY") throw new Error("capacity_version_mismatch")
-      capacityLimited = capacity.runtimeLimitMs < engineTimeoutMs
-      engineTimeoutMs = Math.min(engineTimeoutMs, capacity.runtimeLimitMs)
-    }
+    const capacity = await claimBoundedEngineCapacity(params)
+    capacityLimited = capacity.capacityLimited
+    const engineTimeoutMs = capacity.runtimeLimitMs
     await enterEngineBillablePhase(scanId, markBillablePhaseStarted)
     engineStartedAtMs = Date.now()
     try {

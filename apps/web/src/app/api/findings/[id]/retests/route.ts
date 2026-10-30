@@ -1,4 +1,5 @@
-import { releaseUnstartedScanSlot, UserScanAlreadyActiveError } from "@lyrashield/db"
+import { retestCreationError } from "@/lib/scan-admission-conflicts"
+import { releaseUnstartedScanSlot } from "@lyrashield/db"
 import { recordedOperation } from "@/lib/recorded-operation"
 import { withCookieMutation } from "../../../../../lib/api-auth"
 import {
@@ -7,7 +8,6 @@ import {
   getFindingReference,
   prisma,
   updateScanStatus,
-  WorkspaceScanConcurrencyLimitError,
 } from "@lyrashield/db"
 import { type ScanMode, resolveTargetScanMode } from "@lyrashield/types"
 import { assertOAuthDelegatedScope, requirePermission } from "@lyrashield/auth/server"
@@ -276,24 +276,8 @@ async function post(request: Request, { params }: { params: Promise<{ id: string
               : {}),
           })
         } catch (error) {
-          if (error instanceof UserScanAlreadyActiveError) {
-            confirmNotSubmitted()
-            return apiError(error.code, error.message, 409)
-          }
-          if (error instanceof WorkspaceScanConcurrencyLimitError) {
-            return apiError(
-              "SCAN_CONCURRENCY_LIMIT",
-              "This workspace is at its concurrent review limit. Wait for one to finish before retesting.",
-              409
-            )
-          }
-          if (error instanceof Error && error.message === "Target already has an active scan") {
-            return apiError(
-              "RETEST_IN_PROGRESS",
-              "A retest is already in progress for this target",
-              409
-            )
-          }
+          const response = retestCreationError(error, confirmNotSubmitted)
+          if (response) return response
           throw error
         }
 

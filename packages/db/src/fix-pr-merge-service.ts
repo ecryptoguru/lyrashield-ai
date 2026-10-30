@@ -131,9 +131,7 @@ export async function handleFixPrMergedAndReevaluate({
   const outcome = await withWorkspaceRLS(
     workspaceId,
     async (lockTx) => {
-      await lockUserScanAdmission(lockTx, result.actedById)
-      // Serialize redeliveries through scan creation and durable retest association.
-      await lockTx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${advisoryKey}, 0))`
+      await lockRetestAdmission(lockTx, result.actedById, advisoryKey)
       const anchor = await findAnchor(lockTx)
       if (!anchor) return null
 
@@ -275,4 +273,14 @@ export interface FixPrMergeOutcome extends FixPrMergeResult {
   goal: ScanGoal
   mode: ScanMode
   policyId: string | null
+}
+
+async function lockRetestAdmission(
+  tx: Parameters<typeof lockUserScanAdmission>[0],
+  userId: string,
+  key: string
+) {
+  await lockUserScanAdmission(tx, userId)
+  // Serialize redeliveries through scan creation and durable retest association.
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${key}, 0))`
 }

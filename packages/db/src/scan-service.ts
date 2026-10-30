@@ -1,5 +1,9 @@
 import { targetReadScopeWhere, type ListScansParams } from "./read-query-scope"
 export type { ListScansParams } from "./read-query-scope"
+import type { CreateScanParams } from "./scan-service-types"
+export type { CreateScanParams } from "./scan-service-types"
+export { WorkspaceScanConcurrencyLimitError, lockWorkspaceScanAdmission } from "./scan-slot"
+import { createScanCapacity, readScanCapacity, type ScanCapacityProjection } from "./scan-capacity"
 import { prisma } from "./client"
 import { Prisma } from "./generated/prisma"
 import type {
@@ -16,8 +20,6 @@ import {
   DeterminismModeSchema,
   MAX_CONCURRENT_WORKSPACE_SCANS,
   ScanIdSchema,
-  type DeterminismMode,
-  type ScanWorkflow,
 } from "@lyrashield/types"
 import { computeScanExecutionPlanHash } from "./scan-execution-plan"
 import { isTerminalScanStatus, isValidTransition } from "./scan-transitions"
@@ -26,66 +28,13 @@ import {
   releaseUnstartedScanSlot,
   lockUserScanAdmission,
   UserScanAlreadyActiveError,
+  WorkspaceScanConcurrencyLimitError,
+  lockWorkspaceScanAdmission,
 } from "./scan-slot"
 import { getWorkspaceContext } from "./extension"
 
-export interface CreateScanParams {
-  workspaceId: string
-  targetId: string
-  goal: string
-  mode?: string
-  policyId?: string
-  createdById: string
-  triggerType?: string
-  determinismMode?: DeterminismMode
-  /**
-   * Optional workflow input (defaults to REVIEW_TARGET). The server constructs
-   * and persists the authoritative ScanExecutionPlan snapshot — callers supply
-   * workflow intent and already-resolved provenance only, never plan fields,
-   * limits, or capabilities.
-   */
-  workflow?: ScanWorkflow
-  /**
-   * Immutable git object IDs resolved through the authorized source
-   * integration BEFORE the admission lock is taken. Required for
-   * REVIEW_CHANGES (revision + baseRevision + mergeBaseRevision).
-   */
-  source?: {
-    revision: string
-    baseRevision?: string
-    mergeBaseRevision?: string
-  }
-  attachmentIds?: string[]
-  authorizationRef?: string
-  /**
-   * The delegated OAuth connection grant that authorized this scan, when the
-   * caller authenticated through a hosted MCP/agent credential. Persisted on
-   * the scan row so the async execution boundary (verifyScanAdmission) can
-   * re-verify the exact grant — the synchronous request-time allow is never
-   * inherited blindly by the queued job.
-   */
-  delegatedConnection?: { connectionId: string; authorizationVersion: number }
-}
-
-export class WorkspaceScanConcurrencyLimitError extends Error {
-  constructor() {
-    super(`Workspace already has ${MAX_CONCURRENT_WORKSPACE_SCANS} active scans`)
-    this.name = "WorkspaceScanConcurrencyLimitError"
-  }
-}
-
 export interface ScanWithEvents extends Scan {
-  capacity?: {
-    state: string
-    executionStopped: boolean
-    admissionHeld: boolean
-    multiplier: number
-    fundedMinutes: number
-    runtimeLimitMs: number
-    observedMs: number
-    chargedMinutes: number
-    absorbedMinutes: number
-  } | null
+  capacity?: ScanCapacityProjection | null
   events: ScanEvent[]
   /**
    * When an incremental event window was applied (a valid `eventsAfter` cursor
@@ -132,12 +81,6 @@ export const ACTIVE_SCAN_STATUSES: ScanStatus[] = [
 ]
 type ScanTransaction = Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
 
-export async function lockWorkspaceScanAdmission(
-  tx: ScanTransaction,
-  workspaceId: string
-): Promise<void> {
-  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`scan-admission:${workspaceId}`}, 0))`
-}
 type ScanStatusMetadata = {
   errorCategory?: string
   errorMessage?: string
@@ -228,21 +171,7 @@ export async function createScan(
         executionPlanHash,
       },
     })
-    await tx.userScanSlot.create({
-      data: { userId: params.createdById, scanId: scan.id, workspaceId: params.workspaceId },
-    })
-    const accountId = scan.sponsorAccountId ?? scan.createdById
-    await tx.$executeRaw`SELECT set_config('app.current_account_id', ${accountId}, true)`
-    await tx.scanCapacityReservation.create({
-      data: {
-        scanId: scan.id,
-        accountId,
-        state: executionPlan.capabilities.includes("engine") ? "WAITING" : "RESERVED",
-        workspaceId: scan.workspaceId,
-        userId: scan.createdById,
-        multiplier: scan.mode === "DEEP" || scan.mode === "CUSTOM" ? 3 : 1,
-      },
-    })
+    await createScanCapacity(tx, scan, executionPlan.capabilities.includes("engine"))
     await tx.scanEvent.create({
       data: {
         scanId: scan.id,
@@ -569,32 +498,7 @@ export async function getScanWithEvents(
       },
     })
     if (!scan) return null
-    let capacity: ScanWithEvents["capacity"] = null
-    if (scan.accountingVersion === 2) {
-      const accountId = scan.sponsorAccountId ?? scan.createdById
-      await tx.$executeRaw`SELECT set_config('app.current_account_id', ${accountId}, true)`
-      const reservation = await tx.scanCapacityReservation.findFirst({
-        where: { scanId, workspaceId, accountId },
-        select: {
-          state: true,
-          multiplier: true,
-          fundedMinutes: true,
-          runtimeLimitMs: true,
-          observedMs: true,
-          chargedMinutes: true,
-          absorbedMinutes: true,
-          stoppedAt: true,
-        },
-      })
-      if (reservation) {
-        const { stoppedAt, ...usage } = reservation
-        capacity = {
-          ...usage,
-          executionStopped: Boolean(stoppedAt),
-          admissionHeld: !scan.accountingSettledAt,
-        }
-      }
-    }
+    const capacity = await readScanCapacity(tx, scan)
     return {
       ...scan,
       capacity,

@@ -172,3 +172,20 @@ export function createEngineMinuteMeter(params: {
     }
   }
 }
+
+export function resolveEngineBillingOutcome(
+  budgetExceeded: boolean,
+  initialTerminalError: ScanTerminalError | null
+): EngineBillingOutcome {
+  return budgetExceeded
+    ? "failed"
+    : initialTerminalError?.errorCategory === "CAPACITY_EXHAUSTED"
+      ? "partial"
+      : initialTerminalError?.status === "STOPPED_BUDGET"
+        ? "failed"
+        : initialTerminalError?.status === "PARTIAL"
+          ? "partial"
+          : initialTerminalError
+            ? "failed"
+            : "completed"
+}

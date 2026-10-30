@@ -1,3 +1,5 @@
+import { MAX_CONCURRENT_WORKSPACE_SCANS } from "@lyrashield/types"
+import type { Prisma, ScanStatus } from "./generated/prisma"
 import type { ScopedTransaction } from "./rls"
 import { withWorkspaceRLS } from "./rls"
 
@@ -71,4 +73,52 @@ export async function releaseUnstartedScanSlot(workspaceId: string, scanId: stri
     })
     await tx.userScanSlot.deleteMany({ where: { userId: scan.createdById, scanId } })
   })
+}
+
+export async function hasSponsoredCapacityHold(
+  tx: ScopedTransaction,
+  userId: string
+): Promise<boolean> {
+  await tx.$executeRaw`SELECT set_config('app.current_account_id', ${userId}, true)`
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`account:${userId}`}, 0))`
+  const count = await tx.scanCapacityReservation.count({
+    where: {
+      accountId: userId,
+      OR: [
+        { state: { in: ["WAITING", "RESERVED", "RUNNING", "REVIEW_REQUIRED"] } },
+        { state: "SETTLED", stoppedAt: null },
+      ],
+    },
+  })
+  return count > 0
+}
+
+export function unsettledScanWhere(
+  workspaceId: string,
+  statuses: ScanStatus[]
+): Prisma.ScanWhereInput {
+  return {
+    workspaceId,
+    deletedAt: null,
+    OR: [{ status: { in: statuses } }, { accountingVersion: 2, accountingSettledAt: null }],
+  }
+}
+
+export class WorkspaceScanConcurrencyLimitError extends Error {
+  constructor() {
+    super(`Workspace already has ${MAX_CONCURRENT_WORKSPACE_SCANS} active scans`)
+    this.name = "WorkspaceScanConcurrencyLimitError"
+  }
+}
+
+export async function hasUserScanSlot(tx: ScopedTransaction, userId: string): Promise<boolean> {
+  await lockUserScanAdmission(tx, userId)
+  return Boolean(await tx.userScanSlot.findUnique({ where: { userId } }))
+}
+
+export async function lockWorkspaceScanAdmission(
+  tx: ScopedTransaction,
+  workspaceId: string
+): Promise<void> {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`scan-admission:${workspaceId}`}, 0))`
 }
