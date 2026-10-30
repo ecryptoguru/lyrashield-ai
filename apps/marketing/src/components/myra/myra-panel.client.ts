@@ -23,6 +23,19 @@ function routeContextFor(pathname: string): string | undefined {
   return isManifestRoute(first, "marketing") ? first : undefined
 }
 
+function captureMyraFocus(launcher: HTMLElement): HTMLElement {
+  // Safari does not always focus a button on pointer activation.
+  const active = document.activeElement
+  return active instanceof HTMLElement && active !== document.body ? active : launcher
+}
+
+function restoreMyraFocus(launcher: HTMLElement, previous: HTMLElement | null) {
+  const target = launcher.hasAttribute("data-conversion-visible")
+    ? document.querySelector<HTMLElement>('[data-cta-id="final-cta-create-account"]')
+    : (previous ?? launcher)
+  target?.focus()
+}
+
 export function initMyraPanel() {
   const launcher = document.getElementById("myra-launcher") as HTMLButtonElement | null
   const panel = document.getElementById("myra-panel")
@@ -201,11 +214,7 @@ export function initMyraPanel() {
   function openPanel() {
     if (open) return
     open = true
-    // Safari does not always focus a button on pointer activation.
-    restoredFocus =
-      document.activeElement instanceof HTMLElement && document.activeElement !== document.body
-        ? document.activeElement
-        : launcherEl
+    restoredFocus = captureMyraFocus(launcherEl)
     panelEl.hidden = false
     launcherEl.hidden = true
     launcherEl.setAttribute("aria-expanded", "true")
@@ -234,10 +243,7 @@ export function initMyraPanel() {
     launcherEl.setAttribute("aria-expanded", "false")
     positionChallengeHost()
     updateModal()
-    const focusTarget = launcherEl.hasAttribute("data-conversion-visible")
-      ? document.querySelector<HTMLElement>('[data-cta-id="final-cta-create-account"]')
-      : (restoredFocus ?? launcherEl)
-    focusTarget?.focus()
+    restoreMyraFocus(launcherEl, restoredFocus)
     announce("Myra panel closed.")
   }
 
