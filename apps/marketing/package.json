@@ -52,16 +52,16 @@
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@playwright/test": "^1.62.1",
-    "@astrojs/check": "^0.9.10",
-    "@cloudflare/workers-types": "^5.20260823.1",
+    "@playwright/test": "^1.64.1",
+    "@astrojs/check": "^0.9.12",
+    "@cloudflare/workers-types": "^5.20261024.1",
     "@tailwindcss/typography": "^0.5.20",
     "@types/node": "catalog:",
     "sharp": "^0.35.5",
     "tsx": "catalog:",
     "typescript": "catalog:",
-    "webmcp-types": "^0.1.5",
-    "wrangler": "^4.125.0",
+    "webmcp-types": "^0.1.10",
+    "wrangler": "^4.152.0",
     "vitest": "catalog:"
   },
   "engines": {
