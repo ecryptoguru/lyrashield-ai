@@ -73,8 +73,9 @@ overrides:
   "next@>=16 <16.4.1": "16.4.1"
   # GHSA-587h-7wmj-h5pm: patch the affected Vite 8.2.x editor handling.
   "vite@>=8.2.0 <8.2.4": "8.2.4"
-  # GHSA-q3jh-wrc6-jgq8 and GHSA-8r9p-f939-6h3c: preserve redirect header isolation.
-  "follow-redirects@>=1.16.0 <1.16.1": "1.16.1"
+  # GHSA-q3jh-wrc6-jgq8, GHSA-8r9p-f939-6h3c and GHSA-mrwp-f3q8-3g9p:
+  # preserve redirect header isolation, including cross-realm header lists.
+  "follow-redirects@>=1.16.0 <1.16.2": "1.16.2"
   # GHSA-r7fv-28h4-cvq7 and GHSA-gfr2-rv44-r23c: bound Markdown parser work.
   "markdown-it@>=14 <14.3.3": "14.3.3"
   # GHSA-fxqj-rqcc-2cmp: patched PostCSS starts at 8.5.23.
@@ -146,6 +147,8 @@ minimumReleaseAgeExclude:
   # Four URI security fixes; official v3.1.9 tag/registry gitHead 0def703 verified.
   # https://github.com/fastify/fast-uri/releases/tag/v3.1.9
   - "fast-uri@3.1.9"
+  # GHSA-mrwp-f3q8-3g9p: allow only the patched redirect release.
+  - "follow-redirects@1.16.2"
 # GHSA-ch52-4w7c-c8xp has no patched npm version as of 2026-10-03. Astro's
 # remote asset helper creates a fresh Request(src) and only asks its cache
 # policy for storable/timeToLive; it does not invoke the vulnerable
