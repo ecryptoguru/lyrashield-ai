@@ -1,12 +1,38 @@
 import { randomUUID } from "node:crypto"
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
-import { prisma } from "./client"
+import { PrismaPg } from "@prisma/adapter-pg"
+import { PrismaClient } from "./generated/prisma"
 import {
   beginFixPrExecution,
   getFixPrExecution,
   markFixPrRecovery,
 } from "./fix-pr-execution-service"
 import { createPullRequestRecord } from "./fix-proposal-service"
+
+// Hoisting runs this guard before imports can construct the runtime client.
+await vi.hoisted(async () => {
+  if (process.env.LYRASHIELD_TEST_DB_DISPOSABLE === "1" && process.env.RLS_RUNTIME_DATABASE_URL) {
+    const { assertDisposableDatabasePair } =
+      await import("../../../.github/scripts/vitest-database-env.mjs")
+    assertDisposableDatabasePair(process.env)
+  }
+})
+
+vi.mock("@lyrashield/config", async (original) => {
+  const actual = await original<typeof import("@lyrashield/config")>()
+  return {
+    ...actual,
+    env: {
+      ...actual.env,
+      DATABASE_URL: process.env.RLS_RUNTIME_DATABASE_URL ?? actual.env.DATABASE_URL,
+    },
+  }
+})
+import { prisma } from "./client"
+
+const owner = new PrismaClient({
+  adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
+})
 
 const provider = vi.hoisted(() => ({
   persistFailure: false,
@@ -59,17 +85,23 @@ const workspaceId = `fix-ws-${suffix}`
 const findingId = `fix-finding-${suffix}`
 const proposalId = `fix-proposal-${suffix}`
 beforeAll(async () => {
-  await prisma.workspace.create({ data: { id: workspaceId, name: "Fix PR", slug: workspaceId } })
-  await prisma.user.create({
+  if (process.env.RLS_RUNTIME_DATABASE_URL) {
+    const [role] = await prisma.$queryRaw<{ rolsuper: boolean; rolbypassrls: boolean }[]>`
+      SELECT rolsuper, rolbypassrls FROM pg_roles WHERE rolname = current_user
+    `
+    expect(role).toEqual({ rolsuper: false, rolbypassrls: false })
+  }
+  await owner.workspace.create({ data: { id: workspaceId, name: "Fix PR", slug: workspaceId } })
+  await owner.user.create({
     data: { id: `fix-user-${suffix}`, name: "Fix", email: `fix-${suffix}@example.invalid` },
   })
-  await prisma.workspaceMember.create({
+  await owner.workspaceMember.create({
     data: { workspaceId, userId: `fix-user-${suffix}`, role: "OWNER", status: "active" },
   })
-  await prisma.target.create({
+  await owner.target.create({
     data: { id: `fix-target-${suffix}`, workspaceId, name: "Fix", type: "REPO" },
   })
-  await prisma.scan.create({
+  await owner.scan.create({
     data: {
       id: `fix-scan-${suffix}`,
       workspaceId,
@@ -80,7 +112,7 @@ beforeAll(async () => {
       status: "COMPLETED",
     },
   })
-  await prisma.finding.create({
+  await owner.finding.create({
     data: {
       id: findingId,
       workspaceId,
@@ -92,11 +124,14 @@ beforeAll(async () => {
       dedupeKey: suffix,
     },
   })
-  await prisma.fixProposal.create({ data: { id: proposalId, findingId, summary: "Patch" } })
+  await owner.fixProposal.create({ data: { id: proposalId, findingId, summary: "Patch" } })
 })
 afterAll(async () => {
-  await prisma.workspace.delete({ where: { id: workspaceId } })
-  await prisma.user.delete({ where: { id: `fix-user-${suffix}` } })
+  await owner.userScanSlot.deleteMany({ where: { userId: `fix-user-${suffix}` } })
+  await owner.scanCapacityReservation.deleteMany({ where: { userId: `fix-user-${suffix}` } })
+  await owner.workspace.delete({ where: { id: workspaceId } })
+  await owner.user.delete({ where: { id: `fix-user-${suffix}` } })
+  await owner.$disconnect()
   await prisma.$disconnect()
 })
 describe("durable fix PR persistence", () => {
@@ -175,7 +210,7 @@ describe("durable fix PR persistence", () => {
     const input = buildFixPrApprovalInput(request)
     const approvals = await Promise.all(
       ["first", "second"].map((actor) =>
-        prisma.agentApproval.create({
+        owner.agentApproval.create({
           data: {
             id: `${actor}-${suffix}`,
             workspaceId,
@@ -224,7 +259,7 @@ describe("durable fix PR persistence", () => {
     expect(provider.branch).toHaveBeenCalledOnce()
     expect(provider.write).toHaveBeenCalledOnce()
     expect(provider.pr).toHaveBeenCalledOnce()
-    const rows = await prisma.pullRequest.findMany({
+    const rows = await owner.pullRequest.findMany({
       where: { fixProposalId: proposalId, prNumber: 44 },
     })
     expect(rows).toHaveLength(1)
@@ -232,7 +267,7 @@ describe("durable fix PR persistence", () => {
   })
 
   it("keeps the winner recoverable when loser bookkeeping and winner persistence both fail", async () => {
-    const proposal = await prisma.fixProposal.create({
+    const proposal = await owner.fixProposal.create({
       data: { findingId, summary: "Concurrent failure recovery" },
     })
     const request = {
@@ -252,7 +287,7 @@ describe("durable fix PR persistence", () => {
     const input = buildFixPrApprovalInput(request)
     const approvals = await Promise.all(
       ["winner", "loser"].map((actor) =>
-        prisma.agentApproval.create({
+        owner.agentApproval.create({
           data: {
             workspaceId,
             actionName: "fix_pr.open",
@@ -293,7 +328,7 @@ describe("durable fix PR persistence", () => {
     try {
       const loser = await executeApprovedFixPr({ ...request, approvalId: approvals[1]!.id })
       expect(loser.status).toBe("opening")
-      const intent = await prisma.pullRequest.findFirstOrThrow({
+      const intent = await owner.pullRequest.findFirstOrThrow({
         where: { fixProposalId: proposal.id },
       })
       expect(intent.status).toBe("opening")
@@ -314,7 +349,7 @@ describe("durable fix PR persistence", () => {
       provider.persistFailure = false
       provider.completeFailureApprovalId = ""
     }
-    const intent = await prisma.pullRequest.findFirstOrThrow({
+    const intent = await owner.pullRequest.findFirstOrThrow({
       where: { fixProposalId: proposal.id },
     })
     expect(intent.status).toBe("recovery")
@@ -325,11 +360,11 @@ describe("durable fix PR persistence", () => {
     expect((await getFixPrStatus(request)).status).toBe("opened")
     expect(provider.branch).toHaveBeenCalledOnce()
     expect(provider.pr).toHaveBeenCalledOnce()
-    expect(await prisma.pullRequest.count({ where: { fixProposalId: proposal.id } })).toBe(1)
+    expect(await owner.pullRequest.count({ where: { fixProposalId: proposal.id } })).toBe(1)
   })
 
   it("keeps legacy PR history from opening a second branch automatically", async () => {
-    const legacyProposal = await prisma.fixProposal.create({
+    const legacyProposal = await owner.fixProposal.create({
       data: { findingId, summary: "Legacy patch" },
     })
     await createPullRequestRecord(legacyProposal.id, workspaceId, {
@@ -355,7 +390,7 @@ describe("durable fix PR persistence", () => {
     expect(intent.record.branchName).toBe("fix/legacy")
   })
   it("recovers remote-open/local-persistence failure on a verified merge without duplicate scan", async () => {
-    const proposal = await prisma.fixProposal.create({
+    const proposal = await owner.fixProposal.create({
       data: { findingId, summary: "Recover merged patch" },
     })
     const request = {
@@ -373,7 +408,7 @@ describe("durable fix PR persistence", () => {
       requestedById: `fix-user-${suffix}`,
     }
     const input = buildFixPrApprovalInput(request)
-    const approval = await prisma.agentApproval.create({
+    const approval = await owner.agentApproval.create({
       data: {
         workspaceId,
         actionName: "fix_pr.open",
@@ -395,7 +430,7 @@ describe("durable fix PR persistence", () => {
     } finally {
       provider.persistFailure = false
     }
-    const intent = await prisma.pullRequest.findFirstOrThrow({
+    const intent = await owner.pullRequest.findFirstOrThrow({
       where: { fixProposalId: proposal.id },
     })
     expect(intent.status).toBe("recovery")
@@ -431,32 +466,32 @@ describe("durable fix PR persistence", () => {
       })
     ).toBeNull()
     expect(await handleFixPrMergedAndReevaluate({ ...options, prNumber: undefined })).toBeNull()
-    await prisma.agentApproval.update({
+    await owner.agentApproval.update({
       where: { id: approval.id },
       data: { inputHash: "tampered" },
     })
     expect(await handleFixPrMergedAndReevaluate(options)).toBeNull()
-    await prisma.agentApproval.update({
+    await owner.agentApproval.update({
       where: { id: approval.id },
       data: { inputHash: hashInput("fix_pr.open", input) },
     })
-    await prisma.pullRequest.update({
+    await owner.pullRequest.update({
       where: { id: intent.id },
       data: { diffChecksum: "tampered" },
     })
     expect(await handleFixPrMergedAndReevaluate(options)).toBeNull()
-    await prisma.pullRequest.update({
+    await owner.pullRequest.update({
       where: { id: intent.id },
       data: { diffChecksum: input.diffChecksum, prNumber: 47 },
     })
     expect(await handleFixPrMergedAndReevaluate(options)).toBeNull()
-    await prisma.pullRequest.update({ where: { id: intent.id }, data: { prNumber: null } })
+    await owner.pullRequest.update({ where: { id: intent.id }, data: { prNumber: null } })
     const first = await handleFixPrMergedAndReevaluate(options)
     expect(first?.retestScanId).toBeTruthy()
     const replay = await handleFixPrMergedAndReevaluate(options)
     expect(replay?.retestScanId).toBe(first?.retestScanId)
-    expect(await prisma.retest.count({ where: { workspaceId, findingId } })).toBe(1)
-    expect(await prisma.scan.count({ where: { workspaceId, triggerType: "retest" } })).toBe(1)
+    expect(await owner.retest.count({ where: { workspaceId, findingId } })).toBe(1)
+    expect(await owner.scan.count({ where: { workspaceId, triggerType: "retest" } })).toBe(1)
     expect(provider.pr.mock.calls.length - before).toBe(1)
   })
 })

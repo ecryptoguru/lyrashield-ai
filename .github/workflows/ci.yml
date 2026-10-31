@@ -510,6 +510,11 @@ jobs:
           if [ "$OPS_TESTS" = true ]; then suites+=(ops); fi
           LYRASHIELD_TEST_SUITES="$(IFS=,; echo "${suites[*]}")" pnpm test
 
+      - name: User scan slot concurrency with owned disposable services
+        if: needs.changes.outputs.database-tests == 'true'
+        timeout-minutes: 8
+        run: node .github/scripts/run-user-scan-slot-runtime.mjs "$RUNNER_TEMP/user-scan-slot.json"
+
       - name: Web presentation contracts
         if: needs.changes.outputs.app == 'true'
         run: pnpm exec vitest run --maxWorkers=2 apps/web/src/app/mobile-shell.contract.test.ts
