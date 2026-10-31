@@ -78,6 +78,120 @@ function execute(command, args, options) {
   })
 }
 
+async function exerciseFixture({
+  command,
+  directory,
+  fixtureEnv,
+  postgres,
+  redis,
+  containers,
+  inspect,
+  identity,
+  report,
+  database,
+  runtimePassword,
+}) {
+  // Do not load packages/db/prisma.config.ts: its dotenv call can restore PG
+  // overrides from the developer's .env even after sanitizing process.env.
+  const migrationConfig = resolve(directory, "prisma.config.mjs")
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- private generated fixture path
+  await writeFile(
+    migrationConfig,
+    `export default { schema: ${JSON.stringify(resolve(root, "packages/db/prisma/schema.prisma"))}, migrations: { path: ${JSON.stringify(resolve(root, "packages/db/prisma/migrations"))} }, datasource: { url: process.env.DATABASE_URL } }\n`
+  )
+  await command(
+    "pnpm",
+    [
+      "--filter",
+      "@lyrashield/db",
+      "exec",
+      "prisma",
+      "migrate",
+      "deploy",
+      "--config",
+      migrationConfig,
+    ],
+    { env: fixtureEnv, verbose: true }
+  )
+  await command(
+    "docker",
+    [
+      "exec",
+      "-i",
+      postgres.id,
+      "psql",
+      "-U",
+      "slot_owner",
+      "-d",
+      database,
+      "-v",
+      "ON_ERROR_STOP=1",
+    ],
+    {
+      input: `CREATE ROLE slot_runtime LOGIN PASSWORD '${runtimePassword}' NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS;
+GRANT CONNECT ON DATABASE ${database} TO slot_runtime;
+GRANT USAGE ON SCHEMA public, app TO slot_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE ON "Workspace", users, "Target", "Scan", "Schedule", "UserScanSlot", "ScanEvent", "ScanCapacityReservation", "AuditLog", agent_operations, agent_connections TO slot_runtime;`,
+    }
+  )
+  // Reverify both exact bindings before installing the Redis ownership marker.
+  for (const owned of containers)
+    if (ownedPort(await inspect(owned.id), owned) !== owned.hostPort)
+      throw new Error("Fixture endpoint changed before test execution")
+  const marked = await command("docker", [
+    "exec",
+    redis.id,
+    "redis-cli",
+    "SET",
+    "lyrashield:test-fixture:user-scan-slot",
+    identity,
+    "NX",
+  ])
+  if (marked !== "OK") throw new Error("Fresh Redis ownership marker was not created")
+  // A dedicated config avoids loading the developer's .env through vitest.config.ts.
+  const config = resolve(directory, "vitest.config.mjs")
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- private generated fixture path
+  await writeFile(
+    config,
+    `export default ${JSON.stringify({ root, test: { include: ["apps/worker/src/user-scan-slot.runtime.test.ts", "apps/worker/src/user-scan-slot.fixture.test.ts"], maxWorkers: 1 } })}\n`
+  )
+  await command(
+    "pnpm",
+    [
+      "exec",
+      "vitest",
+      "run",
+      "--config",
+      config,
+      "--reporter=default",
+      "--reporter=json",
+      `--outputFile=${report}`,
+    ],
+    { env: fixtureEnv, verbose: true }
+  )
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- explicit caller report path, read-only
+  assertFileCounts(JSON.parse(await readFile(report, "utf8")), [
+    ["apps/worker/src/user-scan-slot.runtime.test.ts", 12],
+    ["apps/worker/src/user-scan-slot.fixture.test.ts", 2],
+  ])
+  const remaining = await command("docker", [
+    "exec",
+    postgres.id,
+    "psql",
+    "-U",
+    "slot_owner",
+    "-d",
+    database,
+    "-At",
+    "-v",
+    "ON_ERROR_STOP=1",
+    "-c",
+    'SELECT (SELECT count(*) FROM users), (SELECT count(*) FROM "Workspace"), (SELECT count(*) FROM "UserScanSlot")',
+  ])
+  if (remaining !== "0|0|0") throw new Error("Disposable fixture rows were not fully cleaned")
+  console.log("fixture row cleanup: users=0, workspaces=0, slots=0")
+}
+
 /** Fresh services only; no caller-supplied database or Redis endpoint is accepted. */
 export async function runUserScanSlotRuntime({
   run = execute,
@@ -165,105 +279,19 @@ export async function runUserScanSlotRuntime({
       RLS_RUNTIME_DATABASE_URL: `postgresql://slot_runtime:${runtimePassword}@127.0.0.1:${postgres.hostPort}/${database}`,
       REDIS_URL: `redis://127.0.0.1:${redis.hostPort}`,
     }
-    // Do not load packages/db/prisma.config.ts: its dotenv call can restore PG
-    // overrides from the developer's .env even after sanitizing process.env.
-    const migrationConfig = resolve(directory, "prisma.config.mjs")
-    // eslint-disable-next-line security/detect-non-literal-fs-filename -- private generated fixture path
-    await writeFile(
-      migrationConfig,
-      `export default { schema: ${JSON.stringify(resolve(root, "packages/db/prisma/schema.prisma"))}, migrations: { path: ${JSON.stringify(resolve(root, "packages/db/prisma/migrations"))} }, datasource: { url: process.env.DATABASE_URL } }\n`
-    )
-    await command(
-      "pnpm",
-      [
-        "--filter",
-        "@lyrashield/db",
-        "exec",
-        "prisma",
-        "migrate",
-        "deploy",
-        "--config",
-        migrationConfig,
-      ],
-      { env: fixtureEnv, verbose: true }
-    )
-    await command(
-      "docker",
-      [
-        "exec",
-        "-i",
-        postgres.id,
-        "psql",
-        "-U",
-        "slot_owner",
-        "-d",
-        database,
-        "-v",
-        "ON_ERROR_STOP=1",
-      ],
-      {
-        input: `CREATE ROLE slot_runtime LOGIN PASSWORD '${runtimePassword}' NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS;
-GRANT CONNECT ON DATABASE ${database} TO slot_runtime;
-GRANT USAGE ON SCHEMA public, app TO slot_runtime;
-GRANT SELECT, INSERT, UPDATE, DELETE ON "Workspace", users, "Target", "Scan", "Schedule", "UserScanSlot", "ScanEvent", "ScanCapacityReservation", "AuditLog", agent_operations, agent_connections TO slot_runtime;`,
-      }
-    )
-    // Reverify both exact bindings before installing the Redis ownership marker.
-    for (const owned of containers)
-      if (ownedPort(await inspect(owned.id), owned) !== owned.hostPort)
-        throw new Error("Fixture endpoint changed before test execution")
-    const marked = await command("docker", [
-      "exec",
-      redis.id,
-      "redis-cli",
-      "SET",
-      "lyrashield:test-fixture:user-scan-slot",
+    await exerciseFixture({
+      command,
+      directory,
+      fixtureEnv,
+      postgres,
+      redis,
+      containers,
+      inspect,
       identity,
-      "NX",
-    ])
-    if (marked !== "OK") throw new Error("Fresh Redis ownership marker was not created")
-    // A dedicated config avoids loading the developer's .env through vitest.config.ts.
-    const config = resolve(directory, "vitest.config.mjs")
-    // eslint-disable-next-line security/detect-non-literal-fs-filename -- private generated fixture path
-    await writeFile(
-      config,
-      `export default ${JSON.stringify({ root, test: { include: ["apps/worker/src/user-scan-slot.runtime.test.ts", "apps/worker/src/user-scan-slot.fixture.test.ts"], maxWorkers: 1 } })}\n`
-    )
-    await command(
-      "pnpm",
-      [
-        "exec",
-        "vitest",
-        "run",
-        "--config",
-        config,
-        "--reporter=default",
-        "--reporter=json",
-        `--outputFile=${report}`,
-      ],
-      { env: fixtureEnv, verbose: true }
-    )
-    // eslint-disable-next-line security/detect-non-literal-fs-filename -- explicit caller report path, read-only
-    assertFileCounts(JSON.parse(await readFile(report, "utf8")), [
-      ["apps/worker/src/user-scan-slot.runtime.test.ts", 12],
-      ["apps/worker/src/user-scan-slot.fixture.test.ts", 2],
-    ])
-    const remaining = await command("docker", [
-      "exec",
-      postgres.id,
-      "psql",
-      "-U",
-      "slot_owner",
-      "-d",
+      report,
       database,
-      "-At",
-      "-v",
-      "ON_ERROR_STOP=1",
-      "-c",
-      'SELECT (SELECT count(*) FROM users), (SELECT count(*) FROM "Workspace"), (SELECT count(*) FROM "UserScanSlot")',
-    ])
-    if (remaining !== "0|0|0") throw new Error("Disposable fixture rows were not fully cleaned")
-    console.log("fixture row cleanup: users=0, workspaces=0, slots=0")
+      runtimePassword,
+    })
   } finally {
     const errors = []
     for (const owned of containers.reverse()) {
