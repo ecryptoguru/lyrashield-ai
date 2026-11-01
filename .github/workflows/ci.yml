@@ -485,6 +485,11 @@ jobs:
             psql -h 127.0.0.1 -U app_runtime_ci -d lyrashield -v ON_ERROR_STOP=1 \
             -c "DO \$\$ BEGIN IF has_table_privilege(current_user, 'public.billing_reconciliation_state', 'SELECT') OR has_table_privilege(current_user, 'public.billing_reconciliation_state', 'INSERT') OR has_table_privilege(current_user, 'public.billing_reconciliation_state', 'UPDATE') OR has_table_privilege(current_user, 'public.billing_reconciliation_state', 'DELETE') THEN RAISE EXCEPTION 'app_runtime_ci must not access billing_reconciliation_state'; END IF; END \$\$;"
 
+      - name: Verify restore snapshot round trip with owned PostgreSQL 17
+        if: needs.changes.outputs.ops-tests == 'true'
+        # No production URLs/keys or pre-existing database service is used.
+        run: RESTORE_SNAPSHOT_RUNTIME_TEST=1 node --test .github/scripts/tests/restore-snapshot-postgres.runtime.test.mjs
+
       # Core imports these packages through their dist exports. The canonical
       # plugin dependency closure prepares them independently of the quality job.
       - name: Build core test export prerequisites
@@ -509,11 +514,6 @@ jobs:
           fi
           if [ "$OPS_TESTS" = true ]; then suites+=(ops); fi
           LYRASHIELD_TEST_SUITES="$(IFS=,; echo "${suites[*]}")" pnpm test
-
-      - name: Verify restore snapshot round trip with owned PostgreSQL 17
-        if: needs.changes.outputs.ops-tests == 'true'
-        # No production URLs/keys or pre-existing database service is used.
-        run: RESTORE_SNAPSHOT_RUNTIME_TEST=1 node --test .github/scripts/tests/restore-snapshot-postgres.runtime.test.mjs
 
       - name: Web presentation contracts
         if: needs.changes.outputs.app == 'true'
