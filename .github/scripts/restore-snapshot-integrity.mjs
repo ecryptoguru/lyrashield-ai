@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto"
-import { createReadStream, createWriteStream } from "node:fs"
+import { createReadStream, createWriteStream, writeSync } from "node:fs"
 import { once } from "node:events"
 import { spawn } from "node:child_process"
 import { tmpdir } from "node:os"
@@ -100,9 +100,21 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
         JSON.parse(await readFile(second, "utf8"))
       )
     } else throw new Error("invalid-mode")
-  } catch {
+  } catch (error) {
     // Table names, counts, connection strings and raw data are private.
     console.error("restore/snapshot-integrity-failed")
+    if (process.env.RESTORE_SNAPSHOT_DIAGNOSTIC_FD === "3") {
+      const known = new Set([
+        "invalid-dump-binding",
+        "row-size-limit",
+        "snapshot-sort-failed",
+        "invalid-copy-header",
+        "incomplete-copy-snapshot",
+        "snapshot-content-mismatch",
+      ])
+      const reason = known.has(error?.message) ? error.message : "operation-failed"
+      writeSync(3, `restore/snapshot/reason/${reason}\n`)
+    }
     process.exitCode = 1
   }
 }

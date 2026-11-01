@@ -38,3 +38,7 @@ test("snapshot fails closed on malformed, duplicate, missing or truncated COPY b
     await assert.rejects(copySnapshot(lines, sha))
   await assert.rejects(copySnapshot(sql([]), "invalid"))
 })
+
+test("oversized COPY rows retain the fail-closed limit", async () => {
+  await assert.rejects(copySnapshot(sql(["x".repeat(16 * 1024 * 1024 + 1)]), sha), /row-size-limit/)
+})

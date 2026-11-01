@@ -510,6 +510,11 @@ jobs:
           if [ "$OPS_TESTS" = true ]; then suites+=(ops); fi
           LYRASHIELD_TEST_SUITES="$(IFS=,; echo "${suites[*]}")" pnpm test
 
+      - name: Verify restore snapshot round trip with owned PostgreSQL 17
+        if: needs.changes.outputs.ops-tests == 'true'
+        # No production URLs/keys or pre-existing database service is used.
+        run: RESTORE_SNAPSHOT_RUNTIME_TEST=1 node --test .github/scripts/tests/restore-snapshot-postgres.runtime.test.mjs
+
       - name: Web presentation contracts
         if: needs.changes.outputs.app == 'true'
         run: pnpm exec vitest run --maxWorkers=2 apps/web/src/app/mobile-shell.contract.test.ts
