@@ -488,8 +488,9 @@ checks are selected. Run it locally with:
 RESTORE_SNAPSHOT_RUNTIME_TEST=1 node --test .github/scripts/tests/restore-snapshot-postgres.runtime.test.mjs
 ```
 
-The fixture uses a UUID container/ownership label, no host ports or external
-network, synthetic credentials and data, and a memory-backed database. It
+The fixture uses a UUID container/ownership label and a memory-backed database.
+It publishes no host ports and disables external container networking.
+Credentials and rows are synthetic. It
 checks both schemas, empty/duplicate/escaped/typed/partition/RLS rows, immutable
 archive expectations after later source writes, content/row/table/column drift,
 the actual staged verifier, and cleanup. It accepts no database URL and removes
