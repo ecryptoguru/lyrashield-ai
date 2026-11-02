@@ -12,6 +12,8 @@ vi.mock("@lyrashield/config", () => ({
   env: {
     LYRASHIELD_ENGINE_PATH: "",
     LYRASHIELD_IMAGE: "",
+    LYRASHIELD_RUN_RECORD_V1_1: "0",
+    LYRASHIELD_PENDING_HTTP_EVIDENCE: "0",
     REDIS_URL: "redis://localhost:6379",
     STRIX_SANDBOX_MEM_LIMIT: "4g",
     STRIX_SANDBOX_CPUS: "2",

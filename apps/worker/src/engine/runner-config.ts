@@ -221,6 +221,12 @@ export function buildEngineEnv(
       filtered[key] = value
     }
   }
+  // Deployment-only controls come from the validated startup snapshot, never
+  // from scan/profile/chat input or later ambient process.env mutations.
+  filtered.LYRASHIELD_RUN_RECORD_V1_1 = env.LYRASHIELD_RUN_RECORD_V1_1
+  filtered.LYRASHIELD_PENDING_HTTP_EVIDENCE = env.LYRASHIELD_PENDING_HTTP_EVIDENCE
+  if (env.LLM_API_MODE) filtered.LLM_API_MODE = env.LLM_API_MODE
+  if (env.DEDUPE_LLM_API_MODE) filtered.DEDUPE_LLM_API_MODE = env.DEDUPE_LLM_API_MODE
   if (!("LYRASHIELD_PROMPT_CACHE_EXPLICIT" in filtered)) {
     filtered.LYRASHIELD_PROMPT_CACHE_EXPLICIT = "1"
   }
