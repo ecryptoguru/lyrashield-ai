@@ -6,7 +6,7 @@ Founder- and operator-run procedures consolidated from standalone runbooks. Each
 
 [Production release 41438792830](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/41438792830) succeeded for `d488862bd269c07194afe87a918ca413e4a62217`. Independent post-release Azure and VM observations found healthy app, scanner, egress proxy and worker with matching product/image identity; public app/scanner and scan readiness returned 200. Exact revisions and digests are recorded in [PRD §8](../PRD.md#nonbilling-production-release--2026-11-02-ist). Wait for release completion before VM RunCommand reads; never overlap worker promotion.
 
-The November 1 scheduled restore failed its private row-integrity step, and the later November 2 scheduled backup did not run a restore. The corrected verifier has synthetic, not current production-data, restore evidence. Follow the [owner-approved isolated restore procedure](#owner-approved-manual-isolated-restore); do not rerun the failed scheduled workflow.
+The November 1 scheduled restore failed its private row-integrity step, and the later November 2 scheduled backup did not run a restore. A subsequent owner-requested [isolated backup/restore 41448546391](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/41448546391) passed exact-object, row-integrity, schema, audit, readiness and cleanup steps from deployed source `d488862bd269c07194afe87a918ca413e4a62217`; retention deletion was skipped. The historical failure cause remains unknown. Follow the [owner-approved isolated restore procedure](#owner-approved-manual-isolated-restore) for future drills; do not rerun the failed scheduled workflow.
 
 ## Historical production readback — 2026-10-27
 
@@ -519,8 +519,8 @@ Subsequent synthetic testing reproduced a stream startup race that could omit
 early COPY lines; the verifier now subscribes before asynchronous setup. The
 missing historical logs cannot establish whether this caused the November 1 failure.
 Do not rerun that scheduled run: it includes retention deletion and lacks the
-new diagnostic source. Use a separately reviewed isolated dispatch after the
-repair is merged and the exact current main SHA is known.
+new diagnostic source. A later [isolated dispatch 41448546391](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/41448546391)
+passed on merged source `d488862bd269c07194afe87a918ca413e4a62217`; it does not establish the cause of the earlier failure. Future drills still require separate owner approval and the reviewed current main SHA.
 
 CI explicitly enables a fresh owned PostgreSQL 17 round trip when operations
 checks are selected. Run it locally with:
