@@ -112,7 +112,12 @@ run_phase write
 # the independently committed evidence + result manifest remain visible after process death.
 pg -q <<'SQL'
 CREATE FUNCTION fixture_terminal_barrier() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN PERFORM pg_sleep(120); RETURN NEW; END $$;
+BEGIN
+  -- A backend may finish this statement after its client is killed. Always roll it
+  -- back, within the host's 30s DROP TRIGGER deadline.
+  PERFORM pg_sleep(12);
+  RAISE EXCEPTION 'disposable terminal checkpoint expired';
+END $$;
 CREATE TRIGGER fixture_terminal_barrier BEFORE UPDATE OF status ON "Scan" FOR EACH ROW
 WHEN (OLD.id = 'task5-fix1-reverse-reuse' AND NEW.status = 'COMPLETED')
 EXECUTE FUNCTION fixture_terminal_barrier();
@@ -132,9 +137,11 @@ lock_ttl=$(docker exec "$prefix-redis" redis-cli --raw EVAL \
   3 bull:scans:active bull:scans:task5-fix1-reverse-reuse bull:scans:task5-fix1-reverse-reuse:lock task5-fix1-reverse-reuse)
 [[ $lock_ttl =~ ^[0-9]+$ && $lock_ttl -gt 0 && -s "$tmp/proof/checkpoint-job.json" ]] || {
   echo "Original job is not active and locked at manifest checkpoint" >&2; exit 1; }
+echo "Original job active at durable checkpoint: task5-fix1-reverse-reuse attemptsStarted=1 lockTTLms=$lock_ttl"
 docker kill --signal KILL "$prefix-worker" >/dev/null
 set +e; wait "$writer"; rc=$?; set -e
 [[ $rc == 137 ]] || { echo "expected killed worker exit 137, got $rc" >&2; exit 1; }
+echo "Original checkpoint worker exited $rc"
 pg -q -c 'DROP TRIGGER fixture_terminal_barrier ON "Scan"; DROP FUNCTION fixture_terminal_barrier();'
 run_phase resume
 run_phase corrupt

@@ -321,6 +321,20 @@ test("MinIO readiness sends a Host header to the private endpoint and requires s
   assert.ok(probe.includes('[[ "$line" == *" 200 "* ]]'))
 })
 
+test("terminal barrier must abort the status update within the cleanup watchdog even if the client vanishes", () => {
+  const script = readFileSync(
+    new URL("../run-worker-evidence-persistence-drill.sh", import.meta.url),
+    "utf8"
+  )
+  const barrier = script.match(
+    /CREATE FUNCTION fixture_terminal_barrier\(\)[^$]*\$\$([\s\S]*?)\$\$;/
+  )[1]
+  const seconds = Number(barrier.match(/pg_sleep\((\d+)\)/)[1])
+  assert.ok(seconds >= 5 && seconds < 30)
+  assert.match(barrier, /pg_sleep\(\d+\);\s*RAISE EXCEPTION/)
+  assert.doesNotMatch(barrier, /RETURN NEW/)
+})
+
 test("disk gate rejects inadequate or incomparable free space before service startup", () => {
   const guard = fileURLToPath(new URL("../worker-evidence-drill-guard.py", import.meta.url))
   const result = (row) =>
