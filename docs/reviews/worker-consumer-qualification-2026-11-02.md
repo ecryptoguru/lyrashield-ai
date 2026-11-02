@@ -15,16 +15,20 @@ LYRASHIELD_BIN="$ENGINE_CHECKOUT/.venv/bin/lyrashield" \
   bash scripts/verify-worker-contract.sh "$PINNED_CONSUMER_CHECKOUT"
 
 # Run from the current product checkout, using the same candidate engine CLI.
+node scripts/verify-worker-qualification-tools.mjs "$WRITER_FIXTURES"
 LYRASHIELD_BIN="$ENGINE_CHECKOUT/.venv/bin/lyrashield" \
   bash scripts/verify-current-worker-contract.sh "$WRITER_FIXTURES"
 ```
 
-The [declared current test manifest](../../scripts/current-worker-contract-tests.txt) includes all nine pinned-contract suites and the previous reader qualification suites, plus relevant triage, coverage and evidence API checks. The [current invocation](../../scripts/verify-current-worker-contract.sh) checks the worker's required CLI flags, installs the frozen pnpm lockfile, runs the manifest with V8 coverage and then invokes the [actual writer-to-reader bridge](../../scripts/verify-worker-writer-artifacts.ts).
+The [declared current test manifest](../../scripts/current-worker-contract-tests.txt) includes all nine pinned-contract suites and the previous reader qualification suites, plus relevant triage, coverage and evidence API checks. The [current invocation](../../scripts/verify-current-worker-contract.sh) rejects staged or unstaged tracked changes and unreadable Git state before running any CLI, install or test command. It matches complete required CLI option tokens, installs the frozen pnpm lockfile, runs the manifest with V8 coverage and then invokes the [actual writer-to-reader bridge](../../scripts/verify-worker-writer-artifacts.ts). Untracked operator files remain allowed. Similar names such as `--target-list` and `--instruction-file` do not satisfy `--target` or `--instruction`.
 
 The invocation uses the pinned contract's synthetic CI auth/database values. It disables disposable database tests and opt-in Composer Docker smoke. The repository's Vitest environment also replaces database connections with its dead local unit endpoint. No model provider, production database, paid scan or deployment is part of this qualification.
 
 ## Local results
 
+The recorded application qualification below ran on `858085e8caadc0613c610c08872cf7dfac6ad3d9`. The stricter qualification tools add focused checks without changing application behavior.
+
+- [Tool regressions](../../scripts/verify-worker-qualification-tools.mjs): **13 checks passed** against disposable copies of the actual 13-bundle writer fixtures and temporary Git repositories. Missing mandatory receipts, digest mismatch, an unreceipted HTTP artifact, staged/unstaged source changes, failed Git status and misleading CLI option prefixes are rejected; exact tuples, clean source and untracked local notes remain positive controls. Dependency/test commands are stubbed only in the gate's isolated test repository.
 - Unchanged pinned consumer: **9 suites passed; 419 tests passed**.
 - Current consumer: **36 suites passed; 1,019 tests passed; 11 skipped**. The skips are the existing opt-in Composer Docker smoke cases.
 - Separate Composer smoke: **2 suites passed; 27 tests passed; no skips**, including all 11 opt-in cases. The exact pinned Composer image was already cached as arm64; the run used `DOCKER_DEFAULT_PLATFORM=linux/arm64`, `LYRASHIELD_COMPOSER_SMOKE=1` and `--maxWorkers=1`. Metadata and DNS were fixture-supplied; containers used no networking, plugins, scripts or installation, with 256 MiB memory and one CPU limits. No image pull was needed.
@@ -36,7 +40,7 @@ The populated-cache regression first proves a same-revision hit, changes only th
 
 ## Actual writer artifacts
 
-The bridge reads exact engine-emitted bytes and verifies each file's length and SHA-256 against the generator receipt before passing the tuple to `parseEngineOutput`. Expected reader outcomes are declared independently in the bridge; the receipt does not define expected authority.
+The bridge requires an exact per-case receipt file set: `run.json` and `vulnerabilities.json`, plus `http_exchanges.json` only for cases expected to produce that artifact. It checks actual HTTP file presence too. It reads each consumed file once, verifies that buffer's byte length and SHA-256, and passes strings decoded from those same verified buffers to `parseEngineOutput`. Missing or extra receipt entries cannot bypass integrity checks, and no second file read occurs between verification and parsing. Expected reader outcomes are declared independently in the bridge; the receipt does not define expected authority.
 
 The final 13-bundle fixture set was regenerated from writer commit `1c4996688d01cee79435a115b63a6b65a710d5b9` with the portable generator command above.
 

@@ -7,6 +7,20 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 tests_file="$repo_root/scripts/current-worker-contract-tests.txt"
 writer_fixtures="${1:-}"
 
+# Fail closed before executing the candidate CLI or any dependency/test command.
+checked_out_sha="$(git -C "$repo_root" rev-parse --verify HEAD 2>/dev/null)" || {
+  echo "Current worker consumer HEAD unavailable." >&2
+  exit 2
+}
+dirty_output="$(git -C "$repo_root" status --porcelain --untracked-files=no 2>/dev/null)" || {
+  echo "Current worker consumer git status failed; cannot verify cleanliness." >&2
+  exit 2
+}
+if [[ -n "$dirty_output" ]]; then
+  echo "Current worker consumer has local modifications; contract requires a clean checkout." >&2
+  exit 2
+fi
+
 if [[ -z "${LYRASHIELD_BIN:-}" || ! -x "$LYRASHIELD_BIN" ]]; then
   echo "Set LYRASHIELD_BIN to the candidate engine's executable CLI." >&2
   exit 2
@@ -33,15 +47,14 @@ fi
 
 help="$("$LYRASHIELD_BIN" --help)"
 for flag in --non-interactive --target --scan-mode --instruction --max-budget-usd --runtime-budget-seconds; do
-  if ! grep -Fq -- "$flag" <<< "$help"; then
+  if ! grep -Eq -- "(^|[^[:alnum:]_-])${flag}([^[:alnum:]_-]|$)" <<< "$help"; then
     echo "Missing CLI flag required by the worker: $flag" >&2
     exit 1
   fi
 done
 
 cd "$repo_root"
-echo "Current consumer HEAD: $(git rev-parse HEAD)"
-git status --short --untracked-files=no
+echo "Current consumer HEAD: $checked_out_sha"
 corepack pnpm install --frozen-lockfile
 # Synthetic CI-only values match the engine's pinned worker contract. These
 # suites use mocks; this command does not connect to a database or provider.

@@ -46,20 +46,40 @@ for (const [index, outcome] of cases.entries()) {
   const { name } = outcome
   const receipt = summary[name]
   assert(receipt, `${name}: missing summary receipt`)
-  for (const [file, identity] of Object.entries(receipt.files) as Array<
-    [string, { bytes: number; sha256: string }]
-  >) {
-    assert(["run.json", "vulnerabilities.json", "http_exchanges.json"].includes(file))
+  const expectsHttp = name !== "overflow-failed" && name !== "omission-limit"
+  const tupleFiles = [
+    "run.json",
+    "vulnerabilities.json",
+    ...(expectsHttp ? ["http_exchanges.json"] : []),
+  ]
+  assert.deepEqual(
+    Object.keys(receipt.files).sort(),
+    [...tupleFiles].sort(),
+    `${name}: tuple files`
+  )
+  assert.equal(
+    existsSync(join(fixtureRoot, name, "http_exchanges.json")),
+    expectsHttp,
+    `${name}: HTTP artifact presence`
+  )
+  const verified = new Map<string, Buffer>()
+  for (const file of tupleFiles) {
+    const identity = receipt.files[file] as { bytes: number; sha256: string }
     const raw = readFileSync(join(fixtureRoot, name, file))
     assert.equal(raw.length, identity.bytes, `${name}/${file}: byte length`)
-    assert.equal(createHash("sha256").update(raw).digest("hex"), identity.sha256)
+    assert.equal(
+      createHash("sha256").update(raw).digest("hex"),
+      identity.sha256,
+      `${name}/${file}: SHA-256`
+    )
+    verified.set(file, raw)
   }
-  const read = (file: string) => readFileSync(join(fixtureRoot, name, file), "utf8")
-  const httpPath = join(fixtureRoot, name, "http_exchanges.json")
-  const httpRaw = existsSync(httpPath) ? read("http_exchanges.json") : undefined
+  // Parsing uses only the buffers whose byte length and digest were verified.
+  const read = (file: string) => verified.get(file)?.toString("utf8")
+  const httpRaw = read("http_exchanges.json")
   const result = parseEngineOutput(
-    read("vulnerabilities.json"),
-    read("run.json"),
+    read("vulnerabilities.json")!,
+    read("run.json")!,
     { httpExchangesRaw: httpRaw },
     { expectedRunName: `task5-${index < 5 ? "fix1" : "fix2"}-${name}` }
   )
