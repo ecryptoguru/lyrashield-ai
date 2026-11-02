@@ -140,8 +140,8 @@ export interface ScanPollData {
   events?: Array<
     Omit<ScanEvent, "metadata" | "createdAt"> & { metadata?: unknown; createdAt: string | Date }
   >
-  /** Echoed when an incremental event window was applied to this response. */
-  eventsCursorApplied?: string
+  /** Applied cursor for a tail window. A full window returns null or omits it. */
+  eventsCursorApplied?: string | null
   /** The scan's place in the run queue while QUEUED (1-based + total waiting). */
   capacity?: ScanCapacityData | null
   queuePosition?: { position: number; waiting: number } | null

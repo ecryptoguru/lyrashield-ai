@@ -223,29 +223,54 @@ describe("review_scan_progress registration", () => {
     })
   }
 
-  it("defaults to the displayed scan and reads the page's own poll + quality endpoints", async () => {
-    fetchMock.mockImplementation(async (url: string) => {
-      if (String(url).includes("/quality")) return jsonResponse(qualitySurface())
-      return jsonResponse(pollData())
-    })
+  it.each([
+    { window: "full window", cursor: { eventsCursorApplied: null } },
+    { window: "applied cursor", cursor: { eventsCursorApplied: "e-1" } },
+    { window: "omitted cursor", cursor: {} },
+  ])(
+    "reads the displayed scan's poll and quality endpoints with a $window response",
+    async ({ cursor }) => {
+      fetchMock.mockImplementation(async (url: string) => {
+        if (String(url).includes("/quality")) return jsonResponse(qualitySurface())
+        return jsonResponse({ ...pollData(), ...cursor })
+      })
+      const { tool } = register(definition())
+
+      const result = (await tool.execute({}, { signal: abortSignal })) as {
+        ok: boolean
+        output: Record<string, unknown>
+      }
+
+      expect(result.ok).toBe(true)
+      const urls = fetchMock.mock.calls.map(([url]) => String(url))
+      expect(urls).toContain("/api/scans/scan-1?workspaceId=ws-1")
+      expect(urls.some((u) => u.startsWith("/api/scans/scan-1/quality?workspaceId=ws-1"))).toBe(
+        true
+      )
+      // Read-only: no method/body ever goes out.
+      for (const [, init] of fetchMock.mock.calls as [string, RequestInit][]) {
+        expect((init?.method ?? "GET").toUpperCase()).toBe("GET")
+        expect(init?.body).toBeUndefined()
+      }
+      expect(result.output.status).toBe("RUNNING")
+      expect(result.output.scanId).toBe("scan-1")
+    }
+  )
+
+  it("rejects a malformed cursor in the poll response", async () => {
+    fetchMock.mockImplementation(async (url: string) =>
+      jsonResponse(
+        String(url).includes("/quality")
+          ? qualitySurface()
+          : { ...pollData(), eventsCursorApplied: 42 }
+      )
+    )
     const { tool } = register(definition())
-
-    const result = (await tool.execute({}, { signal: abortSignal })) as {
-      ok: boolean
-      output: Record<string, unknown>
-    }
-
-    expect(result.ok).toBe(true)
-    const urls = fetchMock.mock.calls.map(([url]) => String(url))
-    expect(urls.some((u) => u.startsWith("/api/scans/scan-1?workspaceId=ws-1"))).toBe(true)
-    expect(urls.some((u) => u.startsWith("/api/scans/scan-1/quality?workspaceId=ws-1"))).toBe(true)
-    // Read-only: no method/body ever goes out.
-    for (const [, init] of fetchMock.mock.calls as [string, RequestInit][]) {
-      expect((init?.method ?? "GET").toUpperCase()).toBe("GET")
-      expect(init?.body).toBeUndefined()
-    }
-    expect(result.output.status).toBe("RUNNING")
-    expect(result.output.scanId).toBe("scan-1")
+    const result = await tool.execute({}, { signal: abortSignal })
+    expect(result).toMatchObject({
+      ok: false,
+      error: expect.stringContaining("Response validation failed"),
+    })
   })
 
   it("accepts the displayed scan id and rejects any other scan id", async () => {
