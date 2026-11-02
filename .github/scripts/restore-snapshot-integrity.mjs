@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto"
-import { createReadStream, createWriteStream } from "node:fs"
+import { createReadStream, createWriteStream, writeSync } from "node:fs"
 import { once } from "node:events"
 import { spawn } from "node:child_process"
 import { tmpdir } from "node:os"
@@ -17,9 +17,19 @@ export async function copySnapshot(lines, dumpSha256) {
   let current
   const identifier = '(?:"(?:[^"]|"")*"|[a-z_][a-z0-9_$]*)'
   const copyHeader = new RegExp(`^COPY (${identifier}\\.${identifier}) \\((.*)\\) FROM stdin;$`)
-  const directory = await mkdtemp(join(tmpdir(), "lyra-snapshot-"))
+  // Subscribe before the first await: readline starts consuming its input as
+  // soon as it is created, and otherwise early COPY lines can be lost.
+  const iterator = lines[Symbol.asyncIterator]?.()
+  const source = iterator ? { [Symbol.asyncIterator]: () => iterator } : lines
+  let directory
   try {
-    for await (const line of lines) {
+    directory = await mkdtemp(join(tmpdir(), "lyra-snapshot-"))
+  } catch (error) {
+    await iterator?.return?.()
+    throw error
+  }
+  try {
+    for await (const line of source) {
       if (line.length > 16 * 1024 * 1024) throw new Error("row-size-limit")
       if (current) {
         if (line === "\\.") {
@@ -100,9 +110,21 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
         JSON.parse(await readFile(second, "utf8"))
       )
     } else throw new Error("invalid-mode")
-  } catch {
+  } catch (error) {
     // Table names, counts, connection strings and raw data are private.
     console.error("restore/snapshot-integrity-failed")
+    if (process.env.RESTORE_SNAPSHOT_DIAGNOSTIC_FD === "3") {
+      const known = new Set([
+        "invalid-dump-binding",
+        "row-size-limit",
+        "snapshot-sort-failed",
+        "invalid-copy-header",
+        "incomplete-copy-snapshot",
+        "snapshot-content-mismatch",
+      ])
+      const reason = known.has(error?.message) ? error.message : "operation-failed"
+      writeSync(3, `restore/snapshot/reason/${reason}\n`)
+    }
     process.exitCode = 1
   }
 }

@@ -490,8 +490,11 @@ remains in the existing bucket and is subject to ordinary scheduled 30-day
 retention; this mode does not delete it or any older object.
 
 Plaintext dumps, audit exports and command/error logs stay in a private 0700
-runner directory with 0600 files. Sensitive phases return exit status without
-publishing diagnostics. The first isolated `docker rm -fv` removes anonymous
+runner directory with 0600 files. Sensitive command output remains private. Row-integrity verification emits only
+fixed stage labels (`archive-binding`, `prepare`, `archive-export`,
+`restored-export`, `archive-capture`, `restored-capture`, `compare`, `cleanup`)
+and allowlisted failure reasons through a separate diagnostic descriptor. It
+never publishes table names, counts, hashes of individual rows, SQL or errors. The first isolated `docker rm -fv` removes anonymous
 restored-data volumes together with their containers; `always()` cleanup also
 removes private files and named backup containers; application cleanup validates the session leader's UID, process
 group, session and start time before signalling its group. Cleanup refuses
@@ -501,6 +504,34 @@ The isolated backup and restore jobs have respective 20/25-minute timeouts; queu
 waits mean this is not a 45-minute wall-clock limit.
 
 Restore additionally compares private per-table COPY row counts and order-independent SHA fingerprints derived from the same already-verified custom dump, with bounded sort spill and unconditional cleanup. Same-count content drift fails. This covers COPY contents/columns, not full physical/logical equivalence, sequences, large objects or extension semantics. Per-drill DB/auth credentials are random; the DB password stays only in a private 0600 file and never GITHUB_ENV/argv. Backup forwards the verified TLS URL by environment-variable name. These are current source contracts, not a fresh production drill receipt.
+
+The November 1 [scheduled restore 41289855308](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/41289855308)
+restored the exact encrypted object but failed row-integrity verification. Its
+private logs were cleaned; the cause is unknown and schema/audit/readiness/proof
+were skipped. The earlier October 25 success does not qualify this later backup.
+Subsequent synthetic testing reproduced a stream startup race that could omit
+early COPY lines; the verifier now subscribes before asynchronous setup. The
+missing historical logs cannot establish whether this caused the November 1 failure.
+Do not rerun that scheduled run: it includes retention deletion and lacks the
+new diagnostic source. Use a separately reviewed isolated dispatch after the
+repair is merged and the exact current main SHA is known.
+
+CI explicitly enables a fresh owned PostgreSQL 17 round trip when operations
+checks are selected. Run it locally with:
+
+```sh
+RESTORE_SNAPSHOT_RUNTIME_TEST=1 node --test .github/scripts/tests/restore-snapshot-postgres.runtime.test.mjs
+```
+
+The fixture uses a UUID container/ownership label and a memory-backed database.
+It publishes no host ports and disables external container networking.
+Credentials and rows are synthetic. It
+checks both schemas, empty/duplicate/escaped/typed/partition/RLS rows, immutable
+archive expectations after later source writes, content/row/table/column drift,
+the actual staged verifier, and cleanup. It accepts no database URL and removes
+only its ownership-verified container. Ordinary failure invokes cleanup; hard
+process/daemon/host loss can leave resources for operator inspection. Local or
+CI success is synthetic evidence, not a fresh production recovery proof.
 
 Existing credentials authenticate only to their original production database
 and R2 endpoint; the passphrase is used locally. Full private production data
