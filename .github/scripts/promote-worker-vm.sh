@@ -244,7 +244,12 @@ fi
 webhook_cutover=0
 v26_cutover=0
 webhook_recovery=0
+paired_release_held=0
 case "${1:-}" in
+  --paired-release-held)
+    paired_release_held=1
+    shift
+    ;;
   --v26-cutover)
     v26_cutover=1
     shift
@@ -330,6 +335,33 @@ host_backup=
 redis_eval() {
   worker_oneshot "$@"
 }
+
+# Dormant paired release path: the protected caller supplies the reviewed module
+# payload and an exact external owner. The persistent latch is never ours to clear.
+assert_paired_release_hold() {
+  [ "$paired_release_held" -eq 1 ] || return 0
+  : "${LYRASHIELD_PAIRED_RELEASE_OWNER:?}" "${LYRASHIELD_PAIRED_RELEASE_HOLD_MODULE_BASE64:?}"
+  # shellcheck disable=SC2016
+  verified=$(redis_eval '
+const [module,owner,product,engine,digest,readyCode,readyBody,scansCode,scansBody]=process.argv.slice(1);
+const bytes=Buffer.from(module,"base64");
+const {createHash}=await import("node:crypto");
+if(bytes.length>8192 || bytes.toString("base64")!==module || createHash("sha256").update(bytes).digest("hex")!=="138515e7d3139ddc96c19111e9f433e47e41cf3b39607df0cc5184473a270e52") throw new Error("Unreviewed paired hold module");
+const {ownedHold:assertPairedReleaseHold,assertHeldReadiness}=await import("data:text/javascript;base64,"+module);
+const {default:Redis}=await import("ioredis");
+const redis=new Redis(process.env.REDIS_URL,{maxRetriesPerRequest:1});
+try {
+  await assertPairedReleaseHold(redis,"assert",owner,product,engine,digest);
+  if(readyCode) assertHeldReadiness(readyCode,readyBody,scansCode,scansBody);
+  console.log("MATCH");
+} finally { await redis.quit(); }' \
+    "$LYRASHIELD_PAIRED_RELEASE_HOLD_MODULE_BASE64" "$LYRASHIELD_PAIRED_RELEASE_OWNER" \
+    "$expected_app" "$expected_engine" "${target##*@}" "${1:-}" "${2:-}" "${3:-}" "${4:-}")
+  [ "$verified" = MATCH ] || { echo "Paired release hold verification failed" >&2; return 1; }
+}
+
+# Validate ownership before changing timers, host assets, config or the worker.
+assert_paired_release_hold
 
 assert_cutover_receipt() {
   if [ "$v26_cutover" -eq 1 ]; then
@@ -531,6 +563,17 @@ rollback() {
     cleanup_host_assets
     exit "$status"
   fi
+  if [ "$promotion_complete" -ne 1 ] && [ "$paired_release_held" -eq 1 ] && ! assert_paired_release_hold; then
+    # A missing/replaced latch cannot authorize restarting a prior worker.
+    # Preserve external state and fail closed with the consumer stopped.
+    systemctl stop "$timer" || true
+    systemctl stop "$service" || true
+    if [ "$host_assets_changed" -eq 1 ]; then restore_host_assets || true; fi
+    if [ "$config_changed" -eq 1 ]; then cp -p "$backup" "$config"; fi
+    echo "Worker paired release failed; hold changed or unavailable, worker stopped, admission untouched" >&2
+    cleanup_host_assets
+    exit "$status"
+  fi
   if [ "$promotion_complete" -ne 1 ]; then
     if [ "$host_assets_changed" -eq 1 ]; then
       restore_host_assets || echo "Worker host asset rollback failed" >&2
@@ -592,7 +635,9 @@ fi
 # JavaScript template literal is passed verbatim to the container.
 # shellcheck disable=SC2016
 promotion_step=claiming-admission-stop
-if [ "$v26_cutover" -eq 1 ]; then
+if [ "$paired_release_held" -eq 1 ]; then
+  assert_paired_release_hold
+elif [ "$v26_cutover" -eq 1 ]; then
   : "${LYRASHIELD_V26_REQUEST_BASE64:?}"
 elif [ "$maintenance_cutover" -eq 1 ]; then
   assert_cutover_receipt
@@ -674,6 +719,7 @@ app_label=$(docker image inspect "$target" --format '{{index .Config.Labels "org
 engine_label=$(docker image inspect "$target" --format '{{index .Config.Labels "io.lyrashield.engine.revision"}}')
 [ "$app_label" = "$expected_app" ]
 [ "$engine_label" = "$expected_engine" ]
+assert_paired_release_hold
 if [ "$v26_cutover" -eq 1 ] || [ -f /var/lib/lyrashield/v26-cutover.json ]; then
   [ "$(docker image inspect "$target" --format '{{index .Config.Labels "io.lyrashield.accounting.protocol"}}')" = reservations/2 ] || exit 1
   protocol=$(worker_candidate_oneshot 'const {SCAN_ACCOUNTING_PROTOCOL}=await import("@lyrashield/db");console.log(SCAN_ACCOUNTING_PROTOCOL)')
@@ -825,6 +871,7 @@ chown root:root "$temporary"
 mv "$temporary" "$config"
 config_changed=1
 
+assert_paired_release_hold
 promotion_step=restarting-worker
 systemctl reset-failed "$service" || true
 # Capture the unit state and journal tail on a restart failure before the EXIT
@@ -843,6 +890,7 @@ wait_healthy
 [ "$(docker exec "$container" printenv LYRASHIELD_PRODUCT_REVISION)" = "$expected_app" ]
 [ "$(docker exec "$container" printenv LYRASHIELD_ENGINE_REVISION)" = "$expected_engine" ]
 [ "$(docker exec "$container" printenv LYRASHIELD_WORKER_IMAGE_DIGEST)" = "${target##*@}" ]
+assert_paired_release_hold
 
 if [ "$maintenance_cutover" -eq 1 ]; then
   promotion_step=checking-held-cutover
@@ -880,6 +928,24 @@ systemctl is-active --quiet "$timer"
 systemctl is-enabled --quiet "$timer"
 echo "Worker service state: active enabled"
 echo "Worker egress refresh timer state: active enabled"
+if [ "$paired_release_held" -eq 1 ]; then
+  promotion_step=checking-held-scan-readiness
+  assert_paired_release_hold
+  ready_response=$(curl --silent --show-error --max-time 10 --max-filesize 16384 --write-out '\n%{http_code}' https://app.lyrashieldai.com/api/ready)
+  scans_response=$(curl --silent --show-error --max-time 10 --max-filesize 16384 --write-out '\n%{http_code}' https://app.lyrashieldai.com/api/ready/scans)
+  assert_paired_release_hold "$(printf '%s\n' "$ready_response" | tail -n 1)" "$(printf '%s\n' "$ready_response" | sed '$d')" "$(printf '%s\n' "$scans_response" | tail -n 1)" "$(printf '%s\n' "$scans_response" | sed '$d')"
+  worker_is_healthy
+  [ "$(docker inspect "$container" --format '{{.Config.Image}}')" = "$target" ]
+  [ "$(docker exec "$container" printenv LYRASHIELD_PRODUCT_REVISION)" = "$expected_app" ]
+  [ "$(docker exec "$container" printenv LYRASHIELD_ENGINE_REVISION)" = "$expected_engine" ]
+  [ "$(docker exec "$container" printenv LYRASHIELD_WORKER_IMAGE_DIGEST)" = "${target##*@}" ]
+  assert_paired_release_hold
+  promotion_complete=1
+  trap - EXIT HUP INT TERM
+  cleanup_host_assets
+  echo "Worker paired release promotion passed for ${target##*@}; scan admission HELD"
+  exit 0
+fi
 promotion_step=resuming-admission
 if [ "$admission_stop_owned" -eq 1 ]; then
   resume_admission

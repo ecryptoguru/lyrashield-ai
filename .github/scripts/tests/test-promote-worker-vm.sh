@@ -4,7 +4,8 @@ set -euo pipefail
 repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 script="$repo/.github/scripts/promote-worker-vm.sh"
 tmp=$(mktemp -d)
-trap 'rm -rf "$tmp"' EXIT
+http_fixture_pid=
+trap 'if [ -n "$http_fixture_pid" ]; then kill "$http_fixture_pid" 2>/dev/null || true; fi; rm -rf "$tmp"' EXIT
 
 digest="sha256:$(printf 'a%.0s' {1..64})"
 target="ghcr.io/ecryptoguru/lyrashield-ai/lyrashield-worker@${digest}"
@@ -191,7 +192,7 @@ case "$1:$2" in
     export LYRASHIELD_ENGINE_REVISION="$MOCK_ENGINE_REVISION"
     export LYRASHIELD_WORKER_IMAGE_DIGEST="${MOCK_TARGET##*@}"
     case "$*" in
-      *'const [raw,owner,product,currentImage,durable,runId,engine,live]'*|*'candidateWorkerImage:target'*|*assertV26WorkerIdentity*)
+      *'const [raw,owner,product,currentImage,durable,runId,engine,live]'*|*'candidateWorkerImage:target'*|*assertV26WorkerIdentity*|*assertPairedReleaseHold*)
         while [ "$1" != -e ]; do shift; done
         shift
         code=$1
@@ -201,7 +202,7 @@ import fs from "node:fs";
 const code = process.argv[2];
 const args = process.argv.slice(3);
 process.argv = ["node", ...args];
-const replacement = 'Promise.resolve({default: class Redis { async get() { return globalThis.readAdmission(); } async quit() {} }})';
+const replacement = 'Promise.resolve({default: class Redis { async get() { return globalThis.readAdmission(); } async eval(lua, count, key, operation, receipt) { if(count!==1 || key!=="lyrashield:scan-admission:stopped" || operation!=="assert")throw new Error("Unexpected hold mutation"); return globalThis.readAdmission()===receipt && Number(process.env.MOCK_HOLD_PTTL || -1)===-1 ? 1 : 0; } async quit() {} }})';
 globalThis.readAdmission = () => {
   fs.appendFileSync(process.env.MOCK_ORDER_LOG, "redis-read\n");
   return fs.readFileSync(process.env.MOCK_ADMISSION_STOP, "utf8");
@@ -268,7 +269,7 @@ NODE
       *printenv\ DATABASE_URL*)
         if [ "$(cat "$MOCK_SERVICE_ACTIVE")" = 1 ]; then printf '%s\n' 'postgresql://current@database.test:5432/lyrashield'; else printf '%s\n' 'postgresql://retired@retired-database.test:5432/lyrashield'; fi ;;
       *LYRASHIELD_PRODUCT_REVISION*) printf '%s\n' "$MOCK_APP_REVISION" ;;
-      *LYRASHIELD_ENGINE_REVISION*) printf '%s\n' "$MOCK_ENGINE_REVISION" ;;
+      *LYRASHIELD_ENGINE_REVISION*) printf '%s\n' "${MOCK_LIVE_ENGINE_REVISION:-$MOCK_ENGINE_REVISION}" ;;
       *LYRASHIELD_WORKER_IMAGE_DIGEST*) printf '%s\n' "${MOCK_TARGET##*@}" ;;
       *) exit 1 ;;
     esac ;;
@@ -296,6 +297,14 @@ MOCK
 
   cat > "$case_dir/bin/curl" <<'MOCK'
 #!/bin/sh
+if [ -n "${MOCK_HTTP_PORT:-}" ]; then
+  exec node --input-type=module - "$@" <<'NODE'
+import {spawnSync} from "node:child_process";
+const args = process.argv.slice(2).map(arg => arg.replace("https://app.lyrashieldai.com/", `http://127.0.0.1:${process.env.MOCK_HTTP_PORT}/`));
+const result = spawnSync("/usr/bin/curl", ["--noproxy", "127.0.0.1", ...args], {stdio:"inherit"});
+process.exit(result.status ?? 1);
+NODE
+fi
 exit 0
 MOCK
 cat > "$case_dir/bin/df" <<'MOCK'
@@ -345,6 +354,7 @@ run_case() {
   [ "$name" != cutover-docker-uncertain ] || docker_ps_fail=1
   [ "$name" != cutover-live-environment-rotated ] || live_stale=1
   [ "$name" != cutover-health-failure ] || unhealthy=1
+  [ "$name" != paired-health-failure ] || unhealthy=1
   [ "$name" != cutover-insecure-receipt ] || receipt_stat=0:644
   local floor_env=""
   if [ "$floor_via" = env ]; then
@@ -419,6 +429,34 @@ run_case() {
     printf '%s' "$owned_stop" > "$case_dir/admission-stop"
     if [ "$receipt_mode" = foreign ]; then printf 'foreign-owner' > "$case_dir/admission-stop"; fi
   fi
+  local paired_module_payload="" hold_pttl=-1 live_engine=""
+  if [ "$cutover" = paired ]; then
+    mode_arg=--paired-release-held
+    paired_module_payload=$(base64 < "$repo/ops/monitoring/paired-release-hold.mjs" | tr -d '\n')
+    owned_stop=$(node --input-type=module - "$repo/ops/monitoring/paired-release-hold.mjs" "$app_revision" "$engine_revision" "$digest" <<'NODE'
+import {pathToFileURL} from "node:url";
+const [modulePath,product,engine,digest]=process.argv.slice(2);
+const {pairedReleaseReceipt}=await import(pathToFileURL(modulePath));
+console.log(pairedReleaseReceipt("123:1",product,engine,digest));
+NODE
+)
+    case "$receipt_mode" in
+      missing-module) paired_module_payload='' ;;
+      tampered-module) paired_module_payload=$(printf 'export const bypass=true;' | base64 | tr -d '\n') ;;
+      missing) owned_stop='' ;;
+      malformed) owned_stop='not-json' ;;
+      foreign) owned_stop='{"operator":"on-call"}' ;;
+      stale-owner) owned_stop=${owned_stop/123:1/122:1} ;;
+      wrong-source) local wrong_source; wrong_source=$(printf 'f%.0s' {1..40}); owned_stop=${owned_stop/$app_revision/$wrong_source} ;;
+      expiring) hold_pttl=60000 ;;
+      live-engine) live_engine=$(printf 'f%.0s' {1..40}) ;;
+    esac
+    printf '%s' "$owned_stop" > "$case_dir/admission-stop"
+    node "$repo/.github/scripts/tests/fixtures/paired-release-readiness.mjs" "$case_dir/http-port" "$receipt_mode" "$case_dir/admission-stop" &
+    http_fixture_pid=$!
+    for _ in {1..100}; do [ ! -s "$case_dir/http-port" ] || break; /bin/sleep 0.01; done
+    [ -s "$case_dir/http-port" ]
+  fi
   local configured_image
   configured_image=$(sed -n 's/^LYRASHIELD_WORKER_IMAGE=//p' "$case_dir/runtime.conf")
   set +e
@@ -426,6 +464,11 @@ run_case() {
     PATH="$case_dir/bin:$PATH" \
       LYRASHIELD_WORKER_GITHUB_CREDENTIAL_VAULT=app-only-vault \
       MOCK_TARGET="$target" \
+      LYRASHIELD_PAIRED_RELEASE_OWNER=123:1 \
+      LYRASHIELD_PAIRED_RELEASE_HOLD_MODULE_BASE64="$paired_module_payload" \
+      MOCK_HOLD_PTTL="$hold_pttl" \
+      MOCK_LIVE_ENGINE_REVISION="$live_engine" \
+      MOCK_HTTP_PORT="$(cat "$case_dir/http-port" 2>/dev/null || true)" \
       LYRASHIELD_V26_RECEIPT_FILE="$case_dir/v26.json" \
       LYRASHIELD_V26_REQUEST_BASE64="$request_payload" \
       LYRASHIELD_V26_IDENTITY_MODULE_BASE64="$identity_payload" \
@@ -473,6 +516,43 @@ run_case() {
   )
   status=$?
   set -e
+  if [ -n "$http_fixture_pid" ]; then
+    kill "$http_fixture_pid" 2>/dev/null || true
+    wait "$http_fixture_pid" || true
+    http_fixture_pid=
+  fi
+  if [ "$cutover" = paired ]; then
+    if [ "$expected" = success ]; then
+      [ "$status" -eq 0 ] || { printf '%s\n' "$output"; exit 1; }
+      grep -Fq 'scan admission HELD' <<< "$output"
+      grep -Fq "LYRASHIELD_WORKER_IMAGE=$target" "$case_dir/runtime.conf"
+    else
+      [ "$status" -ne 0 ] || { printf '%s\n' "$output"; exit 1; }
+      if grep -Fq 'scan admission HELD' <<< "$output"; then echo "Failed held promotion reported success" >&2; exit 1; fi
+      grep -Fq "LYRASHIELD_WORKER_IMAGE=$configured_image" "$case_dir/runtime.conf"
+    fi
+    if [ -n "$replacement_stop" ]; then
+      [ "$(cat "$case_dir/admission-stop")" = "$replacement_stop" ]
+      [ "$(cat "$case_dir/service-active")" = 0 ]
+    elif [ "$receipt_mode" = http-removal ]; then
+      [ ! -s "$case_dir/admission-stop" ]
+      [ "$(cat "$case_dir/service-active")" = 0 ]
+    elif [ "$receipt_mode" = http-replacement ]; then
+      [ "$(cat "$case_dir/admission-stop")" = '{"operator":"on-call","reason":"http-fixture"}' ]
+      [ "$(cat "$case_dir/service-active")" = 0 ]
+    else
+      [ "$(cat "$case_dir/admission-stop")" = "$owned_stop" ]
+    fi
+    if grep -Fq 'resuming-admission' "$case_dir/order.log" || grep -Fq 'cjson.decode' "$case_dir/docker.log"; then
+      echo "Held promotion touched ordinary admission ownership" >&2
+      exit 1
+    fi
+    case "$receipt_mode" in
+      missing|malformed|foreign|stale-owner|wrong-source|expiring|missing-module|tampered-module)
+        if grep -Fq 'systemctl restart' "$case_dir/order.log"; then echo "Invalid hold reached restart" >&2; exit 1; fi ;;
+    esac
+    return
+  fi
 
   if [ "$cutover" = v26 ]; then
     [ -s "$case_dir/admission-stop" ]
@@ -646,6 +726,19 @@ run_case() {
     [ ! -s "$case_dir/journalctl.log" ]
   fi
 }
+
+if [ "${PAIRED_RELEASE_ONLY:-0}" = 1 ]; then
+  run_case paired-success 1 1 1 success 1 '' 0 '' 9999999000 1 1 '' env 0 paired
+  for mode in missing malformed foreign stale-owner wrong-source expiring live-engine api-outage malformed-body scans-open scans-healthy-body http-replacement http-removal missing-module tampered-module; do
+    run_case "paired-$mode" 1 1 1 failure 1 '' 0 '' 9999999000 1 1 '' env 0 paired "$mode"
+  done
+  run_case paired-replaced 1 1 1 failure 1 '' 0 '{"operator":"on-call","reason":"new-incident"}' 9999999000 1 1 '' env 0 paired
+  run_case paired-image-mismatch 1 1 1 failure 1 '' 1 '' 9999999000 1 1 '' env 0 paired
+  run_case paired-health-failure 1 1 1 failure 1 '' 0 '' 9999999000 1 1 '' env 0 paired
+  run_case paired-restart-failure 1 1 1 failure 1 '' 0 '' 9999999000 1 1 '' env 1 paired
+  echo "Paired release held promotion proof passed (real loopback HTTP)."
+  exit 0
+fi
 
 run_case cutover-rebuilt-candidate 0 0 0 success 0 '' 0 '' 9999999000 0 1 '' env 0 1 rebuilt-retry
 run_case cutover-before-config-crash-retry 0 0 0 success 0 '' 0 '' 9999999000 0 1 '' env 0 1 previous-candidate
