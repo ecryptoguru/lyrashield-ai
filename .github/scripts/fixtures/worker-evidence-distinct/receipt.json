@@ -1,0 +1,35 @@
+{
+  "run_name": "drill-distinct-owner-revision",
+  "status": "partial",
+  "exchanges": 2,
+  "files": {
+    "run.json": {
+      "sha256": "3bdb67165be98e414cd05679daa464d54421b404505ac4d1c32abf29b5d70c17",
+      "bytes": 3673
+    },
+    "vulnerabilities.json": {
+      "sha256": "110e53c83878ad6f0b9eea8bbe8021d9d368629f95a675935a15ebf86f8a48d6",
+      "bytes": 1174
+    },
+    "http_exchanges.json": {
+      "sha256": "b7b71afe6f6a0b9d2a2ed4bc3dcc7a880ee8f289f6059da0d835005eea2e5c7c",
+      "bytes": 2081
+    }
+  },
+  "ordinary": {
+    "vuln-0001": [
+      "71"
+    ],
+    "vuln-0002": [
+      "73"
+    ]
+  },
+  "pending": {
+    "vuln-0001": [
+      "72"
+    ],
+    "vuln-0002": [
+      "72"
+    ]
+  }
+}

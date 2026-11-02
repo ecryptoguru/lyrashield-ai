@@ -6,7 +6,14 @@ import { pathToFileURL } from "node:url"
 // These files define the exact-image worker rehearsal. Keep this list narrow
 // and update it whenever the reusable workflow gains another executable input.
 export const WORKER_IMAGE_REHEARSAL_HARNESS_FILES = [
+  ".github/scripts/disposable-worker-rehearsal-role.sql",
+  ".github/scripts/fixtures/worker-evidence-distinct/receipt.json",
+  ".github/scripts/fixtures/worker-evidence-distinct/run.json",
+  ".github/scripts/fixtures/worker-evidence-distinct/vulnerabilities.json",
+  ".github/scripts/fixtures/worker-evidence-distinct/http_exchanges.json",
   ".github/scripts/normalize-worker-image-reference.sh",
+  ".github/scripts/run-worker-evidence-persistence-drill.sh",
+  ".github/scripts/worker-evidence-persistence-drill.mjs",
   ".github/scripts/tests/supabase-db-tls.docker.mjs",
   ".github/scripts/tests/webhook-cutover-release.redis.test.mjs",
   ".github/scripts/tests/webhook-cutover-schema.postgres.test.mjs",
