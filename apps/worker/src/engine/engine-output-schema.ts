@@ -150,6 +150,21 @@ const httpExchangeIdSchema = z
   .string()
   .regex(/^[0-9]{1,128}$/, "http_exchange_ids entries must be numeric ASCII ids")
 
+/** Raw 1.2 positive export outcome; exclusions must never be repaired/truncated. */
+export const httpExchangeOutcomeV12Schema = z
+  .object({
+    status: z.enum(["exported", "partial"]),
+    exchanges: z.number().int().min(1).max(MAX_HTTP_EXCHANGE_ENTRIES),
+    artifact: z.literal("http_exchanges.json"),
+    sha256: z.string().regex(/^[a-f0-9]{64}$/),
+    missing_request_ids: z.array(httpExchangeIdSchema).max(MAX_HTTP_EXCHANGE_ENTRIES).optional(),
+    capacity_omitted_request_ids: z
+      .array(httpExchangeIdSchema)
+      .max(MAX_HTTP_EXCHANGE_ENTRIES)
+      .optional(),
+  })
+  .strip()
+
 /**
  * dependency_metadata carries flat provenance strings plus structured
  * contextual-CVSS members (score, vector, per-metric breakdown, advisory

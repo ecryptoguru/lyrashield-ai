@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto"
 import {
   advisoryCvssSchema,
+  httpExchangeOutcomeV12Schema,
   findingRevisionSchema,
   fixVerificationSchema,
   MAX_EVIDENCE_FIELD_CHARS,
@@ -54,13 +55,16 @@ export function bindHttpExchangeEvidence(
   }
   if (record?.schema_version !== "1.2") return undefined
   const binding = exported?.binding
+  // Validate the raw outcome before any bounded legacy projection can discard
+  // negative evidence. A repaired/truncated exclusion list is not authoritative.
+  const outcome = httpExchangeOutcomeV12Schema.safeParse(record.evidence_export)
   if (
     !run ||
     !binding ||
     exported?.schemaVersion !== "lyrashield-http-exchanges/1.0" ||
-    !["exported", "partial"].includes(run.evidence_export?.status ?? "") ||
-    !run.evidence_export?.exchanges ||
-    run.evidence_export.exchanges !== exported.exchangeCount ||
+    !outcome.success ||
+    outcome.data.exchanges !== exported.exchangeCount ||
+    outcome.data.sha256 !== record.result_manifest?.artifacts?.["http_exchanges.json"]?.sha256 ||
     !run.run_id ||
     !run.run_name ||
     !Number.isInteger(run.report_artifacts_revision) ||
@@ -244,18 +248,33 @@ export function parseHttpExchangeIds(
       !Array.isArray(findingIds) ||
       binding.finding_revisions?.[findingId] !== findingRevision ||
       !expectedHost ||
-      distinct.some(
-        (id) =>
-          !findingIds.includes(id) ||
-          ctx.httpExchangeExcludedIds?.has(id) ||
-          ctx.httpExchangeRequestHosts?.get(id) !== expectedHost
-      )
+      !(ctx.httpExchangeIds instanceof Set)
     ) {
       recordIngestionIssue(
         ctx.issues,
         `finding ${findingId}: http_exchange_ids lack a matching run/manifest/finding revision binding — field dropped`
       )
       return { refsDropped: true }
+    }
+    // A partial export can qualify one capture without qualifying another.
+    // Keep independently eligible refs; never repair the separate pending list.
+    const eligible = distinct.filter(
+      (id) =>
+        findingIds.includes(id) &&
+        ctx.httpExchangeIds?.has(id) &&
+        !ctx.httpExchangeExcludedIds?.has(id) &&
+        ctx.httpExchangeRequestHosts?.get(id) === expectedHost
+    )
+    const refsDropped = malformed || eligible.length !== distinct.length
+    if (refsDropped) {
+      recordIngestionIssue(
+        ctx.issues,
+        `finding ${findingId}: ineligible http_exchange_ids omitted from partial evidence`
+      )
+    }
+    return {
+      ...(eligible.length ? { ids: eligible } : {}),
+      ...(refsDropped ? { refsDropped: true } : {}),
     }
   }
   // No exchange-export context: carry the refs as engine-asserted evidence.

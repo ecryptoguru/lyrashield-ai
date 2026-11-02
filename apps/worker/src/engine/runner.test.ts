@@ -1224,7 +1224,7 @@ it.each(["vulnerabilities.json", "http_exchanges.json"])(
   }
 )
 
-it.each(["foreign", "matching", "independent-id"])(
+it.each(["foreign", "matching", "independent-id", "foreign-sibling"])(
   "binds a self-consistent %s artifact bundle through the actual runner",
   async (kind) => {
     vi.stubEnv("LYRASHIELD_LUNA_LLM", "azure/gpt-6-luna")
@@ -1248,10 +1248,15 @@ it.each(["foreign", "matching", "independent-id"])(
         if (kind !== "foreign") {
           run.run_name = scanId
           exported.binding.run_name = scanId
-          run.run_id = kind === "matching" ? scanId : "independent-engine-uuid"
+          run.run_id = kind === "independent-id" ? "independent-engine-uuid" : scanId
           exported.binding.run_id = run.run_id
         }
+        if (kind === "foreign-sibling") {
+          exported.binding.run_id = exported.binding.run_name = "other-run"
+          exported.exchanges[0].request.body_sample = "foreign capture content"
+        }
         const exportRaw = JSON.stringify(exported)
+        run.evidence_export.sha256 = createHash("sha256").update(exportRaw).digest("hex")
         run.result_manifest.artifacts["http_exchanges.json"] = {
           path: "http_exchanges.json",
           bytes: Buffer.byteLength(exportRaw),
@@ -1285,7 +1290,13 @@ it.each(["foreign", "matching", "independent-id"])(
         scanId
       )
       expect(processSpy).toHaveBeenCalledOnce()
-      if (kind !== "matching") {
+      if (kind === "foreign-sibling") {
+        expect(result.output.httpExchangeExport).toBeNull()
+        expect(result.output.runRecord?.run_id).toBe(scanId)
+        expect(result.output.vulnerabilities[0]).not.toHaveProperty("http_exchange_ids")
+        expect(result.output.vulnerabilities[0]?.pending_http_exchange_ids).toEqual(["18"])
+        expect(result.output.ingestionIssues.join(" ")).toContain("artifact quarantined")
+      } else if (kind !== "matching") {
         expect(result.output).toMatchObject({
           vulnerabilities: [],
           findingCount: 0,

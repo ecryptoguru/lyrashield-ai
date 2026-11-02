@@ -1,4 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
+import { readFileSync } from "node:fs"
+import { createHash } from "node:crypto"
+import { parseEngineOutput } from "../../engine/output-parser"
 
 const mocks = vi.hoisted(() => ({
   addScanEvent: vi.fn(),
@@ -165,6 +168,48 @@ describe("finalizeScanLifecycle", () => {
       async (_scanId: string, _workspaceId: string, finalize: () => Promise<unknown>) => ({
         status: "finalized",
         value: await finalize(),
+      })
+    )
+  })
+
+  it("does not upload a foreign HTTP sibling into the current scan during finalization", async () => {
+    const read = (name: string) =>
+      readFileSync(new URL(`../../engine/fixtures/run-json-1.2/${name}`, import.meta.url), "utf8")
+    const run = JSON.parse(read("run.json"))
+    const exported = JSON.parse(read("http_exchanges.json"))
+    exported.binding.run_id = exported.binding.run_name = "other-run"
+    exported.exchanges[0].request.body_sample = "foreign capture content"
+    const exportRaw = JSON.stringify(exported)
+    const digest = createHash("sha256").update(exportRaw).digest("hex")
+    run.result_manifest.artifacts["http_exchanges.json"] = {
+      path: "http_exchanges.json",
+      bytes: Buffer.byteLength(exportRaw),
+      sha256: digest,
+    }
+    run.evidence_export.sha256 = digest
+    const output = parseEngineOutput(
+      read("vulnerabilities.json"),
+      JSON.stringify(run),
+      { httpExchangesRaw: exportRaw },
+      { expectedRunName: "task5-writer-fixture" }
+    )
+    const input = params({
+      engineResult: { output },
+      orchestratorResult: {
+        allFindings: output.vulnerabilities,
+        engineFindings: output.vulnerabilities,
+        coverageIssues: [],
+      },
+    })
+    await finalizeScanLifecycle(input as never)
+    expect(mocks.uploadScanArtifact).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "http_exchanges" })
+    )
+    expect(mocks.persistFindings).toHaveBeenCalledWith(
+      expect.objectContaining({
+        vulnerabilities: expect.arrayContaining([
+          expect.objectContaining({ pending_http_exchange_ids: ["18"] }),
+        ]),
       })
     )
   })

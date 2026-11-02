@@ -4,6 +4,7 @@ import {
   parseThreatModels,
 } from "./output-parser-artifacts"
 import { bindHttpExchangeEvidence } from "./output-parser-evidence"
+import { recordIngestionIssue } from "./output-parser-common"
 import { parseVulnerabilitiesArtifact } from "./output-parser-findings"
 import { parseRunJson } from "./output-parser-run"
 import type { EngineArtifactInput, ParsedScanOutput } from "./output-parser-types"
@@ -51,31 +52,46 @@ export function parseEngineOutput(
       httpExchangeExport: null,
     }
   }
-  const httpExchangeExport = parseHttpExchangeExport(artifacts?.httpExchangesRaw, ingestionIssues)
+  const parsedHttpExchangeExport = parseHttpExchangeExport(
+    artifacts?.httpExchangesRaw,
+    ingestionIssues
+  )
+  const httpExchangeBinding = bindHttpExchangeEvidence(
+    runRecord,
+    runJsonRaw,
+    vulnerabilitiesRaw,
+    artifacts?.httpExchangesRaw,
+    parsedHttpExchangeExport
+  )
   // `undefined` means this caller supplied no exchange context at all (e.g.
   // unit tests of the standalone parser): declared refs are carried but never
   // trusted. `null` means the export is absent or unreadable — declared refs
   // are omitted and a warning is recorded.
   const knownExchangeIds =
-    artifacts === undefined ? undefined : (httpExchangeExport?.knownIds ?? null)
+    artifacts === undefined ? undefined : (parsedHttpExchangeExport?.knownIds ?? null)
   const parsedVulnerabilities = parseVulnerabilitiesArtifact(vulnerabilitiesRaw, {
     issues: ingestionIssues,
     httpExchangeIds: knownExchangeIds,
-    httpExchangeRequestHosts: httpExchangeExport?.requestHosts,
+    httpExchangeRequestHosts: parsedHttpExchangeExport?.requestHosts,
     httpExchangeExcludedIds: new Set([
-      ...(httpExchangeExport?.excludedIds ?? []),
+      ...(parsedHttpExchangeExport?.excludedIds ?? []),
       ...(runRecord?.evidence_export?.missing_request_ids ?? []),
       ...(runRecord?.evidence_export?.capacity_omitted_request_ids ?? []),
     ]),
-    httpExchangeBinding: bindHttpExchangeEvidence(
-      runRecord,
-      runJsonRaw,
-      vulnerabilitiesRaw,
-      artifacts?.httpExchangesRaw,
-      httpExchangeExport
-    ),
+    httpExchangeBinding,
   })
   const vulnerabilities = parsedVulnerabilities.vulnerabilities
+  const requiresQualifiedExport =
+    httpExchangeBinding !== undefined ||
+    vulnerabilities.some((finding) => finding.evidence_contract_version === "1.2")
+  const httpExchangeExport =
+    requiresQualifiedExport && !httpExchangeBinding ? null : parsedHttpExchangeExport
+  if (parsedHttpExchangeExport && requiresQualifiedExport && !httpExchangeBinding) {
+    recordIngestionIssue(
+      ingestionIssues,
+      "http_exchanges.json lacks a qualified 1.2 run/manifest/outcome binding — artifact quarantined"
+    )
+  }
   const scopedCoverage = parseEngineCoverage(artifacts?.coverageRaw, ingestionIssues)
   const threatModels = parseThreatModels(
     artifacts?.threatModelsRaw,
