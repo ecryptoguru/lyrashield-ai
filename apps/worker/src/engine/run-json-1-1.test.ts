@@ -519,6 +519,7 @@ describe("run.json 1.2 bound exported exchange references", () => {
     ])
     const run = {
       ...JSON.parse(V1_1_RUN()),
+      receipt_persisted: true,
       schema_version: change.runVersion ?? "1.2",
       evidence_export: { status: "exported", exchanges: 1, ...change.outcome },
     }

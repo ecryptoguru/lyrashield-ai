@@ -2,6 +2,7 @@ import { createHash } from "node:crypto"
 import {
   advisoryCvssSchema,
   httpExchangeOutcomeV12Schema,
+  engineVulnerabilitySchema,
   findingRevisionSchema,
   fixVerificationSchema,
   MAX_EVIDENCE_FIELD_CHARS,
@@ -39,6 +40,16 @@ export interface EvidenceIngestionContext {
   httpExchangeExcludedIds?: Set<string>
 }
 
+// Use the writer's independent list and revision bounds before a lenient finding
+// projection can discard malformed pending claims that contradict a capture.
+const captureOwnerSchema = engineVulnerabilitySchema.pick({
+  id: true,
+  evidence_contract_version: true,
+  http_exchange_ids: true,
+  pending_http_exchange_ids: true,
+  update_history: true,
+})
+
 /** 1.2 refs require an exact manifest and run binding before per-finding checks. */
 export function bindHttpExchangeEvidence(
   run: EngineRunRecord | null,
@@ -59,6 +70,7 @@ export function bindHttpExchangeEvidence(
   // negative evidence. A repaired/truncated exclusion list is not authoritative.
   const outcome = httpExchangeOutcomeV12Schema.safeParse(record.evidence_export)
   if (
+    record.receipt_persisted !== true ||
     !run ||
     !binding ||
     exported?.schemaVersion !== "lyrashield-http-exchanges/1.0" ||
@@ -87,7 +99,45 @@ export function bindHttpExchangeEvidence(
     )
       return null
   }
-  return binding
+  if (!binding.findings || !binding.finding_revisions) return null
+  let owners: unknown
+  try {
+    owners = JSON.parse(vulnerabilitiesRaw)
+  } catch {
+    return null
+  }
+  if (!Array.isArray(owners)) return null
+  const revisions = binding.finding_revisions
+  const declared = new Map(Object.entries(binding.findings))
+  if (Object.keys(revisions).length !== declared.size) return null
+  const matched = new Set<string>()
+  const indexedIds = new Set([
+    ...exported.knownIds,
+    ...exported.excludedIds,
+    ...(outcome.data.missing_request_ids ?? []),
+    ...(outcome.data.capacity_omitted_request_ids ?? []),
+  ])
+  for (const rawOwner of owners) {
+    const ids = declared.get(rawOwner?.id)
+    if (!ids) continue
+    const parsed = captureOwnerSchema.safeParse(rawOwner)
+    if (!parsed.success) return null
+    const owner = parsed.data
+    if (
+      owner.evidence_contract_version !== "1.2" ||
+      matched.has(owner.id) ||
+      revisions[owner.id] !== (owner.update_history?.length ?? 0) ||
+      new Set(ids).size !== ids.length
+    )
+      return null
+    const claims = new Set([
+      ...(owner.http_exchange_ids ?? []),
+      ...(owner.pending_http_exchange_ids ?? []),
+    ])
+    if (ids.some((id) => !claims.has(id) || !indexedIds.has(id))) return null
+    matched.add(owner.id)
+  }
+  return matched.size === declared.size ? binding : null
 }
 
 export function evidenceString(
@@ -182,11 +232,29 @@ export function parseFixVerification(
   return { ...parsed.data, kind: parsed.data.kind ?? "engine_attestation" }
 }
 
-export function parseHttpExchangeIds(
+export function parseFindingExchangeRefs(
+  v: Record<string, unknown>,
+  id: string,
+  ctx?: EvidenceIngestionContext
+) {
+  const captured = parseHttpExchangeIds(v.http_exchange_ids, id, ctx, {
+    target: typeof v.target === "string" ? v.target : undefined,
+    endpoint: typeof v.endpoint === "string" ? v.endpoint : undefined,
+    evidence_contract_version:
+      typeof v.evidence_contract_version === "string" ? v.evidence_contract_version : undefined,
+  })
+  const pending = parsePendingHttpExchangeIds(v.pending_http_exchange_ids, id, ctx?.issues)
+  return {
+    ...(captured.ids ? { http_exchange_ids: captured.ids } : {}),
+    ...(captured.refsDropped ? { http_exchange_refs_dropped: true as const } : {}),
+    ...(pending ? { pending_http_exchange_ids: pending } : {}),
+  }
+}
+
+function parseHttpExchangeIds(
   value: unknown,
   findingId: string,
   ctx?: EvidenceIngestionContext,
-  findingRevision = 0,
   finding?: Pick<EngineVulnerability, "target" | "endpoint" | "evidence_contract_version">
 ): { ids?: string[]; refsDropped?: boolean } {
   if (value === undefined) return {}
@@ -246,7 +314,6 @@ export function parseHttpExchangeIds(
     if (
       !binding ||
       !Array.isArray(findingIds) ||
-      binding.finding_revisions?.[findingId] !== findingRevision ||
       !expectedHost ||
       !(ctx.httpExchangeIds instanceof Set)
     ) {

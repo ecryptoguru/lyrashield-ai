@@ -1,4 +1,4 @@
-import { prisma, resolveDbPoolMax, withWorkspaceRLS } from "@lyrashield/db"
+import { claimObservationPrefix, prisma, resolveDbPoolMax, withWorkspaceRLS } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 import {
   type EngineVulnerability,
@@ -11,7 +11,7 @@ import { verifyVulnerability } from "./verifier"
 import type { NormalizedFinding } from "./normalizer"
 import { deleteEncryptedArtifact, uploadEvidence } from "./evidence-storage"
 import { persistDetectionReceipt } from "./result-integrity"
-import { createHash } from "node:crypto"
+import { createHash, randomUUID } from "node:crypto"
 
 interface PersistFindingsParams {
   scanId: string
@@ -42,6 +42,45 @@ interface PersistedFinding {
   severity: string
   dedupeKey: string
   isNew: boolean
+}
+
+function buildClaimContext(
+  vuln: EngineVulnerability | NormalizedFinding,
+  httpExchangeArtifactChecksum?: string
+) {
+  return {
+    evidence: vuln.evidence,
+    assumptions: vuln.assumptions,
+    fixEffort: vuln.fix_effort,
+    findingClass: vuln.finding_class,
+    dependencyMetadata: vuln.dependency_metadata,
+    cvssBreakdown: vuln.cvss_breakdown,
+    controlIds: vuln.control_ids,
+    // ── run.json 1.1 evidence fields (engine-asserted, never verification) ──
+    counterevidence: vuln.counterevidence,
+    engineConfidence: vuln.engine_confidence,
+    confidenceRationale: vuln.confidence_rationale,
+    severityChangeConditions: vuln.severity_change_conditions,
+    fixVerification: vuln.fix_verification,
+    contextualCvssReasoning: vuln.contextual_cvss_reasoning,
+    advisoryCvss: vuln.advisory_cvss,
+    httpExchangeIds: vuln.http_exchange_ids,
+    // Pending claims deliberately have no artifact checksum or detection receipt.
+    pendingHttpExchangeIds: vuln.pending_http_exchange_ids,
+    pendingHttpExchangeState: vuln.pending_http_exchange_ids?.length ? "PENDING" : undefined,
+    httpExchangeRefsDropped: vuln.http_exchange_refs_dropped,
+    httpExchangeArtifactChecksum:
+      vuln.http_exchange_ids?.length && httpExchangeArtifactChecksum
+        ? httpExchangeArtifactChecksum
+        : undefined,
+    updateHistory: vuln.update_history,
+    updatedAt: vuln.updated_at,
+    evidenceWarnings: vuln.evidence_warnings,
+    evidenceContractVersion: vuln.evidence_contract_version,
+    // The engine's declared verification_state is evidence about what the
+    // engine claimed — never the app's verification status.
+    engineVerificationState: vuln.engine_verification_state,
+  }
 }
 
 async function persistEvidence(
@@ -75,39 +114,7 @@ async function persistEvidence(
       })
     }
   }
-  const claimContext = {
-    evidence: vuln.evidence,
-    assumptions: vuln.assumptions,
-    fixEffort: vuln.fix_effort,
-    findingClass: vuln.finding_class,
-    dependencyMetadata: vuln.dependency_metadata,
-    cvssBreakdown: vuln.cvss_breakdown,
-    controlIds: vuln.control_ids,
-    // ── run.json 1.1 evidence fields (engine-asserted, never verification) ──
-    counterevidence: vuln.counterevidence,
-    engineConfidence: vuln.engine_confidence,
-    confidenceRationale: vuln.confidence_rationale,
-    severityChangeConditions: vuln.severity_change_conditions,
-    fixVerification: vuln.fix_verification,
-    contextualCvssReasoning: vuln.contextual_cvss_reasoning,
-    advisoryCvss: vuln.advisory_cvss,
-    httpExchangeIds: vuln.http_exchange_ids,
-    // Pending claims deliberately have no artifact checksum or detection receipt.
-    pendingHttpExchangeIds: vuln.pending_http_exchange_ids,
-    pendingHttpExchangeState: vuln.pending_http_exchange_ids?.length ? "PENDING" : undefined,
-    httpExchangeRefsDropped: vuln.http_exchange_refs_dropped,
-    httpExchangeArtifactChecksum:
-      vuln.http_exchange_ids?.length && httpExchangeArtifactChecksum
-        ? httpExchangeArtifactChecksum
-        : undefined,
-    updateHistory: vuln.update_history,
-    updatedAt: vuln.updated_at,
-    evidenceWarnings: vuln.evidence_warnings,
-    evidenceContractVersion: vuln.evidence_contract_version,
-    // The engine's declared verification_state is evidence about what the
-    // engine claimed — never the app's verification status.
-    engineVerificationState: vuln.engine_verification_state,
-  }
+  const claimContext = buildClaimContext(vuln, httpExchangeArtifactChecksum)
   if (Object.values(claimContext).some((value) => value !== undefined)) {
     artifacts.push({
       type: "claim_context",
@@ -147,6 +154,7 @@ async function persistEvidence(
   const existingChecksums = new Set(existing.map((row) => row.checksum))
 
   const newEvidence: Array<{
+    id?: string
     findingId: string
     type: string
     redactionStatus: "pending"
@@ -168,6 +176,9 @@ async function persistEvidence(
     })
     assertEvidenceEncrypted(uploaded.encryptionKeyRef)
     newEvidence.push({
+      ...(artifact.type === "claim_context"
+        ? { id: claimObservationPrefix(findingId, scanId) + randomUUID() }
+        : {}),
       findingId,
       type: artifact.type,
       redactionStatus: "pending",
@@ -201,8 +212,28 @@ async function persistEvidence(
   }
 }
 
+function isPrismaUniqueConstraintViolation(err: unknown): boolean {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    "code" in err &&
+    (err as { code: unknown }).code === "P2002"
+  )
+}
+
+function isReopenableStatus(status?: string | null): boolean {
+  return status === "FIXED" || status === "FIXED_PENDING_RETEST"
+}
+
 export async function persistFindings(params: PersistFindingsParams): Promise<PersistedFinding[]> {
-  const { scanId, workspaceId, targetId, vulnerabilities, sourceRevision } = params
+  const {
+    scanId,
+    workspaceId,
+    targetId,
+    vulnerabilities,
+    sourceRevision,
+    httpExchangeArtifactChecksum,
+  } = params
   params.assertCanStart?.()
   const results: PersistedFinding[] = []
 
@@ -271,27 +302,8 @@ export async function persistFindings(params: PersistFindingsParams): Promise<Pe
       normalized?.scannerSource === "secrets" ? "Secrets" : normalized?.enrichment.cweCategory
     const owaspCategory = normalized?.enrichment.owaspCategory
 
-    function isPrismaUniqueConstraintViolation(err: unknown): boolean {
-      return (
-        typeof err === "object" &&
-        err !== null &&
-        "code" in err &&
-        (err as { code: unknown }).code === "P2002"
-      )
-    }
-
-    function isReopenableStatus(status?: string | null): boolean {
-      return status === "FIXED" || status === "FIXED_PENDING_RETEST"
-    }
-
     async function finalizeFinding(findingId: string): Promise<void> {
-      await persistEvidence(
-        findingId,
-        workspaceId,
-        scanId,
-        vuln,
-        params.httpExchangeArtifactChecksum
-      )
+      await persistEvidence(findingId, workspaceId, scanId, vuln, httpExchangeArtifactChecksum)
       await persistDetectionReceipt({
         scanId,
         workspaceId,
@@ -300,7 +312,7 @@ export async function persistFindings(params: PersistFindingsParams): Promise<Pe
         finding: vuln,
         severity,
         dedupeKey,
-        httpExchangeArtifactChecksum: params.httpExchangeArtifactChecksum,
+        httpExchangeArtifactChecksum,
       })
     }
 

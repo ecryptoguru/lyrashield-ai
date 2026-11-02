@@ -1,3 +1,6 @@
+import { randomUUID } from "node:crypto"
+import { claimObservationPrefix } from "@lyrashield/db/src/evidence-observation"
+import { encodeHistoryCursor, decodeHistoryCursor } from "@lyrashield/db/src/finding-history-cursor"
 import { describe, expect, it, vi } from "vitest"
 
 vi.mock("@lyrashield/db", () => ({ getSystemPrisma: vi.fn() }))
@@ -41,6 +44,22 @@ describe("verifyRetainedEvidence", () => {
     expect(testDeps.readArtifact).toHaveBeenCalledWith(
       "s3://private/evidence/ws-1/artifact",
       "ws-1"
+    )
+  })
+
+  it("accepts a scoped claim ID through retained verification and finding history cursors", async () => {
+    const id = claimObservationPrefix("finding-1", "scan-1") + randomUUID()
+    await expect(
+      verifyRetainedEvidence({ ...EXPECTED, evidenceId: id }, deps())
+    ).resolves.toBeUndefined()
+    const cursor = {
+      id,
+      findingId: "finding-1",
+      collection: "evidence" as const,
+      createdAt: new Date().toISOString(),
+    }
+    expect(decodeHistoryCursor(encodeHistoryCursor(cursor), "finding-1", "evidence")).toEqual(
+      cursor
     )
   })
 

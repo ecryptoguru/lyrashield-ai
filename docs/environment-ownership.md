@@ -28,6 +28,8 @@ The worker forwards these controls from the central schema's validated startup c
 | `1`                          | `1`                                | Controlled 1.2 records with pending HTTP evidence |
 | `0`                          | `1`                                | Invalid; startup fails                            |
 
+Set hosted writer controls and endpoint modes in the root-owned `/etc/lyrashield/worker-runtime.conf`. The production launcher and promotion preflight validate that file before constructing Docker arguments. Secret refresh regenerates the separate worker environment file on every start.
+
 The hosted worker also accepts optional canonical `LLM_API_MODE` and `DEDUPE_LLM_API_MODE` values of `auto`, `responses` or `chat_completions`. Unset main policy uses the engine's automatic policy; unset dedupe policy inherits the main policy. Do not install a default dedupe override merely to populate the environment. Engine-only aliases (`LYRASHIELD_LLM_API_MODE`, `LYRASHIELD_DEDUPE_LLM_API_MODE`), arbitrary request bodies/headers and new dedupe credentials are not forwarded. These options do not replace provider qualification or the existing immutable, owned `LYRASHIELD_IMAGE` digest requirement.
 
 Roll out in this order after the separate release and runtime qualifications pass:

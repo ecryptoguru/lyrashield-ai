@@ -83,14 +83,43 @@ export function parseEngineOutput(
   const vulnerabilities = parsedVulnerabilities.vulnerabilities
   const requiresQualifiedExport =
     httpExchangeBinding !== undefined ||
+    parsedHttpExchangeExport?.binding?.finding_revisions !== undefined ||
     vulnerabilities.some((finding) => finding.evidence_contract_version === "1.2")
-  const httpExchangeExport =
-    requiresQualifiedExport && !httpExchangeBinding ? null : parsedHttpExchangeExport
-  if (parsedHttpExchangeExport && requiresQualifiedExport && !httpExchangeBinding) {
-    recordIngestionIssue(
-      ingestionIssues,
-      "http_exchanges.json lacks a qualified 1.2 run/manifest/outcome binding — artifact quarantined"
+  let httpExchangeExport = parsedHttpExchangeExport
+  if (requiresQualifiedExport && parsedHttpExchangeExport) {
+    const acceptedOwners = new Set(vulnerabilities.map((finding) => finding.id))
+    const ownedCaptures = new Set(
+      vulnerabilities.flatMap((finding) => finding.http_exchange_ids ?? [])
     )
+    if (
+      !httpExchangeBinding ||
+      Object.keys(httpExchangeBinding.findings ?? {}).some((id) => !acceptedOwners.has(id)) ||
+      [...parsedHttpExchangeExport.knownIds].some((id) => !ownedCaptures.has(id))
+    ) {
+      httpExchangeExport = null
+      recordIngestionIssue(
+        ingestionIssues,
+        "http_exchanges.json lacks a qualified 1.2 run/manifest/finding capture binding — artifact quarantined"
+      )
+    }
+  }
+  if (requiresQualifiedExport) {
+    for (const finding of vulnerabilities) {
+      if (!finding.http_exchange_ids?.length) continue
+      const captures = finding.http_exchange_ids.filter(
+        (id) => !finding.pending_http_exchange_ids?.includes(id)
+      )
+      if (captures.length !== finding.http_exchange_ids.length) {
+        recordIngestionIssue(
+          ingestionIssues,
+          `finding ${finding.id}: pending and captured HTTP IDs overlap — pending takes precedence`
+        )
+      }
+      if (httpExchangeExport && captures.length === finding.http_exchange_ids.length) continue
+      finding.http_exchange_refs_dropped = true
+      if (httpExchangeExport && captures.length) finding.http_exchange_ids = captures
+      else delete finding.http_exchange_ids
+    }
   }
   const scopedCoverage = parseEngineCoverage(artifacts?.coverageRaw, ingestionIssues)
   const threatModels = parseThreatModels(

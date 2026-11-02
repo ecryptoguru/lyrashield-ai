@@ -1,6 +1,7 @@
+import { parseWriterTuple } from "./fixtures/mutate-http-tuple"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-vi.mock("@lyrashield/db", () => {
+vi.mock("@lyrashield/db", async () => {
   const mockPrisma = {
     finding: { findMany: vi.fn(), create: vi.fn(), update: vi.fn() },
     evidence: { createMany: vi.fn(), findMany: vi.fn() },
@@ -8,6 +9,7 @@ vi.mock("@lyrashield/db", () => {
     findingVerification: { upsert: vi.fn() },
   }
   return {
+    ...(await import("@lyrashield/db/src/evidence-observation")),
     prisma: mockPrisma,
     assertEvidenceEncrypted: vi.fn(),
     resolveDbPoolMax: vi.fn().mockReturnValue(4),
@@ -299,6 +301,62 @@ describe("persistFindings", () => {
         content: expect.stringContaining("lockfile proof"),
       })
     )
+  })
+
+  it("keeps pending overlaps out of persisted capture context, candidate and detection receipt", async () => {
+    const output = parseWriterTuple("overlap")
+    vi.mocked(prisma.finding.findMany).mockResolvedValue([])
+    vi.mocked(prisma.finding.create).mockResolvedValue({ id: "finding-1" } as never)
+    vi.mocked(prisma.findingCandidate.upsert).mockResolvedValue({ id: "candidate-1" } as never)
+    vi.mocked(uploadEvidence).mockResolvedValue({
+      storageUri: "s3://bucket/evidence",
+      checksum: "c".repeat(64),
+      encryptionKeyRef: "vault://test",
+    })
+    await persistFindings({
+      scanId: "task5-writer-fixture",
+      workspaceId: "ws-1",
+      targetId: "target-1",
+      vulnerabilities: output.vulnerabilities,
+      httpExchangeArtifactChecksum: "d".repeat(64),
+    })
+    const claim = vi
+      .mocked(uploadEvidence)
+      .mock.calls.find(([input]) => input.type === "claim_context")!
+    expect(JSON.parse(String(claim[0].content))).toMatchObject({
+      httpExchangeIds: ["19"],
+      pendingHttpExchangeIds: ["18", "17"],
+      httpExchangeArtifactChecksum: "d".repeat(64),
+    })
+    expect(prisma.findingCandidate.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({
+          payload: expect.objectContaining({ httpExchangeIds: ["19"] }),
+        }),
+      })
+    )
+    expect(prisma.findingVerification.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({
+          status: "DETECTED",
+          evidence: expect.objectContaining({
+            httpExchangeIds: ["19"],
+            httpExchangeArtifactChecksum: "d".repeat(64),
+          }),
+        }),
+      })
+    )
+    const row = vi.mocked(prisma.evidence.createMany).mock.calls[0]?.[0]?.data
+    expect(row).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: "claim_context",
+          id: expect.stringMatching(/^ctx-[0-9a-f]{64}-/),
+        }),
+      ])
+    )
+    expect(output.httpExchangeExport).not.toBeNull()
+    expect(output.ingestionIssues.join(" ")).toMatch(/pending.*captured|captured.*pending/)
   })
 
   it("persists 1.1 evidence verbatim through claim_context without promoting trust", async () => {

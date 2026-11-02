@@ -49,6 +49,7 @@ describe("pending HTTP evidence display", () => {
       title: "Claim",
       summary: "Pending exchange evidence",
       evidenceInsights: {
+        capturedHttpExchangeIds: ["17"],
         pendingHttpExchangeIds: ["1".repeat(128), "42"],
         pendingHttpExchangeState: "PENDING",
         evidenceObservationScanId: "scan-1",
@@ -65,6 +66,8 @@ describe("pending HTTP evidence display", () => {
         />
       </Tabs>
     )
+    expect(html).toContain(">Captured<")
+    expect(html).toContain(">17<")
     expect(html).toContain(">Pending<")
     expect(html).toContain("Evidence from scan ")
     expect(html).toContain("scan-1")

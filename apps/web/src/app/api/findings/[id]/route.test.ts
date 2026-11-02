@@ -1,3 +1,5 @@
+import { claimObservationPrefix } from "@lyrashield/db/src/evidence-observation"
+import { createHash } from "node:crypto"
 import { resolveOAuthReadScope } from "../../../../../../../packages/auth/src/oauth-read-scope"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -10,6 +12,7 @@ vi.mock("next/cache", () => ({
   cacheTag: vi.fn(),
 }))
 
+const claimChecksum = "c".repeat(64)
 const getFinding = vi.fn()
 const getFindingReference = vi.fn()
 const markFalsePositive = vi.fn()
@@ -19,7 +22,9 @@ const auditLogCreate = vi.fn()
 const validateFindingScope = vi.fn()
 const requirePermission = vi.fn()
 
-vi.mock("@lyrashield/db", () => ({
+vi.mock("@lyrashield/db", async () => ({
+  ...(await import("@lyrashield/db/src/evidence-observation")),
+  ...(await import("@lyrashield/db/src/manifest-checksum")),
   getFinding,
   getFindingReference,
   markFalsePositive,
@@ -29,6 +34,7 @@ vi.mock("@lyrashield/db", () => ({
   prisma: {
     auditLog: { create: auditLogCreate },
     evidence: { findMany: vi.fn().mockResolvedValue([]) },
+    scanResultManifest: { findFirst: vi.fn() },
     findingCandidate: { findFirst: vi.fn().mockResolvedValue(null) },
   },
 }))
@@ -141,9 +147,10 @@ describe("GET /api/findings/[id]", () => {
       evidence: [],
     })
     vi.mocked(prisma.evidence.findMany).mockResolvedValue([
-      { storageUri: "private://artifact" },
+      { storageUri: "private://artifact", checksum: claimChecksum },
     ] as never)
     vi.mocked(readEncryptedArtifact).mockResolvedValue({
+      checksum: claimChecksum,
       content: Buffer.from(
         JSON.stringify({
           sourceScanId: "scan-1",
@@ -195,9 +202,10 @@ describe("GET /api/findings/[id]", () => {
     async ({ ids }) => {
       getFinding.mockResolvedValue({ id: "finding-1", evidence: [] })
       vi.mocked(prisma.evidence.findMany).mockResolvedValue([
-        { storageUri: "private://artifact" },
+        { storageUri: "private://artifact", checksum: claimChecksum },
       ] as never)
       vi.mocked(readEncryptedArtifact).mockResolvedValue({
+        checksum: claimChecksum,
         content: Buffer.from(
           JSON.stringify({ pendingHttpExchangeIds: ids, pendingHttpExchangeState: "VERIFIED" })
         ),
@@ -233,13 +241,17 @@ describe("GET /api/findings/[id]", () => {
           ...(newerPending ? { pendingHttpExchangeIds: ["99"] } : {}),
         },
       }
-      vi.mocked(prisma.evidence.findMany).mockResolvedValue([
-        { id: "B", createdAt: new Date("2026-11-02"), storageUri: "private://B" },
-        { id: "A", createdAt: new Date("2026-11-01"), storageUri: "private://A" },
-      ] as never)
+      vi.mocked(prisma.evidence.findMany).mockImplementation((async (query: {
+        where: { id: { startsWith: string } }
+      }) => {
+        const key =
+          query.where.id.startsWith === claimObservationPrefix("finding-1", "scan-A") ? "A" : "B"
+        return [{ storageUri: "private://" + key, checksum: claimChecksum }]
+      }) as never)
       vi.mocked(readEncryptedArtifact).mockImplementation(async (uri) => ({
+        checksum: claimChecksum,
         content: Buffer.from(JSON.stringify(contexts[uri])),
-        checksum: "test-checksum",
+
         encryptionKeyRef: "vault://test",
         legacy: false,
       }))
@@ -263,12 +275,128 @@ describe("GET /api/findings/[id]", () => {
     }
   )
 
+  it.each([
+    ["mixed", true],
+    ["reconciled", false],
+    ["missing export", true],
+    ["wrong checksum", true],
+    ["legacy", false],
+  ])(
+    "projects captured IDs only with the selected stored 1.2 export: %s",
+    async (kind, pending) => {
+      getFinding.mockResolvedValue({ id: "finding-1", scanId: "scan-A", evidence: [] })
+      vi.mocked(prisma.evidence.findMany).mockResolvedValue([
+        { storageUri: "private://A", checksum: claimChecksum },
+      ] as never)
+      const checksum = "a".repeat(64)
+      const manifest = {
+        httpExchangeEvidence: {
+          checksum: kind === "wrong checksum" ? "b".repeat(64) : checksum,
+          exchangeCount: 1,
+        },
+      }
+      const checksumInput = JSON.stringify(manifest)
+      vi.mocked(prisma.scanResultManifest.findFirst).mockResolvedValue(
+        kind === "missing export"
+          ? null
+          : {
+              id: "manifest-1",
+              scanId: "scan-A",
+              version: 1,
+              createdAt: new Date(),
+              manifest,
+              checksumInput,
+              checksum: createHash("sha256").update(checksumInput).digest("hex"),
+            }
+      )
+      vi.mocked(readEncryptedArtifact).mockResolvedValue({
+        checksum: claimChecksum,
+        content: Buffer.from(
+          JSON.stringify({
+            sourceScanId: "scan-A",
+            sourceFindingId: "finding-1",
+            evidenceContractVersion: kind === "legacy" ? "1.1" : "1.2",
+            httpExchangeArtifactChecksum: checksum,
+            httpExchangeIds: ["17"],
+            assumptions: "Evidence",
+            ...(pending ? { pendingHttpExchangeIds: ["18"] } : {}),
+          })
+        ),
+      } as never)
+      const response = await GET(
+        new Request(
+          "http://localhost/api/findings/finding-1?workspaceId=ws-1&observedInScanId=scan-A"
+        ),
+        {
+          params: Promise.resolve({ id: "finding-1" }),
+        }
+      )
+      const body = await response.json()
+      expect(body.data.evidenceInsights.capturedHttpExchangeIds).toEqual(
+        ["mixed", "reconciled"].includes(String(kind)) ? ["17"] : undefined
+      )
+      expect(body.data.evidenceInsights.pendingHttpExchangeIds).toEqual(
+        pending ? ["18"] : undefined
+      )
+      expect(JSON.stringify(body)).not.toContain("private://")
+    }
+  )
+
+  it("selects a retained observation beyond 50 newer contexts and skips unrelated corrupt bytes", async () => {
+    getFinding.mockResolvedValue({ id: "finding-1", scanId: "scan-A", evidence: [] })
+    const rows = [
+      ...Array.from({ length: 51 }, (_, i) => ({
+        scan: "scan-" + i,
+        storageUri: "private://corrupt",
+      })),
+      { scan: "scan-A", storageUri: "private://A", checksum: claimChecksum },
+    ]
+    vi.mocked(prisma.evidence.findMany).mockImplementation((async (query: {
+      where: { id?: { startsWith: string } }
+      take: number
+    }) =>
+      rows
+        .filter(
+          (row) =>
+            !query.where.id ||
+            query.where.id.startsWith === claimObservationPrefix("finding-1", row.scan)
+        )
+        .slice(0, query.take)) as never)
+    vi.mocked(readEncryptedArtifact).mockImplementation(async (uri) => {
+      if (uri !== "private://A") throw new Error("unrelated artifact is unreadable")
+      return {
+        checksum: claimChecksum,
+        content: Buffer.from(
+          JSON.stringify({
+            sourceScanId: "scan-A",
+            sourceFindingId: "finding-1",
+            pendingHttpExchangeIds: ["18"],
+          })
+        ),
+        encryptionKeyRef: "vault://fixture",
+        legacy: false,
+      }
+    })
+    const response = await GET(
+      new Request(
+        "http://localhost/api/findings/finding-1?workspaceId=ws-1&observedInScanId=scan-A"
+      ),
+      { params: Promise.resolve({ id: "finding-1" }) }
+    )
+    expect((await response.json()).data.evidenceInsights).toMatchObject({
+      pendingHttpExchangeIds: ["18"],
+    })
+    expect(readEncryptedArtifact).toHaveBeenCalledOnce()
+    expect(readEncryptedArtifact).toHaveBeenCalledWith("private://A", "ws-1")
+  })
+
   it("qualifies a legacy fallback and never presents its unbound pending IDs", async () => {
     getFinding.mockResolvedValue({ id: "finding-1", scanId: "scan-1", evidence: [] })
-    vi.mocked(prisma.evidence.findMany).mockResolvedValue([
-      { storageUri: "private://legacy" },
-    ] as never)
+    vi.mocked(prisma.evidence.findMany)
+      .mockResolvedValueOnce([])
+      .mockResolvedValue([{ storageUri: "private://legacy" }] as never)
     vi.mocked(readEncryptedArtifact).mockResolvedValue({
+      checksum: claimChecksum,
       content: Buffer.from(
         JSON.stringify({ assumptions: "Legacy context", pendingHttpExchangeIds: ["42"] })
       ),
@@ -287,7 +415,7 @@ describe("GET /api/findings/[id]", () => {
       })
     )
     expect(prisma.evidence.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ take: 50, orderBy: [{ createdAt: "desc" }, { id: "desc" }] })
+      expect.objectContaining({ take: 1, orderBy: [{ createdAt: "desc" }, { id: "desc" }] })
     )
   })
 
@@ -297,6 +425,7 @@ describe("GET /api/findings/[id]", () => {
       { storageUri: "private://older" },
     ] as never)
     vi.mocked(readEncryptedArtifact).mockResolvedValue({
+      checksum: claimChecksum,
       content: Buffer.from(
         JSON.stringify({
           sourceScanId: "scan-A",
@@ -312,6 +441,32 @@ describe("GET /api/findings/[id]", () => {
       { params: Promise.resolve({ id: "finding-1" }) }
     )
     expect((await response.json()).data.evidenceInsights).toBeNull()
+  })
+
+  it("fails closed if the selected context URI resolves to a different checksum", async () => {
+    getFinding.mockResolvedValue({ id: "finding-1", scanId: "scan-A", evidence: [] })
+    vi.mocked(prisma.evidence.findMany).mockResolvedValue([
+      { storageUri: "private://selected", checksum: claimChecksum },
+    ] as never)
+    vi.mocked(readEncryptedArtifact).mockResolvedValue({
+      checksum: "d".repeat(64),
+      content: Buffer.from(
+        JSON.stringify({
+          sourceScanId: "scan-A",
+          sourceFindingId: "finding-1",
+          pendingHttpExchangeIds: ["42"],
+        })
+      ),
+    } as never)
+    const response = await GET(
+      new Request(
+        "http://localhost/api/findings/finding-1?workspaceId=ws-1&observedInScanId=scan-A"
+      ),
+      { params: Promise.resolve({ id: "finding-1" }) }
+    )
+    expect((await response.json()).data.evidenceInsights).toBeNull()
+    expect(readEncryptedArtifact).toHaveBeenCalledOnce()
+    expect(prisma.evidence.findMany).toHaveBeenCalledOnce()
   })
 
   it("shows unavailable rather than stale pending when the newest artifact cannot be read", async () => {

@@ -41,7 +41,7 @@ The populated-cache regression first proves a same-revision hit, changes only th
 
 ## Actual writer artifacts
 
-The bridge requires an exact per-case receipt file set: `run.json` and `vulnerabilities.json`, plus `http_exchanges.json` only for cases expected to produce that artifact. It checks actual HTTP file presence too. It reads each consumed file once, verifies that buffer's byte length and SHA-256, and passes strings decoded from those same verified buffers to `parseEngineOutput`. Missing or extra receipt entries cannot bypass integrity checks, and no second file read occurs between verification and parsing. Expected reader outcomes are declared independently in the bridge; the receipt does not define expected authority.
+The bridge requires an exact per-case receipt file set: `run.json` and `vulnerabilities.json`, plus `http_exchanges.json` only for cases expected to produce that artifact. It checks actual HTTP file presence too. It reads each file once and verifies its byte length and SHA-256 before passing the decoded buffer to `parseEngineOutput`. Missing or extra receipt entries cannot bypass integrity checks, and no second file read occurs between verification and parsing. Expected reader outcomes are declared independently in the bridge; the receipt does not define expected authority.
 
 The final 13-bundle fixture set was regenerated from writer commit `1c4996688d01cee79435a115b63a6b65a710d5b9` with the portable generator command above.
 

@@ -360,12 +360,18 @@ export function parseHttpExchangeExport(
       requestHosts.set(entry.proxy_request_id, entry.request.host.toLowerCase().replace(/\.+$/, ""))
     }
   }
+  // 1.2 ownership comes from current findings. The legacy targets array can
+  // carry arbitrary nested metadata and has no authority over captured bytes.
+  const binding =
+    doc.binding?.finding_revisions !== undefined
+      ? { ...doc.binding, targets: undefined }
+      : doc.binding
   // Persist the validated canonical document — not raw bytes — so nothing
   // outside the declared contract reaches encrypted storage.
   const document = JSON.stringify({
     ...(doc.schema_version !== undefined ? { schema_version: doc.schema_version } : {}),
     ...(doc.generated_at ? { generated_at: doc.generated_at } : {}),
-    ...(doc.binding ? { binding: doc.binding } : {}),
+    ...(binding ? { binding } : {}),
     exchanges: doc.exchanges,
     ...(doc.missing_request_ids?.length ? { missing_request_ids: doc.missing_request_ids } : {}),
     ...(doc.capacity_omitted_request_ids?.length
@@ -375,7 +381,7 @@ export function parseHttpExchangeExport(
   })
   return {
     ...(doc.schema_version !== undefined ? { schemaVersion: String(doc.schema_version) } : {}),
-    ...(doc.binding ? { binding: doc.binding } : {}),
+    ...(binding ? { binding } : {}),
     exchangeCount: doc.exchanges.length,
     knownIds,
     requestHosts,

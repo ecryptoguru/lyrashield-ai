@@ -31,6 +31,7 @@ function descriptor(): AiResultCacheDescriptor {
     engineRevision: "c".repeat(40),
     providerFingerprint: "d".repeat(64),
     modelSettings: {
+      mainApiMode: "auto",
       modelRoute,
       reasoningEffort: "medium",
       promptCachePolicy: "off",
