@@ -1,10 +1,11 @@
 // Mounted alongside the exact worker's src and production dependencies, via its tsx binary.
 import assert from "node:assert/strict"
 import { createHash, randomUUID } from "node:crypto"
-import { appendFileSync, existsSync, readFileSync, readdirSync } from "node:fs"
+import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs"
+import { execFileSync } from "node:child_process"
 import { createServer } from "node:http"
 import { createRequire } from "node:module"
-import { join, resolve } from "node:path"
+import { resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 
 const summaryHash = "9f35f1e046f8a2a23f29a13a2ea6900d5d81a299806a67d99511bd5f438f663b"
@@ -20,50 +21,28 @@ const hash = (data) => createHash("sha256").update(data).digest("hex")
 const sorted = (values) => [...values].sort()
 const bucket = "disposable-evidence"
 
-function receiptCase(root, name, row, metadata = []) {
-  assert.deepEqual(sorted(readdirSync(root)), sorted([...Object.keys(row.files), ...metadata]))
-  const bytes = {}
-  for (const [filename, expected] of Object.entries(row.files)) {
-    assert.ok(["run.json", "vulnerabilities.json", "http_exchanges.json"].includes(filename))
-    const raw = readFileSync(join(root, filename))
-    assert.equal(raw.length, expected.bytes)
-    assert.equal(hash(raw), expected.sha256)
-    bytes[filename] = raw.toString("utf8")
-  }
-  assert.equal(JSON.parse(bytes["run.json"]).run_id, row.run_name)
-  assert.equal(JSON.parse(bytes["run.json"]).run_name, row.run_name)
-  return { name, id: row.run_name, bytes, row }
+function checkedFixtures(kind, root) {
+  const helper = fileURLToPath(new URL("./worker-evidence-fixture-io.py", import.meta.url))
+  const result = execFileSync("python3", ["-I", "-B", helper, kind, root], {
+    encoding: "utf8",
+    maxBuffer: 5 * 1024 * 1024,
+    timeout: 15000,
+    stdio: ["ignore", "pipe", "pipe"],
+  })
+  return JSON.parse(result)
 }
-
 export function readWriterFixtures(root) {
-  const summary = readFileSync(join(root, "summary.json"))
-  assert.equal(hash(summary), summaryHash, "unqualified writer fixture manifest")
-  const entries = Object.entries(JSON.parse(summary))
-  assert.equal(entries.length, 13)
-  assert.deepEqual(
-    sorted(readdirSync(root)),
-    sorted(["summary.json", ...entries.map(([name]) => name)])
-  )
-  const cases = entries.map(([name, row]) => receiptCase(join(root, name), name, row))
-  assert.equal(
-    cases.reduce((count, f) => count + Object.keys(f.bytes).length, 0),
-    37
-  )
-  return cases
+  return checkedFixtures("writer", root)
 }
-
 export function distinctFixture(root) {
-  const receipt = readFileSync(join(root, "receipt.json"))
-  assert.equal(hash(receipt), "737230a09793fb52fd6b1bedacef9ca4f48147a12c5e73bdcb40f872fbe1f4d4")
-  return receiptCase(root, "distinct-owners", JSON.parse(receipt), ["receipt.json"])
+  return checkedFixtures("distinct", root)[0]
 }
 
 // New, launch-compatible, synthetic legacy controls. They are not writer outputs.
 // The original 1.0/1.1 repository goldens intentionally have unequal run_id/run_name.
 export function legacy(version) {
   const id = "drill-legacy-" + version
-  const run = { run_id: id, run_name: id, status: "completed" }
-  if (version === "1.1") run.schema_version = version
+  const run = { schema_version: version, run_id: id, run_name: id, status: "completed" }
   const vuln = {
     id: "legacy-finding",
     title: "Legacy " + version + " fixture",
@@ -105,62 +84,152 @@ export function requireDisposable(env, phase) {
   assert.ok(!env.DOCKER_HOST && !env.GITHUB_TOKEN && !env.GH_TOKEN)
 }
 
+// This oracle reads the already authenticated input buffers. No expectation is taken
+// from the parser, normalized winner, database row or content-addressed object under test.
+function fixtureExpectation(f) {
+  const run = JSON.parse(f.bytes["run.json"])
+  const source = JSON.parse(f.bytes["vulnerabilities.json"])
+  const positive = ["exported", "partial"].includes(f.row.status)
+  const owners = new Map(
+    source.map((v) => [
+      v.id,
+      {
+        id: v.id,
+        pending: f.row.pending[v.id] ?? [],
+        captured: positive ? f.row.ordinary[v.id] : [],
+        revisions: v.update_history,
+        updatedAt: v.updated_at,
+        contract: v.evidence_contract_version,
+        verification: v.verification_state,
+      },
+    ])
+  )
+  let document = null
+  if (positive) {
+    const raw = JSON.parse(f.bytes["http_exchanges.json"])
+    const { targets: _excluded, ...binding } = raw.binding
+    const ids = new Set([...owners.values()].flatMap((v) => v.captured))
+    const exchanges = raw.exchanges.filter((e) => ids.has(e.proxy_request_id))
+    assert.deepEqual(sorted(exchanges.map((e) => e.proxy_request_id)), sorted(ids))
+    assert.equal(binding.run_id, f.id)
+    assert.equal(binding.run_name, f.id)
+    assert.equal(binding.report_artifacts_revision, run.report_artifacts_revision)
+    for (const v of owners.values())
+      assert.equal(binding.finding_revisions[v.id], v.revisions?.length ?? 0)
+    document = {
+      schema_version: raw.schema_version,
+      generated_at: raw.generated_at,
+      binding,
+      exchanges,
+    }
+    for (const key of ["missing_request_ids", "capacity_omitted_request_ids"]) {
+      if (raw[key]?.length) document[key] = raw[key]
+    }
+    if (raw.truncated) document.truncated = raw.truncated
+  }
+  // These three exact fixture receipts contain equal-key, equal-rank owners. Only their first
+  // owner survives normal product dedupe. Distinct-owners must retain both independently.
+  const selected = ["shared-capacity", "max-bytes", "omission-limit"].includes(f.name)
+    ? [source[0].id]
+    : source.map((v) => v.id)
+  return { owners, selected, document, version: run.schema_version }
+}
+
+function checkOwner(actual, expected, label) {
+  assert.ok(expected, label + ": unexpected owner")
+  assert.deepEqual(
+    actual.pending_http_exchange_ids ?? [],
+    expected.pending,
+    label + ": pending IDs"
+  )
+  assert.deepEqual(actual.http_exchange_ids ?? [], expected.captured, label + ": captured IDs")
+  assert.equal(actual.evidence_contract_version, expected.contract, label + ": authority")
+  assert.equal(actual.engine_verification_state, expected.verification, label + ": verification")
+  assert.deepEqual(actual.update_history, expected.revisions, label + ": revision history")
+  assert.equal(actual.updated_at, expected.updatedAt, label + ": revision timestamp")
+}
+
 export function qualifyFixture(
   f,
   { parseEngineOutput, generateDedupeKey, normalizeFindings, filterFalsePositives }
 ) {
+  const expected = fixtureExpectation(f)
   const output = parseEngineOutput(
     f.bytes["vulnerabilities.json"],
     f.bytes["run.json"],
     { httpExchangesRaw: f.bytes["http_exchanges.json"] },
     { expectedRunName: f.id }
   )
-  assert.ok(output.runRecord && output.vulnerabilities.length)
+  assert.equal(output.runRecord?.schema_version, expected.version)
   const raw = output.vulnerabilities.map((v) => ({ ...v, scannerSource: "engine" }))
-  if (f.row.status !== "legacy") {
+  assert.deepEqual(
+    sorted(raw.map((v) => v.id)),
+    sorted(expected.owners.keys()),
+    "missing writer owner"
+  )
+  for (const v of raw) checkOwner(v, expected.owners.get(v.id), f.name + "/" + v.id)
+  if (expected.document === null)
+    assert.equal(output.httpExchangeExport, null, "unexpected HTTP capture artifact")
+  else {
+    assert.ok(output.httpExchangeExport, "missing required HTTP capture artifact")
     assert.deepEqual(
-      sorted(raw.map((v) => v.id)),
-      sorted(Object.keys(f.row.pending)),
-      "missing writer owner"
+      JSON.parse(output.httpExchangeExport.document),
+      expected.document,
+      "foreign or incomplete capture provenance"
     )
-  }
-  for (const v of raw) {
-    assert.deepEqual(
-      v.pending_http_exchange_ids ?? [],
-      f.row.pending[v.id] ?? [],
-      f.name + ": pending " + v.id
-    )
-    const ordinary = ["partial", "exported"].includes(f.row.status)
-      ? (f.row.ordinary[v.id] ?? [])
-      : []
-    assert.deepEqual(v.http_exchange_ids ?? [], ordinary, f.name + ": captured " + v.id)
-  }
-  // All colliding writer owners have equal severity/confidence and identical dedupe fields.
-  // Independently choose the first per key; never give it a later owner's IDs.
-  const first = new Map()
-  for (const v of raw) {
-    const key = generateDedupeKey(v, targetId)
-    if (!first.has(key)) first.set(key, v)
+    assert.equal(output.httpExchangeExport.exchangeCount, expected.document.exchanges.length)
   }
   const survivors = filterFalsePositives(normalizeFindings(raw, targetId, generateDedupeKey))
-  assert.deepEqual(sorted(survivors.map((v) => v.id)), sorted([...first.values()].map((v) => v.id)))
-  for (const winner of survivors) {
-    const expected = first.get(winner.dedupeKey)
-    for (const field of [
-      "pending_http_exchange_ids",
-      "http_exchange_ids",
-      "update_history",
-      "evidence_contract_version",
-    ]) {
-      assert.deepEqual(
-        winner[field],
-        expected[field],
-        f.name + ": changed winning owner's " + field
-      )
-    }
+  assert.deepEqual(
+    sorted(survivors.map((v) => v.id)),
+    sorted(expected.selected),
+    "wrong canonical owners"
+  )
+  for (const v of survivors)
+    checkOwner(v, expected.owners.get(v.id), "changed winning owner's " + v.id)
+  return {
+    output,
+    survivors,
+    discarded: raw.filter((v) => !expected.selected.includes(v.id)),
+    expected,
   }
-  const discarded = raw.filter((v) => !survivors.some((s) => s.id === v.id))
-  return { output, survivors, discarded }
+}
+
+export async function requireCrashedJob(queue, original) {
+  const old = await queue.getJob(original.id)
+  assert.ok(old, "interrupted job disappeared")
+  assert.equal(await old.getState(), "active")
+  assert.equal(old.timestamp, original.timestamp)
+  assert.equal(old.data.drillNonce, original.nonce)
+  assert.equal(old.attemptsStarted, 1)
+  assert.equal(old.stalledCounter, 0)
+}
+
+export function checkStoredObservation(content, owner, scanId, findingId, exportHash) {
+  assert.equal(content.evidenceContractVersion, owner.contract)
+  assert.equal(content.engineVerificationState, owner.verification)
+  assert.equal(content.updatedAt, owner.updatedAt)
+  assert.equal(content.sourceScanId, scanId)
+  assert.equal(content.sourceFindingId, findingId)
+  assert.deepEqual(content.updateHistory, owner.revisions)
+  assert.deepEqual(content.pendingHttpExchangeIds ?? [], owner.pending)
+  assert.equal(content.pendingHttpExchangeState, owner.pending.length ? "PENDING" : undefined)
+  assert.deepEqual(content.httpExchangeIds ?? [], owner.captured)
+  assert.equal(content.httpExchangeArtifactChecksum, owner.captured.length ? exportHash : undefined)
+}
+
+export function assertRecoveredDelivery(job, original) {
+  assert.ok(
+    original.id &&
+      Number.isSafeInteger(original.timestamp) &&
+      typeof original.nonce === "string" &&
+      original.nonce.length
+  )
+  assert.equal(job.id, original.id)
+  assert.equal(job.timestamp, original.timestamp)
+  assert.equal(job.data.drillNonce, original.nonce)
+  assert.equal(job.attemptsStarted, 2, "original job must actually be dispatched a second time")
+  assert.equal(job.stalledCounter, 1, "BullMQ must recover the stalled original job")
 }
 
 function checkReaderSources() {
@@ -320,7 +389,7 @@ async function main(phase) {
   }
 
   async function checkCase(f) {
-    const { output, survivors, discarded } = parse(f)
+    const { survivors, discarded, expected } = parse(f)
     const stored = await owner.scanResultManifest.findUniqueOrThrow({ where: { scanId: f.id } })
     assert.equal(db.verifyStoredManifestChecksum(stored), "MATCH")
     const evidence = stored.manifest.httpExchangeEvidence
@@ -330,39 +399,24 @@ async function main(phase) {
     })
     assert.equal(rowReceipt.length, survivors.length)
     assert.equal(await owner.findingCandidate.count({ where: { scanId: f.id } }), survivors.length)
-    const exportDoc = output.httpExchangeExport?.document
-    if (exportDoc) {
-      assert.equal(evidence.checksum, hash(exportDoc))
-      assert.equal(evidence.byteLength, Buffer.byteLength(exportDoc))
-      assert.equal(evidence.exchangeCount, output.httpExchangeExport.exchangeCount)
-      const uri =
-        "s3://" +
-        bucket +
-        "/evidence/" +
-        ws +
-        "/" +
-        f.id +
-        "/http_exchanges/http-exchanges-" +
-        evidence.checksum
-      const read = await readEncryptedArtifact(uri, ws)
-      assert.equal(read.content.toString(), exportDoc)
+    const prefix = `evidence/${ws}/${f.id}/http_exchanges/`
+    const objects = await s3.send(new ListObjectsV2Command({ Bucket: bucket, Prefix: prefix }))
+    assert.ok(!objects.IsTruncated)
+    const keys = (objects.Contents ?? []).map((o) => o.Key)
+    if (expected.document) {
+      assert.ok(evidence)
+      assert.deepEqual(keys, [prefix + "http-exchanges-" + evidence.checksum])
+      const read = await readEncryptedArtifact("s3://" + bucket + "/" + keys[0], ws)
       assert.equal(read.checksum, evidence.checksum)
+      assert.equal(hash(read.content), evidence.checksum)
+      assert.equal(read.content.length, evidence.byteLength)
+      assert.equal(evidence.exchangeCount, expected.document.exchanges.length)
       assert.equal(read.legacy, false)
-      const retained = JSON.parse(read.content.toString())
-      const rawExport = JSON.parse(f.bytes["http_exchanges.json"])
-      const expectedIds = [...new Set(Object.values(f.row.ordinary).flat())]
-      assert.deepEqual(
-        sorted(retained.exchanges.map((e) => e.proxy_request_id)),
-        sorted(expectedIds)
-      )
-      assert.equal(
-        retained.binding.report_artifacts_revision,
-        rawExport.binding.report_artifacts_revision
-      )
-      assert.equal(retained.binding.run_id, f.id)
-      assert.equal(retained.binding.run_name, f.id)
-      assert.deepEqual(retained.binding.finding_revisions, rawExport.binding.finding_revisions)
-    } else assert.equal(evidence, undefined)
+      assert.deepEqual(JSON.parse(read.content.toString()), expected.document)
+    } else {
+      assert.equal(evidence, undefined)
+      assert.deepEqual(keys, [], "unexpected stored scan-level HTTP export")
+    }
     const historical = []
     for (const winner of survivors) {
       const finding = await owner.finding.findUniqueOrThrow({
@@ -388,17 +442,10 @@ async function main(phase) {
       assert.equal(opened.encryptionKeyRef, claim.encryptionKeyRef)
       assert.equal(opened.legacy, false)
       const content = JSON.parse(opened.content.toString())
-      assert.equal(content.evidenceContractVersion, winner.evidence_contract_version)
-      assert.equal(content.sourceScanId, f.id)
-      assert.equal(content.sourceFindingId, finding.id)
-      assert.deepEqual(content.updateHistory, winner.update_history)
-      const pending = f.row.pending[winner.id] ?? [],
-        captured = winner.http_exchange_ids ?? []
-      assert.deepEqual(content.pendingHttpExchangeIds ?? [], pending)
-      assert.equal(content.pendingHttpExchangeState, pending.length ? "PENDING" : undefined)
-      assert.deepEqual(content.httpExchangeIds ?? [], captured)
+      const original = expected.owners.get(winner.id)
+      checkStoredObservation(content, original, f.id, finding.id, evidence?.checksum)
+      const { captured } = original
       const captureHash = captured.length ? evidence.checksum : undefined
-      assert.equal(content.httpExchangeArtifactChecksum, captureHash)
       const candidate = await owner.findingCandidate.findFirstOrThrow({
         where: {
           scanId: f.id,
@@ -406,10 +453,12 @@ async function main(phase) {
           scannerSource: "engine",
         },
       })
-      assert.equal(candidate.payload.id, winner.id)
+      assert.equal(candidate.findingId, finding.id)
+      assert.equal(candidate.payload.id, original.id)
       assert.deepEqual(candidate.payload.httpExchangeIds, captured)
       assert.ok(!Object.keys(candidate.payload).some((k) => /pending/i.test(k)))
       const vr = rowReceipt.find((v) => v.findingId === finding.id)
+      assert.equal(vr.findingId, candidate.findingId)
       assert.equal(vr.candidateId, candidate.id)
       assert.equal(vr.status, "DETECTED")
       assert.equal(vr.method, "ENGINE_CLAIM")
@@ -427,7 +476,10 @@ async function main(phase) {
       scanId: f.id,
       manifest: stored.checksum,
       writerInputHashes: f.row.files ?? null,
-      revisions: survivors.map((v) => [v.id, v.update_history?.length ?? 0]),
+      revisions: expected.selected.map((id) => [
+        id,
+        expected.owners.get(id).revisions?.length ?? 0,
+      ]),
       historical,
       discarded: discarded.map((v) => ({
         owner: v.id,
@@ -451,26 +503,98 @@ async function main(phase) {
     return out
   }
 
-  async function replay(f) {
+  const identityPath = "/proof/checkpoint-job.json"
+
+  // The same automatic Worker manages the original lock, lock renewal, stall detection
+  // and completion in all phases. Only the initial processor substitutes the synthetic
+  // zero-cost finalizer for engine execution. Recovery uses the real processScanJob.
+  async function runCheckpoint(mode) {
     const { Worker } = await import("bullmq")
     const { SCAN_QUEUE_NAME } = await import("@lyrashield/types")
     const { processScanJob } = await import("./src/jobs/run-scan.job.ts")
-    const q = integrations.getScanQueue()
-    const worker = new Worker(SCAN_QUEUE_NAME, undefined, {
-      connection: { url: process.env.REDIS_URL, maxRetriesPerRequest: null },
-      autorun: false,
-    })
+    const queue = integrations.getScanQueue()
+    const recovered = mode === "recover"
+    let original
+    if (recovered) {
+      original = JSON.parse(readFileSync(identityPath, "utf8"))
+      assert.equal(original.id, checkpoint.id)
+      await requireCrashedJob(queue, original)
+    } else {
+      // The original job is created only before the kill. Explicit terminal replay
+      // is created only after the retained, recovered job is proved completed.
+      assert.ok(!(await queue.getJob(checkpoint.id)))
+      const nonce = randomUUID()
+      const added = await queue.add(
+        "scan",
+        { ...jobData(checkpoint.id), drillNonce: nonce },
+        { jobId: checkpoint.id, removeOnComplete: mode === "terminal" }
+      )
+      original = { id: added.id, timestamp: added.timestamp, nonce }
+    }
+    const stalledIds = []
+    const worker = new Worker(
+      SCAN_QUEUE_NAME,
+      async (job, token) => {
+        assert.equal(job.id, checkpoint.id)
+        assert.equal(await job.getState(), "active")
+        const redis = await queue.client
+        assert.ok(
+          token && (await redis.get(queue.toKey(job.id + ":lock"))) === token,
+          "worker must own the live lock"
+        )
+        if (mode === "interrupt") {
+          assert.equal(job.attemptsStarted, 1)
+          assert.equal(job.stalledCounter, 0)
+          writeFileSync(identityPath, JSON.stringify(original), { flag: "wx", mode: 0o644 })
+          await persist(checkpoint)
+          throw new Error("terminal barrier was bypassed")
+        }
+        if (recovered) assertRecoveredDelivery(job, original)
+        else {
+          assert.equal(job.attemptsStarted, 1)
+          assert.equal(job.stalledCounter, 0)
+        }
+        const result = await processScanJob(job)
+        assert.equal(result.status, "completed")
+        return result
+      },
+      {
+        connection: { url: process.env.REDIS_URL, maxRetriesPerRequest: null },
+        autorun: false,
+        concurrency: 1,
+        lockDuration: 8000,
+        stalledInterval: 1000,
+        maxStalledCount: 1,
+      }
+    )
+    worker.on("stalled", (id) => stalledIds.push(id))
+    let timer
     try {
-      await worker.waitUntilReady()
-      await q.add("scan", jobData(f.id), { jobId: f.id, removeOnComplete: true })
-      const token = randomUUID()
-      const job = await worker.getNextJob(token)
-      assert.equal(job?.id, f.id)
-      const result = await processScanJob(job)
-      assert.equal(result.status, "completed")
-      await job.moveToCompleted(result, token, false)
+      await new Promise((ok, fail) => {
+        timer = setTimeout(() => fail(new Error("checkpoint delivery timed out: " + mode)), 75000)
+        worker.once("completed", ok)
+        worker.once("failed", (_job, error) => fail(error))
+        worker.once("error", fail)
+        worker.run().catch(fail)
+      })
+      if (recovered) {
+        assert.deepEqual(stalledIds, [checkpoint.id])
+        const completed = await queue.getJob(checkpoint.id)
+        assert.equal(await completed.getState(), "completed")
+        assertRecoveredDelivery(completed, original)
+        console.log(
+          JSON.stringify({
+            recoveredJob: original.id,
+            timestamp: original.timestamp,
+            attemptsStarted: completed.attemptsStarted,
+            stalledCounter: completed.stalledCounter,
+          })
+        )
+        await completed.remove()
+      }
     } finally {
-      await worker.close()
+      clearTimeout(timer)
+      await worker.close(true)
     }
   }
 
@@ -500,8 +624,7 @@ async function main(phase) {
       for (const f of cases.filter((f) => f.name !== mixed)) await persist(f)
     } else if (phase === "interrupt") {
       // Host waits for the AFTER-manifest terminal SQL barrier, then kills only this container.
-      await persist(checkpoint)
-      throw new Error("terminal barrier was bypassed")
+      await runCheckpoint("interrupt")
     } else if (phase === "resume") {
       assert.equal(
         (await owner.scan.findUniqueOrThrow({ where: { id: checkpoint.id } })).status,
@@ -521,14 +644,26 @@ async function main(phase) {
       const queue = integrations.getScanQueue()
       const enqueue = () =>
         queue.add("scan", jobData(checkpoint.id), { jobId: checkpoint.id, removeOnComplete: true })
-      await enqueue()
-      // Deliberately age only the sweep's clock: a real processable BullMQ job protects the checkpoint.
+      const old = await queue.getJob(checkpoint.id)
+      assert.ok(old && (await old.getState()) === "active", "original killed job must still exist")
+      // No enqueue/retry here. Stale-scan reconciliation must preserve the already-active job.
       const active = await reconcileScanQueue(new Date(Date.now() + QUEUE_ORPHAN_GRACE_MS + 1000))
       assert.ok(active.leaseAcquired)
-      assert.equal(active.queueDepth, 1)
       assert.equal(active.failedOrphanedScans, 0)
-      await replay(checkpoint)
-      await replay(checkpoint)
+      assert.equal(
+        (await owner.scan.findUniqueOrThrow({ where: { id: checkpoint.id } })).status,
+        "VERIFYING"
+      )
+      await runCheckpoint("recover")
+      assert.equal(
+        (await owner.scan.findUniqueOrThrow({ where: { id: checkpoint.id } })).status,
+        "COMPLETED"
+      )
+      assert.equal(await owner.scoreSnapshot.count({ where: { scanId: checkpoint.id } }), 1)
+      // Freeze the recovery verdict before the separately labelled terminal replay can touch data.
+      for (const [i, f] of cases.entries()) assert.deepEqual(await checkCase(f), before[i])
+      assert.deepEqual(await objectIdentity(), beforeObjects)
+      await runCheckpoint("terminal")
       await enqueue()
       const terminal = await reconcileScanQueue()
       assert.ok(terminal.leaseAcquired)

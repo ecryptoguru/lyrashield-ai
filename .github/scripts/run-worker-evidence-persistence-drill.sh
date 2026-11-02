@@ -1,13 +1,29 @@
 #!/usr/bin/env bash
 # Opt-in disposable evidence lifecycle rehearsal. No pulls, builds, published ports or host credentials.
 set -euo pipefail
-if [[ $# -ne 2 || $1 != --fixtures ]]; then
-  echo "usage: $0 --fixtures /path/to/hash-listed/strix-final-writer-fixtures-7311" >&2
-  exit 2
-fi
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
-fixtures=$(cd "$2" && pwd -P)
+guard="$root/.github/scripts/worker-evidence-drill-guard.py"
+if [[ ${1:-} != --supervised ]]; then
+  if [[ $# -ne 2 || $1 != --fixtures ]]; then
+    echo "usage: $0 --fixtures /path/to/hash-listed/strix-final-writer-fixtures-7311" >&2
+    exit 2
+  fi
+  exec python3 -I -B "$guard" supervise "$0" "$2"
+fi
+shift
+[[ $# == 2 && $1 == --fixtures ]]
+tmp=${LYRA_DRILL_SCRATCH:?supervised scratch required}
+prefix=${LYRA_DRILL_PREFIX:?supervised namespace required}
+[[ $prefix =~ ^lyra-ed-[0-9a-f]{16}$ ]]
+net="$prefix-private"
 driver="$root/.github/scripts/worker-evidence-persistence-drill.mjs"
+fixture_io="$root/.github/scripts/worker-evidence-fixture-io.py"
+fixtures=$2
+# Local input preparation only; refuse drift before creating any Docker resource.
+python3 -I -B "$fixture_io" writer "$fixtures" --stage "$tmp/input"
+python3 -I -B "$fixture_io" distinct "$root/.github/scripts/fixtures/worker-evidence-distinct" --stage "$tmp/distinct"
+DRILL_PHASE_TIMEOUT=30
+docker() { python3 -I -B "$guard" bounded "${DRILL_PHASE_TIMEOUT:-30}" docker "$@"; }
 worker='ghcr.io/ecryptoguru/lyrashield-ai/lyrashield-worker@sha256:0c91d2a9dd91cfaa9a35ed9742aa118015a5deba8af324c1996d95d050442d5d'
 postgres='postgres:16-alpine@sha256:0cefaabd882e42bcb2a2f3dc56d3ce4770560ba62fd7f197f1a2e008fd5731ab'
 redis='redis:7-alpine@sha256:8da19c7399dca900c6822a1cf30f9d2285585e2c4b457ff4095b0f4500054d3f'
@@ -18,25 +34,15 @@ product='ed84ce06889e6a9c047db220fcabfa0c643200ad'
 engine='3001517530300ca5f602536bfadcbd3c95ad3039'
 [[ $(docker image inspect "$worker" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}') == "$product" ]]
 [[ $(docker image inspect "$worker" --format '{{index .Config.Labels "io.lyrashield.engine.revision"}}') == "$engine" ]]
-node --input-type=module - "$driver" "$fixtures" <<'JS'
-import { pathToFileURL } from "node:url"
-const { readWriterFixtures } = await import(pathToFileURL(process.argv[2]))
-readWriterFixtures(process.argv[3])
-JS
-
-tmp=$(mktemp -d)
-prefix="lyra-storage-drill-$(basename "$tmp" | tr '[:upper:]' '[:lower:]' | tr -cd '[:alnum:]')"
-net="$prefix-private"
-cleanup() {
-  for n in worker s3 redis postgres; do docker rm -fv "$prefix-$n" >/dev/null 2>&1 || true; done
-  docker network rm "$net" >/dev/null 2>&1 || true
-  rm -rf -- "$tmp"
-}
-trap cleanup EXIT
-trap 'exit 130' INT TERM
-mkdir "$tmp/proof" "$tmp/input"
-cp -R "$fixtures"/. "$tmp/input"
-chmod -R a+rX "$tmp/input"
+# Read the actual VM's Docker overlay free space (not the host's free space); reuse
+# the already-pinned/preloaded Redis image, and do not create a volume or network.
+label="lyrashield.evidence-drill=$prefix"
+touch "$tmp/docker-resources"
+docker run --rm --pull never --name "$prefix-space" --label "$label" --network none \
+  --read-only --tmpfs /data:ro,size=1m --cap-drop ALL --security-opt no-new-privileges \
+  --cpus .1 --memory 48m --pids-limit 16 --user 65534:65534 --entrypoint /bin/df "$redis" -Pk / \
+  | python3 -I -B "$guard" space
+mkdir "$tmp/proof"
 chmod 0777 "$tmp/proof"  # Private under mktemp; only fixture processes see this mounted path.
 cat > "$tmp/deny-engine" <<'DENY'
 #!/bin/sh
@@ -44,9 +50,9 @@ printf 'attempt\n' >>/proof/engine-called
 exit 98
 DENY
 chmod 0555 "$tmp/deny-engine"
-docker network create --internal "$net" >/dev/null
+docker network create --internal --label "$label" "$net" >/dev/null
 [[ $(docker network inspect "$net" --format '{{.Internal}}') == true ]]
-common=(--pull never --network "$net" --security-opt no-new-privileges --pids-limit 128)
+common=(--pull never --label "$label" --network "$net" --security-opt no-new-privileges --pids-limit 128)
 docker run -d "${common[@]}" --name "$prefix-postgres" --network-alias postgres \
   --cpus .5 --memory 512m --env POSTGRES_USER=lyrashield --env POSTGRES_DB=lyrashield \
   --env POSTGRES_PASSWORD=disposable-only "$postgres" -c max_connections=50 >/dev/null
@@ -70,17 +76,18 @@ pg() { docker exec -i "$prefix-postgres" psql -X -U lyrashield -d lyrashield -v 
 # Use each exact production migration's SQL, in Prisma directory order, against a new database.
 # The worker runtime contains the generated client, not the Prisma migration CLI.
 git -C "$root" diff --quiet "$product" -- packages/db/prisma/migrations || { echo 'reader migration source mismatch' >&2; exit 1; }
-for sql in "$root"/packages/db/prisma/migrations/*/migration.sql; do cat "$sql"; printf '\n'; done | pg -q >/dev/null
+for sql in "$root"/packages/db/prisma/migrations/*/migration.sql; do cat "$sql"; printf '\n'; done | DRILL_PHASE_TIMEOUT=120 pg -q >/dev/null
 pg -q < "$root/.github/scripts/disposable-worker-rehearsal-role.sql"
 kek=$(openssl rand -base64 32)
 run_phase() {
   local phase=$1 bucket=disposable-evidence
   [[ $phase != denied ]] || bucket=deliberately-absent
-  docker run --rm "${common[@]}" --name "$prefix-worker" --cap-drop ALL --read-only \
+  DRILL_PHASE_TIMEOUT=150 docker run --rm "${common[@]}" --name "$prefix-worker" --cap-drop ALL --read-only \
     --cpus .75 --memory 768m --tmpfs /tmp:rw,nosuid,nodev,size=64m \
     --mount "type=bind,src=$driver,dst=/app/apps/worker/.ci-evidence.mjs,readonly" \
+    --mount "type=bind,src=$fixture_io,dst=/app/apps/worker/worker-evidence-fixture-io.py,readonly" \
     --mount "type=bind,src=$tmp/input,dst=/fixtures,readonly" \
-    --mount "type=bind,src=$root/.github/scripts/fixtures/worker-evidence-distinct,dst=/distinct,readonly" \
+    --mount "type=bind,src=$tmp/distinct,dst=/distinct,readonly" \
     --mount "type=bind,src=$tmp/deny-engine,dst=/fixture-bin/drill-engine-denied,readonly" \
     --mount "type=bind,src=$tmp/proof,dst=/proof" \
     --workdir /app/apps/worker --entrypoint /app/apps/worker/node_modules/.bin/tsx \
@@ -118,6 +125,13 @@ for i in $(seq 1 90); do
   [[ $i -lt 90 ]] || { echo "timeout waiting for durable checkpoint" >&2; exit 1; }
   sleep 1
 done
+# Exactly one worker lives on this isolated network. Verify original active membership
+# and an unexpired lock atomically at the barrier, immediately before terminating it.
+lock_ttl=$(docker exec "$prefix-redis" redis-cli --raw EVAL \
+  "if redis.call('LPOS',KEYS[1],ARGV[1]) and redis.call('HGET',KEYS[2],'ats')=='1' then return redis.call('PTTL',KEYS[3]) end return -2" \
+  3 bull:scans:active bull:scans:task5-fix1-reverse-reuse bull:scans:task5-fix1-reverse-reuse:lock task5-fix1-reverse-reuse)
+[[ $lock_ttl =~ ^[0-9]+$ && $lock_ttl -gt 0 && -s "$tmp/proof/checkpoint-job.json" ]] || {
+  echo "Original job is not active and locked at manifest checkpoint" >&2; exit 1; }
 docker kill --signal KILL "$prefix-worker" >/dev/null
 set +e; wait "$writer"; rc=$?; set -e
 [[ $rc == 137 ]] || { echo "expected killed worker exit 137, got $rc" >&2; exit 1; }
