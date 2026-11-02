@@ -2,6 +2,7 @@ import { execFileSync, spawnSync } from "node:child_process"
 import assert from "node:assert/strict"
 import {
   cpSync,
+  readFileSync,
   existsSync,
   mkdtempSync,
   rmSync,
@@ -288,6 +289,13 @@ test("fixture staging materializes only verified bytes, independently of later s
     })
   )
   assert.ok(!existsSync(join(root, "bad")))
+})
+
+test("MinIO readiness sends a Host header to the private endpoint and requires status 200", () => {
+  const script = readFileSync(new URL("../run-worker-evidence-persistence-drill.sh", import.meta.url), "utf8")
+  const probe = script.split("\n").find((line) => line.includes("GET /minio/health/ready"))
+  assert.ok(probe.includes(String.raw`GET /minio/health/ready HTTP/1.1\r\nHost: s3:9000\r\nConnection: close\r\n\r\n`))
+  assert.ok(probe.includes('[[ "$line" == *" 200 "* ]]'))
 })
 
 test("disk gate rejects inadequate or incomparable free space before service startup", () => {

@@ -67,7 +67,7 @@ docker run -d "${common[@]}" --name "$prefix-s3" --network-alias s3 --cpus .5 --
 for i in $(seq 1 45); do
   if docker exec "$prefix-postgres" pg_isready -U lyrashield -d lyrashield >/dev/null 2>&1 && \
      docker exec "$prefix-redis" redis-cli ping | grep -qx PONG && \
-     docker exec "$prefix-s3" bash -c 'exec 3<>/dev/tcp/127.0.0.1/9000; printf "GET /minio/health/ready HTTP/1.0\r\n\r\n" >&3; read -r line <&3; [[ "$line" == *" 200 "* ]]' >/dev/null 2>&1; then break; fi
+     docker exec "$prefix-s3" bash -c 'exec 3<>/dev/tcp/127.0.0.1/9000; printf "GET /minio/health/ready HTTP/1.1\r\nHost: s3:9000\r\nConnection: close\r\n\r\n" >&3; read -r line <&3; [[ "$line" == *" 200 "* ]]' >/dev/null 2>&1; then break; fi
   [[ $i -lt 45 ]] || { echo "Disposable services did not become ready" >&2; exit 1; }
   sleep 2
 done
