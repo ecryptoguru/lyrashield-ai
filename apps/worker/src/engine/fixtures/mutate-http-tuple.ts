@@ -62,11 +62,31 @@ export function parseWriterTuple(change = "") {
       run.schema_version = "1.1"
       findings = {}
       break
+    case "missing selected pending":
+      doc.binding.findings[owner] = ["17"]
+      break
+    case "missing claiming owner":
+      findings.push({ ...findings[0], id: "unbound-finding", http_exchange_ids: [] })
+      break
+    case "overlap only":
+      findings[0].pending_http_exchange_ids.push("17")
+      break
+    case "shared overlap":
+      findings[0].pending_http_exchange_ids.push("17")
+      findings.push({ ...findings[0], id: "shared-finding", pending_http_exchange_ids: [] })
+      doc.binding.findings["shared-finding"] = ["17"]
+      doc.binding.finding_revisions["shared-finding"] = 0
+      break
     case "overlap":
       findings[0].pending_http_exchange_ids.push("17")
       findings[0].http_exchange_ids.push("19")
       doc.binding.findings[owner].push("19")
-      doc.exchanges.push({ ...body, proxy_request_id: "19" })
+      doc.exchanges.push({
+        ...body,
+        proxy_request_id: "19",
+        request: { ...body.request, body_sample: "owned-19" },
+      })
+      body.request.body_sample = "pending-only-17"
       break
   }
   run.evidence_export.exchanges = doc.exchanges.length

@@ -389,3 +389,15 @@ export function parseHttpExchangeExport(
     document,
   }
 }
+
+/** A conflict can remove a body from the canonical product artifact after the writer tuple has passed validation. */
+export function retainCapturedHttpExchanges(
+  exported: ParsedHttpExchangeExport,
+  capturedIds: ReadonlySet<string>
+): ParsedHttpExchangeExport | null {
+  if (!capturedIds.size) return null
+  if ([...exported.knownIds].every((id) => capturedIds.has(id))) return exported
+  const document: { exchanges: Array<{ proxy_request_id: string }> } = JSON.parse(exported.document)
+  document.exchanges = document.exchanges.filter((entry) => capturedIds.has(entry.proxy_request_id))
+  return document.exchanges.length ? parseHttpExchangeExport(JSON.stringify(document)) : null
+}

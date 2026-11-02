@@ -1,6 +1,7 @@
 import {
   parseEngineCoverage,
   parseHttpExchangeExport,
+  retainCapturedHttpExchanges,
   parseThreatModels,
 } from "./output-parser-artifacts"
 import { bindHttpExchangeEvidence } from "./output-parser-evidence"
@@ -119,6 +120,12 @@ export function parseEngineOutput(
       finding.http_exchange_refs_dropped = true
       if (httpExchangeExport && captures.length) finding.http_exchange_ids = captures
       else delete finding.http_exchange_ids
+    }
+    if (httpExchangeExport) {
+      const capturedIds = new Set(
+        vulnerabilities.flatMap((finding) => finding.http_exchange_ids ?? [])
+      )
+      httpExchangeExport = retainCapturedHttpExchanges(httpExchangeExport, capturedIds)
     }
   }
   const scopedCoverage = parseEngineCoverage(artifacts?.coverageRaw, ingestionIssues)

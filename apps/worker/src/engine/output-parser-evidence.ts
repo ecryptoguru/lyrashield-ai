@@ -119,22 +119,31 @@ export function bindHttpExchangeEvidence(
   ])
   for (const rawOwner of owners) {
     const ids = declared.get(rawOwner?.id)
-    if (!ids) continue
+    // Owners without a current claim have no entry in the writer's binding.
+    if (
+      !ids &&
+      rawOwner?.http_exchange_ids === undefined &&
+      rawOwner?.pending_http_exchange_ids === undefined
+    )
+      continue
     const parsed = captureOwnerSchema.safeParse(rawOwner)
     if (!parsed.success) return null
     const owner = parsed.data
+    // select_http_export_ids gives captures first use of the shared export capacity.
+    const selected = [
+      ...new Set([...(owner.http_exchange_ids ?? []), ...(owner.pending_http_exchange_ids ?? [])]),
+    ].slice(0, MAX_HTTP_EXCHANGE_IDS)
+    if (!ids && !selected.length) continue
     if (
+      !ids ||
+      !selected.length ||
       owner.evidence_contract_version !== "1.2" ||
       matched.has(owner.id) ||
       revisions[owner.id] !== (owner.update_history?.length ?? 0) ||
-      new Set(ids).size !== ids.length
+      ids.length !== selected.length ||
+      selected.some((id) => !ids.includes(id) || !indexedIds.has(id))
     )
       return null
-    const claims = new Set([
-      ...(owner.http_exchange_ids ?? []),
-      ...(owner.pending_http_exchange_ids ?? []),
-    ])
-    if (ids.some((id) => !claims.has(id) || !indexedIds.has(id))) return null
     matched.add(owner.id)
   }
   return matched.size === declared.size ? binding : null

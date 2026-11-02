@@ -521,11 +521,11 @@ describe("run.json 1.2 bound exported exchange references", () => {
       ...JSON.parse(V1_1_RUN()),
       receipt_persisted: true,
       schema_version: change.runVersion ?? "1.2",
-      evidence_export: { status: "exported", exchanges: 1, ...change.outcome },
+      evidence_export: { status: "partial", exchanges: 1, ...change.outcome },
     }
     const exported = JSON.stringify({
       schema_version: change.exportSchema ?? "lyrashield-http-exchanges/1.0",
-      missing_request_ids: change.missing,
+      missing_request_ids: ["99", ...(change.missing ?? []).filter((id) => id !== "99")],
       capacity_omitted_request_ids: change.capacityOmitted,
       truncated: change.truncatedOmitted
         ? { omitted_request_ids: change.truncatedOmitted }
@@ -534,7 +534,7 @@ describe("run.json 1.2 bound exported exchange references", () => {
         run_id: run.run_id,
         run_name: run.run_name,
         report_artifacts_revision: run.report_artifacts_revision,
-        findings: { "bound-finding": ["42"] },
+        findings: { "bound-finding": ["42", "99"] },
         finding_revisions: { "bound-finding": 1 },
         ...change.binding,
       },
@@ -549,7 +549,7 @@ describe("run.json 1.2 bound exported exchange references", () => {
       ],
     })
     run.evidence_export = {
-      status: "exported",
+      status: "partial",
       exchanges: 1,
       artifact: "http_exchanges.json",
       sha256: createHash("sha256").update(exported).digest("hex"),

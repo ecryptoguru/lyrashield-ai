@@ -245,6 +245,8 @@ describe("finalizeScanLifecycle", () => {
     "orphan body",
     "duplicate body",
     "absent owners",
+    "missing selected pending",
+    "missing claiming owner",
     "foreign owner",
     "stale owner",
     "downgraded empty",
@@ -271,6 +273,58 @@ describe("finalizeScanLifecycle", () => {
       expect(finding.http_exchange_ids).toBeUndefined()
     }
   })
+
+  it.each([
+    { change: "overlap only", bodies: [], findingCaptures: [[]] },
+    { change: "overlap", bodies: ["19"], findingCaptures: [["19"]] },
+    { change: "shared overlap", bodies: ["17"], findingCaptures: [[], ["17"]] },
+  ])(
+    "stores only final captured owners for $change",
+    async ({ change, bodies, findingCaptures }) => {
+      const output = parseWriterTuple(change)
+      // Exercise the finalizer first so the storage assertions observe its actual byte handoff.
+      mocks.uploadScanArtifact.mockImplementation(async ({ content }) => ({
+        checksum: createHash("sha256").update(content).digest("hex"),
+        byteLength: Buffer.byteLength(content),
+        encryptionKeyRef: "vault://test",
+      }))
+      await finalizeScanLifecycle(
+        params({
+          scanId: "task5-writer-fixture",
+          engineResult: { output },
+          orchestratorResult: {
+            allFindings: output.vulnerabilities,
+            engineFindings: output.vulnerabilities,
+            coverageIssues: [],
+          },
+        }) as never
+      )
+      expect(output.vulnerabilities.map((finding) => finding.http_exchange_ids ?? [])).toEqual(
+        findingCaptures
+      )
+      expect(output.vulnerabilities[0]?.pending_http_exchange_ids).toEqual(["18", "17"])
+      if (bodies.length === 0) {
+        expect(mocks.uploadScanArtifact).not.toHaveBeenCalled()
+        expect(output.httpExchangeExport).toBeNull()
+        return
+      }
+      expect(mocks.uploadScanArtifact).toHaveBeenCalledOnce()
+      const content = mocks.uploadScanArtifact.mock.calls[0][0].content
+      expect(
+        JSON.parse(content).exchanges.map(
+          (entry: { proxy_request_id: string }) => entry.proxy_request_id
+        )
+      ).toEqual(bodies)
+      expect(content).not.toContain("pending-only-17")
+      expect(output.httpExchangeExport?.document).toBe(content)
+      expect(output.httpExchangeExport?.exchangeCount).toBe(bodies.length)
+      expect([...(output.httpExchangeExport?.knownIds ?? [])]).toEqual(bodies)
+      expect([...(output.httpExchangeExport?.requestHosts.keys() ?? [])]).toEqual(bodies)
+      expect(mocks.persistFindings.mock.calls[0][0].httpExchangeArtifactChecksum).toBe(
+        createHash("sha256").update(content).digest("hex")
+      )
+    }
+  )
 
   it("retries storage for the same 1.2 scan before any immutable capture receipt", async () => {
     const output = parseWriterTuple()
