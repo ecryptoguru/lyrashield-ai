@@ -80,6 +80,7 @@ vi.mock("@lyrashield/billing", () => ({
   assertTargetAllowed: vi.fn().mockResolvedValue({ allowed: true }),
 }))
 
+import { buildAdmittedScanPlan } from "@lyrashield/db/src/scan-execution-plan"
 import { POST } from "./route"
 import {
   prisma,
@@ -299,6 +300,48 @@ describe("scan operation route regressions", () => {
     )
     expect(enqueueScanJob).not.toHaveBeenCalled()
   })
+  it("refuses a changed default before queuing and binds a same-key retry to the new selection", async () => {
+    const makeDefaultRequest = () => {
+      const req = makeRequest({
+        workspaceId: "ws-1",
+        targetId: "t1",
+        goal: "TEST_APP",
+        mode: "SAFE",
+      })
+      req.headers.set("Idempotency-Key", "default-race")
+      return req
+    }
+    vi.mocked(prisma.policy.findFirst)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ id: "new" } as never)
+    const tx = {
+      policy: {
+        findFirst: vi.fn().mockResolvedValue({ id: "new", maxBudgetUsd: { toNumber: () => 0 } }),
+      },
+    }
+    vi.mocked(createScan).mockImplementationOnce(async (params) => {
+      await buildAdmittedScanPlan(tx as never, params, "REPO", "default")
+      throw new Error("Expected the default policy change to refuse admission")
+    })
+    vi.mocked(claimOrGetAgentOperation)
+      .mockResolvedValueOnce({ status: "NEW", operation: { id: "op" } } as never)
+      .mockResolvedValueOnce({ status: "CONFLICT", message: "Changed policy" } as never)
+    const refusal = await POST(makeDefaultRequest())
+    expect(refusal.status).toBe(400)
+    expect((await refusal.json()).error).toMatchObject({
+      code: "SCAN_PLAN_INVALID",
+      message: expect.stringContaining("default scan policy changed"),
+      details: { operationOutcome: "OPERATION_NOT_SUBMITTED" },
+    })
+    expect(tx.policy.findFirst).toHaveBeenCalledOnce()
+    expect((await POST(makeDefaultRequest())).status).toBe(409)
+    expect(
+      vi.mocked(claimOrGetAgentOperation).mock.calls.map(([claim]) => claim.input)
+    ).toMatchObject([{ policyId: null }, { policyId: "new" }])
+    expect(createScan).toHaveBeenCalledOnce()
+    expect(enqueueScanJob).not.toHaveBeenCalled()
+  })
+
   it("binds the selected policy to operation input", async () => {
     await POST(request("policy-a"))
     await POST(request("policy-b"))

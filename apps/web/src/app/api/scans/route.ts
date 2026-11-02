@@ -585,13 +585,17 @@ async function post(request: Request) {
       }
     }
 
-    submission.attempted = true
-    const scan = await createScan({
+    const scanIdentity = {
       workspaceId,
       targetId: data.targetId,
       goal: data.goal,
       mode: canonicalMode,
       policyId: policy?.id,
+    }
+    submission.attempted = true
+    const scan = await createScan({
+      ...scanIdentity,
+      verifyWorkspaceDefaultPolicy: data.policyId === undefined,
       engineBudgetCeilingUsd: data.engineBudgetCeilingUsd,
       createdById: session.userId,
       // W0.4 — bind the delegated grant that just passed assertOAuthDelegatedScope
@@ -620,11 +624,7 @@ async function post(request: Request) {
     try {
       await enqueueScanJob({
         scanId: scan.id,
-        workspaceId,
-        targetId: data.targetId,
-        goal: data.goal,
-        mode: canonicalMode,
-        policyId: policy?.id,
+        ...scanIdentity,
         focus: data.focus,
       })
     } catch (enqueueErr) {

@@ -157,7 +157,7 @@ describe("findScanPolicy", () => {
     await findScanPolicy("ws-1")
     expect(prisma.policy.findFirst).toHaveBeenLastCalledWith({
       where: { workspaceId: "ws-1", name: "Default Policy", deletedAt: null },
-      orderBy: { createdAt: "asc" },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
       select: { id: true, destructiveTestsAllowed: true, maxBudgetUsd: true },
     })
   })

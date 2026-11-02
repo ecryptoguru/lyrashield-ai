@@ -90,12 +90,26 @@ export async function buildAdmittedScanPlan(
   targetType: string,
   determinismMode: string
 ) {
-  const policy = params.policyId
-    ? await tx.policy.findFirst({
-        where: { id: params.policyId, workspaceId: params.workspaceId, deletedAt: null },
-        select: { maxBudgetUsd: true },
-      })
-    : null
+  const policy =
+    params.verifyWorkspaceDefaultPolicy || params.policyId
+      ? await tx.policy.findFirst({
+          where: {
+            workspaceId: params.workspaceId,
+            deletedAt: null,
+            ...(params.verifyWorkspaceDefaultPolicy
+              ? { name: "Default Policy" }
+              : { id: params.policyId }),
+          },
+          orderBy: params.verifyWorkspaceDefaultPolicy
+            ? [{ createdAt: "asc" }, { id: "asc" }]
+            : undefined,
+          select: { id: true, maxBudgetUsd: true },
+        })
+      : null
+  if (params.verifyWorkspaceDefaultPolicy && policy?.id !== params.policyId)
+    throw new ScanExecutionPlanInputError(
+      "The workspace default scan policy changed. Check eligibility before starting a new review."
+    )
   if (params.policyId && !policy)
     throw new ScanExecutionPlanInputError("Assigned scan policy is unavailable.")
   return buildScanExecutionPlan({

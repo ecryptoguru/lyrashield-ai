@@ -257,6 +257,58 @@ describe("scans page tool registrations", () => {
     expect(JSON.parse(fetchMock.mock.calls[1]![1].body).engineBudgetCeilingUsd).toBe(1)
   })
 
+  it.each([
+    ["1", undefined, 1],
+    ["1", 0.5, 0.5],
+    ["1", 1.2, false],
+    ["bad", undefined, false],
+    [undefined, undefined, undefined],
+  ] as const)(
+    "bounds a durable request by the matching draft (%s, %s)",
+    async (draft, requested, expected) => {
+      fetchMock.mockResolvedValue({ ok: true, json: async () => ({ data: { id: "scan" } }) })
+      const { tool } = register(
+        createRequestSecurityScanTool({
+          workspaceId: "ws-page",
+          getTargets: () => [target({ id: "repo", name: "Canary" })],
+          getSelectedPreset: () => "RELEASE_CHECK",
+          getMatchingDraftBudget: (targetId, reviewType) =>
+            targetId === "repo" && reviewType === "RELEASE_CHECK" ? draft : undefined,
+        })
+      )
+      const result = await tool.execute(
+        {
+          targetName: "Canary",
+          requestId: "same",
+          ...(requested !== undefined ? { engineBudgetCeilingUsd: requested } : {}),
+        },
+        { signal: abortSignal }
+      )
+      expect(result).toMatchObject({ ok: expected !== false })
+      if (expected === false) expect(fetchMock).not.toHaveBeenCalled()
+      else
+        expect(JSON.parse(fetchMock.mock.calls[0]![1].body).engineBudgetCeilingUsd).toBe(expected)
+    }
+  )
+
+  it("refuses a visible ceiling on a checks-only request before POST", async () => {
+    const { tool } = register(
+      createRequestSecurityScanTool({
+        workspaceId: "ws-page",
+        getTargets: () => [target({ name: "Storefront", type: "WEB_APP" })],
+        getSelectedPreset: () => "WEB_APP_SAFE",
+        getMatchingDraftBudget: () => "1",
+      })
+    )
+    expect(
+      await tool.execute(
+        { targetName: "Storefront", requestId: "retained" },
+        { signal: abortSignal }
+      )
+    ).toMatchObject({ ok: false, error: expect.stringContaining("deterministic review") })
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
   it.each([0, -1, Number.NaN, Number.POSITIVE_INFINITY])(
     "rejects engine ceiling %s before a durable request",
     async (amount) => {

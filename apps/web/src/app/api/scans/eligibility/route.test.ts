@@ -170,6 +170,33 @@ describe("GET /api/scans/eligibility", () => {
     expect(JSON.stringify(data)).not.toContain("0.47")
   })
 
+  it.each(["REPO", "WEB_APP"])(
+    "checks engine capability against zero policy on %s",
+    async (type) => {
+      vi.mocked(prisma.target.findFirst).mockResolvedValueOnce({
+        id: "target-1",
+        type,
+        url: "https://app.example.com",
+      } as never)
+      vi.mocked(prisma.policy.findFirst).mockResolvedValueOnce({
+        id: "p",
+        maxBudgetUsd: { toNumber: () => 0 },
+      } as never)
+      const response = await GET(
+        request({ ...validQuery, ...(type === "REPO" ? { engineBudgetCeilingUsd: "1" } : {}) })
+      )
+      const { data } = await response.json()
+      expect(response.status).toBe(200)
+      if (type === "REPO") {
+        expect(data.allowed).toBe(false)
+        expect(data.blockers).toContainEqual({
+          code: "SCAN_PLAN_INVALID",
+          message: expect.stringMatching(/engine spending is disabled/i),
+        })
+      } else expect(data.allowed).toBe(true)
+    }
+  )
+
   it.each(["0", "-1", "NaN", "Infinity", ""])(
     "rejects invalid requested engine ceiling %s",
     async (value) => {

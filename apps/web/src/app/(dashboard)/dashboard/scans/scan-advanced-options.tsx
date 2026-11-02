@@ -1,8 +1,34 @@
+import { useCallback, useState } from "react"
 import { EngineBudgetCeilingTextSchema } from "@lyrashield/types"
 import { ChevronDown } from "lucide-react"
 import { FormField, Input, cn } from "@lyrashield/ui"
 import { getScanModeLabel } from "@/lib/enum-labels"
 import { supportsEngineSpendingLimit, type ManualScanOption } from "@/lib/scan-presets"
+
+export function useEngineBudgetDraft(principalId: string, workspaceId: string) {
+  const [showAdvanced, setShowAdvanced] = useState(false)
+  const [draft, setDraft] = useState({ principalId, workspaceId, text: "" })
+  const engineBudgetCeiling =
+    draft.principalId === principalId && draft.workspaceId === workspaceId ? draft.text : ""
+  const setEngineBudgetCeiling = useCallback(
+    (text: string) => setDraft({ principalId, workspaceId, text }),
+    [principalId, workspaceId]
+  )
+  const prepareEngineBudget = useCallback(
+    (value: string) => {
+      setEngineBudgetCeiling(value)
+      if (value) setShowAdvanced(true)
+    },
+    [setEngineBudgetCeiling]
+  )
+  return {
+    engineBudgetCeiling,
+    setEngineBudgetCeiling,
+    prepareEngineBudget,
+    showAdvanced,
+    setShowAdvanced,
+  }
+}
 
 export function parseEngineBudgetField(
   text: string,

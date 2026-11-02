@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation"
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react"
 import { useScansWebMcp } from "./scans-webmcp"
 import { useScanListState } from "./use-scan-list-state"
-import { parseEngineBudgetField } from "./scan-advanced-options"
+import { parseEngineBudgetField, useEngineBudgetDraft } from "./scan-advanced-options"
 import { useScanEligibility } from "./use-scan-eligibility"
 import { CreateScanSheet } from "./create-scan-sheet"
 import { resolveScanSubmissionFailure } from "./scan-submission-failure"
@@ -122,12 +122,8 @@ export function ScansClient({
     setSelectedPreset(id)
   }, [])
   const [modeResetNotice, setModeResetNotice] = useState<string | null>(null)
-  const [showAdvanced, setShowAdvanced] = useState(false)
-  const [engineBudgetCeiling, setEngineBudgetCeiling] = useState("")
-  const prepareEngineBudget = useCallback((value: string) => {
-    setEngineBudgetCeiling(value)
-    if (value) setShowAdvanced(true)
-  }, [])
+  const budgetDraft = useEngineBudgetDraft(principalId, workspaceId)
+  const { engineBudgetCeiling, prepareEngineBudget } = budgetDraft
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState<string | null>(
     initialRecoveryUnavailable ? "This target is no longer available. Choose another target." : null
@@ -175,16 +171,6 @@ export function ScansClient({
   const [scanRecoveryUnavailable, setScanRecoveryUnavailable] = useState(false)
   const [forceNewAfterRecovery, setForceNewAfterRecovery] = useState(false)
   const isDesktop = useMediaQuery("(min-width: 768px)")
-  useScansWebMcp({
-    workspaceId,
-    targets,
-    selectedPreset,
-    setSelectedTarget,
-    setSelectedPreset: choosePreset,
-    setEngineBudgetCeiling: prepareEngineBudget,
-    setShowCreate,
-    setModeResetNotice,
-  })
   async function handleCreateScan(startNewScan = false) {
     const scopeGeneration = scopeGenerationRef.current
     const isCurrentScope = () => scopeGeneration === scopeGenerationRef.current
@@ -308,7 +294,7 @@ export function ScansClient({
         setShowCreate(false)
         router.push(`/dashboard/scans/${encodeURIComponent(result.id)}`)
         setSelectedFocus(null)
-        setEngineBudgetCeiling("")
+        budgetDraft.setEngineBudgetCeiling("")
         setBaseRef("")
         setHeadRef("")
         setSelectedAttachments([])
@@ -359,6 +345,20 @@ export function ScansClient({
     enabledOptions.find((o) => o.id === selectedPreset) ??
     enabledOptions.find((o) => o.id === getDefaultScanOptionId(availableOptions)) ??
     enabledOptions[0]
+  useScansWebMcp({
+    workspaceId,
+    principalId,
+    visibleDraft: showCreate
+      ? { targetId: selectedTarget, reviewType: selectedOption?.id, budget: engineBudgetCeiling }
+      : null,
+    targets,
+    selectedPreset,
+    setSelectedTarget,
+    setSelectedPreset: choosePreset,
+    setEngineBudgetCeiling: prepareEngineBudget,
+    setShowCreate,
+    setModeResetNotice,
+  })
   const reviewSetupGuidance = selectedTargetDetails
     ? getReviewSetupGuidance({
         targetId: selectedTargetDetails.id,
@@ -725,7 +725,7 @@ export function ScansClient({
         choosePreset={choosePreset}
         modeResetNotice={modeResetNotice}
         engineBudgetCeiling={engineBudgetCeiling}
-        setEngineBudgetCeiling={setEngineBudgetCeiling}
+        setEngineBudgetCeiling={budgetDraft.setEngineBudgetCeiling}
         selectedFocus={selectedFocus}
         setSelectedFocus={setSelectedFocus}
         reviewSetupGuidance={reviewSetupGuidance}
@@ -737,8 +737,8 @@ export function ScansClient({
         startDisabled={startDisabled}
         creating={creating}
         handleCreateScan={() => handleCreateScan(forceNewAfterRecovery)}
-        showAdvanced={showAdvanced}
-        setShowAdvanced={setShowAdvanced}
+        showAdvanced={budgetDraft.showAdvanced}
+        setShowAdvanced={budgetDraft.setShowAdvanced}
         baseRef={baseRef}
         setBaseRef={setBaseRef}
         headRef={headRef}

@@ -365,6 +365,10 @@ export function resolvePlanEngineBudget(
       "The configured spending limit does not permit this authenticated assessment."
     )
   }
+  if (engineBacked && ceiling === 0)
+    throw new ScanExecutionPlanInputError(
+      "Engine spending is disabled for this review. Choose a checks-only review or ask a workspace owner to check the scan policy."
+    )
   return ceiling
 }
 

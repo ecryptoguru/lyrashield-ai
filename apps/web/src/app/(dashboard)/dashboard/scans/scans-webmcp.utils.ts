@@ -9,6 +9,8 @@
  * tool surface is testable without a browser: the same definitions run the
  * real registration path in unit tests.
  */
+import { flushSync } from "react-dom"
+import { parseEngineBudgetField } from "./scan-advanced-options"
 import { EngineBudgetCeilingUsdSchema } from "@lyrashield/types"
 import {
   supportsEngineSpendingLimit,
@@ -321,13 +323,15 @@ export function createPrepareSecurityScanTool(
       const selectedOption = resolveReviewOption(target, input.reviewType, deps.getSelectedPreset())
 
       const ceiling = requestedEngineLimit(input.engineBudgetCeilingUsd, selectedOption)
-      if (ceiling.engineBudgetCeilingUsd !== undefined)
-        deps.setEngineBudgetCeiling(String(ceiling.engineBudgetCeilingUsd))
-      // Prepare the existing form for human confirmation. No apiPost.
-      deps.setSelectedTarget(target.id)
-      deps.setSelectedPreset(selectedOption.id)
-      deps.setShowCreate(true)
-      deps.setModeResetNotice(null)
+      // The next page tool can run immediately after prepare resolves.
+      flushSync(() => {
+        if (ceiling.engineBudgetCeilingUsd !== undefined)
+          deps.setEngineBudgetCeiling(String(ceiling.engineBudgetCeilingUsd))
+        deps.setSelectedTarget(target.id)
+        deps.setSelectedPreset(selectedOption.id)
+        deps.setShowCreate(true)
+        deps.setModeResetNotice(null)
+      })
 
       return {
         prepared: true,
@@ -351,7 +355,9 @@ export function createPrepareSecurityScanTool(
  * authoritative admission checks live on the server; agent input can never
  * supply another workspace or principal. */
 export function createRequestSecurityScanTool(
-  deps: ScansPageToolDeps
+  deps: ScansPageToolDeps & {
+    getMatchingDraftBudget?: (targetId: string, reviewType: string) => string | undefined
+  }
 ): WebMcpPageTool<RequestScanInput> {
   return {
     name: "request_security_scan",
@@ -392,7 +398,21 @@ export function createRequestSecurityScanTool(
       }
 
       const fetchImpl = deps.fetchFn ?? globalThis.fetch
-      const ceiling = requestedEngineLimit(input.engineBudgetCeilingUsd, selectedOption)
+      const draft = parseEngineBudgetField(
+        deps.getMatchingDraftBudget?.(target.id, selectedOption.id) ?? "",
+        selectedOption
+      )
+      if (draft.error) throw new Error(draft.error)
+      if (
+        draft.value !== undefined &&
+        input.engineBudgetCeilingUsd !== undefined &&
+        input.engineBudgetCeilingUsd > draft.value
+      )
+        throw new Error("To raise the engine spending limit, update the open scan form first.")
+      const ceiling = requestedEngineLimit(
+        input.engineBudgetCeilingUsd === undefined ? draft.value : input.engineBudgetCeilingUsd,
+        selectedOption
+      )
       const response = await fetchImpl("/api/scans", {
         method: "POST",
         headers: {

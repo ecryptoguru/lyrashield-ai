@@ -2036,6 +2036,7 @@ describe("processScanJob", () => {
   })
 
   it.each([
+    { live: 5, stored: 0, expected: null },
     { live: null, expected: null },
     { live: NaN, expected: null },
     { live: -1, expected: null },
@@ -2044,9 +2045,9 @@ describe("processScanJob", () => {
     { live: 0.5, expected: 0.5 },
   ])(
     "applies the frozen plan and current assigned policy $live before engine work",
-    async ({ live, expected }) => {
+    async ({ live, expected, stored }) => {
       const plan = buildScanExecutionPlan({ targetType: "REPO", mode: "SAFE" })
-      plan.limits.maxBudgetUsd = 1
+      plan.limits.maxBudgetUsd = stored ?? 1
       mockStoredScanAuthority({
         policyId: "policy-1",
         executionPlan: plan,

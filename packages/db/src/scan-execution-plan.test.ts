@@ -170,7 +170,6 @@ describe("createScan execution plan persistence", () => {
   it.each([
     { requested: 1, policy: 5, expected: 1 },
     { requested: 3, policy: 1, expected: 1 },
-    { requested: undefined, policy: 0, expected: 0 },
     { requested: 20, policy: null, expected: 1.2 },
   ])(
     "hashes the admitted budget ($requested, policy $policy)",
@@ -190,7 +189,7 @@ describe("createScan execution plan persistence", () => {
       })
       expect(tx.policy.findFirst).toHaveBeenCalledWith({
         where: { id: "p", workspaceId: "ws-1", deletedAt: null },
-        select: { maxBudgetUsd: true },
+        select: { id: true, maxBudgetUsd: true },
       })
       const { executionPlan, executionPlanHash } = tx.scan.create.mock.calls[0]![0].data
       expect(executionPlan.limits.maxBudgetUsd).toBe(expected)
@@ -221,6 +220,98 @@ describe("createScan execution plan persistence", () => {
       expect(tx.scan.create).not.toHaveBeenCalled()
     }
   )
+
+  it.each([
+    [undefined, "new-default", 0],
+    [undefined, "new-default", 0.5],
+    [undefined, "new-default", 5],
+    ["old-default", null, 0],
+    ["old-default", "replacement", 5],
+  ] as const)(
+    "refuses a changed workspace default (%s to %s, limit %s)",
+    async (policyId, current, amount) => {
+      const tx = makeTx("REPO")
+      tx.policy.findFirst.mockResolvedValue(
+        current ? { id: current, maxBudgetUsd: { toNumber: () => amount } } : null
+      )
+      await expect(
+        createScan({
+          workspaceId: "ws-1",
+          targetId: "t",
+          createdById: "u",
+          goal: "TEST_APP",
+          policyId,
+          verifyWorkspaceDefaultPolicy: true,
+        })
+      ).rejects.toThrow(/default scan policy changed/i)
+      expect(tx.scan.create).not.toHaveBeenCalled()
+    }
+  )
+
+  it.each([true, false])(
+    "preserves unassigned admission under the caller's policy contract (%s)",
+    async (verifyWorkspaceDefaultPolicy) => {
+      const tx = makeTx("REPO")
+      tx.policy.findFirst.mockResolvedValue(null)
+      await createScan({
+        workspaceId: "ws-1",
+        targetId: "t",
+        createdById: "u",
+        goal: "TEST_APP",
+        verifyWorkspaceDefaultPolicy,
+      })
+      expect(tx.policy.findFirst).toHaveBeenCalledTimes(verifyWorkspaceDefaultPolicy ? 1 : 0)
+      expect(tx.scan.create.mock.calls[0]![0].data).toMatchObject({
+        policyId: null,
+        executionPlan: { limits: { maxBudgetUsd: 1.2 } },
+      })
+    }
+  )
+
+  it("binds an unchanged workspace default and freezes its current limit", async () => {
+    const tx = makeTx("REPO")
+    tx.policy.findFirst.mockResolvedValue({ id: "default", maxBudgetUsd: { toNumber: () => 0.75 } })
+    await createScan({
+      workspaceId: "ws-1",
+      targetId: "t",
+      createdById: "u",
+      goal: "TEST_APP",
+      policyId: "default",
+      verifyWorkspaceDefaultPolicy: true,
+      engineBudgetCeilingUsd: 1,
+    })
+    expect(tx.policy.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { workspaceId: "ws-1", name: "Default Policy", deletedAt: null },
+      })
+    )
+    expect(tx.scan.create.mock.calls[0]![0].data).toMatchObject({
+      policyId: "default",
+      executionPlan: { limits: { maxBudgetUsd: 0.75 } },
+    })
+  })
+
+  it("refuses engine admission at zero while admitting a checks-only review", async () => {
+    for (const targetType of ["REPO", "WEB_APP"]) {
+      const tx = makeTx(targetType)
+      tx.policy.findFirst.mockResolvedValue({ id: "p", maxBudgetUsd: { toNumber: () => 0 } })
+      const admission = createScan({
+        workspaceId: "ws-1",
+        targetId: "t",
+        createdById: "u",
+        goal: "TEST_APP",
+        mode: "QUICK",
+        policyId: "p",
+      })
+      if (targetType === "REPO") {
+        await expect(admission).rejects.toThrow(/engine spending is disabled/i)
+        expect(tx.scan.create).not.toHaveBeenCalled()
+      } else {
+        await admission
+        expect(tx.scan.create.mock.calls[0]![0].data.executionPlan.limits.maxBudgetUsd).toBe(0)
+      }
+    }
+  })
 
   it("persists resolved source provenance for REVIEW_CHANGES", async () => {
     const tx = makeTx("REPO")
