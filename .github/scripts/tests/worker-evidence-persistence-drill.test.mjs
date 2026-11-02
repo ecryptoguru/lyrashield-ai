@@ -23,6 +23,7 @@ import {
   legacy,
   qualifyFixture,
   readWriterFixtures,
+  requireLiveLock,
   requireDisposable,
 } from "../worker-evidence-persistence-drill.mjs"
 
@@ -237,6 +238,21 @@ test(
   }
 )
 
+test("live lock proof uses the integration Redis client and rejects absent or foreign tokens", async () => {
+  const queue = { toKey: (suffix) => "bull:scans:" + suffix }
+  for (const stored of ["owned", "foreign", null]) {
+    const redis = {
+      get: async (key) => {
+        assert.equal(key, "bull:scans:original:lock")
+        return stored
+      },
+    }
+    if (stored === "owned") await requireLiveLock(redis, queue, "original", "owned")
+    else await assert.rejects(() => requireLiveLock(redis, queue, "original", "owned"), /live lock/)
+  }
+  await assert.rejects(() => requireLiveLock(null, queue, "original", "owned"), /Redis/)
+})
+
 test("recovery identity rejects replacement jobs and a first delivery mislabelled as a stall", async () => {
   const { assertRecoveredDelivery } = await import("../worker-evidence-persistence-drill.mjs")
   const original = { id: "same", timestamp: 100, nonce: "one" }
@@ -292,9 +308,16 @@ test("fixture staging materializes only verified bytes, independently of later s
 })
 
 test("MinIO readiness sends a Host header to the private endpoint and requires status 200", () => {
-  const script = readFileSync(new URL("../run-worker-evidence-persistence-drill.sh", import.meta.url), "utf8")
+  const script = readFileSync(
+    new URL("../run-worker-evidence-persistence-drill.sh", import.meta.url),
+    "utf8"
+  )
   const probe = script.split("\n").find((line) => line.includes("GET /minio/health/ready"))
-  assert.ok(probe.includes(String.raw`GET /minio/health/ready HTTP/1.1\r\nHost: s3:9000\r\nConnection: close\r\n\r\n`))
+  assert.ok(
+    probe.includes(
+      String.raw`GET /minio/health/ready HTTP/1.1\r\nHost: s3:9000\r\nConnection: close\r\n\r\n`
+    )
+  )
   assert.ok(probe.includes('[[ "$line" == *" 200 "* ]]'))
 })
 

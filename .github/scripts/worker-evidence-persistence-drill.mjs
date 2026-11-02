@@ -195,6 +195,14 @@ export function qualifyFixture(
   }
 }
 
+export async function requireLiveLock(redis, queue, jobId, token) {
+  assert.ok(redis, "disposable Redis required")
+  assert.ok(
+    token && (await redis.get(queue.toKey(jobId + ":lock"))) === token,
+    "worker must own the live lock"
+  )
+}
+
 export async function requireCrashedJob(queue, original) {
   const old = await queue.getJob(original.id)
   assert.ok(old, "interrupted job disappeared")
@@ -537,11 +545,7 @@ async function main(phase) {
       async (job, token) => {
         assert.equal(job.id, checkpoint.id)
         assert.equal(await job.getState(), "active")
-        const redis = await queue.client
-        assert.ok(
-          token && (await redis.get(queue.toKey(job.id + ":lock"))) === token,
-          "worker must own the live lock"
-        )
+        await requireLiveLock(integrations.getRedis(), queue, job.id, token)
         if (mode === "interrupt") {
           assert.equal(job.attemptsStarted, 1)
           assert.equal(job.stalledCounter, 0)
