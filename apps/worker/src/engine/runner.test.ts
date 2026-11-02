@@ -122,44 +122,48 @@ it("reads the owned singular threat-model artifact before any legacy plural file
   expect(output.artifacts.threatModelsRaw).toBe(canonical)
 })
 
-it("round-trips an actual redacted engine writer artifact through the manifest-bound reader", async () => {
-  // Produced by build_threat_model_document + write_threat_model_artifact in
-  // lyrashield-engine; unlike synthetic models: [] fixtures, it exercises the
-  // writer's model-array, amendment, target-redaction and run binding shape.
-  const canonical = await readFile(
-    new URL("./fixtures/run-json-1.1/threat_model.json", import.meta.url),
-    "utf8"
-  )
-  const runRecord = JSON.parse(
-    await readFile(new URL("./fixtures/run-json-1.1/run.json", import.meta.url), "utf8")
-  )
-  const outputDir = await mkdtemp(join(tmpdir(), "lyrashield-writer-fixture-"))
-  cleanupPaths.push(outputDir)
-  await writeFile(join(outputDir, "threat_model.json"), canonical, "utf8")
-  await writeFile(
-    join(outputDir, "run.json"),
-    JSON.stringify({
-      ...runRecord,
-      result_manifest: {
-        schema_version: 1,
-        artifacts: {
-          "threat_model.json": {
-            path: "threat_model.json",
-            bytes: Buffer.byteLength(canonical),
-            sha256: createHash("sha256").update(canonical).digest("hex"),
+it.each(["1.1", "1.2"])(
+  "round-trips an actual redacted writer artifact through the %s manifest-bound reader",
+  async (version) => {
+    // Produced by build_threat_model_document + write_threat_model_artifact in
+    // lyrashield-engine; unlike synthetic models: [] fixtures, it exercises the
+    // writer's model-array, amendment, target-redaction and run binding shape.
+    const canonical = await readFile(
+      new URL("./fixtures/run-json-1.1/threat_model.json", import.meta.url),
+      "utf8"
+    )
+    const runRecord = JSON.parse(
+      await readFile(new URL("./fixtures/run-json-1.1/run.json", import.meta.url), "utf8")
+    )
+    const outputDir = await mkdtemp(join(tmpdir(), "lyrashield-writer-fixture-"))
+    cleanupPaths.push(outputDir)
+    await writeFile(join(outputDir, "threat_model.json"), canonical, "utf8")
+    await writeFile(
+      join(outputDir, "run.json"),
+      JSON.stringify({
+        ...runRecord,
+        schema_version: version,
+        result_manifest: {
+          schema_version: 1,
+          artifacts: {
+            "threat_model.json": {
+              path: "threat_model.json",
+              bytes: Buffer.byteLength(canonical),
+              sha256: createHash("sha256").update(canonical).digest("hex"),
+            },
           },
         },
-      },
-    })
-  )
+      })
+    )
 
-  const output = await readEngineOutput(outputDir)
-  const parsed = parseEngineOutput(output.vulnerabilitiesRaw, output.runJsonRaw, output.artifacts)
-  expect(output.artifacts.threatModelsRaw).toBe(canonical)
-  expect(parsed.threatModels?.models).toHaveLength(1)
-  expect(JSON.stringify(parsed.threatModels)).toContain("[SECRET]")
-  expect(JSON.stringify(parsed.threatModels)).not.toContain("sample-secret-123")
-})
+    const output = await readEngineOutput(outputDir)
+    const parsed = parseEngineOutput(output.vulnerabilitiesRaw, output.runJsonRaw, output.artifacts)
+    expect(output.artifacts.threatModelsRaw).toBe(canonical)
+    expect(parsed.threatModels?.models).toHaveLength(1)
+    expect(JSON.stringify(parsed.threatModels)).toContain("[SECRET]")
+    expect(JSON.stringify(parsed.threatModels)).not.toContain("sample-secret-123")
+  }
+)
 
 it("rejects an unbound canonical threat model without a 1.1 run receipt", async () => {
   const outputDir = await mkdtemp(join(tmpdir(), "lyrashield-unbound-evidence-"))
@@ -191,49 +195,52 @@ it("retains the plural adapter for a pre-1.1 run", async () => {
   expect(output.artifacts.threatModelsRaw).toBe(legacy)
 })
 
-it("rejects a threat model that is missing or differs from the run manifest", async () => {
-  const outputDir = await mkdtemp(join(tmpdir(), "lyrashield-manifest-evidence-"))
-  cleanupPaths.push(outputDir)
-  const canonical = JSON.stringify({
-    schema_version: "lyrashield-threat-model/1.0",
-    run_id: "scan-1",
-    models: [],
-  })
-  const manifest = {
-    schema_version: 1,
-    artifacts: {
-      "threat_model.json": {
-        path: "threat_model.json",
-        bytes: Buffer.byteLength(canonical),
-        sha256: createHash("sha256").update(canonical).digest("hex"),
+it.each(["1.1", "1.2"])(
+  "rejects a threat model that is missing or differs from the %s run manifest",
+  async (version) => {
+    const outputDir = await mkdtemp(join(tmpdir(), "lyrashield-manifest-evidence-"))
+    cleanupPaths.push(outputDir)
+    const canonical = JSON.stringify({
+      schema_version: "lyrashield-threat-model/1.0",
+      run_id: "scan-1",
+      models: [],
+    })
+    const manifest = {
+      schema_version: 1,
+      artifacts: {
+        "threat_model.json": {
+          path: "threat_model.json",
+          bytes: Buffer.byteLength(canonical),
+          sha256: createHash("sha256").update(canonical).digest("hex"),
+        },
       },
-    },
+    }
+    await writeFile(
+      join(outputDir, "run.json"),
+      JSON.stringify({ schema_version: version, run_id: "scan-1", result_manifest: manifest })
+    )
+    // A stale pre-contract sibling must never fill a missing 1.1 artifact.
+    await writeFile(
+      join(outputDir, "threat_models.json"),
+      JSON.stringify({ stale: { target: "other-run", content: "unbound" } })
+    )
+
+    const missing = await readEngineOutput(outputDir)
+    expect(missing.artifacts.threatModelsRaw).toBeNull()
+    expect(
+      parseEngineOutput(missing.vulnerabilitiesRaw, missing.runJsonRaw, missing.artifacts)
+        .ingestionIssues
+    ).toContain("threat_model.json unreadable or oversized — artifact ignored")
+
+    await writeFile(join(outputDir, "threat_model.json"), canonical.replace("scan-1", "scan-2"))
+    const changed = await readEngineOutput(outputDir)
+    expect(changed.artifacts.threatModelsRaw).toBeNull()
+
+    await writeFile(join(outputDir, "threat_model.json"), canonical)
+    const valid = await readEngineOutput(outputDir)
+    expect(valid.artifacts.threatModelsRaw).toBe(canonical)
   }
-  await writeFile(
-    join(outputDir, "run.json"),
-    JSON.stringify({ schema_version: "1.1", run_id: "scan-1", result_manifest: manifest })
-  )
-  // A stale pre-contract sibling must never fill a missing 1.1 artifact.
-  await writeFile(
-    join(outputDir, "threat_models.json"),
-    JSON.stringify({ stale: { target: "other-run", content: "unbound" } })
-  )
-
-  const missing = await readEngineOutput(outputDir)
-  expect(missing.artifacts.threatModelsRaw).toBeNull()
-  expect(
-    parseEngineOutput(missing.vulnerabilitiesRaw, missing.runJsonRaw, missing.artifacts)
-      .ingestionIssues
-  ).toContain("threat_model.json unreadable or oversized — artifact ignored")
-
-  await writeFile(join(outputDir, "threat_model.json"), canonical.replace("scan-1", "scan-2"))
-  const changed = await readEngineOutput(outputDir)
-  expect(changed.artifacts.threatModelsRaw).toBeNull()
-
-  await writeFile(join(outputDir, "threat_model.json"), canonical)
-  const valid = await readEngineOutput(outputDir)
-  expect(valid.artifacts.threatModelsRaw).toBe(canonical)
-})
+)
 
 it("selects the newest valid output across both layouts", async () => {
   const workDir = await mkdtemp(join(tmpdir(), "lyrashield-engine-"))
@@ -1166,3 +1173,34 @@ describe("engine stream tail capture (failure diagnosis without log exposure)", 
     expect(redactEngineTailLine("token=abc123")).toBe("token=abc123")
   })
 })
+
+it.each(["1.0", "1.3", "2.0"])(
+  "rejects canonical evidence from unsupported run version %s even with a matching manifest",
+  async (version) => {
+    const outputDir = await mkdtemp(join(tmpdir(), "lyrashield-unsupported-evidence-"))
+    cleanupPaths.push(outputDir)
+    const canonical = JSON.stringify({
+      schema_version: "lyrashield-threat-model/1.0",
+      run_id: "scan-1",
+      models: [],
+    })
+    await writeFile(join(outputDir, "threat_model.json"), canonical)
+    await writeFile(
+      join(outputDir, "run.json"),
+      JSON.stringify({
+        schema_version: version,
+        result_manifest: {
+          schema_version: 1,
+          artifacts: {
+            "threat_model.json": {
+              path: "threat_model.json",
+              bytes: Buffer.byteLength(canonical),
+              sha256: createHash("sha256").update(canonical).digest("hex"),
+            },
+          },
+        },
+      })
+    )
+    expect((await readEngineOutput(outputDir)).artifacts.threatModelsRaw).toBeNull()
+  }
+)

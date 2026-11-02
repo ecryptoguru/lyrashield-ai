@@ -91,6 +91,9 @@ async function persistEvidence(
     contextualCvssReasoning: vuln.contextual_cvss_reasoning,
     advisoryCvss: vuln.advisory_cvss,
     httpExchangeIds: vuln.http_exchange_ids,
+    // Pending claims deliberately have no artifact checksum or detection receipt.
+    pendingHttpExchangeIds: vuln.pending_http_exchange_ids,
+    pendingHttpExchangeState: vuln.pending_http_exchange_ids?.length ? "PENDING" : undefined,
     httpExchangeRefsDropped: vuln.http_exchange_refs_dropped,
     httpExchangeArtifactChecksum:
       vuln.http_exchange_ids?.length && httpExchangeArtifactChecksum

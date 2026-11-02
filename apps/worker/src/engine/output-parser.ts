@@ -3,6 +3,7 @@ import {
   parseHttpExchangeExport,
   parseThreatModels,
 } from "./output-parser-artifacts"
+import { bindHttpExchangeEvidence } from "./output-parser-evidence"
 import { parseVulnerabilitiesArtifact } from "./output-parser-findings"
 import { parseRunJson } from "./output-parser-run"
 import type { EngineArtifactInput, ParsedScanOutput } from "./output-parser-types"
@@ -26,6 +27,7 @@ export function parseEngineOutput(
   artifacts?: EngineArtifactInput
 ): ParsedScanOutput {
   const ingestionIssues: string[] = []
+  const runRecord = parseRunJson(runJsonRaw)
   const httpExchangeExport = parseHttpExchangeExport(artifacts?.httpExchangesRaw, ingestionIssues)
   // `undefined` means this caller supplied no exchange context at all (e.g.
   // unit tests of the standalone parser): declared refs are carried but never
@@ -36,9 +38,15 @@ export function parseEngineOutput(
   const parsedVulnerabilities = parseVulnerabilitiesArtifact(vulnerabilitiesRaw, {
     issues: ingestionIssues,
     httpExchangeIds: knownExchangeIds,
+    httpExchangeBinding: bindHttpExchangeEvidence(
+      runRecord,
+      runJsonRaw,
+      vulnerabilitiesRaw,
+      artifacts?.httpExchangesRaw,
+      httpExchangeExport
+    ),
   })
   const vulnerabilities = parsedVulnerabilities.vulnerabilities
-  const runRecord = parseRunJson(runJsonRaw)
   const scopedCoverage = parseEngineCoverage(artifacts?.coverageRaw, ingestionIssues)
   const threatModels = parseThreatModels(
     artifacts?.threatModelsRaw,

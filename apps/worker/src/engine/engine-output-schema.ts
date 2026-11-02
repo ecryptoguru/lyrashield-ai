@@ -207,6 +207,8 @@ export const engineVulnerabilitySchema = z
     contextual_cvss_reasoning: z.string().max(MAX_EVIDENCE_FIELD_CHARS).optional(),
     advisory_cvss: advisoryCvssSchema.optional(),
     http_exchange_ids: z.array(httpExchangeIdSchema).max(MAX_HTTP_EXCHANGE_IDS).optional(),
+    /** 1.2: unresolved claims, separately bounded; never verified refs or receipts. */
+    pending_http_exchange_ids: z.array(httpExchangeIdSchema).max(MAX_HTTP_EXCHANGE_IDS).optional(),
     /**
      * Set when the engine declared exchange references that could not be
      * verified against this scan's exported exchange evidence (unknown id, or
@@ -446,6 +448,9 @@ export const httpExchangeExportSchema = z
         run_name: nullableBoundedString,
         targets: z.array(z.unknown()).max(64).optional(),
         report_artifacts_revision: z.number().int().min(0).nullable().optional(),
+        finding_revisions: z
+          .record(z.string().max(256), z.number().int().min(0).max(MAX_FINDING_REVISIONS))
+          .optional(),
         findings: z
           .record(z.string().max(256), z.array(httpExchangeIdSchema).max(MAX_HTTP_EXCHANGE_IDS))
           .optional(),

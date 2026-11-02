@@ -358,6 +358,7 @@ export function parseHttpExchangeExport(
   })
   return {
     ...(doc.schema_version !== undefined ? { schemaVersion: String(doc.schema_version) } : {}),
+    ...(doc.binding ? { binding: doc.binding } : {}),
     exchangeCount: doc.exchanges.length,
     knownIds,
     document,

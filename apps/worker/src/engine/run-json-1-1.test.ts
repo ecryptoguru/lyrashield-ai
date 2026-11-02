@@ -1,7 +1,8 @@
+import { createHash } from "node:crypto"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { describe, it, expect } from "vitest"
-import { parseEngineOutput } from "./output-parser"
+import { parseEngineOutput, generateDedupeKey } from "./output-parser"
 
 const FIXTURE_DIR = join(__dirname, "fixtures")
 
@@ -419,5 +420,152 @@ describe("run.json 1.1 reader bounds and failure modes", () => {
     const result = parseEngineOutput(JSON.stringify(vulns), V1_1_RUN(), artifacts())
     expect(result.ingestionIssues.length).toBeLessThanOrEqual(101)
     expect(result.ingestionIssues.at(-1)).toContain("truncated")
+  })
+})
+
+describe("run.json 1.2 pending exchange claims", () => {
+  const finding = {
+    id: "pending-finding",
+    title: "Pending evidence",
+    severity: "high" as const,
+    timestamp: "t",
+    evidence_contract_version: "1.2",
+  }
+  const parse = (pending: unknown, httpExchangesRaw: string | null = null) =>
+    parseEngineOutput(
+      JSON.stringify([{ ...finding, pending_http_exchange_ids: pending }]),
+      JSON.stringify({ ...JSON.parse(V1_1_RUN()), schema_version: "1.2" }),
+      { httpExchangesRaw }
+    )
+
+  it.each([
+    { label: "unavailable", raw: null },
+    { label: "exported", raw: V1_1_HTTP_EXCHANGES() },
+  ])("retains pending claims without promoting them even when $label", ({ raw }) => {
+    const result = parse(["42", "42", "99"], raw)
+    expect(result.runRecord?.schema_version).toBe("1.2")
+    expect(result.vulnerabilities[0]).toMatchObject({ pending_http_exchange_ids: ["42", "99"] })
+    expect(result.vulnerabilities[0]).not.toHaveProperty("http_exchange_ids")
+    expect(result.vulnerabilities[0]).not.toHaveProperty("verified")
+    expect(generateDedupeKey(result.vulnerabilities[0]!, "target")).toBe(
+      generateDedupeKey(finding, "target")
+    )
+  })
+
+  it("bounds pending and exported refs independently", () => {
+    const ids = Array.from({ length: 10 }, (_, i) => String(i))
+    const result = parseEngineOutput(
+      JSON.stringify([{ ...finding, http_exchange_ids: ids, pending_http_exchange_ids: ids }]),
+      V1_1_RUN()
+    )
+    expect(result.vulnerabilities[0]?.pending_http_exchange_ids).toEqual(ids)
+    expect(result.vulnerabilities[0]?.http_exchange_ids).toEqual(ids)
+  })
+
+  it.each([{ value: "42" }, { value: Array.from({ length: 11 }, (_, i) => String(i)) }])(
+    "rejects malformed or overflowing pending lists ($value)",
+    ({ value }) => {
+      const result = parse(value)
+      expect(result.vulnerabilities[0]).not.toHaveProperty("pending_http_exchange_ids")
+      expect(result.ingestionIssues.join(" ")).toContain("pending_http_exchange_ids")
+    }
+  )
+
+  it("rejects non-ASCII, non-string, and oversized IDs while preserving bounded claims", () => {
+    const result = parse(["４２", 42, "1".repeat(129), "1".repeat(128), "42"])
+    expect(result.vulnerabilities[0]?.pending_http_exchange_ids).toEqual(["1".repeat(128), "42"])
+    expect(result.ingestionIssues.join(" ")).toContain("pending_http_exchange_ids")
+  })
+})
+
+describe("run.json 1.2 bound exported exchange references", () => {
+  const vuln = {
+    id: "bound-finding",
+    title: "Bound claim",
+    severity: "high",
+    timestamp: "t",
+    http_exchange_ids: ["42"],
+    pending_http_exchange_ids: ["99"],
+    update_history: [{ timestamp: "t", fields: ["severity"] }],
+  }
+  const boundParse = (
+    change: {
+      binding?: Record<string, unknown>
+      corruptManifest?: boolean
+      corruptFindings?: boolean
+      history?: unknown
+      knownId?: string
+      omitManifest?: boolean
+    } = {}
+  ) => {
+    const raw = JSON.stringify([
+      { ...vuln, ...(change.history !== undefined ? { update_history: change.history } : {}) },
+    ])
+    const run = { ...JSON.parse(V1_1_RUN()), schema_version: "1.2" }
+    const exported = JSON.stringify({
+      schema_version: "lyrashield-http-exchanges/1.0",
+      binding: {
+        run_id: run.run_id,
+        run_name: run.run_name,
+        report_artifacts_revision: run.report_artifacts_revision,
+        findings: { "bound-finding": ["42"] },
+        finding_revisions: { "bound-finding": 1 },
+        ...change.binding,
+      },
+      exchanges: [{ proxy_request_id: change.knownId ?? "42" }],
+    })
+    const entry = (path: string, content: string) => ({
+      path,
+      bytes: Buffer.byteLength(content),
+      sha256: createHash("sha256").update(content).digest("hex"),
+    })
+    run.result_manifest = change.omitManifest
+      ? undefined
+      : {
+          schema_version: 1,
+          artifacts: {
+            "http_exchanges.json": entry(
+              "http_exchanges.json",
+              change.corruptManifest ? "changed" : exported
+            ),
+            "vulnerabilities.json": entry(
+              "vulnerabilities.json",
+              change.corruptFindings ? "changed" : raw
+            ),
+          },
+        }
+    return parseEngineOutput(raw, JSON.stringify(run), { httpExchangesRaw: exported })
+  }
+
+  it("accepts exact manifest/run/finding/revision-bound refs without promoting pending claims", () => {
+    const result = boundParse()
+    expect(result.vulnerabilities[0]?.http_exchange_ids).toEqual(["42"])
+    expect(result.vulnerabilities[0]?.pending_http_exchange_ids).toEqual(["99"])
+    expect(result.vulnerabilities[0]).not.toHaveProperty("verified")
+  })
+
+  it.each([
+    { label: "foreign run", binding: { run_id: "another-run" } },
+    { label: "foreign run name", binding: { run_name: "another-name" } },
+    { label: "stale report revision", binding: { report_artifacts_revision: 0 } },
+    { label: "foreign finding", binding: { findings: { another: ["42"] } } },
+    { label: "stale finding revision", binding: { finding_revisions: { "bound-finding": 0 } } },
+    { label: "missing finding revision", binding: { finding_revisions: undefined } },
+    { label: "unknown exchange", knownId: "43" },
+    { label: "changed export", corruptManifest: true },
+    { label: "changed findings", corruptFindings: true },
+    { label: "wrong finding refs", binding: { findings: { "bound-finding": ["99"] } } },
+    {
+      label: "malformed revision history",
+      binding: { finding_revisions: { "bound-finding": 0 } },
+      history: ["invalid"],
+    },
+    { label: "missing manifest", omitManifest: true },
+  ])("drops $label refs while retaining unresolved claims", (change) => {
+    const result = boundParse(change)
+    expect(result.vulnerabilities[0]).not.toHaveProperty("http_exchange_ids")
+    expect(result.vulnerabilities[0]?.http_exchange_refs_dropped).toBe(true)
+    expect(result.vulnerabilities[0]?.pending_http_exchange_ids).toEqual(["99"])
+    expect(result.ingestionIssues.length).toBeGreaterThan(0)
   })
 })

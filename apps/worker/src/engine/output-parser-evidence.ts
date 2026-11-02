@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto"
 import {
   advisoryCvssSchema,
   findingRevisionSchema,
@@ -10,6 +11,9 @@ import { HTTP_EXCHANGE_ID_PATTERN, recordIngestionIssue } from "./output-parser-
 import type {
   AdvisoryCvss,
   EngineVulnerability,
+  EngineRunRecord,
+  ParsedHttpExchangeExport,
+  HttpExchangeBinding,
   FindingRevision,
   FixVerificationAttestation,
 } from "./output-parser-types"
@@ -28,6 +32,52 @@ import type {
 export interface EvidenceIngestionContext {
   issues?: string[]
   httpExchangeIds?: Set<string> | null
+  /** Undefined: legacy contract; null: 1.2 manifest/run binding failed. */
+  httpExchangeBinding?: HttpExchangeBinding | null
+}
+
+/** 1.2 refs require an exact manifest and run binding before per-finding checks. */
+export function bindHttpExchangeEvidence(
+  run: EngineRunRecord | null,
+  runJsonRaw: string,
+  vulnerabilitiesRaw: string,
+  httpExchangesRaw: string | null | undefined,
+  exported: ParsedHttpExchangeExport | null
+): HttpExchangeBinding | null | undefined {
+  let record
+  try {
+    record = JSON.parse(runJsonRaw)
+  } catch {
+    return undefined
+  }
+  if (record?.schema_version !== "1.2") return undefined
+  const binding = exported?.binding
+  if (
+    !run ||
+    !binding ||
+    !run.run_id ||
+    !run.run_name ||
+    !Number.isInteger(run.report_artifacts_revision) ||
+    binding.run_id !== run.run_id ||
+    binding.run_name !== run.run_name ||
+    binding.report_artifacts_revision !== run.report_artifacts_revision ||
+    typeof httpExchangesRaw !== "string" ||
+    record.result_manifest?.schema_version !== 1
+  )
+    return null
+  for (const [path, raw] of [
+    ["vulnerabilities.json", vulnerabilitiesRaw],
+    ["http_exchanges.json", httpExchangesRaw],
+  ] as const) {
+    const entry = record.result_manifest?.artifacts?.[path]
+    if (
+      entry?.path !== path ||
+      entry?.bytes !== Buffer.byteLength(raw, "utf8") ||
+      entry?.sha256 !== createHash("sha256").update(raw, "utf8").digest("hex")
+    )
+      return null
+  }
+  return binding
 }
 
 export function evidenceString(
@@ -125,7 +175,8 @@ export function parseFixVerification(
 export function parseHttpExchangeIds(
   value: unknown,
   findingId: string,
-  ctx?: EvidenceIngestionContext
+  ctx?: EvidenceIngestionContext,
+  findingRevision = 0
 ): { ids?: string[]; refsDropped?: boolean } {
   if (value === undefined) return {}
   if (!Array.isArray(value)) {
@@ -158,6 +209,22 @@ export function parseHttpExchangeIds(
     )
     return { refsDropped: true }
   }
+  if (ctx?.httpExchangeBinding !== undefined) {
+    const binding = ctx.httpExchangeBinding
+    const findingIds = binding?.findings?.[findingId]
+    if (
+      !binding ||
+      !Array.isArray(findingIds) ||
+      binding.finding_revisions?.[findingId] !== findingRevision ||
+      distinct.some((id) => !findingIds.includes(id))
+    ) {
+      recordIngestionIssue(
+        ctx.issues,
+        `finding ${findingId}: http_exchange_ids lack a matching run/manifest/finding revision binding — field dropped`
+      )
+      return { refsDropped: true }
+    }
+  }
   // No exchange-export context: carry the refs as engine-asserted evidence.
   // They are claims, not verification receipts.
   if (ctx?.httpExchangeIds === undefined) return { ids: distinct }
@@ -180,6 +247,45 @@ export function parseHttpExchangeIds(
     return { refsDropped: true }
   }
   return { ids: distinct }
+}
+
+/** Pending claims are shape-checked only, independently of the exported index. */
+export function parsePendingHttpExchangeIds(
+  value: unknown,
+  findingId: string,
+  issues?: string[]
+): string[] | undefined {
+  if (value === undefined) return undefined
+  if (!Array.isArray(value)) {
+    recordIngestionIssue(
+      issues,
+      `finding ${findingId}: pending_http_exchange_ids is not a list — field dropped`
+    )
+    return undefined
+  }
+  const distinct = new Set<string>()
+  let malformed = false
+  for (const item of value) {
+    if (typeof item !== "string" || !HTTP_EXCHANGE_ID_PATTERN.test(item)) {
+      malformed = true
+      continue
+    }
+    distinct.add(item)
+    if (distinct.size > MAX_HTTP_EXCHANGE_IDS) {
+      recordIngestionIssue(
+        issues,
+        `finding ${findingId}: pending_http_exchange_ids exceeds ${MAX_HTTP_EXCHANGE_IDS} distinct ids — field dropped`
+      )
+      return undefined
+    }
+  }
+  if (malformed) {
+    recordIngestionIssue(
+      issues,
+      `finding ${findingId}: pending_http_exchange_ids contained non-numeric or oversized ids — entries dropped`
+    )
+  }
+  return distinct.size ? [...distinct] : undefined
 }
 
 export function parseEvidenceWarnings(

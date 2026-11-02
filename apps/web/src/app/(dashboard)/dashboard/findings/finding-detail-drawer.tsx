@@ -89,6 +89,8 @@ export interface FindingDetail {
     }
     engineVerificationState?: string
     engineConfidence?: string
+    pendingHttpExchangeIds?: string[]
+    pendingHttpExchangeState?: "PENDING"
   } | null
   fixProposals?: Array<{
     id: string
@@ -169,6 +171,11 @@ const evidenceInsightsSchema = z
       .optional(),
     engineVerificationState: z.string().optional(),
     engineConfidence: z.string().optional(),
+    pendingHttpExchangeIds: z
+      .array(z.string().regex(/^[0-9]{1,128}$/))
+      .max(10)
+      .optional(),
+    pendingHttpExchangeState: z.literal("PENDING").optional(),
   })
   .nullable()
 

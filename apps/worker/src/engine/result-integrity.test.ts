@@ -706,6 +706,29 @@ describe("result integrity", () => {
     expect(failed.checksum).not.toBe(completed.checksum)
   })
 
+  it("excludes pending exchange claims from immutable detection receipts", async () => {
+    vi.mocked(prisma.findingCandidate.upsert).mockResolvedValue({ id: "candidate-1" } as never)
+    const params = {
+      scanId: "scan-1",
+      workspaceId: "workspace-1",
+      targetId: "target-1",
+      findingId: "finding-1",
+      severity: "HIGH",
+      dedupeKey: "dedupe-1",
+      finding: { id: "claim", title: "Claim", severity: "high" as const, timestamp: "t" },
+    }
+    await persistDetectionReceipt(params)
+    const before = vi.mocked(prisma.findingCandidate.upsert).mock.calls.at(-1)![0].create
+    await persistDetectionReceipt({
+      ...params,
+      finding: { ...params.finding, pending_http_exchange_ids: ["99"] },
+    })
+    const after = vi.mocked(prisma.findingCandidate.upsert).mock.calls.at(-1)![0].create
+    expect(after).toEqual(before)
+    expect(JSON.stringify(after)).not.toContain("pendingHttpExchange")
+    expect(JSON.stringify(after)).not.toContain("pending_http_exchange")
+  })
+
   it("binds the Composer lock identity version into immutable candidate evidence", async () => {
     vi.mocked(prisma.findingCandidate.upsert).mockResolvedValue({ id: "candidate-1" } as never)
     await persistDetectionReceipt({

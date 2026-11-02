@@ -1,7 +1,9 @@
 import { readFileSync } from "node:fs"
 import { renderToString } from "react-dom/server"
 import { describe, expect, it } from "vitest"
-import { FindingStatusBadge } from "./finding-detail-drawer"
+import { FindingStatusBadge, type FindingDetail } from "./finding-detail-drawer"
+import { FindingTechnicalTab } from "./finding-detail-tabs"
+import { Tabs } from "@/components/ui/tabs"
 
 // The drawer's verification and receipt badges sit behind fetched detail state
 // that SSR cannot reach; pin the label wiring at the source so the humanised
@@ -37,5 +39,35 @@ describe("finding detail drawer enum labels", () => {
     expect((tabsSource.match(/className="break-all font-mono"/g) ?? []).length).toBe(7)
     // Only the short scanner-source label keeps plain mono styling.
     expect((tabsSource.match(/className="font-mono"/g) ?? []).length).toBe(1)
+  })
+})
+
+describe("pending HTTP evidence display", () => {
+  it("renders unresolved IDs with an explicit pending label and trust boundary", () => {
+    const detail: FindingDetail = {
+      id: "f",
+      title: "Claim",
+      summary: "Pending exchange evidence",
+      evidenceInsights: {
+        pendingHttpExchangeIds: ["1".repeat(128), "42"],
+        pendingHttpExchangeState: "PENDING",
+      },
+    }
+    const html = renderToString(
+      <Tabs value="technical">
+        <FindingTechnicalTab
+          detail={detail}
+          knownExploited={false}
+          epssSummary={undefined}
+          historyLoading={new Set()}
+          loadMoreHistory={async () => {}}
+        />
+      </Tabs>
+    )
+    expect(html).toContain(">Pending<")
+    expect(html).toContain("Exchange claims await bound evidence. They do not verify this finding.")
+    expect(html).toContain("1".repeat(128))
+    expect(html).toContain("break-all font-mono")
+    expect(html).not.toContain(">Verified<")
   })
 })

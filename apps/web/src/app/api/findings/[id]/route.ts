@@ -79,7 +79,15 @@ async function loadEvidenceInsights(findingId: string, workspaceId: string) {
   const advisory = AdvisoryCvssSchema.safeParse(
     typeof parsed.advisoryCvss === "number" ? { score: parsed.advisoryCvss } : parsed.advisoryCvss
   )
+  const pending = z
+    .array(z.string().regex(/^[0-9]{1,128}$/))
+    .max(10)
+    .safeParse(parsed.pendingHttpExchangeIds)
+  const pendingIds = pending.success ? [...new Set(pending.data)] : undefined
   const insights = {
+    pendingHttpExchangeIds: pendingIds?.length ? pendingIds : undefined,
+    // Recompute the state from the bounded claim; never trust a stored upgrade.
+    pendingHttpExchangeState: pendingIds?.length ? ("PENDING" as const) : undefined,
     counterevidence: text("counterevidence"),
     evidenceWarnings: Array.isArray(evidenceWarnings)
       ? evidenceWarnings.filter((item): item is string => typeof item === "string").slice(0, 25)

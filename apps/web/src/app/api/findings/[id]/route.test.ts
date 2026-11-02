@@ -143,6 +143,8 @@ describe("GET /api/findings/[id]", () => {
     vi.mocked(readEncryptedArtifact).mockResolvedValue({
       content: Buffer.from(
         JSON.stringify({
+          pendingHttpExchangeIds: ["42", "99"],
+          pendingHttpExchangeState: "VERIFIED",
           counterevidence: "A WAF rule could block exploitation.",
           assumptions: "The endpoint is internet-facing.",
           severityChangeConditions: "Lower if access requires admin role.",
@@ -165,6 +167,8 @@ describe("GET /api/findings/[id]", () => {
     const body = await response.json()
 
     expect(body.data.evidenceInsights).toMatchObject({
+      pendingHttpExchangeIds: ["42", "99"],
+      pendingHttpExchangeState: "PENDING",
       counterevidence: "A WAF rule could block exploitation.",
       assumptions: "The endpoint is internet-facing.",
       severityChangeConditions: "Lower if access requires admin role.",
@@ -175,6 +179,32 @@ describe("GET /api/findings/[id]", () => {
       },
     })
   })
+
+  it.each([
+    { ids: ["s3://private/blob"] },
+    { ids: ["４２"] },
+    { ids: ["1".repeat(129)] },
+    { ids: Array.from({ length: 11 }, (_, i) => String(i)) },
+  ])(
+    "omits malformed pending claims from the bounded detail projection ($ids)",
+    async ({ ids }) => {
+      getFinding.mockResolvedValue({ id: "finding-1", evidence: [] })
+      vi.mocked(prisma.evidence.findFirst).mockResolvedValue({
+        storageUri: "private://artifact",
+      } as never)
+      vi.mocked(readEncryptedArtifact).mockResolvedValue({
+        content: Buffer.from(
+          JSON.stringify({ pendingHttpExchangeIds: ids, pendingHttpExchangeState: "VERIFIED" })
+        ),
+      } as never)
+      const response = await GET(
+        new Request("http://localhost/api/findings/finding-1?workspaceId=ws-1"),
+        { params: Promise.resolve({ id: "finding-1" }) }
+      )
+      expect(response.status).toBe(200)
+      expect((await response.json()).data.evidenceInsights).toBeNull()
+    }
+  )
 
   it("binds the detail response to the requested observation scope", async () => {
     getFinding.mockResolvedValue({ id: "finding-1", evidence: [] })

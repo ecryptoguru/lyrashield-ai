@@ -183,6 +183,20 @@ export function FindingTechnicalTab({
                 </dd>
               </div>
             )}
+            {!!detail.evidenceInsights.pendingHttpExchangeIds?.length && (
+              <div>
+                <dt className="text-muted-foreground text-xs">HTTP exchange evidence</dt>
+                <dd className="mt-0.5 text-xs">
+                  <Badge variant="muted">Pending</Badge>
+                  <p className="mt-1">
+                    Exchange claims await bound evidence. They do not verify this finding.
+                  </p>
+                  <p className="mt-1 break-all font-mono">
+                    {detail.evidenceInsights.pendingHttpExchangeIds.join(", ")}
+                  </p>
+                </dd>
+              </div>
+            )}
             {detail.evidenceInsights.engineConfidence && (
               <div className="flex flex-wrap gap-2">
                 <dt className="text-muted-foreground text-xs">Engine confidence</dt>

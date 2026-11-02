@@ -15,6 +15,7 @@ import {
   parseEvidenceWarnings,
   parseFixVerification,
   parseHttpExchangeIds,
+  parsePendingHttpExchangeIds,
   parseUpdateHistory,
   type EvidenceIngestionContext,
 } from "./output-parser-evidence"
@@ -278,8 +279,20 @@ function validateVulnerability(
     ctx?.issues
   )
   const advisoryCvss = parseAdvisoryCvss(v.advisory_cvss, id, ctx?.issues)
-  const httpExchangeRefs = parseHttpExchangeIds(v.http_exchange_ids, id, ctx)
   const updateHistory = parseUpdateHistory(v.update_history, id, ctx?.issues)
+  // A malformed or truncated history cannot establish a 1.2 revision binding.
+  const findingRevision =
+    v.update_history === undefined
+      ? 0
+      : Array.isArray(v.update_history) && (updateHistory?.length ?? 0) === v.update_history.length
+        ? v.update_history.length
+        : -1
+  const httpExchangeRefs = parseHttpExchangeIds(v.http_exchange_ids, id, ctx, findingRevision)
+  const pendingHttpExchangeIds = parsePendingHttpExchangeIds(
+    v.pending_http_exchange_ids,
+    id,
+    ctx?.issues
+  )
   const updatedAt = evidenceString(v.updated_at, "updated_at", id, ctx?.issues)
   const evidenceWarnings = parseEvidenceWarnings(v.evidence_warnings, id, ctx?.issues)
   const evidenceContractVersion =
@@ -378,6 +391,7 @@ function validateVulnerability(
       : {}),
     ...(advisoryCvss !== undefined ? { advisory_cvss: advisoryCvss } : {}),
     ...(httpExchangeRefs.ids ? { http_exchange_ids: httpExchangeRefs.ids } : {}),
+    ...(pendingHttpExchangeIds ? { pending_http_exchange_ids: pendingHttpExchangeIds } : {}),
     ...(httpExchangeRefs.refsDropped ? { http_exchange_refs_dropped: true } : {}),
     ...(updateHistory !== undefined ? { update_history: updateHistory } : {}),
     ...(updatedAt !== undefined ? { updated_at: updatedAt } : {}),

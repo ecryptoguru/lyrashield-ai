@@ -320,6 +320,7 @@ describe("persistFindings", () => {
       contextual_cvss_reasoning: "Unauthenticated remote reach.",
       advisory_cvss: { score: 8.6, vector: "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/C:H/I:H/A:H" },
       http_exchange_ids: ["42", "43"],
+      pending_http_exchange_ids: ["99"],
       update_history: [
         { timestamp: "t", fields: ["severity"], previous_severity: "medium" as const },
       ],
@@ -364,6 +365,8 @@ describe("persistFindings", () => {
       contextualCvssReasoning: "Unauthenticated remote reach.",
       advisoryCvss: { score: 8.6 },
       httpExchangeIds: ["42", "43"],
+      pendingHttpExchangeIds: ["99"],
+      pendingHttpExchangeState: "PENDING",
       httpExchangeArtifactChecksum: "d".repeat(64),
       updateHistory: [{ timestamp: "t", fields: ["severity"], previous_severity: "medium" }],
       updatedAt: "2026-09-10T11:04:00Z",
@@ -380,6 +383,46 @@ describe("persistFindings", () => {
       data: { verificationStatus: string }
     }
     expect(["DETECTED", "INCONCLUSIVE"]).toContain(created.data.verificationStatus)
+  })
+
+  it("persists pending-only claims without binding them to an artifact or verifying the finding", async () => {
+    vi.mocked(prisma.finding.findMany).mockResolvedValue([])
+    vi.mocked(prisma.finding.create).mockResolvedValue({ id: "finding-1" } as never)
+    vi.mocked(prisma.findingCandidate.upsert).mockResolvedValue({ id: "candidate-1" } as never)
+    vi.mocked(uploadEvidence).mockResolvedValue({
+      storageUri: "s3://bucket/evidence",
+      checksum: "checksum",
+      encryptionKeyRef: "vault://test",
+    })
+    await persistFindings({
+      scanId: "scan-1",
+      workspaceId: "ws-1",
+      targetId: "target-1",
+      vulnerabilities: [
+        {
+          id: "pending",
+          title: "Claim",
+          severity: "high",
+          timestamp: "t",
+          pending_http_exchange_ids: ["42"],
+          evidence_contract_version: "1.2",
+        },
+      ],
+      httpExchangeArtifactChecksum: "d".repeat(64),
+    })
+    const call = vi
+      .mocked(uploadEvidence)
+      .mock.calls.find(([input]) => input.type === "claim_context")
+    const context = JSON.parse(String(call![0].content))
+    expect(context).toMatchObject({
+      pendingHttpExchangeIds: ["42"],
+      pendingHttpExchangeState: "PENDING",
+    })
+    expect(context).not.toHaveProperty("httpExchangeIds")
+    expect(context).not.toHaveProperty("httpExchangeArtifactChecksum")
+    expect(prisma.finding.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ verified: false }),
+    })
   })
 
   it("marks engine-only claims without deterministic corroboration as inconclusive", async () => {
