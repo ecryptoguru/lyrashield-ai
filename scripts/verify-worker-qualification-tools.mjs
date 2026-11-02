@@ -4,22 +4,57 @@
 // tiny local Git repository. No dependency installs or contract suites run here.
 import assert from "node:assert/strict"
 import { spawnSync } from "node:child_process"
-import { cpSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import {
+  cpSync,
+  lstatSync,
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs"
 import { tmpdir } from "node:os"
 import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import { after, test } from "node:test"
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..")
-const fixtures = resolve(process.argv[2] ?? "")
 assert(process.argv[2], "Pass the generated 13-bundle writer fixture directory")
+const sourceFixtures = resolve(process.argv[2])
 const workspace = mkdtempSync(join(tmpdir(), "lyrashield-qualification-tools-"))
 after(() => rmSync(workspace, { recursive: true, force: true }))
+
+function materializeRegularTree(source, destination) {
+  const entry = lstatSync(source)
+  assert(!entry.isSymbolicLink(), "Fixture symbolic links are not allowed")
+  if (entry.isDirectory()) {
+    mkdirSync(destination, { mode: 0o700 })
+    for (const name of readdirSync(source)) {
+      materializeRegularTree(join(source, name), join(destination, name))
+    }
+  } else {
+    assert(entry.isFile(), "Fixtures must contain only regular files and directories")
+    // Never preserve a source link or write through an existing destination.
+    // Even if source metadata changes during reading, writes stay in private
+    // directories as new regular files containing only copied bytes.
+    writeFileSync(destination, readFileSync(source), { flag: "wx", mode: 0o600 })
+  }
+}
+
+// Validate and materialize the entire input before registering mutation tests.
+const fixtures = join(workspace, "source-fixtures")
+try {
+  materializeRegularTree(sourceFixtures, fixtures)
+} catch (error) {
+  rmSync(workspace, { recursive: true, force: true })
+  throw error
+}
 let sequence = 0
 
 function copyFixtures() {
   const root = join(workspace, `fixtures-${sequence++}`)
-  cpSync(fixtures, root, { recursive: true })
+  materializeRegularTree(fixtures, root)
   return root
 }
 
@@ -100,6 +135,7 @@ const requiredFlags = [
   "--runtime-budget-seconds",
 ]
 
+/** @param {{dirty?: string, untracked?: boolean, statusFails?: boolean, help?: string}} [options] */
 function runGate({
   dirty,
   untracked = false,

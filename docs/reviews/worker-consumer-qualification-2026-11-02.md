@@ -15,7 +15,7 @@ LYRASHIELD_BIN="$ENGINE_CHECKOUT/.venv/bin/lyrashield" \
   bash scripts/verify-worker-contract.sh "$PINNED_CONSUMER_CHECKOUT"
 
 # Run from the current product checkout, using the same candidate engine CLI.
-node scripts/verify-worker-qualification-tools.mjs "$WRITER_FIXTURES"
+node scripts/verify-worker-qualification-safety.mjs "$WRITER_FIXTURES"
 LYRASHIELD_BIN="$ENGINE_CHECKOUT/.venv/bin/lyrashield" \
   bash scripts/verify-current-worker-contract.sh "$WRITER_FIXTURES"
 ```
@@ -29,6 +29,7 @@ The invocation uses the pinned contract's synthetic CI auth/database values. It 
 The recorded application qualification below ran on `858085e8caadc0613c610c08872cf7dfac6ad3d9`. The stricter qualification tools add focused checks without changing application behavior.
 
 - [Tool regressions](../../scripts/verify-worker-qualification-tools.mjs): **13 checks passed** against disposable copies of the actual 13-bundle writer fixtures and temporary Git repositories. Missing mandatory receipts, digest mismatch, an unreceipted HTTP artifact, staged/unstaged source changes, failed Git status and misleading CLI option prefixes are rejected; exact tuples, clean source and untracked local notes remain positive controls. Dependency/test commands are stubbed only in the gate's isolated test repository.
+- [Fixture safety regressions](../../scripts/verify-worker-qualification-safety.mjs): **four cases passed**, executing the normal 13 checks plus separate summary, case-directory and artifact symlink probes. The runner rejects links before registering mutation tests and materializes private regular files for every mutation. All external sentinels retain their exact original bytes, including when the child rejects the input.
 - Unchanged pinned consumer: **9 suites passed; 419 tests passed**.
 - Current consumer: **36 suites passed; 1,019 tests passed; 11 skipped**. The skips are the existing opt-in Composer Docker smoke cases.
 - Separate Composer smoke: **2 suites passed; 27 tests passed; no skips**, including all 11 opt-in cases. The exact pinned Composer image was already cached as arm64; the run used `DOCKER_DEFAULT_PLATFORM=linux/arm64`, `LYRASHIELD_COMPOSER_SMOKE=1` and `--maxWorkers=1`. Metadata and DNS were fixture-supplied; containers used no networking, plugins, scripts or installation, with 256 MiB memory and one CPU limits. No image pull was needed.
