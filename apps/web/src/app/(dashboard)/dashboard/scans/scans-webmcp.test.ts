@@ -295,7 +295,7 @@ describe("scans page tool registrations", () => {
     const { tool } = register(
       createRequestSecurityScanTool({
         workspaceId: "ws-page",
-        getTargets: () => [target({ name: "Storefront", type: "WEB_APP" })],
+        getTargets: () => [target({ id: "storefront", name: "Storefront", type: "WEB_APP" })],
         getSelectedPreset: () => "WEB_APP_SAFE",
         getMatchingDraftBudget: () => "1",
       })
