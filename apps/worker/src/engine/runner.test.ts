@@ -5,6 +5,8 @@ import { tmpdir } from "os"
 import { join } from "path"
 import { createHash } from "crypto"
 import { parseEngineOutput } from "./output-parser"
+import * as runnerProcess from "./runner-process"
+import * as runnerOutput from "./runner-output"
 
 vi.mock("@lyrashield/config", () => ({
   env: {
@@ -1202,5 +1204,108 @@ it.each(["1.0", "1.3", "2.0"])(
       })
     )
     expect((await readEngineOutput(outputDir)).artifacts.threatModelsRaw).toBeNull()
+  }
+)
+
+it.each(["vulnerabilities.json", "http_exchanges.json"])(
+  "rejects invalid UTF-8 in manifest artifact %s",
+  async (name) => {
+    const outputDir = await mkdtemp(join(tmpdir(), "lyrashield-invalid-utf8-"))
+    cleanupPaths.push(outputDir)
+    const invalid = Buffer.concat([
+      Buffer.from('{"title":"'),
+      Buffer.from([0xff]),
+      Buffer.from('"}'),
+    ])
+    await writeFile(join(outputDir, name), invalid)
+    const output = await readEngineOutput(outputDir)
+    if (name === "vulnerabilities.json") expect(output.vulnerabilitiesRaw).toBe("")
+    else expect(output.artifacts.httpExchangesRaw).toBeNull()
+  }
+)
+
+it.each(["foreign", "matching", "independent-id"])(
+  "binds a self-consistent %s artifact bundle through the actual runner",
+  async (kind) => {
+    vi.stubEnv("LYRASHIELD_LUNA_LLM", "azure/gpt-6-luna")
+    const scanId = "reader-identity-fixture"
+    const processSpy = vi
+      .spyOn(runnerProcess, "runEngineProcess")
+      .mockImplementation(async (cmd) => {
+        expect(cmd.args[cmd.args.indexOf("--run-name") + 1]).toBe(scanId)
+        const outputDir = join(cmd.workDir, "strix_runs", scanId)
+        cleanupPaths.push(cmd.workDir)
+        await mkdir(outputDir, { recursive: true })
+        const run = JSON.parse(
+          await readFile(new URL("./fixtures/run-json-1.2/run.json", import.meta.url), "utf8")
+        )
+        const exported = JSON.parse(
+          await readFile(
+            new URL("./fixtures/run-json-1.2/http_exchanges.json", import.meta.url),
+            "utf8"
+          )
+        )
+        if (kind !== "foreign") {
+          run.run_name = scanId
+          exported.binding.run_name = scanId
+          run.run_id = kind === "matching" ? scanId : "independent-engine-uuid"
+          exported.binding.run_id = run.run_id
+        }
+        const exportRaw = JSON.stringify(exported)
+        run.result_manifest.artifacts["http_exchanges.json"] = {
+          path: "http_exchanges.json",
+          bytes: Buffer.byteLength(exportRaw),
+          sha256: createHash("sha256").update(exportRaw).digest("hex"),
+        }
+        await writeFile(join(outputDir, "run.json"), JSON.stringify(run))
+        await writeFile(join(outputDir, "http_exchanges.json"), exportRaw)
+        await writeFile(
+          join(outputDir, "vulnerabilities.json"),
+          await readFile(new URL("./fixtures/run-json-1.2/vulnerabilities.json", import.meta.url))
+        )
+        return {
+          exitCode: 2,
+          timedOut: false,
+          timeoutReason: null,
+          cancelled: false,
+          budgetKilled: false,
+          failureType: null,
+        }
+      })
+    const sandboxSpy = vi.spyOn(runnerOutput, "verifySandboxRemoved").mockResolvedValue(true)
+    try {
+      const result = await runEngine(
+        {
+          scanId,
+          goal: "TEST_APP",
+          mode: "STANDARD",
+          maxBudgetUsd: 1,
+          target: { id: "target", name: "Fixture", type: "WEB_APP", url: "https://example.test" },
+        },
+        scanId
+      )
+      expect(processSpy).toHaveBeenCalledOnce()
+      if (kind !== "matching") {
+        expect(result.output).toMatchObject({
+          vulnerabilities: [],
+          findingCount: 0,
+          findingsComplete: false,
+          httpExchangeExport: null,
+          runRecord: null,
+        })
+        expect(result.output.ingestionIssues.join(" ")).toContain("run_name")
+      } else {
+        expect(result.output.vulnerabilities[0]).toMatchObject({
+          http_exchange_ids: ["17"],
+          pending_http_exchange_ids: ["18"],
+        })
+        expect(result.output.runRecord?.run_id).toBe(scanId)
+        expect(result.output.ingestionIssues).toEqual([])
+      }
+    } finally {
+      processSpy.mockRestore()
+      sandboxSpy.mockRestore()
+      vi.unstubAllEnvs()
+    }
   }
 )

@@ -24,10 +24,33 @@ export { mergeLlmUsage, parseRunJson } from "./output-parser-run"
 export function parseEngineOutput(
   vulnerabilitiesRaw: string,
   runJsonRaw: string,
-  artifacts?: EngineArtifactInput
+  artifacts?: EngineArtifactInput,
+  context?: { expectedRunName: string }
 ): ParsedScanOutput {
   const ingestionIssues: string[] = []
   const runRecord = parseRunJson(runJsonRaw)
+  // The launcher supplies --run-name. The owned initial_run_record contract
+  // uses that name for both run_id and run_name (UUIDs apply only without it).
+  // Reject the whole foreign bundle before downstream persistence.
+  if (
+    context &&
+    (runRecord?.run_name !== context.expectedRunName ||
+      runRecord.run_id !== context.expectedRunName)
+  ) {
+    return {
+      vulnerabilities: [],
+      runRecord: null,
+      summary: "Engine output rejected: run identity unavailable or mismatched.",
+      findingCount: 0,
+      findingsComplete: false,
+      ingestionIssues: [
+        "Engine output run_id/run_name does not match the launched run — artifacts rejected",
+      ],
+      scopedCoverage: null,
+      threatModels: null,
+      httpExchangeExport: null,
+    }
+  }
   const httpExchangeExport = parseHttpExchangeExport(artifacts?.httpExchangesRaw, ingestionIssues)
   // `undefined` means this caller supplied no exchange context at all (e.g.
   // unit tests of the standalone parser): declared refs are carried but never
@@ -38,6 +61,12 @@ export function parseEngineOutput(
   const parsedVulnerabilities = parseVulnerabilitiesArtifact(vulnerabilitiesRaw, {
     issues: ingestionIssues,
     httpExchangeIds: knownExchangeIds,
+    httpExchangeRequestHosts: httpExchangeExport?.requestHosts,
+    httpExchangeExcludedIds: new Set([
+      ...(httpExchangeExport?.excludedIds ?? []),
+      ...(runRecord?.evidence_export?.missing_request_ids ?? []),
+      ...(runRecord?.evidence_export?.capacity_omitted_request_ids ?? []),
+    ]),
     httpExchangeBinding: bindHttpExchangeEvidence(
       runRecord,
       runJsonRaw,

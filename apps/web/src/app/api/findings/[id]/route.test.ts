@@ -28,7 +28,8 @@ vi.mock("@lyrashield/db", () => ({
   validateFindingScope,
   prisma: {
     auditLog: { create: auditLogCreate },
-    evidence: { findFirst: vi.fn().mockResolvedValue(null) },
+    evidence: { findMany: vi.fn().mockResolvedValue([]) },
+    findingCandidate: { findFirst: vi.fn().mockResolvedValue(null) },
   },
 }))
 vi.mock("@lyrashield/evidence-storage", () => ({
@@ -62,6 +63,8 @@ function patchRequest(body: unknown) {
 describe("GET /api/findings/[id]", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(prisma.evidence.findMany).mockResolvedValue([])
+    vi.mocked(prisma.findingCandidate.findFirst).mockResolvedValue({ scanId: "scan-1" } as never)
     requirePermission.mockResolvedValue({ session: { userId: "user-1" } })
     validateFindingScope.mockResolvedValue({ available: true, target: null, scanId: null })
   })
@@ -137,12 +140,14 @@ describe("GET /api/findings/[id]", () => {
       recommendedFix: null,
       evidence: [],
     })
-    vi.mocked(prisma.evidence.findFirst).mockResolvedValue({
-      storageUri: "private://artifact",
-    } as never)
+    vi.mocked(prisma.evidence.findMany).mockResolvedValue([
+      { storageUri: "private://artifact" },
+    ] as never)
     vi.mocked(readEncryptedArtifact).mockResolvedValue({
       content: Buffer.from(
         JSON.stringify({
+          sourceScanId: "scan-1",
+          sourceFindingId: "finding-1",
           pendingHttpExchangeIds: ["42", "99"],
           pendingHttpExchangeState: "VERIFIED",
           counterevidence: "A WAF rule could block exploitation.",
@@ -189,9 +194,9 @@ describe("GET /api/findings/[id]", () => {
     "omits malformed pending claims from the bounded detail projection ($ids)",
     async ({ ids }) => {
       getFinding.mockResolvedValue({ id: "finding-1", evidence: [] })
-      vi.mocked(prisma.evidence.findFirst).mockResolvedValue({
-        storageUri: "private://artifact",
-      } as never)
+      vi.mocked(prisma.evidence.findMany).mockResolvedValue([
+        { storageUri: "private://artifact" },
+      ] as never)
       vi.mocked(readEncryptedArtifact).mockResolvedValue({
         content: Buffer.from(
           JSON.stringify({ pendingHttpExchangeIds: ids, pendingHttpExchangeState: "VERIFIED" })
@@ -205,6 +210,124 @@ describe("GET /api/findings/[id]", () => {
       expect((await response.json()).data.evidenceInsights).toBeNull()
     }
   )
+
+  it.each([
+    { olderPending: true, newerPending: false },
+    { olderPending: false, newerPending: true },
+  ])(
+    "selects the latest or explicit scan context without reusing stale pending ($olderPending -> $newerPending)",
+    async ({ olderPending, newerPending }) => {
+      getFinding.mockResolvedValue({ id: "finding-1", scanId: "scan-A", evidence: [] })
+      vi.mocked(prisma.findingCandidate.findFirst).mockResolvedValue({ scanId: "scan-B" } as never)
+      const contexts: Record<string, unknown> = {
+        "private://A": {
+          sourceScanId: "scan-A",
+          sourceFindingId: "finding-1",
+          assumptions: "Observation A",
+          ...(olderPending ? { pendingHttpExchangeIds: ["42"] } : {}),
+        },
+        "private://B": {
+          sourceScanId: "scan-B",
+          sourceFindingId: "finding-1",
+          assumptions: "Observation B",
+          ...(newerPending ? { pendingHttpExchangeIds: ["99"] } : {}),
+        },
+      }
+      vi.mocked(prisma.evidence.findMany).mockResolvedValue([
+        { id: "B", createdAt: new Date("2026-11-02"), storageUri: "private://B" },
+        { id: "A", createdAt: new Date("2026-11-01"), storageUri: "private://A" },
+      ] as never)
+      vi.mocked(readEncryptedArtifact).mockImplementation(async (uri) => ({
+        content: Buffer.from(JSON.stringify(contexts[uri])),
+        checksum: "test-checksum",
+        encryptionKeyRef: "vault://test",
+        legacy: false,
+      }))
+      for (const scan of [undefined, "scan-A", "scan-B", undefined]) {
+        const response = await GET(
+          new Request(
+            `http://localhost/api/findings/finding-1?workspaceId=ws-1${scan ? `&observedInScanId=${scan}` : ""}`
+          ),
+          { params: Promise.resolve({ id: "finding-1" }) }
+        )
+        const insights = (await response.json()).data.evidenceInsights
+        const older = scan === "scan-A"
+        expect(insights).toMatchObject({
+          assumptions: older ? "Observation A" : "Observation B",
+          evidenceObservationScanId: older ? "scan-A" : "scan-B",
+        })
+        expect(insights.pendingHttpExchangeIds).toEqual(
+          (older ? olderPending : newerPending) ? [older ? "42" : "99"] : undefined
+        )
+      }
+    }
+  )
+
+  it("qualifies a legacy fallback and never presents its unbound pending IDs", async () => {
+    getFinding.mockResolvedValue({ id: "finding-1", scanId: "scan-1", evidence: [] })
+    vi.mocked(prisma.evidence.findMany).mockResolvedValue([
+      { storageUri: "private://legacy" },
+    ] as never)
+    vi.mocked(readEncryptedArtifact).mockResolvedValue({
+      content: Buffer.from(
+        JSON.stringify({ assumptions: "Legacy context", pendingHttpExchangeIds: ["42"] })
+      ),
+    } as never)
+    const response = await GET(
+      new Request("http://localhost/api/findings/finding-1?workspaceId=ws-1"),
+      { params: Promise.resolve({ id: "finding-1" }) }
+    )
+    const insights = (await response.json()).data.evidenceInsights
+    expect(insights).toMatchObject({ assumptions: "Legacy context", legacyEvidenceContext: true })
+    expect(insights).not.toHaveProperty("pendingHttpExchangeIds")
+    expect(prisma.findingCandidate.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ findingId: "finding-1", workspaceId: "ws-1" }),
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      })
+    )
+    expect(prisma.evidence.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ take: 50, orderBy: [{ createdAt: "desc" }, { id: "desc" }] })
+    )
+  })
+
+  it("does not reuse an older or unbound context when the selected observation is unavailable", async () => {
+    getFinding.mockResolvedValue({ id: "finding-1", scanId: "scan-A", evidence: [] })
+    vi.mocked(prisma.evidence.findMany).mockResolvedValue([
+      { storageUri: "private://older" },
+    ] as never)
+    vi.mocked(readEncryptedArtifact).mockResolvedValue({
+      content: Buffer.from(
+        JSON.stringify({
+          sourceScanId: "scan-A",
+          sourceFindingId: "finding-1",
+          pendingHttpExchangeIds: ["42"],
+        })
+      ),
+    } as never)
+    const response = await GET(
+      new Request(
+        "http://localhost/api/findings/finding-1?workspaceId=ws-1&observedInScanId=scan-B"
+      ),
+      { params: Promise.resolve({ id: "finding-1" }) }
+    )
+    expect((await response.json()).data.evidenceInsights).toBeNull()
+  })
+
+  it("shows unavailable rather than stale pending when the newest artifact cannot be read", async () => {
+    getFinding.mockResolvedValue({ id: "finding-1", scanId: "scan-1", evidence: [] })
+    vi.mocked(prisma.evidence.findMany).mockResolvedValue([
+      { storageUri: "private://new" },
+      { storageUri: "private://old" },
+    ] as never)
+    vi.mocked(readEncryptedArtifact).mockRejectedValueOnce(new Error("unreadable"))
+    const response = await GET(
+      new Request("http://localhost/api/findings/finding-1?workspaceId=ws-1"),
+      { params: Promise.resolve({ id: "finding-1" }) }
+    )
+    expect((await response.json()).data.evidenceInsights).toBeNull()
+    expect(readEncryptedArtifact).toHaveBeenCalledOnce()
+  })
 
   it("binds the detail response to the requested observation scope", async () => {
     getFinding.mockResolvedValue({ id: "finding-1", evidence: [] })
@@ -337,5 +460,5 @@ it("bounds a finding ID lookup before reading evidence and history", async () =>
   )
   expect(response.status).toBe(404)
   expect(getFinding).toHaveBeenCalledWith("finding-2", "ws-1", { targetIds: ["target-1"] })
-  expect(prisma.evidence.findFirst).not.toHaveBeenCalled()
+  expect(prisma.evidence.findMany).not.toHaveBeenCalled()
 })

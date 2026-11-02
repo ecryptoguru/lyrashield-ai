@@ -247,7 +247,11 @@ export async function readTextFileBounded(path: string, maxBytes: number): Promi
       offset += bytesRead
     }
     if (offset > maxBytes) throw new Error(`Engine artifact exceeds ${maxBytes} byte limit`)
-    return buffer.subarray(0, offset).toString("utf8")
+    // Fatal decoding preserves the raw-byte manifest contract; replacement
+    // characters would change both byte counts and SHA-256 inputs. Preserve BOMs.
+    return new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(
+      buffer.subarray(0, offset)
+    )
   } finally {
     await handle.close()
   }

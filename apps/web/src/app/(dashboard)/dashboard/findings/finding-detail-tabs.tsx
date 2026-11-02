@@ -156,6 +156,16 @@ export function FindingTechnicalTab({
             Assertions the engine recorded for this finding. They are evidence about the
             engine&apos;s own view — not LyraShield verification.
           </p>
+          {detail.evidenceInsights.legacyEvidenceContext && (
+            <p className="text-muted-foreground mt-1 text-xs">
+              Historical context; its scan association is unavailable.
+            </p>
+          )}
+          {detail.evidenceInsights.evidenceObservationScanId && (
+            <p className="text-muted-foreground mt-1 break-all text-xs">
+              Evidence from scan {detail.evidenceInsights.evidenceObservationScanId}
+            </p>
+          )}
           <dl className="mt-2 space-y-2 text-sm">
             {detail.evidenceInsights.advisoryCvss != null && (
               <div className="flex flex-wrap gap-2">

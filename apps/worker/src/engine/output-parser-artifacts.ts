@@ -346,6 +346,20 @@ export function parseHttpExchangeExport(
   }
   const doc = parsed.data
   const knownIds = new Set(doc.exchanges.map((exchange) => exchange.proxy_request_id))
+  const excludedIds = new Set([
+    ...(doc.missing_request_ids ?? []),
+    ...(doc.capacity_omitted_request_ids ?? []),
+    ...(doc.truncated?.omitted_request_ids ?? []),
+  ])
+  const requestHosts = new Map<string, string>()
+  const seenIds = new Set<string>()
+  for (const entry of doc.exchanges) {
+    if (seenIds.has(entry.proxy_request_id)) excludedIds.add(entry.proxy_request_id)
+    seenIds.add(entry.proxy_request_id)
+    if (entry.request?.host && /^[a-f0-9]{64}$/.test(entry.request.sha256 ?? "")) {
+      requestHosts.set(entry.proxy_request_id, entry.request.host.toLowerCase().replace(/\.+$/, ""))
+    }
+  }
   // Persist the validated canonical document — not raw bytes — so nothing
   // outside the declared contract reaches encrypted storage.
   const document = JSON.stringify({
@@ -354,6 +368,9 @@ export function parseHttpExchangeExport(
     ...(doc.binding ? { binding: doc.binding } : {}),
     exchanges: doc.exchanges,
     ...(doc.missing_request_ids?.length ? { missing_request_ids: doc.missing_request_ids } : {}),
+    ...(doc.capacity_omitted_request_ids?.length
+      ? { capacity_omitted_request_ids: doc.capacity_omitted_request_ids }
+      : {}),
     ...(doc.truncated ? { truncated: doc.truncated } : {}),
   })
   return {
@@ -361,6 +378,8 @@ export function parseHttpExchangeExport(
     ...(doc.binding ? { binding: doc.binding } : {}),
     exchangeCount: doc.exchanges.length,
     knownIds,
+    requestHosts,
+    excludedIds,
     document,
   }
 }

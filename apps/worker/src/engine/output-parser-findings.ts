@@ -287,7 +287,12 @@ function validateVulnerability(
       : Array.isArray(v.update_history) && (updateHistory?.length ?? 0) === v.update_history.length
         ? v.update_history.length
         : -1
-  const httpExchangeRefs = parseHttpExchangeIds(v.http_exchange_ids, id, ctx, findingRevision)
+  const httpExchangeRefs = parseHttpExchangeIds(v.http_exchange_ids, id, ctx, findingRevision, {
+    target: typeof v.target === "string" ? v.target : undefined,
+    endpoint: typeof v.endpoint === "string" ? v.endpoint : undefined,
+    evidence_contract_version:
+      typeof v.evidence_contract_version === "string" ? v.evidence_contract_version : undefined,
+  })
   const pendingHttpExchangeIds = parsePendingHttpExchangeIds(
     v.pending_http_exchange_ids,
     id,

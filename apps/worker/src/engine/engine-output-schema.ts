@@ -459,6 +459,10 @@ export const httpExchangeExportSchema = z
       .optional(),
     exchanges: z.array(httpExchangeEntrySchema).max(MAX_HTTP_EXCHANGE_ENTRIES),
     missing_request_ids: z.array(httpExchangeIdSchema).max(MAX_HTTP_EXCHANGE_ENTRIES).optional(),
+    capacity_omitted_request_ids: z
+      .array(httpExchangeIdSchema)
+      .max(MAX_HTTP_EXCHANGE_ENTRIES)
+      .optional(),
     truncated: z
       .object({
         exchange_limit: z.number().int().min(0).optional(),
@@ -585,6 +589,10 @@ export const engineRunRecordSchema = z
         status: z.enum(["exported", "partial", "skipped", "failed"]).optional(),
         reason: boundedString,
         exchanges: z.number().int().min(0).optional(),
+        capacity_omitted_request_ids: z
+          .array(httpExchangeIdSchema)
+          .max(MAX_HTTP_EXCHANGE_ENTRIES)
+          .optional(),
         missing_request_ids: z
           .array(httpExchangeIdSchema)
           .max(MAX_HTTP_EXCHANGE_ENTRIES)

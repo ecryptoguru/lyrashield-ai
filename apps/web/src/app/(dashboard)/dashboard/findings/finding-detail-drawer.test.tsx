@@ -51,6 +51,7 @@ describe("pending HTTP evidence display", () => {
       evidenceInsights: {
         pendingHttpExchangeIds: ["1".repeat(128), "42"],
         pendingHttpExchangeState: "PENDING",
+        evidenceObservationScanId: "scan-1",
       },
     }
     const html = renderToString(
@@ -65,6 +66,8 @@ describe("pending HTTP evidence display", () => {
       </Tabs>
     )
     expect(html).toContain(">Pending<")
+    expect(html).toContain("Evidence from scan ")
+    expect(html).toContain("scan-1")
     expect(html).toContain("Exchange claims await bound evidence. They do not verify this finding.")
     expect(html).toContain("1".repeat(128))
     expect(html).toContain("break-all font-mono")

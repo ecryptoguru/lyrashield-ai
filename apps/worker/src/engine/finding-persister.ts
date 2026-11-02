@@ -47,6 +47,7 @@ interface PersistedFinding {
 async function persistEvidence(
   findingId: string,
   workspaceId: string,
+  scanId: string,
   vuln: EngineVulnerability | NormalizedFinding,
   httpExchangeArtifactChecksum?: string
 ): Promise<void> {
@@ -111,7 +112,11 @@ async function persistEvidence(
     artifacts.push({
       type: "claim_context",
       artifactId: "claim-context",
-      content: JSON.stringify(claimContext),
+      content: JSON.stringify({
+        sourceScanId: scanId,
+        sourceFindingId: findingId,
+        ...claimContext,
+      }),
       contentType: "application/json; charset=utf-8",
     })
   }
@@ -280,7 +285,13 @@ export async function persistFindings(params: PersistFindingsParams): Promise<Pe
     }
 
     async function finalizeFinding(findingId: string): Promise<void> {
-      await persistEvidence(findingId, workspaceId, vuln, params.httpExchangeArtifactChecksum)
+      await persistEvidence(
+        findingId,
+        workspaceId,
+        scanId,
+        vuln,
+        params.httpExchangeArtifactChecksum
+      )
       await persistDetectionReceipt({
         scanId,
         workspaceId,

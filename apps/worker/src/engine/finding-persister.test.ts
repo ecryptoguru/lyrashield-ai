@@ -352,6 +352,8 @@ describe("persistFindings", () => {
     expect(claimContextCall).toBeDefined()
     const claimContext = JSON.parse(String(claimContextCall![0].content)) as Record<string, unknown>
     expect(claimContext).toMatchObject({
+      sourceScanId: "scan-2",
+      sourceFindingId: "finding-1",
       engineConfidence: "high",
       counterevidence: "A WAF rule could still block exploitation.",
       confidenceRationale: "Sink reachable; payload round-trips.",

@@ -187,6 +187,7 @@ export interface EngineRunRecord {
     reason?: string
     exchanges?: number
     missing_request_ids?: string[]
+    capacity_omitted_request_ids?: string[]
   }
 }
 
@@ -254,6 +255,10 @@ export interface ParsedHttpExchangeExport {
   exchangeCount: number
   /** The exchange ids the scan's proxy export attests for this run. */
   knownIds: Set<string>
+  /** 1.2 request captures with a well-formed SHA-256, indexed by correlation id. */
+  requestHosts: Map<string, string>
+  /** Explicit gaps override contradictory index membership. */
+  excludedIds: Set<string>
   /** Canonical bounded JSON persisted to encrypted artifact storage. */
   document: string
 }

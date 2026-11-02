@@ -34,6 +34,8 @@ export interface EvidenceIngestionContext {
   httpExchangeIds?: Set<string> | null
   /** Undefined: legacy contract; null: 1.2 manifest/run binding failed. */
   httpExchangeBinding?: HttpExchangeBinding | null
+  httpExchangeRequestHosts?: Map<string, string>
+  httpExchangeExcludedIds?: Set<string>
 }
 
 /** 1.2 refs require an exact manifest and run binding before per-finding checks. */
@@ -55,6 +57,10 @@ export function bindHttpExchangeEvidence(
   if (
     !run ||
     !binding ||
+    exported?.schemaVersion !== "lyrashield-http-exchanges/1.0" ||
+    !["exported", "partial"].includes(run.evidence_export?.status ?? "") ||
+    !run.evidence_export?.exchanges ||
+    run.evidence_export.exchanges !== exported.exchangeCount ||
     !run.run_id ||
     !run.run_name ||
     !Number.isInteger(run.report_artifacts_revision) ||
@@ -176,7 +182,8 @@ export function parseHttpExchangeIds(
   value: unknown,
   findingId: string,
   ctx?: EvidenceIngestionContext,
-  findingRevision = 0
+  findingRevision = 0,
+  finding?: Pick<EngineVulnerability, "target" | "endpoint" | "evidence_contract_version">
 ): { ids?: string[]; refsDropped?: boolean } {
   if (value === undefined) return {}
   if (!Array.isArray(value)) {
@@ -209,14 +216,40 @@ export function parseHttpExchangeIds(
     )
     return { refsDropped: true }
   }
+  if (finding?.evidence_contract_version === "1.2" && ctx?.httpExchangeBinding === undefined) {
+    recordIngestionIssue(
+      ctx?.issues,
+      `finding ${findingId}: http_exchange_ids require a valid 1.2 run evidence context — field dropped`
+    )
+    return { refsDropped: true }
+  }
   if (ctx?.httpExchangeBinding !== undefined) {
     const binding = ctx.httpExchangeBinding
     const findingIds = binding?.findings?.[findingId]
+    let expectedHost: string | undefined
+    for (const candidate of [finding?.target, finding?.endpoint]) {
+      if (!candidate) continue
+      try {
+        const host = new URL(candidate).hostname.replace(/^\[|\]$/g, "")
+        if (host) {
+          expectedHost = host.toLowerCase().replace(/\.+$/, "")
+          break
+        }
+      } catch {
+        /* A relative endpoint cannot establish target ownership. */
+      }
+    }
     if (
       !binding ||
       !Array.isArray(findingIds) ||
       binding.finding_revisions?.[findingId] !== findingRevision ||
-      distinct.some((id) => !findingIds.includes(id))
+      !expectedHost ||
+      distinct.some(
+        (id) =>
+          !findingIds.includes(id) ||
+          ctx.httpExchangeExcludedIds?.has(id) ||
+          ctx.httpExchangeRequestHosts?.get(id) !== expectedHost
+      )
     ) {
       recordIngestionIssue(
         ctx.issues,

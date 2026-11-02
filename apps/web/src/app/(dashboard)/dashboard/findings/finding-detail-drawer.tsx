@@ -91,6 +91,8 @@ export interface FindingDetail {
     engineConfidence?: string
     pendingHttpExchangeIds?: string[]
     pendingHttpExchangeState?: "PENDING"
+    evidenceObservationScanId?: string
+    legacyEvidenceContext?: true
   } | null
   fixProposals?: Array<{
     id: string
@@ -176,6 +178,8 @@ const evidenceInsightsSchema = z
       .max(10)
       .optional(),
     pendingHttpExchangeState: z.literal("PENDING").optional(),
+    evidenceObservationScanId: z.string().max(128).optional(),
+    legacyEvidenceContext: z.literal(true).optional(),
   })
   .nullable()
 
