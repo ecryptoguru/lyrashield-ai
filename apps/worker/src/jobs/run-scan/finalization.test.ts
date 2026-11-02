@@ -194,6 +194,7 @@ describe("finalizeScanLifecycle", () => {
       { expectedRunName: "task5-writer-fixture" }
     )
     const input = params({
+      scanId: "task5-writer-fixture",
       engineResult: { output },
       orchestratorResult: {
         allFindings: output.vulnerabilities,
@@ -204,6 +205,12 @@ describe("finalizeScanLifecycle", () => {
     await finalizeScanLifecycle(input as never)
     expect(mocks.uploadScanArtifact).not.toHaveBeenCalledWith(
       expect.objectContaining({ type: "http_exchanges" })
+    )
+    expect(mocks.persistResultManifest).toHaveBeenCalledWith(
+      expect.objectContaining({ scanId: "task5-writer-fixture", httpExchangeEvidence: null })
+    )
+    expect(mocks.persistFindings.mock.calls[0]?.[0]).not.toHaveProperty(
+      "httpExchangeArtifactChecksum"
     )
     expect(mocks.persistFindings).toHaveBeenCalledWith(
       expect.objectContaining({
