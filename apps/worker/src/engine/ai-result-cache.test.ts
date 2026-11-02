@@ -319,6 +319,36 @@ describe("exact AI triage result cache", () => {
     expect(changed.artifact).toBeUndefined()
   })
 
+  it("does not reuse a populated cache entry after the engine revision changes", async () => {
+    const redis = new FakeRedis()
+    const cache = createAiResultCache({ redis, secret: "k".repeat(32), mode: "enforce" })
+    const now = Date.parse("2026-10-03T00:00:00.000Z")
+    expect(await cache.store(descriptor(), artifact(), completeUsage(), now)).toBe(true)
+    expect((await cache.lookup(descriptor(), now + 1_000)).outcome).toBe("hit")
+
+    const changed = await cache.lookup(descriptor({ engineRevision: "e".repeat(40) }), now + 1_000)
+
+    expect(changed).toEqual({ outcome: "miss" })
+    expect(redis.get.mock.calls[1]?.[0]).not.toBe(redis.get.mock.calls[0]?.[0])
+    expect(redis.values.size).toBe(1)
+    expect((await cache.lookup(descriptor(), now + 1_000)).outcome).toBe("hit")
+  })
+
+  it("does not read or write reusable results when cache mode is off", async () => {
+    const redis = new FakeRedis()
+    const enabled = createAiResultCache({ redis, secret: "k".repeat(32), mode: "enforce" })
+    const disabled = createAiResultCache({ redis, secret: "k".repeat(32), mode: "off" })
+    const now = Date.parse("2026-10-03T00:00:00.000Z")
+    expect(await enabled.store(descriptor(), artifact(), completeUsage(), now)).toBe(true)
+    redis.get.mockClear()
+    redis.multi.mockClear()
+
+    expect(await disabled.lookup(descriptor(), now + 1_000)).toEqual({ outcome: "disabled" })
+    expect(await disabled.store(descriptor(), artifact(), completeUsage(), now)).toBe(false)
+    expect(redis.get).not.toHaveBeenCalled()
+    expect(redis.multi).not.toHaveBeenCalled()
+  })
+
   it("refuses incomplete accounting, non-completed results, and evidence-join mismatches", async () => {
     const redis = new FakeRedis()
     const cache = createAiResultCache({ redis, secret: "k".repeat(32), mode: "enforce" })
