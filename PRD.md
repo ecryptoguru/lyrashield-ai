@@ -1,6 +1,6 @@
 # LyraShield AI — Product Requirements and Release Plan
 
-> Current production evidence: 2026-10-31 IST (deployed product revision `6739563df7dad585cef1be14cedcb978bc0a5219`, released by run `41117355986`; marketing remains at `0d8fc0f6c126271aa966ca895608cec2460f8cb4`). This file owns product strategy, accepted scope, release gates, and ordered backlog. [codebase.md](./codebase.md) owns implementation mapping; [AGENTS.md](./AGENTS.md) owns operating rules and the immediate handoff. Running code, schema, CI, and live evidence override prose.
+> Current production evidence: 2026-11-02 IST (deployed product revision `d488862bd269c07194afe87a918ca413e4a62217`, released by run `41438792830`; marketing redeployed with source unchanged from `0d8fc0f6c126271aa966ca895608cec2460f8cb4`). This file owns product strategy, accepted scope, release gates, and ordered backlog. [codebase.md](./codebase.md) owns implementation mapping; [AGENTS.md](./AGENTS.md) owns operating rules and the immediate handoff. Running code, schema, CI, and live evidence override prose.
 
 ## 1. Product definition
 
