@@ -89,6 +89,8 @@ export interface EngineVulnerability {
    * verification receipt.
    */
   http_exchange_ids?: string[]
+  /** 1.2 unresolved engine claims; export membership alone never promotes them. */
+  pending_http_exchange_ids?: string[]
   /**
    * True when the engine declared exchange references that were dropped during
    * ingestion (unknown ids, or the exchange export was unavailable). The flag
@@ -185,6 +187,7 @@ export interface EngineRunRecord {
     reason?: string
     exchanges?: number
     missing_request_ids?: string[]
+    capacity_omitted_request_ids?: string[]
   }
 }
 
@@ -238,11 +241,24 @@ export interface ParsedThreatModels {
   document: string
 }
 
+export interface HttpExchangeBinding {
+  run_id?: string
+  run_name?: string | null
+  report_artifacts_revision?: number | null
+  findings?: Record<string, string[]>
+  finding_revisions?: Record<string, number>
+}
+
 export interface ParsedHttpExchangeExport {
+  binding?: HttpExchangeBinding
   schemaVersion?: string
   exchangeCount: number
   /** The exchange ids the scan's proxy export attests for this run. */
   knownIds: Set<string>
+  /** 1.2 request captures with a well-formed SHA-256, indexed by correlation id. */
+  requestHosts: Map<string, string>
+  /** Explicit gaps override contradictory index membership. */
+  excludedIds: Set<string>
   /** Canonical bounded JSON persisted to encrypted artifact storage. */
   document: string
 }

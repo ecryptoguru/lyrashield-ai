@@ -17,11 +17,19 @@ lwe_is_40_hex() {
   [ "${#1}" -eq 40 ]
 }
 
+lwe_valid_api_mode() {
+  case "$1" in
+    auto|responses|chat_completions) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 lyrashield_worker_env_args() {
   lwe_config=$1
   lwe_environment_file=$2
   lwe_shared_root=${3:-/var/lib/lyrashield/worker}
 
+  unset LYRASHIELD_RUN_RECORD_V1_1 LYRASHIELD_PENDING_HTTP_EVIDENCE LLM_API_MODE DEDUPE_LLM_API_MODE
   set -a
   # shellcheck disable=SC1090
   . "$lwe_config"
@@ -55,9 +63,27 @@ lyrashield_worker_env_args() {
     fi
   fi
 
+  # Only trusted runtime.conf controls may reach the word-split Docker argv.
+  lwe_run_record=${LYRASHIELD_RUN_RECORD_V1_1-0}
+  lwe_pending=${LYRASHIELD_PENDING_HTTP_EVIDENCE-0}
+  case "$lwe_run_record/$lwe_pending" in
+    0/0|1/0|1/1) ;;
+    *) echo "Invalid worker evidence writer controls" >&2; return 1 ;;
+  esac
+  if [ "${LLM_API_MODE+x}" = x ] && ! lwe_valid_api_mode "$LLM_API_MODE"; then
+    echo "Invalid worker LLM_API_MODE" >&2; return 1
+  fi
+  if [ "${DEDUPE_LLM_API_MODE+x}" = x ] && ! lwe_valid_api_mode "$DEDUPE_LLM_API_MODE"; then
+    echo "Invalid worker DEDUPE_LLM_API_MODE" >&2; return 1
+  fi
+  if [ -n "${LLM_API_MODE-}" ]; then printf '%s\n' "--env LLM_API_MODE=$LLM_API_MODE"; fi
+  if [ -n "${DEDUPE_LLM_API_MODE-}" ]; then printf '%s\n' "--env DEDUPE_LLM_API_MODE=$DEDUPE_LLM_API_MODE"; fi
+
   # Worker serves no authentication routes. Keep its email flag off so it does
   # not require the app's Brevo credential; app deployment defaults to on.
   printf '%s\n' \
+    "--env LYRASHIELD_RUN_RECORD_V1_1=$lwe_run_record" \
+    "--env LYRASHIELD_PENDING_HTTP_EVIDENCE=$lwe_pending" \
     "--env NODE_ENV=production" \
     "--env PLATFORM_ADMIN_EMAILS=ecryptoguru@gmail.com,ankit@lyrashieldai.com" \
     "--env LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=0" \

@@ -1,0 +1,52 @@
+{
+  "schema_version": "lyrashield-http-exchanges/1.0",
+  "generated_at": "2026-11-02 13:55:12 UTC",
+  "binding": {
+    "run_id": "task5-writer-fixture",
+    "run_name": "task5-writer-fixture",
+    "targets": [],
+    "report_artifacts_revision": 2,
+    "findings": {
+      "vuln-0001": [
+        "17",
+        "18"
+      ]
+    },
+    "finding_revisions": {
+      "vuln-0001": 0
+    }
+  },
+  "exchanges": [
+    {
+      "proxy_request_id": "17",
+      "request": {
+        "method": "GET",
+        "host": "example.test",
+        "port": 443,
+        "path": "/",
+        "target": "/",
+        "is_tls": true,
+        "created_at": "",
+        "headers": {},
+        "body_sample": "",
+        "body_truncated": false,
+        "body_bytes": 0,
+        "sha256": "8ac8a2c19d1c441af9f62e3e2309d3adaf82ddc6cbc8f100770cc234df048e17"
+      },
+      "response": {
+        "status_code": 200,
+        "length": null,
+        "roundtrip_ms": null,
+        "created_at": "",
+        "headers": {},
+        "body_sample": "",
+        "body_truncated": false,
+        "body_bytes": 0,
+        "sha256": "5212f7a67551c4744fd1099622fe454a56221fcb231c76d1ab15efbdf44f1057"
+      }
+    }
+  ],
+  "missing_request_ids": [
+    "18"
+  ]
+}

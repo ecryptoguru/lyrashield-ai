@@ -1,0 +1,126 @@
+{
+  "schema_version": "1.2",
+  "run_id": "task5-writer-fixture",
+  "run_name": "task5-writer-fixture",
+  "start_time": "2026-11-02T13:55:12.741144+00:00",
+  "end_time": null,
+  "status": "running",
+  "phase": "running",
+  "auth_mode": "api_key",
+  "targets_info": [],
+  "llm_usage": {
+    "requests": 0,
+    "input_tokens": 0,
+    "input_tokens_details": [
+      {
+        "cache_write_tokens": 0,
+        "cached_tokens": 0
+      }
+    ],
+    "output_tokens": 0,
+    "output_tokens_details": [
+      {
+        "reasoning_tokens": 0
+      }
+    ],
+    "total_tokens": 0,
+    "agents": []
+  },
+  "seq": 2,
+  "turn_count": 0,
+  "evidence_format": "1.1",
+  "scope_violations": {
+    "entries": [],
+    "dropped": 0,
+    "total": 0
+  },
+  "scan_quality": {
+    "schema": "lyrashield-scan-quality/1.0",
+    "generated_at": "2026-11-02T13:55:12.780058+00:00",
+    "run_id": "task5-writer-fixture",
+    "observed": {
+      "agents_total": 0,
+      "agents_finished": 0,
+      "agents_incomplete": 0,
+      "agents_incomplete_statuses": {},
+      "findings_filed": 1,
+      "web_search_calls": 0,
+      "proxy_requests_admitted": 0,
+      "proxy_requests_denied": 0,
+      "evidence_export": "partial",
+      "sandbox": null,
+      "scan_status": "running",
+      "terminal_reason": null
+    },
+    "declared": {
+      "coverage_entries": 0,
+      "outcomes": {}
+    },
+    "surfaces": [
+      {
+        "surface": "example.test",
+        "origins": [
+          "finding"
+        ],
+        "declared_coverage_entries": 0,
+        "findings": 1,
+        "admitted_requests": 0,
+        "denied_requests": 0,
+        "assessment": "observed"
+      }
+    ],
+    "unassessed": [],
+    "assessment": "inconclusive",
+    "assessment_reasons": [
+      "finalization_incomplete",
+      "http_evidence_pending"
+    ],
+    "note": "Counts derive only from observed runtime activity and the model-declared coverage ledger. 'declared' surfaces are agent-reported, not machine-verified; 'unassessed' surfaces were in scope but have no recorded exercise. Zero findings do not demonstrate that the target is secure."
+  },
+  "result_manifest": {
+    "schema_version": 1,
+    "artifacts": {
+      "vulnerabilities.json": {
+        "path": "vulnerabilities.json",
+        "sha256": "a5977f1193d6054a1fa188d47f14d394ee0b415ddb946d060e9f2583e70f70c2",
+        "bytes": 455
+      },
+      "vulnerabilities.csv": {
+        "path": "vulnerabilities.csv",
+        "sha256": "7fb293bb4a04bf6d4720c3e8a9f7e95705327e3d677d428d9d17580a90e5cc0c",
+        "bytes": 122
+      },
+      "findings.sarif": {
+        "path": "findings.sarif",
+        "sha256": "042602a0f6bbe404905529a3e7c6f686db4e3e1815c3bf5e414a1730e01e9def",
+        "bytes": 2409
+      },
+      "coverage.json": {
+        "path": "coverage.json",
+        "sha256": "b72f4f2c4c24c03b72faf4e804b82453bb77809e4b5a5e10fb29723263cc6da5",
+        "bytes": 794
+      },
+      "http_exchanges.json": {
+        "path": "http_exchanges.json",
+        "sha256": "06fbe67e91b32ef0a6b36a521b11e8a6781152cfb6a854ce5a9f82aac9c8d445",
+        "bytes": 1217
+      },
+      "vulnerabilities/": {
+        "files": {
+          "vuln-0001.md": "295e8e4bcad97a0e696baf25b440361cd1b0a5314b7c89a935b6a27680d83e83"
+        }
+      }
+    }
+  },
+  "report_artifacts_revision": 2,
+  "receipt_persisted": true,
+  "evidence_export": {
+    "status": "partial",
+    "exchanges": 1,
+    "artifact": "http_exchanges.json",
+    "sha256": "06fbe67e91b32ef0a6b36a521b11e8a6781152cfb6a854ce5a9f82aac9c8d445",
+    "missing_request_ids": [
+      "18"
+    ]
+  }
+}

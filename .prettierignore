@@ -19,3 +19,6 @@ packages/agent-plugin/plugin
 docs/marketplace/mcp-registry/schema/server.schema.json
 # Marketplace copies of the legacy skill preserve the canonical template bytes.
 docs/marketplace/**/skills/lyrashield/SKILL.md
+
+# Preserve engine-generated artifact bytes and their result-manifest digests.
+apps/worker/src/engine/fixtures/run-json-1.2/*.json

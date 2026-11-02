@@ -1,7 +1,9 @@
+import { createHash } from "node:crypto"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { describe, it, expect } from "vitest"
-import { parseEngineOutput } from "./output-parser"
+import { engineVulnerabilitySchema } from "./engine-output-schema"
+import { parseEngineOutput, generateDedupeKey } from "./output-parser"
 
 const FIXTURE_DIR = join(__dirname, "fixtures")
 
@@ -419,5 +421,402 @@ describe("run.json 1.1 reader bounds and failure modes", () => {
     const result = parseEngineOutput(JSON.stringify(vulns), V1_1_RUN(), artifacts())
     expect(result.ingestionIssues.length).toBeLessThanOrEqual(101)
     expect(result.ingestionIssues.at(-1)).toContain("truncated")
+  })
+})
+
+describe("run.json 1.2 pending exchange claims", () => {
+  const finding = {
+    id: "pending-finding",
+    title: "Pending evidence",
+    severity: "high" as const,
+    timestamp: "t",
+    evidence_contract_version: "1.2",
+  }
+  const parse = (pending: unknown, httpExchangesRaw: string | null = null) =>
+    parseEngineOutput(
+      JSON.stringify([{ ...finding, pending_http_exchange_ids: pending }]),
+      JSON.stringify({ ...JSON.parse(V1_1_RUN()), schema_version: "1.2" }),
+      { httpExchangesRaw }
+    )
+
+  it.each([
+    { label: "unavailable", raw: null },
+    { label: "exported", raw: V1_1_HTTP_EXCHANGES() },
+  ])("retains pending claims without promoting them even when $label", ({ raw }) => {
+    const result = parse(["42", "42", "99"], raw)
+    expect(result.runRecord?.schema_version).toBe("1.2")
+    expect(result.vulnerabilities[0]).toMatchObject({ pending_http_exchange_ids: ["42", "99"] })
+    expect(result.vulnerabilities[0]).not.toHaveProperty("http_exchange_ids")
+    expect(result.vulnerabilities[0]).not.toHaveProperty("verified")
+    expect(generateDedupeKey(result.vulnerabilities[0]!, "target")).toBe(
+      generateDedupeKey(finding, "target")
+    )
+  })
+
+  it("bounds pending and exported refs independently", () => {
+    const ids = Array.from({ length: 10 }, (_, i) => String(i))
+    const result = engineVulnerabilitySchema.safeParse({
+      ...finding,
+      http_exchange_ids: ids,
+      pending_http_exchange_ids: ids,
+    })
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data.pending_http_exchange_ids).toEqual(ids)
+      expect(result.data.http_exchange_ids).toEqual(ids)
+    }
+  })
+
+  it.each([{ value: "42" }, { value: Array.from({ length: 11 }, (_, i) => String(i)) }])(
+    "rejects malformed or overflowing pending lists ($value)",
+    ({ value }) => {
+      const result = parse(value)
+      expect(result.vulnerabilities[0]).not.toHaveProperty("pending_http_exchange_ids")
+      expect(result.ingestionIssues.join(" ")).toContain("pending_http_exchange_ids")
+    }
+  )
+
+  it("rejects non-ASCII, non-string, and oversized IDs while preserving bounded claims", () => {
+    const result = parse(["４２", 42, "1".repeat(129), "1".repeat(128), "42"])
+    expect(result.vulnerabilities[0]?.pending_http_exchange_ids).toEqual(["1".repeat(128), "42"])
+    expect(result.ingestionIssues.join(" ")).toContain("pending_http_exchange_ids")
+  })
+})
+
+describe("run.json 1.2 bound exported exchange references", () => {
+  const vuln = {
+    id: "bound-finding",
+    evidence_contract_version: "1.2",
+    target: "https://app.example.test/login",
+    title: "Bound claim",
+    severity: "high",
+    timestamp: "t",
+    http_exchange_ids: ["42"],
+    pending_http_exchange_ids: ["99"],
+    update_history: [{ timestamp: "t", fields: ["severity"] }],
+  }
+  const boundParse = (
+    change: {
+      binding?: Record<string, unknown>
+      corruptManifest?: boolean
+      corruptFindings?: boolean
+      history?: unknown
+      knownId?: string
+      omitManifest?: boolean
+      runRaw?: string
+      runVersion?: string
+      expectedRunName?: string
+      outcome?: Record<string, unknown>
+      exportSchema?: string
+      request?: Record<string, unknown> | null
+      missing?: string[]
+      capacityOmitted?: string[]
+      truncatedOmitted?: string[]
+    } = {}
+  ) => {
+    const raw = JSON.stringify([
+      { ...vuln, ...(change.history !== undefined ? { update_history: change.history } : {}) },
+    ])
+    const run = {
+      ...JSON.parse(V1_1_RUN()),
+      receipt_persisted: true,
+      schema_version: change.runVersion ?? "1.2",
+      evidence_export: { status: "partial", exchanges: 1, ...change.outcome },
+    }
+    const exported = JSON.stringify({
+      schema_version: change.exportSchema ?? "lyrashield-http-exchanges/1.0",
+      missing_request_ids: ["99", ...(change.missing ?? []).filter((id) => id !== "99")],
+      capacity_omitted_request_ids: change.capacityOmitted,
+      truncated: change.truncatedOmitted
+        ? { omitted_request_ids: change.truncatedOmitted }
+        : undefined,
+      binding: {
+        run_id: run.run_id,
+        run_name: run.run_name,
+        report_artifacts_revision: run.report_artifacts_revision,
+        findings: { "bound-finding": ["42", "99"] },
+        finding_revisions: { "bound-finding": 1 },
+        ...change.binding,
+      },
+      exchanges: [
+        {
+          proxy_request_id: change.knownId ?? "42",
+          request:
+            change.request === undefined
+              ? { host: "app.example.test", sha256: "a".repeat(64) }
+              : change.request,
+        },
+      ],
+    })
+    run.evidence_export = {
+      status: "partial",
+      exchanges: 1,
+      artifact: "http_exchanges.json",
+      sha256: createHash("sha256").update(exported).digest("hex"),
+      ...change.outcome,
+    }
+    const entry = (path: string, content: string) => ({
+      path,
+      bytes: Buffer.byteLength(content),
+      sha256: createHash("sha256").update(content).digest("hex"),
+    })
+    run.result_manifest = change.omitManifest
+      ? undefined
+      : {
+          schema_version: 1,
+          artifacts: {
+            "http_exchanges.json": entry(
+              "http_exchanges.json",
+              change.corruptManifest ? "changed" : exported
+            ),
+            "vulnerabilities.json": entry(
+              "vulnerabilities.json",
+              change.corruptFindings ? "changed" : raw
+            ),
+          },
+        }
+    return parseEngineOutput(
+      raw,
+      change.runRaw ?? JSON.stringify(run),
+      { httpExchangesRaw: exported },
+      change.expectedRunName ? { expectedRunName: change.expectedRunName } : undefined
+    )
+  }
+
+  it("accepts exact manifest/run/finding/revision-bound refs without promoting pending claims", () => {
+    const result = boundParse()
+    expect(result.vulnerabilities[0]?.http_exchange_ids).toEqual(["42"])
+    expect(result.vulnerabilities[0]?.pending_http_exchange_ids).toEqual(["99"])
+    expect(result.vulnerabilities[0]).not.toHaveProperty("verified")
+  })
+
+  it("preserves valid individually bound refs on a partial export", () => {
+    expect(
+      boundParse({ outcome: { status: "partial", exchanges: 1 }, missing: ["99"] })
+        .vulnerabilities[0]?.http_exchange_ids
+    ).toEqual(["42"])
+  })
+
+  it.each([
+    { label: "foreign run", binding: { run_id: "another-run" } },
+    { label: "foreign run name", binding: { run_name: "another-name" } },
+    { label: "stale report revision", binding: { report_artifacts_revision: 0 } },
+    { label: "foreign finding", binding: { findings: { another: ["42"] } } },
+    { label: "stale finding revision", binding: { finding_revisions: { "bound-finding": 0 } } },
+    { label: "missing finding revision", binding: { finding_revisions: undefined } },
+    { label: "unknown exchange", knownId: "43" },
+    { label: "changed export", corruptManifest: true },
+    { label: "changed findings", corruptFindings: true },
+    { label: "wrong finding refs", binding: { findings: { "bound-finding": ["99"] } } },
+    {
+      label: "malformed revision history",
+      binding: { finding_revisions: { "bound-finding": 0 } },
+      history: ["invalid"],
+    },
+    { label: "missing manifest", omitManifest: true },
+    { label: "malformed run", runRaw: "{" },
+    { label: "missing run", runRaw: "" },
+    { label: "downgraded run", runVersion: "1.1" },
+    { label: "foreign worker run", expectedRunName: "expected-worker-run" },
+    { label: "failed export", outcome: { status: "failed", exchanges: 0 } },
+    { label: "skipped export", outcome: { status: "skipped", exchanges: 1 } },
+    { label: "zero exchanges", outcome: { status: "exported", exchanges: 0 } },
+    { label: "unknown export schema", exportSchema: "unknown" },
+    { label: "index-only exchange", request: null },
+    { label: "missing request hash", request: { host: "app.example.test" } },
+    {
+      label: "foreign request host",
+      request: { host: "foreign.example.test", sha256: "a".repeat(64) },
+    },
+    { label: "explicit missing ID", missing: ["42"] },
+    { label: "explicit capacity-omitted ID", capacityOmitted: ["42"] },
+    { label: "explicit truncated ID", truncatedOmitted: ["42"] },
+    { label: "outcome missing ID", outcome: { missing_request_ids: ["42"] } },
+  ])("drops $label refs while retaining unresolved claims", (change) => {
+    const result = boundParse(change)
+    if (!change.expectedRunName)
+      expect(result.vulnerabilities[0]).not.toHaveProperty("http_exchange_ids")
+    if (change.expectedRunName) {
+      expect(result.vulnerabilities).toEqual([])
+      expect(result.httpExchangeExport).toBeNull()
+      expect(result.findingsComplete).toBe(false)
+    } else {
+      expect(result.vulnerabilities[0]?.http_exchange_refs_dropped).toBe(true)
+      expect(result.vulnerabilities[0]?.pending_http_exchange_ids).toEqual(["99"])
+    }
+    expect(result.ingestionIssues.length).toBeGreaterThan(0)
+  })
+})
+
+describe("actual 1.2 writer artifact tuple", () => {
+  it.each([
+    { verified: 10, pending: 1 },
+    { verified: 1, pending: 10 },
+  ])(
+    "retains independent field bounds with $verified captured and $pending pending IDs",
+    ({ verified, pending }) => {
+      const run = JSON.parse(fixture("run-json-1.2", "run.json"))
+      const findings = JSON.parse(fixture("run-json-1.2", "vulnerabilities.json"))
+      const exported = JSON.parse(fixture("run-json-1.2", "http_exchanges.json"))
+      const ids = Array.from({ length: verified }, (_, index) => String(index + 1))
+      const unresolved = Array.from({ length: pending }, (_, index) => String(index + 101))
+      findings[0].http_exchange_ids = ids
+      findings[0].pending_http_exchange_ids = unresolved
+      const selected = [...ids, ...unresolved].slice(0, 10)
+      const omitted = unresolved.filter((id) => !selected.includes(id))
+      exported.binding.findings[findings[0].id] = selected
+      exported.exchanges = ids.map((id) => ({ ...exported.exchanges[0], proxy_request_id: id }))
+      exported.missing_request_ids = unresolved.filter((id) => selected.includes(id))
+      exported.capacity_omitted_request_ids = omitted
+      run.evidence_export = {
+        status: "partial",
+        exchanges: ids.length,
+        missing_request_ids: exported.missing_request_ids,
+        capacity_omitted_request_ids: omitted,
+      }
+      const raw = JSON.stringify(findings)
+      const exportRaw = JSON.stringify(exported)
+      run.evidence_export.artifact = "http_exchanges.json"
+      run.evidence_export.sha256 = createHash("sha256").update(exportRaw).digest("hex")
+      for (const [path, content] of [
+        ["vulnerabilities.json", raw],
+        ["http_exchanges.json", exportRaw],
+      ] as const) {
+        run.result_manifest.artifacts[path] = {
+          path,
+          bytes: Buffer.byteLength(content),
+          sha256: createHash("sha256").update(content).digest("hex"),
+        }
+      }
+      const result = parseEngineOutput(
+        raw,
+        JSON.stringify(run),
+        { httpExchangesRaw: exportRaw },
+        { expectedRunName: "task5-writer-fixture" }
+      )
+      expect(result.vulnerabilities[0]?.http_exchange_ids).toEqual(ids)
+      expect(result.vulnerabilities[0]?.pending_http_exchange_ids).toEqual(unresolved)
+      expect(result.ingestionIssues).toEqual([])
+    }
+  )
+
+  it.each(["schema", "host", "request hash"])(
+    "rejects actual writer bytes with a contradictory %s even after rebinding the manifest",
+    (change) => {
+      const run = JSON.parse(fixture("run-json-1.2", "run.json"))
+      const exported = JSON.parse(fixture("run-json-1.2", "http_exchanges.json"))
+      if (change === "schema") exported.schema_version = "unknown"
+      if (change === "host") exported.exchanges[0].request.host = "foreign.example.test"
+      if (change === "request hash") exported.exchanges[0].request.sha256 = "invalid"
+      const raw = JSON.stringify(exported)
+      run.evidence_export.sha256 = createHash("sha256").update(raw).digest("hex")
+      run.result_manifest.artifacts["http_exchanges.json"] = {
+        path: "http_exchanges.json",
+        bytes: Buffer.byteLength(raw),
+        sha256: createHash("sha256").update(raw).digest("hex"),
+      }
+      const result = parseEngineOutput(
+        fixture("run-json-1.2", "vulnerabilities.json"),
+        JSON.stringify(run),
+        { httpExchangesRaw: raw },
+        { expectedRunName: "task5-writer-fixture" }
+      )
+      expect(result.vulnerabilities[0]).not.toHaveProperty("http_exchange_ids")
+      expect(result.vulnerabilities[0]?.pending_http_exchange_ids).toEqual(["18"])
+      expect(result.vulnerabilities[0]?.http_exchange_refs_dropped).toBe(true)
+    }
+  )
+
+  it("accepts captured reference17 and retains unresolved18 on partial export", () => {
+    const result = parseEngineOutput(
+      fixture("run-json-1.2", "vulnerabilities.json"),
+      fixture("run-json-1.2", "run.json"),
+      { httpExchangesRaw: fixture("run-json-1.2", "http_exchanges.json") },
+      { expectedRunName: "task5-writer-fixture" }
+    )
+    expect(result.vulnerabilities[0]).toMatchObject({
+      http_exchange_ids: ["17"],
+      pending_http_exchange_ids: ["18"],
+      engine_verification_state: "unverified",
+    })
+    expect(result.ingestionIssues).toEqual([])
+  })
+})
+
+describe("1.2 export document qualification before persistence", () => {
+  const actual = (change: string) => {
+    const run = JSON.parse(fixture("run-json-1.2", "run.json"))
+    const findings = JSON.parse(fixture("run-json-1.2", "vulnerabilities.json"))
+    const exported = JSON.parse(fixture("run-json-1.2", "http_exchanges.json"))
+    if (change === "foreign sibling") {
+      exported.binding.run_id = exported.binding.run_name = "other-run"
+      exported.exchanges[0].request.body_sample = "foreign capture content"
+    }
+    if (change === "stale sibling") exported.binding.report_artifacts_revision = 0
+    if (change === "missing overflow")
+      run.evidence_export.missing_request_ids = [
+        ...Array.from({ length: 500 }, (_, i) => String(i + 1000)),
+        "17",
+      ]
+    if (change === "capacity overflow")
+      run.evidence_export.capacity_omitted_request_ids = [
+        ...Array.from({ length: 500 }, (_, i) => String(i + 1000)),
+        "17",
+      ]
+    if (change === "malformed missing") run.evidence_export.missing_request_ids = ["bad", "17"]
+    if (change === "malformed capacity") run.evidence_export.capacity_omitted_request_ids = "17"
+    if (change === "mixed partial") findings[0].http_exchange_ids = ["17", "18"]
+    const raw = JSON.stringify(findings)
+    const exportRaw = JSON.stringify(exported)
+    for (const [path, content] of [
+      ["vulnerabilities.json", raw],
+      ["http_exchanges.json", exportRaw],
+    ] as const) {
+      run.result_manifest.artifacts[path] = {
+        path,
+        bytes: Buffer.byteLength(content),
+        sha256: createHash("sha256").update(content).digest("hex"),
+      }
+    }
+    run.evidence_export.sha256 = run.result_manifest.artifacts["http_exchanges.json"].sha256
+    if (change === "manifest mismatch")
+      run.result_manifest.artifacts["http_exchanges.json"].sha256 = "0".repeat(64)
+    if (change === "outcome mismatch") run.evidence_export.sha256 = "1".repeat(64)
+    if (change === "missing outcome digest") delete run.evidence_export.sha256
+    return parseEngineOutput(
+      raw,
+      JSON.stringify(run),
+      { httpExchangesRaw: exportRaw },
+      { expectedRunName: "task5-writer-fixture" }
+    )
+  }
+
+  it.each([
+    "foreign sibling",
+    "stale sibling",
+    "manifest mismatch",
+    "outcome mismatch",
+    "missing outcome digest",
+    "missing overflow",
+    "capacity overflow",
+    "malformed missing",
+    "malformed capacity",
+  ])("quarantines $0 while retaining pending findings", (change) => {
+    const result = actual(change)
+    expect(result.httpExchangeExport).toBeNull()
+    expect(result.vulnerabilities[0]).not.toHaveProperty("http_exchange_ids")
+    expect(result.vulnerabilities[0]?.pending_http_exchange_ids).toEqual(["18"])
+    expect(result.ingestionIssues.length).toBeGreaterThan(0)
+  })
+
+  it("retains captured17 when the same finding also cites explicitly missing18", () => {
+    const result = actual("mixed partial")
+    expect(result.httpExchangeExport).not.toBeNull()
+    expect(result.vulnerabilities[0]).toMatchObject({
+      http_exchange_ids: ["17"],
+      http_exchange_refs_dropped: true,
+      pending_http_exchange_ids: ["18"],
+    })
+    expect(result.ingestionIssues.length).toBeGreaterThan(0)
   })
 })

@@ -33,6 +33,7 @@ Keep these three documents separate: the litepaper gives a short executive overv
 - [`user-guide.md`](./user-guide.md) — end-user workflows, options, permissions and limitations.
 - [`webmcp-runtime.md`](./webmcp-runtime.md) — opt-in WebMCP runtime checker: commands, receipt contract, PASS/INCONCLUSIVE semantics and evidence caveats.
 - [`php-security.md`](./php-security.md) — Conditional Standard/Deep PHP project coverage, the browser-local PHP2Shell review, Composer draft fixes and runtime remediation/retest evidence.
+- [`reviews/worker-consumer-qualification-2026-11-02.md`](./reviews/worker-consumer-qualification-2026-11-02.md) — reproducible local current-reader and unchanged pinned-consumer compatibility gates; no deployment claim.
 - [`environment-ownership.md`](./environment-ownership.md) — central application settings and exact external configuration owners.
 - [`low-rate-error-alert-draft.md`](./low-rate-error-alert-draft.md) — proposal only; preserves the approved operator alert policy.
 - [`operations.md`](./operations.md) — founder/operator runbooks: live checkout verification, license signing-key compromise response and affiliate payout operations.

@@ -1,4 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
+import { readFileSync } from "node:fs"
+import { createHash } from "node:crypto"
+import { parseWriterTuple } from "../../engine/fixtures/mutate-http-tuple"
+import { parseEngineOutput } from "../../engine/output-parser"
 
 const mocks = vi.hoisted(() => ({
   addScanEvent: vi.fn(),
@@ -14,16 +18,25 @@ const mocks = vi.hoisted(() => ({
   prisma: {
     scan: { update: vi.fn() },
     workspace: { findFirst: vi.fn() },
+    finding: { findMany: vi.fn(), create: vi.fn() },
+    evidence: { findMany: vi.fn(), createMany: vi.fn() },
+    findingCandidate: { upsert: vi.fn() },
+    findingVerification: { upsert: vi.fn() },
   },
   qualifyReferralForWorkspace: vi.fn(),
   refreshGateVerdictAfterTerminalScan: vi.fn(),
   updateScanStatus: vi.fn(),
   uploadScanArtifact: vi.fn(),
+  uploadEvidence: vi.fn(),
   withScanFinalizationClaim: vi.fn(),
   logger: { error: vi.fn(), info: vi.fn(), warn: vi.fn() },
 }))
 
-vi.mock("@lyrashield/db", () => ({
+vi.mock("@lyrashield/db", async () => ({
+  ...(await import("@lyrashield/db/src/evidence-observation")),
+  resolveDbPoolMax: () => 4,
+  withWorkspaceRLS: (_workspace: string, fn: (tx: typeof mocks.prisma) => unknown) =>
+    fn(mocks.prisma),
   addScanEvent: mocks.addScanEvent,
   assertEvidenceEncrypted: mocks.assertEvidenceEncrypted,
   completeScanWithScore: mocks.completeScanWithScore,
@@ -35,8 +48,13 @@ vi.mock("@lyrashield/db", () => ({
 }))
 vi.mock("@lyrashield/logger", () => ({ logger: mocks.logger }))
 vi.mock("../../engine/finding-persister", () => ({ persistFindings: mocks.persistFindings }))
-vi.mock("../../engine/evidence-storage", () => ({ uploadScanArtifact: mocks.uploadScanArtifact }))
-vi.mock("../../engine/result-integrity", () => ({
+vi.mock("../../engine/evidence-storage", () => ({
+  EvidenceStorageConfigurationError: class extends Error {},
+  uploadScanArtifact: mocks.uploadScanArtifact,
+  uploadEvidence: mocks.uploadEvidence,
+}))
+vi.mock("../../engine/result-integrity", async () => ({
+  ...(await import("../../engine/result-integrity/detection-receipt")),
   completeRetestsForScan: mocks.completeRetestsForScan,
   persistResultManifest: mocks.persistResultManifest,
 }))
@@ -167,6 +185,251 @@ describe("finalizeScanLifecycle", () => {
         value: await finalize(),
       })
     )
+  })
+
+  it("does not upload a foreign HTTP sibling into the current scan during finalization", async () => {
+    const read = (name: string) =>
+      readFileSync(new URL(`../../engine/fixtures/run-json-1.2/${name}`, import.meta.url), "utf8")
+    const run = JSON.parse(read("run.json"))
+    const exported = JSON.parse(read("http_exchanges.json"))
+    exported.binding.run_id = exported.binding.run_name = "other-run"
+    exported.exchanges[0].request.body_sample = "foreign capture content"
+    const exportRaw = JSON.stringify(exported)
+    const digest = createHash("sha256").update(exportRaw).digest("hex")
+    run.result_manifest.artifacts["http_exchanges.json"] = {
+      path: "http_exchanges.json",
+      bytes: Buffer.byteLength(exportRaw),
+      sha256: digest,
+    }
+    run.evidence_export.sha256 = digest
+    const output = parseEngineOutput(
+      read("vulnerabilities.json"),
+      JSON.stringify(run),
+      { httpExchangesRaw: exportRaw },
+      { expectedRunName: "task5-writer-fixture" }
+    )
+    const input = params({
+      scanId: "task5-writer-fixture",
+      engineResult: { output },
+      orchestratorResult: {
+        allFindings: output.vulnerabilities,
+        engineFindings: output.vulnerabilities,
+        coverageIssues: [],
+      },
+    })
+    await finalizeScanLifecycle(input as never)
+    expect(mocks.uploadScanArtifact).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "http_exchanges" })
+    )
+    expect(mocks.persistResultManifest).toHaveBeenCalledWith(
+      expect.objectContaining({ scanId: "task5-writer-fixture", httpExchangeEvidence: null })
+    )
+    expect(mocks.persistFindings.mock.calls[0]?.[0]).not.toHaveProperty(
+      "httpExchangeArtifactChecksum"
+    )
+    expect(mocks.persistFindings).toHaveBeenCalledWith(
+      expect.objectContaining({
+        vulnerabilities: expect.arrayContaining([
+          expect.objectContaining({ pending_http_exchange_ids: ["18"] }),
+        ]),
+      })
+    )
+  })
+
+  it.each([
+    "receipt false",
+    "receipt absent",
+    "receipt string",
+    "unbounded pending overlap",
+    "foreign body",
+    "orphan body",
+    "duplicate body",
+    "absent owners",
+    "missing selected pending",
+    "missing claiming owner",
+    "foreign owner",
+    "stale owner",
+    "downgraded empty",
+    "downgraded malformed",
+  ])("quarantines %s before upload or capture-bearing persistence", async (change) => {
+    const output = parseWriterTuple(change)
+    const input = params({
+      scanId: "task5-writer-fixture",
+      engineResult: { output },
+      orchestratorResult: {
+        allFindings: output.vulnerabilities,
+        engineFindings: output.vulnerabilities,
+        coverageIssues: [],
+      },
+    })
+    await finalizeScanLifecycle(input as never)
+    expect(mocks.uploadScanArtifact).not.toHaveBeenCalled()
+    expect(output.httpExchangeExport).toBeNull()
+    expect(output.ingestionIssues.length).toBeGreaterThan(0)
+    for (const finding of output.vulnerabilities) {
+      expect(finding.pending_http_exchange_ids).toEqual(
+        change === "unbounded pending overlap" ? undefined : ["18"]
+      )
+      expect(finding.http_exchange_ids).toBeUndefined()
+    }
+  })
+
+  it.each([
+    { change: "overlap only", bodies: [], findingCaptures: [[]] },
+    { change: "overlap", bodies: ["19"], findingCaptures: [["19"]] },
+    { change: "shared overlap", bodies: ["17"], findingCaptures: [[], ["17"]] },
+  ])(
+    "stores only final captured owners for $change",
+    async ({ change, bodies, findingCaptures }) => {
+      const output = parseWriterTuple(change)
+      // Exercise the finalizer first so the storage assertions observe its actual byte handoff.
+      mocks.uploadScanArtifact.mockImplementation(async ({ content }) => ({
+        checksum: createHash("sha256").update(content).digest("hex"),
+        byteLength: Buffer.byteLength(content),
+        encryptionKeyRef: "vault://test",
+      }))
+      await finalizeScanLifecycle(
+        params({
+          scanId: "task5-writer-fixture",
+          engineResult: { output },
+          orchestratorResult: {
+            allFindings: output.vulnerabilities,
+            engineFindings: output.vulnerabilities,
+            coverageIssues: [],
+          },
+        }) as never
+      )
+      expect(output.vulnerabilities.map((finding) => finding.http_exchange_ids ?? [])).toEqual(
+        findingCaptures
+      )
+      expect(output.vulnerabilities[0]?.pending_http_exchange_ids).toEqual(["18", "17"])
+      if (bodies.length === 0) {
+        expect(mocks.uploadScanArtifact).not.toHaveBeenCalled()
+        expect(output.httpExchangeExport).toBeNull()
+        return
+      }
+      expect(mocks.uploadScanArtifact).toHaveBeenCalledOnce()
+      const content = mocks.uploadScanArtifact.mock.calls[0][0].content
+      expect(
+        JSON.parse(content).exchanges.map(
+          (entry: { proxy_request_id: string }) => entry.proxy_request_id
+        )
+      ).toEqual(bodies)
+      expect(content).not.toContain("pending-only-17")
+      expect(output.httpExchangeExport?.document).toBe(content)
+      expect(output.httpExchangeExport?.exchangeCount).toBe(bodies.length)
+      expect([...(output.httpExchangeExport?.knownIds ?? [])]).toEqual(bodies)
+      expect([...(output.httpExchangeExport?.requestHosts.keys() ?? [])]).toEqual(bodies)
+      expect(mocks.persistFindings.mock.calls[0][0].httpExchangeArtifactChecksum).toBe(
+        createHash("sha256").update(content).digest("hex")
+      )
+    }
+  )
+
+  it("retries storage for the same 1.2 scan before any immutable capture receipt", async () => {
+    const output = parseWriterTuple()
+    const input = params({
+      scanId: "task5-writer-fixture",
+      engineResult: { output },
+      orchestratorResult: {
+        allFindings: output.vulnerabilities,
+        engineFindings: output.vulnerabilities,
+        coverageIssues: [],
+      },
+    })
+    const { persistFindings } = await vi.importActual<
+      typeof import("../../engine/finding-persister")
+    >("../../engine/finding-persister")
+    mocks.persistFindings.mockImplementation(persistFindings)
+    mocks.prisma.evidence.findMany.mockResolvedValue([])
+    mocks.prisma.finding.findMany.mockResolvedValue([])
+    mocks.prisma.finding.create.mockResolvedValue({ id: "finding-1" })
+    mocks.prisma.findingCandidate.upsert.mockResolvedValue({ id: "candidate-1" })
+    mocks.uploadEvidence.mockResolvedValue({
+      storageUri: "private://context",
+      checksum: "c".repeat(64),
+      encryptionKeyRef: "vault://test",
+    })
+    const checksum = createHash("sha256").update(output.httpExchangeExport!.document).digest("hex")
+    mocks.uploadScanArtifact
+      .mockRejectedValueOnce(new Error("storage unavailable"))
+      .mockRejectedValueOnce(new Error("storage still unavailable"))
+      .mockRejectedValueOnce(new Error("temporary transport failure"))
+      .mockResolvedValueOnce({
+        checksum,
+        byteLength: 100,
+        encryptionKeyRef: "vault://test",
+      })
+    await expect(finalizeScanLifecycle(input as never)).rejects.toThrow()
+    expect(mocks.persistFindings).not.toHaveBeenCalled()
+    expect(mocks.prisma.findingCandidate.upsert).not.toHaveBeenCalled()
+    expect(mocks.prisma.findingVerification.upsert).not.toHaveBeenCalled()
+    await finalizeScanLifecycle(input as never)
+    expect(mocks.uploadScanArtifact).toHaveBeenCalledTimes(4)
+    expect(mocks.persistFindings).toHaveBeenCalledOnce()
+    const claim = mocks.uploadEvidence.mock.calls.find(([input]) => input.type === "claim_context")
+    expect(JSON.parse(claim![0].content)).toMatchObject({
+      httpExchangeArtifactChecksum: checksum,
+      httpExchangeIds: ["17"],
+      pendingHttpExchangeIds: ["18"],
+    })
+    expect(
+      mocks.prisma.findingCandidate.upsert.mock.calls[0][0].create.payload.httpExchangeIds
+    ).toEqual(["17"])
+    expect(mocks.prisma.findingVerification.upsert.mock.calls[0][0].create).toMatchObject({
+      status: "DETECTED",
+      evidence: { httpExchangeIds: ["17"], httpExchangeArtifactChecksum: checksum },
+    })
+    expect(mocks.persistFindings.mock.calls[0][0]).toMatchObject({
+      httpExchangeArtifactChecksum: checksum,
+      vulnerabilities: [expect.objectContaining({ http_exchange_ids: ["17"] })],
+    })
+  })
+
+  it("uploads only owned exchange bodies, excluding opaque target metadata from the 1.2 document", async () => {
+    const output = parseWriterTuple("private target metadata")
+    const document = output.httpExchangeExport!.document
+    mocks.uploadScanArtifact.mockResolvedValue({
+      checksum: createHash("sha256").update(document).digest("hex"),
+      encryptionKeyRef: "vault://test",
+    })
+    await finalizeScanLifecycle(
+      params({
+        scanId: "task5-writer-fixture",
+        engineResult: { output },
+        orchestratorResult: {
+          allFindings: output.vulnerabilities,
+          engineFindings: output.vulnerabilities,
+          coverageIssues: [],
+        },
+      }) as never
+    )
+    const content = mocks.uploadScanArtifact.mock.calls[0][0].content
+    expect(content).not.toContain("unowned body in opaque metadata")
+    expect(
+      JSON.parse(content).exchanges.map(
+        (entry: { proxy_request_id: string }) => entry.proxy_request_id
+      )
+    ).toEqual(["17"])
+  })
+
+  it("refuses capture-bearing writes when storage returns a different checksum", async () => {
+    const output = parseWriterTuple()
+    const input = params({
+      scanId: "task5-writer-fixture",
+      engineResult: { output },
+      orchestratorResult: {
+        allFindings: output.vulnerabilities,
+        engineFindings: output.vulnerabilities,
+        coverageIssues: [],
+      },
+    })
+    mocks.uploadScanArtifact.mockResolvedValue({
+      checksum: "0".repeat(64),
+      encryptionKeyRef: "vault://test",
+    })
+    await expect(finalizeScanLifecycle(input as never)).rejects.toThrow("checksum")
+    expect(mocks.persistFindings).not.toHaveBeenCalled()
   })
 
   it("seals findings and the manifest before retests, score and durable completion", async () => {

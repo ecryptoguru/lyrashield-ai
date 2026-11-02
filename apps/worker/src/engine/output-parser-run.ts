@@ -528,6 +528,7 @@ function parseEvidenceExportOutcome(
     reason?: unknown
     exchanges?: unknown
     missing_request_ids?: unknown
+    capacity_omitted_request_ids?: unknown
   }
   const status = ["exported", "partial", "skipped", "failed"].includes(String(record.status))
     ? (String(record.status) as "exported" | "partial" | "skipped" | "failed")
@@ -542,7 +543,18 @@ function parseEvidenceExportOutcome(
         .filter((id): id is string => typeof id === "string" && HTTP_EXCHANGE_ID_PATTERN.test(id))
         .slice(0, 500)
     : undefined
-  if (status === undefined && reason === undefined && exchanges === undefined && !missing?.length) {
+  const capacityOmitted = Array.isArray(record.capacity_omitted_request_ids)
+    ? record.capacity_omitted_request_ids
+        .filter((id): id is string => typeof id === "string" && HTTP_EXCHANGE_ID_PATTERN.test(id))
+        .slice(0, 500)
+    : undefined
+  if (
+    status === undefined &&
+    reason === undefined &&
+    exchanges === undefined &&
+    !missing?.length &&
+    !capacityOmitted?.length
+  ) {
     return undefined
   }
   return {
@@ -550,5 +562,6 @@ function parseEvidenceExportOutcome(
     ...(reason ? { reason } : {}),
     ...(exchanges !== undefined ? { exchanges } : {}),
     ...(missing?.length ? { missing_request_ids: missing } : {}),
+    ...(capacityOmitted?.length ? { capacity_omitted_request_ids: capacityOmitted } : {}),
   }
 }

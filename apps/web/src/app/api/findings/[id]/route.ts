@@ -7,7 +7,12 @@ import {
   acceptRisk,
   validateFindingScope,
 } from "@lyrashield/db"
-import { prisma } from "@lyrashield/db"
+import {
+  CLAIM_OBSERVATION_PREFIX,
+  claimObservationPrefix,
+  prisma,
+  verifyStoredManifestChecksum,
+} from "@lyrashield/db"
 import { PatchFindingSchema } from "@lyrashield/types"
 import { readEncryptedArtifact } from "@lyrashield/evidence-storage"
 import { requirePermission, resolveOAuthReadScope } from "@lyrashield/auth/server"
@@ -42,26 +47,64 @@ const FindingDetailScopeSchema = z.object({
  * the decrypted payload is re-projected field-by-field so nothing unvetted
  * (storage URIs, raw blob keys) reaches the response.
  */
-async function loadEvidenceInsights(findingId: string, workspaceId: string) {
-  const row = await prisma.evidence.findFirst({
-    where: { findingId, type: "claim_context", finding: { workspaceId } },
-    select: { storageUri: true },
-  })
-  if (!row?.storageUri) return null
-  let artifact
-  try {
-    artifact = await readEncryptedArtifact(row.storageUri, workspaceId)
-  } catch {
-    return null
+async function loadEvidenceInsights(
+  findingId: string,
+  workspaceId: string,
+  originScanId: string,
+  observedInScanId?: string
+) {
+  // Candidate creation is the durable observation timestamp; use an explicit
+  // tie-breaker and never infer recency from the origin finding's scan id.
+  const latestObservation = observedInScanId
+    ? null
+    : await prisma.findingCandidate.findFirst({
+        where: {
+          findingId,
+          workspaceId,
+          finding: { workspaceId },
+          scan: { workspaceId, deletedAt: null },
+        },
+        select: { scanId: true },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      })
+  const selectedScanId = observedInScanId ?? latestObservation?.scanId ?? originScanId
+  const allowLegacy = !observedInScanId && selectedScanId === originScanId
+  const latestContext = async (id: { startsWith: string } | { not: { startsWith: string } }) => {
+    const [row] = await prisma.evidence.findMany({
+      where: { findingId, id, type: "claim_context", finding: { workspaceId } },
+      select: { storageUri: true, redactionStatus: true, checksum: true },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: 1,
+    })
+    return row
   }
+  const boundRow = await latestContext({
+    startsWith: claimObservationPrefix(findingId, selectedScanId),
+  })
+  const row =
+    boundRow ??
+    (allowLegacy
+      ? await latestContext({ not: { startsWith: CLAIM_OBSERVATION_PREFIX } })
+      : undefined)
+  if (!row?.storageUri || row.redactionStatus === "deleted") return null
   let parsed: Record<string, unknown>
   try {
+    const artifact = await readEncryptedArtifact(row.storageUri, workspaceId)
+    if ((boundRow || row.checksum) && (!row.checksum || row.checksum !== artifact.checksum))
+      return null
     const value = JSON.parse(artifact.content.toString("utf8"))
     if (!value || typeof value !== "object" || Array.isArray(value)) return null
-    parsed = value as Record<string, unknown>
+    parsed = value
   } catch {
     return null
   }
+  const scanBound = !!boundRow
+  if (
+    scanBound
+      ? parsed.sourceScanId !== selectedScanId || parsed.sourceFindingId !== findingId
+      : parsed.sourceScanId !== undefined || parsed.sourceFindingId !== undefined
+  )
+    return null
   const text = (key: string) => {
     const value = parsed[key]
     if (typeof value === "string") return value.slice(0, 64_000)
@@ -79,7 +122,45 @@ async function loadEvidenceInsights(findingId: string, workspaceId: string) {
   const advisory = AdvisoryCvssSchema.safeParse(
     typeof parsed.advisoryCvss === "number" ? { score: parsed.advisoryCvss } : parsed.advisoryCvss
   )
+  const idList = z.array(z.string().regex(/^[0-9]{1,128}$/)).max(10)
+  const pending = idList.safeParse(parsed.pendingHttpExchangeIds)
+  const pendingIds = scanBound && pending.success ? [...new Set(pending.data)] : undefined
+  const captured = idList.safeParse(parsed.httpExchangeIds)
+  let capturedIds: string[] | undefined
+  if (
+    scanBound &&
+    parsed.evidenceContractVersion === "1.2" &&
+    captured.success &&
+    captured.data.length &&
+    typeof parsed.httpExchangeArtifactChecksum === "string" &&
+    /^[a-f0-9]{64}$/.test(parsed.httpExchangeArtifactChecksum) &&
+    (parsed.pendingHttpExchangeIds === undefined || pending.success)
+  ) {
+    const stored = await prisma.scanResultManifest.findFirst({
+      where: { scanId: selectedScanId, scan: { workspaceId, deletedAt: null } },
+      select: { manifest: true, checksum: true, checksumInput: true },
+    })
+    const link = z
+      .object({
+        httpExchangeEvidence: z.object({
+          checksum: z.string(),
+          exchangeCount: z.number().int().positive(),
+        }),
+      })
+      .safeParse(stored?.manifest)
+    if (
+      link.success &&
+      verifyStoredManifestChecksum(stored) === "MATCH" &&
+      link.data.httpExchangeEvidence.checksum === parsed.httpExchangeArtifactChecksum
+    ) {
+      capturedIds = [...new Set(captured.data)].filter((id) => !pendingIds?.includes(id))
+    }
+  }
   const insights = {
+    capturedHttpExchangeIds: capturedIds?.length ? capturedIds : undefined,
+    pendingHttpExchangeIds: pendingIds?.length ? pendingIds : undefined,
+    // Recompute the state from the bounded claim; never trust a stored upgrade.
+    pendingHttpExchangeState: pendingIds?.length ? ("PENDING" as const) : undefined,
     counterevidence: text("counterevidence"),
     evidenceWarnings: Array.isArray(evidenceWarnings)
       ? evidenceWarnings.filter((item): item is string => typeof item === "string").slice(0, 25)
@@ -92,7 +173,13 @@ async function loadEvidenceInsights(findingId: string, workspaceId: string) {
     engineVerificationState: text("engineVerificationState"),
     engineConfidence: text("engineConfidence"),
   }
-  return Object.values(insights).some((v) => v !== undefined) ? insights : null
+  return Object.values(insights).some((v) => v !== undefined)
+    ? {
+        ...insights,
+        evidenceObservationScanId: scanBound ? selectedScanId : undefined,
+        legacyEvidenceContext: scanBound ? undefined : (true as const),
+      }
+    : null
 }
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -148,7 +235,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     // Engine-declared insights are allowlist-projected from the encrypted
     // claim_context artifact — private to the workspace, never part of public
     // shares or exports.
-    const evidenceInsights = await loadEvidenceInsights(finding.id, workspaceId)
+    const evidenceInsights = await loadEvidenceInsights(
+      finding.id,
+      workspaceId,
+      finding.scanId,
+      parsedScope.data.observedInScanId
+    )
 
     return apiSuccess({ ...finding, evidence: safeEvidence, evidenceInsights, plainLanguage })
   } catch (error) {

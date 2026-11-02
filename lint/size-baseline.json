@@ -110,19 +110,14 @@
       "totalExcess": 225,
       "maxExcess": 225
     },
-    "apps/web/src/app/(dashboard)/dashboard/findings/finding-detail-drawer.tsx|max-lines": {
-      "count": 1,
-      "totalExcess": 24,
-      "maxExcess": 24
-    },
     "apps/web/src/app/(dashboard)/dashboard/findings/finding-detail-drawer.tsx|max-lines-per-function": {
       "count": 1,
       "totalExcess": 252,
       "maxExcess": 252
     },
     "apps/web/src/app/(dashboard)/dashboard/findings/finding-detail-tabs.tsx|max-lines-per-function": {
-      "count": 2,
-      "totalExcess": 161,
+      "count": 1,
+      "totalExcess": 84,
       "maxExcess": 84
     },
     "apps/web/src/app/(dashboard)/dashboard/findings/findings-client.tsx|max-lines-per-function": {
@@ -447,13 +442,13 @@
     },
     "apps/worker/src/engine/finding-persister.ts|max-lines-per-function": {
       "count": 2,
-      "totalExcess": 87,
-      "maxExcess": 71
+      "totalExcess": 72,
+      "maxExcess": 67
     },
     "apps/worker/src/engine/output-parser-findings.ts|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 18,
-      "maxExcess": 18
+      "totalExcess": 17,
+      "maxExcess": 17
     },
     "apps/worker/src/engine/result-integrity/retest-completion.ts|max-lines-per-function": {
       "count": 2,

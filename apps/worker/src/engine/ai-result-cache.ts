@@ -24,6 +24,7 @@ export type AiResultCacheDescriptor = {
   engineRevision: string
   providerFingerprint: string
   modelSettings: {
+    mainApiMode: "auto" | "responses" | "chat_completions"
     modelRoute: string
     reasoningEffort: string
     promptCachePolicy: "off"
