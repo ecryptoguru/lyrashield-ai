@@ -9,7 +9,12 @@
  * tool surface is testable without a browser: the same definitions run the
  * real registration path in unit tests.
  */
-import { getManualScanOptions, type ManualScanOption } from "@/lib/scan-presets"
+import { EngineBudgetCeilingUsdSchema } from "@lyrashield/types"
+import {
+  supportsEngineSpendingLimit,
+  getManualScanOptions,
+  type ManualScanOption,
+} from "@/lib/scan-presets"
 import type { WebMcpInputSchema, WebMcpPageTool } from "@/lib/webmcp/register"
 import type { TargetItem } from "./scan-types"
 
@@ -31,20 +36,10 @@ const SCANS_WEBMCP_FORBIDDEN_INPUT_KEYS = [
 const prepareScanInputSchema: WebMcpInputSchema = {
   required: ["targetName"],
   properties: {
-    targetName: {
-      type: "string",
-      description: "The unique visible target name.",
+    engineBudgetCeilingUsd: {
+      type: "number",
+      description: "Optional positive USD limit for this review’s scan engine.",
     },
-    reviewType: {
-      type: "string",
-      description: "Optional review type id. Defaults to the first available option.",
-    },
-  },
-}
-
-const checkScanInputSchema: WebMcpInputSchema = {
-  required: ["targetName"],
-  properties: {
     targetName: {
       type: "string",
       description: "The unique visible target name.",
@@ -59,20 +54,23 @@ const checkScanInputSchema: WebMcpInputSchema = {
 const requestScanInputSchema: WebMcpInputSchema = {
   required: ["targetName", "requestId"],
   properties: {
+    ...prepareScanInputSchema.properties,
     requestId: {
       type: "string",
       description:
         "Unique ID for this requested scan. Reuse only for an identical retry; use a new ID for a new scan.",
     },
-    targetName: {
-      type: "string",
-      description: "The unique visible target name.",
-    },
-    reviewType: {
-      type: "string",
-      description: "Optional review type id. Defaults to the first available option.",
-    },
   },
+}
+
+function requestedEngineLimit(amount: number | undefined, option: ManualScanOption) {
+  if (amount === undefined) return {}
+  if (
+    !supportsEngineSpendingLimit(option) ||
+    !EngineBudgetCeilingUsdSchema.safeParse(amount).success
+  )
+    throw new Error("Enter a positive engine spending limit for an engine-backed review.")
+  return { engineBudgetCeilingUsd: amount }
 }
 
 /** Case-insensitive exact visible-name match — identical semantics across
@@ -127,6 +125,7 @@ export function resolveReviewOption(
 }
 
 export interface CheckSecurityScanResult {
+  engineBudgetCeilingUsd?: number
   allowed: boolean
   code: string | null
   message: string | null
@@ -186,7 +185,7 @@ export function createCheckSecurityScanHandler(deps: {
 }) {
   const fetchImpl = deps.fetchFn ?? globalThis.fetch
   return async (
-    input: { targetName: string; reviewType?: string },
+    input: CheckScanInput,
     { signal }: { signal: AbortSignal }
   ): Promise<CheckSecurityScanResult> => {
     const target = resolveVisibleTargetByName(deps.getTargets(), input.targetName)
@@ -197,6 +196,9 @@ export function createCheckSecurityScanHandler(deps: {
       goal: selectedOption.goal,
       mode: selectedOption.mode,
     })
+    const ceiling = requestedEngineLimit(input.engineBudgetCeilingUsd, selectedOption)
+    if (ceiling.engineBudgetCeilingUsd !== undefined)
+      params.set("engineBudgetCeilingUsd", String(ceiling.engineBudgetCeilingUsd))
     const response = await fetchImpl(`/api/scans/eligibility?${params.toString()}`, {
       method: "GET",
       signal,
@@ -221,6 +223,7 @@ export function createCheckSecurityScanHandler(deps: {
     return {
       // allowed:false is a successful read carrying the denial code — the
       // agent sees exactly what the composer would show, nothing more.
+      ...ceiling,
       allowed: data.allowed === true,
       code: data.code ?? null,
       message: data.message ?? null,
@@ -253,9 +256,8 @@ export interface ScansPageToolDeps {
   fetchFn?: typeof fetch
 }
 
-type CheckScanInput = { targetName: string; reviewType?: string }
-type PrepareScanInput = { targetName: string; reviewType?: string }
-type RequestScanInput = { requestId: string; targetName: string; reviewType?: string }
+type CheckScanInput = { targetName: string; reviewType?: string; engineBudgetCeilingUsd?: number }
+type RequestScanInput = CheckScanInput & { requestId: string }
 
 /** `check_security_scan` — advisory read-only preflight on the page's own
  * workspace/session. Same verdict semantics the SDK/CLI/MCP adapters expose. */
@@ -268,7 +270,7 @@ export function createCheckSecurityScanTool(
     title: "Check security scan",
     description:
       "Advisory read-only check whether starting a scan for a target and review type would currently be admitted. Returns the server's verdict; does not start the scan.",
-    inputSchema: checkScanInputSchema,
+    inputSchema: prepareScanInputSchema,
     classification: "read",
     dataClass: "workspace-summary",
     untrustedContent: false,
@@ -294,12 +296,13 @@ export function createCheckSecurityScanTool(
  * confirmation. Prepares UI only; never posts. */
 export function createPrepareSecurityScanTool(
   deps: Pick<ScansPageToolDeps, "getTargets" | "getSelectedPreset"> & {
+    setEngineBudgetCeiling: (value: string) => void
     setSelectedTarget: (targetId: string) => void
     setSelectedPreset: (presetId: string) => void
     setShowCreate: (show: boolean) => void
     setModeResetNotice: (notice: string | null) => void
   }
-): WebMcpPageTool<PrepareScanInput> {
+): WebMcpPageTool<CheckScanInput> {
   return {
     name: "prepare_security_scan",
     title: "Prepare security scan",
@@ -317,6 +320,9 @@ export function createPrepareSecurityScanTool(
       const target = resolveVisibleTargetByName(deps.getTargets(), input.targetName)
       const selectedOption = resolveReviewOption(target, input.reviewType, deps.getSelectedPreset())
 
+      const ceiling = requestedEngineLimit(input.engineBudgetCeilingUsd, selectedOption)
+      if (ceiling.engineBudgetCeilingUsd !== undefined)
+        deps.setEngineBudgetCeiling(String(ceiling.engineBudgetCeilingUsd))
       // Prepare the existing form for human confirmation. No apiPost.
       deps.setSelectedTarget(target.id)
       deps.setSelectedPreset(selectedOption.id)
@@ -325,6 +331,7 @@ export function createPrepareSecurityScanTool(
 
       return {
         prepared: true,
+        ...ceiling,
         target: { name: target.name, type: target.type },
         reviewType: {
           id: selectedOption.id,
@@ -385,6 +392,7 @@ export function createRequestSecurityScanTool(
       }
 
       const fetchImpl = deps.fetchFn ?? globalThis.fetch
+      const ceiling = requestedEngineLimit(input.engineBudgetCeilingUsd, selectedOption)
       const response = await fetchImpl("/api/scans", {
         method: "POST",
         headers: {
@@ -396,6 +404,7 @@ export function createRequestSecurityScanTool(
           targetId: target.id,
           goal: selectedOption.goal,
           mode: selectedOption.mode,
+          ...ceiling,
         }),
         signal,
       })
@@ -408,6 +417,7 @@ export function createRequestSecurityScanTool(
       }
       return {
         started: true,
+        ...ceiling,
         scanId: body?.data?.id,
         operationId: body?.data?.operationId,
         target: { name: target.name, type: target.type },

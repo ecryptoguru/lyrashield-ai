@@ -282,7 +282,6 @@ async function post(request: Request) {
         workflow: data.workflow,
       })
     }
-    const policyId = policy?.id
 
     // W3-01: durable operation identity is opt-in. Callers that send an
     // Idempotency-Key get identical-retry replay semantics; without the
@@ -296,7 +295,7 @@ async function post(request: Request) {
         workspaceId,
         operationName: "scan.create",
         idempotencyKey,
-        input: { ...data, mode: canonicalMode, policyId: policyId ?? null },
+        input: { ...data, mode: canonicalMode, policyId: policy?.id ?? null },
         connectionId: session.oauth?.connectionId,
         authorizationVersion: session.oauth?.authorizationVersion,
         apiKeyId: session.apiKey?.keyId,
@@ -592,7 +591,8 @@ async function post(request: Request) {
       targetId: data.targetId,
       goal: data.goal,
       mode: canonicalMode,
-      policyId,
+      policyId: policy?.id,
+      engineBudgetCeilingUsd: data.engineBudgetCeilingUsd,
       createdById: session.userId,
       // W0.4 — bind the delegated grant that just passed assertOAuthDelegatedScope
       // into the durable scan record, so the async execution boundary re-verifies
@@ -624,7 +624,7 @@ async function post(request: Request) {
         targetId: data.targetId,
         goal: data.goal,
         mode: canonicalMode,
-        policyId,
+        policyId: policy?.id,
         focus: data.focus,
       })
     } catch (enqueueErr) {

@@ -221,6 +221,62 @@ describe("scans page tool registrations", () => {
     return { store, tool, cleanup }
   }
 
+  it("carries the requested $1 ceiling through check, prepare and the durable request", async () => {
+    const deps = {
+      workspaceId: "ws-page",
+      getTargets: () => [target({ id: "repo", name: "Canary" })],
+      getSelectedPreset: () => "RELEASE_CHECK",
+    }
+    const input = { targetName: "Canary", engineBudgetCeilingUsd: 1 }
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: { allowed: true, id: "scan-9" } }),
+    })
+    const setters = {
+      setSelectedTarget: vi.fn(),
+      setSelectedPreset: vi.fn(),
+      setShowCreate: vi.fn(),
+      setModeResetNotice: vi.fn(),
+      setEngineBudgetCeiling: vi.fn(),
+    }
+    for (const [tool, params] of [
+      [register(createCheckSecurityScanTool(deps)).tool, input],
+      [register(createPrepareSecurityScanTool({ ...deps, ...setters })).tool, input],
+      [register(createRequestSecurityScanTool(deps)).tool, { ...input, requestId: "canary-1" }],
+    ] as const) {
+      await expect(tool.execute(params, { signal: abortSignal })).resolves.toMatchObject({
+        ok: true,
+      })
+    }
+    expect(
+      new URL(fetchMock.mock.calls[0]![0], "http://local").searchParams.get(
+        "engineBudgetCeilingUsd"
+      )
+    ).toBe("1")
+    expect(setters.setEngineBudgetCeiling).toHaveBeenCalledWith("1")
+    expect(JSON.parse(fetchMock.mock.calls[1]![1].body).engineBudgetCeilingUsd).toBe(1)
+  })
+
+  it.each([0, -1, Number.NaN, Number.POSITIVE_INFINITY])(
+    "rejects engine ceiling %s before a durable request",
+    async (amount) => {
+      const { tool } = register(
+        createRequestSecurityScanTool({
+          workspaceId: "ws-page",
+          getTargets: () => [target({ id: "repo", name: "Canary" })],
+          getSelectedPreset: () => "RELEASE_CHECK",
+        })
+      )
+      await expect(
+        tool.execute(
+          { targetName: "Canary", requestId: "same", engineBudgetCeilingUsd: amount },
+          { signal: abortSignal }
+        )
+      ).resolves.toMatchObject({ ok: false })
+      expect(fetchMock).not.toHaveBeenCalled()
+    }
+  )
+
   it("request_security_scan posts the page workspace and carries safe receipt refs + recovery link", async () => {
     fetchMock.mockResolvedValue({
       ok: true,
@@ -401,6 +457,7 @@ describe("scans page tool registrations", () => {
 
   it("prepare_security_scan keeps its contract: fills the form, never submits", async () => {
     const setters = {
+      setEngineBudgetCeiling: vi.fn(),
       setSelectedTarget: vi.fn(),
       setSelectedPreset: vi.fn(),
       setShowCreate: vi.fn(),
@@ -426,6 +483,7 @@ describe("scans page tool registrations", () => {
     })
     expect(result.output.nextStep).toMatch(/Start/i)
     expect(setters.setSelectedTarget).toHaveBeenCalledWith("t-1")
+    expect(setters.setEngineBudgetCeiling).not.toHaveBeenCalled()
     expect(setters.setShowCreate).toHaveBeenCalledWith(true)
     expect(fetchMock).not.toHaveBeenCalled()
     expect(store.getSnapshot().latest?.humanConfirmationRequired).toBe(true)

@@ -111,6 +111,10 @@ export type ManualScanOption = {
   authorizationHint?: string
 }
 
+export function supportsEngineSpendingLimit(option?: ManualScanOption): boolean {
+  return option?.usesAi === true && option.workflow !== "AUTHENTICATED_ASSESSMENT"
+}
+
 function repoOptions(): ManualScanOption[] {
   return SCAN_PRESET_ORDER.filter((id) => id !== "WEEKLY_MONITOR").map((id) => {
     const preset = SCAN_PRESETS[id]

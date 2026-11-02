@@ -122,6 +122,7 @@ describe("createScan execution plan persistence", () => {
 
   function makeTx(targetType: string) {
     const tx = {
+      policy: { findFirst: vi.fn() },
       userScanSlot: { findUnique: vi.fn().mockResolvedValue(null), create: vi.fn() },
       scanCapacityReservation: { create: vi.fn() },
       $executeRaw: vi.fn().mockResolvedValue(undefined),
@@ -165,6 +166,61 @@ describe("createScan execution plan persistence", () => {
     // The advisory admission lock precedes the row write in the same tx.
     expect(tx.$executeRaw).toHaveBeenCalled()
   })
+
+  it.each([
+    { requested: 1, policy: 5, expected: 1 },
+    { requested: 3, policy: 1, expected: 1 },
+    { requested: undefined, policy: 0, expected: 0 },
+    { requested: 20, policy: null, expected: 1.2 },
+  ])(
+    "hashes the admitted budget ($requested, policy $policy)",
+    async ({ requested, policy, expected }) => {
+      const tx = makeTx("REPO")
+      tx.policy.findFirst.mockResolvedValue({
+        maxBudgetUsd: policy === null ? null : { toNumber: () => policy },
+      })
+      await createScan({
+        workspaceId: "ws-1",
+        targetId: "target-1",
+        createdById: "user-1",
+        goal: "TEST_APP",
+        mode: "QUICK",
+        policyId: "p",
+        engineBudgetCeilingUsd: requested,
+      })
+      expect(tx.policy.findFirst).toHaveBeenCalledWith({
+        where: { id: "p", workspaceId: "ws-1", deletedAt: null },
+        select: { maxBudgetUsd: true },
+      })
+      const { executionPlan, executionPlanHash } = tx.scan.create.mock.calls[0]![0].data
+      expect(executionPlan.limits.maxBudgetUsd).toBe(expected)
+      expect(verifyStoredScanExecutionPlan(executionPlan, executionPlanHash).ok).toBe(true)
+    }
+  )
+
+  it.each(["missing", "invalid", "beta"])(
+    "refuses %s budget policy before creating a row",
+    async (kind) => {
+      const beta = kind === "beta"
+      const tx = makeTx(beta ? "WEB_APP" : "REPO")
+      tx.policy.findFirst.mockResolvedValue(
+        kind === "missing" ? null : { maxBudgetUsd: { toNumber: () => (beta ? 1 : NaN) } }
+      )
+      await expect(
+        createScan({
+          workspaceId: "ws-1",
+          targetId: "target-1",
+          createdById: "user-1",
+          goal: "TEST_APP",
+          mode: beta ? "DEEP" : "QUICK",
+          workflow: beta ? "AUTHENTICATED_ASSESSMENT" : "REVIEW_TARGET",
+          ...(beta ? { authorizationRef: "auth" } : {}),
+          policyId: "p",
+        })
+      ).rejects.toThrow()
+      expect(tx.scan.create).not.toHaveBeenCalled()
+    }
+  )
 
   it("persists resolved source provenance for REVIEW_CHANGES", async () => {
     const tx = makeTx("REPO")

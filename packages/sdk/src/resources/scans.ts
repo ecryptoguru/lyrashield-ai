@@ -14,6 +14,8 @@ export interface ScanQuery {
 
 export interface ScanInput {
   idempotencyKey?: string
+  /** Optional upper bound on engine spending for an ordinary engine-backed review. */
+  engineBudgetCeilingUsd?: number
   workspaceId?: string
   targetId: string
   goal?: string
@@ -135,6 +137,8 @@ export interface CancelScanOptions {
    * decides whether it binds a durable operation record.
    */
   idempotencyKey?: string
+  /** Optional upper bound on engine spending for an ordinary engine-backed review. */
+  engineBudgetCeilingUsd?: number
   /** Caller abort signal — forwards to the underlying request. */
   signal?: AbortSignal
 }

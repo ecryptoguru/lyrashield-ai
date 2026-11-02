@@ -194,7 +194,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         scanRecord,
         executionPlan,
         targetType: target.type,
-        destructiveTestsAllowed: policy?.destructiveTestsAllowed === true,
+        currentPolicy: policy,
         // Plan-required admission is deployable independently of the additive
         // migration: OFF drains legacy null-plan rows on their original path;
         // ON requires every job to carry a stored, hash-verified plan.

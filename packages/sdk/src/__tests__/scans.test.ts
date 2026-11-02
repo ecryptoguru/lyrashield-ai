@@ -44,6 +44,7 @@ describe("createScan Review Changes inputs", () => {
       workflow: "REVIEW_CHANGES",
       baseRef: "main",
       headRef: "feature/42",
+      engineBudgetCeilingUsd: 1,
     })
 
     const init = mockFetch.mock.calls[0]![1] as RequestInit
@@ -56,6 +57,7 @@ describe("createScan Review Changes inputs", () => {
       workflow: "REVIEW_CHANGES",
       baseRef: "main",
       headRef: "feature/42",
+      engineBudgetCeilingUsd: 1,
     })
   })
 

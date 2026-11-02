@@ -316,6 +316,31 @@ describe("verifyScanAdmission", () => {
       })
     })
 
+    it("denies a queued fixed-budget assessment if the assigned policy is tightened", async () => {
+      const plan = buildScanExecutionPlan({
+        targetType: "API",
+        mode: "DEEP",
+        workflow: "AUTHENTICATED_ASSESSMENT",
+        authorizationRef: "scope",
+      })
+      const policy = { maxBudgetUsd: { toNumber: () => 1 } }
+      await expect(
+        verifyScanAdmission(
+          params({
+            executionPlan: plan,
+            targetType: "API",
+            currentPolicy: policy as never,
+            authAssessmentPermitted: true,
+          })
+        )
+      ).resolves.toMatchObject({
+        ok: false,
+        result: { errorCategory: "SCAN_PLAN_LIMITS_EXCEEDED" },
+      })
+      expect(mocks.resolveAuthenticatedAssessmentAuthorization).not.toHaveBeenCalled()
+      expect(mocks.evaluateScanEntitlement).not.toHaveBeenCalled()
+    })
+
     it("denies AUTHENTICATED_ASSESSMENT when the current policy allows destructive tests", async () => {
       const betaPlan = buildScanExecutionPlan({
         workflow: "AUTHENTICATED_ASSESSMENT",

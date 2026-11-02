@@ -306,6 +306,48 @@ describe("scan operation route regressions", () => {
     expect(calls[0]?.[0].input).not.toEqual(calls[1]?.[0].input)
     expect(calls[0]?.[0].input).toHaveProperty("policyId", "policy-a")
   })
+  it("binds the requested engine ceiling to admission and operation identity, never queue authority", async () => {
+    let admittedInput: string | undefined
+    vi.mocked(claimOrGetAgentOperation).mockImplementation(async ({ input }) => {
+      const identity = JSON.stringify(input)
+      if (!admittedInput) {
+        admittedInput = identity
+        const claim = { status: "NEW", operation: { id: "op-1" } }
+        return claim as never
+      }
+      const result =
+        identity === admittedInput
+          ? {
+              status: "REPLAY",
+              operation: { id: "op-1", result: { id: "new-scan" }, resultReference: "new-scan" },
+            }
+          : { status: "CONFLICT", message: "Request changed" }
+      return result as never
+    })
+    const statuses: number[] = []
+    for (const amount of [1, 1, 0.5]) {
+      const req = makeRequest({
+        workspaceId: "ws-1",
+        targetId: "t1",
+        goal: "TEST_APP",
+        mode: "SAFE",
+        engineBudgetCeilingUsd: amount,
+      })
+      req.headers.set("Idempotency-Key", "same-request")
+      statuses.push((await POST(req)).status)
+    }
+    expect(statuses).toEqual([201, 200, 409])
+    expect(createScan).toHaveBeenCalledOnce()
+    expect(enqueueScanJob).toHaveBeenCalledOnce()
+    const claims = vi.mocked(claimOrGetAgentOperation).mock.calls.map(([claim]) => claim.input)
+    expect(claims[0]).toMatchObject({ engineBudgetCeilingUsd: 1 })
+    expect(claims[1]).toEqual(claims[0])
+    expect(claims[2]).not.toEqual(claims[0])
+    expect(createScan).toHaveBeenCalledWith(expect.objectContaining({ engineBudgetCeilingUsd: 1 }))
+    for (const [job] of vi.mocked(enqueueScanJob).mock.calls)
+      expect(job).not.toHaveProperty("engineBudgetCeilingUsd")
+  })
+
   it("binds workflow inputs to operation input", async () => {
     const plain = request()
     const reviewChanges = makeRequest({

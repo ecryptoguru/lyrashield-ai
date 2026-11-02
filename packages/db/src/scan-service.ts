@@ -1,6 +1,6 @@
 import { targetReadScopeWhere, type ListScansParams } from "./read-query-scope"
 export type { ListScansParams } from "./read-query-scope"
-import type { CreateScanParams } from "./scan-service-types"
+import type { CreateScanParams, ScanTransaction } from "./scan-service-types"
 export type { CreateScanParams } from "./scan-service-types"
 export { WorkspaceScanConcurrencyLimitError, lockWorkspaceScanAdmission } from "./scan-slot"
 import { createScanCapacity, readScanCapacity, type ScanCapacityProjection } from "./scan-capacity"
@@ -16,12 +16,11 @@ import type {
 } from "./generated/prisma"
 import { logger } from "@lyrashield/logger"
 import {
-  buildScanExecutionPlan,
   DeterminismModeSchema,
   MAX_CONCURRENT_WORKSPACE_SCANS,
   ScanIdSchema,
 } from "@lyrashield/types"
-import { computeScanExecutionPlanHash } from "./scan-execution-plan"
+import { buildAdmittedScanPlan, computeScanExecutionPlanHash } from "./scan-execution-plan"
 import { isTerminalScanStatus, isValidTransition } from "./scan-transitions"
 import { withWorkspaceRLS } from "./rls"
 import {
@@ -79,7 +78,6 @@ export const ACTIVE_SCAN_STATUSES: ScanStatus[] = [
   "VERIFYING",
   "REQUIRES_APPROVAL",
 ]
-type ScanTransaction = Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
 
 type ScanStatusMetadata = {
   errorCategory?: string
@@ -141,15 +139,7 @@ export async function createScan(
     // target's type, the canonical profile registry, resolved provenance) and
     // persist it ONCE with the scan row — before queue publication. Updates
     // require a new scan; the queue carries scan identity only.
-    const executionPlan = buildScanExecutionPlan({
-      workflow: params.workflow,
-      targetType: target.type,
-      mode: (params.mode ?? "QUICK") as Scan["mode"],
-      deterministicOnly: determinismMode === "targeted_scanner",
-      ...(params.source ? { source: params.source } : {}),
-      ...(params.attachmentIds ? { attachmentIds: params.attachmentIds } : {}),
-      ...(params.authorizationRef ? { authorizationRef: params.authorizationRef } : {}),
-    })
+    const executionPlan = await buildAdmittedScanPlan(tx, params, target.type, determinismMode)
     const executionPlanHash = computeScanExecutionPlanHash(executionPlan)
 
     const scan = await tx.scan.create({

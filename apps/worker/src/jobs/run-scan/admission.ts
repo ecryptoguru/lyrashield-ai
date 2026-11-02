@@ -1,3 +1,4 @@
+import { env } from "@lyrashield/config"
 import { hasPermission, PERMISSIONS } from "@lyrashield/auth/permissions"
 import { evaluateScanEntitlement } from "@lyrashield/billing"
 import {
@@ -9,10 +10,48 @@ import {
   updateScanStatus,
   type ScanStatus,
 } from "@lyrashield/db"
-import { resolveScanProfile, type ScanExecutionPlan } from "@lyrashield/types"
+import {
+  AUTHENTICATED_ASSESSMENT_BETA_LIMITS,
+  resolveScanProfile,
+  type ScanExecutionPlan,
+} from "@lyrashield/types"
 import type { ScanJobData, ScanJobResult } from "../../types"
 import { refreshGateVerdictAfterTerminalScan } from "./lifecycle-utils"
+import type { readExecutionPolicy } from "./execution-policy"
 import type { StoredScanAuthority } from "./authority"
+
+function resolveCurrentProfile(targetType: string | undefined, mode: string) {
+  try {
+    return targetType ? resolveScanProfile({ targetType, mode }) : null
+  } catch {
+    return null
+  }
+}
+
+function dispatchPolicyError(
+  id: string | null,
+  policy: Awaited<ReturnType<typeof readExecutionPolicy>> | undefined,
+  plan: ScanExecutionPlan | null
+) {
+  const budget = policy?.maxBudgetUsd?.toNumber()
+  if (id && (!policy || (budget !== undefined && (!Number.isFinite(budget) || budget < 0)))) {
+    return {
+      errorCategory: "SCAN_POLICY_UNAVAILABLE",
+      errorMessage: "The assigned scan policy or its spending limit is unavailable.",
+    }
+  }
+  if (
+    plan?.workflow === "AUTHENTICATED_ASSESSMENT" &&
+    Math.min(budget ?? Infinity, env.PLATFORM_MAX_SCAN_BUDGET_USD) <
+      AUTHENTICATED_ASSESSMENT_BETA_LIMITS.maxBudgetUsd
+  ) {
+    return {
+      errorCategory: "SCAN_PLAN_LIMITS_EXCEEDED",
+      errorMessage: "The current spending limit does not permit this authenticated assessment.",
+    }
+  }
+  return null
+}
 
 export async function verifyScanAdmission(params: {
   scanId: string
@@ -42,6 +81,7 @@ export async function verifyScanAdmission(params: {
    * allowlist between queueing and execution still denies the run.
    */
   authAssessmentPermitted?: boolean
+  currentPolicy?: Awaited<ReturnType<typeof readExecutionPolicy>>
 }): Promise<{ ok: true } | { ok: false; result: ScanJobResult }> {
   const {
     scanId,
@@ -54,7 +94,7 @@ export async function verifyScanAdmission(params: {
     executionPlan = null,
     targetType,
     planRequired = false,
-    destructiveTestsAllowed = false,
+    destructiveTestsAllowed = params.currentPolicy?.destructiveTestsAllowed === true,
     authAssessmentPermitted = false,
   } = params
 
@@ -72,11 +112,14 @@ export async function verifyScanAdmission(params: {
         ? PERMISSIONS.retest.create
         : PERMISSIONS.scan.create
   let admissionError: { errorCategory: string; errorMessage: string } | null = null
+  const policyError = dispatchPolicyError(scanRecord.policyId, params.currentPolicy, executionPlan)
   if (!creator || !hasPermission(creator.role, executionPermission)) {
     admissionError = {
       errorCategory: "SCAN_AUTHORIZATION_REVOKED",
       errorMessage: "The scan creator no longer has permission to run this review.",
     }
+  } else if (policyError) {
+    admissionError = policyError
   } else if (planRequired && !executionPlan) {
     // Post-drain admission: every scan must carry its stored plan. Deny rather
     // than fabricating provenance for a legacy row.
@@ -88,12 +131,7 @@ export async function verifyScanAdmission(params: {
     // Current admission policy may only NARROW what the recorded plan asked
     // for — denial is the mechanism, never a silently widened or substituted
     // plan.
-    let currentProfile: ReturnType<typeof resolveScanProfile> | null = null
-    try {
-      currentProfile = targetType ? resolveScanProfile({ targetType, mode }) : null
-    } catch {
-      currentProfile = null
-    }
+    const currentProfile = resolveCurrentProfile(targetType, mode)
     if (targetType && executionPlan.targetType !== targetType) {
       admissionError = {
         errorCategory: "SCAN_PLAN_MISMATCH",

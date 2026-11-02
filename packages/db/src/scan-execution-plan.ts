@@ -1,5 +1,9 @@
+import { env } from "@lyrashield/config"
+import type { CreateScanParams, ScanTransaction } from "./scan-service-types"
 import { canonicalizeJson, sha256Sync } from "@lyrashield/security/webmcp"
 import {
+  buildScanExecutionPlan,
+  ScanExecutionPlanInputError,
   SCAN_EXECUTION_PLAN_VERSION,
   ScanExecutionPlanSchema,
   type ScanExecutionPlan,
@@ -78,4 +82,32 @@ export function verifyStoredScanExecutionPlan(
   }
 
   return { ok: true, plan: parsed.data }
+}
+
+export async function buildAdmittedScanPlan(
+  tx: ScanTransaction,
+  params: CreateScanParams,
+  targetType: string,
+  determinismMode: string
+) {
+  const policy = params.policyId
+    ? await tx.policy.findFirst({
+        where: { id: params.policyId, workspaceId: params.workspaceId, deletedAt: null },
+        select: { maxBudgetUsd: true },
+      })
+    : null
+  if (params.policyId && !policy)
+    throw new ScanExecutionPlanInputError("Assigned scan policy is unavailable.")
+  return buildScanExecutionPlan({
+    policyMaxBudgetUsd: policy?.maxBudgetUsd?.toNumber(),
+    platformMaxBudgetUsd: env.PLATFORM_MAX_SCAN_BUDGET_USD,
+    engineBudgetCeilingUsd: params.engineBudgetCeilingUsd,
+    workflow: params.workflow,
+    targetType,
+    mode: params.mode ?? "QUICK",
+    deterministicOnly: determinismMode === "targeted_scanner",
+    ...(params.source ? { source: params.source } : {}),
+    ...(params.attachmentIds ? { attachmentIds: params.attachmentIds } : {}),
+    ...(params.authorizationRef ? { authorizationRef: params.authorizationRef } : {}),
+  })
 }

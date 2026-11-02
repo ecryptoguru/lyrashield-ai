@@ -283,6 +283,37 @@ describe("normalizePlanDepth", () => {
 })
 
 describe("buildScanExecutionPlan", () => {
+  it("freezes a stricter platform limit and preserves the existing beta limits", () => {
+    expect(
+      buildScanExecutionPlan({
+        targetType: "REPO",
+        mode: "QUICK",
+        engineBudgetCeilingUsd: 1,
+        policyMaxBudgetUsd: 1.1,
+        platformMaxBudgetUsd: 0.4,
+      }).limits.maxBudgetUsd
+    ).toBe(0.4)
+    const beta = {
+      targetType: "WEB_APP",
+      mode: "DEEP",
+      workflow: "AUTHENTICATED_ASSESSMENT" as const,
+      authorizationRef: "auth",
+    }
+    expect(() => buildScanExecutionPlan({ ...beta, platformMaxBudgetUsd: 4 })).toThrow(
+      /spending limit/
+    )
+    expect(() => buildScanExecutionPlan({ ...beta, engineBudgetCeilingUsd: 1 })).toThrow(
+      /ordinary engine-backed/
+    )
+    expect(buildScanExecutionPlan(beta).limits.maxBudgetUsd).toBe(5)
+  })
+
+  it.each([0, -1, NaN, Infinity])("rejects an invalid per-run ceiling %s", (amount) => {
+    expect(() =>
+      buildScanExecutionPlan({ targetType: "REPO", mode: "QUICK", engineBudgetCeilingUsd: amount })
+    ).toThrow()
+  })
+
   it("builds a server-owned REVIEW_TARGET snapshot plan for a repo scan", () => {
     const plan = buildScanExecutionPlan({ targetType: "REPO", mode: "STANDARD" })
     expect(plan).toMatchObject({

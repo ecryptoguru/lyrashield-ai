@@ -2035,6 +2035,55 @@ describe("processScanJob", () => {
     )
   })
 
+  it.each([
+    { live: null, expected: null },
+    { live: NaN, expected: null },
+    { live: -1, expected: null },
+    { live: 0, expected: null },
+    { live: 5, expected: 1 },
+    { live: 0.5, expected: 0.5 },
+  ])(
+    "applies the frozen plan and current assigned policy $live before engine work",
+    async ({ live, expected }) => {
+      const plan = buildScanExecutionPlan({ targetType: "REPO", mode: "SAFE" })
+      plan.limits.maxBudgetUsd = 1
+      mockStoredScanAuthority({
+        policyId: "policy-1",
+        executionPlan: plan,
+        executionPlanHash: computeScanExecutionPlanHash(plan),
+      })
+      const policy = live === null ? null : { maxBudgetUsd: { toNumber: () => live } }
+      vi.mocked(prisma.policy.findFirst).mockResolvedValue(policy as never)
+      const result = await processScanJob({
+        ...mockJobFixture,
+        data: { ...mockJobFixture.data, policyId: "policy-1" },
+      } as never)
+      if (expected === null) {
+        expect(result.status).toBe("failed")
+        expect(runEngine).not.toHaveBeenCalled()
+        expect(addScanEvent).not.toHaveBeenCalledWith(
+          "scan-1",
+          "billable_boundary",
+          expect.anything(),
+          expect.anything(),
+          expect.anything()
+        )
+      } else {
+        expect(vi.mocked(runEngine).mock.calls[0]?.[0].maxBudgetUsd).toBe(expected)
+        expect(addScanEvent).toHaveBeenCalledWith(
+          "scan-1",
+          "budget_cap",
+          "info",
+          expect.any(String),
+          {
+            maxBudgetUsd: expected,
+            source: live! > expected ? "execution_plan" : "policy",
+          }
+        )
+      }
+    }
+  )
+
   it("keeps a queued snapshot inside its recorded wall-clock ceiling", async () => {
     const built = buildScanExecutionPlan({ targetType: "REPO", mode: "SAFE" })
     const plan = {

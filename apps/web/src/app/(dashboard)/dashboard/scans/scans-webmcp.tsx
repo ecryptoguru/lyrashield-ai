@@ -15,6 +15,7 @@ export function useScansWebMcp({
   workspaceId,
   targets,
   selectedPreset,
+  setEngineBudgetCeiling,
   setSelectedTarget,
   setSelectedPreset,
   setShowCreate,
@@ -23,6 +24,7 @@ export function useScansWebMcp({
   workspaceId: string
   targets: TargetItem[]
   selectedPreset: string
+  setEngineBudgetCeiling: (value: string) => void
   setSelectedTarget: (targetId: string) => void
   setSelectedPreset: (presetId: string) => void
   setShowCreate: (show: boolean) => void
@@ -60,6 +62,7 @@ export function useScansWebMcp({
       ...createPrepareSecurityScanTool({
         getTargets: () => targetsRef.current,
         getSelectedPreset: () => selectedPresetRef.current,
+        setEngineBudgetCeiling,
         setSelectedTarget,
         setSelectedPreset,
         setShowCreate,
@@ -71,6 +74,7 @@ export function useScansWebMcp({
     return cleanup
   }, [
     workspaceId,
+    setEngineBudgetCeiling,
     setSelectedTarget,
     setSelectedPreset,
     setShowCreate,

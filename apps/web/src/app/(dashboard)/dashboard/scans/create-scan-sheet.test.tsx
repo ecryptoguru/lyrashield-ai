@@ -149,6 +149,8 @@ const defaults: ComponentProps<typeof CreateScanSheet> = {
   selectedOption: option,
   choosePreset: vi.fn(),
   modeResetNotice: null,
+  engineBudgetCeiling: "",
+  setEngineBudgetCeiling: vi.fn(),
   selectedFocus: null,
   setSelectedFocus: vi.fn(),
   reviewSetupGuidance: null,
@@ -177,6 +179,41 @@ function render(props: Partial<typeof defaults> = {}) {
   return renderToStaticMarkup(<CreateScanSheet {...defaults} {...props} />)
 }
 
+it.each([true, false])(
+  "exposes the requested engine limit in the advanced desktop/mobile form (%s)",
+  (isDesktop) => {
+    const html = render({
+      isDesktop,
+      showAdvanced: true,
+      engineBudgetCeiling: "1",
+      setEngineBudgetCeiling: vi.fn(),
+    })
+    expect(html).toContain("Engine spending limit (USD)")
+    expect(html).toContain('id="scan-engine-budget"')
+    expect(html).toContain('value="1"')
+  }
+)
+it.each([
+  { unsupported: { ...option, usesAi: false }, message: "deterministic review" },
+  {
+    unsupported: { ...option, workflow: "AUTHENTICATED_ASSESSMENT" as const },
+    message: "authenticated assessment",
+  },
+])(
+  "keeps an entered ceiling when the review switches to $message and explains the blocked draft",
+  ({ unsupported, message }) => {
+    const props = {
+      selectedOption: unsupported,
+      engineBudgetCeiling: "1",
+      setEngineBudgetCeiling: vi.fn(),
+    }
+    const open = render({ ...props, showAdvanced: true })
+    expect(open).toContain('value="1"')
+    expect(open).toContain('aria-invalid="true"')
+    expect(render({ ...props, showAdvanced: false })).toContain(message)
+    expect(props.setEngineBudgetCeiling).not.toHaveBeenCalled()
+  }
+)
 function renderTree(props: Partial<typeof defaults> = {}) {
   hooks.cursor = 0
   hooks.effects = []

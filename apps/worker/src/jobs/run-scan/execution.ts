@@ -31,7 +31,8 @@ import {
   runEngine,
   type EngineRunResult,
 } from "../../engine/runner"
-import { resolveScanBudgetUsd, type TargetType } from "../../engine/command-builder"
+import { effectiveEngineBudget } from "./execution-policy"
+import type { TargetType } from "../../engine/command-builder"
 import {
   AUTHENTICATED_ASSESSMENT_BETA_LIMITS,
   AUTHENTICATED_ASSESSMENT_DENIED_PATHS,
@@ -432,11 +433,13 @@ export async function executeScanTarget(params: {
       throw error
     }
   } else if (engineBacked) {
-    maxBudgetUsd = resolveScanBudgetUsd(mode, policyMaxBudgetUsd, target.type)
-    if (executionPlan) {
-      // Current policy and mode defaults may narrow, never widen, a queued plan.
-      maxBudgetUsd = Math.min(maxBudgetUsd, executionPlan.limits.maxBudgetUsd)
-    }
+    const budget = effectiveEngineBudget(
+      mode,
+      target.type,
+      policyMaxBudgetUsd,
+      executionPlan?.limits.maxBudgetUsd
+    )
+    maxBudgetUsd = budget.amount
     if (maxBudgetUsd <= 0) {
       const errorMessage = "Protected run limit is zero"
       logger.warn("Scan rejected: zero budget", { scanId, workspaceId, policyMaxBudgetUsd })
@@ -463,17 +466,10 @@ export async function executeScanTarget(params: {
 
     engineProfile = resolveEngineProfile(mode)
     engineModel = requireEngineModel(engineProfile.model)
-    const budgetSource =
-      typeof policyMaxBudgetUsd === "number" &&
-      Number.isFinite(policyMaxBudgetUsd) &&
-      policyMaxBudgetUsd > 0
-        ? "policy"
-        : "mode_default"
-
     try {
       await addScanEvent(scanId, "budget_cap", "info", "Protected run limit enabled", {
         maxBudgetUsd,
-        source: budgetSource,
+        source: budget.source,
       })
     } catch (eventErr) {
       logger.warn("Failed to persist budget_cap event", {

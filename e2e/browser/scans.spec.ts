@@ -51,6 +51,23 @@ for (const width of [390, 768, 1440]) {
     expect(await selected.getAttribute("id")).not.toBe(oldId)
     await page.keyboard.press("ArrowUp")
     expect(await selected.getAttribute("id")).toBe(oldId)
+    const advanced = dialog.getByRole("button", { name: /Review details and spending limit/ })
+    await advanced.focus()
+    await page.keyboard.press("Space")
+    await page.keyboard.press("Tab")
+    const ceiling = dialog.getByLabel("Engine spending limit (USD)")
+    await expect(ceiling).toBeFocused()
+    await ceiling.fill("0")
+    await expect(dialog.getByRole("button", { name: /^Start scan$/i })).toBeDisabled()
+    await expect(ceiling).toHaveAttribute("aria-invalid", "true")
+    await ceiling.fill("0.005")
+    await expect(dialog.getByRole("button", { name: /^Start scan$/i })).toBeEnabled()
+    await expect(ceiling).toHaveValue("0.005")
+    const requested = page.waitForRequest(
+      (req) => new URL(req.url()).searchParams.get("engineBudgetCeilingUsd") === "1"
+    )
+    await ceiling.fill("1")
+    await requested
     await expect(dialog.getByRole("button", { name: /^Start scan$/i })).toBeEnabled()
     expect(await dialog.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(
       true
@@ -93,6 +110,8 @@ test("recoverable start errors keep revisions and retry the same submission once
   await dialog.getByRole("radio", { name: /^Scan changes:/ }).click()
   await dialog.getByLabel(/^Base revision/).fill("release-branch")
   await dialog.getByLabel(/^Head revision/).fill("feature-branch")
+  await dialog.getByRole("button", { name: /Review details and spending limit/ }).click()
+  await dialog.getByLabel("Engine spending limit (USD)").fill("1")
   const submit = dialog.getByRole("button", { name: /^Start scan$/i })
   await expect(submit).toBeEnabled()
   await submit.click()
@@ -104,7 +123,42 @@ test("recoverable start errors keep revisions and retry the same submission once
   await submit.focus()
   await page.keyboard.press("Enter")
   await expect.poll(() => requests.length).toBe(2)
+  expect(requests[0]?.body).toMatchObject({ engineBudgetCeilingUsd: 1 })
   expect(requests[0]?.key).toBeTruthy()
+  expect(requests[1]).toEqual(requests[0])
+})
+
+test("reloading an uncertain capped request restores the operator limit and reuses the same request", async ({
+  page,
+}) => {
+  await composerRoutes(page)
+  const requests: { key?: string; body: unknown }[] = []
+  await page.route("**/api/scans", async (route) => {
+    requests.push({
+      key: route.request().headers()["idempotency-key"],
+      body: route.request().postDataJSON(),
+    })
+    await route.fulfill({
+      status: 503,
+      json: { success: false, error: { code: "WORKER_UNAVAILABLE", message: "Please retry." } },
+    })
+  })
+  await page.goto("polling.html?polling=create")
+  const open = page.getByRole("button", { name: /^New scan$/i })
+  const dialog = page.getByRole("dialog")
+  await open.click()
+  await dialog.getByRole("button", { name: /Review details and spending limit/ }).click()
+  const input = dialog.getByLabel("Engine spending limit (USD)")
+  await input.fill("1")
+  await dialog.getByRole("button", { name: /^Start scan$/i }).click()
+  await expect(dialog.getByRole("alert")).toBeVisible()
+  await page.reload()
+  await open.click()
+  await expect(input).toHaveValue("1")
+  await dialog.getByRole("button", { name: /^Start scan$/i }).click()
+  await expect.poll(() => requests.length).toBe(2)
+  expect(requests[0]?.key).toBeTruthy()
+  expect(requests[0]?.body).toMatchObject({ engineBudgetCeilingUsd: 1 })
   expect(requests[1]).toEqual(requests[0])
 })
 

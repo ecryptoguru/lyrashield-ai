@@ -103,7 +103,7 @@ export async function findScanPolicy(workspaceId: string, policyId?: string) {
       ? { id: policyId, workspaceId, deletedAt: null }
       : { workspaceId, name: "Default Policy", deletedAt: null },
     orderBy: policyId ? undefined : { createdAt: "asc" },
-    select: { id: true, destructiveTestsAllowed: true },
+    select: { id: true, destructiveTestsAllowed: true, maxBudgetUsd: true },
   })
 }
 
