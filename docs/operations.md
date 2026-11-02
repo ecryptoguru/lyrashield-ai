@@ -2,7 +2,13 @@
 
 Founder- and operator-run procedures consolidated from standalone runbooks. Each section is founder-controlled; nothing here runs unattended.
 
-## Current production readback — 2026-10-27
+## Current production readback — 2026-11-02
+
+[Production release 41438792830](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/41438792830) succeeded for `d488862bd269c07194afe87a918ca413e4a62217`. Independent post-release Azure and VM observations found healthy app, scanner, egress proxy and worker with matching product/image identity; public app/scanner and scan readiness returned 200. Exact revisions and digests are recorded in [PRD §8](../PRD.md#nonbilling-production-release--2026-11-02-ist). Wait for release completion before VM RunCommand reads; never overlap worker promotion.
+
+The November 1 scheduled restore failed its private row-integrity step, and the later November 2 scheduled backup did not run a restore. The corrected verifier has synthetic, not current production-data, restore evidence. Follow the [owner-approved isolated restore procedure](#owner-approved-manual-isolated-restore); do not rerun the failed scheduled workflow.
+
+## Historical production readback — 2026-10-27
 
 Product `2d4e168da544306bf6cc9958a55f14bbfcb717e3` passed [production release 40538483543](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/40538483543). Provider readback showed app `0000507`, scanner `0000481` and proxy `0000347` at 100% traffic; scan readiness returned HTTP 200. Independent VM readback confirmed healthy worker `sha256:690bac6ed42d1c450af94055e270d5f21baa937771ba828e7e4871e501067fbe`, matching product and engine `3001517530300ca5f602536bfadcbd3c95ad3039` provenance and 23 PHP/Composer and coverage source hashes. Wait for release completion before VM RunCommand reads; never overlap worker promotion.
 
