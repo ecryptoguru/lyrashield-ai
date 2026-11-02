@@ -360,7 +360,8 @@ jobs:
           test "$(sha256sum "$dump_path" | awk '{print $1}')" = "$expected_sha256"
 
           # Per-job synthetic credentials; never print them or put them in argv.
-          export POSTGRES_PASSWORD="$(openssl rand -hex 32)"
+          POSTGRES_PASSWORD="$(openssl rand -hex 32)"
+          export POSTGRES_PASSWORD
           printf '%s' "$POSTGRES_PASSWORD" > "$RUNNER_TEMP/restore-db-password"
           docker run -d --name lyrashield-restore-postgres \
             -e POSTGRES_USER=restore -e POSTGRES_PASSWORD -e POSTGRES_DB=lyrashield_restore \
@@ -488,19 +489,9 @@ jobs:
           BACKUP_DUMP_SHA256: ${{ needs.backup.outputs.dump_sha256 }}
         run: |
           set -euo pipefail
+          exec 3>&1 # Fixed snapshot stage labels only; all command output stays private.
           source .github/scripts/isolated-restore-private.sh
-          umask 077
-          test "$(sha256sum "$RUNNER_TEMP/backup.dump" | awk '{print $1}')" = "$BACKUP_DUMP_SHA256"
-          integrity_dir="$(mktemp -d "$RUNNER_TEMP/snapshot-integrity.XXXXXXXX")"
-          trap 'rm -rf -- "$integrity_dir"' EXIT
-          # Derive expected contents from the verified archive, never a later
-          # live query. Compare the restored COPY row multiset privately.
-          docker exec lyrashield-restore-postgres pg_restore --data-only --no-owner --no-acl --file=- /tmp/backup.dump > "$integrity_dir/expected-data.sql"
-          docker exec lyrashield-restore-postgres pg_dump -U restore -d lyrashield_restore --data-only --schema=public --schema=app --no-owner --no-acl > "$integrity_dir/restored-data.sql"
-          node .github/scripts/restore-snapshot-integrity.mjs capture "$integrity_dir/expected-data.sql" "$BACKUP_DUMP_SHA256" "$integrity_dir/expected-snapshot.json"
-          node .github/scripts/restore-snapshot-integrity.mjs capture "$integrity_dir/restored-data.sql" "$BACKUP_DUMP_SHA256" "$integrity_dir/restored-snapshot.json"
-          node .github/scripts/restore-snapshot-integrity.mjs verify "$integrity_dir/expected-snapshot.json" "$integrity_dir/restored-snapshot.json"
-          rm -f "$integrity_dir/expected-data.sql" "$integrity_dir/restored-data.sql"
+          bash .github/scripts/verify-restore-snapshot.sh
 
       - name: Verify schema and audit chains
         shell: bash

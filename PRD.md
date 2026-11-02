@@ -1,6 +1,6 @@
 # LyraShield AI — Product Requirements and Release Plan
 
-> Current production evidence: 2026-10-27 (deployed product revision `2d4e168da544306bf6cc9958a55f14bbfcb717e3`, released by run `40538483543`). This file owns product strategy, accepted scope, release gates, and ordered backlog. [codebase.md](./codebase.md) owns implementation mapping; [AGENTS.md](./AGENTS.md) owns operating rules and the immediate handoff. Running code, schema, CI, and live evidence override prose.
+> Current production evidence: 2026-10-31 IST (deployed product revision `6739563df7dad585cef1be14cedcb978bc0a5219`, released by run `41117355986`; marketing remains at `0d8fc0f6c126271aa966ca895608cec2460f8cb4`). This file owns product strategy, accepted scope, release gates, and ordered backlog. [codebase.md](./codebase.md) owns implementation mapping; [AGENTS.md](./AGENTS.md) owns operating rules and the immediate handoff. Running code, schema, CI, and live evidence override prose.
 
 ## 1. Product definition
 
@@ -404,7 +404,25 @@ Detailed file and package mapping: [codebase.md](./codebase.md).
 
 ## 8. Current production evidence
 
-### PHP release and production readback — 2026-10-27
+### v26 production addendum — 2026-10-31 IST
+
+Implementation [PR #1061](https://github.com/ecryptoguru/lyrashield-ai/pull/1061) merged as `0d8fc0f6c126271aa966ca895608cec2460f8cb4`. Its first release failed before migration during inactive-revision inventory; the original app/scanner were restored and the exact owned stop was subsequently released through the reviewed pre-migration abort. Preserve that failed receipt and its private VM audits. Corrective [PR #1062](https://github.com/ecryptoguru/lyrashield-ai/pull/1062) merged as `6739563df7dad585cef1be14cedcb978bc0a5219` after the three required checks passed on head `299401e6f119576a22783dcdc715fa322423ed23` in [CI 41115200994](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/41115200994).
+
+[Production release 41117355986](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/41117355986) succeeded, including exact-image qualification/rehearsal, owned admission claim, drain, migrations, runtime grants, forced RLS, candidate checks, traffic promotion and exact owned-stop release. The retained independent readback records receipt `COMPLETE`, healthy active worker, active egress refresh timer, admission stop absent, four expected migration checksums applied and forced RLS on both new tables. Release logs separately attest runtime-principal grants. These VM/database observations come from the retained release report; this documentation refresh did not repeat privileged readback.
+
+- Product source: `6739563df7dad585cef1be14cedcb978bc0a5219`.
+- App/scanner web digest: `sha256:c73a978d3c9de1efa93b87e0e8524e775fa54cc1b627b8137a043541b7ce385b`; app `lyrashield-app--0000512` and scanner `lyrashield-scanner--0000486` each had one active replica and 100% traffic at retained readback.
+- Worker digest: `sha256:33a769654ba9c68116d07b4986da673d95d38ed58c8be8369cdc33895d78e723`; engine unchanged at `3001517530300ca5f602536bfadcbd3c95ad3039`.
+- Fresh public GET observations at `2026-10-30T21:39:21Z`–`21:39:27Z` (October 31 IST): scanner `/api/ready` returned 200 with database/Redis ready; curl app `/api/ready` returned 200 with database/Redis ready and app `/api/ready/scans` returned 200 with worker ready. An initial Python urllib app probe received 403; curl succeeded. These point-in-time HTTP observations do not independently prove image identity or authenticated scan execution.
+- Historical [scan-readiness workflow 41110605407](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/41110605407) failed its probe at October 30 18:52 UTC during the held first-cutover/recovery window and remains failed. The final release completed at 20:48 UTC. Later deployed-source [readiness workflow 41140312487](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/41140312487) succeeded at `2026-10-30T22:46:31Z`–`22:46:43Z` on product `6739563df7dad585cef1be14cedcb978bc0a5219`; this does not qualify subsequent probe-source changes. The public 200s above remain separate point-in-time HTTP evidence.
+
+Marketing remains at `0d8fc0f6c126271aa966ca895608cec2460f8cb4`; PR #1062 skipped marketing deployment. The retained preservation evidence matches all five landing motion/runtime/layout files and four original motion specs byte-for-byte to pre-v26 main `284523ca381ee0d6ffa62ce22e855f7ecae9518f`. Recorded live desktop and 390×844 smoke showed decoded film, scroll advancement, no horizontal overflow and menu Escape/focus behavior. This is not physical-device, Firefox, native-zoom or screen-reader acceptance; D5 remains deferred. No new loading policy or model routing is introduced.
+
+The [original-ID dispositions (P1-1–P1-3 and P2-1–P2-30)](./docs/handoffs/v26-implementation-2026-10-30.md#original-issue-dispositions), [D1–D5 decisions and carried leads](./docs/handoffs/v26-implementation-2026-10-30.md#decisions-and-carried-leads) and [dated source review](./LyraShield-Deep-Review-v26-v3.md#historical-validation-performed--version-5) remain intact. The earlier local-only handoff is historical; this addendum establishes the later release evidence without relabeling historical tests. The [later bounded public Go broker receipt](./docs/handoffs/v26-implementation-2026-10-30.md#nonbilling-qualification-addendum--2026-10-31-ist) completed locally at `2026-10-30T22:50:31.837Z` with a network-disabled amd64 resolver, one package and two metadata receipts (217 bytes). It qualifies that captured fixture only, not production egress, broad ecosystem coverage or independent sumdb verification. Production paid acceptance, positive GitHub Fix PR/retest, Firefox/native zoom/physical-device/screen-reader proof, schedule cursor fairness and broad Fix PR trace P3 remain unverified or follow-up work. Signed Desktop release remains deferred. Financial work is excluded from this refresh; no financial conclusions are added.
+
+Retained release readback: `/Users/defiankit/Desktop/lyrashield-v26-evidence-20261030/production-release-6739563d-20261031.md` (local evidence artifact, not a published repository artifact). Recheck runtime state before operational action.
+
+### Historical PHP release and production readback — 2026-10-27
 
 PR #1043 merged as product `2d4e168da544306bf6cc9958a55f14bbfcb717e3`; [production release 40538483543](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/40538483543) succeeded. Provider readback showed app `0000507`, scanner `0000481` and egress proxy `0000347` each receiving 100% traffic. Scan readiness returned HTTP 200. Independent VM readback confirmed healthy worker `sha256:690bac6ed42d1c450af94055e270d5f21baa937771ba828e7e4871e501067fbe`, matching product and engine `3001517530300ca5f602536bfadcbd3c95ad3039` provenance, and 23 PHP/Composer and coverage source hashes. Desktop release remains deferred.
 

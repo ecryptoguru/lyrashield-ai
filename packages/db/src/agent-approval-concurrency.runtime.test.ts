@@ -3,6 +3,15 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 import { PrismaPg } from "@prisma/adapter-pg"
 import { PrismaClient } from "./generated/prisma"
 
+// Hoisting runs this guard before imports can construct the runtime client.
+await vi.hoisted(async () => {
+  if (process.env.LYRASHIELD_TEST_DB_DISPOSABLE === "1" && process.env.RLS_RUNTIME_DATABASE_URL) {
+    const { assertDisposableDatabasePair } =
+      await import("../../../.github/scripts/vitest-database-env.mjs")
+    assertDisposableDatabasePair(process.env)
+  }
+})
+
 vi.mock("@lyrashield/config", async (original) => {
   const actual = await original<typeof import("@lyrashield/config")>()
   return {
@@ -16,7 +25,7 @@ vi.mock("@lyrashield/config", async (original) => {
 
 import { prisma } from "./client"
 import { withWorkspaceRLS } from "./rls"
-import { findOrCreatePendingApproval } from "./agent-approval-service"
+import { claimApprovalExecution, findOrCreatePendingApproval } from "./agent-approval-service"
 
 const owner = new PrismaClient({
   adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
@@ -62,6 +71,42 @@ describe.skipIf(!process.env.RLS_RUNTIME_DATABASE_URL)(
       )
       const replacement = await findOrCreatePendingApproval(input)
       expect(replacement.id).not.toBe(approvals[0]!.id)
+    })
+
+    it("rejects expired, changed-input and foreign-workspace claims before one concurrent winner", async () => {
+      const inputHash = "immutable-patch-and-scanned-base"
+      const approval = await owner.agentApproval.create({
+        data: {
+          workspaceId,
+          actionName: "fix_pr.open",
+          inputHash,
+          input: { fixProposalId: "proposal" },
+          status: "APPROVED",
+          requestedById: "requester",
+          expiresAt: new Date(0),
+        },
+      })
+      expect(await claimApprovalExecution(approval.id, workspaceId, inputHash)).toBe(false)
+      await owner.agentApproval.update({
+        where: { id: approval.id },
+        data: { expiresAt: new Date(Date.now() + 60_000) },
+      })
+      expect(await claimApprovalExecution(approval.id, workspaceId, "changed-patch-or-base")).toBe(
+        false
+      )
+      expect(await claimApprovalExecution(approval.id, `foreign-${workspaceId}`, inputHash)).toBe(
+        false
+      )
+      const unchanged = await owner.agentApproval.findUniqueOrThrow({ where: { id: approval.id } })
+      expect(unchanged.status).toBe("APPROVED")
+      expect(unchanged.attempts).toBe(0)
+      const claims = await Promise.all(
+        Array.from({ length: 8 }, () => claimApprovalExecution(approval.id, workspaceId, inputHash))
+      )
+      expect(claims.filter(Boolean)).toHaveLength(1)
+      const executed = await owner.agentApproval.findUniqueOrThrow({ where: { id: approval.id } })
+      expect(executed.status).toBe("EXECUTING")
+      expect(executed.attempts).toBe(1)
     })
   }
 )
