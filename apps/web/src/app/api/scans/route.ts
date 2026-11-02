@@ -595,7 +595,7 @@ async function post(request: Request) {
     submission.attempted = true
     const scan = await createScan({
       ...scanIdentity,
-      verifyWorkspaceDefaultPolicy: data.policyId === undefined,
+      verifyWorkspaceDefaultPolicy: !data.policyId,
       engineBudgetCeilingUsd: data.engineBudgetCeilingUsd,
       createdById: session.userId,
       // W0.4 — bind the delegated grant that just passed assertOAuthDelegatedScope
