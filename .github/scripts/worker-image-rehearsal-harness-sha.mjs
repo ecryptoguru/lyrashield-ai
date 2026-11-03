@@ -14,6 +14,7 @@ export const WORKER_IMAGE_REHEARSAL_HARNESS_FILES = [
   ".github/scripts/normalize-worker-image-reference.sh",
   ".github/scripts/run-worker-evidence-persistence-drill.sh",
   ".github/scripts/worker-evidence-persistence-drill.mjs",
+  ".github/scripts/worker-evidence-drill-oracle.mjs",
   ".github/scripts/worker-evidence-fixture-io.py",
   ".github/scripts/worker-evidence-drill-guard.py",
   ".github/scripts/tests/supabase-db-tls.docker.mjs",

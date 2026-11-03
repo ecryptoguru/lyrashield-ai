@@ -17,6 +17,7 @@ prefix=${LYRA_DRILL_PREFIX:?supervised namespace required}
 [[ $prefix =~ ^lyra-ed-[0-9a-f]{16}$ ]]
 net="$prefix-private"
 driver="$root/.github/scripts/worker-evidence-persistence-drill.mjs"
+oracle="$root/.github/scripts/worker-evidence-drill-oracle.mjs"
 fixture_io="$root/.github/scripts/worker-evidence-fixture-io.py"
 fixtures=$2
 # Local input preparation only; refuse drift before creating any Docker resource.
@@ -85,6 +86,7 @@ run_phase() {
   DRILL_PHASE_TIMEOUT=150 docker run --rm "${common[@]}" --name "$prefix-worker" --cap-drop ALL --read-only \
     --cpus .75 --memory 768m --tmpfs /tmp:rw,nosuid,nodev,size=64m \
     --mount "type=bind,src=$driver,dst=/app/apps/worker/.ci-evidence.mjs,readonly" \
+    --mount "type=bind,src=$oracle,dst=/app/apps/worker/worker-evidence-drill-oracle.mjs,readonly" \
     --mount "type=bind,src=$fixture_io,dst=/app/apps/worker/worker-evidence-fixture-io.py,readonly" \
     --mount "type=bind,src=$tmp/input,dst=/fixtures,readonly" \
     --mount "type=bind,src=$tmp/distinct,dst=/distinct,readonly" \
