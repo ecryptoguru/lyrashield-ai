@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
+import { logger } from "@lyrashield/logger"
 import { verifyRelayGrant } from "@lyrashield/security"
-import { mintScanRelayGrant, registerRelayGrant, resolveRelayRuntimeConfig } from "./relay-client"
+import {
+  mintScanRelayGrant,
+  registerRelayGrant,
+  resolveRelayRuntimeConfig,
+  revokeRelayGrant,
+} from "./relay-client"
 
 const CONFIG = {
   url: "http://relay.test",
@@ -189,6 +195,55 @@ describe("registerRelayGrant", () => {
       expect(fetchMock).toHaveBeenCalledTimes(1)
     }
   )
+
+  it("keeps owned transport errors out of scan events and cleanup logs", async () => {
+    const warn = vi.spyOn(logger, "warn").mockImplementation(() => {})
+    const ownerId = "b0d63ee8-357b-4762-a2b6-e2f61aa4b69f"
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error(`session material ${ownerId}`)))
+    try {
+      await expect(
+        registerRelayGrant("scan-1", "signed-grant", CONFIG, undefined, ownerId)
+      ).rejects.toThrow(/^RELAY_REGISTRATION_FAILED$/)
+      await revokeRelayGrant("scan-1", CONFIG, { ownerId, grant: "signed-grant" })
+      expect(warn).toHaveBeenCalledWith("Relay grant revocation failed", {
+        scanId: "scan-1",
+        error: "RELAY_REVOCATION_FAILED",
+      })
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
+  it("fails closed against a legacy relay without trying its scan-wide cleanup", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockImplementation(() => Promise.resolve(Response.json({ ok: false }, { status: 404 })))
+    vi.stubGlobal("fetch", fetchMock)
+    const ownerId = "f807bc6d-9051-4bca-a4dd-ebd98910d83f"
+    const session = {
+      headers: { cookie: "fixture-session" },
+      hosts: ["app.example.com"],
+      exp: Date.now() + 60_000,
+    }
+    await expect(
+      registerRelayGrant("scan-1", "signed-grant", CONFIG, session, ownerId)
+    ).rejects.toThrow("RELAY_REGISTRATION_FAILED")
+    await revokeRelayGrant("scan-1", CONFIG, { ownerId, grant: "signed-grant" })
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      "http://relay.test/v1/register-owned/scan-1",
+      "http://relay.test/v1/revoke-owned/scan-1",
+    ])
+    for (const [, init] of fetchMock.mock.calls) {
+      expect(init.headers).toMatchObject({
+        "x-lyra-relay-owner": ownerId,
+        "x-lyra-relay-grant": "signed-grant",
+        Authorization: "Bearer test-admin-secret",
+      })
+      expect(init.redirect).toBe("error")
+    }
+    expect(JSON.parse(fetchMock.mock.calls[0]![1].body)).toEqual({ session })
+    expect(fetchMock.mock.calls[1]![1].body).toBeUndefined()
+  })
 
   it("carries the session binding on the admin channel, never in the grant", async () => {
     const fetchMock = vi.fn().mockResolvedValue(Response.json({ ok: true }))

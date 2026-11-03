@@ -1,4 +1,8 @@
 import {
+  insertScanBillableClaim,
+  readLockedBillableScan,
+} from "@lyrashield/db/src/scan-billable-claim"
+import {
   bindAccountRLSContext,
   lockUserScanAdmission,
   withWorkspaceRLS,
@@ -74,7 +78,9 @@ export async function reserveScanCapacity(input: {
   scanId: string
   maxRuntimeMs: number
   start?: boolean
+  claimBillable?: boolean
 }): Promise<CapacityAdmission> {
+  if (input.claimBillable && !input.start) throw new Error("billable_capacity_requires_start")
   if (!Number.isFinite(input.maxRuntimeMs) || input.maxRuntimeMs <= 0)
     throw new Error("invalid_capacity_runtime")
   return withWorkspaceRLS(input.workspaceId, async (tx) => {
@@ -210,6 +216,7 @@ export async function reserveScanCapacity(input: {
         runtimeLimitMs,
       },
     })
+    if (input.claimBillable) await insertScanBillableClaim(tx, input.workspaceId, input.scanId)
     return { state, runtimeLimitMs, fundedMinutes }
   })
 }
@@ -347,11 +354,14 @@ export async function confirmScanCapacityStopped(
   workspaceId: string,
   scanId: string,
   noBillableWork = false,
-  billingDisposition?: ScanBillingDisposition
+  billingDisposition?: ScanBillingDisposition,
+  onlyIfUnclaimed = false
 ): Promise<void> {
   await withWorkspaceRLS(workspaceId, async (tx) => {
     const { scan } = await lockedScan(tx, workspaceId, scanId)
     if (scan.accountingVersion !== 2) return
+    if (onlyIfUnclaimed && (await readLockedBillableScan(tx, workspaceId, scanId))?.events.length)
+      return
     const reservation = await tx.scanCapacityReservation.findUnique({ where: { scanId } })
     if (
       !reservation ||
@@ -412,7 +422,8 @@ export async function resetUnstartedScanCapacity(
 ): Promise<void> {
   await withWorkspaceRLS(workspaceId, async (tx) => {
     const { scan, accountId } = await lockedScan(tx, workspaceId, scanId)
-    if (scan.accountingVersion !== 2 || scan.status !== "QUEUED") return
+    const locked = await readLockedBillableScan(tx, workspaceId, scanId)
+    if (scan.accountingVersion !== 2 || locked?.status !== "QUEUED" || locked.events.length) return
     const plan = scan.executionPlan as { capabilities?: string[] } | null
     if (!plan) throw new Error("capacity_scan_plan_missing")
     const reset = await tx.scanCapacityReservation.updateMany({

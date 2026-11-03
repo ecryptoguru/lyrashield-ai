@@ -151,14 +151,14 @@ describe("findScanPolicy", () => {
     expect(prisma.policy.findFirst).toHaveBeenCalledWith({
       where: { id: "p-9", workspaceId: "ws-1", deletedAt: null },
       orderBy: undefined,
-      select: { id: true, destructiveTestsAllowed: true },
+      select: { id: true, destructiveTestsAllowed: true, maxBudgetUsd: true },
     })
 
     await findScanPolicy("ws-1")
     expect(prisma.policy.findFirst).toHaveBeenLastCalledWith({
       where: { workspaceId: "ws-1", name: "Default Policy", deletedAt: null },
-      orderBy: { createdAt: "asc" },
-      select: { id: true, destructiveTestsAllowed: true },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      select: { id: true, destructiveTestsAllowed: true, maxBudgetUsd: true },
     })
   })
 })

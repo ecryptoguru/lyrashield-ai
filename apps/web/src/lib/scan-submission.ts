@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { EngineBudgetCeilingUsdSchema } from "@lyrashield/types"
 
 export interface ScanSubmissionScope {
   principalId: string
@@ -73,6 +74,15 @@ function normalizeForIdentity(value: unknown): unknown {
 
 export function scanRequestIdentity(payload: unknown): string {
   return JSON.stringify(normalizeForIdentity(payload))
+}
+
+/** Restore only the operator's request, never a workspace or deployment budget. */
+export function pendingEngineBudgetInput(submission: PendingScanSubmission | null): string {
+  if (!submission || submission.state !== "pending") return ""
+  const request = z
+    .object({ engineBudgetCeilingUsd: EngineBudgetCeilingUsdSchema.optional() })
+    .parse(JSON.parse(submission.requestIdentity))
+  return request.engineBudgetCeilingUsd === undefined ? "" : String(request.engineBudgetCeilingUsd)
 }
 
 export function readPendingScanSubmission(

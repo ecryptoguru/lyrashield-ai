@@ -81,7 +81,7 @@ describe("stageScanAttachments", () => {
       legacy: false,
     } as never)
 
-    const staged = await stageScanAttachments({
+    await using staged = await stageScanAttachments({
       scanId,
       workspaceId: "ws-1",
       attachmentIds: ["att-1"],
@@ -96,6 +96,8 @@ describe("stageScanAttachments", () => {
       mediaType: "text/plain",
     })
 
+    await expect(lstat(staged!.dir)).rejects.toMatchObject({ code: "ENOENT" })
+    await staged!.publish()
     // Staged bytes are identical and read-only.
     const stagedPath = join(staged!.dir, staged!.entries[0]!.stagedAs)
     const stat = await lstat(stagedPath)
@@ -127,6 +129,71 @@ describe("stageScanAttachments", () => {
     ).rejects.toMatchObject({ code: "SCAN_ATTACHMENT_CHECKSUM_MISMATCH" })
   })
 
+  it("leaves no first attachment plaintext when the second checksum fails", async () => {
+    const first = "private-first-file",
+      second = "recorded-second"
+    vi.mocked(resolveScanAttachments).mockResolvedValue([
+      rowFor("one", first),
+      rowFor("two", second),
+    ] as never)
+    vi.mocked(readEncryptedArtifact).mockImplementation(async (uri) => {
+      const content = Buffer.from(uri.includes("one") ? first : "corrupt")
+      return {
+        content,
+        checksum: SHA(content.toString()),
+        encryptionKeyRef: "local",
+        legacy: false,
+      }
+    })
+    await expect(
+      stageScanAttachments({ scanId, workspaceId: "ws-1", attachmentIds: ["one", "two"] })
+    ).rejects.toMatchObject({ code: "SCAN_ATTACHMENT_CHECKSUM_MISMATCH" })
+    await expect(lstat(join(ENGINE_WORK_ROOT, scanId))).rejects.toMatchObject({ code: "ENOENT" })
+  })
+
+  it("keeps winner inputs intact when a competing attempt disposes or cannot publish", async () => {
+    const content = "private-winner"
+    vi.mocked(resolveScanAttachments).mockResolvedValue([rowFor("id", content)] as never)
+    vi.mocked(readEncryptedArtifact).mockResolvedValue({
+      content: Buffer.from(content),
+      checksum: SHA(content),
+      encryptionKeyRef: "local",
+      legacy: false,
+    })
+    const params = { scanId, workspaceId: "ws-1", attachmentIds: ["id"] }
+    await using winner = await stageScanAttachments(params)
+    const loser = await stageScanAttachments(params)
+    await expect(lstat(winner!.dir)).rejects.toMatchObject({ code: "ENOENT" })
+    await winner!.publish()
+    await expect(loser!.publish()).rejects.toThrow("already exists")
+    await loser![Symbol.asyncDispose]()
+    expect(await readFile(join(winner!.dir, winner!.entries[0]!.stagedAs), "utf8")).toBe(content)
+    await winner![Symbol.asyncDispose]()
+    await expect(lstat(winner!.dir)).rejects.toMatchObject({ code: "ENOENT" })
+  })
+
+  it("removes its temporary tree when publishing fails after the first file", async () => {
+    const content = "private",
+      longId = "x".repeat(260)
+    vi.mocked(resolveScanAttachments).mockResolvedValue([
+      rowFor("one", content),
+      rowFor(longId, content),
+    ] as never)
+    vi.mocked(readEncryptedArtifact).mockResolvedValue({
+      content: Buffer.from(content),
+      checksum: SHA(content),
+      encryptionKeyRef: "local",
+      legacy: false,
+    })
+    await using stage = await stageScanAttachments({
+      scanId,
+      workspaceId: "ws-1",
+      attachmentIds: ["one", longId],
+    })
+    await expect(stage!.publish()).rejects.toMatchObject({ code: "ENAMETOOLONG" })
+    await expect(lstat(join(ENGINE_WORK_ROOT, scanId))).rejects.toMatchObject({ code: "ENOENT" })
+  })
+
   it("fails closed when an attachment row is missing or deleted", async () => {
     vi.mocked(resolveScanAttachments).mockRejectedValue(
       new ScanAttachmentError("SCAN_ATTACHMENT_UNAVAILABLE", "deleted")
@@ -153,11 +220,12 @@ describe("stageScanAttachments", () => {
       }
     })
 
-    const staged = await stageScanAttachments({
+    await using staged = await stageScanAttachments({
       scanId,
       workspaceId: "ws-1",
       attachmentIds: ["att-a", "att-b"],
     })
+    await staged!.publish()
     const names = staged!.entries.map((e) => e.stagedAs)
     expect(new Set(names).size).toBe(2)
     for (const entry of staged!.entries) {
@@ -187,10 +255,12 @@ describe("stageScanAttachments", () => {
     const stagedAs = "att-1-notes.txt"
     await symlink(outsideFile, join(dir, stagedAs))
 
-    // O_NOFOLLOW rejects the planted symlink instead of writing through it.
-    await expect(
-      stageScanAttachments({ scanId, workspaceId: "ws-1", attachmentIds: ["att-1"] })
-    ).rejects.toThrow()
+    await using staged = await stageScanAttachments({
+      scanId,
+      workspaceId: "ws-1",
+      attachmentIds: ["att-1"],
+    })
+    await expect(staged!.publish()).rejects.toThrow()
     // The symlinked target must be untouched.
     expect((await readFile(outsideFile)).toString()).toBe("existing")
     await rm(outside, { recursive: true, force: true })
@@ -219,7 +289,7 @@ describe("attachments are untrusted input, never control", () => {
       legacy: false,
     } as never)
 
-    const staged = await stageScanAttachments({
+    await using staged = await stageScanAttachments({
       scanId,
       workspaceId: "ws-1",
       attachmentIds: ["att-9"],
@@ -257,6 +327,7 @@ describe("attachments are untrusted input, never control", () => {
       expect(arg).not.toContain("IGNORE ALL PREVIOUS")
     }
     expect(withoutAttachments.args.join(" ")).not.toContain("attachment")
+    await staged!.publish()
     // The staged file itself retains the hostile bytes verbatim — it is inert
     // data on disk, not a control surface.
     const stagedPath = join(staged!.dir, staged!.entries[0]!.stagedAs)

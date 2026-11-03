@@ -1,4 +1,4 @@
-import { prisma, updateScanStatus, type ScanStatus } from "@lyrashield/db"
+import { prisma, updateUnclaimedScanStatus, type ScanStatus } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 import { checkInstructionSafety } from "@lyrashield/security"
 import {
@@ -46,11 +46,11 @@ export async function prepareScanExecution(params: {
   const { scanId, targetId, goal, mode, executionPlan } = params
 
   // 1. Preflight checks
-  await updateScanStatus(scanId, "PREFLIGHT" as ScanStatus)
+  await updateUnclaimedScanStatus(scanId, "PREFLIGHT" as ScanStatus)
   const preflight = await runPreflight(scanId, targetId)
 
   if (!preflight.passed) {
-    await updateScanStatus(scanId, "FAILED" as ScanStatus, {
+    await updateUnclaimedScanStatus(scanId, "FAILED" as ScanStatus, {
       errorCategory: preflight.errorCategory,
       errorMessage: preflight.errorMessage,
     })
@@ -82,7 +82,7 @@ export async function prepareScanExecution(params: {
   })
 
   if (!target) {
-    await updateScanStatus(scanId, "FAILED" as ScanStatus, {
+    await updateUnclaimedScanStatus(scanId, "FAILED" as ScanStatus, {
       errorCategory: "TARGET_NOT_FOUND",
       errorMessage: "Target disappeared between preflight and execution",
     })
@@ -119,7 +119,7 @@ export async function prepareScanExecution(params: {
         hasBaseRevision: Boolean(source?.baseRevision),
         hasMergeBaseRevision: Boolean(source?.mergeBaseRevision),
       })
-      await updateScanStatus(scanId, "FAILED" as ScanStatus, {
+      await updateUnclaimedScanStatus(scanId, "FAILED" as ScanStatus, {
         errorCategory: "SCAN_PLAN_INVALID",
         errorMessage,
       })
@@ -142,7 +142,7 @@ export async function prepareScanExecution(params: {
       hasApiSpec: Boolean(target.apiSpecUrl),
     })
     if (!resolved.ok) {
-      await updateScanStatus(scanId, "FAILED" as ScanStatus, {
+      await updateUnclaimedScanStatus(scanId, "FAILED" as ScanStatus, {
         errorCategory: resolved.code,
         errorMessage: resolved.reason,
       })
@@ -173,7 +173,7 @@ export async function prepareScanExecution(params: {
       goalSafe: goalSafety.safe,
       targetNameSafe: targetNameSafety.safe,
     })
-    await updateScanStatus(scanId, "FAILED" as ScanStatus, {
+    await updateUnclaimedScanStatus(scanId, "FAILED" as ScanStatus, {
       errorCategory: "PROMPT_INJECTION",
       errorMessage: reason,
     })

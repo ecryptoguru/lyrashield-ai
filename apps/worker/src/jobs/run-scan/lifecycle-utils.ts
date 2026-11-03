@@ -1,15 +1,27 @@
+import {
+  isConfirmedScanClaimRollback,
+  ScanBillableClaimError,
+} from "@lyrashield/db/src/scan-billable-claim"
 import { hasUnsettledScanIntent } from "@lyrashield/billing"
 import { env } from "@lyrashield/config"
 import { addScanEvent, evaluateGateForTarget } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 import { resolveScanProfile } from "@lyrashield/types"
 import type { TargetType } from "../../engine/command-builder"
-import type { ScanJobData } from "../../types"
+import type { ScanJobData, ScanJobResult } from "../../types"
 
 export type StoredTerminalOutcome = {
   status: "COMPLETED" | "PARTIAL" | "FAILED" | "STOPPED_BUDGET"
   errorCategory: string | null
   errorMessage: string | null
+}
+
+export function retainedBillableScanResult(): ScanJobResult {
+  return {
+    status: "failed",
+    errorCategory: "BILLABLE_PHASE_INTERRUPTED",
+    errorMessage: "Existing or uncertain paid execution was not replayed",
+  }
 }
 
 export function storedTerminalOutcome(manifest: unknown): StoredTerminalOutcome | null {
@@ -167,12 +179,20 @@ export async function enterEngineBillablePhase(
   scanId: string,
   markStarted: () => void
 ): Promise<void> {
-  await addScanEvent(
-    scanId,
-    "billable_boundary",
-    "info",
-    "Automatic retries disabled before provider-billable analysis",
-    { retryPolicy: "fresh_scan_required" }
-  )
+  try {
+    await addScanEvent(
+      scanId,
+      "billable_boundary",
+      "info",
+      "Automatic retries disabled before provider-billable analysis",
+      { retryPolicy: "fresh_scan_required" }
+    )
+  } catch (cause) {
+    if (isConfirmedScanClaimRollback(cause)) throw cause
+    // A commit acknowledgement can be lost. Only a confirmed first insert may invoke the engine.
+    throw new ScanBillableClaimError("Paid admission was refused or its commit is uncertain", {
+      cause,
+    })
+  }
   markStarted()
 }

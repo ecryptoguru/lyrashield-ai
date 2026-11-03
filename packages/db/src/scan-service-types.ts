@@ -1,4 +1,7 @@
+import type { prisma } from "./client"
 import type { DeterminismMode, ScanWorkflow } from "@lyrashield/types"
+
+export type ScanTransaction = Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
 
 export interface CreateScanParams {
   workspaceId: string
@@ -6,6 +9,9 @@ export interface CreateScanParams {
   goal: string
   mode?: string
   policyId?: string
+  /** Revalidate the default (including its absence) selected by manual admission. */
+  verifyWorkspaceDefaultPolicy?: boolean
+  engineBudgetCeilingUsd?: number
   createdById: string
   triggerType?: string
   determinismMode?: DeterminismMode

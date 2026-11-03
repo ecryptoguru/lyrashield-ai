@@ -177,6 +177,7 @@ export {
   lockWorkspaceScanAdmission,
   createScan,
   updateScanStatus,
+  updateUnclaimedScanStatus,
   addScanEvent,
   getScanWithEvents,
   getScanResultManifestDetail,

@@ -822,8 +822,15 @@ test("held recovery skips migration execution and keeps promotion failure forwar
     'if [ "$promotion_complete" -ne 1 ];',
     heldFailureStart + 1
   )
-  assert.ok(heldFailureStart >= 0 && genericRollbackStart > heldFailureStart)
-  const heldFailure = promoter.slice(heldFailureStart, genericRollbackStart)
+  const heldFailureEnd = promoter.indexOf("\n  fi\n", heldFailureStart)
+  assert.ok(
+    heldFailureStart >= 0 &&
+      heldFailureEnd > heldFailureStart &&
+      genericRollbackStart > heldFailureEnd
+  )
+  // End at maintenance's own closing guard; paired promotion has its own policy.
+  const heldFailure = promoter.slice(heldFailureStart, heldFailureEnd + "\n  fi\n".length)
+  assert.match(heldFailure, /\n    exit "\$status"\n  fi\n$/)
   assert.match(heldFailure, /webhook maintenance held, no legacy rollback/)
   assert.doesNotMatch(
     heldFailure,
