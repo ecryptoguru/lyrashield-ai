@@ -10,6 +10,7 @@ import math
 import os
 from pathlib import Path
 import re
+import socket
 import subprocess
 import sys
 import tarfile
@@ -22,6 +23,7 @@ import zipfile
 ENGINE = '992b3d9df696753c7b62a31ea58f1ca5d21055c1'
 REPOSITORY = 'ghcr.io/ecryptoguru/lyrashield-ai/lyrashield-worker@sha256:'
 PROBE = Path(__file__).with_name('engine-physical-ceiling-probe.py')
+LINUX_GUARD = Path(__file__).with_name('physical-network-guard-linux.py')
 TESTS = (
     'tests/test_budget_reservations.py',
     'tests/test_e2e_budget_lifecycle.py',
@@ -62,16 +64,33 @@ def invoke(args, *, cwd=None, env=None, data=None, timeout=1200):
     return result.stdout
 
 
-def materialize(repo, dest):
+def _materialize_commit(repo, dest, commit):
     env = {'PATH': '/usr/bin:/bin:/usr/sbin:/sbin', 'HOME': str(dest.parent),
            'GIT_CONFIG_NOSYSTEM': '1', 'GIT_CONFIG_GLOBAL': os.devnull,
            'GIT_NO_REPLACE_OBJECTS': '1', 'LC_ALL': 'C'}
-    identity = invoke(['/usr/bin/git', '-C', str(repo), 'rev-parse', '--verify', ENGINE+'^{commit}'], env=env)
-    if identity.decode().strip() != ENGINE:
+    if not re.fullmatch(r'[0-9a-f]{40}', commit):
+        raise RuntimeError('invalid engine object ID')
+    identity = invoke(['/usr/bin/git', '-C', str(repo), 'rev-parse', '--verify', commit+'^{commit}'], env=env)
+    if identity.decode().strip() != commit:
         raise RuntimeError('engine object identity mismatch')
+    entries = invoke(['/usr/bin/git','-C',str(repo),'ls-tree','-rz','--full-tree',commit],env=env)
+    expected = {}
+    for row in entries.split(b'\0'):
+        if not row:
+            continue
+        meta, separator, name = row.partition(b'\t')
+        match = re.fullmatch(rb'(100644|100755) blob ([0-9a-f]{40})',meta)
+        if not separator or not match:
+            raise RuntimeError('unsupported engine tree entry')
+        path = Path(os.fsdecode(name))
+        if path.is_absolute() or '..' in path.parts or str(path) in expected:
+            raise RuntimeError('invalid engine tree path')
+        expected[str(path)] = (match.group(1),match.group(2).decode())
+    if not expected:
+        raise RuntimeError('empty engine tree')
     archive = dest.parent / 'engine.tar'
     with archive.open('xb') as out:
-        p = subprocess.run(['/usr/bin/git','-C',str(repo),'archive','--format=tar',ENGINE],
+        p = subprocess.run(['/usr/bin/git','-C',str(repo),'archive','--format=tar',commit],
                            env=env, stdout=out, stderr=subprocess.PIPE, timeout=120)
     if p.returncode:
         raise RuntimeError('could not materialize exact engine Git object')
@@ -81,8 +100,31 @@ def materialize(repo, dest):
             path = Path(item.name)
             if path.is_absolute() or '..' in path.parts or not (item.isfile() or item.isdir()):
                 raise RuntimeError('unsafe engine archive entry')
-        tar.extractall(dest)
+        tar.extractall(dest, filter='data')
     archive.unlink()
+    seen = set()
+    for path in dest.rglob('*'):
+        if path.is_symlink():
+            raise RuntimeError('engine archive contains a symbolic link')
+        if path.is_dir():
+            continue
+        name = path.relative_to(dest).as_posix()
+        if not path.is_file() or name not in expected:
+            raise RuntimeError('engine archive contains an unexpected entry')
+        mode, blob = expected[name]
+        if bool(path.stat().st_mode & 0o111) != (mode == b'100755'):
+            raise RuntimeError('engine archive mode differs from commit')
+        contents = path.read_bytes()
+        observed = hashlib.sha1(b'blob '+str(len(contents)).encode()+b'\0'+contents).hexdigest()
+        if observed != blob:
+            raise RuntimeError('engine archive contents differ from commit')
+        seen.add(name)
+    if seen != set(expected):
+        raise RuntimeError('engine archive omitted committed paths')
+
+
+def materialize(repo, dest):
+    _materialize_commit(repo, dest, ENGINE)
 
 
 def check_results(path):
@@ -94,6 +136,55 @@ def check_results(path):
     if not set(REQUIRED_TESTS).issubset(names):
         raise RuntimeError('engine suite omitted a required named test')
     return len(cases)
+
+
+def network_guard(python, cwd, env):
+    if sys.platform == 'darwin':
+        prefix = ['/usr/bin/sandbox-exec','-p','(version 1) (allow default) (deny network*)']
+    elif sys.platform == 'linux':
+        prefix = [str(python),'-I',str(LINUX_GUARD)]
+    else:
+        raise RuntimeError('no qualified network isolation for this platform')
+    # The endpoints are deliberately live and also tested outside the guard.
+    # Refusal, timeout, missing paths or a fake no-listener failure is not proof.
+    with tempfile.TemporaryDirectory(prefix='physical-net-',dir='/tmp') as root:
+        tcp = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
+        unix = socket.socket(socket.AF_UNIX,socket.SOCK_STREAM)
+        datagram = socket.socket(socket.AF_UNIX,socket.SOCK_DGRAM)
+        try:
+            tcp.bind(('127.0.0.1',0)); tcp.listen(2); tcp.settimeout(2)
+            unix_path = str(Path(root)/'stream')
+            unix.bind(unix_path); unix.listen(2); unix.settimeout(2)
+            datagram_path = str(Path(root)/'datagram')
+            datagram.bind(datagram_path); datagram.settimeout(2)
+            with socket.create_connection(tcp.getsockname(),timeout=2):
+                accepted, _ = tcp.accept(); accepted.close()
+            with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as local:
+                local.connect(unix_path); accepted, _ = unix.accept(); accepted.close()
+            with socket.socket(socket.AF_UNIX,socket.SOCK_DGRAM) as local:
+                local.sendto(b'canary',datagram_path)
+                if datagram.recv(16) != b'canary': raise RuntimeError('datagram control failed')
+            code = '''import errno,socket,sys
+def denied(fn):
+ try: fn()
+ except OSError as e:
+  if e.errno in (errno.EACCES,errno.EPERM): return
+  raise
+ raise AssertionError('network operation unexpectedly succeeded')
+def tcp():
+ with socket.socket(socket.AF_INET,socket.SOCK_STREAM) as s: s.connect(('127.0.0.1',int(sys.argv[1])))
+def unix():
+ with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as s: s.connect(sys.argv[2])
+def datagram():
+ with socket.socket(socket.AF_UNIX,socket.SOCK_DGRAM) as s: s.sendto(b'canary',sys.argv[3])
+for operation in (tcp,unix,datagram): denied(operation)
+a,b=socket.socketpair(); a.send(b'x'); assert b.recv(1)==b'x'; a.close(); b.close()
+'''
+            invoke([*prefix,str(python),'-I','-c',code,str(tcp.getsockname()[1]),
+                    unix_path,datagram_path],cwd=cwd,env=env,timeout=15)
+        finally:
+            tcp.close(); unix.close(); datagram.close()
+    return prefix
 
 
 def check_probe(proof, versions, fingerprint):
@@ -117,6 +208,23 @@ def check_probe(proof, versions, fingerprint):
         raise RuntimeError('in-image modeled cost or reservation exceeded cap')
     if aggregate['modeledMaximumUsd'] > aggregate['heldReservationsUsd']:
         raise RuntimeError('modeled wire cost exceeded held reservations')
+
+
+def cleanup_probe(name, owner, image_id, created_id):
+    ids = invoke(['docker','ps','-aq','--no-trunc','--filter','name=^/'+name+'$'],timeout=30).decode().split()
+    if not ids:
+        return
+    if len(ids) != 1 or not re.fullmatch(r'[0-9a-f]{64}', ids[0]):
+        raise RuntimeError('probe container identity is ambiguous')
+    container = json.loads(invoke(['docker','inspect',ids[0]],timeout=30))[0]
+    labels = container.get('Config',{}).get('Labels') or {}
+    if (container.get('Id') != ids[0] or container.get('Name') != '/'+name or
+        container.get('Image') != image_id or labels.get('lyrashield.physical-drill-owner') != owner or
+        (created_id is not None and created_id != ids[0])):
+        raise RuntimeError('refusing cleanup of a container without exact probe ownership')
+    invoke(['docker','rm','-f',ids[0]],timeout=30)
+    if invoke(['docker','ps','-aq','--no-trunc','--filter','name=^/'+name+'$'],timeout=30).strip():
+        raise RuntimeError('offline probe container cleanup failed')
 
 
 def main():
@@ -162,13 +270,15 @@ def main():
                     versions[package['name']] = package['version']
             if set(versions) != set(PACKAGES):
                 raise RuntimeError('missing locked provider dependency')
-            invoke(['uv','sync','--frozen','--offline'],cwd=source,env=env)
+            guard = network_guard(python,source,env)
+            invoke([*guard,'uv','sync','--frozen','--offline'],cwd=source,env=env)
             xml = tmp/'results.xml'
-            invoke([str(tmp/'venv/bin/python'),'-m','pytest','-p','pytest_asyncio.plugin',
+            python = tmp/'venv/bin/python'
+            invoke([*guard,str(python),'-m','pytest','-p','pytest_asyncio.plugin',
                     '--junitxml='+str(xml),*TESTS],cwd=source,env=env,timeout=1800)
             count = check_results(xml)
             wheel_dir = tmp/'wheels'; wheel_dir.mkdir()
-            invoke(['uv','build','--offline','--wheel','--out-dir',str(wheel_dir)],cwd=source,env=env)
+            invoke([*guard,'uv','build','--offline','--wheel','--out-dir',str(wheel_dir)],cwd=source,env=env)
             wheels = list(wheel_dir.glob('*.whl'))
             if len(wheels) != 1:
                 raise RuntimeError('expected exactly one engine wheel')
@@ -181,21 +291,24 @@ def main():
             expected = {'versions':versions,'wheelFiles':files,'wheelFingerprint':fingerprint}
             input_bytes = json.dumps(expected,separators=(',',':')).encode()+b'\n'+PROBE.read_bytes()
             bootstrap = 'import json,sys; expected=json.loads(sys.stdin.buffer.readline()); exec(compile(sys.stdin.buffer.read(),"<offline-probe>","exec"))'
-            name = 'lyra-physical-proof-' + uuid4().hex
+            owner = uuid4().hex
+            name = 'lyra-physical-proof-' + owner
+            created_id = None
             try:
-                raw = invoke(['docker','run','--rm','-i','--pull','never','--name',name,
+                created = invoke(['docker','create','-i','--pull','never','--name',name,
+                              '--label','lyrashield.physical-drill-owner='+owner,
                               '--network','none','--read-only','--cap-drop','ALL',
                               '--security-opt','no-new-privileges','--pids-limit','64',
                               '--memory','768m','--cpus','1','--tmpfs','/tmp:rw,nosuid,nodev,mode=1777,size=64m',
                               '--entrypoint','/opt/lyrashield-venv/bin/python',image,'-I','-c',bootstrap],
-                             data=input_bytes,timeout=180)
+                             timeout=30).decode().strip()
+                if not re.fullmatch(r'[0-9a-f]{64}',created):
+                    raise RuntimeError('invalid created probe container identity')
+                created_id = created
+                raw = invoke(['docker','start','-a','-i',created_id],data=input_bytes,timeout=180)
             finally:
-                # Only this unique container is eligible for cleanup, including timeouts.
-                found = invoke(['docker','ps','-aq','--filter','name=^/'+name+'$'],timeout=30).decode().split()
-                if found:
-                    invoke(['docker','rm','-f',name],timeout=30)
-                if invoke(['docker','ps','-aq','--filter','name=^/'+name+'$'],timeout=30).strip():
-                    raise RuntimeError('offline probe container cleanup failed')
+                # A same-name conflict is not ownership: verify ID, label and image.
+                cleanup_probe(name,owner,meta['Id'],created_id)
             proof = json.loads(raw)
             check_probe(proof, versions, fingerprint)
             result.update({'passed':True,'engineTestCases':count,'lockSha256':hashlib.sha256(lock).hexdigest(),
