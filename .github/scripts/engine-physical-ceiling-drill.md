@@ -1,0 +1,16 @@
+# Offline engine physical-ceiling rehearsal
+
+This produces a **local, unsigned rehearsal receipt**. It neither authorizes a release nor establishes a live provider's billing. Run it only after the candidate image exists locally and its independent provenance is verified. It creates no provider request and requires no API credential.
+
+```sh
+python3.12 .github/scripts/run-engine-physical-ceiling-drill.py \
+  --candidate ghcr.io/ecryptoguru/lyrashield-ai/lyrashield-worker@sha256:DIGEST PRODUCT_SHA \
+  --engine-repo /path/to/lyrashield-engine \
+  --receipt /private/new-physical-ceiling-receipt.json
+```
+
+The command requires Python 3.12, a local `uv` cache containing the exact locked test and build dependencies, Docker, and the already-present canonical immutable worker image. It never pulls images and runs `uv` offline. The image must report the requested product revision and engine `992b3d9df696753c7b62a31ea58f1ca5d21055c1`; those labels alone are not provenance authentication. The script materializes that exact engine Git object into a private directory with replacement objects and inherited Git configuration disabled. It executes eight fixed financial test files in a fresh Python 3.12 frozen environment and refuses any omitted named critical case, failure, error, or skip.
+
+It builds a wheel from the same materialized tree, compares every installed `lyrashield`, `lyrashield_adapter`, and `strix` package file against that wheel, and checks the installed OpenAI SDK, Agents SDK, LiteLLM and HTTPX versions against the exact engine lock. Six tests run inside the actual immutable worker image with its installed engine and SDKs: Responses, Chat Completions, and LiteLLM, each with streaming on and off. Each uses `httpx.MockTransport` to return a 503 and asserts one physical request, a 128-token output cap on the wire, a retained reservation, and disabled hidden retries. The image has no network, no host mounts, all capabilities removed, a read-only root filesystem, and a private tmpfs; only the exact uniquely named test container may be removed. The command fails if cleanup cannot be verified.
+
+The fixed engine suite exercises other cases including lost acknowledgements, auxiliary calls, fallback, durable reservations, cancellation, redirects and malformed usage. Those suite cases run on the host, not in the image. The in-image probe checks dependency **versions**, not the cryptographic contents of all third-party dependencies, and tests only the specified synthetic failures. Neither part measures live provider charging, deployed routing or rollback. A future protected issuer must independently authenticate image provenance, materialize the reviewed product-side runner and probe from its exact Git object, run this command itself, bind its receipt and engine/worker tuple to the protected job, and combine it with the separate actual-worker crash proof. It must not promote a caller-provided `passed` boolean or this standalone file as an OIDC qualification.
