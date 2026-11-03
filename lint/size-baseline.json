@@ -232,8 +232,8 @@
     },
     "apps/web/src/app/(dashboard)/dashboard/settings/api-keys.tsx|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 145,
-      "maxExcess": 145
+      "totalExcess": 142,
+      "maxExcess": 142
     },
     "apps/web/src/app/(dashboard)/dashboard/settings/two-factor-security.tsx|max-lines-per-function": {
       "count": 1,
