@@ -517,13 +517,13 @@
     },
     "apps/worker/src/jobs/run-scan/execution.ts|max-lines": {
       "count": 1,
-      "totalExcess": 114,
-      "maxExcess": 114
+      "totalExcess": 105,
+      "maxExcess": 105
     },
     "apps/worker/src/jobs/run-scan/execution.ts|max-lines-per-function": {
       "count": 2,
-      "totalExcess": 222,
-      "maxExcess": 197
+      "totalExcess": 218,
+      "maxExcess": 193
     },
     "apps/worker/src/jobs/run-scan/finalization.ts|max-lines-per-function": {
       "count": 1,

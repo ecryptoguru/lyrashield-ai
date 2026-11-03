@@ -831,6 +831,36 @@ describe("processScanJob", () => {
       expect(recordAgentMinutes).not.toHaveBeenCalled()
     })
 
+    it.each([{ status: "CANCELLED" }, null])(
+      "rechecks cancellation/removal committed during relay activation and never dispatches: %j",
+      async (status) => {
+        mockStoredScanAuthority({ mode: "STANDARD", accountingVersion: 2 })
+        vi.mocked(prisma.target.findFirst).mockResolvedValue(mockUrlTarget as never)
+        vi.mocked(prisma.targetDomainVerification.findFirst).mockResolvedValue({
+          id: "proof",
+        } as never)
+        vi.mocked(registerRelayGrant).mockImplementationOnce(async () => {
+          vi.mocked(prisma.scan.findUnique).mockResolvedValue(status as never)
+        })
+        await expect(processScanJob(standardUrlJob)).resolves.toMatchObject({
+          status: "failed",
+          errorCategory: "CANCELLED",
+        })
+        expect(registerRelayGrant).toHaveBeenCalledOnce()
+        const [scanId, grant, config, , ownerId] = vi.mocked(registerRelayGrant).mock.calls[0]!
+        expect(revokeRelayGrant).toHaveBeenCalledWith(scanId, config, { grant, ownerId })
+        expect(cleanupEngineWorkspace).not.toHaveBeenCalled()
+        expect(runEngine).not.toHaveBeenCalled()
+        expect(recordAgentMinutes).not.toHaveBeenCalled()
+        expect(vi.mocked(confirmScanCapacityStopped).mock.calls[0]?.slice(0, 3)).toEqual([
+          "ws-1",
+          "scan-1",
+          true,
+        ])
+        expect(releaseStoppedScanSlot).toHaveBeenCalledWith("ws-1", "scan-1")
+      }
+    )
+
     it("does not execute or meter the engine when relay admission fails", async () => {
       vi.mocked(prisma.target.findFirst).mockResolvedValue(mockUrlTarget as never)
       vi.mocked(prisma.targetDomainVerification.findFirst).mockResolvedValue({
@@ -1403,10 +1433,13 @@ describe("processScanJob", () => {
     expect(runEngine).toHaveBeenCalledWith(
       expect.anything(),
       "scan-1",
-      115_000,
+      expect.any(Number),
       expect.any(Function),
       undefined
     )
+    const dispatchBudget = vi.mocked(runEngine).mock.calls[0]![2]!
+    expect(dispatchBudget).toBeGreaterThan(0)
+    expect(dispatchBudget).toBeLessThanOrEqual(115_000)
     expect(confirmScanCapacityStopped).toHaveBeenCalledWith(
       "ws-1",
       "scan-1",

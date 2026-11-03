@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { randomUUID } from "node:crypto"
+import { lstat, readFile, rm } from "node:fs/promises"
+import { join } from "node:path"
+import { engineWorkspacePath } from "../../engine/workspace-path"
+import { createHash, randomUUID } from "node:crypto"
 
 const mocks = vi.hoisted(() => ({
   logger: { warn: vi.fn(), error: vi.fn(), info: vi.fn() },
@@ -8,6 +11,8 @@ const mocks = vi.hoisted(() => ({
   },
   addScanEvent: vi.fn(),
   uploadEncryptedArtifact: vi.fn(),
+  readEncryptedArtifact: vi.fn(),
+  resolveScanAttachments: vi.fn(),
   authorizeDeterministicRetest: vi.fn(),
   checkoutDeterministicRetest: vi.fn(),
   fetchRelayAudit: vi.fn(),
@@ -37,9 +42,11 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@lyrashield/evidence-storage", () => ({
   uploadEncryptedArtifact: mocks.uploadEncryptedArtifact,
+  readEncryptedArtifact: mocks.readEncryptedArtifact,
 }))
 vi.mock("@lyrashield/db", () => ({
   addScanEvent: mocks.addScanEvent,
+  resolveScanAttachments: mocks.resolveScanAttachments,
   prisma: mocks.prisma,
   resolveAuthenticatedAssessmentAuthorization: mocks.resolveAuthenticatedAssessmentAuthorization,
 }))
@@ -359,6 +366,83 @@ describe("executeScanTarget relay lifecycle", () => {
       expect(mocks.revokeRelayGrant).toHaveBeenCalledOnce()
     }
   )
+
+  it("does not dispatch when the final forced status read fails after claim", async () => {
+    const isScanCancelled = vi
+      .fn()
+      .mockResolvedValueOnce(false)
+      .mockRejectedValueOnce(new Error("status unavailable"))
+    const result = await executeScanTarget(params({ isScanCancelled }))
+    expect(isScanCancelled.mock.calls).toEqual([[true], [true]])
+    expect(result).toMatchObject({
+      ok: false,
+      noEngineDispatchAfterClaim: true,
+      result: { errorCategory: "SCAN_STATUS_UNAVAILABLE" },
+    })
+    expect(mocks.revokeRelayGrant).toHaveBeenCalledOnce()
+    expect(mocks.runEngine).not.toHaveBeenCalled()
+  })
+
+  it("keeps plaintext off disk until claim and removes the owner's published input on a late cancel", async () => {
+    const scanId = randomUUID(),
+      root = engineWorkspacePath(scanId),
+      directory = join(root, "attachments")
+    const content = Buffer.from("owner-private attachment"),
+      checksum = createHash("sha256").update(content).digest("hex")
+    const plan = buildScanExecutionPlan({
+      workflow: "REVIEW_TARGET",
+      targetType: "WEB_APP",
+      mode: "STANDARD",
+      attachmentIds: ["att-one"],
+    })
+    mocks.resolveScanAttachments.mockResolvedValue([
+      {
+        id: "att-one",
+        filename: "a.txt",
+        mediaType: "text/plain",
+        storageUri: "fixture",
+        checksum,
+        byteLength: content.byteLength,
+      },
+    ])
+    mocks.readEncryptedArtifact.mockResolvedValue({ content, checksum })
+    let registered = false,
+      checkedPublished = false
+    mocks.addScanEvent.mockImplementation(async (_id, stage) => {
+      if (stage === "billable_boundary")
+        await expect(lstat(root)).rejects.toMatchObject({ code: "ENOENT" })
+      return { id: "event" }
+    })
+    mocks.registerRelayGrant.mockImplementationOnce(async () => {
+      registered = true
+    })
+    try {
+      const result = await executeScanTarget(
+        params({
+          scanId,
+          executionPlan: plan,
+          isScanCancelled: async (force) => {
+            expect(force).toBe(true)
+            if (!registered) return false
+            expect(await readFile(join(directory, "att-one-a.txt"))).toEqual(content)
+            checkedPublished = true
+            return true
+          },
+        })
+      )
+      expect(checkedPublished).toBe(true)
+      expect(result).toMatchObject({
+        ok: false,
+        noEngineDispatchAfterClaim: true,
+        result: { errorCategory: "CANCELLED" },
+      })
+      await expect(lstat(directory)).rejects.toMatchObject({ code: "ENOENT" })
+      expect(mocks.revokeRelayGrant).toHaveBeenCalledOnce()
+      expect(mocks.runEngine).not.toHaveBeenCalled()
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
 
   it("registers only the authorized retry after a confirmed paid-claim rollback", async () => {
     const rollback = Object.assign(new Error("claim rolled back"), { code: "P2034" })

@@ -1,3 +1,4 @@
+import type { ScanExecutionResult } from "./execution"
 import {
   revokeRelayGrant,
   type RelayAttempt,
@@ -13,7 +14,8 @@ import { failTerminalRetestsForScan } from "../../engine/result-integrity"
 export async function cleanupScanExecution(
   scanId: string,
   ownsEngineWorkspace: boolean,
-  deterministicCheckout?: { cleanup: () => Promise<void> } | null
+  deterministicCheckout?: { cleanup: () => Promise<void> } | null,
+  outcome?: ScanExecutionResult
 ) {
   try {
     await failTerminalRetestsForScan(scanId)
@@ -27,7 +29,11 @@ export async function cleanupScanExecution(
     await boundedCleanup(
       (async () => {
         await deterministicCheckout?.cleanup()
-        if (ownsEngineWorkspace) await cleanupEngineWorkspace(engineWorkspacePath(scanId), scanId)
+        // A confirmed pre-dispatch denial cleans only its own attachment publication.
+        // An existing workspace can belong to another delivery.
+        const didNotDispatch = outcome?.ok === false && outcome.noEngineDispatchAfterClaim
+        if (ownsEngineWorkspace && !didNotDispatch)
+          await cleanupEngineWorkspace(engineWorkspacePath(scanId), scanId)
       })()
     )
   } catch (cleanupError) {

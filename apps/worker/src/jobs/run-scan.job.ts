@@ -100,6 +100,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
     let scanRuntimeBudgetMs = MAX_SCAN_RUNTIME_MS
     let contended = false
     let billablePhaseStarted = false
+    let execution: Awaited<ReturnType<typeof executeScanTarget>> | undefined
     let executorReturned = false
     let noBillableWork = true
     let billingDisposition: ScanBillingDisposition | undefined
@@ -221,7 +222,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       })
       await updateUnclaimedScanStatus(scanId, "RUNNING" as ScanStatus)
       await markRetestsRunning(scanId)
-      const execution = await executeScanTarget({
+      execution = await executeScanTarget({
         accountingVersion: scanRecord.accountingVersion,
         scanId,
         workspaceId,
@@ -505,8 +506,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         scanRuntimeBudgetMs,
         elapsedScanMs,
       })
-      const aiSecuritySignals = triageOverlay.aiSecuritySignals
-      const triageSnapshot = triageOverlay.triageSnapshot
+      const { aiSecuritySignals, triageSnapshot } = triageOverlay
       budgetExceeded = triageOverlay.budgetExceeded
       billedCostUsd = triageOverlay.billedCostUsd
       costReconciled = triageOverlay.costReconciled
@@ -761,7 +761,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
           noBillableWork,
           billingDisposition,
         })
-        await cleanupScanExecution(scanId, billablePhaseStarted, deterministicCheckout)
+        await cleanupScanExecution(scanId, billablePhaseStarted, deterministicCheckout, execution)
       }
     }
   }) // end runWithWorkspaceContext

@@ -38,12 +38,7 @@ import {
 import type { RelaySessionBinding } from "@lyrashield/security"
 import type { ScanJobData, ScanJobResult } from "../../types"
 import { AuthSessionError, resolveRelaySessionBinding } from "./auth-session"
-import {
-  stageScanAttachments,
-  ScanAttachmentStagingError,
-  type StagedScanAttachments,
-} from "./attachments"
-import { ScanAttachmentError } from "@lyrashield/db"
+import { stageScanAttachments, attachmentFailure, type StagedScanAttachments } from "./attachments"
 import { requireEngineModel, resolveEngineRuntimeBudgetMs } from "./lifecycle-utils"
 import type { ScanExecutionTarget } from "./preparation"
 import type { ScanTerminalError } from "./settlement"
@@ -425,70 +420,16 @@ export async function executeScanTarget(params: {
       }
     }
 
-    // Stage recorded attachments BEFORE any billable/provider work: each
-    // stored object is re-resolved workspace-scoped, decrypted, verified
-    // against its recorded sha256, and written read-only under the engine
-    // workspace's `attachments/` input directory alongside the manifest the
-    // engine consumes. Attachment bytes are untrusted input data — they are
-    // never read into instructions, scope, credentials, model routing, or
-    // budget, so a hostile attachment cannot widen the run. A missing,
-    // deleted, or tampered input fails closed rather than running against a
-    // different input set than the immutable plan recorded.
-    if (plannedAttachmentIds.length > 0) {
-      try {
-        stagedAttachments = await stageScanAttachments({
-          scanId,
-          workspaceId,
-          attachmentIds: plannedAttachmentIds,
-        })
-        if (stagedAttachments) {
-          await addScanEvent(
-            scanId,
-            "attachments_staged",
-            "info",
-            `${stagedAttachments.entries.length} supporting file(s) staged read-only for the engine`,
-            {
-              count: stagedAttachments.entries.length,
-              totalBytes: stagedAttachments.totalBytes,
-              manifestChecksum: stagedAttachments.manifestChecksum,
-            }
-          )
-        }
-      } catch (error) {
-        const isKnown =
-          error instanceof ScanAttachmentError || error instanceof ScanAttachmentStagingError
-        logger.warn("Scan attachment staging failed", {
-          scanId,
-          workspaceId,
-          error: error instanceof Error ? error.message : String(error),
-        })
-        try {
-          await addScanEvent(
-            scanId,
-            "attachments_failed",
-            "error",
-            "A supporting file could not be verified or is no longer available",
-            {
-              code: isKnown ? error.code : "SCAN_ATTACHMENT_STAGING",
-            }
-          )
-        } catch (eventErr) {
-          logger.warn("Failed to persist attachments_failed event", {
-            scanId,
-            error: eventErr instanceof Error ? eventErr.message : String(eventErr),
-          })
-        }
-        return {
-          ok: false,
-          result: {
-            status: "failed",
-            errorCategory: isKnown ? error.code : "SCAN_ATTACHMENT_UNAVAILABLE",
-            errorMessage:
-              "A supporting file could not be verified or is no longer available. Re-upload it and start a new scan.",
-          },
-        }
-      }
+    try {
+      stagedAttachments = await stageScanAttachments({
+        scanId,
+        workspaceId,
+        attachmentIds: plannedAttachmentIds,
+      })
+    } catch (error) {
+      return attachmentFailure(scanId, workspaceId, error)
     }
+    await using inputs = stagedAttachments
 
     let relay: UrlEngineRelay | null = null
     if (urlEngineBacked) {
@@ -516,15 +457,56 @@ export async function executeScanTarget(params: {
 
     // Keep the profile's deterministic-scanner reserve available even when
     // the model is healthy until its own wall-clock cap.
-    const claimElapsedMs = relay ? elapsedScanMs() : 0
+    const claimElapsedMs = elapsedScanMs()
     const capacity = await claimBoundedEngineCapacity(params)
     capacityLimited = capacity.capacityLimited
     const relayFailure = await relay?.activate()
     if (relayFailure) return { ...relayFailure, noEngineDispatchAfterClaim: true }
     try {
-      const setupMs = relay ? Math.max(0, elapsedScanMs() - claimElapsedMs) : 0
+      if (inputs) {
+        try {
+          await inputs.publish()
+          await addScanEvent(
+            scanId,
+            "attachments_staged",
+            "info",
+            `${inputs.entries.length} supporting file(s) staged read-only for the engine`,
+            {
+              count: inputs.entries.length,
+              totalBytes: inputs.totalBytes,
+              manifestChecksum: inputs.manifestChecksum,
+            }
+          )
+        } catch (error) {
+          return {
+            ...(await attachmentFailure(scanId, workspaceId, error)),
+            noEngineDispatchAfterClaim: true,
+          }
+        }
+      }
+      // Bypass preflight’s cancellation cache after relay setup and input publication.
+      const cancelled = await isScanCancelled(true).catch(() => null)
+      if (cancelled !== false) {
+        return {
+          ok: false,
+          noEngineDispatchAfterClaim: true,
+          result:
+            cancelled === true
+              ? {
+                  status: "failed",
+                  errorCategory: "CANCELLED",
+                  errorMessage: "Scan cancelled by user",
+                }
+              : {
+                  status: "failed",
+                  errorCategory: "SCAN_STATUS_UNAVAILABLE",
+                  errorMessage: "Could not confirm scan status before engine dispatch.",
+                },
+        }
+      }
+      const setupMs = Math.max(0, elapsedScanMs() - claimElapsedMs)
       const engineTimeoutMs = capacity.runtimeLimitMs - setupMs
-      if (relay && engineTimeoutMs <= 0) {
+      if (engineTimeoutMs <= 0) {
         params.markGlobalScanTimeout()
         return {
           ok: false,
@@ -536,6 +518,7 @@ export async function executeScanTarget(params: {
           },
         }
       }
+      inputs?.handoff()
       engineStartedAtMs = Date.now()
       engineResult = await runEngine(
         {
