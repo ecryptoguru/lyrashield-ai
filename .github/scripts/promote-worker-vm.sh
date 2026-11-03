@@ -987,6 +987,8 @@ if [ "$paired_release_held" -eq 1 ]; then
   if [ -n "$prior_worker_ref" ]; then
     [ "$(docker exec "$container" printenv LYRASHIELD_RUN_RECORD_V1_1)" = 0 ]
     [ "$(docker exec "$container" printenv LYRASHIELD_PENDING_HTTP_EVIDENCE)" = 0 ]
+    # Never export or print the selector's value.
+    docker exec "$container" sh -c 'test -z "${LYRASHIELD_EVIDENCE_WRITER_CANARY:-}"'
     running_id=$(docker inspect "$container" --format '{{.Image}}')
     [ -n "$running_id" ] && [ "$running_id" = "$(docker image inspect "$target" --format '{{.Id}}')" ] || exit 1
   fi

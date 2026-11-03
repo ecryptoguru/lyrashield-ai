@@ -1,6 +1,7 @@
 // Dormant protected release steps. There is deliberately no CLI or environment
 // switch. The future workflow owns live infrastructure readers and credentials.
 import assert from "node:assert/strict"
+import { isDeepStrictEqual } from "node:util"
 import {
   constants,
   lstatSync,
@@ -76,12 +77,12 @@ function verifiedRecord(dir, stage) {
   }
 }
 
-function persist(dir, stage, pair) {
+function persist(dir, stage, pair, workerFailure) {
   // eslint-disable-next-line security/detect-non-literal-fs-filename -- exclusive new record in the private release directory
   const fd = openSync(join(dir, stage), "wx", 0o600)
   try {
     // eslint-disable-next-line security/detect-non-literal-fs-filename -- exclusive descriptor for this stage
-    writeFileSync(fd, JSON.stringify({ version: 1, stage, pair }) + "\n")
+    writeFileSync(fd, JSON.stringify({ version: 1, stage, pair, workerFailure }) + "\n")
     fsyncSync(fd)
   } finally {
     closeSync(fd)
@@ -113,9 +114,38 @@ async function verifyQualification(adapter, pair) {
   assert.deepEqual(identity(approval.pair), pair)
 }
 
+// Only forward the local wrapper's bounded metadata into the private stage
+// record. Raw stderr may contain arbitrary cloud diagnostics or credentials.
+function workerFailureMetadata(error) {
+  const stderr = error?.stderr
+  if (!(typeof stderr === "string" || Buffer.isBuffer(stderr)) || stderr.length > 2048)
+    return { kind: "unknown" }
+  const lines = stderr.toString().trimEnd().split(/\r?\n/)
+  const guest =
+    /^Paired VM completion unverified \(guest stage (prepare|drain|promote|cleanup), exit ([1-9][0-9]{0,2})\)$/.exec(
+      lines.at(-1)
+    )
+  if (guest && Number(guest[2]) <= 255)
+    return { kind: "guest", stage: guest[1], exit: Number(guest[2]) }
+  const transport = lines
+    .map((line) => /^Paired VM transport exit ([1-9][0-9]{0,2}); guest status unknown$/.exec(line))
+    .find(Boolean)
+  if (transport && Number(transport[1]) <= 255)
+    return {
+      kind: "transport",
+      exit: Number(transport[1]),
+      category: lines.includes("Paired VM transport: timeout")
+        ? "timeout"
+        : lines.includes("Paired VM transport: busy")
+          ? "busy"
+          : "unknown",
+    }
+  return { kind: "unknown" }
+}
+
 async function verifyWorker(adapter, pair) {
   const w = await adapter.readWorker(pair)
-  assert.deepEqual(w, {
+  const expected = {
     productRevision: pair.productRevision,
     engineRevision: pair.engineRevision,
     digest: pair.workerDigest,
@@ -124,7 +154,10 @@ async function verifyWorker(adapter, pair) {
     consumers: 1,
     runRecordV11: "0",
     pendingHttpEvidence: "0",
-  })
+    canarySelectorPresent: false,
+  }
+  // Never echo unexpected fields or the selector/value in an assertion diff.
+  assert.ok(isDeepStrictEqual(w, expected), "worker identity or writer-off proof mismatch")
 }
 
 async function verifyRoute(adapter, pair, name, retired = true) {
@@ -163,18 +196,32 @@ async function verifyHeld(adapter, pair, hold) {
 // Never restore a previous tuple. A verified operator adapter must recheck the
 // owner before each containment mutation. A foreign or unavailable latch is
 // left to an operator. Even after re-holding, the admission gap remains real.
-async function contain(adapter, pair, hold, dir, afterIntent) {
-  const state = await hold.state()
-  if (afterIntent && state === "absent") {
+async function contain(adapter, pair, hold, dir) {
+  const observe = () => hold.state().catch(() => "unknown")
+  let state = await observe()
+  if (state === "absent") {
     persist(dir, "admission-gap", pair)
-    await hold.claim()
-  } else if (state !== "owned") {
+    // A racing foreign claim must win. Re-read after an ambiguous NX
+    // acknowledgement before touching either fleet or admission.
+    try {
+      await hold.claim()
+      state = "owned"
+    } catch {
+      state = await observe()
+    }
+  }
+  if (state !== "owned") {
     persist(dir, "ownership-unconfirmed", pair)
     return
   }
-  await hold.assert()
-  await adapter.containOwnedConsumers(pair)
-  await hold.assert()
+  try {
+    await hold.assert()
+    await adapter.containOwnedConsumers(pair)
+    await hold.assert()
+  } catch (error) {
+    persist(dir, "containment-unconfirmed", pair)
+    throw error
+  }
   persist(dir, "contained", pair)
 }
 
@@ -224,14 +271,21 @@ export async function promoteHeldPair(input, root, adapter, signal) {
       await verifyRoute(adapter, pair, name)
     }
     await replaceRoute("relay")
-    await held("install-worker", () => adapter.promoteStoppedWorker(pair))
+    await held("install-worker", async () => {
+      try {
+        await adapter.promoteStoppedWorker(pair)
+      } catch (error) {
+        persist(dir, "worker-promotion-failed", pair, workerFailureMetadata(error))
+        throw new Error("Paired worker promotion failed; inspect the protected stage record")
+      }
+    })
     await verifyWorker(adapter, pair)
     for (const name of ["app", "scanner"]) await replaceRoute(name)
     await verifyHeld(adapter, pair, hold)
     checkpoint(signal)
     persist(dir, "pair-held-verified", pair)
   } catch (error) {
-    await contain(adapter, pair, hold, dir, false)
+    await contain(adapter, pair, hold, dir)
     throw error
   }
 }
@@ -247,13 +301,11 @@ export async function releaseVerifiedPair(input, root, adapter, signal) {
   privateDirectory(dir)
   assert.deepEqual(verifiedRecord(dir, stage), { version: 1, stage, pair })
   persist(dir, "verification-started", pair)
-  let releaseStarted = false
   try {
     await verifyQualification(adapter, pair)
     await verifyHeld(adapter, pair, hold)
     checkpoint(signal)
     persist(dir, "release-intent", pair)
-    releaseStarted = true
     await hold.release()
     persist(dir, "release-acknowledged", pair)
     checkpoint(signal)
@@ -273,7 +325,7 @@ export async function releaseVerifiedPair(input, root, adapter, signal) {
     checkpoint(signal)
     persist(dir, "release-verified", pair)
   } catch (error) {
-    await contain(adapter, pair, hold, dir, releaseStarted)
+    await contain(adapter, pair, hold, dir)
     throw error
   }
 }

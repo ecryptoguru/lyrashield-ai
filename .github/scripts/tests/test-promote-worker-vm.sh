@@ -281,6 +281,7 @@ NODE
       *LYRASHIELD_PRODUCT_REVISION*) printf '%s\n' "$MOCK_APP_REVISION" ;;
       *LYRASHIELD_ENGINE_REVISION*) printf '%s\n' "${MOCK_LIVE_ENGINE_REVISION:-$MOCK_ENGINE_REVISION}" ;;
       *LYRASHIELD_RUN_RECORD_V1_1*) printf '%s\n' "${MOCK_RUN_RECORD_V11:-0}" ;;
+      *LYRASHIELD_EVIDENCE_WRITER_CANARY*) [ -z "${MOCK_CANARY_SELECTOR:-}" ] || exit 1 ;;
       *LYRASHIELD_PENDING_HTTP_EVIDENCE*) printf '%s\n' "${MOCK_PENDING_EVIDENCE:-0}" ;;
       *LYRASHIELD_WORKER_IMAGE_DIGEST*) printf '%s\n' "${MOCK_TARGET##*@}" ;;
       *) exit 1 ;;
@@ -783,6 +784,7 @@ if [ "${PAIRED_STOPPED_ONLY:-0}" = 1 ]; then
     run_case "paired-stopped-$label" 0 0 0 failure 0 '' 0 '' 9999999000 "$container" 1 '' env 0 paired
   done
   MOCK_RUN_RECORD_V11=1 run_case paired-stopped-writer 0 0 0 failure 0 '' 0 '' 9999999000 0 1 '' env 0 paired
+  MOCK_CANARY_SELECTOR=set run_case paired-stopped-canary 0 0 0 failure 0 '' 0 '' 9999999000 0 1 '' env 0 paired
   MOCK_PENDING_EVIDENCE=1 run_case paired-stopped-pending 0 0 0 failure 0 '' 0 '' 9999999000 0 1 '' env 0 paired
   MOCK_CONFIG_ID=wrong run_case paired-stopped-image-id 0 0 0 failure 0 '' 0 '' 9999999000 0 1 '' env 0 paired
   echo "Paired stopped-entry proof passed (real loopback HTTP)."

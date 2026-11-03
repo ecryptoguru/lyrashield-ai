@@ -146,6 +146,7 @@ function fixture(t) {
         imageIdMatchesDigest: true,
         healthy: true,
         consumers: 1,
+        canarySelectorPresent: false,
         runRecordV11: "0",
         pendingHttpEvidence: "0",
         ...f.workerDrift,
@@ -211,7 +212,7 @@ for (const stage of mutations)
   test("fault immediately after " + stage, async (t) => {
     const f = fixture(t)
     f.fail = stage
-    await assert.rejects(f.promote(), /fault/)
+    await assert.rejects(f.promote(), /fault|Paired worker promotion failed/)
     assert.equal(f.state, "owned")
     assert.deepEqual(
       f.log.filter((x) => mutations.includes(x)),
@@ -228,14 +229,15 @@ for (const mode of ["lost", "replace", "abort"])
     f.mode = mode
     await assert.rejects(f.promote())
     assert.ok(!f.log.includes("route-app"))
-    assert.equal(f.log.includes("contain"), mode === "abort")
-    assert.equal(f.log.filter((x) => x === "claim").length, 1)
+    assert.equal(f.log.includes("contain"), mode !== "replace")
+    assert.equal(f.log.filter((x) => x === "claim").length, mode === "lost" ? 2 : 1)
+    assert.equal(f.stages().includes("admission-gap"), mode === "lost")
   })
 
 test("lost claim acknowledgement cannot auto-adopt or move traffic", async (t) => {
   const f = fixture(t)
   f.fail = "claim"
-  await assert.rejects(f.promote(), /fault/)
+  await assert.rejects(f.promote(), /fault|Paired worker promotion failed/)
   assert.equal(f.state, "owned")
   assert.deepEqual(f.stages(), ["claim-intent"])
   await assert.rejects(f.promote(), { code: "EEXIST" })
@@ -254,6 +256,8 @@ for (const [field, value] of [
   ["routeDrift", { replicas: 2 }],
   ["routeDrift", { traffic: [{ revision: "app--new", weight: 100, latestRevision: true }] }],
   ["routeDrift", { ownedGrantRefusalVerified: false }],
+  ["workerDrift", { canarySelectorPresent: true }],
+  ["workerDrift", { canarySelectorPresent: undefined }],
   ["workerDrift", { runRecordV11: "1" }],
   ["workerDrift", { pendingHttpEvidence: undefined }],
   ["workerDrift", { consumers: 2 }],
@@ -441,3 +445,85 @@ test("bounded drain retries only confirmed busy work and reasserts the latch", a
     { name: "AbortError" }
   )
 })
+
+test("pre-release gap after routing app is contained before scanner or CAS", async (t) => {
+  const f = fixture(t)
+  f.fail = "route-app"
+  f.mode = "lost"
+  await assert.rejects(f.promote())
+  assert.equal(f.state, "owned")
+  assert.ok(f.stages().includes("admission-gap"))
+  assert.ok(f.stages().includes("contained"))
+  assert.ok(!f.log.includes("route-scanner"))
+  assert.ok(!f.log.includes("release"))
+})
+
+test("foreign claim winning the gap race is left in place", async (t) => {
+  const f = fixture(t)
+  f.fail = "route-app"
+  f.mode = "lost"
+  const set = f.adapter.redis.set
+  f.adapter.redis.set = async (...args) => {
+    if (f.log.includes("route-app")) f.state = "foreign"
+    return set(...args)
+  }
+  await assert.rejects(f.promote())
+  assert.equal(f.state, "foreign")
+  assert.ok(!f.log.includes("contain"))
+  assert.ok(f.stages().includes("admission-gap"))
+  assert.ok(f.stages().includes("ownership-unconfirmed"))
+})
+test("unavailable hold observation records uncertainty without an NX attempt", async (t) => {
+  const f = fixture(t)
+  f.fail = "route-app"
+  f.mode = "lost"
+  const evaluate = f.adapter.redis.eval
+  f.adapter.redis.eval = async (...args) => {
+    if (args[0].includes('return "absent"')) throw new Error("Redis read lost")
+    return evaluate(...args)
+  }
+  await assert.rejects(f.promote())
+  assert.ok(f.stages().includes("ownership-unconfirmed"))
+  assert.ok(!f.stages().includes("admission-gap"))
+  assert.equal(f.log.filter((x) => x === "claim").length, 1)
+})
+
+test("malformed worker proof cannot print a canary selector", async (t) => {
+  const f = fixture(t)
+  await f.promote()
+  f.workerDrift = { canarySelectorPresent: "private-synthetic-value" }
+  await assert.rejects(
+    f.release(),
+    (error) =>
+      error.message.includes("writer-off proof mismatch") &&
+      !error.message.includes("private-synthetic-value")
+  )
+})
+
+for (const [stderr, expected] of [
+  [
+    "Paired VM completion unverified (guest stage promote, exit 17)",
+    { kind: "guest", stage: "promote", exit: 17 },
+  ],
+  [
+    "Paired VM transport: timeout\nPaired VM transport exit 124; guest status unknown",
+    { kind: "transport", exit: 124, category: "timeout" },
+  ],
+  ["private-untrusted-output", { kind: "unknown" }],
+])
+  test("private worker failure record retains only " + expected.kind + " metadata", async (t) => {
+    const f = fixture(t)
+    f.adapter.promoteStoppedWorker = async () => {
+      throw Object.assign(new Error("private-untrusted-output"), { stderr })
+    }
+    await assert.rejects(f.promote(), /inspect the protected stage record/)
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- private temporary release fixture
+    const raw = readFileSync(join(f.root, pair.owner, "worker-promotion-failed"), "utf8")
+    assert.ok(!raw.includes("private-untrusted-output"))
+    assert.deepEqual(JSON.parse(raw), {
+      version: 1,
+      stage: "worker-promotion-failed",
+      pair,
+      workerFailure: expected,
+    })
+  })

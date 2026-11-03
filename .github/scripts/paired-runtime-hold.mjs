@@ -79,12 +79,14 @@ export async function assertPairedWorkDrained(redis, db, inspectPhysicalChildren
   try {
     await db.query("SET LOCAL statement_timeout = '10s'")
     await db.query("SET LOCAL row_security = off")
+    // A surviving v2 Scan must have its slot-release acknowledgement, including
+    // nonbillable work. The stopped funding record can outlive its parent.
     const result = await db.query(`SELECT
       NOT EXISTS (SELECT 1 FROM public."Scan" WHERE status NOT IN
         ('COMPLETED','PARTIAL','FAILED','CANCELLED','STOPPED_BUDGET','TIMED_OUT')
         OR ("accountingVersion"=2 AND "accountingSettledAt" IS NULL))
       AND NOT EXISTS (SELECT 1 FROM public."ScanCapacityReservation"
-        WHERE state <> 'SETTLED' OR "stoppedAt" IS NULL)
+        WHERE state NOT IN ('SETTLED','RELEASED') OR "stoppedAt" IS NULL)
       AND NOT EXISTS (SELECT 1 FROM public."UserScanSlot")
       AND NOT EXISTS (SELECT 1 FROM public."AgentApproval" WHERE status='EXECUTING')
       AND NOT EXISTS (SELECT 1 FROM public.agent_operations WHERE status='EXECUTING')
