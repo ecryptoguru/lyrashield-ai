@@ -1,6 +1,6 @@
 import test from "node:test"
 import assert from "node:assert/strict"
-import { generateKeyPairSync, createHash, sign } from "node:crypto"
+import { generateKeyPairSync, createHash, randomBytes, sign } from "node:crypto"
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
@@ -251,7 +251,8 @@ test("current authority must join the live main ref, exact Git object, active re
     "ACTIONS_ID_TOKEN_REQUEST_URL",
     "https://issuer-test.actions.githubusercontent.com/private/idtoken"
   )
-  set("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "private-issuance-fixture-012345")
+  const requestToken = randomBytes(24).toString("hex")
+  set("ACTIONS_ID_TOKEN_REQUEST_TOKEN", requestToken)
   t.after(() => {
     for (const [k, v] of Object.entries(old)) {
       if (v === undefined) delete process.env[k]
@@ -292,7 +293,7 @@ const file=files[process.argv.at(-1)];if(!file)process.exit(19);process.stdout.w
     if (url.hostname === "token.actions.githubusercontent.com")
       return new Response(JSON.stringify(keys))
     assert.equal(url.hostname, "issuer-test.actions.githubusercontent.com")
-    assert.equal(opts.headers.Authorization, "Bearer private-issuance-fixture-012345")
+    assert.equal(opts.headers.Authorization, `Bearer ${requestToken}`)
     const n = Math.floor(Date.now() / 1000)
     return new Response(
       JSON.stringify({

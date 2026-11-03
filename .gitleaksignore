@@ -54,3 +54,7 @@ fa3f24b6b714229d29387b3781578e494ea9bd76:ops/worker/refresh-secrets.sh:private-k
 
 # Synthetic redaction-test value only; renamed in current source.
 5f63271c29f63d0ffa4cf9af550a4be9f737f399:apps/marketing/src/tests/public-pages-ux.test.ts:generic-api-key:39
+
+# Synthetic OIDC request-token fixture in the historical test commit; the
+# current test generates a random dummy value. This does not exempt other findings.
+cb80200ff2d0f28267044ef2a0ba279ffd9984c3:.github/scripts/tests/paired-runtime-live-trust.test.mjs:generic-api-key:254
