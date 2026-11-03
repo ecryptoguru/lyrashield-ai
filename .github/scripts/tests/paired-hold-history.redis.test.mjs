@@ -155,7 +155,9 @@ test(
     await applyTransition(redis, reopen)
     await assert.rejects(verifyJournalAnchor(redis, owner))
     // A real second-write permission failure must retain unknown journal state.
-    const secret = randomUUID()
+    const secret = randomUUID(),
+      writerSecret = randomUUID(),
+      auditSecret = randomUUID()
     cli(
       "ACL",
       "SETUSER",
@@ -197,8 +199,23 @@ test(
       })
     )
     // Current deployed broad/default authority must never qualify.
-    cli("ACL", "SETUSER", "runtime", ...runtimeAclRules(), ">" + secret)
-    cli("ACL", "SETUSER", "writer", ...writerAclRules(), ">" + secret)
+    cli(
+      "ACL",
+      "SETUSER",
+      "runtime",
+      ...runtimeAclRules(),
+      ">" + secret,
+      ...(process.env.PAIRED_HISTORY_ROLE_CASE === "flushdb" ? ["+flushdb"] : [])
+    )
+    cli(
+      "ACL",
+      "SETUSER",
+      "writer",
+      ...writerAclRules(),
+      ...(process.env.PAIRED_HISTORY_ROLE_CASE === "nopass"
+        ? ["nopass"]
+        : [">" + (process.env.PAIRED_HISTORY_ROLE_CASE === "shared" ? secret : writerSecret)])
+    )
     await assert.rejects(
       verifyPairedRolePolicy(redis, { runtimeUser: "runtime", writerUser: "writer" })
     )
@@ -208,15 +225,33 @@ test(
       "auditor",
       "reset",
       "on",
-      ">" + secret,
+      ">" + auditSecret,
       "-@all",
       "+acl|users",
       "+acl|getuser",
       "+acl|dryrun"
     )
     cli("ACL", "SETUSER", "default", "off", "-@all", "resetkeys")
-    const callAs = (user, ...args) => cli("--user", user, "-a", secret, ...args)
+    const callAs = (user, ...args) =>
+      cli(
+        "--user",
+        user,
+        "-a",
+        user === "writer" ? writerSecret : user === "auditor" ? auditSecret : secret,
+        ...args
+      )
     const audit = { call: async (...args) => callAs("auditor", ...args) }
+    if (process.env.PAIRED_HISTORY_ROLE_CASE) {
+      assert.ok(["flushdb", "nopass", "shared"].includes(process.env.PAIRED_HISTORY_ROLE_CASE))
+      await assert.rejects(
+        verifyPairedRolePolicy(audit, { runtimeUser: "runtime", writerUser: "writer" })
+      )
+      t.diagnostic(
+        "unsafe role rejected before any protected mutation: " +
+          process.env.PAIRED_HISTORY_ROLE_CASE
+      )
+      return
+    }
     const proof = await verifyPairedRolePolicy(audit, {
       runtimeUser: "runtime",
       writerUser: "writer",

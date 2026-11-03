@@ -96,6 +96,17 @@ export async function verifyPairedRolePolicy(admin, { runtimeUser, writerUser })
   for (const user of [runtime, writer]) {
     assert.ok(user.get("flags")?.includes("on"))
     assert.deepEqual(user.get("selectors"), [])
+    assert.ok(
+      !user.get("flags").includes("nopass"),
+      "paired roles require authenticated credentials"
+    )
+    const passwordHashes = user.get("passwords")
+    assert.ok(
+      Array.isArray(passwordHashes) &&
+        passwordHashes.length > 0 &&
+        passwordHashes.every((p) => typeof p === "string" && /^[a-f0-9]{64}$/.test(p)),
+      "paired role credentials unavailable"
+    )
   }
   // Exact key-rule grammar; selectors and broad writes cannot be hidden behind
   // sampled DRYRUN checks. Password fields are never returned or logged.
@@ -104,6 +115,13 @@ export async function verifyPairedRolePolicy(admin, { runtimeUser, writerUser })
     rules(["%R~*", ...RUNTIME_WRITE_PATTERNS.map((p) => "%W~" + p)].join(" "))
   )
   assert.deepEqual(rules(writer.get("keys")), rules("~" + SCAN_ADMISSION_KEY + " ~" + HISTORY_KEY))
+  assert.deepEqual(
+    rules(runtime.get("commands")),
+    runtimeAclRules()
+      .filter((r) => r.startsWith("+") || r.startsWith("-"))
+      .sort(),
+    "unreviewed runtime commands"
+  )
   assert.deepEqual(
     rules(writer.get("commands")),
     writerAclRules()
@@ -146,6 +164,12 @@ export async function verifyPairedRolePolicy(admin, { runtimeUser, writerUser })
     assert.ok(name.length <= 128)
     if (name === writerUser) continue
     const info = fields(await admin.call("ACL", "GETUSER", name))
+    const otherHashes = info.get("passwords")
+    assert.ok(Array.isArray(otherHashes), "unavailable Redis credential inventory")
+    assert.ok(
+      !otherHashes.some((p) => writer.get("passwords").includes(p)),
+      "protected writer credential is shared"
+    )
     // OFF prevents new AUTH but does not revoke already authenticated clients.
     // Only an empty command/key grant is a fully revoked historical user.
     if (
