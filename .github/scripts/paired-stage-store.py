@@ -15,6 +15,9 @@ STAGE = re.compile(r"(?:[a-z][a-z-]{0,63}|acquisition-use-[a-f0-9]{64})")
 def directory(path, create=False):
     fd = os.open("/", os.O_RDONLY | os.O_DIRECTORY)
     try:
+        initial = os.fstat(fd)
+        if initial.st_uid != 0 or initial.st_mode & 0o022:
+            raise ValueError("unsafe stage root ancestor")
         for component in path.split("/")[1:]:
             if create:
                 try:
