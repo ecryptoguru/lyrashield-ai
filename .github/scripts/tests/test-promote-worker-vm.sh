@@ -212,7 +212,7 @@ import fs from "node:fs";
 const code = process.argv[2];
 const args = process.argv.slice(3);
 process.argv = ["node", ...args];
-const replacement = 'Promise.resolve({default: class Redis { async get() { return globalThis.readAdmission(); } async eval(lua, count, key, operation, receipt) { if(count!==1 || key!=="lyrashield:scan-admission:stopped" || operation!=="assert")throw new Error("Unexpected hold mutation"); return globalThis.readAdmission()===receipt && Number(process.env.MOCK_HOLD_PTTL || -1)===-1 ? 1 : 0; } async quit() {} }})';
+const replacement = 'Promise.resolve({default: class Redis { constructor() { return { get: async () => globalThis.readAdmission(), eval: async (lua, count, key, operation, receipt) => { if(count!==1 || key!=="lyrashield:scan-admission:stopped" || operation!=="assert")throw new Error("Unexpected hold mutation"); return globalThis.readAdmission()===receipt && Number(process.env.MOCK_HOLD_PTTL || -1)===-1 ? 1 : 0; }, quit: async () => {} }; } }})';
 globalThis.readAdmission = () => {
   fs.appendFileSync(process.env.MOCK_ORDER_LOG, "redis-read\n");
   return fs.readFileSync(process.env.MOCK_ADMISSION_STOP, "utf8");
