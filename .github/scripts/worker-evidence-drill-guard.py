@@ -61,13 +61,13 @@ def cleanup(prefix):
         )
 
 
-def supervise(script, fixtures, *, timeout=600):
+def supervise(script, fixtures, *selection, timeout=600):
     with tempfile.TemporaryDirectory(prefix="reader-evidence-drill-") as temp:
         scratch = str(Path(temp).resolve())
         prefix = "lyra-ed-" + uuid.uuid4().hex[:16]
         env = {**os.environ, "LYRA_DRILL_SCRATCH": scratch, "LYRA_DRILL_PREFIX": prefix}
         child = subprocess.Popen(
-            ["bash", script, "--supervised", "--fixtures", fixtures],
+            ["bash", script, "--supervised", "--fixtures", fixtures, *selection],
             env=env,
             start_new_session=True,
         )
@@ -108,9 +108,9 @@ if __name__ == "__main__":
             print(f"fixture phase command exceeded {seconds}s", file=sys.stderr)
             sys.exit(124)
     else:
-        script, fixtures = args.args
+        script, fixtures, *selection = args.args
         try:
-            sys.exit(supervise(script, fixtures))
+            sys.exit(supervise(script, fixtures, *selection))
         except subprocess.TimeoutExpired:
             print(
                 "whole disposable drill exceeded its wall-clock deadline",

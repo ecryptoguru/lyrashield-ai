@@ -3,15 +3,17 @@
 set -euo pipefail
 root=$(git -C "$(dirname "$0")" rev-parse --show-toplevel)
 guard="$root/.github/scripts/worker-evidence-drill-guard.py"
+selection="$root/.github/scripts/worker-evidence-drill-selection.mjs"
 if [[ ${1:-} != --supervised ]]; then
-  if [[ $# -ne 2 || $1 != --fixtures ]]; then
-    echo "usage: $0 --fixtures /path/to/hash-listed/strix-final-writer-fixtures-7311" >&2
+  if [[ ( $# != 2 && $# != 6 ) || ${1:-} != --fixtures ]]; then
+    echo "usage: $0 --fixtures FIXTURE_DIRECTORY [--candidate WORKER@sha256:DIGEST PRODUCT_SHA ENGINE_SHA]" >&2
     exit 2
   fi
-  exec python3 -I -B "$guard" supervise "$0" "$2"
+  node "$selection" validate "${@:3}"
+  exec python3 -I -B "$guard" supervise "$0" "${@:2}"
 fi
 shift
-[[ $# == 2 && $1 == --fixtures ]]
+[[ ( $# == 2 || $# == 6 ) && $1 == --fixtures ]]
 tmp=${LYRA_DRILL_SCRATCH:?supervised scratch required}
 prefix=${LYRA_DRILL_PREFIX:?supervised namespace required}
 [[ $prefix =~ ^lyra-ed-[0-9a-f]{16}$ ]]
@@ -20,25 +22,36 @@ driver="$root/.github/scripts/worker-evidence-persistence-drill.mjs"
 oracle="$root/.github/scripts/worker-evidence-drill-oracle.mjs"
 fixture_io="$root/.github/scripts/worker-evidence-fixture-io.py"
 fixtures=$2
+shift 2
+node "$selection" prepare "$root" "$tmp" "$@" > "$tmp/selected-refs"
+read -r worker product engine < "$tmp/selected-refs"
+manifest="$tmp/reader-selection.json"
 # Local input preparation only; refuse drift before creating any Docker resource.
 python3 -I -B "$fixture_io" writer "$fixtures" --stage "$tmp/input"
 python3 -I -B "$fixture_io" distinct "$root/.github/scripts/fixtures/worker-evidence-distinct" --stage "$tmp/distinct"
 DRILL_PHASE_TIMEOUT=30
 docker() { python3 -I -B "$guard" bounded "${DRILL_PHASE_TIMEOUT:-30}" docker "$@"; }
-worker='ghcr.io/ecryptoguru/lyrashield-ai/lyrashield-worker@sha256:0c91d2a9dd91cfaa9a35ed9742aa118015a5deba8af324c1996d95d050442d5d'
 postgres='postgres:16-alpine@sha256:0cefaabd882e42bcb2a2f3dc56d3ce4770560ba62fd7f197f1a2e008fd5731ab'
 redis='redis:7-alpine@sha256:8da19c7399dca900c6822a1cf30f9d2285585e2c4b457ff4095b0f4500054d3f'
 minio='bitnamilegacy/minio:2025.7.23-debian-12-r5@sha256:6dabb4a2088c9a79908de3bc05f4586c23ad2182c8908e7e3acbf61c1467fb20'
 # Check everything local before starting even the first service.
 for image in "$worker" "$postgres" "$redis" "$minio"; do docker image inspect "$image" >/dev/null; done
-product='ed84ce06889e6a9c047db220fcabfa0c643200ad'
-engine='3001517530300ca5f602536bfadcbd3c95ad3039'
-[[ $(docker image inspect "$worker" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}') == "$product" ]]
-[[ $(docker image inspect "$worker" --format '{{index .Config.Labels "io.lyrashield.engine.revision"}}') == "$engine" ]]
-# Read the actual VM's Docker overlay free space (not the host's free space); reuse
-# the already-pinned/preloaded Redis image, and do not create a volume or network.
+docker image inspect --format '{{json .RepoDigests}}{{println}}{{json (index .Config.Labels "org.opencontainers.image.revision")}}{{println}}{{json (index .Config.Labels "io.lyrashield.engine.revision")}}' "$worker" \
+  | node "$selection" image "$manifest"
+# Verify the actual image source before provisioning the drill network or any services.
 label="lyrashield.evidence-drill=$prefix"
 touch "$tmp/docker-resources"
+reader_mounts=(
+  --mount "type=bind,src=$selection,dst=/app/apps/worker/worker-evidence-drill-selection.mjs,readonly"
+  --mount "type=bind,src=$manifest,dst=/reader-selection.json,readonly"
+)
+docker run --rm --pull never --name "$prefix-reader" --label "$label" --network none \
+  --cap-drop ALL --security-opt no-new-privileges --read-only --cpus .5 --memory 128m --pids-limit 32 \
+  "${reader_mounts[@]}" --workdir /app/apps/worker --entrypoint node "$worker" \
+  ./worker-evidence-drill-selection.mjs reader /reader-selection.json \
+  | node "$selection" receipt "$manifest"
+# Read the actual VM's Docker overlay free space (not the host's free space); reuse
+# the already-pinned/preloaded Redis image, and do not create a volume or network.
 docker run --rm --pull never --name "$prefix-space" --label "$label" --network none \
   --read-only --tmpfs /data:ro,size=1m --cap-drop ALL --security-opt no-new-privileges \
   --cpus .1 --memory 48m --pids-limit 16 --user 65534:65534 --entrypoint /bin/df "$redis" -Pk / \
@@ -76,8 +89,7 @@ done
 pg() { docker exec -i "$prefix-postgres" psql -X -U lyrashield -d lyrashield -v ON_ERROR_STOP=1 "$@"; }
 # Use each exact production migration's SQL, in Prisma directory order, against a new database.
 # The worker runtime contains the generated client, not the Prisma migration CLI.
-git -C "$root" diff --quiet "$product" -- packages/db/prisma/migrations || { echo 'reader migration source mismatch' >&2; exit 1; }
-for sql in "$root"/packages/db/prisma/migrations/*/migration.sql; do cat "$sql"; printf '\n'; done | DRILL_PHASE_TIMEOUT=120 pg -q >/dev/null
+DRILL_PHASE_TIMEOUT=120 pg -q < "$tmp/migrations.sql" >/dev/null
 pg -q < "$root/.github/scripts/disposable-worker-rehearsal-role.sql"
 kek=$(openssl rand -base64 32)
 run_phase() {
@@ -85,6 +97,7 @@ run_phase() {
   [[ $phase != denied ]] || bucket=deliberately-absent
   DRILL_PHASE_TIMEOUT=150 docker run --rm "${common[@]}" --name "$prefix-worker" --cap-drop ALL --read-only \
     --cpus .75 --memory 768m --tmpfs /tmp:rw,nosuid,nodev,size=64m \
+    "${reader_mounts[@]}" \
     --mount "type=bind,src=$driver,dst=/app/apps/worker/.ci-evidence.mjs,readonly" \
     --mount "type=bind,src=$oracle,dst=/app/apps/worker/worker-evidence-drill-oracle.mjs,readonly" \
     --mount "type=bind,src=$fixture_io,dst=/app/apps/worker/worker-evidence-fixture-io.py,readonly" \

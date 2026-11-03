@@ -10,7 +10,6 @@ import {
   bucket,
   checkPersistedCase,
   distinctFixture,
-  hash,
   legacy,
   qualifyFixture,
   readObjectIdentity,
@@ -26,22 +25,26 @@ export {
   readWriterFixtures,
 } from "./worker-evidence-drill-oracle.mjs"
 
+import {
+  baseline,
+  checkReaderSources,
+  proofIdentity,
+  readManifest,
+} from "./worker-evidence-drill-selection.mjs"
+
 const summaryHash = "9f35f1e046f8a2a23f29a13a2ea6900d5d81a299806a67d99511bd5f438f663b"
-const revision = "ed84ce06889e6a9c047db220fcabfa0c643200ad"
-const workerDigest = "sha256:0c91d2a9dd91cfaa9a35ed9742aa118015a5deba8af324c1996d95d050442d5d"
-const engineRevision = "3001517530300ca5f602536bfadcbd3c95ad3039"
 const user = "drill-owner"
 const mixed = "reverse-reuse",
   capture = "header-bound"
 const identityPath = "/proof/checkpoint-job.json"
 const callsFile = "/proof/engine-called"
 
-export function requireDisposable(env, phase) {
+export function requireDisposable(env, phase, selection = baseline) {
   assert.equal(env.LYRASHIELD_TEST_DB_DISPOSABLE, "1")
   assert.equal(env.NODE_ENV, "test")
-  assert.equal(env.LYRASHIELD_PRODUCT_REVISION, revision)
-  assert.equal(env.LYRASHIELD_WORKER_IMAGE_DIGEST, workerDigest)
-  assert.equal(env.LYRASHIELD_ENGINE_REVISION, engineRevision)
+  assert.equal(env.LYRASHIELD_PRODUCT_REVISION, selection.product)
+  assert.equal(env.LYRASHIELD_WORKER_IMAGE_DIGEST, selection.worker.split("@")[1])
+  assert.equal(env.LYRASHIELD_ENGINE_REVISION, selection.engine)
   assert.equal(env.LYRASHIELD_ENGINE_PATH, "/fixture-bin/drill-engine-denied")
   for (const [name, value] of Object.entries({
     DATABASE_URL: "postgresql://app_runtime_ci:runtime-ci-only@postgres:5432/lyrashield",
@@ -88,37 +91,6 @@ export function assertRecoveredDelivery(job, original) {
   assert.equal(job.data.drillNonce, original.nonce)
   assert.equal(job.attemptsStarted, 2, "original job must actually be dispatched a second time")
   assert.equal(job.stalledCounter, 1, "BullMQ must recover the stalled original job")
-}
-
-function checkReaderSources() {
-  const paths = [
-    "src/engine/output-parser.ts",
-    "src/engine/output-parser-evidence.ts",
-    "src/engine/output-parser-artifacts.ts",
-    "src/engine/output-parser-findings.ts",
-    "src/engine/output-parser-run.ts",
-    "src/engine/normalizer.ts",
-    "src/engine/finding-persister.ts",
-    "src/engine/evidence-storage.ts",
-    "src/engine/result-integrity/detection-receipt.ts",
-    "src/engine/result-integrity/result-manifest.ts",
-    "src/jobs/run-scan/finalization.ts",
-    "src/jobs/run-scan/pending-finalization.ts",
-    "src/jobs/run-scan/http-exchange-evidence.ts",
-    "src/queue-reconciliation.ts",
-    "@lyrashield/evidence-storage",
-  ]
-  const source = paths
-    .map((name) => {
-      const path = name.startsWith("@") ? fileURLToPath(import.meta.resolve(name)) : resolve(name)
-      return name + "\0" + hash(readFileSync(path)) + "\n"
-    })
-    .join("")
-  assert.equal(
-    hash(source),
-    "ae1407d6bf00803854f6b536c25d3234093275d6f370e04206b9312c22084564",
-    "image reader sources differ from ed84"
-  )
 }
 
 async function startProviderTrap() {
@@ -449,7 +421,7 @@ async function resumeCheckpoint(context) {
       observations: after,
       objects: Object.keys(beforeObjects).length,
       fixtureManifest: summaryHash,
-      source: revision,
+      ...proofIdentity(context.selection),
       syntheticTerminal: true,
     })
   )
@@ -516,11 +488,16 @@ async function runPhase(context, phase) {
 }
 
 async function main(phase) {
-  requireDisposable(process.env, phase)
-  checkReaderSources()
+  const selection = readManifest("/reader-selection.json")
+  requireDisposable(process.env, phase, selection)
+  assert.equal(
+    checkReaderSources(selection),
+    selection.fingerprint,
+    "actual worker reader fingerprint"
+  )
   const context = await createDrillContext()
   try {
-    await runPhase(context, phase)
+    await runPhase({ ...context, selection }, phase)
     assert.ok(!existsSync("/proof/provider-called"), "provider request attempted")
     assert.ok(!existsSync(callsFile), "engine was invoked")
   } finally {
