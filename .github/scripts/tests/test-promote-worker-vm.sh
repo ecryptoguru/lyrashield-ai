@@ -280,6 +280,8 @@ NODE
         if [ "$(cat "$MOCK_SERVICE_ACTIVE")" = 1 ]; then printf '%s\n' 'postgresql://current@database.test:5432/lyrashield'; else printf '%s\n' 'postgresql://retired@retired-database.test:5432/lyrashield'; fi ;;
       *LYRASHIELD_PRODUCT_REVISION*) printf '%s\n' "$MOCK_APP_REVISION" ;;
       *LYRASHIELD_ENGINE_REVISION*) printf '%s\n' "${MOCK_LIVE_ENGINE_REVISION:-$MOCK_ENGINE_REVISION}" ;;
+      *LYRASHIELD_RUN_RECORD_V1_1*) printf '%s\n' "${MOCK_RUN_RECORD_V11:-0}" ;;
+      *LYRASHIELD_PENDING_HTTP_EVIDENCE*) printf '%s\n' "${MOCK_PENDING_EVIDENCE:-0}" ;;
       *LYRASHIELD_WORKER_IMAGE_DIGEST*) printf '%s\n' "${MOCK_TARGET##*@}" ;;
       *) exit 1 ;;
     esac ;;
@@ -291,6 +293,7 @@ NODE
   image:prune) : ;;
   image:inspect)
     case "$*" in
+      *'{{.Id}}'*) printf '%s\n' "${MOCK_CONFIG_ID:-sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd}" ;;
       *'{{.Size}}'*)
         case "$*" in
           *"$MOCK_OLD_IMAGE"*) [ "$MOCK_OLD_IMAGE_PRESENT" = 1 ] || exit 1 ;;
@@ -449,6 +452,12 @@ run_case() {
   esac
   if [ "$cutover" = paired ]; then
     mode_arg=--paired-release-held
+    local prior_arg=
+    if [[ "$name" = paired-stopped-* ]]; then
+      mode_arg=--paired-release-stopped
+      prior_arg=$old_image
+      [ "$name" != paired-stopped-wrong-prior ] || prior_arg=$target
+    fi
     paired_module_payload=$(base64 < "$repo/ops/monitoring/paired-release-hold.mjs" | tr -d '\n')
     owned_stop=$(node --input-type=module - "$repo/ops/monitoring/paired-release-hold.mjs" "$app_revision" "$engine_revision" "$digest" <<'NODE'
 import {pathToFileURL} from "node:url";
@@ -533,7 +542,7 @@ NODE
       LYRASHIELD_WORKER_HOST_ASSETS_DIR="$case_dir/host/assets" \
       LYRASHIELD_WORKER_ENV_LIB="$repo/ops/worker/worker-env.sh" \
       LYRASHIELD_WORKER_SYSTEMD_DIR="$case_dir/host/systemd" \
-      "${PROMOTION_SHELL:-sh}" "$script" ${mode_arg:+"$mode_arg"} "$target" "$app_revision" "$engine_revision" 2>&1
+      "${PROMOTION_SHELL:-sh}" "$script" ${mode_arg:+"$mode_arg"} ${prior_arg:+"$prior_arg"} "$target" "$app_revision" "$engine_revision" 2>&1
   )
   status=$?
   set -e
@@ -767,6 +776,18 @@ NODE
   fi
 }
 
+if [ "${PAIRED_STOPPED_ONLY:-0}" = 1 ]; then
+  run_case paired-stopped-success 0 0 0 success 0 '' 0 '' 9999999000 0 1 '' env 0 paired
+  for label in wrong-prior foreign-container; do
+    container=0; [ "$label" != foreign-container ] || container=1
+    run_case "paired-stopped-$label" 0 0 0 failure 0 '' 0 '' 9999999000 "$container" 1 '' env 0 paired
+  done
+  MOCK_RUN_RECORD_V11=1 run_case paired-stopped-writer 0 0 0 failure 0 '' 0 '' 9999999000 0 1 '' env 0 paired
+  MOCK_PENDING_EVIDENCE=1 run_case paired-stopped-pending 0 0 0 failure 0 '' 0 '' 9999999000 0 1 '' env 0 paired
+  MOCK_CONFIG_ID=wrong run_case paired-stopped-image-id 0 0 0 failure 0 '' 0 '' 9999999000 0 1 '' env 0 paired
+  echo "Paired stopped-entry proof passed (real loopback HTTP)."
+  exit 0
+fi
 if [ "${PAIRED_RELEASE_ONLY:-0}" = 1 ]; then
   run_case paired-success 1 1 1 success 1 '' 0 '' 9999999000 1 1 '' env 0 paired
   for mode in missing malformed foreign stale-owner wrong-source expiring live-engine api-outage malformed-body scans-open scans-healthy-body http-replacement http-removal missing-module tampered-module; do

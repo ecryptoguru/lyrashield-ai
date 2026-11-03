@@ -245,7 +245,14 @@ webhook_cutover=0
 v26_cutover=0
 webhook_recovery=0
 paired_release_held=0
+prior_worker_ref=
 case "${1:-}" in
+  --paired-release-stopped)
+    paired_release_held=1
+    shift
+    prior_worker_ref=${1:?exact previous worker digest reference is required}
+    shift
+    ;;
   --paired-release-held)
     paired_release_held=1
     shift
@@ -620,6 +627,11 @@ rollback() {
   cleanup_host_assets
   exit "$status"
 }
+if [ -n "$prior_worker_ref" ]; then
+  [ "$old_image" = "$prior_worker_ref" ]
+  [ "$(systemctl is-active "$service" 2>/dev/null || true)" = inactive ]
+  assert_recovery_worker_stopped
+fi
 trap rollback EXIT
 trap 'exit 129' HUP
 trap 'exit 130' INT
@@ -646,6 +658,10 @@ if [ "$maintenance_cutover" -eq 1 ]; then
   else
     assert_legacy_worker_stopped
   fi
+elif [ "$paired_release_held" -eq 1 ] && [ -n "${prior_worker_ref:-}" ]; then
+  [ "$old_image" = "$prior_worker_ref" ]
+  [ "$(systemctl is-active "$service" 2>/dev/null || true)" = inactive ]
+  assert_recovery_worker_stopped
 elif ! worker_is_healthy; then
   if worker_environment_is_fresh; then
     echo "Current worker is unhealthy with a fresh environment" >&2
@@ -657,7 +673,7 @@ fi
 # Normal promotions refresh Key Vault values before read-only checks. Held
 # recovery preserves the original cutover's connection identity and must not
 # sync or rotate those values.
-if [ "$webhook_recovery" -eq 0 ] && [ "$v26_cutover" -eq 0 ]; then
+if [ "$webhook_recovery" -eq 0 ] && [ "$v26_cutover" -eq 0 ] && [ -z "$prior_worker_ref" ]; then
   refresh_worker_secrets
 fi
 
@@ -968,6 +984,12 @@ if [ "$paired_release_held" -eq 1 ]; then
   [ "$(docker exec "$container" printenv LYRASHIELD_PRODUCT_REVISION)" = "$expected_app" ]
   [ "$(docker exec "$container" printenv LYRASHIELD_ENGINE_REVISION)" = "$expected_engine" ]
   [ "$(docker exec "$container" printenv LYRASHIELD_WORKER_IMAGE_DIGEST)" = "${target##*@}" ]
+  if [ -n "$prior_worker_ref" ]; then
+    [ "$(docker exec "$container" printenv LYRASHIELD_RUN_RECORD_V1_1)" = 0 ]
+    [ "$(docker exec "$container" printenv LYRASHIELD_PENDING_HTTP_EVIDENCE)" = 0 ]
+    running_id=$(docker inspect "$container" --format '{{.Image}}')
+    [ -n "$running_id" ] && [ "$running_id" = "$(docker image inspect "$target" --format '{{.Id}}')" ] || exit 1
+  fi
   assert_paired_release_hold
   promotion_complete=1
   trap - EXIT HUP INT TERM
