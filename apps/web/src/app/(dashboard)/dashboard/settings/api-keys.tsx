@@ -54,6 +54,43 @@ const createdKeySchema = apiKeyRowSchema.and(z.object({ rawKey: z.string() }).pa
  * Workspace API keys — used by the LyraShield MCP server, CLI, and CI.
  * The raw key is displayed exactly once after creation.
  */
+function renderApiKeyScopeField(
+  scope: "read" | "write",
+  onScopeChange: (scope: "read" | "write") => void
+) {
+  return (
+    <fieldset className="space-y-1">
+      <legend className="text-sm font-medium">Access</legend>
+      <div className="flex flex-col gap-2 sm:flex-row sm:gap-4">
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="radio"
+            name="api-key-scope"
+            checked={scope === "read"}
+            onChange={() => onScopeChange("read")}
+          />
+          Read-only <span className="text-muted-foreground">(recommended)</span>
+        </label>
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="radio"
+            name="api-key-scope"
+            checked={scope === "write"}
+            onChange={() => onScopeChange("write")}
+          />
+          Read &amp; write (can start scans, create reports)
+        </label>
+      </div>
+      {scope === "write" ? (
+        <p className="text-muted-foreground text-xs">
+          This key will be able to start scans and create reports in this workspace. Prefer
+          read-only unless a tool needs to make changes.
+        </p>
+      ) : null}
+    </fieldset>
+  )
+}
+
 export function ApiKeysSection({
   workspaceId,
   canManage,
@@ -300,35 +337,7 @@ export function ApiKeysSection({
                 <option value={720}>30 days</option>
               </select>
             </div>
-            <fieldset className="space-y-1">
-              <legend className="text-sm font-medium">Access</legend>
-              <div className="flex flex-col gap-2 sm:flex-row sm:gap-4">
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="radio"
-                    name="api-key-scope"
-                    checked={scope === "read"}
-                    onChange={() => setScope("read")}
-                  />
-                  Read-only <span className="text-muted-foreground">(recommended)</span>
-                </label>
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="radio"
-                    name="api-key-scope"
-                    checked={scope === "write"}
-                    onChange={() => setScope("write")}
-                  />
-                  Read &amp; write (can start scans, create reports)
-                </label>
-              </div>
-              {scope === "write" ? (
-                <p className="text-muted-foreground text-xs">
-                  This key will be able to start scans and create reports in this workspace. Prefer
-                  read-only unless a tool needs to make changes.
-                </p>
-              ) : null}
-            </fieldset>
+            {renderApiKeyScopeField(scope, setScope)}
             <div className="flex gap-2">
               <Button
                 size="sm"
