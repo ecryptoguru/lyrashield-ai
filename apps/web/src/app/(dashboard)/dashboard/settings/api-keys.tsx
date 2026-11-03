@@ -66,6 +66,7 @@ export function ApiKeysSection({
   const [showCreate, setShowCreate] = useState(false)
   const [name, setName] = useState("")
   const [scope, setScope] = useState<"read" | "write">("read")
+  const [expiryHours, setExpiryHours] = useState(0)
   const [creating, setCreating] = useState(false)
   const [createdKey, setCreatedKey] = useState<CreatedKey | null>(null)
   const [copied, setCopied] = useState(false)
@@ -136,6 +137,7 @@ export function ApiKeysSection({
     setShowCreate(false)
     setName("")
     setScope("read")
+    setExpiryHours(0)
   }
 
   async function handleCreate() {
@@ -149,6 +151,9 @@ export function ApiKeysSection({
           workspaceId,
           name: name.trim(),
           scopes: scope === "write" ? ["read", "write"] : ["read"],
+          ...(expiryHours > 0
+            ? { expiresAt: new Date(Date.now() + expiryHours * 60 * 60 * 1000).toISOString() }
+            : {}),
         },
         { schema: createdKeySchema }
       )
@@ -274,6 +279,26 @@ export function ApiKeysSection({
                 placeholder="e.g. Cursor on my laptop, CI pipeline"
                 className="border-input bg-background w-full rounded-md border px-3 py-2 text-base md:text-sm"
               />
+            </div>
+            <div className="space-y-1">
+              <label htmlFor="api-key-expiry" className="text-sm font-medium">
+                Expires after
+              </label>
+              <select
+                id="api-key-expiry"
+                value={expiryHours}
+                onChange={(event) => {
+                  const hours = Number(event.target.value)
+                  if ([0, 4, 24, 720].includes(hours)) setExpiryHours(hours)
+                }}
+                disabled={creating}
+                className="border-input bg-background w-full rounded-md border px-3 py-2 text-base md:text-sm"
+              >
+                <option value={0}>No expiry</option>
+                <option value={4}>4 hours</option>
+                <option value={24}>1 day</option>
+                <option value={720}>30 days</option>
+              </select>
             </div>
             <fieldset className="space-y-1">
               <legend className="text-sm font-medium">Access</legend>
