@@ -62,9 +62,32 @@ function identity(input) {
   return Object.freeze(pair)
 }
 
+function stageRoot(root, adapter) {
+  if (!adapter.stageStore) return root
+  if (typeof root !== "string") {
+    requireProof(root.store === adapter.stageStore)
+    return root
+  }
+  return { store: adapter.stageStore, path: "" }
+}
+function stagePath(root, owner) {
+  return typeof root === "string" ? join(root, owner) : { store: root.store, path: owner }
+}
+async function createStageDirectory(root, dir) {
+  if (typeof root !== "string") return root.store.createDirectory(dir.path)
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- validated owner below the private local stage root
+  mkdirSync(dir, { mode: 0o700 })
+  syncDirectory(root)
+}
+async function assertStage(dir, stage, expected) {
+  if (typeof dir !== "string") return dir.store.assert(dir.path, stage, expected)
+  requireProof(isDeepStrictEqual(verifiedRecord(dir, stage), expected))
+}
+
 // Only a runner-owned private directory on persistent protected storage can
 // authorize the separate release step. Do not follow a substituted record.
-function privateDirectory(dir) {
+async function privateDirectory(dir) {
+  if (typeof dir !== "string") return dir.store.directory(dir.path)
   // eslint-disable-next-line security/detect-non-literal-fs-filename -- caller-protected state root or canonical owner beneath it
   const info = lstatSync(dir)
   assert.ok(info.isDirectory() && info.uid === process.getuid() && (info.mode & 0o077) === 0)
@@ -92,7 +115,9 @@ function verifiedRecord(dir, stage) {
   }
 }
 
-function persist(dir, stage, pair, workerFailure, intent) {
+async function persist(dir, stage, pair, workerFailure, intent) {
+  if (typeof dir !== "string")
+    return dir.store.write(dir.path, stage, { version: 1, stage, pair, workerFailure, intent })
   // eslint-disable-next-line security/detect-non-literal-fs-filename -- exclusive new record in the private release directory
   const fd = openSync(join(dir, stage), "wx", 0o600)
   try {
@@ -217,7 +242,7 @@ async function contain(adapter, pair, hold, dir) {
   const observe = () => hold.state().catch(() => "unknown")
   let state = await observe()
   if (state === "absent") {
-    persist(dir, "admission-gap", pair)
+    await persist(dir, "admission-gap", pair)
     // A racing foreign claim must win. Re-read after an ambiguous NX
     // acknowledgement before touching either fleet or admission.
     try {
@@ -228,7 +253,7 @@ async function contain(adapter, pair, hold, dir) {
     }
   }
   if (state !== "owned") {
-    persist(dir, "ownership-unconfirmed", pair)
+    await persist(dir, "ownership-unconfirmed", pair)
     return
   }
   try {
@@ -236,17 +261,17 @@ async function contain(adapter, pair, hold, dir) {
     await adapter.containOwnedConsumers(pair)
     await hold.assert()
   } catch (error) {
-    persist(dir, "containment-unconfirmed", pair)
+    await persist(dir, "containment-unconfirmed", pair)
     throw error
   }
-  persist(dir, "contained", pair)
+  await persist(dir, "contained", pair)
 }
 
 async function mutateHeld(dir, pair, hold, signal, stage, mutate) {
   checkpoint(signal)
   await hold.assert()
   checkpoint(signal)
-  persist(dir, stage, pair)
+  await persist(dir, stage, pair)
   await mutate()
   checkpoint(signal)
   await hold.assert()
@@ -269,7 +294,7 @@ async function installQuiesced(pair, adapter, hold, dir, signal, stageRevision) 
     try {
       await adapter.promoteStoppedWorker(pair)
     } catch (error) {
-      persist(dir, "worker-promotion-failed", pair, workerFailureMetadata(error))
+      await persist(dir, "worker-promotion-failed", pair, workerFailureMetadata(error))
       throw new Error("Paired worker promotion failed; inspect the protected stage record")
     }
   })
@@ -280,16 +305,15 @@ async function installQuiesced(pair, adapter, hold, dir, signal, stageRevision) 
 }
 
 export async function promoteHeldPair(input, root, adapter, signal) {
+  root = stageRoot(root, adapter)
   const pair = identity(input)
   const hold = pairedHold(adapter.redis, pair)
-  privateDirectory(root)
-  const dir = join(root, pair.owner)
+  await privateDirectory(root)
+  const dir = stagePath(root, pair.owner)
   await verifyQualification(adapter, pair)
   checkpoint(signal)
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- validated numeric owner underneath a private root
-  mkdirSync(dir, { mode: 0o700 }) // no adoption, including a same-run retry
-  syncDirectory(root)
-  persist(dir, "claim-intent", pair)
+  await createStageDirectory(root, dir) // no adoption, including a same-run retry
+  await persist(dir, "claim-intent", pair)
   await hold.claim()
   try {
     await hold.assert()
@@ -310,7 +334,7 @@ export async function promoteHeldPair(input, root, adapter, signal) {
     await installQuiesced(pair, adapter, hold, dir, signal, (name, p) =>
       adapter.stageAtZeroTraffic(name, p)
     )
-    persist(dir, "pair-held-verified", pair)
+    await persist(dir, "pair-held-verified", pair)
   } catch (error) {
     await contain(adapter, pair, hold, dir)
     throw error
@@ -320,28 +344,29 @@ export async function promoteHeldPair(input, root, adapter, signal) {
 // Separate step. A lost DEL acknowledgement or post-release failure must not
 // replay DEL; exclusive intent consumes the record before sending it.
 export async function releaseVerifiedPair(input, root, adapter, signal) {
+  root = stageRoot(root, adapter)
   const pair = identity(input)
   const hold = pairedHold(adapter.redis, pair)
-  privateDirectory(root)
-  const dir = join(root, pair.owner)
+  await privateDirectory(root)
+  const dir = stagePath(root, pair.owner)
   const stage = "pair-held-verified"
-  privateDirectory(dir)
-  assert.deepEqual(verifiedRecord(dir, stage), { version: 1, stage, pair })
-  persist(dir, "verification-started", pair)
+  await privateDirectory(dir)
+  await assertStage(dir, stage, { version: 1, stage, pair })
+  await persist(dir, "verification-started", pair)
   try {
     await verifyQualification(adapter, pair)
     await verifyHeld(adapter, pair, hold)
     checkpoint(signal)
-    persist(dir, "release-intent", pair)
+    await persist(dir, "release-intent", pair)
     await hold.release()
-    persist(dir, "release-acknowledged", pair)
+    await persist(dir, "release-acknowledged", pair)
     checkpoint(signal)
     assert.equal(await hold.state(), "absent")
     await verifyFleet(adapter, pair)
     await verifyOpen(adapter, pair)
     assert.equal(await hold.state(), "absent")
     checkpoint(signal)
-    persist(dir, "release-verified", pair)
+    await persist(dir, "release-verified", pair)
   } catch (error) {
     await contain(adapter, pair, hold, dir)
     throw error
@@ -363,24 +388,20 @@ async function verifyOpen(adapter, pair) {
 
 // The approval reference is a content digest. Only the protected store and
 // authenticated original-owner/explicit takeover records can authorize it.
-function startProtected(root, pair, acquisition, id) {
-  privateDirectory(root)
-  const dir = join(root, pair.owner)
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- validated owner under private protected root
-  mkdirSync(dir, { mode: 0o700 })
-  syncDirectory(root)
+async function startProtected(root, pair, acquisition, id) {
+  await privateDirectory(root)
+  const dir = stagePath(root, pair.owner)
+  await createStageDirectory(root, dir)
   // An arm and a recovery (or two takeover owners) cannot both mutate under one acquisition.
-  intentStage(root, "acquisition-use-" + acquisition, pair, id)
+  await intentStage(root, "acquisition-use-" + acquisition, pair, id)
   return dir
 }
-function matchStage(dir, stage, pair, id) {
-  privateDirectory(dir)
-  requireProof(
-    isDeepStrictEqual(verifiedRecord(dir, stage), { version: 1, stage, pair, intent: id })
-  )
+async function matchStage(dir, stage, pair, id) {
+  await privateDirectory(dir)
+  await assertStage(dir, stage, { version: 1, stage, pair, intent: id })
 }
-function intentStage(dir, stage, pair, id) {
-  persist(dir, stage, pair, undefined, id)
+async function intentStage(dir, stage, pair, id) {
+  await persist(dir, stage, pair, undefined, id)
 }
 async function stoppedOrigin(adapter, source, acq) {
   await adapter.verifyStoppedLegacy(source, source.workerDigest)
@@ -407,14 +428,15 @@ async function beforeRebind(id, adapter, { source, acq, r }, signal) {
 // Strictly after the source hold's actual acquisition. This entry never
 // claims an absent key and never submits a canary request.
 export async function restoreQualifiedPair(id, root, adapter, signal) {
+  root = stageRoot(root, adapter)
   const a = await recoveryAuthority(adapter, id, identity),
     { source, pair, acq, r } = a
   const prior = pairedHold(adapter.redis, source)
   await prior.assert()
   requireProof((await adapter.verifyAcquisitionContinuity(r.sourceAcquisition)) === true)
   await verifyFleet(adapter, source, acq.selectorHash !== null)
-  const dir = startProtected(root, pair, r.sourceAcquisition, id)
-  intentStage(dir, "restore-authorized", pair, id)
+  const dir = await startProtected(root, pair, r.sourceAcquisition, id)
+  await intentStage(dir, "restore-authorized", pair, id)
   try {
     await waitForPairedDrain(
       source,
@@ -445,7 +467,7 @@ export async function restoreQualifiedPair(id, root, adapter, signal) {
     await contain(adapter, source, prior, dir)
     throw error
   }
-  intentStage(dir, "rebind-intent", pair, id)
+  await intentStage(dir, "rebind-intent", pair, id)
   return commitRebind(id, root, adapter, signal, source, pair)
 }
 
@@ -459,50 +481,53 @@ async function commitRebind(id, root, adapter, signal, source, pair) {
 }
 
 export async function inspectReboundPair(id, root, adapter) {
+  root = stageRoot(root, adapter)
   const { source, pair, r } = await recoveryAuthority(adapter, id, identity)
-  privateDirectory(root)
-  matchStage(root, "acquisition-use-" + r.sourceAcquisition, pair, id)
-  matchStage(join(root, pair.owner), "rebind-intent", pair, id)
+  await privateDirectory(root)
+  await matchStage(root, "acquisition-use-" + r.sourceAcquisition, pair, id)
+  await matchStage(stagePath(root, pair.owner), "rebind-intent", pair, id)
   return observeRebind(adapter.redis, source, pair).catch(() => "unknown")
 }
 
 // If the first command did not apply, an operator may authorize one retry
 // of exactly that journaled intent after proving the source remained held.
 export async function retryUnappliedRebind(id, root, adapter, signal) {
+  root = stageRoot(root, adapter)
   const a = await recoveryAuthority(adapter, id, identity)
-  privateDirectory(root)
-  const dir = join(root, a.pair.owner)
-  matchStage(root, "acquisition-use-" + a.r.sourceAcquisition, a.pair, id)
-  matchStage(dir, "rebind-intent", a.pair, id)
+  await privateDirectory(root)
+  const dir = stagePath(root, a.pair.owner)
+  await matchStage(root, "acquisition-use-" + a.r.sourceAcquisition, a.pair, id)
+  await matchStage(dir, "rebind-intent", a.pair, id)
   requireProof((await observeRebind(adapter.redis, a.source, a.pair)) === "source")
   requireProof((await adapter.authorizeUnappliedRetry(id)) === true)
   await beforeRebind(id, adapter, a, signal)
-  intentStage(dir, "rebind-retry-intent", a.pair, id)
+  await intentStage(dir, "rebind-retry-intent", a.pair, id)
   return commitRebind(id, root, adapter, signal, a.source, a.pair)
 }
 
 // Explicit same-intent continuation after lost ACK. Only the destination
 // receipt can proceed; never replay CAS or a started installation.
 export async function finishReboundPair(id, root, adapter, signal) {
+  root = stageRoot(root, adapter)
   const { source, pair, acq, r } = await recoveryAuthority(adapter, id, identity)
-  privateDirectory(root)
-  const dir = join(root, pair.owner),
+  await privateDirectory(root)
+  const dir = stagePath(root, pair.owner),
     hold = pairedHold(adapter.redis, pair)
-  matchStage(root, "acquisition-use-" + r.sourceAcquisition, pair, id)
-  matchStage(dir, "rebind-intent", pair, id)
+  await matchStage(root, "acquisition-use-" + r.sourceAcquisition, pair, id)
+  await matchStage(dir, "rebind-intent", pair, id)
   requireProof((await observeRebind(adapter.redis, source, pair)) === "destination")
   await hold.assert()
   requireProof((await adapter.proveReboundContinuity(id)) === true)
   await stoppedOrigin(adapter, source, acq)
   requireProof((await adapter.proveSelectorFileAbsent()) === true)
   checkpoint(signal)
-  intentStage(dir, "restore-install-started", pair, id)
+  await intentStage(dir, "restore-install-started", pair, id)
   try {
     await installQuiesced(pair, adapter, hold, dir, signal, (name, p) =>
       adapter.reactivateArchivedRevision(name, p)
     )
     await evidenceReads(adapter, pair, r)
-    intentStage(dir, "restore-held-verified", pair, id)
+    await intentStage(dir, "restore-held-verified", pair, id)
   } catch (error) {
     await contain(adapter, pair, hold, dir)
     throw error
@@ -520,13 +545,14 @@ async function evidenceReads(adapter, pair, r) {
 }
 
 export async function releaseRestoredPair(id, root, adapter, signal) {
+  root = stageRoot(root, adapter)
   const { pair, r } = await recoveryAuthority(adapter, id, identity)
-  privateDirectory(root)
-  const dir = join(root, pair.owner),
+  await privateDirectory(root)
+  const dir = stagePath(root, pair.owner),
     hold = pairedHold(adapter.redis, pair)
-  matchStage(root, "acquisition-use-" + r.sourceAcquisition, pair, id)
-  matchStage(dir, "restore-held-verified", pair, id)
-  intentStage(dir, "restore-release-started", pair, id)
+  await matchStage(root, "acquisition-use-" + r.sourceAcquisition, pair, id)
+  await matchStage(dir, "restore-held-verified", pair, id)
+  await intentStage(dir, "restore-release-started", pair, id)
   try {
     await verifyHeld(adapter, pair, hold)
     await evidenceReads(adapter, pair, r)
@@ -534,15 +560,15 @@ export async function releaseRestoredPair(id, root, adapter, signal) {
     requireProof((await adapter.proveReboundContinuity(id)) === true)
     await hold.assert()
     checkpoint(signal)
-    intentStage(dir, "release-intent", pair, id)
+    await intentStage(dir, "release-intent", pair, id)
     await hold.release()
-    intentStage(dir, "release-acknowledged", pair, id)
+    await intentStage(dir, "release-acknowledged", pair, id)
     await verifyFleet(adapter, pair)
     await verifyOpen(adapter, pair)
     await evidenceReads(adapter, pair, r)
     requireProof((await hold.state()) === "absent")
     checkpoint(signal)
-    intentStage(dir, "restored-release-verified", pair, id)
+    await intentStage(dir, "restored-release-verified", pair, id)
   } catch (error) {
     await contain(adapter, pair, hold, dir)
     throw error
@@ -567,11 +593,12 @@ async function armedReadback(adapter, pair, r) {
 // Operator installed the one prepared sibling and recreated B under a fresh
 // scoped B hold. The release neither installs a selector nor creates a job.
 export async function releaseArmedCanary(id, root, adapter, signal) {
+  root = stageRoot(root, adapter)
   const { pair, r } = await armedAuthority(adapter, id, identity)
   const hold = pairedHold(adapter.redis, pair)
   await hold.assert()
-  const dir = startProtected(root, pair, r.sourceAcquisition, id)
-  intentStage(dir, "arm-verification-started", pair, id)
+  const dir = await startProtected(root, pair, r.sourceAcquisition, id)
+  await intentStage(dir, "arm-verification-started", pair, id)
   try {
     requireProof((await adapter.verifyAcquisitionContinuity(r.sourceAcquisition)) === true)
     await verifyHeld(adapter, pair, hold, true)
@@ -580,16 +607,16 @@ export async function releaseArmedCanary(id, root, adapter, signal) {
     requireProof((await adapter.verifyAcquisitionContinuity(r.sourceAcquisition)) === true)
     await hold.assert()
     checkpoint(signal)
-    intentStage(dir, "arm-release-intent", pair, id)
+    await intentStage(dir, "arm-release-intent", pair, id)
     await releaseWithinLease(adapter.redis, pair, r)
-    intentStage(dir, "arm-release-acknowledged", pair, id)
+    await intentStage(dir, "arm-release-acknowledged", pair, id)
     requireProof((await hold.state()) === "absent")
     await verifyFleet(adapter, pair, true)
     await verifyOpen(adapter, pair)
     await armedReadback(adapter, pair, r)
     requireProof((await hold.state()) === "absent" && Date.now() + 30000 < r.expiresAtMs)
     checkpoint(signal)
-    intentStage(dir, "arm-released-verified", pair, id)
+    await intentStage(dir, "arm-released-verified", pair, id)
   } catch (error) {
     await contain(adapter, pair, hold, dir)
     throw error

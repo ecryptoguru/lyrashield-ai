@@ -556,3 +556,61 @@ test("sandbox qualification is mandatory before any ordinary paired claim", asyn
   assert.equal(f.state, "absent")
   assert.deepEqual(f.log, ["qualified"])
 })
+
+test("shared stage backend is awaited before stop and retains hold after an unknown write", async (t) => {
+  const f = fixture(t)
+  let entered, rejectWrite
+  const blocked = new Promise((resolve) => {
+    entered = resolve
+  })
+  f.adapter.stageStore = {
+    directory: async () => {},
+    createDirectory: async () => {},
+    async write(_owner, stage) {
+      if (stage === "stop-legacy") {
+        entered()
+        await new Promise((_resolve, reject) => {
+          rejectWrite = reject
+        })
+      }
+    },
+  }
+  const pending = f.promote()
+  await blocked
+  assert.equal(f.state, "owned")
+  assert.ok(!f.log.includes("stop-legacy"))
+  rejectWrite(new Error("write acknowledgement unknown"))
+  await assert.rejects(pending, /acknowledgement unknown/)
+  assert.equal(f.state, "owned")
+  assert.ok(f.log.includes("contain"))
+})
+
+test("remote stage receipts gate release and cannot be adopted by a replay", async (t) => {
+  const f = fixture(t),
+    records = new Map(),
+    directories = new Set([""])
+  f.adapter.stageStore = {
+    async directory(owner) {
+      assert.ok(directories.has(owner))
+    },
+    async createDirectory(owner) {
+      assert.ok(!directories.has(owner))
+      directories.add(owner)
+    },
+    async write(owner, stage, body) {
+      const key = owner + "/" + stage
+      assert.ok(!records.has(key))
+      records.set(key, JSON.stringify(body))
+    },
+    async assert(owner, stage, body) {
+      assert.equal(records.get(owner + "/" + stage), JSON.stringify(body))
+    },
+  }
+  await f.promote()
+  assert.ok(records.has(pair.owner + "/pair-held-verified"))
+  await assert.rejects(f.promote())
+  await f.release()
+  assert.equal(f.state, "absent")
+  await assert.rejects(f.release())
+  assert.equal(f.log.filter((x) => x === "release").length, 1)
+})

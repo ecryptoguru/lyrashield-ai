@@ -3,6 +3,7 @@
 import { createHash } from "node:crypto"
 import { pairedReleaseReceipt } from "../../ops/monitoring/paired-release-hold.mjs"
 import * as cloud from "./paired-runtime-cloud.mjs"
+import { vmStageStore } from "./paired-stage-store.mjs"
 import { guest, liveRedis } from "./paired-live-transport.mjs"
 import {
   readAuthenticatedOwner,
@@ -279,6 +280,7 @@ export function protectedLiveAdapter() {
   const sandboxes = new Map()
   return {
     ...protectedApprovals(sandboxes),
+    stageStore: vmStageStore(guest),
     async readServingRoute(role, p) {
       const r = await cloud.azureServingRoute(role, p)
       if (role === "relay")

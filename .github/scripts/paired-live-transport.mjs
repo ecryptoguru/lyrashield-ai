@@ -6,6 +6,7 @@ import { rebindLua, observeLua, armedReleaseLua } from "./paired-runtime-authori
 import { holdStateLua } from "./paired-runtime-hold.mjs"
 const root = fileURLToPath(new URL("../../", import.meta.url))
 const files = [
+  ".github/scripts/paired-stage-store.py",
   ".github/scripts/paired-live-host.sh",
   ".github/scripts/paired-live-guest.mjs",
   ".github/scripts/v26-runtime-database.mjs",
@@ -15,6 +16,7 @@ const files = [
   "ops/monitoring/paired-release-hold.mjs",
 ]
 const phases = new Set([
+  "stage-store",
   "rpc",
   "drain",
   "continuity",
@@ -82,7 +84,7 @@ export function readGuestResult(raw, nonce) {
 export function guest(phase, params) {
   check(phases.has(phase))
   const body = JSON.stringify(params)
-  check(body.length <= 4096)
+  check(Buffer.byteLength(body, "utf8") <= (phase === "stage-store" ? 16384 : 4096))
   const group = process.env.RG,
     vm = process.env.WORKER_VM_NAME,
     head = git("rev-parse", "HEAD").toString().trim()

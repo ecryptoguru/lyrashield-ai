@@ -2,7 +2,10 @@
 # Unwired protected VM entry point, transferred with its exact Git sources.
 set -eu
 phase=$1 argument=$2 dir=$3
-case "$phase" in rpc|drain|continuity|relay|accounted|evidence|unused|worker|stopped|physical|stop|contain|stage-sandbox|clear|selector-absent|armed-selector) ;; *) exit 2 ;; esac
+case "$phase" in stage-store|rpc|drain|continuity|relay|accounted|evidence|unused|worker|stopped|physical|stop|contain|stage-sandbox|clear|selector-absent|armed-selector) ;; *) exit 2 ;; esac
+if [ "$phase" = stage-store ]; then
+  exec python3 -I "$dir/.github/scripts/paired-stage-store.py" "$argument"
+fi
 config=/etc/lyrashield/worker-runtime.conf
 env_file=/etc/lyrashield/worker.env
 pins=/run/lyrashield-egress-hosts
