@@ -54,6 +54,43 @@ const createdKeySchema = apiKeyRowSchema.and(z.object({ rawKey: z.string() }).pa
  * Workspace API keys — used by the LyraShield MCP server, CLI, and CI.
  * The raw key is displayed exactly once after creation.
  */
+function renderApiKeyScopeField(
+  scope: "read" | "write",
+  onScopeChange: (scope: "read" | "write") => void
+) {
+  return (
+    <fieldset className="space-y-1">
+      <legend className="text-sm font-medium">Access</legend>
+      <div className="flex flex-col gap-2 sm:flex-row sm:gap-4">
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="radio"
+            name="api-key-scope"
+            checked={scope === "read"}
+            onChange={() => onScopeChange("read")}
+          />
+          Read-only <span className="text-muted-foreground">(recommended)</span>
+        </label>
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="radio"
+            name="api-key-scope"
+            checked={scope === "write"}
+            onChange={() => onScopeChange("write")}
+          />
+          Read &amp; write (can start scans, create reports)
+        </label>
+      </div>
+      {scope === "write" ? (
+        <p className="text-muted-foreground text-xs">
+          This key will be able to start scans and create reports in this workspace. Prefer
+          read-only unless a tool needs to make changes.
+        </p>
+      ) : null}
+    </fieldset>
+  )
+}
+
 export function ApiKeysSection({
   workspaceId,
   canManage,
@@ -66,6 +103,7 @@ export function ApiKeysSection({
   const [showCreate, setShowCreate] = useState(false)
   const [name, setName] = useState("")
   const [scope, setScope] = useState<"read" | "write">("read")
+  const [expiryHours, setExpiryHours] = useState(0)
   const [creating, setCreating] = useState(false)
   const [createdKey, setCreatedKey] = useState<CreatedKey | null>(null)
   const [copied, setCopied] = useState(false)
@@ -136,6 +174,7 @@ export function ApiKeysSection({
     setShowCreate(false)
     setName("")
     setScope("read")
+    setExpiryHours(0)
   }
 
   async function handleCreate() {
@@ -149,6 +188,9 @@ export function ApiKeysSection({
           workspaceId,
           name: name.trim(),
           scopes: scope === "write" ? ["read", "write"] : ["read"],
+          ...(expiryHours > 0
+            ? { expiresAt: new Date(Date.now() + expiryHours * 60 * 60 * 1000).toISOString() }
+            : {}),
         },
         { schema: createdKeySchema }
       )
@@ -275,35 +317,27 @@ export function ApiKeysSection({
                 className="border-input bg-background w-full rounded-md border px-3 py-2 text-base md:text-sm"
               />
             </div>
-            <fieldset className="space-y-1">
-              <legend className="text-sm font-medium">Access</legend>
-              <div className="flex flex-col gap-2 sm:flex-row sm:gap-4">
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="radio"
-                    name="api-key-scope"
-                    checked={scope === "read"}
-                    onChange={() => setScope("read")}
-                  />
-                  Read-only <span className="text-muted-foreground">(recommended)</span>
-                </label>
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="radio"
-                    name="api-key-scope"
-                    checked={scope === "write"}
-                    onChange={() => setScope("write")}
-                  />
-                  Read &amp; write (can start scans, create reports)
-                </label>
-              </div>
-              {scope === "write" ? (
-                <p className="text-muted-foreground text-xs">
-                  This key will be able to start scans and create reports in this workspace. Prefer
-                  read-only unless a tool needs to make changes.
-                </p>
-              ) : null}
-            </fieldset>
+            <div className="space-y-1">
+              <label htmlFor="api-key-expiry" className="text-sm font-medium">
+                Expires after
+              </label>
+              <select
+                id="api-key-expiry"
+                value={expiryHours}
+                onChange={(event) => {
+                  const hours = Number(event.target.value)
+                  if ([0, 4, 24, 720].includes(hours)) setExpiryHours(hours)
+                }}
+                disabled={creating}
+                className="border-input bg-background w-full rounded-md border px-3 py-2 text-base md:text-sm"
+              >
+                <option value={0}>No expiry</option>
+                <option value={4}>4 hours</option>
+                <option value={24}>1 day</option>
+                <option value={720}>30 days</option>
+              </select>
+            </div>
+            {renderApiKeyScopeField(scope, setScope)}
             <div className="flex gap-2">
               <Button
                 size="sm"
