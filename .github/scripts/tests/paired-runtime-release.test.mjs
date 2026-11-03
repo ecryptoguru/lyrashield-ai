@@ -15,6 +15,7 @@ const pair = {
   webDigest: digest("2"),
   proxyDigest: digest("3"),
   priorWorkerDigest: digest("4"),
+  sandboxDigest: digest("5"),
 }
 for (const name of ["app", "scanner", "relay"])
   pair[name] = { candidate: name + "--new", previous: name + "--old" }
@@ -143,6 +144,8 @@ function fixture(t) {
         productRevision: pair.productRevision,
         engineRevision: pair.engineRevision,
         digest: pair.workerDigest,
+        sandboxDigest: pair.sandboxDigest,
+        sandboxImageMatchesRuntime: true,
         imageIdMatchesDigest: true,
         healthy: true,
         consumers: 1,
@@ -260,6 +263,11 @@ for (const [field, value] of [
   ["workerDrift", { canarySelectorPresent: undefined }],
   ["workerDrift", { runRecordV11: "1" }],
   ["workerDrift", { pendingHttpEvidence: undefined }],
+  [
+    "workerDrift",
+    { sandboxDigest: "sha256:73067cefe2138c89c1f63abb597f006f66eae22dca332a6b01398d870a638dcf" },
+  ],
+  ["workerDrift", { sandboxImageMatchesRuntime: false }],
   ["workerDrift", { consumers: 2 }],
   ["workerDrift", { imageIdMatchesDigest: false }],
   ["readinessDrift", { scansBody: "{}" }],
@@ -527,3 +535,24 @@ for (const [stderr, expected] of [
       workerFailure: expected,
     })
   })
+
+test("sandbox qualification is mandatory before any ordinary paired claim", async (t) => {
+  const f = fixture(t)
+  for (const input of [
+    { ...pair, sandboxDigest: undefined },
+    { ...pair, sandboxDigest: "latest" },
+  ]) {
+    await assert.rejects(promoteHeldPair(input, f.root, f.adapter))
+    assert.equal(f.state, "absent")
+    assert.deepEqual(f.log, [])
+  }
+  f.approvalDrift = {
+    pair: {
+      ...pair,
+      sandboxDigest: "sha256:73067cefe2138c89c1f63abb597f006f66eae22dca332a6b01398d870a638dcf",
+    },
+  }
+  await assert.rejects(f.promote())
+  assert.equal(f.state, "absent")
+  assert.deepEqual(f.log, ["qualified"])
+})

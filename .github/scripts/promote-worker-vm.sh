@@ -246,6 +246,7 @@ v26_cutover=0
 webhook_recovery=0
 paired_release_held=0
 prior_worker_ref=
+paired_sandbox=
 case "${1:-}" in
   --paired-release-stopped)
     paired_release_held=1
@@ -278,6 +279,13 @@ if [ "$webhook_cutover" -eq 1 ] || [ "$v26_cutover" -eq 1 ]; then maintenance_cu
 target=${1:?worker image digest reference is required}
 expected_app=${2:?product revision is required}
 expected_engine=${3:?engine revision is required}
+if [ -n "$prior_worker_ref" ]; then
+  paired_sandbox=${4:?qualified sandbox image is required}
+  case "$paired_sandbox" in ghcr.io/ecryptoguru/lyrashield-sandbox@sha256:*) ;; *) exit 1 ;; esac
+  sandbox_digest=${paired_sandbox##*@sha256:}
+  [ "${#sandbox_digest}" -eq 64 ] || exit 1
+  case "$sandbox_digest" in *[!a-f0-9]*) exit 1 ;; esac
+fi
 # Capture the requested vault before worker-env.sh sources the old config.
 credential_vault=${LYRASHIELD_WORKER_GITHUB_CREDENTIAL_VAULT:-}
 case "$credential_vault" in
@@ -910,7 +918,7 @@ if [ "$maintenance_cutover" -eq 0 ] || [ ! -e "$backup" ]; then
   cp -p "$config" "$backup"
 fi
 temporary=$(mktemp "${config}.XXXXXX")
-awk -v image="$target" -v vault="$credential_vault" 'BEGIN { found=0 } /^LYRASHIELD_WORKER_IMAGE=/ { print "LYRASHIELD_WORKER_IMAGE=" image; found=1; next } /^LYRASHIELD_GITHUB_CREDENTIAL_VAULT_NAME=/ { next } { print } END { if (!found) exit 1; print "LYRASHIELD_GITHUB_CREDENTIAL_VAULT_NAME=" vault }' "$config" > "$temporary"
+awk -v image="$target" -v vault="$credential_vault" -v sandbox="$paired_sandbox" 'BEGIN { found=0 } /^LYRASHIELD_WORKER_IMAGE=/ { print "LYRASHIELD_WORKER_IMAGE=" image; found=1; next } /^LYRASHIELD_SANDBOX_IMAGE=/ && sandbox != "" { print "LYRASHIELD_SANDBOX_IMAGE=" sandbox; sandbox_count++; next } /^LYRASHIELD_GITHUB_CREDENTIAL_VAULT_NAME=/ { next } { print } END { if (!found || (sandbox != "" && sandbox_count != 1)) exit 1; print "LYRASHIELD_GITHUB_CREDENTIAL_VAULT_NAME=" vault }' "$config" > "$temporary"
 chmod 0600 "$temporary"
 chown root:root "$temporary"
 mv "$temporary" "$config"
@@ -987,6 +995,10 @@ if [ "$paired_release_held" -eq 1 ]; then
   if [ -n "$prior_worker_ref" ]; then
     [ "$(docker exec "$container" printenv LYRASHIELD_RUN_RECORD_V1_1)" = 0 ]
     [ "$(docker exec "$container" printenv LYRASHIELD_PENDING_HTTP_EVIDENCE)" = 0 ]
+    [ "$(sed -n 's/^LYRASHIELD_SANDBOX_IMAGE=//p' "$config")" = "$paired_sandbox" ]
+    [ "$(docker exec "$container" printenv LYRASHIELD_IMAGE)" = "$paired_sandbox" ]
+    sandbox_refs=$(docker image inspect "$paired_sandbox" --format '{{range .RepoDigests}}{{println .}}{{end}}')
+    printf '%s\n' "$sandbox_refs" | grep -Fxq "$paired_sandbox"
     # Never export or print the selector's value.
     docker exec "$container" sh -c 'test -z "${LYRASHIELD_EVIDENCE_WRITER_CANARY:-}"'
     running_id=$(docker inspect "$container" --format '{{.Image}}')

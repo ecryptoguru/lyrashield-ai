@@ -176,7 +176,17 @@ test("relay adapter routes exact source digest and named revision then positivel
 test("VM wrapper serializes fixed Git blobs, canonical worker refs and stopped-only mode", (t) => {
   const { run, calls } = commands(t)
   const sha = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim()
-  const args = [owner, sha, engine, worker, prior, "resource-group", "worker-vm", "fixture-vault"]
+  const args = [
+    owner,
+    sha,
+    engine,
+    worker,
+    prior,
+    "resource-group",
+    "worker-vm",
+    "fixture-vault",
+    "sha256:" + "c".repeat(64),
+  ]
   const pass = run("vm", args, {
     VM_RESPONSE: JSON.stringify({
       value: [
@@ -218,7 +228,17 @@ test("VM wrapper serializes fixed Git blobs, canonical worker refs and stopped-o
 test("guest shell generates its private acknowledgement only after a genuine successful exit", (t) => {
   const { run, calls } = commands(t),
     sha = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim()
-  const args = [owner, sha, engine, worker, prior, "resource-group", "worker-vm", "fixture-vault"]
+  const args = [
+    owner,
+    sha,
+    engine,
+    worker,
+    prior,
+    "resource-group",
+    "worker-vm",
+    "fixture-vault",
+    "sha256:" + "c".repeat(64),
+  ]
   const response = {
     VM_RESPONSE: JSON.stringify({
       value: [
@@ -249,7 +269,7 @@ test("guest shell generates its private acknowledgement only after a genuine suc
     assert.equal(command.split(drain).length, 2)
     const promoter = [
       "set -eu",
-      '[ "$#" = 5 ]',
+      '[ "$#" = 6 ]',
       '[ -z "${completion_nonce+x}" ]',
       '[ "$1" = --paired-release-stopped ]',
       'echo "Created symlink for worker timer" >&2',
@@ -283,7 +303,17 @@ test("ambiguous transport timeout exposes only bounded recovery metadata", (t) =
     sha = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim()
   const r = run(
     "vm",
-    [owner, sha, engine, worker, prior, "resource-group", "worker-vm", "fixture-vault"],
+    [
+      owner,
+      sha,
+      engine,
+      worker,
+      prior,
+      "resource-group",
+      "worker-vm",
+      "fixture-vault",
+      "sha256:" + "c".repeat(64),
+    ],
     { MOCK_VM_TIMEOUT: "1" }
   )
   assert.equal(r.status, 124)

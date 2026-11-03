@@ -282,6 +282,7 @@ NODE
       *LYRASHIELD_ENGINE_REVISION*) printf '%s\n' "${MOCK_LIVE_ENGINE_REVISION:-$MOCK_ENGINE_REVISION}" ;;
       *LYRASHIELD_RUN_RECORD_V1_1*) printf '%s\n' "${MOCK_RUN_RECORD_V11:-0}" ;;
       *LYRASHIELD_EVIDENCE_WRITER_CANARY*) [ -z "${MOCK_CANARY_SELECTOR:-}" ] || exit 1 ;;
+      *"printenv LYRASHIELD_IMAGE"*) printf '%s\n' "${MOCK_RUNTIME_SANDBOX:-$MOCK_PAIRED_SANDBOX}" ;;
       *LYRASHIELD_PENDING_HTTP_EVIDENCE*) printf '%s\n' "${MOCK_PENDING_EVIDENCE:-0}" ;;
       *LYRASHIELD_WORKER_IMAGE_DIGEST*) printf '%s\n' "${MOCK_TARGET##*@}" ;;
       *) exit 1 ;;
@@ -294,6 +295,7 @@ NODE
   image:prune) : ;;
   image:inspect)
     case "$*" in
+      *'.RepoDigests'*) printf '%s\n' "${MOCK_LOCAL_SANDBOX:-$MOCK_PAIRED_SANDBOX}" ;;
       *'{{.Id}}'*) printf '%s\n' "${MOCK_CONFIG_ID:-sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd}" ;;
       *'{{.Size}}'*)
         case "$*" in
@@ -453,10 +455,11 @@ run_case() {
   esac
   if [ "$cutover" = paired ]; then
     mode_arg=--paired-release-held
-    local prior_arg=
+    local prior_arg= sandbox_arg=
     if [[ "$name" = paired-stopped-* ]]; then
       mode_arg=--paired-release-stopped
       prior_arg=$old_image
+      sandbox_arg="ghcr.io/ecryptoguru/lyrashield-sandbox@sha256:$(printf 'f%.0s' {1..64})"
       [ "$name" != paired-stopped-wrong-prior ] || prior_arg=$target
     fi
     paired_module_payload=$(base64 < "$repo/ops/monitoring/paired-release-hold.mjs" | tr -d '\n')
@@ -535,6 +538,7 @@ NODE
       MOCK_REPLACEMENT_STOP="$replacement_stop" \
       MOCK_RESTART_FAIL="$restart_fails" \
       LYRASHIELD_WORKER_IMAGE_FLOOR_BYTES="$floor_env" \
+      MOCK_PAIRED_SANDBOX="${sandbox_arg:-}" \
       LYRASHIELD_WORKER_RUNTIME_CONFIG="$case_dir/runtime.conf" \
       LYRASHIELD_WORKER_ENV_FILE="$case_dir/worker.env" \
       LYRASHIELD_EGRESS_PIN_FILE="$case_dir/egress-pins" \
@@ -543,7 +547,7 @@ NODE
       LYRASHIELD_WORKER_HOST_ASSETS_DIR="$case_dir/host/assets" \
       LYRASHIELD_WORKER_ENV_LIB="$repo/ops/worker/worker-env.sh" \
       LYRASHIELD_WORKER_SYSTEMD_DIR="$case_dir/host/systemd" \
-      "${PROMOTION_SHELL:-sh}" "$script" ${mode_arg:+"$mode_arg"} ${prior_arg:+"$prior_arg"} "$target" "$app_revision" "$engine_revision" 2>&1
+      "${PROMOTION_SHELL:-sh}" "$script" ${mode_arg:+"$mode_arg"} ${prior_arg:+"$prior_arg"} "$target" "$app_revision" "$engine_revision" ${sandbox_arg:+"$sandbox_arg"} 2>&1
   )
   status=$?
   set -e
@@ -786,6 +790,8 @@ if [ "${PAIRED_STOPPED_ONLY:-0}" = 1 ]; then
   MOCK_RUN_RECORD_V11=1 run_case paired-stopped-writer 0 0 0 failure 0 '' 0 '' 9999999000 0 1 '' env 0 paired
   MOCK_CANARY_SELECTOR='set' run_case paired-stopped-canary 0 0 0 failure 0 '' 0 '' 9999999000 0 1 '' env 0 paired
   MOCK_PENDING_EVIDENCE=1 run_case paired-stopped-pending 0 0 0 failure 0 '' 0 '' 9999999000 0 1 '' env 0 paired
+  MOCK_LOCAL_SANDBOX=wrong run_case paired-stopped-local-sandbox 0 0 0 failure 0 '' 0 '' 9999999000 0 1 '' env 0 paired
+  MOCK_RUNTIME_SANDBOX=wrong run_case paired-stopped-runtime-sandbox 0 0 0 failure 0 '' 0 '' 9999999000 0 1 '' env 0 paired
   MOCK_CONFIG_ID=wrong run_case paired-stopped-image-id 0 0 0 failure 0 '' 0 '' 9999999000 0 1 '' env 0 paired
   echo "Paired stopped-entry proof passed (real loopback HTTP)."
   exit 0
