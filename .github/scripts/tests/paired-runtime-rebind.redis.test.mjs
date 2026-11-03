@@ -13,16 +13,16 @@ test(
   "one-key rebind and armed release on isolated Redis",
   { skip: !cid, timeout: 45_000 },
   async (t) => {
-    const exec = promisify(execFile)
+    const execFileAsync = promisify(execFile)
     assert.match(cid, /^[a-f0-9]{64}$/)
-    const [meta] = JSON.parse((await exec("docker", ["inspect", cid])).stdout)
+    const [meta] = JSON.parse((await execFileAsync("docker", ["inspect", cid])).stdout)
     assert.equal(meta.Config.Labels["com.lyrashield.drill"], "paired-recovery-arm")
     assert.equal(meta.HostConfig.NetworkMode, "none")
     assert.ok(meta.Name.startsWith("/strix-paired-rebind-"))
     const cli = async (...cmd) =>
       JSON.parse(
         (
-          await exec("docker", ["exec", cid, "redis-cli", "--json", ...cmd.map(String)], {
+          await execFileAsync("docker", ["exec", cid, "redis-cli", "--json", ...cmd.map(String)], {
             timeout: 5000,
           })
         ).stdout
