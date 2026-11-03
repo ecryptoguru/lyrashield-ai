@@ -136,6 +136,61 @@ function renderAdminOnlyApiKeys() {
   )
 }
 
+function CreatedApiKey({
+  rawKey,
+  copied,
+  hasCopiedKey,
+  copyButtonRef,
+  onCopy,
+  onDismiss,
+}: {
+  rawKey: string
+  copied: boolean
+  hasCopiedKey: boolean
+  copyButtonRef: Ref<HTMLButtonElement>
+  onCopy: () => void
+  onDismiss: () => void
+}) {
+  return (
+    <div className="border-primary/40 bg-primary/5 space-y-2 rounded-md border p-4">
+      <p className="flex items-center gap-2 text-sm font-medium">
+        <ShieldAlert className="size-4" aria-hidden="true" />
+        Copy this key now — it will not be shown again.
+      </p>
+      <div className="flex items-center gap-2">
+        <code className="bg-muted min-w-0 flex-1 truncate rounded px-2 py-1.5 font-mono text-xs">
+          {rawKey}
+        </code>
+        <Button ref={copyButtonRef} size="sm" variant="outline" onClick={onCopy}>
+          {copied ? (
+            <Check className="size-4" aria-hidden="true" />
+          ) : (
+            <Copy className="size-4" aria-hidden="true" />
+          )}
+          <span className="sr-only">Copy API key</span>
+        </Button>
+      </div>
+      <Button
+        size="sm"
+        variant="ghost"
+        disabled={!hasCopiedKey}
+        aria-describedby={hasCopiedKey ? undefined : "api-key-copy-hint"}
+        onClick={onDismiss}
+      >
+        I&apos;ve stored it safely
+      </Button>
+      <p id="api-key-existing-key-hint" className="text-muted-foreground text-xs">
+        Store the previous key before creating another.
+      </p>
+      {!hasCopiedKey ? (
+        <p id="api-key-copy-hint" className="text-xs text-amber-600 dark:text-amber-400">
+          Copy the key first — dismissing this notice discards the only copy.
+        </p>
+      ) : null}
+    </div>
+  )
+}
+
 export function ApiKeysSection({
   workspaceId,
   canManage,
@@ -146,7 +201,9 @@ export function ApiKeysSection({
   const createTriggerRef = useRef<HTMLButtonElement>(null)
   const createButtonRef = useRef<HTMLButtonElement>(null)
   const nameInputRef = useRef<HTMLInputElement>(null)
+  const copyButtonRef = useRef<HTMLButtonElement>(null)
   const formGeneration = useRef(0)
+  const pendingSuccessFocus = useRef<number | null>(null)
   const [keys, setKeys] = useState<ApiKeyRow[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [showCreate, setShowCreate] = useState(false)
@@ -192,6 +249,16 @@ export function ApiKeysSection({
     }
   }, [canManage, workspaceId])
 
+  useEffect(() => {
+    if (
+      pendingSuccessFocus.current === formGeneration.current &&
+      document.activeElement === document.body
+    ) {
+      copyButtonRef.current?.focus()
+    }
+    pendingSuccessFocus.current = null
+  }, [createdKey])
+
   if (!canManage) return renderAdminOnlyApiKeys()
 
   /**
@@ -208,9 +275,9 @@ export function ApiKeysSection({
   }
 
   async function handleCreate() {
-    if (!name.trim()) return
-    const restoreFocus =
-      typeof document !== "undefined" && document.activeElement === createButtonRef.current
+    if (!name.trim() || createdKey) return
+    const focusAtSubmission = typeof document === "undefined" ? null : document.activeElement
+    const restoreFocus = focusAtSubmission === createButtonRef.current && focusAtSubmission !== null
     const submittedGeneration = formGeneration.current
     setCreating(true)
     setError(null)
@@ -227,18 +294,26 @@ export function ApiKeysSection({
         },
         { schema: createdKeySchema }
       )
+      const focusUnchanged =
+        typeof document === "undefined" ||
+        document.activeElement === document.body ||
+        document.activeElement === createButtonRef.current ||
+        document.activeElement === focusAtSubmission
+      if (formGeneration.current === submittedGeneration && focusUnchanged) {
+        const focusCopy =
+          restoreFocus &&
+          (document.activeElement === document.body ||
+            document.activeElement === createButtonRef.current)
+        closeCreateForm()
+        if (focusCopy) pendingSuccessFocus.current = formGeneration.current
+      }
       setCreatedKey(created)
       setHasCopiedKey(false)
-      closeCreateForm()
       await load()
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to create API key")
-      if (
-        restoreFocus &&
-        formGeneration.current === submittedGeneration &&
-        document.activeElement === document.body
-      ) {
-        nameInputRef.current?.focus()
+      if (formGeneration.current === submittedGeneration) {
+        setError(err instanceof ApiError ? err.message : "Failed to create API key")
+        if (restoreFocus && document.activeElement === document.body) nameInputRef.current?.focus()
       }
     } finally {
       setCreating(false)
@@ -290,6 +365,8 @@ export function ApiKeysSection({
           onClick={() => (showCreate ? closeCreateForm() : setShowCreate(true))}
           aria-expanded={showCreate}
           aria-controls="api-key-create-form"
+          disabled={!!createdKey && !showCreate}
+          aria-describedby={createdKey ? "api-key-existing-key-hint" : undefined}
         >
           <Plus className="mr-1 size-4" aria-hidden="true" />
           New key
@@ -307,40 +384,18 @@ export function ApiKeysSection({
           </p>
         ) : null}
 
+        <p role="status" className="sr-only">
+          {createdKey ? "Copy this key now — it will not be shown again." : ""}
+        </p>
         {createdKey ? (
-          <div className="border-primary/40 bg-primary/5 space-y-2 rounded-md border p-4">
-            <p className="flex items-center gap-2 text-sm font-medium">
-              <ShieldAlert className="size-4" aria-hidden="true" />
-              Copy this key now — it will not be shown again.
-            </p>
-            <div className="flex items-center gap-2">
-              <code className="bg-muted min-w-0 flex-1 truncate rounded px-2 py-1.5 font-mono text-xs">
-                {createdKey.rawKey}
-              </code>
-              <Button size="sm" variant="outline" onClick={() => void copyKey()}>
-                {copied ? (
-                  <Check className="size-4" aria-hidden="true" />
-                ) : (
-                  <Copy className="size-4" aria-hidden="true" />
-                )}
-                <span className="sr-only">Copy API key</span>
-              </Button>
-            </div>
-            <Button
-              size="sm"
-              variant="ghost"
-              disabled={!hasCopiedKey}
-              aria-describedby={hasCopiedKey ? undefined : "api-key-copy-hint"}
-              onClick={() => setCreatedKey(null)}
-            >
-              I&apos;ve stored it safely
-            </Button>
-            {!hasCopiedKey ? (
-              <p id="api-key-copy-hint" className="text-xs text-amber-600 dark:text-amber-400">
-                Copy the key first — dismissing this notice discards the only copy.
-              </p>
-            ) : null}
-          </div>
+          <CreatedApiKey
+            rawKey={createdKey.rawKey}
+            copied={copied}
+            hasCopiedKey={hasCopiedKey}
+            copyButtonRef={copyButtonRef}
+            onCopy={() => void copyKey()}
+            onDismiss={() => setCreatedKey(null)}
+          />
         ) : null}
 
         {showCreate ? (
@@ -372,7 +427,8 @@ export function ApiKeysSection({
                 ref={createButtonRef}
                 size="sm"
                 onClick={() => void handleCreate()}
-                disabled={creating || !name.trim()}
+                disabled={creating || !name.trim() || !!createdKey}
+                aria-describedby={createdKey ? "api-key-existing-key-hint" : undefined}
               >
                 {creating ? <Spinner className="mr-1 size-4" /> : null}
                 Create key

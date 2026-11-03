@@ -119,12 +119,14 @@ test("late failure after cancel and reopen does not move focus into the new form
   await page.keyboard.press("Enter")
   await page.getByRole("button", { name: "Cancel" }).click()
   await trigger.click()
+  await page.getByLabel("Key name").fill("New draft")
   const readOnly = page.getByRole("radio", { name: /Read-only/ })
   await readOnly.focus()
   respond()
-  await expect(page.getByRole("alert")).toContainText("Fixture unavailable")
+  await expect(page.getByRole("button", { name: "Create key" })).toBeEnabled()
+  await expect(page.getByRole("alert")).toHaveCount(0)
   await expect(readOnly).toBeFocused()
-  await expect(page.getByLabel("Key name")).toHaveValue("")
+  await expect(page.getByLabel("Key name")).toHaveValue("New draft")
 })
 
 test("IME composition in the key name does not submit or close the form", async ({ page }) => {
@@ -144,4 +146,121 @@ test("IME composition in the key name does not submit or close the form", async 
   await expect(input).toBeFocused()
   await expect(input).toHaveValue("日本語")
   expect(posts).toBe(0)
+})
+
+const createdFixture = {
+  id: "fixture-key",
+  name: "Original draft",
+  prefix: "fixture-prefix",
+  scopes: ["read"],
+  lastUsedAt: null,
+  expiresAt: null,
+  revokedAt: null,
+  createdAt: "2026-11-03T12:00:00.000Z",
+  rawKey: "fixture-once-only-key",
+}
+
+for (const [viewportName, viewport] of [
+  ["desktop", { width: 1440, height: 900 }],
+  ["mobile", { width: 390, height: 844 }],
+] as const) {
+  test(`${viewportName}: late success preserves a reopened draft and announces the one-time key without moving focus`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(viewport)
+    let posts = 0
+    let respond!: () => void
+    const pending = new Promise<void>((resolve) => {
+      respond = resolve
+    })
+    await page.route("**/api/api-keys**", async (route) => {
+      if (route.request().method() === "GET")
+        return route.fulfill({ json: { success: true, data: [] } })
+      posts++
+      await pending
+      const data =
+        posts === 1
+          ? createdFixture
+          : { ...createdFixture, id: "fixture-key-2", rawKey: "fixture-second-once-only-key" }
+      await route.fulfill({ json: { success: true, data } })
+    })
+    await page.goto("?api-keys")
+    const trigger = page.getByRole("button", { name: "New key" })
+    await trigger.click()
+    await page.getByLabel("Key name").fill("Original draft")
+    await page.getByRole("button", { name: "Create key" }).focus()
+    await page.keyboard.press("Enter")
+    await page.getByRole("button", { name: "Cancel" }).click()
+    await trigger.click()
+    const newName = page.getByLabel("Key name")
+    await newName.fill("New draft")
+    await newName.focus()
+    respond()
+    const announcement = page.getByRole("status")
+    await expect(announcement).toContainText("Copy this key now")
+    await expect(announcement).not.toContainText(createdFixture.rawKey)
+    await expect(page.getByText(createdFixture.rawKey)).toBeVisible()
+    await expect(newName).toHaveValue("New draft")
+    await expect(newName).toBeFocused()
+    const create = page.getByRole("button", { name: "Create key" })
+    await expect(create).toBeDisabled()
+    expect(posts).toBe(1)
+    await expect(page.getByText("Store the previous key before creating another.")).toBeVisible()
+    await page.context().grantPermissions(["clipboard-write"])
+    await page.getByRole("button", { name: "Copy API key" }).click()
+    await page.getByRole("button", { name: "I've stored it safely" }).click()
+    await expect(create).toBeEnabled()
+    await expect(newName).toHaveValue("New draft")
+    await create.click()
+    await expect(page.getByText("fixture-second-once-only-key")).toBeVisible()
+    expect(posts).toBe(2)
+  })
+}
+
+test("successful keyboard creation announces the key and focuses its copy action", async ({
+  page,
+}) => {
+  await page.route("**/api/api-keys**", (route) =>
+    route.fulfill(
+      route.request().method() === "GET"
+        ? { json: { success: true, data: [] } }
+        : { json: { success: true, data: createdFixture } }
+    )
+  )
+  await page.goto("?api-keys")
+  await page.getByRole("button", { name: "New key" }).click()
+  await page.getByLabel("Key name").fill("Original draft")
+  await page.getByRole("button", { name: "Create key" }).focus()
+  await page.keyboard.press("Enter")
+  const announcement = page.getByRole("status")
+  await expect(announcement).toContainText("Copy this key now")
+  await expect(announcement).not.toContainText(createdFixture.rawKey)
+  await expect(page.getByText(createdFixture.rawKey)).toBeVisible()
+  await expect(page.getByRole("button", { name: "Copy API key" })).toBeFocused()
+})
+
+test("successful pending creation preserves an edited draft when focus moved", async ({ page }) => {
+  let respond!: () => void
+  const pending = new Promise<void>((resolve) => {
+    respond = resolve
+  })
+  await page.route("**/api/api-keys**", async (route) => {
+    if (route.request().method() === "GET")
+      return route.fulfill({ json: { success: true, data: [] } })
+    await pending
+    await route.fulfill({ json: { success: true, data: createdFixture } })
+  })
+  await page.goto("?api-keys")
+  await page.getByRole("button", { name: "New key" }).click()
+  const nameInput = page.getByLabel("Key name")
+  await nameInput.fill("Original draft")
+  await page.getByRole("button", { name: "Create key" }).focus()
+  await page.keyboard.press("Enter")
+  await nameInput.fill("Edited while pending")
+  await nameInput.focus()
+  respond()
+  await expect(page.getByRole("status")).toContainText("Copy this key now")
+  await expect(page.getByText(createdFixture.rawKey)).toBeVisible()
+  await expect(nameInput).toHaveValue("Edited while pending")
+  await expect(nameInput).toBeFocused()
 })
