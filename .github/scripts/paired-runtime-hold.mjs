@@ -8,6 +8,9 @@ import {
   SCAN_ADMISSION_KEY,
 } from "../../ops/monitoring/paired-release-hold.mjs"
 
+export const holdStateLua =
+  'local v=redis.call("GET",KEYS[1]); if not v then return "absent" end; if v==ARGV[1] and redis.call("PTTL",KEYS[1])==-1 then return "owned" end; return "foreign"'
+
 function identity(pair) {
   return [pair.owner, pair.productRevision, pair.engineRevision, pair.workerDigest]
 }
@@ -28,12 +31,7 @@ export function pairedHold(redis, pair) {
     release: () => ownedHold(redis, "release", ...args),
     async state() {
       // GET and PTTL must describe the same instant.
-      return await redis.eval(
-        'local v=redis.call("GET",KEYS[1]); if not v then return "absent" end; if v==ARGV[1] and redis.call("PTTL",KEYS[1])==-1 then return "owned" end; return "foreign"',
-        1,
-        SCAN_ADMISSION_KEY,
-        receipt
-      )
+      return await redis.eval(holdStateLua, 1, SCAN_ADMISSION_KEY, receipt)
     },
   }
 }
@@ -67,6 +65,14 @@ export async function waitForPairedDrain(pair, redis, db, inspectPhysicalChildre
 }
 
 export async function assertPairedWorkDrained(redis, db, inspectPhysicalChildren) {
+  // The protected GitHub runner has no direct production DB/Redis connection.
+  // A single private VM probe runs THIS same native transaction remotely.
+  if (db.readRemotePairedDrain) {
+    const state = await db.readRemotePairedDrain()
+    if (state === "busy") throw new PairedWorkPending("pending queue work")
+    assert.equal(state, "drained")
+    return
+  }
   for (const name of ["scans", "webhook-track-retry", "fix-generate"]) {
     for (const state of ["wait", "active", "paused"])
       assertEmptyCount(await redis.llen(`bull:${name}:${state}`))

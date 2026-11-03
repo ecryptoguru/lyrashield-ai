@@ -194,13 +194,13 @@ function validateLease(r) {
 }
 const bytes = (p) =>
   pairedReleaseReceipt(p.owner, p.productRevision, p.engineRevision, p.workerDigest)
-const rebindLua = `if redis.call("GET",KEYS[1]) ~= ARGV[1] or redis.call("PTTL",KEYS[1]) ~= -1 then return 0 end
+export const rebindLua = `if redis.call("GET",KEYS[1]) ~= ARGV[1] or redis.call("PTTL",KEYS[1]) ~= -1 then return 0 end
 redis.call("SET",KEYS[1],ARGV[2],"XX")
 return 1`
-const observeLua = `local v=redis.call("GET",KEYS[1]); if not v then return "absent" end
+export const observeLua = `local v=redis.call("GET",KEYS[1]); if not v then return "absent" end
 if redis.call("PTTL",KEYS[1]) ~= -1 then return "foreign" end
 if v==ARGV[1] then return "source" end; if v==ARGV[2] then return "destination" end; return "foreign"`
-const armedReleaseLua = `if redis.call("GET",KEYS[1]) ~= ARGV[1] or redis.call("PTTL",KEYS[1]) ~= -1 then return 0 end
+export const armedReleaseLua = `if redis.call("GET",KEYS[1]) ~= ARGV[1] or redis.call("PTTL",KEYS[1]) ~= -1 then return 0 end
 local t=redis.call("TIME"); local ms=t[1]*1000+math.floor(t[2]/1000)
 if ms<tonumber(ARGV[2]) or ms+30000>=tonumber(ARGV[3]) then return 0 end
 return redis.call("DEL",KEYS[1])`

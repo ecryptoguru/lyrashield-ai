@@ -303,7 +303,7 @@ export async function promoteHeldPair(input, root, adapter, signal) {
       signal
     )
     await mutateHeld(dir, pair, hold, signal, "stop-legacy", () =>
-      adapter.stopLegacyConsumers(pair)
+      adapter.stopLegacyConsumers(pair, pair.priorWorkerDigest)
     )
     await adapter.verifyStoppedLegacy(pair)
     await assertPairedWorkDrained(adapter.redis, adapter.db, () => adapter.readPhysicalDrain(pair))
@@ -383,7 +383,7 @@ function intentStage(dir, stage, pair, id) {
   persist(dir, stage, pair, undefined, id)
 }
 async function stoppedOrigin(adapter, source, acq) {
-  await adapter.verifyStoppedLegacy(source)
+  await adapter.verifyStoppedLegacy(source, source.workerDigest)
   requireProof((await adapter.proveStoppedOrigin(source, acq.continuity)) === true)
   await assertPairedWorkDrained(adapter.redis, adapter.db, () => adapter.readPhysicalDrain(source))
 }
@@ -428,7 +428,7 @@ export async function restoreQualifiedPair(id, root, adapter, signal) {
         true
     )
     await mutateHeld(dir, source, prior, signal, "stop-source", () =>
-      adapter.stopLegacyConsumers(source)
+      adapter.stopLegacyConsumers(source, source.workerDigest)
     )
     await stoppedOrigin(adapter, source, acq)
     if (acq.selectorHash !== null) {
@@ -437,7 +437,7 @@ export async function restoreQualifiedPair(id, root, adapter, signal) {
           true
       )
       await mutateHeld(dir, source, prior, signal, "clear-accounted-selector", () =>
-        adapter.clearMatchingSelector(acq.selectorHash)
+        adapter.clearMatchingSelector(acq.selectorHash, source)
       )
     }
     await beforeRebind(id, adapter, a, signal)
