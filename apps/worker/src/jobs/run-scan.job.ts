@@ -13,7 +13,7 @@ import type { Job } from "bullmq"
 import { ScanCapacityWaitingError, type ScanBillingDisposition } from "@lyrashield/billing"
 import { finalizationGrace, scanElapsedClock } from "../engine/scan-deadline"
 import { runWithWorkspaceContext } from "@lyrashield/db"
-import { logger } from "@lyrashield/logger"
+import { logger as log } from "@lyrashield/logger"
 import {
   env,
   evaluateAuthAssessmentAdmission,
@@ -50,6 +50,7 @@ import {
   createScanCancellationPoller,
   isBillableExecutionContention,
   finalizeExecutionDenial,
+  executorProvenStopped,
   readScanTerminalState,
 } from "./run-scan/lifecycle-guards"
 import { resumePendingScanFinalization } from "./run-scan/pending-finalization"
@@ -80,7 +81,6 @@ export {
 }
 
 export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Promise<ScanJobResult> {
-  const log = logger
   const authority = await verifyScanJobAuthority(job)
   if (!authority.ok) return authority.result
   const { data, scanRecord, workspaceId, executionPlan } = authority
@@ -246,11 +246,12 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         scanProfile,
         executionPlan,
       })
+      executorReturned = executorProvenStopped(execution, engineBacked, deterministicRetest)
       if (!execution.ok) {
-        return await finalizeExecutionDenial(scanId, workspaceId, targetId, execution.result)
+        // noBillableWork is still true. Only an acknowledged claim may finalize as its owner.
+        const update = billablePhaseStarted && executorReturned ? updateScanStatus : undefined
+        return await finalizeExecutionDenial(authority, execution.result, update)
       }
-      executorReturned =
-        !engineBacked || deterministicRetest || execution.engineResult.sandboxRemoved === true
       engineResult = execution.engineResult
       deterministicCheckout = execution.deterministicCheckout
       engineProfile = execution.engineProfile

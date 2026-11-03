@@ -1,6 +1,7 @@
 import { withWorkspaceRLS, updateUnclaimedScanStatus, type ScanStatus } from "@lyrashield/db"
 import { ScanBillableClaimError } from "@lyrashield/db/src/scan-billable-claim"
-import type { ScanJobResult } from "../../types"
+import type { ScanExecutionResult } from "./execution"
+import type { ScanJobData, ScanJobResult } from "../../types"
 import { refreshGateVerdictAfterTerminalScan } from "./lifecycle-utils"
 
 export function isBillableExecutionContention(error: unknown): boolean {
@@ -54,16 +55,29 @@ export async function readScanTerminalState(scanId: string, workspaceId: string)
   })
 }
 
+/** Only a proven stop (including a claimed attempt that never dispatched) releases funded capacity. */
+export function executorProvenStopped(
+  execution: ScanExecutionResult,
+  engineBacked: boolean,
+  deterministicRetest: boolean
+): boolean {
+  if (!execution.ok) return execution.noEngineDispatchAfterClaim === true
+  return !engineBacked || deterministicRetest || execution.engineResult.sandboxRemoved === true
+}
+
 /** Execution denial occurs after RUNNING, so persist its actual terminal cause. */
 export async function finalizeExecutionDenial(
-  scanId: string,
-  workspaceId: string,
-  targetId: string,
-  result: ScanJobResult
+  authority: { workspaceId: string; data: Pick<ScanJobData, "scanId" | "targetId"> },
+  result: ScanJobResult,
+  updateStatus = updateUnclaimedScanStatus
 ): Promise<ScanJobResult> {
+  const {
+    workspaceId,
+    data: { scanId, targetId },
+  } = authority
   if (result.status === "failed" && result.errorCategory !== "CANCELLED") {
     // The guarded status transition preserves cancellation racing this denial.
-    await updateUnclaimedScanStatus(scanId, "FAILED", {
+    await updateStatus(scanId, "FAILED", {
       errorCategory: result.errorCategory,
       errorMessage: result.errorMessage,
     })

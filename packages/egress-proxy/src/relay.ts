@@ -583,10 +583,10 @@ export function createRelayHandler(signingSecret: string, deps?: RelayDeps): Rel
       const verified = verifyRelayGrant(grant, signingSecret)
       if (!ownerId || !verified.ok || verified.scope.scanId !== scanId) return { ok: false }
       const state = states.get(scanId)
-      if (state) {
-        if (state.ownerId === ownerId && state.grant === grant) revoke(scanId)
+      if (state?.ownerId === ownerId && state.grant === grant) {
+        revoke(scanId)
       } else {
-        // The registration request may still be in flight after a lost acknowledgement.
+        // A delayed registration can outlive the other owner's state and its retained audit.
         revokedOwners.revoke(scanId, ownerId, verified.scope.exp)
       }
       return { ok: true }

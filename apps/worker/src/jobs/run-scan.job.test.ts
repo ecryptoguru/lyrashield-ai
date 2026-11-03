@@ -842,6 +842,38 @@ describe("processScanJob", () => {
       expect(recordAgentMinutes).not.toHaveBeenCalled()
     })
 
+    it.each(["registration refused", "registration acknowledgement lost"])(
+      "releases a funded owner without billing when there was no engine dispatch: %s",
+      async (failure) => {
+        mockStoredScanAuthority({ mode: "STANDARD", accountingVersion: 2 })
+        vi.mocked(prisma.target.findFirst).mockResolvedValue(mockUrlTarget as never)
+        vi.mocked(prisma.targetDomainVerification.findFirst).mockResolvedValue({
+          id: "proof-1",
+        } as never)
+        vi.mocked(registerRelayGrant).mockRejectedValueOnce(new Error(failure))
+        await expect(processScanJob(standardUrlJob)).resolves.toMatchObject({
+          status: "failed",
+          errorCategory: "RELAY_SCOPE_UNAVAILABLE",
+        })
+        expect(reserveScanCapacity).toHaveBeenCalledWith(
+          expect.objectContaining({ scanId: "scan-1", start: true })
+        )
+        const [scanId, grant, config, , ownerId] = vi.mocked(registerRelayGrant).mock.calls[0]!
+        expect(revokeRelayGrant).toHaveBeenCalledWith(scanId, config, { grant, ownerId })
+        expect(runEngine).not.toHaveBeenCalled()
+        expect(recordAgentMinutes).not.toHaveBeenCalled()
+        expect(updateScanStatus).toHaveBeenCalledWith(
+          "scan-1",
+          "FAILED",
+          expect.objectContaining({ errorCategory: "RELAY_SCOPE_UNAVAILABLE" })
+        )
+        const stop = vi.mocked(confirmScanCapacityStopped).mock.calls[0]!
+        expect(stop.slice(0, 3)).toEqual(["ws-1", "scan-1", true])
+        expect(releaseStoppedScanSlot).toHaveBeenCalledWith("ws-1", "scan-1")
+        expect(resetUnstartedScanCapacity).not.toHaveBeenCalled()
+      }
+    )
+
     it("runs the engine with a signed relay grant and revokes it afterward", async () => {
       vi.mocked(prisma.target.findFirst).mockResolvedValue(mockUrlTarget as never)
       vi.mocked(prisma.targetDomainVerification.findFirst).mockResolvedValue({

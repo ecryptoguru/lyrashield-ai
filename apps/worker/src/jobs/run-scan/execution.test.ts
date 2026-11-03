@@ -334,6 +334,72 @@ describe("executeScanTarget relay lifecycle", () => {
     expect(mocks.runEngine).not.toHaveBeenCalled()
   })
 
+  it.each([5_000, 15_000])(
+    "includes %i ms of relay setup in the claimed runtime budget",
+    async (delay) => {
+      let elapsed = 0
+      mocks.resolveEngineRuntimeBudgetMs.mockReturnValue(15_000)
+      mocks.registerRelayGrant.mockImplementationOnce(async () => {
+        elapsed += delay
+      })
+      const input = params({ elapsedScanMs: () => elapsed })
+      const result = await executeScanTarget(input)
+      if (delay < 15_000) {
+        expect(result.ok).toBe(true)
+        expect(mocks.runEngine.mock.calls[0]?.[2]).toBe(15_000 - delay)
+      } else {
+        expect(result).toMatchObject({
+          ok: false,
+          noEngineDispatchAfterClaim: true,
+          result: { errorCategory: "TIMEOUT" },
+        })
+        expect(input.markGlobalScanTimeout).toHaveBeenCalledOnce()
+        expect(mocks.runEngine).not.toHaveBeenCalled()
+      }
+      expect(mocks.revokeRelayGrant).toHaveBeenCalledOnce()
+    }
+  )
+
+  it("registers only the authorized retry after a confirmed paid-claim rollback", async () => {
+    const rollback = Object.assign(new Error("claim rolled back"), { code: "P2034" })
+    let rejectClaim = true
+    mocks.addScanEvent.mockImplementation(async (_scanId, type) => {
+      if (type === "billable_boundary" && rejectClaim) {
+        rejectClaim = false
+        throw rollback
+      }
+      return { id: "event" }
+    })
+    await expect(executeScanTarget(params())).rejects.toBe(rollback)
+    expect(mocks.registerRelayGrant).not.toHaveBeenCalled()
+    expect(mocks.revokeRelayGrant).not.toHaveBeenCalled()
+    expect(mocks.runEngine).not.toHaveBeenCalled()
+
+    const retry = params()
+    await expect(executeScanTarget(retry)).resolves.toMatchObject({ ok: true })
+    expect(mocks.registerRelayGrant).toHaveBeenCalledTimes(1)
+    expect(retry.markBillablePhaseStarted.mock.invocationCallOrder[0]!).toBeLessThan(
+      mocks.registerRelayGrant.mock.invocationCallOrder[0]!
+    )
+    expect(mocks.runEngine).toHaveBeenCalledTimes(1)
+    expect(mocks.revokeRelayGrant).toHaveBeenCalledTimes(1)
+  })
+
+  it("never activates a relay or dispatches an engine when the paid claim is indeterminate or held", async () => {
+    const unknown = new Error("commit acknowledgement lost")
+    const held = new Error("paid claim held for reconciliation")
+    let claims = 0
+    mocks.addScanEvent.mockImplementation(async (_scanId, type) => {
+      if (type === "billable_boundary") throw ++claims === 1 ? unknown : held
+      return { id: "event" }
+    })
+    await expect(executeScanTarget(params())).rejects.toBe(unknown)
+    await expect(executeScanTarget(params())).rejects.toBe(held)
+    expect(mocks.registerRelayGrant).not.toHaveBeenCalled()
+    expect(mocks.runEngine).not.toHaveBeenCalled()
+    expect(mocks.revokeRelayGrant).not.toHaveBeenCalled()
+  })
+
   it("keeps independent cleanup owners for duplicate deliveries with identical minted grants", async () => {
     await executeScanTarget(params())
     await executeScanTarget(params())
@@ -367,6 +433,21 @@ describe("executeScanTarget relay lifecycle", () => {
     expect(mocks.runEngine).not.toHaveBeenCalled()
   })
 
+  it("keeps proof of no dispatch when the relay rejection cannot be audited", async () => {
+    mocks.registerRelayGrant.mockRejectedValueOnce(new Error("acknowledgement lost"))
+    mocks.addScanEvent.mockImplementation(async (_id, type) => {
+      if (type === "engine_skipped") throw new Error("audit unavailable")
+      return { id: "event" }
+    })
+    await expect(executeScanTarget(params())).resolves.toMatchObject({
+      ok: false,
+      noEngineDispatchAfterClaim: true,
+      result: { errorCategory: "RELAY_SCOPE_UNAVAILABLE" },
+    })
+    expect(mocks.revokeRelayGrant).toHaveBeenCalledOnce()
+    expect(mocks.runEngine).not.toHaveBeenCalled()
+  })
+
   it("revokes after relay audit failure without masking it when cleanup fails", async () => {
     mocks.addScanEvent.mockImplementation(async (_scanId, eventName) => {
       if (eventName === "relay_scope") throw new Error("relay scope audit unavailable")
@@ -393,7 +474,7 @@ describe("executeScanTarget relay lifecycle", () => {
       "scan-1",
       "engine_skipped",
       "error",
-      "Relay grant could not be minted",
+      "Relay scope could not be established",
       expect.objectContaining({ error: "relay scope audit unavailable" })
     )
     expect(mocks.logger.error).toHaveBeenCalledWith(

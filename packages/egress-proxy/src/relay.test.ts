@@ -1,5 +1,5 @@
 // security-scan-skip-file: relay tests mint grants and stand up loopback fixtures intentionally
-import { describe, expect, it, afterAll, beforeAll } from "vitest"
+import { describe, expect, it, afterAll, beforeAll, vi } from "vitest"
 import { randomBytes, randomUUID } from "node:crypto"
 import { execFileSync } from "node:child_process"
 import { mkdtempSync, readFileSync, rmSync } from "node:fs"
@@ -572,6 +572,39 @@ describe("scoped relay", () => {
     expect(
       (await rawForward(proxy.port, `http://${UPSTREAM_HOST}:${upstreamPort}/echo`, token)).status
     ).toBe(200)
+  })
+
+  it("holds an acknowledged foreign cleanup beyond natural expiry and closed-audit eviction", async () => {
+    const { createRelayHandler } = await import("./relay")
+    const handler = createRelayHandler(RELAY_SECRET)
+    const now = Date.now(),
+      clock = vi.spyOn(Date, "now").mockReturnValue(now)
+    try {
+      const scope = scopeFor(UPSTREAM_HOST, { exp: now + 1000 })
+      const ownerA = randomUUID(),
+        ownerB = randomUUID()
+      const grantA = mintRelayGrant(scope, RELAY_SECRET)
+      const grantB = mintRelayGrant({ ...scope, exp: now + 60_000 }, RELAY_SECRET)
+      expect(handler.register(scope.scanId, grantA, undefined, ownerA)).toEqual({ ok: true })
+      expect(handler.revokeOwned(scope.scanId, ownerB, grantB)).toEqual({ ok: true })
+      expect(handler.register(scope.scanId, grantA, undefined, ownerA)).toEqual({ ok: true })
+      for (let i = 0; i < 201; i++) {
+        const other = { ...scope, scanId: `history_${i}` }
+        expect(handler.register(other.scanId, mintRelayGrant(other, RELAY_SECRET))).toEqual({
+          ok: true,
+        })
+      }
+      clock.mockReturnValue(now + 2000)
+      handler._sweep()
+      expect(handler.getAudit(scope.scanId)).toBeNull()
+      expect(handler.register(scope.scanId, grantB, undefined, ownerB)).toEqual({
+        ok: false,
+        reason: "revoked",
+      })
+      expect(handler.register(scope.scanId, grantB, undefined, randomUUID())).toEqual({ ok: true })
+    } finally {
+      clock.mockRestore()
+    }
   })
 
   it("aborts an active response immediately on revocation", async () => {

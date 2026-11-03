@@ -1,8 +1,6 @@
-import { randomUUID } from "node:crypto"
-import { revokeFailedRelayRegistration } from "./cleanup"
+import { prepareRelayRegistration, relaySetupFailure } from "./relay-registration"
 import { claimBoundedEngineCapacity } from "./capacity-lifecycle"
 import { prepareRepositoryAuth } from "../../engine/repository-auth"
-import { uploadEncryptedArtifact } from "@lyrashield/evidence-storage"
 import {
   addScanEvent,
   prisma,
@@ -20,13 +18,9 @@ import {
   checkoutDeterministicRetest,
 } from "../../engine/deterministic-retest"
 import {
-  fetchRelayAudit,
   mintScanRelayGrant,
-  registerRelayGrant,
   resolveRelayRuntimeConfig,
   resolveSpecServerHosts,
-  revokeRelayGrant,
-  type RelayAttempt,
 } from "../../engine/relay-client"
 import {
   interpretExitCode,
@@ -79,13 +73,9 @@ export type ScanExecutionResult =
         manifestChecksum: string
       }
     }
-  | { ok: false; result: ScanJobResult }
+  | { ok: false; result: ScanJobResult; noEngineDispatchAfterClaim?: true }
 
-type UrlEngineRelay = {
-  attempt: RelayAttempt
-  context: { url: string; grant: string }
-  config: NonNullable<ReturnType<typeof resolveRelayRuntimeConfig>>
-}
+type UrlEngineRelay = ReturnType<typeof prepareRelayRegistration>
 
 type UrlEngineRelayResult =
   { ok: true; relay: UrlEngineRelay } | { ok: false; result: ScanJobResult }
@@ -189,7 +179,6 @@ async function prepareUrlEngineRelay(params: {
     executionPlan ? executionPlan.limits.maxEngineMs : Number.POSITIVE_INFINITY
   )
 
-  let attempt: RelayAttempt | undefined
   try {
     const specServerHosts =
       target.type === "API" && target.apiSpecUrl
@@ -257,60 +246,19 @@ async function prepareUrlEngineRelay(params: {
       }
     }
 
-    // Registration may succeed remotely even if its response is lost. From
-    // this point, every setup failure must attempt revocation before failing.
-    attempt = { ownerId: randomUUID(), grant: minted.grant }
-    await registerRelayGrant(scanId, minted.grant, relayConfig, sessionBinding, attempt.ownerId)
-    await addScanEvent(scanId, "relay_scope", "info", "Relay scope granted", {
-      hosts: minted.scope.hosts,
-      methods: minted.scope.methods,
-      maxRequests: minted.scope.maxRequests,
-    })
-    if (sessionBinding && authorization) {
-      const credentialScope =
-        authorization.credentialScope &&
-        typeof authorization.credentialScope === "object" &&
-        !Array.isArray(authorization.credentialScope)
-          ? (authorization.credentialScope as Record<string, unknown>)
-          : {}
-      await addScanEvent(
-        scanId,
-        "auth_session_bound",
-        "info",
-        "Pre-created test session bound to the relay scope",
-        {
-          authorizationRef: authorization.planId,
-          credentialId: authorization.credentialId,
-          sessionHosts: sessionBinding.hosts,
-          sessionExpiresAt: new Date(sessionBinding.exp).toISOString(),
-          ...(typeof credentialScope.role === "string"
-            ? { credentialRole: credentialScope.role }
-            : {}),
-        }
-      )
-    }
     return {
       ok: true,
-      relay: {
-        attempt,
-        context: { url: relayConfig.url, grant: minted.grant },
-        config: relayConfig,
-      },
+      relay: prepareRelayRegistration({
+        scanId,
+        targetType: target.type,
+        relayConfig,
+        minted,
+        sessionBinding,
+        authorization,
+      }),
     }
   } catch (grantError) {
-    if (attempt) await revokeFailedRelayRegistration(scanId, relayConfig, attempt, grantError)
-    await addScanEvent(scanId, "engine_skipped", "error", "Relay grant could not be minted", {
-      targetType: target.type,
-      error: grantError instanceof Error ? grantError.message : String(grantError),
-    })
-    return {
-      ok: false,
-      result: {
-        status: "failed",
-        errorCategory: "RELAY_SCOPE_UNAVAILABLE",
-        errorMessage: "Could not establish relay scope for this verified target.",
-      },
-    }
+    return relaySetupFailure(scanId, target.type, grantError)
   }
 }
 
@@ -568,11 +516,27 @@ export async function executeScanTarget(params: {
 
     // Keep the profile's deterministic-scanner reserve available even when
     // the model is healthy until its own wall-clock cap.
+    const claimElapsedMs = relay ? elapsedScanMs() : 0
     const capacity = await claimBoundedEngineCapacity(params)
     capacityLimited = capacity.capacityLimited
-    const engineTimeoutMs = capacity.runtimeLimitMs
-    engineStartedAtMs = Date.now()
+    const relayFailure = await relay?.activate()
+    if (relayFailure) return { ...relayFailure, noEngineDispatchAfterClaim: true }
     try {
+      const setupMs = relay ? Math.max(0, elapsedScanMs() - claimElapsedMs) : 0
+      const engineTimeoutMs = capacity.runtimeLimitMs - setupMs
+      if (relay && engineTimeoutMs <= 0) {
+        params.markGlobalScanTimeout()
+        return {
+          ok: false,
+          noEngineDispatchAfterClaim: true,
+          result: {
+            status: "failed",
+            errorCategory: "TIMEOUT",
+            errorMessage: "Engine time budget expired before dispatch.",
+          },
+        }
+      }
+      engineStartedAtMs = Date.now()
       engineResult = await runEngine(
         {
           scanId,
@@ -611,33 +575,7 @@ export async function executeScanTarget(params: {
         undefined
       )
     } finally {
-      // Relay hygiene runs on EVERY terminal path — success, failure,
-      // cancel, or throw. The grant's expiry is a backstop, not the
-      // mechanism; revocation is immediate.
-      if (relay) {
-        const entries = await fetchRelayAudit(scanId, relay.config)
-        if (entries.length > 0) {
-          try {
-            const uploaded = await uploadEncryptedArtifact({
-              workspaceId,
-              ownerId: scanId,
-              type: "relay_audit",
-              content: JSON.stringify(entries),
-              contentType: "application/json",
-            })
-            await addScanEvent(scanId, "relay_audit", "info", "Relay audit trail captured", {
-              entries: entries.length,
-              storageUri: uploaded.storageUri,
-            })
-          } catch (auditErr) {
-            logger.warn("Failed to persist relay audit", {
-              scanId,
-              error: auditErr instanceof Error ? auditErr.message : String(auditErr),
-            })
-          }
-        }
-        await revokeRelayGrant(scanId, relay.config, relay.attempt)
-      }
+      await relay?.finish(workspaceId)
     }
   } else if (target.type === "WEB_APP" || target.type === "API") {
     engineResult = {
