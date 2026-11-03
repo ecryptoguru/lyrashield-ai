@@ -22,7 +22,7 @@ const nameRx = /^[a-z][a-z0-9-]{0,30}$/,
 function ok(c) {
   if (!c) throw new Error("Paired Azure readback mismatch")
 }
-function exec(file, args, timeout = 60000) {
+function runCommand(file, args, timeout = 60000) {
   try {
     return execFileSync(file, args, {
       cwd: root,
@@ -51,7 +51,7 @@ function exec(file, args, timeout = 60000) {
   }
 }
 function az(args) {
-  let raw = exec("az", [...args, "--only-show-errors", "--output", "json"])
+  let raw = runCommand("az", [...args, "--only-show-errors", "--output", "json"])
   try {
     return JSON.parse(raw)
   } catch {
@@ -231,7 +231,7 @@ export function reactivateArchivedRevision(role, pair) {
 export function promoteNamedRoute(role, pair) {
   const t = target(role, pair)
   verifyZeroTrafficCandidate(role, pair)
-  exec("bash", [
+  runCommand("bash", [
     ".github/scripts/paired-runtime-route.sh",
     role,
     t.group,
@@ -271,15 +271,15 @@ export function promoteStoppedWorker(p) {
     p.sandboxDigest,
   ]
   ok(sha.test(p.productRevision))
-  const head = exec("git", ["--no-replace-objects", "rev-parse", "HEAD"])
+  const head = runCommand("git", ["--no-replace-objects", "rev-parse", "HEAD"])
   if (head === p.productRevision) {
-    exec("bash", [".github/scripts/paired-runtime-vm.sh", ...args], 1810000)
+    runCommand("bash", [".github/scripts/paired-runtime-vm.sh", ...args], 1810000)
     return
   }
   // Historical rollback needs actual archived Git contents. Never checkout over
   // the trusted current-main controller or copy a candidate source overlay.
   const compare = JSON.parse(
-    exec("gh", [
+    runCommand("gh", [
       "api",
       "--hostname",
       "github.com",
@@ -289,8 +289,8 @@ export function promoteStoppedWorker(p) {
   ok(compare.merge_base_commit?.sha === p.productRevision && compare.status === "ahead")
   const dir = mkdtempSync(join(tmpdir(), "paired-historical-"))
   try {
-    exec("git", ["init", "--quiet", dir])
-    exec("git", [
+    runCommand("git", ["init", "--quiet", dir])
+    runCommand("git", [
       "-C",
       dir,
       "-c",
@@ -303,7 +303,7 @@ export function promoteStoppedWorker(p) {
       "https://github.com/ecryptoguru/lyrashield-ai.git",
       p.productRevision,
     ])
-    exec("git", [
+    runCommand("git", [
       "-C",
       dir,
       "--no-replace-objects",
@@ -314,8 +314,11 @@ export function promoteStoppedWorker(p) {
       "--detach",
       "FETCH_HEAD",
     ])
-    ok(exec("git", ["-C", dir, "--no-replace-objects", "rev-parse", "HEAD"]) === p.productRevision)
-    exec("bash", [join(dir, ".github/scripts/paired-runtime-vm.sh"), ...args], 1810000)
+    ok(
+      runCommand("git", ["-C", dir, "--no-replace-objects", "rev-parse", "HEAD"]) ===
+        p.productRevision
+    )
+    runCommand("bash", [join(dir, ".github/scripts/paired-runtime-vm.sh"), ...args], 1810000)
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }
@@ -378,7 +381,7 @@ export async function compareProducerConnections(pair, worker) {
       .join(" ")
     for (const replica of before) {
       ok(typeof replica === "string" && /^[a-z0-9-]{1,128}$/.test(replica))
-      const actual = exec(
+      const actual = runCommand(
         "python3",
         [
           "-I",
@@ -422,7 +425,7 @@ export function verifyImageSources(pair) {
     ok(digest.test(d) && sha.test(rev))
     if (kind === "sandbox") {
       const index = JSON.parse(
-        exec("docker", ["buildx", "imagetools", "inspect", name + "@" + d, "--raw"])
+        runCommand("docker", ["buildx", "imagetools", "inspect", name + "@" + d, "--raw"])
       )
       const platforms = index.manifests
         ?.filter((m) => m.platform?.os === "linux")
@@ -431,7 +434,7 @@ export function verifyImageSources(pair) {
       ok(JSON.stringify(platforms) === JSON.stringify(["amd64", "arm64"]))
     }
     const raw = JSON.parse(
-      exec("docker", [
+      runCommand("docker", [
         "buildx",
         "imagetools",
         "inspect",
@@ -460,8 +463,8 @@ export function verifyCompatibleMaintenance() {
   const dir = mkdtempSync(join(tmpdir(), "paired-classifiers-")),
     out = join(dir, "result")
   try {
-    exec("bash", [".github/scripts/assert-no-held-v26.sh"])
-    exec(
+    runCommand("bash", [".github/scripts/assert-no-held-v26.sh"])
+    runCommand(
       process.execPath,
       [".github/scripts/verify-webhook-cutover.mjs", "--expect-mode", "compatible"],
       180000
