@@ -455,7 +455,7 @@ run_case() {
   esac
   if [ "$cutover" = paired ]; then
     mode_arg=--paired-release-held
-    local prior_arg= sandbox_arg=
+    local prior_arg='' sandbox_arg=''
     if [[ "$name" = paired-stopped-* ]]; then
       mode_arg=--paired-release-stopped
       prior_arg=$old_image
