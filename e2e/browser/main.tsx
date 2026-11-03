@@ -13,6 +13,10 @@ if (new URLSearchParams(location.search).has("v26-dashboard")) {
   await import("../../apps/web/src/app/globals.css")
   const { default: GitHubConnectionHarness } = await import("./github-connection-harness")
   root.render(<GitHubConnectionHarness />)
+} else if (new URLSearchParams(location.search).has("api-keys")) {
+  await import("../../apps/web/src/app/globals.css")
+  const { default: ApiKeysHarness } = await import("./api-keys-harness")
+  root.render(<ApiKeysHarness />)
 } else if (new URLSearchParams(location.search).has("notification-integrations")) {
   await import("../../apps/web/src/app/globals.css")
   const { default: NotificationIntegrationsHarness } =
