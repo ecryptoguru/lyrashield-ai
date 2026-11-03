@@ -14,6 +14,22 @@ spec.loader.exec_module(drill)
 
 
 class PhysicalCeilingDrillTests(unittest.TestCase):
+    def test_aggregate_requires_all_scenarios_and_finite_bounded_numbers(self):
+        versions = {'openai':'2.48.0'}
+        cases = [{'route':api,'streaming':stream,'attempts':1,'outputCap':128}
+                 for api in ('responses','chat','litellm') for stream in (False,True)]
+        aggregate = {'concurrentAttempts':2,'fallbackAttempts':1,'deniedAttempts':0,
+                     'configuredCapUsd':0.002,'priceModel':'openai/gpt-6-luna',
+                     'modeledMaximumUsd':0.0007,'heldReservationsUsd':0.0018,
+                     'inputRatePerMillion':0.125,'outputRatePerMillion':0.5}
+        good = {'versions':versions,'wheelFingerprint':'fixture','cases':cases,'aggregate':aggregate}
+        drill.check_probe(good, versions, 'fixture')
+        for patch in ({'modeledMaximumUsd':0.003},{'modeledMaximumUsd':0.0019},
+                      {'heldReservationsUsd':float('nan')},
+                      {'deniedAttempts':False},{'fallbackAttempts':0},{'outputRatePerMillion':0}):
+            with self.assertRaises(RuntimeError):
+                drill.check_probe({**good,'aggregate':{**aggregate,**patch}},versions,'fixture')
+
     def junit(self, directory, extra='', omit=None):
         names = [name for name in drill.REQUIRED_TESTS if name != omit]
         cases = ''.join('<testcase name="'+name+'"/>' for name in names)

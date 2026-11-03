@@ -34,12 +34,17 @@ from agents.models._retry_runtime import should_disable_provider_managed_retries
 from agents.models.openai_chatcompletions import OpenAIChatCompletionsModel
 from agents.models.openai_responses import OpenAIResponsesModel
 from litellm.llms.openai.openai import OpenAIChatCompletion
-from openai import APIStatusError, AsyncOpenAI
+from openai import APIConnectionError, APIStatusError, AsyncOpenAI
 
 from lyrashield.artifacts import state as state_module
 from lyrashield.artifacts.state import ReportState
 from lyrashield.lifecycle import hooks as hooks_module
-from lyrashield.lifecycle.hooks import ReportUsageHooks
+from lyrashield.lifecycle.hooks import (
+    BudgetExceededError,
+    ReportUsageHooks,
+    _model_rate_card,
+    _reservation_input_rate,
+)
 from lyrashield.lifecycle.inputs import make_model_settings
 
 async def exercise(api, streaming):
@@ -48,6 +53,7 @@ async def exercise(api, streaming):
     attempts = []
     def unavailable(request):
         body = json.loads(request.content)
+        assert body.get('model') == 'gpt-6-luna' and body.get('n', 1) == 1
         attempts.append({'path': request.url.path, 'body': body})
         return httpx.Response(503, headers={'retry-after-ms':'1'}, json={'error':{'message':'offline'}})
     with tempfile.TemporaryDirectory(prefix='physical-ceiling-') as root:
@@ -101,6 +107,98 @@ async def exercise(api, streaming):
         assert not should_disable_provider_managed_retries()
         return {'route': api, 'streaming': streaming, 'attempts': 1, 'outputCap': cap}
 
+async def exercise_aggregate():
+    """Two simultaneous submissions, a fallback with lost ACK, and denied admission."""
+    state_module._global_report_state = None
+    hooks_module._active_hooks = None
+    model_name = 'openai/gpt-6-luna'
+    # This tighter cap admits the first three bounded requests at the frozen
+    # price card and must reject the next one using the same shared ledger.
+    cap_usd = 0.002
+    wire = []
+    both_reached = asyncio.Event()
+
+    async def endpoint(request):
+        body = json.loads(request.content)
+        assert body.get('model') == 'gpt-6-luna' and body.get('n', 1) == 1
+        assert len(request.content) < 10_000  # This fixture does not use long-context pricing.
+        output = body.get('max_output_tokens', body.get('max_completion_tokens', body.get('max_tokens')))
+        assert output == 128
+        wire.append({'path': request.url.path, 'bytes': len(request.content), 'outputCap': output})
+        if len(wire) <= 2:
+            if len(wire) == 2:
+                both_reached.set()
+            await asyncio.wait_for(both_reached.wait(), timeout=5)
+            return httpx.Response(503, json={'error': {'message': 'offline'}})
+        raise httpx.ReadError('synthetic response lost after acceptance', request=request)
+
+    def settings():
+        return make_model_settings(None, model_name=model_name, bounded_budget=True,
+                                   max_output_tokens=128)
+
+    async def run(agent, hooks, agent_id):
+        return await Runner.run(agent, 'offline', context={'agent_id': agent_id}, hooks=hooks,
+                                run_config=RunConfig(tracing_disabled=True))
+
+    with tempfile.TemporaryDirectory(prefix='physical-aggregate-') as root:
+        state = ReportState('offline-' + uuid4().hex)
+        state._run_dir = Path(root).resolve() / state.run_name
+        hooks = ReportUsageHooks(model=model_name, max_budget_usd=cap_usd,
+                                 max_output_tokens=128, report_state=state)
+        hooks_module.set_active_hooks(hooks)
+        async with AsyncOpenAI(api_key='offline-test',
+            http_client=httpx.AsyncClient(transport=httpx.MockTransport(endpoint))) as client:
+            native = OpenAIResponsesModel('gpt-6-luna', openai_client=client)
+            agents = [Agent(name='Concurrent '+str(i), model=native, model_settings=settings())
+                      for i in range(2)]
+            outcomes = await asyncio.gather(*(run(agent, hooks, 'agent-'+str(i))
+                                              for i, agent in enumerate(agents)),
+                                            return_exceptions=True)
+            assert len(wire) == 2 and all(isinstance(x, APIStatusError) for x in outcomes)
+            fallback = Agent(name='Fallback',
+                             model=OpenAIChatCompletionsModel('gpt-6-luna', openai_client=client),
+                             model_settings=settings())
+            try:
+                await run(fallback, hooks, 'fallback')
+            except APIConnectionError:
+                pass
+            else:
+                raise AssertionError('lost acknowledgement was not surfaced')
+            assert len(wire) == 3 and wire[0]['path'].endswith('/responses')
+            assert wire[1]['path'].endswith('/responses') and wire[2]['path'].endswith('/chat/completions')
+            active = sum(hooks._agent_reservations.values())
+            abandoned = sum(hooks._agent_abandoned_floors.values())
+            assert 0 < active + abandoned <= cap_usd
+
+            # With those three uncertain costs still held, the same ledger must
+            # reject the next request before the transport sees it.
+            try:
+                await run(Agent(name='Denied', model=native, model_settings=settings()),
+                          hooks, 'denied')
+            except BudgetExceededError:
+                pass
+            else:
+                raise AssertionError('request exceeding remaining cap was admitted')
+            assert len(wire) == 3
+            assert sum(hooks._agent_reservations.values()) == active
+            assert sum(hooks._agent_abandoned_floors.values()) == abandoned
+
+        # Model a deliberately pessimistic maximum per synthetic wire request using
+        # byte count plus framing for input and its admitted output limit. This is an
+        # offline estimate at the engine's price card, not provider billing evidence.
+        input_rate = _reservation_input_rate(model_name)
+        output_rate = _model_rate_card(model_name)[3]
+        assert 0 < input_rate and 0 < output_rate
+        modeled = sum(((r['bytes'] + 1024) * input_rate + r['outputCap'] * output_rate)
+                      / 1_000_000 for r in wire)
+        assert 0 < modeled <= cap_usd
+        assert modeled <= active + abandoned
+        assert not should_disable_provider_managed_retries()
+        return {'concurrentAttempts': 2, 'fallbackAttempts': 1, 'deniedAttempts': 0,
+                'configuredCapUsd': cap_usd, 'modeledMaximumUsd': modeled,
+                'heldReservationsUsd': active + abandoned, 'priceModel': model_name,
+                'inputRatePerMillion': input_rate, 'outputRatePerMillion': output_rate}
+
 async def main():
     cases = []
     # Some provider libraries print diagnostic banners even on an expected 503.
@@ -109,6 +207,8 @@ async def main():
         for api in ('responses', 'chat', 'litellm'):
             for streaming in (False, True):
                 cases.append(await exercise(api, streaming))
+        aggregate = await exercise_aggregate()
     print(json.dumps({'cases': cases, 'versions': expected['versions'],
-                      'wheelFingerprint': expected['wheelFingerprint']}, sort_keys=True))
+                      'wheelFingerprint': expected['wheelFingerprint'],
+                      'aggregate': aggregate}, sort_keys=True))
 asyncio.run(main())

@@ -6,6 +6,7 @@ This is not an attestation or a release authorization. See the companion documen
 import argparse
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -33,11 +34,17 @@ TESTS = (
 )
 REQUIRED_TESTS = (
     'test_full_budget_lifecycle_reserve_then_cap',
+    'test_one_call_allowance_two_concurrent_calls_single_request',
+    'test_cost_limit_counts_reserved_charges',
     'test_bounded_sdk_lost_ack_does_not_replay_under_one_reservation',
     'test_direct_native_lost_ack_has_one_physical_attempt_when_capped',
     'test_real_runner_and_native_http_cannot_replay_bounded_503',
     'test_real_litellm_and_native_http_do_not_replay_capped_503',
+    'test_native_503_then_success_cannot_hide_a_second_capped_attempt',
     'test_litellm_422_cannot_replay_without_output_cap',
+    'test_native_dual_preflight_missing_usage_stops_unless_quote_is_free',
+    'test_incomplete_wire_chat_stream_usage_cannot_refund_quote',
+    'test_image_recovery_requires_fresh_covered_admission',
     'test_actual_wire_output_cap_cannot_be_removed_or_raised',
     'test_body_callbacks_cannot_rewrite_the_admitted_request',
 )
@@ -87,6 +94,29 @@ def check_results(path):
     if not set(REQUIRED_TESTS).issubset(names):
         raise RuntimeError('engine suite omitted a required named test')
     return len(cases)
+
+
+def check_probe(proof, versions, fingerprint):
+    expected_cases = [{'route':api,'streaming':stream,'attempts':1,'outputCap':128}
+                      for api in ('responses','chat','litellm') for stream in (False,True)]
+    if proof.get('versions') != versions or proof.get('wheelFingerprint') != fingerprint or proof.get('cases') != expected_cases:
+        raise RuntimeError('in-image probe did not report the required route cases')
+    aggregate = proof.get('aggregate')
+    if not isinstance(aggregate, dict) or any(aggregate.get(k) != v for k,v in {
+        'concurrentAttempts':2,'fallbackAttempts':1,'deniedAttempts':0,
+        'configuredCapUsd':0.002,'priceModel':'openai/gpt-6-luna',
+    }.items()):
+        raise RuntimeError('in-image aggregate scenario was incomplete')
+    if any(type(aggregate.get(key)) is not int for key in ('concurrentAttempts','fallbackAttempts','deniedAttempts')) or type(aggregate.get('configuredCapUsd')) not in (int,float):
+        raise RuntimeError('invalid in-image scenario types')
+    for key in ('modeledMaximumUsd','heldReservationsUsd','inputRatePerMillion','outputRatePerMillion'):
+        value = aggregate.get(key)
+        if isinstance(value,bool) or not isinstance(value,(int,float)) or not math.isfinite(value) or value <= 0:
+            raise RuntimeError('invalid in-image cost or price')
+    if aggregate['modeledMaximumUsd'] > 0.002 or aggregate['heldReservationsUsd'] > 0.002:
+        raise RuntimeError('in-image modeled cost or reservation exceeded cap')
+    if aggregate['modeledMaximumUsd'] > aggregate['heldReservationsUsd']:
+        raise RuntimeError('modeled wire cost exceeded held reservations')
 
 
 def main():
@@ -167,10 +197,7 @@ def main():
                 if invoke(['docker','ps','-aq','--filter','name=^/'+name+'$'],timeout=30).strip():
                     raise RuntimeError('offline probe container cleanup failed')
             proof = json.loads(raw)
-            expected_cases = [{'route':api,'streaming':stream,'attempts':1,'outputCap':128}
-                              for api in ('responses','chat','litellm') for stream in (False,True)]
-            if proof.get('versions') != versions or proof.get('wheelFingerprint') != fingerprint or proof.get('cases') != expected_cases:
-                raise RuntimeError('in-image probe did not report the required result')
+            check_probe(proof, versions, fingerprint)
             result.update({'passed':True,'engineTestCases':count,'lockSha256':hashlib.sha256(lock).hexdigest(),
                            'wheelSha256':hashlib.sha256(wheels[0].read_bytes()).hexdigest(),
                            'wheelFingerprint':fingerprint,'installedProbe':proof})
