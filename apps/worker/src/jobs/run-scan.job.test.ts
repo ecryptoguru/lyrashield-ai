@@ -105,6 +105,9 @@ vi.mock("@lyrashield/db", async () => {
         findUnique: systemScanFindUnique,
       },
     })),
+    get updateUnclaimedScanStatus() {
+      return this.updateScanStatus
+    },
     updateScanStatus: vi.fn().mockResolvedValue({ id: "scan-1" }),
     requeueScanForRetry: vi.fn().mockResolvedValue({ requeued: true, fromStatus: "PREFLIGHT" }),
     completeScanWithScore: vi.fn().mockResolvedValue({}),
@@ -1113,7 +1116,7 @@ describe("processScanJob", () => {
       expect(recordAgentMinutes).not.toHaveBeenCalled()
       expect(evaluateGateForTarget).toHaveBeenCalledWith("ws-1", "target-1")
       expect(failTerminalRetestsForScan).toHaveBeenCalledOnce()
-      expect(cleanupEngineWorkspace).toHaveBeenCalledWith(expect.any(String), "scan-1")
+      expect(cleanupEngineWorkspace).not.toHaveBeenCalled()
     }
   )
 
@@ -1373,10 +1376,177 @@ describe("processScanJob", () => {
       "ws-1",
       "scan-1",
       false,
-      "settlement_required"
+      "settlement_required",
+      false
     )
     expect(releaseStoppedScanSlot).toHaveBeenCalledWith("ws-1", "scan-1")
   })
+
+  it.each([1, 2])(
+    "requeues a confirmed pre-claim transaction rollback for accounting %s",
+    async (accountingVersion) => {
+      mockStoredScanAuthority({ accountingVersion, startedAt: null })
+      const failure = Object.assign(new Error("transaction rolled back"), { code: "P2034" })
+      const prior = vi.mocked(reserveScanCapacity).getMockImplementation()!
+      const previousEvent = vi.mocked(addScanEvent).getMockImplementation()
+      if (accountingVersion === 2) {
+        vi.mocked(reserveScanCapacity).mockImplementation(async (params) => {
+          if (params.start) throw failure
+          return prior(params)
+        })
+      } else {
+        vi.mocked(addScanEvent).mockImplementation(async (_id, stage) => {
+          if (stage === "billable_boundary") throw failure
+          const event = {}
+          return event as never
+        })
+      }
+      try {
+        const jobFixture = { ...mockJobFixture, attemptsMade: 0, opts: { attempts: 3 } }
+        const job = jobFixture as never
+        await expect(processScanJob(job)).rejects.toBe(failure)
+        expect(runEngine).not.toHaveBeenCalled()
+        expect(cleanupEngineWorkspace).not.toHaveBeenCalled()
+        expect(requeueScanForRetry).toHaveBeenCalledWith(
+          expect.objectContaining({
+            scanId: "scan-1",
+            workspaceId: "ws-1",
+            attempt: 1,
+            maxAttempts: 3,
+          })
+        )
+      } finally {
+        vi.mocked(reserveScanCapacity).mockImplementation(prior)
+        if (previousEvent) vi.mocked(addScanEvent).mockImplementation(previousEvent)
+      }
+    }
+  )
+
+  it("preserves the paid executor when a stale preflight and its retry overlap", async () => {
+    const plan = buildScanExecutionPlan({
+      targetType: "REPO",
+      mode: "QUICK",
+      engineBudgetCeilingUsd: 1,
+    })
+    mockStoredScanAuthority({
+      accountingVersion: 2,
+      startedAt: null,
+      mode: "QUICK",
+      executionPlan: plan,
+      executionPlanHash: computeScanExecutionPlanHash(plan),
+    })
+    const previousReserve = vi.mocked(reserveScanCapacity).getMockImplementation()!
+    let claimed = false
+    let capacityRunning = false
+    const preflight = Promise.withResolvers<void>()
+    const releasePreflight = Promise.withResolvers<void>()
+    const launched = Promise.withResolvers<void>()
+    const finish = Promise.withResolvers<void>()
+    const snapshot = () => ({
+      status: claimed ? "RUNNING" : "QUEUED",
+      events: claimed ? [{ id: "paid" }] : [],
+      resultManifest: null,
+    })
+    vi.mocked(prisma.scan.findUnique).mockImplementation(async () => snapshot() as never)
+    vi.mocked(updateScanStatus).mockImplementation(async (_id, status) => {
+      if (status === "PREFLIGHT" && !preflightStarted) {
+        preflightStarted = true
+        preflight.resolve()
+        await releasePreflight.promise
+      }
+      const scan = {}
+      return scan as never
+    })
+    let preflightStarted = false
+    vi.mocked(reserveScanCapacity).mockImplementation(async ({ start }) => {
+      if (capacityRunning) throw new Error("capacity_execution_already_started")
+      if (start) {
+        capacityRunning = true
+        claimed = true
+      }
+      return { state: start ? "RUNNING" : "RESERVED", runtimeLimitMs: 60_000, fundedMinutes: 1 }
+    })
+    vi.mocked(addScanEvent).mockImplementation(async (_id, stage) => {
+      if (stage === "billable_boundary") claimed = true
+      const event = {}
+      return event as never
+    })
+    vi.mocked(runEngine).mockImplementation(async (config) => {
+      expect(config.maxBudgetUsd).toBe(1)
+      launched.resolve()
+      await finish.promise
+      throw new Error("zero-provider fixture exit")
+    })
+    const jobFixture = {
+      ...mockJobFixture,
+      data: { ...mockJobFixture.data, mode: "QUICK" },
+      attemptsMade: 0,
+      opts: { attempts: 3 },
+    }
+    const job = jobFixture as never
+    const contender = processScanJob(job)
+    await preflight.promise
+    const winner = processScanJob(job)
+    await launched.promise
+    releasePreflight.resolve()
+    try {
+      await Promise.allSettled([contender])
+      expect(requeueScanForRetry).not.toHaveBeenCalled()
+      expect(resetUnstartedScanCapacity).not.toHaveBeenCalled()
+      expect(confirmScanCapacityStopped).not.toHaveBeenCalled()
+      expect(cleanupEngineWorkspace).not.toHaveBeenCalled()
+      await processScanJob(job)
+      expect(runEngine).toHaveBeenCalledOnce()
+      expect(updateScanStatus).not.toHaveBeenCalledWith("scan-1", "FAILED", expect.anything())
+      expect(cleanupEngineWorkspace).not.toHaveBeenCalled()
+    } finally {
+      finish.resolve()
+      await Promise.allSettled([winner])
+      vi.mocked(reserveScanCapacity).mockImplementation(previousReserve)
+    }
+  })
+
+  it.each([1, 2])(
+    "refuses an uncertain accounting-%i claim acknowledgement before dispatch",
+    async (accountingVersion) => {
+      mockStoredScanAuthority({ accountingVersion })
+      let committed = false
+      const unknown = async () => {
+        committed = true
+        throw new Error("commit ACK connection lost")
+      }
+      if (accountingVersion === 2) {
+        vi.mocked(reserveScanCapacity)
+          .mockResolvedValueOnce({ state: "RESERVED", runtimeLimitMs: 60_000, fundedMinutes: 1 })
+          .mockImplementationOnce(unknown)
+      } else {
+        const base = vi.mocked(addScanEvent).getMockImplementation()!
+        vi.mocked(addScanEvent).mockImplementation(async (...args) =>
+          args[1] === "billable_boundary" ? unknown() : base(...args)
+        )
+      }
+      try {
+        await expect(processScanJob(mockJob)).resolves.toMatchObject({
+          errorCategory: "BILLABLE_PHASE_INTERRUPTED",
+        })
+        expect(committed).toBe(true)
+        vi.mocked(prisma.scan.findUnique).mockResolvedValueOnce({
+          status: "PREFLIGHT",
+          events: [{ id: "committed" }],
+          resultManifest: null,
+        } as never)
+        await expect(processScanJob(mockJob)).resolves.toMatchObject({
+          errorCategory: "BILLABLE_PHASE_INTERRUPTED",
+        })
+        expect(runEngine).not.toHaveBeenCalled()
+        expect(confirmScanCapacityStopped).not.toHaveBeenCalled()
+        expect(resetUnstartedScanCapacity).not.toHaveBeenCalled()
+        expect(cleanupEngineWorkspace).not.toHaveBeenCalled()
+      } finally {
+        vi.mocked(addScanEvent).mockResolvedValue(undefined as never)
+      }
+    }
+  )
 
   it("releases a successful second attempt with a retained pre-provider timestamp", async () => {
     mockStoredScanAuthority({ accountingVersion: 2 })
@@ -1504,7 +1674,8 @@ describe("processScanJob", () => {
       "ws-1",
       "scan-1",
       false,
-      "settlement_required"
+      "settlement_required",
+      false
     )
     expect(logger.error).toHaveBeenCalledWith(
       "billing.scan_settlement_commit_uncertain",
@@ -2252,7 +2423,8 @@ describe("processScanJob", () => {
           "ws-1",
           "scan-1",
           false,
-          "nonbillable"
+          "nonbillable",
+          false
         )
         expect(releaseStoppedScanSlot).toHaveBeenCalledWith("ws-1", "scan-1")
       }
@@ -3151,10 +3323,7 @@ describe("processScanJob", () => {
       errorCategory: "BILLABLE_PHASE_INTERRUPTED",
     })
 
-    expect(updateScanStatus).toHaveBeenCalledWith("scan-1", "FAILED", {
-      errorCategory: "BILLABLE_PHASE_INTERRUPTED",
-      errorMessage: "Provider-billable analysis was interrupted and was not replayed automatically",
-    })
+    expect(updateScanStatus).not.toHaveBeenCalled()
     expect(runEngine).not.toHaveBeenCalled()
   })
 

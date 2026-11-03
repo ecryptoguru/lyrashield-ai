@@ -6,14 +6,11 @@ import {
   deferScanCapacityWait,
   isCapacityStop,
   capacityStopError,
+  requeueUnbilledScan,
 } from "./run-scan/capacity-lifecycle"
 import { cleanupScanExecution } from "./run-scan/cleanup"
 import type { Job } from "bullmq"
-import {
-  resetUnstartedScanCapacity,
-  ScanCapacityWaitingError,
-  type ScanBillingDisposition,
-} from "@lyrashield/billing"
+import { ScanCapacityWaitingError, type ScanBillingDisposition } from "@lyrashield/billing"
 import { finalizationGrace, scanElapsedClock } from "../engine/scan-deadline"
 import { runWithWorkspaceContext } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
@@ -35,8 +32,8 @@ import {
 import { runEngineTriageOverlay, triageEvidence } from "./run-scan/triage"
 import {
   updateScanStatus,
+  updateUnclaimedScanStatus,
   addScanEvent,
-  requeueScanForRetry,
   type ScanStatus,
 } from "@lyrashield/db"
 import { resolveScanProfile, type UrlScanProfile } from "@lyrashield/types"
@@ -51,6 +48,7 @@ import { verifyScanJobAuthority } from "./run-scan/authority"
 import { verifyScanAdmission } from "./run-scan/admission"
 import {
   createScanCancellationPoller,
+  isBillableExecutionContention,
   finalizeExecutionDenial,
   readScanTerminalState,
 } from "./run-scan/lifecycle-guards"
@@ -60,6 +58,7 @@ import {
   isTimeoutError,
   MAX_SCAN_RUNTIME_MS,
   reportInterruptedSettlement,
+  retainedBillableScanResult,
   resolveScanRuntimeBudgetMs,
   resolveScannerPhaseTimeoutMs,
   timeoutErrorMessage,
@@ -99,6 +98,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
     const workerExecution = resolveWorkerExecutionProvenance()
     let globalScanTimeoutReached = false
     let scanRuntimeBudgetMs = MAX_SCAN_RUNTIME_MS
+    let contended = false
     let billablePhaseStarted = false
     let executorReturned = false
     let noBillableWork = true
@@ -118,6 +118,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
       })
       if (resumedFinalization) {
         recoveringPreviousExecution = true
+        contended = resumedFinalization.errorCategory === "BILLABLE_PHASE_INTERRUPTED"
         return resumedFinalization
       }
 
@@ -218,7 +219,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         deterministicRetest,
         scanRuntimeBudgetMs,
       })
-      await updateScanStatus(scanId, "RUNNING" as ScanStatus)
+      await updateUnclaimedScanStatus(scanId, "RUNNING" as ScanStatus)
       await markRetestsRunning(scanId)
       const execution = await executeScanTarget({
         accountingVersion: scanRecord.accountingVersion,
@@ -634,6 +635,11 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         summary: scanSummary,
       }
     } catch (error) {
+      if (isBillableExecutionContention(error)) {
+        contended = true
+        log.warn("Scan execution retained by prior delivery", { scanId, workspaceId })
+        return retainedBillableScanResult()
+      }
       if (error instanceof ScanCapacityWaitingError && !billablePhaseStarted)
         await deferScanCapacityWait(job, workspaceId, scanId)
       const isTerminalPrerequisiteFailure = error instanceof EvidenceStorageConfigurationError
@@ -705,42 +711,26 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         !isTerminalPrerequisiteFailure &&
         (job.attemptsMade ?? 0) + 1 < maxAttempts
       ) {
-        // W2.2: the regression to QUEUED is itself a recorded step. A bare
-        // status write would silently lose the interrupted step and its cause —
-        // after a worker restart the timeline must show exactly where the run
-        // was handed back to the queue. A scan already in a terminal or paused
-        // state is never requeued.
-        const requeue = await requeueScanForRetry({
+        const claimedElsewhere = await requeueUnbilledScan({
+          job,
           scanId,
           workspaceId,
-          attempt: (job.attemptsMade ?? 0) + 1,
           maxAttempts,
+          accountingVersion: scanRecord.accountingVersion,
+          recoveringPreviousExecution,
           errorCategory: finalErrorCategory,
           errorMessage: finalErrorMessage,
         })
-        if (
-          requeue.requeued &&
-          scanRecord.accountingVersion === 2 &&
-          !recoveringPreviousExecution
-        ) {
-          await resetUnstartedScanCapacity(workspaceId, scanId)
+        if (claimedElsewhere) {
+          contended = true
+          return retainedBillableScanResult()
         }
-        if (!requeue.requeued) {
-          log.warn("Scan left an active status before retry requeue", {
-            scanId,
-            currentStatus: requeue.currentStatus,
-          })
-        }
-        log.warn("Scan job failed and will be retried", {
-          scanId,
-          attempt: (job.attemptsMade ?? 0) + 1,
-          maxAttempts,
-        })
         throw error
       }
 
       try {
-        await updateScanStatus(scanId, "FAILED" as ScanStatus, {
+        const update = billablePhaseStarted ? updateScanStatus : updateUnclaimedScanStatus
+        await update(scanId, "FAILED" as ScanStatus, {
           errorCategory: finalErrorCategory,
           errorMessage: finalErrorMessage,
         })
@@ -759,17 +749,19 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
         errorMessage: finalErrorMessage,
       }
     } finally {
-      await finalizeScanCapacity({
-        accountingVersion: scanRecord.accountingVersion,
-        workspaceId,
-        scanId,
-        recoveringPreviousExecution,
-        billablePhaseStarted,
-        executorReturned,
-        noBillableWork,
-        billingDisposition,
-      })
-      await cleanupScanExecution(scanId, deterministicCheckout)
+      if (!contended) {
+        await finalizeScanCapacity({
+          accountingVersion: scanRecord.accountingVersion,
+          workspaceId,
+          scanId,
+          recoveringPreviousExecution,
+          billablePhaseStarted,
+          executorReturned,
+          noBillableWork,
+          billingDisposition,
+        })
+        await cleanupScanExecution(scanId, billablePhaseStarted, deterministicCheckout)
+      }
     }
   }) // end runWithWorkspaceContext
 }

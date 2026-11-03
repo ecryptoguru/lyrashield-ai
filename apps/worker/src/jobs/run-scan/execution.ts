@@ -47,11 +47,7 @@ import {
   type StagedScanAttachments,
 } from "./attachments"
 import { ScanAttachmentError } from "@lyrashield/db"
-import {
-  enterEngineBillablePhase,
-  requireEngineModel,
-  resolveEngineRuntimeBudgetMs,
-} from "./lifecycle-utils"
+import { requireEngineModel, resolveEngineRuntimeBudgetMs } from "./lifecycle-utils"
 import type { ScanExecutionTarget } from "./preparation"
 import type { ScanTerminalError } from "./settlement"
 
@@ -359,7 +355,6 @@ export async function executeScanTarget(params: {
     scanRuntimeBudgetMs,
     elapsedScanMs,
     isScanCancelled,
-    markBillablePhaseStarted,
     deterministicRetest,
     engineBacked,
     urlEngineBacked,
@@ -583,7 +578,6 @@ export async function executeScanTarget(params: {
     const capacity = await claimBoundedEngineCapacity(params)
     capacityLimited = capacity.capacityLimited
     const engineTimeoutMs = capacity.runtimeLimitMs
-    await enterEngineBillablePhase(scanId, markBillablePhaseStarted)
     engineStartedAtMs = Date.now()
     try {
       engineResult = await runEngine(

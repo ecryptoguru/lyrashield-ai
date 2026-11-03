@@ -5,7 +5,7 @@ import {
   getSystemPrisma,
   type ScanStatus,
   TERMINAL_SCAN_STATUSES,
-  updateScanStatus,
+  updateUnclaimedScanStatus,
 } from "@lyrashield/db"
 import { getRedis } from "@lyrashield/integrations"
 import { logger } from "@lyrashield/logger"
@@ -169,7 +169,7 @@ async function reconcileOrphanedScanCandidate(
   }
 
   lease.assertOwned()
-  await updateScanStatus(
+  await updateUnclaimedScanStatus(
     scan.id,
     "FAILED",
     {
@@ -335,7 +335,7 @@ export async function reconcileFailedQueueJob(
     })
     if (!scan || !ACTIVE_SCAN_STATUSES.has(scan.status)) return
 
-    await updateScanStatus(
+    await updateUnclaimedScanStatus(
       jobId,
       "FAILED",
       {

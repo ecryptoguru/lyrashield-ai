@@ -502,13 +502,13 @@
     },
     "apps/worker/src/jobs/run-scan.job.ts|max-lines": {
       "count": 1,
-      "totalExcess": 87,
-      "maxExcess": 87
+      "totalExcess": 84,
+      "maxExcess": 84
     },
     "apps/worker/src/jobs/run-scan.job.ts|max-lines-per-function": {
       "count": 2,
-      "totalExcess": 908,
-      "maxExcess": 458
+      "totalExcess": 904,
+      "maxExcess": 456
     },
     "apps/worker/src/jobs/run-scan/admission.ts|max-lines-per-function": {
       "count": 1,
@@ -517,13 +517,13 @@
     },
     "apps/worker/src/jobs/run-scan/execution.ts|max-lines": {
       "count": 1,
-      "totalExcess": 182,
-      "maxExcess": 182
+      "totalExcess": 176,
+      "maxExcess": 176
     },
     "apps/worker/src/jobs/run-scan/execution.ts|max-lines-per-function": {
       "count": 2,
-      "totalExcess": 280,
-      "maxExcess": 206
+      "totalExcess": 278,
+      "maxExcess": 204
     },
     "apps/worker/src/jobs/run-scan/finalization.ts|max-lines-per-function": {
       "count": 1,
@@ -654,11 +654,6 @@
       "count": 1,
       "totalExcess": 72,
       "maxExcess": 72
-    },
-    "packages/db/src/scan-service.ts|max-lines": {
-      "count": 1,
-      "totalExcess": 18,
-      "maxExcess": 18
     },
     "packages/egress-proxy/src/index.ts|max-lines-per-function": {
       "count": 1,

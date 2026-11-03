@@ -7,7 +7,7 @@ import {
   prisma,
   resolveAuthenticatedAssessmentAuthorization,
   runWithAccountContext,
-  updateScanStatus,
+  updateUnclaimedScanStatus,
   type ScanStatus,
 } from "@lyrashield/db"
 import {
@@ -254,7 +254,7 @@ export async function verifyScanAdmission(params: {
     }
   }
   if (admissionError) {
-    await updateScanStatus(scanId, "FAILED" as ScanStatus, admissionError)
+    await updateUnclaimedScanStatus(scanId, "FAILED" as ScanStatus, admissionError)
     await refreshGateVerdictAfterTerminalScan(workspaceId, targetId, scanId)
     return { ok: false, result: { status: "failed", ...admissionError } }
   }

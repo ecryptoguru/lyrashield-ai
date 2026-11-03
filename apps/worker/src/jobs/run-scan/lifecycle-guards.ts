@@ -1,6 +1,14 @@
-import { withWorkspaceRLS, updateScanStatus, type ScanStatus } from "@lyrashield/db"
+import { withWorkspaceRLS, updateUnclaimedScanStatus, type ScanStatus } from "@lyrashield/db"
+import { ScanBillableClaimError } from "@lyrashield/db/src/scan-billable-claim"
 import type { ScanJobResult } from "../../types"
 import { refreshGateVerdictAfterTerminalScan } from "./lifecycle-utils"
+
+export function isBillableExecutionContention(error: unknown): boolean {
+  return (
+    error instanceof ScanBillableClaimError ||
+    (error instanceof Error && error.message === "capacity_execution_already_started")
+  )
+}
 
 /** Missing soft-deleted rows stop provider work just like visible cancellation. */
 export function createScanCancellationPoller(scanId: string, workspaceId: string) {
@@ -55,7 +63,7 @@ export async function finalizeExecutionDenial(
 ): Promise<ScanJobResult> {
   if (result.status === "failed" && result.errorCategory !== "CANCELLED") {
     // The guarded status transition preserves cancellation racing this denial.
-    await updateScanStatus(scanId, "FAILED", {
+    await updateUnclaimedScanStatus(scanId, "FAILED", {
       errorCategory: result.errorCategory,
       errorMessage: result.errorMessage,
     })

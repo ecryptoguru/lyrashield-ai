@@ -28,7 +28,7 @@ vi.mock("@lyrashield/db", () => ({
   CANONICAL_OPERATIONS: { SCAN_CREATE: "scan.create", RETEST_CREATE: "retest.create" },
   prisma: mocks.prisma,
   runWithAccountContext: mocks.runWithAccountContext,
-  updateScanStatus: mocks.updateScanStatus,
+  updateUnclaimedScanStatus: mocks.updateScanStatus,
   resolveAuthenticatedAssessmentAuthorization: mocks.resolveAuthenticatedAssessmentAuthorization,
   LiveAiSafetyError: class LiveAiSafetyError extends Error {
     readonly code: string

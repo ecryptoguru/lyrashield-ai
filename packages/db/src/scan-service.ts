@@ -22,6 +22,7 @@ import {
 } from "@lyrashield/types"
 import { buildAdmittedScanPlan, computeScanExecutionPlanHash } from "./scan-execution-plan"
 import { isTerminalScanStatus, isValidTransition } from "./scan-transitions"
+import { insertScanBillableClaim, requireUnclaimedScan } from "./scan-billable-claim"
 import { withWorkspaceRLS } from "./rls"
 import {
   releaseUnstartedScanSlot,
@@ -259,111 +260,34 @@ export async function updateScanStatus(
   scanId: string,
   newStatus: ScanStatus,
   metadata?: ScanStatusMetadata,
-  workspaceId?: string
+  workspaceId?: string,
+  requireUnclaimed = false
 ): Promise<Scan> {
   const resolvedWorkspaceId = workspaceId ?? getWorkspaceContext()
   if (!resolvedWorkspaceId) {
     throw new Error(`workspaceId or workspace context is required for updateScanStatus`)
   }
 
-  const { updated, currentStatus } = await withWorkspaceRLS(resolvedWorkspaceId, (tx) =>
-    updateScanStatusInTransaction(tx, scanId, newStatus, metadata)
-  )
+  const { updated, currentStatus } = await withWorkspaceRLS(resolvedWorkspaceId, async (tx) => {
+    if (requireUnclaimed) await requireUnclaimedScan(tx, resolvedWorkspaceId, scanId)
+    return updateScanStatusInTransaction(tx, scanId, newStatus, metadata)
+  })
 
   logger.info("Scan status updated", { scanId, from: currentStatus, to: newStatus })
   return updated
 }
 
-/**
- * Statuses a retrying job may regress to QUEUED. Anything outside this set is
- * terminal or paused (REQUIRES_APPROVAL) and must not be silently requeued —
- * the caller gets `requeued: false` and decides whether retrying is still
- * meaningful.
- */
-const REQUEUEABLE_SCAN_STATUSES: ScanStatus[] = ["QUEUED", "PREFLIGHT", "RUNNING", "VERIFYING"]
-
-export type RequeueScanForRetryResult =
-  { requeued: true; fromStatus: ScanStatus } | { requeued: false; currentStatus: ScanStatus | null }
-
-/**
- * W2.2 — recorded retry requeue.
- *
- * BullMQ retries — including stalled-job recovery after a worker restart —
- * regress the scan row to QUEUED while the queue owns re-execution. Doing
- * that with a bare UPDATE loses the step: the interrupted PREFLIGHT/RUNNING/
- * VERIFYING step would vanish from the timeline with no trace of why. This
- * helper performs the regression and records the `queued` step event with
- * attempt and failure context in the same workspace-scoped transaction, so
- * the persisted lifecycle stays complete and deterministic across restarts.
- *
- * The status guard is part of the row write: a scan that raced to a terminal
- * or paused state is never requeued, and no event claims a requeue that did
- * not happen.
- */
-export async function requeueScanForRetry(params: {
-  scanId: string
+/** Transitions requested by a worker that has not acquired paid execution. */
+export function updateUnclaimedScanStatus(
+  scanId: string,
+  status: ScanStatus,
+  metadata?: ScanStatusMetadata,
   workspaceId?: string
-  attempt: number
-  maxAttempts: number
-  errorCategory?: string
-  errorMessage?: string
-}): Promise<RequeueScanForRetryResult> {
-  const workspaceId = params.workspaceId ?? getWorkspaceContext()
-  if (!workspaceId) {
-    throw new Error(`workspaceId or workspace context is required for requeueScanForRetry`)
-  }
-
-  const outcome = await withWorkspaceRLS(workspaceId, async (tx) => {
-    const scan = await tx.scan.findFirst({
-      where: { id: params.scanId, workspaceId },
-      select: { status: true },
-    })
-    if (!scan) return { requeued: false as const, currentStatus: null }
-    const currentStatus = scan.status as ScanStatus
-    if (!REQUEUEABLE_SCAN_STATUSES.includes(currentStatus)) {
-      return { requeued: false as const, currentStatus }
-    }
-    const result = await tx.scan.updateMany({
-      where: { id: params.scanId, status: currentStatus },
-      data: { status: "QUEUED" },
-    })
-    if (result.count !== 1) {
-      // Lost a race to a status change — re-read so the caller sees the truth.
-      const latest = await tx.scan.findUnique({
-        where: { id: params.scanId },
-        select: { status: true },
-      })
-      return { requeued: false as const, currentStatus: (latest?.status as ScanStatus) ?? null }
-    }
-    await tx.scanEvent.create({
-      data: {
-        scanId: params.scanId,
-        stage: "queued",
-        level: "info",
-        message: `Scan requeued for retry (attempt ${params.attempt} of ${params.maxAttempts})`,
-        metadata: {
-          transition: "requeue",
-          fromStatus: currentStatus,
-          attempt: params.attempt,
-          maxAttempts: params.maxAttempts,
-          ...(params.errorCategory ? { errorCategory: params.errorCategory } : {}),
-          ...(params.errorMessage ? { errorMessage: params.errorMessage.slice(0, 500) } : {}),
-        },
-      },
-    })
-    return { requeued: true as const, fromStatus: currentStatus }
-  })
-
-  if (outcome.requeued) {
-    logger.info("Scan requeued for retry", {
-      scanId: params.scanId,
-      from: outcome.fromStatus,
-      attempt: params.attempt,
-      maxAttempts: params.maxAttempts,
-    })
-  }
-  return outcome
+) {
+  return updateScanStatus(scanId, status, metadata, workspaceId, true)
 }
+
+export { requeueScanForRetry, type RequeueScanForRetryResult } from "./scan-retry"
 
 export async function withScanFinalizationClaim<T>(
   scanId: string,
@@ -402,6 +326,7 @@ export async function addScanEvent(
   }
 
   return withWorkspaceRLS(workspaceId, async (tx) => {
+    if (stage === "billable_boundary") return insertScanBillableClaim(tx, workspaceId, scanId)
     // Defense-in-depth: verify the scan belongs to the current workspace before
     // writing an event. ScanEvent is a child table without its own workspaceId, so
     // this prevents cross-tenant event injection if a caller has a valid scanId

@@ -519,7 +519,7 @@ describe("requeueScanForRetry (W2.2)", () => {
   })
 
   it("regresses an active scan to QUEUED and records the step in the same transaction", async () => {
-    mockPrisma.scan.findFirst.mockResolvedValue({ id: "scan-1", status: "RUNNING" })
+    mockPrisma.scan.findFirst.mockResolvedValue({ id: "scan-1", events: [], status: "RUNNING" })
     mockPrisma.scan.updateMany.mockResolvedValue({ count: 1 })
 
     const result = await requeueScanForRetry({
@@ -555,7 +555,7 @@ describe("requeueScanForRetry (W2.2)", () => {
   it.each(["PREFLIGHT", "QUEUED", "VERIFYING"] as const)(
     "requeues and records the step from %s",
     async (status) => {
-      mockPrisma.scan.findFirst.mockResolvedValue({ id: "scan-1", status })
+      mockPrisma.scan.findFirst.mockResolvedValue({ id: "scan-1", events: [], status })
       mockPrisma.scan.updateMany.mockResolvedValue({ count: 1 })
 
       const result = await requeueScanForRetry({
@@ -581,7 +581,7 @@ describe("requeueScanForRetry (W2.2)", () => {
   ] as const)(
     "never requeues a terminal or paused scan from %s and writes no event",
     async (status) => {
-      mockPrisma.scan.findFirst.mockResolvedValue({ id: "scan-1", status })
+      mockPrisma.scan.findFirst.mockResolvedValue({ id: "scan-1", events: [], status })
 
       const result = await requeueScanForRetry({
         scanId: "scan-1",
@@ -597,7 +597,7 @@ describe("requeueScanForRetry (W2.2)", () => {
   )
 
   it("writes no event when the status raced to a different value mid-update", async () => {
-    mockPrisma.scan.findFirst.mockResolvedValue({ id: "scan-1", status: "RUNNING" })
+    mockPrisma.scan.findFirst.mockResolvedValue({ id: "scan-1", events: [], status: "RUNNING" })
     mockPrisma.scan.updateMany.mockResolvedValue({ count: 0 })
     mockPrisma.scan.findUnique.mockResolvedValue({ status: "CANCELLED" })
 

@@ -7,6 +7,7 @@ import { failTerminalRetestsForScan } from "../../engine/result-integrity"
 
 export async function cleanupScanExecution(
   scanId: string,
+  ownsEngineWorkspace: boolean,
   deterministicCheckout?: { cleanup: () => Promise<void> } | null
 ) {
   try {
@@ -21,7 +22,7 @@ export async function cleanupScanExecution(
     await boundedCleanup(
       (async () => {
         await deterministicCheckout?.cleanup()
-        await cleanupEngineWorkspace(engineWorkspacePath(scanId), scanId)
+        if (ownsEngineWorkspace) await cleanupEngineWorkspace(engineWorkspacePath(scanId), scanId)
       })()
     )
   } catch (cleanupError) {
