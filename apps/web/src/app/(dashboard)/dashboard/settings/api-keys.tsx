@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState, type Ref } from "react"
 import { Check, Copy, KeyRound, Plus, ShieldAlert } from "lucide-react"
 import {
   Badge,
@@ -54,6 +54,29 @@ const createdKeySchema = apiKeyRowSchema.and(z.object({ rawKey: z.string() }).pa
  * Workspace API keys — used by the LyraShield MCP server, CLI, and CI.
  * The raw key is displayed exactly once after creation.
  */
+function renderApiKeyNameField(
+  name: string,
+  onNameChange: (name: string) => void,
+  inputRef: Ref<HTMLInputElement>
+) {
+  return (
+    <div className="space-y-1">
+      <label htmlFor="api-key-name" className="text-sm font-medium">
+        Key name
+      </label>
+      <input
+        id="api-key-name"
+        ref={inputRef}
+        value={name}
+        onChange={(e) => onNameChange(e.target.value)}
+        maxLength={100}
+        placeholder="e.g. Cursor on my laptop, CI pipeline"
+        className="border-input bg-background w-full rounded-md border px-3 py-2 text-base md:text-sm"
+      />
+    </div>
+  )
+}
+
 function renderApiKeyScopeField(
   scope: "read" | "write",
   onScopeChange: (scope: "read" | "write") => void
@@ -91,6 +114,28 @@ function renderApiKeyScopeField(
   )
 }
 
+function renderAdminOnlyApiKeys() {
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between space-y-0">
+        <CardTitle as="h2" className="flex items-center gap-2">
+          <KeyRound className="size-4" aria-hidden="true" />
+          API keys
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <EmptyState
+          headingLevel="h3"
+          icon={KeyRound}
+          title="API keys are admin-only"
+          description="Only workspace owners and admins can create or manage API keys. Contact an admin if you need access."
+          action={null}
+        />
+      </CardContent>
+    </Card>
+  )
+}
+
 export function ApiKeysSection({
   workspaceId,
   canManage,
@@ -98,6 +143,10 @@ export function ApiKeysSection({
   workspaceId: string
   canManage: boolean
 }) {
+  const createTriggerRef = useRef<HTMLButtonElement>(null)
+  const createButtonRef = useRef<HTMLButtonElement>(null)
+  const nameInputRef = useRef<HTMLInputElement>(null)
+  const formGeneration = useRef(0)
   const [keys, setKeys] = useState<ApiKeyRow[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [showCreate, setShowCreate] = useState(false)
@@ -143,27 +192,7 @@ export function ApiKeysSection({
     }
   }, [canManage, workspaceId])
 
-  if (!canManage) {
-    return (
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0">
-          <CardTitle as="h2" className="flex items-center gap-2">
-            <KeyRound className="size-4" aria-hidden="true" />
-            API keys
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <EmptyState
-            headingLevel="h3"
-            icon={KeyRound}
-            title="API keys are admin-only"
-            description="Only workspace owners and admins can create or manage API keys. Contact an admin if you need access."
-            action={null}
-          />
-        </CardContent>
-      </Card>
-    )
-  }
+  if (!canManage) return renderAdminOnlyApiKeys()
 
   /**
    * Reset the create form to its defaults. Scope MUST be reset along with the
@@ -171,6 +200,7 @@ export function ApiKeysSection({
    * a key the user believes is read-only (least-privilege default is "read").
    */
   function closeCreateForm() {
+    formGeneration.current += 1
     setShowCreate(false)
     setName("")
     setScope("read")
@@ -179,6 +209,9 @@ export function ApiKeysSection({
 
   async function handleCreate() {
     if (!name.trim()) return
+    const restoreFocus =
+      typeof document !== "undefined" && document.activeElement === createButtonRef.current
+    const submittedGeneration = formGeneration.current
     setCreating(true)
     setError(null)
     try {
@@ -200,6 +233,13 @@ export function ApiKeysSection({
       await load()
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to create API key")
+      if (
+        restoreFocus &&
+        formGeneration.current === submittedGeneration &&
+        document.activeElement === document.body
+      ) {
+        nameInputRef.current?.focus()
+      }
     } finally {
       setCreating(false)
     }
@@ -244,6 +284,7 @@ export function ApiKeysSection({
           API keys
         </CardTitle>
         <Button
+          ref={createTriggerRef}
           size="sm"
           variant="outline"
           onClick={() => (showCreate ? closeCreateForm() : setShowCreate(true))}
@@ -304,19 +345,7 @@ export function ApiKeysSection({
 
         {showCreate ? (
           <div id="api-key-create-form" className="space-y-3 rounded-md border p-4">
-            <div className="space-y-1">
-              <label htmlFor="api-key-name" className="text-sm font-medium">
-                Key name
-              </label>
-              <input
-                id="api-key-name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                maxLength={100}
-                placeholder="e.g. Cursor on my laptop, CI pipeline"
-                className="border-input bg-background w-full rounded-md border px-3 py-2 text-base md:text-sm"
-              />
-            </div>
+            {renderApiKeyNameField(name, setName, nameInputRef)}
             <div className="space-y-1">
               <label htmlFor="api-key-expiry" className="text-sm font-medium">
                 Expires after
@@ -340,6 +369,7 @@ export function ApiKeysSection({
             {renderApiKeyScopeField(scope, setScope)}
             <div className="flex gap-2">
               <Button
+                ref={createButtonRef}
                 size="sm"
                 onClick={() => void handleCreate()}
                 disabled={creating || !name.trim()}
@@ -347,7 +377,14 @@ export function ApiKeysSection({
                 {creating ? <Spinner className="mr-1 size-4" /> : null}
                 Create key
               </Button>
-              <Button size="sm" variant="ghost" onClick={closeCreateForm}>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  createTriggerRef.current?.focus()
+                  closeCreateForm()
+                }}
+              >
                 Cancel
               </Button>
             </div>

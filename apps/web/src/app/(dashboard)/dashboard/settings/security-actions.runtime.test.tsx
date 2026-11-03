@@ -15,6 +15,11 @@ vi.mock("react", async (original) => ({
   ...(await original<typeof import("react")>()),
   useCallback: (fn: unknown) => fn,
   useEffect: () => {},
+  useRef: (initial: unknown) => {
+    const index = hooks.cursor++
+    if (!(index in hooks.values)) hooks.values[index] = { current: initial }
+    return hooks.values[index]
+  },
   useState: (initial: unknown) => {
     const index = hooks.cursor++
     if (!(index in hooks.values)) hooks.values[index] = initial
