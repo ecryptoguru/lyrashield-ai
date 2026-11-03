@@ -240,6 +240,15 @@ def check_probe(proof, versions, fingerprint):
         raise RuntimeError('modeled wire cost exceeded held reservations')
 
 
+def probe_stdin(expected):
+    # repr makes the entire manifest one inert Python string literal, including
+    # any quotes, backslashes or newlines in a Git path. The fixed probe follows
+    # as ordinary Python source; no dynamic evaluation of the payload is needed.
+    manifest = json.dumps(expected,separators=(',',':'),ensure_ascii=True)
+    prefix = 'import json\nexpected = json.loads('+repr(manifest)+')\n'
+    return prefix.encode('ascii') + PROBE.read_bytes()
+
+
 def cleanup_probe(name, owner, image_id, created_id):
     if not isinstance(created_id,str) or not re.fullmatch(r'[0-9a-f]{64}',created_id):
         raise RuntimeError('probe create acknowledgment unavailable; ownership and cleanup are unknown')
@@ -324,8 +333,7 @@ def main():
                 raise RuntimeError('wheel missing owned package contents')
             fingerprint = hashlib.sha256(json.dumps(files,sort_keys=True,separators=(',',':')).encode()).hexdigest()
             expected = {'versions':versions,'wheelFiles':files,'wheelFingerprint':fingerprint}
-            input_bytes = json.dumps(expected,separators=(',',':')).encode()+b'\n'+PROBE.read_bytes()
-            bootstrap = 'import json,sys; expected=json.loads(sys.stdin.buffer.readline()); exec(compile(sys.stdin.buffer.read(),"<offline-probe>","exec"))'
+            input_bytes = probe_stdin(expected)
             owner = uuid4().hex
             name = 'lyra-physical-proof-' + owner
             created_id = None
@@ -335,7 +343,7 @@ def main():
                               '--network','none','--read-only','--cap-drop','ALL',
                               '--security-opt','no-new-privileges','--pids-limit','64',
                               '--memory','768m','--cpus','1','--tmpfs','/tmp:rw,nosuid,nodev,mode=1777,size=64m',
-                              '--entrypoint','/opt/lyrashield-venv/bin/python',image,'-I','-c',bootstrap],
+                              '--entrypoint','/opt/lyrashield-venv/bin/python',image,'-I','-'],
                              timeout=30).decode().strip()
                 if not re.fullmatch(r'[0-9a-f]{64}',created):
                     raise RuntimeError('invalid created probe container identity')

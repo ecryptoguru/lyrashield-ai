@@ -62,7 +62,7 @@ async def exercise(api, streaming):
         hooks = ReportUsageHooks(model='openai/gpt-6-luna', max_budget_usd=1,
                                  max_output_tokens=128, report_state=state)
         hooks_module.set_active_hooks(hooks)
-        async with AsyncOpenAI(api_key='offline-test',
+        async with AsyncOpenAI(api_key='test',
             http_client=httpx.AsyncClient(transport=httpx.MockTransport(unavailable))) as client:
             native_retries = []
             old_factory = OpenAIChatCompletion._get_openai_client
@@ -71,7 +71,7 @@ async def exercise(api, streaming):
                     native_retries.append(kwargs['max_retries'])
                     return client.with_options(max_retries=kwargs['max_retries'])
                 OpenAIChatCompletion._get_openai_client = factory
-                model = LitellmModel('openai/gpt-6-luna', api_key='offline-test')
+                model = LitellmModel('openai/gpt-6-luna', api_key='test')
                 error = litellm.ServiceUnavailableError
             else:
                 model = (OpenAIResponsesModel if api == 'responses' else OpenAIChatCompletionsModel)(
@@ -146,7 +146,7 @@ async def exercise_aggregate():
         hooks = ReportUsageHooks(model=model_name, max_budget_usd=cap_usd,
                                  max_output_tokens=128, report_state=state)
         hooks_module.set_active_hooks(hooks)
-        async with AsyncOpenAI(api_key='offline-test',
+        async with AsyncOpenAI(api_key='test',
             http_client=httpx.AsyncClient(transport=httpx.MockTransport(endpoint))) as client:
             native = OpenAIResponsesModel('gpt-6-luna', openai_client=client)
             agents = [Agent(name='Concurrent '+str(i), model=native, model_settings=settings())

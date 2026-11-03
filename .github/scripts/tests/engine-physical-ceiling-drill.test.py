@@ -1,4 +1,5 @@
 """Failure controls for the unsigned offline physical-ceiling rehearsal."""
+import ast
 import importlib.util
 import os
 import json
@@ -16,6 +17,15 @@ spec.loader.exec_module(drill)
 
 
 class PhysicalCeilingDrillTests(unittest.TestCase):
+    def test_probe_manifest_is_an_inert_literal_before_the_fixed_source(self):
+        expected = {'path': "quote' slash\\ newline\n__import__('os').abort()"}
+        code = drill.probe_stdin(expected).decode('ascii')
+        module = ast.parse(code)
+        self.assertEqual(json.loads(ast.literal_eval(module.body[1].value.args[0])),expected)
+        self.assertTrue(code.endswith(drill.PROBE.read_text()))
+        self.assertFalse(any(isinstance(node,ast.Call) and isinstance(node.func,ast.Name)
+                             and node.func.id in ('exec','eval') for node in ast.walk(module)))
+
     def test_network_guard_blocks_live_inet_and_unix_endpoints(self):
         self.assertTrue(drill.network_guard(sys.executable,os.getcwd(),dict(os.environ)))
 
