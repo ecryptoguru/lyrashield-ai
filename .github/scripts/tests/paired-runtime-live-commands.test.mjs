@@ -147,6 +147,10 @@ test("sandbox staging executes only the pinned held pull and refuses low disk, d
   // eslint-disable-next-line security/detect-non-literal-fs-filename -- private generated test fixture path
   writeFileSync(pins, "redis.test 127.0.0.1 6379\n")
   const s = readFileSync(".github/scripts/paired-live-host.sh", "utf8")
+    .replace(
+      "loader=/opt/lyrashield-worker-host/worker-env.sh",
+      "loader=" + join(dir, "ops/worker/worker-env.sh")
+    )
     .replace("config=/etc/lyrashield/worker-runtime.conf", "config=" + config)
     .replace("env_file=/etc/lyrashield/worker.env", "env_file=" + envFile)
     .replace("pins=/run/lyrashield-egress-hosts", "pins=" + pins)
@@ -165,12 +169,13 @@ test("sandbox staging executes only the pinned held pull and refuses low disk, d
     'case "$*" in *is-active*) echo inactive; exit 3;; *is-enabled*) echo disabled; exit 1;; *) exit 19;; esac'
   )
   write("flock", ":")
+  write("stat", 'case "$2" in %u) echo 0;; %a) echo 600;; *) exit 19;; esac')
   write("df", 'printf "header\\n/dev/fake 0 0 %s 0 /\\n" "${TEST_BYTES:-9999999999}"')
   write(
     "docker",
     `echo "$*" >> "$RECORDER/docker-commands"
 case "$1 $2" in
- "ps -a") exit 0;;
+ "ps -a"|"ps --quiet") exit 0;;
  "run --rm") printf 1;;
  "info --format") case "$3" in *Architecture*) echo x86_64;; *) echo "$RECORDER";; esac;;
  "login ghcr.io") cat >/dev/null;;

@@ -172,6 +172,18 @@ async function readOne(id, p, canary) {
         Array.isArray(finding.evidenceInsights.pendingHttpExchangeIds) &&
         finding.evidenceInsights.pendingHttpExchangeIds.length > 0
     )
+  const pending = finding.evidenceInsights.pendingHttpExchangeIds ?? []
+  ok(
+    Array.isArray(pending) &&
+      pending.length <= 10 &&
+      pending.every((v) => typeof v === "string" && /^[0-9]{1,128}$/.test(v))
+  )
+  ok(
+    pending.length
+      ? finding.evidenceInsights.pendingHttpExchangeState === "PENDING"
+      : finding.evidenceInsights.pendingHttpExchangeState === undefined
+  )
+  const pendingProjection = sha(JSON.stringify(pending))
   const reader = sha(JSON.stringify(finding.evidenceInsights))
   ok(reader === r.readerProjection)
   const opened = guest("evidence", {
@@ -180,6 +192,7 @@ async function readOne(id, p, canary) {
     finding: r.finding,
     evidence: r.evidence,
     binding: r.binding,
+    pendingProjection,
   })
   ok(opened === r.openedProjection)
   return id

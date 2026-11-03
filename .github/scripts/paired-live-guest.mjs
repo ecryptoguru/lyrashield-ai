@@ -1,7 +1,7 @@
 // Isolated tools execute inside the pinned worker image, using the existing
 // worker authority and no Docker socket. Only finite RPC operations are admitted.
 import { createRequire } from "node:module"
-import { createHash } from "node:crypto"
+import { createHash, randomBytes } from "node:crypto"
 import {
   pairedReleaseReceipt,
   OWNED_HOLD_LUA,
@@ -45,6 +45,34 @@ async function connected(global, fn) {
     await client.end()
   }
 }
+// Called INSIDE the same read-only system transaction that performs the
+// global query. The advisory challenge also distinguishes cloned databases
+// with matching catalog/server fingerprints and transaction-pool endpoints.
+async function bindGlobalSession(system) {
+  check(hash(process.env.DATABASE_URL) === process.env.PAIRED_RUNTIME_DB_HASH)
+  await connected(false, async (runtime) => {
+    await runtime.query("BEGIN READ ONLY")
+    try {
+      const restricted = await observeRuntimeDatabase(runtime)
+      const global = await observeRuntimeDatabase(system, { runtime: false })
+      check(
+        global.databaseIdentity === restricted.databaseIdentity &&
+          global.principal !== restricted.principal
+      )
+      const role = await system.query(
+        "SELECT rolsuper OR rolbypassrls AS global_read FROM pg_catalog.pg_roles WHERE rolname=current_user"
+      )
+      check(role.rows.length === 1 && role.rows[0].global_read === true)
+      const bytes = randomBytes(8),
+        keys = [bytes.readInt32BE(0), bytes.readInt32BE(4)]
+      const probe = "SELECT pg_try_advisory_xact_lock($1::integer,$2::integer) AS acquired"
+      check((await runtime.query(probe, keys)).rows[0]?.acquired === true)
+      check((await system.query(probe, keys)).rows[0]?.acquired === false)
+    } finally {
+      await runtime.query("ROLLBACK")
+    }
+  })
+}
 async function withRedis(fn) {
   const r = new Redis(process.env.REDIS_URL, {
     connectTimeout: 5000,
@@ -61,6 +89,17 @@ async function withRedis(fn) {
   }
 }
 async function run(action, a) {
+  if (action === "startup-policy") {
+    const p = process.env,
+      v = p.LYRASHIELD_EVIDENCE_WRITER_CANARY
+    check(typeof p.DATABASE_URL === "string" && p.DATABASE_URL.length > 0)
+    return {
+      runRecordV11: p.LYRASHIELD_RUN_RECORD_V1_1,
+      pendingHttpEvidence: p.LYRASHIELD_PENDING_HTTP_EVIDENCE,
+      selectorHash: v ? hash("LYRASHIELD_EVIDENCE_WRITER_CANARY=" + v + "\n") : null,
+      databaseUrlHash: hash(p.DATABASE_URL),
+    }
+  }
   if (action === "rpc") {
     const [op, one, two, three] = a
     return withRedis(async (r) => {
@@ -100,7 +139,12 @@ async function run(action, a) {
     try {
       await withRedis((r) =>
         connected(true, (db) =>
-          assertPairedWorkDrained(r, db, async () => process.env.PAIRED_PHYSICAL_PROOF)
+          assertPairedWorkDrained(
+            r,
+            db,
+            async () => process.env.PAIRED_PHYSICAL_PROOF,
+            bindGlobalSession
+          )
         )
       )
     } catch (e) {
@@ -159,6 +203,7 @@ async function readOperation(action, a) {
     return connected(true, async (db) => {
       await db.query("BEGIN READ ONLY")
       try {
+        await bindGlobalSession(db)
         await db.query("SET LOCAL row_security=off")
         const { rows } = await db.query(
           `SELECT NOT EXISTS (SELECT 1 FROM public.agent_operations WHERE "workspaceId"=$1 AND "principalType"='BROWSER_SESSION' AND "principalId"=$2 AND "idempotencyKey"=$3 AND "operationName"='scan.create') AS unused`,
@@ -176,6 +221,7 @@ async function readOperation(action, a) {
     return connected(true, async (db) => {
       await db.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY")
       try {
+        await bindGlobalSession(db)
         await db.query("SET LOCAL row_security=off")
         const { rows } = await db.query(
           `SELECT s.id,s.status,s."accountingSettledAt" IS NOT NULL AS settled,r.state,r."stoppedAt" IS NOT NULL AS stopped,
@@ -209,14 +255,32 @@ async function readOperation(action, a) {
       await db.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY")
       try {
         await db.query("SELECT set_config('app.current_workspace_id',$1,true)", [a.workspace])
+        // Match loadEvidenceInsights: select the newest bound row (including
+        // tombstones); a legacy fallback is allowed only for the origin scan
+        // and only when there is no bound row or later candidate observation.
+        check(["scan-observation", "legacy-origin"].includes(a.binding))
+        const prefix = "ctx-" + hash(JSON.stringify([a.finding, a.scan])) + "-"
         const { rows } = await db.query(
-          `SELECT e.id,e.checksum,e."storageUri",e."encryptionKeyRef",f.id AS finding,f."scanId",f."workspaceId"
-     FROM public."Evidence" e JOIN public."Finding" f ON f.id=e."findingId"
-     WHERE e.id=$1 AND e.type='claim_context' AND e."redactionStatus"<>'deleted' AND f.id=$2 AND f."workspaceId"=$4 AND
-     (f."scanId"=$3 OR EXISTS(SELECT 1 FROM public."FindingCandidate" c WHERE c."findingId"=f.id AND c."scanId"=$3 AND c."workspaceId"=$4))`,
-          [a.evidence, a.finding, a.scan, a.workspace]
+          `SELECT e.id,e.type,e.checksum,e."storageUri",e."encryptionKeyRef",e."redactionStatus",f.id AS finding,f."scanId",f."workspaceId"
+          FROM public."Evidence" e JOIN public."Finding" f ON f.id=e."findingId"
+          WHERE f.id=$1 AND f."workspaceId"=$2 AND e.type='claim_context'
+            AND (starts_with(e.id,$4) OR ($5='legacy-origin' AND NOT starts_with(e.id,'ctx-'))) AND
+            (($5='scan-observation' AND (f."scanId"=$3 OR EXISTS
+              (SELECT 1 FROM public."FindingCandidate" c JOIN public."Scan" s ON s.id=c."scanId"
+               WHERE c."findingId"=f.id AND c."scanId"=$3 AND c."workspaceId"=$2 AND s."workspaceId"=$2 AND s."deletedAt" IS NULL))) OR
+             ($5='legacy-origin' AND f."scanId"=$3 AND COALESCE(
+              (SELECT c."scanId" FROM public."FindingCandidate" c JOIN public."Scan" s ON s.id=c."scanId"
+               WHERE c."findingId"=f.id AND c."workspaceId"=$2 AND s."workspaceId"=$2 AND s."deletedAt" IS NULL
+               ORDER BY c."createdAt" DESC,c.id DESC LIMIT 1),f."scanId")=$3))
+          ORDER BY starts_with(e.id,$4) DESC,e."createdAt" DESC,e.id DESC LIMIT 1`,
+          [a.finding, a.workspace, a.scan, prefix, a.binding]
         )
-        check(rows.length === 1)
+        check(
+          rows.length === 1 &&
+            rows[0].id === a.evidence &&
+            rows[0].storageUri &&
+            rows[0].redactionStatus !== "deleted"
+        )
         const r = rows[0],
           storage = await import(base.resolve("@lyrashield/evidence-storage"))
         const opened = await storage.readEncryptedArtifact(r.storageUri, a.workspace)
@@ -236,11 +300,22 @@ async function readOperation(action, a) {
         } else {
           check(
             a.binding === "legacy-origin" &&
+              !r.id.startsWith("ctx-") &&
               r.scanId === a.scan &&
               content.sourceScanId === undefined &&
               content.sourceFindingId === undefined
           )
         }
+        const ids = content.pendingHttpExchangeIds
+        const pending =
+          a.binding === "scan-observation" &&
+          Array.isArray(ids) &&
+          ids.length <= 10 &&
+          ids.every((v) => typeof v === "string" && /^[0-9]{1,128}$/.test(v))
+            ? [...new Set(ids)]
+            : []
+        const projection = hash(JSON.stringify(pending))
+        check(projection === a.pendingProjection)
         return hash(
           JSON.stringify({
             workspace: r.workspaceId,

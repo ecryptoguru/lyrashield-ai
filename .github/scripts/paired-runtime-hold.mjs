@@ -64,7 +64,12 @@ export async function waitForPairedDrain(pair, redis, db, inspectPhysicalChildre
   }
 }
 
-export async function assertPairedWorkDrained(redis, db, inspectPhysicalChildren) {
+export async function assertPairedWorkDrained(
+  redis,
+  db,
+  inspectPhysicalChildren,
+  bindGlobalSession
+) {
   // The protected GitHub runner has no direct production DB/Redis connection.
   // A single private VM probe runs THIS same native transaction remotely.
   if (db.readRemotePairedDrain) {
@@ -84,6 +89,7 @@ export async function assertPairedWorkDrained(redis, db, inspectPhysicalChildren
   await db.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY")
   try {
     await db.query("SET LOCAL statement_timeout = '10s'")
+    if (bindGlobalSession) await bindGlobalSession(db)
     await db.query("SET LOCAL row_security = off")
     // A surviving v2 Scan must have its slot-release acknowledgement, including
     // nonbillable work. The stopped funding record can outlive its parent.

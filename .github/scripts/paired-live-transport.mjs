@@ -13,7 +13,6 @@ const files = [
   ".github/scripts/paired-runtime-hold.mjs",
   ".github/scripts/paired-runtime-authority.mjs",
   "ops/monitoring/paired-release-hold.mjs",
-  "ops/worker/worker-env.sh",
 ]
 const phases = new Set([
   "rpc",
