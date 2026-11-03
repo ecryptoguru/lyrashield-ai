@@ -77,6 +77,35 @@ function renderApiKeyNameField(
   )
 }
 
+function renderApiKeyExpiryField(
+  expiryHours: number,
+  creating: boolean,
+  onExpiryChange: (hours: number) => void
+) {
+  return (
+    <div className="space-y-1">
+      <label htmlFor="api-key-expiry" className="text-sm font-medium">
+        Expires after
+      </label>
+      <select
+        id="api-key-expiry"
+        value={expiryHours}
+        onChange={(event) => {
+          const hours = Number(event.target.value)
+          if ([0, 4, 24, 720].includes(hours)) onExpiryChange(hours)
+        }}
+        disabled={creating}
+        className="border-input bg-background w-full rounded-md border px-3 py-2 text-base md:text-sm"
+      >
+        <option value={0}>No expiry</option>
+        <option value={4}>4 hours</option>
+        <option value={24}>1 day</option>
+        <option value={720}>30 days</option>
+      </select>
+    </div>
+  )
+}
+
 function renderApiKeyScopeField(
   scope: "read" | "write",
   onScopeChange: (scope: "read" | "write") => void
@@ -149,7 +178,7 @@ function CreatedApiKey({
   hasCopiedKey: boolean
   copyButtonRef: Ref<HTMLButtonElement>
   onCopy: () => void
-  onDismiss: () => void
+  onDismiss: (restoreFocus: boolean) => void
 }) {
   return (
     <div className="border-primary/40 bg-primary/5 space-y-2 rounded-md border p-4">
@@ -175,7 +204,7 @@ function CreatedApiKey({
         variant="ghost"
         disabled={!hasCopiedKey}
         aria-describedby={hasCopiedKey ? undefined : "api-key-copy-hint"}
-        onClick={onDismiss}
+        onClick={(event) => onDismiss(document.activeElement === event.currentTarget)}
       >
         I&apos;ve stored it safely
       </Button>
@@ -191,6 +220,54 @@ function CreatedApiKey({
   )
 }
 
+function renderApiKeyList(
+  activeKeys: ApiKeyRow[],
+  revokedKeys: ApiKeyRow[],
+  onRevoke: (id: string) => Promise<void>
+) {
+  return (
+    <ul className="divide-y">
+      {activeKeys.map((key) => (
+        <li key={key.id} className="flex flex-wrap items-center justify-between gap-2 py-3">
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium">{key.name}</p>
+            <p className="text-muted-foreground font-mono text-xs">
+              {key.prefix}…
+              <span className="ml-2 font-sans">
+                {key.lastUsedAt ? `last used ${formatDate(key.lastUsedAt)}` : "never used"}
+              </span>
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Badge variant="muted">
+              {key.scopes.includes("write") ? "read & write" : "read-only"}
+            </Badge>
+            <InlineConfirm
+              triggerLabel="Revoke"
+              confirmLabel="Confirm revoke"
+              message={`Revoke “${key.name}”?`}
+              aria-label={`Revoke API key ${key.name}`}
+              onConfirm={() => onRevoke(key.id)}
+            />
+          </div>
+        </li>
+      ))}
+      {revokedKeys.map((key) => (
+        <li
+          key={key.id}
+          className="text-muted-foreground flex items-center justify-between gap-2 py-3"
+        >
+          <div className="min-w-0">
+            <p className="truncate text-sm line-through">{key.name}</p>
+            <p className="font-mono text-xs">{key.prefix}…</p>
+          </div>
+          <Badge variant="muted">revoked</Badge>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
 export function ApiKeysSection({
   workspaceId,
   canManage,
@@ -203,7 +280,9 @@ export function ApiKeysSection({
   const nameInputRef = useRef<HTMLInputElement>(null)
   const copyButtonRef = useRef<HTMLButtonElement>(null)
   const formGeneration = useRef(0)
+  const draftRevision = useRef(0)
   const pendingSuccessFocus = useRef<number | null>(null)
+  const pendingDismissFocus = useRef<number | null>(null)
   const [keys, setKeys] = useState<ApiKeyRow[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [showCreate, setShowCreate] = useState(false)
@@ -257,7 +336,16 @@ export function ApiKeysSection({
       copyButtonRef.current?.focus()
     }
     pendingSuccessFocus.current = null
-  }, [createdKey])
+    if (
+      !createdKey &&
+      pendingDismissFocus.current === formGeneration.current &&
+      document.activeElement === document.body
+    ) {
+      if (showCreate) nameInputRef.current?.focus()
+      else createTriggerRef.current?.focus()
+    }
+    pendingDismissFocus.current = null
+  }, [createdKey, showCreate])
 
   if (!canManage) return renderAdminOnlyApiKeys()
 
@@ -279,6 +367,7 @@ export function ApiKeysSection({
     const focusAtSubmission = typeof document === "undefined" ? null : document.activeElement
     const restoreFocus = focusAtSubmission === createButtonRef.current && focusAtSubmission !== null
     const submittedGeneration = formGeneration.current
+    const submittedDraftRevision = draftRevision.current
     setCreating(true)
     setError(null)
     try {
@@ -299,7 +388,11 @@ export function ApiKeysSection({
         document.activeElement === document.body ||
         document.activeElement === createButtonRef.current ||
         document.activeElement === focusAtSubmission
-      if (formGeneration.current === submittedGeneration && focusUnchanged) {
+      if (
+        formGeneration.current === submittedGeneration &&
+        draftRevision.current === submittedDraftRevision &&
+        focusUnchanged
+      ) {
         const focusCopy =
           restoreFocus &&
           (document.activeElement === document.body ||
@@ -313,7 +406,12 @@ export function ApiKeysSection({
     } catch (err) {
       if (formGeneration.current === submittedGeneration) {
         setError(err instanceof ApiError ? err.message : "Failed to create API key")
-        if (restoreFocus && document.activeElement === document.body) nameInputRef.current?.focus()
+        if (
+          restoreFocus &&
+          draftRevision.current === submittedDraftRevision &&
+          document.activeElement === document.body
+        )
+          nameInputRef.current?.focus()
       }
     } finally {
       setCreating(false)
@@ -394,33 +492,23 @@ export function ApiKeysSection({
             hasCopiedKey={hasCopiedKey}
             copyButtonRef={copyButtonRef}
             onCopy={() => void copyKey()}
-            onDismiss={() => setCreatedKey(null)}
+            onDismiss={(restoreFocus) => {
+              pendingDismissFocus.current = restoreFocus ? formGeneration.current : null
+              setCreatedKey(null)
+            }}
           />
         ) : null}
 
         {showCreate ? (
-          <div id="api-key-create-form" className="space-y-3 rounded-md border p-4">
+          <div
+            id="api-key-create-form"
+            className="space-y-3 rounded-md border p-4"
+            onChangeCapture={() => {
+              draftRevision.current += 1
+            }}
+          >
             {renderApiKeyNameField(name, setName, nameInputRef)}
-            <div className="space-y-1">
-              <label htmlFor="api-key-expiry" className="text-sm font-medium">
-                Expires after
-              </label>
-              <select
-                id="api-key-expiry"
-                value={expiryHours}
-                onChange={(event) => {
-                  const hours = Number(event.target.value)
-                  if ([0, 4, 24, 720].includes(hours)) setExpiryHours(hours)
-                }}
-                disabled={creating}
-                className="border-input bg-background w-full rounded-md border px-3 py-2 text-base md:text-sm"
-              >
-                <option value={0}>No expiry</option>
-                <option value={4}>4 hours</option>
-                <option value={24}>1 day</option>
-                <option value={720}>30 days</option>
-              </select>
-            </div>
+            {renderApiKeyExpiryField(expiryHours, creating, setExpiryHours)}
             {renderApiKeyScopeField(scope, setScope)}
             <div className="flex gap-2">
               <Button
@@ -455,45 +543,7 @@ export function ApiKeysSection({
         ) : activeKeys.length === 0 && revokedKeys.length === 0 ? (
           <p className="text-muted-foreground text-sm">No API keys yet.</p>
         ) : (
-          <ul className="divide-y">
-            {activeKeys.map((key) => (
-              <li key={key.id} className="flex flex-wrap items-center justify-between gap-2 py-3">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium">{key.name}</p>
-                  <p className="text-muted-foreground font-mono text-xs">
-                    {key.prefix}…
-                    <span className="ml-2 font-sans">
-                      {key.lastUsedAt ? `last used ${formatDate(key.lastUsedAt)}` : "never used"}
-                    </span>
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Badge variant="muted">
-                    {key.scopes.includes("write") ? "read & write" : "read-only"}
-                  </Badge>
-                  <InlineConfirm
-                    triggerLabel="Revoke"
-                    confirmLabel="Confirm revoke"
-                    message={`Revoke “${key.name}”?`}
-                    aria-label={`Revoke API key ${key.name}`}
-                    onConfirm={() => handleRevoke(key.id)}
-                  />
-                </div>
-              </li>
-            ))}
-            {revokedKeys.map((key) => (
-              <li
-                key={key.id}
-                className="text-muted-foreground flex items-center justify-between gap-2 py-3"
-              >
-                <div className="min-w-0">
-                  <p className="truncate text-sm line-through">{key.name}</p>
-                  <p className="font-mono text-xs">{key.prefix}…</p>
-                </div>
-                <Badge variant="muted">revoked</Badge>
-              </li>
-            ))}
-          </ul>
+          renderApiKeyList(activeKeys, revokedKeys, handleRevoke)
         )}
       </CardContent>
     </Card>
