@@ -24,7 +24,12 @@ class PhysicalCeilingDrillTests(unittest.TestCase):
         def response(label, actual_image=image):
             return json.dumps([{'Id':cid,'Name':'/'+name,'Image':actual_image,
                                 'Config':{'Labels':{'lyrashield.physical-drill-owner':label}}}]).encode()
-        for label, actual_image, created in [('foreign',image,None),(owner,'sha256:'+'d'*64,None),
+        # Matching name, label and image do not prove ownership without the
+        # acknowledged container ID; do not even attempt a deletion by lookup.
+        with patch.object(drill,'invoke',side_effect=AssertionError('unexpected Docker call')):
+            with self.assertRaisesRegex(RuntimeError,'acknowledgment'):
+                drill.cleanup_probe(name,owner,image,None)
+        for label, actual_image, created in [('foreign',image,cid),(owner,'sha256:'+'d'*64,cid),
                                              (owner,image,'e'*64)]:
             calls = []
             def foreign(args, **_kwargs):

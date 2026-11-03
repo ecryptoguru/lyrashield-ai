@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Exec a command under an inherited Linux seccomp policy denying outbound sockets.
 
-Allows AF_UNIX socketpair use by asyncio, while denying connect, named datagram
-sends, sendmsg/sendmmsg and io_uring. The caller must independently run the
-network canary before using this guard.
+Allows AF_UNIX socketpair use by asyncio, while denying bind/listen/accept,
+connect, named datagram sends, sendmsg/sendmmsg and io_uring. The caller must
+independently run the network canary before using this guard.
 """
 import ctypes
 import errno
@@ -26,13 +26,14 @@ def main():
         raise SystemExit('expected command')
     machine = platform.machine().lower()
     tables = {
-        'x86_64': (0xc000003e, 41, 42, 44, 46, 307),
-        'aarch64': (0xc00000b7, 198, 203, 206, 211, 269),
-        'arm64': (0xc00000b7, 198, 203, 206, 211, 269),
+        'x86_64': (0xc000003e, 41, 42, 44, 46, 307, 49, 50, 43, 288),
+        'aarch64': (0xc00000b7, 198, 203, 206, 211, 269, 200, 201, 202, 242),
+        'arm64': (0xc00000b7, 198, 203, 206, 211, 269, 200, 201, 202, 242),
     }
     if machine not in tables:
         raise SystemExit('unsupported seccomp architecture')
-    arch, socket_nr, connect_nr, sendto_nr, sendmsg_nr, sendmmsg_nr = tables[machine]
+    (arch, socket_nr, connect_nr, sendto_nr, sendmsg_nr, sendmmsg_nr,
+     bind_nr, listen_nr, accept_nr, accept4_nr) = tables[machine]
     load, jeq, jset, ret = 0x20, 0x15, 0x45, 0x06
     allow, deny = 0x7fff0000, 0x00050000 | errno.EPERM
     instructions = [
@@ -43,7 +44,8 @@ def main():
     ]
     if machine == 'x86_64':
         instructions.extend([(jset,0,1,0x40000000),(ret,0,0,deny)])  # reject x32 ABI
-    for number in (connect_nr, sendmsg_nr, sendmmsg_nr, 425, 426, 427):
+    for number in (connect_nr, sendmsg_nr, sendmmsg_nr, bind_nr, listen_nr,
+                   accept_nr, accept4_nr, 425, 426, 427):
         instructions.extend([(jeq,0,1,number),(ret,0,0,deny)])
     instructions.extend([
         (jeq,0,4,socket_nr),

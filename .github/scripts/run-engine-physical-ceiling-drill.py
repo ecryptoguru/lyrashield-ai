@@ -10,6 +10,7 @@ import math
 import os
 from pathlib import Path
 import re
+import signal
 import socket
 import subprocess
 import sys
@@ -54,9 +55,9 @@ PACKAGES = ('openai', 'openai-agents', 'litellm', 'httpx')
 ROOTS = ('lyrashield/', 'lyrashield_adapter/', 'strix/')
 
 
-def invoke(args, *, cwd=None, env=None, data=None, timeout=1200):
+def invoke(args, *, cwd=None, env=None, data=None, timeout=1200, pass_fds=()):
     result = subprocess.run(args, cwd=cwd, env=env, input=data, stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE, timeout=timeout)
+                            stderr=subprocess.PIPE, timeout=timeout, pass_fds=pass_fds)
     if result.returncode:
         # This harness receives no secrets; expose bounded diagnostic output only.
         diagnostics = (result.stdout + b'\n' + result.stderr).decode(errors='replace')[-3000:]
@@ -177,11 +178,40 @@ def unix():
  with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as s: s.connect(sys.argv[2])
 def datagram():
  with socket.socket(socket.AF_UNIX,socket.SOCK_DGRAM) as s: s.sendto(b'canary',sys.argv[3])
-for operation in (tcp,unix,datagram): denied(operation)
+def bind():
+ with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as s: s.bind(sys.argv[4])
+for operation in (tcp,unix,datagram,bind): denied(operation)
 a,b=socket.socketpair(); a.send(b'x'); assert b.recv(1)==b'x'; a.close(); b.close()
 '''
             invoke([*prefix,str(python),'-I','-c',code,str(tcp.getsockname()[1]),
-                    unix_path,datagram_path],cwd=cwd,env=env,timeout=15)
+                    unix_path,datagram_path,str(Path(root)/'guarded-listener')],
+                   cwd=cwd,env=env,timeout=15)
+            if sys.platform == 'linux':
+                # A deliberately inherited socket with a real queued peer must
+                # not allow accept; an already-bound socket must not listen.
+                peer = socket.create_connection(tcp.getsockname(),timeout=2)
+                bound = socket.socket(socket.AF_UNIX,socket.SOCK_STREAM)
+                try:
+                    bound.bind(str(Path(root)/'bound-not-listening'))
+                    inherited = '''import ctypes,errno,platform,socket,sys
+for fd,method in ((int(sys.argv[1]),'accept'),(int(sys.argv[2]),'listen')):
+ s=socket.socket(fileno=fd)
+ try: getattr(s,method)()
+ except OSError as e:
+  if e.errno in (errno.EPERM,errno.EACCES): s.detach(); continue
+  raise
+ raise AssertionError(method+' unexpectedly succeeded')
+numbers={'x86_64':(43,288),'aarch64':(202,242),'arm64':(202,242)}[platform.machine().lower()]
+libc=ctypes.CDLL(None,use_errno=True)
+for number in numbers:
+ if libc.syscall(number,int(sys.argv[1]),0,0,0) != -1 or ctypes.get_errno() not in (errno.EPERM,errno.EACCES):
+  raise AssertionError('accept syscall unexpectedly succeeded')
+'''
+                    invoke([*prefix,str(python),'-I','-c',inherited,str(tcp.fileno()),
+                            str(bound.fileno())],cwd=cwd,env=env,timeout=15,
+                           pass_fds=(tcp.fileno(),bound.fileno()))
+                finally:
+                    peer.close(); bound.close()
         finally:
             tcp.close(); unix.close(); datagram.close()
     return prefix
@@ -211,7 +241,9 @@ def check_probe(proof, versions, fingerprint):
 
 
 def cleanup_probe(name, owner, image_id, created_id):
-    ids = invoke(['docker','ps','-aq','--no-trunc','--filter','name=^/'+name+'$'],timeout=30).decode().split()
+    if not isinstance(created_id,str) or not re.fullmatch(r'[0-9a-f]{64}',created_id):
+        raise RuntimeError('probe create acknowledgment unavailable; ownership and cleanup are unknown')
+    ids = invoke(['docker','ps','-aq','--no-trunc','--filter','id='+created_id],timeout=30).decode().split()
     if not ids:
         return
     if len(ids) != 1 or not re.fullmatch(r'[0-9a-f]{64}', ids[0]):
@@ -220,10 +252,10 @@ def cleanup_probe(name, owner, image_id, created_id):
     labels = container.get('Config',{}).get('Labels') or {}
     if (container.get('Id') != ids[0] or container.get('Name') != '/'+name or
         container.get('Image') != image_id or labels.get('lyrashield.physical-drill-owner') != owner or
-        (created_id is not None and created_id != ids[0])):
+        created_id != ids[0]):
         raise RuntimeError('refusing cleanup of a container without exact probe ownership')
     invoke(['docker','rm','-f',ids[0]],timeout=30)
-    if invoke(['docker','ps','-aq','--no-trunc','--filter','name=^/'+name+'$'],timeout=30).strip():
+    if invoke(['docker','ps','-aq','--no-trunc','--filter','id='+created_id],timeout=30).strip():
         raise RuntimeError('offline probe container cleanup failed')
 
 
@@ -233,6 +265,9 @@ def main():
     parser.add_argument('--engine-repo', required=True)
     parser.add_argument('--receipt', required=True)
     args = parser.parse_args()
+    def interrupted(_signum, _frame):
+        raise KeyboardInterrupt()
+    signal.signal(signal.SIGTERM, interrupted)
     image, product = args.candidate
     out = Path(args.receipt).absolute()
     if out.exists() or out.is_symlink():
