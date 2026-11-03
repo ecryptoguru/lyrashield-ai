@@ -784,7 +784,7 @@ if [ "${PAIRED_STOPPED_ONLY:-0}" = 1 ]; then
     run_case "paired-stopped-$label" 0 0 0 failure 0 '' 0 '' 9999999000 "$container" 1 '' env 0 paired
   done
   MOCK_RUN_RECORD_V11=1 run_case paired-stopped-writer 0 0 0 failure 0 '' 0 '' 9999999000 0 1 '' env 0 paired
-  MOCK_CANARY_SELECTOR=set run_case paired-stopped-canary 0 0 0 failure 0 '' 0 '' 9999999000 0 1 '' env 0 paired
+  MOCK_CANARY_SELECTOR='set' run_case paired-stopped-canary 0 0 0 failure 0 '' 0 '' 9999999000 0 1 '' env 0 paired
   MOCK_PENDING_EVIDENCE=1 run_case paired-stopped-pending 0 0 0 failure 0 '' 0 '' 9999999000 0 1 '' env 0 paired
   MOCK_CONFIG_ID=wrong run_case paired-stopped-image-id 0 0 0 failure 0 '' 0 '' 9999999000 0 1 '' env 0 paired
   echo "Paired stopped-entry proof passed (real loopback HTTP)."
