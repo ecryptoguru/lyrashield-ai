@@ -372,11 +372,10 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
               ...(engineResult.sourceRevision
                 ? { sourceRevision: engineResult.sourceRevision }
                 : {}),
+              // An engine-owned claim cannot replace an unavailable host observation.
               ...(typeof engineResult.sandboxRemoved === "boolean"
                 ? { sandboxRemoved: engineResult.sandboxRemoved }
-                : runRecord?.cleanup
-                  ? { sandboxRemoved: runRecord.cleanup.sandbox_removed }
-                  : {}),
+                : {}),
             }
           : undefined
 

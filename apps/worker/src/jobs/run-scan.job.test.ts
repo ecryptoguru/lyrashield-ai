@@ -323,6 +323,7 @@ import {
 import { resolveWorkerExecutionProvenance } from "@lyrashield/config"
 import { verifyRelayGrant } from "@lyrashield/security"
 import { runScannerOrchestrator } from "../engine/scanner-orchestrator"
+import { receiptIdentityCoverageIssues } from "../engine/result-integrity/coverage-receipts"
 import {
   assertEvidenceStorageConfigured,
   EvidenceStorageConfigurationError,
@@ -2324,6 +2325,46 @@ describe("processScanJob", () => {
     }
   )
 
+  it("keeps unavailable host cleanup unknown on an early budget-stop receipt", async () => {
+    vi.mocked(runEngine).mockResolvedValueOnce({
+      exitCode: 0,
+      cancelled: false,
+      timedOut: false,
+      budgetKilled: true,
+      sourceRevision: "c".repeat(40),
+      sourceCheckoutPath: null,
+      output: {
+        ingestionIssues: [],
+        vulnerabilities: [],
+        findingsComplete: false,
+        findingCount: 0,
+        summary: "Budget stopped",
+        runRecord: {
+          run_id: "scan-1",
+          run_name: "scan-1",
+          status: "completed",
+          model: "azure_ai/gpt-6-luna",
+          reasoning_effort: "medium",
+          llm_usage: completeUsage,
+          cleanup: { sandbox_removed: true },
+        },
+      },
+    } as never)
+
+    await expect(processScanJob(mockJob)).resolves.toMatchObject({
+      status: "failed",
+      errorCategory: "BUDGET_EXCEEDED",
+    })
+    const manifest = vi.mocked(persistResultManifest).mock.calls.at(-1)?.[0]
+    expect(manifest?.terminalOutcome).toMatchObject({ status: "STOPPED_BUDGET" })
+    expect(manifest?.engineExecution).toMatchObject({
+      model: "azure_ai/gpt-6-luna",
+      reasoningEffort: "medium",
+      sourceRevision: "c".repeat(40),
+    })
+    expect(manifest?.engineExecution).not.toHaveProperty("sandboxRemoved")
+  })
+
   it("keeps a queued snapshot inside its recorded wall-clock ceiling", async () => {
     const built = buildScanExecutionPlan({ targetType: "REPO", mode: "SAFE" })
     const plan = {
@@ -3349,6 +3390,69 @@ describe("processScanJob", () => {
       expect.objectContaining({ workerExecution: mockProvenance })
     )
   })
+
+  it.each([
+    { host: true, engine: false, expected: true },
+    { host: false, engine: true, expected: false },
+    { host: undefined, engine: true, expected: undefined },
+    { host: undefined, engine: false, expected: undefined },
+  ])(
+    "projects host cleanup observation $host without trusting engine cleanup $engine",
+    async ({ host, engine, expected }) => {
+      vi.mocked(runEngine).mockResolvedValueOnce({
+        exitCode: 0,
+        cancelled: false,
+        timedOut: false,
+        sandboxRemoved: host,
+        sourceRevision: "c".repeat(40),
+        sourceCheckoutPath: "/tmp/receipt-source",
+        output: {
+          ingestionIssues: [],
+          vulnerabilities: [],
+          findingsComplete: true,
+          findingCount: 0,
+          summary: "Completed",
+          runRecord: {
+            run_id: "scan-1",
+            run_name: "scan-1",
+            status: "completed",
+            model: "azure_ai/gpt-6-luna",
+            reasoning_effort: "medium",
+            delegate_model: "azure_ai/gpt-6-luna",
+            delegate_reasoning_effort: "medium",
+            model_routing_policy:
+              "coordinator=azure_ai/gpt-6-luna@medium;delegate=azure_ai/gpt-6-luna@medium;v=1",
+            engine_version: "1.6.4",
+            max_agents: 2,
+            llm_usage: completeUsage,
+            cleanup: { sandbox_removed: engine },
+          },
+        },
+      } as never)
+
+      expect(await processScanJob(mockJob)).toMatchObject({ status: "completed" })
+      const manifest = vi.mocked(persistResultManifest).mock.calls.at(-1)?.[0]
+      expect(manifest?.engineExecution).toMatchObject({
+        model: "azure_ai/gpt-6-luna",
+        reasoningEffort: "medium",
+        engineVersion: "1.6.4",
+        maxAgents: 2,
+        sourceRevision: "c".repeat(40),
+      })
+      if (expected === undefined) {
+        expect(manifest?.engineExecution).not.toHaveProperty("sandboxRemoved")
+      } else {
+        expect(manifest?.engineExecution).toHaveProperty("sandboxRemoved", expected)
+      }
+
+      // Run the real downstream coverage policy against the projected output.
+      // Isolate this check from unrelated existing coverage issues in the job.
+      const issues = receiptIdentityCoverageIssues({ ...manifest!, coverageIssues: [] })
+      const reasons = issues.map((issue) => issue.reason).join("; ")
+      if (expected === true) expect(reasons).not.toContain("sandboxRemoved")
+      else expect(reasons).toContain("sandboxRemoved")
+    }
+  )
 
   it("resumes a durable budget stop without completing the scan", async () => {
     vi.mocked(prisma.scan.findUnique).mockResolvedValueOnce({
