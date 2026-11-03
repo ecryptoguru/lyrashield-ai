@@ -22,7 +22,7 @@ import { AUTHENTICATED_ASSESSMENT_BETA_LIMITS } from "@lyrashield/types"
  * grant on any terminal scan state.
  */
 
-interface RelayRuntimeConfig {
+export interface RelayRuntimeConfig {
   url: string
   signingSecret: string
   /** Admin secret shared with the egress proxy's audit/revoke endpoints. */
@@ -271,38 +271,61 @@ export async function registerRelayGrant(
   scanId: string,
   grant: string,
   config: RelayRuntimeConfig,
-  session?: RelaySessionBinding
+  session?: RelaySessionBinding,
+  ownerId?: string
 ): Promise<void> {
-  const response = await fetch(`${config.url}/v1/register/${encodeURIComponent(scanId)}`, {
+  const action = ownerId === undefined ? "register" : "register-owned"
+  const response = await fetch(`${config.url}/v1/${action}/${encodeURIComponent(scanId)}`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${config.adminSecret}`,
       "x-lyra-relay-grant": grant,
+      ...(ownerId === undefined ? {} : { "x-lyra-relay-owner": ownerId }),
       ...(session ? { "Content-Type": "application/json" } : {}),
     },
     ...(session ? { body: JSON.stringify({ session }) } : {}),
     signal: AbortSignal.timeout(10_000),
     redirect: "error",
+  }).catch((error: unknown) => {
+    if (ownerId !== undefined) throw new Error("RELAY_REGISTRATION_FAILED")
+    throw error
   })
   if (!response.ok) throw new Error("RELAY_REGISTRATION_FAILED")
-  const body: unknown = await response.json()
+  const body: unknown = await response.json().catch(() => null)
   if (!body || typeof body !== "object" || !("ok" in body) || body.ok !== true) {
     throw new Error("RELAY_REGISTRATION_FAILED")
   }
 }
 
-/** Revoke the grant immediately — call on every terminal scan state. */
-export async function revokeRelayGrant(scanId: string, config: RelayRuntimeConfig): Promise<void> {
+/** Private to the worker and relay administration. */
+export interface RelayAttempt {
+  ownerId: string
+  grant: string
+}
+
+export async function revokeRelayGrant(
+  scanId: string,
+  config: RelayRuntimeConfig,
+  attempt?: RelayAttempt
+): Promise<void> {
   try {
-    await fetch(`${config.url}/v1/revoke/${encodeURIComponent(scanId)}`, {
+    const action = attempt ? "revoke-owned" : "revoke"
+    const response = await fetch(`${config.url}/v1/${action}/${encodeURIComponent(scanId)}`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${config.adminSecret}` },
+      headers: {
+        Authorization: `Bearer ${config.adminSecret}`,
+        ...(attempt
+          ? { "x-lyra-relay-owner": attempt.ownerId, "x-lyra-relay-grant": attempt.grant }
+          : {}),
+      },
+      ...(attempt ? { redirect: "error" as const } : {}),
       signal: AbortSignal.timeout(10_000),
     })
+    if (attempt && !response.ok) throw new Error("RELAY_REVOCATION_FAILED")
   } catch (err) {
     logger.warn("Relay grant revocation failed", {
       scanId,
-      error: err instanceof Error ? err.message : String(err),
+      error: attempt ? "RELAY_REVOCATION_FAILED" : err instanceof Error ? err.message : String(err),
     })
   }
 }

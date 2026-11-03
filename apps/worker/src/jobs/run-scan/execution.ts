@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto"
+import { revokeFailedRelayRegistration } from "./cleanup"
 import { claimBoundedEngineCapacity } from "./capacity-lifecycle"
 import { prepareRepositoryAuth } from "../../engine/repository-auth"
 import { uploadEncryptedArtifact } from "@lyrashield/evidence-storage"
@@ -24,6 +26,7 @@ import {
   resolveRelayRuntimeConfig,
   resolveSpecServerHosts,
   revokeRelayGrant,
+  type RelayAttempt,
 } from "../../engine/relay-client"
 import {
   interpretExitCode,
@@ -79,6 +82,7 @@ export type ScanExecutionResult =
   | { ok: false; result: ScanJobResult }
 
 type UrlEngineRelay = {
+  attempt: RelayAttempt
   context: { url: string; grant: string }
   config: NonNullable<ReturnType<typeof resolveRelayRuntimeConfig>>
 }
@@ -185,7 +189,7 @@ async function prepareUrlEngineRelay(params: {
     executionPlan ? executionPlan.limits.maxEngineMs : Number.POSITIVE_INFINITY
   )
 
-  let relayRegistrationAttempted = false
+  let attempt: RelayAttempt | undefined
   try {
     const specServerHosts =
       target.type === "API" && target.apiSpecUrl
@@ -255,8 +259,8 @@ async function prepareUrlEngineRelay(params: {
 
     // Registration may succeed remotely even if its response is lost. From
     // this point, every setup failure must attempt revocation before failing.
-    relayRegistrationAttempted = true
-    await registerRelayGrant(scanId, minted.grant, relayConfig, sessionBinding)
+    attempt = { ownerId: randomUUID(), grant: minted.grant }
+    await registerRelayGrant(scanId, minted.grant, relayConfig, sessionBinding, attempt.ownerId)
     await addScanEvent(scanId, "relay_scope", "info", "Relay scope granted", {
       hosts: minted.scope.hosts,
       methods: minted.scope.methods,
@@ -287,25 +291,14 @@ async function prepareUrlEngineRelay(params: {
     }
     return {
       ok: true,
-      relay: { context: { url: relayConfig.url, grant: minted.grant }, config: relayConfig },
+      relay: {
+        attempt,
+        context: { url: relayConfig.url, grant: minted.grant },
+        config: relayConfig,
+      },
     }
   } catch (grantError) {
-    if (relayRegistrationAttempted) {
-      try {
-        await revokeRelayGrant(scanId, relayConfig)
-      } catch (cleanupError) {
-        // Cleanup must not replace the original registration/audit failure.
-        try {
-          logger.error("Failed to revoke relay grant after setup failure", {
-            scanId,
-            setupErrorType: grantError instanceof Error ? grantError.name : "UNKNOWN",
-            cleanupErrorType: cleanupError instanceof Error ? cleanupError.name : "UNKNOWN",
-          })
-        } catch {
-          // Logging must not replace the original registration/audit failure either.
-        }
-      }
-    }
+    if (attempt) await revokeFailedRelayRegistration(scanId, relayConfig, attempt, grantError)
     await addScanEvent(scanId, "engine_skipped", "error", "Relay grant could not be minted", {
       targetType: target.type,
       error: grantError instanceof Error ? grantError.message : String(grantError),
@@ -643,7 +636,7 @@ export async function executeScanTarget(params: {
             })
           }
         }
-        await revokeRelayGrant(scanId, relay.config)
+        await revokeRelayGrant(scanId, relay.config, relay.attempt)
       }
     }
   } else if (target.type === "WEB_APP" || target.type === "API") {

@@ -238,7 +238,10 @@ describe("executeScanTarget relay lifecycle", () => {
 
     // Audit is drained before the grant dies; revocation still runs.
     expect(mocks.fetchRelayAudit).toHaveBeenCalledWith("scan-1", relayConfig)
-    expect(mocks.revokeRelayGrant).toHaveBeenCalledWith("scan-1", relayConfig)
+    expect(mocks.revokeRelayGrant).toHaveBeenCalledWith("scan-1", relayConfig, {
+      grant: "grant-1",
+      ownerId: mocks.registerRelayGrant.mock.calls[0]?.[4],
+    })
     expect(mocks.fetchRelayAudit.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.revokeRelayGrant.mock.invocationCallOrder[0]!
     )
@@ -254,14 +257,20 @@ describe("executeScanTarget relay lifecycle", () => {
     expect(mocks.uploadEncryptedArtifact).toHaveBeenCalledWith(
       expect.objectContaining({ workspaceId: "ws-1", type: "relay_audit" })
     )
-    expect(mocks.revokeRelayGrant).toHaveBeenCalledWith("scan-1", relayConfig)
+    expect(mocks.revokeRelayGrant).toHaveBeenCalledWith("scan-1", relayConfig, {
+      grant: "grant-1",
+      ownerId: mocks.registerRelayGrant.mock.calls[0]?.[4],
+    })
   })
 
   it("revokes the grant after a successful engine run too", async () => {
     const result = await executeScanTarget(params())
 
     expect(result).toMatchObject({ ok: true })
-    expect(mocks.revokeRelayGrant).toHaveBeenCalledWith("scan-1", relayConfig)
+    expect(mocks.revokeRelayGrant).toHaveBeenCalledWith("scan-1", relayConfig, {
+      grant: "grant-1",
+      ownerId: mocks.registerRelayGrant.mock.calls[0]?.[4],
+    })
   })
 
   it("cleans a deterministic checkout when event persistence fails before handoff", async () => {
@@ -325,6 +334,24 @@ describe("executeScanTarget relay lifecycle", () => {
     expect(mocks.runEngine).not.toHaveBeenCalled()
   })
 
+  it("keeps independent cleanup owners for duplicate deliveries with identical minted grants", async () => {
+    await executeScanTarget(params())
+    await executeScanTarget(params())
+    const owners = mocks.registerRelayGrant.mock.calls.map((call) => call[4])
+    expect(owners).toHaveLength(2)
+    expect(new Set(owners).size).toBe(2)
+    for (const ownerId of owners) {
+      expect(ownerId).toMatch(/^[0-9a-f-]{36}$/)
+      expect(mocks.revokeRelayGrant).toHaveBeenCalledWith("scan-1", relayConfig, {
+        ownerId,
+        grant: "grant-1",
+      })
+      expect(
+        JSON.stringify([mocks.runEngine.mock.calls, mocks.addScanEvent.mock.calls])
+      ).not.toContain(ownerId)
+    }
+  })
+
   it("revokes when relay registration has an ambiguous failure", async () => {
     mocks.registerRelayGrant.mockRejectedValueOnce(new Error("RELAY_REGISTRATION_FAILED"))
 
@@ -333,7 +360,10 @@ describe("executeScanTarget relay lifecycle", () => {
       result: { errorCategory: "RELAY_SCOPE_UNAVAILABLE" },
     })
 
-    expect(mocks.revokeRelayGrant).toHaveBeenCalledWith("scan-1", relayConfig)
+    expect(mocks.revokeRelayGrant).toHaveBeenCalledWith("scan-1", relayConfig, {
+      grant: "grant-1",
+      ownerId: mocks.registerRelayGrant.mock.calls[0]?.[4],
+    })
     expect(mocks.runEngine).not.toHaveBeenCalled()
   })
 
@@ -355,7 +385,10 @@ describe("executeScanTarget relay lifecycle", () => {
       },
     })
 
-    expect(mocks.revokeRelayGrant).toHaveBeenCalledWith("scan-1", relayConfig)
+    expect(mocks.revokeRelayGrant).toHaveBeenCalledWith("scan-1", relayConfig, {
+      grant: "grant-1",
+      ownerId: mocks.registerRelayGrant.mock.calls[0]?.[4],
+    })
     expect(mocks.addScanEvent).toHaveBeenCalledWith(
       "scan-1",
       "engine_skipped",
@@ -533,7 +566,8 @@ describe("executeScanTarget authenticated staging beta", () => {
       "scan-1",
       "grant-1",
       relayConfig,
-      sessionBinding
+      sessionBinding,
+      expect.any(String)
     )
     expect(mocks.resolveRelaySessionBinding).toHaveBeenCalledWith(
       authorization,

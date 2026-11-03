@@ -869,7 +869,8 @@ describe("processScanJob", () => {
         "scan-1",
         expect.stringMatching(/^lrg1\./),
         expect.objectContaining({ url: "http://relay.test" }),
-        undefined
+        undefined,
+        expect.stringMatching(/^[a-f0-9-]{36}$/)
       )
       expect(vi.mocked(registerRelayGrant).mock.invocationCallOrder[0]).toBeLessThan(
         vi.mocked(runEngine).mock.invocationCallOrder[0]!
@@ -879,9 +880,11 @@ describe("processScanJob", () => {
         "scan-1",
         expect.objectContaining({ url: "http://relay.test" })
       )
+      const registered = vi.mocked(registerRelayGrant).mock.calls[0]!
       expect(revokeRelayGrant).toHaveBeenCalledWith(
         "scan-1",
-        expect.objectContaining({ url: "http://relay.test" })
+        expect.objectContaining({ url: "http://relay.test" }),
+        { ownerId: registered[4], grant: registered[1] }
       )
       expect(addScanEvent).toHaveBeenCalledWith(
         "scan-1",

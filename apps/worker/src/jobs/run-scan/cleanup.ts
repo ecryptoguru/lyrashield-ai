@@ -1,3 +1,8 @@
+import {
+  revokeRelayGrant,
+  type RelayAttempt,
+  type RelayRuntimeConfig,
+} from "../../engine/relay-client"
 import { logger } from "@lyrashield/logger"
 import { addScanEvent } from "@lyrashield/db"
 import { boundedCleanup } from "../../engine/scan-deadline"
@@ -41,6 +46,28 @@ export async function cleanupScanExecution(
         scanId,
         error: eventError instanceof Error ? eventError.message : String(eventError),
       })
+    }
+  }
+}
+
+export async function revokeFailedRelayRegistration(
+  scanId: string,
+  relayConfig: RelayRuntimeConfig,
+  attempt: RelayAttempt,
+  grantError: unknown
+): Promise<void> {
+  try {
+    await revokeRelayGrant(scanId, relayConfig, attempt)
+  } catch (cleanupError) {
+    // Cleanup must not replace the original registration/audit failure.
+    try {
+      logger.error("Failed to revoke relay grant after setup failure", {
+        scanId,
+        setupErrorType: grantError instanceof Error ? grantError.name : "UNKNOWN",
+        cleanupErrorType: cleanupError instanceof Error ? cleanupError.name : "UNKNOWN",
+      })
+    } catch {
+      // Logging must not replace the original registration/audit failure either.
     }
   }
 }
