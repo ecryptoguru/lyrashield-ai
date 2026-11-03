@@ -165,6 +165,22 @@ describe.skipIf(!enabled)("exact AI triage cache against disposable local Redis"
     expect(await cache.lookup(sibling)).toMatchObject({ outcome: "miss" })
   })
 
+  it("isolates engine revisions and preserves stored bytes when caching is off", async () => {
+    if (!redis || !cache) throw new Error("Redis test setup is unavailable")
+    const value = descriptor()
+    expect(await cache.store(value, artifact(), usage())).toBe(true)
+    expect((await cache.lookup(value)).outcome).toBe("hit")
+    const changed = await cache.lookup({ ...value, engineRevision: "f".repeat(40) })
+    expect(changed.outcome).toBe("miss")
+    expect(changed.artifact).toBeUndefined()
+    const before = await redis.get(entryKey(value))
+    const disabled = createAiResultCache({ redis, secret: keyMaterial, mode: "off" })
+
+    expect((await disabled.lookup(value)).outcome).toBe("disabled")
+    expect(await disabled.store(value, artifact(), usage())).toBe(false)
+    expect(await redis.get(entryKey(value))).toBe(before)
+  })
+
   it("treats corrupt and oversized values as misses", async () => {
     if (!redis || !cache) throw new Error("Redis test setup is unavailable")
     const corrupt = descriptor()
