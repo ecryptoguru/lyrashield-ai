@@ -346,7 +346,7 @@ assert_paired_release_hold() {
 const [module,owner,product,engine,digest,readyCode,readyBody,scansCode,scansBody]=process.argv.slice(1);
 const bytes=Buffer.from(module,"base64");
 const {createHash}=await import("node:crypto");
-if(bytes.length>8192 || bytes.toString("base64")!==module || createHash("sha256").update(bytes).digest("hex")!=="138515e7d3139ddc96c19111e9f433e47e41cf3b39607df0cc5184473a270e52") throw new Error("Unreviewed paired hold module");
+if(bytes.length>8192 || bytes.toString("base64")!==module || createHash("sha256").update(bytes).digest("hex")!=="cd027329d8a0436030580f2190a92c78a5ab8a87fdd0fb36fcc8f0ace9568177") throw new Error("Unreviewed paired hold module");
 const {ownedHold:assertPairedReleaseHold,assertHeldReadiness}=await import("data:text/javascript;base64,"+module);
 const {default:Redis}=await import("ioredis");
 const redis=new Redis(process.env.REDIS_URL,{maxRetriesPerRequest:1});
@@ -552,9 +552,28 @@ cleanup_host_assets() {
   fi
 }
 
+# A failed held transition never restarts a prior consumer. Disabling the units
+# prevents boot/timer recovery from silently reopening an unsafe pairing.
+contain_paired_worker() {
+  actions_ok=1
+  systemctl disable --now "$timer" || actions_ok=0
+  systemctl disable --now "$service" || actions_ok=0
+  systemctl stop "$timer" || actions_ok=0
+  systemctl stop "$service" || actions_ok=0
+  for unit in "$service" "$timer"; do
+    active=$(systemctl is-active "$unit" 2>/dev/null) || { [ "$active" = inactive ] || return 1; }
+    enabled=$(systemctl is-enabled "$unit" 2>/dev/null) || { [ "$enabled" = disabled ] || [ "$enabled" = masked ] || return 1; }
+    [ "$active" = inactive ] || return 1
+    [ "$enabled" = disabled ] || [ "$enabled" = masked ] || return 1
+  done
+  remaining=$(docker ps -a --filter 'name=^/lyrashield-worker$' --format '{{.Names}}') || return 1
+  [ -z "$remaining" ] && [ "$actions_ok" -eq 1 ]
+}
+
 rollback() {
   status=$?
   trap - EXIT HUP INT TERM
+  [ "$promotion_complete" -eq 1 ] || [ "$status" -ne 0 ] || status=1
   if [ "$promotion_complete" -ne 1 ] && [ "$maintenance_cutover" -eq 1 ]; then
     # Schema cutover is forward-only. Never restore or restart legacy writers.
     systemctl disable --now "$timer" || true
@@ -563,14 +582,21 @@ rollback() {
     cleanup_host_assets
     exit "$status"
   fi
-  if [ "$promotion_complete" -ne 1 ] && [ "$paired_release_held" -eq 1 ] && ! assert_paired_release_hold; then
-    # A missing/replaced latch cannot authorize restarting a prior worker.
-    # Preserve external state and fail closed with the consumer stopped.
-    systemctl stop "$timer" || true
-    systemctl stop "$service" || true
-    if [ "$host_assets_changed" -eq 1 ]; then restore_host_assets || true; fi
-    if [ "$config_changed" -eq 1 ]; then cp -p "$backup" "$config"; fi
-    echo "Worker paired release failed; hold changed or unavailable, worker stopped, admission untouched" >&2
+  if [ "$promotion_complete" -ne 1 ] && [ "$paired_release_held" -eq 1 ]; then
+    if ! contain_paired_worker; then
+      echo "CONTAINMENT FAILED: paired release worker/timer stop or disable could not be verified; manual recovery required; admission untouched" >&2
+      cleanup_host_assets
+      exit "$status"
+    fi
+    restored=1
+    if [ "$host_assets_changed" -eq 1 ]; then restore_host_assets || restored=0; fi
+    if [ "$config_changed" -eq 1 ]; then cp -p "$backup" "$config" || restored=0; fi
+    if ! contain_paired_worker; then
+      echo "CONTAINMENT FAILED: restored paired release units are not verified inactive and disabled; manual recovery required; admission untouched" >&2
+    else
+      echo "Worker paired release failed during: ${promotion_step}; worker and timer verified inactive and disabled; admission untouched" >&2
+    fi
+    [ "$restored" -eq 1 ] || echo "Prior worker files were not fully restored; manual recovery required" >&2
     cleanup_host_assets
     exit "$status"
   fi
@@ -594,7 +620,10 @@ rollback() {
   cleanup_host_assets
   exit "$status"
 }
-trap rollback EXIT HUP INT TERM
+trap rollback EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 # Keep DNS refresh from racing the bounded replacement window. The timer is
 # restored after success or rollback.

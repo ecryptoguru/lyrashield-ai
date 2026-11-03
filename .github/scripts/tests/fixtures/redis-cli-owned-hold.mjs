@@ -38,16 +38,29 @@ if (command === "SET") {
       if (["claim", "assert", "release"].includes(operation)) result = "1"
     }
   } else {
-    if (!lua.includes("value.owner ~= nil") || !lua.includes("value.operator ~= ARGV[1]")) {
+    if (
+      !lua.includes("raw ~= ARGV[2]") ||
+      !lua.includes("count ~= 3") ||
+      !lua.includes("value.operator ~= ARGV[1]") ||
+      !lua.includes("value.stoppedAt:match")
+    ) {
       throw new Error("Unsafe legacy resume")
     }
     try {
       const value = JSON.parse(state.value)
       if (
         value &&
-        !Object.hasOwn(value, "owner") &&
-        value.reason !== "paired-release" &&
-        value.operator === operation
+        state.value === receipt &&
+        JSON.stringify(value) === state.value &&
+        Object.keys(value).sort().join(",") === "operator,reason,stoppedAt" &&
+        typeof value.operator === "string" &&
+        value.operator.length > 0 &&
+        value.operator === operation &&
+        typeof value.reason === "string" &&
+        value.reason.length > 0 &&
+        typeof value.stoppedAt === "string" &&
+        /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value.stoppedAt) &&
+        new Date(value.stoppedAt).toISOString() === value.stoppedAt
       ) {
         state.value = null
         result = "1"

@@ -144,3 +144,65 @@ test("promoter binds the exact reviewed hold module payload", () => {
   const promoter = readFileSync(path.join(root, ".github/scripts/promote-worker-vm.sh"), "utf8")
   assert.ok(promoter.includes(`digest("hex")!=="${digest}"`))
 })
+
+test("receipt identity components must be strings before regex validation", () => {
+  for (let index = 0; index < identity.length; index++) {
+    for (const value of [[identity[index]], { toString: () => identity[index] }, null, 123]) {
+      const input = [...identity]
+      input[index] = value
+      assert.throws(() => pairedReleaseReceipt(...input), /Invalid paired release identity/)
+    }
+  }
+})
+
+test("manual option-like names remain releasable and ambiguous raw JSON is preserved", (t) => {
+  const f = fixture(t)
+  assert.equal(f.run("stop", ["--version", "incident"]).status, 0)
+  assert.equal(f.run("resume", ["--version"]).status, 0)
+  for (const reason of [
+    "paired-release",
+    "worker-promotion",
+    "webhook-claims-cutover",
+    "v26-accounting-cutover",
+  ]) {
+    f.state(JSON.stringify({ operator: "on-call", reason, stoppedAt: "2026-11-03T00:00:00.000Z" }))
+    assert.equal(f.run("resume", ["on-call"]).status, 0)
+  }
+  const ambiguous =
+    '{"operator":"on-call","reason":"paired-release","reason":"incident","stoppedAt":"2026-11-03T00:00:00.000Z"}'
+  f.state(ambiguous)
+  assert.notEqual(f.run("resume", ["on-call"]).status, 0)
+  assert.equal(f.read().value, ambiguous)
+  const manual = JSON.stringify({
+    operator: "on-call",
+    reason: "incident",
+    stoppedAt: "2026-11-03T00:00:00.000Z",
+  })
+  const replacement = JSON.stringify({
+    operator: "on-call",
+    reason: "other",
+    stoppedAt: "2026-11-03T00:00:00.000Z",
+  })
+  f.state(manual)
+  assert.notEqual(f.run("resume", ["on-call"], { FAKE_REDIS_REPLACEMENT: replacement }).status, 0)
+  assert.equal(f.read().value, replacement)
+})
+
+test("oversized manual stop is refused before creating an unreleasable receipt", (t) => {
+  const f = fixture(t)
+  assert.notEqual(f.run("stop", ["on-call", "x".repeat(4096)]).status, 0)
+  assert.equal(f.read().value, null)
+})
+
+test("a legitimate oversized legacy manual receipt remains releasable by its owner", (t) => {
+  const f = fixture(t)
+  f.state(
+    JSON.stringify({
+      operator: "on-call",
+      reason: "x".repeat(4096),
+      stoppedAt: "2026-11-03T00:00:00.000Z",
+    })
+  )
+  assert.equal(f.run("resume", ["on-call"]).status, 0)
+  assert.equal(f.read().value, null)
+})

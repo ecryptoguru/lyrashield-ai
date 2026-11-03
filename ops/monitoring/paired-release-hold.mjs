@@ -3,6 +3,9 @@ export const SCAN_ADMISSION_KEY = "lyrashield:scan-admission:stopped"
 
 export function pairedReleaseReceipt(owner, productRevision, engineRevision, workerDigest) {
   if (
+    [owner, productRevision, engineRevision, workerDigest].some(
+      (value) => typeof value !== "string"
+    ) ||
     !/^[1-9][0-9]{0,19}:[1-9][0-9]{0,9}$/.test(owner ?? "") ||
     !/^[a-f0-9]{40}$/.test(productRevision ?? "") ||
     !/^[a-f0-9]{40}$/.test(engineRevision ?? "") ||

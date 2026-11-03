@@ -114,6 +114,10 @@ case "$command:$unit" in
       esac
     done ;;
   disable:--now)
+    if [ "${2:-}" = lyrashield-worker.service ] && [ "${MOCK_CONTAINMENT_FAIL:-0}" = 1 ]; then exit 1; fi
+    if [ "${2:-}" = lyrashield-worker.service ] && [ "${MOCK_DISABLE_LIES:-0}" = 1 ]; then
+      printf 0 > "$MOCK_SERVICE_ACTIVE"; printf 0 > "$MOCK_CONTAINER_PRESENT"; exit 0
+    fi
     case "${2:-}" in
       lyrashield-worker-egress-refresh.timer)
         printf 0 > "$MOCK_TIMER_ACTIVE"
@@ -125,6 +129,7 @@ case "$command:$unit" in
       *) exit 1 ;;
     esac ;;
   stop:lyrashield-worker.service)
+    [ "${MOCK_CONTAINMENT_FAIL:-0}" != 1 ] || exit 1
     printf 0 > "$MOCK_SERVICE_ACTIVE"
     printf 0 > "$MOCK_CONTAINER_PRESENT" ;;
   stop:lyrashield-worker-egress-refresh.timer)
@@ -132,6 +137,11 @@ case "$command:$unit" in
   start:lyrashield-worker-egress-refresh.timer)
     printf 1 > "$MOCK_TIMER_ACTIVE" ;;
   restart:lyrashield-worker.service)
+    restart_count=$(cat "$MOCK_SERVICE_ACTIVE.restart-count" 2>/dev/null || printf 0)
+    restart_count=$((restart_count + 1))
+    printf '%s' "$restart_count" > "$MOCK_SERVICE_ACTIVE.restart-count"
+    if [ "$restart_count" = 2 ] && [ "${MOCK_ROLLBACK_REMOVAL:-0}" = 1 ]; then : > "$MOCK_ADMISSION_STOP"; fi
+    if [ "$restart_count" = 1 ] && [ -n "${MOCK_RESTART_SIGNAL:-}" ]; then kill -"$MOCK_RESTART_SIGNAL" "$PPID"; fi
     if [ "${MOCK_RESTART_FAIL:-0}" = 1 ]; then
       echo "simulated worker restart failure" >&2
       exit 1
@@ -430,6 +440,13 @@ run_case() {
     if [ "$receipt_mode" = foreign ]; then printf 'foreign-owner' > "$case_dir/admission-stop"; fi
   fi
   local paired_module_payload="" hold_pttl=-1 live_engine=""
+  local containment_fail=0 disable_lies=0 rollback_removal=0 restart_signal=""
+  case "$name" in
+    paired-stop-failure) containment_fail=1 ;;
+    paired-disable-lies) disable_lies=1 ;;
+    paired-rollback-removal) rollback_removal=1 ;;
+    paired-signal-*) restart_signal=TERM ;;
+  esac
   if [ "$cutover" = paired ]; then
     mode_arg=--paired-release-held
     paired_module_payload=$(base64 < "$repo/ops/monitoring/paired-release-hold.mjs" | tr -d '\n')
@@ -467,6 +484,10 @@ NODE
       LYRASHIELD_PAIRED_RELEASE_OWNER=123:1 \
       LYRASHIELD_PAIRED_RELEASE_HOLD_MODULE_BASE64="$paired_module_payload" \
       MOCK_HOLD_PTTL="$hold_pttl" \
+      MOCK_CONTAINMENT_FAIL="$containment_fail" \
+      MOCK_DISABLE_LIES="$disable_lies" \
+      MOCK_ROLLBACK_REMOVAL="$rollback_removal" \
+      MOCK_RESTART_SIGNAL="$restart_signal" \
       MOCK_LIVE_ENGINE_REVISION="$live_engine" \
       MOCK_HTTP_PORT="$(cat "$case_dir/http-port" 2>/dev/null || true)" \
       LYRASHIELD_V26_RECEIPT_FILE="$case_dir/v26.json" \
@@ -512,7 +533,7 @@ NODE
       LYRASHIELD_WORKER_HOST_ASSETS_DIR="$case_dir/host/assets" \
       LYRASHIELD_WORKER_ENV_LIB="$repo/ops/worker/worker-env.sh" \
       LYRASHIELD_WORKER_SYSTEMD_DIR="$case_dir/host/systemd" \
-      sh "$script" ${mode_arg:+"$mode_arg"} "$target" "$app_revision" "$engine_revision" 2>&1
+      "${PROMOTION_SHELL:-sh}" "$script" ${mode_arg:+"$mode_arg"} "$target" "$app_revision" "$engine_revision" 2>&1
   )
   status=$?
   set -e
@@ -529,14 +550,33 @@ NODE
     else
       [ "$status" -ne 0 ] || { printf '%s\n' "$output"; exit 1; }
       if grep -Fq 'scan admission HELD' <<< "$output"; then echo "Failed held promotion reported success" >&2; exit 1; fi
-      grep -Fq "LYRASHIELD_WORKER_IMAGE=$configured_image" "$case_dir/runtime.conf"
+      if [ "$containment_fail" = 1 ] || [ "$disable_lies" = 1 ]; then
+        grep -Fq 'CONTAINMENT FAILED' <<< "$output"
+        if grep -Eq 'verified inactive and disabled|worker stopped' <<< "$output"; then echo "False containment claim" >&2; exit 1; fi
+      else
+        grep -Fq "LYRASHIELD_WORKER_IMAGE=$configured_image" "$case_dir/runtime.conf"
+      fi
+      if [ -n "$restart_signal" ]; then [ "$status" -eq 143 ]; fi
+      case "$receipt_mode" in
+        missing|malformed|foreign|stale-owner|wrong-source|expiring|missing-module|tampered-module) ;;
+        *)
+          if [ "$containment_fail" != 1 ] && [ "$disable_lies" != 1 ]; then
+            [ "$(cat "$case_dir/service-active")" = 0 ]
+            [ "$(cat "$case_dir/service-enabled")" = 0 ]
+            [ "$(cat "$case_dir/timer-active")" = 0 ]
+            [ "$(cat "$case_dir/timer-enabled")" = 0 ]
+          fi ;;
+      esac
+      if [ -e "$case_dir/service-active.restart-count" ]; then
+        [ "$(cat "$case_dir/service-active.restart-count")" -le 1 ]
+      fi
     fi
     if [ -n "$replacement_stop" ]; then
       [ "$(cat "$case_dir/admission-stop")" = "$replacement_stop" ]
       [ "$(cat "$case_dir/service-active")" = 0 ]
     elif [ "$receipt_mode" = http-removal ]; then
       [ ! -s "$case_dir/admission-stop" ]
-      [ "$(cat "$case_dir/service-active")" = 0 ]
+      if [ "$containment_fail" != 1 ]; then [ "$(cat "$case_dir/service-active")" = 0 ]; fi
     elif [ "$receipt_mode" = http-replacement ]; then
       [ "$(cat "$case_dir/admission-stop")" = '{"operator":"on-call","reason":"http-fixture"}' ]
       [ "$(cat "$case_dir/service-active")" = 0 ]
@@ -736,6 +776,13 @@ if [ "${PAIRED_RELEASE_ONLY:-0}" = 1 ]; then
   run_case paired-image-mismatch 1 1 1 failure 1 '' 1 '' 9999999000 1 1 '' env 0 paired
   run_case paired-health-failure 1 1 1 failure 1 '' 0 '' 9999999000 1 1 '' env 0 paired
   run_case paired-restart-failure 1 1 1 failure 1 '' 0 '' 9999999000 1 1 '' env 1 paired
+  run_case paired-rollback-removal 1 1 1 failure 1 '' 0 '' 9999999000 1 1 '' env 0 paired scans-open
+  run_case paired-stop-failure 1 1 1 failure 1 '' 0 '' 9999999000 1 1 '' env 0 paired http-removal
+  run_case paired-disable-lies 1 1 1 failure 1 '' 0 '' 9999999000 1 1 '' env 0 paired http-removal
+  run_case paired-signal-sh 1 1 1 failure 1 '' 0 '' 9999999000 1 1 '' env 0 paired
+  if command -v dash >/dev/null; then
+    PROMOTION_SHELL="$(command -v dash)" run_case paired-signal-dash 1 1 1 failure 1 '' 0 '' 9999999000 1 1 '' env 0 paired
+  fi
   echo "Paired release held promotion proof passed (real loopback HTTP)."
   exit 0
 fi
