@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto"
+import { createHash, timingSafeEqual } from "node:crypto"
 
 /**
  * Pure canonical-input hashing for durable agent operations.
@@ -21,4 +21,19 @@ export function sortKeysReplacer(_key: string, value: unknown): unknown {
 export function hashOperationInput(operationName: string, input: Record<string, unknown>): string {
   const canonical = JSON.stringify({ operationName, input }, sortKeysReplacer)
   return createHash("sha256").update(canonical).digest("hex")
+}
+
+const ADMISSION_PROOF_HASH = /^[0-9a-f]{64}$/
+
+/** Hash a one-time admission proof before persistence. */
+export function hashDelegatedAdmissionProof(proof: string): string {
+  return createHash("sha256").update(proof, "utf8").digest("hex")
+}
+
+/** Compare a presented proof with its persisted SHA-256 in constant time. */
+export function verifyDelegatedAdmissionProof(proof: string, expectedHash: string | null): boolean {
+  if (!proof || !expectedHash || !ADMISSION_PROOF_HASH.test(expectedHash)) return false
+  const actual = Buffer.from(hashDelegatedAdmissionProof(proof), "hex")
+  const expected = Buffer.from(expectedHash, "hex")
+  return actual.length === expected.length && timingSafeEqual(actual, expected)
 }
