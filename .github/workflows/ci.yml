@@ -247,6 +247,15 @@ jobs:
           node .github/scripts/verify-pnpm-pin.mjs
           pnpm lint:ratchet-baselines
 
+      - name: Test protected release controller and distribution matrix
+        if: needs.changes.outputs.tooling-only == 'true' || needs.changes.outputs.shared == 'true'
+        run: >-
+          node --test
+          .github/scripts/tests/paired-runtime-workflow.test.mjs
+          .github/scripts/tests/paired-runtime-live-commands.test.mjs
+          .github/scripts/tests/paired-runtime-live-trust.test.mjs
+          .github/scripts/tests/release-surface-matrix.test.mjs
+
       - name: Lint
         if: needs.changes.outputs.app == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true') || needs.changes.outputs.marketing-tests == 'true' || needs.changes.outputs.motion-tests == 'true' || needs.changes.outputs.desktop-frontend-tests == 'true'
         run: node .github/scripts/ci-selection.mjs lint quality

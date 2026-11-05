@@ -313,6 +313,11 @@ const file=files[process.argv.at(-1)];if(!file)process.exit(19);process.stdout.w
   })
   const { readAuthenticatedOwner } = await import("../paired-runtime-github.mjs")
   assert.equal(await readAuthenticatedOwner(), owner)
+  drift = { job_workflow_ref: repo + "/.github/workflows/deploy-azure.yml@refs/heads/main" }
+  assert.equal(await readAuthenticatedOwner(".github/workflows/deploy-azure.yml"), owner)
+  await assert.rejects(readAuthenticatedOwner())
+  await assert.rejects(readAuthenticatedOwner(".github/workflows/untrusted.yml"))
+  drift = {}
   setMain("0".repeat(40))
   await assert.rejects(readAuthenticatedOwner())
   setMain(actual)

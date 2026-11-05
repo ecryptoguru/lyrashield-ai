@@ -313,6 +313,9 @@ export function protectedLiveAdapter() {
       )
       cloud.promoteStoppedWorker(p)
     },
+    async verifyRollbackAvailability(p) {
+      cloud.verifyRollbackAvailability(p)
+    },
     readWorker: () => guest("worker", {}),
     readPhysicalDrain: () => guest("physical", {}),
     verifySourceAndConnectionContinuity: (p) =>

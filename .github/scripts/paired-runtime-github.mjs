@@ -18,6 +18,7 @@ const REPO = "ecryptoguru/lyrashield-ai",
   ISSUER = "https://token.actions.githubusercontent.com"
 const ENV = "azure-production",
   JOB = ".github/workflows/deploy-azure-runtime.yml"
+const ownerJobs = new Set([JOB, ".github/workflows/deploy-azure.yml"])
 const ENTRIES = new Map([
   [".github/workflows/release-production.yml", "push"],
   [".github/workflows/deploy-azure.yml", "workflow_dispatch"],
@@ -146,7 +147,8 @@ async function getLimited(url, options, max) {
     throw new Error("Protected identity service unavailable")
   }
 }
-function claims(token, jwks, identity, aud, when) {
+function claims(token, jwks, identity, aud, when, jobWorkflow = JOB) {
+  check(ownerJobs.has(jobWorkflow))
   check(typeof token === "string" && token.length <= 16384)
   const parts = token.split(".")
   check(parts.length === 3 && parts.every((x) => /^[\w-]+$/.test(x)))
@@ -194,7 +196,7 @@ function claims(token, jwks, identity, aud, when) {
   check(
     c.workflow_ref === `${REPO}/${x.path}${ref}` &&
       c.workflow_sha === x.source &&
-      c.job_workflow_ref === `${REPO}/${JOB}${ref}` &&
+      c.job_workflow_ref === `${REPO}/${jobWorkflow}${ref}` &&
       c.job_workflow_sha === x.source
   )
   check(
@@ -251,10 +253,11 @@ function currentRun() {
   )
   return identity
 }
-export async function readAuthenticatedOwner() {
+export async function readAuthenticatedOwner(jobWorkflow = JOB) {
+  check(ownerJobs.has(jobWorkflow))
   const x = currentRun(),
     aud = audience("owner", x.owner)
-  claims(await requestToken(aud), await keys(), x, aud, Math.floor(Date.now() / 1000))
+  claims(await requestToken(aud), await keys(), x, aud, Math.floor(Date.now() / 1000), jobWorkflow)
   return x.owner
 }
 // Wire to the protected publishing step after qualifications. Keep the private
