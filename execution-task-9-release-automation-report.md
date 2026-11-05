@@ -9,6 +9,8 @@ customer, delegated or engine worktree was changed.
 
 Implementation commit: `9f84a2ef`
 
+Review remediation commit: `1de18cc3820cfe8b6f7db2656e3848ea57c728cd`
+
 ## Delivered
 
 - Added `.github/scripts/paired-runtime-workflow.mjs`, a finite controller with only
@@ -44,6 +46,28 @@ Implementation commit: `9f84a2ef`
   modes and the mutable-only `v2` major tag.
 - Added the focused controller tests to required path-scoped CI tooling coverage.
 
+## Review remediation — caller workflow identity
+
+The conditional-pass review found that `deploy-azure.yml` selected the caller
+workflow for owner authentication, while protected record authentication and
+witness verification still defaulted to `deploy-azure-runtime.yml`. Current-run
+artifacts from the caller preflight therefore had two incompatible identity
+requirements.
+
+`verifyRecordWitness`, `issueRecordWitness`, `verifiedArtifact`,
+`readProtectedRecord` and the internal artifact authenticator now accept the
+expected protected job workflow. For artifacts from the current run, caller
+authentication, artifact authentication and witness-policy verification use the
+same workflow identity. Historical artifacts retain the runtime workflow policy.
+The finite controller's default artifact and record readers also thread its
+resolved `ownerWorkflow` into those verifiers.
+
+A new signed regression uses real focused `readAuthenticatedOwner`,
+`verifyRecordWitness` and `verifiedArtifact` behavior with `deploy-azure.yml`
+JWT identities, a bounded signed artifact ZIP and current-run GitHub responses.
+It proves the caller identity succeeds through all three boundaries and that
+the runtime default rejects the caller record.
+
 ## Rollback behavior
 
 The controller exposes the existing explicit B-to-A restore implementation rather
@@ -54,7 +78,7 @@ supplementary; it is not treated as rollback success.
 
 ## Verification
 
-- `node --test .github/scripts/tests/paired-runtime-release.test.mjs .github/scripts/tests/paired-runtime-recovery-arm.test.mjs .github/scripts/tests/paired-runtime-live-trust.test.mjs .github/scripts/tests/paired-runtime-live-commands.test.mjs .github/scripts/tests/paired-runtime-transport.test.mjs .github/scripts/tests/paired-runtime-workflow.test.mjs .github/scripts/tests/release-surface-matrix.test.mjs` — 110 passed.
+- `node --test .github/scripts/tests/paired-runtime-release.test.mjs .github/scripts/tests/paired-runtime-recovery-arm.test.mjs .github/scripts/tests/paired-runtime-live-trust.test.mjs .github/scripts/tests/paired-runtime-live-commands.test.mjs .github/scripts/tests/paired-runtime-transport.test.mjs .github/scripts/tests/paired-runtime-workflow.test.mjs .github/scripts/tests/release-surface-matrix.test.mjs` — 111 passed.
 - `pnpm exec eslint` on all changed JavaScript and test files — passed with no warnings.
 - `pnpm exec prettier --check` on all changed files — passed.
 - `actionlint -shellcheck='' .github/workflows/*.yml` — passed.
