@@ -22,7 +22,7 @@ printf 'POSTGRES_PASSWORD=%s\nPOSTGRES_DB=lyrashield_test\n' "$admin_password" >
 cleanup() {
   local status=$? observed
   trap - EXIT
-  if [[ -n "$relay_pid" ]]; then : > "$dir/stop-relay"; wait "$relay_pid" 2>/dev/null || true; fi
+  if [[ -n "$relay_pid" ]]; then kill "$relay_pid" 2>/dev/null || true; wait "$relay_pid" 2>/dev/null || true; fi
   if [[ -n "$container" ]]; then
     observed=$(docker inspect --format '{{.Id}}|{{.Config.Image}}|{{index .Config.Labels "lyrashield.dispatch-authority-fixture"}}|{{.HostConfig.NetworkMode}}' "$container" 2>/dev/null) || observed=''
     if [[ "$observed" == "$container|$image|$identity|none" ]]; then
@@ -31,6 +31,7 @@ cleanup() {
       echo 'Refusing to remove unverified fixture container' >&2; status=1
     fi
   fi
+  if [[ "$status" -ne 0 && -s "$dir/relay.err" ]]; then cat "$dir/relay.err" >&2; fi
   rm -rf "$dir"
   exit "$status"
 }
@@ -69,369 +70,47 @@ if [[ "$diff_status" -ne 0 ]]; then
   cat "$dir/schema.diff" "$dir/schema.diff.err" >&2
   exit 1
 fi
-docker exec -i "$container" psql -X -U postgres -d lyrashield_test -v ON_ERROR_STOP=1 <<'SQL'
--- Closed baseline and monotonic epoch.
-DO $test$
-DECLARE
-  closed_count integer;
-BEGIN
-  SELECT count(*) INTO closed_count FROM "ScanAuthorityEpoch"
-  WHERE NOT "isOpen" AND "closedAt" IS NOT NULL;
-  IF closed_count < 1 THEN
-    RAISE EXCEPTION 'closed authority baseline missing';
-  END IF;
-
-  BEGIN
-    INSERT INTO "ScanAuthorityEpoch"
-      ("id", "epoch", "isOpen", "openedAt", "closedAt", "createdAt", "updatedAt")
-    VALUES
-      ('test-lower-epoch', 1, false, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
-    RAISE EXCEPTION 'non-monotonic authority epoch was accepted';
-  EXCEPTION WHEN check_violation THEN NULL;
-  END;
-
-  BEGIN
-    UPDATE "ScanAuthorityEpoch" SET "isOpen" = true WHERE id = 'scan-authority-baseline';
-    RAISE EXCEPTION 'closed authority epoch was reopened';
-  EXCEPTION WHEN check_violation THEN NULL;
-  END;
-END
-$test$;
-
--- No authority can be issued from the closed migration baseline.
-DO $test$
-BEGIN
-  BEGIN
-    INSERT INTO "ScanWorkerInstanceGrant"
-      ("id", "authorityEpochId", "instanceId", "credentialHash", "issuedAt", "expiresAt", "createdAt", "updatedAt")
-    VALUES
-      ('closed-worker', 'scan-authority-baseline', 'closed-instance', repeat('0', 64),
-       CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + interval '1 hour', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
-    RAISE EXCEPTION 'worker grant was issued from a closed epoch';
-  EXCEPTION WHEN check_violation THEN NULL;
-  END;
-END
-$test$;
-INSERT INTO "ScanAuthorityEpoch"
-  ("id", "epoch", "isOpen", "openKey", "openedAt", "closedAt", "createdAt", "updatedAt")
-VALUES
-  ('test-open-epoch', 2, true, 'open', CURRENT_TIMESTAMP, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
-
--- Live product rows are the source of the attempt identity.
-INSERT INTO "users" ("id", "name", "email", "createdAt", "updatedAt")
-VALUES ('user-1', 'Fixture user', 'fixture@example.invalid', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
-INSERT INTO "Workspace"
-  ("id", "name", "slug", "mode", "plan", "deploymentType", "retentionDays",
-   "telemetryEnabled", "createdAt", "updatedAt")
-VALUES
-  ('workspace-1', 'Fixture workspace', 'fixture-workspace', 'VIBE', 'FREE', 'saas', 30,
-   false, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
-INSERT INTO "Target"
-  ("id", "workspaceId", "type", "name", "environment", "status", "createdAt", "updatedAt")
-VALUES
-  ('target-1', 'workspace-1', 'REPO', 'Fixture target', 'STAGING', 'active',
-   CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
-INSERT INTO "Scan" (
-  "id", "workspaceId", "targetId", "goal", "mode", "status", "triggerType",
-  "accountingVersion", "determinismMode", "executionPlan", "executionPlanHash",
-  "createdById", "sponsorAccountId", "createdAt", "updatedAt"
-) VALUES
-  ('scan-1', 'workspace-1', 'target-1', 'TEST_APP', 'SAFE', 'QUEUED', 'manual',
-   2, 'default', '{"limits":{"maxBudgetUsd":0,"maxDurationMs":60000}}'::jsonb,
-   repeat('c', 64), 'user-1', 'user-1', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-  ('scan-2', 'workspace-1', 'target-1', 'TEST_APP', 'SAFE', 'QUEUED', 'manual',
-   2, 'default', '{"limits":{"maxBudgetUsd":0,"maxDurationMs":60000}}'::jsonb,
-   repeat('c', 64), 'user-1', 'user-1', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
-
--- Hash-only worker instance grant and immutable attempt identity.
-INSERT INTO "ScanWorkerInstanceGrant"
-  ("id", "authorityEpochId", "instanceId", "credentialHash", "issuedAt", "expiresAt", "createdAt", "updatedAt")
-VALUES
-  ('worker-grant-1', 'test-open-epoch', 'worker-instance-1',
-   repeat('a', 64), CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + interval '1 hour',
-   CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
-INSERT INTO "ScanDispatchAttempt" (
-  "operationId", "attemptId", "scanId", "workspaceId", "initiatingUserId", "sponsorAccountId",
-  "targetId", "targetSnapshotDigest", "executionPlanHash", "policyVersion",
-  "delegatedAuthorizationVersion", "attachmentIds", "mode", "goal", "maxBudgetUsd",
-  "maxRuntimeMs", "authorityEpochId", "workerInstanceGrantId", "expiresAt"
-) VALUES (
-  'operation-1', 'attempt-1', 'scan-1', 'workspace-1', 'user-1', 'user-1',
-  'target-1', repeat('b', 64), repeat('c', 64), 'policy-1',
-  NULL, ARRAY['attachment-1']::TEXT[], 'SAFE', 'TEST_APP', 0,
-  60000, 'test-open-epoch', 'worker-grant-1', CURRENT_TIMESTAMP + interval '10 minutes'
-);
-DO $test$
-BEGIN
-  BEGIN
-    UPDATE "ScanDispatchAttempt" SET "maxBudgetUsd" = 1 WHERE "operationId" = 'operation-1';
-    RAISE EXCEPTION 'attempt identity was mutable';
-  EXCEPTION WHEN check_violation THEN NULL;
-  END;
-  BEGIN
-    DELETE FROM "ScanDispatchAttempt" WHERE "operationId" = 'operation-1';
-    RAISE EXCEPTION 'attempt deletion was accepted';
-  EXCEPTION WHEN check_violation THEN NULL;
-  END;
-END
-$test$;
-
--- One unresolved physical attempt per scan.
-INSERT INTO "ScanPhysicalExecution" (
-  "attemptId", "operationId", "scanId", "workspaceId", "authorityEpochId",
-  "workerInstanceGrantId", "state", "unresolvedKey", "revision", "createdAt", "updatedAt"
-) VALUES (
-  'attempt-1', 'operation-1', 'scan-1', 'workspace-1', 'test-open-epoch',
-  'worker-grant-1', 'RESERVED', 'scan-1', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-);
-INSERT INTO "ScanDispatchAttempt" (
-  "operationId", "attemptId", "scanId", "workspaceId", "initiatingUserId", "sponsorAccountId",
-  "targetId", "targetSnapshotDigest", "executionPlanHash", "policyVersion",
-  "delegatedAuthorizationVersion", "attachmentIds", "mode", "goal", "maxBudgetUsd",
-  "maxRuntimeMs", "authorityEpochId", "workerInstanceGrantId", "expiresAt"
-) VALUES (
-  'operation-2', 'attempt-2', 'scan-1', 'workspace-1', 'user-1', 'user-1',
-  'target-1', repeat('b', 64), repeat('c', 64), 'policy-1',
-  NULL, ARRAY[]::TEXT[], 'SAFE', 'TEST_APP', 0,
-  60000, 'test-open-epoch', 'worker-grant-1', CURRENT_TIMESTAMP + interval '10 minutes'
-);
-DO $test$
-BEGIN
-  BEGIN
-    INSERT INTO "ScanPhysicalExecution" (
-      "attemptId", "operationId", "scanId", "workspaceId", "authorityEpochId",
-      "workerInstanceGrantId", "state", "unresolvedKey", "revision", "createdAt", "updatedAt"
-    ) VALUES (
-      'attempt-2', 'operation-2', 'scan-1', 'workspace-1', 'test-open-epoch',
-      'worker-grant-1', 'RESERVED', 'scan-1', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-    );
-    RAISE EXCEPTION 'overlapping unresolved physical attempt was accepted';
-  EXCEPTION WHEN unique_violation THEN NULL;
-  END;
-END
-$test$;
-
--- Unique operation + command in the digest-only outbox.
-INSERT INTO "ScanDispatchOutbox" (
-  "id", "operationId", "attemptId", "commandType", "commandDigest", "status", "attempts",
-  "availableAt", "createdAt", "updatedAt"
-) VALUES (
-  'outbox-1', 'operation-1', 'attempt-1', 'PREPARE', repeat('d', 64), 'PENDING', 0,
-  CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-);
-DO $test$
-BEGIN
-  BEGIN
-    INSERT INTO "ScanDispatchOutbox" (
-      "id", "operationId", "attemptId", "commandType", "commandDigest", "status", "attempts",
-      "availableAt", "createdAt", "updatedAt"
-    ) VALUES (
-      'outbox-2', 'operation-1', 'attempt-1', 'PREPARE', repeat('d', 64), 'PENDING', 0,
-      CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-    );
-    RAISE EXCEPTION 'duplicate operation command was accepted';
-  EXCEPTION WHEN unique_violation THEN NULL;
-  END;
-END
-$test$;
-
--- Terminal release and ambiguity cannot bypass bound supervisor evidence.
-INSERT INTO "ScanDispatchAttempt" (
-  "operationId", "attemptId", "scanId", "workspaceId", "initiatingUserId", "sponsorAccountId",
-  "targetId", "targetSnapshotDigest", "executionPlanHash", "policyVersion",
-  "delegatedAuthorizationVersion", "attachmentIds", "mode", "goal", "maxBudgetUsd",
-  "maxRuntimeMs", "authorityEpochId", "workerInstanceGrantId", "expiresAt"
-) VALUES (
-  'operation-3', 'attempt-3', 'scan-2', 'workspace-1', 'user-1', 'user-1',
-  'target-1', repeat('b', 64), repeat('c', 64), 'policy-1',
-  NULL, ARRAY[]::TEXT[], 'SAFE', 'TEST_APP', 0,
-  60000, 'test-open-epoch', 'worker-grant-1', CURRENT_TIMESTAMP + interval '10 minutes'
-);
-INSERT INTO "ScanPhysicalExecution" (
-  "attemptId", "operationId", "scanId", "workspaceId", "authorityEpochId",
-  "workerInstanceGrantId", "state", "unresolvedKey", "revision", "createdAt", "updatedAt"
-) VALUES (
-  'attempt-3', 'operation-3', 'scan-2', 'workspace-1', 'test-open-epoch',
-  'worker-grant-1', 'RESERVED', 'scan-2', 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-);
-DO $test$
-BEGIN
-  BEGIN
-    INSERT INTO "ScanPhysicalExecutionTransition" (
-      "id", "attemptId", "operationId", "revision", "fromState", "toState", "evidenceReference", "createdAt"
-    ) VALUES (
-      'transition-invalid-terminal', 'attempt-3', 'operation-3', 2, 'RESERVED', 'NEVER_DISPATCHED',
-      'free-text', CURRENT_TIMESTAMP
-    );
-    RAISE EXCEPTION 'unverified terminal transition was accepted';
-  EXCEPTION WHEN check_violation THEN NULL;
-  END;
-  INSERT INTO "ScanPhysicalExecutionTransition" (
-    "id", "attemptId", "operationId", "revision", "fromState", "toState", "evidenceReference", "createdAt"
-  ) VALUES (
-    'transition-stop-request', 'attempt-3', 'operation-3', 2, 'RESERVED', 'STOP_REQUESTED',
-    'stop-requested', CURRENT_TIMESTAMP
-  );
-  BEGIN
-    INSERT INTO "ScanPhysicalExecutionTransition" (
-      "id", "attemptId", "operationId", "revision", "fromState", "toState", "evidenceReference", "createdAt"
-    ) VALUES (
-      'transition-unbound-stop', 'attempt-3', 'operation-3', 3, 'STOP_REQUESTED', 'STOPPED',
-      repeat('9', 64), CURRENT_TIMESTAMP
-    );
-    RAISE EXCEPTION 'terminal transition without stop receipt was accepted';
-  EXCEPTION WHEN check_violation THEN NULL;
-  END;
-END
-$test$;
-INSERT INTO "ScanDispatchOutbox" (
-  "id", "operationId", "attemptId", "commandType", "commandDigest", "status", "attempts",
-  "availableAt", "createdAt", "updatedAt"
-) VALUES (
-  'outbox-unknown-3', 'operation-3', 'attempt-3', 'PREPARE', repeat('f', 64), 'PROCESSING', 0,
-  CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-);
-INSERT INTO "ScanPhysicalExecutionTransition" (
-  "id", "attemptId", "operationId", "revision", "fromState", "toState", "evidenceReference", "createdAt"
-) VALUES (
-  'transition-unknown-2', 'attempt-3', 'operation-3', 3, 'STOP_REQUESTED', 'UNKNOWN',
-  repeat('f', 64), CURRENT_TIMESTAMP
-);
-UPDATE "ScanDispatchOutbox" SET "status" = 'UNKNOWN', "updatedAt" = CURRENT_TIMESTAMP
-WHERE "id" = 'outbox-unknown-3';
-INSERT INTO "ScanDispatchOutbox" (
-  "id", "operationId", "attemptId", "commandType", "commandDigest", "status", "attempts",
-  "availableAt", "createdAt", "updatedAt"
-) VALUES (
-  'outbox-stop-3', 'operation-3', 'attempt-3', 'STOP', repeat('8', 64), 'PENDING', 0,
-  CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-);
-DO $test$
-BEGIN
-  BEGIN
-    UPDATE "ScanDispatchOutbox" SET "status" = 'UNKNOWN', "updatedAt" = CURRENT_TIMESTAMP
-    WHERE "id" = 'outbox-stop-3';
-    RAISE EXCEPTION 'unknown command without matching physical quarantine was accepted';
-  EXCEPTION WHEN check_violation THEN NULL;
-  END;
-  BEGIN
-    UPDATE "ScanPhysicalExecution" SET "lastEvidenceReference" = 'direct-evidence'
-    WHERE "attemptId" = 'attempt-3';
-    RAISE EXCEPTION 'physical evidence was mutable outside the journal';
-  EXCEPTION WHEN check_violation THEN NULL;
-  END;
-  BEGIN
-    UPDATE "ScanDispatchOutbox" SET "id" = 'outbox-renamed'
-    WHERE "id" = 'outbox-stop-3';
-    RAISE EXCEPTION 'outbox identity was mutable';
-  EXCEPTION WHEN check_violation THEN NULL;
-  END;
-END
-$test$;
-
--- Monotonic transition revision and verified UNKNOWN reconciliation.
-DO $test$
-BEGIN
-  BEGIN
-    INSERT INTO "ScanPhysicalExecutionTransition" (
-      "id", "attemptId", "operationId", "revision", "fromState", "toState", "evidenceReference", "createdAt"
-    ) VALUES (
-      'transition-skip', 'attempt-1', 'operation-1', 4, 'RESERVED', 'ACTIVE', 'evidence-skip', CURRENT_TIMESTAMP
-    );
-    RAISE EXCEPTION 'nonconsecutive physical revision was accepted';
-  EXCEPTION WHEN check_violation THEN NULL;
-  END;
-END
-$test$;
-INSERT INTO "ScanPhysicalExecutionTransition" (
-  "id", "attemptId", "operationId", "revision", "fromState", "toState", "evidenceReference", "createdAt"
-) VALUES (
-  'transition-dispatch', 'attempt-1', 'operation-1', 2, 'RESERVED', 'DISPATCH_PENDING', repeat('d', 64), CURRENT_TIMESTAMP
-);
-INSERT INTO "ScanPhysicalExecutionTransition" (
-  "id", "attemptId", "operationId", "revision", "fromState", "toState", "evidenceReference", "createdAt"
-) VALUES (
-  'transition-active', 'attempt-1', 'operation-1', 3, 'DISPATCH_PENDING', 'ACTIVE', repeat('d', 64), CURRENT_TIMESTAMP
-);
-UPDATE "ScanDispatchOutbox"
-SET "status" = 'PROCESSING', "updatedAt" = CURRENT_TIMESTAMP
-WHERE "id" = 'outbox-1';
-INSERT INTO "ScanPhysicalExecutionTransition" (
-  "id", "attemptId", "operationId", "revision", "fromState", "toState", "evidenceReference", "createdAt"
-) VALUES (
-  'transition-unknown', 'attempt-1', 'operation-1', 4, 'ACTIVE', 'UNKNOWN', repeat('d', 64), CURRENT_TIMESTAMP
-);
-DO $test$
-DECLARE
-  retained_state text;
-  retained_revision integer;
-BEGIN
-  SELECT "state", "revision" INTO retained_state, retained_revision
-  FROM "ScanPhysicalExecution" WHERE "attemptId" = 'attempt-1';
-  IF retained_state <> 'UNKNOWN' OR retained_revision <> 4 THEN
-    RAISE EXCEPTION 'physical projection did not follow the journal';
-  END IF;
-
-  BEGIN
-    INSERT INTO "ScanPhysicalExecutionTransition" (
-      "id", "attemptId", "operationId", "revision", "fromState", "toState", "evidenceReference", "createdAt"
-    ) VALUES (
-      'transition-after-unknown', 'attempt-1', 'operation-1', 5, 'UNKNOWN', 'STOPPED',
-      repeat('e', 64), CURRENT_TIMESTAMP
-    );
-    RAISE EXCEPTION 'UNKNOWN physical execution was replaced without reconciliation';
-  EXCEPTION WHEN check_violation THEN NULL;
-  END;
-
-  BEGIN
-    UPDATE "ScanPhysicalExecution" SET "state" = 'STOPPED' WHERE "attemptId" = 'attempt-1';
-    RAISE EXCEPTION 'UNKNOWN physical execution was cleared directly';
-  EXCEPTION WHEN check_violation THEN NULL;
-  END;
-END
-$test$;
-INSERT INTO "ScanDispatchOutbox" (
-  "id", "operationId", "attemptId", "commandType", "commandDigest", "status", "attempts",
-  "availableAt", "createdAt", "updatedAt"
-) VALUES (
-  'outbox-reconcile', 'operation-1', 'attempt-1', 'RECONCILE', repeat('e', 64), 'PENDING', 0,
-  CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-);
-UPDATE "ScanDispatchOutbox" SET "status" = 'ACKNOWLEDGED', "deliveredAt" = CURRENT_TIMESTAMP, "updatedAt" = CURRENT_TIMESTAMP
-WHERE "id" = 'outbox-reconcile';
-INSERT INTO "ScanPhysicalExecutionTransition" (
-  "id", "attemptId", "operationId", "revision", "fromState", "toState", "evidenceReference", "createdAt"
-) VALUES (
-  'transition-reconciled', 'attempt-1', 'operation-1', 5, 'UNKNOWN', 'STOPPED',
-  repeat('e', 64), CURRENT_TIMESTAMP
-);
-DO $test$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM "ScanPhysicalExecution"
-    WHERE "attemptId" = 'attempt-1' AND "state" = 'STOPPED' AND "revision" = 5
-  ) THEN
-    RAISE EXCEPTION 'verified reconciliation did not update the physical projection';
-  END IF;
-END
-$test$;
-
--- The authority surface has no raw credential/token/secret/payload columns.
-DO $test$
-DECLARE
-  raw_columns integer;
-BEGIN
-  SELECT count(*) INTO raw_columns
-  FROM information_schema.columns
-  WHERE table_schema = 'public'
-    AND table_name IN (
-      'ScanAuthorityEpoch', 'ScanWorkerInstanceGrant', 'ScanDispatchAttempt',
-      'ScanDispatchOutbox', 'ScanPhysicalExecution', 'ScanPhysicalExecutionTransition'
+runtime_password=$(openssl rand -hex 24)
+docker exec -i "$container" psql -X -U postgres -d lyrashield_test -v ON_ERROR_STOP=1 <<SQL
+CREATE ROLE dispatch_authority_runtime LOGIN PASSWORD '$runtime_password'
+  NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS;
+GRANT USAGE ON SCHEMA public, app TO dispatch_authority_runtime;
+DO \$\$ DECLARE item record; BEGIN
+  FOR item IN SELECT tablename FROM pg_tables WHERE schemaname='public'
+    AND tablename NOT LIKE 'Scan%AUTHORITY%'
+    AND tablename NOT IN (
+      'PlatformAdminElevation','PlatformAdminChallengeLimit','PlatformAdminAudit',
+      'billing_reconciliation_state','ScanAuthorityEpoch','ScanWorkerInstanceGrant',
+      'ScanDispatchOperation','ScanQueueOutbox','ScanDispatchAttempt','ScanDispatchOutbox',
+      'ScanDispatchStart','ScanSupervisorReceipt','ScanPhysicalExecution',
+      'ScanPhysicalExecutionTransition','ScanDispatchReleaseReceipt'
     )
-    AND column_name ~ '(credential$|^token$|^secret$|^payload$)';
-  IF raw_columns <> 0 THEN
-    RAISE EXCEPTION 'raw credential material column found';
-  END IF;
-END
-$test$;
+  LOOP EXECUTE format('GRANT SELECT,INSERT,UPDATE,DELETE ON TABLE public.%I TO dispatch_authority_runtime',item.tablename); END LOOP;
+END \$\$;
 SQL
+
+prior_reload=$(docker exec --user postgres "$container" psql -X -q -At -U postgres -d lyrashield_test -c 'SELECT pg_conf_load_time()')
+docker exec --user postgres "$container" sh -c 'printf "local all postgres peer\nlocal all all reject\nhost all all 127.0.0.1/32 scram-sha-256\nhost all all ::1/128 scram-sha-256\n" > "$PGDATA/pg_hba.conf"; pg_ctl reload -D "$PGDATA" >/dev/null'
+for _ in {1..100}; do
+  current_reload=$(docker exec --user postgres "$container" psql -X -q -At -U postgres -d lyrashield_test -c 'SELECT pg_conf_load_time()')
+  [[ "$current_reload" != "$prior_reload" ]] && break
+  sleep 0.05
+done
+[[ "$current_reload" != "$prior_reload" ]] || { echo 'fixture authentication reload unavailable' >&2; exit 1; }
+
+kill "$relay_pid" 2>/dev/null || true
+wait "$relay_pid" 2>/dev/null || true
+relay_pid=''
+python3 "$repo_root/packages/db/scripts/tests/dispatch-authority-relay.py" \
+  "$container" "$dir/fault-port" "$dir/armed" "$dir/commit-dropped" \
+  >"$dir/relay.out" 2>"$dir/relay.err" &
+relay_pid=$!
+for _ in {1..100}; do
+  [[ -s "$dir/fault-port" ]] && break
+  kill -0 "$relay_pid" 2>/dev/null || { cat "$dir/relay.err" >&2; exit 1; }
+  sleep 0.05
+done
+port=$(cat "$dir/fault-port")
+[[ "$port" =~ ^[0-9]+$ ]] || { echo 'Fixture fault relay unavailable' >&2; exit 1; }
+
+BETTER_AUTH_SECRET=fixture-only-secret-32-characters-minimum BETTER_AUTH_URL=http://localhost:3000 NEXT_PUBLIC_APP_URL=http://localhost:3000 DATABASE_URL="postgresql://postgres:${admin_password}@127.0.0.1:${port}/lyrashield_test" RLS_RUNTIME_DATABASE_URL="postgresql://dispatch_authority_runtime:${runtime_password}@127.0.0.1:${port}/lyrashield_test" DISPATCH_AUTHORITY_DATABASE_URL="postgresql://postgres:${admin_password}@127.0.0.1:${port}/lyrashield_test" DISPATCH_AUTHORITY_RUNTIME_DATABASE_URL="postgresql://dispatch_authority_runtime:${runtime_password}@127.0.0.1:${port}/lyrashield_test" FAULT_ARM_PATH="$dir/armed" FAULT_MARKER_PATH="$dir/commit-dropped" LYRASHIELD_TEST_DB_DISPOSABLE=1 SCAN_DISPATCH_AUTHORITY_POSTGRES_TEST=1   pnpm exec vitest run packages/db/src/scan-dispatch-authority-broker.postgres.test.ts
