@@ -773,6 +773,89 @@ describe.skipIf(!enabled)("scan dispatch authority broker", () => {
     ).rejects.toMatchObject({ code: "DISPATCH_REPLAY_CONFLICT" })
   })
 
+  it("rejects stop and reconciliation issued under a different worker grant", async () => {
+    const stopFixture = await createFixture()
+    const stopPrepared = await broker.prepare({
+      operationId: stopFixture.operationId,
+      workerInstanceId: stopFixture.instanceId,
+      workerGrantId: stopFixture.grantId,
+      authorityEpochId: stopFixture.epochId,
+      expiresAt: await attemptExpiry(),
+    })
+    if (stopPrepared.kind !== "committed")
+      throw new Error("fixture preparation did not commit")
+
+    const otherStopGrantId = `authority-grant-other-${stopFixture.operationId}`
+    const otherStopInstanceId = `authority-worker-other-${stopFixture.operationId}`
+    await owner.query(
+      `INSERT INTO "ScanWorkerInstanceGrant"
+        ("id","authorityEpochId","instanceId","credentialHash","issuedAt","expiresAt","createdAt","updatedAt")
+       VALUES ($1,$2,$3,$4,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP + interval '1 hour',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`,
+      [otherStopGrantId, stopFixture.epochId, otherStopInstanceId, "b".repeat(64)]
+    )
+    await expect(
+      broker.stop({
+        operationId: stopFixture.operationId,
+        attemptId: stopPrepared.attemptId,
+        workerInstanceId: otherStopInstanceId,
+        workerGrantId: otherStopGrantId,
+        authorityEpochId: stopFixture.epochId,
+        reasonCode: "USER_CANCELLED",
+      })
+    ).rejects.toMatchObject({ code: "DISPATCH_REPLAY_CONFLICT" })
+    expect(
+      (
+        await owner.query<{ count: string }>(
+          'SELECT count(*)::text AS count FROM "ScanDispatchOutbox" WHERE "operationId"=$1 AND "commandType"=\'STOP\'',
+          [stopFixture.operationId]
+        )
+      ).rows[0]!.count
+    ).toBe("0")
+
+    const reconcileFixture = await createFixture()
+    const reconcilePrepared = await broker.prepare({
+      operationId: reconcileFixture.operationId,
+      workerInstanceId: reconcileFixture.instanceId,
+      workerGrantId: reconcileFixture.grantId,
+      authorityEpochId: reconcileFixture.epochId,
+      expiresAt: await attemptExpiry(),
+    })
+    if (reconcilePrepared.kind !== "committed")
+      throw new Error("fixture preparation did not commit")
+    await owner.query(
+      `UPDATE "ScanDispatchOperation"
+       SET "state"='UNKNOWN', "terminalReason"='AMBIGUOUS_EFFECT', "updatedAt"=CURRENT_TIMESTAMP
+       WHERE "operationId"=$1`,
+      [reconcileFixture.operationId]
+    )
+
+    const otherReconcileGrantId = `authority-grant-other-${reconcileFixture.operationId}`
+    const otherReconcileInstanceId = `authority-worker-other-${reconcileFixture.operationId}`
+    await owner.query(
+      `INSERT INTO "ScanWorkerInstanceGrant"
+        ("id","authorityEpochId","instanceId","credentialHash","issuedAt","expiresAt","createdAt","updatedAt")
+       VALUES ($1,$2,$3,$4,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP + interval '1 hour',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`,
+      [otherReconcileGrantId, reconcileFixture.epochId, otherReconcileInstanceId, "b".repeat(64)]
+    )
+    await expect(
+      broker.reconcile({
+        operationId: reconcileFixture.operationId,
+        attemptId: reconcilePrepared.attemptId,
+        workerInstanceId: otherReconcileInstanceId,
+        workerGrantId: otherReconcileGrantId,
+        authorityEpochId: reconcileFixture.epochId,
+      })
+    ).rejects.toMatchObject({ code: "DISPATCH_REPLAY_CONFLICT" })
+    expect(
+      (
+        await owner.query<{ count: string }>(
+          'SELECT count(*)::text AS count FROM "ScanDispatchOutbox" WHERE "operationId"=$1 AND "commandType"=\'RECONCILE\'',
+          [reconcileFixture.operationId]
+        )
+      ).rows[0]!.count
+    ).toBe("0")
+  })
+
   it("rejects preparation after the admitted execution plan changes scope", async () => {
     const fixture = await createFixture()
     await owner.query(

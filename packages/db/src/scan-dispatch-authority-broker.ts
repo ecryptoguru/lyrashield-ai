@@ -1,3 +1,42 @@
+/**
+ * Closed durable dispatch-authority broker. Unconsumed foundation: no production
+ * caller is wired to this module; see
+ * docs/design/2026-11-06-durable-dispatch-authority-adr.md.
+ *
+ * Full broker write set (every path runs through transaction() and the
+ * lockOperation() lock set; nothing else is written):
+ * - prepare: INSERT ScanDispatchAttempt, INSERT ScanPhysicalExecution, INSERT
+ *   ScanDispatchOutbox (PREPARE, sequence 1), UPDATE ScanDispatchOperation
+ *   (-> WAITING_CAPACITY | PREPARING). Reads but does not write the
+ *   reservation (WAITING stays WAITING).
+ * - startPaid: UPDATE Scan (status='RUNNING', startedAt/updatedAt), UPDATE
+ *   ScanCapacityReservation (RESERVED -> RUNNING), INSERT ScanEvent
+ *   (stage='billable_boundary'), INSERT ScanDispatchStart, INSERT
+ *   ScanDispatchOutbox (START_PAID, sequence 2), UPDATE
+ *   ScanDispatchOperation (-> START_PENDING).
+ * - stop: INSERT ScanDispatchOutbox (STOP, sequence 3), UPDATE
+ *   ScanDispatchOperation (-> STOPPING).
+ * - reconcile: INSERT ScanDispatchOutbox (RECONCILE, sequence 4) only; the
+ *   operation stays UNKNOWN until supervisor evidence resolves it.
+ * Reads (SELECT ... FOR SHARE / FOR UPDATE): ScanAuthorityEpoch,
+ * ScanWorkerInstanceGrant, ScanDispatchOperation, Scan, ScanDispatchAttempt,
+ * ScanCapacityReservation, ScanPhysicalExecution, ScanDispatchOutbox,
+ * ScanDispatchStart, plus EXECUTE on app.scan_dispatch_scope_digest(text),
+ * app.scan_target_snapshot_digest(text) and app.scan_policy_digest(text).
+ *
+ * leasePrismaUnit least-privilege grant list: the identity that leases the
+ * connection for this broker (leasePrismaUnit) must hold no more than SELECT
+ * on the nine tables above; INSERT on ScanDispatchAttempt,
+ * ScanPhysicalExecution, ScanDispatchOutbox, ScanDispatchStart and ScanEvent;
+ * UPDATE on Scan, ScanCapacityReservation and ScanDispatchOperation; EXECUTE
+ * on the three app.* digest functions. No INSERT/UPDATE/DELETE on
+ * ScanWorkerInstanceGrant, ScanAuthorityEpoch, ScanSupervisorReceipt,
+ * ScanPhysicalExecutionTransition or ScanDispatchReleaseReceipt, and no
+ * DELETE on any table. The disposable fixture runs as owner/superuser, so
+ * production least-privilege is pinned by this comment only; proving it
+ * against the real admission identity stays an ADR gate.
+ */
+
 import { createHash } from "node:crypto"
 import { createId } from "@paralleldrive/cuid2"
 import pg from "pg"
@@ -158,6 +197,7 @@ export function createScanDispatchAuthorityBroker(options: BrokerOptions) {
   ): Promise<TransactionOutcome<T & object>> {
     const client = await pool.connect()
     let commitAttempted = false
+    let discardClient = false
     try {
       await client.query("BEGIN ISOLATION LEVEL READ COMMITTED READ WRITE")
       await client.query("SET LOCAL statement_timeout = '15s'")
@@ -172,7 +212,15 @@ export function createScanDispatchAuthorityBroker(options: BrokerOptions) {
       return { kind: "committed", operationId, value }
     } catch (error) {
       if (!commitAttempted) {
-        await client.query("ROLLBACK").catch(() => undefined)
+        // A failed ROLLBACK means the socket is unusable (dead backend); the
+        // client is released with an error below so pg discards it instead of
+        // returning a broken connection to the pool. The original error still
+        // surfaces as the transaction result.
+        try {
+          await client.query("ROLLBACK")
+        } catch {
+          discardClient = true
+        }
         if (error instanceof ScanDispatchAuthorityError) throw error
         throw new ScanDispatchAuthorityError("DATABASE_REJECTED", "Dispatch transaction rejected", {
           cause: error,
@@ -184,7 +232,7 @@ export function createScanDispatchAuthorityBroker(options: BrokerOptions) {
         reasonCode: "COMMIT_OUTCOME_UNKNOWN",
       }
     } finally {
-      client.release(commitAttempted)
+      client.release(commitAttempted || discardClient)
     }
   }
 
@@ -212,11 +260,30 @@ export function createScanDispatchAuthorityBroker(options: BrokerOptions) {
     if (epoch.rowCount !== 1)
       throw new ScanDispatchAuthorityError("AUTHORITY_EPOCH_CLOSED", "Authority epoch is not open")
 
+    // Advisory-key conventions (do not "normalize" blindly; each key is chosen
+    // to match the dominant product call sites on the rows this broker writes):
+    // - user `scan-user:<id>` and sponsor account `account:<id>` match
+    //   scan-slot.ts exactly (hashtextextended, 64-bit).
+    // - workspace: raw hashtextextended(workspaceId, 0) matches the dominant
+    //   product convention (scan-slot release paths, account-deletion,
+    //   target-service create, client reserve, billing capacity/meter/expiry:
+    //   8 sites). The prefixed scan-admission:<workspaceId> key
+    //   (lockWorkspaceScanAdmission, used by createScan/target-delete) is the
+    //   minority key and is deliberately NOT taken; those paths are excluded
+    //   by row locks + the post-lock re-read below instead.
+    // - target: 32-bit hashtext(targetId) matches the scan-creation/trust
+    //   path that touches the same Scan rows (scan-service create,
+    //   target-service delete, targets route: 3 sites) over the 64-bit
+    //   hashtextextended(targetId) sites (threat-model-service,
+    //   ai-system-profile-service: 2 sites), which guard other control planes
+    //   and hash a different key value. 32-bit collisions are accepted: row
+    //   locks + digest re-read still fail closed (lock_timeout ->
+    //   DATABASE_REJECTED).
     await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [
       `scan-user:${pre.userId}`,
     ])
     await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [
-      `scan-admission:${pre.workspaceId}`,
+      pre.workspaceId,
     ])
     await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [pre.targetId])
     await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [
@@ -255,6 +322,12 @@ export function createScanDispatchAuthorityBroker(options: BrokerOptions) {
       const expiresAt = timestampWithoutTimeZone(input.expiresAt)
       const outcome = await transaction(input.operationId, async (client) => {
         const operation = await lockOperation(client, input)
+        // Intended order: grant liveness BEFORE the replay short-circuit
+        // below. A lost-COMMIT replay presented after the original grant
+        // expired or was revoked fails WORKER_GRANT_INVALID instead of
+        // re-acking the committed identities; callers recover read-only
+        // committed state via status(), never via replay-as-liveness-oracle.
+        // Fail-closed on purpose.
         const grant = await client.query(
           `SELECT 1 FROM "ScanWorkerInstanceGrant"
            WHERE "id"=$1 AND "authorityEpochId"=$2 AND "instanceId"=$3
@@ -675,6 +748,13 @@ export function createScanDispatchAuthorityBroker(options: BrokerOptions) {
     }
   }
 
+  // Outbox `sequence` is a producer-local monotonic hint per attempt
+  // (1 PREPARE, 2 START_PAID, 3 STOP, 4 RECONCILE); the DB enforces only
+  // sequence > 0 plus UNIQUE(operationId, commandType). STOP/RECONCILE may be
+  // inserted without START_PAID ever existing (stop is allowed from
+  // PREPARING/PREPARED), so dispatch ordering is by commandType presence plus
+  // the supervisor receipt chain, never by sequence gaps or by a sequence
+  // value implying a prior command.
   async function insertAttemptCommand(
     client: pg.PoolClient,
     input: StopDispatchInput | ReconcileDispatchInput,
@@ -682,12 +762,28 @@ export function createScanDispatchAuthorityBroker(options: BrokerOptions) {
     sequence: number,
     digestValue: unknown
   ): Promise<string> {
-    const attempt = await client.query(
-      'SELECT 1 FROM "ScanDispatchAttempt" WHERE "operationId"=$1 AND "attemptId"=$2 FOR UPDATE',
+    const attempt = await client.query<{
+      workerInstanceGrantId: string
+      authorityEpochId: string
+    }>(
+      'SELECT "workerInstanceGrantId", "authorityEpochId" FROM "ScanDispatchAttempt" WHERE "operationId"=$1 AND "attemptId"=$2 FOR UPDATE',
       [input.operationId, input.attemptId]
     )
     if (attempt.rowCount !== 1)
       throw new ScanDispatchAuthorityError("OPERATION_NOT_FOUND", "Dispatch attempt not found")
+    // Bind the command to the caller's worker grant/epoch, mirroring
+    // startPaid: a live grant in an open epoch must not STOP/RECONCILE another
+    // worker's attempt. Checked before the replay short-circuit below so a
+    // mismatched caller fails closed even if the command already exists.
+    const attemptRow = attempt.rows[0]!
+    if (
+      attemptRow.workerInstanceGrantId !== input.workerGrantId ||
+      attemptRow.authorityEpochId !== input.authorityEpochId
+    )
+      throw new ScanDispatchAuthorityError(
+        "DISPATCH_REPLAY_CONFLICT",
+        "Attempt worker identity changed"
+      )
     const existing = await client.query<{ id: string }>(
       `SELECT "id" FROM "ScanDispatchOutbox"
        WHERE "operationId"=$1 AND "attemptId"=$2 AND "commandType"=$3::"ScanDispatchCommandType"`,
