@@ -720,6 +720,7 @@ export * from "./plain-language"
 // service imports it through the package root.
 export * from "./scan-attachments"
 export * from "./scan-quality"
+export * from "./setup-health"
 
 export {
   resolveUrlReviewMode,

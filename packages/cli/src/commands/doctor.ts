@@ -1,11 +1,18 @@
 import type { AgentEntry } from "@lyrashield/agent-registry"
+import { getSetupHealth, type SetupHealthSnapshot } from "@lyrashield/sdk"
+import minimist from "minimist"
 import { createClient } from "../client.js"
 import { getEffectiveCredentials } from "../credentials.js"
 import { redactKey } from "../output.js"
 import { detectAgent, findDetectedLocations } from "../installers/detect.js"
 import type { Output } from "../output.js"
 
-export async function handleDoctor(_args: string[], output: Output): Promise<number> {
+export async function handleDoctor(args: string[], output: Output): Promise<number> {
+  const parsed = minimist(args, {
+    boolean: ["strict", "offline", "help"],
+    string: ["workspace", "target", "goal", "mode", "workflow", "policy"],
+    alias: { w: "workspace", h: "help" },
+  })
   const creds = await getEffectiveCredentials()
   const credential =
     creds.credentialKind === "oauth"
@@ -21,12 +28,13 @@ export async function handleDoctor(_args: string[], output: Output): Promise<num
     // misclassifying OAuth access tokens as third-party API keys.
     apiKey: creds.credentialKind === "api-key" ? redactKey(creds.apiKey) : "not set",
     apiUrl: creds.apiUrl,
-    workspaceId: creds.workspaceId ?? "not set",
+    workspaceId: parsed.workspace ?? creds.workspaceId ?? "not set",
     apiKeySource: creds.source,
   }
 
   let apiReachable = false
-  if (creds.apiKey) {
+  let setupHealth: SetupHealthSnapshot | null = null
+  if (creds.apiKey && !parsed.offline) {
     try {
       const client = await createClient()
       const workspaces = (await client.request("GET", "/workspaces")) as {
@@ -35,16 +43,41 @@ export async function handleDoctor(_args: string[], output: Output): Promise<num
       }[]
       report.workspacesAvailable = workspaces.length
       apiReachable = true
-      if (creds.workspaceId && !workspaces.some((w) => w.id === creds.workspaceId)) {
+      const workspaceId = parsed.workspace ?? creds.workspaceId
+      if (workspaceId && !workspaces.some((w) => w.id === workspaceId)) {
         // Naming the alternatives is the difference between a dead end and a
         // fix: the id alone is an opaque cuid the user cannot act on.
-        report.workspaceWarning = `Workspace ${creds.workspaceId} was not found in the available workspaces.`
+        report.workspaceWarning = `Workspace ${workspaceId} was not found in the available workspaces.`
         report.availableWorkspaces = workspaces.map((w) => ({ id: w.id, name: w.name }))
         report.workspaceRemedy = workspaces.length
           ? `Switch with: lyrashield use <workspaceId> — available: ${workspaces
               .map((w) => (w.name ? `${w.id} (${w.name})` : w.id))
               .join(", ")}`
           : "This API key can't see any workspaces. Check that the key belongs to the right workspace."
+      }
+
+      if (typeof parsed.target === "string" && parsed.target.trim()) {
+        try {
+          setupHealth = await getSetupHealth(client, {
+            ...(workspaceId ? { workspaceId } : {}),
+            targetId: parsed.target.trim(),
+            goal: typeof parsed.goal === "string" && parsed.goal ? parsed.goal : "TEST_APP",
+            mode: typeof parsed.mode === "string" && parsed.mode ? parsed.mode : "QUICK",
+            workflow:
+              parsed.workflow === "REVIEW_CHANGES" ||
+              parsed.workflow === "AUTHENTICATED_ASSESSMENT" ||
+              parsed.workflow === "REVIEW_TARGET"
+                ? parsed.workflow
+                : "REVIEW_TARGET",
+            ...(typeof parsed.policy === "string" && parsed.policy
+              ? { policyId: parsed.policy }
+              : {}),
+          })
+          report.setupHealth = setupHealth
+        } catch (error) {
+          report.setupHealthError =
+            error instanceof Error ? error.message : "Setup health could not be checked"
+        }
       }
     } catch (err) {
       report.apiError = err instanceof Error ? err.message : String(err)
@@ -55,6 +88,9 @@ export async function handleDoctor(_args: string[], output: Output): Promise<num
       ]
       apiReachable = false
     }
+  } else if (parsed.offline) {
+    report.apiReachable = null
+    report.apiStatus = "skipped (offline)"
   } else {
     report.apiError = "No API key set."
     report.apiRemedy = [
@@ -115,6 +151,15 @@ export async function handleDoctor(_args: string[], output: Output): Promise<num
       output.warn(report.workspaceWarning as string)
       if (report.workspaceRemedy) output.log(`  → ${report.workspaceRemedy as string}`)
     }
+    if (setupHealth) {
+      output.log(`Setup:     ${setupHealth.status}`)
+      const primary = setupHealth.checks.find((check) => check.code === setupHealth.primaryCheck)
+      if (primary) {
+        output.log(`  ${primary.code}: ${primary.explanation}`)
+        if (primary.recoveryAction)
+          output.log(`  Next: ${primary.recoveryAction.replaceAll("_", " ").toLowerCase()}`)
+      }
+    }
     for (const check of agentChecks as {
       id: string
       displayName: string
@@ -135,5 +180,10 @@ export async function handleDoctor(_args: string[], output: Output): Promise<num
     }
   }
 
+  if (parsed.strict) {
+    if (setupHealth?.status === "unknown" || report.setupHealthError) return 6
+    if (setupHealth?.status === "blocked") return 5
+  }
+  if (parsed.offline) return creds.apiKey ? 0 : 4
   return apiReachable ? 0 : 4
 }

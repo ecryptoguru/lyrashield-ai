@@ -6,6 +6,7 @@ import {
   createGetFindingsTool,
   createGetLaunchReadinessTool,
   createGetScanEligibilityTool,
+  createGetSetupHealthTool,
   createCreateReportTool,
   createPrSecurityRecapTool,
   type ToolHandlerContext,
@@ -547,6 +548,49 @@ describe("apiCall error handling", () => {
     expect(result.isError).toBe(true)
     const data = JSON.parse(result.content[0]!.text)
     expect(data.error).toBe("Permission denied")
+  })
+})
+
+describe("createGetSetupHealthTool", () => {
+  it("returns the shared setup-health reason and recovery codes without mutating", async () => {
+    mockFetch.mockResolvedValueOnce(
+      makeApiResponse({
+        version: "lyrashield-setup-health/1.0.0",
+        status: "blocked",
+        allowed: false,
+        checkedAt: "2026-11-05T00:00:00.000Z",
+        expiresAt: "2026-11-05T00:01:00.000Z",
+        scopeFingerprint: "a".repeat(64),
+        scope: {},
+        checks: [
+          {
+            code: "DOMAIN_VERIFICATION_REQUIRED",
+            status: "blocked",
+            explanation: "Verify control of this domain once.",
+            recoveryAction: "VERIFY_DOMAIN",
+          },
+        ],
+        primaryCheck: "DOMAIN_VERIFICATION_REQUIRED",
+        limitations: [],
+      })
+    )
+
+    const tool = createGetSetupHealthTool(context)
+    const result = await tool.handler({
+      workspaceId: "ws-1",
+      targetId: "target-1",
+      goal: "TEST_APP",
+      mode: "STANDARD",
+    })
+    const data = JSON.parse(result.content[0]!.text)
+
+    expect(result.isError).toBeUndefined()
+    expect(data.primaryCheck).toBe("DOMAIN_VERIFICATION_REQUIRED")
+    expect(data.checks[0].recoveryAction).toBe("VERIFY_DOMAIN")
+    expect(mockFetch).toHaveBeenCalledWith(
+      expect.stringContaining("/api/v1/setup-health?"),
+      expect.objectContaining({ method: "GET" })
+    )
   })
 })
 

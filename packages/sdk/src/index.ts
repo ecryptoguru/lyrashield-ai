@@ -11,6 +11,7 @@ export * from "./schemas"
 
 export * from "./resources/scans"
 export * from "./resources/scan-eligibility"
+export * from "./resources/setup-health"
 export * from "./resources/scan-wait"
 export * from "./resources/findings"
 export * from "./resources/targets"
