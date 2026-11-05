@@ -15,10 +15,15 @@ describe("durable scan dispatch authority schema", () => {
     for (const model of [
       "ScanAuthorityEpoch",
       "ScanWorkerInstanceGrant",
+      "ScanDispatchOperation",
+      "ScanQueueOutbox",
       "ScanDispatchAttempt",
       "ScanDispatchOutbox",
+      "ScanDispatchStart",
       "ScanPhysicalExecution",
       "ScanPhysicalExecutionTransition",
+      "ScanSupervisorReceipt",
+      "ScanDispatchReleaseReceipt",
     ]) {
       expect(schema).toContain(`model ${model} `)
     }
@@ -36,7 +41,7 @@ describe("durable scan dispatch authority schema", () => {
   it("enforces one unresolved physical attempt per scan", () => {
     expect(sql).toContain('CREATE UNIQUE INDEX "ScanPhysicalExecution_unresolvedKey_key"')
     expect(sql).toContain(
-      "'RESERVED', 'DISPATCH_PENDING', 'ACTIVE', 'STOP_REQUESTED', 'CLEANUP_PENDING', 'UNKNOWN'"
+      "'RESERVED', 'PREPARING', 'DISPATCH_PENDING', 'ACTIVE', 'STOP_REQUESTED', 'CLEANUP_PENDING', 'UNKNOWN'"
     )
   })
 
@@ -45,9 +50,12 @@ describe("durable scan dispatch authority schema", () => {
       'CREATE UNIQUE INDEX "ScanPhysicalExecutionTransition_attemptId_revision_key"'
     )
     expect(sql).toContain("scan_physical_execution_transition_guard")
-    expect(sql).toContain("terminal physical release requires acknowledged supervisor evidence")
+    expect(sql).toContain("terminal physical release requires an authenticated supervisor receipt")
     expect(sql).toContain("unknown command lacks physical quarantine")
     expect(sql).toContain("unknown physical execution reconciliation is unverified")
+    expect(sql).toContain("terminal physical release requires every command resolved")
+    expect(sql).toContain("terminal physical release requires an authenticated supervisor receipt")
+    expect(sql).toContain("unknown command must quarantine physical execution")
     expect(sql).toContain("CREATE TRIGGER scan_physical_execution_transition_guard")
     expect(sql).toContain("CREATE TRIGGER scan_physical_execution_immutable_state")
   })
@@ -55,8 +63,27 @@ describe("durable scan dispatch authority schema", () => {
   it("requires an open epoch and a matching live worker grant for attempts", () => {
     expect(sql).toContain("attempt requires an open authority epoch")
     expect(sql).toContain("attempt requires a live worker grant in its epoch")
+    expect(sql).toContain("attempt contradicts live scan authority rows")
+    expect(sql).toContain('JOIN "UserScanSlot" slot')
+    expect(sql).toContain('JOIN "ScanCapacityReservation" reservation')
     expect(sql).toContain("physical execution identity contradicts its attempt")
     expect(sql).toContain('FOREIGN KEY ("operationId", "attemptId")')
+  })
+
+  it("separates queue transport from attempt-bound execution authority", () => {
+    expect(sql).toContain('CREATE TABLE "ScanDispatchOperation"')
+    expect(sql).toContain('CREATE TABLE "ScanQueueOutbox"')
+    expect(sql).toContain('CREATE UNIQUE INDEX "ScanQueueOutbox_scanId_key"')
+    expect(sql).not.toMatch(/CREATE TYPE "ScanDispatchCommandType" AS ENUM \([^)]*QUEUE_PUBLISH/s)
+    expect(sql).toContain("START_UNMETERED")
+  })
+
+  it("records authenticated supervisor command acceptance, create intent and terminal receipts", () => {
+    expect(sql).toContain('CREATE TABLE "ScanSupervisorReceipt"')
+    expect(sql).toContain("scan_supervisor_receipt_guard")
+    expect(sql).toContain("EXECUTOR_CREATE_INTENT")
+    expect(sql).toContain('CREATE TABLE "ScanDispatchReleaseReceipt"')
+    expect(sql).toContain("scan_dispatch_release_receipt_guard")
   })
 
   it("stores only hashes for worker instance credentials", () => {
