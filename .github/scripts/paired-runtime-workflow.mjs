@@ -248,8 +248,12 @@ export async function preflightQualifiedRelease(
   )
     blocked("owner workflow unavailable")
   const readOwner = dependencies.readOwner ?? (() => readAuthenticatedOwner(ownerWorkflow))
-  const verifyArtifact = dependencies.verifyArtifact ?? verifiedArtifact
-  const readRecord = dependencies.readProtectedRecord ?? readProtectedRecord
+  const verifyArtifact =
+    dependencies.verifyArtifact ??
+    ((kind, artifactDigest) => verifiedArtifact(kind, artifactDigest, ownerWorkflow))
+  const readRecord =
+    dependencies.readProtectedRecord ??
+    ((kind, recordDigest) => readProtectedRecord(kind, recordDigest, ownerWorkflow))
   const createAdapter = dependencies.createAdapter ?? protectedLiveAdapter
   const verifyAuthority = dependencies.verifyAuthority ?? verifyPairedAuthority
 

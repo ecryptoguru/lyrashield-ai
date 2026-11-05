@@ -328,3 +328,160 @@ const file=files[process.argv.at(-1)];if(!file)process.exit(19);process.stdout.w
   writeFileSync(join(dir, "run"), JSON.stringify({ ...run, run_attempt: 2 }))
   await assert.rejects(readAuthenticatedOwner())
 })
+
+test("caller workflow identity threads through owner, witness and protected artifact verification", async (t) => {
+  const callerPath = ".github/workflows/deploy-azure.yml"
+  const root = mkdtempSync(join(tmpdir(), "paired-caller-identity-"))
+  const records = join(root, "lyrashield-paired-records")
+  t.after(() => rmSync(root, { recursive: true, force: true }))
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- private generated test fixture path
+  mkdirSync(records, { mode: 0o700 })
+  const actual = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim()
+  const caller = repo + "/" + callerPath + "@refs/heads/main"
+  const artifactRepo = { id: 123, full_name: repo, owner: { id: 77, login: "ecryptoguru" } }
+  const identity = {
+    source: actual,
+    owner,
+    runId: "42",
+    attempt: "1",
+    path: x.path,
+    event: "push",
+    repoId: "123",
+    ownerId: "77",
+  }
+  const nowSeconds = Math.floor(Date.now() / 1000)
+  const makeClaims = (aud) => ({
+    ...claims,
+    aud,
+    sha: actual,
+    workflow_sha: actual,
+    job_workflow_ref: caller,
+    job_workflow_sha: actual,
+    iat: nowSeconds - 2,
+    nbf: nowSeconds - 2,
+    exp: nowSeconds + 120,
+  })
+  const body = JSON.stringify({ kind: "evidence", workspace: "caller-private" })
+  const bodyDigest = hash(body)
+  const ownerToken = jwt(makeClaims("urn:lyrashield:paired:v1:owner:42:1"))
+  const witnessToken = jwt(makeClaims("urn:lyrashield:paired:v1:evidence:" + bodyDigest))
+  const locator = { runId: "42", attempt: "1", artifactId: "11", source: actual }
+  const ts = (seconds) => new Date(seconds * 1000).toISOString()
+  const run = {
+    id: 42,
+    head_sha: actual,
+    run_attempt: 1,
+    head_branch: "main",
+    event: "push",
+    status: "in_progress",
+    conclusion: null,
+    path: x.path,
+    repository: artifactRepo,
+    head_repository: artifactRepo,
+    run_started_at: ts(nowSeconds - 40),
+    updated_at: ts(nowSeconds + 20),
+  }
+  const witness = { version: 1, kind: "evidence", digest: bodyDigest, token: witnessToken }
+  const archive = execFileSync(
+    "python3",
+    [
+      "-I",
+      "-c",
+      'import io,json,sys,zipfile; b=io.BytesIO(); z=zipfile.ZipFile(b,"w"); z.writestr("paired-witness.json",sys.stdin.read()); z.close(); sys.stdout.buffer.write(b.getvalue())',
+    ],
+    { input: JSON.stringify(witness) }
+  )
+  const files = {
+    repo: JSON.stringify(artifactRepo),
+    main: JSON.stringify({ object: { sha: actual } }),
+    run: JSON.stringify(run),
+    attempt: JSON.stringify(run),
+    zip: archive,
+    artifact: JSON.stringify({
+      id: 11,
+      expired: false,
+      name: "paired-v1-42-1-evidence-" + bodyDigest,
+      created_at: ts(nowSeconds),
+      size_in_bytes: archive.length,
+      digest: "sha256:" + hash(archive),
+      workflow_run: {
+        id: 42,
+        head_sha: actual,
+        head_branch: "main",
+        repository_id: 123,
+        head_repository_id: 123,
+      },
+    }),
+  }
+  const put = (name, value, mode = 0o600) => {
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- private generated test fixture path
+    writeFileSync(join(records, name), value, { mode })
+  }
+  put(bodyDigest + ".locator.json", JSON.stringify(locator))
+  put(bodyDigest + ".json", body)
+  put("zip", files.zip)
+  for (const name of ["repo", "main", "run", "attempt", "artifact"]) put(name, files[name])
+  const ghfake = join(root, "gh")
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- private generated test fixture path
+  writeFileSync(
+    ghfake,
+    `#!/usr/bin/env node
+const fs=require("node:fs"),path=process.argv.at(-1),root=process.env.RUNNER_TEMP+"/lyrashield-paired-records/"
+const map={
+  "repos/ecryptoguru/lyrashield-ai":"repo",
+  "repos/ecryptoguru/lyrashield-ai/git/ref/heads/main":"main",
+  "repos/ecryptoguru/lyrashield-ai/actions/runs/42":"run",
+  "repos/ecryptoguru/lyrashield-ai/actions/runs/42/attempts/1":"attempt",
+  "repos/ecryptoguru/lyrashield-ai/actions/artifacts/11":"artifact",
+  "repos/ecryptoguru/lyrashield-ai/actions/artifacts/11/zip":"zip"
+}
+if(!Object.hasOwn(map,path))process.exit(19)
+process.stdout.write(fs.readFileSync(root+map[path]))`,
+    { mode: 0o700 }
+  )
+  const previous = {}
+  const set = (key, value) => {
+    if (!Object.hasOwn(previous, key)) previous[key] = process.env[key]
+    process.env[key] = value
+  }
+  set("PATH", root + ":" + process.env.PATH)
+  set("RUNNER_TEMP", root)
+  set("GITHUB_SHA", actual)
+  set("GITHUB_REPOSITORY", repo)
+  set("GITHUB_REF", "refs/heads/main")
+  set("GITHUB_RUN_ID", "42")
+  set("GITHUB_RUN_ATTEMPT", "1")
+  set(
+    "ACTIONS_ID_TOKEN_REQUEST_URL",
+    "https://issuer-caller.actions.githubusercontent.com/private/idtoken"
+  )
+  set("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "caller-request-token-value")
+  t.after(() => {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[key]
+      else process.env[key] = value
+    }
+  })
+  t.mock.method(globalThis, "fetch", async (value) => {
+    const url = new URL(value)
+    if (url.hostname === "token.actions.githubusercontent.com")
+      return new Response(JSON.stringify(keys))
+    assert.equal(url.hostname, "issuer-caller.actions.githubusercontent.com")
+    return new Response(JSON.stringify({ value: ownerToken }))
+  })
+  const { readAuthenticatedOwner } = await import("../paired-runtime-github.mjs")
+  assert.equal(await readAuthenticatedOwner(callerPath), owner)
+  assert.doesNotThrow(() =>
+    verifyRecordWitness(
+      witnessToken,
+      keys,
+      identity,
+      "evidence",
+      bodyDigest,
+      nowSeconds,
+      callerPath
+    )
+  )
+  assert.equal((await verifiedArtifact("evidence", bodyDigest, callerPath)).raw, body)
+  await assert.rejects(verifiedArtifact("evidence", bodyDigest))
+})
