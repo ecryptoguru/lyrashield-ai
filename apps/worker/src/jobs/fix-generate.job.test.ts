@@ -10,9 +10,11 @@ const mocks = vi.hoisted(() => ({
   read: vi.fn(),
   prepare: vi.fn(),
   billing: vi.fn(),
+  delegatedAuthority: vi.fn(),
 }))
 vi.mock("@lyrashield/logger", () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }))
 vi.mock("@lyrashield/db", () => ({
+  getCurrentDelegatedScanAuthority: mocks.delegatedAuthority,
   withWorkspaceRLS: async (_ws: string, fn: (tx: unknown) => unknown) =>
     fn({
       fixProposal: {
@@ -37,10 +39,20 @@ import { buildComposerUpdateDiff, diffChecksum } from "@lyrashield/fix"
 import { processFixGenerateJob, processQueuedFixGenerateJob } from "./fix-generate.job"
 const finding = {
   id: "finding-1",
+  workspaceId: "ws-1",
+  deletedAt: null,
   targetId: "target-1",
   scanId: "scan-1",
   baseCommit: "a".repeat(40),
-  scan: { createdById: "sponsor-1" },
+  scan: {
+    id: "scan-1",
+    createdById: "sponsor-1",
+    deletedAt: null,
+    targetId: "target-1",
+    mode: "STANDARD",
+    delegatedConnectionId: null,
+    delegatedAuthorizationVersion: null,
+  },
   implicatedFiles: [],
   target: {
     type: "REPO",
@@ -61,15 +73,106 @@ beforeEach(() => {
   })
   mocks.evidence.mockResolvedValue([])
   mocks.prepare.mockResolvedValue(null)
-  mocks.current.mockResolvedValue({ status: "draft" })
+  mocks.current.mockResolvedValue({
+    status: "draft",
+    deletedAt: null,
+    finding: { workspaceId: "ws-1", deletedAt: null, ...finding },
+  })
   mocks.upload.mockResolvedValue({
     storageUri: "s3://test/server-generated",
     checksum: "b".repeat(64),
   })
   mocks.billing.mockResolvedValue({ effectivePlan: "PRO" })
   mocks.updateMany.mockResolvedValue({ count: 1 })
+  mocks.delegatedAuthority.mockResolvedValue({ memberRole: "OWNER" })
 })
 describe("fix generation lifecycle", () => {
+  it("fails closed when the target is deleted after proposal enqueue", async () => {
+    mocks.proposal.mockResolvedValue({
+      ...{ id: "proposal-1", status: "draft", summary: "Fix this issue" },
+      finding: {
+        ...finding,
+        target: { ...finding.target, deletedAt: new Date("2026-11-05T10:00:00Z") },
+      },
+    })
+    expect(await processFixGenerateJob(input)).toMatchObject({
+      status: "skipped",
+      reason: "target no longer accepts fix work",
+    })
+    expect(mocks.prepare).not.toHaveBeenCalled()
+    expect(mocks.upload).not.toHaveBeenCalled()
+  })
+
+  it("fails closed when the finding scan no longer matches the active target", async () => {
+    mocks.proposal.mockResolvedValue({
+      ...{ id: "proposal-1", status: "draft", summary: "Fix this issue" },
+      finding: { ...finding, scan: { ...finding.scan, targetId: "target-other" } },
+    })
+    expect(await processFixGenerateJob(input)).toMatchObject({
+      status: "skipped",
+      reason: "finding lifecycle no longer accepts fix work",
+    })
+    expect(mocks.prepare).not.toHaveBeenCalled()
+  })
+
+  it("skips a queued delegated fix when authority was revoked before consumption", async () => {
+    const delegatedScan = {
+      ...finding.scan,
+      delegatedConnectionId: "conn-1",
+      delegatedAuthorizationVersion: 2,
+    }
+    const delegatedFinding = { ...finding, scan: delegatedScan }
+    mocks.proposal.mockResolvedValue({
+      id: "proposal-1",
+      status: "draft",
+      finding: delegatedFinding,
+      summary: "Fix this issue",
+    })
+    mocks.delegatedAuthority.mockResolvedValueOnce(null)
+
+    expect(await processFixGenerateJob(input)).toMatchObject({
+      status: "skipped",
+      reason: "delegated authority no longer accepts fix work",
+    })
+    expect(mocks.read).not.toHaveBeenCalled()
+    expect(mocks.upload).not.toHaveBeenCalled()
+  })
+
+  it("does not link a generated patch after delegated authority is narrowed", async () => {
+    const delegatedScan = {
+      ...finding.scan,
+      delegatedConnectionId: "conn-1",
+      delegatedAuthorizationVersion: 2,
+    }
+    const delegatedFinding = { ...finding, scan: delegatedScan }
+    mocks.proposal.mockResolvedValue({
+      id: "proposal-1",
+      status: "draft",
+      finding: delegatedFinding,
+      summary: "Fix this issue",
+    })
+    mocks.current.mockResolvedValue({
+      status: "draft",
+      deletedAt: null,
+      finding: { workspaceId: "ws-1", deletedAt: null, ...delegatedFinding },
+    })
+    mocks.delegatedAuthority.mockResolvedValueOnce({ memberRole: "OWNER" }).mockResolvedValueOnce(null)
+    mocks.evidence.mockResolvedValue([{ type: "code_location", storageUri: "s3://test/location" }])
+    mocks.read.mockResolvedValue({
+      content: Buffer.from(
+        JSON.stringify({ file: "src/index.php", fix_before: "before\n", fix_after: "after\n" })
+      ),
+    })
+
+    expect(await processFixGenerateJob(input)).toMatchObject({
+      status: "skipped",
+      reason: "proposal is no longer a draft",
+    })
+    expect(mocks.upload).toHaveBeenCalledOnce()
+    expect(mocks.updateMany).not.toHaveBeenCalled()
+    expect(mocks.findingUpdate).not.toHaveBeenCalled()
+  })
+
   it("does not regenerate a proposal already ready for approval", async () => {
     mocks.proposal.mockResolvedValue({ status: "ready", finding })
     expect(await processFixGenerateJob(input)).toMatchObject({
