@@ -60,6 +60,47 @@ describe("GET /api/v1/setup-health", () => {
     expect(body.data.scopeFingerprint).toMatch(/^[a-f0-9]{64}$/)
   })
 
+  it("projects every legacy blocker and dependency uncertainty as unknown checks", async () => {
+    legacyGet.mockResolvedValueOnce(
+      Response.json({
+        success: true,
+        data: {
+          allowed: false,
+          code: "NO_MINUTES_REMAINING",
+          message: "Entitlement state is unavailable.",
+          dependencyUnavailable: true,
+          blockers: [
+            { code: "NO_MINUTES_REMAINING", message: "Entitlement state is unavailable." },
+            {
+              code: "WORKER_READINESS_UNAVAILABLE",
+              message: "Worker readiness is unavailable.",
+            },
+          ],
+          limitations: [],
+        },
+      })
+    )
+
+    const body = await (await GET(request(query))).json()
+
+    expect(body.data.status).toBe("unknown")
+    expect(body.data.primaryCheck).toBe("NO_MINUTES_REMAINING")
+    expect(body.data.checks).toEqual([
+      {
+        code: "NO_MINUTES_REMAINING",
+        status: "unknown",
+        explanation: "Entitlement state is unavailable.",
+        recoveryAction: "REVIEW_BILLING",
+      },
+      {
+        code: "WORKER_READINESS_UNAVAILABLE",
+        status: "unknown",
+        explanation: "Worker readiness is unavailable.",
+        recoveryAction: "WAIT_FOR_WORKER",
+      },
+    ])
+  })
+
   it("keeps a valid review ready while retaining submission-time limitations", async () => {
     legacyGet.mockResolvedValueOnce(
       Response.json({

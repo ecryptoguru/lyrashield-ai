@@ -1,4 +1,9 @@
-import { getReleasePacket, getReportByShareToken } from "@lyrashield/db"
+import {
+  getReleasePacket,
+  getReleasePacketForDelegatedRead,
+  getReportByShareToken,
+  ReleasePacketError,
+} from "@lyrashield/db"
 import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
@@ -31,8 +36,34 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     ) {
       return noStore(apiError("REPORT_NOT_FOUND", "Release packet not found", 404))
     }
-    await requirePermission(resolved.workspaceId, PERMISSIONS.report.download)
-    const payload = await getReleasePacket(id, resolved.workspaceId)
+    const { session } = await requirePermission(resolved.workspaceId, PERMISSIONS.report.download)
+
+    let payload: Awaited<ReturnType<typeof getReleasePacket>>
+    try {
+      if (session.oauth?.connectionId) {
+        const { connectionId, authorizationVersion, workspaceId: grantWorkspaceId } = session.oauth
+        if (!authorizationVersion || grantWorkspaceId !== resolved.workspaceId) {
+          return noStore(apiError("FORBIDDEN", "Release packet is not authorized", 403))
+        }
+        payload = await getReleasePacketForDelegatedRead({
+          reportId: id,
+          workspaceId: resolved.workspaceId,
+          userId: session.userId,
+          connectionId,
+          authorizationVersion,
+          shareToken: token,
+        })
+      } else {
+        payload = await getReleasePacket(id, resolved.workspaceId, { shareToken: token })
+      }
+    } catch (error) {
+      if (error instanceof ReleasePacketError && error.code === "SNAPSHOT_INVALID") {
+        return noStore(
+          apiError("REPORT_SNAPSHOT_MISSING", "Release packet snapshot is unavailable", 409)
+        )
+      }
+      throw error
+    }
     if (!payload) return noStore(apiError("REPORT_NOT_FOUND", "Release packet not found", 404))
     return noStore(Response.json({ success: true, data: payload }))
   } catch (error) {

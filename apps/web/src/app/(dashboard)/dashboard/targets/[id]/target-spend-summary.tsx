@@ -29,8 +29,11 @@ function money(value: SpendValue): string {
 
 export function TargetSpendSummary({
   projection,
+  hasScan = true,
 }: {
   projection: ResourceResult<ScanSpendProjection | null>
+  /** False only when the target has never been reviewed. */
+  hasScan?: boolean
 }) {
   if (projection.status === "unavailable") {
     return (
@@ -54,7 +57,9 @@ export function TargetSpendSummary({
           </h2>
         </div>
         <p className="text-muted-foreground mt-2 text-sm">
-          Spend details are available to the scan sponsor or billing manager.
+          {hasScan
+            ? "Spend details are available to the scan sponsor or billing manager."
+            : "No review has started, so there is no spend yet."}
         </p>
       </Card>
     )

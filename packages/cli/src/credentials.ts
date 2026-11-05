@@ -56,6 +56,14 @@ export async function removeCredentials(): Promise<void> {
   })
 }
 
+/**
+ * Resolve environment/file credentials without any network call. `--offline`
+ * diagnostics must never trigger an OAuth refresh just to print the source.
+ */
+export async function getOfflineCredentials(): Promise<EffectiveCredentials> {
+  return resolveCredentials()
+}
+
 export async function getEffectiveCredentials(): Promise<EffectiveCredentials> {
   const resolved = await resolveCredentials()
   if (resolved.source !== "file" || resolved.credentialKind !== "oauth") return resolved

@@ -4,10 +4,14 @@ import type { Output } from "../output.js"
 
 const mocks = vi.hoisted(() => ({
   credentials: vi.fn(),
+  offlineCredentials: vi.fn(),
   request: vi.fn(),
 }))
 
-vi.mock("../credentials.js", () => ({ getEffectiveCredentials: mocks.credentials }))
+vi.mock("../credentials.js", () => ({
+  getEffectiveCredentials: mocks.credentials,
+  getOfflineCredentials: mocks.offlineCredentials,
+}))
 vi.mock("../client.js", () => ({
   createClient: vi.fn(async () => ({ request: mocks.request })),
 }))
@@ -106,6 +110,38 @@ describe("doctor credential diagnostics", () => {
     expect(
       await handleDoctor(["--target", "target-1", "--mode", "STANDARD", "--strict"], output)
     ).toBe(6)
+  })
+
+  it("resolves stored credentials offline without OAuth refresh or any fetch", async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockRejectedValue(new Error("offline doctor must not fetch"))
+    mocks.offlineCredentials.mockResolvedValue({
+      apiKey: "stored-access-token",
+      credentialKind: "oauth",
+      apiUrl: "https://app.lyrashieldai.com",
+      workspaceId: "ws-1",
+      installId: "install-1",
+      source: "file",
+    })
+    mocks.credentials.mockRejectedValue(new Error("offline doctor must not refresh OAuth"))
+
+    expect(await handleDoctor(["--offline"], output)).toBe(0)
+
+    expect(mocks.offlineCredentials).toHaveBeenCalledTimes(1)
+    expect(mocks.credentials).not.toHaveBeenCalled()
+    expect(mocks.request).not.toHaveBeenCalled()
+    expect(fetchSpy).not.toHaveBeenCalled()
+    expect(output.result).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        credential: "OAuth access token",
+        credentialKind: "oauth",
+        credentialSource: "file",
+        workspaceId: "ws-1",
+        apiStatus: "skipped (offline)",
+      })
+    )
+    fetchSpy.mockRestore()
   })
 
   it("labels OAuth without presenting its bearer token as an API key", async () => {

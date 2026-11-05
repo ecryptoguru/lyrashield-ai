@@ -6,7 +6,7 @@ import { logger } from "@lyrashield/logger"
 import type { Report } from "./generated/prisma"
 import { gatherReportData, parseWebMcpAssurance } from "./report-generator"
 import { getSystemPrisma } from "./system-client"
-import { withWorkspaceRLS } from "./rls"
+import { withWorkspaceRLS, type ScopedTransaction } from "./rls"
 import { parseLaunchReportProvenance } from "./launch-report-provenance"
 
 export interface CreateReportParams {
@@ -416,15 +416,20 @@ export async function getShareableReport(
  * The request body is never consulted — attribution comes only from stored
  * rows (the linked scan's target, or the launch report's provenance-verified
  * gate verdict), so a caller cannot steer the check toward a covered target.
+ *
+ * Pass `client` to resolve the binding inside an existing RLS transaction so
+ * the authorization check and the content read share one snapshot. Pass
+ * `withProfile` when the caller also enforces profile-scoped grants.
  */
 export async function resolveReportDelegationTarget(
   reportId: string,
-  workspaceId: string
-): Promise<{ targetId: string | null } | null> {
+  workspaceId: string,
+  options: { client?: ScopedTransaction; withProfile?: boolean } = {}
+): Promise<{ targetId: string | null; profile?: string | null } | null> {
   // Same isolation boundary as getShareableReport: Report/Scan/GateVerdict are
   // under FORCE ROW LEVEL SECURITY, so the transaction-local workspace context
   // is the real boundary and the explicit predicates are defence-in-depth.
-  return withWorkspaceRLS(workspaceId, async (tx) => {
+  const read = async (tx: ScopedTransaction) => {
     const report = await tx.report.findFirst({
       where: { id: reportId, workspaceId, deletedAt: null },
       select: { id: true, scanId: true, type: true, provenanceJson: true },
@@ -434,11 +439,14 @@ export async function resolveReportDelegationTarget(
     if (report.scanId) {
       const scan = await tx.scan.findFirst({
         where: { id: report.scanId, workspaceId, deletedAt: null },
-        select: { targetId: true },
+        select: { targetId: true, ...(options.withProfile ? { mode: true } : {}) },
       })
       // Deleted scan, or a workspace-wide scan with no persisted target:
       // unattributable → all-targets only.
-      return { targetId: scan?.targetId ?? null }
+      const target = scan as { targetId: string | null; mode?: string | null } | null
+      return options.withProfile
+        ? { targetId: target?.targetId ?? null, profile: target?.mode ?? null }
+        : { targetId: target?.targetId ?? null }
     }
 
     if (report.type === "launch_readiness") {
@@ -446,21 +454,25 @@ export async function resolveReportDelegationTarget(
       // only when the stored verdict still carries the recorded checksum — a
       // contradiction means the binding cannot be proven.
       const provenance = parseLaunchReportProvenance(report.provenanceJson)
-      if (!provenance) return { targetId: null }
+      if (!provenance)
+        return options.withProfile ? { targetId: null, profile: null } : { targetId: null }
       const verdict = await tx.gateVerdict.findFirst({
         where: { id: provenance.gateVerdictId, workspaceId },
         select: { targetId: true, verdictChecksum: true },
       })
       if (!verdict || verdict.verdictChecksum !== provenance.verdictChecksum) {
-        return { targetId: null }
+        return options.withProfile ? { targetId: null, profile: null } : { targetId: null }
       }
-      return { targetId: verdict.targetId }
+      return options.withProfile
+        ? { targetId: verdict.targetId, profile: null }
+        : { targetId: verdict.targetId }
     }
 
     // No scan link and not a launch report: provenance on other report types
     // is not a delegation binding.
-    return { targetId: null }
-  })
+    return options.withProfile ? { targetId: null, profile: null } : { targetId: null }
+  }
+  return options.client ? read(options.client) : withWorkspaceRLS(workspaceId, read)
 }
 
 export { listReports, type ReportListItem } from "./report-list-service"

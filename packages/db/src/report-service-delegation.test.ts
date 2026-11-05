@@ -21,6 +21,7 @@ vi.mock("./rls", () => ({
 vi.mock("@lyrashield/logger", () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }))
 
 import { prisma } from "./client"
+import { withWorkspaceRLS } from "./rls"
 import { resolveReportDelegationTarget } from "./report-service"
 
 const reportFindFirst = vi.mocked(prisma.report.findFirst)
@@ -67,6 +68,32 @@ describe("resolveReportDelegationTarget", () => {
     expect(scanFindFirst).toHaveBeenCalledWith({
       where: { id: "scan-1", workspaceId: "ws-1", deletedAt: null },
       select: { targetId: true },
+    })
+  })
+
+  it("returns the scan profile and reuses a caller-owned transaction on request", async () => {
+    const client = {
+      report: { findFirst: reportFindFirst },
+      scan: { findFirst: scanFindFirst },
+      gateVerdict: { findFirst: verdictFindFirst },
+    }
+    reportFindFirst.mockResolvedValue({
+      id: "report-1",
+      scanId: "scan-1",
+      type: "release_packet",
+    } as never)
+    scanFindFirst.mockResolvedValue({ targetId: "target-1", mode: "STANDARD" } as never)
+
+    await expect(
+      resolveReportDelegationTarget("report-1", "ws-1", {
+        client: client as never,
+        withProfile: true,
+      })
+    ).resolves.toEqual({ targetId: "target-1", profile: "STANDARD" })
+    expect(withWorkspaceRLS).not.toHaveBeenCalled()
+    expect(scanFindFirst).toHaveBeenCalledWith({
+      where: { id: "scan-1", workspaceId: "ws-1", deletedAt: null },
+      select: { targetId: true, mode: true },
     })
   })
 

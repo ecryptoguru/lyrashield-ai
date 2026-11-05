@@ -25,6 +25,257 @@ import { TargetAssessmentSummary } from "./target-assessment-summary"
 import { TargetSpendSummary } from "./target-spend-summary"
 import { TargetSetupHealth } from "./target-setup-health"
 
+type ScopedTarget = NonNullable<Awaited<ReturnType<typeof getScopedTarget>>>
+
+function TargetDetailHeader({ target }: { target: ScopedTarget }) {
+  return (
+    <div className="mb-6">
+      <div className="flex flex-wrap items-center gap-3">
+        <h1 className="text-2xl font-bold tracking-tight">{target.name}</h1>
+        <Badge>
+          {target.type === "REPO" ? (
+            <GitBranch className="h-3 w-3" aria-hidden="true" />
+          ) : (
+            <Globe className="h-3 w-3" aria-hidden="true" />
+          )}
+          {getTargetTypeLabel(target.type)}
+        </Badge>
+        <Badge variant={target.status === "active" ? "success" : "muted"}>
+          {humanizeToken(target.status)}
+        </Badge>
+      </div>
+      <p className="text-muted-foreground mt-1 text-sm">
+        Environment: {getEnvironmentLabel(target.environment)}
+        {target.project && ` · Project: ${target.project.name}`}
+      </p>
+    </div>
+  )
+}
+
+function TargetStatCards({ target }: { target: ScopedTarget }) {
+  return (
+    <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <Card className="group p-5 transition-[border-color,box-shadow] duration-(--duration-base) ease-out hover:shadow-md">
+        <div className="text-muted-foreground flex items-center gap-2 text-sm">
+          <Crosshair className="text-primary h-4 w-4" aria-hidden="true" />
+          Total Scans
+        </div>
+        <p className="mt-2 text-2xl font-bold tracking-tight">{target._count.scans}</p>
+      </Card>
+      <Card className="group p-5 transition-[border-color,box-shadow] duration-(--duration-base) ease-out hover:shadow-md">
+        <div className="text-muted-foreground flex items-center gap-2 text-sm">
+          <Bug className="text-primary h-4 w-4" aria-hidden="true" />
+          Total findings
+        </div>
+        <p className="mt-2 text-2xl font-bold tracking-tight">{target._count.findings}</p>
+      </Card>
+      <Card className="group p-5 transition-[border-color,box-shadow] duration-(--duration-base) ease-out hover:shadow-md">
+        <div className="text-muted-foreground text-sm">Last Scan</div>
+        <p className="mt-2 text-2xl font-bold tracking-tight">
+          {target.lastScanAt ? <LocalTime value={target.lastScanAt} /> : "Never"}
+        </p>
+      </Card>
+    </div>
+  )
+}
+
+function TargetScoreCard({
+  target,
+  membershipRole,
+}: {
+  target: ScopedTarget
+  membershipRole: string
+}) {
+  const latestScore = target.scoreSnapshots[0]
+  const scoreExpired = latestScore ? latestScore.expiresAt <= new Date() : false
+  if (!latestScore) return null
+  return (
+    <div className="bg-card mb-6 rounded-xl border p-4 shadow-sm sm:p-6">
+      <h2 className="text-lg font-semibold">LyraShield Score</h2>
+      <p className="text-primary mt-2 font-mono text-4xl font-bold">
+        {latestScore.grade.replace("_PLUS", "+")} · {latestScore.score}
+      </p>
+      <p className="text-muted-foreground mt-2 text-sm">
+        {scoreExpired
+          ? "This score is stale — run a new scan to refresh it before sharing."
+          : latestScore.shareEligible
+            ? "Eligible for a public scorecard."
+            : "Provisional score — run a Standard or Deep scan on the configured default branch to share."}
+      </p>
+      {latestScore.shareEligible && !scoreExpired && (
+        <ScorecardControls
+          targetId={target.id}
+          workspaceId={target.workspaceId}
+          grade={latestScore.grade}
+          canPublish={["OWNER", "ADMIN", "SECURITY_ADMIN", "APPSEC_MANAGER"].includes(
+            membershipRole
+          )}
+          existingShare={
+            latestScore.shares[0]
+              ? {
+                  id: latestScore.shares[0].id,
+                  slug: latestScore.shares[0].slug,
+                  resolvedFindings:
+                    normalizeScorecardPayload(latestScore.shares[0].publicPayload)
+                      ?.resolvedFindings ?? 0,
+                  views: latestScore.shares[0].viewCount,
+                  shareHandoffs: latestScore.shares[0]._count.events,
+                  referredSignups: latestScore.shares[0].referralCode?._count.attributions ?? 0,
+                  url: latestScore.shares[0].referralCode?.code
+                    ? `/score/${latestScore.shares[0].slug}?ref=${latestScore.shares[0].referralCode.code}`
+                    : `/score/${latestScore.shares[0].slug}`,
+                }
+              : undefined
+          }
+        />
+      )}
+    </div>
+  )
+}
+
+function TargetRepositoryDetails({
+  target,
+  canUpdateTarget,
+}: {
+  target: ScopedTarget
+  canUpdateTarget: boolean
+}) {
+  if (target.type !== "REPO") return null
+  return (
+    <div className="bg-card mb-6 rounded-xl border p-4 shadow-sm sm:p-6">
+      <h2 className="mb-4 text-lg font-semibold">Repository Details</h2>
+      <dl className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-3">
+        <div>
+          <dt className="text-muted-foreground">Provider</dt>
+          <dd className="font-medium">{target.repoProvider}</dd>
+        </div>
+        <div>
+          <dt className="text-muted-foreground">Repository</dt>
+          <dd className="font-medium">{target.repoFullName}</dd>
+        </div>
+        {target._count.scans === 0 && canUpdateTarget ? (
+          <div>
+            <dt className="sr-only">Branch or tag</dt>
+            <dd>
+              <RepositoryRefEditor
+                targetId={target.id}
+                workspaceId={target.workspaceId}
+                initialRef={target.branch ?? ""}
+              />
+            </dd>
+          </div>
+        ) : (
+          <div>
+            <dt className="text-muted-foreground">Branch or tag</dt>
+            <dd className="font-medium">{target.branch ?? "Default branch"}</dd>
+          </div>
+        )}
+      </dl>
+    </div>
+  )
+}
+
+function TargetUrlDetails({ target }: { target: ScopedTarget }) {
+  if (target.type === "REPO" || !target.url) return null
+  return (
+    <div className="bg-card mb-6 rounded-xl border p-4 shadow-sm sm:p-6">
+      <h2 className="mb-4 text-lg font-semibold">URL Details</h2>
+      <dl className="grid grid-cols-1 gap-4 text-sm">
+        <div>
+          <dt className="text-muted-foreground">URL</dt>
+          <dd className="font-medium">
+            <a
+              href={target.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary hover:underline"
+            >
+              {target.url}
+            </a>
+          </dd>
+        </div>
+      </dl>
+    </div>
+  )
+}
+
+function RecentScansTable({ target }: { target: ScopedTarget }) {
+  return (
+    <div
+      className="overflow-x-auto rounded-xl border shadow-sm"
+      tabIndex={0}
+      aria-label="Recent scans"
+    >
+      <div className="border-b p-4">
+        <h2 className="text-lg font-semibold">Recent Scans</h2>
+      </div>
+      {target.scans.length === 0 ? (
+        <div className="text-muted-foreground p-8 text-center text-sm">
+          No scans yet for this {TARGET_SINGULAR.toLowerCase()}.
+        </div>
+      ) : (
+        <table className="w-full text-sm">
+          <thead className="bg-muted/30 border-b">
+            <tr>
+              <th scope="col" className="px-4 py-3 text-left font-semibold">
+                Goal
+              </th>
+              <th scope="col" className="px-4 py-3 text-left font-semibold">
+                Mode
+              </th>
+              <th scope="col" className="px-4 py-3 text-left font-semibold">
+                Status
+              </th>
+              <th scope="col" className="hidden px-4 py-3 text-left font-semibold sm:table-cell">
+                Date
+              </th>
+              <th scope="col" className="px-4 py-3 text-left font-semibold">
+                <span className="sr-only">View</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {target.scans.map((scan) => (
+              <tr key={scan.id} className="border-b last:border-0">
+                <td className="px-4 py-3 font-medium">{getScanGoalLabel(scan.goal)}</td>
+                <td className="px-4 py-3">{modeLabel(scan.mode)}</td>
+                <td className="px-4 py-3">
+                  <Badge
+                    variant={
+                      scan.status === "COMPLETED"
+                        ? "success"
+                        : scan.status === "PARTIAL"
+                          ? "warning"
+                          : scan.status === "FAILED"
+                            ? "danger"
+                            : scan.status === "RUNNING"
+                              ? "info"
+                              : "muted"
+                    }
+                  >
+                    {scanStatusLabel(scan.status)}
+                  </Badge>
+                </td>
+                <td className="text-muted-foreground hidden px-4 py-3 sm:table-cell">
+                  <LocalTime withTime value={scan.createdAt} />
+                </td>
+                <td className="px-4 py-3">
+                  <Link
+                    href={`/dashboard/scans/${scan.id}`}
+                    className="text-primary text-xs font-medium hover:underline"
+                  >
+                    View
+                  </Link>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  )
+}
+
 /** Readable status for the Recent Scans table without the full presentation copy. */
 function scanStatusLabel(status: string): string {
   return getScanPresentation(status, {}).label
@@ -136,8 +387,6 @@ export default async function TargetDetailPage({ params }: { params: Promise<{ i
   const canDeleteTarget = hasPermission(membership.role, PERMISSIONS.target.delete)
   const canStartScan = hasPermission(membership.role, PERMISSIONS.scan.create)
   const canManageBilling = hasPermission(membership.role, PERMISSIONS.billing.manage)
-  const latestScore = target.scoreSnapshots[0]
-  const scoreExpired = latestScore ? latestScore.expiresAt <= new Date() : false
   const [domainStatuses, targetEntitlement] = await Promise.all([
     getTargetDomainStatuses(workspaceId, [target]),
     assertTargetAllowed(workspaceId, session.userId),
@@ -186,30 +435,11 @@ export default async function TargetDetailPage({ params }: { params: Promise<{ i
         Back to targets
       </Link>
 
-      <div className="mb-6">
-        <div className="flex flex-wrap items-center gap-3">
-          <h1 className="text-2xl font-bold tracking-tight">{target.name}</h1>
-          <Badge>
-            {target.type === "REPO" ? (
-              <GitBranch className="h-3 w-3" aria-hidden="true" />
-            ) : (
-              <Globe className="h-3 w-3" aria-hidden="true" />
-            )}
-            {getTargetTypeLabel(target.type)}
-          </Badge>
-          <Badge variant={target.status === "active" ? "success" : "muted"}>
-            {humanizeToken(target.status)}
-          </Badge>
-        </div>
-        <p className="text-muted-foreground mt-1 text-sm">
-          Environment: {getEnvironmentLabel(target.environment)}
-          {target.project && ` · Project: ${target.project.name}`}
-        </p>
-      </div>
+      <TargetDetailHeader target={target} />
 
       <div className="mb-6 grid gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(18rem,1fr)]">
         <TargetAssessmentSummary projection={assessmentProjection} />
-        <TargetSpendSummary projection={assessmentProjection.spend} />
+        <TargetSpendSummary projection={assessmentProjection.spend} hasScan={Boolean(latestScan)} />
       </div>
 
       <div className="mb-6">
@@ -221,125 +451,13 @@ export default async function TargetDetailPage({ params }: { params: Promise<{ i
         />
       </div>
 
-      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <Card className="group p-5 transition-[border-color,box-shadow] duration-(--duration-base) ease-out hover:shadow-md">
-          <div className="text-muted-foreground flex items-center gap-2 text-sm">
-            <Crosshair className="text-primary h-4 w-4" aria-hidden="true" />
-            Total Scans
-          </div>
-          <p className="mt-2 text-2xl font-bold tracking-tight">{target._count.scans}</p>
-        </Card>
-        <Card className="group p-5 transition-[border-color,box-shadow] duration-(--duration-base) ease-out hover:shadow-md">
-          <div className="text-muted-foreground flex items-center gap-2 text-sm">
-            <Bug className="text-primary h-4 w-4" aria-hidden="true" />
-            Total findings
-          </div>
-          <p className="mt-2 text-2xl font-bold tracking-tight">{target._count.findings}</p>
-        </Card>
-        <Card className="group p-5 transition-[border-color,box-shadow] duration-(--duration-base) ease-out hover:shadow-md">
-          <div className="text-muted-foreground text-sm">Last Scan</div>
-          <p className="mt-2 text-2xl font-bold tracking-tight">
-            {target.lastScanAt ? <LocalTime value={target.lastScanAt} /> : "Never"}
-          </p>
-        </Card>
-      </div>
+      <TargetStatCards target={target} />
 
-      {latestScore && (
-        <div className="bg-card mb-6 rounded-xl border p-4 shadow-sm sm:p-6">
-          <h2 className="text-lg font-semibold">LyraShield Score</h2>
-          <p className="text-primary mt-2 font-mono text-4xl font-bold">
-            {latestScore.grade.replace("_PLUS", "+")} · {latestScore.score}
-          </p>
-          <p className="text-muted-foreground mt-2 text-sm">
-            {scoreExpired
-              ? "This score is stale — run a new scan to refresh it before sharing."
-              : latestScore.shareEligible
-                ? "Eligible for a public scorecard."
-                : "Provisional score — run a Standard or Deep scan on the configured default branch to share."}
-          </p>
-          {latestScore.shareEligible && !scoreExpired && (
-            <ScorecardControls
-              targetId={target.id}
-              workspaceId={target.workspaceId}
-              grade={latestScore.grade}
-              canPublish={["OWNER", "ADMIN", "SECURITY_ADMIN", "APPSEC_MANAGER"].includes(
-                membership.role
-              )}
-              existingShare={
-                latestScore.shares[0]
-                  ? {
-                      id: latestScore.shares[0].id,
-                      slug: latestScore.shares[0].slug,
-                      resolvedFindings:
-                        normalizeScorecardPayload(latestScore.shares[0].publicPayload)
-                          ?.resolvedFindings ?? 0,
-                      views: latestScore.shares[0].viewCount,
-                      shareHandoffs: latestScore.shares[0]._count.events,
-                      referredSignups: latestScore.shares[0].referralCode?._count.attributions ?? 0,
-                      url: latestScore.shares[0].referralCode?.code
-                        ? `/score/${latestScore.shares[0].slug}?ref=${latestScore.shares[0].referralCode.code}`
-                        : `/score/${latestScore.shares[0].slug}`,
-                    }
-                  : undefined
-              }
-            />
-          )}
-        </div>
-      )}
+      <TargetScoreCard target={target} membershipRole={membership.role} />
 
-      {target.type === "REPO" && (
-        <div className="bg-card mb-6 rounded-xl border p-4 shadow-sm sm:p-6">
-          <h2 className="mb-4 text-lg font-semibold">Repository Details</h2>
-          <dl className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-3">
-            <div>
-              <dt className="text-muted-foreground">Provider</dt>
-              <dd className="font-medium">{target.repoProvider}</dd>
-            </div>
-            <div>
-              <dt className="text-muted-foreground">Repository</dt>
-              <dd className="font-medium">{target.repoFullName}</dd>
-            </div>
-            {target._count.scans === 0 && canUpdateTarget ? (
-              <div>
-                <dt className="sr-only">Branch or tag</dt>
-                <dd>
-                  <RepositoryRefEditor
-                    targetId={target.id}
-                    workspaceId={target.workspaceId}
-                    initialRef={target.branch ?? ""}
-                  />
-                </dd>
-              </div>
-            ) : (
-              <div>
-                <dt className="text-muted-foreground">Branch or tag</dt>
-                <dd className="font-medium">{target.branch ?? "Default branch"}</dd>
-              </div>
-            )}
-          </dl>
-        </div>
-      )}
+      <TargetRepositoryDetails target={target} canUpdateTarget={canUpdateTarget} />
 
-      {target.type !== "REPO" && target.url && (
-        <div className="bg-card mb-6 rounded-xl border p-4 shadow-sm sm:p-6">
-          <h2 className="mb-4 text-lg font-semibold">URL Details</h2>
-          <dl className="grid grid-cols-1 gap-4 text-sm">
-            <div>
-              <dt className="text-muted-foreground">URL</dt>
-              <dd className="font-medium">
-                <a
-                  href={target.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-primary hover:underline"
-                >
-                  {target.url}
-                </a>
-              </dd>
-            </div>
-          </dl>
-        </div>
-      )}
+      <TargetUrlDetails target={target} />
 
       {(target.type === "WEB_APP" || target.type === "API") && (
         <DomainVerificationCard
@@ -358,78 +476,7 @@ export default async function TargetDetailPage({ params }: { params: Promise<{ i
         canDelete={canDeleteTarget}
       />
 
-      <div
-        className="overflow-x-auto rounded-xl border shadow-sm"
-        tabIndex={0}
-        aria-label="Recent scans"
-      >
-        <div className="border-b p-4">
-          <h2 className="text-lg font-semibold">Recent Scans</h2>
-        </div>
-        {target.scans.length === 0 ? (
-          <div className="text-muted-foreground p-8 text-center text-sm">
-            No scans yet for this {TARGET_SINGULAR.toLowerCase()}.
-          </div>
-        ) : (
-          <table className="w-full text-sm">
-            <thead className="bg-muted/30 border-b">
-              <tr>
-                <th scope="col" className="px-4 py-3 text-left font-semibold">
-                  Goal
-                </th>
-                <th scope="col" className="px-4 py-3 text-left font-semibold">
-                  Mode
-                </th>
-                <th scope="col" className="px-4 py-3 text-left font-semibold">
-                  Status
-                </th>
-                <th scope="col" className="hidden px-4 py-3 text-left font-semibold sm:table-cell">
-                  Date
-                </th>
-                <th scope="col" className="px-4 py-3 text-left font-semibold">
-                  <span className="sr-only">View</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {target.scans.map((scan) => (
-                <tr key={scan.id} className="border-b last:border-0">
-                  <td className="px-4 py-3 font-medium">{getScanGoalLabel(scan.goal)}</td>
-                  <td className="px-4 py-3">{modeLabel(scan.mode)}</td>
-                  <td className="px-4 py-3">
-                    <Badge
-                      variant={
-                        scan.status === "COMPLETED"
-                          ? "success"
-                          : scan.status === "PARTIAL"
-                            ? "warning"
-                            : scan.status === "FAILED"
-                              ? "danger"
-                              : scan.status === "RUNNING"
-                                ? "info"
-                                : "muted"
-                      }
-                    >
-                      {scanStatusLabel(scan.status)}
-                    </Badge>
-                  </td>
-                  <td className="text-muted-foreground hidden px-4 py-3 sm:table-cell">
-                    <LocalTime withTime value={scan.createdAt} />
-                  </td>
-                  <td className="px-4 py-3">
-                    <Link
-                      href={`/dashboard/scans/${scan.id}`}
-                      className="text-primary text-xs font-medium hover:underline"
-                    >
-                      View
-                    </Link>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+      <RecentScansTable target={target} />
     </div>
   )
 }

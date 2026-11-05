@@ -40,7 +40,7 @@ function sampledRate(numerator: number, denominator: number) {
   }
 }
 
-async function getActivationMetrics(prisma: ReturnType<typeof getSystemPrisma>) {
+async function fetchActivationRow(prisma: ReturnType<typeof getSystemPrisma>) {
   const [row] = await prisma.$queryRaw<ActivationRow[]>`
     WITH first_scan AS (
       SELECT "createdById" AS user_id, MIN("createdAt") AS started_at
@@ -165,6 +165,10 @@ async function getActivationMetrics(prisma: ReturnType<typeof getSystemPrisma>) 
   `
 
   if (!row) throw new Error("Activation metrics query returned no row")
+  return row
+}
+
+function projectActivationMetrics(row: ActivationRow) {
   const accountsCreated = Number(row.accountsCreated)
   const validAssessments = Number(row.validAssessments)
   const usefulAssessments = Number(row.usefulAssessments)
@@ -203,6 +207,10 @@ async function getActivationMetrics(prisma: ReturnType<typeof getSystemPrisma>) 
       ),
     },
   }
+}
+
+async function getActivationMetrics(prisma: ReturnType<typeof getSystemPrisma>) {
+  return projectActivationMetrics(await fetchActivationRow(prisma))
 }
 
 function countStatus(

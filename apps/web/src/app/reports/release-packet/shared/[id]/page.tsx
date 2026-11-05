@@ -1,10 +1,15 @@
 import type { Metadata } from "next"
 import Link from "next/link"
 import { notFound } from "next/navigation"
-import { getReleasePacket, getReportByShareToken } from "@lyrashield/db"
+import {
+  getReleasePacket,
+  getReleasePacketForDelegatedRead,
+  getReportByShareToken,
+  ReleasePacketError,
+} from "@lyrashield/db"
+import type { ReleasePacketPayload } from "@lyrashield/types"
 import { getSession, requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
-import { ReleasePacketPayloadSchema } from "@lyrashield/types"
 import { Card, buttonVariants } from "@lyrashield/ui"
 import { ReleasePacketView } from "./release-packet-view"
 
@@ -54,14 +59,36 @@ export default async function PrivateReleasePacketPage({
     )
   }
 
-  try {
-    await requirePermission(report.workspaceId, PERMISSIONS.report.download)
-  } catch {
+  const { session: authorizedSession } = await requirePermission(
+    report.workspaceId,
+    PERMISSIONS.report.download
+  )
+
+  const oauth = authorizedSession.oauth
+  if (
+    oauth?.connectionId &&
+    (!oauth.authorizationVersion || oauth.workspaceId !== report.workspaceId)
+  ) {
     notFound()
   }
-  const payload = await getReleasePacket(id, report.workspaceId)
+
+  let payload: ReleasePacketPayload | null
+  try {
+    payload = oauth?.connectionId
+      ? await getReleasePacketForDelegatedRead({
+          reportId: id,
+          workspaceId: report.workspaceId,
+          userId: authorizedSession.userId,
+          connectionId: oauth.connectionId,
+          authorizationVersion: oauth.authorizationVersion!,
+          shareToken: token,
+        })
+      : await getReleasePacket(id, report.workspaceId, { shareToken: token })
+  } catch (error) {
+    if (error instanceof ReleasePacketError) notFound()
+    throw error
+  }
   if (!payload) notFound()
-  const parsed = ReleasePacketPayloadSchema.safeParse(payload)
-  if (!parsed.success) notFound()
-  return <ReleasePacketView payload={parsed.data} workspaceId={report.workspaceId} reportId={id} />
+
+  return <ReleasePacketView payload={payload} workspaceId={report.workspaceId} reportId={id} />
 }

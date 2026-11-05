@@ -148,6 +148,14 @@ describe("target spend summary", () => {
     expect(html).not.toContain("Consumed $0.00")
   })
 
+  it("distinguishes no review from unauthorized spend visibility", () => {
+    const html = renderToStaticMarkup(
+      <TargetSpendSummary projection={{ status: "available", value: null }} hasScan={false} />
+    )
+    expect(html).toContain("No review has started, so there is no spend yet.")
+    expect(html).not.toContain("available to the scan sponsor or billing manager")
+  })
+
   it("keeps unauthorized spend details private", () => {
     const html = renderToStaticMarkup(
       <TargetSpendSummary projection={{ status: "available", value: null }} />

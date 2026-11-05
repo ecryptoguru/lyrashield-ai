@@ -44,7 +44,8 @@ const RECOVERY_HREF: Partial<Record<SetupRecoveryAction, string>> = {
   RECONNECT_AGENT: "/dashboard/connections",
   CONNECT_GITHUB: "/dashboard/integrations",
   VERIFY_DOMAIN: "#domain-verification",
-  ADD_API_SPEC: "#target-settings",
+  // ADD_API_SPEC has no anchored control on this page; render the action text
+  // without linking to a dead fragment.
   REFRESH_ATTACHMENTS: "/dashboard/scans",
   START_TRIAL: "/dashboard/billing",
   REVIEW_BILLING: "/dashboard/billing",

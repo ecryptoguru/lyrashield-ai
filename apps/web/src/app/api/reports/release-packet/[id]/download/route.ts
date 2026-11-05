@@ -1,5 +1,9 @@
-import { getReleasePacket, generateReleasePacketCsv } from "@lyrashield/db"
-import { ReleasePacketPayloadSchema } from "@lyrashield/types"
+import {
+  generateReleasePacketCsv,
+  getReleasePacket,
+  getReleasePacketForDelegatedRead,
+  ReleasePacketError,
+} from "@lyrashield/db"
 import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
@@ -15,17 +19,32 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     if (!workspaceId) return apiError("MISSING_PARAM", "workspaceId is required", 400)
     if (format !== "csv") return apiError("UNSUPPORTED_FORMAT", "Only CSV is available here", 400)
     const { session } = await requirePermission(workspaceId, PERMISSIONS.report.download)
-    const payload = await getReleasePacket(id, workspaceId)
-    if (!payload) return apiError("REPORT_NOT_FOUND", "Release packet not found", 404)
-    const parsed = ReleasePacketPayloadSchema.safeParse(payload)
-    if (!parsed.success) {
-      logger.error("Release packet CSV snapshot invalid", {
-        reportId: id,
-        userId: session.userId,
-      })
-      return apiError("REPORT_SNAPSHOT_MISSING", "Release packet snapshot is unavailable", 409)
+
+    let payload: Awaited<ReturnType<typeof getReleasePacket>>
+    try {
+      if (session.oauth?.connectionId) {
+        const { connectionId, authorizationVersion, workspaceId: grantWorkspaceId } = session.oauth
+        if (!authorizationVersion || grantWorkspaceId !== workspaceId) {
+          return apiError("FORBIDDEN", "Release packet is not authorized", 403)
+        }
+        payload = await getReleasePacketForDelegatedRead({
+          reportId: id,
+          workspaceId,
+          userId: session.userId,
+          connectionId,
+          authorizationVersion,
+        })
+      } else {
+        payload = await getReleasePacket(id, workspaceId)
+      }
+    } catch (error) {
+      if (error instanceof ReleasePacketError && error.code === "SNAPSHOT_INVALID") {
+        return apiError("REPORT_SNAPSHOT_MISSING", "Release packet snapshot is unavailable", 409)
+      }
+      throw error
     }
-    const csv = generateReleasePacketCsv(parsed.data)
+    if (!payload) return apiError("REPORT_NOT_FOUND", "Release packet not found", 404)
+    const csv = generateReleasePacketCsv(payload)
     return new Response(csv, {
       headers: {
         "Content-Type": "text/csv; charset=utf-8",

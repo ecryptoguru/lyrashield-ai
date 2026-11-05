@@ -2,18 +2,111 @@ import type { AgentEntry } from "@lyrashield/agent-registry"
 import { getSetupHealth, type SetupHealthSnapshot } from "@lyrashield/sdk"
 import minimist from "minimist"
 import { createClient } from "../client.js"
-import { getEffectiveCredentials } from "../credentials.js"
+import { getEffectiveCredentials, getOfflineCredentials } from "../credentials.js"
 import { redactKey } from "../output.js"
 import { detectAgent, findDetectedLocations } from "../installers/detect.js"
 import type { Output } from "../output.js"
 
-export async function handleDoctor(args: string[], output: Output): Promise<number> {
+function parseDoctorArgs(args: string[]) {
   const parsed = minimist(args, {
     boolean: ["strict", "offline", "help"],
     string: ["workspace", "target", "goal", "mode", "workflow", "policy"],
     alias: { w: "workspace", h: "help" },
   })
-  const creds = await getEffectiveCredentials()
+  return parsed
+}
+
+async function collectAgentChecks(output: Output): Promise<unknown[]> {
+  const registry = await import("@lyrashield/agent-registry").catch(() => ({}))
+  const list = (registry as Record<string, unknown>).listAgents as (() => AgentEntry[]) | undefined
+  const arr = (registry as Record<string, unknown>).AGENTS as AgentEntry[] | undefined
+  const agents = list?.() ?? arr ?? []
+
+  const agentChecks: unknown[] = []
+  for (const agent of agents) {
+    const detected = await detectAgent(agent)
+    const locations = await findDetectedLocations(agent)
+    const configured = locations.filter((l) => l.hasEntry)
+    const wrongRoot = locations.find((l) => l.exists && !l.hasEntry && l.rootKeyCorrect === false)
+    const checks = {
+      id: agent.id,
+      displayName: agent.displayName,
+      detected,
+      configured: configured.map((l) => l.resolvedPath),
+      wrongRoot: wrongRoot ? wrongRoot.resolvedPath : undefined,
+      gotchas: agent.gotchas,
+    }
+    agentChecks.push(checks)
+    if (wrongRoot) {
+      output.warn(
+        `[${agent.id}] Config found but LyraShield entry missing at the expected root key in ${wrongRoot.resolvedPath}`
+      )
+    }
+  }
+  return agentChecks
+}
+
+function renderDoctorTextReport(
+  output: Output,
+  report: Record<string, unknown>,
+  context: {
+    credential: string
+    credentialSource: string
+    apiUrl: string | undefined
+    workspaceId: string | null | undefined
+    apiReachable: boolean
+    setupHealth: SetupHealthSnapshot | null
+    agentChecks: unknown[]
+  }
+) {
+  output.log(`Credential: ${context.credential} (${context.credentialSource})`)
+  output.log(`API URL:    ${context.apiUrl}`)
+  output.log(`Workspace:  ${context.workspaceId ?? "not set"}`)
+  output.log(`API status: ${context.apiReachable ? "reachable" : "unreachable"}`)
+  if (report.apiError) {
+    output.error(report.apiError as string)
+    for (const step of (report.apiRemedy as string[] | undefined) ?? []) {
+      output.log(`  → ${step}`)
+    }
+  }
+  if (report.workspaceWarning) {
+    output.warn(report.workspaceWarning as string)
+    if (report.workspaceRemedy) output.log(`  → ${report.workspaceRemedy as string}`)
+  }
+  const setupHealth = context.setupHealth
+  if (setupHealth) {
+    output.log(`Setup:     ${setupHealth.status}`)
+    const primary = setupHealth.checks.find((check) => check.code === setupHealth.primaryCheck)
+    if (primary) {
+      output.log(`  ${primary.code}: ${primary.explanation}`)
+      if (primary.recoveryAction)
+        output.log(`  Next: ${primary.recoveryAction.replaceAll("_", " ").toLowerCase()}`)
+    }
+  }
+  for (const check of context.agentChecks as {
+    id: string
+    displayName: string
+    detected: boolean
+    configured: string[]
+    gotchas: string[]
+  }[]) {
+    output.log(`\n[${check.id}] ${check.displayName}`)
+    output.log(`  detected:   ${check.detected ? "yes" : "no"}`)
+    output.log(`  configured: ${check.configured.length ? check.configured.join(", ") : "no"}`)
+    // Gotchas for an agent the user doesn't have are pure noise; only surface
+    // them once the agent is actually present or configured.
+    if (check.detected || check.configured.length > 0) {
+      for (const gotcha of check.gotchas) {
+        output.log(`  ! ${gotcha}`)
+      }
+    }
+  }
+}
+
+export async function handleDoctor(args: string[], output: Output): Promise<number> {
+  const parsed = parseDoctorArgs(args)
+  // `--offline` must not refresh an expired OAuth token over the network.
+  const creds = parsed.offline ? await getOfflineCredentials() : await getEffectiveCredentials()
   const credential =
     creds.credentialKind === "oauth"
       ? "OAuth access token"
@@ -99,32 +192,7 @@ export async function handleDoctor(args: string[], output: Output): Promise<numb
     ]
   }
 
-  const registry = await import("@lyrashield/agent-registry").catch(() => ({}))
-  const list = (registry as Record<string, unknown>).listAgents as (() => AgentEntry[]) | undefined
-  const arr = (registry as Record<string, unknown>).AGENTS as AgentEntry[] | undefined
-  const agents = list?.() ?? arr ?? []
-
-  const agentChecks: unknown[] = []
-  for (const agent of agents) {
-    const detected = await detectAgent(agent)
-    const locations = await findDetectedLocations(agent)
-    const configured = locations.filter((l) => l.hasEntry)
-    const wrongRoot = locations.find((l) => l.exists && !l.hasEntry && l.rootKeyCorrect === false)
-    const checks = {
-      id: agent.id,
-      displayName: agent.displayName,
-      detected,
-      configured: configured.map((l) => l.resolvedPath),
-      wrongRoot: wrongRoot ? wrongRoot.resolvedPath : undefined,
-      gotchas: agent.gotchas,
-    }
-    agentChecks.push(checks)
-    if (wrongRoot) {
-      output.warn(
-        `[${agent.id}] Config found but LyraShield entry missing at the expected root key in ${wrongRoot.resolvedPath}`
-      )
-    }
-  }
+  const agentChecks = await collectAgentChecks(output)
 
   report.agents = agentChecks
 
@@ -137,47 +205,15 @@ export async function handleDoctor(args: string[], output: Output): Promise<numb
   if (output.json) {
     output.result(report)
   } else {
-    output.log(`Credential: ${credential} (${creds.source})`)
-    output.log(`API URL:    ${creds.apiUrl}`)
-    output.log(`Workspace:  ${creds.workspaceId ?? "not set"}`)
-    output.log(`API status: ${apiReachable ? "reachable" : "unreachable"}`)
-    if (report.apiError) {
-      output.error(report.apiError as string)
-      for (const step of (report.apiRemedy as string[] | undefined) ?? []) {
-        output.log(`  → ${step}`)
-      }
-    }
-    if (report.workspaceWarning) {
-      output.warn(report.workspaceWarning as string)
-      if (report.workspaceRemedy) output.log(`  → ${report.workspaceRemedy as string}`)
-    }
-    if (setupHealth) {
-      output.log(`Setup:     ${setupHealth.status}`)
-      const primary = setupHealth.checks.find((check) => check.code === setupHealth.primaryCheck)
-      if (primary) {
-        output.log(`  ${primary.code}: ${primary.explanation}`)
-        if (primary.recoveryAction)
-          output.log(`  Next: ${primary.recoveryAction.replaceAll("_", " ").toLowerCase()}`)
-      }
-    }
-    for (const check of agentChecks as {
-      id: string
-      displayName: string
-      detected: boolean
-      configured: string[]
-      gotchas: string[]
-    }[]) {
-      output.log(`\n[${check.id}] ${check.displayName}`)
-      output.log(`  detected:   ${check.detected ? "yes" : "no"}`)
-      output.log(`  configured: ${check.configured.length ? check.configured.join(", ") : "no"}`)
-      // Gotchas for an agent the user doesn't have are pure noise; only surface
-      // them once the agent is actually present or configured.
-      if (check.detected || check.configured.length > 0) {
-        for (const gotcha of check.gotchas) {
-          output.log(`  ! ${gotcha}`)
-        }
-      }
-    }
+    renderDoctorTextReport(output, report, {
+      credential,
+      credentialSource: creds.source,
+      apiUrl: creds.apiUrl,
+      workspaceId: creds.workspaceId,
+      apiReachable,
+      setupHealth,
+      agentChecks,
+    })
   }
 
   if (parsed.strict) {

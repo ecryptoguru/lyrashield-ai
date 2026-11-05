@@ -61,10 +61,18 @@ export type SetupHealthSnapshot = z.infer<typeof SetupHealthSnapshotSchema>
 /** Lower-case alias for callers that import runtime schemas by camelCase. */
 export const setupHealthSnapshotSchema = SetupHealthSnapshotSchema
 
-export interface SetupHealthSnapshotInput {
-  allowed: boolean
+export interface SetupHealthBlockerInput {
   code?: string | null
   message?: string | null
+}
+
+export interface SetupHealthSnapshotInput {
+  allowed: boolean
+  /** Legacy single-blocker fields; used when `blockers` is absent. */
+  code?: string | null
+  message?: string | null
+  /** Every legacy admission blocker, in server order. The first stays primary. */
+  blockers?: SetupHealthBlockerInput[]
   limitations?: string[]
   scope: SetupHealthScope
   scopeFingerprint: string
@@ -175,8 +183,35 @@ export function buildSetupHealthSnapshot(input: SetupHealthSnapshotInput): Setup
     }
   }
 
-  const code = input.code?.slice(0, 96) || "SETUP_BLOCKED"
   const status: SetupHealthStatus = input.dependencyUnavailable ? "unknown" : "blocked"
+  const seen = new Set<string>()
+  const blockers = (input.blockers ?? [])
+    .filter(
+      (blocker): blocker is { code: string; message?: string | null } =>
+        typeof blocker.code === "string" && blocker.code.trim().length > 0
+    )
+    .map((blocker) => ({
+      code: blocker.code.slice(0, 96),
+      message: blocker.message ?? null,
+    }))
+    .filter((blocker) => {
+      if (seen.has(blocker.code)) return false
+      seen.add(blocker.code)
+      return true
+    })
+  if (blockers.length === 0) {
+    blockers.push({
+      code: input.code?.slice(0, 96) || "SETUP_BLOCKED",
+      message: input.message ?? null,
+    })
+  }
+  const checks: SetupHealthCheck[] = blockers.map((blocker) => ({
+    code: blocker.code,
+    status,
+    explanation: safeExplanation(blocker.message, "This review cannot be started yet."),
+    recoveryAction: setupRecoveryActionForCode(blocker.code),
+  }))
+  const primaryCheck = checks[0]?.code ?? "SETUP_BLOCKED"
   return {
     version: SETUP_HEALTH_VERSION,
     status,
@@ -185,15 +220,8 @@ export function buildSetupHealthSnapshot(input: SetupHealthSnapshotInput): Setup
     expiresAt,
     scopeFingerprint: input.scopeFingerprint,
     scope: input.scope,
-    checks: [
-      {
-        code,
-        status,
-        explanation: safeExplanation(input.message, "This review cannot be started yet."),
-        recoveryAction: setupRecoveryActionForCode(code),
-      },
-    ],
-    primaryCheck: code,
+    checks,
+    primaryCheck,
     limitations: (input.limitations ?? []).map((item) => item.slice(0, 500)),
   }
 }

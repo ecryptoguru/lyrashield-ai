@@ -67,8 +67,8 @@
     },
     "apps/web/src/app/(dashboard)/dashboard/admin/page.tsx|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 79,
-      "maxExcess": 79
+      "totalExcess": 67,
+      "maxExcess": 67
     },
     "apps/web/src/app/(dashboard)/dashboard/admin/support/support-case-detail.tsx|max-lines-per-function": {
       "count": 1,
@@ -239,11 +239,6 @@
       "count": 1,
       "totalExcess": 23,
       "maxExcess": 23
-    },
-    "apps/web/src/app/(dashboard)/dashboard/targets/[id]/page.tsx|max-lines-per-function": {
-      "count": 1,
-      "totalExcess": 104,
-      "maxExcess": 104
     },
     "apps/web/src/app/(dashboard)/dashboard/targets/[id]/scorecard-controls.tsx|max-lines-per-function": {
       "count": 1,

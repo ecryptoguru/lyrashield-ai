@@ -68,7 +68,10 @@ export async function GET(request: Request) {
 
   const data = body.data
   const blockers = Array.isArray(data.blockers)
-    ? (data.blockers as Array<{ code?: unknown; message?: unknown }>)
+    ? (data.blockers as Array<{ code?: unknown; message?: unknown }>).map((blocker) => ({
+        code: typeof blocker?.code === "string" ? blocker.code : null,
+        message: typeof blocker?.message === "string" ? blocker.message : null,
+      }))
     : []
   const firstBlocker = blockers[0]
   const code =
@@ -86,6 +89,8 @@ export async function GET(request: Request) {
     allowed: data.allowed === true,
     code,
     message,
+    blockers,
+    dependencyUnavailable: data.dependencyUnavailable === true,
     limitations,
     scope,
     scopeFingerprint,

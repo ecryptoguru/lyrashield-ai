@@ -42,6 +42,61 @@ describe("setup health contract", () => {
     expect(snapshot.expiresAt).toBe("2026-11-05T00:01:00.000Z")
   })
 
+  it("projects every legacy blocker as a check while retaining the first as primary", () => {
+    const snapshot = buildSetupHealthSnapshot({
+      allowed: false,
+      blockers: [
+        {
+          code: "NO_MINUTES_REMAINING",
+          message: "No agent minutes remain.",
+        },
+        {
+          code: "DOMAIN_VERIFICATION_REQUIRED",
+          message: "Verify control of this domain once.",
+        },
+      ],
+      limitations: [],
+      scope,
+      scopeFingerprint: "c".repeat(64),
+      now: new Date("2026-11-05T00:00:00.000Z"),
+    })
+
+    expect(snapshot.primaryCheck).toBe("NO_MINUTES_REMAINING")
+    expect(snapshot.checks).toEqual([
+      {
+        code: "NO_MINUTES_REMAINING",
+        status: "blocked",
+        explanation: "No agent minutes remain.",
+        recoveryAction: "REVIEW_BILLING",
+      },
+      {
+        code: "DOMAIN_VERIFICATION_REQUIRED",
+        status: "blocked",
+        explanation: "Verify control of this domain once.",
+        recoveryAction: "VERIFY_DOMAIN",
+      },
+    ])
+  })
+
+  it("propagates dependency uncertainty to every projected blocker", () => {
+    const snapshot = buildSetupHealthSnapshot({
+      allowed: false,
+      dependencyUnavailable: true,
+      blockers: [
+        { code: "NO_MINUTES_REMAINING", message: "Entitlement state is unavailable." },
+        { code: "WORKER_READINESS_UNAVAILABLE", message: "Worker readiness is unavailable." },
+      ],
+      limitations: [],
+      scope,
+      scopeFingerprint: "b".repeat(64),
+      now: new Date("2026-11-05T00:00:00.000Z"),
+    })
+
+    expect(snapshot.status).toBe("unknown")
+    expect(snapshot.checks).toHaveLength(2)
+    expect(snapshot.checks.every((check) => check.status === "unknown")).toBe(true)
+  })
+
   it("builds a ready snapshot and keeps submission-time limitations advisory", () => {
     const snapshot = buildSetupHealthSnapshot({
       allowed: true,

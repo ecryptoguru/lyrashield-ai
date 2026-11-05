@@ -78,6 +78,19 @@ export const metadata: Metadata = {
   title: "Platform Admin",
 }
 
+function AdminDestinations() {
+  return (
+    <section className="flex flex-wrap gap-3" aria-label="Admin destinations">
+      <Link href="/dashboard/admin/affiliates" className={buttonVariants({ variant: "secondary" })}>
+        Review affiliates
+      </Link>
+      <Link href="/dashboard/launch-readiness" className={buttonVariants({ variant: "secondary" })}>
+        Review launch readiness
+      </Link>
+    </section>
+  )
+}
+
 export default async function PlatformAdminPage() {
   try {
     await requirePlatformAdminIdentity()
@@ -302,20 +315,7 @@ export default async function PlatformAdminPage() {
         </section>
       )}
 
-      <section className="flex flex-wrap gap-3" aria-label="Admin destinations">
-        <Link
-          href="/dashboard/admin/affiliates"
-          className={buttonVariants({ variant: "secondary" })}
-        >
-          Review affiliates
-        </Link>
-        <Link
-          href="/dashboard/launch-readiness"
-          className={buttonVariants({ variant: "secondary" })}
-        >
-          Review launch readiness
-        </Link>
-      </section>
+      <AdminDestinations />
     </div>
   )
 }
