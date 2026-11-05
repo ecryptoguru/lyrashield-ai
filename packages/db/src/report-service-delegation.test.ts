@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { LAUNCH_REPORT_PROVENANCE_VERSION } from "./launch-report-provenance"
+import {
+  computeLaunchReportChecksum,
+  LAUNCH_REPORT_PAYLOAD_VERSION,
+} from "./launch-report-payload"
 
 /**
  * W0.3 — resolveReportDelegationTarget maps a persisted report to the target
@@ -28,6 +32,30 @@ const reportFindFirst = vi.mocked(prisma.report.findFirst)
 const scanFindFirst = vi.mocked(prisma.scan.findFirst)
 const verdictFindFirst = vi.mocked(prisma.gateVerdict.findFirst)
 
+function launchReportPayload() {
+  const unsigned = {
+    payloadVersion: LAUNCH_REPORT_PAYLOAD_VERSION,
+    verdictLabel: "Ready to launch",
+    standardVersion: "1.0.0",
+    appDisplayName: "acme-app",
+    evaluatedAt: "2026-09-10T00:00:00.000Z",
+    issuedAt: "2026-09-10T01:00:00.000Z",
+    coverageStatement: ["repository unit tests"],
+    nonCoverage: ["live provider calls"],
+    counts: {
+      unresolvedCritical: 0,
+      unresolvedHigh: 0,
+      unresolvedMedium: null,
+      unresolvedLow: null,
+      fixedAndRetestConfirmed: 2,
+      independentlyVerified: 0,
+    },
+    notEvaluatedSeverities: [],
+    stale: false,
+  }
+  return { ...unsigned, reportChecksum: computeLaunchReportChecksum(unsigned) }
+}
+
 const PROVENANCE = {
   schemaVersion: LAUNCH_REPORT_PROVENANCE_VERSION,
   gateVerdictId: "verdict-1",
@@ -51,7 +79,7 @@ describe("resolveReportDelegationTarget", () => {
     await expect(resolveReportDelegationTarget("report-1", "ws-1")).resolves.toBeNull()
     expect(reportFindFirst).toHaveBeenCalledWith({
       where: { id: "report-1", workspaceId: "ws-1", deletedAt: null },
-      select: { id: true, scanId: true, type: true, provenanceJson: true },
+      select: { id: true, scanId: true, type: true, provenanceJson: true, contentJson: true },
     })
   })
 
@@ -127,6 +155,7 @@ describe("resolveReportDelegationTarget", () => {
       scanId: null,
       type: "launch_readiness",
       provenanceJson: { ...PROVENANCE },
+      contentJson: launchReportPayload(),
     } as never)
     verdictFindFirst.mockResolvedValue({
       targetId: "target-7",
@@ -147,6 +176,7 @@ describe("resolveReportDelegationTarget", () => {
       scanId: null,
       type: "launch_readiness",
       provenanceJson: { schemaVersion: "unknown" },
+      contentJson: launchReportPayload(),
     } as never)
     await expect(resolveReportDelegationTarget("report-1", "ws-1")).resolves.toEqual({
       targetId: null,
@@ -160,6 +190,7 @@ describe("resolveReportDelegationTarget", () => {
       scanId: null,
       type: "launch_readiness",
       provenanceJson: { ...PROVENANCE },
+      contentJson: launchReportPayload(),
     } as never)
     verdictFindFirst.mockResolvedValue(null as never)
     await expect(resolveReportDelegationTarget("report-1", "ws-1")).resolves.toEqual({
@@ -173,6 +204,7 @@ describe("resolveReportDelegationTarget", () => {
       scanId: null,
       type: "launch_readiness",
       provenanceJson: { ...PROVENANCE },
+      contentJson: launchReportPayload(),
     } as never)
     verdictFindFirst.mockResolvedValue({
       targetId: "target-7",
@@ -181,6 +213,19 @@ describe("resolveReportDelegationTarget", () => {
     await expect(resolveReportDelegationTarget("report-1", "ws-1")).resolves.toEqual({
       targetId: null,
     })
+  })
+
+  it("returns null for a launch report whose stored payload fails validation", async () => {
+    reportFindFirst.mockResolvedValue({
+      id: "report-1",
+      scanId: null,
+      type: "launch_readiness",
+      provenanceJson: { ...PROVENANCE },
+      contentJson: { verdictLabel: "forged" },
+    } as never)
+    await expect(resolveReportDelegationTarget("report-1", "ws-1")).resolves.toBeNull()
+    // An unbound launch payload cannot be attributed to any target at all.
+    expect(verdictFindFirst).not.toHaveBeenCalled()
   })
 
   it("requires all-targets for non-launch reports with no scan link", async () => {

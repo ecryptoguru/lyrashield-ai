@@ -1,4 +1,5 @@
 import { prisma } from "./client"
+import type { ScopedTransaction } from "./rls"
 import {
   AI_ASSURANCE_CONTROL_IDS,
   listControlEvidence,
@@ -23,6 +24,17 @@ export { isReportData, parseWebMcpAssurance }
 export type { ReportData, ReportWebMcpAssurance }
 
 type ReportCoverageReceipt = { controlId: string; scanner: string; status: string }
+
+function scoreSummary<T extends { score: unknown; grade: unknown; computedAt: Date }>(
+  scoreTrend: T[],
+  bySeverity: Record<string, number>
+) {
+  return {
+    currentScore: scoreTrend[0] ?? null,
+    criticalCount: bySeverity.CRITICAL ?? 0,
+    highCount: bySeverity.HIGH ?? 0,
+  }
+}
 
 function hasIncompleteWindowsReceipt(receipts: ReportCoverageReceipt[]): boolean {
   return receipts.some(
@@ -51,9 +63,11 @@ function getIncompleteScanners(receipts: ReportCoverageReceipt[]): string[] {
 export async function gatherReportData(
   workspaceId: string,
   scanId?: string,
-  audience: "developer" | "executive" | "compliance" = "developer"
+  audience: "developer" | "executive" | "compliance" = "developer",
+  client?: ScopedTransaction
 ): Promise<ReportData> {
-  const workspace = await prisma.workspace.findFirst({
+  const db = client ?? prisma
+  const workspace = await db.workspace.findFirst({
     where: { id: workspaceId },
     select: { name: true },
   })
@@ -71,7 +85,7 @@ export async function gatherReportData(
       }
 
   if (scanId) {
-    const scan = await prisma.scan.findFirst({
+    const scan = await db.scan.findFirst({
       where: { id: scanId, workspaceId, deletedAt: null },
       include: {
         target: { select: { name: true, type: true, url: true } },
@@ -130,7 +144,7 @@ export async function gatherReportData(
 
   const FINDINGS_LIMIT = 500
 
-  const findings = await prisma.finding.findMany({
+  const findings = await db.finding.findMany({
     where: scanWhere,
     select: {
       id: true,
@@ -264,15 +278,13 @@ export async function gatherReportData(
     }
   }
 
-  const scoreTrend = await prisma.scoreSnapshot.findMany({
+  const scoreTrend = await db.scoreSnapshot.findMany({
     where: { workspaceId, ...(targetId ? { targetId } : {}) },
     orderBy: { computedAt: "desc" },
     take: 10,
     select: { score: true, grade: true, computedAt: true },
   })
-  const currentScore = scoreTrend[0] ?? null
-  const criticalCount = bySeverity.CRITICAL ?? 0
-  const highCount = bySeverity.HIGH ?? 0
+  const { currentScore, criticalCount, highCount } = scoreSummary(scoreTrend, bySeverity)
   // Only terminal scans with usable coverage can ground a readiness verdict.
   // Partial scans remain conditional even with no retained findings.
   // Historical rows may carry lowercase enum spellings.
@@ -357,7 +369,7 @@ export async function gatherReportData(
   )
 
   const aiSecurityScoreSnapshot = scanId
-    ? await getAiSecurityScoreSnapshot(scanId, workspaceId).catch(() => null)
+    ? await getAiSecurityScoreSnapshot(scanId, workspaceId, client).catch(() => null)
     : null
 
   const [aiSystemProfile, threatModel] = targetId
