@@ -42,4 +42,16 @@ export interface CreateScanParams {
    * inherited blindly by the queued job.
    */
   delegatedConnection?: { connectionId: string; authorizationVersion: number }
+  /**
+   * Server-issued capability from a hosted MCP claim. When present, the same
+   * scan transaction must reserve the outer operation result and persist the
+   * immutable operation→scan→target provenance row.
+   */
+  delegatedOperation?: {
+    operationId: string
+    operationName?: "scan.create" | "retest.create"
+    admissionProof: string
+    connectionId: string
+    authorizationVersion: number
+  }
 }

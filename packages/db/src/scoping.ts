@@ -114,6 +114,7 @@ export const WORKSPACE_SCOPED_MODELS = new Set<string>([
   "GateVerdict",
   "AgentConnection",
   "AgentOperation",
+  "DelegatedScanProvenance",
   "LoopClosure",
   "SyncCursor",
   "ScanAttachment",

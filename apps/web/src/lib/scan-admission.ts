@@ -26,6 +26,11 @@ const URL_TARGET_TYPES = new Set(["WEB_APP", "API"])
 
 export { TARGET_RELAY_UNAVAILABLE_MESSAGE }
 
+/** Delegated OAuth grants currently carry no policy selection scope. */
+export function assertSelectableScanPolicy(session: { oauth?: unknown }, policyId?: string): void {
+  if (session.oauth && policyId !== undefined) throw new Error("FORBIDDEN")
+}
+
 export async function getTargetRelayAvailability(targetType: string): Promise<boolean> {
   return !URL_TARGET_TYPES.has(targetType) || (await isTargetRelayWorkerAvailable())
 }

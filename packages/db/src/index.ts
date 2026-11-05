@@ -271,6 +271,7 @@ export {
   getReportByShareToken,
   getShareableReport,
   resolveReportDelegationTarget,
+  reportSnapshotScanBindingMatches,
   listReports,
   type CreateReportParams,
   type ShareableReport,
@@ -528,6 +529,7 @@ export {
   retainUnknownAgentOperationResult,
   retryScanCancellation,
   getAgentOperation,
+  resolveDelegatedScanOperation,
   getOperationStatus,
   toOperationStatusView,
   hashOperationInput,
@@ -541,6 +543,20 @@ export {
   type OperationStatusView,
   type PrincipalIdentity,
 } from "./agent-operation-service"
+export {
+  bindDelegatedScanProvenance,
+  DelegatedScanAdmissionError,
+  type DelegatedScanAdmission,
+} from "./delegated-scan-provenance"
+export {
+  getDelegatedOperationAccess,
+  getDelegatedOperationStatus,
+  projectDelegatedOperationAccess,
+  projectDelegatedOperationStatus,
+  type DelegatedOperationAccess,
+  type DelegatedOperationDisclosure,
+  type DelegatedOperationStatusRow,
+} from "./delegated-operation-status"
 export {
   getDelegatedActiveTargetIds,
   getDelegatedScanAccess,

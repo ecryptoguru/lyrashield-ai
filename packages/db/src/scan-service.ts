@@ -33,6 +33,7 @@ import {
   lockWorkspaceScanAdmission,
 } from "./scan-slot"
 import { getWorkspaceContext } from "./extension"
+import { bindDelegatedScanProvenance } from "./delegated-scan-provenance"
 
 export interface ScanWithEvents extends Scan {
   capacity?: ScanCapacityProjection | null
@@ -167,6 +168,15 @@ export async function createScan(
         executionPlanHash,
       },
     })
+    if (params.delegatedOperation) {
+      await bindDelegatedScanProvenance(tx, {
+        workspaceId: params.workspaceId,
+        scanId: scan.id,
+        targetId: params.targetId,
+        executionPlanHash,
+        admission: params.delegatedOperation,
+      })
+    }
     await createScanCapacity(tx, scan, executionPlan.capabilities.includes("engine"))
     await tx.scanEvent.create({
       data: {
