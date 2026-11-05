@@ -67,8 +67,8 @@
     },
     "apps/web/src/app/(dashboard)/dashboard/admin/page.tsx|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 79,
-      "maxExcess": 79
+      "totalExcess": 67,
+      "maxExcess": 67
     },
     "apps/web/src/app/(dashboard)/dashboard/admin/support/support-case-detail.tsx|max-lines-per-function": {
       "count": 1,
@@ -142,8 +142,8 @@
     },
     "apps/web/src/app/(dashboard)/dashboard/launch-readiness/launch-readiness-client.tsx|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 218,
-      "maxExcess": 218
+      "totalExcess": 252,
+      "maxExcess": 252
     },
     "apps/web/src/app/(dashboard)/dashboard/licenses/licenses-client.tsx|max-lines-per-function": {
       "count": 1,
@@ -197,8 +197,8 @@
     },
     "apps/web/src/app/(dashboard)/dashboard/scans/create-scan-sheet.tsx|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 271,
-      "maxExcess": 271
+      "totalExcess": 278,
+      "maxExcess": 278
     },
     "apps/web/src/app/(dashboard)/dashboard/scans/scan-list.tsx|max-lines-per-function": {
       "count": 1,
@@ -239,11 +239,6 @@
       "count": 1,
       "totalExcess": 23,
       "maxExcess": 23
-    },
-    "apps/web/src/app/(dashboard)/dashboard/targets/[id]/page.tsx|max-lines-per-function": {
-      "count": 1,
-      "totalExcess": 100,
-      "maxExcess": 100
     },
     "apps/web/src/app/(dashboard)/dashboard/targets/[id]/scorecard-controls.tsx|max-lines-per-function": {
       "count": 1,
@@ -292,13 +287,18 @@
     },
     "apps/web/src/app/api/mcp/remote-approval-gate.ts|max-lines-per-function": {
       "count": 2,
-      "totalExcess": 126,
-      "maxExcess": 66
+      "totalExcess": 216,
+      "maxExcess": 111
     },
     "apps/web/src/app/api/scans/[id]/artifacts/sarif/route.ts|max-lines-per-function": {
       "count": 2,
       "totalExcess": 259,
       "maxExcess": 172
+    },
+    "apps/web/src/app/api/scans/eligibility/route.ts|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 61,
+      "maxExcess": 61
     },
     "apps/web/src/app/api/scans/route.ts|max-lines": {
       "count": 1,
@@ -349,6 +349,11 @@
       "count": 1,
       "totalExcess": 52,
       "maxExcess": 52
+    },
+    "apps/web/src/app/reports/shared/[id]/launch-report-view.tsx|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 1,
+      "maxExcess": 1
     },
     "apps/web/src/app/reports/shared/[id]/shared-report-view.tsx|max-lines-per-function": {
       "count": 1,
@@ -570,10 +575,15 @@
       "totalExcess": 11,
       "maxExcess": 11
     },
+    "packages/cli/src/commands/preflight.ts|max-lines-per-function": {
+      "count": 1,
+      "totalExcess": 1,
+      "maxExcess": 1
+    },
     "packages/cli/src/commands/scan.ts|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 50,
-      "maxExcess": 50
+      "totalExcess": 66,
+      "maxExcess": 66
     },
     "packages/cli/src/commands/targets.ts|max-lines-per-function": {
       "count": 1,
