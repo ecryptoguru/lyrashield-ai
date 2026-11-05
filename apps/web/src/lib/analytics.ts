@@ -22,6 +22,7 @@ export const EVENT_ALLOWLIST = {
   repos_loaded: ["repo_count_bucket", "load_ms_bucket"],
   repos_selected: ["selected_count"],
   first_run_started: ["preset", "asset_count", "estimate_low_min", "estimate_high_min"],
+  setup_blocker_viewed: ["blocker_code", "surface"],
   trial_started: ["surface"],
   results_viewed: ["status", "had_findings"],
   review_completed: ["status"],

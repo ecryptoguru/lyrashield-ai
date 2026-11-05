@@ -228,15 +228,16 @@ export default async function PlatformAdminPage() {
               </p>
             </Card>
             <Card className="p-5">
-              <h3 className="font-semibold">Time to first valid assessment</h3>
+              <h3 className="font-semibold">Time to first useful result</h3>
               <p className="mt-2 text-xl font-semibold tabular-nums">
-                {overview.activation.timeToFirstValidAssessment.medianMinutes === null
-                  ? `Insufficient sample (${overview.activation.timeToFirstValidAssessment.denominator}/${overview.activation.minimumSample})`
-                  : `${overview.activation.timeToFirstValidAssessment.medianMinutes.toFixed(1)}m median · ${overview.activation.timeToFirstValidAssessment.p90Minutes?.toFixed(1)}m p90`}
+                {overview.activation.timeToFirstUsefulResult.medianMinutes === null
+                  ? `Insufficient sample (${overview.activation.timeToFirstUsefulResult.denominator}/${overview.activation.minimumSample})`
+                  : `${overview.activation.timeToFirstUsefulResult.medianMinutes.toFixed(1)}m median · ${overview.activation.timeToFirstUsefulResult.p95Minutes?.toFixed(1)}m p95`}
               </p>
               <p className="text-muted-foreground mt-2 text-xs">
-                Account creation to its first server-recorded COMPLETED or PARTIAL scan.
-                Denominator: accounts reaching that state.
+                {overview.activation.metricVersion}: account creation to the first stored gate
+                verdict backed by a result manifest and completed scanner coverage. Denominator:
+                accounts reaching that state.
               </p>
             </Card>
             <Card className="p-5">

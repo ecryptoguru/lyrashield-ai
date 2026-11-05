@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const legacyGet = vi.hoisted(() => vi.fn())
 
-vi.mock("../../../scans/eligibility/route", () => ({ GET: legacyGet }))
+vi.mock("../../scans/eligibility/route", () => ({ GET: legacyGet }))
 
 import { GET } from "./route"
 

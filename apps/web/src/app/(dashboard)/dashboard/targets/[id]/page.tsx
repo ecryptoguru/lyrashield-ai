@@ -19,6 +19,11 @@ import { getTargetTypeLabel, getScanGoalLabel, getEnvironmentLabel } from "@/lib
 import { getScanPresentation } from "@/lib/scan-presentation"
 import { TARGET_SINGULAR } from "@/lib/terminology"
 import { getCachedSession, getCachedWorkspaceId } from "@/lib/cache"
+import { loadTargetAssessmentPanels } from "@/lib/target-assessment-server"
+import { projectTargetAssessment } from "@/lib/target-assessment"
+import { TargetAssessmentSummary } from "./target-assessment-summary"
+import { TargetSpendSummary } from "./target-spend-summary"
+import { TargetSetupHealth } from "./target-setup-health"
 
 /** Readable status for the Recent Scans table without the full presentation copy. */
 function scanStatusLabel(status: string): string {
@@ -56,6 +61,7 @@ const getScopedTarget = cache((id: string, workspaceId: string, userId: string) 
             createdAt: true,
             startedAt: true,
             endedAt: true,
+            executionPlan: true,
           },
         },
         scoreSnapshots: {
@@ -128,12 +134,47 @@ export default async function TargetDetailPage({ params }: { params: Promise<{ i
   const membership = target.workspace.members[0]!
   const canUpdateTarget = hasPermission(membership.role, PERMISSIONS.target.update)
   const canDeleteTarget = hasPermission(membership.role, PERMISSIONS.target.delete)
+  const canStartScan = hasPermission(membership.role, PERMISSIONS.scan.create)
+  const canManageBilling = hasPermission(membership.role, PERMISSIONS.billing.manage)
   const latestScore = target.scoreSnapshots[0]
   const scoreExpired = latestScore ? latestScore.expiresAt <= new Date() : false
   const [domainStatuses, targetEntitlement] = await Promise.all([
     getTargetDomainStatuses(workspaceId, [target]),
     assertTargetAllowed(workspaceId, session.userId),
   ])
+  const latestScan = target.scans[0]
+  const panels = await loadTargetAssessmentPanels({
+    workspaceId,
+    targetId: target.id,
+    actorUserId: session.userId,
+    canManageBilling,
+    latestScanId: latestScan?.id ?? null,
+    latestScanStartedAt: latestScan?.createdAt ?? null,
+  })
+  const assessmentProjection = projectTargetAssessment({
+    target: {
+      id: target.id,
+      name: target.name,
+      type: target.type,
+      environment: target.environment ?? null,
+    },
+    canStartScan,
+    latestScan: latestScan
+      ? {
+          id: latestScan.id,
+          status: latestScan.status,
+          goal: latestScan.goal,
+          mode: latestScan.mode,
+          createdAt: latestScan.createdAt.toISOString(),
+          startedAt: latestScan.startedAt?.toISOString() ?? null,
+          endedAt: latestScan.endedAt?.toISOString() ?? null,
+          sourceRevision: sourceRevisionFromPlan(latestScan.executionPlan),
+        }
+      : null,
+    gate: panels.gate,
+    remediation: panels.remediation,
+    spend: panels.spend,
+  })
 
   return (
     <div>
@@ -164,6 +205,20 @@ export default async function TargetDetailPage({ params }: { params: Promise<{ i
           Environment: {getEnvironmentLabel(target.environment)}
           {target.project && ` · Project: ${target.project.name}`}
         </p>
+      </div>
+
+      <div className="mb-6 grid gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(18rem,1fr)]">
+        <TargetAssessmentSummary projection={assessmentProjection} />
+        <TargetSpendSummary projection={assessmentProjection.spend} />
+      </div>
+
+      <div className="mb-6">
+        <TargetSetupHealth
+          workspaceId={workspaceId}
+          targetId={target.id}
+          goal={latestScan?.goal ?? "LAUNCH_REVIEW"}
+          mode={latestScan?.mode ?? "STANDARD"}
+        />
       </div>
 
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -377,4 +432,12 @@ export default async function TargetDetailPage({ params }: { params: Promise<{ i
       </div>
     </div>
   )
+}
+
+function sourceRevisionFromPlan(value: unknown): string | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null
+  const source = (value as { source?: unknown }).source
+  if (!source || typeof source !== "object" || Array.isArray(source)) return null
+  const revision = (source as { revision?: unknown }).revision
+  return typeof revision === "string" ? revision : null
 }

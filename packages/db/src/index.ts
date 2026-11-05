@@ -107,6 +107,12 @@ export { ApprovalStatus } from "./generated/prisma"
 export { Prisma } from "./generated/prisma"
 
 export { prisma } from "./client"
+export {
+  buildScanSpendProjection,
+  getScanSpendProjection,
+  type ScanSpendProjection,
+  type SpendValue,
+} from "./scan-spend-projection"
 export { getSystemPrisma } from "./system-client"
 export { createBoundedPgAdapter, resolveDbPoolMax } from "./pool"
 export {

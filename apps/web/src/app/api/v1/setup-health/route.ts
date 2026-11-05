@@ -5,7 +5,7 @@ import {
   type SetupHealthScope,
   type SetupHealthSnapshot,
 } from "@lyrashield/types"
-import { GET as legacyEligibilityGET } from "../../../scans/eligibility/route"
+import { GET as legacyEligibilityGET } from "../../scans/eligibility/route"
 
 function digest(value: string): string {
   return createHash("sha256").update(value).digest("hex")
