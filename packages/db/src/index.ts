@@ -244,6 +244,12 @@ export {
   type ScorecardEventInput,
 } from "./score-service"
 export {
+  getFindingHistoryPage,
+  type FindingHistoryCollection,
+  type FindingHistoryPage,
+} from "./finding-history-service"
+
+export {
   listFindings,
   getFinding,
   updateFindingStatus,
@@ -252,14 +258,11 @@ export {
   getFindingStats,
   listEvidenceFindings,
   getFindingReference,
-  getFindingHistoryPage,
   findingScopeWhere,
   validateFindingScope,
   type ListFindingsParams,
   type FindingScopeParams,
   type FindingStats,
-  type FindingHistoryCollection,
-  type FindingHistoryPage,
 } from "./finding-service"
 export {
   createReport,
@@ -539,6 +542,19 @@ export {
   type PrincipalIdentity,
 } from "./agent-operation-service"
 export {
+  getDelegatedActiveTargetIds,
+  getDelegatedScanAccess,
+  getDelegatedScanAccessBatch,
+  getCurrentDelegatedScanAuthority,
+  withDelegatedReadAuthority,
+  type DelegatedReadPrincipal,
+  type DelegatedReadAuthorityParams,
+  type DelegatedScanAuthority,
+  type DelegatedScanAccess,
+  type DelegatedScanListAccess,
+  type DelegatedReadAuthority,
+} from "./delegated-read-access"
+export {
   CONNECTOR_PROVIDERS,
   CONNECTOR_ALLOWED_PLANS,
   connectorPrincipal,
@@ -584,8 +600,6 @@ export {
   releaseUnstartedScanSlot,
   UserScanAlreadyActiveError,
 } from "./scan-slot"
-export {
-  beginFixPrExecution,
-  getFixPrExecution,
-  markFixPrRecovery,
-} from "./fix-pr-execution-service"
+export { beginFixPrExecution, getFixPrExecution, markFixPrRecovery } from "./fix-pr-execution-service"
+
+export { lockActiveTargetForDerivedWrite } from "./target-write-lock"

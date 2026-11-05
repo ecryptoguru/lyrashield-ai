@@ -582,6 +582,7 @@ describe("OAuth target bounds in finding queries", () => {
   })
 
   it("rejects history before reading child rows when its finding is outside the grant", async () => {
+    vi.mocked(prisma.finding.findFirst).mockReset()
     vi.mocked(prisma.finding.findFirst).mockResolvedValue(null)
     await expect(
       getFindingHistoryPage("denied-finding", "ws-1", "evidence", { targetIds: ["allowed-target"] })
