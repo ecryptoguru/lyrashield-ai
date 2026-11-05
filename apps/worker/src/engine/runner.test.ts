@@ -1,9 +1,19 @@
 import { execFileSync } from "child_process"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { mkdtempSync, writeFileSync } from "fs"
 import { mkdtemp, mkdir, readFile, realpath, rm, symlink, utimes, writeFile } from "fs/promises"
 import { tmpdir } from "os"
 import { join } from "path"
 import { createHash } from "crypto"
+import {
+  SBOM_COVERAGE_LIMITATIONS,
+  SBOM_COVERAGE_LIMITS,
+  SBOM_COVERAGE_LINK_POLICY,
+  SBOM_COVERAGE_PREDICATE_TYPE,
+  SBOM_COVERAGE_POLICY,
+  SBOM_COVERAGE_REQUIRED_APPS,
+  SBOM_COVERAGE_SCOPE,
+} from "./sandbox-sbom-coverage"
 import { parseEngineOutput } from "./output-parser"
 import * as runnerProcess from "./runner-process"
 import * as runnerOutput from "./runner-output"
@@ -431,6 +441,93 @@ describe("repository scan runtime configuration", () => {
     LYRASHIELD_ENGINE_SANDBOX_NETWORK: "lyrashield-sandbox",
   }
 
+  // Minimal signed-coverage evidence for the `a`*64 sandbox digest used by the
+  // production cases below. Written to a temp dir; the consumer reads the
+  // verify output and expected aggregate sync from these paths.
+  const coverageEvidenceEnv = (): Record<string, string> => {
+    const dir = mkdtempSync(join(tmpdir(), "lyrashield-sbom-coverage-test-"))
+    const digestHex = "a".repeat(64)
+    const goApplications = [...SBOM_COVERAGE_REQUIRED_APPS].map((name) => ({
+      name,
+      binaryPath: `/usr/local/bin/${name}`,
+      binarySha256: "9".repeat(64),
+      spdxFileId: `SPDXRef-file-${name}`,
+      mainModule: `example.com/${name}`,
+      pinnedVersion: "v1.2.3",
+      mainSpdxPackageId: `SPDXRef-Package-${name}`,
+      dependencyCount: 3,
+    }))
+    const platform = (receipt: string, manifest: string) => ({
+      receiptDigest: `sha256:${receipt.repeat(64)}`,
+      manifestDigest: `sha256:${manifest.repeat(64)}`,
+      configDigest: `sha256:${"1".repeat(64)}`,
+      containerId: "3".repeat(64),
+      rootfsDigest: `sha256:${"5".repeat(64)}`,
+      rootfsSize: 12345,
+      spdxDocumentDigest: `sha256:${"7".repeat(64)}`,
+      goToolSha256: "9".repeat(64),
+      exporter: { dockerServer: "29.9.2/0367cbe" },
+      ignoredLinks: { count: 2535, policy: { ...SBOM_COVERAGE_LINK_POLICY } },
+      goApplications,
+      limits: { ...SBOM_COVERAGE_LIMITS },
+    })
+    const aggregate = {
+      schema: "lyrashield.sandbox.sbom-coverage.v1",
+      policy: { ...SBOM_COVERAGE_POLICY },
+      indexDigest: `sha256:${digestHex}`,
+      engineRevision: "b".repeat(40),
+      workflowRevision: "e".repeat(40),
+      runId: "123",
+      runAttempt: "2",
+      platforms: { amd64: platform("c", "f"), arm64: platform("d", "e") },
+      requiredGoApplications: [...SBOM_COVERAGE_REQUIRED_APPS],
+      scope: [...SBOM_COVERAGE_SCOPE],
+      limitations: [...SBOM_COVERAGE_LIMITATIONS],
+    }
+    const records = [
+      {
+        verificationResult: {
+          signature: {
+            certificate: {
+              issuer: "https://token.actions.githubusercontent.com",
+              buildSignerURI:
+                "https://github.com/ecryptoguru/lyrashield-engine/.github/workflows/publish-sandbox.yml@refs/heads/main",
+              buildSignerDigest: "b".repeat(40),
+              sourceRepositoryURI: "https://github.com/ecryptoguru/lyrashield-engine",
+              sourceRepositoryDigest: "b".repeat(40),
+              sourceRepositoryRef: "refs/heads/main",
+              runnerEnvironment: "github-hosted",
+              runInvocationURI:
+                "https://github.com/ecryptoguru/lyrashield-engine/actions/runs/123/attempts/2",
+            },
+          },
+          statement: {
+            _type: "https://in-toto.io/Statement/v1",
+            subject: [
+              { name: "ghcr.io/ecryptoguru/lyrashield-sandbox", digest: { sha256: digestHex } },
+            ],
+            predicateType: SBOM_COVERAGE_PREDICATE_TYPE,
+            predicate: aggregate,
+          },
+        },
+      },
+    ]
+    const verifyPath = join(dir, "coverage-verify.json")
+    const expectedPath = join(dir, "coverage-predicate.json")
+    writeFileSync(verifyPath, JSON.stringify(records))
+    writeFileSync(expectedPath, JSON.stringify(aggregate))
+    return {
+      LYRASHIELD_SANDBOX_SBOM_COVERAGE_VERIFY_PATH: verifyPath,
+      LYRASHIELD_SANDBOX_SBOM_COVERAGE_EXPECTED_PATH: expectedPath,
+      LYRASHIELD_SANDBOX_SBOM_COVERAGE_REPO: "ecryptoguru/lyrashield-engine",
+      LYRASHIELD_SANDBOX_SBOM_COVERAGE_REF: "refs/heads/main",
+      LYRASHIELD_SANDBOX_SBOM_COVERAGE_ENGINE_REVISION: "b".repeat(40),
+      LYRASHIELD_SANDBOX_SBOM_COVERAGE_WORKFLOW_REVISION: "e".repeat(40),
+      LYRASHIELD_SANDBOX_SBOM_COVERAGE_RUN_ID: "123",
+      LYRASHIELD_SANDBOX_SBOM_COVERAGE_RUN_ATTEMPT: "2",
+    }
+  }
+
   it("accepts a named sandbox control-plane network", () => {
     expect(resolveEngineSandboxNetwork(runtimeEnv)).toBe("lyrashield-sandbox")
     expect(() => assertRepositoryScanRuntimeConfigured(runtimeEnv)).not.toThrow()
@@ -472,6 +569,7 @@ describe("repository scan runtime configuration", () => {
       assertRepositoryScanRuntimeConfigured({
         ...productionEnv,
         DOCKER_HOST: "ssh://scanner@isolated-worker",
+        ...coverageEvidenceEnv(),
       })
     ).not.toThrow()
   })
@@ -499,6 +597,7 @@ describe("repository scan runtime configuration", () => {
         ...productionEnv,
         DOCKER_HOST: "unix:///var/run/docker.sock",
         LYRASHIELD_ALLOW_LOCAL_SANDBOX_HOST: "1",
+        ...coverageEvidenceEnv(),
       })
     ).not.toThrow()
 
@@ -528,6 +627,26 @@ describe("repository scan runtime configuration", () => {
         LYRASHIELD_IMAGE: image,
       })
     ).toThrow("LYRASHIELD_IMAGE")
+  })
+
+  it("fails closed in production without signed SBOM coverage evidence", () => {
+    expect(() =>
+      assertRepositoryScanRuntimeConfigured({
+        ...runtimeEnv,
+        NODE_ENV: "production",
+        DOCKER_HOST: "ssh://scanner@isolated-worker",
+        LYRASHIELD_IMAGE: `ghcr.io/ecryptoguru/lyrashield-sandbox@sha256:${"a".repeat(64)}`,
+      })
+    ).toThrow("sandbox SBOM coverage")
+  })
+
+  it("does not require coverage evidence outside production", () => {
+    expect(() =>
+      assertRepositoryScanRuntimeConfigured({
+        ...runtimeEnv,
+        DOCKER_HOST: "ssh://scanner@isolated-worker",
+      })
+    ).not.toThrow()
   })
 })
 

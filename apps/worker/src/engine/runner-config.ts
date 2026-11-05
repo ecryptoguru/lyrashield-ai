@@ -1,6 +1,7 @@
 import type { RepositoryAuth } from "./repository-auth"
 import { env } from "@lyrashield/config"
 import { ENGINE_TEMP_ROOT } from "./workspace-path"
+import { assertSandboxSbomCoverageVerified } from "./sandbox-sbom-coverage"
 
 type ReasoningEffort = "medium" | "high"
 
@@ -83,6 +84,7 @@ export function assertRepositoryScanRuntimeConfigured(
     throw new Error("A model provider credential must be configured for repository scans")
   }
   resolveEngineSandboxNetwork(runtimeEnv)
+
   if (runtimeEnv.NODE_ENV === "production") {
     const image = runtimeEnv.LYRASHIELD_IMAGE ?? ""
     if (!/^ghcr\.io\/ecryptoguru\/lyrashield-sandbox@sha256:[a-f0-9]{64}$/.test(image)) {
@@ -112,6 +114,10 @@ export function assertRepositoryScanRuntimeConfigured(
     if (/^tcp:\/\//.test(dockerHost) && runtimeEnv.DOCKER_TLS_VERIFY !== "1") {
       throw new Error("DOCKER_TLS_VERIFY=1 is required for a tcp:// production DOCKER_HOST")
     }
+    // Fail-closed consumer for the signed bounded SBOM coverage attestation.
+    // Scoped to the pinned sandbox image above; non-production flows and
+    // non-sandbox artifacts never reach this check.
+    assertSandboxSbomCoverageVerified(runtimeEnv, image)
   }
 }
 
