@@ -721,6 +721,7 @@ export * from "./plain-language"
 export * from "./scan-attachments"
 export * from "./scan-quality"
 export * from "./setup-health"
+export * from "./release-packet"
 
 export {
   resolveUrlReviewMode,

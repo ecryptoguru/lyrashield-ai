@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const getReportByShareToken = vi.fn()
 const getShareableReport = vi.fn()
@@ -14,6 +14,8 @@ function request(id: string, token?: string) {
 }
 
 describe("GET /api/reports/shared/[id]", () => {
+  beforeEach(() => vi.clearAllMocks())
+
   it("rejects a request without a token", async () => {
     const response = await GET(request("report-1"), { params: Promise.resolve({ id: "report-1" }) })
     expect(response.status).toBe(400)
@@ -76,6 +78,29 @@ describe("GET /api/reports/shared/[id]", () => {
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toMatchObject({ success: true })
     expect(getShareableReport).toHaveBeenCalledWith("report-1", "ws-1")
+  })
+
+  it("never serves a private release packet through the public shared-report route", async () => {
+    getReportByShareToken.mockResolvedValue({
+      id: "report-1",
+      workspaceId: "ws-1",
+      shareExpiresAt: null,
+    })
+    getShareableReport.mockResolvedValue({
+      id: "report-1",
+      title: "Private release packet",
+      type: "release_packet",
+    })
+
+    const response = await GET(request("report-1", "e".repeat(64)), {
+      params: Promise.resolve({ id: "report-1" }),
+    })
+
+    expect(response.status).toBe(404)
+    await expect(response.json()).resolves.toMatchObject({
+      success: false,
+      error: { code: "REPORT_NOT_FOUND" },
+    })
   })
 
   it("returns a 500 when the share lookup throws", async () => {

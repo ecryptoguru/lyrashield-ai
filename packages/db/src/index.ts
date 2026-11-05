@@ -113,6 +113,14 @@ export {
   type ScanSpendProjection,
   type SpendValue,
 } from "./scan-spend-projection"
+export {
+  classifyReleaseFindings,
+  getReleasePacket,
+  issueReleasePacket,
+  ReleasePacketError,
+  type IssueReleasePacketInput,
+} from "./release-packet-service"
+export { escapeReleasePacketCsvCell, generateReleasePacketCsv } from "./release-packet-csv"
 export { getSystemPrisma } from "./system-client"
 export { createBoundedPgAdapter, resolveDbPoolMax } from "./pool"
 export {
