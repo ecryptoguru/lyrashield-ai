@@ -6,6 +6,21 @@ vi.mock("@lyrashield/db", () => ({
   prisma: { scan: { findFirst: vi.fn() } },
   listReports: vi.fn(),
   createReport: vi.fn(),
+  getDelegatedActiveTargetIds: vi.fn(),
+  getDelegatedScanAccess: vi.fn(),
+  withDelegatedReadAuthority: async (
+    params: { allTargets?: boolean; allowedTargetIds?: string[] },
+    run: (tx: unknown, authority: { targetIds?: string[]; allowedProfiles: string[] }) => unknown
+  ) =>
+    run(
+      {},
+      {
+        ...(params.allTargets
+          ? { targetIds: ["target-active"] }
+          : { targetIds: params.allowedTargetIds ?? [] }),
+        allowedProfiles: ["SAFE", "STANDARD", "QUICK"],
+      }
+    ),
 }))
 
 vi.mock("@lyrashield/auth/server", () => ({
@@ -20,9 +35,42 @@ vi.mock("@lyrashield/auth", () => ({
 
 vi.mock("@lyrashield/logger", () => ({ setRequestId: vi.fn(), logger: { error: vi.fn() } }))
 vi.mock("../../../lib/cache", () => ({ revalidateDashboardAggregates: vi.fn() }))
+vi.mock("../../../lib/delegated-target-read-scope", () => ({
+  delegatedReadPrincipal: (session: {
+    userId?: string
+    oauth?: {
+      connectionId?: string
+      allTargets?: boolean
+      allowedTargetIds?: string[]
+      authorizationVersion?: number
+    }
+  }) =>
+    session.oauth?.connectionId
+      ? {
+          workspaceId: "ws-1",
+          userId: session.userId ?? "user-1",
+          memberId: "member-1",
+          memberRole: "OWNER",
+          memberUpdatedAt: new Date("2026-11-05T10:00:00Z"),
+          connectionId: session.oauth.connectionId,
+          authorizationVersion: session.oauth.authorizationVersion ?? 2,
+          allTargets: session.oauth.allTargets,
+          allowedTargetIds: session.oauth.allowedTargetIds ?? [],
+        }
+      : null,
+  resolveDelegatedTargetReadScope: (session: {
+    oauth?: { connectionId?: string; allTargets?: boolean; allowedTargetIds?: string[] }
+  }) => {
+    if (session.oauth?.connectionId && !session.oauth.allTargets) {
+      return { targetIds: session.oauth.allowedTargetIds ?? [], requireActiveTarget: true }
+    }
+    return {}
+  },
+}))
 
 import { GET, POST } from "./route"
 import { prisma, createReport, listReports } from "@lyrashield/db"
+import { getDelegatedActiveTargetIds } from "@lyrashield/db"
 import { assertOAuthDelegatedScope, requirePermission } from "@lyrashield/auth/server"
 import { expectPermissionDenied } from "@/__tests__/route-permission-manifest"
 
@@ -222,7 +270,15 @@ it.each([{ targetIds: ["target-1"] }, { targetIds: [] }])(
       new Request("http://localhost/api/reports?workspaceId=ws-1&cursor=cursor-1")
     )
     expect(response.status).toBe(200)
-    expect(listReports).toHaveBeenCalledWith("ws-1", "cursor-1", 50, targetIds)
+    expect(listReports).toHaveBeenCalledWith(
+      "ws-1",
+      "cursor-1",
+      50,
+      targetIds,
+      true,
+      {},
+      ["SAFE", "STANDARD", "QUICK"]
+    )
   }
 )
 
@@ -247,7 +303,15 @@ it("does not return a broad cached report page after a target grant narrows", as
   )
   expect(response.status).toBe(200)
   expect((await response.json()).data).toEqual({ items: [], nextCursor: null })
-  expect(listReports).toHaveBeenLastCalledWith("ws-1", undefined, 50, [])
+  expect(listReports).toHaveBeenLastCalledWith(
+    "ws-1",
+    undefined,
+    50,
+    [],
+    true,
+    {},
+    ["SAFE", "STANDARD", "QUICK"]
+  )
 })
 
 it("preserves omitted-target all-target delegation reads", async () => {
@@ -258,5 +322,47 @@ it("preserves omitted-target all-target delegation reads", async () => {
   vi.mocked(listReports).mockResolvedValueOnce({ items: [], nextCursor: null })
   const response = await V1GET(new Request("http://localhost/api/reports?workspaceId=ws-1"))
   expect(response.status).toBe(200)
-  expect(listReports).toHaveBeenLastCalledWith("ws-1", undefined, 50, undefined)
+  expect(listReports).toHaveBeenLastCalledWith(
+    "ws-1",
+    undefined,
+    50,
+    ["target-active"],
+    true,
+    {},
+    ["SAFE", "STANDARD", "QUICK"]
+  )
+})
+
+it("filters an authenticated all-target report list to currently active targets", async () => {
+  vi.clearAllMocks()
+  vi.mocked(requirePermission).mockResolvedValueOnce({
+    session: {
+      userId: "user-1",
+      oauth: {
+        workspaceId: "ws-1",
+        connectionId: "conn-1",
+        authorizationVersion: 2,
+        allTargets: true,
+        allowedTargetIds: [],
+      },
+    },
+    workspace: {
+      member: { id: "member-1", role: "OWNER", updatedAt: new Date("2026-11-05T10:00:00Z") },
+    },
+  } as never)
+  vi.mocked(getDelegatedActiveTargetIds).mockResolvedValueOnce(["target-active"])
+  vi.mocked(listReports).mockResolvedValueOnce({ items: [], nextCursor: null })
+
+  const response = await V1GET(new Request("http://localhost/api/reports?workspaceId=ws-1"))
+
+  expect(response.status).toBe(200)
+  expect(listReports).toHaveBeenLastCalledWith(
+    "ws-1",
+    undefined,
+    50,
+    ["target-active"],
+    true,
+    expect.any(Object),
+    ["SAFE", "STANDARD", "QUICK"]
+  )
 })

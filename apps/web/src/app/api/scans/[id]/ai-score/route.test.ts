@@ -3,9 +3,25 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const getAiSecurityScoreSnapshot = vi.fn()
 const scanFindFirst = vi.fn()
+const delegatedScanAccessMock = vi.hoisted(() => vi.fn())
 
 vi.mock("@lyrashield/db", () => ({
   getAiSecurityScoreSnapshot,
+  withDelegatedReadAuthority: async (
+    params: { targetId?: string; allTargets?: boolean; allowedTargetIds?: string[] },
+    run: (tx: unknown, authority: { targetIds: string[]; allowedProfiles: string[] }) => unknown
+  ) =>
+    run(
+      {},
+      {
+        targetIds: params.targetId
+          ? [params.targetId]
+          : params.allTargets
+            ? ["target-1"]
+            : (params.allowedTargetIds ?? []),
+        allowedProfiles: ["STANDARD"],
+      }
+    ),
   withWorkspaceRLS: (_workspaceId: string, callback: (tx: unknown) => unknown) =>
     callback({ scan: { findFirst: scanFindFirst } }),
 }))
@@ -20,6 +36,30 @@ vi.mock("@lyrashield/logger", () => ({
   setRequestId: vi.fn(),
   logger: { error: vi.fn() },
 }))
+vi.mock("@/lib/delegated-target-read-scope", () => ({
+  delegatedReadPrincipal: (session: {
+    userId?: string
+    oauth?: {
+      connectionId?: string
+      allTargets?: boolean
+      allowedTargetIds?: string[]
+    }
+  }) =>
+    session.oauth?.connectionId
+      ? {
+          workspaceId: "ws-1",
+          userId: session.userId ?? "user-1",
+          memberId: "member-1",
+          memberRole: "OWNER",
+          memberUpdatedAt: new Date("2026-11-05T10:00:00Z"),
+          connectionId: session.oauth.connectionId,
+          authorizationVersion: 2,
+          allTargets: session.oauth.allTargets,
+          allowedTargetIds: session.oauth.allowedTargetIds ?? [],
+        }
+      : null,
+  delegatedScanAccess: (...args: unknown[]) => delegatedScanAccessMock(...args),
+}))
 
 const { GET } = await import("./route")
 
@@ -32,7 +72,17 @@ function request(ifNoneMatch?: string) {
 }
 
 describe("GET /api/scans/[id]/ai-score", () => {
-  beforeEach(() => vi.clearAllMocks())
+  beforeEach(() => {
+    vi.clearAllMocks()
+    delegatedScanAccessMock.mockImplementation(async (session, _workspaceId, scanId) => {
+      const typed = session as { oauth?: { connectionId?: string } }
+      if (!typed.oauth?.connectionId) return null
+      const scan = await scanFindFirst()
+      if (!scan) return null
+      resolveOAuthReadScope(typed as never, scan.targetId as string, true)
+      return { scanId, status: "COMPLETED", statusOnly: false }
+    })
+  })
 
   it("returns the score snapshot with an ETag", async () => {
     getAiSecurityScoreSnapshot.mockResolvedValue({

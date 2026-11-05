@@ -61,6 +61,30 @@ vi.mock("@lyrashield/db", () => {
     prisma,
     createScan: vi.fn(),
     listScans: vi.fn(),
+    getDelegatedScanAccessBatch: vi.fn(),
+    withDelegatedReadAuthority: async (
+      params: { targetId?: string; allTargets?: boolean; allowedTargetIds?: string[] },
+      run: (tx: unknown, authority: { targetIds: string[]; allowedProfiles: string[] }) => unknown
+    ) => {
+      if (
+        params.targetId &&
+        !params.allTargets &&
+        !params.allowedTargetIds?.includes(params.targetId)
+      ) {
+        throw new Error("FORBIDDEN")
+      }
+      return run(
+        {},
+        {
+          targetIds: params.targetId
+            ? [params.targetId]
+            : params.allTargets
+              ? ["target-1"]
+              : (params.allowedTargetIds ?? []),
+          allowedProfiles: ["SAFE", "STANDARD", "QUICK"],
+        }
+      )
+    },
     updateScanStatus: vi.fn(),
     resolveScanAttachments: vi.fn().mockResolvedValue([]),
     resolveAuthenticatedAssessmentAuthorization: vi.fn(),
@@ -97,6 +121,30 @@ vi.mock("@lyrashield/auth", () => ({
 }))
 
 vi.mock("@lyrashield/logger", async () => (await import("../../../__tests__/mocks")).loggerModule())
+vi.mock("../../../lib/delegated-target-read-scope", () => ({
+  delegatedReadPrincipal: (session: {
+    userId?: string
+    oauth?: {
+      connectionId?: string
+      allTargets?: boolean
+      allowedTargetIds?: string[]
+      authorizationVersion?: number
+    }
+  }) =>
+    session.oauth?.connectionId
+      ? {
+          workspaceId: "ws-1",
+          userId: session.userId ?? "user-1",
+          memberId: "member-1",
+          memberRole: "OWNER",
+          memberUpdatedAt: new Date("2026-11-05T10:00:00Z"),
+          connectionId: session.oauth.connectionId,
+          authorizationVersion: session.oauth.authorizationVersion ?? 2,
+          allTargets: session.oauth.allTargets,
+          allowedTargetIds: session.oauth.allowedTargetIds ?? [],
+        }
+      : null,
+}))
 
 vi.mock("../../../lib/rate-limit", () => ({
   checkScanCreateRateLimit: vi
@@ -143,6 +191,7 @@ import {
   prisma,
   createScan,
   listScans,
+  getDelegatedScanAccessBatch,
   updateScanStatus,
   resolveScanAttachments,
   resolveAuthenticatedAssessmentAuthorization,
@@ -1863,10 +1912,125 @@ describe("OAuth scan list scope", () => {
     expect(listScans).not.toHaveBeenCalled()
   })
 
+  function scanItem(id: string, overrides: Record<string, unknown> = {}) {
+    return {
+      id,
+      status: "COMPLETED",
+      goal: "TEST_APP",
+      mode: "SAFE",
+      triggerType: "manual",
+      durationMs: 1000,
+      summary: "sensitive summary",
+      errorCategory: "PRIVATE_ERROR",
+      errorMessage: "private error text",
+      findingCount: 2,
+      targetId: "target-1",
+      targetName: "private.example",
+      targetType: "WEB_APP",
+      targetUrl: "https://private.example",
+      targetApiSpecUrl: null,
+      targetRepoFullName: "private/repo",
+      startedAt: new Date("2026-11-05T10:00:00Z"),
+      endedAt: new Date("2026-11-05T10:01:00Z"),
+      createdAt: new Date("2026-11-05T09:59:00Z"),
+      ...overrides,
+    }
+  }
+
+  it("projects proven, deleted-proven, legacy and contradictory scans without bypasses", async () => {
+    vi.mocked(requirePermission).mockResolvedValueOnce({
+      session: {
+        userId: "user-1",
+        oauth: {
+          connectionId: "conn-1",
+          workspaceId: "ws-1",
+          authorizationVersion: 3,
+          scopes: ["lyrashield.read"],
+          allowedOperations: ["scan.create"],
+          allowedProfiles: ["SAFE"],
+          allTargets: true,
+          allowedTargetIds: [],
+        },
+      },
+      workspace: {
+        id: "ws-1",
+        member: { id: "member-1", role: "OWNER", updatedAt: new Date() },
+      },
+    } as never)
+    vi.mocked(listScans).mockResolvedValueOnce({
+      items: [
+        scanItem("scan-proven"),
+        scanItem("scan-deleted"),
+        scanItem("scan-legacy"),
+        scanItem("scan-contradictory"),
+        scanItem("scan-foreign"),
+      ],
+      nextCursor: "cursor-next",
+    } as never)
+    vi.mocked(getDelegatedScanAccessBatch).mockResolvedValueOnce([
+      {
+        sourceId: "scan-proven",
+        scanId: "scan-proven",
+        status: "COMPLETED",
+        statusOnly: false,
+      },
+      {
+        sourceId: "scan-deleted",
+        scanId: "scan-deleted",
+        status: "COMPLETED",
+        statusOnly: true,
+      },
+      {
+        sourceId: "scan-legacy",
+        scanId: null,
+        status: "COMPLETED",
+        statusOnly: true,
+      },
+      {
+        sourceId: "scan-contradictory",
+        scanId: null,
+        status: "FAILED",
+        statusOnly: true,
+      },
+    ] as never)
+
+    const response = await GET(makeGetRequest({ workspaceId: "ws-1" }))
+    expect(response.status).toBe(200)
+    const items = (await response.json()).data.items
+    expect(items).toHaveLength(4)
+    expect(items[0]).toMatchObject({
+      id: "scan-proven",
+      targetName: "private.example",
+      targetRepoFullName: "private/repo",
+    })
+    expect(items[1]).toEqual({ id: "scan-deleted", status: "COMPLETED" })
+    expect(items[2]).toEqual({ status: "COMPLETED" })
+    expect(items[3]).toEqual({ status: "FAILED" })
+    expect(JSON.stringify(items.slice(1))).not.toMatch(
+      /private\.example|private summary|private error|private\/repo/
+    )
+    expect(getDelegatedScanAccessBatch).toHaveBeenCalledWith(
+      {
+        workspaceId: "ws-1",
+        userId: "user-1",
+        memberId: "member-1",
+        memberRole: "OWNER",
+        memberUpdatedAt: expect.any(Date),
+        connectionId: "conn-1",
+        authorizationVersion: 3,
+        allTargets: true,
+        allowedTargetIds: [],
+        scanIds: ["scan-proven", "scan-deleted", "scan-legacy", "scan-contradictory", "scan-foreign"],
+      },
+      expect.any(Object)
+    )
+  })
+
   it("intersects scan IDs and cursors with the delegated targets", async () => {
     await GET(makeGetRequest({ workspaceId: "ws-1", ids: "scan-2", cursor: "scan-1" }))
     expect(listScans).toHaveBeenCalledWith(
-      expect.objectContaining({ targetIds: ["target-1"], scanIds: ["scan-2"], cursor: "scan-1" })
+      expect.objectContaining({ targetIds: ["target-1"], scanIds: ["scan-2"], cursor: "scan-1" }),
+      expect.any(Object)
     )
   })
 })

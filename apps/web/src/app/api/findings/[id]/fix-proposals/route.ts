@@ -1,6 +1,11 @@
 import { recordedOperation } from "@/lib/recorded-operation"
 import { withCookieMutation } from "../../../../../lib/api-auth"
-import { createFixProposal, getFindingReference } from "@lyrashield/db"
+import {
+  createFixProposal,
+  getFindingReference,
+  withDelegatedReadAuthority,
+  type DelegatedReadAuthority,
+} from "@lyrashield/db"
 import { prisma } from "@lyrashield/db"
 import { assertOAuthDelegatedScope, requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
@@ -9,6 +14,10 @@ import { enqueueFixGenerate } from "@lyrashield/integrations"
 import { authErrorResponse } from "../../../../../lib/api-auth"
 import { apiError, apiSuccess } from "../../../../../lib/api-response"
 import { z } from "zod"
+import {
+  delegatedReadPrincipal,
+  resolveDelegatedTargetReadScope,
+} from "../../../../../lib/delegated-target-read-scope"
 
 const CreateFixProposalSchema = z.object({
   workspaceId: z.string().min(1),
@@ -31,26 +40,47 @@ async function post(request: Request, { params }: { params: Promise<{ id: string
 
     const { workspaceId, summary, diffRef, generatedByModel, safetyScore } = parsed.data
 
-    const { session } = await requirePermission(workspaceId, PERMISSIONS.fix.create)
+    const { session, workspace } = await requirePermission(workspaceId, PERMISSIONS.fix.create)
 
     const finding = await getFindingReference(id, workspaceId)
     if (!finding) {
       return apiError("FINDING_NOT_FOUND", "Finding not found", 404)
     }
+    if (!finding.targetId) return apiError("FINDING_NOT_FOUND", "Finding not found", 404)
+    await resolveDelegatedTargetReadScope(session, workspace, finding.targetId)
     assertOAuthDelegatedScope(session, finding.targetId)
+    const principal = delegatedReadPrincipal(session, workspace)
 
-    return await recordedOperation(
-      request,
-      {
-        workspaceId,
-        operationName: "fix_proposal.create",
-        input: { ...parsed.data, findingId: id },
-        session,
-      },
-      async () => {
+    const execute = async (
+      client?: Parameters<typeof createFixProposal>[0]["client"],
+      authority?: DelegatedReadAuthority
+    ) => {
+      const currentFinding = client
+        ? await getFindingReference(id, workspaceId, client)
+        : finding
+      if (
+        !currentFinding ||
+        currentFinding.targetId !== finding.targetId ||
+        (authority &&
+          (!authority.targetId || !authority.allowedProfiles.includes(currentFinding.scan.mode)))
+      ) {
+        return apiError("FINDING_NOT_FOUND", "Finding not found", 404)
+      }
+      return recordedOperation(
+        request,
+        {
+          workspaceId,
+          operationName: "fix_proposal.create",
+          input: { ...parsed.data, findingId: id },
+          session,
+        },
+        async () => {
         const proposal = await createFixProposal({
           findingId: id,
           workspaceId,
+          targetId: currentFinding.targetId ?? undefined,
+          requireActiveTarget: Boolean(principal),
+          ...(client ? { client } : {}),
           summary,
           ...(diffRef ? { diffRef } : {}),
           ...(generatedByModel ? { generatedByModel } : {}),
@@ -85,8 +115,23 @@ async function post(request: Request, { params }: { params: Promise<{ id: string
         })
 
         return apiSuccess(proposal)
-      }
-    )
+        }
+      )
+    }
+
+    // Await inside the try so authority/write failures reach this
+    // route's error mapping instead of escaping as unhandled rejections.
+    return await (principal
+      ? withDelegatedReadAuthority(
+          {
+            ...principal,
+            targetId: finding.targetId,
+            requiredOperation: "fix_proposal.create",
+            requiredProfile: finding.scan.mode,
+          },
+          (tx, authority) => execute(tx, authority)
+        )
+      : execute())
   } catch (error) {
     const authErr = authErrorResponse(error)
     if (authErr) return authErr
