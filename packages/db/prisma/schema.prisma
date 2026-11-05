@@ -425,6 +425,25 @@ enum ScanMode {
   CUSTOM
 }
 
+enum ScanDispatchCommandType {
+  QUEUE_PUBLISH
+  PREPARE
+  START_PAID
+  STOP
+  RECONCILE
+}
+
+enum ScanPhysicalExecutionState {
+  RESERVED
+  DISPATCH_PENDING
+  ACTIVE
+  STOP_REQUESTED
+  CLEANUP_PENDING
+  STOPPED
+  NEVER_DISPATCHED
+  UNKNOWN
+}
+
 enum ScanStatus {
   QUEUED
   PREFLIGHT
@@ -583,6 +602,7 @@ model Workspace {
   syncCursors              SyncCursor[]
   agentConnections         AgentConnection[]
   agentOperations          AgentOperation[]
+  delegatedScanProvenance  DelegatedScanProvenance[]
   loopClosures             LoopClosure[]
   scanAttachments          ScanAttachment[]
 
@@ -665,6 +685,7 @@ model Target {
   threatModels             ThreatModel[]
   controlEvidence          ControlEvidence[]
   liveAiSafetyPlans        LiveAiSafetyPlan[]
+  delegatedScanProvenance  DelegatedScanProvenance[]
 
   @@unique([workspaceId, repoFullName], where: { deletedAt: null }, map: "Target_workspaceId_repoFullName_key")
   @@unique([workspaceId, url], where: { deletedAt: null }, map: "Target_workspaceId_url_key")
@@ -876,6 +897,7 @@ model Scan {
   coverageReceipts        ScanCoverageReceipt[]
   findingCandidates       FindingCandidate[]
   findingVerifications    FindingVerification[]
+  delegatedScanProvenance DelegatedScanProvenance?
 
   @@index([workspaceId])
   @@index([projectId])
@@ -1921,9 +1943,10 @@ model AgentConnection {
   createdAt            DateTime              @default(now())
   updatedAt            DateTime              @updatedAt
 
-  workspace  Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  operations AgentOperation[]
+  workspace               Workspace                 @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user                    User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  operations              AgentOperation[]
+  delegatedScanProvenance DelegatedScanProvenance[]
 
   @@unique([id, workspaceId])
   @@index([workspaceId])
@@ -1963,17 +1986,195 @@ model AgentOperation {
   resultReference      String?
   result               Json?
   error                String?
+  /// SHA-256 of a one-time server-issued admission proof. NULL on legacy rows.
+  admissionProofHash   String?
   createdAt            DateTime             @default(now())
   updatedAt            DateTime             @updatedAt
 
-  workspace  Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  connection AgentConnection? @relation(fields: [connectionId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+  workspace               Workspace                @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  connection              AgentConnection?         @relation(fields: [connectionId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+  delegatedScanProvenance DelegatedScanProvenance?
 
   @@unique([connectionId, operationName, idempotencyKey])
   @@unique([workspaceId, principalType, principalId, operationName, idempotencyKey])
   @@index([workspaceId])
   @@index([status])
   @@map("agent_operations")
+}
+
+/// Immutable proof that the server admitted exactly one scan for an operation.
+/// Legacy operations have no row and remain unproven.
+model DelegatedScanProvenance {
+  operationId           String   @id
+  workspaceId           String
+  scanId                String   @unique
+  targetId              String
+  connectionId          String
+  authorizationVersion  Int
+  operationInputHash    String
+  scanExecutionPlanHash String
+  createdAt             DateTime @default(now())
+
+  operation  AgentOperation  @relation(fields: [operationId], references: [id], onDelete: Cascade)
+  workspace  Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  scan       Scan            @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  target     Target          @relation(fields: [targetId], references: [id], onDelete: Restrict)
+  connection AgentConnection @relation(fields: [connectionId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+
+  @@index([workspaceId, targetId, createdAt])
+  @@index([workspaceId, connectionId])
+  @@map("delegated_scan_provenance")
+}
+
+/// Closed-by-default authority epochs. A new epoch must be inserted with a
+/// higher number; a closed epoch can never be reopened.
+model ScanAuthorityEpoch {
+  id        String    @id @default(cuid())
+  epoch     Int       @unique
+  isOpen    Boolean   @default(false)
+  openKey   String?   @unique
+  openedAt  DateTime?
+  closedAt  DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  workerInstanceGrants ScanWorkerInstanceGrant[]
+  attempts             ScanDispatchAttempt[]
+  physicalExecutions   ScanPhysicalExecution[]
+}
+
+/// Supervisor-issued worker identity. Only the credential digest is durable;
+/// the credential itself is never persisted.
+model ScanWorkerInstanceGrant {
+  id               String    @id @default(cuid())
+  authorityEpochId String
+  instanceId       String    @unique
+  credentialHash   String    @unique
+  issuedAt         DateTime  @default(now())
+  expiresAt        DateTime
+  revokedAt        DateTime?
+  lastSeenAt       DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  authorityEpoch     ScanAuthorityEpoch      @relation(fields: [authorityEpochId], references: [id], onDelete: Restrict)
+  attempts           ScanDispatchAttempt[]
+  physicalExecutions ScanPhysicalExecution[]
+
+  @@index([authorityEpochId])
+  @@index([expiresAt])
+  @@index([revokedAt])
+}
+
+/// Immutable broker-authorized execution identity. Scan IDs are deliberately
+/// not foreign keys: ordinary scan deletion must not erase authority evidence.
+model ScanDispatchAttempt {
+  operationId                   String   @id
+  attemptId                     String   @unique
+  scanId                        String
+  workspaceId                   String
+  initiatingUserId              String
+  sponsorAccountId              String
+  targetId                      String
+  targetSnapshotDigest          String
+  executionPlanHash             String
+  policyVersion                 String
+  delegatedAuthorizationVersion Int?
+  attachmentIds                 String[] @default([])
+  mode                          ScanMode
+  goal                          ScanGoal
+  maxBudgetUsd                  Decimal  @db.Decimal(19, 4)
+  maxRuntimeMs                  Int
+  authorityEpochId              String
+  workerInstanceGrantId         String
+  expiresAt                     DateTime
+  createdAt                     DateTime @default(now())
+
+  authorityEpoch      ScanAuthorityEpoch      @relation(fields: [authorityEpochId], references: [id], onDelete: Restrict)
+  workerInstanceGrant ScanWorkerInstanceGrant @relation(fields: [workerInstanceGrantId], references: [id], onDelete: Restrict)
+  outbox              ScanDispatchOutbox[]
+  physicalExecution   ScanPhysicalExecution?
+
+  @@unique([attemptId, scanId])
+  @@unique([operationId, attemptId])
+  @@index([scanId])
+  @@index([workspaceId])
+  @@index([sponsorAccountId])
+  @@index([authorityEpochId])
+  @@index([workerInstanceGrantId])
+  @@index([expiresAt])
+}
+
+/// Durable command intent. Commands are represented by a bounded digest, not
+/// by raw payloads or credentials.
+model ScanDispatchOutbox {
+  id            String                  @id @default(cuid())
+  operationId   String
+  attemptId     String
+  commandType   ScanDispatchCommandType
+  commandDigest String
+  status        String                  @default("PENDING")
+  attempts      Int                     @default(0)
+  availableAt   DateTime                @default(now())
+  deliveredAt   DateTime?
+  createdAt     DateTime                @default(now())
+  updatedAt     DateTime                @updatedAt
+
+  attempt ScanDispatchAttempt @relation(fields: [operationId, attemptId], references: [operationId, attemptId], onDelete: Restrict)
+
+  @@unique([operationId, commandType])
+  @@index([attemptId])
+  @@index([status, availableAt])
+}
+
+/// Current physical-execution projection. `scanId` is denormalized so the
+/// partial unique index can prevent overlapping unresolved attempts.
+model ScanPhysicalExecution {
+  attemptId             String                     @id
+  operationId           String
+  scanId                String
+  workspaceId           String
+  authorityEpochId      String
+  workerInstanceGrantId String
+  state                 ScanPhysicalExecutionState @default(RESERVED)
+  unresolvedKey         String?                    @unique
+  revision              Int                        @default(1)
+  lastEvidenceReference String?
+  createdAt             DateTime                   @default(now())
+  updatedAt             DateTime                   @updatedAt
+
+  attempt             ScanDispatchAttempt               @relation(fields: [attemptId, scanId], references: [attemptId, scanId], onDelete: Restrict)
+  authorityEpoch      ScanAuthorityEpoch                @relation(fields: [authorityEpochId], references: [id], onDelete: Restrict)
+  workerInstanceGrant ScanWorkerInstanceGrant           @relation(fields: [workerInstanceGrantId], references: [id], onDelete: Restrict)
+  transitions         ScanPhysicalExecutionTransition[]
+
+  @@unique([attemptId, scanId])
+  @@unique([attemptId, operationId])
+  @@index([scanId, state])
+  @@index([workspaceId, state])
+  @@index([authorityEpochId])
+  @@index([workerInstanceGrantId])
+  @@index([revision])
+}
+
+/// Append-only physical lifecycle journal. A transition must increment the
+/// current physical revision by exactly one. Leaving UNKNOWN requires a
+/// separately acknowledged RECONCILE outbox command bound to the evidence.
+model ScanPhysicalExecutionTransition {
+  id                String                     @id @default(cuid())
+  attemptId         String
+  operationId       String
+  revision          Int
+  fromState         ScanPhysicalExecutionState
+  toState           ScanPhysicalExecutionState
+  evidenceReference String
+  createdAt         DateTime                   @default(now())
+
+  physicalExecution ScanPhysicalExecution @relation(fields: [attemptId, operationId], references: [attemptId, operationId], onDelete: Restrict)
+
+  @@unique([attemptId, revision])
+  @@index([operationId, revision])
+  @@index([toState, createdAt])
 }
 
 model OnboardingState {
