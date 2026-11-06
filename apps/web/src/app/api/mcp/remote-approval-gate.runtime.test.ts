@@ -101,7 +101,7 @@ describe.skipIf(!databaseUrl || !runtimeUrl)(
         userId,
         clientType: "mcp",
         clientName: "input-hash-test",
-        scopes: ["write"],
+        scopes: ["lyrashield.read", "lyrashield.write"],
         allowedOperations: [CANONICAL_OPERATIONS.SCAN_CREATE],
         allowedTargetIds: [targetId],
         allowedProfiles: ["STANDARD"],

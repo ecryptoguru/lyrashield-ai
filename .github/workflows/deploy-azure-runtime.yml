@@ -260,22 +260,24 @@ jobs:
           subscription-id: ${{ secrets.AZURE_DEPLOY_SUBSCRIPTION_ID }}
       - name: Ensure Container Apps extension
         run: az extension add --name containerapp --yes --only-show-errors
+      - name: Authenticate qualified rollback image reads
+        if: inputs.qualified_release_digest != ''
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ github.token }}
       - name: Preflight protected paired release
         if: inputs.qualified_release_digest != ''
         env:
-          {
-            APP_NAME: "${{ vars.AZURE_APP_CONTAINER_APP_NAME }}",
-            EGRESS_NAME: "${{ vars.AZURE_EGRESS_PROXY_CONTAINER_APP_NAME }}",
-            GH_TOKEN: "${{ github.token }}",
-            GHCR_USERNAME: "${{ github.repository_owner }}",
-            PAIRED_JOB_WORKFLOW: ".github/workflows/deploy-azure-runtime.yml",
-            PAIRED_QUALIFIED_RELEASE_SHA256: "${{ inputs.qualified_release_digest }}",
-            RG: "${{ vars.AZURE_RESOURCE_GROUP }}",
-            SCANNER_NAME: "${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}",
-          }
-        run: |
-          printf '%s' "$GH_TOKEN" | docker login ghcr.io -u "$GHCR_USERNAME" --password-stdin
-          node .github/scripts/paired-runtime-workflow.mjs preflight
+          APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
+          EGRESS_NAME: ${{ vars.AZURE_EGRESS_PROXY_CONTAINER_APP_NAME }}
+          GH_TOKEN: ${{ github.token }}
+          PAIRED_JOB_WORKFLOW: .github/workflows/deploy-azure-runtime.yml
+          PAIRED_QUALIFIED_RELEASE_SHA256: ${{ inputs.qualified_release_digest }}
+          RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+          SCANNER_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
+        run: node .github/scripts/paired-runtime-workflow.mjs preflight
       - name: Recheck v26 maintenance before any production mutation
         env:
           RG: ${{ vars.AZURE_RESOURCE_GROUP }}
