@@ -14,6 +14,14 @@
  *   (stage='billable_boundary'), INSERT ScanDispatchStart, INSERT
  *   ScanDispatchOutbox (START_PAID, sequence 2), UPDATE
  *   ScanDispatchOperation (-> START_PENDING).
+ * - startUnmetered: mirrors startPaid but requires attempt maxBudgetUsd = 0,
+ *   skips the ScanCapacityReservation RUNNING mutation and the billable-boundary
+ *   ScanEvent, inserts ScanDispatchStart(kind='UNMETERED', maxBudgetUsd=0,
+ *   fundingDigest computed, billableClaimEventId=NULL,
+ *   providerGrantDigest=NULL) and ScanDispatchOutbox (START_UNMETERED,
+ *   sequence 2), and updates ScanDispatchOperation (-> START_PENDING).
+ *   The Scan status='RUNNING' update is kept (retest/deterministic scans
+ *   still run), but no capacity or billing side effects occur.
  * - stop: INSERT ScanDispatchOutbox (STOP, sequence 3), UPDATE
  *   ScanDispatchOperation (-> STOPPING).
  * - reconcile: INSERT ScanDispatchOutbox (RECONCILE, sequence 4) only; the
@@ -43,9 +51,10 @@ import { createPgConnectionConfig } from "./connection-config"
 import {
   ScanDispatchAuthorityError,
   prepareDispatch,
-  startPaidDispatch,
+  startUnmeteredDispatch,
   valueDigest,
 } from "./scan-dispatch-authority-broker-methods"
+import { startPaidDispatch } from "./scan-dispatch-authority-broker-start"
 
 export type DispatchOperationState =
   | "QUEUED"
@@ -87,12 +96,16 @@ export type StartPaidDispatchInput = {
   authorityEpochId: string
 }
 
+export type StartUnmeteredDispatchInput = StartPaidDispatchInput
+
 export type StartPaidDispatchResult = DispatchBrokerResult<{
   state: "START_PENDING"
   attemptId: string
   startId: string
   commandId: string
 }>
+
+export type StartUnmeteredDispatchResult = StartPaidDispatchResult
 
 export type StopDispatchInput = {
   operationId: string
@@ -293,7 +306,7 @@ async function getDispatchStatus(pool: pg.Pool, operationId: string): Promise<Di
 }
 
 // Outbox `sequence` is a producer-local monotonic hint per attempt
-// (1 PREPARE, 2 START_PAID, 3 STOP, 4 RECONCILE); the DB enforces only
+// (1 PREPARE, 2 START_PAID|START_UNMETERED, 3 STOP, 4 RECONCILE); the DB enforces only
 // sequence > 0 plus UNIQUE(operationId, commandType). STOP/RECONCILE may be
 // inserted without START_PAID ever existing (stop is allowed from
 // PREPARING/PREPARED), so dispatch ordering is by commandType presence plus
@@ -477,6 +490,8 @@ export function createScanDispatchAuthorityBroker(options: BrokerOptions) {
   return {
     prepare: (input: PrepareDispatchInput) => prepareDispatch(ctx, input),
     startPaid: (input: StartPaidDispatchInput) => startPaidDispatch(ctx, input),
+    startUnmetered: (input: StartUnmeteredDispatchInput) =>
+      startUnmeteredDispatch(ctx, input),
     stop: (input: StopDispatchInput) => stopDispatch(pool, input),
     reconcile: (input: ReconcileDispatchInput) => reconcileDispatch(pool, input),
     status: (operationId: string) => getDispatchStatus(pool, operationId),

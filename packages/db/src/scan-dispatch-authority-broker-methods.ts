@@ -6,8 +6,8 @@ import type {
   DispatchOperationState,
   PrepareDispatchInput,
   PrepareDispatchResult,
-  StartPaidDispatchInput,
-  StartPaidDispatchResult,
+  StartUnmeteredDispatchInput,
+  StartUnmeteredDispatchResult,
 } from "./scan-dispatch-authority-broker"
 
 export class ScanDispatchAuthorityError extends Error {
@@ -55,7 +55,11 @@ export type DispatchBrokerContext = {
   ) => Promise<LockedOperation>
 }
 
-function commandDigest(commandType: string, operationId: string, attemptId: string): string {
+export function commandDigest(
+  commandType: string,
+  operationId: string,
+  attemptId: string
+): string {
   return createHash("sha256")
     .update(`dispatch-command/1\u0000${commandType}\u0000${operationId}\u0000${attemptId}`)
     .digest("hex")
@@ -340,9 +344,9 @@ export async function prepareDispatch(
   }
 }
 
-async function checkStartPaidGrant(
+async function checkStartUnmeteredGrant(
   client: pg.PoolClient,
-  input: StartPaidDispatchInput
+  input: StartUnmeteredDispatchInput
 ): Promise<void> {
   const grant = await client.query(
     `SELECT 1 FROM "ScanWorkerInstanceGrant"
@@ -359,7 +363,7 @@ async function checkStartPaidGrant(
     )
 }
 
-type StartPaidAttemptRow = {
+type StartUnmeteredAttemptRow = {
   attemptId: string
   scanId: string
   operationId: string
@@ -371,11 +375,11 @@ type StartPaidAttemptRow = {
   scanStatus: string
 }
 
-async function loadStartPaidAttempt(
+async function loadStartUnmeteredAttempt(
   client: pg.PoolClient,
-  input: StartPaidDispatchInput
-): Promise<StartPaidAttemptRow> {
-  const attempt = await client.query<StartPaidAttemptRow>(
+  input: StartUnmeteredDispatchInput
+): Promise<StartUnmeteredAttemptRow> {
+  const attempt = await client.query<StartUnmeteredAttemptRow>(
     `SELECT a."attemptId", a."scanId", a."operationId", a."maxBudgetUsd"::text AS "maxBudgetUsd",
             a."maxRuntimeMs", a."policyDigest", a."workerInstanceGrantId", a."authorityEpochId",
             s."status"::text AS "scanStatus"
@@ -399,30 +403,30 @@ async function loadStartPaidAttempt(
   return attemptRow
 }
 
-async function readStartPaidReplay(
+async function readStartUnmeteredReplay(
   client: pg.PoolClient,
-  input: StartPaidDispatchInput
+  input: StartUnmeteredDispatchInput
 ): Promise<{ startId: string; commandId: string } | null> {
   const existing = await client.query<{ startId: string; commandId: string }>(
     `SELECT st."startId", o."id" AS "commandId"
      FROM "ScanDispatchStart" st
      JOIN "ScanDispatchOutbox" o ON o."operationId"=st."operationId"
-       AND o."attemptId"=st."attemptId" AND o."commandType"='START_PAID'
+       AND o."attemptId"=st."attemptId" AND o."commandType"='START_UNMETERED'
      WHERE st."operationId"=$1 AND st."attemptId"=$2`,
     [input.operationId, input.attemptId]
   )
   return existing.rows[0] ?? null
 }
 
-async function checkStartPaidPreparation(
+async function checkStartUnmeteredPreparation(
   client: pg.PoolClient,
   operation: LockedOperation,
-  input: StartPaidDispatchInput
+  input: StartUnmeteredDispatchInput
 ): Promise<void> {
   if (operation.state !== "PREPARED")
     throw new ScanDispatchAuthorityError(
       "DISPATCH_OPERATION_STATE_INVALID",
-      `Paid start requires PREPARED, found ${operation.state}`
+      `Unmetered start requires PREPARED, found ${operation.state}`
     )
   const physical = await client.query<{ state: string }>(
     'SELECT "state"::text AS state FROM "ScanPhysicalExecution" WHERE "attemptId"=$1 FOR UPDATE',
@@ -445,81 +449,49 @@ async function checkStartPaidPreparation(
     )
 }
 
-type StartPaidFunding = {
-  accountId: string
-  state: string
-  fundedMinutes: number
-  runtimeLimitMs: number
-  poolMinutes: number
-  packMinutes: number
-  graceMinutes: number
-  overageMinutes: number
-}
-
-async function loadStartPaidFunding(
+async function writeStartUnmeteredRecords(
   client: pg.PoolClient,
-  attemptRow: StartPaidAttemptRow
-): Promise<{ funding: StartPaidFunding; maxBudgetUsd: number; maxRuntimeMs: number }> {
-  const reservation = await client.query<StartPaidFunding>(
-    `SELECT "accountId", "state", "fundedMinutes", "runtimeLimitMs", "poolMinutes",
-            "packMinutes", "graceMinutes", "overageMinutes"
+  input: StartUnmeteredDispatchInput,
+  attemptRow: StartUnmeteredAttemptRow
+): Promise<{ state: "START_PENDING"; attemptId: string; startId: string; commandId: string }> {
+  const reservation = await client.query<{
+    accountId: string
+    state: string
+    runtimeLimitMs: number
+  }>(
+    `SELECT "accountId", "state", "runtimeLimitMs"
      FROM "ScanCapacityReservation" WHERE "scanId"=$1 FOR UPDATE`,
     [attemptRow.scanId]
   )
   const funding = reservation.rows[0]
-  if (!funding || funding.state !== "RESERVED" || funding.fundedMinutes <= 0)
+  if (!funding || funding.state !== "RESERVED")
     throw new ScanDispatchAuthorityError(
       "CAPACITY_NOT_READY",
-      "Funded reservation is not ready"
+      "Reservation is not ready"
     )
   if (!["QUEUED", "PREFLIGHT"].includes(attemptRow.scanStatus))
     throw new ScanDispatchAuthorityError(
       "DISPATCH_OPERATION_STATE_INVALID",
       "Scan is not startable"
     )
-
   const maxBudgetUsd = Number(attemptRow.maxBudgetUsd)
-  if (!Number.isFinite(maxBudgetUsd) || maxBudgetUsd <= 0)
+  if (!Number.isFinite(maxBudgetUsd) || maxBudgetUsd !== 0)
     throw new ScanDispatchAuthorityError(
       "CAPACITY_NOT_READY",
-      "Paid start requires a positive budget"
+      "Unmetered start requires a zero budget"
     )
   const maxRuntimeMs = Math.min(attemptRow.maxRuntimeMs, funding.runtimeLimitMs)
   if (!Number.isInteger(maxRuntimeMs) || maxRuntimeMs <= 0)
     throw new ScanDispatchAuthorityError(
       "CAPACITY_NOT_READY",
-      "Paid start requires runtime capacity"
+      "Unmetered start requires runtime capacity"
     )
-  return { funding, maxBudgetUsd, maxRuntimeMs }
-}
-
-async function writeStartPaidRecords(
-  client: pg.PoolClient,
-  input: StartPaidDispatchInput,
-  attemptRow: StartPaidAttemptRow,
-  funding: StartPaidFunding,
-  maxBudgetUsd: number,
-  maxRuntimeMs: number
-): Promise<{ state: "START_PENDING"; attemptId: string; startId: string; commandId: string }> {
   const startId = createId()
-  const billableClaimEventId = createId()
   const commandId = createId()
   const fundingDigest = valueDigest("dispatch-funding/1", {
     scanId: attemptRow.scanId,
-    accountId: funding.accountId,
-    fundedMinutes: funding.fundedMinutes,
-    poolMinutes: funding.poolMinutes,
-    packMinutes: funding.packMinutes,
-    graceMinutes: funding.graceMinutes,
-    overageMinutes: funding.overageMinutes,
-    runtimeLimitMs: funding.runtimeLimitMs,
     maxRuntimeMs,
-  })
-  const providerGrantDigest = valueDigest("provider-grant-intent/1", {
-    attemptId: attemptRow.attemptId,
-    startId,
-    maxBudgetUsd,
-    maxRuntimeMs,
+    mode: "UNMETERED",
   })
 
   await client.query(
@@ -527,46 +499,29 @@ async function writeStartPaidRecords(
     [attemptRow.scanId]
   )
   await client.query(
-    'UPDATE "ScanCapacityReservation" SET "state"=\'RUNNING\', "updatedAt"=CURRENT_TIMESTAMP WHERE "scanId"=$1',
-    [attemptRow.scanId]
-  )
-  await client.query(
-    `INSERT INTO "ScanEvent" ("id","scanId","stage","level","message","metadata","createdAt")
-     VALUES ($1,$2,'billable_boundary','info',
-       'Automatic retries disabled before provider-billable analysis', $3::jsonb, CURRENT_TIMESTAMP)`,
-    [
-      billableClaimEventId,
-      attemptRow.scanId,
-      JSON.stringify({ retryPolicy: "fresh_scan_required" }),
-    ]
-  )
-  await client.query(
     `INSERT INTO "ScanDispatchStart" (
       "startId","operationId","attemptId","kind","maxBudgetUsd","maxRuntimeMs",
       "policyDigest","fundingDigest","billableClaimEventId","providerGrantDigest","createdAt"
-    ) VALUES ($1,$2,$3,'PAID',$4::numeric,$5,$6,$7,$8,$9,CURRENT_TIMESTAMP)`,
+    ) VALUES ($1,$2,$3,'UNMETERED',0,$4,$5,$6,NULL,NULL,CURRENT_TIMESTAMP)`,
     [
       startId,
       input.operationId,
       input.attemptId,
-      maxBudgetUsd,
       maxRuntimeMs,
       attemptRow.policyDigest,
       fundingDigest,
-      billableClaimEventId,
-      providerGrantDigest,
     ]
   )
   await client.query(
     `INSERT INTO "ScanDispatchOutbox" (
       "id","operationId","attemptId","commandType","sequence","commandDigest","status",
       "attempts","availableAt","createdAt","updatedAt"
-    ) VALUES ($1,$2,$3,'START_PAID',2,$4,'PENDING',0,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`,
+    ) VALUES ($1,$2,$3,'START_UNMETERED',2,$4,'PENDING',0,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`,
     [
       commandId,
       input.operationId,
       input.attemptId,
-      commandDigest("START_PAID", input.operationId, input.attemptId),
+      commandDigest("START_UNMETERED", input.operationId, input.attemptId),
     ]
   )
   await client.query(
@@ -576,16 +531,16 @@ async function writeStartPaidRecords(
   return { state: "START_PENDING" as const, attemptId: input.attemptId, startId, commandId }
 }
 
-export async function startPaidDispatch(
+export async function startUnmeteredDispatch(
   ctx: DispatchBrokerContext,
-  input: StartPaidDispatchInput
-): Promise<StartPaidDispatchResult> {
+  input: StartUnmeteredDispatchInput
+): Promise<StartUnmeteredDispatchResult> {
   try {
     const outcome = await ctx.transaction(input.operationId, async (client) => {
       const operation = await ctx.lockOperation(client, input)
-      await checkStartPaidGrant(client, input)
-      const attemptRow = await loadStartPaidAttempt(client, input)
-      const replay = await readStartPaidReplay(client, input)
+      await checkStartUnmeteredGrant(client, input)
+      const attemptRow = await loadStartUnmeteredAttempt(client, input)
+      const replay = await readStartUnmeteredReplay(client, input)
       if (replay)
         return {
           state: "START_PENDING" as const,
@@ -593,23 +548,20 @@ export async function startPaidDispatch(
           startId: replay.startId,
           commandId: replay.commandId,
         }
-      await checkStartPaidPreparation(client, operation, input)
-      const { funding, maxBudgetUsd, maxRuntimeMs } = await loadStartPaidFunding(client, attemptRow)
-      return await writeStartPaidRecords(
-        client,
-        input,
-        attemptRow,
-        funding,
-        maxBudgetUsd,
-        maxRuntimeMs
-      )
+      await checkStartUnmeteredPreparation(client, operation, input)
+      return await writeStartUnmeteredRecords(client, input, attemptRow)
     })
     if (outcome.kind === "unknown") return outcome
     return { kind: "committed", operationId: input.operationId, ...outcome.value }
   } catch (error) {
     if (error instanceof ScanDispatchAuthorityError) throw error
-    throw new ScanDispatchAuthorityError("DATABASE_REJECTED", "Paid-start transaction rejected", {
-      cause: error,
-    })
+    throw new ScanDispatchAuthorityError(
+      "DATABASE_REJECTED",
+      "Unmetered-start transaction rejected",
+      {
+        cause: error,
+      }
+    )
   }
 }
+

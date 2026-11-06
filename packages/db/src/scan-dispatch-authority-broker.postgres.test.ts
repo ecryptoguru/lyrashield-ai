@@ -27,7 +27,13 @@ type Fixture = {
   instanceId: string
 }
 
-async function createFixture(options: { reservationState?: "WAITING" | "RESERVED" } = {}) {
+async function createFixture(
+  options: {
+    reservationState?: "WAITING" | "RESERVED"
+    maxBudgetUsd?: number
+    fundedMinutes?: number
+  } = {}
+) {
   if (!owner) throw new Error("fixture database unavailable")
   const suffix = randomUUID()
   const fixture: Fixture = {
@@ -63,7 +69,10 @@ async function createFixture(options: { reservationState?: "WAITING" | "RESERVED
       fixture.scanId,
       fixture.workspaceId,
       fixture.targetId,
-      JSON.stringify({ limits: { maxBudgetUsd: 1, maxDurationMs: 60000 }, attachmentIds: [] }),
+      JSON.stringify({
+        limits: { maxBudgetUsd: options.maxBudgetUsd ?? 1, maxDurationMs: 60000 },
+        attachmentIds: [],
+      }),
       "c".repeat(64),
       fixture.userId,
       now,
@@ -93,13 +102,14 @@ async function createFixture(options: { reservationState?: "WAITING" | "RESERVED
     `INSERT INTO "ScanCapacityReservation"
       ("scanId","accountId","workspaceId","userId","state","accountingVersion","multiplier",
        "poolMinutes","fundedMinutes","runtimeLimitMs","createdAt","updatedAt")
-     VALUES ($1,$2,$3,$2,$4,2,1,2,2,60000,$5,$5)`,
+     VALUES ($1,$2,$3,$2,$4,2,1,2,$6,60000,$5,$5)`,
     [
       fixture.scanId,
       fixture.userId,
       fixture.workspaceId,
       options.reservationState ?? "RESERVED",
       now,
+      options.fundedMinutes ?? 2,
     ]
   )
   await owner.query(
@@ -525,6 +535,146 @@ describe.skipIf(!enabled)("scan dispatch authority broker", () => {
     expect(replay).toEqual(started)
   })
 
+  it("commits unmetered start without capacity or billing side effects", async () => {
+    const fixture = await createFixture({ maxBudgetUsd: 0 })
+    const expiresAt = (
+      await owner.query<{ expiresAt: Date }>(
+        "SELECT CURRENT_TIMESTAMP + interval '10 minutes' AS \"expiresAt\""
+      )
+    ).rows[0]!.expiresAt
+    const prepared = await broker.prepare({
+      operationId: fixture.operationId,
+      workerInstanceId: fixture.instanceId,
+      workerGrantId: fixture.grantId,
+      authorityEpochId: fixture.epochId,
+      expiresAt,
+    })
+    if (prepared.kind !== "committed") throw new Error("fixture preparation did not commit")
+    await markPrepared(fixture, prepared.attemptId, prepared.commandId)
+
+    const started = await broker.startUnmetered({
+      operationId: fixture.operationId,
+      attemptId: prepared.attemptId,
+      workerInstanceId: fixture.instanceId,
+      workerGrantId: fixture.grantId,
+      authorityEpochId: fixture.epochId,
+    })
+    expect(started).toMatchObject({ kind: "committed", state: "START_PENDING" })
+    const state = await owner.query<{
+      scanState: string
+      reservationState: string
+      boundaryClaims: string
+      starts: string
+      commands: string
+      kind: string
+      maxBudget: string
+      billableClaim: string | null
+      providerGrant: string | null
+    }>(
+      `SELECT (SELECT "status"::text FROM "Scan" WHERE "id"=$1) AS "scanState",
+              (SELECT "state" FROM "ScanCapacityReservation" WHERE "scanId"=$1) AS "reservationState",
+              (SELECT count(*)::text FROM "ScanEvent" WHERE "scanId"=$1 AND "stage"='billable_boundary') AS "boundaryClaims",
+              (SELECT count(*)::text FROM "ScanDispatchStart" WHERE "operationId"=$2) AS starts,
+              (SELECT count(*)::text FROM "ScanDispatchOutbox" WHERE "operationId"=$2 AND "commandType"='START_UNMETERED') AS commands,
+              (SELECT "kind"::text FROM "ScanDispatchStart" WHERE "operationId"=$2) AS kind,
+              (SELECT "maxBudgetUsd"::text FROM "ScanDispatchStart" WHERE "operationId"=$2) AS "maxBudget",
+              (SELECT "billableClaimEventId" FROM "ScanDispatchStart" WHERE "operationId"=$2) AS "billableClaim",
+              (SELECT "providerGrantDigest" FROM "ScanDispatchStart" WHERE "operationId"=$2) AS "providerGrant"`,
+      [fixture.scanId, fixture.operationId]
+    )
+    expect(state.rows[0]).toMatchObject({
+      scanState: "RUNNING",
+      reservationState: "RESERVED",
+      boundaryClaims: "0",
+      starts: "1",
+      commands: "1",
+      kind: "UNMETERED",
+      billableClaim: null,
+      providerGrant: null,
+    })
+    expect(Number(state.rows[0]!.maxBudget)).toBe(0)
+
+    const replay = await broker.startUnmetered({
+      operationId: fixture.operationId,
+      attemptId: prepared.attemptId,
+      workerInstanceId: fixture.instanceId,
+      workerGrantId: fixture.grantId,
+      authorityEpochId: fixture.epochId,
+    })
+    expect(replay).toEqual(started)
+  })
+
+  it("rejects unmetered start when the attempt carries a positive budget", async () => {
+    const fixture = await createFixture()
+    const expiresAt = (
+      await owner.query<{ expiresAt: Date }>(
+        "SELECT CURRENT_TIMESTAMP + interval '10 minutes' AS \"expiresAt\""
+      )
+    ).rows[0]!.expiresAt
+    const prepared = await broker.prepare({
+      operationId: fixture.operationId,
+      workerInstanceId: fixture.instanceId,
+      workerGrantId: fixture.grantId,
+      authorityEpochId: fixture.epochId,
+      expiresAt,
+    })
+    if (prepared.kind !== "committed") throw new Error("fixture preparation did not commit")
+    await markPrepared(fixture, prepared.attemptId, prepared.commandId)
+
+    await expect(
+      broker.startUnmetered({
+        operationId: fixture.operationId,
+        attemptId: prepared.attemptId,
+        workerInstanceId: fixture.instanceId,
+        workerGrantId: fixture.grantId,
+        authorityEpochId: fixture.epochId,
+      })
+    ).rejects.toMatchObject({ code: "CAPACITY_NOT_READY" })
+    expect(
+      (
+        await owner.query<{ count: string }>(
+          'SELECT count(*)::text AS count FROM "ScanDispatchStart" WHERE "operationId"=$1',
+          [fixture.operationId]
+        )
+      ).rows[0]!.count
+    ).toBe("0")
+  })
+
+  it("rejects unmetered start when PREPARE is not complete", async () => {
+    const fixture = await createFixture({ maxBudgetUsd: 0 })
+    const expiresAt = (
+      await owner.query<{ expiresAt: Date }>(
+        "SELECT CURRENT_TIMESTAMP + interval '10 minutes' AS \"expiresAt\""
+      )
+    ).rows[0]!.expiresAt
+    const prepared = await broker.prepare({
+      operationId: fixture.operationId,
+      workerInstanceId: fixture.instanceId,
+      workerGrantId: fixture.grantId,
+      authorityEpochId: fixture.epochId,
+      expiresAt,
+    })
+    if (prepared.kind !== "committed") throw new Error("fixture preparation did not commit")
+
+    await expect(
+      broker.startUnmetered({
+        operationId: fixture.operationId,
+        attemptId: prepared.attemptId,
+        workerInstanceId: fixture.instanceId,
+        workerGrantId: fixture.grantId,
+        authorityEpochId: fixture.epochId,
+      })
+    ).rejects.toMatchObject({ code: "DISPATCH_OPERATION_STATE_INVALID" })
+    expect(
+      (
+        await owner.query<{ count: string }>(
+          'SELECT count(*)::text AS count FROM "ScanDispatchStart" WHERE "operationId"=$1',
+          [fixture.operationId]
+        )
+      ).rows[0]!.count
+    ).toBe("0")
+  })
+
   it("creates one durable STOP command without releasing capacity", async () => {
     const fixture = await createFixture()
     const expiresAt = (
@@ -760,7 +910,7 @@ describe.skipIf(!enabled)("scan dispatch authority broker", () => {
       `INSERT INTO "ScanWorkerInstanceGrant"
         ("id","authorityEpochId","instanceId","credentialHash","issuedAt","expiresAt","createdAt","updatedAt")
        VALUES ($1,$2,$3,$4,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP + interval '1 hour',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`,
-      [otherGrantId, fixture.epochId, otherInstanceId, "b".repeat(64)]
+      [otherGrantId, fixture.epochId, otherInstanceId, `${"b".repeat(32)}${randomUUID().replaceAll("-", "")}`]
     )
     await expect(
       broker.prepare({
@@ -791,7 +941,7 @@ describe.skipIf(!enabled)("scan dispatch authority broker", () => {
       `INSERT INTO "ScanWorkerInstanceGrant"
         ("id","authorityEpochId","instanceId","credentialHash","issuedAt","expiresAt","createdAt","updatedAt")
        VALUES ($1,$2,$3,$4,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP + interval '1 hour',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`,
-      [otherStopGrantId, stopFixture.epochId, otherStopInstanceId, "b".repeat(64)]
+      [otherStopGrantId, stopFixture.epochId, otherStopInstanceId, `${"b".repeat(32)}${randomUUID().replaceAll("-", "")}`]
     )
     await expect(
       broker.stop({
@@ -835,7 +985,7 @@ describe.skipIf(!enabled)("scan dispatch authority broker", () => {
       `INSERT INTO "ScanWorkerInstanceGrant"
         ("id","authorityEpochId","instanceId","credentialHash","issuedAt","expiresAt","createdAt","updatedAt")
        VALUES ($1,$2,$3,$4,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP + interval '1 hour',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`,
-      [otherReconcileGrantId, reconcileFixture.epochId, otherReconcileInstanceId, "b".repeat(64)]
+      [otherReconcileGrantId, reconcileFixture.epochId, otherReconcileInstanceId, `${"b".repeat(32)}${randomUUID().replaceAll("-", "")}`]
     )
     await expect(
       broker.reconcile({
