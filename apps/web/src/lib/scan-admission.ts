@@ -36,7 +36,6 @@ export async function getTargetRelayAvailability(targetType: string): Promise<bo
 }
 
 export { findCurrentDomainProof, resolveUrlReviewMode }
-export type { UrlReviewMode } from "@lyrashield/types"
 
 /** Shared worker/API admission with an advisory snapshot when already fetched. */
 export async function resolveAvailableUrlReview(

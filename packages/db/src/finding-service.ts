@@ -503,5 +503,4 @@ export async function getFindingStats(
 export {
   getFindingHistoryPage,
   type FindingHistoryCollection,
-  type FindingHistoryPage,
 } from "./finding-history-service"

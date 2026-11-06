@@ -417,7 +417,7 @@ export async function getReportByShareToken(
 }
 
 /** A locator grants no access: bind capability and DB time to the content SELECT. */
-export async function readActiveSharedReport(
+async function readActiveSharedReport(
   tx: ScopedTransaction,
   workspaceId: string,
   reportId: string,

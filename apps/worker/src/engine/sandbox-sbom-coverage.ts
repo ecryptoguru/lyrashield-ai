@@ -29,7 +29,7 @@ const DOCKER_SERVER_RE = /^[A-Za-z0-9._+/:-]{1,256}$/
 
 export const SBOM_COVERAGE_PREDICATE_TYPE =
   "https://lyrashieldai.com/attestations/sandbox-sbom-coverage/v1"
-export const SBOM_COVERAGE_AGGREGATE_SCHEMA = "lyrashield.sandbox.sbom-coverage.v1"
+const SBOM_COVERAGE_AGGREGATE_SCHEMA = "lyrashield.sandbox.sbom-coverage.v1"
 export const SBOM_COVERAGE_POLICY = { id: "sandbox-bounded-package-coverage", version: 1 }
 export const SBOM_COVERAGE_LINK_POLICY = {
   id: "sandbox-bounded-package-link-policy",
@@ -105,7 +105,7 @@ const GO_APP_KEYS = [
   "dependencyCount",
 ] as const
 
-export interface SandboxSbomCoverageIdentity {
+interface SandboxSbomCoverageIdentity {
   engineRevision: string
   workflowRevision: string
   runId: string
@@ -167,7 +167,7 @@ function requireDigest(value: unknown, label: string): string {
  * both architecture receipts present, bounded scopes matched, LIMITATIONS
  * propagated, and rootfs digests recorded.
  */
-export function validateSandboxSbomCoverageAggregate(
+function validateSandboxSbomCoverageAggregate(
   aggregate: unknown,
   identity: SandboxSbomCoverageIdentity
 ): void {
@@ -349,7 +349,7 @@ function validateGoApplications(value: unknown, arch: string): void {
  * for the coverage predicate: fixed signer, source revision, source ref,
  * GitHub-hosted runner, run invocation, exact subject and exact predicate.
  */
-export function findAcceptedCoverageAttestation(
+function findAcceptedCoverageAttestation(
   records: unknown,
   expectedAggregate: unknown,
   options: {

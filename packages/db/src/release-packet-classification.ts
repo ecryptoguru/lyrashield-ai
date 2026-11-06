@@ -3,7 +3,7 @@ import {
   type ReleasePacketPayload,
 } from "@lyrashield/types"
 
-export interface ClassificationFinding {
+interface ClassificationFinding {
   id: string
   dedupeKey: string
   title: string

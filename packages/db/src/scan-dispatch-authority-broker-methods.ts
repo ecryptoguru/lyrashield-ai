@@ -40,7 +40,7 @@ export type LockedOperation = {
   sponsorAccountId: string
 }
 
-export type TransactionOutcome<T extends object> =
+type TransactionOutcome<T extends object> =
   | { kind: "committed"; operationId: string; value: T }
   | Extract<DispatchBrokerResult, { kind: "unknown" }>
 

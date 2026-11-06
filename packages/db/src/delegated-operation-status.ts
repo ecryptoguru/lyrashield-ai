@@ -18,7 +18,7 @@ export interface DelegatedOperationProjectionRow {
   updatedAt: Date
 }
 
-export interface DelegatedOperationAccessRow extends DelegatedOperationProjectionRow {
+interface DelegatedOperationAccessRow extends DelegatedOperationProjectionRow {
   workspaceId: string
   connectionId: string | null
   operationName: string

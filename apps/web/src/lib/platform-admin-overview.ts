@@ -5,7 +5,7 @@ import { paidAccountMetricsFromAggregate, THIRTY_DAYS_MS } from "./growth-metric
 
 export type PlatformHealthStatus = "healthy" | "degraded" | "unknown"
 const ACTIVATION_MINIMUM_SAMPLE = 20
-export const SETUP_QUALITY_METRIC_VERSION = "setup-quality/2.0.0" as const
+const SETUP_QUALITY_METRIC_VERSION = "setup-quality/2.0.0" as const
 
 type ActivationRow = {
   accountsCreated: bigint

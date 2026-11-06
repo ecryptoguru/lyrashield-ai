@@ -60,7 +60,7 @@ function normalize(value: unknown): unknown {
  * Canonical JSON: recursively sort object keys, then JSON.stringify.
  * Must match `packages/runtime-control/src/canonical-json.ts` exactly.
  */
-export function canonicalJson(value: unknown): string {
+function canonicalJson(value: unknown): string {
   return JSON.stringify(normalize(value))
 }
 
