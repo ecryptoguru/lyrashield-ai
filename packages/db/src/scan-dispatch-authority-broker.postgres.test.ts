@@ -126,7 +126,13 @@ async function createFixture(
   return fixture
 }
 
-async function markPrepared(fixture: Fixture, attemptId: string, commandId: string) {
+async function markPrepared(
+  fixture: Fixture,
+  attemptId: string,
+  commandId: string,
+  options: { completePrepareCommand?: boolean } = {}
+) {
+  const complete = options.completePrepareCommand !== false
   const receipt1 = createHash("sha256").update(`${fixture.operationId}:1`).digest("hex")
   const receipt2 = createHash("sha256").update(`${receipt1}:2`).digest("hex")
   await owner.query(
@@ -160,37 +166,39 @@ async function markPrepared(fixture: Fixture, attemptId: string, commandId: stri
     ]
   )
   await owner.query(
-    `INSERT INTO "ScanSupervisorReceipt" (
-      "id","supervisorInstanceId","operationId","attemptId","authorityEpochId","commandId",
-      "sequence","previousReceiptHash","receiptHash","signature","receiptType","executorKey",
-      "outcome","evidenceDigest","observedAt","createdAt"
-    ) VALUES ($1,$10,$2,$3,$4,$5,2,$6,$7,$8,'PREPARE_COMPLETED',NULL,
-      'completed',$9,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`,
-    [
-      `receipt-2-${fixture.operationId}`,
-      fixture.operationId,
-      attemptId,
-      fixture.epochId,
-      commandId,
-      receipt1,
-      receipt2,
-      "s".repeat(64),
-      "b".repeat(64),
-      `supervisor-${fixture.operationId}`,
-    ]
-  )
-  await owner.query(
     `UPDATE "ScanDispatchOutbox"
      SET "status"='ACCEPTED', "deliveredAt"=CURRENT_TIMESTAMP, "updatedAt"=CURRENT_TIMESTAMP
      WHERE "id"=$1`,
     [commandId]
   )
-  await owner.query(
-    `UPDATE "ScanDispatchOutbox"
-     SET "status"='COMPLETED', "updatedAt"=CURRENT_TIMESTAMP
-     WHERE "id"=$1`,
-    [commandId]
-  )
+  if (complete) {
+    await owner.query(
+      `INSERT INTO "ScanSupervisorReceipt" (
+        "id","supervisorInstanceId","operationId","attemptId","authorityEpochId","commandId",
+        "sequence","previousReceiptHash","receiptHash","signature","receiptType","executorKey",
+        "outcome","evidenceDigest","observedAt","createdAt"
+      ) VALUES ($1,$10,$2,$3,$4,$5,2,$6,$7,$8,'PREPARE_COMPLETED',NULL,
+        'completed',$9,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`,
+      [
+        `receipt-2-${fixture.operationId}`,
+        fixture.operationId,
+        attemptId,
+        fixture.epochId,
+        commandId,
+        receipt1,
+        receipt2,
+        "s".repeat(64),
+        "b".repeat(64),
+        `supervisor-${fixture.operationId}`,
+      ]
+    )
+    await owner.query(
+      `UPDATE "ScanDispatchOutbox"
+       SET "status"='COMPLETED', "updatedAt"=CURRENT_TIMESTAMP
+       WHERE "id"=$1`,
+      [commandId]
+    )
+  }
   await owner.query(
     `UPDATE "ScanDispatchOperation"
      SET "state"='PREPARED', "updatedAt"=CURRENT_TIMESTAMP
@@ -655,6 +663,12 @@ describe.skipIf(!enabled)("scan dispatch authority broker", () => {
       expiresAt,
     })
     if (prepared.kind !== "committed") throw new Error("fixture preparation did not commit")
+    // Reach the PREPARE-status check: the operation is PREPARED and physical
+    // preparation is in flight, but the PREPARE outbox command is only
+    // ACCEPTED, never COMPLETED.
+    await markPrepared(fixture, prepared.attemptId, prepared.commandId, {
+      completePrepareCommand: false,
+    })
 
     await expect(
       broker.startUnmetered({
@@ -664,7 +678,10 @@ describe.skipIf(!enabled)("scan dispatch authority broker", () => {
         workerGrantId: fixture.grantId,
         authorityEpochId: fixture.epochId,
       })
-    ).rejects.toMatchObject({ code: "DISPATCH_OPERATION_STATE_INVALID" })
+    ).rejects.toMatchObject({
+      code: "DISPATCH_OPERATION_STATE_INVALID",
+      message: "PREPARE is not complete",
+    })
     expect(
       (
         await owner.query<{ count: string }>(
@@ -910,7 +927,12 @@ describe.skipIf(!enabled)("scan dispatch authority broker", () => {
       `INSERT INTO "ScanWorkerInstanceGrant"
         ("id","authorityEpochId","instanceId","credentialHash","issuedAt","expiresAt","createdAt","updatedAt")
        VALUES ($1,$2,$3,$4,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP + interval '1 hour',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`,
-      [otherGrantId, fixture.epochId, otherInstanceId, `${"b".repeat(32)}${randomUUID().replaceAll("-", "")}`]
+      [
+        otherGrantId,
+        fixture.epochId,
+        otherInstanceId,
+        `${"b".repeat(32)}${randomUUID().replaceAll("-", "")}`,
+      ]
     )
     await expect(
       broker.prepare({
@@ -932,8 +954,7 @@ describe.skipIf(!enabled)("scan dispatch authority broker", () => {
       authorityEpochId: stopFixture.epochId,
       expiresAt: await attemptExpiry(),
     })
-    if (stopPrepared.kind !== "committed")
-      throw new Error("fixture preparation did not commit")
+    if (stopPrepared.kind !== "committed") throw new Error("fixture preparation did not commit")
 
     const otherStopGrantId = `authority-grant-other-${stopFixture.operationId}`
     const otherStopInstanceId = `authority-worker-other-${stopFixture.operationId}`
@@ -941,7 +962,12 @@ describe.skipIf(!enabled)("scan dispatch authority broker", () => {
       `INSERT INTO "ScanWorkerInstanceGrant"
         ("id","authorityEpochId","instanceId","credentialHash","issuedAt","expiresAt","createdAt","updatedAt")
        VALUES ($1,$2,$3,$4,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP + interval '1 hour',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`,
-      [otherStopGrantId, stopFixture.epochId, otherStopInstanceId, `${"b".repeat(32)}${randomUUID().replaceAll("-", "")}`]
+      [
+        otherStopGrantId,
+        stopFixture.epochId,
+        otherStopInstanceId,
+        `${"b".repeat(32)}${randomUUID().replaceAll("-", "")}`,
+      ]
     )
     await expect(
       broker.stop({
@@ -985,7 +1011,12 @@ describe.skipIf(!enabled)("scan dispatch authority broker", () => {
       `INSERT INTO "ScanWorkerInstanceGrant"
         ("id","authorityEpochId","instanceId","credentialHash","issuedAt","expiresAt","createdAt","updatedAt")
        VALUES ($1,$2,$3,$4,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP + interval '1 hour',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`,
-      [otherReconcileGrantId, reconcileFixture.epochId, otherReconcileInstanceId, `${"b".repeat(32)}${randomUUID().replaceAll("-", "")}`]
+      [
+        otherReconcileGrantId,
+        reconcileFixture.epochId,
+        otherReconcileInstanceId,
+        `${"b".repeat(32)}${randomUUID().replaceAll("-", "")}`,
+      ]
     )
     await expect(
       broker.reconcile({

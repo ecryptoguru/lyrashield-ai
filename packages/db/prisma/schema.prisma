@@ -2229,7 +2229,8 @@ model ScanDispatchOutbox {
 }
 
 /// Immutable start decision. Paid starts retain the existing lifetime billable
-/// claim; unmetered starts may only bind a zero-funded reservation.
+/// claim; unmetered starts require a zero-budget attempt and bind it to an
+/// existing RESERVED capacity reservation without settling or releasing it.
 model ScanDispatchStart {
   startId              String                @id @default(cuid())
   operationId          String                @unique

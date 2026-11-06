@@ -297,7 +297,7 @@ CREATE TABLE "ScanDispatchStart" (
   CONSTRAINT "ScanDispatchStart_limits_check"
     CHECK ("maxBudgetUsd" >= 0 AND "maxRuntimeMs" > 0),
   CONSTRAINT "ScanDispatchStart_kind_shape_check" CHECK (
-    ("kind" = 'PAID' AND "billableClaimEventId" IS NOT NULL AND "providerGrantDigest" IS NOT NULL) OR
+    ("kind" = 'PAID' AND "maxBudgetUsd" > 0 AND "billableClaimEventId" IS NOT NULL AND "providerGrantDigest" IS NOT NULL) OR
     ("kind" = 'UNMETERED' AND "maxBudgetUsd" = 0 AND "billableClaimEventId" IS NULL AND "providerGrantDigest" IS NULL)
   )
 );

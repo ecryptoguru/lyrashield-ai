@@ -22,9 +22,11 @@ function assertAliasParity(path: string, alias: string, twin: string | undefined
   // v1 scan deletion was never exposed; changing that public contract needs separate review.
   const omitted = path === "../app/api/v1/scans/[id]/route.ts" ? ["DELETE"] : []
   const exportedMethods = [
-    ...[...twin.matchAll(
-      /\bexport (?:async )?(?:function|const) (GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\b/g
-    )].map((match) => match[1]!),
+    ...[
+      ...twin.matchAll(
+        /\bexport (?:async )?(?:function|const) (GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\b/g
+      ),
+    ].map((match) => match[1]!),
     // Handlers may be re-exported from a colocated module (e.g. GET from
     // "./scan-list-route"); those groups still define route methods.
     ...[...twin.matchAll(/\bexport \{ ([A-Z, ]+) \} from "[^"]+"/g)].flatMap((match) =>
@@ -64,6 +66,7 @@ const aliasContract: Record<string, string[]> = {
   "scans/attachments/[id]": ["DELETE"],
   "scans/eligibility": ["GET"],
   schedules: ["GET", "POST"],
+  "setup-health": ["GET"],
   "schedules/[id]": ["DELETE", "GET", "PATCH"],
   "target-domain-verifications": ["GET", "POST", "PUT"],
   targets: ["GET", "POST"],

@@ -37,6 +37,8 @@ import { createHash, createHmac, timingSafeEqual } from "node:crypto"
 
 export const SUPERVISOR_RECEIPT_DOMAIN = "lyrashield-supervisor-receipt/1"
 export const SUPERVISOR_RECEIPT_VERSION = 1
+/** Mirrors the supervisor journal's minimum HMAC key length. */
+const MIN_SUPERVISOR_SECRET_BYTES = 32
 export const SUPERVISOR_RECEIPT_CANONICAL_FIELDS = [
   "version",
   "sequence",
@@ -139,6 +141,7 @@ export type VerifySupervisorReceiptHmacResult =
         | "SIGNATURE_MISMATCH"
         | "KEY_MISMATCH"
         | "MISSING_INSTANCE"
+        | "INVALID_SECRET"
       reason: string
     }
 
@@ -148,14 +151,36 @@ function timingSafeHexEqual(left: string, right: string): boolean {
   return leftBytes.length === rightBytes.length && timingSafeEqual(leftBytes, rightBytes)
 }
 
-function resolveInstanceId(record: SupervisorReceiptRecord): string | null {
-  if (record.supervisorInstanceId !== undefined) return record.supervisorInstanceId
+function payloadInstanceId(record: SupervisorReceiptRecord): string | null {
   const payload = record.payload
   if (payload !== null && typeof payload === "object" && !Array.isArray(payload)) {
     const candidate = (payload as Record<string, unknown>).supervisorInstanceId
     if (typeof candidate === "string") return candidate
   }
   return null
+}
+
+/**
+ * Resolve the instance id without trusting an unsigned envelope over the
+ * signed payload. If both are present they must agree; the signed payload wins
+ * when only one carries the id.
+ */
+function resolveInstanceId(record: SupervisorReceiptRecord): {
+  instanceId: string | null
+  envelopePayloadMismatch: boolean
+} {
+  const envelope = record.supervisorInstanceId
+  const signed = payloadInstanceId(record)
+  if (envelope !== undefined && typeof envelope !== "string") {
+    return { instanceId: null, envelopePayloadMismatch: false }
+  }
+  if (typeof envelope === "string" && signed !== null && envelope !== signed) {
+    return { instanceId: null, envelopePayloadMismatch: true }
+  }
+  return {
+    instanceId: signed ?? (typeof envelope === "string" ? envelope : null),
+    envelopePayloadMismatch: false,
+  }
 }
 
 function isSha256Hex(value: unknown): value is string {
@@ -171,9 +196,29 @@ export function verifySupervisorReceiptHmac(
   input: VerifySupervisorReceiptHmacInput
 ): VerifySupervisorReceiptHmacResult {
   const { record, expectedInstanceId, secret } = input
-  const instanceId = resolveInstanceId(record)
+  const secretBytes = Buffer.isBuffer(secret) ? secret : Buffer.from(secret, "utf8")
+  if (secretBytes.length < MIN_SUPERVISOR_SECRET_BYTES) {
+    return {
+      ok: false,
+      code: "INVALID_SECRET",
+      reason: `supervisor HMAC secret must be at least ${MIN_SUPERVISOR_SECRET_BYTES} bytes`,
+    }
+  }
+  const resolved = resolveInstanceId(record)
+  if (resolved.envelopePayloadMismatch) {
+    return {
+      ok: false,
+      code: "INSTANCE_MISMATCH",
+      reason: "envelope supervisorInstanceId does not match the signed payload",
+    }
+  }
+  const instanceId = resolved.instanceId
   if (instanceId === null || instanceId === "")
-    return { ok: false, code: "MISSING_INSTANCE", reason: "receipt carries no supervisorInstanceId" }
+    return {
+      ok: false,
+      code: "MISSING_INSTANCE",
+      reason: "receipt carries no supervisorInstanceId",
+    }
   if (instanceId !== expectedInstanceId)
     return {
       ok: false,
@@ -206,9 +251,11 @@ export function verifySupervisorReceiptHmac(
       reason: "previousHash does not match expected predecessor",
     }
   if (input.expectedKeyHash !== undefined) {
-    const secretBytes = Buffer.isBuffer(secret) ? secret : Buffer.from(secret, "utf8")
     const actualKeyHash = createHash("sha256").update(secretBytes).digest("hex")
-    if (!isSha256Hex(input.expectedKeyHash) || !timingSafeHexEqual(actualKeyHash, input.expectedKeyHash))
+    if (
+      !isSha256Hex(input.expectedKeyHash) ||
+      !timingSafeHexEqual(actualKeyHash, input.expectedKeyHash)
+    )
       return { ok: false, code: "KEY_MISMATCH", reason: "secret does not match expected key hash" }
   }
   const unsigned = {
@@ -220,10 +267,7 @@ export function verifySupervisorReceiptHmac(
   const expectedHash = sha256Hex(canonicalizeSupervisorReceipt(unsigned))
   if (!timingSafeHexEqual(expectedHash, record.hash))
     return { ok: false, code: "HASH_MISMATCH", reason: "receipt hash does not match payload" }
-  const expectedSignature = createHmac(
-    "sha256",
-    Buffer.isBuffer(secret) ? secret : Buffer.from(secret, "utf8")
-  )
+  const expectedSignature = createHmac("sha256", secretBytes)
     .update(canonicalizeSupervisorReceipt(unsigned, record.hash), "utf8")
     .digest("hex")
   if (!timingSafeHexEqual(expectedSignature, record.signature))

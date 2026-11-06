@@ -443,8 +443,10 @@ describe("repository scan runtime configuration", () => {
 
   // Minimal signed-coverage evidence for the `a`*64 sandbox digest used by the
   // production cases below. Written to a temp dir; the consumer reads the
-  // verify output and expected aggregate sync from these paths.
-  const coverageEvidenceEnv = (): Record<string, string> => {
+  // verify output and expected aggregate sync from these paths. The signer
+  // certificate binds the workflow run revision (`github.sha`), not the
+  // engine source pin.
+  const coverageEvidenceEnv = (certificateDigest = "e".repeat(40)): Record<string, string> => {
     const dir = mkdtempSync(join(tmpdir(), "lyrashield-sbom-coverage-test-"))
     const digestHex = "a".repeat(64)
     const goApplications = [...SBOM_COVERAGE_REQUIRED_APPS].map((name) => ({
@@ -492,9 +494,9 @@ describe("repository scan runtime configuration", () => {
               issuer: "https://token.actions.githubusercontent.com",
               buildSignerURI:
                 "https://github.com/ecryptoguru/lyrashield-engine/.github/workflows/publish-sandbox.yml@refs/heads/main",
-              buildSignerDigest: "b".repeat(40),
+              buildSignerDigest: certificateDigest,
               sourceRepositoryURI: "https://github.com/ecryptoguru/lyrashield-engine",
-              sourceRepositoryDigest: "b".repeat(40),
+              sourceRepositoryDigest: certificateDigest,
               sourceRepositoryRef: "refs/heads/main",
               runnerEnvironment: "github-hosted",
               runInvocationURI:
@@ -636,6 +638,18 @@ describe("repository scan runtime configuration", () => {
         NODE_ENV: "production",
         DOCKER_HOST: "ssh://scanner@isolated-worker",
         LYRASHIELD_IMAGE: `ghcr.io/ecryptoguru/lyrashield-sandbox@sha256:${"a".repeat(64)}`,
+      })
+    ).toThrow("sandbox SBOM coverage")
+  })
+
+  it("rejects coverage whose signer certificate binds only the engine revision", () => {
+    expect(() =>
+      assertRepositoryScanRuntimeConfigured({
+        ...runtimeEnv,
+        NODE_ENV: "production",
+        DOCKER_HOST: "ssh://scanner@isolated-worker",
+        LYRASHIELD_IMAGE: `ghcr.io/ecryptoguru/lyrashield-sandbox@sha256:${"a".repeat(64)}`,
+        ...coverageEvidenceEnv("b".repeat(40)),
       })
     ).toThrow("sandbox SBOM coverage")
   })

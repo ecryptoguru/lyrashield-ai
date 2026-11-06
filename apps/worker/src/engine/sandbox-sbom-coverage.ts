@@ -348,6 +348,10 @@ function validateGoApplications(value: unknown, arch: string): void {
  * output. Mirrors the engine's `check_sandbox_attestations.py::accepted`
  * for the coverage predicate: fixed signer, source revision, source ref,
  * GitHub-hosted runner, run invocation, exact subject and exact predicate.
+ *
+ * The signer certificate's `buildSignerDigest` and `sourceRepositoryDigest`
+ * bind the workflow run revision (`github.sha`), which is the aggregate's
+ * `workflowRevision` — never the engine source pin.
  */
 function findAcceptedCoverageAttestation(
   records: unknown,
@@ -502,7 +506,7 @@ export function assertSandboxSbomCoverageVerified(
     },
     imageName: "ghcr.io/ecryptoguru/lyrashield-sandbox",
     repo,
-    revision: engineRevision,
+    revision: workflowRevision,
     ref,
   })
 }

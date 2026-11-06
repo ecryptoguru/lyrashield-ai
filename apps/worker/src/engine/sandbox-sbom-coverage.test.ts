@@ -99,9 +99,9 @@ function buildRecords(aggregate: unknown, overrides?: { subjectDigest?: string }
           certificate: {
             issuer: "https://token.actions.githubusercontent.com",
             buildSignerURI: `https://github.com/${REPO}/.github/workflows/publish-sandbox.yml@${REF}`,
-            buildSignerDigest: ENGINE_REVISION,
+            buildSignerDigest: WORKFLOW_REVISION,
             sourceRepositoryURI: `https://github.com/${REPO}`,
-            sourceRepositoryDigest: ENGINE_REVISION,
+            sourceRepositoryDigest: WORKFLOW_REVISION,
             sourceRepositoryRef: REF,
             runnerEnvironment: "github-hosted",
             runInvocationURI: invocation,
@@ -127,7 +127,7 @@ function verify(aggregate: unknown, records: unknown, identity = IDENTITY) {
     identity,
     imageName: IMAGE_NAME,
     repo: REPO,
-    revision: ENGINE_REVISION,
+    revision: WORKFLOW_REVISION,
     ref: REF,
   })
 }
@@ -202,6 +202,14 @@ describe("verifySandboxSbomCoverage", () => {
     const records = buildRecords(aggregate)
     records[0].verificationResult.signature.certificate.buildSignerURI =
       "https://github.com/attacker/engine/.github/workflows/publish-sandbox.yml@refs/heads/main"
+    expect(() => verify(aggregate, records)).toThrow(/sandbox SBOM coverage/)
+  })
+
+  it("rejects a certificate bound to the engine revision instead of the workflow run", () => {
+    const aggregate = buildAggregate()
+    const records = buildRecords(aggregate)
+    records[0].verificationResult.signature.certificate.buildSignerDigest = ENGINE_REVISION
+    records[0].verificationResult.signature.certificate.sourceRepositoryDigest = ENGINE_REVISION
     expect(() => verify(aggregate, records)).toThrow(/sandbox SBOM coverage/)
   })
 })
