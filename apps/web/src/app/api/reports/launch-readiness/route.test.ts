@@ -9,7 +9,10 @@ vi.mock("@lyrashield/db", () => ({
   generateShareToken: (...args: unknown[]) => generateShareToken(...args),
   withDelegatedReadAuthority: async (
     params: { targetId?: string; allTargets?: boolean; allowedTargetIds?: string[] },
-    run: (tx: unknown, authority: { targetId: string; targetIds: string[]; allowedProfiles: string[] }) => unknown
+    run: (
+      tx: unknown,
+      authority: { targetId: string; targetIds: string[]; allowedProfiles: string[] }
+    ) => unknown
   ) => {
     if (
       params.targetId &&

@@ -1,7 +1,4 @@
-import {
-  type ReleasePacketFinding,
-  type ReleasePacketPayload,
-} from "@lyrashield/types"
+import { type ReleasePacketFinding, type ReleasePacketPayload } from "@lyrashield/types"
 
 interface ClassificationFinding {
   id: string

@@ -307,10 +307,24 @@ describe.skipIf(!runtimeUrl)("strict workspace RLS fails closed", () => {
       SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity
       FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
       WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p')`
+    const authorityTables = [
+      "ScanAuthorityEpoch",
+      "ScanWorkerInstanceGrant",
+      "ScanDispatchOperation",
+      "ScanQueueOutbox",
+      "ScanDispatchAttempt",
+      "ScanDispatchOutbox",
+      "ScanDispatchStart",
+      "ScanSupervisorReceipt",
+      "ScanPhysicalExecution",
+      "ScanPhysicalExecutionTransition",
+      "ScanDispatchReleaseReceipt",
+    ]
     const physicalTableNames: Record<string, string> = {
       AgentConnection: "agent_connections",
       AgentOperation: "agent_operations",
       LoopClosure: "loop_closures",
+      DelegatedScanProvenance: "delegated_scan_provenance",
     }
     const tenantTables = [...WORKSPACE_SCOPED_MODELS, ...children, ...Object.keys(explicit)].map(
       (model) => physicalTableNames[model] ?? model
@@ -325,6 +339,7 @@ describe.skipIf(!runtimeUrl)("strict workspace RLS fails closed", () => {
         ...tenantTables,
         ...accountTables,
         ...myraTables,
+        ...authorityTables,
         ...Object.keys(systemOnly),
         ...Object.keys(forcedSystemOnlyTables),
       ].sort()
@@ -342,6 +357,12 @@ describe.skipIf(!runtimeUrl)("strict workspace RLS fails closed", () => {
       ).toMatchObject({ relrowsecurity: true, relforcerowsecurity: false })
     }
     for (const table of Object.keys(forcedSystemOnlyTables)) {
+      expect(
+        rows.find((row) => row.relname === table),
+        table
+      ).toMatchObject({ relrowsecurity: true, relforcerowsecurity: true })
+    }
+    for (const table of authorityTables) {
       expect(
         rows.find((row) => row.relname === table),
         table

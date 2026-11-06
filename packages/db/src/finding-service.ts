@@ -500,7 +500,4 @@ export async function getFindingStats(
   }
 }
 
-export {
-  getFindingHistoryPage,
-  type FindingHistoryCollection,
-} from "./finding-history-service"
+export { getFindingHistoryPage, type FindingHistoryCollection } from "./finding-history-service"

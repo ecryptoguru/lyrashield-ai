@@ -74,9 +74,7 @@ export async function createFixProposal(params: CreateFixProposalParams): Promis
 
     return proposal
   }
-  return params.client
-    ? create(params.client)
-    : withWorkspaceRLS(params.workspaceId, create)
+  return params.client ? create(params.client) : withWorkspaceRLS(params.workspaceId, create)
 }
 
 export async function getFixProposal(

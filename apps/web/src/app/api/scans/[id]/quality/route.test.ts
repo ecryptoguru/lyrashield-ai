@@ -216,10 +216,15 @@ describe("/api/scans/[id]/quality", () => {
       select: { targetId: true },
     })
     expect(assertOAuthDelegatedScopeMock).toHaveBeenCalledWith(session, "target-1")
-    expect(getScanQualitySurface).toHaveBeenCalledWith("scan-1", "ws-1", {}, {
-      requireActiveTarget: true,
-      allowedProfiles: ["STANDARD"],
-    })
+    expect(getScanQualitySurface).toHaveBeenCalledWith(
+      "scan-1",
+      "ws-1",
+      {},
+      {
+        requireActiveTarget: true,
+        allowedProfiles: ["STANDARD"],
+      }
+    )
   })
 
   it("denies a connection-scoped caller when the resolved scan target is outside its grant", async () => {

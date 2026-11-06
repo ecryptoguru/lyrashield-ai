@@ -51,7 +51,8 @@ export async function GET(request: Request) {
         )
       } else {
         const parsed = ScanStatusSchema.safeParse(parts[0])
-        if (!parsed.success) return apiError("INVALID_PARAM", "status must be a valid scan status", 400)
+        if (!parsed.success)
+          return apiError("INVALID_PARAM", "status must be a valid scan status", 400)
         singleStatus = parsed.data
       }
     }

@@ -435,8 +435,10 @@ describe.skipIf(!enabled)("delegated scan provenance with PostgreSQL", () => {
 
   it("serializes delegated reads with revocation and denies the next read", async () => {
     await expectMutationFenced(
-      (tx) => tx.agentConnection.update({ where: { id: connectionOneId }, data: { status: "REVOKED" } }),
-      () => owner.agentConnection.update({ where: { id: connectionOneId }, data: { status: "ACTIVE" } })
+      (tx) =>
+        tx.agentConnection.update({ where: { id: connectionOneId }, data: { status: "REVOKED" } }),
+      () =>
+        owner.agentConnection.update({ where: { id: connectionOneId }, data: { status: "ACTIVE" } })
     )
   })
 
@@ -464,8 +466,7 @@ describe.skipIf(!enabled)("delegated scan provenance with PostgreSQL", () => {
 
   it("serializes delegated reads with target deletion and denies the next read", async () => {
     await expectMutationFenced(
-      (tx) =>
-        tx.target.update({ where: { id: targetOneId }, data: { deletedAt: new Date() } }),
+      (tx) => tx.target.update({ where: { id: targetOneId }, data: { deletedAt: new Date() } }),
       () => owner.target.update({ where: { id: targetOneId }, data: { deletedAt: null } })
     )
   })

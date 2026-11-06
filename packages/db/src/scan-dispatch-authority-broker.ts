@@ -249,9 +249,7 @@ async function lockOperation(
   await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [
     `scan-user:${pre.userId}`,
   ])
-  await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [
-    pre.workspaceId,
-  ])
+  await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [pre.workspaceId])
   await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [pre.targetId])
   await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [
     `account:${pre.sponsorAccountId}`,
@@ -384,9 +382,7 @@ async function stopDispatch(pool: pg.Pool, input: StopDispatchInput): Promise<St
           "Worker instance grant is not live"
         )
       if (
-        !["PREPARING", "PREPARED", "START_PENDING", "ACTIVE", "STOPPING"].includes(
-          operation.state
-        )
+        !["PREPARING", "PREPARED", "START_PENDING", "ACTIVE", "STOPPING"].includes(operation.state)
       )
         throw new ScanDispatchAuthorityError(
           "DISPATCH_OPERATION_STATE_INVALID",
@@ -490,8 +486,7 @@ export function createScanDispatchAuthorityBroker(options: BrokerOptions) {
   return {
     prepare: (input: PrepareDispatchInput) => prepareDispatch(ctx, input),
     startPaid: (input: StartPaidDispatchInput) => startPaidDispatch(ctx, input),
-    startUnmetered: (input: StartUnmeteredDispatchInput) =>
-      startUnmeteredDispatch(ctx, input),
+    startUnmetered: (input: StartUnmeteredDispatchInput) => startUnmeteredDispatch(ctx, input),
     stop: (input: StopDispatchInput) => stopDispatch(pool, input),
     reconcile: (input: ReconcileDispatchInput) => reconcileDispatch(pool, input),
     status: (operationId: string) => getDispatchStatus(pool, operationId),

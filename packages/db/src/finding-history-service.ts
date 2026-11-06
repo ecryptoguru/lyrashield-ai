@@ -36,9 +36,7 @@ async function readHistoryRows(params: {
         ],
       }
     : {}
-  const activeFinding = requireActiveTarget
-    ? { deletedAt: null, target: { deletedAt: null } }
-    : {}
+  const activeFinding = requireActiveTarget ? { deletedAt: null, target: { deletedAt: null } } : {}
 
   switch (collection) {
     case "evidence": {

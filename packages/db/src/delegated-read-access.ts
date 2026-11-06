@@ -64,14 +64,14 @@ export async function getDelegatedScanAccess(
 ): Promise<DelegatedScanAccess | null> {
   const read = (tx: ScopedTransaction) =>
     tx.$queryRaw<
-        Array<{
-          id: string
-          status: ScanStatus
-          provenanceTrustworthy: boolean
-          targetDeleted: boolean
-          scanDeleted: boolean
-        }>
-      >`
+      Array<{
+        id: string
+        status: ScanStatus
+        provenanceTrustworthy: boolean
+        targetDeleted: boolean
+        scanDeleted: boolean
+      }>
+    >`
       SELECT
         s.id,
         s.status::text AS "status",
@@ -128,9 +128,7 @@ export async function getDelegatedScanAccess(
         AND m."updatedAt" = ${params.memberUpdatedAt}
         LIMIT 1
       `
-  const rows = client
-    ? await read(client)
-    : await withWorkspaceRLS(params.workspaceId, read)
+  const rows = client ? await read(client) : await withWorkspaceRLS(params.workspaceId, read)
   const row = rows[0]
   if (!row) return null
   return {
@@ -150,14 +148,14 @@ export async function getDelegatedScanAccessBatch(
   }
   const read = (tx: ScopedTransaction) =>
     tx.$queryRaw<
-        Array<{
-          id: string
-          status: ScanStatus
-          provenanceTrustworthy: boolean
-          targetDeleted: boolean
-          scanDeleted: boolean
-        }>
-      >`
+      Array<{
+        id: string
+        status: ScanStatus
+        provenanceTrustworthy: boolean
+        targetDeleted: boolean
+        scanDeleted: boolean
+      }>
+    >`
       SELECT
         s.id,
         s.status::text AS "status",
@@ -218,9 +216,7 @@ export async function getDelegatedScanAccessBatch(
         AND m."updatedAt" = ${params.memberUpdatedAt}
         ORDER BY s.id
       `
-  const rows = client
-    ? await read(client)
-    : await withWorkspaceRLS(params.workspaceId, read)
+  const rows = client ? await read(client) : await withWorkspaceRLS(params.workspaceId, read)
   return rows.map((row) => ({
     sourceId: row.id,
     scanId: row.provenanceTrustworthy ? row.id : null,
@@ -336,13 +332,13 @@ export async function withDelegatedReadAuthority<T>(
     `
     if (!connection) throw new Error("FORBIDDEN")
     const allowedProfiles = connection.allowedProfiles.map((profile) => profile.toUpperCase())
-    if (params.requiredOperation && !connection.allowedOperations.includes(params.requiredOperation)) {
+    if (
+      params.requiredOperation &&
+      !connection.allowedOperations.includes(params.requiredOperation)
+    ) {
       throw new Error("FORBIDDEN")
     }
-    if (
-      params.requiredProfile &&
-      !allowedProfiles.includes(params.requiredProfile.toUpperCase())
-    ) {
+    if (params.requiredProfile && !allowedProfiles.includes(params.requiredProfile.toUpperCase())) {
       throw new Error("FORBIDDEN")
     }
 

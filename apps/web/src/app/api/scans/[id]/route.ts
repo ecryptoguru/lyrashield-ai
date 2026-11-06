@@ -21,10 +21,7 @@ import { revalidateDashboardAggregates } from "../../../../lib/cache"
 import { recordedOperation } from "../../../../lib/recorded-operation"
 import { publicScanProvenance } from "../../../../lib/scan-provenance"
 import { filterDashboardScanEvents } from "@/lib/scan-event-visibility"
-import {
-  delegatedReadPrincipal,
-  delegatedScanAccess,
-} from "@/lib/delegated-target-read-scope"
+import { delegatedReadPrincipal, delegatedScanAccess } from "@/lib/delegated-target-read-scope"
 
 function scanEtag(
   scan: NonNullable<Awaited<ReturnType<typeof getScanWithEvents>>>,
@@ -85,7 +82,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       eventsAfterParam && ScanIdSchema.safeParse(eventsAfterParam).success
         ? eventsAfterParam
         : undefined
-    const load = async (client?: Parameters<typeof getScanWithEvents>[3], authority?: DelegatedReadAuthority) => {
+    const load = async (
+      client?: Parameters<typeof getScanWithEvents>[3],
+      authority?: DelegatedReadAuthority
+    ) => {
       if (principal) {
         const access = await delegatedScanAccess(session, workspace, id, client)
         if (!access) return null

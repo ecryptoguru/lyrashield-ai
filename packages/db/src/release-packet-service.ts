@@ -156,9 +156,7 @@ async function loadAssessedPacketContext(
     expectedCommit:
       input.expectedIdentity.kind === "COMMIT" ? input.expectedIdentity.value : undefined,
     expectedArtifactDigest:
-      input.expectedIdentity.kind === "ARTIFACT_DIGEST"
-        ? input.expectedIdentity.value
-        : undefined,
+      input.expectedIdentity.kind === "ARTIFACT_DIGEST" ? input.expectedIdentity.value : undefined,
     now,
   })
 
@@ -179,10 +177,7 @@ async function loadAssessedPacketContext(
       deletedAt: null,
       id: { not: currentScan.id },
       status: { in: ["COMPLETED", "PARTIAL"] },
-      OR: [
-        { endedAt: { lt: currentScan.endedAt ?? currentScan.createdAt } },
-        { endedAt: null },
-      ],
+      OR: [{ endedAt: { lt: currentScan.endedAt ?? currentScan.createdAt } }, { endedAt: null }],
     },
     orderBy: [{ endedAt: "desc" }, { createdAt: "desc" }, { id: "desc" }],
     select: { id: true },
@@ -200,70 +195,75 @@ async function loadPacketRemediation(
 ) {
   const { currentScan, baselineScan, snapshot } = context
 
-  const [findings, currentCandidates, baselineCandidates, uncertainCandidateCount, reportsCoverage] =
-    await Promise.all([
-      tx.finding.findMany({
-        where: { workspaceId: input.workspaceId, targetId: input.targetId, deletedAt: null },
-        select: {
-          id: true,
-          dedupeKey: true,
-          title: true,
-          severity: true,
-          status: true,
-          verificationStatus: true,
-          baseCommit: true,
-          firstSeenAt: true,
-          lastSeenAt: true,
-          verificationReceipts: {
-            where: { method: "RETEST" },
-            orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-            take: 1,
-            select: { status: true },
-          },
-          retests: {
-            orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-            take: 1,
-            select: { status: true },
-          },
-          fixProposals: {
-            where: { deletedAt: null },
-            orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-            take: 1,
-            select: { status: true },
-          },
+  const [
+    findings,
+    currentCandidates,
+    baselineCandidates,
+    uncertainCandidateCount,
+    reportsCoverage,
+  ] = await Promise.all([
+    tx.finding.findMany({
+      where: { workspaceId: input.workspaceId, targetId: input.targetId, deletedAt: null },
+      select: {
+        id: true,
+        dedupeKey: true,
+        title: true,
+        severity: true,
+        status: true,
+        verificationStatus: true,
+        baseCommit: true,
+        firstSeenAt: true,
+        lastSeenAt: true,
+        verificationReceipts: {
+          where: { method: "RETEST" },
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+          take: 1,
+          select: { status: true },
         },
-      }),
-      tx.findingCandidate.findMany({
-        where: {
-          workspaceId: input.workspaceId,
-          scanId: currentScan.id,
-          targetId: input.targetId,
+        retests: {
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+          take: 1,
+          select: { status: true },
         },
-        select: { dedupeKey: true },
-      }),
-      baselineScan
-        ? tx.findingCandidate.findMany({
-            where: {
-              workspaceId: input.workspaceId,
-              scanId: baselineScan.id,
-              targetId: input.targetId,
-            },
-            select: { dedupeKey: true },
-          })
-        : Promise.resolve([]),
-      tx.findingCandidate.count({
-        where: {
-          workspaceId: input.workspaceId,
-          scanId: currentScan.id,
-          targetId: input.targetId,
-          findingId: null,
+        fixProposals: {
+          where: { deletedAt: null },
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+          take: 1,
+          select: { status: true },
         },
-      }),
-      tx.scanCoverageReceipt.findMany({
-        where: { scanId: currentScan.id },
-        select: { scanner: true, status: true },
-      }),
-    ])
+      },
+    }),
+    tx.findingCandidate.findMany({
+      where: {
+        workspaceId: input.workspaceId,
+        scanId: currentScan.id,
+        targetId: input.targetId,
+      },
+      select: { dedupeKey: true },
+    }),
+    baselineScan
+      ? tx.findingCandidate.findMany({
+          where: {
+            workspaceId: input.workspaceId,
+            scanId: baselineScan.id,
+            targetId: input.targetId,
+          },
+          select: { dedupeKey: true },
+        })
+      : Promise.resolve([]),
+    tx.findingCandidate.count({
+      where: {
+        workspaceId: input.workspaceId,
+        scanId: currentScan.id,
+        targetId: input.targetId,
+        findingId: null,
+      },
+    }),
+    tx.scanCoverageReceipt.findMany({
+      where: { scanId: currentScan.id },
+      select: { scanner: true, status: true },
+    }),
+  ])
 
   const remediation = classifyReleaseFindings({
     findings: findings.map((finding) => {

@@ -142,10 +142,7 @@ async function loadStartPaidFunding(
   )
   const funding = reservation.rows[0]
   if (!funding || funding.state !== "RESERVED" || funding.fundedMinutes <= 0)
-    throw new ScanDispatchAuthorityError(
-      "CAPACITY_NOT_READY",
-      "Funded reservation is not ready"
-    )
+    throw new ScanDispatchAuthorityError("CAPACITY_NOT_READY", "Funded reservation is not ready")
   if (!["QUEUED", "PREFLIGHT"].includes(attemptRow.scanStatus))
     throw new ScanDispatchAuthorityError(
       "DISPATCH_OPERATION_STATE_INVALID",
@@ -287,4 +284,3 @@ export async function startPaidDispatch(
     })
   }
 }
-

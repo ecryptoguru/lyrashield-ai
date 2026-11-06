@@ -55,12 +55,7 @@ async function hasCurrentFixAuthority(
   scan: FixScanAuthorityFields
 ): Promise<boolean> {
   if (!scan.delegatedConnectionId) return true
-  if (
-    !scan.createdById ||
-    !scan.targetId ||
-    !scan.delegatedAuthorizationVersion ||
-    !scan.mode
-  ) {
+  if (!scan.createdById || !scan.targetId || !scan.delegatedAuthorizationVersion || !scan.mode) {
     return false
   }
   const authority = await getCurrentDelegatedScanAuthority(tx, {
@@ -75,10 +70,10 @@ async function hasCurrentFixAuthority(
   })
   return Boolean(
     authority &&
-      hasPermission(
-        authority.memberRole as Parameters<typeof hasPermission>[0],
-        PERMISSIONS.fix.create
-      )
+    hasPermission(
+      authority.memberRole as Parameters<typeof hasPermission>[0],
+      PERMISSIONS.fix.create
+    )
   )
 }
 

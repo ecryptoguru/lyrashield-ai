@@ -6,10 +6,7 @@ import { authErrorResponse } from "../../../../../lib/api-auth"
 import { apiError } from "../../../../../lib/api-response"
 import { jsonWithEtag } from "../../../../../lib/http-etag"
 import { z } from "zod"
-import {
-  delegatedReadPrincipal,
-  delegatedScanAccess,
-} from "@/lib/delegated-target-read-scope"
+import { delegatedReadPrincipal, delegatedScanAccess } from "@/lib/delegated-target-read-scope"
 
 const WorkspaceSchema = z.string().min(1)
 

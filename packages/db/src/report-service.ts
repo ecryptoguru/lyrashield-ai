@@ -278,18 +278,18 @@ export async function createReport(
       const targetExists = params.client
         ? Boolean(
             params.targetId &&
-              (await tx.target.findFirst({
-                where: {
-                  id: params.targetId,
-                  workspaceId: params.workspaceId,
-                  deletedAt: null,
-                },
-                select: { id: true },
-              }))
+            (await tx.target.findFirst({
+              where: {
+                id: params.targetId,
+                workspaceId: params.workspaceId,
+                deletedAt: null,
+              },
+              select: { id: true },
+            }))
           )
         : Boolean(
             params.targetId &&
-              (await lockActiveTargetForDerivedWrite(tx, params.workspaceId, params.targetId))
+            (await lockActiveTargetForDerivedWrite(tx, params.workspaceId, params.targetId))
           )
       if (!targetExists) {
         throw new Error("FORBIDDEN")

@@ -270,15 +270,11 @@ it.each([{ targetIds: ["target-1"] }, { targetIds: [] }])(
       new Request("http://localhost/api/reports?workspaceId=ws-1&cursor=cursor-1")
     )
     expect(response.status).toBe(200)
-    expect(listReports).toHaveBeenCalledWith(
-      "ws-1",
-      "cursor-1",
-      50,
-      targetIds,
-      true,
-      {},
-      ["SAFE", "STANDARD", "QUICK"]
-    )
+    expect(listReports).toHaveBeenCalledWith("ws-1", "cursor-1", 50, targetIds, true, {}, [
+      "SAFE",
+      "STANDARD",
+      "QUICK",
+    ])
   }
 )
 
@@ -303,15 +299,11 @@ it("does not return a broad cached report page after a target grant narrows", as
   )
   expect(response.status).toBe(200)
   expect((await response.json()).data).toEqual({ items: [], nextCursor: null })
-  expect(listReports).toHaveBeenLastCalledWith(
-    "ws-1",
-    undefined,
-    50,
-    [],
-    true,
-    {},
-    ["SAFE", "STANDARD", "QUICK"]
-  )
+  expect(listReports).toHaveBeenLastCalledWith("ws-1", undefined, 50, [], true, {}, [
+    "SAFE",
+    "STANDARD",
+    "QUICK",
+  ])
 })
 
 it("preserves omitted-target all-target delegation reads", async () => {
@@ -322,15 +314,11 @@ it("preserves omitted-target all-target delegation reads", async () => {
   vi.mocked(listReports).mockResolvedValueOnce({ items: [], nextCursor: null })
   const response = await V1GET(new Request("http://localhost/api/reports?workspaceId=ws-1"))
   expect(response.status).toBe(200)
-  expect(listReports).toHaveBeenLastCalledWith(
-    "ws-1",
-    undefined,
-    50,
-    ["target-active"],
-    true,
-    {},
-    ["SAFE", "STANDARD", "QUICK"]
-  )
+  expect(listReports).toHaveBeenLastCalledWith("ws-1", undefined, 50, ["target-active"], true, {}, [
+    "SAFE",
+    "STANDARD",
+    "QUICK",
+  ])
 })
 
 it("filters an authenticated all-target report list to currently active targets", async () => {

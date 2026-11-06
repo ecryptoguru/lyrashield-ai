@@ -17,10 +17,7 @@ import {
 } from "@lyrashield/db"
 import { assertOAuthDelegatedScope, requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
-import {
-  CreateScanInputSchema,
-  ScanExecutionPlanInputError,
-} from "@lyrashield/types"
+import { CreateScanInputSchema, ScanExecutionPlanInputError } from "@lyrashield/types"
 import { logger } from "@lyrashield/logger"
 import { assertScanAllowed } from "@lyrashield/billing"
 import {

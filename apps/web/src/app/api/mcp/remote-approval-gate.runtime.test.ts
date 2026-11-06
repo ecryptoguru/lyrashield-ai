@@ -66,6 +66,8 @@ describe.skipIf(!databaseUrl || !runtimeUrl)(
     let connectionId = ""
     let targetId = ""
     let operationId = ""
+    let memberId = ""
+    let memberUpdatedAt = new Date("2026-11-06T00:00:00Z")
 
     beforeAll(async () => {
       const [role] = await runtime.$queryRaw<Array<{ rolsuper: boolean; rolbypassrls: boolean }>>`
@@ -78,9 +80,11 @@ describe.skipIf(!databaseUrl || !runtimeUrl)(
       await owner.workspace.create({
         data: { id: workspaceId, name: "MCP hash mismatch test", slug: `mcp-hash-${suffix}` },
       })
-      await owner.workspaceMember.create({
+      const member = await owner.workspaceMember.create({
         data: { workspaceId, userId, role: "OWNER", status: "active" },
       })
+      memberId = member.id
+      memberUpdatedAt = member.updatedAt
       const target = await owner.target.create({
         data: {
           id: randomUUID(),
@@ -390,6 +394,11 @@ describe.skipIf(!databaseUrl || !runtimeUrl)(
       expect(await gate("lyrashield_scan_target", args)).toMatchObject({
         approved: true,
         result: { isError: true },
+      })
+      requireOAuthPermissionMock.mockResolvedValue({
+        workspace: {
+          member: { id: memberId, role: "OWNER", updatedAt: memberUpdatedAt },
+        },
       })
       const backend = makeHostedMcpTaskBackend({
         oauth,

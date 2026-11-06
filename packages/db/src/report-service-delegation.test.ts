@@ -1,9 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { LAUNCH_REPORT_PROVENANCE_VERSION } from "./launch-report-provenance"
-import {
-  computeLaunchReportChecksum,
-  LAUNCH_REPORT_PAYLOAD_VERSION,
-} from "./launch-report-payload"
+import { computeLaunchReportChecksum, LAUNCH_REPORT_PAYLOAD_VERSION } from "./launch-report-payload"
 
 /**
  * W0.3 — resolveReportDelegationTarget maps a persisted report to the target

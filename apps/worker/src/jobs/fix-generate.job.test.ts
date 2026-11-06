@@ -156,7 +156,9 @@ describe("fix generation lifecycle", () => {
       deletedAt: null,
       finding: { workspaceId: "ws-1", deletedAt: null, ...delegatedFinding },
     })
-    mocks.delegatedAuthority.mockResolvedValueOnce({ memberRole: "OWNER" }).mockResolvedValueOnce(null)
+    mocks.delegatedAuthority
+      .mockResolvedValueOnce({ memberRole: "OWNER" })
+      .mockResolvedValueOnce(null)
     mocks.evidence.mockResolvedValue([{ type: "code_location", storageUri: "s3://test/location" }])
     mocks.read.mockResolvedValue({
       content: Buffer.from(

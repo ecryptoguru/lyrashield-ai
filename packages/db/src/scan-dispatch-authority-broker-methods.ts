@@ -55,11 +55,7 @@ export type DispatchBrokerContext = {
   ) => Promise<LockedOperation>
 }
 
-export function commandDigest(
-  commandType: string,
-  operationId: string,
-  attemptId: string
-): string {
+export function commandDigest(commandType: string, operationId: string, attemptId: string): string {
   return createHash("sha256")
     .update(`dispatch-command/1\u0000${commandType}\u0000${operationId}\u0000${attemptId}`)
     .digest("hex")
@@ -312,7 +308,11 @@ export async function prepareDispatch(
       await checkPrepareGrant(client, input, expiresAt)
       const replay = await readPrepareReplay(client, input)
       if (replay)
-        return { state: "PREPARING" as const, attemptId: replay.attemptId, commandId: replay.commandId }
+        return {
+          state: "PREPARING" as const,
+          attemptId: replay.attemptId,
+          commandId: replay.commandId,
+        }
       if (!["QUEUED", "WAITING_CAPACITY"].includes(operation.state))
         throw new ScanDispatchAuthorityError(
           "DISPATCH_OPERATION_STATE_INVALID",
@@ -334,13 +334,9 @@ export async function prepareDispatch(
     }
   } catch (error) {
     if (error instanceof ScanDispatchAuthorityError) throw error
-    throw new ScanDispatchAuthorityError(
-      "DATABASE_REJECTED",
-      "Preparation transaction rejected",
-      {
-        cause: error,
-      }
-    )
+    throw new ScanDispatchAuthorityError("DATABASE_REJECTED", "Preparation transaction rejected", {
+      cause: error,
+    })
   }
 }
 
@@ -465,10 +461,7 @@ async function writeStartUnmeteredRecords(
   )
   const funding = reservation.rows[0]
   if (!funding || funding.state !== "RESERVED")
-    throw new ScanDispatchAuthorityError(
-      "CAPACITY_NOT_READY",
-      "Reservation is not ready"
-    )
+    throw new ScanDispatchAuthorityError("CAPACITY_NOT_READY", "Reservation is not ready")
   if (!["QUEUED", "PREFLIGHT"].includes(attemptRow.scanStatus))
     throw new ScanDispatchAuthorityError(
       "DISPATCH_OPERATION_STATE_INVALID",
@@ -564,4 +557,3 @@ export async function startUnmeteredDispatch(
     )
   }
 }
-

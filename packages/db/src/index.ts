@@ -511,6 +511,10 @@ export {
   releaseUnstartedScanSlot,
   UserScanAlreadyActiveError,
 } from "./scan-slot"
-export { beginFixPrExecution, getFixPrExecution, markFixPrRecovery } from "./fix-pr-execution-service"
+export {
+  beginFixPrExecution,
+  getFixPrExecution,
+  markFixPrRecovery,
+} from "./fix-pr-execution-service"
 
 export { lockActiveTargetForDerivedWrite } from "./target-write-lock"

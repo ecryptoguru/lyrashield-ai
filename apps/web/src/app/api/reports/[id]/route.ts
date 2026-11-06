@@ -16,9 +16,7 @@ import { authErrorResponse } from "../../../../lib/api-auth"
 import { apiError, apiSuccess } from "../../../../lib/api-response"
 import { jsonWithEtag } from "../../../../lib/http-etag"
 import { ReportActionSchema } from "@lyrashield/types"
-import {
-  delegatedReadPrincipal,
-} from "../../../../lib/delegated-target-read-scope"
+import { delegatedReadPrincipal } from "../../../../lib/delegated-target-read-scope"
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params

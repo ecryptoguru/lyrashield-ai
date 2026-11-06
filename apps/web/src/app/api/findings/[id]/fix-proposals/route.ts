@@ -55,9 +55,7 @@ async function post(request: Request, { params }: { params: Promise<{ id: string
       client?: Parameters<typeof createFixProposal>[0]["client"],
       authority?: DelegatedReadAuthority
     ) => {
-      const currentFinding = client
-        ? await getFindingReference(id, workspaceId, client)
-        : finding
+      const currentFinding = client ? await getFindingReference(id, workspaceId, client) : finding
       if (
         !currentFinding ||
         currentFinding.targetId !== finding.targetId ||
@@ -75,46 +73,46 @@ async function post(request: Request, { params }: { params: Promise<{ id: string
           session,
         },
         async () => {
-        const proposal = await createFixProposal({
-          findingId: id,
-          workspaceId,
-          targetId: currentFinding.targetId ?? undefined,
-          requireActiveTarget: Boolean(principal),
-          ...(client ? { client } : {}),
-          summary,
-          ...(diffRef ? { diffRef } : {}),
-          ...(generatedByModel ? { generatedByModel } : {}),
-          ...(safetyScore != null ? { safetyScore } : {}),
-        })
-
-        // Supplied references remain supported for recording drafts; they do not
-        // establish generated provenance for PR execution (fix-pr-context checks it).
-        // WP3 producer: a proposal without a caller-supplied patch is enqueued for
-        // deterministic generation from the finding's engine-emitted structured
-        // fix. Best-effort — the proposal exists and can be regenerated; a queue
-        // outage must not fail the API response.
-        if (!diffRef) {
-          try {
-            await enqueueFixGenerate({ workspaceId, fixProposalId: proposal.id })
-          } catch (enqueueError) {
-            logger.error("Failed to enqueue fix generation (proposal remains draft)", {
-              fixProposalId: proposal.id,
-              error: enqueueError instanceof Error ? enqueueError.message : String(enqueueError),
-            })
-          }
-        }
-
-        await prisma.auditLog.create({
-          data: {
+          const proposal = await createFixProposal({
+            findingId: id,
             workspaceId,
-            actorUserId: session.userId,
-            action: "fix_proposal.created",
-            resourceType: "fix_proposal",
-            resourceId: proposal.id,
-          },
-        })
+            targetId: currentFinding.targetId ?? undefined,
+            requireActiveTarget: Boolean(principal),
+            ...(client ? { client } : {}),
+            summary,
+            ...(diffRef ? { diffRef } : {}),
+            ...(generatedByModel ? { generatedByModel } : {}),
+            ...(safetyScore != null ? { safetyScore } : {}),
+          })
 
-        return apiSuccess(proposal)
+          // Supplied references remain supported for recording drafts; they do not
+          // establish generated provenance for PR execution (fix-pr-context checks it).
+          // WP3 producer: a proposal without a caller-supplied patch is enqueued for
+          // deterministic generation from the finding's engine-emitted structured
+          // fix. Best-effort — the proposal exists and can be regenerated; a queue
+          // outage must not fail the API response.
+          if (!diffRef) {
+            try {
+              await enqueueFixGenerate({ workspaceId, fixProposalId: proposal.id })
+            } catch (enqueueError) {
+              logger.error("Failed to enqueue fix generation (proposal remains draft)", {
+                fixProposalId: proposal.id,
+                error: enqueueError instanceof Error ? enqueueError.message : String(enqueueError),
+              })
+            }
+          }
+
+          await prisma.auditLog.create({
+            data: {
+              workspaceId,
+              actorUserId: session.userId,
+              action: "fix_proposal.created",
+              resourceType: "fix_proposal",
+              resourceId: proposal.id,
+            },
+          })
+
+          return apiSuccess(proposal)
         }
       )
     }

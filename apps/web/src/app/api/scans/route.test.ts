@@ -2020,7 +2020,13 @@ describe("OAuth scan list scope", () => {
         authorizationVersion: 3,
         allTargets: true,
         allowedTargetIds: [],
-        scanIds: ["scan-proven", "scan-deleted", "scan-legacy", "scan-contradictory", "scan-foreign"],
+        scanIds: [
+          "scan-proven",
+          "scan-deleted",
+          "scan-legacy",
+          "scan-contradictory",
+          "scan-foreign",
+        ],
       },
       expect.any(Object)
     )

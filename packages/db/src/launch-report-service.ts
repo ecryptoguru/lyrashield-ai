@@ -115,23 +115,23 @@ export async function generateLaunchReport(
   } = { verdict: null, applicability: null }
   try {
     const read = async (tx: ScopedTransaction) => {
-        const selected = await tx.gateVerdict.findFirst({
-          where: {
-            workspaceId,
-            targetId,
-            target: { workspaceId, deletedAt: null },
-          },
-          // id tiebreaker for same-millisecond verdicts (see getLatestGateVerdict).
-          orderBy: [{ evaluatedAt: "desc" }, { id: "desc" }],
-        })
-        // Captured outside the callback so a later statement failure in this
-        // transaction still leaves the selected binding available.
-        selection.verdict = selected
-        if (!selected) return
-        selection.applicability = await evaluateVerdictApplicability(tx, workspaceId, selected, {
-          now: applicabilityCheckedAt,
-        })
-      }
+      const selected = await tx.gateVerdict.findFirst({
+        where: {
+          workspaceId,
+          targetId,
+          target: { workspaceId, deletedAt: null },
+        },
+        // id tiebreaker for same-millisecond verdicts (see getLatestGateVerdict).
+        orderBy: [{ evaluatedAt: "desc" }, { id: "desc" }],
+      })
+      // Captured outside the callback so a later statement failure in this
+      // transaction still leaves the selected binding available.
+      selection.verdict = selected
+      if (!selected) return
+      selection.applicability = await evaluateVerdictApplicability(tx, workspaceId, selected, {
+        now: applicabilityCheckedAt,
+      })
+    }
     if (opts.client) await read(opts.client)
     else
       await withWorkspaceRLS(
