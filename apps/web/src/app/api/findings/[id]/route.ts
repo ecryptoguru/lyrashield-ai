@@ -2,6 +2,7 @@ import { withCookieMutation } from "../../../../lib/api-auth"
 import {
   getFinding,
   getFindingReference,
+  withDelegatedReadAuthority,
   updateFindingStatus,
   markFalsePositive,
   acceptRisk,
@@ -15,7 +16,7 @@ import {
 } from "@lyrashield/db"
 import { PatchFindingSchema } from "@lyrashield/types"
 import { readEncryptedArtifact } from "@lyrashield/evidence-storage"
-import { requirePermission, resolveOAuthReadScope } from "@lyrashield/auth/server"
+import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS, type Permission } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
 import { authErrorResponse } from "../../../../lib/api-auth"
@@ -23,6 +24,10 @@ import { apiError, apiSuccess } from "../../../../lib/api-response"
 import { explainFinding } from "@/lib/plain-language"
 import { z } from "zod"
 import { revalidateDashboardAggregates } from "../../../../lib/cache"
+import {
+  delegatedReadPrincipal,
+  resolveDelegatedTargetReadScope,
+} from "../../../../lib/delegated-target-read-scope"
 
 const AdvisoryCvssSchema = z
   .object({
@@ -51,13 +56,15 @@ async function loadEvidenceInsights(
   findingId: string,
   workspaceId: string,
   originScanId: string,
-  observedInScanId?: string
+  observedInScanId?: string,
+  client?: Parameters<typeof getFinding>[3]
 ) {
+  const db = client ?? prisma
   // Candidate creation is the durable observation timestamp; use an explicit
   // tie-breaker and never infer recency from the origin finding's scan id.
   const latestObservation = observedInScanId
     ? null
-    : await prisma.findingCandidate.findFirst({
+    : await db.findingCandidate.findFirst({
         where: {
           findingId,
           workspaceId,
@@ -70,7 +77,7 @@ async function loadEvidenceInsights(
   const selectedScanId = observedInScanId ?? latestObservation?.scanId ?? originScanId
   const allowLegacy = !observedInScanId && selectedScanId === originScanId
   const latestContext = async (id: { startsWith: string } | { not: { startsWith: string } }) => {
-    const [row] = await prisma.evidence.findMany({
+    const [row] = await db.evidence.findMany({
       where: { findingId, id, type: "claim_context", finding: { workspaceId } },
       select: { storageUri: true, redactionStatus: true, checksum: true },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -136,7 +143,7 @@ async function loadEvidenceInsights(
     /^[a-f0-9]{64}$/.test(parsed.httpExchangeArtifactChecksum) &&
     (parsed.pendingHttpExchangeIds === undefined || pending.success)
   ) {
-    const stored = await prisma.scanResultManifest.findFirst({
+    const stored = await db.scanResultManifest.findFirst({
       where: { scanId: selectedScanId, scan: { workspaceId, deletedAt: null } },
       select: { manifest: true, checksum: true, checksumInput: true },
     })
@@ -203,46 +210,85 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       return apiError("INVALID_PARAM", "Invalid finding scope", 400)
     }
 
-    const { session } = await requirePermission(workspaceId, PERMISSIONS.finding.view)
-    const readScope = resolveOAuthReadScope(session, parsedScope.data.targetId)
+    const { session, workspace } = await requirePermission(workspaceId, PERMISSIONS.finding.view)
+    const principal = delegatedReadPrincipal(session, workspace)
+    const load = async (
+      client?: Parameters<typeof getFinding>[3],
+      authority?: {
+        targetId?: string
+        targetIds?: string[]
+        allowedProfiles: string[]
+      }
+    ) => {
+      const readScope = authority
+        ? {
+            ...(authority.targetId ? { targetId: authority.targetId } : {}),
+            ...(authority.targetIds !== undefined ? { targetIds: authority.targetIds } : {}),
+            allowedProfiles: authority.allowedProfiles,
+            requireActiveTarget: true,
+          }
+        : await resolveDelegatedTargetReadScope(session, workspace, parsedScope.data.targetId)
 
-    const scope = await validateFindingScope({ workspaceId, ...parsedScope.data, ...readScope })
-    if (!scope.available) {
-      return apiError("FINDING_NOT_FOUND", "Finding not found", 404)
+      const scope = client
+        ? await validateFindingScope({ workspaceId, ...parsedScope.data, ...readScope }, client)
+        : await validateFindingScope({ workspaceId, ...parsedScope.data, ...readScope })
+      if (!scope.available) {
+        return apiError("FINDING_NOT_FOUND", "Finding not found", 404)
+      }
+
+      const findingScope = { ...parsedScope.data, ...readScope }
+      const finding = client
+        ? await getFinding(id, workspaceId, findingScope, client)
+        : await getFinding(id, workspaceId, findingScope)
+      if (!finding) {
+        return apiError("FINDING_NOT_FOUND", "Finding not found", 404)
+      }
+      if (principal && !finding.targetId) {
+        return apiError("FINDING_NOT_FOUND", "Finding not found", 404)
+      }
+
+      const plainLanguage = explainFinding({
+        title: finding.title,
+        severity: finding.severity,
+        cwe: finding.cwe,
+        category: finding.category,
+        recommendedFix: finding.recommendedFix,
+      })
+
+      // Defense in depth: evidence rows must never leak their private storage
+      // URI to the dashboard, even if a future service layer returns one.
+      const safeEvidence = finding.evidence.map(({ id, type, redactionStatus }) => ({
+        id,
+        type,
+        redactionStatus,
+      }))
+
+      // Engine-declared insights are allowlist-projected from the encrypted
+      // claim_context artifact — private to the workspace, never part of public
+      // shares or exports.
+      const loadInsights = (activeClient?: Parameters<typeof getFinding>[3]) =>
+        loadEvidenceInsights(
+          finding.id,
+          workspaceId,
+          finding.scanId,
+          parsedScope.data.observedInScanId,
+          activeClient
+        )
+      const evidenceInsights = client ? await loadInsights(client) : await loadInsights()
+
+      return apiSuccess({ ...finding, evidence: safeEvidence, evidenceInsights, plainLanguage })
     }
 
-    const finding = await getFinding(id, workspaceId, { ...parsedScope.data, ...readScope })
-    if (!finding) {
-      return apiError("FINDING_NOT_FOUND", "Finding not found", 404)
+    if (principal) {
+      return await withDelegatedReadAuthority(
+        {
+          ...principal,
+          ...(parsedScope.data.targetId ? { targetId: parsedScope.data.targetId } : {}),
+        },
+        (tx, authority) => load(tx, authority)
+      )
     }
-
-    const plainLanguage = explainFinding({
-      title: finding.title,
-      severity: finding.severity,
-      cwe: finding.cwe,
-      category: finding.category,
-      recommendedFix: finding.recommendedFix,
-    })
-
-    // Defense in depth: evidence rows must never leak their private storage
-    // URI to the dashboard, even if a future service layer returns one.
-    const safeEvidence = finding.evidence.map(({ id, type, redactionStatus }) => ({
-      id,
-      type,
-      redactionStatus,
-    }))
-
-    // Engine-declared insights are allowlist-projected from the encrypted
-    // claim_context artifact — private to the workspace, never part of public
-    // shares or exports.
-    const evidenceInsights = await loadEvidenceInsights(
-      finding.id,
-      workspaceId,
-      finding.scanId,
-      parsedScope.data.observedInScanId
-    )
-
-    return apiSuccess({ ...finding, evidence: safeEvidence, evidenceInsights, plainLanguage })
+    return await load()
   } catch (error) {
     const authErr = authErrorResponse(error)
     if (authErr) return authErr

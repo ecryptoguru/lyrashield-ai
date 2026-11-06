@@ -374,6 +374,32 @@ describe("exact AI triage result cache", () => {
     ])
   })
 
+  it("misses a populated cache when only engineRevision changes", async () => {
+    const redis = new FakeRedis()
+    const cache = createAiResultCache({ redis, secret: "k".repeat(32), mode: "enforce" })
+    const value = descriptor()
+    expect(await cache.store(value, artifact(), completeUsage())).toBe(true)
+    expect((await cache.lookup(value)).outcome).toBe("hit")
+
+    const changed = await cache.lookup({ ...value, engineRevision: "f".repeat(40) })
+
+    expect(changed.outcome).toBe("miss")
+    expect(changed.artifact).toBeUndefined()
+  })
+
+  it("neither reuses nor replaces a populated cache when caching is off", async () => {
+    const redis = new FakeRedis()
+    const value = descriptor()
+    const enabled = createAiResultCache({ redis, secret: "k".repeat(32), mode: "enforce" })
+    expect(await enabled.store(value, artifact(), completeUsage())).toBe(true)
+    const before = [...redis.values.entries()]
+    const disabled = createAiResultCache({ redis, secret: "k".repeat(32), mode: "off" })
+
+    expect((await disabled.lookup(value)).outcome).toBe("disabled")
+    expect(await disabled.store(value, artifact(), completeUsage())).toBe(false)
+    expect([...redis.values.entries()]).toEqual(before)
+  })
+
   it("misses when any ownership, source, evidence, model, or policy identity changes", async () => {
     const redis = new FakeRedis()
     const cache = createAiResultCache({ redis, secret: "k".repeat(32), mode: "enforce" })

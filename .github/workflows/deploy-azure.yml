@@ -22,11 +22,20 @@ on:
         required: false
         default: ""
         type: string
+      qualified_release_digest:
+        required: false
+        default: ""
+        type: string
   workflow_dispatch:
     inputs:
       source_sha:
         description: Current main SHA to deploy
         required: true
+        type: string
+      qualified_release_digest:
+        description: Optional protected paired-release record digest
+        required: false
+        default: ""
         type: string
 concurrency:
   group: deploy-azure-${{ vars.AZURE_RESOURCE_GROUP || 'production' }}-${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
@@ -90,6 +99,7 @@ jobs:
       actions: read
       contents: read
       id-token: write
+      packages: read
     steps:
       - name: Checkout exact deployment source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -121,6 +131,26 @@ jobs:
 
       - name: Ensure Container Apps extension
         run: az extension add --name containerapp --yes --only-show-errors
+
+      - name: Authenticate qualified rollback image reads
+        if: inputs.qualified_release_digest != ''
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ github.token }}
+
+      - name: Preflight protected paired release
+        if: inputs.qualified_release_digest != ''
+        env:
+          APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
+          EGRESS_NAME: ${{ vars.AZURE_EGRESS_PROXY_CONTAINER_APP_NAME }}
+          GH_TOKEN: ${{ github.token }}
+          PAIRED_JOB_WORKFLOW: .github/workflows/deploy-azure.yml
+          PAIRED_QUALIFIED_RELEASE_SHA256: ${{ inputs.qualified_release_digest }}
+          RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+          SCANNER_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
+        run: node .github/scripts/paired-runtime-workflow.mjs preflight
 
       - name: Block automatic retry of incomplete v26 maintenance
         env:
@@ -656,6 +686,7 @@ jobs:
       worker_digest: ${{ needs.resolve-images.outputs.worker_digest }}
       egress_proxy_image: ${{ needs.resolve-images.outputs.egress_proxy_image }}
       egress_proxy_digest: ${{ needs.resolve-images.outputs.egress_proxy_digest }}
+      qualified_release_digest: ${{ inputs.qualified_release_digest }}
     secrets: inherit
 
   verify-held-recovery-outcome:

@@ -9,7 +9,9 @@ import {
 async function reportTargetWhere(
   tx: ScopedTransaction,
   workspaceId: string,
-  targetIds: string[]
+  targetIds: string[],
+  requireActiveTarget = false,
+  allowedProfiles?: string[]
 ): Promise<Prisma.ReportWhereInput> {
   const bindings = await tx.report.findMany({
     where: { workspaceId, deletedAt: null, scanId: null, type: "launch_readiness" },
@@ -24,6 +26,7 @@ async function reportTargetWhere(
         where: {
           workspaceId,
           targetId: { in: targetIds },
+          ...(requireActiveTarget ? { target: { workspaceId, deletedAt: null } } : {}),
           id: { in: [...new Set(parsed.map((row) => row.provenance.gateVerdictId))] },
         },
         select: { id: true, verdictChecksum: true },
@@ -35,7 +38,15 @@ async function reportTargetWhere(
     .map((row) => row.id)
   return {
     OR: [
-      { scan: { workspaceId, deletedAt: null, targetId: { in: targetIds } } },
+      {
+        scan: {
+          workspaceId,
+          deletedAt: null,
+          targetId: { in: targetIds },
+          ...(requireActiveTarget ? { target: { workspaceId, deletedAt: null } } : {}),
+          ...(allowedProfiles !== undefined ? { mode: { in: allowedProfiles as never[] } } : {}),
+        },
+      },
       { id: { in: ids }, scanId: null, type: "launch_readiness" },
     ],
   }
@@ -90,7 +101,10 @@ export async function listReports(
   workspaceId: string,
   cursor?: string,
   limit?: number,
-  targetIds?: string[]
+  targetIds?: string[],
+  requireActiveTarget = false,
+  client?: ScopedTransaction,
+  allowedProfiles?: string[]
 ): Promise<{
   items: ReportListItem[]
   nextCursor: string | null
@@ -100,9 +114,11 @@ export async function listReports(
 
   // "Report" is under FORCE ROW LEVEL SECURITY, so the transaction-local context
   // is the isolation boundary — the workspaceId predicate alone is not.
-  const reports = await withWorkspaceRLS(workspaceId, async (tx) => {
+  const read = async (tx: ScopedTransaction) => {
     const targetWhere =
-      targetIds !== undefined ? await reportTargetWhere(tx, workspaceId, targetIds) : {}
+      targetIds !== undefined
+        ? await reportTargetWhere(tx, workspaceId, targetIds, requireActiveTarget, allowedProfiles)
+        : {}
     return tx.report.findMany({
       where: { workspaceId, deletedAt: null, ...targetWhere },
       orderBy: { createdAt: "desc" },
@@ -110,7 +126,8 @@ export async function listReports(
       ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
       select: REPORT_LIST_SELECT,
     })
-  })
+  }
+  const reports = client ? await read(client) : await withWorkspaceRLS(workspaceId, read)
 
   const hasMore = reports.length > lim
   const rows = hasMore ? reports.slice(0, lim) : reports

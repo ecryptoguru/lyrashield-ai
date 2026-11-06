@@ -1027,6 +1027,63 @@ describe.skipIf(!enabled)("agent-minute metering against disposable PostgreSQL",
     ).toMatchObject({ state: "RUNNING", fundedMinutes: 2 })
   })
 
+  it.each([1, 2])(
+    "serializes concurrent paid admission and stale retry writes for accounting %i",
+    async (version) => {
+      const f = await fixture(12)
+      const { reserveScanCapacity, resetUnstartedScanCapacity } = await import("./capacity")
+      if (version === 2) await enableCapacity(f)
+      else await owner.scan.update({ where: { id: f.scanId }, data: { accountingVersion: 1 } })
+      const startedAt = new Date()
+      await owner.scan.update({ where: { id: f.scanId }, data: { startedAt } })
+      const claim = (workspaceId: string) =>
+        version === 2
+          ? reserveScanCapacity({
+              workspaceId,
+              scanId: f.scanId,
+              maxRuntimeMs: 60_000,
+              start: true,
+              claimBillable: true,
+            })
+          : db.runWithWorkspaceContext(workspaceId, () =>
+              db.addScanEvent(f.scanId, "billable_boundary", "info", "claim")
+            )
+      await expect(claim(f.workspaceIds[1]!)).rejects.toThrow()
+      const results = await Promise.allSettled(
+        Array.from({ length: 4 }, () => claim(f.workspaceId))
+      )
+      expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1)
+      expect(
+        await owner.scanEvent.count({ where: { scanId: f.scanId, stage: "billable_boundary" } })
+      ).toBe(1)
+      await expect(
+        db.updateUnclaimedScanStatus(f.scanId, "PREFLIGHT", undefined, f.workspaceId)
+      ).rejects.toThrow(/claim/)
+      await expect(
+        db.requeueScanForRetry({
+          workspaceId: f.workspaceId,
+          scanId: f.scanId,
+          attempt: 1,
+          maxAttempts: 3,
+        })
+      ).rejects.toThrow(/claim/)
+      await owner.scan.update({ where: { id: f.scanId }, data: { status: "QUEUED" } }) // Retained historical stale row.
+      await resetUnstartedScanCapacity(f.workspaceId, f.scanId)
+      expect((await owner.scan.findUniqueOrThrow({ where: { id: f.scanId } })).startedAt).toEqual(
+        startedAt
+      )
+      if (version === 2) {
+        const reservation = await owner.scanCapacityReservation.findUniqueOrThrow({
+          where: { scanId: f.scanId },
+        })
+        expect(reservation.state).toBe("RUNNING")
+        expect(reservation.fundedMinutes).toBeGreaterThan(0)
+        expect(reservation.stoppedAt).toBeNull()
+      }
+      await expect(claim(f.workspaceId)).rejects.toThrow()
+    }
+  )
+
   it("settles concurrent phases across workspaces against one account and retries real serialization contention", async () => {
     const f = await fixture(5, 20)
     const entered = deferred()

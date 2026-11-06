@@ -114,6 +114,26 @@
       "reason": "Shared Next.js TypeScript template consumed by the web workspace, which declares next; config package does not run Next.js."
     },
     {
+      "id": "packages/db/src/delegated-scan-provenance.ts:exports:resolveDelegatedScanOperation",
+      "reason": "Transaction-scoped delegated admission preflight retained with the Task 4 provenance module; scan creation currently revalidates inside bindDelegatedScanProvenance, so the helper has no caller yet."
+    },
+    {
+      "id": "packages/db/src/scan-dispatch-authority-broker.ts:exports:ScanDispatchAuthorityError",
+      "reason": "Broker's public error type for callers; the durable dispatch authority broker is intentionally closed and unconsumed until Task 6 runtime integration, so no production importer exists yet."
+    },
+    {
+      "id": "packages/db/src/scan-supervisor-receipt-verifier.ts:exports:SUPERVISOR_RECEIPT_CANONICAL_FIELDS",
+      "reason": "Signed-receipt protocol field list reserved for the pending supervisor mirroring service; the verifier is intentionally unconsumed until that integration lands."
+    },
+    {
+      "id": "packages/db/src/scan-supervisor-receipt-verifier.ts:exports:SUPERVISOR_RECEIPT_DOMAIN",
+      "reason": "Signed-receipt protocol domain reserved for the pending supervisor mirroring service; the verifier is intentionally unconsumed until that integration lands."
+    },
+    {
+      "id": "packages/db/src/scan-supervisor-receipt-verifier.ts:exports:SUPERVISOR_RECEIPT_VERSION",
+      "reason": "Signed-receipt version exported for the pending supervisor mirroring service (also used internally for validation); no production importer exists yet."
+    },
+    {
       "id": "packages/egress-proxy/src/relay.test.ts:binaries:openssl",
       "reason": "External system executable prerequisite; intentionally not installed as an npm dependency."
     }

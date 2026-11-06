@@ -159,6 +159,58 @@ const validQuery = {
 }
 
 describe("GET /api/scans/eligibility", () => {
+  it("accepts a positive operator ceiling for a repository review and keeps policy amounts private", async () => {
+    vi.mocked(prisma.policy.findFirst).mockResolvedValueOnce({
+      id: "p",
+      maxBudgetUsd: { toNumber: () => 0.47 },
+    } as never)
+    const response = await GET(request({ ...validQuery, engineBudgetCeilingUsd: "1" }))
+    const { data } = await response.json()
+    expect(data.allowed).toBe(true)
+    expect(JSON.stringify(data)).not.toContain("0.47")
+  })
+
+  it.each(["REPO", "WEB_APP"])(
+    "checks engine capability against zero policy on %s",
+    async (type) => {
+      vi.mocked(prisma.target.findFirst).mockResolvedValueOnce({
+        id: "target-1",
+        type,
+        url: "https://app.example.com",
+      } as never)
+      vi.mocked(prisma.policy.findFirst).mockResolvedValueOnce({
+        id: "p",
+        maxBudgetUsd: { toNumber: () => 0 },
+      } as never)
+      const response = await GET(
+        request({ ...validQuery, ...(type === "REPO" ? { engineBudgetCeilingUsd: "1" } : {}) })
+      )
+      const { data } = await response.json()
+      expect(response.status).toBe(200)
+      if (type === "REPO") {
+        expect(data.allowed).toBe(false)
+        expect(data.blockers).toContainEqual({
+          code: "SCAN_PLAN_INVALID",
+          message: expect.stringMatching(/engine spending is disabled/i),
+        })
+      } else expect(data.allowed).toBe(true)
+    }
+  )
+
+  it.each(["0", "-1", "NaN", "Infinity", ""])(
+    "rejects invalid requested engine ceiling %s",
+    async (value) => {
+      expect((await GET(request({ ...validQuery, engineBudgetCeilingUsd: value }))).status).toBe(
+        400
+      )
+    }
+  )
+  it("rejects duplicate request ceilings instead of selecting the last amount", async () => {
+    const params = new URLSearchParams({ ...validQuery, engineBudgetCeilingUsd: "1" })
+    params.append("engineBudgetCeilingUsd", "2")
+    expect((await GET(request(params))).status).toBe(400)
+  })
+
   beforeEach(() => {
     vi.clearAllMocks()
     configMocks.authAssessment.enabled = "0"

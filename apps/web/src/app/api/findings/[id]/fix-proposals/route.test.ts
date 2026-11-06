@@ -17,6 +17,10 @@ vi.mock("@lyrashield/db", () => ({
   getFindingReference: mocks.getFindingReference,
   createFixProposal: mocks.createFixProposal,
   prisma: { auditLog: { create: mocks.auditCreate } },
+  withDelegatedReadAuthority: async (
+    _params: unknown,
+    run: (tx: unknown, authority: { targetId: string; allowedProfiles: string[] }) => unknown
+  ) => run({}, { targetId: "target-1", allowedProfiles: ["STANDARD"] }),
 }))
 vi.mock("@lyrashield/integrations", () => ({ enqueueFixGenerate: vi.fn() }))
 vi.mock("@/lib/recorded-operation", () => ({
@@ -24,6 +28,24 @@ vi.mock("@/lib/recorded-operation", () => ({
     operation(),
 }))
 vi.mock("@lyrashield/logger", () => ({ logger: { error: vi.fn() } }))
+vi.mock("@/lib/delegated-target-read-scope", () => ({
+  delegatedReadPrincipal: (session: {
+    userId?: string
+    oauth?: { connectionId?: string; authorizationVersion?: number }
+  }) =>
+    session.oauth?.connectionId
+      ? {
+          workspaceId: "workspace-1",
+          userId: session.userId ?? "user-1",
+          memberId: "member-1",
+          memberRole: "OWNER",
+          memberUpdatedAt: new Date("2026-11-05T10:00:00Z"),
+          connectionId: session.oauth.connectionId,
+          authorizationVersion: session.oauth.authorizationVersion ?? 2,
+        }
+      : null,
+  resolveDelegatedTargetReadScope: vi.fn().mockResolvedValue({}),
+}))
 
 import { POST } from "./route"
 
@@ -46,7 +68,11 @@ describe("POST /api/findings/[id]/fix-proposals", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.requirePermission.mockResolvedValue({ session: { userId: "user-1" } })
-    mocks.getFindingReference.mockResolvedValue({ id: "finding-1", targetId: "target-1" })
+    mocks.getFindingReference.mockResolvedValue({
+      id: "finding-1",
+      targetId: "target-1",
+      scan: { mode: "STANDARD" },
+    })
     mocks.createFixProposal.mockResolvedValue({ id: "proposal-1" })
     mocks.auditCreate.mockResolvedValue({})
   })
@@ -62,6 +88,8 @@ describe("POST /api/findings/[id]/fix-proposals", () => {
     expect(mocks.createFixProposal).toHaveBeenCalledWith({
       findingId: "finding-1",
       workspaceId: "workspace-1",
+      targetId: "target-1",
+      requireActiveTarget: false,
       summary: "Apply the validated security fix",
       diffRef: "artifact-ref",
     })

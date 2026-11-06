@@ -8,6 +8,7 @@ import {
   getFindingReference,
   prisma,
   updateScanStatus,
+  withDelegatedReadAuthority,
 } from "@lyrashield/db"
 import { type ScanMode, resolveTargetScanMode } from "@lyrashield/types"
 import { assertOAuthDelegatedScope, requirePermission } from "@lyrashield/auth/server"
@@ -29,6 +30,10 @@ import {
   checkScanCreateRateLimit,
   clientIpFromRequest,
 } from "../../../../../lib/rate-limit"
+import {
+  delegatedReadPrincipal,
+  resolveDelegatedTargetReadScope,
+} from "../../../../../lib/delegated-target-read-scope"
 import {
   resolveSponsorScanPlan,
   resolveAvailableUrlReview,
@@ -164,6 +169,110 @@ async function checkRetestAvailability(
   return null
 }
 
+async function createRetestRecords(params: {
+  workspaceId: string
+  findingId: string
+  findingScanId: string
+  sourceScan: {
+    id: string
+    targetId: string | null
+    goal: string
+    mode: ScanMode
+    policyId: string | null
+  }
+  retestTargetId: string
+  retestProfile: ReturnType<typeof resolveRetestProfile>
+  session: Awaited<ReturnType<typeof requirePermission>>["session"]
+  admission?: { operationId: string; admissionProof: string }
+  client?: Parameters<typeof createScan>[1]
+}) {
+  let lockedSourceScan = params.sourceScan
+  if (params.client) {
+    const lockedFinding = await getFindingReference(
+      params.findingId,
+      params.workspaceId,
+      params.client
+    )
+    if (
+      !lockedFinding ||
+      lockedFinding.targetId !== params.retestTargetId ||
+      lockedFinding.scan.mode !== params.sourceScan.mode
+    ) {
+      throw new Error("FORBIDDEN")
+    }
+    const currentSourceScan = await params.client.scan.findFirst({
+      where: {
+        id: params.findingScanId,
+        workspaceId: params.workspaceId,
+        targetId: params.retestTargetId,
+        deletedAt: null,
+        target: { workspaceId: params.workspaceId, deletedAt: null },
+      },
+      select: { id: true, targetId: true, goal: true, mode: true, policyId: true },
+    })
+    if (!currentSourceScan?.targetId || currentSourceScan.mode !== params.sourceScan.mode) {
+      throw new Error("FORBIDDEN")
+    }
+    lockedSourceScan = currentSourceScan
+  }
+
+  const scanInput = {
+    workspaceId: params.workspaceId,
+    targetId: params.retestTargetId,
+    goal: lockedSourceScan.goal,
+    mode: params.retestProfile.mode as ScanMode,
+    policyId: lockedSourceScan.policyId ?? undefined,
+    createdById: params.session.userId,
+    triggerType: "retest",
+    determinismMode: params.retestProfile.determinismMode,
+    ...(params.session.oauth?.connectionId && params.session.oauth.authorizationVersion
+      ? {
+          delegatedConnection: {
+            connectionId: params.session.oauth.connectionId,
+            authorizationVersion: params.session.oauth.authorizationVersion,
+          },
+          ...(params.admission
+            ? {
+                delegatedOperation: {
+                  ...params.admission,
+                  operationName: "retest.create" as const,
+                  connectionId: params.session.oauth.connectionId,
+                  authorizationVersion: params.session.oauth.authorizationVersion,
+                },
+              }
+            : {}),
+        }
+      : {}),
+  }
+  const scan = params.client
+    ? await createScan(scanInput, params.client)
+    : await createScan(scanInput)
+
+  let retest: { id: string }
+  const retestData = {
+    workspaceId: params.workspaceId,
+    findingId: params.findingId,
+    scanId: scan.id,
+    status: "pending",
+    resultBefore: params.retestProfile.reason,
+  }
+  try {
+    retest = params.client
+      ? await params.client.retest.create({ data: retestData })
+      : await prisma.retest.create({ data: retestData })
+  } catch (error) {
+    if (!params.client) {
+      await updateScanStatus(scan.id, "FAILED", {
+        errorCategory: "RETEST_SETUP",
+        errorMessage: "Retest could not be prepared before queueing",
+      })
+      await releaseUnstartedScanSlot(params.workspaceId, scan.id)
+    }
+    throw error
+  }
+  return { scan, retest }
+}
+
 async function post(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
 
@@ -177,17 +286,17 @@ async function post(request: Request, { params }: { params: Promise<{ id: string
 
     const { workspaceId } = parsed.data
 
-    const { session } = await requirePermission(workspaceId, PERMISSIONS.retest.create)
+    const { session, workspace } = await requirePermission(workspaceId, PERMISSIONS.retest.create)
 
     const finding = await getFindingReference(id, workspaceId)
     if (!finding) {
       return apiError("FINDING_NOT_FOUND", "Finding not found", 404)
     }
 
-    if (!finding.targetId) {
-      return apiError("RETEST_UNAVAILABLE", "This finding has no target to retest", 409)
-    }
+    if (!finding.targetId) return apiError("RETEST_UNAVAILABLE", "No target", 409)
+    await resolveDelegatedTargetReadScope(session, workspace, finding.targetId)
     assertOAuthDelegatedScope(session, finding.targetId)
+    const principal = delegatedReadPrincipal(session, workspace)
 
     const sourceScan = await prisma.scan.findFirst({
       where: { id: finding.scanId, workspaceId, targetId: finding.targetId, deletedAt: null },
@@ -241,7 +350,7 @@ async function post(request: Request, { params }: { params: Promise<{ id: string
         input: { ...parsed.data, findingId: id },
         session,
       },
-      async ({ confirmNotSubmitted }) => {
+      async ({ confirmNotSubmitted, admission }) => {
         assertOAuthDelegatedScope(session, finding.targetId, retestProfile.mode)
         const admissionError = await checkRetestAdmission({
           request,
@@ -260,62 +369,58 @@ async function post(request: Request, { params }: { params: Promise<{ id: string
         )
         if (availabilityError) return availabilityError
 
-        let scan: Awaited<ReturnType<typeof createScan>>
+        let prepared: Awaited<ReturnType<typeof createRetestRecords>>
         try {
-          scan = await createScan({
-            workspaceId,
-            targetId: retestTargetId,
-            goal: sourceScan.goal,
-            mode: retestProfile.mode as ScanMode,
-            policyId: sourceScan.policyId ?? undefined,
-            createdById: session.userId,
-            triggerType: "retest",
-            determinismMode: retestProfile.determinismMode,
-            // W0.4 — bind the delegated grant verified synchronously above into
-            // the durable scan record so execution-time admission re-checks it.
-            ...(session.oauth?.connectionId && session.oauth.authorizationVersion
-              ? {
-                  delegatedConnection: {
-                    connectionId: session.oauth.connectionId,
-                    authorizationVersion: session.oauth.authorizationVersion,
-                  },
+          prepared = principal
+            ? await withDelegatedReadAuthority(
+                {
+                  ...principal,
+                  targetId: retestTargetId,
+                  requiredOperation: "retest.create",
+                  requiredProfile: retestProfile.mode,
+                },
+                async (tx, authority) => {
+                  if (!authority.targetId) throw new Error("FORBIDDEN")
+                  return createRetestRecords({
+                    workspaceId,
+                    findingId: id,
+                    findingScanId: finding.scanId,
+                    sourceScan,
+                    retestTargetId,
+                    retestProfile,
+                    session,
+                    admission,
+                    client: tx,
+                  })
                 }
-              : {}),
-          })
+              )
+            : await createRetestRecords({
+                workspaceId,
+                findingId: id,
+                findingScanId: finding.scanId,
+                sourceScan,
+                retestTargetId,
+                retestProfile,
+                session,
+                admission,
+              })
         } catch (error) {
+          confirmNotSubmitted()
           const response = retestCreationError(error, confirmNotSubmitted)
           if (response) return response
           throw error
         }
 
-        let retest: { id: string }
-        try {
-          retest = await prisma.retest.create({
-            data: {
-              workspaceId,
-              findingId: id,
-              scanId: scan.id,
-              status: "pending",
-              resultBefore: retestProfile.reason,
-            },
-          })
-        } catch (error) {
-          await updateScanStatus(scan.id, "FAILED", {
-            errorCategory: "RETEST_SETUP",
-            errorMessage: "Retest could not be prepared before queueing",
-          })
-          await releaseUnstartedScanSlot(workspaceId, scan.id)
-          throw error
-        }
+        const { scan, retest } = prepared
 
         try {
           await enqueueScanJob({
             scanId: scan.id,
             workspaceId,
             targetId: retestTargetId,
-            goal: sourceScan.goal,
+            goal: scan.goal,
             mode: retestProfile.mode as ScanMode,
-            policyId: sourceScan.policyId ?? undefined,
+            policyId: scan.policyId ?? undefined,
           })
         } catch (enqueueError) {
           await updateScanStatus(scan.id, "FAILED", {

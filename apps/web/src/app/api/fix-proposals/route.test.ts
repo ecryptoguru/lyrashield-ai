@@ -10,6 +10,34 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@lyrashield/db", () => ({
   listFixProposals: mocks.listFixProposals,
   validateFindingScope: mocks.validateFindingScope,
+  withDelegatedReadAuthority: async (
+    params: {
+      targetId?: string
+      allTargets?: boolean
+      allowedTargetIds?: string[]
+    },
+    run: (
+      tx: unknown,
+      authority: { targetId?: string; targetIds?: string[]; allowedProfiles: string[] }
+    ) => unknown
+  ) => {
+    if (
+      params.targetId &&
+      !params.allTargets &&
+      !params.allowedTargetIds?.includes(params.targetId)
+    ) {
+      throw new Error("FORBIDDEN")
+    }
+    return run(
+      {},
+      {
+        ...(params.targetId
+          ? { targetId: params.targetId }
+          : { targetIds: params.allowedTargetIds ?? [] }),
+        allowedProfiles: ["SAFE", "STANDARD", "QUICK"],
+      }
+    )
+  },
 }))
 vi.mock("@lyrashield/auth/server", () => ({
   resolveOAuthReadScope,
@@ -17,6 +45,29 @@ vi.mock("@lyrashield/auth/server", () => ({
 }))
 vi.mock("@lyrashield/auth", () => ({ PERMISSIONS: { finding: { view: "finding:view" } } }))
 vi.mock("@lyrashield/logger", () => ({ setRequestId: vi.fn(), logger: { error: vi.fn() } }))
+vi.mock("../../../lib/delegated-target-read-scope", () => ({
+  delegatedReadPrincipal: (session: {
+    userId?: string
+    oauth?: {
+      connectionId?: string
+      allTargets?: boolean
+      allowedTargetIds?: string[]
+    }
+  }) =>
+    session.oauth?.connectionId
+      ? {
+          workspaceId: "ws-1",
+          userId: session.userId ?? "user-1",
+          memberId: "member-1",
+          memberRole: "OWNER",
+          memberUpdatedAt: new Date("2026-11-05T10:00:00Z"),
+          connectionId: session.oauth.connectionId,
+          authorizationVersion: 2,
+          allTargets: session.oauth.allTargets,
+          allowedTargetIds: session.oauth.allowedTargetIds ?? [],
+        }
+      : null,
+}))
 
 import { GET } from "./route"
 import { expectPermissionDenied } from "@/__tests__/route-permission-manifest"
@@ -130,7 +181,8 @@ describe("OAuth proposal read scope", () => {
         targetIds: ["target-1"],
         findingId: "finding-2",
         cursor: "proposal-1",
-      })
+      }),
+      expect.any(Object)
     )
   })
 })

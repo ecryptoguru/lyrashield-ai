@@ -28,7 +28,7 @@ vi.mock("@lyrashield/db", () => ({
   CANONICAL_OPERATIONS: { SCAN_CREATE: "scan.create", RETEST_CREATE: "retest.create" },
   prisma: mocks.prisma,
   runWithAccountContext: mocks.runWithAccountContext,
-  updateScanStatus: mocks.updateScanStatus,
+  updateUnclaimedScanStatus: mocks.updateScanStatus,
   resolveAuthenticatedAssessmentAuthorization: mocks.resolveAuthenticatedAssessmentAuthorization,
   LiveAiSafetyError: class LiveAiSafetyError extends Error {
     readonly code: string
@@ -314,6 +314,31 @@ describe("verifyScanAdmission", () => {
         ok: false,
         result: { errorCategory: "SCAN_PLAN_LIMITS_EXCEEDED" },
       })
+    })
+
+    it("denies a queued fixed-budget assessment if the assigned policy is tightened", async () => {
+      const plan = buildScanExecutionPlan({
+        targetType: "API",
+        mode: "DEEP",
+        workflow: "AUTHENTICATED_ASSESSMENT",
+        authorizationRef: "scope",
+      })
+      const policy = { maxBudgetUsd: { toNumber: () => 1 } }
+      await expect(
+        verifyScanAdmission(
+          params({
+            executionPlan: plan,
+            targetType: "API",
+            currentPolicy: policy as never,
+            authAssessmentPermitted: true,
+          })
+        )
+      ).resolves.toMatchObject({
+        ok: false,
+        result: { errorCategory: "SCAN_PLAN_LIMITS_EXCEEDED" },
+      })
+      expect(mocks.resolveAuthenticatedAssessmentAuthorization).not.toHaveBeenCalled()
+      expect(mocks.evaluateScanEntitlement).not.toHaveBeenCalled()
     })
 
     it("denies AUTHENTICATED_ASSESSMENT when the current policy allows destructive tests", async () => {

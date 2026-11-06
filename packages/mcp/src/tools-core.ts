@@ -403,6 +403,85 @@ export function createGetScanEligibilityTool(context: ToolHandlerContext): McpTo
   }
 }
 
+export function createGetSetupHealthTool(context: ToolHandlerContext): McpTool {
+  return {
+    name: "lyrashield_get_setup_health",
+    mutating: false,
+    description:
+      "Read the versioned, cross-client setup-health snapshot for a proposed review. The result uses the same server-owned reason and recovery codes as the web app and CLI. It is advisory and performs no scan, billing, provider, queue or audit mutation; scan creation revalidates all checks.",
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        workspaceId: { type: "string", description: "Workspace ID" },
+        targetId: { type: "string", description: "Existing target ID" },
+        goal: {
+          type: "string",
+          enum: [
+            "CHECK_PR",
+            "TEST_APP",
+            "LAUNCH_REVIEW",
+            "WEEKLY_MONITOR",
+            "FULL_PENTEST",
+            "COMPLIANCE_REVIEW",
+          ],
+          description: "Review intent. Default TEST_APP.",
+        },
+        mode: {
+          type: "string",
+          enum: ["SAFE", "QUICK", "STANDARD", "DEEP", "CUSTOM"],
+          description: "Review depth. Default STANDARD.",
+        },
+        policyId: { type: "string", description: "Optional workspace policy ID" },
+        engineBudgetCeilingUsd: {
+          type: "number",
+          exclusiveMinimum: 0,
+          description: "Optional operator engine-spend ceiling in USD",
+        },
+        ...WORKFLOW_INPUT_PROPERTIES,
+      },
+      required: ["workspaceId", "targetId"],
+    },
+    handler: async (args: Record<string, unknown>) => {
+      try {
+        if (typeof args.workspaceId !== "string" || !args.workspaceId) {
+          throw new Error("workspaceId is required")
+        }
+        if (typeof args.targetId !== "string" || !args.targetId) {
+          throw new Error("targetId is required")
+        }
+        const fields = workflowInputFields(args)
+        const params = new URLSearchParams()
+        params.set("workspaceId", args.workspaceId)
+        params.set("targetId", args.targetId)
+        params.set("goal", typeof args.goal === "string" && args.goal ? args.goal : "TEST_APP")
+        params.set("mode", typeof args.mode === "string" && args.mode ? args.mode : "STANDARD")
+        if (typeof args.policyId === "string" && args.policyId)
+          params.set("policyId", args.policyId)
+        if (typeof args.engineBudgetCeilingUsd === "number") {
+          params.set("engineBudgetCeilingUsd", String(args.engineBudgetCeilingUsd))
+        }
+        const workflow = fields.workflow as string | undefined
+        const baseRef = fields.baseRef as string | undefined
+        const headRef = fields.headRef as string | undefined
+        const attachmentIds = fields.attachmentIds as string[] | undefined
+        const authorizationRef = fields.authorizationRef as string | undefined
+        if (workflow) params.set("workflow", workflow)
+        if (baseRef) params.set("baseRef", baseRef)
+        if (headRef) params.set("headRef", headRef)
+        if (authorizationRef) params.set("authorizationRef", authorizationRef)
+        for (const id of attachmentIds ?? []) params.append("attachmentIds", id)
+        const data = await apiCall(context, "GET", `/api/v1/setup-health?${params.toString()}`)
+        return makeToolResult(data)
+      } catch (err) {
+        return makeErrorResult(
+          err instanceof Error ? err.message : "Failed to evaluate setup health"
+        )
+      }
+    },
+  }
+}
+
 export function createGetScanQualityTool(context: ToolHandlerContext): McpTool {
   return {
     name: "lyrashield_get_scan_quality",

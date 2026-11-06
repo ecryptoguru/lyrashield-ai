@@ -1,6 +1,6 @@
 import { targetReadScopeWhere, type ListScansParams } from "./read-query-scope"
 export type { ListScansParams } from "./read-query-scope"
-import type { CreateScanParams } from "./scan-service-types"
+import type { CreateScanParams, ScanTransaction } from "./scan-service-types"
 export type { CreateScanParams } from "./scan-service-types"
 export { WorkspaceScanConcurrencyLimitError, lockWorkspaceScanAdmission } from "./scan-slot"
 import { createScanCapacity, readScanCapacity, type ScanCapacityProjection } from "./scan-capacity"
@@ -9,6 +9,7 @@ import { Prisma } from "./generated/prisma"
 import type {
   Scan,
   ScanEvent,
+  ScanMode,
   ScanStatus,
   ScanResultManifest,
   ScanCoverageReceipt,
@@ -16,14 +17,14 @@ import type {
 } from "./generated/prisma"
 import { logger } from "@lyrashield/logger"
 import {
-  buildScanExecutionPlan,
   DeterminismModeSchema,
   MAX_CONCURRENT_WORKSPACE_SCANS,
   ScanIdSchema,
 } from "@lyrashield/types"
-import { computeScanExecutionPlanHash } from "./scan-execution-plan"
+import { buildAdmittedScanPlan, computeScanExecutionPlanHash } from "./scan-execution-plan"
 import { isTerminalScanStatus, isValidTransition } from "./scan-transitions"
-import { withWorkspaceRLS } from "./rls"
+import { insertScanBillableClaim, requireUnclaimedScan } from "./scan-billable-claim"
+import { withWorkspaceRLS, type ScopedTransaction } from "./rls"
 import {
   releaseUnstartedScanSlot,
   lockUserScanAdmission,
@@ -32,6 +33,7 @@ import {
   lockWorkspaceScanAdmission,
 } from "./scan-slot"
 import { getWorkspaceContext } from "./extension"
+import { bindDelegatedScanProvenance } from "./delegated-scan-provenance"
 
 export interface ScanWithEvents extends Scan {
   capacity?: ScanCapacityProjection | null
@@ -70,6 +72,10 @@ export interface GetScanWithEventsOptions {
    * the full window — never an empty one.
    */
   eventsAfter?: string
+  /** Delegated detail reads must re-prove the target is still active. */
+  requireActiveTarget?: boolean
+  /** Delegated reads remain bounded by the connection's current profile grant. */
+  allowedProfiles?: string[]
 }
 
 export const ACTIVE_SCAN_STATUSES: ScanStatus[] = [
@@ -79,7 +85,6 @@ export const ACTIVE_SCAN_STATUSES: ScanStatus[] = [
   "VERIFYING",
   "REQUIRES_APPROVAL",
 ]
-type ScanTransaction = Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
 
 type ScanStatusMetadata = {
   errorCategory?: string
@@ -141,15 +146,7 @@ export async function createScan(
     // target's type, the canonical profile registry, resolved provenance) and
     // persist it ONCE with the scan row — before queue publication. Updates
     // require a new scan; the queue carries scan identity only.
-    const executionPlan = buildScanExecutionPlan({
-      workflow: params.workflow,
-      targetType: target.type,
-      mode: (params.mode ?? "QUICK") as Scan["mode"],
-      deterministicOnly: determinismMode === "targeted_scanner",
-      ...(params.source ? { source: params.source } : {}),
-      ...(params.attachmentIds ? { attachmentIds: params.attachmentIds } : {}),
-      ...(params.authorizationRef ? { authorizationRef: params.authorizationRef } : {}),
-    })
+    const executionPlan = await buildAdmittedScanPlan(tx, params, target.type, determinismMode)
     const executionPlanHash = computeScanExecutionPlanHash(executionPlan)
 
     const scan = await tx.scan.create({
@@ -171,6 +168,15 @@ export async function createScan(
         executionPlanHash,
       },
     })
+    if (params.delegatedOperation) {
+      await bindDelegatedScanProvenance(tx, {
+        workspaceId: params.workspaceId,
+        scanId: scan.id,
+        targetId: params.targetId,
+        executionPlanHash,
+        admission: params.delegatedOperation,
+      })
+    }
     await createScanCapacity(tx, scan, executionPlan.capabilities.includes("engine"))
     await tx.scanEvent.create({
       data: {
@@ -269,111 +275,34 @@ export async function updateScanStatus(
   scanId: string,
   newStatus: ScanStatus,
   metadata?: ScanStatusMetadata,
-  workspaceId?: string
+  workspaceId?: string,
+  requireUnclaimed = false
 ): Promise<Scan> {
   const resolvedWorkspaceId = workspaceId ?? getWorkspaceContext()
   if (!resolvedWorkspaceId) {
     throw new Error(`workspaceId or workspace context is required for updateScanStatus`)
   }
 
-  const { updated, currentStatus } = await withWorkspaceRLS(resolvedWorkspaceId, (tx) =>
-    updateScanStatusInTransaction(tx, scanId, newStatus, metadata)
-  )
+  const { updated, currentStatus } = await withWorkspaceRLS(resolvedWorkspaceId, async (tx) => {
+    if (requireUnclaimed) await requireUnclaimedScan(tx, resolvedWorkspaceId, scanId)
+    return updateScanStatusInTransaction(tx, scanId, newStatus, metadata)
+  })
 
   logger.info("Scan status updated", { scanId, from: currentStatus, to: newStatus })
   return updated
 }
 
-/**
- * Statuses a retrying job may regress to QUEUED. Anything outside this set is
- * terminal or paused (REQUIRES_APPROVAL) and must not be silently requeued —
- * the caller gets `requeued: false` and decides whether retrying is still
- * meaningful.
- */
-const REQUEUEABLE_SCAN_STATUSES: ScanStatus[] = ["QUEUED", "PREFLIGHT", "RUNNING", "VERIFYING"]
-
-export type RequeueScanForRetryResult =
-  { requeued: true; fromStatus: ScanStatus } | { requeued: false; currentStatus: ScanStatus | null }
-
-/**
- * W2.2 — recorded retry requeue.
- *
- * BullMQ retries — including stalled-job recovery after a worker restart —
- * regress the scan row to QUEUED while the queue owns re-execution. Doing
- * that with a bare UPDATE loses the step: the interrupted PREFLIGHT/RUNNING/
- * VERIFYING step would vanish from the timeline with no trace of why. This
- * helper performs the regression and records the `queued` step event with
- * attempt and failure context in the same workspace-scoped transaction, so
- * the persisted lifecycle stays complete and deterministic across restarts.
- *
- * The status guard is part of the row write: a scan that raced to a terminal
- * or paused state is never requeued, and no event claims a requeue that did
- * not happen.
- */
-export async function requeueScanForRetry(params: {
-  scanId: string
+/** Transitions requested by a worker that has not acquired paid execution. */
+export function updateUnclaimedScanStatus(
+  scanId: string,
+  status: ScanStatus,
+  metadata?: ScanStatusMetadata,
   workspaceId?: string
-  attempt: number
-  maxAttempts: number
-  errorCategory?: string
-  errorMessage?: string
-}): Promise<RequeueScanForRetryResult> {
-  const workspaceId = params.workspaceId ?? getWorkspaceContext()
-  if (!workspaceId) {
-    throw new Error(`workspaceId or workspace context is required for requeueScanForRetry`)
-  }
-
-  const outcome = await withWorkspaceRLS(workspaceId, async (tx) => {
-    const scan = await tx.scan.findFirst({
-      where: { id: params.scanId, workspaceId },
-      select: { status: true },
-    })
-    if (!scan) return { requeued: false as const, currentStatus: null }
-    const currentStatus = scan.status as ScanStatus
-    if (!REQUEUEABLE_SCAN_STATUSES.includes(currentStatus)) {
-      return { requeued: false as const, currentStatus }
-    }
-    const result = await tx.scan.updateMany({
-      where: { id: params.scanId, status: currentStatus },
-      data: { status: "QUEUED" },
-    })
-    if (result.count !== 1) {
-      // Lost a race to a status change — re-read so the caller sees the truth.
-      const latest = await tx.scan.findUnique({
-        where: { id: params.scanId },
-        select: { status: true },
-      })
-      return { requeued: false as const, currentStatus: (latest?.status as ScanStatus) ?? null }
-    }
-    await tx.scanEvent.create({
-      data: {
-        scanId: params.scanId,
-        stage: "queued",
-        level: "info",
-        message: `Scan requeued for retry (attempt ${params.attempt} of ${params.maxAttempts})`,
-        metadata: {
-          transition: "requeue",
-          fromStatus: currentStatus,
-          attempt: params.attempt,
-          maxAttempts: params.maxAttempts,
-          ...(params.errorCategory ? { errorCategory: params.errorCategory } : {}),
-          ...(params.errorMessage ? { errorMessage: params.errorMessage.slice(0, 500) } : {}),
-        },
-      },
-    })
-    return { requeued: true as const, fromStatus: currentStatus }
-  })
-
-  if (outcome.requeued) {
-    logger.info("Scan requeued for retry", {
-      scanId: params.scanId,
-      from: outcome.fromStatus,
-      attempt: params.attempt,
-      maxAttempts: params.maxAttempts,
-    })
-  }
-  return outcome
+) {
+  return updateScanStatus(scanId, status, metadata, workspaceId, true)
 }
+
+export { requeueScanForRetry, type RequeueScanForRetryResult } from "./scan-retry"
 
 export async function withScanFinalizationClaim<T>(
   scanId: string,
@@ -412,6 +341,7 @@ export async function addScanEvent(
   }
 
   return withWorkspaceRLS(workspaceId, async (tx) => {
+    if (stage === "billable_boundary") return insertScanBillableClaim(tx, workspaceId, scanId)
     // Defense-in-depth: verify the scan belongs to the current workspace before
     // writing an event. ScanEvent is a child table without its own workspaceId, so
     // this prevents cross-tenant event injection if a caller has a valid scanId
@@ -440,9 +370,10 @@ export async function addScanEvent(
 export async function getScanWithEvents(
   scanId: string,
   workspaceId: string,
-  options?: GetScanWithEventsOptions
+  options?: GetScanWithEventsOptions,
+  client?: ScopedTransaction
 ): Promise<ScanWithEvents | null> {
-  return withWorkspaceRLS(workspaceId, async (tx) => {
+  const read = async (tx: ScopedTransaction) => {
     const eventsAfter = options?.eventsAfter
     let eventCursor: { createdAt: Date; id: string } | null = null
     if (eventsAfter) {
@@ -456,7 +387,15 @@ export async function getScanWithEvents(
     }
 
     const scan = await tx.scan.findFirst({
-      where: { id: scanId, workspaceId, deletedAt: null },
+      where: {
+        id: scanId,
+        workspaceId,
+        deletedAt: null,
+        ...(options?.requireActiveTarget ? { target: { deletedAt: null } } : {}),
+        ...(options?.allowedProfiles !== undefined
+          ? { mode: { in: options.allowedProfiles as ScanMode[] } }
+          : {}),
+      },
       include: {
         events: {
           where: {
@@ -511,7 +450,8 @@ export async function getScanWithEvents(
       coverageReceipts: scan.coverageReceipts,
       target: scan.target,
     }
-  })
+  }
+  return client ? read(client) : withWorkspaceRLS(workspaceId, read)
 }
 
 /**
@@ -687,7 +627,10 @@ function toScanListItem(
   return { ...rest, findingCount: findingCandidates?.length ?? 0 }
 }
 
-export async function listScans(params: ListScansParams): Promise<{
+export async function listScans(
+  params: ListScansParams,
+  client?: ScopedTransaction
+): Promise<{
   items: ScanListItem[]
   nextCursor: string | null
 }> {
@@ -703,6 +646,12 @@ export async function listScans(params: ListScansParams): Promise<{
     deletedAt: null,
     ...(params.scanIds?.length ? { id: { in: params.scanIds } } : {}),
     ...targetReadScopeWhere(params),
+    ...(params.requireActiveTarget
+      ? { target: { workspaceId: params.workspaceId, deletedAt: null } }
+      : {}),
+    ...(params.allowedProfiles !== undefined
+      ? { mode: { in: params.allowedProfiles as ScanMode[] } }
+      : {}),
     ...statusFilter,
   }
 
@@ -710,7 +659,7 @@ export async function listScans(params: ListScansParams): Promise<{
   // query share one connection. The workspaceId predicate above is not a
   // substitute: "Scan" is under FORCE ROW LEVEL SECURITY, so the database policy
   // is the actual isolation boundary and it needs the transaction-local context.
-  const scans = await withWorkspaceRLS(params.workspaceId, (tx) =>
+  const read = (tx: ScopedTransaction) =>
     tx.scan.findMany({
       where,
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -718,7 +667,7 @@ export async function listScans(params: ListScansParams): Promise<{
       ...(params.cursor ? { cursor: { id: params.cursor }, skip: 1 } : {}),
       select: SCAN_LIST_SELECT,
     })
-  )
+  const scans = client ? await read(client) : await withWorkspaceRLS(params.workspaceId, read)
 
   const hasMore = scans.length > limit
   const page = hasMore ? scans.slice(0, limit) : scans

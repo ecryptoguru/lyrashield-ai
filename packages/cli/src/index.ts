@@ -73,7 +73,7 @@ Commands:
   logout               Remove stored credentials
   use <workspace>      Set default workspace
   agents               List registry agents and detection state
-  doctor               Diagnose configuration and API reachability
+  doctor               Diagnose configuration and API reachability [--target <id> --goal <g> --mode <m> --strict; --offline skips remote checks]
   init                 Detect and configure installed agents
   install <agent>      Configure a single agent
   uninstall <agent>    Remove LyraShield entry for a single agent

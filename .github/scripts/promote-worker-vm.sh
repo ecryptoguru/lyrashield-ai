@@ -244,7 +244,20 @@ fi
 webhook_cutover=0
 v26_cutover=0
 webhook_recovery=0
+paired_release_held=0
+prior_worker_ref=
+paired_sandbox=
 case "${1:-}" in
+  --paired-release-stopped)
+    paired_release_held=1
+    shift
+    prior_worker_ref=${1:?exact previous worker digest reference is required}
+    shift
+    ;;
+  --paired-release-held)
+    paired_release_held=1
+    shift
+    ;;
   --v26-cutover)
     v26_cutover=1
     shift
@@ -266,6 +279,13 @@ if [ "$webhook_cutover" -eq 1 ] || [ "$v26_cutover" -eq 1 ]; then maintenance_cu
 target=${1:?worker image digest reference is required}
 expected_app=${2:?product revision is required}
 expected_engine=${3:?engine revision is required}
+if [ -n "$prior_worker_ref" ]; then
+  paired_sandbox=${4:?qualified sandbox image is required}
+  case "$paired_sandbox" in ghcr.io/ecryptoguru/lyrashield-sandbox@sha256:*) ;; *) exit 1 ;; esac
+  sandbox_digest=${paired_sandbox##*@sha256:}
+  [ "${#sandbox_digest}" -eq 64 ] || exit 1
+  case "$sandbox_digest" in *[!a-f0-9]*) exit 1 ;; esac
+fi
 # Capture the requested vault before worker-env.sh sources the old config.
 credential_vault=${LYRASHIELD_WORKER_GITHUB_CREDENTIAL_VAULT:-}
 case "$credential_vault" in
@@ -330,6 +350,33 @@ host_backup=
 redis_eval() {
   worker_oneshot "$@"
 }
+
+# Dormant paired release path: the protected caller supplies the reviewed module
+# payload and an exact external owner. The persistent latch is never ours to clear.
+assert_paired_release_hold() {
+  [ "$paired_release_held" -eq 1 ] || return 0
+  : "${LYRASHIELD_PAIRED_RELEASE_OWNER:?}" "${LYRASHIELD_PAIRED_RELEASE_HOLD_MODULE_BASE64:?}"
+  # shellcheck disable=SC2016
+  verified=$(redis_eval '
+const [module,owner,product,engine,digest,readyCode,readyBody,scansCode,scansBody]=process.argv.slice(1);
+const bytes=Buffer.from(module,"base64");
+const {createHash}=await import("node:crypto");
+if(bytes.length>8192 || bytes.toString("base64")!==module || createHash("sha256").update(bytes).digest("hex")!=="cd027329d8a0436030580f2190a92c78a5ab8a87fdd0fb36fcc8f0ace9568177") throw new Error("Unreviewed paired hold module");
+const {ownedHold:assertPairedReleaseHold,assertHeldReadiness}=await import("data:text/javascript;base64,"+module);
+const {default:Redis}=await import("ioredis");
+const redis=new Redis(process.env.REDIS_URL,{maxRetriesPerRequest:1});
+try {
+  await assertPairedReleaseHold(redis,"assert",owner,product,engine,digest);
+  if(readyCode) assertHeldReadiness(readyCode,readyBody,scansCode,scansBody);
+  console.log("MATCH");
+} finally { await redis.quit(); }' \
+    "$LYRASHIELD_PAIRED_RELEASE_HOLD_MODULE_BASE64" "$LYRASHIELD_PAIRED_RELEASE_OWNER" \
+    "$expected_app" "$expected_engine" "${target##*@}" "${1:-}" "${2:-}" "${3:-}" "${4:-}")
+  [ "$verified" = MATCH ] || { echo "Paired release hold verification failed" >&2; return 1; }
+}
+
+# Validate ownership before changing timers, host assets, config or the worker.
+assert_paired_release_hold
 
 assert_cutover_receipt() {
   if [ "$v26_cutover" -eq 1 ]; then
@@ -520,14 +567,51 @@ cleanup_host_assets() {
   fi
 }
 
+# A failed held transition never restarts a prior consumer. Disabling the units
+# prevents boot/timer recovery from silently reopening an unsafe pairing.
+contain_paired_worker() {
+  actions_ok=1
+  systemctl disable --now "$timer" || actions_ok=0
+  systemctl disable --now "$service" || actions_ok=0
+  systemctl stop "$timer" || actions_ok=0
+  systemctl stop "$service" || actions_ok=0
+  for unit in "$service" "$timer"; do
+    active=$(systemctl is-active "$unit" 2>/dev/null) || { [ "$active" = inactive ] || return 1; }
+    enabled=$(systemctl is-enabled "$unit" 2>/dev/null) || { [ "$enabled" = disabled ] || [ "$enabled" = masked ] || return 1; }
+    [ "$active" = inactive ] || return 1
+    [ "$enabled" = disabled ] || [ "$enabled" = masked ] || return 1
+  done
+  remaining=$(docker ps -a --filter 'name=^/lyrashield-worker$' --format '{{.Names}}') || return 1
+  [ -z "$remaining" ] && [ "$actions_ok" -eq 1 ]
+}
+
 rollback() {
   status=$?
   trap - EXIT HUP INT TERM
+  [ "$promotion_complete" -eq 1 ] || [ "$status" -ne 0 ] || status=1
   if [ "$promotion_complete" -ne 1 ] && [ "$maintenance_cutover" -eq 1 ]; then
     # Schema cutover is forward-only. Never restore or restart legacy writers.
     systemctl disable --now "$timer" || true
     systemctl disable --now "$service" || true
     echo "Worker promotion failed during: ${promotion_step} (exit ${status}); webhook maintenance held, no legacy rollback" >&2
+    cleanup_host_assets
+    exit "$status"
+  fi
+  if [ "$promotion_complete" -ne 1 ] && [ "$paired_release_held" -eq 1 ]; then
+    if ! contain_paired_worker; then
+      echo "CONTAINMENT FAILED: paired release worker/timer stop or disable could not be verified; manual recovery required; admission untouched" >&2
+      cleanup_host_assets
+      exit "$status"
+    fi
+    restored=1
+    if [ "$host_assets_changed" -eq 1 ]; then restore_host_assets || restored=0; fi
+    if [ "$config_changed" -eq 1 ]; then cp -p "$backup" "$config" || restored=0; fi
+    if ! contain_paired_worker; then
+      echo "CONTAINMENT FAILED: restored paired release units are not verified inactive and disabled; manual recovery required; admission untouched" >&2
+    else
+      echo "Worker paired release failed during: ${promotion_step}; worker and timer verified inactive and disabled; admission untouched" >&2
+    fi
+    [ "$restored" -eq 1 ] || echo "Prior worker files were not fully restored; manual recovery required" >&2
     cleanup_host_assets
     exit "$status"
   fi
@@ -551,7 +635,15 @@ rollback() {
   cleanup_host_assets
   exit "$status"
 }
-trap rollback EXIT HUP INT TERM
+if [ -n "$prior_worker_ref" ]; then
+  [ "$old_image" = "$prior_worker_ref" ]
+  [ "$(systemctl is-active "$service" 2>/dev/null || true)" = inactive ]
+  assert_recovery_worker_stopped
+fi
+trap rollback EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 # Keep DNS refresh from racing the bounded replacement window. The timer is
 # restored after success or rollback.
@@ -574,6 +666,10 @@ if [ "$maintenance_cutover" -eq 1 ]; then
   else
     assert_legacy_worker_stopped
   fi
+elif [ "$paired_release_held" -eq 1 ] && [ -n "${prior_worker_ref:-}" ]; then
+  [ "$old_image" = "$prior_worker_ref" ]
+  [ "$(systemctl is-active "$service" 2>/dev/null || true)" = inactive ]
+  assert_recovery_worker_stopped
 elif ! worker_is_healthy; then
   if worker_environment_is_fresh; then
     echo "Current worker is unhealthy with a fresh environment" >&2
@@ -585,14 +681,16 @@ fi
 # Normal promotions refresh Key Vault values before read-only checks. Held
 # recovery preserves the original cutover's connection identity and must not
 # sync or rotate those values.
-if [ "$webhook_recovery" -eq 0 ] && [ "$v26_cutover" -eq 0 ]; then
+if [ "$webhook_recovery" -eq 0 ] && [ "$v26_cutover" -eq 0 ] && [ -z "$prior_worker_ref" ]; then
   refresh_worker_secrets
 fi
 
 # JavaScript template literal is passed verbatim to the container.
 # shellcheck disable=SC2016
 promotion_step=claiming-admission-stop
-if [ "$v26_cutover" -eq 1 ]; then
+if [ "$paired_release_held" -eq 1 ]; then
+  assert_paired_release_hold
+elif [ "$v26_cutover" -eq 1 ]; then
   : "${LYRASHIELD_V26_REQUEST_BASE64:?}"
 elif [ "$maintenance_cutover" -eq 1 ]; then
   assert_cutover_receipt
@@ -674,6 +772,7 @@ app_label=$(docker image inspect "$target" --format '{{index .Config.Labels "org
 engine_label=$(docker image inspect "$target" --format '{{index .Config.Labels "io.lyrashield.engine.revision"}}')
 [ "$app_label" = "$expected_app" ]
 [ "$engine_label" = "$expected_engine" ]
+assert_paired_release_hold
 if [ "$v26_cutover" -eq 1 ] || [ -f /var/lib/lyrashield/v26-cutover.json ]; then
   [ "$(docker image inspect "$target" --format '{{index .Config.Labels "io.lyrashield.accounting.protocol"}}')" = reservations/2 ] || exit 1
   protocol=$(worker_candidate_oneshot 'const {SCAN_ACCOUNTING_PROTOCOL}=await import("@lyrashield/db");console.log(SCAN_ACCOUNTING_PROTOCOL)')
@@ -819,12 +918,13 @@ if [ "$maintenance_cutover" -eq 0 ] || [ ! -e "$backup" ]; then
   cp -p "$config" "$backup"
 fi
 temporary=$(mktemp "${config}.XXXXXX")
-awk -v image="$target" -v vault="$credential_vault" 'BEGIN { found=0 } /^LYRASHIELD_WORKER_IMAGE=/ { print "LYRASHIELD_WORKER_IMAGE=" image; found=1; next } /^LYRASHIELD_GITHUB_CREDENTIAL_VAULT_NAME=/ { next } { print } END { if (!found) exit 1; print "LYRASHIELD_GITHUB_CREDENTIAL_VAULT_NAME=" vault }' "$config" > "$temporary"
+awk -v image="$target" -v vault="$credential_vault" -v sandbox="$paired_sandbox" 'BEGIN { found=0 } /^LYRASHIELD_WORKER_IMAGE=/ { print "LYRASHIELD_WORKER_IMAGE=" image; found=1; next } /^LYRASHIELD_SANDBOX_IMAGE=/ && sandbox != "" { print "LYRASHIELD_SANDBOX_IMAGE=" sandbox; sandbox_count++; next } /^LYRASHIELD_GITHUB_CREDENTIAL_VAULT_NAME=/ { next } { print } END { if (!found || (sandbox != "" && sandbox_count != 1)) exit 1; print "LYRASHIELD_GITHUB_CREDENTIAL_VAULT_NAME=" vault }' "$config" > "$temporary"
 chmod 0600 "$temporary"
 chown root:root "$temporary"
 mv "$temporary" "$config"
 config_changed=1
 
+assert_paired_release_hold
 promotion_step=restarting-worker
 systemctl reset-failed "$service" || true
 # Capture the unit state and journal tail on a restart failure before the EXIT
@@ -843,6 +943,7 @@ wait_healthy
 [ "$(docker exec "$container" printenv LYRASHIELD_PRODUCT_REVISION)" = "$expected_app" ]
 [ "$(docker exec "$container" printenv LYRASHIELD_ENGINE_REVISION)" = "$expected_engine" ]
 [ "$(docker exec "$container" printenv LYRASHIELD_WORKER_IMAGE_DIGEST)" = "${target##*@}" ]
+assert_paired_release_hold
 
 if [ "$maintenance_cutover" -eq 1 ]; then
   promotion_step=checking-held-cutover
@@ -880,6 +981,36 @@ systemctl is-active --quiet "$timer"
 systemctl is-enabled --quiet "$timer"
 echo "Worker service state: active enabled"
 echo "Worker egress refresh timer state: active enabled"
+if [ "$paired_release_held" -eq 1 ]; then
+  promotion_step=checking-held-scan-readiness
+  assert_paired_release_hold
+  ready_response=$(curl --silent --show-error --max-time 10 --max-filesize 16384 --write-out '\n%{http_code}' https://app.lyrashieldai.com/api/ready)
+  scans_response=$(curl --silent --show-error --max-time 10 --max-filesize 16384 --write-out '\n%{http_code}' https://app.lyrashieldai.com/api/ready/scans)
+  assert_paired_release_hold "$(printf '%s\n' "$ready_response" | tail -n 1)" "$(printf '%s\n' "$ready_response" | sed '$d')" "$(printf '%s\n' "$scans_response" | tail -n 1)" "$(printf '%s\n' "$scans_response" | sed '$d')"
+  worker_is_healthy
+  [ "$(docker inspect "$container" --format '{{.Config.Image}}')" = "$target" ]
+  [ "$(docker exec "$container" printenv LYRASHIELD_PRODUCT_REVISION)" = "$expected_app" ]
+  [ "$(docker exec "$container" printenv LYRASHIELD_ENGINE_REVISION)" = "$expected_engine" ]
+  [ "$(docker exec "$container" printenv LYRASHIELD_WORKER_IMAGE_DIGEST)" = "${target##*@}" ]
+  if [ -n "$prior_worker_ref" ]; then
+    [ "$(docker exec "$container" printenv LYRASHIELD_RUN_RECORD_V1_1)" = 0 ]
+    [ "$(docker exec "$container" printenv LYRASHIELD_PENDING_HTTP_EVIDENCE)" = 0 ]
+    [ "$(sed -n 's/^LYRASHIELD_SANDBOX_IMAGE=//p' "$config")" = "$paired_sandbox" ]
+    [ "$(docker exec "$container" printenv LYRASHIELD_IMAGE)" = "$paired_sandbox" ]
+    sandbox_refs=$(docker image inspect "$paired_sandbox" --format '{{range .RepoDigests}}{{println .}}{{end}}')
+    printf '%s\n' "$sandbox_refs" | grep -Fxq "$paired_sandbox"
+    # Never export or print the selector's value.
+    docker exec "$container" sh -c 'test -z "${LYRASHIELD_EVIDENCE_WRITER_CANARY:-}"'
+    running_id=$(docker inspect "$container" --format '{{.Image}}')
+    [ -n "$running_id" ] && [ "$running_id" = "$(docker image inspect "$target" --format '{{.Id}}')" ] || exit 1
+  fi
+  assert_paired_release_hold
+  promotion_complete=1
+  trap - EXIT HUP INT TERM
+  cleanup_host_assets
+  echo "Worker paired release promotion passed for ${target##*@}; scan admission HELD"
+  exit 0
+fi
 promotion_step=resuming-admission
 if [ "$admission_stop_owned" -eq 1 ]; then
   resume_admission

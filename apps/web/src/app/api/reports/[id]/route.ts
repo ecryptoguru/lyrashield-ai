@@ -5,6 +5,9 @@ import {
   revokeShareToken,
   getLaunchReportDetail,
   resolveReportDelegationTarget,
+  withDelegatedReadAuthority,
+  type DelegatedReadAuthority,
+  type ScopedTransaction,
 } from "@lyrashield/db"
 import { assertOAuthDelegatedScope, requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
@@ -13,6 +16,7 @@ import { authErrorResponse } from "../../../../lib/api-auth"
 import { apiError, apiSuccess } from "../../../../lib/api-response"
 import { jsonWithEtag } from "../../../../lib/http-etag"
 import { ReportActionSchema } from "@lyrashield/types"
+import { delegatedReadPrincipal } from "../../../../lib/delegated-target-read-scope"
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -25,29 +29,65 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       return apiError("MISSING_PARAM", "workspaceId is required", 400)
     }
 
-    const { session } = await requirePermission(workspaceId, PERMISSIONS.report.download)
+    const { session, workspace } = await requirePermission(workspaceId, PERMISSIONS.report.download)
+    const principal = delegatedReadPrincipal(session, workspace)
 
-    const report = await getShareableReport(id, workspaceId)
-    if (!report) {
-      return apiError("REPORT_NOT_FOUND", "Report not found", 404)
-    }
-    if (session.oauth?.connectionId && !session.oauth.allTargets) {
-      const delegation = await resolveReportDelegationTarget(id, workspaceId)
-      if (!delegation) {
+    const load = async (
+      client?: Parameters<typeof getShareableReport>[2] extends infer T
+        ? T extends { client?: infer C }
+          ? C
+          : never
+        : never,
+      authority?: DelegatedReadAuthority
+    ) => {
+      const delegated = Boolean(principal)
+      if (principal) {
+        const delegation = await resolveReportDelegationTarget(id, workspaceId, {
+          requireExplicitSnapshotBinding: true,
+          allowedProfiles: authority?.allowedProfiles,
+          ...(client ? { client } : {}),
+        })
+        if (!delegation) {
+          return apiError("REPORT_NOT_FOUND", "Report not found", 404)
+        }
+        if (!delegation.targetId) {
+          return apiError(
+            "REPORT_TARGET_UNAVAILABLE",
+            "Report target provenance is unavailable",
+            403
+          )
+        }
+        if (
+          !authority ||
+          !(
+            (authority.targetId !== undefined && authority.targetId === delegation.targetId) ||
+            authority.targetIds?.includes(delegation.targetId)
+          )
+        ) {
+          return apiError("FORBIDDEN", "Report target is no longer authorized", 403)
+        }
+        assertOAuthDelegatedScope(session, delegation.targetId)
+      }
+      const report = await getShareableReport(id, workspaceId, {
+        requireExplicitSnapshotBinding: delegated,
+        ...(authority ? { allowedProfiles: authority.allowedProfiles } : {}),
+        ...(client ? { client } : {}),
+      })
+      if (!report) {
         return apiError("REPORT_NOT_FOUND", "Report not found", 404)
       }
-      assertOAuthDelegatedScope(session, delegation.targetId)
+
+      const launchReport =
+        report.type === "launch_readiness"
+          ? await getLaunchReportDetail(id, workspaceId, client)
+          : null
+      return jsonWithEtag(request, launchReport ? { ...report, launchReport } : report)
     }
 
-    // Private issue-time provenance rides along only on this authenticated
-    // route — the shared-token reader calls getShareableReport directly and
-    // never sees it.
-    const launchReport =
-      report.type === "launch_readiness" ? await getLaunchReportDetail(id, workspaceId) : null
-
-    // W2.4: ETag bound to the serialized representation — a matching
-    // If-None-Match answers 304 with no body.
-    return jsonWithEtag(request, launchReport ? { ...report, launchReport } : report)
+    if (principal) {
+      return await withDelegatedReadAuthority(principal, (tx, authority) => load(tx, authority))
+    }
+    return load()
   } catch (error) {
     const authErr = authErrorResponse(error)
     if (authErr) return authErr
@@ -69,37 +109,65 @@ async function post(request: Request, { params }: { params: Promise<{ id: string
 
     const { workspaceId, action } = parsed.data
 
-    const { session } = await requirePermission(workspaceId, PERMISSIONS.report.create)
+    const { session, workspace } = await requirePermission(workspaceId, PERMISSIONS.report.create)
 
-    // Delegated-scope gate (W0.3): share/revoke mutate a report bound to one
-    // persisted target, so a narrowed OAuth connection may act only within its
-    // grant. The PERSISTED binding is authoritative — a request-body targetId
-    // can never steer the check — and an unresolvable binding (workspace-wide
-    // scan, deleted scan, legacy/contradictory provenance) fails closed into
-    // "requires an all-targets grant" rather than "no check".
-    const delegation = await resolveReportDelegationTarget(id, workspaceId)
-    if (!delegation) {
-      return apiError("REPORT_NOT_FOUND", "Report not found", 404)
-    }
-    assertOAuthDelegatedScope(session, delegation.targetId)
+    const principal = delegatedReadPrincipal(session, workspace)
+    const mutate = async (client?: ScopedTransaction, authority?: DelegatedReadAuthority) => {
+      const delegated = Boolean(principal)
+      const delegation = await resolveReportDelegationTarget(id, workspaceId, {
+        requireExplicitSnapshotBinding: delegated,
+        ...(authority ? { allowedProfiles: authority.allowedProfiles } : {}),
+        ...(client ? { client } : {}),
+      })
+      if (!delegation) {
+        return apiError("REPORT_NOT_FOUND", "Report not found", 404)
+      }
+      if (!delegation.targetId) {
+        return apiError("REPORT_TARGET_UNAVAILABLE", "Report target provenance is unavailable", 403)
+      }
+      if (
+        principal &&
+        (!authority ||
+          !(
+            (authority.targetId !== undefined && authority.targetId === delegation.targetId) ||
+            authority.targetIds?.includes(delegation.targetId)
+          ))
+      ) {
+        return apiError("FORBIDDEN", "Report target is no longer authorized", 403)
+      }
+      assertOAuthDelegatedScope(session, delegation.targetId)
 
-    switch (action) {
-      case "share": {
-        const { token, expiresAt } = await generateShareToken(id, workspaceId)
-        // tokenHash stays server-side: the client has no legitimate use for the
-        // hash of the bearer token it already holds, and echoing it widens the
-        // disclosure surface for no feature.
-        return apiSuccess({
-          token,
-          expiresAt: expiresAt.toISOString(),
-          shareUrl: `/reports/shared/${id}?token=${token}`,
-        })
-      }
-      case "revoke": {
-        const revokedAt = await revokeShareToken(id, workspaceId)
-        return apiSuccess({ revoked: true, revokedAt: revokedAt.toISOString() })
+      switch (action) {
+        case "share": {
+          const { token, expiresAt } = await generateShareToken(id, workspaceId, {
+            targetId: delegation.targetId,
+            requireActiveTarget: delegated,
+            ...(client ? { client } : {}),
+          })
+          return apiSuccess({
+            token,
+            expiresAt: expiresAt.toISOString(),
+            shareUrl: `/reports/shared/${id}?token=${token}`,
+          })
+        }
+        case "revoke": {
+          const revokedAt = await revokeShareToken(id, workspaceId, {
+            targetId: delegation.targetId,
+            requireActiveTarget: delegated,
+            ...(client ? { client } : {}),
+          })
+          return apiSuccess({ revoked: true, revokedAt: revokedAt.toISOString() })
+        }
       }
     }
+
+    if (principal) {
+      return await withDelegatedReadAuthority(
+        { ...principal, requiredOperation: "report.create" },
+        (tx, authority) => mutate(tx, authority)
+      )
+    }
+    return mutate()
   } catch (error) {
     const authErr = authErrorResponse(error)
     if (authErr) return authErr

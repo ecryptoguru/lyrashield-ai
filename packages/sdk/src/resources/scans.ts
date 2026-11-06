@@ -14,6 +14,8 @@ export interface ScanQuery {
 
 export interface ScanInput {
   idempotencyKey?: string
+  /** Optional upper bound on engine spending for an ordinary engine-backed review. */
+  engineBudgetCeilingUsd?: number
   workspaceId?: string
   targetId: string
   goal?: string

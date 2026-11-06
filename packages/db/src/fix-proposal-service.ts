@@ -1,5 +1,6 @@
 import { isRecoverableFixPrMerge } from "./fix-pr-merge-recovery"
-import { withWorkspaceRLS } from "./rls"
+import { withWorkspaceRLS, type ScopedTransaction } from "./rls"
+import { lockActiveTargetForDerivedWrite } from "./target-write-lock"
 import { findingScopeWhere } from "./finding-service"
 import type { FixProposal, PullRequest, Finding, Target } from "./generated/prisma"
 import { logger } from "@lyrashield/logger"
@@ -11,6 +12,10 @@ export interface CreateFixProposalParams {
   diffRef?: string
   generatedByModel?: string
   safetyScore?: number
+  targetId?: string
+  requireActiveTarget?: boolean
+  /** Caller already holds `withDelegatedReadAuthority` for this target. */
+  client?: ScopedTransaction
 }
 
 export interface FixProposalWithDetails extends FixProposal {
@@ -21,12 +26,29 @@ export interface FixProposalWithDetails extends FixProposal {
 }
 
 export async function createFixProposal(params: CreateFixProposalParams): Promise<FixProposal> {
-  return withWorkspaceRLS(params.workspaceId, async (tx) => {
+  const create = async (tx: ScopedTransaction) => {
+    if (
+      params.requireActiveTarget &&
+      (!params.targetId ||
+        !(params.client
+          ? await tx.target.findFirst({
+              where: {
+                id: params.targetId,
+                workspaceId: params.workspaceId,
+                deletedAt: null,
+              },
+              select: { id: true },
+            })
+          : await lockActiveTargetForDerivedWrite(tx, params.workspaceId, params.targetId)))
+    ) {
+      throw new Error("FORBIDDEN")
+    }
     const finding = await tx.finding.findFirst({
       where: {
         id: params.findingId,
         workspaceId: params.workspaceId,
         deletedAt: null,
+        ...(params.requireActiveTarget ? { target: { deletedAt: null } } : {}),
       },
     })
     if (!finding) {
@@ -51,7 +73,8 @@ export async function createFixProposal(params: CreateFixProposalParams): Promis
     })
 
     return proposal
-  })
+  }
+  return params.client ? create(params.client) : withWorkspaceRLS(params.workspaceId, create)
 }
 
 export async function getFixProposal(
@@ -84,17 +107,22 @@ export async function getFixProposal(
   })
 }
 
-export async function listFixProposals(params: {
-  workspaceId: string
-  targetId?: string
-  targetIds?: string[]
-  observedInScanId?: string
-  findingId?: string
-  status?: string
-  cursor?: string
-  limit?: number
-}): Promise<{ items: FixProposalWithDetails[]; nextCursor: string | null }> {
-  return withWorkspaceRLS(params.workspaceId, async (tx) => {
+export async function listFixProposals(
+  params: {
+    workspaceId: string
+    targetId?: string
+    targetIds?: string[]
+    requireActiveTarget?: boolean
+    allowedProfiles?: string[]
+    observedInScanId?: string
+    findingId?: string
+    status?: string
+    cursor?: string
+    limit?: number
+  },
+  client?: ScopedTransaction
+): Promise<{ items: FixProposalWithDetails[]; nextCursor: string | null }> {
+  const read = async (tx: ScopedTransaction) => {
     const limit = Math.min(params.limit ?? 20, 50)
 
     const proposals = await tx.fixProposal.findMany({
@@ -129,7 +157,8 @@ export async function listFixProposals(params: {
     const nextCursor = hasMore && items.length > 0 ? items[items.length - 1]!.id : null
 
     return { items, nextCursor }
-  })
+  }
+  return client ? read(client) : withWorkspaceRLS(params.workspaceId, read)
 }
 
 const VALID_PROPOSAL_STATUSES = [

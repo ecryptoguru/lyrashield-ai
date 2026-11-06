@@ -133,6 +133,124 @@ describe("getShareableReport", () => {
     )
   })
 
+  it("rejects a snapshot whose source scan contradicts the report scan link", async () => {
+    mockPrisma.report.findFirst.mockResolvedValue({
+      id: "report-1",
+      workspaceId: "ws-1",
+      scanId: "scan-a",
+      title: "Shared report",
+      type: "developer",
+      status: "generated",
+      format: "html",
+      contentJson: {
+        version: 2,
+        scanInfo: {
+          scanId: "scan-b",
+          status: "COMPLETED",
+          summary: "Foreign snapshot",
+          targetName: "Foreign target",
+        },
+      },
+      shareTokenHash: "hash",
+      shareExpiresAt: null,
+      revokedAt: null,
+      createdAt: new Date(),
+    })
+
+    await expect(getShareableReport("report-1", "ws-1")).resolves.toBeNull()
+  })
+
+  it("requires an explicit snapshot scan binding for delegated readers", async () => {
+    for (const contentJson of [
+      null,
+      {
+        version: 2,
+        totalFindings: 1,
+        assurance: {
+          verdict: "NOT_READY",
+          score: 2,
+          grade: "F",
+          narrative: "Foreign assurance",
+          scoreTrend: [],
+          ageBuckets: {},
+          priorityActions: [],
+          methodology: [],
+        },
+      },
+      { version: 2, scanInfo: null },
+      { version: 2, scanInfo: "scan-a" },
+      { version: 2, scanInfo: { scanId: null } },
+    ]) {
+      mockPrisma.report.findFirst.mockResolvedValue({
+        id: "report-1",
+        workspaceId: "ws-1",
+        scanId: "scan-a",
+        title: "Shared report",
+        type: "developer",
+        status: "generated",
+        format: "html",
+        contentJson,
+        shareTokenHash: null,
+        shareExpiresAt: null,
+        revokedAt: null,
+        createdAt: new Date(),
+      })
+
+      await expect(
+        getShareableReport("report-1", "ws-1", {
+          requireExplicitSnapshotBinding: true,
+        })
+      ).resolves.toBeNull()
+    }
+  })
+
+  it("rejects an explicit delegated snapshot whose scan or target is deleted", async () => {
+    mockPrisma.report.findFirst.mockResolvedValue({
+      id: "report-1",
+      workspaceId: "ws-1",
+      scanId: "scan-a",
+      title: "Shared report",
+      type: "developer",
+      status: "generated",
+      format: "html",
+      contentJson: { version: 2, scanInfo: { scanId: "scan-a" } },
+      shareTokenHash: null,
+      shareExpiresAt: null,
+      revokedAt: null,
+      createdAt: new Date(),
+    })
+    mockPrisma.scan.findFirst.mockResolvedValue(null)
+
+    await expect(
+      getShareableReport("report-1", "ws-1", {
+        requireExplicitSnapshotBinding: true,
+      })
+    ).resolves.toBeNull()
+  })
+
+  it("requires a valid launch snapshot for delegated readers", async () => {
+    mockPrisma.report.findFirst.mockResolvedValue({
+      id: "report-1",
+      workspaceId: "ws-1",
+      scanId: null,
+      title: "Launch",
+      type: "launch_readiness",
+      status: "generated",
+      format: "html",
+      contentJson: { malformed: true },
+      shareTokenHash: null,
+      shareExpiresAt: null,
+      revokedAt: null,
+      createdAt: new Date(),
+    })
+
+    await expect(
+      getShareableReport("report-1", "ws-1", {
+        requireExplicitSnapshotBinding: true,
+      })
+    ).resolves.toBeNull()
+  })
+
   it("does not expose private AI assurance data in public share payloads", async () => {
     mockPrisma.report.findFirst.mockResolvedValue({
       id: "report-1",

@@ -61,6 +61,12 @@ export const TOOL_OPERATION_MAP: Record<string, ToolOperationDescriptor> = {
     requiresTarget: true,
     isBillable: false,
   },
+  lyrashield_get_setup_health: {
+    canonicalOperation: CANONICAL_OPERATIONS.SCAN_ELIGIBILITY,
+    mutating: false,
+    requiresTarget: true,
+    isBillable: false,
+  },
   lyrashield_get_launch_readiness: {
     canonicalOperation: CANONICAL_OPERATIONS.GATE_READ,
     mutating: false,

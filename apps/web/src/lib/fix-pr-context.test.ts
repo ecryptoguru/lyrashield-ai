@@ -26,6 +26,7 @@ vi.mock("./fix-pr-connection", () => ({ hasActiveFixPrConnection: mocks.connecti
 vi.mock("@lyrashield/config", () => ({ env: mocks.env }))
 vi.mock("@lyrashield/db", () => ({
   getFixProposal: mocks.proposal,
+  getCurrentDelegatedScanAuthority: vi.fn().mockResolvedValue(null),
   withWorkspaceRLS: mocks.rls,
   assertEvidenceEncrypted: vi.fn(),
   hashInput: (_action: string, input: unknown) => JSON.stringify(input),
@@ -144,13 +145,36 @@ describe("fix PR patch provenance with disposable encrypted artifacts", () => {
       targetId: "target-1",
       baseCommit: "scanned-sha",
       scanId: "original-scan",
-      scan: { createdById: "sponsor-1" },
+      scan: {
+        id: "original-scan",
+        createdById: "sponsor-1",
+        deletedAt: null,
+        targetId: "target-1",
+        mode: "STANDARD",
+        delegatedConnectionId: null,
+        delegatedAuthorizationVersion: null,
+      },
       implicatedFiles: ["src/a.ts"],
+      target: {
+        repoOwner: "acme",
+        repoName: "app",
+        installationId: "42",
+        deletedAt: null,
+      },
     }
     const tx = {
       fixProposal: {
-        findFirst: vi.fn().mockResolvedValue({ status: "draft", finding }),
-        findUnique: vi.fn().mockResolvedValue({ status: "draft" }),
+        findFirst: vi.fn().mockResolvedValue({ status: "draft", summary: "Fix it", finding }),
+        findUnique: vi.fn().mockResolvedValue({
+          status: "draft",
+          deletedAt: null,
+          finding: {
+            workspaceId: "workspace-1",
+            deletedAt: null,
+            targetId: "target-1",
+            scan: finding.scan,
+          },
+        }),
         update: vi.fn(),
         updateMany: vi.fn().mockResolvedValue({ count: 1 }),
       },

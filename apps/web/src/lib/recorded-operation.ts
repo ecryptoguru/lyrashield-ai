@@ -18,7 +18,10 @@ export async function recordedOperation(
     input: Record<string, unknown>
     session: Awaited<ReturnType<typeof requirePermission>>["session"]
   },
-  execute: (outcome: { confirmNotSubmitted: () => void }) => Promise<Response>
+  execute: (outcome: {
+    confirmNotSubmitted: () => void
+    admission?: { operationId: string; admissionProof: string }
+  }) => Promise<Response>
 ): Promise<Response> {
   let confirmedNotSubmitted = false
   const outcome = {
@@ -60,9 +63,13 @@ export async function recordedOperation(
       undefined,
       { operationId }
     )
+  const admission =
+    claim.status === "NEW" && claim.admissionProof
+      ? { operationId, admissionProof: claim.admissionProof }
+      : undefined
   let completed = false
   try {
-    const response = await execute(outcome)
+    const response = await execute({ ...outcome, ...(admission ? { admission } : {}) })
     if (!response.ok) {
       const envelope = await response.clone().json()
       if (envelope.error) {
@@ -74,7 +81,11 @@ export async function recordedOperation(
     const envelope: unknown = await response.clone().json()
     if (!isJsonObject(envelope) || !isJsonObject(envelope.data)) return response
     const data = envelope.data
-    const resultReference = [data.id, data.approvalId, data.prUrl].find(
+    const nestedScanId =
+      data.scan && typeof data.scan === "object" && !Array.isArray(data.scan)
+        ? (data.scan as Record<string, unknown>).id
+        : undefined
+    const resultReference = [data.id, data.approvalId, data.prUrl, data.scanId, nestedScanId].find(
       (value): value is string => typeof value === "string" && value.length > 0
     )
     await completeAgentOperation(operationId, params.workspaceId, {

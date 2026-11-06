@@ -20,7 +20,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     }
 
     const shareable = await getShareableReport(report.id, report.workspaceId)
-    if (!shareable) {
+    if (!shareable || shareable.type === "release_packet") {
       return apiError("REPORT_NOT_FOUND", "Report not found", 404)
     }
 
