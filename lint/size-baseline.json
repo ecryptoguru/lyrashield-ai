@@ -302,8 +302,8 @@
     },
     "apps/web/src/app/api/scans/route.ts|max-lines": {
       "count": 1,
-      "totalExcess": 71,
-      "maxExcess": 71
+      "totalExcess": 68,
+      "maxExcess": 68
     },
     "apps/web/src/app/api/scans/route.ts|max-lines-per-function": {
       "count": 1,
