@@ -506,5 +506,15 @@ test("deploy workflows expose an opt-in protected digest and run read-only prefl
   assert.ok(runtimePreflight >= 0 && runtimePreflight < firstProductionMutation)
   assert.ok(runtimeRegistryLogin >= 0 && runtimeRegistryLogin < runtimePreflight)
   assert.doesNotMatch(JSON.stringify([deploy, runtime]), /PAIRED_COMMAND|arbitrary command/)
-  assert.equal(production.jobs["deploy-azure"].with.qualified_release_digest, undefined)
+  const qualification = production.jobs["qualify-azure-release"]
+  assert.ok(qualification)
+  assert.equal(qualification.environment.name, "azure-production")
+  assert.deepEqual(qualification.needs, "routing")
+  assert.match(qualification.steps[0].run, /a-f0-9\]\{64\}/)
+  assert.match(qualification.steps[0].run, /exit 1/)
+  assert.equal(
+    production.jobs["deploy-azure"].with.qualified_release_digest,
+    "${{ needs.qualify-azure-release.outputs.digest }}"
+  )
+  assert.deepEqual(production.jobs["deploy-azure"].needs, ["routing", "qualify-azure-release"])
 })

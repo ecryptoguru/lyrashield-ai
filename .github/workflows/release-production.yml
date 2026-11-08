@@ -49,12 +49,43 @@ jobs:
           HEAD_SHA: ${{ github.sha }}
         run: bash .github/scripts/classify-main-change-gap.sh
 
-  deploy-azure:
+  qualify-azure-release:
+    name: Require a protected qualified release record
     needs: routing
+    if: needs.routing.outputs.current-main == 'true' && needs.routing.outputs.azure-deploy == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment:
+      name: azure-production
+    permissions:
+      contents: read
+    outputs:
+      digest: ${{ steps.require.outputs.digest }}
+    steps:
+      - name: Require the protected qualified release digest
+        id: require
+        env:
+          QUALIFIED_RELEASE_DIGEST: ${{ vars.LYRASHIELD_QUALIFIED_RELEASE_DIGEST }}
+        run: |
+          if [[ ! "$QUALIFIED_RELEASE_DIGEST" =~ ^[a-f0-9]{64}$ ]]; then
+            {
+              echo "## Azure release held before deployment"
+              echo
+              echo "No 64-character qualified release digest is configured in the protected \`azure-production\` environment."
+              echo "Production will not deploy without a signed qualified release record and rollback tuple."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::error::Set LYRASHIELD_QUALIFIED_RELEASE_DIGEST in the azure-production environment to a qualified release record digest before deploying."
+            exit 1
+          fi
+          echo "digest=$QUALIFIED_RELEASE_DIGEST" >> "$GITHUB_OUTPUT"
+
+  deploy-azure:
+    needs: [routing, qualify-azure-release]
     if: needs.routing.outputs.current-main == 'true' && needs.routing.outputs.azure-deploy == 'true'
     uses: ./.github/workflows/deploy-azure.yml
     with:
       source_sha: ${{ github.sha }}
+      qualified_release_digest: ${{ needs.qualify-azure-release.outputs.digest }}
     secrets: inherit
     permissions:
       actions: read
