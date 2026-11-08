@@ -95,7 +95,7 @@ function fixture(t, options = {}) {
     writeFileSync(receiptPath, JSON.stringify(receipt), { mode: 0o600 })
   writeFileSync(
     configPath,
-    `LYRASHIELD_WORKER_IMAGE=${currentImage}\nLYRASHIELD_SANDBOX_IMAGE=ghcr.io/ecryptoguru/sandbox:fixture@sha256:${"f".repeat(64)}\n`
+    `LYRASHIELD_WORKER_IMAGE=${currentImage}\nLYRASHIELD_SANDBOX_IMAGE=ghcr.io/ecryptoguru/sandbox:fixture@sha256:${"f".repeat(64)}\nLYRASHIELD_SANDBOX_SBOM_COVERAGE_VERIFY_PATH=/tmp/coverage.json\nLYRASHIELD_SANDBOX_SBOM_COVERAGE_EXPECTED_PATH=/tmp/coverage-predicate.json\nLYRASHIELD_SANDBOX_SBOM_COVERAGE_REPO=ecryptoguru/lyrashield-engine\nLYRASHIELD_SANDBOX_SBOM_COVERAGE_REF=refs/heads/main\nLYRASHIELD_SANDBOX_SBOM_COVERAGE_ENGINE_REVISION=${"a".repeat(40)}\nLYRASHIELD_SANDBOX_SBOM_COVERAGE_WORKFLOW_REVISION=${"b".repeat(40)}\nLYRASHIELD_SANDBOX_SBOM_COVERAGE_RUN_ID=42487812345\nLYRASHIELD_SANDBOX_SBOM_COVERAGE_RUN_ATTEMPT=1\n`
   )
   writeFileSync(environmentPath, "")
   writeFileSync(envLibPath, "lyrashield_worker_env_args() { :; }\n")

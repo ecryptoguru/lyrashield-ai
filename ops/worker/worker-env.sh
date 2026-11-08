@@ -24,6 +24,18 @@ lwe_valid_api_mode() {
   esac
 }
 
+# Consumers word-split the emitted arguments, so every value must be
+# whitespace-free. In the C locale the printable range is space..tilde, so
+# anything outside it (tab/newline/CR/control/>=0x7F bytes) rejects.
+lwe_whitespace_free() {
+  case "$1" in
+    '') return 1 ;;
+    *' '*) return 1 ;;
+  esac
+  printf '%s' "$1" | LC_ALL=C grep -q '[^[:print:]]' && return 1
+  return 0
+}
+
 lyrashield_worker_env_args() {
   lwe_config=$1
   lwe_environment_file=$2
@@ -78,6 +90,71 @@ lyrashield_worker_env_args() {
   fi
   if [ -n "${LLM_API_MODE-}" ]; then printf '%s\n' "--env LLM_API_MODE=$LLM_API_MODE"; fi
   if [ -n "${DEDUPE_LLM_API_MODE-}" ]; then printf '%s\n' "--env DEDUPE_LLM_API_MODE=$DEDUPE_LLM_API_MODE"; fi
+
+  # Signed bounded SBOM coverage evidence for the pinned sandbox image.
+  # runner-config.ts requires all eight values in production
+  # (assertSandboxSbomCoverageVerified), so the worker cannot start without
+  # them; fail here, before any consumer starts, with the same formats the
+  # consumer enforces. The evidence files are provisioned by the operator
+  # into the shared root; runtime.conf carries only paths and identity.
+  : "${LYRASHIELD_SANDBOX_SBOM_COVERAGE_VERIFY_PATH:?Set the verified attestation output path in the runtime configuration}"
+  : "${LYRASHIELD_SANDBOX_SBOM_COVERAGE_EXPECTED_PATH:?Set the expected coverage predicate path in the runtime configuration}"
+  : "${LYRASHIELD_SANDBOX_SBOM_COVERAGE_REPO:?Set the SBOM coverage engine repository in the runtime configuration}"
+  : "${LYRASHIELD_SANDBOX_SBOM_COVERAGE_REF:?Set the SBOM coverage source ref in the runtime configuration}"
+  : "${LYRASHIELD_SANDBOX_SBOM_COVERAGE_ENGINE_REVISION:?Set the SBOM coverage engine revision in the runtime configuration}"
+  : "${LYRASHIELD_SANDBOX_SBOM_COVERAGE_WORKFLOW_REVISION:?Set the SBOM coverage workflow revision in the runtime configuration}"
+  : "${LYRASHIELD_SANDBOX_SBOM_COVERAGE_RUN_ID:?Set the SBOM coverage run ID in the runtime configuration}"
+  : "${LYRASHIELD_SANDBOX_SBOM_COVERAGE_RUN_ATTEMPT:?Set the SBOM coverage run attempt in the runtime configuration}"
+  for lwe_sbom_path in \
+    "$LYRASHIELD_SANDBOX_SBOM_COVERAGE_VERIFY_PATH" \
+    "$LYRASHIELD_SANDBOX_SBOM_COVERAGE_EXPECTED_PATH"; do
+    case "$lwe_sbom_path" in
+      /*) ;;
+      *) echo "SBOM coverage evidence paths must be absolute" >&2; return 1 ;;
+    esac
+    lwe_whitespace_free "$lwe_sbom_path" || {
+      echo "SBOM coverage evidence paths must be whitespace-free" >&2
+      return 1
+    }
+  done
+  for lwe_sbom_value in \
+    "$LYRASHIELD_SANDBOX_SBOM_COVERAGE_REPO" \
+    "$LYRASHIELD_SANDBOX_SBOM_COVERAGE_REF"; do
+    lwe_whitespace_free "$lwe_sbom_value" || {
+      echo "SBOM coverage evidence values must be whitespace-free" >&2
+      return 1
+    }
+  done
+  case "$LYRASHIELD_SANDBOX_SBOM_COVERAGE_REF" in
+    refs/*) ;;
+    *) echo "SBOM coverage source ref must be fully qualified" >&2; return 1 ;;
+  esac
+  case "$LYRASHIELD_SANDBOX_SBOM_COVERAGE_REPO" in
+    */*) ;;
+    *) echo "SBOM coverage engine repository must be owner/name" >&2; return 1 ;;
+  esac
+  lwe_is_40_hex "$LYRASHIELD_SANDBOX_SBOM_COVERAGE_ENGINE_REVISION" || {
+    echo "SBOM coverage engine revision must be a 40-character SHA" >&2
+    return 1
+  }
+  lwe_is_40_hex "$LYRASHIELD_SANDBOX_SBOM_COVERAGE_WORKFLOW_REVISION" || {
+    echo "SBOM coverage workflow revision must be a 40-character SHA" >&2
+    return 1
+  }
+  for lwe_sbom_number in "$LYRASHIELD_SANDBOX_SBOM_COVERAGE_RUN_ID" "$LYRASHIELD_SANDBOX_SBOM_COVERAGE_RUN_ATTEMPT"; do
+    case "$lwe_sbom_number" in
+      ''|*[!0-9]*|0*) echo "SBOM coverage run identity must be positive decimal" >&2; return 1 ;;
+    esac
+  done
+  printf '%s\n' \
+    "--env LYRASHIELD_SANDBOX_SBOM_COVERAGE_VERIFY_PATH=$LYRASHIELD_SANDBOX_SBOM_COVERAGE_VERIFY_PATH" \
+    "--env LYRASHIELD_SANDBOX_SBOM_COVERAGE_EXPECTED_PATH=$LYRASHIELD_SANDBOX_SBOM_COVERAGE_EXPECTED_PATH" \
+    "--env LYRASHIELD_SANDBOX_SBOM_COVERAGE_REPO=$LYRASHIELD_SANDBOX_SBOM_COVERAGE_REPO" \
+    "--env LYRASHIELD_SANDBOX_SBOM_COVERAGE_REF=$LYRASHIELD_SANDBOX_SBOM_COVERAGE_REF" \
+    "--env LYRASHIELD_SANDBOX_SBOM_COVERAGE_ENGINE_REVISION=$LYRASHIELD_SANDBOX_SBOM_COVERAGE_ENGINE_REVISION" \
+    "--env LYRASHIELD_SANDBOX_SBOM_COVERAGE_WORKFLOW_REVISION=$LYRASHIELD_SANDBOX_SBOM_COVERAGE_WORKFLOW_REVISION" \
+    "--env LYRASHIELD_SANDBOX_SBOM_COVERAGE_RUN_ID=$LYRASHIELD_SANDBOX_SBOM_COVERAGE_RUN_ID" \
+    "--env LYRASHIELD_SANDBOX_SBOM_COVERAGE_RUN_ATTEMPT=$LYRASHIELD_SANDBOX_SBOM_COVERAGE_RUN_ATTEMPT"
 
   # Worker serves no authentication routes. Keep its email flag off so it does
   # not require the app's Brevo credential; app deployment defaults to on.
