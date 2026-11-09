@@ -14,6 +14,18 @@ const aiResultCacheSyncArgs = [
   "sync-ai-result-cache-secrets-to-worker-key-vault",
 ]
 
+// worker-env.sh requires signed SBOM coverage evidence for the pinned
+// sandbox image; fixtures that run the real loader must carry valid values.
+const sbomEvidenceLines =
+  "LYRASHIELD_SANDBOX_SBOM_COVERAGE_VERIFY_PATH=/tmp/coverage.json\n" +
+  "LYRASHIELD_SANDBOX_SBOM_COVERAGE_EXPECTED_PATH=/tmp/coverage-predicate.json\n" +
+  "LYRASHIELD_SANDBOX_SBOM_COVERAGE_REPO=ecryptoguru/lyrashield-engine\n" +
+  "LYRASHIELD_SANDBOX_SBOM_COVERAGE_REF=refs/heads/main\n" +
+  "LYRASHIELD_SANDBOX_SBOM_COVERAGE_ENGINE_REVISION=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n" +
+  "LYRASHIELD_SANDBOX_SBOM_COVERAGE_WORKFLOW_REVISION=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n" +
+  "LYRASHIELD_SANDBOX_SBOM_COVERAGE_RUN_ID=42487812345\n" +
+  "LYRASHIELD_SANDBOX_SBOM_COVERAGE_RUN_ATTEMPT=1\n"
+
 const workflowStepBody = (script, slug) => {
   const marker = `step_${slug}() {\n`
   const start = script.indexOf(marker)
@@ -408,7 +420,8 @@ test("worker preflight reads refreshed Key Vault credentials without restarting 
     writeFileSync(
       runtimeConfig,
       "LYRASHIELD_WORKER_IMAGE=ghcr.io/example/worker@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n" +
-        "LYRASHIELD_SANDBOX_IMAGE=ghcr.io/example/sandbox@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\n"
+        "LYRASHIELD_SANDBOX_IMAGE=ghcr.io/example/sandbox@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\n" +
+        sbomEvidenceLines
     )
     writeFileSync(envFile, preflightEnvFile)
     const empty = {
@@ -517,7 +530,8 @@ test("worker preflight reports a stale worker environment without printing endpo
     writeFileSync(
       runtimeConfig,
       "LYRASHIELD_WORKER_IMAGE=ghcr.io/example/worker@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n" +
-        "LYRASHIELD_SANDBOX_IMAGE=ghcr.io/example/sandbox@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\n"
+        "LYRASHIELD_SANDBOX_IMAGE=ghcr.io/example/sandbox@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\n" +
+        sbomEvidenceLines
     )
     writeFileSync(envFile, preflightEnvFile)
     const empty = {
@@ -605,6 +619,7 @@ function verifyPreflightEnvironment(controls) {
       runtimeConfig,
       "LYRASHIELD_WORKER_IMAGE=ghcr.io/example/worker@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n" +
         "LYRASHIELD_SANDBOX_IMAGE=ghcr.io/example/sandbox@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\n" +
+        sbomEvidenceLines +
         Object.entries(controls)
           .map(([name, value]) => `${name}=${value}\n`)
           .join("")
