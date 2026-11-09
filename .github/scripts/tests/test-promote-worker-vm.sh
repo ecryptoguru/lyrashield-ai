@@ -882,7 +882,7 @@ printf 1 > "$preflight_dir/timer-enabled"
 : > "$preflight_dir/docker.log"
 : > "$preflight_dir/systemctl.log"
 : > "$preflight_dir/order.log"
-printf 'LYRASHIELD_WORKER_IMAGE=%s\nLYRASHIELD_SANDBOX_IMAGE=ghcr.io/example/sandbox@sha256:%s\n' "$old_image" "$(printf 'e%.0s' {1..64})" > "$preflight_dir/runtime.conf"
+printf 'LYRASHIELD_WORKER_IMAGE=%s\nLYRASHIELD_SANDBOX_IMAGE=ghcr.io/example/sandbox@sha256:%s\nLYRASHIELD_SANDBOX_SBOM_COVERAGE_VERIFY_PATH=/tmp/coverage.json\nLYRASHIELD_SANDBOX_SBOM_COVERAGE_EXPECTED_PATH=/tmp/coverage-predicate.json\nLYRASHIELD_SANDBOX_SBOM_COVERAGE_REPO=ecryptoguru/lyrashield-engine\nLYRASHIELD_SANDBOX_SBOM_COVERAGE_REF=refs/heads/main\nLYRASHIELD_SANDBOX_SBOM_COVERAGE_ENGINE_REVISION=%s\nLYRASHIELD_SANDBOX_SBOM_COVERAGE_WORKFLOW_REVISION=%s\nLYRASHIELD_SANDBOX_SBOM_COVERAGE_RUN_ID=42487812345\nLYRASHIELD_SANDBOX_SBOM_COVERAGE_RUN_ATTEMPT=1\n' "$old_image" "$(printf 'e%.0s' {1..64})" "$(printf 'a%.0s' {1..40})" "$(printf 'a%.0s' {1..40})" > "$preflight_dir/runtime.conf"
 printf 'REDIS_URL=rediss://current@redis.test:6379\nDATABASE_URL=postgresql://current@database.test:5432/lyrashield\n' > "$preflight_dir/worker.env"
 preflight_output=$(
   PATH="$preflight_dir/bin:$PATH" \
