@@ -25,12 +25,13 @@ lwe_valid_api_mode() {
 }
 
 # Consumers word-split the emitted arguments, so every value must be
-# whitespace-free. In the C locale the printable range is space..tilde, so
-# anything outside it (tab/newline/CR/control/>=0x7F bytes) rejects.
+# whitespace-free. grep treats newlines as separators, so reject them first.
 lwe_whitespace_free() {
   case "$1" in
     '') return 1 ;;
     *' '*) return 1 ;;
+    *'
+'*) return 1 ;;
   esac
   printf '%s' "$1" | LC_ALL=C grep -q '[^[:print:]]' && return 1
   return 0
@@ -42,6 +43,10 @@ lyrashield_worker_env_args() {
   lwe_shared_root=${3:-/var/lib/lyrashield/worker}
 
   unset LYRASHIELD_RUN_RECORD_V1_1 LYRASHIELD_PENDING_HTTP_EVIDENCE LLM_API_MODE DEDUPE_LLM_API_MODE
+  unset LYRASHIELD_SANDBOX_SBOM_COVERAGE_VERIFY_PATH LYRASHIELD_SANDBOX_SBOM_COVERAGE_EXPECTED_PATH \
+    LYRASHIELD_SANDBOX_SBOM_COVERAGE_REPO LYRASHIELD_SANDBOX_SBOM_COVERAGE_REF \
+    LYRASHIELD_SANDBOX_SBOM_COVERAGE_ENGINE_REVISION LYRASHIELD_SANDBOX_SBOM_COVERAGE_WORKFLOW_REVISION \
+    LYRASHIELD_SANDBOX_SBOM_COVERAGE_RUN_ID LYRASHIELD_SANDBOX_SBOM_COVERAGE_RUN_ATTEMPT
   set -a
   # shellcheck disable=SC1090
   . "$lwe_config"
