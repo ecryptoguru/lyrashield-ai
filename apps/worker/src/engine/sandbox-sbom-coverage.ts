@@ -15,7 +15,7 @@
  * bounded-scope contract.
  */
 
-import { readFileSync, statSync } from "node:fs"
+import { closeSync, constants, fstatSync, lstatSync, openSync, readSync } from "node:fs"
 
 const DIGEST_RE = /^sha256:[0-9a-f]{64}$/
 const SHA256_RE = /^[0-9a-f]{64}$/
@@ -436,22 +436,56 @@ export function verifySandboxSbomCoverage(options: SandboxSbomCoverageVerifyOpti
 const MAX_EVIDENCE_BYTES = 16 * 1024 * 1024
 const SANDBOX_IMAGE_RE = /^ghcr\.io\/ecryptoguru\/lyrashield-sandbox@sha256:([a-f0-9]{64})$/
 
-function readJsonEvidence(path: string, label: string): unknown {
-  let stat: { size: number; isFile: () => boolean }
+export function readJsonEvidence(path: string, label: string, expectedOwner: number): unknown {
+  if (typeof constants.O_NOFOLLOW !== "number" || typeof constants.O_NONBLOCK !== "number") {
+    fail("safe evidence file flags are unavailable")
+  }
+  let fd: number
   try {
     // eslint-disable-next-line security/detect-non-literal-fs-filename
-    stat = statSync(path)
+    fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK)
   } catch {
     fail(`${label} is unavailable: ${path}`)
   }
-  if (!stat.isFile() || stat.size <= 0 || stat.size > MAX_EVIDENCE_BYTES) {
-    fail(`${label} has an invalid size: ${path}`)
-  }
   try {
+    const before = fstatSync(fd)
+    if (
+      !before.isFile() ||
+      before.uid !== expectedOwner ||
+      before.size <= 0 ||
+      before.size > MAX_EVIDENCE_BYTES
+    ) {
+      fail(`${label} has an invalid owner, type or size: ${path}`)
+    }
+    const bytes = Buffer.allocUnsafe(before.size + 1)
+    let length = 0
+    while (length < bytes.length) {
+      const count = readSync(fd, bytes, length, bytes.length - length, null)
+      if (count === 0) break
+      length += count
+    }
+    const after = fstatSync(fd)
     // eslint-disable-next-line security/detect-non-literal-fs-filename
-    return JSON.parse(readFileSync(path, "utf8"))
-  } catch {
-    fail(`${label} is not valid JSON: ${path}`)
+    const entry = lstatSync(path)
+    if (
+      length !== before.size ||
+      after.size !== before.size ||
+      after.mtimeMs !== before.mtimeMs ||
+      after.ctimeMs !== before.ctimeMs ||
+      after.uid !== expectedOwner ||
+      !entry.isFile() ||
+      entry.dev !== before.dev ||
+      entry.ino !== before.ino
+    ) {
+      fail(`${label} changed while reading: ${path}`)
+    }
+    try {
+      return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes.subarray(0, length)))
+    } catch {
+      fail(`${label} is not valid JSON: ${path}`)
+    }
+  } finally {
+    closeSync(fd)
   }
 }
 
@@ -494,9 +528,11 @@ export function assertSandboxSbomCoverageVerified(
         "_ENGINE_REVISION, _WORKFLOW_REVISION, _RUN_ID, _RUN_ATTEMPT)"
     )
   }
+  const expectedOwner = process.getuid?.()
+  if (expectedOwner === undefined) fail("evidence owner cannot be established")
   verifySandboxSbomCoverage({
-    records: readJsonEvidence(verifyPath, "verified attestation output"),
-    expectedAggregate: readJsonEvidence(expectedPath, "expected coverage predicate"),
+    records: readJsonEvidence(verifyPath, "verified attestation output", expectedOwner),
+    expectedAggregate: readJsonEvidence(expectedPath, "expected coverage predicate", expectedOwner),
     identity: {
       engineRevision,
       workflowRevision,
