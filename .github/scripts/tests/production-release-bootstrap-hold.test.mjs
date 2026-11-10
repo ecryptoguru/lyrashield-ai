@@ -12,15 +12,30 @@ const workflows = [
   ["finalize-held-webhook-recovery.yml", "finalize"],
 ]
 
-function firstStep(workflow, jobName) {
-  const source = readFileSync(new URL(`../../workflows/${workflow}`, import.meta.url), "utf8")
+function firstStepInSource(source, workflow, jobName) {
   const job = source.match(
     new RegExp(`^  ${jobName}:\\n([\\s\\S]*?)(?=^  [a-zA-Z0-9_-]+:\\n|(?![\\s\\S]))`, "m")
   )?.[1]
   assert.ok(job, `${workflow}: ${jobName} must exist`)
   const steps = job.match(/^    steps:\n([\s\S]*)/m)?.[1]
   assert.ok(steps, `${workflow}: ${jobName} must have steps`)
-  return steps.match(/^      - name: ([^\n]+)\n([\s\S]*?)(?=^      - name: |(?![\s\S]))/m)
+  const entry = steps.match(/^      -([^\n]*)\n([\s\S]*?)(?=^      -(?:\s|$)|(?![\s\S]))/m)
+  if (!entry) return null
+  const name = entry[1].match(/^\s+name:\s+(.+)$/)?.[1]
+  return [entry[0], name, entry[2]]
+}
+
+function firstStep(workflow, jobName) {
+  const source = readFileSync(new URL(`../../workflows/${workflow}`, import.meta.url), "utf8")
+  return firstStepInSource(source, workflow, jobName)
+}
+
+for (const unnamed of ["run: echo bypass", "uses: actions/checkout@v4"]) {
+  test(`does not overlook an unnamed ${unnamed.split(":")[0]} step before the hold`, () => {
+    const source = `jobs:\n  routing:\n    steps:\n      - ${unnamed}\n      - name: Hold production until runtime qualification\n        run: exit 1\n`
+    const step = firstStepInSource(source, "fixture.yml", "routing")
+    assert.notEqual(step?.[1], "Hold production until runtime qualification")
+  })
 }
 
 for (const [workflow, job] of workflows) {
