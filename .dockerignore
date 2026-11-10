@@ -12,6 +12,7 @@ lyrashield-engine/
 *.md
 .env*
 .env.local
+**/.lyrashield
 coverage
 .turbo
 output
