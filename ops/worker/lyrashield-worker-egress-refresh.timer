@@ -3,6 +3,7 @@ Description=Refresh LyraShield worker egress endpoints
 
 [Timer]
 OnBootSec=2min
+OnActiveSec=2min
 OnUnitActiveSec=5min
 RandomizedDelaySec=30s
 Persistent=true
