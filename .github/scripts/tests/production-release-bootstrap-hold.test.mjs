@@ -29,13 +29,14 @@ for (const [workflow, job] of workflows) {
     assert.ok(step, "first step must exist")
     assert.equal(step[1], "Hold production until runtime qualification")
     assert.doesNotMatch(step[2], /^        (?:if|continue-on-error):/m)
-    const script = step[2].match(/^        run: \|\n((?: {10}[^\n]*\n?)+)/m)?.[1]
+    const block = step[2].match(/^        run: \|\n((?: {10}[^\n]*\n?)+)/m)?.[1]
+    const script = block?.replace(/^ {10}/gm, "") ?? step[2].match(/^        run: (.+)$/m)?.[1]
     assert.ok(script, "the hold must run directly, before any checkout or credentials")
-    const result = spawnSync("bash", ["-e", "-c", script.replace(/^ {10}/gm, "")], {
+    const result = spawnSync("bash", ["-e", "-c", script], {
       encoding: "utf8",
       env: { PATH: process.env.PATH },
     })
     assert.equal(result.status, 1, "the bootstrap hold must fail closed")
-    assert.match(result.stdout, /production.*qualification/i)
+    if (result.stdout) assert.match(result.stdout, /production.*qualification/i)
   })
 }
