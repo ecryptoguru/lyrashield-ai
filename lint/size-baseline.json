@@ -295,11 +295,6 @@
       "totalExcess": 259,
       "maxExcess": 172
     },
-    "apps/web/src/app/api/scans/eligibility/route.ts|max-lines-per-function": {
-      "count": 1,
-      "totalExcess": 61,
-      "maxExcess": 61
-    },
     "apps/web/src/app/api/scans/route.ts|max-lines": {
       "count": 1,
       "totalExcess": 68,

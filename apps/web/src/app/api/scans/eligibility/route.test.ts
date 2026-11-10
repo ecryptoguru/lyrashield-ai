@@ -1,5 +1,8 @@
 vi.mock("@lyrashield/integrations", () => ({
   isTargetRelayWorkerAvailable: vi.fn().mockResolvedValue(true),
+  getBranchRefSha: vi.fn().mockResolvedValue("a".repeat(40)),
+  getDefaultBranch: vi.fn().mockResolvedValue("main"),
+  getMergeBaseSha: vi.fn().mockResolvedValue("b".repeat(40)),
 }))
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -33,6 +36,7 @@ vi.mock("@lyrashield/db", () => {
     workspace: { findUnique: vi.fn() },
     targetDomainVerification: { findFirst: vi.fn() },
     policy: { findFirst: vi.fn() },
+    integration: { findFirst: vi.fn() },
     scanAttachment: { findMany: vi.fn() },
     auditLog: { create: vi.fn() },
   }
@@ -135,6 +139,7 @@ import {
 } from "@lyrashield/db"
 import { assertOAuthDelegatedScope, requirePermission } from "@lyrashield/auth/server"
 import { assertScanAllowed, evaluateScanEntitlement, isTrialAvailable } from "@lyrashield/billing"
+import { getBranchRefSha } from "@lyrashield/integrations"
 import {
   checkFreeUrlScanRateLimit,
   checkScanCreateRateLimit,
@@ -142,6 +147,7 @@ import {
   peekFreeUrlScanRateLimit,
 } from "../../../../lib/rate-limit"
 import { GET } from "./route"
+import { GET as setupHealthGET } from "../../setup-health/route"
 import { expectPermissionDenied } from "@/__tests__/route-permission-manifest"
 
 function request(params: Record<string, string> | URLSearchParams) {
@@ -240,6 +246,10 @@ describe("GET /api/scans/eligibility", () => {
       remainingMinutes: 120,
     } as never)
     vi.mocked(resolveScanAttachments).mockResolvedValue([] as never)
+    vi.mocked(prisma.integration.findFirst).mockResolvedValue({
+      id: "integration-1",
+      status: "active",
+    } as never)
     vi.mocked(resolveAuthenticatedAssessmentAuthorization).mockResolvedValue({
       id: "authz-1",
     } as never)
@@ -669,5 +679,150 @@ describe("GET /api/scans/eligibility", () => {
       "NO_MINUTES_REMAINING",
       "SCAN_WORKFLOW_UNAVAILABLE",
     ])
+  })
+
+  it("binds setup health to resolved policy, sponsor, membership and source connection", async () => {
+    const member = { id: "member-1", role: "OWNER", status: "active", updatedAt: new Date(0) }
+    vi.mocked(requirePermission).mockResolvedValue({
+      session: { userId: "user-1" },
+      workspace: { role: "OWNER", member },
+    } as never)
+    vi.mocked(prisma.target.findFirst).mockResolvedValue({
+      id: "target-1",
+      type: "REPO",
+      repoFullName: "private/app",
+      branch: "main",
+      installationId: "123",
+    } as never)
+    vi.mocked(prisma.integration.findFirst).mockResolvedValue({
+      id: "connection-1",
+      status: "active",
+      updatedAt: new Date(0),
+    } as never)
+    vi.mocked(prisma.policy.findFirst).mockResolvedValue({
+      id: "policy-1",
+      maxBudgetUsd: { toNumber: () => 0.47 },
+      blockedPaths: ["/private"],
+    } as never)
+    vi.mocked(evaluateScanEntitlement).mockResolvedValue({
+      allowed: true,
+      accountId: "private-sponsor",
+      plan: "PRO",
+      isTrial: false,
+      remainingMinutes: 120,
+    } as never)
+    const check = async () =>
+      (await (await setupHealthGET(request({ ...validQuery, mode: "STANDARD" }))).json()).data
+    const initial = await check()
+    expect(initial).toMatchObject({ status: "ready", allowed: true })
+    expect(JSON.stringify(initial)).not.toContain("private-sponsor")
+    expect(JSON.stringify(initial)).not.toContain("private/app")
+    expect(JSON.stringify(initial)).not.toContain("0.47")
+
+    vi.mocked(getBranchRefSha).mockResolvedValueOnce("f".repeat(40))
+    const movedBranch = await check()
+    expect(movedBranch.scopeFingerprint).not.toBe(initial.scopeFingerprint)
+    expect(JSON.stringify(movedBranch)).not.toContain("f".repeat(40))
+    vi.mocked(getBranchRefSha).mockRejectedValueOnce(new Error("provider unavailable"))
+    const unavailableSource = await check()
+    expect(unavailableSource).toMatchObject({ status: "unknown", allowed: false })
+
+    vi.mocked(prisma.policy.findFirst).mockResolvedValue({
+      id: "policy-1",
+      maxBudgetUsd: { toNumber: () => 0.22 },
+      blockedPaths: ["/private"],
+    } as never)
+    const policyChanged = await check()
+    expect(policyChanged.scopeFingerprint).not.toBe(initial.scopeFingerprint)
+
+    vi.mocked(evaluateScanEntitlement).mockResolvedValue({
+      allowed: true,
+      accountId: "another-sponsor",
+      plan: "PRO",
+      isTrial: false,
+      remainingMinutes: 120,
+    } as never)
+    const sponsorChanged = await check()
+    expect(sponsorChanged.scopeFingerprint).not.toBe(policyChanged.scopeFingerprint)
+
+    member.role = "MEMBER"
+    const membershipChanged = await check()
+    expect(membershipChanged.scopeFingerprint).not.toBe(sponsorChanged.scopeFingerprint)
+
+    vi.mocked(prisma.integration.findFirst).mockResolvedValue({
+      id: "connection-1",
+      status: "disabled",
+      updatedAt: new Date(1),
+    } as never)
+    const disconnected = await check()
+    expect(disconnected.scopeFingerprint).not.toBe(membershipChanged.scopeFingerprint)
+    expect(disconnected).toMatchObject({ status: "unknown", allowed: false })
+
+    vi.mocked(prisma.integration.findFirst).mockResolvedValue({
+      id: "connection-1",
+      status: "active",
+      updatedAt: new Date(0),
+    } as never)
+    vi.mocked(requirePermission)
+      .mockResolvedValueOnce({ session: { userId: "user-1" }, workspace: { member } } as never)
+      .mockRejectedValueOnce(new Error("FORBIDDEN"))
+    let release: ((revision: string) => void) | undefined
+    vi.mocked(getBranchRefSha).mockClear()
+    vi.mocked(getBranchRefSha).mockImplementationOnce(
+      () =>
+        new Promise<string>((resolve) => {
+          release = resolve
+        })
+    )
+    const pending = setupHealthGET(request({ ...validQuery, mode: "STANDARD" }))
+    await vi.waitFor(() => expect(getBranchRefSha).toHaveBeenCalledTimes(1))
+    release?.("a".repeat(40))
+    const revoked = await pending
+    expect(revoked.status).toBe(403)
+  })
+
+  it("rechecks attachments that are revoked during source observation", async () => {
+    vi.mocked(requirePermission).mockResolvedValue({
+      session: { userId: "user-1" },
+      workspace: { member: { id: "member-1", role: "OWNER", status: "active" } },
+    } as never)
+    vi.mocked(prisma.target.findFirst).mockResolvedValue({
+      id: "target-1",
+      type: "REPO",
+      repoFullName: "owner/project",
+      branch: "main",
+      installationId: "123",
+    } as never)
+    vi.mocked(prisma.integration.findFirst).mockResolvedValue({
+      id: "connection-1",
+      status: "active",
+    } as never)
+    vi.mocked(resolveScanAttachments)
+      .mockResolvedValueOnce([
+        { id: "attachment-1", checksum: "a".repeat(64), status: "ACTIVE", byteLength: 1 },
+      ] as never)
+      .mockRejectedValueOnce(
+        new ScanAttachmentError("SCAN_ATTACHMENT_UNAVAILABLE", "Attachment is unavailable")
+      )
+    let release: ((revision: string) => void) | undefined
+    vi.mocked(getBranchRefSha).mockClear()
+    vi.mocked(getBranchRefSha).mockImplementationOnce(
+      () =>
+        new Promise<string>((resolve) => {
+          release = resolve
+        })
+    )
+    const pending = setupHealthGET(
+      request({ ...validQuery, mode: "STANDARD", attachmentIds: "attachment-1" })
+    )
+    await vi.waitFor(() => expect(getBranchRefSha).toHaveBeenCalledTimes(1))
+    release?.("a".repeat(40))
+    const body = await (await pending).json()
+    expect(resolveScanAttachments).toHaveBeenCalledTimes(2)
+    expect(body.data).toMatchObject({
+      status: "blocked",
+      allowed: false,
+      primaryCheck: "SCAN_ATTACHMENT_UNAVAILABLE",
+    })
   })
 })

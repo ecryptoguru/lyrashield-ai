@@ -1,8 +1,41 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const legacyGet = vi.hoisted(() => vi.fn())
+const authority = vi.hoisted(() => ({
+  evidence: {
+    intent: {
+      workspaceId: "ws-1",
+      targetId: "target-1",
+      goal: "TEST_APP",
+      mode: "STANDARD",
+      workflow: "REVIEW_TARGET",
+      policyId: null,
+      engineBudgetCeilingUsd: null,
+      baseRef: null,
+      headRef: null,
+      attachmentIds: [],
+      authorizationRef: null,
+    },
+    actor: {},
+    target: {},
+    connection: null,
+    source: null,
+    policy: null,
+    budget: {},
+    entitlement: {},
+    attachments: [],
+    authorization: null,
+    relay: {},
+    network: null,
+  },
+}))
 
-vi.mock("../../scans/eligibility/route", () => ({ GET: legacyGet }))
+vi.mock("../../scans/eligibility/evaluator", () => ({
+  evaluateScanSetup: async (request: Request) => ({
+    response: await legacyGet(request),
+    evidence: authority.evidence,
+  }),
+}))
 
 import { GET } from "./route"
 
@@ -23,7 +56,10 @@ const query = {
 }
 
 describe("GET /api/v1/setup-health", () => {
-  beforeEach(() => legacyGet.mockReset())
+  beforeEach(() => {
+    legacyGet.mockReset()
+    authority.evidence.entitlement = {}
+  })
 
   it("projects a legacy denial into the shared reason/recovery contract", async () => {
     legacyGet.mockResolvedValueOnce(
@@ -121,6 +157,17 @@ describe("GET /api/v1/setup-health", () => {
     expect(body.data.limitations).toEqual([
       "Comparison refs resolve only when the scan is submitted.",
     ])
+  })
+
+  it("keeps a nominal pass unknown if resolved authority is unavailable", async () => {
+    authority.evidence.entitlement = "UNAVAILABLE" as never
+    legacyGet.mockResolvedValueOnce(Response.json({ success: true, data: { allowed: true } }))
+    const body = await (await GET(request(query))).json()
+    expect(body.data).toMatchObject({
+      status: "unknown",
+      allowed: false,
+      primaryCheck: "SETUP_AUTHORITY_UNAVAILABLE",
+    })
   })
 
   it("passes authentication errors through without a health snapshot", async () => {

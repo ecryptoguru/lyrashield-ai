@@ -1161,7 +1161,7 @@ describe("POST /api/scans", () => {
       )
     })
 
-    it("passes a full-SHA headRef through without a ref lookup", async () => {
+    it("normalizes a full-SHA headRef without a ref lookup", async () => {
       vi.mocked(prisma.target.findFirst).mockResolvedValue(repoTarget as never)
       const headSha = "f".repeat(40)
       vi.mocked(getBranchRefSha).mockResolvedValue("b".repeat(40)) // baseRef only
@@ -1183,7 +1183,7 @@ describe("POST /api/scans", () => {
           mode: "QUICK",
           workflow: "REVIEW_CHANGES",
           baseRef: "release/1",
-          headRef: headSha,
+          headRef: headSha.toUpperCase(),
         })
       )
 

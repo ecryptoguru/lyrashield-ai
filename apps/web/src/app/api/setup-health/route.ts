@@ -1,39 +1,8 @@
-import { createHash } from "node:crypto"
 import { NextResponse } from "next/server"
-import {
-  buildSetupHealthSnapshot,
-  type SetupHealthScope,
-  type SetupHealthSnapshot,
-} from "@lyrashield/types"
-import { GET as legacyEligibilityGET } from "../scans/eligibility/route"
-
-function digest(value: string): string {
-  return createHash("sha256").update(value).digest("hex")
-}
-
-function sortedAttachmentFingerprint(url: URL): string | null {
-  const ids = [...new Set(url.searchParams.getAll("attachmentIds"))].sort()
-  return ids.length ? digest(JSON.stringify(["lyrashield-attachments/1.0.0", ...ids])) : null
-}
-
-function scopeFromRequest(url: URL): SetupHealthScope {
-  const policyId = url.searchParams.get("policyId")
-  const authorizationRef = url.searchParams.get("authorizationRef")
-  const headRef = url.searchParams.get("headRef")
-  return {
-    workspaceId: url.searchParams.get("workspaceId") ?? "",
-    targetId: url.searchParams.get("targetId") ?? "",
-    goal: url.searchParams.get("goal") ?? "",
-    mode: url.searchParams.get("mode") ?? "",
-    workflow: url.searchParams.get("workflow") ?? "REVIEW_TARGET",
-    policyFingerprint: policyId ? digest(`policy-id:${policyId}`) : null,
-    attachmentFingerprint: sortedAttachmentFingerprint(url),
-    authorizationFingerprint: authorizationRef
-      ? digest(`authorization-ref:${authorizationRef}`)
-      : null,
-    sourceRevision: headRef && /^[a-f0-9]{40}$/i.test(headRef) ? headRef.toLowerCase() : null,
-  }
-}
+import { buildSetupHealthSnapshot, type SetupHealthSnapshot } from "@lyrashield/types"
+import { env } from "@lyrashield/config"
+import { buildSetupAuthorityProjection } from "../../../lib/setup-health-authority"
+import { evaluateScanSetup } from "../scans/eligibility/evaluator"
 
 function noStore<T extends Response>(response: T): T {
   response.headers.set("Cache-Control", "private, no-store")
@@ -43,12 +12,12 @@ function noStore<T extends Response>(response: T): T {
 /**
  * Versioned, read-only setup-health projection.
  *
- * The legacy eligibility route remains the single admission evaluator. This
- * adapter preserves its exact blocker reason and invalidation checks while
+ * The shared eligibility evaluator supplies the decision and the authority
+ * it actually observed. This projection preserves blocker reasons while
  * giving web, CLI and MCP one client-neutral status/action contract.
  */
 export async function GET(request: Request) {
-  const legacy = await legacyEligibilityGET(request)
+  const { response: legacy, evidence } = await evaluateScanSetup(request, { resolveSource: true })
   const body = (await legacy.json().catch(() => null)) as
     | { success: true; data: Record<string, unknown> }
     | { success: false; error?: { code?: string; message?: string; details?: unknown } }
@@ -83,14 +52,27 @@ export async function GET(request: Request) {
   const limitations = Array.isArray(data.limitations)
     ? (data.limitations as unknown[]).filter((item): item is string => typeof item === "string")
     : []
-  const scope = scopeFromRequest(new URL(request.url))
-  const scopeFingerprint = digest(JSON.stringify(["lyrashield-setup-scope/1.0.0", scope]))
+  const { scope, scopeFingerprint, complete } = buildSetupAuthorityProjection(
+    evidence,
+    env.BETTER_AUTH_SECRET
+  )
+  const authorityUnavailable = data.allowed === true && !complete
+  if (authorityUnavailable) {
+    blockers.unshift({
+      code: "SETUP_AUTHORITY_UNAVAILABLE",
+      message: "Setup authority could not be fully evaluated. Retry the setup check.",
+    })
+  } else if (!complete) {
+    limitations.push("Some setup authority was not evaluated after an earlier blocker.")
+  }
   const snapshot: SetupHealthSnapshot = buildSetupHealthSnapshot({
-    allowed: data.allowed === true,
-    code,
-    message,
+    allowed: data.allowed === true && complete,
+    code: authorityUnavailable ? "SETUP_AUTHORITY_UNAVAILABLE" : code,
+    message: authorityUnavailable
+      ? "Setup authority could not be fully evaluated. Retry the setup check."
+      : message,
     blockers,
-    dependencyUnavailable: data.dependencyUnavailable === true,
+    dependencyUnavailable: data.dependencyUnavailable === true || authorityUnavailable,
     limitations,
     scope,
     scopeFingerprint,

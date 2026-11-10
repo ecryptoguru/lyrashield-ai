@@ -107,7 +107,21 @@ export async function findScanPolicy(workspaceId: string, policyId?: string) {
       ? { id: policyId, workspaceId, deletedAt: null }
       : { workspaceId, name: "Default Policy", deletedAt: null },
     orderBy: policyId ? undefined : [{ createdAt: "asc" }, { id: "asc" }],
-    select: { id: true, destructiveTestsAllowed: true, maxBudgetUsd: true },
+    select: {
+      id: true,
+      scanWindow: true,
+      blockedPaths: true,
+      allowedDomains: true,
+      rateLimit: true,
+      networkEgressPolicy: true,
+      destructiveTestsAllowed: true,
+      approvalRequired: true,
+      maxBudgetUsd: true,
+      maxDurationMinutes: true,
+      piiRedactionEnabled: true,
+      evidenceRetentionDays: true,
+      updatedAt: true,
+    },
   })
 }
 

@@ -53,7 +53,7 @@ import {
 
 /** Full lowercase git object IDs (SHA-1 = 40, SHA-256 = 64) pass through as
  * immutable revisions; anything else resolves through the installation. */
-const FULL_GIT_OBJECT_ID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/
+const FULL_GIT_OBJECT_ID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/i
 
 async function resolveRepoRevision(
   installationId: number,
@@ -61,7 +61,7 @@ async function resolveRepoRevision(
   repo: string,
   ref: string
 ): Promise<string> {
-  if (FULL_GIT_OBJECT_ID.test(ref)) return ref
+  if (FULL_GIT_OBJECT_ID.test(ref)) return ref.toLowerCase()
   return getBranchRefSha(installationId, owner, repo, ref)
 }
 
