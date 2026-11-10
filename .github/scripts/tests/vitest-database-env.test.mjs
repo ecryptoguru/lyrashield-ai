@@ -25,10 +25,12 @@ describe("Vitest database environment", () => {
       UPSTASH_REDIS_REST_TOKEN: "secret-token",
       TRIAL_INTEGRATION_TEST: "1",
       SCAN_USAGE_RLS_RUNTIME_TEST: "1",
+      RETEST_TRUST_RLS_RUNTIME_TEST: "1",
     }
 
     assert.equal(configureVitestDatabaseEnvironment(env), false)
     assert.equal(env.SCAN_USAGE_RLS_RUNTIME_TEST, undefined)
+    assert.equal(env.RETEST_TRUST_RLS_RUNTIME_TEST, undefined)
     assert.equal(env.DATABASE_URL, "postgresql://vitest:vitest@127.0.0.1:1/lyrashield_test")
     assert.equal(env.RLS_RUNTIME_DATABASE_URL, undefined)
     assert.equal(env.REDIS_URL, undefined)

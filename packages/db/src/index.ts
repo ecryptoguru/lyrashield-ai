@@ -517,3 +517,5 @@ export {
 } from "./fix-pr-execution-service"
 
 export { lockActiveTargetForDerivedWrite } from "./target-write-lock"
+export { classifyRetestResolution } from "./release-packet-classification"
+export { loadReceiptBackedRetestFindingIds } from "./retest-evidence-trust"

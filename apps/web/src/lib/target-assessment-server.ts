@@ -1,8 +1,11 @@
 import {
+  classifyRetestResolution,
   getCurrentGateVerdict,
   getCustomerScanUsageProjection,
+  loadReceiptBackedRetestFindingIds,
   parseAssessmentSnapshot,
   withWorkspaceRLS,
+  type ScopedTransaction,
 } from "@lyrashield/db"
 import type {
   ResourceResult,
@@ -38,6 +41,7 @@ interface RemediationFindingInput {
   firstSeenAt: Date
   lastSeenAt: Date
   observedInCurrentScan: boolean
+  trustedRetest?: boolean
 }
 
 const BLOCKING_STATUSES = new Set([
@@ -66,8 +70,10 @@ export function countTargetRemediation(
     ) {
       counts.blockingFindings++
     }
-    if (finding.status === "FIXED") {
-      counts.resolvedFindings++
+    const resolution = classifyRetestResolution(finding.status, finding.trustedRetest === true)
+    if (resolution) {
+      if (resolution === "resolved") counts.resolvedFindings++
+      else counts.uncertainMatches++
       continue
     }
     if (!finding.observedInCurrentScan) {
@@ -129,27 +135,53 @@ async function defaultLoadGate(input: PanelInput): Promise<TargetAssessmentGate 
   }
 }
 
+function withAssessmentSnapshot<T>(workspaceId: string, fn: (tx: ScopedTransaction) => Promise<T>) {
+  return withWorkspaceRLS(workspaceId, fn, { isolationLevel: "RepeatableRead" })
+}
+
 async function defaultLoadRemediation(input: PanelInput): Promise<TargetRemediationCounts> {
-  const findings = await withWorkspaceRLS(input.workspaceId, (tx) =>
-    tx.finding.findMany({
+  const findings = await withAssessmentSnapshot(input.workspaceId, async (tx) => {
+    const rows = await tx.finding.findMany({
       where: { workspaceId: input.workspaceId, targetId: input.targetId, deletedAt: null },
       select: {
+        id: true,
+        scanId: true,
+        dedupeKey: true,
         severity: true,
         status: true,
         firstSeenAt: true,
         lastSeenAt: true,
+        verificationReceipts: {
+          where: { method: "RETEST" },
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+          take: 1,
+          select: {
+            status: true,
+            method: true,
+            scanId: true,
+            verifierVersion: true,
+            evidence: true,
+          },
+        },
         candidates: input.latestScanId
           ? { where: { scanId: input.latestScanId }, select: { id: true }, take: 1 }
           : false,
       },
     })
-  )
+    const trusted = await loadReceiptBackedRetestFindingIds(tx, {
+      workspaceId: input.workspaceId,
+      targetId: input.targetId,
+      findings: rows.filter((finding) => finding.status === "FIXED"),
+    })
+    return rows.map((finding) => ({ ...finding, trustedRetest: trusted.has(finding.id) }))
+  })
   return countTargetRemediation(
     findings.map((finding) => ({
       severity: finding.severity,
       status: finding.status,
       firstSeenAt: finding.firstSeenAt,
       lastSeenAt: finding.lastSeenAt,
+      trustedRetest: finding.trustedRetest,
       observedInCurrentScan: Array.isArray(finding.candidates) && finding.candidates.length > 0,
     })),
     input.latestScanStartedAt

@@ -559,6 +559,11 @@ jobs:
           node .github/scripts/assert-named-vitest-tests.mjs "$RUNNER_TEMP/customer-usage-rls.json" \
             "reads only the persisted sponsor's account receipt" \
             'rejects a receipt whose persisted scan binding changes'
+          DATABASE_URL="$RLS_RUNTIME_DATABASE_URL" RETEST_TRUST_RLS_RUNTIME_TEST=1 \
+            pnpm exec vitest run --maxWorkers=2 packages/db/src/retest-evidence-trust.runtime.test.ts \
+              --reporter=default --reporter=json --outputFile="$RUNNER_TEMP/retest-trust-rls.json"
+          node .github/scripts/assert-named-vitest-tests.mjs "$RUNNER_TEMP/retest-trust-rls.json" \
+            'accepts complete evidence only inside its workspace'
 
       - name: Prove metering and queue invariants with disposable services
         if: needs.changes.outputs.database-tests == 'true'

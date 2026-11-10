@@ -14,6 +14,7 @@ import { parseLaunchReportProvenance } from "./launch-report-provenance"
 import { verifyLaunchReportSignature } from "./launch-report-signing"
 import { resolveReportDelegationTarget } from "./report-service"
 import { classifyReleaseFindings } from "./release-packet-classification"
+import { loadReceiptBackedRetestFindingIds } from "./retest-evidence-trust"
 
 export { classifyReleaseFindings } from "./release-packet-classification"
 
@@ -206,6 +207,7 @@ async function loadPacketRemediation(
       where: { workspaceId: input.workspaceId, targetId: input.targetId, deletedAt: null },
       select: {
         id: true,
+        scanId: true,
         dedupeKey: true,
         title: true,
         severity: true,
@@ -218,7 +220,13 @@ async function loadPacketRemediation(
           where: { method: "RETEST" },
           orderBy: [{ createdAt: "desc" }, { id: "desc" }],
           take: 1,
-          select: { status: true },
+          select: {
+            status: true,
+            method: true,
+            scanId: true,
+            verifierVersion: true,
+            evidence: true,
+          },
         },
         retests: {
           orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -265,11 +273,15 @@ async function loadPacketRemediation(
     }),
   ])
 
+  const trustedRetests = await loadReceiptBackedRetestFindingIds(tx, {
+    workspaceId: input.workspaceId,
+    targetId: input.targetId,
+    findings: findings.filter((finding) => finding.status === "FIXED"),
+  })
   const remediation = classifyReleaseFindings({
     findings: findings.map((finding) => {
       const retest = finding.retests[0]
-      const receipt = finding.verificationReceipts[0]
-      const trustedRetest = receipt?.status === "VALIDATED"
+      const trustedRetest = trustedRetests.has(finding.id)
       const retestState: ReleasePacketFinding["retestState"] = trustedRetest
         ? "trusted"
         : retest?.status === "pending" || retest?.status === "running"

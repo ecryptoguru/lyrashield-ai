@@ -34,6 +34,13 @@ const SEVERITY_RANK: Record<string, number> = {
   INFO: 1,
 }
 
+export function classifyRetestResolution(
+  status: string,
+  trustedRetest: boolean
+): "resolved" | "uncertain" | null {
+  return status === "FIXED" ? (trustedRetest ? "resolved" : "uncertain") : null
+}
+
 function proposalState(
   proposal: ClassificationFinding["fixProposal"],
   identity: ClassificationInput["assessedIdentity"]
@@ -61,11 +68,12 @@ export function classifyReleaseFindings(input: ClassificationInput): {
 
   for (const finding of input.findings) {
     const observedCurrent = input.currentObservedKeys.has(finding.dedupeKey)
+    const resolution = classifyRetestResolution(finding.status, finding.trustedRetest)
     let category: ReleasePacketFinding["category"]
-    if (finding.status === "FIXED" && finding.trustedRetest) {
+    if (resolution === "resolved") {
       category = "resolved"
       resolvedFindings++
-    } else if (finding.status === "FIXED") {
+    } else if (resolution === "uncertain") {
       category = "uncertain"
       uncertainMatches++
     } else if (observedCurrent) {

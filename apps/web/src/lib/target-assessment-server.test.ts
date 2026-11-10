@@ -46,6 +46,14 @@ describe("countTargetRemediation", () => {
         {
           severity: "LOW",
           status: "FIXED",
+          trustedRetest: true,
+          firstSeenAt: new Date("2026-11-01T00:00:00.000Z"),
+          lastSeenAt: new Date("2026-11-05T00:03:00.000Z"),
+          observedInCurrentScan: false,
+        },
+        {
+          severity: "LOW",
+          status: "FIXED",
           firstSeenAt: new Date("2026-11-01T00:00:00.000Z"),
           lastSeenAt: new Date("2026-11-05T00:03:00.000Z"),
           observedInCurrentScan: false,
@@ -65,7 +73,7 @@ describe("countTargetRemediation", () => {
       newFindings: 1,
       recurringFindings: 1,
       resolvedFindings: 1,
-      uncertainMatches: 1,
+      uncertainMatches: 2,
       blockingFindings: 1,
     })
   })
