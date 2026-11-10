@@ -63,6 +63,12 @@ jobs:
       SCANNER_URL: ${{ vars.LYRASHIELD_SCANNER_URL || 'https://scanner.lyrashieldai.com' }}
       GH_TOKEN: ${{ github.token }}
     steps:
+      # The finalizer can activate historical runtime revisions directly.
+      - name: Hold production until runtime qualification
+        run: |
+          echo '::error::Production release is held pending runtime qualification.'
+          exit 1
+
       - name: Verify trusted main source before checkout
         env:
           OPS_SHA: ${{ inputs.operations_sha }}
