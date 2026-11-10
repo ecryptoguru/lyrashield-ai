@@ -1,6 +1,7 @@
 import type { Scan } from "./generated/prisma"
 import { readScanCapacity, type ScanCapacityProjection } from "./scan-capacity"
 import { withWorkspaceRLS } from "./rls"
+import { decimalString, planFacts } from "./scan-spend-facts"
 
 export type SpendValue =
   | {
@@ -31,8 +32,9 @@ export interface ScanSpendProjection {
   } | null
 }
 
-interface SpendScanInput {
+export interface SpendScanInput {
   id: string
+  workspaceId: string
   createdById: string
   sponsorAccountId: string | null
   status: string
@@ -43,37 +45,6 @@ interface SpendScanInput {
   createdAt: Date
   updatedAt: Date
   executionPlan: unknown
-}
-
-function decimalString(value: unknown): string | null {
-  if (value === null || value === undefined) return null
-  if (typeof value === "string" && value.trim()) return value.trim()
-  if (typeof value === "number" && Number.isFinite(value)) return String(value)
-  if (typeof value === "object" && value !== null && "toString" in value) {
-    const rendered = String(value)
-    if (rendered && rendered !== "[object Object]") return rendered
-  }
-  return null
-}
-
-function planFacts(value: unknown): { engineBacked: boolean; maximumUsd: string | null } {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return { engineBacked: false, maximumUsd: null }
-  }
-  const plan = value as {
-    capabilities?: unknown
-    limits?: { maxBudgetUsd?: unknown }
-  }
-  const engineBacked =
-    Array.isArray(plan.capabilities) && plan.capabilities.some((item) => item === "engine")
-  const maximum = plan.limits?.maxBudgetUsd
-  return {
-    engineBacked,
-    maximumUsd:
-      typeof maximum === "number" && Number.isFinite(maximum) && maximum >= 0
-        ? String(maximum)
-        : null,
-  }
 }
 
 /**
@@ -91,38 +62,37 @@ export function buildScanSpendProjection(input: {
   if (!input.canManageBilling && input.actorUserId !== sponsorAccountId) return null
 
   const plan = planFacts(input.scan.executionPlan)
-  const maximum: SpendValue = !plan.engineBacked
-    ? {
-        state: "known",
-        amountUsd: "0",
-        source: "ADMITTED_PROVIDER_CEILING",
-        observedAt: input.scan.createdAt.toISOString(),
-      }
-    : plan.maximumUsd !== null
-      ? {
-          state: "known",
-          amountUsd: plan.maximumUsd,
-          source: "ADMITTED_PROVIDER_CEILING",
-          observedAt: input.scan.createdAt.toISOString(),
-        }
-      : {
-          state: "unavailable",
-          reason:
-            input.scan.accountingVersion === 2 ? "PROVIDER_USAGE_UNRECONCILED" : "LEGACY_SCAN",
-        }
-
   const billed = decimalString(input.scan.billedCostUsd)
   const legacyActual = decimalString(
     input.scan.actualCostCents === null ? null : input.scan.actualCostCents / 100
   )
-  const consumed: SpendValue = !plan.engineBacked
-    ? {
-        state: "known",
-        amountUsd: "0",
-        source: "RECONCILED_PROVIDER_USAGE",
-        observedAt: input.scan.updatedAt.toISOString(),
-      }
-    : billed !== null
+  const contradictoryReceipt =
+    plan.applicability === "deterministic" &&
+    [billed, legacyActual].some((amount) => amount !== null && Number(amount) > 0)
+  const applicability = contradictoryReceipt ? "unavailable" : plan.applicability
+  const maximum: SpendValue =
+    applicability === "deterministic"
+      ? {
+          state: "known",
+          amountUsd: "0",
+          source: "ADMITTED_PROVIDER_CEILING",
+          observedAt: input.scan.createdAt.toISOString(),
+        }
+      : applicability === "engine" && plan.maximumUsd !== null
+        ? {
+            state: "known",
+            amountUsd: plan.maximumUsd,
+            source: "ADMITTED_PROVIDER_CEILING",
+            observedAt: input.scan.createdAt.toISOString(),
+          }
+        : {
+            state: "unavailable",
+            reason:
+              input.scan.accountingVersion === 2 ? "PROVIDER_USAGE_UNRECONCILED" : "LEGACY_SCAN",
+          }
+
+  const consumed: SpendValue =
+    billed !== null
       ? {
           state: "known",
           amountUsd: billed,
@@ -136,23 +106,34 @@ export function buildScanSpendProjection(input: {
             source: "RECONCILED_PROVIDER_USAGE",
             observedAt: input.scan.updatedAt.toISOString(),
           }
-        : {
-            state: "unavailable",
-            reason:
-              input.scan.accountingVersion !== 2
-                ? "LEGACY_SCAN"
-                : input.scan.status === "RUNNING" ||
-                    input.scan.status === "QUEUED" ||
-                    input.scan.status === "PREFLIGHT" ||
-                    input.scan.status === "VERIFYING" ||
-                    input.scan.accountingSettledAt === null
-                  ? "SETTLEMENT_PENDING"
-                  : "PROVIDER_USAGE_UNRECONCILED",
-          }
+        : applicability === "deterministic"
+          ? {
+              state: "known",
+              amountUsd: "0",
+              source: "RECONCILED_PROVIDER_USAGE",
+              observedAt: input.scan.updatedAt.toISOString(),
+            }
+          : {
+              state: "unavailable",
+              reason:
+                input.scan.accountingVersion !== 2
+                  ? "LEGACY_SCAN"
+                  : input.scan.status === "RUNNING" ||
+                      input.scan.status === "QUEUED" ||
+                      input.scan.status === "PREFLIGHT" ||
+                      input.scan.status === "VERIFYING" ||
+                      input.scan.accountingSettledAt === null
+                    ? "SETTLEMENT_PENDING"
+                    : "PROVIDER_USAGE_UNRECONCILED",
+            }
 
-  const reserved: SpendValue = plan.engineBacked
-    ? { state: "unavailable", reason: "NO_PROVIDER_DOLLAR_RESERVATION" }
-    : { state: "not_applicable", reason: "This review does not invoke a paid provider." }
+  const reserved: SpendValue =
+    applicability === "deterministic"
+      ? { state: "not_applicable", reason: "This review does not invoke a paid provider." }
+      : {
+          state: "unavailable",
+          reason: applicability === "engine" ? "NO_PROVIDER_DOLLAR_RESERVATION" : "LEGACY_SCAN",
+        }
 
   return {
     maximum,

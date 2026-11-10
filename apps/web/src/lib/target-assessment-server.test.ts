@@ -8,7 +8,6 @@ describe("target assessment panel loading", () => {
         workspaceId: "ws-1",
         targetId: "target-1",
         actorUserId: "user-1",
-        canManageBilling: true,
         latestScanId: "scan-1",
         latestScanStartedAt: new Date("2026-11-05T00:00:00.000Z"),
       },

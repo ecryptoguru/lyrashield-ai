@@ -121,46 +121,51 @@ describe("target assessment summary", () => {
 })
 
 describe("target spend summary", () => {
-  it("shows consumed, reserved and maximum separately without rendering unknown as zero", () => {
+  it("shows the sponsor's reconciled agent minutes without provider costs", () => {
     const html = renderToStaticMarkup(
       <TargetSpendSummary
         projection={{
           status: "available",
-          value: {
-            maximum: {
-              state: "known",
-              amountUsd: "3.20",
-              source: "ADMITTED_PROVIDER_CEILING",
-              observedAt: "2026-11-05T00:00:00.000Z",
-            },
-            consumed: { state: "unavailable", reason: "SETTLEMENT_PENDING" },
-            reserved: { state: "unavailable", reason: "NO_PROVIDER_DOLLAR_RESERVATION" },
-            agentMinutes: { funded: 5, charged: 2, absorbed: 1 },
-          },
+          value: { state: "reconciled", chargedMinutes: 3 },
         }}
       />
     )
-    expect(html).toContain("Spend")
-    expect(html).toContain("$3.20")
-    expect(html).toContain("Unknown — settlement still pending")
-    expect(html).toContain("Not persisted")
-    expect(html).toContain("Funded 5")
-    expect(html).not.toContain("Consumed $0.00")
+    expect(html).toContain("Agent minutes")
+    expect(html).toContain("Charged")
+    expect(html).toContain("3")
+    expect(html).not.toMatch(/provider|\$|budget/i)
   })
 
   it("distinguishes no review from unauthorized spend visibility", () => {
     const html = renderToStaticMarkup(
       <TargetSpendSummary projection={{ status: "available", value: null }} hasScan={false} />
     )
-    expect(html).toContain("No review has started, so there is no spend yet.")
-    expect(html).not.toContain("available to the scan sponsor or billing manager")
+    expect(html).toContain("No review has started, so there is no usage yet.")
+    expect(html).not.toContain("available to the scan sponsor")
   })
 
   it("keeps unauthorized spend details private", () => {
     const html = renderToStaticMarkup(
       <TargetSpendSummary projection={{ status: "available", value: null }} />
     )
-    expect(html).toContain("available to the scan sponsor or billing manager")
+    expect(html).toContain("available to the scan sponsor")
     expect(html).not.toContain("$")
+  })
+
+  it.each([
+    ["pending", "Usage is still being reconciled."],
+    ["unavailable", "Usage is unavailable."],
+    ["not_applicable", "This review did not use billable agent minutes."],
+  ] as const)("explains %s usage without inventing a charge", (state, message) => {
+    const html = renderToStaticMarkup(
+      <TargetSpendSummary
+        projection={{
+          status: "available",
+          value: { state, chargedMinutes: state === "not_applicable" ? 0 : null },
+        }}
+      />
+    )
+    expect(html).toContain(message)
+    expect(html).not.toMatch(/provider|\$|budget/i)
   })
 })

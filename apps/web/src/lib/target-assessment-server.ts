@@ -1,6 +1,6 @@
 import {
   getCurrentGateVerdict,
-  getScanSpendProjection,
+  getCustomerScanUsageProjection,
   parseAssessmentSnapshot,
   withWorkspaceRLS,
 } from "@lyrashield/db"
@@ -14,7 +14,6 @@ interface PanelInput {
   workspaceId: string
   targetId: string
   actorUserId: string
-  canManageBilling: boolean
   latestScanId: string | null
   latestScanStartedAt: Date | null
 }
@@ -22,13 +21,15 @@ interface PanelInput {
 export interface TargetAssessmentPanels {
   gate: ResourceResult<TargetAssessmentGate | null>
   remediation: ResourceResult<TargetRemediationCounts>
-  spend: ResourceResult<Awaited<ReturnType<typeof getScanSpendProjection>>>
+  spend: ResourceResult<Awaited<ReturnType<typeof getCustomerScanUsageProjection>>>
 }
 
 interface PanelLoaders {
   loadGate: (input: PanelInput) => Promise<TargetAssessmentGate | null>
   loadRemediation: (input: PanelInput) => Promise<TargetRemediationCounts>
-  loadSpend: (input: PanelInput) => Promise<Awaited<ReturnType<typeof getScanSpendProjection>>>
+  loadSpend: (
+    input: PanelInput
+  ) => Promise<Awaited<ReturnType<typeof getCustomerScanUsageProjection>>>
 }
 
 interface RemediationFindingInput {
@@ -157,11 +158,10 @@ async function defaultLoadRemediation(input: PanelInput): Promise<TargetRemediat
 
 async function defaultLoadSpend(input: PanelInput) {
   if (!input.latestScanId) return null
-  return getScanSpendProjection({
+  return getCustomerScanUsageProjection({
     workspaceId: input.workspaceId,
     scanId: input.latestScanId,
     actorUserId: input.actorUserId,
-    canManageBilling: input.canManageBilling,
   })
 }
 

@@ -386,7 +386,6 @@ export default async function TargetDetailPage({ params }: { params: Promise<{ i
   const canUpdateTarget = hasPermission(membership.role, PERMISSIONS.target.update)
   const canDeleteTarget = hasPermission(membership.role, PERMISSIONS.target.delete)
   const canStartScan = hasPermission(membership.role, PERMISSIONS.scan.create)
-  const canManageBilling = hasPermission(membership.role, PERMISSIONS.billing.manage)
   const [domainStatuses, targetEntitlement] = await Promise.all([
     getTargetDomainStatuses(workspaceId, [target]),
     assertTargetAllowed(workspaceId, session.userId),
@@ -396,7 +395,6 @@ export default async function TargetDetailPage({ params }: { params: Promise<{ i
     workspaceId,
     targetId: target.id,
     actorUserId: session.userId,
-    canManageBilling,
     latestScanId: latestScan?.id ?? null,
     latestScanStartedAt: latestScan?.createdAt ?? null,
   })

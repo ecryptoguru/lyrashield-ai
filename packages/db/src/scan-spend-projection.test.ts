@@ -1,8 +1,13 @@
 import { describe, expect, it } from "vitest"
+import { buildScanExecutionPlan } from "@lyrashield/types"
 import { buildScanSpendProjection } from "./scan-spend-projection"
+
+const enginePlan = buildScanExecutionPlan({ targetType: "REPO", mode: "STANDARD" })
+const deterministicPlan = buildScanExecutionPlan({ targetType: "WEB_APP", mode: "QUICK" })
 
 const baseScan = {
   id: "scan-1",
+  workspaceId: "workspace-1",
   createdById: "sponsor-1",
   sponsorAccountId: "sponsor-1",
   status: "RUNNING",
@@ -12,10 +17,7 @@ const baseScan = {
   actualCostCents: null,
   createdAt: new Date("2026-11-05T00:00:00.000Z"),
   updatedAt: new Date("2026-11-05T00:01:00.000Z"),
-  executionPlan: {
-    capabilities: ["engine"],
-    limits: { maxBudgetUsd: 3.2 },
-  },
+  executionPlan: { ...enginePlan, limits: { ...enginePlan.limits, maxBudgetUsd: 3.2 } },
 }
 
 const capacity = {
@@ -82,7 +84,7 @@ describe("buildScanSpendProjection", () => {
       canManageBilling: false,
       scan: {
         ...baseScan,
-        executionPlan: { capabilities: ["sast", "secrets"], limits: {} },
+        executionPlan: deterministicPlan,
       },
       capacity: null,
     })
@@ -126,5 +128,57 @@ describe("buildScanSpendProjection", () => {
     })
 
     expect(projection?.consumed).toEqual({ state: "unavailable", reason: "LEGACY_SCAN" })
+  })
+
+  it.each([null, {}, { capabilities: [] }, { capabilities: ["url"], limits: {} }])(
+    "does not invent zero provider spend from an unavailable execution plan: %j",
+    (executionPlan) => {
+      const projection = buildScanSpendProjection({
+        actorUserId: "sponsor-1",
+        canManageBilling: false,
+        scan: {
+          ...baseScan,
+          status: "COMPLETED",
+          accountingVersion: null,
+          executionPlan,
+          actualCostCents: 120,
+        },
+        capacity: null,
+      })
+
+      expect(projection?.maximum.state).toBe("unavailable")
+      expect(projection?.reserved.state).toBe("unavailable")
+      expect(projection?.consumed).toMatchObject({ state: "known", amountUsd: "1.2" })
+    }
+  )
+
+  it("does not call a contradictory deterministic plan free when a provider receipt exists", () => {
+    const projection = buildScanSpendProjection({
+      actorUserId: "sponsor-1",
+      canManageBilling: false,
+      scan: { ...baseScan, executionPlan: deterministicPlan, billedCostUsd: "1.25" },
+      capacity: null,
+    })
+
+    expect(projection?.maximum.state).toBe("unavailable")
+    expect(projection?.reserved.state).toBe("unavailable")
+    expect(projection?.consumed).toMatchObject({ state: "known", amountUsd: "1.25" })
+  })
+
+  it.each([
+    {
+      ...buildScanExecutionPlan({ targetType: "WEB_APP", mode: "STANDARD" }),
+      capabilities: ["url"],
+    },
+    { ...enginePlan, capabilities: ["unknown"] },
+  ])("treats a schema-valid but inconsistent capability set as unavailable", (executionPlan) => {
+    const projection = buildScanSpendProjection({
+      actorUserId: "sponsor-1",
+      canManageBilling: false,
+      scan: { ...baseScan, executionPlan },
+      capacity: null,
+    })
+    expect(projection?.maximum.state).toBe("unavailable")
+    expect(projection?.consumed.state).toBe("unavailable")
   })
 })

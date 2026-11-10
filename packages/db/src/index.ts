@@ -108,11 +108,10 @@ export { Prisma } from "./generated/prisma"
 
 export { prisma } from "./client"
 export {
-  buildScanSpendProjection,
-  getScanSpendProjection,
-  type ScanSpendProjection,
-  type SpendValue,
-} from "./scan-spend-projection"
+  buildCustomerScanUsageProjection,
+  getCustomerScanUsageProjection,
+  type CustomerScanUsageProjection,
+} from "./scan-customer-usage-projection"
 export * from "./release-packet-exports"
 export { getSystemPrisma } from "./system-client"
 export { createBoundedPgAdapter, resolveDbPoolMax } from "./pool"

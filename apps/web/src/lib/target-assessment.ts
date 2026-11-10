@@ -1,4 +1,4 @@
-import type { ScanSpendProjection } from "@lyrashield/db"
+import type { CustomerScanUsageProjection } from "@lyrashield/db"
 
 export type ResourceResult<T> =
   { status: "available"; value: T } | { status: "unavailable"; code: string }
@@ -43,7 +43,7 @@ export interface TargetAssessmentSource {
   } | null
   gate: ResourceResult<TargetAssessmentGate | null>
   remediation: ResourceResult<TargetRemediationCounts>
-  spend: ResourceResult<ScanSpendProjection | null>
+  spend: ResourceResult<CustomerScanUsageProjection | null>
 }
 
 export interface TargetAssessmentProjection {
@@ -65,7 +65,7 @@ export interface TargetAssessmentProjection {
     nonCoverage: TargetAssessmentGate["nonCoverage"]
   }>
   remediation: ResourceResult<TargetRemediationCounts>
-  spend: ResourceResult<ScanSpendProjection | null>
+  spend: ResourceResult<CustomerScanUsageProjection | null>
   nextAction: {
     code:
       | "START_REVIEW"
