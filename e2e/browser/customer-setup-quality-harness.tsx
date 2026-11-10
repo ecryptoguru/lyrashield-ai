@@ -36,7 +36,41 @@ export default function CustomerSetupQualityHarness() {
   const [actorId, setActorId] = useState("actor-1")
   const params = new URLSearchParams(location.search)
   if (params.has("release-packet")) {
-    return <ReleasePacketView payload={historicalPacket} workspaceId="ws-1" reportId="packet-1" />
+    const signed = params.get("release-packet") === "signed"
+    return (
+      <ReleasePacketView
+        result={{
+          payload: signed
+            ? {
+                ...historicalPacket,
+                version: "release_packet/1.1.0",
+                signingKeyId: `lyrashield-packet-ed25519-${"d".repeat(64)}`,
+                packetSignature: `${"a".repeat(86)}==`,
+                expiresAt: "2026-11-06T06:00:00.000Z",
+                signedAssessment: { state: "SIGNED" },
+              }
+            : historicalPacket,
+          authenticity: {
+            signatureState: signed
+              ? "VERIFIED"
+              : params.get("release-packet") === "invalid"
+                ? "INVALID"
+                : "HISTORICAL_UNSIGNED",
+            expiresAt: signed ? "2026-11-06T06:00:00.000Z" : null,
+            expired: signed ? false : null,
+            checkedAt: "2026-11-06T00:00:00.000Z",
+          },
+          assessmentValidity: {
+            signatureState: signed ? "VERIFIED" : "UNAVAILABLE",
+            expiresAt: signed ? "2026-11-06T06:00:00.000Z" : null,
+            expired: signed ? false : null,
+          },
+          currentApplicability: { state: signed ? "CURRENT" : "NOT_CURRENT", reasons: [] },
+        }}
+        workspaceId="ws-1"
+        reportId="packet-1"
+      />
+    )
   }
   const failed = params.get("target-assessment") === "failure"
   const projection = projectTargetAssessment({

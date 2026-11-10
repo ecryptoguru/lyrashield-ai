@@ -519,3 +519,9 @@ export {
 export { lockActiveTargetForDerivedWrite } from "./target-write-lock"
 export { classifyRetestResolution } from "./release-packet-classification"
 export { loadReceiptBackedRetestFindingIds } from "./retest-evidence-trust"
+export {
+  releasePacketSigningKeyId,
+  signReleasePacketChecksum,
+  verifyReleasePacketChecksum,
+  type ReleasePacketVerificationKey,
+} from "./release-packet-signing"

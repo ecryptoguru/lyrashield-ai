@@ -233,7 +233,8 @@ for (const width of [390, 1440]) {
     await page.setViewportSize({ width, height: 900 })
     await page.goto("?release-packet=historical&theme=dark")
     await expect(page.getByRole("heading", { name: "Release App" })).toBeVisible()
-    await expect(page.getByText("Signature unavailable").first()).toBeVisible()
+    await expect(page.getByText("Assessment signature unavailable").first()).toBeVisible()
+    await expect(page.getByText("Historical unsigned packet")).toBeVisible()
     await expect(page.getByText("Historical — not current evidence")).toBeVisible()
     await expect(page.getByText("Unsupported")).toBeVisible()
 
@@ -271,5 +272,30 @@ for (const width of [390, 1440]) {
     await page.emulateMedia({ media: "print" })
     await expect(download).toBeHidden()
     await expect(print).toBeHidden()
+    await expect(page.getByText("Historical unsigned packet")).toBeVisible()
+    await expect(page.getByRole("cell", { name: "Potential tenant escape" })).toBeVisible()
+  })
+
+  test(`invalid release packets cannot be exported at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 })
+    await page.goto("?release-packet=invalid&theme=dark")
+    await expect(page.getByText("Packet signature invalid")).toBeVisible()
+    await expect(page.getByRole("link", { name: "Download CSV" })).toHaveCount(0)
+    await expect(page.getByRole("button", { name: "Print / Save as PDF" })).toHaveCount(0)
+  })
+
+  test(`signed packet details remain visible for print at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 })
+    await page.goto("?release-packet=signed&theme=dark")
+    await expect(page.getByText("Packet signature verified")).toBeVisible()
+    await expect(page.getByText(`lyrashield-packet-ed25519-${"d".repeat(64)}`)).toBeVisible()
+    await expect(page.getByText(`${"a".repeat(86)}==`)).toBeVisible()
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+      width
+    )
+    await page.emulateMedia({ media: "print" })
+    await expect(page.getByText("Packet signature verified")).toBeVisible()
+    await expect(page.getByText(`${"a".repeat(86)}==`)).toBeVisible()
+    await expect(page.getByRole("link", { name: "Download CSV" })).toBeHidden()
   })
 }

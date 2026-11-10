@@ -23,6 +23,10 @@ vi.mock("@lyrashield/db", () => ({
   },
 }))
 vi.mock("@lyrashield/logger", () => ({ logger: { error: vi.fn() } }))
+vi.mock("@lyrashield/billing", () => ({
+  resolveReleasePacketVerificationKeys: vi.fn().mockResolvedValue([]),
+  resolveLaunchReportSigningPublicKey: vi.fn().mockResolvedValue(null),
+}))
 
 import { GET } from "./route"
 
@@ -53,6 +57,13 @@ const payload = {
   },
   coverage: { completed: ["sast"], notApplicable: [], incomplete: [], manifestChecksum: null },
 }
+const verification = { verificationKeys: [], assessmentPublicKey: null }
+const packetResult = {
+  payload,
+  authenticity: { signatureState: "HISTORICAL_UNSIGNED" },
+  assessmentValidity: {},
+  currentApplicability: {},
+}
 
 function request() {
   return new Request(
@@ -67,7 +78,7 @@ describe("GET release packet CSV", () => {
   })
 
   it("serves an authenticated CSV with formula-safe cells", async () => {
-    mocks.getReleasePacket.mockResolvedValue(payload)
+    mocks.getReleasePacket.mockResolvedValue(packetResult)
 
     const response = await GET(request(), { params: Promise.resolve({ id: "report-1" }) })
     const csv = await response.text()
@@ -76,7 +87,8 @@ describe("GET release packet CSV", () => {
     expect(response.headers.get("Content-Type")).toContain("text/csv")
     expect(response.headers.get("Content-Disposition")).toContain("release-packet-report-1.csv")
     expect(csv).toContain('"\'=formula"')
-    expect(mocks.getReleasePacket).toHaveBeenCalledWith("report-1", "ws-1")
+    expect(mocks.getReleasePacket).toHaveBeenCalledWith("report-1", "ws-1", verification)
+    expect(mocks.generateCsv).toHaveBeenCalledWith(payload, packetResult)
     expect(mocks.getReleasePacketForDelegatedRead).not.toHaveBeenCalled()
   })
 
@@ -93,7 +105,7 @@ describe("GET release packet CSV", () => {
         },
       },
     })
-    mocks.getReleasePacketForDelegatedRead.mockResolvedValue(payload)
+    mocks.getReleasePacketForDelegatedRead.mockResolvedValue(packetResult)
 
     const response = await GET(request(), { params: Promise.resolve({ id: "report-1" }) })
 
@@ -104,8 +116,19 @@ describe("GET release packet CSV", () => {
       userId: "user-1",
       connectionId: "conn-1",
       authorizationVersion: 3,
+      ...verification,
     })
     expect(mocks.getReleasePacket).not.toHaveBeenCalled()
+  })
+
+  it("refuses CSV export when a packet signature is revoked", async () => {
+    mocks.getReleasePacket.mockResolvedValue({
+      ...packetResult,
+      authenticity: { signatureState: "REVOKED" },
+    })
+    const response = await GET(request(), { params: Promise.resolve({ id: "report-1" }) })
+    expect(response.status).toBe(409)
+    expect(mocks.generateCsv).not.toHaveBeenCalled()
   })
 
   it("returns a non-disclosing 404 when delegated authority or binding fails", async () => {

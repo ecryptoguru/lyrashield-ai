@@ -1,4 +1,5 @@
 import type { ReleasePacketPayload } from "@lyrashield/types"
+import type { ReleasePacketReadResult } from "./release-packet-service"
 
 /**
  * Quote one CSV cell and neutralize spreadsheet formula execution. The value is
@@ -10,12 +11,23 @@ export function escapeReleasePacketCsvCell(value: unknown): string {
   return `"${text.replaceAll('"', '""')}"`
 }
 
-export function generateReleasePacketCsv(payload: ReleasePacketPayload): string {
+export function generateReleasePacketCsv(
+  payload: ReleasePacketPayload,
+  verification: Pick<
+    ReleasePacketReadResult,
+    "authenticity" | "assessmentValidity" | "currentApplicability"
+  >
+): string {
   const rows: unknown[][] = [
     ["section", "key", "value"],
     ["scope", "packetVersion", payload.version],
     ["scope", "packetChecksum", payload.packetChecksum],
     ["scope", "generatedAt", payload.generatedAt],
+    ["packet", "signatureState", verification.authenticity.signatureState],
+    ["packet", "expiresAt", verification.authenticity.expiresAt ?? "unavailable"],
+    ["packet", "expired", verification.authenticity.expired ?? "unavailable"],
+    ["packet", "keyId", payload.signingKeyId ?? "unavailable"],
+    ["packet", "signature", payload.packetSignature ?? "unavailable"],
     ["target", "id", payload.target.id],
     ["target", "name", payload.target.name],
     ["target", "type", payload.target.type],
@@ -24,6 +36,9 @@ export function generateReleasePacketCsv(payload: ReleasePacketPayload): string 
     ["assessment", "standardVersion", payload.assessment.standardVersion],
     ["assessment", "state", payload.assessment.state],
     ["assessment", "applicable", payload.assessment.applicable],
+    ["assessment", "currentApplicability", verification.currentApplicability.state],
+    ["assessment", "signatureState", verification.assessmentValidity.signatureState],
+    ["assessment", "expired", verification.assessmentValidity.expired ?? "unavailable"],
     ["assessment", "evaluatedAt", payload.assessment.evaluatedAt],
     ["assessment", "identityKind", payload.assessment.assessedIdentity?.kind ?? "unavailable"],
     ["assessment", "identityValue", payload.assessment.assessedIdentity?.value ?? "unavailable"],

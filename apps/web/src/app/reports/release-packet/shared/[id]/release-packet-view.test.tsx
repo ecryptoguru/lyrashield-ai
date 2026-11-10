@@ -55,20 +55,33 @@ const payload: ReleasePacketPayload = {
 }
 
 describe("ReleasePacketView", () => {
+  const result = {
+    payload,
+    authenticity: {
+      signatureState: "HISTORICAL_UNSIGNED" as const,
+      expiresAt: null,
+      expired: null,
+      checkedAt: "2026-11-06T00:00:00.000Z",
+    },
+    assessmentValidity: { signatureState: "UNAVAILABLE" as const, expiresAt: null, expired: null },
+    currentApplicability: { state: "NOT_CURRENT" as const, reasons: [] },
+  }
   it("keeps historical evidence and unavailable signatures explicit", () => {
     const html = renderToStaticMarkup(
-      <ReleasePacketView payload={payload} workspaceId="ws-1" reportId="packet-report-1" />
+      <ReleasePacketView result={result} workspaceId="ws-1" reportId="packet-report-1" />
     )
     expect(html).toContain("Not enough evidence")
     expect(html).toContain("Historical")
-    expect(html).toContain("Signature unavailable")
+    expect(html).toContain("Assessment signature unavailable")
+    expect(html).toContain("Historical unsigned packet")
+    expect(html).toContain("This historical packet has a checksum but no packet signature")
     expect(html).toContain("verification key unavailable")
     expect(html).not.toContain("Signature valid")
   })
 
   it("renders remediation trust states and private export controls", () => {
     const html = renderToStaticMarkup(
-      <ReleasePacketView payload={payload} workspaceId="ws-1" reportId="packet-report-1" />
+      <ReleasePacketView result={result} workspaceId="ws-1" reportId="packet-report-1" />
     )
     expect(html).toContain("Potential tenant escape")
     expect(html).toContain("Unsupported")
@@ -76,5 +89,57 @@ describe("ReleasePacketView", () => {
     expect(html).toContain("Download CSV")
     expect(html).toContain("Print / Save as PDF")
     expect(html).toContain(`/api/reports/release-packet/packet-report-1/download?workspaceId=ws-1`)
+  })
+
+  it("marks invalid packet signatures and hides export controls", () => {
+    const html = renderToStaticMarkup(
+      <ReleasePacketView
+        result={{ ...result, authenticity: { ...result.authenticity, signatureState: "INVALID" } }}
+        workspaceId="ws-1"
+        reportId="packet-report-1"
+      />
+    )
+    expect(html).toContain("Packet signature invalid")
+    expect(html).not.toContain("Download CSV")
+    expect(html).not.toContain("Print / Save as PDF")
+  })
+
+  it("describes the packet signature separately for version 1.1", () => {
+    const html = renderToStaticMarkup(
+      <ReleasePacketView
+        result={{
+          ...result,
+          payload: {
+            ...payload,
+            version: "release_packet/1.1.0",
+            signingKeyId: "packet-key-id",
+            packetSignature: "packet-signature",
+            expiresAt: "2026-11-06T06:00:00.000Z",
+          },
+        }}
+        workspaceId="ws-1"
+        reportId="packet-report-1"
+      />
+    )
+    expect(html).toContain("The packet signature authenticates the checksum")
+    expect(html).toContain("packet-key-id")
+    expect(html).toContain("packet-signature")
+    expect(html).not.toContain("no packet signature")
+  })
+
+  it("keeps an assessment marked historical even if signatures and current applicability pass", () => {
+    const html = renderToStaticMarkup(
+      <ReleasePacketView
+        result={{
+          payload: { ...payload, signedAssessment: { state: "HISTORICAL" } },
+          authenticity: { ...result.authenticity, signatureState: "VERIFIED", expired: false },
+          assessmentValidity: { signatureState: "VERIFIED", expiresAt: null, expired: false },
+          currentApplicability: { state: "CURRENT", reasons: [] },
+        }}
+        workspaceId="ws-1"
+        reportId="packet-report-1"
+      />
+    )
+    expect(html).toContain("Historical — not current evidence")
   })
 })

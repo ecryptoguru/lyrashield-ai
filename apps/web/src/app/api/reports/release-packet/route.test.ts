@@ -6,6 +6,8 @@ const mocks = vi.hoisted(() => ({
   issueReleasePacket: vi.fn(),
   generateShareToken: vi.fn(),
   resolveKey: vi.fn(),
+  resolvePrivateKey: vi.fn(),
+  resolveVerificationKeys: vi.fn(),
 }))
 
 vi.mock("@lyrashield/auth/server", () => ({
@@ -28,11 +30,14 @@ vi.mock("@lyrashield/db", () => ({
 }))
 vi.mock("@lyrashield/billing", () => ({
   resolveLaunchReportSigningPublicKey: mocks.resolveKey,
+  resolveLaunchReportSigningPrivateKey: mocks.resolvePrivateKey,
+  resolveReleasePacketVerificationKeys: mocks.resolveVerificationKeys,
 }))
 vi.mock("@lyrashield/logger", () => ({ logger: { error: vi.fn(), warn: vi.fn() } }))
 vi.mock("@lyrashield/config", () => ({ env: { NEXT_PUBLIC_APP_URL: "https://app.example.test" } }))
 
 import { POST } from "./route"
+import { ReleasePacketError } from "@lyrashield/db"
 
 function request(body: unknown) {
   return new Request("http://localhost/api/reports/release-packet", {
@@ -51,6 +56,10 @@ describe("POST /api/reports/release-packet", () => {
     vi.clearAllMocks()
     mocks.requirePermission.mockResolvedValue({ session: { userId: "user-1" } })
     mocks.resolveKey.mockResolvedValue("public-key")
+    mocks.resolvePrivateKey.mockResolvedValue("private-key")
+    mocks.resolveVerificationKeys.mockResolvedValue([
+      { id: "key", publicKey: "public-key", revoked: false },
+    ])
     mocks.issueReleasePacket.mockResolvedValue({
       reportId: "report-1",
       payload: { packetChecksum: "a".repeat(64) },
@@ -77,6 +86,8 @@ describe("POST /api/reports/release-packet", () => {
         actorUserId: "user-1",
         expectedIdentity: { kind: "COMMIT", value: "c".repeat(40) },
         signingPublicKey: "public-key",
+        signingPrivateKey: "private-key",
+        verificationKeys: [{ id: "key", publicKey: "public-key", revoked: false }],
       })
     )
     expect(body.data).toEqual({
@@ -97,5 +108,20 @@ describe("POST /api/reports/release-packet", () => {
     )
     expect(response.status).toBe(400)
     expect(mocks.issueReleasePacket).not.toHaveBeenCalled()
+  })
+
+  it("fails closed when packet signing is unavailable", async () => {
+    mocks.resolvePrivateKey.mockRejectedValue(new Error("key unavailable"))
+    mocks.issueReleasePacket.mockRejectedValue(
+      new ReleasePacketError("SIGNING_UNAVAILABLE", "Signing unavailable")
+    )
+    const response = await POST(
+      request({ workspaceId: "ws-1", targetId: "target-1", commit: "c".repeat(40) })
+    )
+    expect(response.status).toBe(503)
+    expect(mocks.issueReleasePacket).toHaveBeenCalledWith(
+      expect.objectContaining({ signingPrivateKey: null })
+    )
+    expect(mocks.generateShareToken).not.toHaveBeenCalled()
   })
 })

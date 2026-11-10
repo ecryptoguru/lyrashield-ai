@@ -62,7 +62,16 @@ describe("release packet CSV", () => {
   })
 
   it("contains scope, integrity and finding rows with neutralized cells", () => {
-    const csv = generateReleasePacketCsv(payload)
+    const csv = generateReleasePacketCsv(payload, {
+      authenticity: {
+        signatureState: "HISTORICAL_UNSIGNED",
+        expiresAt: null,
+        expired: null,
+        checkedAt: "2026-11-06T00:00:00.000Z",
+      },
+      assessmentValidity: { signatureState: "UNSIGNED", expiresAt: null, expired: null },
+      currentApplicability: { state: "UNAVAILABLE", reasons: [] },
+    })
     expect(csv).toContain('"scope","packetChecksum","aaaaaaaa')
     expect(csv).toContain('"target","name","\'=HYPERLINK')
     expect(csv).toContain('"finding","finding-1","\'+cmd')

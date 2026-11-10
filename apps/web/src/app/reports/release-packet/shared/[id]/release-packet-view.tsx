@@ -1,6 +1,7 @@
 import Link from "next/link"
 import { ShieldCheck } from "lucide-react"
 import type { ReleasePacketPayload } from "@lyrashield/types"
+import type { ReleasePacketReadResult } from "@lyrashield/db"
 import { Badge, Card, buttonVariants } from "@lyrashield/ui"
 import { PrintButton } from "./print-button"
 
@@ -10,28 +11,43 @@ const VERDICT_LABEL: Record<ReleasePacketPayload["assessment"]["state"], string>
   INSUFFICIENT_EVIDENCE: "Not enough evidence",
 }
 
-const SIGNATURE_LABEL: Record<ReleasePacketPayload["signedAssessment"]["state"], string> = {
-  SIGNED: "Signature verified",
+const PACKET_SIGNATURE_LABEL: Record<
+  ReleasePacketReadResult["authenticity"]["signatureState"],
+  string
+> = {
+  VERIFIED: "Packet signature verified",
+  UNSIGNED: "Unsigned packet",
+  UNAVAILABLE: "Packet signature unavailable",
+  INVALID: "Packet signature invalid",
+  REVOKED: "Packet signing key revoked",
+  HISTORICAL_UNSIGNED: "Historical unsigned packet",
+}
+const ASSESSMENT_SIGNATURE_LABEL: Record<
+  ReleasePacketReadResult["assessmentValidity"]["signatureState"],
+  string
+> = {
+  VERIFIED: "Assessment signature verified",
   UNSIGNED: "Unsigned assessment",
-  UNAVAILABLE: "Signature unavailable",
-  INVALID: "Signature invalid",
-  HISTORICAL: "Historical signature",
+  UNAVAILABLE: "Assessment signature unavailable",
+  INVALID: "Assessment signature invalid",
+  REVOKED: "Assessment signing key revoked",
 }
 
 export function ReleasePacketView({
-  payload,
+  result,
   workspaceId,
   reportId,
 }: {
-  payload: ReleasePacketPayload
+  result: ReleasePacketReadResult
   workspaceId: string
   reportId: string
 }) {
+  const { payload } = result
   return (
     <main className="mx-auto max-w-6xl space-y-5 px-4 py-8 print:max-w-none print:px-0 print:py-0">
       <style>{`@media print { .print-hide { display:none!important } body { background:white!important } a { color:inherit!important; text-decoration:none!important } }`}</style>
-      <PacketHeader payload={payload} workspaceId={workspaceId} reportId={reportId} />
-      <AssessmentSummarySection payload={payload} />
+      <PacketHeader result={result} workspaceId={workspaceId} reportId={reportId} />
+      <AssessmentSummarySection result={result} />
       <RemediationHistoryCard payload={payload} />
       <FindingsCard payload={payload} />
       <footer className="text-muted-foreground border-t pt-4 text-xs">
@@ -43,16 +59,25 @@ export function ReleasePacketView({
 }
 
 function PacketHeader({
-  payload,
+  result,
   workspaceId,
   reportId,
 }: {
-  payload: ReleasePacketPayload
+  result: ReleasePacketReadResult
   workspaceId: string
   reportId: string
 }) {
+  const { payload, authenticity, assessmentValidity, currentApplicability } = result
   const historical =
-    payload.signedAssessment.state === "HISTORICAL" || !payload.assessment.applicable
+    payload.signedAssessment.state !== "SIGNED" ||
+    authenticity.signatureState !== "VERIFIED" ||
+    authenticity.expired !== false ||
+    assessmentValidity.signatureState !== "VERIFIED" ||
+    assessmentValidity.expired !== false ||
+    currentApplicability.state !== "CURRENT"
+  const exportable =
+    authenticity.signatureState === "VERIFIED" ||
+    authenticity.signatureState === "HISTORICAL_UNSIGNED"
   const csvHref = `/api/reports/release-packet/${encodeURIComponent(reportId)}/download?${new URLSearchParams({ workspaceId })}`
   return (
     <header className="border-border bg-card rounded-xl border p-5 sm:p-7 print:break-after-avoid">
@@ -70,35 +95,52 @@ function PacketHeader({
             generated {formatDate(payload.generatedAt)}
           </p>
         </div>
-        <div className="flex flex-wrap gap-2 print:hidden">
-          <a href={csvHref} className={buttonVariants({ variant: "outline" })}>
-            Download CSV
-          </a>
-          <PrintButton />
-        </div>
+        {exportable && (
+          <div className="flex flex-wrap gap-2 print:hidden">
+            <a href={csvHref} className={buttonVariants({ variant: "outline" })}>
+              Download CSV
+            </a>
+            <PrintButton />
+          </div>
+        )}
       </div>
       <div className="mt-5 flex flex-wrap gap-2">
         <Badge
           variant={
-            payload.assessment.state === "READY"
+            payload.assessment.state === "READY" && !historical
               ? "success"
               : payload.assessment.state === "NOT_READY"
                 ? "danger"
                 : "warning"
           }
         >
-          {VERDICT_LABEL[payload.assessment.state]}
+          Recorded: {VERDICT_LABEL[payload.assessment.state]}
         </Badge>
         <Badge
           variant={
-            payload.signedAssessment.state === "SIGNED"
+            authenticity.signatureState === "VERIFIED"
               ? "success"
-              : payload.signedAssessment.state === "INVALID"
+              : authenticity.signatureState === "INVALID" ||
+                  authenticity.signatureState === "REVOKED"
                 ? "danger"
                 : "muted"
           }
         >
-          {SIGNATURE_LABEL[payload.signedAssessment.state]}
+          {PACKET_SIGNATURE_LABEL[authenticity.signatureState]}
+        </Badge>
+        <Badge variant={assessmentValidity.signatureState === "VERIFIED" ? "success" : "muted"}>
+          {ASSESSMENT_SIGNATURE_LABEL[assessmentValidity.signatureState]}
+        </Badge>
+        {authenticity.expired && <Badge variant="warning">Packet expired</Badge>}
+        {assessmentValidity.expired && <Badge variant="warning">Assessment expired</Badge>}
+        <Badge
+          variant={currentApplicability.state === "CURRENT" && !historical ? "success" : "warning"}
+        >
+          {currentApplicability.state === "CURRENT"
+            ? "Recorded evidence current"
+            : currentApplicability.state === "NOT_CURRENT"
+              ? "Evidence changed or expired"
+              : "Current applicability unavailable"}
         </Badge>
         {historical && <Badge variant="warning">Historical — not current evidence</Badge>}
       </div>
@@ -107,7 +149,7 @@ function PacketHeader({
           role="status"
           className="border-warning/40 bg-warning/10 mt-4 rounded-lg border p-3 text-sm"
         >
-          This packet records what the stored assessment established. It does not certify the
+          This packet is historical or could not be fully verified. It does not establish the
           current revision.
         </div>
       )}
@@ -118,7 +160,8 @@ function PacketHeader({
   )
 }
 
-function AssessmentSummarySection({ payload }: { payload: ReleasePacketPayload }) {
+function AssessmentSummarySection({ result }: { result: ReleasePacketReadResult }) {
+  const { payload, assessmentValidity, currentApplicability } = result
   return (
     <>
       <section className="grid gap-4 md:grid-cols-2" aria-label="Assessment scope and integrity">
@@ -137,8 +180,18 @@ function AssessmentSummarySection({ payload }: { payload: ReleasePacketPayload }
             />
             <Datum label="Evaluated" value={formatDate(payload.assessment.evaluatedAt)} />
             <Datum
-              label="Assessment applicable now"
+              label="Applicable at issuance"
               value={payload.assessment.applicable ? "Yes" : "No"}
+            />
+            <Datum
+              label="Current applicability"
+              value={
+                currentApplicability.state === "CURRENT"
+                  ? "Current according to recorded evidence"
+                  : currentApplicability.state === "NOT_CURRENT"
+                    ? "Not current"
+                    : "Unavailable"
+              }
             />
           </dl>
           {payload.assessment.reasons.length > 0 && (
@@ -153,9 +206,27 @@ function AssessmentSummarySection({ payload }: { payload: ReleasePacketPayload }
           <h2 className="font-semibold">Evidence integrity</h2>
           <dl className="mt-3 space-y-3 text-sm">
             <Datum label="Packet SHA-256" value={payload.packetChecksum} mono />
+            {payload.version === "release_packet/1.1.0" && (
+              <>
+                <Datum
+                  label="Packet signing key"
+                  value={payload.signingKeyId ?? "Unavailable"}
+                  mono
+                />
+                <Datum
+                  label="Packet signature"
+                  value={payload.packetSignature ?? "Unavailable"}
+                  mono
+                />
+                <Datum
+                  label="Packet expires"
+                  value={payload.expiresAt ? formatDate(payload.expiresAt) : "Unavailable"}
+                />
+              </>
+            )}
             <Datum
               label="Assessment signature"
-              value={SIGNATURE_LABEL[payload.signedAssessment.state]}
+              value={ASSESSMENT_SIGNATURE_LABEL[assessmentValidity.signatureState]}
             />
             <Datum
               label="Result manifest"
@@ -164,8 +235,9 @@ function AssessmentSummarySection({ payload }: { payload: ReleasePacketPayload }
             />
           </dl>
           <p className="text-muted-foreground mt-3 text-xs">
-            The packet checksum detects changes to the frozen packet. It is not a separate
-            signature; signature status refers only to the bound launch assessment.
+            {payload.version === "release_packet/1.0.0"
+              ? "This historical packet has a checksum but no packet signature. The assessment signature is checked separately."
+              : "The packet signature authenticates the checksum of the complete frozen packet. The assessment signature is checked separately."}
           </p>
         </Card>
       </section>

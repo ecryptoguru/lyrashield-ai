@@ -31,10 +31,15 @@ vi.mock("@lyrashield/db", () => ({
   },
 }))
 vi.mock("./release-packet-view", () => ({ ReleasePacketView: () => null }))
+vi.mock("@lyrashield/billing", () => ({
+  resolveReleasePacketVerificationKeys: vi.fn().mockResolvedValue([]),
+  resolveLaunchReportSigningPublicKey: vi.fn().mockResolvedValue(null),
+}))
 
 import PrivateReleasePacketPage from "./page"
 
 const token = "b".repeat(64)
+const verification = { verificationKeys: [], assessmentPublicKey: null }
 const params = Promise.resolve({ id: "report-1" })
 const searchParams = Promise.resolve({ token })
 
@@ -51,11 +56,14 @@ describe("PrivateReleasePacketPage", () => {
   })
 
   it("reads a non-delegated packet with the private token re-proved in the transaction", async () => {
-    mocks.getReleasePacket.mockResolvedValue({ packetChecksum: "a".repeat(64) })
+    mocks.getReleasePacket.mockResolvedValue({ payload: { packetChecksum: "a".repeat(64) } })
 
     await PrivateReleasePacketPage({ params, searchParams })
 
-    expect(mocks.getReleasePacket).toHaveBeenCalledWith("report-1", "ws-1", { shareToken: token })
+    expect(mocks.getReleasePacket).toHaveBeenCalledWith("report-1", "ws-1", {
+      shareToken: token,
+      ...verification,
+    })
   })
 
   it("enforces live delegated authority for a selected-target session", async () => {
@@ -84,6 +92,7 @@ describe("PrivateReleasePacketPage", () => {
       connectionId: "conn-1",
       authorizationVersion: 4,
       shareToken: token,
+      ...verification,
     })
     expect(mocks.getReleasePacket).not.toHaveBeenCalled()
     expect(mocks.notFound).toHaveBeenCalled()

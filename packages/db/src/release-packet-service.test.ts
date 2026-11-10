@@ -1,6 +1,7 @@
-import { createHash } from "node:crypto"
+import { createHash, generateKeyPairSync } from "node:crypto"
 import {
   computeReleasePacketChecksum,
+  LEGACY_RELEASE_PACKET_VERSION,
   RELEASE_PACKET_VERSION,
   ReleasePacketPayloadSchema,
   type ReleasePacketPayload,
@@ -31,9 +32,16 @@ vi.mock("./launch-report-html", () => ({
 vi.mock("./launch-report-provenance", () => ({
   parseLaunchReportProvenance: mocks.parseLaunchReportProvenance,
 }))
-vi.mock("./launch-report-signing", () => ({
-  verifyLaunchReportSignature: mocks.verifyLaunchReportSignature,
-}))
+vi.mock("./launch-report-signing", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./launch-report-signing")>()
+  return {
+    ...actual,
+    verifyLaunchReportSignature: (message: string, signature: string, key: string) =>
+      message.startsWith("lyrashield-release-packet/")
+        ? actual.verifyLaunchReportSignature(message, signature, key)
+        : mocks.verifyLaunchReportSignature(message, signature, key),
+  }
+})
 
 import {
   classifyReleaseFindings,
@@ -41,9 +49,22 @@ import {
   getReleasePacketForDelegatedRead,
   issueReleasePacket,
 } from "./release-packet-service"
+import {
+  releasePacketSigningKeyId,
+  signReleasePacketChecksum,
+  verifyReleasePacketChecksum,
+} from "./release-packet-signing"
 
 const scanStartedAt = new Date("2026-11-05T00:00:00.000Z")
 const commit = "b".repeat(40)
+const packetKeyPair = generateKeyPairSync("ed25519")
+const packetPrivateKey = packetKeyPair.privateKey
+  .export({ type: "pkcs8", format: "pem" })
+  .toString()
+const packetPublicKey = packetKeyPair.publicKey.export({ type: "spki", format: "pem" }).toString()
+const packetKeys = [
+  { id: releasePacketSigningKeyId(packetPublicKey), publicKey: packetPublicKey, revoked: false },
+]
 
 function finding(overrides: Record<string, unknown> = {}) {
   return {
@@ -227,7 +248,7 @@ describe("issueReleasePacket", () => {
         contentJson: {
           reportChecksum: "d".repeat(64),
           signature: "signature",
-          signingKeyId: "key-1",
+          signingKeyId: "lyrashield-launch-report-ed25519-1",
           expiresAt: "2026-11-07T00:00:00.000Z",
         },
         provenanceJson: { gateVerdictId: "verdict-1" },
@@ -252,7 +273,9 @@ describe("issueReleasePacket", () => {
       targetId: "target-1",
       actorUserId: "user-1",
       expectedIdentity: { kind: "COMMIT", value: commit },
-      signingPublicKey: "public-key",
+      signingPublicKey: packetPublicKey,
+      signingPrivateKey: packetPrivateKey,
+      verificationKeys: packetKeys,
       now: new Date("2026-11-06T00:00:00.000Z"),
     })
 
@@ -263,6 +286,16 @@ describe("issueReleasePacket", () => {
       reportId: "launch-report-1",
       reportChecksum: "d".repeat(64),
     })
+    expect(result.payload.signingKeyId).toBe(packetKeys[0]!.id)
+    expect(result.payload.expiresAt).toBe("2026-11-07T00:00:00.000Z")
+    expect(
+      verifyReleasePacketChecksum(
+        result.payload.packetChecksum,
+        result.payload.packetSignature!,
+        result.payload.signingKeyId!,
+        packetKeys
+      )
+    ).toBe("VERIFIED")
     const { packetChecksum, ...base } = result.payload
     expect(await computeReleasePacketChecksum(base)).toBe(packetChecksum)
   })
@@ -281,7 +314,7 @@ describe("issueReleasePacket", () => {
         contentJson: {
           reportChecksum: "d".repeat(64),
           signature: "signature",
-          signingKeyId: "key-1",
+          signingKeyId: "lyrashield-launch-report-ed25519-1",
           expiresAt: new Date(Date.now() + 60_000).toISOString(),
         },
         provenanceJson: { gateVerdictId: "verdict-1" },
@@ -293,7 +326,9 @@ describe("issueReleasePacket", () => {
       targetId: "target-1",
       actorUserId: "user-1",
       expectedIdentity: { kind: "COMMIT", value: commit },
-      signingPublicKey: "public-key",
+      signingPublicKey: packetPublicKey,
+      signingPrivateKey: packetPrivateKey,
+      verificationKeys: packetKeys,
     })
 
     expect(result.payload.signedAssessment.state).toBe("SIGNED")
@@ -307,11 +342,69 @@ describe("issueReleasePacket", () => {
     })
     expect(query.take).toBeUndefined()
   })
+
+  it("refuses issuance without an allowed signing key and caps packet validity by assessment expiry", async () => {
+    const input = {
+      workspaceId: "ws-1",
+      targetId: "target-1",
+      actorUserId: "user-1",
+      expectedIdentity: { kind: "COMMIT" as const, value: commit },
+      signingPublicKey: packetPublicKey,
+      now: new Date("2026-11-06T00:00:00.000Z"),
+    }
+    await expect(issueReleasePacket(input)).rejects.toMatchObject({ code: "SIGNING_UNAVAILABLE" })
+    await expect(
+      issueReleasePacket({
+        ...input,
+        signingPrivateKey: packetPrivateKey,
+        verificationKeys: [{ ...packetKeys[0]!, revoked: true }],
+      })
+    ).rejects.toMatchObject({ code: "SIGNING_UNAVAILABLE" })
+    expect(issueTx.report.create).not.toHaveBeenCalled()
+    issueTx.report.findMany.mockResolvedValue([
+      {
+        id: "launch-report-1",
+        contentJson: {
+          reportChecksum: "d".repeat(64),
+          signature: "signature",
+          signingKeyId: "lyrashield-launch-report-ed25519-1",
+          expiresAt: "2026-11-06T06:00:00.000Z",
+        },
+        provenanceJson: { gateVerdictId: "verdict-1" },
+      },
+    ])
+    const result = await issueReleasePacket({
+      ...input,
+      signingPrivateKey: packetPrivateKey,
+      verificationKeys: packetKeys,
+    })
+    expect(result.payload.expiresAt).toBe("2026-11-06T06:00:00.000Z")
+  })
+
+  it("does not record a revoked assessment key as trusted when a new packet key is allowed", async () => {
+    const newPair = generateKeyPairSync("ed25519")
+    const newPrivate = newPair.privateKey.export({ type: "pkcs8", format: "pem" }).toString()
+    const newPublic = newPair.publicKey.export({ type: "spki", format: "pem" }).toString()
+    const result = await issueReleasePacket({
+      workspaceId: "ws-1",
+      targetId: "target-1",
+      actorUserId: "user-1",
+      expectedIdentity: { kind: "COMMIT", value: commit },
+      signingPublicKey: packetPublicKey,
+      signingPrivateKey: newPrivate,
+      verificationKeys: [
+        { ...packetKeys[0]!, revoked: true },
+        { id: releasePacketSigningKeyId(newPublic), publicKey: newPublic, revoked: false },
+      ],
+      now: new Date("2026-11-06T00:00:00.000Z"),
+    })
+    expect(result.payload.signedAssessment.state).toBe("UNAVAILABLE")
+  })
 })
 
 async function storedPayload(): Promise<ReleasePacketPayload> {
   const base: Omit<ReleasePacketPayload, "packetChecksum"> = {
-    version: RELEASE_PACKET_VERSION,
+    version: LEGACY_RELEASE_PACKET_VERSION,
     generatedAt: "2026-11-05T00:00:00.000Z",
     target: { id: "target-1", name: "Release App", type: "REPO", environment: "PRODUCTION" },
     assessment: {
@@ -353,6 +446,15 @@ async function storedPayload(): Promise<ReleasePacketPayload> {
   return payload
 }
 
+function readReport(contentJson: unknown, extra: Record<string, unknown> = {}) {
+  return {
+    contentJson,
+    scanId: "scan-1",
+    scan: { workspaceId: "ws-1", targetId: "target-1" },
+    ...extra,
+  }
+}
+
 describe("getReleasePacket", () => {
   let readTx: ReturnType<typeof makeTx>
 
@@ -369,12 +471,16 @@ describe("getReleasePacket", () => {
   it("parses and recomputes the immutable packet checksum before returning it", async () => {
     const payload = await storedPayload()
     const tx = readTx
-    tx.report.findFirst.mockResolvedValue({ contentJson: payload, scanId: "scan-1" })
+    tx.report.findFirst.mockResolvedValue(readReport(payload))
 
-    await expect(getReleasePacket("report-1", "ws-1")).resolves.toEqual(payload)
+    await expect(getReleasePacket("report-1", "ws-1")).resolves.toMatchObject({
+      payload,
+      authenticity: { signatureState: "HISTORICAL_UNSIGNED" },
+      currentApplicability: { state: "UNAVAILABLE" },
+    })
 
     const tampered = { ...payload, target: { ...payload.target, name: "Tampered" } }
-    tx.report.findFirst.mockResolvedValue({ contentJson: tampered, scanId: "scan-1" })
+    tx.report.findFirst.mockResolvedValue(readReport(tampered))
     await expect(getReleasePacket("report-1", "ws-1")).rejects.toMatchObject({
       code: "SNAPSHOT_INVALID",
     })
@@ -383,10 +489,7 @@ describe("getReleasePacket", () => {
 
   it("rejects a snapshot whose content belongs to a different scan than the report", async () => {
     const payload = await storedPayload()
-    readTx.report.findFirst.mockResolvedValue({
-      contentJson: payload,
-      scanId: "scan-other",
-    })
+    readTx.report.findFirst.mockResolvedValue(readReport(payload, { scanId: "scan-other" }))
 
     await expect(getReleasePacket("report-1", "ws-1")).rejects.toMatchObject({
       code: "SNAPSHOT_INVALID",
@@ -397,32 +500,34 @@ describe("getReleasePacket", () => {
     const payload = await storedPayload()
     const shareToken = "b".repeat(64)
     const shareTokenHash = createHash("sha256").update(shareToken).digest("hex")
-    readTx.report.findFirst.mockResolvedValue({
-      contentJson: payload,
-      scanId: "scan-1",
-      shareTokenHash,
-      shareExpiresAt: new Date(Date.now() + 60_000),
-      revokedAt: null,
+    readTx.report.findFirst.mockResolvedValue(
+      readReport(payload, {
+        shareTokenHash,
+        shareExpiresAt: new Date(Date.now() + 60_000),
+        revokedAt: null,
+      })
+    )
+
+    await expect(getReleasePacket("report-1", "ws-1", { shareToken })).resolves.toMatchObject({
+      payload,
     })
 
-    await expect(getReleasePacket("report-1", "ws-1", { shareToken })).resolves.toEqual(payload)
-
-    readTx.report.findFirst.mockResolvedValue({
-      contentJson: payload,
-      scanId: "scan-1",
-      shareTokenHash,
-      shareExpiresAt: new Date(Date.now() + 60_000),
-      revokedAt: new Date(),
-    })
+    readTx.report.findFirst.mockResolvedValue(
+      readReport(payload, {
+        shareTokenHash,
+        shareExpiresAt: new Date(Date.now() + 60_000),
+        revokedAt: new Date(),
+      })
+    )
     await expect(getReleasePacket("report-1", "ws-1", { shareToken })).resolves.toBeNull()
 
-    readTx.report.findFirst.mockResolvedValue({
-      contentJson: payload,
-      scanId: "scan-1",
-      shareTokenHash,
-      shareExpiresAt: new Date(Date.now() + 60_000),
-      revokedAt: null,
-    })
+    readTx.report.findFirst.mockResolvedValue(
+      readReport(payload, {
+        shareTokenHash,
+        shareExpiresAt: new Date(Date.now() + 60_000),
+        revokedAt: null,
+      })
+    )
     await expect(
       getReleasePacket("report-1", "ws-1", { shareToken: "c".repeat(64) })
     ).resolves.toBeNull()
@@ -431,7 +536,7 @@ describe("getReleasePacket", () => {
   it("scopes reads to the workspace and never mutates the stored snapshot", async () => {
     const payload = await storedPayload()
     const tx = readTx
-    tx.report.findFirst.mockResolvedValue({ contentJson: payload, scanId: "scan-1" })
+    tx.report.findFirst.mockResolvedValue(readReport(payload))
 
     await getReleasePacket("report-1", "ws-1")
 
@@ -451,6 +556,7 @@ describe("getReleasePacket", () => {
         select: {
           contentJson: true,
           scanId: true,
+          scan: { select: { workspaceId: true, targetId: true } },
           shareTokenHash: true,
           shareExpiresAt: true,
           revokedAt: true,
@@ -458,6 +564,80 @@ describe("getReleasePacket", () => {
       })
     )
     expect(tx.report.update).not.toHaveBeenCalled()
+  })
+
+  it("rechecks the full packet signature, revocation, expiry, and current applicability on read", async () => {
+    const legacy = await storedPayload()
+    const base = {
+      ...legacy,
+      version: RELEASE_PACKET_VERSION,
+      generatedAt: "2026-11-06T00:00:00.000Z",
+      expiresAt: "2026-11-07T00:00:00.000Z",
+      signingKeyId: packetKeys[0]!.id,
+    }
+    const packetChecksum = await computeReleasePacketChecksum(base)
+    const packet = {
+      ...base,
+      packetChecksum,
+      packetSignature: signReleasePacketChecksum(packetChecksum, packetPrivateKey),
+    }
+    readTx.report.findFirst.mockResolvedValue(readReport(packet))
+    readTx.gateVerdict.findFirst.mockResolvedValue({
+      id: "verdict-1",
+      targetId: "target-1",
+      state: "NOT_READY",
+      evaluatedAt: new Date("2026-11-05T00:00:00.000Z"),
+      assessmentSnapshot: "snapshot",
+    })
+    mocks.evaluateVerdictApplicability.mockResolvedValue({ applicable: true, reasons: [] })
+    const now = new Date("2026-11-06T01:00:00.000Z")
+    const result = await getReleasePacket("report-1", "ws-1", { verificationKeys: packetKeys, now })
+    expect(result).toMatchObject({
+      payload: packet,
+      authenticity: { signatureState: "VERIFIED", expired: false },
+      assessmentValidity: { signatureState: "UNSIGNED" },
+      currentApplicability: { state: "CURRENT" },
+    })
+    readTx.report.findFirst.mockResolvedValue(readReport({ ...packet, extra: "unbound" }))
+    await expect(
+      getReleasePacket("report-1", "ws-1", { verificationKeys: packetKeys, now })
+    ).rejects.toMatchObject({ code: "SNAPSHOT_INVALID" })
+    readTx.report.findFirst.mockResolvedValue(readReport(packet))
+    expect(
+      (
+        await getReleasePacket("report-1", "ws-1", {
+          verificationKeys: [{ ...packetKeys[0]!, revoked: true }],
+          now,
+        })
+      )?.authenticity.signatureState
+    ).toBe("REVOKED")
+    expect(
+      (await getReleasePacket("report-1", "ws-1", { verificationKeys: [], now }))?.authenticity
+        .signatureState
+    ).toBe("UNAVAILABLE")
+    expect(
+      (
+        await getReleasePacket("report-1", "ws-1", {
+          verificationKeys: packetKeys,
+          now: new Date("2026-11-07T00:00:00.000Z"),
+        })
+      )?.authenticity.expired
+    ).toBe(true)
+    mocks.evaluateVerdictApplicability.mockResolvedValue({
+      applicable: false,
+      reasons: [{ code: "EVIDENCE_CHANGED", message: "Evidence changed" }],
+    })
+    expect(
+      (await getReleasePacket("report-1", "ws-1", { verificationKeys: packetKeys, now }))
+        ?.currentApplicability.state
+    ).toBe("NOT_CURRENT")
+    const changed = { ...packet, target: { ...packet.target, name: "Tampered" } }
+    changed.packetChecksum = await computeReleasePacketChecksum(changed)
+    readTx.report.findFirst.mockResolvedValue(readReport(changed))
+    expect(
+      (await getReleasePacket("report-1", "ws-1", { verificationKeys: packetKeys, now }))
+        ?.authenticity.signatureState
+    ).toBe("INVALID")
   })
 })
 
@@ -494,9 +674,11 @@ describe("getReleasePacketForDelegatedRead", () => {
   it("reads the binding, live grant and packet in one RepeatableRead transaction", async () => {
     const payload = await storedPayload()
     readTx.$queryRaw.mockResolvedValue([authority])
-    readTx.report.findFirst.mockResolvedValue({ contentJson: payload, scanId: "scan-1" })
+    readTx.report.findFirst.mockResolvedValue(readReport(payload))
 
-    await expect(getReleasePacketForDelegatedRead(delegatedInput())).resolves.toEqual(payload)
+    await expect(getReleasePacketForDelegatedRead(delegatedInput())).resolves.toMatchObject({
+      payload,
+    })
 
     expect(mocks.withWorkspaceRLS).toHaveBeenCalledWith(
       "ws-1",
@@ -540,16 +722,16 @@ describe("getReleasePacketForDelegatedRead", () => {
     const payload = await storedPayload()
     const shareToken = "b".repeat(64)
     readTx.$queryRaw.mockResolvedValue([authority])
-    readTx.report.findFirst.mockResolvedValue({
-      contentJson: payload,
-      scanId: "scan-1",
-      shareTokenHash: createHash("sha256").update(shareToken).digest("hex"),
-      shareExpiresAt: new Date(Date.now() + 60_000),
-      revokedAt: null,
-    })
+    readTx.report.findFirst.mockResolvedValue(
+      readReport(payload, {
+        shareTokenHash: createHash("sha256").update(shareToken).digest("hex"),
+        shareExpiresAt: new Date(Date.now() + 60_000),
+        revokedAt: null,
+      })
+    )
 
     await expect(
       getReleasePacketForDelegatedRead({ ...delegatedInput(), shareToken })
-    ).resolves.toEqual(payload)
+    ).resolves.toMatchObject({ payload })
   })
 })

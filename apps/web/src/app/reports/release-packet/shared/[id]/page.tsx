@@ -7,11 +7,12 @@ import {
   getReportByShareToken,
   ReleasePacketError,
 } from "@lyrashield/db"
-import type { ReleasePacketPayload } from "@lyrashield/types"
+import type { ReleasePacketReadResult } from "@lyrashield/db"
 import { getSession, requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { Card, buttonVariants } from "@lyrashield/ui"
 import { ReleasePacketView } from "./release-packet-view"
+import { releasePacketVerificationContext } from "../../../../../lib/release-packet-verification"
 
 export const dynamic = "force-dynamic"
 
@@ -72,9 +73,10 @@ export default async function PrivateReleasePacketPage({
     notFound()
   }
 
-  let payload: ReleasePacketPayload | null
+  let result: ReleasePacketReadResult | null
   try {
-    payload = oauth?.connectionId
+    const verification = await releasePacketVerificationContext()
+    result = oauth?.connectionId
       ? await getReleasePacketForDelegatedRead({
           reportId: id,
           workspaceId: report.workspaceId,
@@ -82,13 +84,14 @@ export default async function PrivateReleasePacketPage({
           connectionId: oauth.connectionId,
           authorizationVersion: oauth.authorizationVersion!,
           shareToken: token,
+          ...verification,
         })
-      : await getReleasePacket(id, report.workspaceId, { shareToken: token })
+      : await getReleasePacket(id, report.workspaceId, { shareToken: token, ...verification })
   } catch (error) {
     if (error instanceof ReleasePacketError) notFound()
     throw error
   }
-  if (!payload) notFound()
+  if (!result) notFound()
 
-  return <ReleasePacketView payload={payload} workspaceId={report.workspaceId} reportId={id} />
+  return <ReleasePacketView result={result} workspaceId={report.workspaceId} reportId={id} />
 }

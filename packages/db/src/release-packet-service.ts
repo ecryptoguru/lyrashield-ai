@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto"
+import { isDeepStrictEqual } from "node:util"
 import {
   computeReleasePacketChecksum,
   RELEASE_PACKET_VERSION,
@@ -9,12 +10,26 @@ import {
 } from "@lyrashield/types"
 import { withWorkspaceRLS, type ScopedTransaction } from "./rls"
 import { evaluateVerdictApplicability, parseAssessmentSnapshot } from "./gate-service"
-import { isLaunchReportShareablePayload } from "./launch-report-html"
-import { parseLaunchReportProvenance } from "./launch-report-provenance"
-import { verifyLaunchReportSignature } from "./launch-report-signing"
+import { signedAssessmentFor } from "./release-packet-assessment"
 import { resolveReportDelegationTarget } from "./report-service"
 import { classifyReleaseFindings } from "./release-packet-classification"
 import { loadReceiptBackedRetestFindingIds } from "./retest-evidence-trust"
+import {
+  evaluateAssessmentValidity,
+  evaluatePacketAuthenticity,
+  type ReleaseAssessmentValidity,
+  type ReleasePacketAuthenticity,
+} from "./release-packet-authenticity"
+import {
+  readPacketApplicability,
+  type ReleasePacketApplicability,
+} from "./release-packet-applicability"
+import {
+  releasePacketSigningKeyId,
+  signReleasePacketChecksum,
+  verifyReleasePacketChecksum,
+  type ReleasePacketVerificationKey,
+} from "./release-packet-signing"
 
 export { classifyReleaseFindings } from "./release-packet-classification"
 
@@ -25,6 +40,7 @@ export class ReleasePacketError extends Error {
       | "NOT_EVALUATED"
       | "ASSESSMENT_INCOMPLETE"
       | "RELEASE_IDENTITY_MISMATCH"
+      | "SIGNING_UNAVAILABLE"
       | "SNAPSHOT_INVALID",
     message: string
   ) {
@@ -33,88 +49,14 @@ export class ReleasePacketError extends Error {
   }
 }
 
-function sameIdentity(
-  left: { kind: string; value: string } | null,
-  right: { kind: string; value: string } | null
-): boolean {
-  return Boolean(
-    left &&
-    right &&
-    left.kind === right.kind &&
-    left.value.toLowerCase() === right.value.toLowerCase()
-  )
-}
-
-async function signedAssessmentFor(
-  tx: ScopedTransaction,
-  input: {
-    workspaceId: string
-    verdictId: string
-    identity: { kind: "COMMIT" | "ARTIFACT_DIGEST"; value: string } | null
-    publicKey: string | null
-    now: Date
-  }
-): Promise<SignedAssessment> {
-  const reports = await tx.report.findMany({
-    where: {
-      workspaceId: input.workspaceId,
-      type: "launch_readiness",
-      deletedAt: null,
-      provenanceJson: { path: ["gateVerdictId"], equals: input.verdictId },
-    },
-    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-    select: { id: true, contentJson: true, provenanceJson: true },
-  })
-  const report = reports.find((candidate) => {
-    const provenance = parseLaunchReportProvenance(candidate.provenanceJson)
-    return (
-      provenance?.gateVerdictId === input.verdictId &&
-      sameIdentity(provenance.assessedIdentity, input.identity)
-    )
-  })
-  if (!report) {
-    return { state: "UNAVAILABLE", reason: "No signed assessment report is bound to this verdict." }
-  }
-  if (!isLaunchReportShareablePayload(report.contentJson)) {
-    return {
-      state: "UNAVAILABLE",
-      reportId: report.id,
-      reason: "The bound assessment report snapshot is unreadable.",
-    }
-  }
-  const payload = report.contentJson
-  const common = {
-    reportId: report.id,
-    reportChecksum: payload.reportChecksum,
-    signature: payload.signature,
-    signingKeyId: payload.signingKeyId,
-    verifiedAt: input.now.toISOString(),
-  }
-  const expiresAt = payload.expiresAt ? new Date(payload.expiresAt).getTime() : Number.NaN
-  if (payload.stale || !Number.isFinite(expiresAt) || expiresAt <= input.now.getTime()) {
-    return { ...common, state: "HISTORICAL", reason: "The signed assessment is historical." }
-  }
-  if (!payload.signature) {
-    return {
-      ...common,
-      state: "UNSIGNED",
-      reason: "The assessment was issued without a signature.",
-    }
-  }
-  if (!input.publicKey) {
-    return { ...common, state: "UNAVAILABLE", reason: "The verification key is unavailable." }
-  }
-  return verifyLaunchReportSignature(payload.reportChecksum, payload.signature, input.publicKey)
-    ? { ...common, state: "SIGNED" }
-    : { state: "INVALID", ...common, reason: "The bound assessment signature is invalid." }
-}
-
 export interface IssueReleasePacketInput {
   workspaceId: string
   targetId: string
   actorUserId: string
   expectedIdentity: { kind: "COMMIT" | "ARTIFACT_DIGEST"; value: string }
   signingPublicKey?: string | null
+  signingPrivateKey?: string | null
+  verificationKeys?: readonly ReleasePacketVerificationKey[]
   now?: Date
   detailLimit?: number
 }
@@ -329,8 +271,9 @@ function buildReleasePacketBasePayload(args: {
   remediation: Awaited<ReturnType<typeof loadPacketRemediation>>["remediation"]
   reportsCoverage: Array<{ scanner: string; status: string }>
   now: Date
-}): Omit<ReleasePacketPayload, "packetChecksum"> {
-  const { context, signedAssessment, remediation, reportsCoverage, now } = args
+  signingKeyId: string
+}): Omit<ReleasePacketPayload, "packetChecksum" | "packetSignature"> {
+  const { context, signedAssessment, remediation, reportsCoverage, now, signingKeyId } = args
   const { target, verdict, snapshot, applicability, currentScan, baselineScan } = context
   const completed: string[] = []
   const notApplicable: string[] = []
@@ -343,6 +286,15 @@ function buildReleasePacketBasePayload(args: {
   return {
     version: RELEASE_PACKET_VERSION,
     generatedAt: now.toISOString(),
+    expiresAt: new Date(
+      Math.min(
+        now.getTime() + 24 * 60 * 60 * 1000,
+        signedAssessment.expiresAt
+          ? Date.parse(signedAssessment.expiresAt)
+          : Number.POSITIVE_INFINITY
+      )
+    ).toISOString(),
+    signingKeyId,
     target: {
       id: target.id,
       name: target.name.slice(0, 160),
@@ -433,18 +385,45 @@ export async function issueReleasePacket(
         verdictId: context.verdict.id,
         identity: context.snapshot.identity,
         publicKey: input.signingPublicKey ?? null,
+        verificationKeys: input.verificationKeys ?? [],
         now,
       })
+      let signingKeyId: string
+      try {
+        if (!input.signingPrivateKey) throw new Error("missing signing key")
+        signingKeyId = releasePacketSigningKeyId(input.signingPrivateKey)
+      } catch {
+        throw new ReleasePacketError("SIGNING_UNAVAILABLE", "Release packet signing is unavailable")
+      }
       const basePayload = buildReleasePacketBasePayload({
         context,
         signedAssessment,
         remediation,
         reportsCoverage,
         now,
+        signingKeyId,
       })
+      const packetChecksum = await computeReleasePacketChecksum(basePayload)
+      let packetSignature: string
+      try {
+        packetSignature = signReleasePacketChecksum(packetChecksum, input.signingPrivateKey!)
+        if (
+          verifyReleasePacketChecksum(
+            packetChecksum,
+            packetSignature,
+            signingKeyId,
+            input.verificationKeys ?? []
+          ) !== "VERIFIED"
+        ) {
+          throw new Error("signing key is not allowed")
+        }
+      } catch {
+        throw new ReleasePacketError("SIGNING_UNAVAILABLE", "Release packet signing is unavailable")
+      }
       const payload: ReleasePacketPayload = {
         ...basePayload,
-        packetChecksum: await computeReleasePacketChecksum(basePayload),
+        packetChecksum,
+        packetSignature,
       }
       const reportId = await persistReleasePacket(tx, input, context, payload, now)
       return { reportId, payload }
@@ -460,19 +439,31 @@ export interface ReleasePacketReadOptions {
   client?: ScopedTransaction
   /** When supplied, re-prove the private capability inside the same read transaction. */
   shareToken?: string
+  verificationKeys?: readonly ReleasePacketVerificationKey[]
+  assessmentPublicKey?: string | null
+  now?: Date
+}
+
+export interface ReleasePacketReadResult {
+  payload: ReleasePacketPayload
+  authenticity: ReleasePacketAuthenticity
+  assessmentValidity: ReleaseAssessmentValidity
+  currentApplicability: ReleasePacketApplicability
 }
 
 async function readReleasePacket(
   tx: ScopedTransaction,
   reportId: string,
   workspaceId: string,
-  shareToken?: string
-): Promise<ReleasePacketPayload | null> {
+  options: ReleasePacketReadOptions
+): Promise<ReleasePacketReadResult | null> {
+  const { shareToken } = options
   const report = await tx.report.findFirst({
     where: { id: reportId, workspaceId, type: "release_packet", deletedAt: null },
     select: {
       contentJson: true,
       scanId: true,
+      scan: { select: { workspaceId: true, targetId: true } },
       shareTokenHash: true,
       shareExpiresAt: true,
       revokedAt: true,
@@ -499,10 +490,24 @@ async function readReleasePacket(
       "The stored release packet is invalid or incomplete"
     )
   }
+  if (
+    parsed.data.version === RELEASE_PACKET_VERSION &&
+    !isDeepStrictEqual(report.contentJson, parsed.data)
+  ) {
+    throw new ReleasePacketError(
+      "SNAPSHOT_INVALID",
+      "The stored release packet contains unsupported fields"
+    )
+  }
   // The packet's finding/coverage snapshot must belong to the same scan that
   // binds the report to a target; otherwise delegated scope could be checked
   // against one scan while the content came from another.
-  if (report.scanId === null || parsed.data.remediation.currentScanId !== report.scanId) {
+  if (
+    report.scanId === null ||
+    parsed.data.remediation.currentScanId !== report.scanId ||
+    report.scan?.workspaceId !== workspaceId ||
+    report.scan.targetId !== parsed.data.target.id
+  ) {
     throw new ReleasePacketError(
       "SNAPSHOT_INVALID",
       "The stored release packet is not bound to its assessed scan"
@@ -516,16 +521,30 @@ async function readReleasePacket(
       "The stored release packet checksum does not match its content"
     )
   }
-  return parsed.data
+  const now = options.now ?? new Date()
+  const [authenticity, currentApplicability] = await Promise.all([
+    evaluatePacketAuthenticity(parsed.data, options.verificationKeys ?? [], now),
+    readPacketApplicability(tx, workspaceId, parsed.data, now),
+  ])
+  return {
+    payload: parsed.data,
+    authenticity,
+    assessmentValidity: evaluateAssessmentValidity(
+      parsed.data,
+      options.assessmentPublicKey ?? null,
+      options.verificationKeys ?? [],
+      now
+    ),
+    currentApplicability,
+  }
 }
 
 export async function getReleasePacket(
   reportId: string,
   workspaceId: string,
   options: ReleasePacketReadOptions = {}
-): Promise<ReleasePacketPayload | null> {
-  const read = (tx: ScopedTransaction) =>
-    readReleasePacket(tx, reportId, workspaceId, options.shareToken)
+): Promise<ReleasePacketReadResult | null> {
+  const read = (tx: ScopedTransaction) => readReleasePacket(tx, reportId, workspaceId, options)
   return options.client
     ? read(options.client)
     : withWorkspaceRLS(workspaceId, read, { isolationLevel: "RepeatableRead" })
@@ -538,6 +557,9 @@ export interface DelegatedReleasePacketReadInput {
   connectionId: string
   authorizationVersion: number
   shareToken?: string
+  verificationKeys?: readonly ReleasePacketVerificationKey[]
+  assessmentPublicKey?: string | null
+  now?: Date
 }
 
 /**
@@ -549,7 +571,7 @@ export interface DelegatedReleasePacketReadInput {
  */
 export async function getReleasePacketForDelegatedRead(
   input: DelegatedReleasePacketReadInput
-): Promise<ReleasePacketPayload | null> {
+): Promise<ReleasePacketReadResult | null> {
   return withWorkspaceRLS(
     input.workspaceId,
     async (tx) => {
@@ -583,7 +605,8 @@ export async function getReleasePacketForDelegatedRead(
         return null
       }
 
-      return readReleasePacket(tx, input.reportId, input.workspaceId, input.shareToken)
+      const packet = await readReleasePacket(tx, input.reportId, input.workspaceId, input)
+      return packet?.payload.target.id === binding.targetId ? packet : null
     },
     { isolationLevel: "RepeatableRead" }
   )

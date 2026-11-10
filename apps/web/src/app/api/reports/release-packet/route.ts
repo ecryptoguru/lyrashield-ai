@@ -1,6 +1,10 @@
 import { z } from "zod"
 import { generateShareToken, issueReleasePacket, ReleasePacketError } from "@lyrashield/db"
-import { resolveLaunchReportSigningPublicKey } from "@lyrashield/billing"
+import {
+  resolveLaunchReportSigningPrivateKey,
+  resolveLaunchReportSigningPublicKey,
+  resolveReleasePacketVerificationKeys,
+} from "@lyrashield/billing"
 import { assertOAuthDelegatedScope, requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { env } from "@lyrashield/config"
@@ -54,6 +58,10 @@ async function post(request: Request) {
       })
       return null
     })
+    const [signingPrivateKey, verificationKeys] = await Promise.all([
+      resolveLaunchReportSigningPrivateKey().catch(() => null),
+      resolveReleasePacketVerificationKeys().catch(() => []),
+    ])
     const expectedIdentity = data.commit
       ? { kind: "COMMIT" as const, value: data.commit.toLowerCase() }
       : { kind: "ARTIFACT_DIGEST" as const, value: data.artifactDigest!.toLowerCase() }
@@ -63,6 +71,8 @@ async function post(request: Request) {
       actorUserId: session.userId,
       expectedIdentity,
       signingPublicKey,
+      signingPrivateKey,
+      verificationKeys,
     })
 
     let shareUrl: string | null = null
@@ -86,11 +96,13 @@ async function post(request: Request) {
     if (authErr) return authErr
     if (error instanceof ReleasePacketError) {
       const status =
-        error.code === "TARGET_NOT_FOUND" || error.code === "NOT_EVALUATED"
-          ? 404
-          : error.code === "RELEASE_IDENTITY_MISMATCH"
-            ? 409
-            : 422
+        error.code === "SIGNING_UNAVAILABLE"
+          ? 503
+          : error.code === "TARGET_NOT_FOUND" || error.code === "NOT_EVALUATED"
+            ? 404
+            : error.code === "RELEASE_IDENTITY_MISMATCH"
+              ? 409
+              : 422
       return apiError(error.code, error.message, status)
     }
     logger.error("Release packet generation failed", { error: String(error) })

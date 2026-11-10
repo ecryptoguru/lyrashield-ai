@@ -9,6 +9,10 @@ import { PERMISSIONS } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
 import { authErrorResponse } from "../../../../../../lib/api-auth"
 import { apiError } from "../../../../../../lib/api-response"
+import {
+  isReleasePacketExportable,
+  releasePacketVerificationContext,
+} from "../../../../../../lib/release-packet-verification"
 
 function noStore(response: Response): Response {
   response.headers.set("Cache-Control", "private, no-store")
@@ -38,23 +42,28 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     }
     const { session } = await requirePermission(resolved.workspaceId, PERMISSIONS.report.download)
 
-    let payload: Awaited<ReturnType<typeof getReleasePacket>>
+    let result: Awaited<ReturnType<typeof getReleasePacket>>
     try {
+      const verification = await releasePacketVerificationContext()
       if (session.oauth?.connectionId) {
         const { connectionId, authorizationVersion, workspaceId: grantWorkspaceId } = session.oauth
         if (!authorizationVersion || grantWorkspaceId !== resolved.workspaceId) {
           return noStore(apiError("FORBIDDEN", "Release packet is not authorized", 403))
         }
-        payload = await getReleasePacketForDelegatedRead({
+        result = await getReleasePacketForDelegatedRead({
           reportId: id,
           workspaceId: resolved.workspaceId,
           userId: session.userId,
           connectionId,
           authorizationVersion,
           shareToken: token,
+          ...verification,
         })
       } else {
-        payload = await getReleasePacket(id, resolved.workspaceId, { shareToken: token })
+        result = await getReleasePacket(id, resolved.workspaceId, {
+          shareToken: token,
+          ...verification,
+        })
       }
     } catch (error) {
       if (error instanceof ReleasePacketError && error.code === "SNAPSHOT_INVALID") {
@@ -64,8 +73,26 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       }
       throw error
     }
-    if (!payload) return noStore(apiError("REPORT_NOT_FOUND", "Release packet not found", 404))
-    return noStore(Response.json({ success: true, data: payload }))
+    if (!result) return noStore(apiError("REPORT_NOT_FOUND", "Release packet not found", 404))
+    if (!isReleasePacketExportable(result))
+      return noStore(
+        apiError(
+          "PACKET_AUTHENTICITY_UNAVAILABLE",
+          "Release packet authenticity could not be verified",
+          409
+        )
+      )
+    return noStore(
+      Response.json({
+        success: true,
+        data: result.payload,
+        verification: {
+          authenticity: result.authenticity,
+          assessmentValidity: result.assessmentValidity,
+          currentApplicability: result.currentApplicability,
+        },
+      })
+    )
   } catch (error) {
     const authErr = authErrorResponse(error)
     if (authErr) return noStore(authErr)

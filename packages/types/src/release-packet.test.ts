@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest"
 import {
   computeReleasePacketChecksum,
+  LEGACY_RELEASE_PACKET_VERSION,
   releasePacketPayloadSchema,
   RELEASE_PACKET_VERSION,
 } from "./release-packet"
 
 const base = {
-  version: RELEASE_PACKET_VERSION,
+  version: LEGACY_RELEASE_PACKET_VERSION,
   generatedAt: "2026-11-05T00:00:00.000Z",
   target: { id: "target-1", name: "App", type: "REPO", environment: "PRODUCTION" },
   assessment: {
@@ -68,5 +69,44 @@ describe("release packet contract", () => {
       }
       expect(releasePacketPayloadSchema.parse(payload).signedAssessment.state).toBe(state)
     }
+  })
+
+  it("binds a version 1.1 packet's expiry and key identity without hashing its signature", async () => {
+    const next = {
+      ...base,
+      version: RELEASE_PACKET_VERSION,
+      expiresAt: "2026-11-06T00:00:00.000Z",
+      signingKeyId: `lyrashield-packet-ed25519-${"d".repeat(64)}`,
+    }
+    const checksum = await computeReleasePacketChecksum(next)
+    const signed = { ...next, packetChecksum: checksum, packetSignature: "s".repeat(88) }
+    expect(releasePacketPayloadSchema.parse(signed)).toEqual(signed)
+    expect(await computeReleasePacketChecksum({ ...signed, packetSignature: "t".repeat(88) })).toBe(
+      checksum
+    )
+    expect(
+      await computeReleasePacketChecksum({ ...next, expiresAt: "2026-11-05T12:00:00.000Z" })
+    ).not.toBe(checksum)
+    expect(
+      await computeReleasePacketChecksum({
+        ...next,
+        signingKeyId: `lyrashield-packet-ed25519-${"e".repeat(64)}`,
+      })
+    ).not.toBe(checksum)
+    expect(
+      releasePacketPayloadSchema.safeParse({ ...next, packetChecksum: checksum }).success
+    ).toBe(false)
+    expect(
+      releasePacketPayloadSchema.safeParse({
+        ...signed,
+        expiresAt: "2026-11-07T00:00:00.000Z",
+      }).success
+    ).toBe(false)
+    expect(
+      releasePacketPayloadSchema.safeParse({
+        ...signed,
+        signedAssessment: { ...signed.signedAssessment, expiresAt: "2026-11-05T12:00:00.000Z" },
+      }).success
+    ).toBe(false)
   })
 })

@@ -393,6 +393,36 @@ track state and audit entry have been reviewed.
 Payouts (RazorpayX/Payoneer), tax-form operations, marketplace listing
 payments — separate founder workstreams with their own gates.
 
+## Release packet signing and key rotation
+
+Version 1.1 release packets use the existing launch-report Ed25519 key pair. The private key is
+resolved through the managed Key Vault path in production. Issuance fails if the private key is
+unavailable or its derived public key is missing from, or revoked by, the configured verification
+keyring. Historical version 1.0 packets remain unsigned; their checksum is not a signature.
+
+`RELEASE_PACKET_VERIFICATION_KEYS_JSON` is an optional server-side JSON array of objects with
+`id`, `publicKey` (SPKI PEM) and `revoked` (boolean). The ID is
+`lyrashield-packet-ed25519-` followed by the lowercase SHA-256 of the public key's DER-encoded
+SPKI. An absent value allows only the current resolved launch public key; an explicit empty array
+allows none. An invalid, duplicate or mismatched entry fails closed. Do not put private keys in
+this setting. The same allowlist and revocations apply when the packet checks its bound launch
+assessment, because both use the shared signing key.
+
+Before rotating, install an explicit keyring containing the current and replacement public keys,
+verify their fingerprints, and test the new key against a non-production packet. Rotate the
+managed private and public pair together, then roll all web instances through the approved
+deployment procedure: launch keys are cached per process. Read back verification on each instance
+and confirm new issuance and old packet verification before removing any old public key. To revoke
+a compromised key, mark its keyring entry `revoked: true`, roll all web instances and verify the
+revoked status and blocked exports. Existing launch-assessment verification resolves only the
+current launch public key, so an older assessment can become unavailable after rotation even when
+its packet signature remains verifiable. The separate launch-report verification endpoint has its
+own key behavior and must not be assumed to enforce this packet keyring.
+
+These are configuration and verification steps, not evidence that production has been provisioned
+or rotated. Confirm the managed identity, Key Vault references, keyring configuration and runtime
+readback before enabling version 1.1 issuance in a release.
+
 ## License signing-key compromise (FF4)
 
 > **Severity: Critical.** This runbook records the current response boundary.

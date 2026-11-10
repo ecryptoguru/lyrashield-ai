@@ -23,10 +23,21 @@ vi.mock("@lyrashield/db", () => ({
   },
 }))
 vi.mock("@lyrashield/logger", () => ({ logger: { error: vi.fn() } }))
+vi.mock("@lyrashield/billing", () => ({
+  resolveReleasePacketVerificationKeys: vi.fn().mockResolvedValue([]),
+  resolveLaunchReportSigningPublicKey: vi.fn().mockResolvedValue(null),
+}))
 
 import { GET } from "./route"
 
 const token = "b".repeat(64)
+const verification = { verificationKeys: [], assessmentPublicKey: null }
+const packetResult = {
+  payload: { packetChecksum: "a".repeat(64) },
+  authenticity: { signatureState: "VERIFIED" },
+  assessmentValidity: {},
+  currentApplicability: {},
+}
 
 function request() {
   return new Request(`http://localhost/api/reports/release-packet/shared/report-1?token=${token}`)
@@ -44,14 +55,17 @@ describe("private shared release packet", () => {
   })
 
   it("requires both a live token and authorized workspace session", async () => {
-    mocks.getReleasePacket.mockResolvedValue({ packetChecksum: "a".repeat(64) })
+    mocks.getReleasePacket.mockResolvedValue(packetResult)
 
     const response = await GET(request(), { params: Promise.resolve({ id: "report-1" }) })
 
     expect(response.status).toBe(200)
     expect(response.headers.get("Cache-Control")).toBe("private, no-store")
     expect(mocks.requirePermission).toHaveBeenCalledWith("ws-1", "report:download")
-    expect(mocks.getReleasePacket).toHaveBeenCalledWith("report-1", "ws-1", { shareToken: token })
+    expect(mocks.getReleasePacket).toHaveBeenCalledWith("report-1", "ws-1", {
+      shareToken: token,
+      ...verification,
+    })
   })
 
   it("does not disclose a report for an unknown or mismatched token", async () => {
@@ -71,7 +85,10 @@ describe("private shared release packet", () => {
     const response = await GET(request(), { params: Promise.resolve({ id: "report-1" }) })
 
     expect(response.status).toBe(404)
-    expect(mocks.getReleasePacket).toHaveBeenCalledWith("report-1", "ws-1", { shareToken: token })
+    expect(mocks.getReleasePacket).toHaveBeenCalledWith("report-1", "ws-1", {
+      shareToken: token,
+      ...verification,
+    })
   })
 
   it("reads a delegated packet under the live connection authority and token", async () => {
@@ -87,7 +104,7 @@ describe("private shared release packet", () => {
         },
       },
     })
-    mocks.getReleasePacketForDelegatedRead.mockResolvedValue({ packetChecksum: "a".repeat(64) })
+    mocks.getReleasePacketForDelegatedRead.mockResolvedValue(packetResult)
 
     const response = await GET(request(), { params: Promise.resolve({ id: "report-1" }) })
 
@@ -99,8 +116,19 @@ describe("private shared release packet", () => {
       connectionId: "conn-1",
       authorizationVersion: 2,
       shareToken: token,
+      ...verification,
     })
     expect(mocks.getReleasePacket).not.toHaveBeenCalled()
+  })
+
+  it("refuses JSON export when packet signature verification fails", async () => {
+    mocks.getReleasePacket.mockResolvedValue({
+      ...packetResult,
+      authenticity: { signatureState: "INVALID" },
+    })
+    const response = await GET(request(), { params: Promise.resolve({ id: "report-1" }) })
+    expect(response.status).toBe(409)
+    expect((await response.json()).error.code).toBe("PACKET_AUTHENTICITY_UNAVAILABLE")
   })
 
   it("returns 404 when the live delegated grant no longer covers the packet", async () => {
