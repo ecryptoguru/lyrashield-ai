@@ -66,6 +66,7 @@ describe("getManualScanOptions", () => {
       "CODE_REVIEW",
       "REVIEW_CHANGES",
       "DEEP_REVIEW",
+      "CODE_REVIEW_LAUNCH_REVIEW",
     ])
     expect(options.every((o) => o.available)).toBe(true)
     expect(options.every((option) => !Object.hasOwn(option, "maxBudgetUsd"))).toBe(true)
@@ -111,7 +112,12 @@ describe("getManualScanOptions", () => {
 
   it("returns Safe, Standard, and Deep web review options", () => {
     const options = getManualScanOptions({ type: "WEB_APP" })
-    expect(options.map((o) => o.id)).toEqual(["WEB_APP_SAFE", "WEB_APP_STANDARD", "WEB_APP_DEEP"])
+    expect(options.map((o) => o.id)).toEqual([
+      "WEB_APP_SAFE",
+      "WEB_APP_STANDARD",
+      "WEB_APP_DEEP",
+      "WEB_APP_STANDARD_LAUNCH_REVIEW",
+    ])
     expect(options[0]).toMatchObject({
       id: "WEB_APP_SAFE",
       label: "Surface Review",
@@ -147,6 +153,7 @@ describe("getManualScanOptions", () => {
       { id: "API_SAFE", available: true },
       { id: "API_STANDARD", available: false },
       { id: "API_DEEP", available: false },
+      { id: "API_STANDARD_LAUNCH_REVIEW", available: false },
     ])
     expect(options[0]).toMatchObject({
       id: "API_SAFE",
@@ -161,7 +168,12 @@ describe("getManualScanOptions", () => {
 
   it("returns Contract and Contract Behavior options for an API target with an OpenAPI spec", () => {
     const options = getManualScanOptions({ type: "API", hasApiSpec: true })
-    expect(options.map((o) => o.id)).toEqual(["API_SAFE", "API_STANDARD", "API_DEEP"])
+    expect(options.map((o) => o.id)).toEqual([
+      "API_SAFE",
+      "API_STANDARD",
+      "API_DEEP",
+      "API_STANDARD_LAUNCH_REVIEW",
+    ])
     expect(options[0]).toMatchObject({
       id: "API_SAFE",
       label: "Endpoint Review",
@@ -198,6 +210,7 @@ describe("getManualScanOptions", () => {
       "CODE_REVIEW",
       "REVIEW_CHANGES",
       "DEEP_REVIEW",
+      "CODE_REVIEW_LAUNCH_REVIEW",
     ])
   })
 })

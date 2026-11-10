@@ -73,6 +73,16 @@ export function findRecoveryPreset<
   )
 }
 
+/** Preserve an explicitly requested unavailable option so the user sees its blocker. */
+export function resolveInitialScanPreset<T extends { id: string; goal: string; mode: string }>(
+  options: T[],
+  goal: string | undefined,
+  mode: string | undefined,
+  fallbackId: string
+): string {
+  return options.find((option) => option.goal === goal && option.mode === mode)?.id ?? fallbackId
+}
+
 export function isBillingRecoveryCode(code: string | null): boolean {
   return (
     code !== null && ["NO_MINUTES_REMAINING", "TRIAL_EXPIRED", "DEEP_NOT_ALLOWED"].includes(code)

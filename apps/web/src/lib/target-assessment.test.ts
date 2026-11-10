@@ -1,4 +1,9 @@
 import { describe, expect, it } from "vitest"
+import {
+  findRecoveryPreset,
+  resolveInitialScanPreset,
+} from "@/app/(dashboard)/dashboard/scans/scans-client.utils"
+import { getDefaultScanOptionId, getManualScanOptions } from "./scan-presets"
 import { projectTargetAssessment, type TargetAssessmentSource } from "./target-assessment"
 
 const source: TargetAssessmentSource = {
@@ -61,6 +66,37 @@ describe("projectTargetAssessment", () => {
     const query = new URL(projection.nextAction.href, "https://example.invalid").searchParams
     expect(query.get("goal")).toBe(projection.proposedReview.goal)
     expect(query.get("mode")).toBe(projection.proposedReview.mode)
+  })
+
+  it.each(["REPO", "WEB_APP", "API"])(
+    "selects the actual Standard launch-review preset for a %s target",
+    (type) => {
+      const projection = projectTargetAssessment({ ...source, target: { ...source.target, type } })
+      const query = new URL(projection.nextAction.href, "https://example.invalid").searchParams
+      const options = getManualScanOptions({ type, hasApiSpec: true })
+      const selected = findRecoveryPreset(options, query.get("goal") ?? "", query.get("mode") ?? "")
+      expect(options.find((option) => option.id === selected)).toMatchObject({
+        goal: "LAUNCH_REVIEW",
+        mode: "STANDARD",
+        workflow: "REVIEW_TARGET",
+        available: true,
+      })
+    }
+  )
+
+  it("keeps an unavailable API Standard launch review selected instead of silently downgrading", () => {
+    const options = getManualScanOptions({ type: "API", hasApiSpec: false })
+    const selected = resolveInitialScanPreset(
+      options,
+      "LAUNCH_REVIEW",
+      "STANDARD",
+      getDefaultScanOptionId(options)
+    )
+    expect(options.find((option) => option.id === selected)).toMatchObject({
+      goal: "LAUNCH_REVIEW",
+      mode: "STANDARD",
+      available: false,
+    })
   })
 
   it("links to the active run before proposing another review", () => {

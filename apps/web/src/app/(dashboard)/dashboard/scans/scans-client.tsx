@@ -21,7 +21,11 @@ import {
 } from "@/lib/api-schemas"
 import { ApiError, apiPost, apiGet } from "@/lib/api-client"
 import { SCAN_SINGULAR, TARGET_PLURAL, TARGET_SINGULAR } from "@/lib/terminology"
-import { findRecoveryPreset, getReviewSetupGuidance } from "./scans-client.utils"
+import {
+  findRecoveryPreset,
+  getReviewSetupGuidance,
+  resolveInitialScanPreset,
+} from "./scans-client.utils"
 import { prepareScanRetry } from "./prepare-scan-retry"
 import {
   SCAN_STATE_FILTERS,
@@ -111,7 +115,12 @@ export function ScansClient({
       type: target?.type ?? "",
       hasApiSpec: Boolean(target?.apiSpecUrl),
     })
-    return findRecoveryPreset(options, initialGoal, initialMode) || getDefaultScanOptionId(options)
+    return resolveInitialScanPreset(
+      options,
+      initialGoal,
+      initialMode,
+      getDefaultScanOptionId(options)
+    )
   })
   const [baseRef, setBaseRef] = useState("")
   const [headRef, setHeadRef] = useState("")
@@ -181,6 +190,10 @@ export function ScansClient({
     }
     if (!selectedOption) {
       setError("No review option is available for this target")
+      return
+    }
+    if (!selectedOption.available) {
+      setError(selectedOption.disabledReason ?? "This review option is unavailable for this target")
       return
     }
     if (selectedOption.requiresRevisionInputs && !baseRef.trim()) {
@@ -342,7 +355,7 @@ export function ScansClient({
   })
   const enabledOptions = availableOptions.filter((o) => o.available)
   const selectedOption =
-    enabledOptions.find((o) => o.id === selectedPreset) ??
+    availableOptions.find((o) => o.id === selectedPreset) ??
     enabledOptions.find((o) => o.id === getDefaultScanOptionId(availableOptions)) ??
     enabledOptions[0]
   useScansWebMcp({
@@ -543,6 +556,7 @@ export function ScansClient({
     !selectedTarget ||
     Boolean(engineBudget.error) ||
     !selectedOption ||
+    !selectedOption.available ||
     (selectedOption?.requiresRevisionInputs === true && !baseRef.trim()) ||
     eligibility.status === "checking" ||
     eligibility.status === "error" ||

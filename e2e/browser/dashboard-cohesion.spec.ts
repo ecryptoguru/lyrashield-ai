@@ -60,6 +60,67 @@ test("connected repository setup finishes loading and recovers after changing so
 })
 
 for (const width of [390, 1440]) {
+  test(`launch review uses the proposed Standard intent at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 })
+    const requests: URL[] = []
+    await page.route("**/api/scans/eligibility?**", (route) => {
+      requests.push(new URL(route.request().url()))
+      return route.fulfill({
+        json: {
+          success: true,
+          data: {
+            allowed: true,
+            code: null,
+            message: null,
+            plan: "STARTER",
+            isTrial: false,
+            remainingMinutes: 100,
+          },
+        },
+      })
+    })
+    await page.route("**/api/scans/attachments?**", (route) =>
+      route.fulfill({ json: { success: true, data: { items: [] } } })
+    )
+    await page.goto("?dashboard-ux=first-scan&launch-review")
+    const dialog = page.getByRole("dialog", { name: "Start a scan" })
+    await expect(dialog.getByRole("radio", { name: /^Standard launch review:/ })).toHaveAttribute(
+      "aria-checked",
+      "true"
+    )
+    await expect(dialog.getByRole("button", { name: /^Start scan$/i })).toBeEnabled()
+    expect(requests.at(-1)?.searchParams.get("goal")).toBe("LAUNCH_REVIEW")
+    expect(requests.at(-1)?.searchParams.get("mode")).toBe("STANDARD")
+  })
+
+  test(`unavailable API launch review does not fall back at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 })
+    await page.route("**/api/scans/eligibility?**", (route) =>
+      route.fulfill({
+        json: {
+          success: true,
+          data: {
+            allowed: false,
+            code: "API_SPEC_REQUIRED",
+            message: "An API specification is required.",
+            plan: "STARTER",
+            isTrial: false,
+            remainingMinutes: 100,
+          },
+        },
+      })
+    )
+    await page.route("**/api/scans/attachments?**", (route) =>
+      route.fulfill({ json: { success: true, data: { items: [] } } })
+    )
+    await page.goto("?dashboard-ux=first-scan&launch-review&target-type=API")
+    const dialog = page.getByRole("dialog", { name: "Start a scan" })
+    const review = dialog.getByRole("radio", { name: /^Standard launch review:/ })
+    await expect(review).toHaveAttribute("aria-checked", "true")
+    await expect(review).toBeDisabled()
+    await expect(dialog.getByRole("button", { name: /^Start scan$/i })).toBeDisabled()
+  })
+
   test(`first scan continues from source to explicit confirmation and progress at ${width}px`, async ({
     page,
   }) => {

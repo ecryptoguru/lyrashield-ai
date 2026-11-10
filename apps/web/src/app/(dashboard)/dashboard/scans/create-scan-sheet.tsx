@@ -186,7 +186,9 @@ export function CreateScanSheet({
   const displayedOptions = availableOptions.map((option) => {
     const advisory =
       eligibility.status === "ready"
-        ? eligibility.eligibility.supportedModes?.find((mode) => mode.id === option.id)
+        ? eligibility.eligibility.supportedModes?.find(
+            (mode) => mode.id === option.id.replace(/_LAUNCH_REVIEW$/, "")
+          )
         : undefined
     return advisory?.available === false
       ? {
@@ -533,7 +535,7 @@ export function CreateScanSheet({
           recoveryError={scanRecoveryError}
           canManageBilling={canManageBilling}
           creating={creating}
-          startDisabled={startDisabled}
+          startDisabled={startDisabled || !selectedIsAvailable}
           onStart={handleCreateScan}
           onCancel={() => onOpenChange(false)}
           submissionErrorRef={submissionErrorRef}

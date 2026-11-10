@@ -210,6 +210,24 @@ function urlOptions(targetType: UrlTargetType, hasApiSpec: boolean): ManualScanO
   return options
 }
 
+function withStandardLaunchReview(options: ManualScanOption[]): ManualScanOption[] {
+  const standard = options.find(
+    (option) => option.mode === "STANDARD" && option.workflow === "REVIEW_TARGET"
+  )
+  if (!standard) return options
+  return [
+    ...options,
+    {
+      ...standard,
+      id: `${standard.id}_LAUNCH_REVIEW`,
+      label: "Standard launch review",
+      description: "A Standard-depth review before launch.",
+      goal: "LAUNCH_REVIEW",
+      isDefault: false,
+    },
+  ]
+}
+
 export function getManualScanOptions(target: {
   type: string
   hasApiSpec?: boolean | null
@@ -219,14 +237,14 @@ export function getManualScanOptions(target: {
   }
 
   if (target.type === "REPO") {
-    return repoOptions()
+    return withStandardLaunchReview(repoOptions())
   }
 
   if (target.type === "WEB_APP" || target.type === "API") {
-    return urlOptions(target.type, Boolean(target.hasApiSpec))
+    return withStandardLaunchReview(urlOptions(target.type, Boolean(target.hasApiSpec)))
   }
 
-  return repoOptions()
+  return withStandardLaunchReview(repoOptions())
 }
 
 /** The preset id to preselect for a target: its marked default, else the
