@@ -23,6 +23,14 @@ import { ScanEligibilityRecovery } from "./scan-eligibility-recovery"
 import type { ScanEligibilityState, TargetItem } from "./scan-types"
 import type { ScanAttachmentItem } from "@/lib/api-schemas"
 
+function getModeAdvisory(eligibility: ScanEligibilityState, optionId: string) {
+  return eligibility.status === "ready"
+    ? eligibility.eligibility.supportedModes?.find(
+        (mode) => mode.id === optionId.replace(/_LAUNCH_REVIEW$/, "")
+      )
+    : undefined
+}
+
 function ScanMinuteDisclosure({ option }: { option: ManualScanOption }) {
   return (
     <p className="text-muted-foreground mt-2 text-xs">
@@ -184,12 +192,7 @@ export function CreateScanSheet({
     errorMessage
   )
   const displayedOptions = availableOptions.map((option) => {
-    const advisory =
-      eligibility.status === "ready"
-        ? eligibility.eligibility.supportedModes?.find(
-            (mode) => mode.id === option.id.replace(/_LAUNCH_REVIEW$/, "")
-          )
-        : undefined
+    const advisory = getModeAdvisory(eligibility, option.id)
     return advisory?.available === false
       ? {
           ...option,

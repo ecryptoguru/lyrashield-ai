@@ -1,7 +1,7 @@
 "use client"
 
 import { useRouter } from "next/navigation"
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { useScansWebMcp } from "./scans-webmcp"
 import { useScanListState } from "./use-scan-list-state"
 import { parseEngineBudgetField, useEngineBudgetDraft } from "./scan-advanced-options"
@@ -24,7 +24,8 @@ import { SCAN_SINGULAR, TARGET_PLURAL, TARGET_SINGULAR } from "@/lib/terminology
 import {
   findRecoveryPreset,
   getReviewSetupGuidance,
-  resolveInitialScanPreset,
+  getInitialPreset,
+  useMediaQuery,
 } from "./scans-client.utils"
 import { prepareScanRetry } from "./prepare-scan-retry"
 import {
@@ -50,23 +51,6 @@ import {
 } from "@/lib/scan-submission"
 
 const scanCreateResponseSchema = scanItemSchema.extend({ operationId: z.string().optional() })
-
-/**
- * Media query with SSR-safe hydration: the server snapshot (mobile) is used
- * for the first render, then the client value applies — the same pattern the
- * reduced-motion hook uses, so server and hydrated HTML always match.
- */
-function useMediaQuery(query: string): boolean {
-  return useSyncExternalStore(
-    (callback) => {
-      const mql = window.matchMedia(query)
-      mql.addEventListener("change", callback)
-      return () => mql.removeEventListener("change", callback)
-    },
-    () => window.matchMedia(query).matches,
-    () => false
-  )
-}
 
 interface ScansClientProps {
   principalId: string
@@ -109,19 +93,13 @@ export function ScansClient({
   const initialSelectedTarget = initialTargetId || (targets.length === 1 ? targets[0]!.id : "")
   const [selectedTarget, setSelectedTarget] = useState(initialSelectedTarget)
   const [selectedFocus, setSelectedFocus] = useState<string | null>(null)
-  const [selectedPreset, setSelectedPreset] = useState(() => {
-    const target = targets.find((item) => item.id === initialSelectedTarget)
-    const options = getManualScanOptions({
-      type: target?.type ?? "",
-      hasApiSpec: Boolean(target?.apiSpecUrl),
-    })
-    return resolveInitialScanPreset(
-      options,
+  const [selectedPreset, setSelectedPreset] = useState(() =>
+    getInitialPreset(
+      targets.find((item) => item.id === initialSelectedTarget),
       initialGoal,
-      initialMode,
-      getDefaultScanOptionId(options)
+      initialMode
     )
-  })
+  )
   const [baseRef, setBaseRef] = useState("")
   const [headRef, setHeadRef] = useState("")
   const [attachments, setAttachments] = useState<ScanAttachmentItem[]>([])
@@ -188,12 +166,8 @@ export function ScansClient({
       setError("Select a target to scan")
       return
     }
-    if (!selectedOption) {
-      setError("No review option is available for this target")
-      return
-    }
-    if (!selectedOption.available) {
-      setError(selectedOption.disabledReason ?? "This review option is unavailable for this target")
+    if (!selectedOption?.available) {
+      setError(selectedOption?.disabledReason ?? "No review option is available for this target")
       return
     }
     if (selectedOption.requiresRevisionInputs && !baseRef.trim()) {
