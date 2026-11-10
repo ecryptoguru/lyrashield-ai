@@ -444,8 +444,10 @@ export default async function TargetDetailPage({ params }: { params: Promise<{ i
         <TargetSetupHealth
           workspaceId={workspaceId}
           targetId={target.id}
-          goal={latestScan?.goal ?? "LAUNCH_REVIEW"}
-          mode={latestScan?.mode ?? "STANDARD"}
+          actorId={session.userId}
+          goal={assessmentProjection.proposedReview.goal}
+          mode={assessmentProjection.proposedReview.mode}
+          workflow={assessmentProjection.proposedReview.workflow}
         />
       </div>
 

@@ -30,20 +30,30 @@ const setupHealth = {
   limitations: ["Comparison refs resolve only when a review is submitted."],
 }
 
+function freshSetupHealth() {
+  const now = Date.now()
+  return {
+    ...setupHealth,
+    checkedAt: new Date(now).toISOString(),
+    expiresAt: new Date(now + 60_000).toISOString(),
+  }
+}
+
 for (const width of [390, 1440]) {
-  test(`target assessment remains actionable and readable at ${width}px`, async ({ page }) => {
+  test(`target assessment remains actionable and readable at ${width}px`, async ({
+    page,
+  }, testInfo) => {
     await page.setViewportSize({ width, height: 900 })
     await page.route("**/api/v1/setup-health?*", (route) =>
-      route.fulfill({ json: { success: true, data: setupHealth } })
+      route.fulfill({ json: { success: true, data: freshSetupHealth() } })
     )
     await page.goto(`?target-assessment=blocked&theme=dark`)
 
     await expect(page.getByRole("heading", { name: "Assessment" })).toBeVisible()
     await expect(page.getByText("Not assessed")).toBeVisible()
-    await expect(page.getByRole("heading", { name: "Spend" })).toBeVisible()
-    await expect(page.getByText("$3.20")).toBeVisible()
-    await expect(page.getByText("Unknown — settlement still pending")).toBeVisible()
-    await expect(page.getByText("Not persisted")).toBeVisible()
+    await expect(page.getByRole("heading", { name: "Agent minutes" })).toBeVisible()
+    await expect(page.getByText("Charged: 2 agent minutes.")).toBeVisible()
+    await expect(page.getByText("$3.20")).toHaveCount(0)
     await expect(page.getByText("Setup blocked")).toBeVisible()
     await expect(page.getByRole("link", { name: "Start launch review" })).toHaveAttribute(
       "href",
@@ -58,6 +68,7 @@ for (const width of [390, 1440]) {
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
       width
     )
+    await page.screenshot({ path: testInfo.outputPath(`target-${width}.png`), fullPage: true })
 
     await page.addStyleTag({ content: "html { font-size: 200%; }" })
     await expect(primary).toBeVisible()
@@ -67,6 +78,129 @@ for (const width of [390, 1440]) {
   })
 }
 
+test("expired setup is hidden while a fresh snapshot is fetched", async ({ page }) => {
+  await page.clock.install({ time: new Date("2026-11-05T00:00:00.000Z") })
+  let requests = 0
+  let releaseRefresh = () => {}
+  const refreshGate = new Promise<void>((resolve) => {
+    releaseRefresh = resolve
+  })
+  await page.route("**/api/v1/setup-health?*", async (route) => {
+    requests++
+    if (requests === 1) {
+      await route.fulfill({
+        json: {
+          success: true,
+          data: {
+            ...setupHealth,
+            status: "ready",
+            allowed: true,
+            checks: [],
+            primaryCheck: "SETUP_READY",
+          },
+        },
+      })
+    } else {
+      await refreshGate
+      await route.fulfill({
+        json: {
+          success: true,
+          data: {
+            ...setupHealth,
+            checkedAt: "2026-11-05T00:01:00.000Z",
+            expiresAt: "2026-11-05T00:02:00.000Z",
+          },
+        },
+      })
+    }
+  })
+  await page.goto("?target-assessment=blocked")
+  await expect(page.getByText("Setup ready")).toBeVisible()
+  await page.clock.fastForward(60_001)
+  await expect.poll(() => requests).toBe(2)
+  await expect(page.getByText("Checking current setup…")).toBeVisible()
+  await expect(page.getByText("ready", { exact: true })).toHaveCount(0)
+  releaseRefresh()
+  await expect(page.getByText("Setup blocked")).toBeVisible()
+})
+
+test("switching accounts fences an earlier setup response", async ({ page }) => {
+  let requests = 0
+  let firstFinished = false
+  await page.route("**/api/v1/setup-health?*", async (route) => {
+    requests++
+    if (requests === 1) {
+      await new Promise((resolve) => setTimeout(resolve, 1_500))
+      await route
+        .fulfill({
+          json: {
+            success: true,
+            data: {
+              ...freshSetupHealth(),
+              status: "ready",
+              allowed: true,
+              checks: [],
+              primaryCheck: "SETUP_READY",
+            },
+          },
+        })
+        .catch(() => {})
+      firstFinished = true
+    } else {
+      await route.fulfill({ json: { success: true, data: freshSetupHealth() } })
+    }
+  })
+  await page.goto("?target-assessment=blocked")
+  await expect.poll(() => requests).toBe(1)
+  await page.getByRole("button", { name: "Switch account" }).click()
+  await expect.poll(() => requests, { timeout: 2_000 }).toBe(2)
+  await expect(page.getByText("Setup blocked")).toBeVisible()
+  await expect.poll(() => firstFinished, { timeout: 4_000 }).toBe(true)
+  await expect(page.getByText("Setup ready")).toHaveCount(0)
+})
+
+test("returning to the page refreshes setup health", async ({ page }) => {
+  let requests = 0
+  await page.route("**/api/v1/setup-health?*", (route) => {
+    requests++
+    return route.fulfill({
+      json: {
+        success: true,
+        data:
+          requests === 1
+            ? {
+                ...freshSetupHealth(),
+                status: "ready",
+                allowed: true,
+                checks: [],
+                primaryCheck: "SETUP_READY",
+              }
+            : freshSetupHealth(),
+      },
+    })
+  })
+  await page.goto("?target-assessment=blocked")
+  await expect(page.getByText("Setup ready")).toBeVisible()
+  await page.evaluate(() => {
+    Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" })
+    document.dispatchEvent(new Event("visibilitychange"))
+  })
+  await expect(page.getByText("Setup blocked")).toBeVisible()
+  expect(requests).toBe(2)
+})
+
+test("an already expired response stops and offers retry instead of looping", async ({ page }) => {
+  let requests = 0
+  await page.route("**/api/v1/setup-health?*", (route) => {
+    requests++
+    return route.fulfill({ json: { success: true, data: setupHealth } })
+  })
+  await page.goto("?target-assessment=blocked")
+  await expect(page.getByRole("alert")).toContainText("Setup status expired")
+  await expect(page.getByRole("button", { name: "Retry" })).toBeVisible()
+  expect(requests).toBe(1)
+})
+
 test("target panels isolate setup failure from assessment, spend and recovery", async ({
   page,
 }) => {
@@ -75,7 +209,7 @@ test("target panels isolate setup failure from assessment, spend and recovery", 
   await page.route("**/api/v1/setup-health?*", (route) =>
     route.fulfill(
       retry
-        ? { json: { success: true, data: setupHealth } }
+        ? { json: { success: true, data: freshSetupHealth() } }
         : {
             status: 503,
             json: { success: false, error: { code: "UNAVAILABLE", message: "Setup unavailable" } },
@@ -84,7 +218,7 @@ test("target panels isolate setup failure from assessment, spend and recovery", 
   )
   await page.goto("?target-assessment=failure&theme=light")
   await expect(page.getByRole("heading", { name: "Assessment" })).toBeVisible()
-  await expect(page.getByRole("heading", { name: "Spend" })).toBeVisible()
+  await expect(page.getByRole("heading", { name: "Agent minutes" })).toBeVisible()
   await expect(page.getByText("Finding counts are unavailable")).toBeVisible()
   await expect(page.getByRole("alert")).toContainText("Setup unavailable")
   retry = true

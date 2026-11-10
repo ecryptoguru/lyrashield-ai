@@ -1,16 +1,12 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useEffect, useRef } from "react"
 import Link from "next/link"
 import { AlertTriangle, CheckCircle2, CircleHelp, RefreshCw } from "lucide-react"
 import { Badge, Button, Card, Spinner } from "@lyrashield/ui"
-import {
-  SetupHealthSnapshotSchema,
-  type SetupHealthSnapshot,
-  type SetupRecoveryAction,
-} from "@lyrashield/types"
-import { apiGet } from "@/lib/api-client"
+import { type SetupHealthSnapshot, type SetupRecoveryAction } from "@lyrashield/types"
 import { track } from "@/lib/analytics"
+import { useTargetSetupHealth } from "./use-target-setup-health"
 
 interface SetupPresentation {
   label: string
@@ -56,56 +52,33 @@ const RECOVERY_HREF: Partial<Record<SetupRecoveryAction, string>> = {
 export function TargetSetupHealth({
   workspaceId,
   targetId,
+  actorId,
   goal,
   mode,
   workflow = "REVIEW_TARGET",
 }: {
   workspaceId: string
   targetId: string
+  actorId: string
   goal: string
   mode: string
   workflow?: "REVIEW_TARGET" | "REVIEW_CHANGES" | "AUTHENTICATED_ASSESSMENT"
 }) {
-  const [snapshot, setSnapshot] = useState<SetupHealthSnapshot | null>(null)
-  const [completedRequestKey, setCompletedRequestKey] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [attempt, setAttempt] = useState(0)
+  const { snapshot, loading, error, retry } = useTargetSetupHealth({
+    workspaceId,
+    targetId,
+    actorId,
+    goal,
+    mode,
+    workflow,
+  })
   const trackedBlockers = useRef(new Set<string>())
-  const requestKey = JSON.stringify([attempt, workspaceId, targetId, goal, mode, workflow])
-  const loading = completedRequestKey !== requestKey
-
-  useEffect(() => {
-    const controller = new AbortController()
-    let cancelled = false
-    const params = new URLSearchParams({ workspaceId, targetId, goal, mode, workflow })
-    apiGet(`/api/v1/setup-health?${params.toString()}`, {
-      schema: SetupHealthSnapshotSchema,
-      signal: controller.signal,
-    })
-      .then((result) => {
-        if (!cancelled && result) {
-          setSnapshot(result)
-          setError(null)
-        }
-      })
-      .catch((cause) => {
-        if (!cancelled && !controller.signal.aborted) {
-          setSnapshot(null)
-          setError(cause instanceof Error ? cause.message : "Setup health is unavailable")
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setCompletedRequestKey(requestKey)
-      })
-    return () => {
-      cancelled = true
-      controller.abort()
-    }
-  }, [goal, mode, requestKey, targetId, workflow, workspaceId])
-
-  const retry = useCallback(() => setAttempt((value) => value + 1), [])
   const presentation = snapshot ? presentTargetSetupHealth(snapshot) : null
   const href = presentation?.recoveryAction ? RECOVERY_HREF[presentation.recoveryAction] : undefined
+
+  useEffect(() => {
+    trackedBlockers.current.clear()
+  }, [actorId, workspaceId, targetId])
 
   useEffect(() => {
     if (!snapshot || snapshot.status === "ready" || !presentation) return

@@ -39,6 +39,30 @@ describe("projectTargetAssessment", () => {
     expect(projection.nextAction.href).toContain("target=target-1")
   })
 
+  it("uses the proposed launch review for both setup and the CTA after a Quick scan", () => {
+    const projection = projectTargetAssessment({
+      ...source,
+      latestScan: {
+        id: "scan-quick",
+        status: "COMPLETED",
+        goal: "TEST_APP",
+        mode: "QUICK",
+        createdAt: "2026-11-05T00:00:00.000Z",
+        startedAt: "2026-11-05T00:01:00.000Z",
+        endedAt: "2026-11-05T00:02:00.000Z",
+        sourceRevision: null,
+      },
+    })
+    expect(projection.proposedReview).toEqual({
+      goal: "LAUNCH_REVIEW",
+      mode: "STANDARD",
+      workflow: "REVIEW_TARGET",
+    })
+    const query = new URL(projection.nextAction.href, "https://example.invalid").searchParams
+    expect(query.get("goal")).toBe(projection.proposedReview.goal)
+    expect(query.get("mode")).toBe(projection.proposedReview.mode)
+  })
+
   it("links to the active run before proposing another review", () => {
     const projection = projectTargetAssessment({
       ...source,

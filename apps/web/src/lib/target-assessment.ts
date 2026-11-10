@@ -1,5 +1,11 @@
 import type { CustomerScanUsageProjection } from "@lyrashield/db"
 
+const PROPOSED_REVIEW = {
+  goal: "LAUNCH_REVIEW",
+  mode: "STANDARD",
+  workflow: "REVIEW_TARGET",
+} as const
+
 export type ResourceResult<T> =
   { status: "available"; value: T } | { status: "unavailable"; code: string }
 
@@ -47,6 +53,7 @@ export interface TargetAssessmentSource {
 }
 
 export interface TargetAssessmentProjection {
+  proposedReview: typeof PROPOSED_REVIEW
   target: TargetAssessmentSource["target"]
   assessment: TargetAssessmentGate | null
   assessmentState: ResourceResult<TargetAssessmentGate | null>["status"]
@@ -95,12 +102,12 @@ function deliveryState(status: string | undefined): "UNKNOWN" | "QUEUED" | "RUNN
   return "TERMINAL"
 }
 
-function reviewHref(targetId: string): string {
+function reviewHref(targetId: string, intent: typeof PROPOSED_REVIEW): string {
   return `/dashboard/scans?${new URLSearchParams({
     new: "1",
     target: targetId,
-    goal: "LAUNCH_REVIEW",
-    mode: "STANDARD",
+    goal: intent.goal,
+    mode: intent.mode,
   }).toString()}`
 }
 
@@ -152,7 +159,7 @@ export function projectTargetAssessment(input: TargetAssessmentSource): TargetAs
     nextAction = {
       code: "START_REVIEW",
       label: "Start launch review",
-      href: reviewHref(input.target.id),
+      href: reviewHref(input.target.id, PROPOSED_REVIEW),
     }
   } else if (gate.state === "NOT_READY") {
     nextAction = {
@@ -164,7 +171,7 @@ export function projectTargetAssessment(input: TargetAssessmentSource): TargetAs
     nextAction = {
       code: "COMPLETE_COVERAGE",
       label: "Run a current review",
-      href: reviewHref(input.target.id),
+      href: reviewHref(input.target.id, PROPOSED_REVIEW),
     }
   } else {
     const identity = gate.assessedIdentity
@@ -179,6 +186,7 @@ export function projectTargetAssessment(input: TargetAssessmentSource): TargetAs
   }
 
   return {
+    proposedReview: PROPOSED_REVIEW,
     target: input.target,
     assessment: gate,
     assessmentState: input.gate.status,

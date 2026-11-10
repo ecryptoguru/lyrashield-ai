@@ -1,4 +1,5 @@
 import type { ReleasePacketPayload } from "@lyrashield/types"
+import { useState } from "react"
 import { TargetAssessmentSummary } from "../../apps/web/src/app/(dashboard)/dashboard/targets/[id]/target-assessment-summary"
 import { TargetSpendSummary } from "../../apps/web/src/app/(dashboard)/dashboard/targets/[id]/target-spend-summary"
 import { TargetSetupHealth } from "../../apps/web/src/app/(dashboard)/dashboard/targets/[id]/target-setup-health"
@@ -9,21 +10,8 @@ import {
 } from "../../apps/web/src/lib/target-assessment"
 
 const spend = {
-  maximum: {
-    state: "known" as const,
-    amountUsd: "3.20",
-    source: "ADMITTED_PROVIDER_CEILING" as const,
-    observedAt: "2026-11-05T00:00:00.000Z",
-  },
-  consumed: {
-    state: "unavailable" as const,
-    reason: "SETTLEMENT_PENDING" as const,
-  },
-  reserved: {
-    state: "unavailable" as const,
-    reason: "NO_PROVIDER_DOLLAR_RESERVATION" as const,
-  },
-  agentMinutes: { funded: 5, charged: 2, absorbed: 1 },
+  state: "reconciled" as const,
+  chargedMinutes: 2,
 }
 
 const baseSource: TargetAssessmentSource = {
@@ -45,6 +33,7 @@ const baseSource: TargetAssessmentSource = {
 }
 
 export default function CustomerSetupQualityHarness() {
+  const [actorId, setActorId] = useState("actor-1")
   const params = new URLSearchParams(location.search)
   if (params.has("release-packet")) {
     return <ReleasePacketView payload={historicalPacket} workspaceId="ws-1" reportId="packet-1" />
@@ -58,11 +47,15 @@ export default function CustomerSetupQualityHarness() {
   })
   return (
     <main className="mx-auto max-w-6xl space-y-4 p-4">
+      <button type="button" onClick={() => setActorId("actor-2")}>
+        Switch account
+      </button>
       <TargetAssessmentSummary projection={projection} />
       <div className="grid gap-4 md:grid-cols-[minmax(0,2fr)_minmax(18rem,1fr)]">
         <TargetSetupHealth
           workspaceId="ws-1"
           targetId="target-1"
+          actorId={actorId}
           goal="LAUNCH_REVIEW"
           mode="STANDARD"
         />
