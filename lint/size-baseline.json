@@ -167,8 +167,8 @@
     },
     "apps/web/src/app/(dashboard)/dashboard/reports/reports-client.tsx|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 351,
-      "maxExcess": 351
+      "totalExcess": 304,
+      "maxExcess": 304
     },
     "apps/web/src/app/(dashboard)/dashboard/reports/reports-views.tsx|max-lines-per-function": {
       "count": 1,
