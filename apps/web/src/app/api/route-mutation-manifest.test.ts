@@ -89,10 +89,10 @@ const BOUNDARY_GROUPS = {
   },
   workspacePermissionOauthDenied: {
     description:
-      "SARIF import checks workspace permission then explicitly denies hosted OAuth sessions; scan creation does not grant arbitrary import authority.",
+      "The handler checks workspace permission then denies hosted OAuth sessions; report creation and scanning do not grant packet link management or arbitrary import authority.",
     marker: "session.oauth",
     additionalMarkers: ["requirePermission"],
-    routes: ["scans/[id]/artifacts/sarif#POST"],
+    routes: ["reports/release-packet/[id]#POST", "scans/[id]/artifacts/sarif#POST"],
   },
   browserSessionOnly: {
     description:
@@ -532,7 +532,7 @@ describe("API mutation route boundary manifest", () => {
       []
     )
     expect(stale, "Remove or correct classifications for deleted/renamed mutations").toEqual([])
-    expect(boundaries.size + Object.keys(VERSIONED_ROUTE_ALIASES).length).toBe(133)
+    expect(boundaries.size + Object.keys(VERSIONED_ROUTE_ALIASES).length).toBe(134)
     expect(
       [...Object.values(BOUNDARY_GROUPS)].every((group) => group.description.trim().length > 0)
     ).toBe(true)
