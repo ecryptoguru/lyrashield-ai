@@ -10,10 +10,12 @@ import {
 } from "@lyrashield/types"
 import { withWorkspaceRLS, type ScopedTransaction } from "./rls"
 import { evaluateVerdictApplicability, parseAssessmentSnapshot } from "./gate-service"
+import { evaluateGateForTarget } from "./gate-evaluation-service"
 import { signedAssessmentFor } from "./release-packet-assessment"
 import { resolveReportDelegationTarget } from "./report-service"
 import { classifyReleaseFindings } from "./release-packet-classification"
 import { loadReceiptBackedRetestFindingIds } from "./retest-evidence-trust"
+import { isVerifiedPacketScan } from "./release-packet-evidence"
 import {
   evaluateAssessmentValidity,
   evaluatePacketAuthenticity,
@@ -72,10 +74,22 @@ async function loadAssessedPacketContext(
   })
   if (!target) throw new ReleasePacketError("TARGET_NOT_FOUND", "Target not found")
 
-  const verdict = await tx.gateVerdict.findFirst({
-    where: { workspaceId: input.workspaceId, targetId: input.targetId },
-    orderBy: [{ evaluatedAt: "desc" }, { id: "desc" }],
+  // A stored verdict can originate from an older worker that accepted weaker
+  // retest claims. Reassess with the current receipt-backed evaluator and bind
+  // its exact ID; a concurrent worker verdict must never replace this result.
+  const evaluation = await evaluateGateForTarget(input.workspaceId, input.targetId, {
+    transaction: tx,
+    reuseEquivalentVerdict: true,
   })
+  const verdict = evaluation
+    ? await tx.gateVerdict.findFirst({
+        where: {
+          id: evaluation.gateVerdictId,
+          workspaceId: input.workspaceId,
+          targetId: input.targetId,
+        },
+      })
+    : null
   if (!verdict) {
     throw new ReleasePacketError("NOT_EVALUATED", "No launch assessment exists for this target")
   }
@@ -104,13 +118,23 @@ async function loadAssessedPacketContext(
   })
 
   const currentScan = await tx.scan.findFirst({
-    where: { id: snapshot.scanId, workspaceId: input.workspaceId, deletedAt: null },
-    include: { resultManifest: { select: { checksum: true } } },
+    where: {
+      id: snapshot.scanId,
+      workspaceId: input.workspaceId,
+      targetId: input.targetId,
+      status: "COMPLETED",
+      deletedAt: null,
+    },
+    include: { resultManifest: true, coverageReceipts: true },
   })
-  if (!currentScan) {
+  if (
+    !currentScan ||
+    verdict.scanId !== snapshot.scanId ||
+    !isVerifiedPacketScan(currentScan, snapshot, target)
+  ) {
     throw new ReleasePacketError(
       "ASSESSMENT_INCOMPLETE",
-      "The assessed scan is no longer available"
+      "The assessed scan lacks complete, verified evidence for this target; run a new assessment"
     )
   }
   const baselineScan = await tx.scan.findFirst({
@@ -367,9 +391,9 @@ async function persistReleasePacket(
 }
 
 /**
- * Issue one immutable private release packet from a stored gate verdict and
- * its evidence. The packet never recomputes readiness and never promotes a
- * missing/foreign retest into resolution.
+ * Issue one immutable private release packet from a newly evaluated gate
+ * verdict and the same transaction's evidence. Historical verdicts and packets
+ * stay immutable; missing/foreign retests never become resolution.
  */
 export async function issueReleasePacket(
   input: IssueReleasePacketInput
@@ -383,6 +407,7 @@ export async function issueReleasePacket(
       const signedAssessment = await signedAssessmentFor(tx, {
         workspaceId: input.workspaceId,
         verdictId: context.verdict.id,
+        verdict: context.verdict,
         identity: context.snapshot.identity,
         publicKey: input.signingPublicKey ?? null,
         verificationKeys: input.verificationKeys ?? [],
