@@ -167,10 +167,13 @@ async function post(request: Request, { params }: { params: Promise<{ id: string
         (tx, authority) => mutate(tx, authority)
       )
     }
-    return mutate()
+    return await mutate()
   } catch (error) {
     const authErr = authErrorResponse(error)
     if (authErr) return authErr
+    if (error instanceof Error && error.message === "Report not found") {
+      return apiError("REPORT_NOT_FOUND", "Report not found", 404)
+    }
     logger.error("Failed to update report", { error: String(error) })
     return apiError("INTERNAL_ERROR", "Failed to update report", 500)
   }
