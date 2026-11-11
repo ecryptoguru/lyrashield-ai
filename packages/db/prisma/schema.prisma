@@ -2137,19 +2137,24 @@ model ScanDispatchOperation {
 /// BullMQ publication is transport, not execution authority. Queue publication
 /// therefore has its own outbox and deliberately has no attempt foreign key.
 model ScanQueueOutbox {
-  id             String                @id @default(cuid())
-  scanId         String                @unique
-  operationId    String                @unique
-  jobId          String                @unique
-  payloadDigest  String
-  state          ScanQueueOutboxState   @default(PENDING)
-  attempts       Int                   @default(0)
-  leaseOwner     String?
-  leaseExpiresAt DateTime?
-  publishedAt    DateTime?
-  lastErrorCode  String?
-  createdAt      DateTime              @default(now())
-  updatedAt      DateTime              @updatedAt
+  id                          String               @id @default(cuid())
+  scanId                      String               @unique
+  operationId                 String               @unique
+  jobId                       String               @unique
+  payloadDigest               String
+  /// Exact immutable canonical admitted job bytes. NULL legacy rows are unavailable.
+  payloadInputJson            String?
+  /// Private positive queue readback; publication alone never authorizes execution.
+  publicationReceiptInputJson String?
+  publicationReceiptChecksum  String?
+  state                       ScanQueueOutboxState @default(PENDING)
+  attempts                    Int                  @default(0)
+  leaseOwner                  String?
+  leaseExpiresAt              DateTime?
+  publishedAt                 DateTime?
+  lastErrorCode               String?
+  createdAt                   DateTime             @default(now())
+  updatedAt                   DateTime             @updatedAt
 
   @@index([state, leaseExpiresAt])
 }

@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto"
 import { createId } from "@paralleldrive/cuid2"
 import type pg from "pg"
+import { requirePublishedScanQueueAuthority } from "./scan-queue-outbox-store"
+import { ScanQueueOutboxError, scanQueueDigest } from "./scan-queue-payload"
 import type {
   DispatchBrokerResult,
   DispatchOperationState,
@@ -20,6 +22,7 @@ export class ScanDispatchAuthorityError extends Error {
       | "DISPATCH_SCOPE_CHANGED"
       | "DISPATCH_REPLAY_CONFLICT"
       | "CAPACITY_NOT_READY"
+      | "QUEUE_PUBLICATION_NOT_CONFIRMED"
       | "DATABASE_REJECTED",
     message: string,
     options?: ErrorOptions
@@ -226,7 +229,8 @@ async function createPrepareAttempt(
     maxRuntimeMs: number
   },
   input: PrepareDispatchInput,
-  expiresAt: string
+  expiresAt: string,
+  focusDigest: string | null
 ): Promise<{ waiting: false; state: "PREPARING"; attemptId: string; commandId: string }> {
   const attemptId = createId()
   const commandId = createId()
@@ -237,7 +241,7 @@ async function createPrepareAttempt(
       "policyVersion","policyDigest","delegatedAuthorizationVersion","attachmentIds","focusDigest",
       "mode","goal","maxBudgetUsd","maxRuntimeMs","authorityEpochId","workerInstanceGrantId","expiresAt"
     ) VALUES (
-      $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'dispatch-v1',$12,$13,$14::text[],NULL,
+      $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'dispatch-v1',$12,$13,$14::text[],$22,
       $15::"ScanMode",$16::"ScanGoal",$17::numeric,$18,$19,$20,$21::timestamp
     )`,
     [
@@ -262,6 +266,7 @@ async function createPrepareAttempt(
       input.authorityEpochId,
       input.workerGrantId,
       expiresAt,
+      focusDigest,
     ]
   )
   await client.query(
@@ -307,20 +312,38 @@ export async function prepareDispatch(
       const operation = await ctx.lockOperation(client, input)
       await checkPrepareGrant(client, input, expiresAt)
       const replay = await readPrepareReplay(client, input)
-      if (replay)
+      if (replay) {
+        await requireBrokerQueuePublication(
+          client,
+          { operationId: operation.operationId, workspaceId: operation.workspaceId },
+          true
+        )
         return {
           state: "PREPARING" as const,
           attemptId: replay.attemptId,
           commandId: replay.commandId,
         }
+      }
       if (!["QUEUED", "WAITING_CAPACITY"].includes(operation.state))
         throw new ScanDispatchAuthorityError(
           "DISPATCH_OPERATION_STATE_INVALID",
           `Operation ${operation.operationId} cannot prepare from ${operation.state}`
         )
+      const { payload } = await requireBrokerQueuePublication(client, {
+        operationId: operation.operationId,
+        workspaceId: operation.workspaceId,
+      })
       if (await checkPrepareCapacity(client, operation)) return { waiting: true as const }
       const { digest, scanRow } = await loadPrepareScope(client, operation)
-      return await createPrepareAttempt(client, operation, digest, scanRow, input, expiresAt)
+      return await createPrepareAttempt(
+        client,
+        operation,
+        digest,
+        scanRow,
+        input,
+        expiresAt,
+        payload.focus === undefined ? null : scanQueueDigest(JSON.stringify(payload.focus))
+      )
     })
     if (outcome.kind === "unknown") return outcome
     if (outcome.value.waiting)
@@ -337,6 +360,29 @@ export async function prepareDispatch(
     throw new ScanDispatchAuthorityError("DATABASE_REJECTED", "Preparation transaction rejected", {
       cause: error,
     })
+  }
+}
+
+async function requireBrokerQueuePublication(
+  client: pg.PoolClient,
+  scope: { operationId: string; workspaceId: string },
+  replay = false
+) {
+  try {
+    return await requirePublishedScanQueueAuthority(client, scope, replay)
+  } catch (error) {
+    if (!(error instanceof ScanQueueOutboxError)) throw error
+    throw new ScanDispatchAuthorityError(
+      [
+        "QUEUE_ADMISSION_SCOPE_CHANGED",
+        "QUEUE_PAYLOAD_IDENTITY_CHANGED",
+        "QUEUE_ADMITTED_PLAN_INVALID",
+      ].includes(error.code)
+        ? "DISPATCH_SCOPE_CHANGED"
+        : "QUEUE_PUBLICATION_NOT_CONFIRMED",
+      "Queue publication authority is unavailable",
+      { cause: error }
+    )
   }
 }
 
