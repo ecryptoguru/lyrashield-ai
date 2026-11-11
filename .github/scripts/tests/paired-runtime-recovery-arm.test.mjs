@@ -14,6 +14,10 @@ import {
   releaseVerifiedPair,
 } from "../paired-runtime-release.mjs"
 import { pairedReleaseReceipt } from "../../../ops/monitoring/paired-release-hold.mjs"
+import {
+  qualifiedFleetSchema,
+  qualificationControlPlaneFields,
+} from "../paired-runtime-qualification.mjs"
 
 const D = (n) => "sha256:" + hashRecord(n),
   H = (n) => hashRecord(n)
@@ -56,7 +60,9 @@ function fixture(t, edits = {}) {
   const archive = (p) =>
     add({
       kind: "qualified-fleet",
+      schema: qualifiedFleetSchema,
       pair: p,
+      controlPlane: Object.fromEntries(qualificationControlPlaneFields.map((key) => [key, D(key)])),
       releaseProof: H("release" + p.productRevision),
       sandboxProof: H("sandbox" + p.sandboxDigest),
       financialProof: H("money" + p.productRevision),

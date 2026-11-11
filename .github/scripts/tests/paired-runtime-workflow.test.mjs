@@ -3,6 +3,11 @@ import { createHash } from "node:crypto"
 import { readFileSync } from "node:fs"
 import { createRequire } from "node:module"
 import test from "node:test"
+import { armedAuthority, recoveryAuthority, hashRecord } from "../paired-runtime-authority.mjs"
+import {
+  qualifiedFleetSchema,
+  qualificationControlPlaneFields,
+} from "../paired-runtime-qualification.mjs"
 
 import {
   CONTROLLER_ACTIONS,
@@ -92,6 +97,7 @@ function fixture(t, overrides = {}) {
   const { record, rollbackPair } = releaseRecord(overrides.record)
   const archive = {
     kind: "qualified-fleet",
+    schema: qualifiedFleetSchema,
     pair: rollbackPair,
     controlPlane: Object.fromEntries(
       [
@@ -102,6 +108,11 @@ function fixture(t, overrides = {}) {
         "runtimePolicyDigest",
       ].map((key) => [key, record.rollback?.[key]])
     ),
+    releaseProof: H("release"),
+    sandboxProof: H("sandbox"),
+    financialProof: H("financial"),
+    readerProof: H("reader"),
+    connectionProof: H("connection"),
   }
   const events = []
   const adapter = {
@@ -234,6 +245,169 @@ test("preflight binds source, owner, artifact, signed tuple and available rollba
     "rollback-available:" + rollbackSource,
     "authority:" + source + ":" + owner,
   ])
+})
+
+function compositionFixture(t, mutateArchive = () => {}, sourceMigration) {
+  const f = fixture(t)
+  const records = new Map()
+  const add = (record) => {
+    const id = hashRecord(record)
+    records.set(id, JSON.stringify(record))
+    return id
+  }
+  mutateArchive(f.archive)
+  const archiveId = add(f.archive)
+  f.record.rollback.archiveSha256 = archiveId
+  const readProtectedRecord = async (kind, id) => {
+    const raw = records.get(id)
+    assert.equal(JSON.parse(raw).kind, kind)
+    return raw
+  }
+  f.deps.readProtectedRecord = readProtectedRecord
+  f.adapter.readProtectedRecord = readProtectedRecord
+  let authorityOwner = owner
+  f.adapter.readAuthenticatedOwner = async () => authorityOwner
+  f.adapter.verifyArmAuthorization = async () => true
+  f.adapter.verifyRecoveryHandoff = async () => true
+  const armAcquisition = add({
+    kind: "hold-acquisition",
+    owner,
+    fleet: archiveId,
+    continuity: H("arm-continuity"),
+    selectorHash: null,
+  })
+  const armId = add({
+    kind: "arm",
+    nonce: H("nonce"),
+    owner,
+    sourceAcquisition: armAcquisition,
+    selectorHash: H("selector"),
+    inputHash: H("input"),
+    issuedAtMs: 1000,
+    expiresAtMs: 301000,
+    capUsd: 1,
+  })
+  const sourcePair = structuredClone(f.record.pair)
+  sourcePair.owner = "40:1"
+  sourcePair.priorWorkerDigest = f.rollbackPair.workerDigest
+  for (const name of ["app", "scanner", "relay"])
+    sourcePair[name].previous = f.rollbackPair[name].candidate
+  const sourceArchive = {
+    ...f.archive,
+    pair: sourcePair,
+    controlPlane: structuredClone(f.record.controlPlane),
+  }
+  if (sourceMigration) sourceArchive.controlPlane.migrationChecksum = sourceMigration
+  const sourceId = add(sourceArchive)
+  const acquisition = add({
+    kind: "hold-acquisition",
+    owner,
+    fleet: sourceId,
+    continuity: H("restore-continuity"),
+    selectorHash: H("selector"),
+  })
+  const newOwner = "43:1",
+    nonce = H("restore-nonce")
+  const reverse = {
+    ...structuredClone(f.rollbackPair),
+    owner: newOwner,
+    priorWorkerDigest: sourcePair.workerDigest,
+  }
+  for (const name of ["app", "scanner", "relay"])
+    reverse[name] = {
+      previous: sourcePair[name].candidate,
+      candidate: f.rollbackPair[name].candidate,
+    }
+  const reversePlan = hashRecord(reverse)
+  const handoff = add({
+    kind: "handoff",
+    authorization: "original-owner",
+    sourceOwner: owner,
+    newOwner,
+    sourceAcquisition: acquisition,
+    destinationArchive: archiveId,
+    reversePlan,
+    nonceHash: hashRecord(nonce),
+  })
+  const restoreId = add({
+    kind: "restore",
+    nonce,
+    owner: newOwner,
+    sourceAcquisition: acquisition,
+    destinationArchive: archiveId,
+    reversePlan,
+    handoff,
+    baselineEvidence: H("baseline-evidence"),
+    canaryEvidence: H("canary-evidence"),
+  })
+  return {
+    ...f,
+    records,
+    archiveId,
+    armId,
+    restoreId,
+    setRecoveryOwner: () => {
+      authorityOwner = newOwner
+    },
+  }
+}
+
+test("one canonical signed v2 archive passes workflow preflight and actual arm/recovery parsers", async (t) => {
+  const f = compositionFixture(t)
+  const context = await preflightQualifiedRelease(qualified, f.deps)
+  const armed = await armedAuthority(f.adapter, f.armId, structuredClone)
+  f.setRecoveryOwner()
+  const recovered = await recoveryAuthority(f.adapter, f.restoreId, structuredClone)
+  const raw = f.records.get(f.archiveId)
+  assert.equal(hashRecord(JSON.parse(raw)), context.rollback.archiveSha256)
+  assert.equal(JSON.stringify(armed.fleet), raw)
+  assert.equal(JSON.stringify(recovered.archive), raw)
+  assert.deepEqual(recovered.archive.controlPlane, f.archive.controlPlane)
+})
+
+test("legacy, unknown and incomplete archive schemas fail both composed consumers", async (t) => {
+  for (const mutate of [
+    (a) => {
+      delete a.schema
+    },
+    (a) => {
+      a.schema = "lyrashield-qualified-fleet/1"
+    },
+    (a) => {
+      a.schema = "lyrashield-qualified-fleet/3"
+    },
+    (a) => {
+      a.extra = true
+    },
+    (a) => {
+      delete a.controlPlane
+    },
+    ...qualificationControlPlaneFields.map((field) => (a) => {
+      delete a.controlPlane[field]
+    }),
+    ...qualificationControlPlaneFields.map((field) => (a) => {
+      a.controlPlane[field] = "invalid"
+    }),
+    (a) => {
+      a.controlPlane.extra = D("unexpected")
+    },
+  ]) {
+    const f = compositionFixture(t, mutate)
+    await assert.rejects(
+      preflightQualifiedRelease(qualified, f.deps),
+      /rollback archive schema invalid/
+    )
+    await assert.rejects(armedAuthority(f.adapter, f.armId, structuredClone))
+    f.setRecoveryOwner()
+    await assert.rejects(recoveryAuthority(f.adapter, f.restoreId, structuredClone))
+  }
+})
+
+test("composed recovery refuses a different signed migration instead of rolling schema backward", async (t) => {
+  const f = compositionFixture(t, undefined, D("different-migration"))
+  await preflightQualifiedRelease(qualified, f.deps)
+  f.setRecoveryOwner()
+  await assert.rejects(recoveryAuthority(f.adapter, f.restoreId, structuredClone), /proof mismatch/)
 })
 
 test("each controller action uses one allowlisted implementation after preflight", async (t) => {
@@ -449,7 +623,10 @@ test("rollback comparison binds migration, broker, supervisor, gateway and runti
       false
     )
     delete f.archive.controlPlane[field]
-    await assert.rejects(preflightQualifiedRelease(qualified, f.deps), /rollback tuple mismatch/)
+    await assert.rejects(
+      preflightQualifiedRelease(qualified, f.deps),
+      /rollback archive schema invalid/
+    )
   }
 })
 

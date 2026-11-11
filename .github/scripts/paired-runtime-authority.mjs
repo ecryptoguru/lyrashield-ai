@@ -10,6 +10,45 @@ import {
 export function requireProof(condition) {
   if (!condition) throw new Error("Protected paired runtime proof mismatch")
 }
+export const qualifiedFleetSchema = "lyrashield-qualified-fleet/2"
+export const qualificationControlPlaneFields = Object.freeze([
+  "migrationChecksum",
+  "brokerDigest",
+  "supervisorDigest",
+  "providerGatewayDigest",
+  "runtimePolicyDigest",
+])
+const archiveProofs = [
+  "releaseProof",
+  "sandboxProof",
+  "financialProof",
+  "readerProof",
+  "connectionProof",
+]
+// Keep guest authority self-contained: this file is copied to the VM without
+// runner-only GitHub readers. Legacy records require fresh signed qualification.
+export function requireQualifiedFleetSchema(a) {
+  requireProof(
+    a?.kind === "qualified-fleet" &&
+      a.schema === qualifiedFleetSchema &&
+      isDeepStrictEqual(
+        Object.keys(a).sort(),
+        ["kind", "schema", "pair", "controlPlane", ...archiveProofs].sort()
+      ) &&
+      a.controlPlane !== null &&
+      typeof a.controlPlane === "object" &&
+      Object.getPrototypeOf(a.controlPlane) === Object.prototype &&
+      isDeepStrictEqual(
+        Object.keys(a.controlPlane).sort(),
+        [...qualificationControlPlaneFields].sort()
+      )
+  )
+  for (const key of qualificationControlPlaneFields)
+    requireProof(
+      typeof a.controlPlane[key] === "string" && /^sha256:[a-f0-9]{64}$/.test(a.controlPlane[key])
+    )
+  for (const key of archiveProofs) hash(a[key])
+}
 export const hashRecord = (value) =>
   createHash("sha256").update(JSON.stringify(value)).digest("hex")
 function hash(value) {
@@ -46,13 +85,16 @@ const forbiddenEngine = "3001517530300ca5f602536bfadcbd3c95ad3039"
 const forbiddenProducer = "b03f0bbe2b42f3a49e24e103655187372ba0a5f6"
 async function archive(adapter, id, identity) {
   const a = await record(adapter, "qualified-fleet", id, [
+    "schema",
     "pair",
+    "controlPlane",
     "releaseProof",
     "sandboxProof",
     "financialProof",
     "readerProof",
     "connectionProof",
   ])
+  requireQualifiedFleetSchema(a)
   for (const key of [
     "releaseProof",
     "sandboxProof",
@@ -144,6 +186,7 @@ export async function recoveryAuthority(adapter, id, identity) {
       source.productRevision !== dest.pair.productRevision &&
       source.workerDigest !== dest.pair.workerDigest &&
       source.priorWorkerDigest === dest.pair.workerDigest &&
+      fleet.controlPlane.migrationChecksum === dest.controlPlane.migrationChecksum &&
       fleet.connectionProof === dest.connectionProof
   )
   const reverse = { ...dest.pair, owner: r.owner, priorWorkerDigest: source.workerDigest }

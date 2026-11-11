@@ -3,7 +3,10 @@
 import { resolve } from "node:path"
 import { pathToFileURL } from "node:url"
 import { protectedLiveAdapter } from "./paired-runtime-live.mjs"
-import { qualificationControlPlaneFields } from "./paired-runtime-qualification.mjs"
+import {
+  qualificationControlPlaneFields,
+  validateQualifiedFleetArchive,
+} from "./paired-runtime-qualification.mjs"
 import {
   readAuthenticatedOwner,
   readProtectedRecord,
@@ -136,6 +139,11 @@ function requireRollback(rollback, pair, controlPlane) {
 function compareRollbackArchive(archive, rollback) {
   if (!plain(archive) || archive.kind !== "qualified-fleet" || !plain(archive.pair))
     blocked("rollback record unavailable")
+  try {
+    validateQualifiedFleetArchive(archive)
+  } catch {
+    blocked("rollback archive schema invalid")
+  }
   const pair = archive.pair
   const comparisons = [
     ["productRevision", pair.productRevision, rollback.productRevision],

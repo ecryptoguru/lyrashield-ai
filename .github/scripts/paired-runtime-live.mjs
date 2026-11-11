@@ -1,11 +1,15 @@
 // Unwired composition for protected GitHub Actions. No injected proof booleans,
 // generic command dispatcher, live scan, or deployment entry point.
 import { createHash } from "node:crypto"
+import { isDeepStrictEqual } from "node:util"
 import { pairedReleaseReceipt } from "../../ops/monitoring/paired-release-hold.mjs"
 import * as cloud from "./paired-runtime-cloud.mjs"
 import { vmStageStore } from "./paired-stage-store.mjs"
 import { guest, liveRedis } from "./paired-live-transport.mjs"
-import { readHeldBaselineArchive } from "./paired-runtime-qualification.mjs"
+import {
+  readHeldBaselineArchive,
+  validateQualifiedFleetArchive,
+} from "./paired-runtime-qualification.mjs"
 import {
   readAuthenticatedOwner,
   readProtectedRecord,
@@ -59,9 +63,11 @@ async function archive(id) {
   const a = await verifiedArtifact("qualified-fleet", id),
     r = record(a),
     p = r.pair
+  validateQualifiedFleetArchive(r)
   ok(p?.owner === a.owner && a.source === p.productRevision)
   cloud.verifyImageSources(p)
   const release = await matchedWitness("release-readback", r.releaseProof, p)
+  ok(isDeepStrictEqual(release.controlPlane, r.controlPlane))
   ok(
     release.owner === p.owner &&
       release.admission === "open" &&

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict"
 import { createHash } from "node:crypto"
+import { execFileSync } from "node:child_process"
 import test from "node:test"
 import {
   assertPromotionActionLease,
@@ -203,6 +204,174 @@ test("held baseline rejects schema, identity, witness, raw-byte and proof substi
   )
 })
 
+function runHeldAdapter(mutate = () => {}) {
+  const f = baselineFixture()
+  const p = f.expected.pair
+  const binding = Object.fromEntries(
+    [
+      "productRevision",
+      "engineRevision",
+      "workerDigest",
+      "webDigest",
+      "proxyDigest",
+      "sandboxDigest",
+    ].map((key) => [key, p[key]])
+  )
+  const proofRecords = {
+    sandbox: {
+      kind: "sandbox-qualification",
+      owner: p.owner,
+      ...binding,
+      amd64: "passed",
+      arm64: "passed",
+      manifestDigest: p.sandboxDigest,
+      publishRunId: "10",
+      publishAttempt: "1",
+    },
+    financial: {
+      kind: "financial-qualification",
+      owner: p.owner,
+      ...binding,
+      physicalCeiling: "passed",
+      crashRecovery: "passed",
+      workerLifetimeClaim: "passed",
+      engineCiRunId: "20",
+      engineCiAttempt: "1",
+    },
+    reader: {
+      kind: "reader-qualification",
+      owner: p.owner,
+      ...binding,
+      pendingFinalization: "passed",
+      queueReconciliation: "passed",
+      readerFingerprint: hash("reader"),
+    },
+    continuity: {
+      kind: "continuity",
+      purpose: "fleet-authority",
+      environment: "azure-production",
+      databaseIdentity: hash("database"),
+      redisUrlHash: hash("redis"),
+    },
+  }
+  mutate(proofRecords, f)
+  f.record.sandboxProof = f.add(proofRecords.sandbox)
+  f.record.financialProof = f.add(proofRecords.financial)
+  f.record.readerProof = f.add(proofRecords.reader)
+  f.record.connectionProof = f.add(proofRecords.continuity)
+  const id = f.rebuild()
+  const githubMock = `
+import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+export async function verifiedArtifact(kind,id) {
+  globalThis.events.push(kind);
+  const artifact=globalThis.fixture.artifacts[kind+":"+id];
+  assert.ok(artifact,"unverified artifact");
+  assert.equal(createHash("sha256").update(artifact.raw).digest("hex"),id);
+  return artifact;
+}
+export function verifyEngineRun(run,attempt,engine,workflow) {
+  assert.equal(attempt,"1"); assert.equal(engine,globalThis.fixture.expected.pair.engineRevision);
+  assert.equal(run,workflow==="ci.yml"?"20":"10"); globalThis.events.push(workflow);
+}
+export function verifySandboxAttestation(pair,run,attempt) {
+  assert.deepEqual(pair,globalThis.fixture.expected.pair);
+  assert.equal(run,"10"); assert.equal(attempt,"1"); globalThis.events.push("attestation");
+}
+export const readAuthenticatedOwner=()=>{throw Error("unavailable")};
+export const readProtectedRecord=readAuthenticatedOwner,verifyCurrentSource=readAuthenticatedOwner,
+verifyEnvironmentApproval=readAuthenticatedOwner,protectedSessionCookie=readAuthenticatedOwner;
+`
+  const cloudMock = `
+import assert from "node:assert/strict";
+export function verifyImageSources(pair) {
+  assert.deepEqual(pair,globalThis.fixture.expected.pair);globalThis.events.push("image-sources");
+}`
+  const transportMock = `export const guest=()=>{throw Error("physical operation forbidden")};export const liveRedis={};`
+  const script = `
+import { registerHooks } from "node:module";
+import { readFileSync } from "node:fs";
+globalThis.fixture=JSON.parse(readFileSync(0,"utf8"));globalThis.events=[];
+const mocks=globalThis.fixture.mocks;
+registerHooks({resolve(specifier,context,next){
+  const source=mocks[specifier];
+  return source?{url:"data:text/javascript,"+encodeURIComponent(source),shortCircuit:true}:next(specifier,context);
+}});
+const { protectedLiveAdapter }=await import(process.argv[1]);
+const adapter=protectedLiveAdapter();
+try {
+  const ok=await adapter.verifyHeldBaselineArchive(globalThis.fixture.id,globalThis.fixture.expected);
+  let promoteRefused=false,openFleetRefused=false;
+  try{await adapter.promoteStoppedWorker(globalThis.fixture.expected.pair)}catch{promoteRefused=true}
+  try{await adapter.verifyQualifiedArchive(globalThis.fixture.id)}catch{openFleetRefused=true}
+  process.stdout.write(JSON.stringify({ok,promoteRefused,openFleetRefused,events:globalThis.events}));
+}catch{process.stdout.write(JSON.stringify({ok:false,events:globalThis.events}))}
+`
+  return JSON.parse(
+    execFileSync(
+      process.execPath,
+      [
+        "--input-type=module",
+        "-e",
+        script,
+        new URL("../paired-runtime-live.mjs", import.meta.url).href,
+      ],
+      {
+        input: JSON.stringify({
+          id,
+          expected: f.expected,
+          artifacts: Object.fromEntries(f.artifacts),
+          mocks: {
+            "./paired-runtime-github.mjs": githubMock,
+            "./paired-runtime-cloud.mjs": cloudMock,
+            "./paired-live-transport.mjs": transportMock,
+          },
+        }),
+        timeout: 10000,
+        encoding: "utf8",
+        stdio: ["pipe", "pipe", "pipe"],
+      }
+    )
+  )
+}
+
+test("actual held adapter joins qualification proofs without enabling promotion or open fleet authority", () => {
+  const result = runHeldAdapter()
+  assert.equal(result.ok, true)
+  assert.equal(result.promoteRefused, true)
+  assert.equal(result.openFleetRefused, true)
+  assert.deepEqual(result.events.slice(0, 10), [
+    "held-baseline",
+    "release-readback",
+    "image-sources",
+    "sandbox-qualification",
+    "financial-qualification",
+    "reader-qualification",
+    "publish-sandbox.yml",
+    "attestation",
+    "ci.yml",
+    "continuity",
+  ])
+  for (const mutate of [
+    (r) => {
+      r.sandbox.amd64 = "failed"
+    },
+    (r) => {
+      r.financial.workerLifetimeClaim = "failed"
+    },
+    (r) => {
+      r.reader.pendingFinalization = "failed"
+    },
+    (r) => {
+      r.continuity.environment = "wrong"
+    },
+    (_r, f) => {
+      f.readback.admission = "open"
+    },
+  ])
+    assert.equal(runHeldAdapter(mutate).ok, false)
+})
+
 function leaseFixture() {
   const expected = {
     ...tuple(),
@@ -263,12 +432,15 @@ function leaseFixture() {
 }
 
 test("action lease checks complete qualification before signed lease and authoritative durable state", async () => {
-  for (const duration of [1, 300, 900]) {
-    const f = leaseFixture()
-    f.record.expiresAt = 1000 + duration
-    f.state.now = 1000
-    await f.check()
-    assert.deepEqual(f.events, ["qualification", "lease", "durable-state"])
+  for (const action of ["forward", "restore", "release"]) {
+    for (const duration of [1, 300, 900]) {
+      const f = leaseFixture()
+      f.expected.action = f.record.action = f.state.action = action
+      f.record.expiresAt = 1000 + duration
+      f.state.now = 1000
+      await f.check()
+      assert.deepEqual(f.events, ["qualification", "lease", "durable-state"])
+    }
   }
 })
 

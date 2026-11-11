@@ -3,6 +3,14 @@ import { createHash } from "node:crypto"
 import { isDeepStrictEqual } from "node:util"
 import { verifiedArtifact } from "./paired-runtime-github.mjs"
 import {
+  requireQualifiedFleetSchema,
+  qualificationControlPlaneFields,
+} from "./paired-runtime-authority.mjs"
+export {
+  qualifiedFleetSchema,
+  qualificationControlPlaneFields,
+} from "./paired-runtime-authority.mjs"
+import {
   assertHeldReadiness,
   pairedReleaseReceipt,
 } from "../../ops/monitoring/paired-release-hold.mjs"
@@ -19,13 +27,6 @@ const pairDigests = [
   "sandboxDigest",
 ]
 const services = ["app", "scanner", "relay"]
-export const qualificationControlPlaneFields = Object.freeze([
-  "migrationChecksum",
-  "brokerDigest",
-  "supervisorDigest",
-  "providerGatewayDigest",
-  "runtimePolicyDigest",
-])
 const proofs = ["releaseProof", "sandboxProof", "financialProof", "readerProof", "connectionProof"]
 
 function requireRecord(condition) {
@@ -89,6 +90,13 @@ async function authenticated(kind, id, verifyArtifact) {
       record.pair?.productRevision === artifact.source
   )
   return record
+}
+
+// Legacy archives are not upgraded in memory. They require fresh signed v2
+// qualification, including the complete control-plane tuple, before recovery.
+export function validateQualifiedFleetArchive(record) {
+  requireQualifiedFleetSchema(record)
+  matchedTuple(record.pair, record.controlPlane, record)
 }
 
 // An archive of a held, qualified baseline is rollback evidence only. It never
