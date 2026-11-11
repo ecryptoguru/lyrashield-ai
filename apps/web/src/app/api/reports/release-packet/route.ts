@@ -1,5 +1,9 @@
 import { z } from "zod"
-import { generateShareToken, issueReleasePacket, ReleasePacketError } from "@lyrashield/db"
+import {
+  generateReleasePacketShareToken,
+  issueReleasePacket,
+  ReleasePacketError,
+} from "@lyrashield/db"
 import {
   resolveLaunchReportSigningPrivateKey,
   resolveLaunchReportSigningPublicKey,
@@ -77,7 +81,7 @@ async function post(request: Request) {
 
     let shareUrl: string | null = null
     if (data.share) {
-      const { token } = await generateShareToken(result.reportId, data.workspaceId)
+      const { token } = await generateReleasePacketShareToken(result.reportId, data.workspaceId)
       const base = env.NEXT_PUBLIC_APP_URL.replace(/\/+$/, "")
       const params = new URLSearchParams({ token, workspaceId: data.workspaceId })
       shareUrl = `${base}/reports/release-packet/shared/${result.reportId}?${params.toString()}`
