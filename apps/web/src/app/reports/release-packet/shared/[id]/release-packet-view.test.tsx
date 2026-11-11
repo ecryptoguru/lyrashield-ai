@@ -104,6 +104,21 @@ describe("ReleasePacketView", () => {
     expect(html).not.toContain("Print / Save as PDF")
   })
 
+  it("renders a workspace packet without a second main landmark or a token requirement", () => {
+    const html = renderToStaticMarkup(
+      <ReleasePacketView
+        result={result}
+        workspaceId="ws-1"
+        reportId="packet-report-1"
+        workspaceView
+      />
+    )
+    expect(html).not.toContain("<main")
+    expect(html).toContain("Access requires workspace report permission")
+    expect(html).toContain("Download CSV")
+    expect(html).toContain("Historical — not current evidence")
+  })
+
   it("describes the packet signature separately for version 1.1", () => {
     const html = renderToStaticMarkup(
       <ReleasePacketView
