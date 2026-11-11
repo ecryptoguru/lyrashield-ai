@@ -1,0 +1,172 @@
+import { createHash } from "node:crypto"
+import { beforeEach, describe, expect, it, vi } from "vitest"
+
+const mocks = vi.hoisted(() => ({
+  reportFindFirst: vi.fn(),
+  updateMany: vi.fn(),
+  scanFindFirst: vi.fn(),
+  groupBy: vi.fn(),
+  tokenFindFirst: vi.fn(),
+  requirePermission: vi.fn(),
+  notFound: vi.fn(() => {
+    throw new Error("NEXT_NOT_FOUND")
+  }),
+}))
+
+vi.mock("../../../../../../../packages/db/src/client", () => ({
+  prisma: {
+    report: { findFirst: mocks.reportFindFirst, updateMany: mocks.updateMany },
+    scan: { findFirst: mocks.scanFindFirst },
+    finding: { groupBy: mocks.groupBy },
+  },
+}))
+vi.mock("../../../../../../../packages/db/src/rls", () => ({
+  withWorkspaceRLS: async (_workspaceId: string, read: (tx: unknown) => unknown) =>
+    read((await import("../../../../../../../packages/db/src/client")).prisma),
+}))
+vi.mock("../../../../../../../packages/db/src/system-client", () => ({
+  getSystemPrisma: () => ({ report: { findFirst: mocks.tokenFindFirst } }),
+}))
+// Exercise the real generic services through the page and routes. Only DB IO,
+// the separate launch renderer, and request authentication are fixture ports.
+vi.mock("@lyrashield/db", async () => ({
+  ...(await import("../../../../../../../packages/db/src/report-service")),
+  getSharedLaunchReport: vi.fn().mockResolvedValue(null),
+  getLaunchReportDetail: vi.fn(),
+  withDelegatedReadAuthority: vi.fn(),
+}))
+vi.mock("next/navigation", () => ({ notFound: mocks.notFound }))
+vi.mock("@lyrashield/auth/server", () => ({
+  requirePermission: mocks.requirePermission,
+  assertOAuthDelegatedScope: vi.fn(),
+}))
+vi.mock("@lyrashield/logger", () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }))
+vi.mock("../../../../lib/api-auth", () => ({
+  withCookieMutation: (handler: unknown) => handler,
+  authErrorResponse: () => null,
+  getApiRequestId: () => undefined,
+}))
+vi.mock("../../../../lib/delegated-target-read-scope", () => ({
+  delegatedReadPrincipal: () => null,
+}))
+vi.mock("./shared-report-view", () => ({
+  SharedReportView: () => null,
+}))
+vi.mock("./launch-report-view", () => ({
+  SharedLaunchReportView: () => null,
+}))
+
+import SharedReportPage from "./page"
+import { GET as sharedGet } from "../../../api/reports/shared/[id]/route"
+import { GET as reportGet, POST as reportPost } from "../../../api/reports/[id]/route"
+import { getReportByShareToken } from "../../../../../../../packages/db/src/report-service"
+
+// Synthetic capability, deliberately unrelated to any deployed report.
+const token = "a".repeat(64)
+const params = { params: Promise.resolve({ id: "packet-fixture" }) }
+const report = {
+  id: "packet-fixture",
+  workspaceId: "workspace-fixture",
+  type: "release_packet",
+  scanId: "scan-fixture",
+  contentJson: { version: "release_packet/1.1.0" },
+  shareTokenHash: createHash("sha256").update(token).digest("hex"),
+  shareExpiresAt: new Date("2030-01-01T00:00:00Z"),
+  revokedAt: null,
+  deletedAt: null,
+}
+
+describe("release packet cannot cross the generic report boundary", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    report.type = "release_packet"
+    mocks.reportFindFirst.mockResolvedValue(report)
+    mocks.tokenFindFirst.mockImplementation(async ({ where }) =>
+      where.shareTokenHash === report.shareTokenHash
+        ? { id: report.id, workspaceId: report.workspaceId, shareExpiresAt: report.shareExpiresAt }
+        : null
+    )
+    mocks.scanFindFirst.mockResolvedValue({
+      id: report.scanId,
+      targetId: "target-fixture",
+      status: "COMPLETED",
+      summary: "Private scan summary must never render",
+    })
+    mocks.groupBy.mockResolvedValue([])
+    mocks.requirePermission.mockResolvedValue({ session: { userId: "member-fixture" } })
+    mocks.updateMany.mockImplementation(async ({ where }) => ({
+      count: where.type?.not === report.type ? 0 : 1,
+    }))
+  })
+
+  it("404s a valid packet token on the generic page without any membership or summary read", async () => {
+    mocks.requirePermission.mockRejectedValue(new Error("FORBIDDEN"))
+    await expect(getReportByShareToken(token)).resolves.toMatchObject({ id: report.id })
+    await expect(
+      SharedReportPage({ ...params, searchParams: Promise.resolve({ token }) })
+    ).rejects.toThrow("NEXT_NOT_FOUND")
+    expect(mocks.requirePermission).not.toHaveBeenCalled()
+    expect(mocks.scanFindFirst).not.toHaveBeenCalled()
+    expect(mocks.groupBy).not.toHaveBeenCalled()
+  })
+
+  it("404s the same valid token on the generic shared API before a summary read", async () => {
+    const response = await sharedGet(
+      new Request(`http://localhost/api/reports/shared/${report.id}?token=${token}`),
+      params
+    )
+    expect(response.status).toBe(404)
+    expect(await response.text()).not.toContain("Private scan summary")
+    expect(mocks.requirePermission).not.toHaveBeenCalled()
+    expect(mocks.scanFindFirst).not.toHaveBeenCalled()
+    expect(mocks.groupBy).not.toHaveBeenCalled()
+  })
+
+  it("also rejects the authenticated generic report API", async () => {
+    const response = await reportGet(
+      new Request(`http://localhost/api/reports/${report.id}?workspaceId=${report.workspaceId}`),
+      params
+    )
+    expect(response.status).toBe(404)
+    expect(mocks.scanFindFirst).not.toHaveBeenCalled()
+    expect(mocks.groupBy).not.toHaveBeenCalled()
+  })
+
+  it.each(["share", "revoke"])(
+    "cannot %s a packet token through the generic mutation API",
+    async (action) => {
+      const original = { ...report }
+      const response = await reportPost(
+        new Request(`http://localhost/api/reports/${report.id}`, {
+          method: "POST",
+          body: JSON.stringify({ workspaceId: report.workspaceId, action }),
+        }),
+        params
+      )
+      expect(response.status).toBe(404)
+      expect(mocks.updateMany).toHaveBeenCalledWith({
+        where: {
+          id: report.id,
+          workspaceId: report.workspaceId,
+          deletedAt: null,
+          type: { not: "release_packet" },
+        },
+        data: expect.any(Object),
+      })
+      expect(report).toEqual(original)
+      expect(await response.text()).not.toContain("shareUrl")
+    }
+  )
+
+  it("preserves normal report summaries on the generic page and shared API", async () => {
+    report.type = "developer"
+    const page = await SharedReportPage({ ...params, searchParams: Promise.resolve({ token }) })
+    expect(page.props.report.scanSummary.summary).toBe("Private scan summary must never render")
+    const response = await sharedGet(
+      new Request(`http://localhost/api/reports/shared/${report.id}?token=${token}`),
+      params
+    )
+    expect(response.status).toBe(200)
+    expect(await response.text()).toContain("Private scan summary must never render")
+  })
+})

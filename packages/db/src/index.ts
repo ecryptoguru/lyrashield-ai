@@ -256,6 +256,7 @@ export {
 export {
   createReport,
   generateShareToken,
+  generateReleasePacketShareToken,
   revokeShareToken,
   getReportByShareToken,
   getShareableReport,

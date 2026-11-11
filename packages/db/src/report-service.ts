@@ -330,14 +330,33 @@ export async function createReport(
   return report
 }
 
+interface ShareTokenOptions {
+  targetId?: string | null
+  requireActiveTarget?: boolean
+  client?: ScopedTransaction
+}
+
 export async function generateShareToken(
   reportId: string,
   workspaceId: string,
-  options: {
-    targetId?: string | null
-    requireActiveTarget?: boolean
-    client?: ScopedTransaction
-  } = {}
+  options: ShareTokenOptions = {}
+): Promise<{ token: string; tokenHash: string; expiresAt: Date }> {
+  return generateTypedShareToken(reportId, workspaceId, false, options)
+}
+
+/** Packet issuance uses a private link whose readers still require workspace permission. */
+export async function generateReleasePacketShareToken(
+  reportId: string,
+  workspaceId: string
+): Promise<{ token: string; tokenHash: string; expiresAt: Date }> {
+  return generateTypedShareToken(reportId, workspaceId, true)
+}
+
+async function generateTypedShareToken(
+  reportId: string,
+  workspaceId: string,
+  releasePacket: boolean,
+  options: ShareTokenOptions = {}
 ): Promise<{ token: string; tokenHash: string; expiresAt: Date }> {
   const token = randomBytes(32).toString("hex")
   const tokenHash = createHash("sha256").update(token).digest("hex")
@@ -351,7 +370,13 @@ export async function generateShareToken(
       }
     }
     const updated = await tx.report.updateMany({
-      where: { id: reportId, workspaceId, deletedAt: null },
+      // Bind the type to the write itself: a pre-read cannot prevent a type-change race.
+      where: {
+        id: reportId,
+        workspaceId,
+        deletedAt: null,
+        type: releasePacket ? "release_packet" : { not: "release_packet" },
+      },
       data: {
         shareTokenHash: tokenHash,
         shareExpiresAt: expiresAt,
@@ -384,7 +409,7 @@ export async function revokeShareToken(
       }
     }
     const updated = await tx.report.updateMany({
-      where: { id: reportId, workspaceId, deletedAt: null },
+      where: { id: reportId, workspaceId, deletedAt: null, type: { not: "release_packet" } },
       data: { revokedAt },
     })
     if (updated.count !== 1) throw new Error("Report not found")
@@ -467,7 +492,9 @@ async function readShareableReport(
       ? await readActiveSharedReport(tx, workspaceId, reportId, shareToken)
       : await tx.report.findFirst({ where: { id: reportId, workspaceId, deletedAt: null } })
 
-    if (!report) return null
+    // Release packets have their own permission-checked readers; never project
+    // their linked scan or snapshot into a generic report, even with a valid token.
+    if (!report || report.type === "release_packet") return null
     if (
       !reportSnapshotScanBindingMatches(report.contentJson, report.scanId, report.type, {
         requireExplicit: options.requireExplicitSnapshotBinding,

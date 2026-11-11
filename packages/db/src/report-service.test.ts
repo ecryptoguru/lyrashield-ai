@@ -17,7 +17,13 @@ vi.mock("./system-client", () => ({ getSystemPrisma: vi.fn(() => systemPrisma) }
 
 import { randomBytes } from "crypto"
 import { prisma } from "./client"
-import { getReportByShareToken, getShareableReport } from "./report-service"
+import {
+  generateReleasePacketShareToken,
+  generateShareToken,
+  getReportByShareToken,
+  getShareableReport,
+  revokeShareToken,
+} from "./report-service"
 
 const mockPrisma = prisma as unknown as {
   $transaction: ReturnType<typeof vi.fn>
@@ -40,6 +46,22 @@ describe("getShareableReport", () => {
     mockPrisma.$executeRaw.mockResolvedValue(1)
     mockPrisma.finding.groupBy.mockResolvedValue([])
   })
+
+  it.each([undefined, { client: mockPrisma as never }])(
+    "rejects a release packet before reading any generic summary (options: %j)",
+    async (options) => {
+      mockPrisma.report.findFirst.mockResolvedValue({
+        id: "packet-1",
+        workspaceId: "ws-1",
+        type: "release_packet",
+        scanId: "scan-1",
+        contentJson: { scanInfo: { scanId: "scan-1", summary: "Private snapshot" } },
+      })
+      await expect(getShareableReport("packet-1", "ws-1", options)).resolves.toBeNull()
+      expect(mockPrisma.scan.findFirst).not.toHaveBeenCalled()
+      expect(mockPrisma.finding.groupBy).not.toHaveBeenCalled()
+    }
+  )
 
   it("does not load a scan outside the report workspace", async () => {
     mockPrisma.report.findFirst.mockResolvedValue({
@@ -478,5 +500,79 @@ describe("getReportByShareToken", () => {
       workspaceId: "ws-1",
       shareExpiresAt: expect.any(Date),
     })
+  })
+})
+
+describe("report-type-bound share mutations", () => {
+  const updateMany = vi.fn()
+  const client = { report: { updateMany } }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockPrisma.$transaction.mockImplementation(async (callback) => callback(client))
+    Object.assign(client, { $executeRaw: vi.fn().mockResolvedValue(1) })
+    updateMany.mockResolvedValue({ count: 1 })
+  })
+
+  it.each([generateShareToken, revokeShareToken])(
+    "rejects a packet atomically without changing its token via %s",
+    async (mutate) => {
+      const packet = {
+        id: "packet-1",
+        workspaceId: "ws-1",
+        type: "release_packet",
+        shareTokenHash: "persisted-packet-token-hash",
+        shareExpiresAt: new Date("2030-01-01T00:00:00Z"),
+        revokedAt: null,
+      }
+      const original = { ...packet }
+      updateMany.mockImplementation(async ({ where, data }) => {
+        if (where.type?.not === packet.type) return { count: 0 }
+        Object.assign(packet, data)
+        return { count: 1 }
+      })
+
+      await expect(mutate(packet.id, packet.workspaceId)).rejects.toThrow("Report not found")
+      expect(updateMany).toHaveBeenCalledWith({
+        where: {
+          id: "packet-1",
+          workspaceId: "ws-1",
+          deletedAt: null,
+          type: { not: "release_packet" },
+        },
+        data: expect.any(Object),
+      })
+      expect(packet).toEqual(original)
+    }
+  )
+
+  it("preserves ordinary report token generation and caller-owned transactions", async () => {
+    const result = await generateShareToken("report-1", "ws-1", { client: client as never })
+    expect(result.token).toMatch(/^[a-f0-9]{64}$/)
+    expect(updateMany).toHaveBeenCalledWith({
+      where: {
+        id: "report-1",
+        workspaceId: "ws-1",
+        deletedAt: null,
+        type: { not: "release_packet" },
+      },
+      data: { shareTokenHash: result.tokenHash, shareExpiresAt: result.expiresAt, revokedAt: null },
+    })
+    expect(mockPrisma.$transaction).not.toHaveBeenCalled()
+  })
+
+  it("issues a packet token only through the packet-specific writer", async () => {
+    const result = await generateReleasePacketShareToken("packet-1", "ws-1")
+    expect(updateMany).toHaveBeenCalledWith({
+      where: { id: "packet-1", workspaceId: "ws-1", deletedAt: null, type: "release_packet" },
+      data: { shareTokenHash: result.tokenHash, shareExpiresAt: result.expiresAt, revokedAt: null },
+    })
+  })
+
+  it("rejects a non-packet or missing row through the packet-specific writer", async () => {
+    updateMany.mockResolvedValue({ count: 0 })
+    await expect(generateReleasePacketShareToken("report-1", "ws-1")).rejects.toThrow(
+      "Report not found"
+    )
   })
 })
