@@ -51,6 +51,9 @@ vi.mock("@lyrashield/db", () => {
       return { domain, verified: Boolean(proof) }
     }),
     prisma,
+    withWorkspaceRLS: vi.fn(async (_workspaceId: string, fn: (tx: typeof prisma) => unknown) =>
+      fn(prisma)
+    ),
     createScan: vi.fn(),
     resolveScanAttachments: vi.fn().mockResolvedValue([]),
     resolveAuthenticatedAssessmentAuthorization: vi.fn().mockResolvedValue({ id: "authz-1" }),
@@ -131,6 +134,7 @@ vi.mock("../../../../lib/rate-limit", () => ({
 
 import {
   prisma,
+  withWorkspaceRLS,
   createScan,
   resolveScanAttachments,
   resolveAuthenticatedAssessmentAuthorization,
@@ -282,6 +286,7 @@ describe("GET /api/scans/eligibility", () => {
 
     expect(response.status).toBe(404)
     expect(requirePermission).toHaveBeenCalledWith("ws-1", "scan:create")
+    expect(withWorkspaceRLS).toHaveBeenCalledWith("ws-1", expect.any(Function))
     expect(prisma.target.findFirst).toHaveBeenCalledWith({
       where: { id: "target-1", workspaceId: "ws-1", deletedAt: null },
     })
@@ -715,6 +720,12 @@ describe("GET /api/scans/eligibility", () => {
       (await (await setupHealthGET(request({ ...validQuery, mode: "STANDARD" }))).json()).data
     const initial = await check()
     expect(initial).toMatchObject({ status: "ready", allowed: true })
+    expect(vi.mocked(withWorkspaceRLS).mock.calls.map(([workspaceId]) => workspaceId)).toEqual([
+      "ws-1",
+      "ws-1",
+      "ws-1",
+      "ws-1",
+    ])
     expect(JSON.stringify(initial)).not.toContain("private-sponsor")
     expect(JSON.stringify(initial)).not.toContain("private/app")
     expect(JSON.stringify(initial)).not.toContain("0.47")
