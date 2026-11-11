@@ -8,6 +8,8 @@ const mocks = vi.hoisted(() => ({
   groupBy: vi.fn(),
   tokenFindFirst: vi.fn(),
   requirePermission: vi.fn(),
+  principal: vi.fn(),
+  withAuthority: vi.fn(),
   notFound: vi.fn(() => {
     throw new Error("NEXT_NOT_FOUND")
   }),
@@ -33,7 +35,7 @@ vi.mock("@lyrashield/db", async () => ({
   ...(await import("../../../../../../../packages/db/src/report-service")),
   getSharedLaunchReport: vi.fn().mockResolvedValue(null),
   getLaunchReportDetail: vi.fn(),
-  withDelegatedReadAuthority: vi.fn(),
+  withDelegatedReadAuthority: mocks.withAuthority,
 }))
 vi.mock("next/navigation", () => ({ notFound: mocks.notFound }))
 vi.mock("@lyrashield/auth/server", () => ({
@@ -43,11 +45,14 @@ vi.mock("@lyrashield/auth/server", () => ({
 vi.mock("@lyrashield/logger", () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }))
 vi.mock("../../../../lib/api-auth", () => ({
   withCookieMutation: (handler: unknown) => handler,
-  authErrorResponse: () => null,
+  authErrorResponse: (error: Error) =>
+    error.message === "FORBIDDEN"
+      ? Response.json({ success: false, error: { code: "FORBIDDEN" } }, { status: 403 })
+      : null,
   getApiRequestId: () => undefined,
 }))
 vi.mock("../../../../lib/delegated-target-read-scope", () => ({
-  delegatedReadPrincipal: () => null,
+  delegatedReadPrincipal: mocks.principal,
 }))
 vi.mock("./shared-report-view", () => ({
   SharedReportView: () => null,
@@ -59,6 +64,7 @@ vi.mock("./launch-report-view", () => ({
 import SharedReportPage from "./page"
 import { GET as sharedGet } from "../../../api/reports/shared/[id]/route"
 import { GET as reportGet, POST as reportPost } from "../../../api/reports/[id]/route"
+import { POST as packetPost } from "../../../api/reports/release-packet/[id]/route"
 import { getReportByShareToken } from "../../../../../../../packages/db/src/report-service"
 
 // Synthetic capability, deliberately unrelated to any deployed report.
@@ -72,7 +78,7 @@ const report = {
   contentJson: { version: "release_packet/1.1.0" },
   shareTokenHash: createHash("sha256").update(token).digest("hex"),
   shareExpiresAt: new Date("2030-01-01T00:00:00Z"),
-  revokedAt: null,
+  revokedAt: null as Date | null,
   deletedAt: null,
 }
 
@@ -80,9 +86,18 @@ describe("release packet cannot cross the generic report boundary", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     report.type = "release_packet"
+    report.revokedAt = null
+    report.shareTokenHash = createHash("sha256").update(token).digest("hex")
+    mocks.principal.mockReturnValue(null)
+    mocks.withAuthority.mockImplementation(async (_principal, run) =>
+      run((await import("../../../../../../../packages/db/src/client")).prisma, {
+        targetIds: ["target-fixture"],
+        allowedProfiles: ["STANDARD"],
+      })
+    )
     mocks.reportFindFirst.mockResolvedValue(report)
     mocks.tokenFindFirst.mockImplementation(async ({ where }) =>
-      where.shareTokenHash === report.shareTokenHash
+      where.shareTokenHash === report.shareTokenHash && report.revokedAt === null
         ? { id: report.id, workspaceId: report.workspaceId, shareExpiresAt: report.shareExpiresAt }
         : null
     )
@@ -94,9 +109,24 @@ describe("release packet cannot cross the generic report boundary", () => {
     })
     mocks.groupBy.mockResolvedValue([])
     mocks.requirePermission.mockResolvedValue({ session: { userId: "member-fixture" } })
-    mocks.updateMany.mockImplementation(async ({ where }) => ({
-      count: where.type?.not === report.type ? 0 : 1,
-    }))
+    mocks.updateMany.mockImplementation(async ({ where, data }) => {
+      if (
+        where.workspaceId !== report.workspaceId ||
+        where.id !== report.id ||
+        (typeof where.type === "string"
+          ? where.type !== report.type
+          : where.type?.not === report.type)
+      )
+        return { count: 0 }
+      if (
+        where.scan &&
+        (!where.scan.targetId.in.includes("target-fixture") ||
+          !where.scan.mode.in.includes("STANDARD"))
+      )
+        return { count: 0 }
+      Object.assign(report, data)
+      return { count: 1 }
+    })
   })
 
   it("404s a valid packet token on the generic page without any membership or summary read", async () => {
@@ -169,4 +199,90 @@ describe("release packet cannot cross the generic report boundary", () => {
     expect(response.status).toBe(200)
     expect(await response.text()).toContain("Private scan summary must never render")
   })
+
+  function packetRequest(action: "share" | "revoke", workspaceId = report.workspaceId) {
+    return new Request(`http://localhost/api/reports/release-packet/${report.id}`, {
+      method: "POST",
+      body: JSON.stringify({ workspaceId, action }),
+    })
+  }
+
+  it("revokes a private packet capability through the authorized packet API", async () => {
+    const originalHash = report.shareTokenHash
+    const response = await packetPost(packetRequest("revoke"), params)
+    expect(response.status).toBe(200)
+    expect(report.shareTokenHash).toBe(originalHash)
+    expect(report.revokedAt).toBeInstanceOf(Date)
+    await expect(getReportByShareToken(token)).resolves.toBeNull()
+  })
+
+  it("creates a packet private link and rotation invalidates the prior token", async () => {
+    report.shareTokenHash = ""
+    const created = await packetPost(packetRequest("share"), params)
+    const first = (await created.json()).data
+    expect(created.status).toBe(200)
+    expect(first.shareUrl).toMatch(/^\/reports\/release-packet\/shared\/packet-fixture\?token=/)
+    await expect(getReportByShareToken(first.token)).resolves.toMatchObject({ id: report.id })
+    const rotated = await packetPost(packetRequest("share"), params)
+    const second = (await rotated.json()).data
+    expect(rotated.status).toBe(200)
+    expect(second.token).not.toBe(first.token)
+    await expect(getReportByShareToken(first.token)).resolves.toBeNull()
+    await expect(getReportByShareToken(second.token)).resolves.toMatchObject({ id: report.id })
+    await expect(
+      SharedReportPage({ ...params, searchParams: Promise.resolve({ token: second.token }) })
+    ).rejects.toThrow("NEXT_NOT_FOUND")
+  })
+
+  it.each(["share", "revoke"] as const)(
+    "preserves the packet token on cross-workspace %s",
+    async (action) => {
+      const original = { ...report }
+      expect((await packetPost(packetRequest(action, "other-workspace"), params)).status).toBe(404)
+      expect(report).toEqual(original)
+    }
+  )
+
+  it.each(["share", "revoke"] as const)(
+    "preserves the packet token on unauthorized %s",
+    async (action) => {
+      const original = { ...report }
+      mocks.requirePermission.mockRejectedValue(new Error("FORBIDDEN"))
+      expect((await packetPost(packetRequest(action), params)).status).toBe(403)
+      expect(report).toEqual(original)
+      expect(mocks.updateMany).not.toHaveBeenCalled()
+    }
+  )
+
+  it.each([
+    { action: "share" as const, targetIds: ["other-target"], allowedProfiles: ["STANDARD"] },
+    { action: "revoke" as const, targetIds: ["other-target"], allowedProfiles: ["STANDARD"] },
+    { action: "share" as const, targetIds: ["target-fixture"], allowedProfiles: ["DEEP"] },
+    { action: "revoke" as const, targetIds: ["target-fixture"], allowedProfiles: ["DEEP"] },
+  ])(
+    "binds delegated scope to the actual write (%j)",
+    async ({ action, targetIds, allowedProfiles }) => {
+      mocks.principal.mockReturnValue({ workspaceId: report.workspaceId })
+      const original = { ...report }
+      mocks.withAuthority.mockImplementation(async (_principal, run) =>
+        run((await import("../../../../../../../packages/db/src/client")).prisma, {
+          targetIds,
+          allowedProfiles,
+        })
+      )
+      expect((await packetPost(packetRequest(action), params)).status).toBe(404)
+      expect(report).toEqual(original)
+      expect(mocks.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            type: "release_packet",
+            scan: expect.objectContaining({
+              targetId: { in: targetIds },
+              mode: { in: allowedProfiles },
+            }),
+          }),
+        })
+      )
+    }
+  )
 })

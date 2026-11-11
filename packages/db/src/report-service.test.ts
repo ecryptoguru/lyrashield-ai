@@ -23,6 +23,7 @@ import {
   getReportByShareToken,
   getShareableReport,
   revokeShareToken,
+  revokeReleasePacketShareToken,
 } from "./report-service"
 
 const mockPrisma = prisma as unknown as {
@@ -575,4 +576,50 @@ describe("report-type-bound share mutations", () => {
       "Report not found"
     )
   })
+  it("revokes only a packet in the given workspace while retaining its token hash", async () => {
+    const revokedAt = await revokeReleasePacketShareToken("packet-1", "ws-1")
+    expect(updateMany).toHaveBeenCalledWith({
+      where: { id: "packet-1", workspaceId: "ws-1", deletedAt: null, type: "release_packet" },
+      data: { revokedAt },
+    })
+  })
+
+  it.each([generateReleasePacketShareToken, revokeReleasePacketShareToken])(
+    "requires a held transaction when delegated authority is supplied to %s",
+    async (mutate) => {
+      await expect(
+        mutate("packet-1", "ws-1", {
+          authority: { targetIds: ["target-1"], allowedProfiles: ["STANDARD"] },
+        })
+      ).rejects.toThrow("FORBIDDEN")
+      expect(updateMany).not.toHaveBeenCalled()
+    }
+  )
+
+  it.each([generateReleasePacketShareToken, revokeReleasePacketShareToken])(
+    "binds delegated target/profile and packet type atomically via %s",
+    async (mutate) => {
+      await mutate("packet-1", "ws-1", {
+        client: client as never,
+        authority: { targetIds: ["target-1"], allowedProfiles: ["STANDARD"] },
+      })
+      expect(updateMany).toHaveBeenCalledWith({
+        where: {
+          id: "packet-1",
+          workspaceId: "ws-1",
+          deletedAt: null,
+          type: "release_packet",
+          scan: {
+            workspaceId: "ws-1",
+            deletedAt: null,
+            targetId: { in: ["target-1"] },
+            mode: { in: ["STANDARD"] },
+            target: { workspaceId: "ws-1", deletedAt: null },
+          },
+        },
+        data: expect.any(Object),
+      })
+      expect(mockPrisma.$transaction).not.toHaveBeenCalled()
+    }
+  )
 })
