@@ -1,7 +1,7 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { afterEach, describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import { z } from "zod"
 import { SignedJournal, type JournalRecord } from "./journal"
 import {
@@ -130,6 +130,38 @@ async function setup(
 }
 
 describe("independent authority journal", () => {
+  it("reconfirms a recovered pending local record only on exact explicit replay", async () => {
+    const { journal, local, store, mirror } = await setup()
+    const record = await local.append(event)
+    const confirm = vi.spyOn(local, "confirmRecord")
+    await expect(journal.loadConfirmed()).rejects.toMatchObject({ code: "REPLAY_REQUIRED" })
+    expect(confirm).not.toHaveBeenCalled()
+    expect(store.writes + mirror.applications).toBe(0)
+    expect(await journal.appendIntent(event)).toEqual(record)
+    expect(confirm).toHaveBeenCalledOnce()
+    expect(confirm).toHaveBeenCalledWith(record)
+    expect(await local.load()).toEqual([record])
+  })
+
+  it("does not persist recovered local intent without an fsync confirmation port", async () => {
+    const { local, store, mirror } = await setup()
+    await local.append(event)
+    const journal = new IndependentAuthorityJournal({
+      local: { append: (value) => local.append(value), load: () => local.load() },
+      store,
+      mirror,
+      epochId: "epoch-2",
+      supervisorInstanceId: "supervisor-1",
+      signingSecret: "k".repeat(48),
+      payloadSchema: z.object({ action: z.string() }).strict(),
+      authorize: async () => true,
+    })
+    await expect(journal.appendIntent(event)).rejects.toMatchObject({ code: "AUTHORITY_UNKNOWN" })
+    expect(store.writes + mirror.applications).toBe(0)
+    expect(await local.load()).toHaveLength(1)
+    await expect(journal.loadConfirmed()).rejects.toMatchObject({ code: "REPLAY_REQUIRED" })
+  })
+
   it("reads a confirmed snapshot without writing and preserves the signed envelope", async () => {
     const { journal, local, store, mirror } = await setup()
     expect(await journal.loadConfirmed()).toEqual([])

@@ -1,5 +1,6 @@
 import { timingSafeEqual } from "node:crypto"
 import type { IncomingMessage, RequestListener, ServerResponse } from "node:http"
+import { IndependentAuthorityError } from "@lyrashield/runtime-control"
 import { RuntimeControlError, type SupervisorService } from "./service"
 
 const MAX_REQUEST_BYTES = 1024 * 1024
@@ -58,6 +59,18 @@ export function createSupervisorHandler(
         sendJson(response, error.httpStatus, { code: error.code, message: error.message })
         return
       }
+      if (
+        error instanceof IndependentAuthorityError &&
+        ["INVALID_CURSOR", "CURSOR_CONFLICT", "INVALID_RECOVERY", "RECOVERY_CONFLICT"].includes(
+          error.code
+        )
+      ) {
+        sendJson(response, error.code.startsWith("INVALID_") ? 400 : 409, {
+          code: error.code,
+          message: error.message,
+        })
+        return
+      }
       sendJson(response, 503, {
         code: "RUNTIME_CONTROL_UNAVAILABLE",
         message: "runtime control failed closed",
@@ -84,6 +97,37 @@ async function handleRequest(
   if (request.method === "POST" && url.pathname === "/v1/commands") {
     const command = await readJson(request)
     sendJson(response, 200, await service.execute(command))
+    return
+  }
+  if (request.method === "POST" && url.pathname === "/v1/recovery") {
+    if (url.searchParams.size)
+      throw new RuntimeControlError(
+        "INVALID_RECOVERY",
+        "recovery query parameters are not allowed",
+        400
+      )
+    sendJson(response, 200, await service.recover(await readJson(request)))
+    return
+  }
+  if (request.method === "GET" && url.pathname === "/v1/journal") {
+    const fields = ["epochId", "supervisorInstanceId", "afterSequence", "afterHash", "limit"]
+    if (
+      url.searchParams.size !== fields.length ||
+      fields.some((field) => url.searchParams.getAll(field).length !== 1) ||
+      !/^(0|[1-9][0-9]*)$/.test(url.searchParams.get("afterSequence") ?? "") ||
+      !/^[1-9][0-9]*$/.test(url.searchParams.get("limit") ?? "")
+    ) {
+      throw new RuntimeControlError("INVALID_CURSOR", "invalid supervisor journal cursor", 400)
+    }
+    sendJson(
+      response,
+      200,
+      await service.readJournal({
+        ...Object.fromEntries(url.searchParams),
+        afterSequence: Number(url.searchParams.get("afterSequence")),
+        limit: Number(url.searchParams.get("limit")),
+      })
+    )
     return
   }
   if (request.method === "GET" && url.pathname === "/v1/resources") {
