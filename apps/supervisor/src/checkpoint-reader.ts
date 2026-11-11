@@ -135,6 +135,11 @@ export class SupervisorCheckpointReader implements SupervisorJournalReader<Super
       authority.supervisorInstanceId !== this.options.supervisorInstanceId
     )
       checkpointFailure("AUTHORITY_CONFLICT", "persisted stream authority differs")
+    this.assertMonotonic(authority)
+    return authority
+  }
+
+  private assertMonotonic(authority: CheckpointStreamAuthority): void {
     const prior = this.observed
     if (
       prior &&
@@ -151,7 +156,13 @@ export class SupervisorCheckpointReader implements SupervisorJournalReader<Super
         "CHECKPOINT_ROLLBACK",
         "persisted checkpoint authority rolled back or forked"
       )
-    return authority
+  }
+
+  private commitObservation(authority: CheckpointStreamAuthority): void {
+    // No await may separate this comparison from assignment: another read can
+    // commit a newer observation after asynchronous authority validation returns.
+    this.assertMonotonic(authority)
+    this.observed = authority
   }
 
   private async snapshot(authority: CheckpointStreamAuthority): Promise<Snapshot> {
@@ -353,7 +364,7 @@ export class SupervisorCheckpointReader implements SupervisorJournalReader<Super
         current = await this.authority()
       if (!checkpointSame(before, after) || !checkpointSame(authority, current))
         checkpointFailure("CURSOR_CONFLICT", "checkpoint genesis changed while read")
-      this.observed = current
+      this.commitObservation(current)
       return { records: [], nextCursor: cursor, hasMore: false }
     }
     await this.checkpointEvidence(before.checkpoint, authority)
@@ -417,7 +428,7 @@ export class SupervisorCheckpointReader implements SupervisorJournalReader<Super
       current = await this.authority()
     if (!checkpointSame(before, after) || !checkpointSame(authority, current))
       checkpointFailure("CURSOR_CONFLICT", "checkpoint heads or authority changed while read")
-    this.observed = current
+    this.commitObservation(current)
     return structuredClone(page)
   }
 

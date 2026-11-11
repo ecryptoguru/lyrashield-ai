@@ -441,6 +441,74 @@ describe("closed bounded supervisor checkpoint foundation", () => {
     })
   })
 
+  it.each([0, 66])(
+    "rejects a delayed older concurrent commit with %i original records",
+    async (count) => {
+      const f = await fixture(count)
+      const prior = structuredClone(f.authorityState.current)
+      let reachedOlder!: () => void, reachedNewer!: () => void
+      let releaseOlder!: (value: CheckpointStreamAuthority) => void
+      let releaseNewer!: (value: CheckpointStreamAuthority) => void
+      const olderReached = new Promise<void>((resolve) => {
+          reachedOlder = resolve
+        }),
+        newerReached = new Promise<void>((resolve) => {
+          reachedNewer = resolve
+        }),
+        olderHeld = new Promise<CheckpointStreamAuthority>((resolve) => {
+          releaseOlder = resolve
+        }),
+        newerHeld = new Promise<CheckpointStreamAuthority>((resolve) => {
+          releaseNewer = resolve
+        })
+      const readStream = f.options.trust.readStream
+      let calls = 0
+      f.options.trust.readStream = async (stream) => {
+        const call = ++calls
+        const authority = await readStream(stream)
+        if (call === 2) {
+          reachedOlder()
+          return olderHeld
+        }
+        if (call === 4) {
+          reachedNewer()
+          return newerHeld
+        }
+        return authority
+      }
+      const older = f.reader.readCursor(checkpointCursor)
+      void older.catch(() => undefined)
+      await olderReached
+      if (count) {
+        await f.journal.append({
+          type: "attempt_status",
+          supervisorInstanceId: checkpointStream.supervisorInstanceId,
+          observedAt: "2026-11-11T10:00:01.000Z",
+          commandId: checkpointPrepare.commandId,
+          attemptId: checkpointBinding.attemptId,
+          status: "UNKNOWN",
+        })
+        await f.publish()
+      } else f.authorityState.current.revision++
+      const current = structuredClone(f.authorityState.current)
+      const newer = f.reader.readCursor(checkpointCursor)
+      void newer.catch(() => undefined)
+      await newerReached
+      // Let the newer port promise attach its held-result continuation first.
+      await Promise.resolve()
+      // Queue both final authority validations before either read can commit its observation.
+      releaseNewer(current)
+      releaseOlder(prior)
+      await expect(newer).resolves.toMatchObject({ hasMore: count > 0 })
+      await expect(older).rejects.toMatchObject({ code: "CHECKPOINT_ROLLBACK" })
+      f.options.trust.readStream = async () => prior
+      await expect(f.reader.readCursor(checkpointCursor)).rejects.toMatchObject({
+        code: "CHECKPOINT_ROLLBACK",
+      })
+      expect(f.effects).toEqual({ create: 0, start: 0, inspect: 0, stop: 0, provider: 0 })
+    }
+  )
+
   it("verifies native original signatures without treating a single record as a chain proof", async () => {
     const f = await fixture()
     const original = f.acceptedRecords.get(32)!.payload.payload
