@@ -4,6 +4,10 @@ import { resolve } from "node:path"
 import { pathToFileURL } from "node:url"
 import { protectedLiveAdapter } from "./paired-runtime-live.mjs"
 import {
+  qualificationControlPlaneFields,
+  validateQualifiedFleetArchive,
+} from "./paired-runtime-qualification.mjs"
+import {
   readAuthenticatedOwner,
   readProtectedRecord,
   verifiedArtifact,
@@ -105,6 +109,10 @@ function requireControlPlane(controlPlane) {
       controlPlane.providerGatewayDigest,
       "qualified release provider-gateway digest invalid"
     ),
+    runtimePolicyDigest: requiredDigest(
+      controlPlane.runtimePolicyDigest,
+      "qualified release runtime-policy digest invalid"
+    ),
   }
 }
 
@@ -117,12 +125,7 @@ function requireRollback(rollback, pair, controlPlane) {
     requiredDigest(rollback[key], "rollback image digest invalid")
   for (const key of ["appRevision", "scannerRevision", "relayRevision"])
     if (!revision.test(rollback[key])) blocked("rollback revision invalid")
-  for (const key of [
-    "migrationChecksum",
-    "brokerDigest",
-    "supervisorDigest",
-    "providerGatewayDigest",
-  ])
+  for (const key of qualificationControlPlaneFields)
     requiredDigest(rollback[key], "rollback control-plane digest invalid")
 
   if (rollback.engineRevision !== pair.engineRevision) blocked("rollback tuple mismatch")
@@ -136,6 +139,11 @@ function requireRollback(rollback, pair, controlPlane) {
 function compareRollbackArchive(archive, rollback) {
   if (!plain(archive) || archive.kind !== "qualified-fleet" || !plain(archive.pair))
     blocked("rollback record unavailable")
+  try {
+    validateQualifiedFleetArchive(archive)
+  } catch {
+    blocked("rollback archive schema invalid")
+  }
   const pair = archive.pair
   const comparisons = [
     ["productRevision", pair.productRevision, rollback.productRevision],
@@ -147,6 +155,11 @@ function compareRollbackArchive(archive, rollback) {
     ["appRevision", pair.app?.candidate, rollback.appRevision],
     ["scannerRevision", pair.scanner?.candidate, rollback.scannerRevision],
     ["relayRevision", pair.relay?.candidate, rollback.relayRevision],
+    ...qualificationControlPlaneFields.map((key) => [
+      key,
+      archive.controlPlane?.[key],
+      rollback[key],
+    ]),
   ]
   if (comparisons.some(([, actual, expected]) => !same(actual, expected)))
     blocked("rollback tuple mismatch")
