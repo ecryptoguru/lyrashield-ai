@@ -13,6 +13,16 @@ export interface JournalPort<T> {
   load(): Promise<JournalRecord<T>[]>
   /** Explicitly fsync an existing exact record without appending or re-signing it. */
   confirmRecord?(record: JournalRecord<T>): Promise<JournalRecord<T>>
+  loadBounded?(limits: JournalReadLimits): Promise<JournalRecord<T>[]>
+}
+
+export interface JournalReadLimits {
+  maxBytes: number
+  maxRecords: number
+}
+
+export class JournalReadLimitError extends Error {
+  readonly code = "JOURNAL_READ_LIMIT"
 }
 
 export interface JournalRecord<T> {
@@ -154,19 +164,36 @@ export class SignedJournal<T> implements JournalPort<T> {
   }
 
   async load(): Promise<JournalRecord<T>[]> {
+    return this.loadWithLimits()
+  }
+
+  async loadBounded(limits: JournalReadLimits): Promise<JournalRecord<T>[]> {
+    const bounds = { maxBytes: limits.maxBytes, maxRecords: limits.maxRecords }
+    if (
+      !Number.isSafeInteger(bounds.maxBytes) ||
+      bounds.maxBytes < 1 ||
+      bounds.maxBytes > MAX_JOURNAL_BYTES ||
+      !Number.isSafeInteger(bounds.maxRecords) ||
+      bounds.maxRecords < 1
+    )
+      throw new JournalReadLimitError("invalid journal read limits")
+    return this.loadWithLimits(bounds)
+  }
+
+  private async loadWithLimits(limits?: JournalReadLimits): Promise<JournalRecord<T>[]> {
     if (this.closed) throw new JournalIntegrityError("journal is closed")
     const operation = this.serial.then(async () => {
       this.assertUsable()
       try {
-        await this.ensureLoaded()
-        const records = await this.readAll()
+        const initial = await this.ensureLoaded(limits)
+        const records = initial ?? (await this.readAll(limits))
         const lastHash = this.verifyChain(records)
         if (records.length + 1 !== this.nextSequence || lastHash !== this.previousHash) {
           throw new JournalIntegrityError("journal changed outside the active writer")
         }
         return records
       } catch (error) {
-        this.latch(error)
+        if (!(error instanceof JournalReadLimitError)) this.latch(error)
         throw error
       }
     })
@@ -272,14 +299,15 @@ export class SignedJournal<T> implements JournalPort<T> {
     }
   }
 
-  private async ensureLoaded(): Promise<void> {
+  private async ensureLoaded(limits?: JournalReadLimits): Promise<JournalRecord<T>[] | undefined> {
     if (this.loaded) return
     await this.acquireLock()
-    const records = await this.readAll()
+    const records = await this.readAll(limits)
     const previousHash = this.verifyChain(records)
     this.nextSequence = records.length + 1
     this.previousHash = previousHash
     this.loaded = true
+    return records
   }
 
   private verifyChain(records: JournalRecord<T>[]): string {
@@ -413,7 +441,7 @@ export class SignedJournal<T> implements JournalPort<T> {
     this.fileIdentity = { dev: stat.dev, ino: stat.ino }
   }
 
-  private async readAll(): Promise<JournalRecord<T>[]> {
+  private async readAll(limits?: JournalReadLimits): Promise<JournalRecord<T>[]> {
     await this.assertLockIdentity()
     let file: FileHandle
     try {
@@ -425,19 +453,25 @@ export class SignedJournal<T> implements JournalPort<T> {
       throw error
     }
     let raw: string
+    const maxBytes = limits?.maxBytes ?? MAX_JOURNAL_BYTES
     try {
       await this.assertFileIdentity(file)
       const before = await file.stat()
-      if (before.size > MAX_JOURNAL_BYTES)
+      if (before.size > maxBytes) {
+        if (limits) throw new JournalReadLimitError("journal exceeds bounded read size")
         throw new JournalIntegrityError("journal exceeds size cap")
+      }
       const chunks: Buffer[] = []
       let offset = 0
       for (;;) {
-        const buffer = Buffer.alloc(Math.min(64 * 1024, MAX_JOURNAL_BYTES + 1 - offset))
+        const buffer = Buffer.alloc(Math.min(64 * 1024, maxBytes + 1 - offset))
         const { bytesRead } = await file.read(buffer, 0, buffer.length, offset)
         if (bytesRead === 0) break
         offset += bytesRead
-        if (offset > MAX_JOURNAL_BYTES) throw new JournalIntegrityError("journal exceeds size cap")
+        if (offset > maxBytes) {
+          if (limits) throw new JournalReadLimitError("journal exceeds bounded read size")
+          throw new JournalIntegrityError("journal exceeds size cap")
+        }
         chunks.push(buffer.subarray(0, bytesRead))
       }
       const after = await file.stat()
@@ -459,6 +493,9 @@ export class SignedJournal<T> implements JournalPort<T> {
     const records: JournalRecord<T>[] = []
     for (const line of raw.split("\n")) {
       if (!line) continue
+      if (limits && records.length >= limits.maxRecords) {
+        throw new JournalReadLimitError("journal exceeds bounded record count")
+      }
       let parsed: unknown
       try {
         parsed = JSON.parse(line)

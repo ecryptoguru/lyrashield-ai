@@ -167,3 +167,41 @@ describe("SignedJournal explicit replay confirmation", () => {
     await expect(journal.load()).rejects.toThrow("does not match")
   })
 })
+
+describe("SignedJournal bounded readback", () => {
+  it("rejects the byte ceiling before reading contents without disabling the writer", async () => {
+    const path = join(await root(), "bounded.jsonl")
+    const journal = new SignedJournal(path, secret, (value) => payloadSchema.parse(value))
+    const first = await journal.append({ kind: "prepare", value: 1 })
+    const handle = await open(path, "r")
+    const prototype = Object.getPrototypeOf(handle)
+    await handle.close()
+    const read = vi.spyOn(prototype, "read")
+    await expect(journal.loadBounded({ maxBytes: 1, maxRecords: 1 })).rejects.toMatchObject({
+      code: "JOURNAL_READ_LIMIT",
+    })
+    expect(read).not.toHaveBeenCalled()
+    const second = await journal.append({ kind: "stop", value: 2 })
+    expect(second.sequence).toBe(2)
+    expect(second.previousHash).toBe(first.hash)
+    expect(await journal.load()).toEqual([first, second])
+  })
+
+  it("rejects excess records on cold read but preserves complete history for STOP", async () => {
+    const path = join(await root(), "bounded.jsonl")
+    const first = new SignedJournal(path, secret, (value) => payloadSchema.parse(value))
+    const records = [
+      await first.append({ kind: "prepare", value: 1 }),
+      await first.append({ kind: "start", value: 2 }),
+    ]
+    await first.close()
+    const journal = new SignedJournal(path, secret, (value) => payloadSchema.parse(value))
+    await expect(journal.loadBounded({ maxBytes: 4096, maxRecords: 1 })).rejects.toMatchObject({
+      code: "JOURNAL_READ_LIMIT",
+    })
+    expect(await journal.load()).toEqual(records)
+    const stopped = await journal.append({ kind: "stop", value: 3 })
+    expect(stopped.sequence).toBe(3)
+    expect(stopped.previousHash).toBe(records[1]!.hash)
+  })
+})

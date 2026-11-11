@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { createServer } from "node:http"
-import { afterEach, describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import {
   SignedJournal,
   MAX_SUPERVISOR_JOURNAL_PAGE_BYTES,
@@ -18,6 +18,7 @@ import {
 import { z } from "zod"
 import {
   SupervisorAuthorityJournal,
+  SUPERVISOR_CURSOR_HISTORY_LIMITS,
   createSupervisorAuthorityJournal,
   type SupervisorAuthorityJournalOptions,
 } from "./authority-journal"
@@ -127,7 +128,10 @@ function same(left: unknown, right: unknown): boolean {
   return canonicalJson(left) === canonicalJson(right)
 }
 
-async function setup(authorize: SupervisorAuthorityJournalOptions["authorize"] = async () => true) {
+async function setup(
+  authorize: SupervisorAuthorityJournalOptions["authorize"] = async () => true,
+  authorizeStream: SupervisorAuthorityJournalOptions["authorizeStream"] = async () => true
+) {
   const root = await mkdtemp(join(tmpdir(), "supervisor-authority-test-"))
   roots.push(root)
   const originalPath = join(root, "original.jsonl")
@@ -151,6 +155,7 @@ async function setup(authorize: SupervisorAuthorityJournalOptions["authorize"] =
     supervisorInstanceId,
     signingSecret,
     authorize,
+    authorizeStream,
   }
   return {
     root,
@@ -166,6 +171,265 @@ async function setup(authorize: SupervisorAuthorityJournalOptions["authorize"] =
 }
 
 describe("supervisor independent journal adapter", () => {
+  it("requires persisted stream authority even for an empty genesis cursor", async () => {
+    const eventAuthority = vi.fn(async () => false)
+    const streamAuthority = vi.fn(async () => false)
+    const { journal, original, store, mirror } = await setup(eventAuthority, streamAuthority)
+    const load = vi.spyOn(original, "loadBounded")
+    await expect(journal.readCursor(cursor)).rejects.toMatchObject({ code: "AUTHORITY_CONFLICT" })
+    expect(streamAuthority).toHaveBeenCalledOnce()
+    expect(streamAuthority).toHaveBeenCalledWith({ epochId, supervisorInstanceId })
+    expect(eventAuthority).not.toHaveBeenCalled()
+    expect(load).not.toHaveBeenCalled()
+    expect(store.writes + mirror.writes).toBe(0)
+  })
+
+  it("checks stream authority after empty readback and holds revocation", async () => {
+    let calls = 0
+    const { journal } = await setup(
+      async () => true,
+      async () => ++calls < 3
+    )
+    await expect(journal.readCursor(cursor)).rejects.toMatchObject({ code: "AUTHORITY_CONFLICT" })
+    expect(calls).toBe(3)
+    await expect(journal.readCursor(cursor)).rejects.toMatchObject({ code: "AUTHORITY_CONFLICT" })
+    expect(calls).toBe(3)
+  })
+
+  it.each([1, 3])(
+    "keeps unavailable stream authority unresolved at read boundary %s",
+    async (unavailableAt) => {
+      let calls = 0
+      const { journal, store, mirror } = await setup(
+        async () => true,
+        async () => {
+          if (++calls === unavailableAt) throw new Error("persisted epoch read unavailable")
+          return true
+        }
+      )
+      await expect(journal.readCursor(cursor)).rejects.toMatchObject({ code: "AUTHORITY_UNKNOWN" })
+      expect(store.writes + mirror.writes).toBe(0)
+      expect((await journal.readCursor(cursor)).records).toEqual([])
+    }
+  )
+
+  it("uses constant local snapshot loads with measured bounded mirror I/O", async () => {
+    const eventAuthority = vi.fn(async () => true)
+    const streamAuthority = vi.fn(async () => true)
+    const fixture = await setup(eventAuthority, streamAuthority)
+    await fixture.journal.append(intent)
+    for (let index = 1; index < 10; index += 1)
+      await fixture.journal.append({
+        type: "attempt_status",
+        supervisorInstanceId,
+        observedAt: intent.observedAt,
+        attemptId: binding.attemptId,
+        status: "UNKNOWN",
+      })
+    const originalLoad = vi.spyOn(fixture.original, "load")
+    const boundedOriginal = vi.spyOn(fixture.original, "loadBounded")
+    const boundedLocal = vi.spyOn(fixture.local, "loadBounded")
+    const remote = vi.spyOn(fixture.store, "read")
+    const database = vi.spyOn(fixture.mirror, "readRecord")
+    eventAuthority.mockClear()
+    streamAuthority.mockClear()
+    const page = await fixture.journal.readCursor({ ...cursor, limit: 1 })
+    expect(page.records).toHaveLength(1)
+    expect(originalLoad).not.toHaveBeenCalled()
+    expect(boundedOriginal).toHaveBeenCalledTimes(3)
+    expect(boundedLocal).toHaveBeenCalledTimes(5)
+    expect(remote.mock.calls.filter(([key]) => key.includes("/records/")).length).toBe(20)
+    expect(database).toHaveBeenCalledTimes(20)
+    expect(eventAuthority).toHaveBeenCalledTimes(10)
+    expect(streamAuthority).toHaveBeenCalledTimes(3)
+    remote.mockClear()
+    database.mockClear()
+    boundedOriginal.mockClear()
+    boundedLocal.mockClear()
+    eventAuthority.mockClear()
+    const cold = new SupervisorAuthorityJournal(fixture.options)
+    await cold.readCursor({ ...cursor, limit: 1 })
+    expect(boundedOriginal).toHaveBeenCalledTimes(3)
+    expect(boundedLocal).toHaveBeenCalledTimes(6)
+    expect(remote.mock.calls.filter(([key]) => key.includes("/records/")).length).toBe(30)
+    expect(database).toHaveBeenCalledTimes(30)
+    expect(eventAuthority).toHaveBeenCalledTimes(10)
+  })
+
+  it("detects original history changes during persisted authority validation", async () => {
+    let mutate = false
+    let original!: SignedJournal<SupervisorJournalEvent>
+    const fixture = await setup(async () => {
+      if (mutate) {
+        mutate = false
+        await original.append({
+          type: "attempt_status",
+          supervisorInstanceId,
+          observedAt: intent.observedAt,
+          attemptId: binding.attemptId,
+          status: "UNKNOWN",
+        })
+      }
+      return true
+    })
+    original = fixture.original
+    await fixture.journal.append(intent)
+    mutate = true
+    await expect(fixture.journal.readCursor(cursor)).rejects.toMatchObject({
+      code: "AUTHORITY_CONFLICT",
+    })
+    expect(await original.load()).toHaveLength(2)
+    expect(fixture.mirror.writes).toBe(1)
+  })
+
+  it("rejects a cursor changed by a queued append without latching the writer", async () => {
+    const fixture = await setup()
+    let entered!: () => void
+    const writing = new Promise<void>((resolve) => {
+      entered = resolve
+    })
+    let release!: () => void
+    const held = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    fixture.store.onRecordWrite = async (bytes) => {
+      const value = JSON.parse(Buffer.from(bytes).toString("utf8"))
+      if (value.record.payload.payload.payload.type === "command_intent") {
+        entered()
+        await held
+      }
+    }
+    const first = fixture.journal.append(intent)
+    await writing
+    const second = fixture.journal.append({
+      type: "attempt_status",
+      supervisorInstanceId,
+      observedAt: intent.observedAt,
+      attemptId: binding.attemptId,
+      status: "UNKNOWN",
+    })
+    let captured!: () => void
+    const capture = new Promise<void>((resolve) => {
+      captured = resolve
+    })
+    const bounded = fixture.local.loadBounded.bind(fixture.local)
+    vi.spyOn(fixture.local, "loadBounded").mockImplementation(async (limits) => {
+      const records = await bounded(limits)
+      captured()
+      return records
+    })
+    const read = fixture.journal.readCursor(cursor)
+    await capture
+    release()
+    await Promise.all([first, second])
+    await expect(read).rejects.toMatchObject({ code: "CURSOR_CONFLICT" })
+    expect((await fixture.journal.readCursor(cursor)).records).toHaveLength(2)
+  })
+
+  it("holds service retries and restart until exact trusted journal recovery occurs", async () => {
+    const fixture = await setup()
+    let clock = new Date("2026-11-11T10:00:00.000Z")
+    const first = serviceFixture(fixture.journal, () => clock)
+    fixture.store.loseAcknowledgement = true
+    await expect(first.service.execute(first.prepare)).rejects.toMatchObject({
+      code: "AUTHORITY_UNKNOWN",
+    })
+    const pending = (await fixture.original.load())[0]!
+    const bytes = await readFile(fixture.originalPath, "utf8")
+    clock = new Date(clock.getTime() + 1)
+    await expect(first.service.execute(first.prepare)).rejects.toMatchObject({
+      code: "IDENTITY_CONFLICT",
+    })
+    expect(first.effects.count).toBe(0)
+    await fixture.original.close()
+    await fixture.local.close()
+    const restarted = createSupervisorAuthorityJournal({
+      originalPath: fixture.originalPath,
+      independentPath: fixture.independentPath,
+      originalSigningSecret: signingSecret,
+      signingSecret,
+      epochId,
+      supervisorInstanceId,
+      store: fixture.store,
+      mirror: fixture.mirror,
+      authorize: async () => true,
+      authorizeStream: async () => true,
+    })
+    try {
+      const second = serviceFixture(restarted.journal, () => clock)
+      await expect(second.service.initialize()).rejects.toMatchObject({ code: "REPLAY_REQUIRED" })
+      await expect(second.service.execute(second.prepare)).rejects.toMatchObject({
+        code: "REPLAY_REQUIRED",
+      })
+      expect(second.effects.count).toBe(0)
+      expect(await readFile(fixture.originalPath, "utf8")).toBe(bytes)
+      // Explicit trusted durability repair repeats the stored payload/observedAt
+      // only. It never replays PREPARE, executor or provider effects.
+      expect(await restarted.journal.append(pending.payload)).toEqual(pending)
+      const reconciled = serviceFixture(restarted.journal, () => clock)
+      expect((await reconciled.service.execute(reconciled.prepare)).status).toBe("UNKNOWN")
+      expect(reconciled.effects.count).toBe(0)
+      expect(await readFile(fixture.originalPath, "utf8")).toBe(bytes)
+    } finally {
+      await restarted.close()
+    }
+  })
+
+  it("rejects an oversized cursor before serialization while STOP preserves all history", async () => {
+    const { journal, store, original } = await setup()
+    const { service, effects, prepare } = serviceFixture(journal)
+    await service.execute(prepare)
+    for (let index = 0; index < SUPERVISOR_CURSOR_HISTORY_LIMITS.maxRecords; index += 1) {
+      await journal.append({
+        type: "attempt_status",
+        supervisorInstanceId,
+        observedAt: intent.observedAt,
+        attemptId: binding.attemptId,
+        status: "UNKNOWN",
+      })
+    }
+    const before = await original.load()
+    expect(before.length).toBeGreaterThan(64)
+    let entered!: () => void
+    const stopping = new Promise<void>((resolve) => {
+      entered = resolve
+    })
+    let release!: () => void
+    const held = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    store.onRecordWrite = async (bytes) => {
+      const value = JSON.parse(Buffer.from(bytes).toString("utf8"))
+      if (
+        value.record.payload.payload.payload.type === "command_intent" &&
+        value.record.payload.payload.payload.command.type === "STOP"
+      ) {
+        entered()
+        await held
+      }
+    }
+    const attempt = await service.getAttempt(binding.attemptId)
+    const stop = service.execute({
+      type: "STOP",
+      commandId: "stop-over-limit",
+      attemptId: binding.attemptId,
+      expectedReceiptHash: attempt!.receipt.hash,
+    })
+    await stopping
+    const reads = vi.spyOn(store, "read")
+    try {
+      await expect(journal.readCursor(cursor)).rejects.toMatchObject({ code: "READ_LIMIT" })
+      expect(reads).not.toHaveBeenCalled()
+    } finally {
+      release()
+    }
+    expect((await stop).status).toBe("NEVER_DISPATCHED")
+    expect(effects.count).toBe(0)
+    const after = await journal.load()
+    expect(after.slice(0, before.length)).toEqual(before)
+    expect(after.length).toBeGreaterThan(before.length)
+  }, 30_000)
+
   it("preserves original canonical envelopes and cursor predecessors across restart", async () => {
     const { journal, original, originalPath, local, store, mirror, options } = await setup()
     const first = await journal.append(intent)
@@ -407,6 +671,7 @@ describe("supervisor independent journal adapter", () => {
         store: new Store(),
         mirror: new Mirror(),
         authorize: async () => false,
+        authorizeStream: async () => true,
       })
     ).toThrow("separate files")
   })
@@ -426,6 +691,7 @@ describe("supervisor independent journal adapter", () => {
       store: new Store(),
       mirror: new Mirror(),
       authorize: async () => true,
+      authorizeStream: async () => true,
     }
     const first = createSupervisorAuthorityJournal(options)
     const receipt = await first.journal.append(intent)
@@ -595,7 +861,10 @@ describe("supervisor independent journal adapter", () => {
   })
 })
 
-function serviceFixture(journal: SupervisorAuthorityJournal) {
+function serviceFixture(
+  journal: SupervisorAuthorityJournal,
+  now: () => Date = () => new Date("2026-11-11T10:00:00.000Z")
+) {
   const effects = { count: 0 }
   const prepare = {
     type: "PREPARE" as const,
@@ -624,7 +893,7 @@ function serviceFixture(journal: SupervisorAuthorityJournal) {
     signingSecret,
     supervisorInstanceId,
     admission: "open",
-    now: () => new Date("2026-11-11T10:00:00.000Z"),
+    now,
     providerGatewayUrl: "http://127.0.0.1:1",
     executor: {
       create: async () => {

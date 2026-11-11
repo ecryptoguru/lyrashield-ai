@@ -2,6 +2,7 @@ import { z } from "zod"
 import {
   IndependentAuthorityError,
   IndependentAuthorityJournal,
+  JournalReadLimitError,
   MAX_SUPERVISOR_JOURNAL_PAGE_BYTES,
   MAX_SUPERVISOR_JOURNAL_RECORD_BYTES,
   SignedJournal,
@@ -23,6 +24,15 @@ type OriginalEventPosition = Pick<OriginalRecord, "payload" | "sequence">
 type WrappedEvent = AuthorityEvent<OriginalRecord>
 type WrappedRecord = JournalRecord<WrappedEvent>
 
+// Closed prototype safeguard. Continuing production recovery needs authenticated
+// checkpoints/compaction or truly bounded paging; STOP/append have no such ceiling.
+export const SUPERVISOR_CURSOR_HISTORY_LIMITS = {
+  maxRecords: 64,
+  originalMaxBytes: 512 * 1024,
+  wrappedMaxBytes: 1024 * 1024,
+} as const
+type LocalSnapshot = { originals: OriginalRecord[]; wrapped: WrappedRecord[] }
+
 const hashSchema = z.string().regex(/^[a-f0-9]{64}$/)
 const originalRecordSchema = z
   .object({
@@ -43,6 +53,9 @@ type DurabilityOptions = Omit<
   // workspace, scan and authority revision. Journal evidence is not permission
   // to perform an executor or provider action.
   authorize: (event: WrappedEvent, binding: AttemptBinding) => Promise<boolean>
+  // Mandatory even for genesis: authenticate the persisted active stream/epoch
+  // independently of whether there are any events to authorize.
+  authorizeStream: (stream: { epochId: string; supervisorInstanceId: string }) => Promise<boolean>
 }
 
 export interface SupervisorAuthorityJournalOptions extends DurabilityOptions {
@@ -103,13 +116,29 @@ export class SupervisorAuthorityJournal
   private readonly independent: IndependentAuthorityJournal<OriginalRecord>
   private serial: Promise<void> = Promise.resolve()
   private failed: IndependentAuthorityError | null = null
+  private originals: OriginalRecord[] | null = null
+  private boundedRead = false
 
   constructor(private readonly options: SupervisorAuthorityJournalOptions) {
     this.independent = new IndependentAuthorityJournal({
       ...options,
+      local: {
+        load: () => this.loadLocal(),
+        append: (event) => options.local.append(event),
+        ...(options.local.confirmRecord
+          ? {
+              confirmRecord: (record: WrappedRecord) => options.local.confirmRecord!(record),
+            }
+          : {}),
+      },
       payloadSchema: originalRecordSchema,
       authorize: async (event) => {
-        const originals = await options.original.load()
+        const originals = this.originals
+        if (!originals)
+          throw new IndependentAuthorityError(
+            "AUTHORITY_UNKNOWN",
+            "no authenticated local snapshot"
+          )
         const original = originals[event.payload.sequence - 1]
         if (!original || !same(original, event.payload)) {
           conflict("independent event differs from its original signed envelope")
@@ -121,9 +150,11 @@ export class SupervisorAuthorityJournal
     })
   }
 
-  private serialized<T>(operation: () => Promise<T>): Promise<T> {
+  private serialized<T>(operation: () => Promise<T>, snapshot?: LocalSnapshot): Promise<T> {
     const run = this.serial.then(async () => {
       if (this.failed) throw this.failed
+      this.originals = snapshot?.originals ?? null
+      this.boundedRead = !!snapshot
       try {
         return await operation()
       } catch (error) {
@@ -132,6 +163,9 @@ export class SupervisorAuthorityJournal
           throw error
         }
         throw new IndependentAuthorityError("AUTHORITY_UNKNOWN", "supervisor journal is unresolved")
+      } finally {
+        this.originals = null
+        this.boundedRead = false
       }
     })
     this.serial = run.then(
@@ -139,6 +173,94 @@ export class SupervisorAuthorityJournal
       () => undefined
     )
     return run
+  }
+
+  private async assertStreamAuthorized(): Promise<void> {
+    try {
+      if (
+        !(await this.options.authorizeStream({
+          epochId: this.options.epochId,
+          supervisorInstanceId: this.options.supervisorInstanceId,
+        }))
+      ) {
+        this.failed = new IndependentAuthorityError(
+          "AUTHORITY_CONFLICT",
+          "persisted stream or epoch is revoked"
+        )
+        throw this.failed
+      }
+    } catch (error) {
+      if (error instanceof IndependentAuthorityError) throw error
+      throw new IndependentAuthorityError(
+        "AUTHORITY_UNKNOWN",
+        "persisted stream authority is unavailable"
+      )
+    }
+  }
+
+  private loadOriginal(): Promise<OriginalRecord[]> {
+    return this.boundedRead ? this.boundedOriginal() : this.options.original.load()
+  }
+
+  private loadLocal(): Promise<WrappedRecord[]> {
+    return this.boundedRead ? this.boundedLocal() : this.options.local.load()
+  }
+
+  private async boundedOriginal(): Promise<OriginalRecord[]> {
+    if (!this.options.original.loadBounded)
+      throw new IndependentAuthorityError(
+        "AUTHORITY_UNKNOWN",
+        "bounded original read is unavailable"
+      )
+    const records = await this.options.original.loadBounded({
+      maxBytes: SUPERVISOR_CURSOR_HISTORY_LIMITS.originalMaxBytes,
+      maxRecords: SUPERVISOR_CURSOR_HISTORY_LIMITS.maxRecords,
+    })
+    this.assertCursorCeiling(records, SUPERVISOR_CURSOR_HISTORY_LIMITS.originalMaxBytes)
+    return records
+  }
+
+  private async boundedLocal(): Promise<WrappedRecord[]> {
+    if (!this.options.local.loadBounded)
+      throw new IndependentAuthorityError(
+        "AUTHORITY_UNKNOWN",
+        "bounded wrapper read is unavailable"
+      )
+    const records = await this.options.local.loadBounded({
+      maxBytes: SUPERVISOR_CURSOR_HISTORY_LIMITS.wrappedMaxBytes,
+      maxRecords: SUPERVISOR_CURSOR_HISTORY_LIMITS.maxRecords,
+    })
+    this.assertCursorCeiling(records, SUPERVISOR_CURSOR_HISTORY_LIMITS.wrappedMaxBytes)
+    return records
+  }
+
+  private assertCursorCeiling(records: unknown[], maxBytes: number): void {
+    if (
+      records.length > SUPERVISOR_CURSOR_HISTORY_LIMITS.maxRecords ||
+      Buffer.byteLength(canonicalJson(records)) > maxBytes
+    ) {
+      throw new JournalReadLimitError("cursor snapshot exceeds read ceiling")
+    }
+  }
+
+  private async captureCursorSnapshot(): Promise<LocalSnapshot> {
+    // This capped capture happens before the cursor joins STOP/append serialization.
+    // A limit rejection must neither latch the writer nor discard existing history.
+    try {
+      return { originals: await this.boundedOriginal(), wrapped: await this.boundedLocal() }
+    } catch (error) {
+      if (error instanceof JournalReadLimitError) {
+        throw new IndependentAuthorityError(
+          "READ_LIMIT",
+          "cursor history exceeds prototype read ceiling"
+        )
+      }
+      if (error instanceof IndependentAuthorityError) throw error
+      throw new IndependentAuthorityError(
+        "AUTHORITY_UNKNOWN",
+        "bounded signed snapshot is unavailable"
+      )
+    }
   }
 
   private eventFor(record: OriginalRecord, originals: OriginalRecord[]): WrappedEvent {
@@ -161,8 +283,9 @@ export class SupervisorAuthorityJournal
   }
 
   private async localHistory(): Promise<{ originals: OriginalRecord[]; wrapped: WrappedRecord[] }> {
-    const originals = await this.options.original.load()
-    const wrapped = await this.options.local.load()
+    const originals = this.originals ?? (await this.loadOriginal())
+    this.originals = originals
+    const wrapped = await this.loadLocal()
     if (wrapped.length > originals.length || originals.length > wrapped.length + 1) {
       conflict("original and independent local streams disagree")
     }
@@ -176,14 +299,16 @@ export class SupervisorAuthorityJournal
   }
 
   private async confirmedHistory(): Promise<WrappedRecord[]> {
+    await this.assertStreamAuthorized()
     const { originals, wrapped } = await this.localHistory()
     const confirmed = await this.independent.loadConfirmed()
     if (originals.length !== confirmed.length) {
       throw new IndependentAuthorityError("REPLAY_REQUIRED", "replay the original pending event")
     }
-    if (!same(wrapped, confirmed) || !same(originals, await this.options.original.load())) {
+    if (!same(wrapped, confirmed) || !same(originals, await this.loadOriginal())) {
       conflict("signed supervisor history changed during readback")
     }
+    await this.assertStreamAuthorized()
     return confirmed
   }
 
@@ -195,6 +320,7 @@ export class SupervisorAuthorityJournal
 
   async append(input: SupervisorJournalEvent): Promise<OriginalRecord> {
     return this.serialized(async () => {
+      await this.assertStreamAuthorized()
       const payload = supervisorJournalEventSchema.parse(input)
       if (Buffer.byteLength(canonicalJson(payload)) > MAX_SUPERVISOR_JOURNAL_RECORD_BYTES - 1024) {
         throw new IndependentAuthorityError(
@@ -244,6 +370,7 @@ export class SupervisorAuthorityJournal
         conflict("original replay confirmation changed the signed envelope")
       }
       const history = pending ? originals : [...originals, original]
+      this.originals = history
       const event = this.eventFor(original, history)
       await this.independent.appendIntent(event)
       await this.confirmedHistory()
@@ -252,17 +379,29 @@ export class SupervisorAuthorityJournal
   }
 
   async readCursor(input: unknown): Promise<SupervisorJournalPage<SupervisorJournalEvent>> {
+    const parsed = supervisorJournalCursorSchema.safeParse(input)
+    if (!parsed.success) {
+      throw new IndependentAuthorityError("INVALID_CURSOR", "invalid supervisor journal cursor")
+    }
+    const cursor = parsed.data
+    if (
+      cursor.epochId !== this.options.epochId ||
+      cursor.supervisorInstanceId !== this.options.supervisorInstanceId
+    ) {
+      throw new IndependentAuthorityError("CURSOR_CONFLICT", "cursor belongs to another stream")
+    }
+    if (this.failed) throw this.failed
+    await this.assertStreamAuthorized()
+    const snapshot = await this.captureCursorSnapshot()
     return this.serialized(async () => {
-      const parsed = supervisorJournalCursorSchema.safeParse(input)
-      if (!parsed.success) {
-        throw new IndependentAuthorityError("INVALID_CURSOR", "invalid supervisor journal cursor")
-      }
-      const cursor = parsed.data
       if (
-        cursor.epochId !== this.options.epochId ||
-        cursor.supervisorInstanceId !== this.options.supervisorInstanceId
+        !same(snapshot.originals, await this.boundedOriginal()) ||
+        !same(snapshot.wrapped, await this.boundedLocal())
       ) {
-        throw new IndependentAuthorityError("CURSOR_CONFLICT", "cursor belongs to another stream")
+        throw new IndependentAuthorityError(
+          "CURSOR_CONFLICT",
+          "cursor snapshot changed while queued; retry readback"
+        )
       }
       const history = await this.confirmedHistory()
       const previous = cursor.afterSequence
@@ -304,7 +443,7 @@ export class SupervisorAuthorityJournal
         Object.assign(page, candidate)
       }
       return structuredClone(page)
-    })
+    }, snapshot)
   }
 }
 

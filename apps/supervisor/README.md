@@ -57,6 +57,9 @@ is derived from the original record hash, so a lost acknowledgement cannot creat
 The factory requires an exact epoch and supervisor identity, protected object-store and PostgreSQL
 mirror ports, and an injected `authorize(event, binding)` implementation. That implementation must
 atomically compare the persisted epoch, operation, scan, workspace, attempt and authority revision.
+An additional mandatory `authorizeStream({ epochId, supervisorInstanceId })` port validates the
+persisted active stream before and after readback, including empty genesis reads. Revocation
+latches the adapter closed; unavailable authorization stays unresolved.
 Every append and read revalidates that authority around local/R2/database readback. A read never
 repairs a pending append. Replay requires the same original payload; a missing acknowledgement or
 negative read remains unresolved, and conflicting histories latch the adapter closed.
@@ -72,12 +75,35 @@ new original events are capped below 128 KiB so a cursor can make progress. A wr
 supervisor or predecessor is rejected. The endpoint requires the existing control credential and
 returns `no-store` responses.
 
+Cursor reconciliation uses one authenticated original snapshot rather than reloading the entire
+original file for each event. A captured snapshot that changes while queued is rejected for retry;
+source and independent heads are rechecked around authority validation. The closed prototype
+limits cursor history to 64 records, 512 KiB of original bytes and 1 MiB of wrapper bytes, with
+bounded file reads before joining STOP/append serialization. Over-limit readback returns
+`READ_LIMIT`, proves no recovery, performs no repair, and does not latch the writer. Append,
+startup history and STOP keep the complete history available above the cursor ceiling.
+
+For ten records and a one-record page, tests measure three bounded original loads, five bounded
+wrapper loads, twenty R2-record reads, twenty database-record reads, ten event-authority calls and
+three stream-authority calls. A cold adapter adds one wrapper load and ten record reads per mirror.
+The fixed ceiling is a **production blocker**, not a scalable recovery design: authenticated
+checkpoints/compaction or genuinely bounded paging are still required. No history is discarded.
+
 The production entrypoint still uses its closed local-only configuration: this endpoint returns
 503 there. Replacing that factory requires the real protected storage and persisted authority
 implementation, plus an atomic per-action executor/provider fence. Journal confirmation alone
 does not authorize creation, start, teardown or provider effects. The adapter's tests of STOP
 against delayed intent confirmation do not qualify native Docker delayed-daemon behavior,
 cgroup ownership, process isolation, managed-provider durability or production admission.
+
+Service-owned same-operation recovery is an **open P2 integration blocker**. With real signed
+files, a lost PREPARE journal acknowledgement followed by an identical command retry one
+millisecond later fails `IDENTITY_CONFLICT` because the service regenerates `observedAt`.
+Restart initialization fails `REPLAY_REQUIRED` while durability is pending. Explicit trusted
+adapter replay of the stored original payload confirms only journal durability; a fresh service
+still returns `UNKNOWN`, with no executor/provider effect replay. The service has no authenticated
+recovery route that completes this handoff. Keep admission closed until that recovery integration
+retains the exact original identity and reconciles effects independently.
 
 ## Deployment boundary
 
