@@ -88,6 +88,28 @@ describe("supervisor HTTP boundary", () => {
       expect(await health.json()).toEqual({ status: "ok", admission: "closed" })
       const unauthorized = await fetch(`${base}/v1/commands`, { method: "POST", body: "{}" })
       expect(unauthorized.status).toBe(401)
+      const query = new URLSearchParams({
+        epochId: "epoch-http",
+        supervisorInstanceId: "supervisor-http-1",
+        afterSequence: "0",
+        afterHash: "0".repeat(64),
+        limit: "10",
+      })
+      expect((await fetch(`${base}/v1/journal?${query}`)).status).toBe(401)
+      const headers = { authorization: `Bearer ${control}` }
+      const localOnly = await fetch(`${base}/v1/journal?${query}`, { headers })
+      expect(localOnly.status).toBe(503)
+      expect(await localOnly.json()).toMatchObject({ code: "JOURNAL_AUTHORITY_UNAVAILABLE" })
+      for (const malformed of [
+        `${query}&limit=1`,
+        `${query}&extra=1`,
+        query.toString().replace("afterSequence=0", "afterSequence="),
+        query.toString().replace("limit=10", "limit=0"),
+      ]) {
+        const invalid = await fetch(`${base}/v1/journal?${malformed}`, { headers })
+        expect(invalid.status).toBe(400)
+        expect(await invalid.json()).toMatchObject({ code: "INVALID_CURSOR" })
+      }
       const closed = await fetch(`${base}/v1/commands`, {
         method: "POST",
         headers: { authorization: `Bearer ${control}`, "content-type": "application/json" },
