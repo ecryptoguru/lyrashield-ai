@@ -63,6 +63,7 @@ describe("fix approval browser execution", () => {
     expect((await call()).status).toBe(200)
     expect(mocks.permission).toHaveBeenCalledWith("ws-1", PERMISSIONS.fix.approve)
     expect(mocks.resolve).toHaveBeenCalledWith("ws-1", "stored-proposal", "user-1")
+    expect(mocks.approve).toHaveBeenCalledWith("approval-1", "ws-1", "user-1", "hash")
     expect(mocks.execute).toHaveBeenCalledWith({
       diff: "stored patch",
       workspaceId: "ws-1",

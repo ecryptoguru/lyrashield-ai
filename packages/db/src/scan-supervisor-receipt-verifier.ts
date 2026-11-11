@@ -51,7 +51,7 @@ function normalize(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(normalize)
   if (value !== null && typeof value === "object") {
     const record = value as Record<string, unknown>
-    const normalized: Record<string, unknown> = {}
+    const normalized: Record<string, unknown> = Object.create(null)
     for (const key of Object.keys(record).sort()) normalized[key] = normalize(record[key])
     return normalized
   }

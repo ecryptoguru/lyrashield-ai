@@ -9,7 +9,7 @@ import { createHash, timingSafeEqual } from "node:crypto"
  */
 export function sortKeysReplacer(_key: string, value: unknown): unknown {
   if (value && typeof value === "object" && !Array.isArray(value)) {
-    const sorted: Record<string, unknown> = {}
+    const sorted: Record<string, unknown> = Object.create(null)
     for (const k of Object.keys(value as Record<string, unknown>).sort()) {
       sorted[k] = (value as Record<string, unknown>)[k]
     }

@@ -73,6 +73,19 @@ describe("verifySupervisorReceiptHmac", () => {
     expect(result).toMatchObject({ ok: false, code: "HASH_MISMATCH" })
   })
 
+  it("rejects a prototype-named field added to a signed payload", () => {
+    const record = signRecord({ supervisorInstanceId: INSTANCE, kind: "attempt_prepared" })
+    const payload = JSON.parse(JSON.stringify(record.payload)) as Record<string, unknown>
+    Object.defineProperty(payload, "__proto__", { value: { forged: true }, enumerable: true })
+    expect(
+      verifySupervisorReceiptHmac({
+        record: { ...record, payload },
+        expectedInstanceId: INSTANCE,
+        secret: SECRET,
+      })
+    ).toMatchObject({ ok: false, code: "HASH_MISMATCH" })
+  })
+
   it("rejects a receipt signed with the wrong key", () => {
     const record = signRecord(
       { supervisorInstanceId: INSTANCE, kind: "attempt_prepared" },

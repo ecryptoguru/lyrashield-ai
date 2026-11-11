@@ -49,6 +49,10 @@ describe("classifyIntent", () => {
 })
 
 describe("hashOperationPayload", () => {
+  it("binds prototype-named properties in a proposal", () => {
+    const altered: unknown = JSON.parse('{"nested":{"__proto__":{"value":1}}}')
+    expect(hashOperationPayload(altered)).not.toBe(hashOperationPayload({ nested: {} }))
+  })
   it("is stable for identical payloads and differs on change", () => {
     const a = hashOperationPayload({ subject: "s", summary: "x" })
     expect(hashOperationPayload({ subject: "s", summary: "x" })).toBe(a)
