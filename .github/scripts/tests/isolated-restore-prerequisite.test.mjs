@@ -9,6 +9,8 @@ import {
   rmSync,
   realpathSync,
   truncateSync,
+  mkdirSync,
+  existsSync,
 } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
@@ -18,6 +20,7 @@ import {
   assertPrerequisiteTarget,
   runIsolatedRestorePrerequisite,
   MAX_ARCHIVE_BYTES,
+  readPrivatePrerequisiteInput,
 } from "../isolated-restore-prerequisite.mjs"
 import { sha256, RESTORE_AUTHORITY_POSTGRES_IMAGE } from "../restore-authority-contract.mjs"
 
@@ -309,3 +312,91 @@ test("CLI failure emits only its fixed public diagnostic", (t) => {
     "restore/prerequisite/failed; authority and production remain unqualified\n"
   )
 })
+
+function privateConfigFixture(t) {
+  const f = fixture(t),
+    directory = join(f.root, "config"),
+    bin = join(f.root, "bin")
+  mkdirSync(directory, { mode: 0o700 })
+  mkdirSync(bin, { mode: 0o700 })
+  const path = join(directory, "input.json"),
+    marker = join(f.root, "docker-called")
+  writeFileSync(path, JSON.stringify(f.config), { mode: 0o600 })
+  // A fake Docker executable proves rejection happens at the CLI input boundary.
+  // The authenticated archive remains in its separate valid private parent.
+  writeFileSync(
+    join(bin, "docker"),
+    `#!${process.execPath}\nrequire('node:fs').writeFileSync(${JSON.stringify(marker)},'called');process.exit(1);\n`,
+    { mode: 0o700 }
+  )
+  const invoke = (input) =>
+    spawnSync(
+      process.execPath,
+      [
+        new URL("../isolated-restore-prerequisite.mjs", import.meta.url).pathname,
+        "--config",
+        input,
+      ],
+      {
+        cwd: f.root,
+        env: { PATH: bin, HOME: process.env.HOME, LYRASHIELD_RESTORE_PREREQUISITE_DISPOSABLE: "1" },
+        encoding: "utf8",
+        timeout: 5000,
+      }
+    )
+  return { ...f, directory, path, marker, invoke }
+}
+test("absolute private config reaches only the fake Docker control", (t) => {
+  const f = privateConfigFixture(t)
+  assert.deepEqual(JSON.parse(readPrivatePrerequisiteInput(f.path, 4096)), f.config)
+  assert.equal(f.invoke(f.path).status, 1)
+  assert.equal(existsSync(f.marker), true)
+})
+for (const scenario of [
+  "relative",
+  "noncanonical",
+  "parent symlink",
+  "ancestor symlink",
+  "file symlink",
+  "parent group readable",
+  "parent world readable",
+  "parent group writable",
+  "config group readable",
+]) {
+  test(`CLI rejects config path before Docker: ${scenario}`, (t) => {
+    const f = privateConfigFixture(t)
+    let input = f.path
+    if (scenario === "relative") input = "config/input.json"
+    if (scenario === "noncanonical") input = `${f.directory}/../config/input.json`
+    if (scenario === "parent symlink") {
+      const link = join(f.root, "config-link")
+      symlinkSync(f.directory, link)
+      input = join(link, "input.json")
+    }
+    if (scenario === "ancestor symlink") {
+      const link = `${f.root}-link`
+      symlinkSync(f.root, link)
+      t.after(() => rmSync(link))
+      input = join(link, "config", "input.json")
+    }
+    if (scenario === "file symlink") {
+      input = join(f.directory, "linked.json")
+      symlinkSync(f.path, input)
+    }
+    if (scenario === "parent group readable") chmodSync(f.directory, 0o750)
+    if (scenario === "parent world readable") chmodSync(f.directory, 0o755)
+    if (scenario === "parent group writable") chmodSync(f.directory, 0o770)
+    if (scenario === "config group readable") chmodSync(f.path, 0o640)
+    assert.throws(() => readPrivatePrerequisiteInput(input, 4096), {
+      code: "PRIVATE_INPUT_REJECTED",
+    })
+    const result = f.invoke(input)
+    assert.equal(result.status, 1)
+    assert.equal(result.stdout, "")
+    assert.equal(
+      result.stderr,
+      "restore/prerequisite/failed; authority and production remain unqualified\n"
+    )
+    assert.equal(existsSync(f.marker), false)
+  })
+}

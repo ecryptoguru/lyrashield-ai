@@ -107,19 +107,10 @@ export function assertPrerequisiteTarget(value, id, token) {
   )
 }
 
-function readArchive(config) {
-  requireCheck(
-    config?.schema === "lyrashield-isolated-restore-prerequisite/1" &&
-      Object.keys(config).sort().join(",") === "archivePath,expectedSha256,schema,sourceRevision" &&
-      typeof config.archivePath === "string" &&
-      isAbsolute(config.archivePath) &&
-      /^[a-f0-9]{64}$/.test(config.expectedSha256) &&
-      /^[a-f0-9]{40}$/.test(config.sourceRevision),
-    "PRIVATE_INPUT_REJECTED"
-  )
-  const parent = dirname(config.archivePath)
-  // The caller owns the input directory. Copy verified bytes through stdin, never reopen
-  // the archive for docker cp: a path replacement must not change the inspected bytes.
+/** Both config and archive inputs require an absolute path in a canonical owner-only parent. */
+export function readPrivatePrerequisiteInput(path, maximumBytes) {
+  requireCheck(typeof path === "string" && isAbsolute(path), "PRIVATE_INPUT_REJECTED")
+  const parent = dirname(path)
   try {
     // eslint-disable-next-line security/detect-non-literal-fs-filename
     const stat = lstatSync(parent)
@@ -135,7 +126,20 @@ function readArchive(config) {
   } catch {
     throw new RestoreAuthorityError("PRIVATE_INPUT_REJECTED")
   }
-  const bytes = readPrivateRestoreFile(config.archivePath, MAX_ARCHIVE_BYTES)
+  return readPrivateRestoreFile(path, maximumBytes)
+}
+
+function readArchive(config) {
+  requireCheck(
+    config?.schema === "lyrashield-isolated-restore-prerequisite/1" &&
+      Object.keys(config).sort().join(",") === "archivePath,expectedSha256,schema,sourceRevision" &&
+      /^[a-f0-9]{64}$/.test(config.expectedSha256) &&
+      /^[a-f0-9]{40}$/.test(config.sourceRevision),
+    "PRIVATE_INPUT_REJECTED"
+  )
+  // Copy verified bytes through stdin, never reopen the archive for docker cp:
+  // a path replacement must not change the inspected bytes.
+  const bytes = readPrivatePrerequisiteInput(config.archivePath, MAX_ARCHIVE_BYTES)
   requireCheck(
     bytes.length > 5 &&
       bytes.subarray(0, 5).toString("ascii") === "PGDMP" &&
@@ -421,7 +425,7 @@ async function main() {
     process.argv.length === 4 && process.argv[2] === "--config",
     "PRIVATE_INPUT_REJECTED"
   )
-  const config = JSON.parse(readPrivateRestoreFile(process.argv[3], 4096).toString("utf8"))
+  const config = JSON.parse(readPrivatePrerequisiteInput(process.argv[3], 4096).toString("utf8"))
   const result = await runIsolatedRestorePrerequisite(config)
   process.stdout.write(`${JSON.stringify(result)}\n`)
 }
