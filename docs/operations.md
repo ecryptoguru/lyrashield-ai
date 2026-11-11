@@ -576,14 +576,23 @@ unwired from the production backup workflow. Its owned fixture pins PostgreSQL
 helper definitions, role fences and closed epoch, it executes the no-policy
 digest helper under every configured denied role in a bounded read-only
 transaction. The probe checks function resolution and a fixed synthetic digest;
-it exposes no restored policy rows. Missing extension, schema usage, table read,
+it permits only the two reviewed extension-owned `digest` signatures across
+`pg_catalog`/`public`, rejecting extra overloads, defaulted or variadic candidates
+before helper execution. It exposes no restored policy rows. Missing extension, schema usage, table read,
 RLS helper or digest execution grants fail closed. Verification installs nothing
 and never repairs grants or opens authority.
 
 Run the synthetic compatibility fixture with
 `RESTORE_AUTHORITY_RUNTIME_TEST=1 node --test .github/scripts/tests/restore-authority-postgres.runtime.test.mjs`.
-The fixture explicitly installs the omitted extension and restores only its
-synthetic prerequisite grants. `--no-owner --no-acl` archives still need a
+The fixture explicitly installs the omitted extension before schema restoration
+and restores only its synthetic prerequisite grants. The current
+`20261111120000_scan_queue_publication_receipts` migration adds checksum CHECK
+constraints that resolve `public.digest(bytea,text)` during `pg_restore`; without
+that extension prerequisite, restoring the `public`/`app` archive fails before
+the verifier runs. The production backup/restore workflow remains unchanged and
+unqualified for this schema until an independently reviewed, appropriately
+privileged pre-restore extension step is implemented and tested.
+`--no-owner --no-acl` archives still need a
 separately reviewed ownership and privilege restoration procedure, and the
 `public`/`app` archive still excludes the independent `lyrashield_authority`
 schema and retained journal. These checks do not qualify Supabase PostgreSQL

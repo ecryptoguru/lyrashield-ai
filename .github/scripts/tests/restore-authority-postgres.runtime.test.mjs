@@ -183,27 +183,53 @@ test(
       "--no-acl",
     ]).stdout
     docker(["exec", "-i", containerId, "sh", "-c", "cat > /tmp/public-app.dump"], dump)
+    const archiveList = text(["exec", containerId, "pg_restore", "--list", "/tmp/public-app.dump"])
+    assert.doesNotMatch(archiveList, /EXTENSION.*pgcrypto/)
+    const publicSchemaEntry = /^\d+; \d+ \d+ SCHEMA - public \S+$/
+    assert.equal(archiveList.split("\n").filter((line) => publicSchemaEntry.test(line)).length, 1)
+    // Preserve the fresh default public namespace that owns the prerequisite extension. Only
+    // this exact schema-creation entry is skipped; tables, constraints, functions and rows remain.
+    const restoreList = archiveList
+      .split("\n")
+      .map((line) => (publicSchemaEntry.test(line) ? `;${line}` : line))
+      .join("\n")
+    docker(["exec", "-i", containerId, "sh", "-c", "cat > /tmp/public-app.list"], restoreList)
     const restoreDispatch = (restrictedAcl = true, installExtension = true) => {
       sql("DROP DATABASE IF EXISTS lyrashield_restore; CREATE DATABASE lyrashield_restore;")
-      docker([
-        "exec",
-        containerId,
-        "pg_restore",
-        "-U",
-        "restore",
-        "-d",
-        "lyrashield_restore",
-        "--clean",
-        "--if-exists",
-        "--no-owner",
-        "--no-acl",
-        "--exit-on-error",
-        "/tmp/public-app.dump",
-      ])
-      // Explicit synthetic prerequisites only; the read-only verifier never installs extensions
-      // or grants privileges on the inspected target. The public/app archive omits pgcrypto.
+      // Prerequisite for digest-bound CHECK constraints: the archive omits pgcrypto and must
+      // not be treated as self-contained. This setup touches only the owned synthetic target.
       if (installExtension)
         sql("CREATE EXTENSION pgcrypto WITH SCHEMA public;", "lyrashield_restore")
+      const restored = docker(
+        [
+          "exec",
+          containerId,
+          "pg_restore",
+          "-U",
+          "restore",
+          "-d",
+          "lyrashield_restore",
+          "--no-owner",
+          "--no-acl",
+          "--use-list=/tmp/public-app.list",
+          "--exit-on-error",
+          "/tmp/public-app.dump",
+        ],
+        undefined,
+        installExtension
+      )
+      if (!installExtension) {
+        assert.notEqual(
+          restored.status,
+          0,
+          "missing extension must reject digest-bound schema restore"
+        )
+        assert.match(
+          restored.stderr.toString("utf8"),
+          /function public\.digest\(bytea, text\) does not exist/
+        )
+        return
+      }
       // Fixture prerequisite only: --no-acl archives do NOT restore safe function permissions.
       // The verifier never applies this ACL setup or repairs any supplied/restored target.
       // Real restore integration needs a separately reviewed privilege-restoration step.
@@ -345,6 +371,37 @@ test(
       assert.deepEqual(observation, { resolution: false, digest: null })
       rejected(verify())
     })
+    for (const schema of ["pg_catalog", "public"])
+      for (const [label, argumentsSql] of [
+        ["defaulted", "bytea,text,int DEFAULT 0"],
+        ["variadic", "bytea,VARIADIC text[]"],
+      ])
+        await t.test(`rejects ${schema} ${label} digest overload before execution`, () => {
+          restoreDispatch()
+          sql(
+            `CREATE FUNCTION ${schema}.digest(${argumentsSql}) RETURNS bytea LANGUAGE plpgsql IMMUTABLE AS $$ BEGIN RAISE EXCEPTION 'unreviewed overload executed'; END; $$;`,
+            "lyrashield_restore"
+          )
+          // Exact-signature lookup still finds the reviewed function. It is not a resolver
+          // for the actual call's defaulted/variadic candidates, so must not authorize execution.
+          assert.equal(
+            sql(
+              "SET search_path=pg_catalog,public; SELECT pg_catalog.to_regprocedure('digest(bytea,text)')='public.digest(bytea,text)'::regprocedure;",
+              "lyrashield_restore"
+            ),
+            "t"
+          )
+          assert.deepEqual(
+            JSON.parse(
+              sql(
+                `BEGIN READ ONLY; SET LOCAL statement_timeout='10s'; ${dispatchDigestProbeSql("authority_app_restore")} ROLLBACK;`,
+                "lyrashield_restore"
+              )
+            ),
+            { resolution: false, digest: null }
+          )
+          rejected(verify())
+        })
     for (const [label, mutation] of [
       [
         "extension installed in an unresolved schema",
@@ -357,6 +414,18 @@ test(
       [
         "digest detached from extension membership",
         "ALTER EXTENSION pgcrypto DROP FUNCTION public.digest(bytea,text);",
+      ],
+      [
+        "text digest detached from extension membership",
+        "ALTER EXTENSION pgcrypto DROP FUNCTION public.digest(text,text);",
+      ],
+      [
+        "extension-owned digest acquired a default argument",
+        "CREATE OR REPLACE FUNCTION public.digest(bytea,text DEFAULT 'sha256') RETURNS bytea LANGUAGE c IMMUTABLE STRICT PARALLEL SAFE AS '$libdir/pgcrypto','pg_digest';",
+      ],
+      [
+        "text digest metadata became unavailable",
+        "UPDATE pg_catalog.pg_proc SET probin=NULL WHERE oid='public.digest(text,text)'::regprocedure;",
       ],
       [
         "missing helper execution grant",

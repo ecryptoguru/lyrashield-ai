@@ -211,6 +211,24 @@ function reviewedDefinersOnly(role, approved = "false") {
 const systemDefinersAbsent = `NOT EXISTS (SELECT 1 FROM pg_catalog.pg_proc p
   JOIN pg_catalog.pg_namespace n ON n.oid=p.pronamespace
   WHERE p.prosecdef AND (n.nspname ~ '^pg_' OR n.nspname='information_schema'))`
+// Signature lookup does not model call resolution through default/variadic arguments. Admit
+// only the two reviewed pgcrypto signatures across every schema in the probe search path.
+const digestCatalog = `(SELECT count(*)=2 AND bool_and(COALESCE(
+    n.nspname='public' AND p.proargtypes IN ('17 25'::oidvector,'25 25'::oidvector)
+    AND p.prorettype=17 AND NOT p.proretset AND p.prokind='f'
+    AND p.pronargdefaults=0 AND p.proargdefaults IS NULL AND p.provariadic=0
+    AND p.proargmodes IS NULL AND p.proallargtypes IS NULL
+    AND language.lanname='c' AND p.prosrc='pg_digest' AND p.probin='$libdir/pgcrypto'
+    AND NOT p.prosecdef AND p.proisstrict AND p.provolatile='i' AND p.proparallel='s'
+    AND p.proconfig IS NULL AND EXISTS (
+      SELECT 1 FROM pg_catalog.pg_depend d JOIN pg_catalog.pg_extension e ON e.oid=d.refobjid
+      JOIN pg_catalog.pg_namespace extension_schema ON extension_schema.oid=e.extnamespace
+      WHERE d.classid='pg_catalog.pg_proc'::regclass AND d.objid=p.oid AND d.objsubid=0
+        AND d.refclassid='pg_catalog.pg_extension'::regclass AND d.refobjsubid=0 AND d.deptype='e'
+        AND e.extname='pgcrypto' AND e.extversion='1.3' AND extension_schema.nspname='public'),false))
+  FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid=p.pronamespace
+  JOIN pg_catalog.pg_language language ON language.oid=p.prolang
+  WHERE p.proname='digest' AND n.nspname IN ('pg_catalog','public'))`
 export function dispatchVerificationSql(deniedRoles) {
   roles(deniedRoles)
   const triggerChecks = triggers
@@ -252,18 +270,7 @@ export function dispatchVerificationSql(deniedRoles) {
       SELECT 1 FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid=p.pronamespace
       JOIN pg_catalog.pg_language language ON language.oid=p.prolang
       WHERE ${functionContract("app", { name: "current_workspace_id", result: "text", language: "sql", volatility: "s", body: rlsHelperBody, config: ["search_path=pg_catalog, app"] })}),
-    'extension', EXISTS (
-      SELECT 1 FROM pg_catalog.pg_extension e
-      JOIN pg_catalog.pg_namespace extension_schema ON extension_schema.oid=e.extnamespace
-      JOIN pg_catalog.pg_depend d ON d.refclassid='pg_catalog.pg_extension'::regclass
-        AND d.refobjid=e.oid AND d.classid='pg_catalog.pg_proc'::regclass AND d.deptype='e'
-      JOIN pg_catalog.pg_proc p ON p.oid=d.objid
-      JOIN pg_catalog.pg_namespace n ON n.oid=p.pronamespace
-      JOIN pg_catalog.pg_language language ON language.oid=p.prolang
-      WHERE e.extname='pgcrypto' AND e.extversion='1.3' AND extension_schema.nspname='public'
-        AND n.nspname='public' AND p.proname='digest' AND p.proargtypes='17 25'::oidvector
-        AND p.prorettype=17 AND language.lanname='c' AND p.prosrc='pg_digest'
-        AND p.probin='$libdir/pgcrypto' AND NOT p.prosecdef AND p.proisstrict AND p.provolatile='i'),
+    'extension', ${digestCatalog},
     'systemDefiners', ${systemDefinersAbsent},
     'privilegedFunctions', ${deniedRoles.map((role) => reviewedDefinersOnly(role)).join(" AND ")},
     'closed', NOT EXISTS (SELECT 1 FROM public."ScanAuthorityEpoch" WHERE "isOpen" OR "openKey" IS NOT NULL OR "closedAt" IS NULL)
@@ -278,12 +285,23 @@ export function dispatchDigestProbeSql(role) {
   // PostgreSQL jsonb::text uses this canonical spacing. The NULL policy branch always hashes
   // these synthetic bytes, including on an empty database, and never returns restored row data.
   const expected = sha256('{"schemaVersion": "scan-policy/none"}')
-  const resolved =
-    "pg_catalog.to_regprocedure('digest(bytea,text)')='public.digest(bytea,text)'::regprocedure"
+  const resolved = `(pg_catalog.to_regprocedure('digest(bytea,text)')='public.digest(bytea,text)'::regprocedure AND ${digestCatalog})`
+  // SQL CASE does not prevent helper inlining during planning. Plan the fixed helper query
+  // only after the catalog gate; a transaction-local setting carries synthetic booleans only.
   return `SET LOCAL ROLE ${literal(role)};
     SET LOCAL row_security=on; SET LOCAL search_path=pg_catalog,public;
-    SELECT json_build_object('resolution', ${resolved},
-      'digest', CASE WHEN ${resolved} THEN app.scan_policy_digest(NULL::text)=${literal(expected)} END)::text;`
+    DO $restore_probe$
+    DECLARE resolved boolean; matches boolean;
+    BEGIN
+      resolved := ${resolved};
+      IF resolved THEN
+        EXECUTE ${literal(`SELECT app.scan_policy_digest(NULL::text)=${literal(expected)}`)} INTO matches;
+      END IF;
+      PERFORM pg_catalog.set_config('lyrashield.restore_digest_probe',
+        pg_catalog.json_build_object('resolution',resolved,'digest',matches)::text,true);
+    END;
+    $restore_probe$;
+    SELECT pg_catalog.current_setting('lyrashield.restore_digest_probe');`
 }
 
 const mirrorFunctions = [

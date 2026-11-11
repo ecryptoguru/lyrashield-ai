@@ -279,7 +279,17 @@ test("every denied role must execute the digest helper after static authority ch
     assert.match(observations[index + 1], /SET LOCAL search_path=pg_catalog,public/)
     assert.match(observations[index + 1], /app\.scan_policy_digest\(NULL::text\)/)
     assert.match(observations[index + 1], /to_regprocedure\('digest\(bytea,text\)'\)/)
-    assert.match(observations[index + 1], /'digest', CASE WHEN .* THEN app\.scan_policy_digest/s)
+    assert.match(observations[index + 1], /count\(\*\)=2 AND bool_and/)
+    assert.match(observations[index + 1], /n\.nspname IN \('pg_catalog','public'\)/)
+    assert.match(
+      observations[index + 1],
+      /p\.pronargdefaults=0 AND p\.proargdefaults IS NULL AND p\.provariadic=0/
+    )
+    assert.match(
+      observations[index + 1],
+      /IF resolved THEN\s+EXECUTE 'SELECT app\.scan_policy_digest/
+    )
+    assert.match(observations[index + 1], /set_config\('lyrashield.restore_digest_probe'/)
   }
   observations.length = 0
   await assert.rejects(
@@ -369,6 +379,7 @@ test("generated observations stay read-only and bind executable source rather th
   assert.match(dispatch, /extension_schema\.nspname='public'/)
   assert.match(dispatch, /d\.deptype='e'/)
   assert.match(dispatch, /p\.prosrc='pg_digest'/)
+  assert.match(dispatch, /p\.proargtypes IN \('17 25'::oidvector,'25 25'::oidvector\)/)
   assert.match(mirror, /NOT EXISTS .*active/s)
   assert.match(mirror, /p\.proconfig\s*=ARRAY\['search_path=pg_catalog'\]/)
   for (const name of [
