@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState, type Ref } from "react"
+import { useEffect, useRef, useState, type Ref } from "react"
 import { Check, Copy, KeyRound, Plus, ShieldAlert } from "lucide-react"
 import {
   Badge,
@@ -13,43 +13,17 @@ import {
   Spinner,
 } from "@lyrashield/ui"
 import { InlineConfirm } from "@/components/ui/inline-confirm"
-import { writeClipboard } from "@/components/scorecard-share-composer"
 import { z } from "zod"
-import { apiDelete, apiGet, apiPost, ApiError } from "@/lib/api-client"
-import { formatDate } from "@/lib/date-format"
-
-interface ApiKeyRow {
-  id: string
-  name: string
-  prefix: string
-  scopes: string[]
-  lastUsedAt: string | null
-  expiresAt: string | null
-  revokedAt: string | null
-  createdAt: string
-}
+import { apiDelete, apiPost, ApiError } from "@/lib/api-client"
+import { formatDate, formatDateTime } from "@/lib/date-format"
+import { apiKeyRowSchema, expiryTime, useApiKeysList, type ApiKeyRow } from "./use-api-keys-list"
+import { useApiKeyCopy } from "./use-api-key-copy"
 
 interface CreatedKey extends ApiKeyRow {
   rawKey: string
 }
 
-const apiKeyRowSchema = z
-  .object({
-    id: z.string(),
-    name: z.string(),
-    prefix: z.string(),
-    scopes: z.array(z.string()),
-    lastUsedAt: z.string().datetime().or(z.string()).nullable(),
-    expiresAt: z.string().datetime().or(z.string()).nullable(),
-    revokedAt: z.string().datetime().or(z.string()).nullable(),
-    createdAt: z.string().datetime().or(z.string()),
-  })
-  .passthrough()
-
-const apiKeysSchema = z.array(apiKeyRowSchema)
-
 const createdKeySchema = apiKeyRowSchema.and(z.object({ rawKey: z.string() }).passthrough())
-
 /**
  * Workspace API keys — used by the LyraShield MCP server, CLI, and CI.
  * The raw key is displayed exactly once after creation.
@@ -187,7 +161,19 @@ function CreatedApiKey({
         Copy this key now — it will not be shown again.
       </p>
       <div className="flex items-center gap-2">
-        <code className="bg-muted min-w-0 flex-1 truncate rounded px-2 py-1.5 font-mono text-xs">
+        <code
+          aria-label="API key shown once"
+          tabIndex={0}
+          onFocus={(event) => {
+            const selection = window.getSelection()
+            if (!selection) return
+            const range = document.createRange()
+            range.selectNodeContents(event.currentTarget)
+            selection.removeAllRanges()
+            selection.addRange(range)
+          }}
+          className="bg-muted min-w-0 flex-1 select-all rounded px-2 py-1.5 font-mono text-xs break-all"
+        >
           {rawKey}
         </code>
         <Button ref={copyButtonRef} size="sm" variant="outline" onClick={onCopy}>
@@ -220,11 +206,49 @@ function CreatedApiKey({
   )
 }
 
-function renderApiKeyList(
-  activeKeys: ApiKeyRow[],
-  revokedKeys: ApiKeyRow[],
+function ApiKeyListError({
+  message,
+  hasKeys,
+  loading,
+  onRetry,
+}: {
+  message: string
+  hasKeys: boolean
+  loading: boolean
+  onRetry: () => Promise<void>
+}) {
+  return (
+    <div role="alert" className="space-y-2 text-sm">
+      <p className="text-destructive">
+        {message}
+        {hasKeys ? " The displayed keys may be out of date." : ""}
+      </p>
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        disabled={loading}
+        onClick={() => void onRetry()}
+      >
+        {loading ? "Retrying…" : "Retry"}
+      </Button>
+    </div>
+  )
+}
+
+function ApiKeyList({
+  activeKeys,
+  revokedKeys,
+  onRevoke,
+  now,
+  stale,
+}: {
+  activeKeys: ApiKeyRow[]
+  revokedKeys: ApiKeyRow[]
   onRevoke: (id: string) => Promise<void>
-) {
+  now: number | null
+  stale: boolean
+}) {
   return (
     <ul className="divide-y">
       {activeKeys.map((key) => (
@@ -237,16 +261,27 @@ function renderApiKeyList(
                 {key.lastUsedAt ? `last used ${formatDate(key.lastUsedAt)}` : "never used"}
               </span>
             </p>
+            <p className="text-muted-foreground mt-1 text-xs">
+              {key.expiresAt === null
+                ? "No expiry"
+                : expiryTime(key.expiresAt) === null
+                  ? "Expiry unavailable"
+                  : `${now !== null && expiryTime(key.expiresAt)! <= now ? "Expired" : "Expires"} ${formatDateTime(key.expiresAt)}`}
+            </p>
           </div>
           <div className="flex items-center gap-2">
             <Badge variant="muted">
               {key.scopes.includes("write") ? "read & write" : "read-only"}
             </Badge>
+            {now !== null &&
+              expiryTime(key.expiresAt) !== null &&
+              expiryTime(key.expiresAt)! <= now && <Badge variant="muted">expired</Badge>}
             <InlineConfirm
               triggerLabel="Revoke"
               confirmLabel="Confirm revoke"
               message={`Revoke “${key.name}”?`}
               aria-label={`Revoke API key ${key.name}`}
+              disabled={stale}
               onConfirm={() => onRevoke(key.id)}
             />
           </div>
@@ -275,6 +310,70 @@ export function ApiKeysSection({
   workspaceId: string
   canManage: boolean
 }) {
+  const [createdKeys, setCreatedKeys] = useState<Record<string, CreatedKey>>({})
+  const [creatingWorkspaces, setCreatingWorkspaces] = useState<Set<string>>(new Set())
+  const pendingCreates = useRef(new Set<string>())
+  const createdKey = createdKeys[workspaceId] ?? null
+
+  function startCreate() {
+    if (pendingCreates.current.has(workspaceId)) return false
+    pendingCreates.current.add(workspaceId)
+    setCreatingWorkspaces(new Set(pendingCreates.current))
+    return true
+  }
+
+  function finishCreate() {
+    pendingCreates.current.delete(workspaceId)
+    setCreatingWorkspaces(new Set(pendingCreates.current))
+  }
+
+  return (
+    <>
+      {canManage && Object.keys(createdKeys).some((id) => id !== workspaceId) && (
+        <p role="status" className="text-muted-foreground mb-3 text-sm">
+          A newly created key is waiting in another workspace. Switch back to save it.
+        </p>
+      )}
+      <WorkspaceApiKeysSection
+        key={`${workspaceId}:${canManage}`}
+        workspaceId={workspaceId}
+        canManage={canManage}
+        creating={creatingWorkspaces.has(workspaceId)}
+        createdKey={createdKey}
+        startCreate={startCreate}
+        finishCreate={finishCreate}
+        onCreated={(key) => setCreatedKeys((current) => ({ ...current, [workspaceId]: key }))}
+        onDiscard={() =>
+          setCreatedKeys((current) => {
+            const next = { ...current }
+            delete next[workspaceId]
+            return next
+          })
+        }
+      />
+    </>
+  )
+}
+
+function WorkspaceApiKeysSection({
+  workspaceId,
+  canManage,
+  creating,
+  createdKey,
+  startCreate,
+  finishCreate,
+  onCreated,
+  onDiscard,
+}: {
+  workspaceId: string
+  canManage: boolean
+  creating: boolean
+  createdKey: CreatedKey | null
+  startCreate: () => boolean
+  finishCreate: () => void
+  onCreated: (key: CreatedKey) => void
+  onDiscard: () => void
+}) {
   const createTriggerRef = useRef<HTMLButtonElement>(null)
   const createButtonRef = useRef<HTMLButtonElement>(null)
   const nameInputRef = useRef<HTMLInputElement>(null)
@@ -283,50 +382,20 @@ export function ApiKeysSection({
   const draftRevision = useRef(0)
   const pendingSuccessFocus = useRef<number | null>(null)
   const pendingDismissFocus = useRef<number | null>(null)
-  const [keys, setKeys] = useState<ApiKeyRow[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [showCreate, setShowCreate] = useState(false)
   const [name, setName] = useState("")
   const [scope, setScope] = useState<"read" | "write">("read")
   const [expiryHours, setExpiryHours] = useState(0)
-  const [creating, setCreating] = useState(false)
-  const [createdKey, setCreatedKey] = useState<CreatedKey | null>(null)
-  const [copied, setCopied] = useState(false)
-  // Sticky "has copied at least once" flag — `copied` resets after the icon
-  // flash, but the dismiss gate must stay open once the key has been copied.
-  const [hasCopiedKey, setHasCopiedKey] = useState(false)
+  const { copied, hasCopiedKey, setHasCopiedKey, copyKey } = useApiKeyCopy(
+    createdKey?.rawKey,
+    setError
+  )
 
-  const load = useCallback(async () => {
-    try {
-      const data = await apiGet<ApiKeyRow[]>(`/api/api-keys?workspaceId=${workspaceId}`, {
-        schema: apiKeysSchema,
-      })
-      setKeys(data)
-      setError(null)
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Failed to load API keys")
-      setKeys([])
-    }
-  }, [workspaceId])
-
-  useEffect(() => {
-    if (!canManage) return
-    let active = true
-    apiGet<ApiKeyRow[]>(`/api/api-keys?workspaceId=${workspaceId}`, { schema: apiKeysSchema })
-      .then((data) => {
-        if (!active) return
-        setKeys(data)
-        setError(null)
-      })
-      .catch((err: unknown) => {
-        if (!active) return
-        setError(err instanceof ApiError ? err.message : "Failed to load API keys")
-        setKeys([])
-      })
-    return () => {
-      active = false
-    }
-  }, [canManage, workspaceId])
+  const { keys, loadingKeys, listError, now, load, mounted } = useApiKeysList(
+    workspaceId,
+    canManage
+  )
 
   useEffect(() => {
     if (
@@ -363,12 +432,11 @@ export function ApiKeysSection({
   }
 
   async function handleCreate() {
-    if (!name.trim() || createdKey) return
+    if (!name.trim() || createdKey || !startCreate()) return
     const focusAtSubmission = typeof document === "undefined" ? null : document.activeElement
     const restoreFocus = focusAtSubmission === createButtonRef.current && focusAtSubmission !== null
     const submittedGeneration = formGeneration.current
     const submittedDraftRevision = draftRevision.current
-    setCreating(true)
     setError(null)
     try {
       const created = await apiPost(
@@ -383,6 +451,10 @@ export function ApiKeysSection({
         },
         { schema: createdKeySchema }
       )
+      if (!mounted.current) {
+        onCreated(created)
+        return
+      }
       const focusUnchanged =
         typeof document === "undefined" ||
         document.activeElement === document.body ||
@@ -400,7 +472,7 @@ export function ApiKeysSection({
         closeCreateForm()
         if (focusCopy) pendingSuccessFocus.current = formGeneration.current
       }
-      setCreatedKey(created)
+      onCreated(created)
       setHasCopiedKey(false)
       await load()
     } catch (err) {
@@ -414,7 +486,7 @@ export function ApiKeysSection({
           nameInputRef.current?.focus()
       }
     } finally {
-      setCreating(false)
+      finishCreate()
     }
   }
 
@@ -422,27 +494,10 @@ export function ApiKeysSection({
     setError(null)
     try {
       await apiDelete(`/api/api-keys/${id}?workspaceId=${workspaceId}`)
-      if (createdKey?.id === id) setCreatedKey(null)
+      if (createdKey?.id === id) onDiscard()
       await load()
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to revoke API key")
-    }
-  }
-
-  async function copyKey() {
-    if (!createdKey) return
-    try {
-      await writeClipboard(createdKey.rawKey)
-      setCopied(true)
-      setHasCopiedKey(true)
-      setTimeout(() => setCopied(false), 2000)
-    } catch {
-      setError("Failed to copy API key. Copy it manually or check your browser permissions.")
-      setCopied(false)
-      // Clipboard access can be denied outright. Unlock the dismiss button so a
-      // user who copies the key by hand is not trapped with an undismissable
-      // banner — the warning above still tells them it is shown only once.
-      setHasCopiedKey(true)
     }
   }
 
@@ -482,8 +537,21 @@ export function ApiKeysSection({
           </p>
         ) : null}
 
+        {listError ? (
+          <ApiKeyListError
+            message={listError}
+            hasKeys={keys !== null}
+            loading={loadingKeys}
+            onRetry={load}
+          />
+        ) : null}
+
         <p role="status" className="sr-only">
-          {createdKey ? "Copy this key now — it will not be shown again." : ""}
+          {createdKey
+            ? copied
+              ? "API key copied."
+              : "Copy this key now — it will not be shown again."
+            : ""}
         </p>
         {createdKey ? (
           <CreatedApiKey
@@ -494,7 +562,7 @@ export function ApiKeysSection({
             onCopy={() => void copyKey()}
             onDismiss={(restoreFocus) => {
               pendingDismissFocus.current = restoreFocus ? formGeneration.current : null
-              setCreatedKey(null)
+              onDiscard()
             }}
           />
         ) : null}
@@ -535,15 +603,24 @@ export function ApiKeysSection({
           </div>
         ) : null}
 
-        {keys === null ? (
+        {keys === null && !listError ? (
           <div className="flex items-center gap-2 py-2">
             <Spinner className="size-4" />
             <span className="text-muted-foreground text-sm">Loading keys…</span>
           </div>
-        ) : activeKeys.length === 0 && revokedKeys.length === 0 ? (
+        ) : keys === null ? null : activeKeys.length === 0 &&
+          revokedKeys.length === 0 &&
+          !listError &&
+          !loadingKeys ? (
           <p className="text-muted-foreground text-sm">No API keys yet.</p>
         ) : (
-          renderApiKeyList(activeKeys, revokedKeys, handleRevoke)
+          <ApiKeyList
+            activeKeys={activeKeys}
+            revokedKeys={revokedKeys}
+            onRevoke={handleRevoke}
+            now={now}
+            stale={loadingKeys || listError !== null}
+          />
         )}
       </CardContent>
     </Card>
