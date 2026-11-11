@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import test from "node:test"
 import { readFileSync } from "node:fs"
 import { createRequire } from "node:module"
+import { randomBytes } from "node:crypto"
 import { checkIssuerHealth, verifyHealthSignature } from "../qualification-issuer-health.mjs"
 
 const fixture = JSON.parse(
@@ -39,12 +40,13 @@ test("unverified identity never exchanges credentials or signs", async () => {
 })
 
 test("signing failures log out and cannot return a qualified receipt", async () => {
+  const token = randomBytes(24).toString("base64url")
   for (const failure of ["login", "keyvault", "malformed-signature"]) {
     const calls = []
     await assert.rejects(
       checkIssuerHealth({
         readIdentity: async () => ({
-          token: "fixture-token",
+          token,
           identity: { source: "a".repeat(40), owner: "42:1" },
         }),
         run: (args) => {
