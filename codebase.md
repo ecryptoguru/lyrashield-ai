@@ -675,6 +675,8 @@ This is target/revision-scoped runtime and accounting proof, not a security guar
 | `.github/workflows/ci.yml`                              | Main release gate                                                                   |
 | `.github/workflows/deploy-azure.yml`                    | Migration-first Azure deployment                                                    |
 
+CI's app, marketing and Desktop browser sites use `.github/scripts/ci-browser.mjs` to run the unchanged selected Playwright suites through a loopback-only disposable server. The official Playwright 1.62.1 Jammy image is pinned to its amd64 manifest; startup verifies package versions, Chromium identities, native libraries, installed fonts and native WebMCP launch flags. The container is nonroot, has a read-only root filesystem, private shared memory, no capabilities and no host mounts or credentials. `--unsafe` is confined to this CI server because Playwright otherwise strips the explicit WebMCP launch arguments. FFmpeg first validates the host's `lavfi` and `libx264`; its fallback accepts only the current synthetic motion fixture command and returns bounded MP4 bytes from container temporary storage. Every browser job removes only its owned container and temporary FFmpeg wrapper, including failed startup. Required check routing, auth-mail privacy guards and marketing failure diagnostics remain in force.
+
 ## 13. Landmines
 
 See [AGENTS.md](./AGENTS.md#landmines) for the current engineering rules and operational landmines.
