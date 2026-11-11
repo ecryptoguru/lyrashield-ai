@@ -22,7 +22,12 @@ is accepted. Tools, media, attachments, previous-response IDs and other request 
 The per-call reservation uses the full approved input envelope, the requested bounded output cap
 and the highest approved input/cache rate. It ignores the caller's `costReservationMicros` and
 retains reservations after ambiguous outcomes; the smaller broker-grant and server aggregate cap
-applies. At most eight provider calls can be active in one service instance.
+applies. At most eight physically unresolved provider requests are permitted across all grants
+in one gateway journal. Both the global limit and the per-grant limit count durable dispatch
+intents, including `UNKNOWN` requests, across local timeouts, aborts and restarts. A slot releases
+only after an authenticated terminal response is durably recorded. Late network completion and
+local revocation or shutdown do not establish provider stop evidence; no trusted provider-stop
+adapter is installed in this prototype. Private request status reports `physicalOutstanding`.
 
 The text byte envelope includes a conservative 1,024-token framing allowance. Its tokenizer and
 provider pricing/usage semantics remain unqualified. It must not be treated as a measured token
@@ -40,7 +45,9 @@ SHA-256 hashing. The Responses adapter parses fragmented UTF-8 SSE frames, binds
 identity/model, and requires an affirmative completed terminal response and bounded, internally
 consistent token usage. Missing/malformed usage, conflicting/duplicate terminal identities,
 partial streams, HTTP errors, revocation, expiration and unacknowledged provider outcomes remain
-`UNKNOWN`. Usage identity authenticates the request/attempt and terminal token buckets; it is
+`UNKNOWN`. Grant validity is rechecked after asynchronous authorization and journal writes,
+immediately before serialized provider dispatch and response return; queued revocations block
+dispatch and replay. Usage identity authenticates the request/attempt and terminal token buckets; it is
 not derived from the output hash. This narrow adapter does not support other provider APIs or
 usage/cache-write shapes.
 

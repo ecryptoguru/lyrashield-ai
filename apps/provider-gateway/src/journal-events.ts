@@ -99,6 +99,9 @@ export interface RequestState {
   maxOutputTokens?: number
   stream?: boolean
   outcome: "PENDING" | "SUCCEEDED" | "FAILED" | "UNKNOWN"
+  // A durable dispatch intent remains physically outstanding until trusted
+  // terminal evidence is recorded. Local abort/timeout is not stop proof.
+  physicalOutstanding: boolean
   statusCode?: number
   responseHash?: string
   responseBytes?: number
