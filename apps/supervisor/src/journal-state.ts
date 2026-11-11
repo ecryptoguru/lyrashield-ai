@@ -83,6 +83,29 @@ function applyIntent(
   })
 }
 
+function applyRecoveryHold(
+  event: Extract<SupervisorJournalEvent, { type: "command_recovery_hold" }>,
+  receipt: SupervisorReceipt,
+  attempts: Map<string, AttemptState>,
+  commands: Map<string, CommandState>
+): void {
+  const command = commands.get(event.commandId)
+  const attempt = attempts.get(event.attemptId)
+  if (
+    !command ||
+    !attempt ||
+    command.attemptId !== event.attemptId ||
+    command.requestHash !== event.expectedCommandHash
+  ) {
+    throw new RuntimeControlError("JOURNAL_INTEGRITY", "invalid recovery command binding", 500)
+  }
+  command.status = "UNKNOWN"
+  command.reason = "journal durability confirmed; physical disposition remains unresolved"
+  command.receipt = receipt
+  attempt.status = "UNKNOWN"
+  attempt.receipt = receipt
+}
+
 export function applyJournalRecord(
   record: JournalRecord<SupervisorJournalEvent>,
   attempts: Map<string, AttemptState>,
@@ -90,6 +113,10 @@ export function applyJournalRecord(
 ): void {
   const event = record.payload
   const receipt = receiptFromRecord(record)
+  if (event.type === "command_recovery_hold") {
+    applyRecoveryHold(event, receipt, attempts, commands)
+    return
+  }
   if (event.type === "attempt_prepared") {
     applyPrepared(event, receipt, attempts, commands)
     return

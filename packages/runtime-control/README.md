@@ -10,6 +10,10 @@ observation prevents execution permission. A lost acknowledgement requires
 readback and replay of the same operation identity; a negative read does not
 prove that the earlier write failed. Authorization is checked around durability
 work, but each physical effect still requires broker and supervisor fencing.
+Recovered pending local records require explicit `JournalPort.confirmRecord()` fsync confirmation
+before same-identity replay can advance independent storage. `SignedJournal` confirms the exact
+owned file and directory without changing the record. Ports without that capability stay
+unresolved. Read-only confirmed-history calls never perform this repair.
 
 ## PostgreSQL mirror
 
