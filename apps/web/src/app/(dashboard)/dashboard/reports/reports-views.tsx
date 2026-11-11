@@ -346,12 +346,14 @@ export function ShareLinkCard({
   shareUrl,
   copied,
   handoffMessage,
+  privatePacket = false,
   onCopyLink,
   onCopyHandoff,
 }: {
   shareUrl: string
   copied: "link" | "handoff" | null
   handoffMessage: string
+  privatePacket?: boolean
   onCopyLink: () => void
   onCopyHandoff: () => void
 }) {
@@ -360,7 +362,23 @@ export function ShareLinkCard({
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="min-w-0 flex-1" role="status">
           <p className="mb-1 text-sm font-medium">Share link generated (valid 30 days):</p>
-          <p className="text-muted-foreground truncate font-mono text-sm">{shareUrl}</p>
+          {privatePacket && (
+            <p className="text-muted-foreground mb-2 text-xs">
+              Recipients must sign in with workspace report access. Packet validity may expire
+              sooner than the link.
+            </p>
+          )}
+          {privatePacket ? (
+            <input
+              aria-label="Private release packet link"
+              readOnly
+              value={shareUrl}
+              onFocus={(event) => event.currentTarget.select()}
+              className="border-input bg-background text-foreground w-full min-w-0 rounded border px-2 py-1 font-mono text-sm"
+            />
+          ) : (
+            <p className="text-muted-foreground truncate font-mono text-sm">{shareUrl}</p>
+          )}
         </div>
         <div className="flex flex-wrap gap-2">
           <Button size="sm" variant="secondary" onClick={onCopyLink}>
@@ -391,12 +409,17 @@ export function ReportCard({
   workspaceId,
   onShare,
   onRevoke,
+  packetActionPending = false,
 }: {
   report: ReportItem
   workspaceId: string
   onShare: (reportId: string) => void
   onRevoke: (reportId: string) => void
+  packetActionPending?: boolean
 }) {
+  const isPacket = report.type === "release_packet"
+  const reportId = encodeURIComponent(report.id)
+  const workspaceQuery = new URLSearchParams({ workspaceId }).toString()
   return (
     <Card className="hover:shadow-card-hover p-4 transition-shadow duration-(--duration-base) ease-out">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -404,10 +427,14 @@ export function ReportCard({
           <div className="mb-1 flex flex-wrap items-center gap-2">
             <h2 className="w-full wrap-anywhere font-medium" title={report.title}>
               <a
-                href={`/api/reports/${report.id}/download?workspaceId=${workspaceId}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label={`View ${report.title} in a new tab`}
+                href={
+                  isPacket
+                    ? `/dashboard/reports/release-packet/${reportId}`
+                    : `/api/reports/${report.id}/download?workspaceId=${workspaceId}`
+                }
+                target={isPacket ? undefined : "_blank"}
+                rel={isPacket ? undefined : "noopener noreferrer"}
+                aria-label={isPacket ? `View ${report.title}` : `View ${report.title} in a new tab`}
                 className="underline-offset-4 hover:underline"
               >
                 {report.title}
@@ -423,7 +450,9 @@ export function ReportCard({
             >
               {humanizeToken(report.status)}
             </Badge>
-            {report.revokedAt && <Badge variant="muted">revoked</Badge>}
+            {report.revokedAt && (
+              <Badge variant="muted">{isPacket ? "Link revoked" : "revoked"}</Badge>
+            )}
           </div>
           <p className="text-muted-foreground text-sm">
             Created <LocalTime value={report.createdAt} />
@@ -438,31 +467,59 @@ export function ReportCard({
             <LaunchReportProvenanceBlock provenance={report.provenance ?? null} />
           )}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <a
-            href={`/api/reports/${report.id}/download?workspaceId=${workspaceId}&download=1`}
+            href={
+              isPacket
+                ? `/api/reports/release-packet/${reportId}/download?${workspaceQuery}`
+                : `/api/reports/${report.id}/download?workspaceId=${workspaceId}&download=1`
+            }
             download
             aria-label={`Download ${report.title}`}
-            className={buttonVariants({ size: "sm", variant: "ghost" })}
+            className={buttonVariants({ size: isPacket ? "icon" : "sm", variant: "ghost" })}
           >
             <Download className="h-4 w-4" aria-hidden="true" />
           </a>
-          {!report.revokedAt && (
+          {isPacket && report.shareExpiresAt && !report.revokedAt ? (
+            <InlineConfirm
+              triggerIcon={<Share2 className="h-4 w-4" aria-hidden="true" />}
+              triggerSize="icon"
+              aria-label="Regenerate private link"
+              message="The previous link will stop working. Regenerate it?"
+              confirmLabel="Regenerate"
+              disabled={packetActionPending}
+              onConfirm={() => onShare(report.id)}
+            />
+          ) : isPacket ? (
             <Button
-              size="sm"
+              size="icon"
               variant="ghost"
-              aria-label={report.shareExpiresAt ? "Regenerate share link" : "Create share link"}
+              aria-label="Create private link"
+              disabled={packetActionPending}
               onClick={() => onShare(report.id)}
             >
               <Share2 className="h-4 w-4" aria-hidden="true" />
             </Button>
+          ) : (
+            !report.revokedAt && (
+              <Button
+                size="sm"
+                variant="ghost"
+                aria-label={report.shareExpiresAt ? "Regenerate share link" : "Create share link"}
+                onClick={() => onShare(report.id)}
+              >
+                <Share2 className="h-4 w-4" aria-hidden="true" />
+              </Button>
+            )
           )}
           {!report.revokedAt && report.shareExpiresAt && (
             <InlineConfirm
               triggerIcon={<Trash2 className="h-4 w-4" aria-hidden="true" />}
-              aria-label="Revoke share link"
+              triggerSize={isPacket ? "icon" : "sm"}
+              aria-label={isPacket ? "Revoke private link" : "Revoke share link"}
               message="Revoke link?"
               confirmLabel="Revoke"
+              disabled={isPacket && packetActionPending}
               onConfirm={() => onRevoke(report.id)}
             />
           )}
