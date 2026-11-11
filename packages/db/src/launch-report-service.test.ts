@@ -678,7 +678,29 @@ describe("confirmSharedLaunchReportIdentity — confirmation without disclosure"
     historicalState: "READY",
     effectiveState: "READY",
   }
-  const payload = validLaunchPayload()
+  const payload = buildLaunchReportPayload(
+    {
+      standardVersion: "lyrashield-gate/1.0.0",
+      state: "READY",
+      coverageStatement: ["engine", "sca"],
+      nonCoverage: [],
+      blockingReasons: [],
+      evidenceSummary: {
+        verified: 0,
+        retestConfirmed: 0,
+        unresolvedCritical: 0,
+        unresolvedHigh: 0,
+        unresolvedMedium: 0,
+        unresolvedLow: 0,
+        acceptedRisk: 0,
+        falsePositive: 0,
+      },
+      staleness: { current: true },
+      verdictChecksum: "vc-1",
+      evaluatedAt: EVALUATED_AT,
+    },
+    { issuedAt: EVALUATED_AT }
+  )
 
   beforeEach(() => {
     vi.clearAllMocks()
@@ -687,6 +709,7 @@ describe("confirmSharedLaunchReportIdentity — confirmation without disclosure"
       workspaceId: "workspace-1",
       shareExpiresAt: new Date(Date.now() + DAY_MS),
     })
+    mocks.gateVerdictFindFirst.mockResolvedValue(verdictRow())
     mocks.reportFindFirst.mockResolvedValue({
       type: "launch_readiness",
       shareExpiresAt: new Date(Date.now() + DAY_MS),
@@ -715,6 +738,37 @@ describe("confirmSharedLaunchReportIdentity — confirmation without disclosure"
         identity: { kind: "COMMIT", value: "c".repeat(40) },
       })
     ).resolves.toBe("MISMATCH")
+  })
+
+  it("rejects swapped provenance identity even when the requested identity matches it", async () => {
+    const swapped = { ...provenance, assessedIdentity: { kind: "COMMIT", value: "c".repeat(40) } }
+    mocks.reportFindFirst.mockResolvedValueOnce({
+      type: "launch_readiness",
+      shareExpiresAt: new Date(Date.now() + DAY_MS),
+      contentJson: payload,
+      provenanceJson: swapped,
+    })
+    expect(
+      await confirmSharedLaunchReportIdentity({
+        reportId: "report-1",
+        token: "a".repeat(64),
+        reportChecksum: payload.reportChecksum,
+        identity: { kind: "COMMIT", value: "c".repeat(40) },
+      })
+    ).toBe("UNAVAILABLE")
+  })
+
+  it("keeps issue-time identity confirmation independent of current policy", async () => {
+    mocks.policyFindFirst.mockRejectedValueOnce(new Error("policy unavailable"))
+    expect(
+      await confirmSharedLaunchReportIdentity({
+        reportId: "report-1",
+        token: "a".repeat(64),
+        reportChecksum: payload.reportChecksum,
+        identity: { kind: "COMMIT", value: COMMIT },
+      })
+    ).toBe("MATCH")
+    expect(mocks.policyFindFirst).not.toHaveBeenCalled()
   })
 
   it("does not confirm identity from a checksum-mismatched stored payload", async () => {

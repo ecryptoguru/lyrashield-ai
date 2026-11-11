@@ -1,9 +1,14 @@
 import { isDeepStrictEqual } from "node:util"
 import { DETERMINISTIC_RETEST_SCANNERS } from "@lyrashield/types"
+import { VIBE_SECURITY_CONTROLS } from "@lyrashield/security"
 import { z } from "zod"
 import { verifyStoredManifestChecksum } from "./manifest-checksum"
 import type { ScopedTransaction } from "./rls"
 import type { Prisma } from "./generated/prisma"
+
+// Worker coverage contract: up to 500 scoped entries, 50 gaps, nine
+// scanner families, one PHP applicability row, and one row per control.
+export const MAX_RETEST_COVERAGE_RECEIPTS = 500 + 50 + 9 + 1 + VIBE_SECURITY_CONTROLS.length
 
 const deterministicScanners = new Set<string>(DETERMINISTIC_RETEST_SCANNERS)
 const checksum = z.string().regex(/^[0-9a-f]{64}$/i)
@@ -265,7 +270,7 @@ export async function loadReceiptBackedRetestFindingIdsAcrossTargets(
             SELECT jsonb_agg(to_jsonb(c)) AS items FROM (
               SELECT "id", "scanId", "scanner", "controlId", "status"::text AS "status",
                 "reason", "subject", "metadata"
-              FROM "ScanCoverageReceipt" WHERE "scanId" = s."id" LIMIT 513
+              FROM "ScanCoverageReceipt" WHERE "scanId" = s."id" LIMIT ${MAX_RETEST_COVERAGE_RECEIPTS + 1}
             ) c
           ) coverage ON true
           WHERE s."workspaceId" = ${input.workspaceId} AND s."id" = ANY(${scanIds}::text[])
@@ -299,7 +304,7 @@ export async function loadReceiptBackedRetestFindingIdsAcrossTargets(
             status: true,
             resultManifest: { select: { checksum: true, checksumInput: true, manifest: true } },
             coverageReceipts: {
-              ...(input.bounded ? { take: 513 } : {}),
+              ...(input.bounded ? { take: MAX_RETEST_COVERAGE_RECEIPTS + 1 } : {}),
               select: {
                 id: true,
                 scanId: true,
@@ -344,7 +349,7 @@ export async function loadReceiptBackedRetestFindingIdsAcrossTargets(
     for (const scan of scans) {
       if (
         scan.targetId &&
-        scan.coverageReceipts.length > 512 &&
+        scan.coverageReceipts.length > MAX_RETEST_COVERAGE_RECEIPTS &&
         requestsByTarget.get(scan.targetId)?.scanIds.has(scan.id)
       ) {
         overloaded.add(scan.targetId)

@@ -68,6 +68,7 @@ import { GET as sharedGet } from "../../../api/reports/shared/[id]/route"
 import { GET as reportGet, POST as reportPost } from "../../../api/reports/[id]/route"
 import { POST as packetPost } from "../../../api/reports/release-packet/[id]/route"
 import { getReportByShareToken } from "../../../../../../../packages/db/src/report-service"
+import { buildLaunchReportPayload } from "../../../../../../../packages/db/src/launch-report-payload"
 
 // Synthetic capability, deliberately unrelated to any deployed report.
 const token = "a".repeat(64)
@@ -148,6 +149,34 @@ describe("release packet cannot cross the generic report boundary", () => {
     expect(mocks.requirePermission).not.toHaveBeenCalled()
     expect(mocks.scanFindFirst).not.toHaveBeenCalled()
     expect(mocks.groupBy).not.toHaveBeenCalled()
+  })
+
+  it("does not fall back to the generic page when the launch reader declines", async () => {
+    const payload = buildLaunchReportPayload(
+      {
+        standardVersion: "lyrashield-gate/2.4.0",
+        state: "READY",
+        coverageStatement: [],
+        nonCoverage: [],
+        blockingReasons: [],
+        evidenceSummary: {
+          verified: 0,
+          retestConfirmed: 0,
+          unresolvedCritical: 0,
+          unresolvedHigh: 0,
+        },
+        staleness: { current: true },
+        verdictChecksum: "fixture",
+        evaluatedAt: new Date("2026-11-12T00:00:00Z"),
+      },
+      { issuedAt: new Date("2026-11-12T00:01:00Z") }
+    )
+    mocks.queryRaw.mockResolvedValue([
+      { ...report, type: "launch_readiness", contentJson: payload, scanId: null },
+    ])
+    await expect(
+      SharedReportPage({ ...params, searchParams: Promise.resolve({ token }) })
+    ).rejects.toThrow("NEXT_NOT_FOUND")
   })
 
   it("denies the generic page when a token is revoked after lookup", async () => {

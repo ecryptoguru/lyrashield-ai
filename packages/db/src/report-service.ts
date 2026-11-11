@@ -394,7 +394,7 @@ export async function getShareableReportByToken(
   workspaceId: string,
   token: string
 ): Promise<ShareableReport | null> {
-  return readShareableReport(reportId, workspaceId, token)
+  return readShareableReport(reportId, workspaceId, token, true)
 }
 
 async function readShareableReport(

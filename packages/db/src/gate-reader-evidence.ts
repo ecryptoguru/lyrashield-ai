@@ -98,8 +98,11 @@ export async function findMismatchedGateEvidence(
       ORDER BY "id" LIMIT 10001
     ) AS f
     LEFT JOIN LATERAL (
-      SELECT jsonb_agg(to_jsonb(r)) AS items FROM (
-        SELECT "status"::text AS "status", "method"::text AS "method", "scanId", "verifierVersion", "evidence"
+      SELECT jsonb_agg(jsonb_build_object(
+        'status', r."status", 'method', r."method", 'scanId', r."scanId",
+        'verifierVersion', r."verifierVersion", 'evidence', r."evidence"
+      ) ORDER BY r."createdAt" DESC, r."id" DESC) AS items FROM (
+        SELECT "id", "createdAt", "status"::text AS "status", "method"::text AS "method", "scanId", "verifierVersion", "evidence"
         FROM "FindingVerification"
         WHERE "workspaceId" = ${workspaceId} AND "findingId" = f."id"
           AND ("status" IN ('VALIDATED', 'VERIFIED') OR "method" = 'RETEST')

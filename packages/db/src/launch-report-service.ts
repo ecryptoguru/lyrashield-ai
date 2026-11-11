@@ -290,6 +290,49 @@ function reportSourceFromVerdict(verdict: GateVerdict, current: boolean): Launch
   }
 }
 
+/** Bind the frozen public payload and private provenance to one immutable verdict. */
+async function loadBoundReportVerdict(
+  tx: ScopedTransaction,
+  workspaceId: string,
+  provenance: LaunchReportProvenance | null,
+  payload: LaunchReportShareablePayload
+): Promise<GateVerdict | null> {
+  if (!provenance) return null
+  try {
+    const verdict = await tx.gateVerdict.findFirst({
+      where: { id: provenance.gateVerdictId, workspaceId },
+    })
+    const snapshot = verdict ? parseAssessmentSnapshot(verdict.assessmentSnapshot) : null
+    const expectedEffective =
+      provenance.applicability === "applicable"
+        ? verdict?.state
+        : provenance.applicability === "not_applicable"
+          ? "INSUFFICIENT_EVIDENCE"
+          : null
+    if (
+      !verdict ||
+      verdict.verdictChecksum !== provenance.verdictChecksum ||
+      verdict.assessmentVersion !== provenance.assessmentVersion ||
+      verdict.evaluatedAt.toISOString() !== provenance.assessedAt ||
+      verdict.state !== provenance.historicalState ||
+      provenance.effectiveState !== expectedEffective ||
+      !isDeepStrictEqual(snapshot?.identity ?? null, provenance.assessedIdentity) ||
+      payload.issuedAt !== provenance.issuedAt
+    )
+      return null
+    const expected = buildLaunchReportPayload(
+      reportSourceFromVerdict(verdict, provenance.applicability === "applicable"),
+      {
+        appDisplayName: payload.appDisplayName,
+        issuedAt: new Date(provenance.issuedAt),
+      }
+    )
+    return expected.reportChecksum === payload.reportChecksum ? verdict : null
+  } catch {
+    return null
+  }
+}
+
 /** A signed report remains immutable; only its current presentation is qualified. */
 async function reportEvidenceMatches(
   tx: ScopedTransaction,
@@ -299,26 +342,10 @@ async function reportEvidenceMatches(
 ): Promise<boolean> {
   if (!provenance || provenance.applicability !== "applicable") return false
   try {
-    const verdict = await tx.gateVerdict.findFirst({
-      where: { id: provenance.gateVerdictId, workspaceId },
-    })
-    const snapshot = verdict ? parseAssessmentSnapshot(verdict.assessmentSnapshot) : null
-    if (
-      !verdict ||
-      verdict.verdictChecksum !== provenance.verdictChecksum ||
-      verdict.assessmentVersion !== provenance.assessmentVersion ||
-      verdict.evaluatedAt.toISOString() !== provenance.assessedAt ||
-      verdict.state !== provenance.historicalState ||
-      !isDeepStrictEqual(snapshot?.identity ?? null, provenance.assessedIdentity) ||
-      payload.issuedAt !== provenance.issuedAt
+    const verdict = await loadBoundReportVerdict(tx, workspaceId, provenance, payload)
+    return (
+      verdict !== null && (await evaluateVerdictApplicability(tx, workspaceId, verdict)).applicable
     )
-      return false
-    const expected = buildLaunchReportPayload(reportSourceFromVerdict(verdict, true), {
-      appDisplayName: payload.appDisplayName,
-      issuedAt: new Date(provenance.issuedAt),
-    })
-    if (expected.reportChecksum !== payload.reportChecksum) return false
-    return (await evaluateVerdictApplicability(tx, workspaceId, verdict)).applicable
   } catch {
     return false
   }
@@ -455,6 +482,9 @@ export async function confirmSharedLaunchReportIdentity(input: {
     ) {
       return "UNAVAILABLE"
     }
+
+    if (!(await loadBoundReportVerdict(tx, resolved.workspaceId, provenance, payload)))
+      return "UNAVAILABLE"
 
     const expected = Buffer.from(provenance.assessedIdentity.value.toLowerCase(), "utf8")
     const supplied = Buffer.from(input.identity.value.toLowerCase(), "utf8")

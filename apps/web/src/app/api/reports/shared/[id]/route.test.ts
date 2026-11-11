@@ -80,6 +80,28 @@ describe("GET /api/reports/shared/[id]", () => {
     expect(getShareableReportByToken).toHaveBeenCalledWith("report-1", "ws-1", "b".repeat(64))
   })
 
+  it("returns safe metadata for a validated launch-readiness report", async () => {
+    getReportByShareToken.mockResolvedValue({
+      id: "report-1",
+      workspaceId: "ws-1",
+      shareExpiresAt: null,
+    })
+    getShareableReportByToken.mockResolvedValue({
+      id: "report-1",
+      type: "launch_readiness",
+      title: "LyraShield Launch Readiness Report",
+    })
+    const response = await GET(request("report-1", "a".repeat(64)), {
+      params: Promise.resolve({ id: "report-1" }),
+    })
+    expect(response.status).toBe(200)
+    expect(getShareableReportByToken).toHaveBeenCalledWith("report-1", "ws-1", "a".repeat(64))
+    expect(await response.json()).toMatchObject({
+      success: true,
+      data: { type: "launch_readiness" },
+    })
+  })
+
   it("never serves a private release packet through the public shared-report route", async () => {
     getReportByShareToken.mockResolvedValue({
       id: "report-1",

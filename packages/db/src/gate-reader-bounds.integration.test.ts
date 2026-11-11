@@ -3,7 +3,10 @@ import { Client } from "pg"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { findMismatchedGateEvidence } from "./gate-reader-evidence"
 import { readActiveSharedReport } from "./report-service"
-import { loadReceiptBackedRetestFindingIdsAcrossTargets } from "./retest-evidence-trust"
+import {
+  MAX_RETEST_COVERAGE_RECEIPTS,
+  loadReceiptBackedRetestFindingIdsAcrossTargets,
+} from "./retest-evidence-trust"
 import type { ScopedTransaction } from "./rls"
 
 const url = process.env.GATE_READER_TEST_DATABASE_URL
@@ -202,6 +205,45 @@ describe.skipIf(!url)("per-target gate bounds against PostgreSQL", () => {
       })
       return { trusted, unverified }
     }
+    await client.query(
+      `INSERT INTO "Finding" ("id", "workspaceId", "targetId", "severity", "status", "verificationStatus", "lastSeenAt", "scanId", "dedupeKey") VALUES ('small-finding', 'ws', 'small', 'HIGH', 'FIXED', 'DETECTED', NOW(), 'small-base', 'small-key')`
+    )
+    await client.query(
+      `INSERT INTO "FindingVerification" VALUES ('old-valid','ws','small-finding','VALIDATED','RETEST','small-retest','result-integrity-v3',$1,'2026-01-01')`,
+      [JSON.stringify(b.finding.verificationReceipts[0]!.evidence)]
+    )
+    await client.query(
+      `INSERT INTO "FindingVerification" VALUES ('new-invalid','ws','small-finding','VALIDATED','RETEST','small-retest','result-integrity-v3','{}','2026-01-02')`
+    )
+    const receiptSummary = {
+      detected: 1,
+      validated: 0,
+      verified: 0,
+      retestConfirmed: 1,
+      inconclusive: 0,
+      insufficientPositiveEvidence: 0,
+      blockingUnverified: 0,
+      unresolvedCritical: 0,
+      unresolvedHigh: 0,
+      unresolvedMedium: 0,
+      unresolvedLow: 0,
+      acceptedRisk: 0,
+      falsePositive: 0,
+    }
+    const verdict = [
+      {
+        targetId: "small",
+        scanId: "small-retest",
+        evidenceSummary: receiptSummary,
+        blockingReasons: [],
+      },
+    ]
+    expect(await findMismatchedGateEvidence(tx, "ws", verdict)).toEqual(new Set(["small"]))
+    await client.query(`DELETE FROM "FindingVerification" WHERE "id" = 'new-invalid'`)
+    expect(await findMismatchedGateEvidence(tx, "ws", verdict)).toEqual(new Set())
+    await client.query(
+      `INSERT INTO "ScanCoverageReceipt" SELECT 'small-extra-' || n, 'small-base', 'unused', 'extra-' || n, 'COMPLETED', NULL, NULL, NULL FROM generate_series(1,${MAX_RETEST_COVERAGE_RECEIPTS - 1}) AS n`
+    )
     const both = await evaluate([a.finding, b.finding])
     expect(both).toEqual({ trusted: new Set([b.finding.id]), unverified: new Set(["large"]) })
     expect(await evaluate([a.finding])).toEqual({
@@ -213,7 +255,7 @@ describe.skipIf(!url)("per-target gate bounds against PostgreSQL", () => {
       unverified: new Set(),
     })
     await client.query(
-      `INSERT INTO "ScanCoverageReceipt" SELECT 'extra-' || n, 'large-base', 'sca', 'extra-' || n, 'COMPLETED', NULL, NULL, NULL FROM generate_series(1,512) AS n`
+      `INSERT INTO "ScanCoverageReceipt" SELECT 'extra-' || n, 'large-base', 'sca', 'extra-' || n, 'COMPLETED', NULL, NULL, NULL FROM generate_series(1,${MAX_RETEST_COVERAGE_RECEIPTS}) AS n`
     )
     const coverage = await evaluate([a.finding, b.finding])
     expect(coverage).toEqual({ trusted: new Set([b.finding.id]), unverified: new Set(["large"]) })

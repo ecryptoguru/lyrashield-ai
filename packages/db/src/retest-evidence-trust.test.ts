@@ -1,6 +1,11 @@
 import { createHash } from "node:crypto"
 import { describe, expect, it } from "vitest"
-import { isReceiptBackedRetest } from "./retest-evidence-trust"
+import { isReceiptBackedRetest, MAX_RETEST_COVERAGE_RECEIPTS } from "./retest-evidence-trust"
+import {
+  MAX_SCOPED_COVERAGE_ENTRIES,
+  MAX_COVERAGE_GAPS,
+} from "../../../apps/worker/src/engine/engine-output-schema"
+import { VIBE_SECURITY_CONTROLS } from "@lyrashield/security"
 
 function fixture(targetType: "REPO" | "WEB_APP" = "REPO") {
   const identity = (scanId: string, revision: string) => {
@@ -173,4 +178,10 @@ describe("batched retest candidate binding", () => {
       })
     ).toEqual(new Set([finding.id]))
   })
+})
+
+it("permits the worker's maximum supported coverage receipts", () => {
+  expect(MAX_RETEST_COVERAGE_RECEIPTS).toBeGreaterThanOrEqual(
+    MAX_SCOPED_COVERAGE_ENTRIES + MAX_COVERAGE_GAPS + 9 + 1 + VIBE_SECURITY_CONTROLS.length
+  )
 })

@@ -185,8 +185,8 @@ describe("gate readers with retained worker receipts", () => {
             .flatMap((f) => [f.baseline, f.current])
             .filter(
               (scan) =>
-                (values[1] as string[]).includes(scan.id) &&
-                (values[2] as string[]).includes(scan.targetId)
+                (values[2] as string[]).includes(scan.id) &&
+                (values[3] as string[]).includes(scan.targetId)
             )
         if (sql.includes('FROM "Retest"'))
           return data

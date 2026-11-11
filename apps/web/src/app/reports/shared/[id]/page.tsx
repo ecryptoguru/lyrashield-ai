@@ -39,7 +39,8 @@ export default async function SharedReportPage({
   }
 
   const shareable = await getShareableReportByToken(report.id, report.workspaceId, token)
-  if (!shareable || shareable.type === "release_packet") return notFound()
+  if (!shareable || shareable.type === "release_packet" || shareable.type === "launch_readiness")
+    return notFound()
 
   return <SharedReportView report={shareable} />
 }
