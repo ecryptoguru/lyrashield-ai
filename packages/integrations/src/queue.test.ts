@@ -44,6 +44,7 @@ const mocks = vi.hoisted(() => {
     },
     async exists(key: string) {
       if (existsError) throw existsError
+      if (commandResults.has("exists")) return commandResults.get("exists")
       return values.has(key) ? 1 : 0
     },
   }
@@ -272,6 +273,67 @@ describe("scan worker availability", () => {
       code: "SCAN_SERVICE_UNAVAILABLE",
       reason: "ADMISSION_HELD",
     })
+  })
+
+  it.each([
+    { label: "null", value: null },
+    { label: "undefined", value: undefined },
+    { label: "NaN", value: NaN },
+    { label: "negative count", value: -1 },
+    { label: "count above one", value: 2 },
+    { label: "fractional count", value: 0.5 },
+    { label: "infinite count", value: Infinity },
+    { label: "nonnumeric string", value: "not-a-count" },
+    { label: "string zero", value: "0" },
+    { label: "string one", value: "1" },
+    { label: "object", value: {} },
+    { label: "array", value: [] },
+    { label: "false", value: false },
+    { label: "true", value: true },
+  ])(
+    "fails readiness and queue admission closed for an admission-stop $label reply",
+    async ({ value }) => {
+      await registerScanWorker("worker-1", Date.now())
+      mocks.commandResults.set("exists", value)
+      mocks.commandCalls.length = 0
+
+      await expect(assertScanWorkerAvailable()).rejects.toMatchObject({
+        code: "SCAN_SERVICE_UNAVAILABLE",
+        message: "No scan worker is currently available",
+        reason: "UNKNOWN",
+      })
+      await expect(
+        enqueueScan({
+          scanId: "scan-malformed-stop",
+          workspaceId: "workspace-1",
+          targetId: "target-1",
+          goal: "TEST_APP",
+          mode: "SAFE",
+        })
+      ).rejects.toMatchObject({ reason: "UNKNOWN" })
+      expect(mocks.queueAdd).not.toHaveBeenCalled()
+      expect(mocks.commandCalls).toEqual([])
+    }
+  )
+
+  it("checks the separate worker registry after an exact numeric zero admission-stop reply", async () => {
+    await registerScanWorker("worker-1", Date.now())
+    mocks.commandResults.set("exists", 0)
+    mocks.commandCalls.length = 0
+
+    await expect(assertScanWorkerAvailable()).resolves.toBeUndefined()
+    expect(mocks.commandCalls).toEqual([
+      { name: "scanWorkerReadiness", args: ["lyrashield:scan-workers", expect.any(Number)] },
+    ])
+  })
+
+  it("reports an exact numeric one admission-stop reply as held before checking the worker registry", async () => {
+    await registerScanWorker("worker-1", Date.now())
+    mocks.commandResults.set("exists", 1)
+    mocks.commandCalls.length = 0
+
+    await expect(assertScanWorkerAvailable()).rejects.toMatchObject({ reason: "ADMISSION_HELD" })
+    expect(mocks.commandCalls).toEqual([])
   })
 
   it("reports Redis failures and malformed worker lease results without guessing a cause", async () => {

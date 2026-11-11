@@ -169,7 +169,11 @@ export async function assertScanWorkerAvailable(): Promise<void> {
 
   try {
     // This key is in a different Redis Cluster slot from the worker registry.
-    if ((await redis.exists(SCAN_ADMISSION_STOP_KEY)) > 0) {
+    const admissionStop = await redis.exists(SCAN_ADMISSION_STOP_KEY)
+    if (admissionStop !== 0 && admissionStop !== 1) {
+      throw new ScanWorkerUnavailableError("UNKNOWN")
+    }
+    if (admissionStop === 1) {
       throw new ScanWorkerUnavailableError("ADMISSION_HELD")
     }
   } catch (error) {
