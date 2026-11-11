@@ -118,6 +118,7 @@ export class IndependentAuthorityJournal<T> {
   private records: JournalRecord<AuthorityEvent<T>>[] | null = null
   private confirmed = 0
   private pending: JournalRecord<AuthorityEvent<T>> | null = null
+  private pendingRequiresConfirmation = false
   private serial: Promise<void> = Promise.resolve()
   private failed: IndependentAuthorityError | null = null
 
@@ -211,6 +212,15 @@ export class IndependentAuthorityJournal<T> {
         this.pending = record
       }
       const record = this.pending
+      if (this.pendingRequiresConfirmation) {
+        if (!this.options.local.confirmRecord) {
+          throw unknown("pending local record requires explicit fsync confirmation")
+        }
+        const local = await this.options.local.confirmRecord(record)
+        if (!same(local, record))
+          throw conflict("local replay confirmation changed the signed record")
+        this.pendingRequiresConfirmation = false
+      }
       await this.persist(record)
       await this.assertHeads(record.sequence)
       await this.assertAuthorized(event)
@@ -333,7 +343,10 @@ export class IndependentAuthorityJournal<T> {
         throw conflict("local, independent and database authority histories disagree")
       }
       this.confirmed = mirrorSeq
-      if (records.length > mirrorSeq) this.pending = records[mirrorSeq]!
+      if (records.length > mirrorSeq) {
+        this.pending = records[mirrorSeq]!
+        this.pendingRequiresConfirmation = true
+      }
       for (let index = 0; index < remoteSeq; index += 1) await this.verifyRecord(records[index]!)
       for (let index = 0; index < mirrorSeq; index += 1) {
         await this.verifyMirrorRecord(records[index]!)
@@ -343,6 +356,7 @@ export class IndependentAuthorityJournal<T> {
       // confirmed on retry. Reconstruct every head from durable sources again.
       this.records = null
       this.pending = null
+      this.pendingRequiresConfirmation = false
       this.confirmed = 0
       this.byEvent.clear()
       throw error
