@@ -1,41 +1,58 @@
 import type { ProviderRoute } from "./config"
 import { ProviderGatewayError } from "./errors"
 
-export async function abortable<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> {
+export async function abortable<T>(
+  operation: Promise<T>,
+  signal: AbortSignal,
+  idleTimeoutMs?: number
+): Promise<T> {
   if (signal.aborted) throw new Error("operation aborted")
   let onAbort: () => void = () => undefined
+  let timeout: ReturnType<typeof setTimeout> | undefined
   const aborted = new Promise<never>((_resolve, reject) => {
     onAbort = () => reject(new Error("operation aborted"))
     signal.addEventListener("abort", onAbort, { once: true })
+    if (idleTimeoutMs !== undefined)
+      timeout = setTimeout(
+        () => reject(new Error("provider idle deadline exceeded")),
+        idleTimeoutMs
+      )
   })
   try {
     return await Promise.race([operation, aborted])
   } finally {
     signal.removeEventListener("abort", onAbort)
+    if (timeout !== undefined) clearTimeout(timeout)
   }
 }
 
-export async function readBoundedResponse(response: Response, maxBytes: number): Promise<Buffer> {
+export async function readBoundedResponse(
+  response: Response,
+  maxBytes: number,
+  options: { signal: AbortSignal; idleTimeoutMs: number; onChunk: (chunk: Uint8Array) => void }
+): Promise<Buffer> {
   if (!response.body) return Buffer.alloc(0)
   const reader = response.body.getReader()
   const chunks: Buffer[] = []
   let total = 0
   try {
     for (;;) {
-      const { done, value } = await reader.read()
+      const { done, value } = await abortable(reader.read(), options.signal, options.idleTimeoutMs)
       if (done) break
       total += value.byteLength
       if (total > maxBytes) {
-        await reader.cancel()
         throw new ProviderGatewayError(
           "PROVIDER_RESPONSE_TOO_LARGE",
           "provider response exceeds the byte cap",
           502
         )
       }
+      options.onChunk(value)
       chunks.push(Buffer.from(value))
     }
   } finally {
+    // Do not await an uncooperative provider's cancellation acknowledgement.
+    void reader.cancel().catch(() => undefined)
     reader.releaseLock()
   }
   return Buffer.concat(chunks, total)
