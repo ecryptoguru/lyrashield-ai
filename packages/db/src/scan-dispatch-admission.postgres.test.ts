@@ -205,7 +205,17 @@ describe.skipIf(!enabled)("shadow admission with disposable PostgreSQL", () => {
     const operation = await owner.scanDispatchOperation.findUniqueOrThrow({
       where: { scanId: scan.id },
     })
-    const epoch = await owner.scanAuthorityEpoch.findFirstOrThrow({ where: { isOpen: true } })
+    // The owned runner creates this common epoch before launching either suite.
+    // Do not depend on broker-test setup or accept an arbitrary open epoch.
+    const epoch = await owner.scanAuthorityEpoch.findUniqueOrThrow({
+      where: { id: "authority-shared-open-epoch" },
+    })
+    expect(epoch).toMatchObject({
+      isOpen: true,
+      openKey: "open",
+      openedAt: expect.any(Date),
+      closedAt: null,
+    })
     const instanceId = randomUUID()
     const grant = await owner.scanWorkerInstanceGrant.create({
       data: {
