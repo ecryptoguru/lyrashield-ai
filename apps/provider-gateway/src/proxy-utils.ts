@@ -1,5 +1,8 @@
+import { performance } from "node:perf_hooks"
 import type { ProviderRoute } from "./config"
 import { ProviderGatewayError } from "./errors"
+
+export const MAX_DELIVERY_CHUNK_BYTES = 64 * 1024
 
 export async function abortable<T>(
   operation: Promise<T>,
@@ -29,33 +32,62 @@ export async function abortable<T>(
 export async function readBoundedResponse(
   response: Response,
   maxBytes: number,
-  options: { signal: AbortSignal; idleTimeoutMs: number; onChunk: (chunk: Uint8Array) => void }
+  options: {
+    signal: AbortSignal
+    deadlineAt?: number
+    idleTimeoutMs: number
+    onChunk: (chunk: Uint8Array) => void | Promise<void>
+  }
 ): Promise<Buffer> {
   if (!response.body) return Buffer.alloc(0)
   const reader = response.body.getReader()
-  const chunks: Buffer[] = []
+  // Fixed storage also bounds object overhead for tiny fragmented inputs.
+  const storage = Buffer.allocUnsafe(maxBytes)
   let total = 0
   try {
     for (;;) {
+      if (options.deadlineAt !== undefined && performance.now() >= options.deadlineAt)
+        throw new ProviderGatewayError(
+          "PROVIDER_DEADLINE_EXCEEDED",
+          "provider deadline exceeded",
+          502
+        )
       const { done, value } = await abortable(reader.read(), options.signal, options.idleTimeoutMs)
       if (done) break
-      total += value.byteLength
-      if (total > maxBytes) {
+      if (total + value.byteLength > maxBytes) {
         throw new ProviderGatewayError(
           "PROVIDER_RESPONSE_TOO_LARGE",
           "provider response exceeds the byte cap",
           502
         )
       }
-      options.onChunk(value)
-      chunks.push(Buffer.from(value))
+      const start = total
+      storage.set(value, start)
+      total += value.byteLength
+      for (let offset = 0; offset < value.byteLength; offset += MAX_DELIVERY_CHUNK_BYTES) {
+        if (options.deadlineAt !== undefined && performance.now() >= options.deadlineAt)
+          throw new ProviderGatewayError(
+            "PROVIDER_DEADLINE_EXCEEDED",
+            "provider deadline exceeded",
+            502
+          )
+        const chunk = storage.subarray(
+          start + offset,
+          Math.min(total, start + offset + MAX_DELIVERY_CHUNK_BYTES)
+        )
+        await abortable(
+          Promise.resolve(options.onChunk(chunk)),
+          options.signal,
+          options.idleTimeoutMs
+        )
+      }
     }
   } finally {
     // Do not await an uncooperative provider's cancellation acknowledgement.
     void reader.cancel().catch(() => undefined)
     reader.releaseLock()
   }
-  return Buffer.concat(chunks, total)
+  return storage.subarray(0, total)
 }
 
 export function resolveProviderUrl(route: ProviderRoute, rawPath: string): URL {
