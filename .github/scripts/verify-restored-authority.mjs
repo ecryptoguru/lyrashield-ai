@@ -13,7 +13,9 @@
  * allowlist is empty; system/extension additions and other versions require separate review.
  * Source/permission/history reads are separate bounded observations, not a coherent authority
  * snapshot. Container ownership does not exclude concurrent catalog, grant or epoch writers.
- * Qualification is withheld and restored helpers are never executed by this diagnostic.
+ * Qualification is withheld; no explicit digest execution probe is issued. Named-relation
+ * reads can still invoke restored code through views, policies or concurrent replacements.
+ * Read-only is not a non-executing inspection guarantee, and relkind is not a writer fence.
  * It neither closes nor opens epochs and grants nothing.
  */
 import { spawnSync } from "node:child_process"

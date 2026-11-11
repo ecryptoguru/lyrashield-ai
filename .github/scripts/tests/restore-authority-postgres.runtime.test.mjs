@@ -387,7 +387,7 @@ test(
           )
           return observed
         })
-        assert.equal(reads, 1, "no restored helper may execute after the catalog observation")
+        assert.equal(reads, 1, "no explicit digest probe follows the catalog observation")
         assert.equal(result.dispatch, "UNQUALIFIED")
         assert.equal(result.consistentAuthorityStateQualified, false)
         assert.equal(result.admissionAllowed, false)
@@ -399,6 +399,69 @@ test(
           "1"
         )
         rejected(verify())
+      }
+    )
+    await t.test(
+      "named migration view invokes restored code in READ ONLY without qualification",
+      async () => {
+        restoreDispatch()
+        sql(
+          `ALTER TABLE public."_prisma_migrations" RENAME TO "_prisma_migrations_fixture";
+         CREATE FUNCTION app.fixture_migration_checksum(value text) RETURNS text LANGUAGE plpgsql VOLATILE AS $$
+         BEGIN PERFORM pg_catalog.set_config('lyrashield.fixture_view_executed','yes',true); RETURN value; END; $$;
+         CREATE VIEW public."_prisma_migrations" AS SELECT migration_name,
+           app.fixture_migration_checksum(checksum) AS checksum,finished_at,rolled_back_at
+           FROM public."_prisma_migrations_fixture";`,
+          "lyrashield_restore"
+        )
+        let invoked = false
+        const result = await verifyRestoredAuthority(config, async (_, querySql) => {
+          const lines = sql(
+            `BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY; ${querySql}
+           SELECT pg_catalog.current_setting('lyrashield.fixture_view_executed',true); ROLLBACK;`,
+            "lyrashield_restore"
+          ).split("\n")
+          invoked = lines[1] === "yes"
+          assert.equal(JSON.parse(lines[0]).migration, true)
+          return JSON.parse(lines[0])
+        })
+        assert.equal(invoked, true, "ordinary named-relation SELECT can invoke restored functions")
+        assert.equal(result.dispatch, "UNQUALIFIED")
+        assert.equal(result.consistentAuthorityStateQualified, false)
+      }
+    )
+    await t.test(
+      "relkind rejection does not prevent a named epoch view from invoking code",
+      async () => {
+        restoreDispatch()
+        sql(
+          `ALTER TABLE public."ScanAuthorityEpoch" RENAME TO "ScanAuthorityEpoch_fixture";
+         CREATE FUNCTION app.fixture_epoch_open(value boolean) RETURNS boolean LANGUAGE plpgsql VOLATILE AS $$
+         BEGIN PERFORM pg_catalog.set_config('lyrashield.fixture_epoch_view_executed','yes',true); RETURN value; END; $$;
+         CREATE VIEW public."ScanAuthorityEpoch" AS SELECT id,epoch,
+           app.fixture_epoch_open("isOpen") AS "isOpen","openKey","openedAt","closedAt","updatedAt"
+           FROM public."ScanAuthorityEpoch_fixture";`,
+          "lyrashield_restore"
+        )
+        let invoked = false
+        await assert.rejects(
+          verifyRestoredAuthority(config, async (_, querySql) => {
+            const lines = sql(
+              `BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY; ${querySql}
+           SELECT pg_catalog.current_setting('lyrashield.fixture_epoch_view_executed',true); ROLLBACK;`,
+              "lyrashield_restore"
+            ).split("\n")
+            invoked = lines[1] === "yes"
+            assert.equal(JSON.parse(lines[0]).tables, false)
+            return JSON.parse(lines[0])
+          }),
+          { code: "RESTORED_AUTHORITY_REJECTED" }
+        )
+        assert.equal(
+          invoked,
+          true,
+          "relkind is a rejection check, not an execution or concurrency fence"
+        )
       }
     )
     for (const schema of ["pg_catalog", "public"])

@@ -262,7 +262,7 @@ test("public/app verification never claims mirror or admission qualification", a
   )
   assert.equal(reads, 1)
 })
-test("standalone diagnostic withholds qualification and never executes restored helpers", async () => {
+test("standalone diagnostic withholds qualification and issues no explicit digest execution probes", async () => {
   const value = config()
   value.dispatch.deniedRoles.push("authority_worker_restore")
   const observations = []
@@ -295,15 +295,15 @@ test("standalone diagnostic withholds qualification and never executes restored 
       return { ...closed, extension: false }
     })
   )
-  assert.equal(observations.length, 1, "unverified helpers must never execute")
+  assert.equal(observations.length, 1, "no explicit digest probe follows rejected metadata")
   assert.throws(() => dispatchDigestProbeSql("runtime';SELECT 1;--"))
 })
-test("drift after a closed observation cannot produce VERIFIED_CLOSED or invoke a changed helper", async () => {
+test("drift after a closed observation cannot produce VERIFIED_CLOSED or an explicit digest probe", async () => {
   let reads = 0
   let changed = false
   const result = await verifyRestoredAuthority(config(), async (_, sql) => {
     reads++
-    assert.equal(changed, false, "no later executable read may follow the static observation")
+    assert.equal(changed, false, "no later explicit digest probe follows the static observation")
     assert.doesNotMatch(sql, /DO \$restore_probe\$/)
     changed = true // Represents an owner opening the epoch or replacing a helper after this read.
     return closed
@@ -437,7 +437,8 @@ test("generated observations stay read-only and bind executable source rather th
     assert.match(sql, /p\.proparallel='u'/)
     assert.match(sql, /NOT p\.proleakproof/)
   }
-  // SQL function bodies appear only as escaped literals, never executed during observation.
+  // Reviewed bodies are compared as escaped literals. Named relations can still be views
+  // that invoke restored code; these generated observations are not a non-executing inspector.
   assert.ok(dispatch.startsWith("SELECT "))
   assert.ok(mirror.startsWith("SELECT "))
 })

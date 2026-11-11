@@ -575,8 +575,12 @@ unwired from the production backup workflow. Its owned fixture pins PostgreSQL
 `digest(bytea,text)` implementation. It passively checks migration/source,
 extension identity, role grants and closed-state observations in bounded read-only
 transactions. Missing extension, schema usage, table read, RLS helper or digest
-execution grants fail closed. Restored helpers are never executed by the
-standalone diagnostic. Its result schema `/2` reports `UNQUALIFIED` for dispatch
+execution grants fail closed. The standalone diagnostic issues no explicit
+digest execution probes. Its named-relation reads can still invoke restored
+functions through views, RLS policies, rules, operators or concurrent object
+replacement. Read-only transactions do not establish a non-executing inspector;
+`relkind` rejection checks are neither execution guards nor concurrency fences.
+Its result schema `/2` reports `UNQUALIFIED` for dispatch
 and any requested mirror, with `consistentAuthorityStateQualified=false`,
 `admissionAllowed=false` and `managedFailoverQualified=false`.
 
