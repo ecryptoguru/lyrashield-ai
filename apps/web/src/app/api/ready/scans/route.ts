@@ -11,7 +11,7 @@ export async function GET() {
   } catch (error) {
     if (!(error instanceof ScanWorkerUnavailableError)) throw error
     ready = false
-    logger.warn("Scan service readiness check failed", { ready: false })
+    logger.warn("Scan service readiness check failed", { ready: false, reason: error.reason })
   }
 
   return NextResponse.json(
