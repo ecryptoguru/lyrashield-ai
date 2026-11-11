@@ -30,7 +30,22 @@ const config = () => ({
   schema: "lyrashield-offline-authority-restore/1",
   dispatch: { target: target(), deniedRoles: ["authority_app_restore"] },
 })
-const closed = { migration: true, tables: true, triggers: true, closed: true, roles: true }
+const closed = {
+  migration: true,
+  tables: true,
+  triggers: true,
+  helpers: true,
+  privilegedFunctions: true,
+  closed: true,
+  roles: true,
+}
+const mirrorClosed = {
+  protected: true,
+  functions: true,
+  privilegedFunctions: true,
+  closed: true,
+  roles: true,
+}
 const retainedStream = {
   epochId: "epoch-2",
   supervisorId: "supervisor-1",
@@ -244,18 +259,16 @@ test("mirror requires an independent target, protected closed schema, and exact 
     sql.includes("'migration'")
       ? closed
       : sql.includes("'protected'")
-        ? { protected: true, functions: true, closed: true, roles: true }
+        ? mirrorClosed
         : retainedStream
   const result = await verifyRestoredAuthority(value, read, () => retainedBytes)
   assert.equal(result.mirror, "VERIFIED_CLOSED_RETAINED_BYTES")
-  for (const field of ["protected", "functions", "closed", "roles"]) {
+  for (const field of Object.keys(mirrorClosed)) {
     await assert.rejects(
       verifyRestoredAuthority(
         value,
         async (target, sql) =>
-          sql.includes("'protected'")
-            ? { protected: true, functions: true, closed: true, roles: true, [field]: false }
-            : read(target, sql),
+          sql.includes("'protected'") ? { ...mirrorClosed, [field]: false } : read(target, sql),
         () => retainedBytes
       )
     )
@@ -309,7 +322,24 @@ test("generated observations stay read-only and bind executable source rather th
   assert.match(dispatch, /t\.tgtype=/)
   assert.match(dispatch, /checksum='[a-f0-9]{64}'/)
   assert.match(mirror, /NOT EXISTS .*active/s)
-  assert.match(mirror, /p\.proconfig=ARRAY\['search_path=pg_catalog'\]/)
+  assert.match(mirror, /p\.proconfig\s*=ARRAY\['search_path=pg_catalog'\]/)
+  for (const name of [
+    "scan_attachment_ids_valid",
+    "scan_target_snapshot_digest",
+    "scan_policy_digest",
+    "scan_dispatch_scope_digest",
+  ]) {
+    assert.ok(dispatch.includes(`p.proname='${name}'`))
+  }
+  for (const sql of [dispatch, mirror]) {
+    assert.match(sql, /'privilegedFunctions'/)
+    assert.match(sql, /WHERE p\.prosecdef AND n\.nspname !~/)
+    assert.match(sql, /has_function_privilege\(reachable\.oid,p\.oid,'EXECUTE'\)/)
+    assert.match(sql, /pg_has_role\('[a-z_]+',reachable\.oid,'MEMBER'\)/)
+    assert.match(sql, /p\.proargnames/)
+    assert.match(sql, /p\.proparallel='u'/)
+    assert.match(sql, /NOT p\.proleakproof/)
+  }
   // SQL function bodies appear only as escaped literals, never executed during observation.
   assert.ok(dispatch.startsWith("SELECT "))
   assert.ok(mirror.startsWith("SELECT "))

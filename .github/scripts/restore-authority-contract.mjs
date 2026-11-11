@@ -101,6 +101,19 @@ const bodies = new Map(
     (match) => [match[1], match[2]]
   )
 )
+const dispatchHelpers = [
+  {
+    name: "scan_attachment_ids_valid",
+    arguments: "text[]",
+    names: ["ids"],
+    result: "boolean",
+    volatility: "i",
+    strict: true,
+  },
+  { name: "scan_target_snapshot_digest", arguments: "text", names: ["target_id"] },
+  { name: "scan_policy_digest", arguments: "text", names: ["policy_id"] },
+  { name: "scan_dispatch_scope_digest", arguments: "text", names: ["scan_id"] },
+]
 const triggers = [
   ...dispatchSql.matchAll(
     /CREATE TRIGGER ([a-z_]+)\s+BEFORE (INSERT|UPDATE|DELETE)(?: OR (INSERT|UPDATE|DELETE))? ON "([A-Za-z]+)"\s+FOR EACH ROW EXECUTE FUNCTION app\.([a-z_]+)\(\);/g
@@ -117,7 +130,8 @@ const triggers = [
 requireCheck(
   dispatchTables.length === 11 &&
     triggers.length === 25 &&
-    triggers.every((trigger) => bodies.has(trigger.function)),
+    triggers.every((trigger) => bodies.has(trigger.function)) &&
+    dispatchHelpers.every((helper) => bodies.has(helper.name)),
   "SOURCE_CONTRACT_UNAVAILABLE"
 )
 const tableArray = (names) => `ARRAY[${names.map((name) => literal(name)).join(",")}]::text[]`
@@ -135,6 +149,44 @@ function reachablePrivilege(role, kind, object, privileges) {
     pg_catalog.pg_has_role(${literal(role)},reachable.oid,'MEMBER') AND
     pg_catalog.has_${kind}_privilege(reachable.oid,${object},${literal(privileges)}))`
 }
+// Match reviewed catalog attributes as well as source bytes, including argument names used by
+// PL/pgSQL/SQL bodies. This is a bounded source/permission check, not proof against dynamic SQL,
+// mutable dependencies, or changes after this read-only snapshot.
+function functionContract(schema, definition) {
+  const {
+    name,
+    body,
+    arguments: args = "",
+    names,
+    result = "text",
+    language = "plpgsql",
+    volatility = "v",
+    strict = false,
+    definer = false,
+    config,
+  } = definition
+  return `n.nspname=${literal(schema)} AND p.proname=${literal(name)}
+    AND pg_catalog.oidvectortypes(p.proargtypes)=${literal(args)}
+    AND p.proargnames ${names ? `=${tableArray(names)}` : "IS NULL"}
+    AND p.prorettype=${literal(result)}::regtype AND NOT p.proretset AND p.prokind='f'
+    AND p.proargmodes IS NULL AND p.proallargtypes IS NULL AND p.pronargdefaults=0 AND p.proargdefaults IS NULL AND p.provariadic=0
+    AND p.protrftypes IS NULL AND p.prosupport=0 AND p.prosqlbody IS NULL AND p.probin IS NULL
+    AND p.provolatile=${literal(volatility)} AND p.proisstrict=${strict}
+    AND NOT p.proleakproof AND p.proparallel='u' AND p.procost=100 AND p.prorows=0
+    AND p.prosecdef=${definer} AND p.proconfig ${config ? `=${tableArray(config)}` : "IS NULL"}
+    AND language.lanname=${literal(language)} AND p.prosrc=${literal(body)}`
+}
+// EXECUTE is deliberately checked even without current schema USAGE: a subsequent USAGE grant
+// must not uncover an unreviewed definer. MEMBER includes inherited and SET ROLE permissions;
+// has_function_privilege also includes PUBLIC. No caller-provided SQL allowlist is accepted.
+function reviewedDefinersOnly(role, approved = "false") {
+  return `NOT EXISTS (SELECT 1 FROM pg_catalog.pg_proc p
+    JOIN pg_catalog.pg_namespace n ON n.oid=p.pronamespace
+    JOIN pg_catalog.pg_language language ON language.oid=p.prolang
+    WHERE p.prosecdef AND n.nspname !~ '^pg_' AND n.nspname <> 'information_schema'
+      AND ${reachablePrivilege(role, "function", "p.oid", "EXECUTE")}
+      AND (${approved}) IS NOT TRUE)`
+}
 export function dispatchVerificationSql(deniedRoles) {
   roles(deniedRoles)
   const triggerChecks = triggers
@@ -146,10 +198,15 @@ export function dispatchVerificationSql(deniedRoles) {
     WHERE t.tgrelid=${literal(`public."${trigger.table}"`)}::regclass
       AND t.tgname=${literal(trigger.name)} AND NOT t.tgisinternal AND t.tgenabled='O'
       AND t.tgtype=${trigger.type} AND t.tgqual IS NULL AND t.tgnargs=0 AND t.tgattr=''::int2vector
-      AND n.nspname='app' AND p.proname=${literal(trigger.function)}
-      AND p.pronargs=0 AND p.prorettype='trigger'::regtype AND NOT p.prosecdef
-      AND p.proconfig IS NULL AND language.lanname='plpgsql'
-      AND p.prosrc=${literal(bodies.get(trigger.function))})`
+      AND ${functionContract("app", { name: trigger.function, body: bodies.get(trigger.function), result: "trigger" })})`
+    )
+    .join(" AND ")
+  const helpers = dispatchHelpers
+    .map(
+      (helper) => `EXISTS (
+    SELECT 1 FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid=p.pronamespace
+    JOIN pg_catalog.pg_language language ON language.oid=p.prolang
+    WHERE ${functionContract("app", { result: "text", language: "sql", volatility: "s", ...helper, body: bodies.get(helper.name) })})`
     )
     .join(" AND ")
   const roleChecks = deniedRoles
@@ -167,6 +224,8 @@ export function dispatchVerificationSql(deniedRoles) {
       FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
       WHERE n.nspname='public' AND c.relname=ANY(${tableArray(dispatchTables)})),
     'triggers', ${triggerChecks},
+    'helpers', ${helpers},
+    'privilegedFunctions', ${deniedRoles.map((role) => reviewedDefinersOnly(role)).join(" AND ")},
     'closed', NOT EXISTS (SELECT 1 FROM public."ScanAuthorityEpoch" WHERE "isOpen" OR "openKey" IS NOT NULL OR "closedAt" IS NULL)
       AND EXISTS (SELECT 1 FROM public."ScanAuthorityEpoch" WHERE id='scan-authority-baseline' AND epoch=1
         AND NOT "isOpen" AND "openKey" IS NULL AND "openedAt" IS NULL AND "closedAt" IS NOT NULL),
@@ -179,26 +238,37 @@ const mirrorFunctions = [
   ),
 ].map((match) => ({ name: match[1], body: match[2] }))
 const mirrorArguments = {
-  read_head: "text, text",
-  read_record: "text, text, bigint",
-  append_record: "text, text, text, text, text",
+  read_head: { arguments: "text, text", names: ["p_epoch", "p_supervisor"] },
+  read_record: {
+    arguments: "text, text, bigint",
+    names: ["p_epoch", "p_supervisor", "p_sequence"],
+  },
+  append_record: {
+    arguments: "text, text, text, text, text",
+    names: ["p_epoch", "p_supervisor", "p_previous", "p_head", "p_record"],
+  },
 }
 requireCheck(mirrorFunctions.length === 3, "SOURCE_CONTRACT_UNAVAILABLE")
 export function mirrorVerificationSql(runtimeRole, deniedRoles) {
   roleName(runtimeRole)
   roles(deniedRoles)
+  const approved = mirrorFunctions
+    .map(
+      ({ name, body }) =>
+        `(${functionContract("lyrashield_authority", { name, body, ...mirrorArguments[name], definer: true, config: ["search_path=pg_catalog"] })})`
+    )
+    .join(" OR ")
   const functions = mirrorFunctions
     .map(
       ({ name, body }) => `EXISTS (
     SELECT 1 FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid=p.pronamespace
     JOIN pg_catalog.pg_language language ON language.oid=p.prolang
-    WHERE n.nspname='lyrashield_authority' AND p.proname=${literal(name)}
-      AND p.prosecdef AND p.proconfig=ARRAY['search_path=pg_catalog']::text[] AND p.prosrc=${literal(body)}
-      AND p.prorettype='text'::regtype AND language.lanname='plpgsql'
-      AND pg_catalog.oidvectortypes(p.proargtypes)=${literal(mirrorArguments[name])}
+    WHERE ${functionContract("lyrashield_authority", { name, body, ...mirrorArguments[name], definer: true, config: ["search_path=pg_catalog"] })}
       AND NOT pg_catalog.pg_has_role(${literal(runtimeRole)},p.proowner,'MEMBER')
       AND pg_catalog.has_function_privilege(${literal(runtimeRole)},p.oid,'EXECUTE')
-      AND NOT EXISTS (SELECT 1 FROM pg_catalog.aclexplode(COALESCE(p.proacl,pg_catalog.acldefault('f',p.proowner))) a WHERE a.grantee=0))`
+      AND NOT EXISTS (SELECT 1 FROM pg_catalog.aclexplode(COALESCE(p.proacl,pg_catalog.acldefault('f',p.proowner))) a
+        WHERE a.grantee=0 OR (a.is_grantable AND CASE WHEN a.grantee<>0
+          THEN pg_catalog.pg_has_role(${literal(runtimeRole)},a.grantee,'MEMBER') ELSE false END)))`
     )
     .join(" AND ")
   const denied = deniedRoles
@@ -219,6 +289,7 @@ export function mirrorVerificationSql(runtimeRole, deniedRoles) {
         WHERE n.nspname='lyrashield_authority' AND c.relname IN ('stream','record') AND c.relkind='r'
           AND NOT EXISTS (SELECT 1 FROM pg_catalog.aclexplode(COALESCE(c.relacl,pg_catalog.acldefault('r',c.relowner))) a WHERE a.grantee=0)),
     'functions', ${functions},
+    'privilegedFunctions', ${reviewedDefinersOnly(runtimeRole, approved)} AND ${deniedRoles.map((role) => reviewedDefinersOnly(role)).join(" AND ")},
     'roles', ${restrictedRole(runtimeRole)} AND pg_catalog.has_schema_privilege(${literal(runtimeRole)},'lyrashield_authority','USAGE')
       AND NOT ${reachablePrivilege(runtimeRole, "schema", "'lyrashield_authority'", "CREATE")}
       AND NOT EXISTS (SELECT 1 FROM unnest(ARRAY['stream','record']) name WHERE

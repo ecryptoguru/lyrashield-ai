@@ -149,7 +149,7 @@ export async function verifyRestoredAuthority(
   validateRestoreAuthorityConfig(config)
   assertRestoredChecks(
     await read(config.dispatch.target, dispatchVerificationSql(config.dispatch.deniedRoles)),
-    ["migration", "tables", "triggers", "closed", "roles"]
+    ["migration", "tables", "triggers", "helpers", "privilegedFunctions", "closed", "roles"]
   )
   if (config.mirror) {
     const mirror = config.mirror
@@ -159,7 +159,7 @@ export async function verifyRestoredAuthority(
     )
     assertRestoredChecks(
       await read(mirror.target, mirrorVerificationSql(mirror.runtimeRole, mirror.deniedRoles)),
-      ["protected", "functions", "roles", "closed"]
+      ["protected", "functions", "privilegedFunctions", "roles", "closed"]
     )
     for (const stream of retained.streams)
       assertRetainedJournal(stream, await read(mirror.target, retainedJournalSql(stream)))

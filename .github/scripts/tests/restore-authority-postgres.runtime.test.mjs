@@ -133,6 +133,7 @@ test(
     sql(`CREATE ROLE authority_app_restore NOLOGIN NOSUPERUSER NOCREATEROLE NOCREATEDB NOBYPASSRLS;
       CREATE ROLE authority_mirror_restore NOLOGIN NOSUPERUSER NOCREATEROLE NOCREATEDB NOBYPASSRLS;
       CREATE ROLE authority_worker_restore NOLOGIN NOSUPERUSER NOCREATEROLE NOCREATEDB NOBYPASSRLS;
+      CREATE ROLE authority_restore_group NOLOGIN NOSUPERUSER NOBYPASSRLS;
       CREATE TABLE public."_prisma_migrations" (migration_name text, checksum text, finished_at timestamptz, rolled_back_at timestamptz);`)
     let migrationCount = 0
     for (const directory of readdirSync(migrations).sort()) {
@@ -160,7 +161,7 @@ test(
       "--no-acl",
     ]).stdout
     docker(["exec", "-i", containerId, "sh", "-c", "cat > /tmp/public-app.dump"], dump)
-    const restoreDispatch = () => {
+    const restoreDispatch = (restrictedAcl = true) => {
       sql("DROP DATABASE IF EXISTS lyrashield_restore; CREATE DATABASE lyrashield_restore;")
       docker([
         "exec",
@@ -177,6 +178,14 @@ test(
         "--exit-on-error",
         "/tmp/public-app.dump",
       ])
+      // Fixture prerequisite only: --no-acl archives do NOT restore safe function permissions.
+      // The verifier never applies this ACL setup or repairs any supplied/restored target.
+      // Real restore integration needs a separately reviewed privilege-restoration step.
+      if (restrictedAcl)
+        sql(
+          "REVOKE EXECUTE ON ALL FUNCTIONS IN SCHEMA public,app FROM PUBLIC;",
+          "lyrashield_restore"
+        )
     }
     restoreDispatch()
     const config = {
@@ -209,6 +218,21 @@ test(
       assert.equal(result.stdout, "")
       assert.match(result.stderr, /^restore\/authority\/[a-z_]+; admission remains closed\n$/)
     }
+    await t.test(
+      "no-acl archive alone cannot establish safe privileged function permissions",
+      () => {
+        restoreDispatch(false)
+        assert.notEqual(
+          sql(
+            "SELECT count(*) FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid=p.pronamespace WHERE p.prosecdef AND n.nspname IN ('public','app') AND has_function_privilege('authority_app_restore',p.oid,'EXECUTE');",
+            "lyrashield_restore"
+          ),
+          "0"
+        )
+        rejected(verify())
+        restoreDispatch()
+      }
+    )
     await t.test(
       "restores every checked-out migration with source-bound triggers and no open epoch",
       () => {
@@ -254,6 +278,36 @@ test(
         "trigger search path drift",
         "ALTER FUNCTION app.reject_scan_physical_execution_transition_mutation() SET search_path=public;",
       ],
+      [
+        "constant attachment helper",
+        "CREATE OR REPLACE FUNCTION app.scan_attachment_ids_valid(ids text[]) RETURNS boolean LANGUAGE sql IMMUTABLE STRICT AS $$ SELECT true $$;",
+      ],
+      [
+        "constant target snapshot helper",
+        "CREATE OR REPLACE FUNCTION app.scan_target_snapshot_digest(target_id text) RETURNS text LANGUAGE sql STABLE AS $$ SELECT repeat('a',64) $$;",
+      ],
+      [
+        "constant policy helper",
+        "CREATE OR REPLACE FUNCTION app.scan_policy_digest(policy_id text) RETURNS text LANGUAGE sql STABLE AS $$ SELECT repeat('a',64) $$;",
+      ],
+      [
+        "constant dispatch scope helper",
+        "CREATE OR REPLACE FUNCTION app.scan_dispatch_scope_digest(scan_id text) RETURNS text LANGUAGE sql STABLE AS $$ SELECT repeat('a',64) $$;",
+      ],
+      ["helper strictness drift", "ALTER FUNCTION app.scan_policy_digest(text) STRICT;"],
+      ["helper volatility drift", "ALTER FUNCTION app.scan_policy_digest(text) IMMUTABLE;"],
+      [
+        "helper parallel safety drift",
+        "ALTER FUNCTION app.scan_policy_digest(text) PARALLEL SAFE;",
+      ],
+      [
+        "helper search path drift",
+        "ALTER FUNCTION app.scan_policy_digest(text) SET search_path=public;",
+      ],
+      [
+        "helper signature drift",
+        "ALTER FUNCTION app.scan_policy_digest(text) RENAME TO displaced_policy_digest; CREATE FUNCTION app.scan_policy_digest(text[]) RETURNS text LANGUAGE sql STABLE AS $$ SELECT repeat('a',64) $$;",
+      ],
       ["missing authority table", 'DROP TABLE public."ScanDispatchReleaseReceipt";'],
       [
         "missing forced RLS",
@@ -290,7 +344,6 @@ test(
     })
     await t.test("rejects authority recovered through a NOINHERIT membership", () => {
       restoreDispatch()
-      sql("CREATE ROLE authority_restore_group NOLOGIN NOSUPERUSER NOBYPASSRLS;")
       sql(
         'GRANT SELECT ON public."ScanDispatchAttempt" TO authority_restore_group;',
         "lyrashield_restore"
@@ -299,6 +352,61 @@ test(
       rejected(verify())
       sql("REVOKE authority_restore_group FROM authority_app_restore;")
     })
+    const grantExecution = (schema, role, mode) => {
+      const grantRole =
+        mode === "PUBLIC" ? "PUBLIC" : mode === "direct" ? role : "authority_restore_group"
+      return (
+        `GRANT EXECUTE ON FUNCTION ${schema}.unreviewed_open() TO ${grantRole};` +
+        (["inherited", "SET ROLE"].includes(mode)
+          ? `GRANT authority_restore_group TO ${role} WITH INHERIT ${mode === "inherited" ? "TRUE" : "FALSE"};`
+          : "")
+      )
+    }
+    for (const schema of ["public", "app"])
+      for (const mode of ["direct", "PUBLIC", "inherited", "SET ROLE"])
+        await t.test(
+          `rejects ${schema} privileged epoch opener reachable by application ${mode}`,
+          () => {
+            restoreDispatch()
+            sql(
+              `GRANT USAGE ON SCHEMA ${schema} TO authority_app_restore;
+            CREATE FUNCTION ${schema}.unreviewed_open() RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public AS $$
+            BEGIN INSERT INTO public."ScanAuthorityEpoch" (id,epoch,"isOpen","openKey","openedAt","updatedAt") VALUES ('isolated-test-open',2,true,'open',now(),now()); END; $$;
+            REVOKE ALL ON FUNCTION ${schema}.unreviewed_open() FROM PUBLIC;
+            ${grantExecution(schema, "authority_app_restore", mode)}`,
+              "lyrashield_restore"
+            )
+            rejected(verify())
+            assert.equal(
+              sql(
+                'SELECT count(*) FROM public."ScanAuthorityEpoch" WHERE "isOpen";',
+                "lyrashield_restore"
+              ),
+              "0"
+            )
+            const callRole =
+              mode === "SET ROLE" ? "authority_restore_group" : "authority_app_restore"
+            if (mode === "SET ROLE")
+              sql(
+                `GRANT USAGE ON SCHEMA ${schema} TO authority_restore_group;`,
+                "lyrashield_restore"
+              )
+            // Demonstrate the rejected capability on synthetic data, after proving verification left
+            // the epoch closed. Application execution really would cross the table permission fence.
+            sql(
+              `SET ROLE ${callRole}; SELECT ${schema}.unreviewed_open(); RESET ROLE;`,
+              "lyrashield_restore"
+            )
+            assert.equal(
+              sql(
+                'SELECT count(*) FROM public."ScanAuthorityEpoch" WHERE "isOpen";',
+                "lyrashield_restore"
+              ),
+              "1"
+            )
+            sql("REVOKE authority_restore_group FROM authority_app_restore;")
+          }
+        )
     restoreDispatch()
     sql("CREATE DATABASE lyrashield_authority_restore;")
     sql(mirrorSource, "lyrashield_authority_restore")
@@ -357,6 +465,52 @@ test(
         assert.equal(JSON.parse(result.stdout).managedFailoverQualified, false)
       }
     )
+    for (const schema of ["lyrashield_authority", "public", "app"])
+      for (const mode of ["direct", "PUBLIC", "inherited", "SET ROLE"])
+        await t.test(
+          `rejects ${schema} privileged stream opener reachable by mirror ${mode}`,
+          () => {
+            sql(
+              `CREATE SCHEMA IF NOT EXISTS ${schema};
+            GRANT USAGE ON SCHEMA ${schema} TO authority_mirror_restore,authority_restore_group;
+            CREATE FUNCTION ${schema}.unreviewed_open() RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
+            BEGIN UPDATE lyrashield_authority.stream SET active=true; END; $$;
+            REVOKE ALL ON FUNCTION ${schema}.unreviewed_open() FROM PUBLIC;
+            ${grantExecution(schema, "authority_mirror_restore", mode)}`,
+              "lyrashield_authority_restore"
+            )
+            rejected(verify(mirrorConfig))
+            assert.equal(
+              sql(
+                "SELECT count(*) FROM lyrashield_authority.stream WHERE active;",
+                "lyrashield_authority_restore"
+              ),
+              "0"
+            )
+            const callRole =
+              mode === "SET ROLE" ? "authority_restore_group" : "authority_mirror_restore"
+            sql(
+              `SET ROLE ${callRole}; SELECT ${schema}.unreviewed_open(); RESET ROLE;`,
+              "lyrashield_authority_restore"
+            )
+            assert.equal(
+              sql(
+                "SELECT count(*) FROM lyrashield_authority.stream WHERE active;",
+                "lyrashield_authority_restore"
+              ),
+              "1"
+            )
+            sql(
+              `UPDATE lyrashield_authority.stream SET active=false;
+            DROP FUNCTION ${schema}.unreviewed_open();
+            REVOKE USAGE ON SCHEMA ${schema} FROM authority_restore_group;`,
+              "lyrashield_authority_restore"
+            )
+            sql("REVOKE authority_restore_group FROM authority_mirror_restore;")
+            const result = verify(mirrorConfig)
+            assert.equal(result.status, 0, result.stderr)
+          }
+        )
     for (const [label, mutation, undo] of [
       [
         "active restored mirror stream",
@@ -382,6 +536,21 @@ test(
         "mirror function search path drift",
         "ALTER FUNCTION lyrashield_authority.read_head(text,text) SET search_path=public;",
         "ALTER FUNCTION lyrashield_authority.read_head(text,text) SET search_path=pg_catalog;",
+      ],
+      [
+        "mirror function volatility drift",
+        "ALTER FUNCTION lyrashield_authority.read_head(text,text) STABLE;",
+        "ALTER FUNCTION lyrashield_authority.read_head(text,text) VOLATILE;",
+      ],
+      [
+        "mirror function strictness drift",
+        "ALTER FUNCTION lyrashield_authority.read_head(text,text) STRICT;",
+        "ALTER FUNCTION lyrashield_authority.read_head(text,text) CALLED ON NULL INPUT;",
+      ],
+      [
+        "mirror function execution grant option",
+        "GRANT EXECUTE ON FUNCTION lyrashield_authority.read_head(text,text) TO authority_mirror_restore WITH GRANT OPTION;",
+        "REVOKE GRANT OPTION FOR EXECUTE ON FUNCTION lyrashield_authority.read_head(text,text) FROM authority_mirror_restore;",
       ],
       [
         "worker NOINHERIT schema access",
