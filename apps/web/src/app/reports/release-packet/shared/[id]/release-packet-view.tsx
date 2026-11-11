@@ -37,24 +37,28 @@ export function ReleasePacketView({
   result,
   workspaceId,
   reportId,
+  workspaceView = false,
 }: {
   result: ReleasePacketReadResult
   workspaceId: string
   reportId: string
+  workspaceView?: boolean
 }) {
   const { payload } = result
+  const Container = workspaceView ? "div" : "main"
   return (
-    <main className="mx-auto max-w-6xl space-y-5 px-4 py-8 print:max-w-none print:px-0 print:py-0">
+    <Container className="mx-auto max-w-6xl space-y-5 px-4 py-8 print:max-w-none print:px-0 print:py-0">
       <style>{`@media print { .print-hide { display:none!important } body { background:white!important } a { color:inherit!important; text-decoration:none!important } }`}</style>
       <PacketHeader result={result} workspaceId={workspaceId} reportId={reportId} />
       <AssessmentSummarySection result={result} />
       <RemediationHistoryCard payload={payload} />
       <FindingsCard payload={payload} />
       <footer className="text-muted-foreground border-t pt-4 text-xs">
-        Private workspace artifact. Access requires the share token and an authorized workspace
-        session. The link can be revoked and does not make this packet a public report.
+        {workspaceView
+          ? "Private workspace artifact. Access requires workspace report permission. Private links also require an authorized workspace session and can be revoked."
+          : "Private workspace artifact. Access requires the share token and an authorized workspace session. The link can be revoked and does not make this packet a public report."}
       </footer>
-    </main>
+    </Container>
   )
 }
 

@@ -156,6 +156,7 @@ export const REPORT_TYPE_LABEL: Record<string, string> = {
   developer: "Developer",
   compliance: "Assurance",
   launch_readiness: "Launch Readiness",
+  release_packet: "Release packet",
 }
 
 export const LAUNCH_HISTORICAL_VERDICT_LABEL: Record<string, string> = {

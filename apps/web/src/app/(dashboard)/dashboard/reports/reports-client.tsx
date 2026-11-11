@@ -60,6 +60,7 @@ export function ReportsClient({
   const [sharedReportId, setSharedReportId] = useState<string | null>(null)
   const [copied, setCopied] = useState<"link" | "handoff" | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [packetActionsPending, setPacketActionsPending] = useState<Set<string>>(new Set())
 
   const [showCreateForm, setShowCreateForm] = useState(Boolean(initialScanId))
   const [reportTitle, setReportTitle] = useState("")
@@ -88,6 +89,7 @@ export function ReportsClient({
   const scansPageRequestRef = useRef(0)
   const createRequestsRef = useRef(new Set<string>())
   const reportMutationVersionsRef = useRef(new Map<string, number>())
+  const packetActionsPendingRef = useRef(new Set<string>())
 
   const isWorkspaceCurrent = useCallback(
     (requestWorkspaceId: string) =>
@@ -323,12 +325,22 @@ export function ReportsClient({
   }
 
   const handleShare = async (reportId: string) => {
+    const isPacket = reports.some(
+      (report) => report.id === reportId && report.type === "release_packet"
+    )
     const mutationKey = `${workspaceId}:${reportId}`
+    if (isPacket && packetActionsPendingRef.current.has(mutationKey)) return
+    if (isPacket) {
+      packetActionsPendingRef.current.add(mutationKey)
+      setPacketActionsPending(new Set(packetActionsPendingRef.current))
+    }
     const mutationVersion = (reportMutationVersionsRef.current.get(mutationKey) ?? 0) + 1
     reportMutationVersionsRef.current.set(mutationKey, mutationVersion)
     try {
       const res = await apiPost(
-        `/api/reports/${reportId}`,
+        isPacket
+          ? `/api/reports/release-packet/${encodeURIComponent(reportId)}`
+          : `/api/reports/${reportId}`,
         { workspaceId, action: "share" },
         { schema: reportShareSchema }
       )
@@ -345,23 +357,41 @@ export function ReportsClient({
       setActionError(null)
       setReports((current) =>
         current.map((report) =>
-          report.id === reportId ? { ...report, shareExpiresAt: res.expiresAt } : report
+          report.id === reportId
+            ? { ...report, shareExpiresAt: res.expiresAt, ...(isPacket ? { revokedAt: null } : {}) }
+            : report
         )
       )
     } catch (error) {
       if (isWorkspaceCurrent(workspaceId)) {
         setActionError(error instanceof Error ? error.message : "Failed to generate share link.")
       }
+    } finally {
+      if (isPacket) {
+        packetActionsPendingRef.current.delete(mutationKey)
+        if (isWorkspaceCurrent(workspaceId))
+          setPacketActionsPending(new Set(packetActionsPendingRef.current))
+      }
     }
   }
 
   const handleRevoke = async (reportId: string) => {
+    const isPacket = reports.some(
+      (report) => report.id === reportId && report.type === "release_packet"
+    )
     const mutationKey = `${workspaceId}:${reportId}`
+    if (isPacket && packetActionsPendingRef.current.has(mutationKey)) return
+    if (isPacket) {
+      packetActionsPendingRef.current.add(mutationKey)
+      setPacketActionsPending(new Set(packetActionsPendingRef.current))
+    }
     const mutationVersion = (reportMutationVersionsRef.current.get(mutationKey) ?? 0) + 1
     reportMutationVersionsRef.current.set(mutationKey, mutationVersion)
     try {
       const result = await apiPost(
-        `/api/reports/${reportId}`,
+        isPacket
+          ? `/api/reports/release-packet/${encodeURIComponent(reportId)}`
+          : `/api/reports/${reportId}`,
         { workspaceId, action: "revoke" },
         { schema: reportRevokeSchema }
       )
@@ -385,6 +415,12 @@ export function ReportsClient({
     } catch (error) {
       if (isWorkspaceCurrent(workspaceId)) {
         setActionError(error instanceof Error ? error.message : "Failed to revoke share link.")
+      }
+    } finally {
+      if (isPacket) {
+        packetActionsPendingRef.current.delete(mutationKey)
+        if (isWorkspaceCurrent(workspaceId))
+          setPacketActionsPending(new Set(packetActionsPendingRef.current))
       }
     }
   }
@@ -437,12 +473,22 @@ export function ReportsClient({
       await writeClipboard(shareUrl)
       if (isWorkspaceCurrent(requestWorkspaceId)) setCopied("link")
     } catch {
-      if (isWorkspaceCurrent(requestWorkspaceId)) setActionError("Failed to copy share link.")
+      if (isWorkspaceCurrent(requestWorkspaceId))
+        setActionError(
+          sharedPacket
+            ? "Failed to copy share link. Select and copy the private link below."
+            : "Failed to copy share link."
+        )
     }
   }
 
+  const sharedPacket = reports.some(
+    (report) => report.id === sharedReportId && report.type === "release_packet"
+  )
   const handoffMessage = shareUrl
-    ? `Security scan ready for your review. This private link expires in 30 days: ${shareUrl}`
+    ? sharedPacket
+      ? `A private release packet is ready for review. Sign in with workspace report access. The link expires in 30 days; packet validity may expire sooner: ${shareUrl}`
+      : `Security scan ready for your review. This private link expires in 30 days: ${shareUrl}`
     : ""
   const showShareUrl = shareUrl && sharedReportId ? shareUrl : null
 
@@ -493,6 +539,7 @@ export function ReportsClient({
           shareUrl={showShareUrl}
           copied={copied}
           handoffMessage={handoffMessage}
+          privatePacket={sharedPacket}
           onCopyLink={() => void copyToClipboard()}
           onCopyHandoff={() => {
             const requestWorkspaceId = workspaceId
@@ -548,6 +595,7 @@ export function ReportsClient({
                 key={report.id}
                 report={report}
                 workspaceId={workspaceId}
+                packetActionPending={packetActionsPending.has(`${workspaceId}:${report.id}`)}
                 onShare={(reportId) => void handleShare(reportId)}
                 onRevoke={(reportId) => void handleRevoke(reportId)}
               />
