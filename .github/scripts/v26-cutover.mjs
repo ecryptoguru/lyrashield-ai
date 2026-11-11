@@ -450,6 +450,8 @@ async function main() {
         throw new Error("Incomplete first-v26 cutover requires deliberate operator repair")
       const schema = await classifyV26Schema(client, migrations)
       const current = schema === "current"
+      if (env.RETAINED_WORKER_SOURCE && !current)
+        throw new Error("Retained-worker releases require the current v26 schema")
       if (
         !current &&
         (Number(env.GITHUB_RUN_ATTEMPT) !== 1 || env.WEBHOOK_CLAIMS_CUTOVER === "true")
@@ -468,6 +470,7 @@ async function main() {
           workerImage,
           env.DEPLOY_SHA,
           env.ENGINE_REVISION,
+          env.RETAINED_WORKER_SOURCE || env.DEPLOY_SHA,
         ],
         1800000
       )

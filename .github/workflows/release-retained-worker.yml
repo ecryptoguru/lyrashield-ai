@@ -1,0 +1,149 @@
+name: Release web with retained legacy worker
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Exact current main revision approved for a web and scanner release
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-azure-${{ vars.AZURE_RESOURCE_GROUP || 'production' }}-${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
+  cancel-in-progress: false
+
+jobs:
+  approve:
+    name: Qualify current main and protected retained identities
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: azure-production
+    permissions:
+      actions: read
+      contents: read
+      checks: read
+      pull-requests: read
+    outputs:
+      worker_digest: ${{ steps.approval.outputs.workerDigest }}
+      worker_source_sha: ${{ steps.approval.outputs.workerSourceSha }}
+      engine_revision: ${{ steps.approval.outputs.engineRevision }}
+      egress_digest: ${{ steps.approval.outputs.egressDigest }}
+    steps:
+      - name: Checkout trusted main validator
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/heads/main
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Validate the exact current main dispatch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: bash .github/scripts/validate-webhook-deploy-dispatch.sh
+      - name: Qualify merged source against required PR checks
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ inputs.source_sha }}
+        run: node .github/scripts/qualify-release-source.mjs
+      - name: Require exact protected retained-worker approval
+        id: approval
+        env:
+          DEPLOY_SHA: ${{ inputs.source_sha }}
+          RETAINED_WORKER_APPROVAL: ${{ vars.LYRASHIELD_RETAINED_WORKER_APPROVAL }}
+        run: node .github/scripts/retained-legacy-runtime.mjs approve
+
+  build:
+    name: Build and verify the exact web image with the retained worker
+    needs: approve
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      web_digest: ${{ steps.web.outputs.digest }}
+    steps:
+      - name: Checkout approved web source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.source_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Confirm build source remains current main
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: bash .github/scripts/assert-current-main.sh
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Authenticate exact release images
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - name: Verify production analytics project key
+        env:
+          POSTHOG_PUBLIC_PROJECT_KEY: ${{ vars.POSTHOG_PUBLIC_PROJECT_KEY }}
+        run: '[[ "$POSTHOG_PUBLIC_PROJECT_KEY" =~ ^phc_[A-Za-z0-9]+$ ]]'
+      - name: Build and push immutable web image
+        id: web
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          target: runner
+          push: true
+          sbom: true
+          tags: ghcr.io/${{ github.repository }}/lyrashield-web:${{ inputs.source_sha }}
+          labels: |
+            org.opencontainers.image.revision=${{ inputs.source_sha }}
+            io.lyrashield.accounting.protocol=reservations/2
+          build-args: |
+            BUILD_APP_URL=${{ vars.LYRASHIELD_APP_URL || 'https://app.lyrashieldai.com' }}
+            BUILD_PUBLIC_APP_URL=${{ vars.LYRASHIELD_SCANNER_URL || 'https://scanner.lyrashieldai.com' }}
+            BUILD_PUBLIC_MARKETING_URL=${{ vars.LYRASHIELD_MARKETING_URL || 'https://lyrashieldai.com' }}
+            BUILD_TRUSTED_PROXY_IP_HEADER=x-forwarded-for
+            BUILD_LYRASHIELD_REQUIRE_EMAIL_VERIFICATION=${{ vars.LYRASHIELD_REQUIRE_EMAIL_VERIFICATION || '1' }}
+            BUILD_NEXT_PUBLIC_POSTHOG_KEY=${{ vars.POSTHOG_PUBLIC_PROJECT_KEY }}
+            BUILD_NEXT_PUBLIC_SENTRY_DSN=${{ vars.NEXT_PUBLIC_SENTRY_DSN }}
+            BUILD_NEXT_PUBLIC_SENTRY_RELEASE=${{ inputs.source_sha }}
+          cache-from: type=gha,scope=release-web
+          cache-to: type=gha,mode=max,scope=release-web
+      - name: Verify both immutable images and their separate source identities
+        env:
+          WEB_DIGEST: ${{ steps.web.outputs.digest }}
+          WORKER_DIGEST: ${{ needs.approve.outputs.worker_digest }}
+          WORKER_SOURCE: ${{ needs.approve.outputs.worker_source_sha }}
+          ENGINE: ${{ needs.approve.outputs.engine_revision }}
+          SOURCE: ${{ inputs.source_sha }}
+        run: |
+          sh .github/scripts/verify-v26-images.sh \
+            "ghcr.io/$GITHUB_REPOSITORY/lyrashield-web@$WEB_DIGEST" \
+            "ghcr.io/$GITHUB_REPOSITORY/lyrashield-worker@$WORKER_DIGEST" \
+            "$SOURCE" "$ENGINE" "$WORKER_SOURCE"
+
+  deploy:
+    name: Deploy web and scanner while retaining the legacy runtime
+    needs: [approve, build]
+    uses: ./.github/workflows/deploy-azure-runtime.yml
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+      packages: read
+    with:
+      source_sha: ${{ inputs.source_sha }}
+      retained_worker: true
+      worker_source_sha: ${{ needs.approve.outputs.worker_source_sha }}
+      engine_revision: ${{ needs.approve.outputs.engine_revision }}
+      web_image: ghcr.io/${{ github.repository }}/lyrashield-web
+      web_digest: ${{ needs.build.outputs.web_digest }}
+      worker_image: ghcr.io/${{ github.repository }}/lyrashield-worker
+      worker_digest: ${{ needs.approve.outputs.worker_digest }}
+      egress_proxy_image: ghcr.io/${{ github.repository }}/lyrashield-egress-proxy
+      egress_proxy_digest: ${{ needs.approve.outputs.egress_digest }}
+    secrets: inherit

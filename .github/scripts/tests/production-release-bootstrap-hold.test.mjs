@@ -13,7 +13,9 @@ const workflows = [
 ]
 
 function firstStepInSource(source, workflow, jobName) {
+  // Job names come only from the fixed workflow inventory above.
   const job = source.match(
+    // eslint-disable-next-line security/detect-non-literal-regexp
     new RegExp(`^  ${jobName}:\\n([\\s\\S]*?)(?=^  [a-zA-Z0-9_-]+:\\n|(?![\\s\\S]))`, "m")
   )?.[1]
   assert.ok(job, `${workflow}: ${jobName} must exist`)
@@ -26,6 +28,8 @@ function firstStepInSource(source, workflow, jobName) {
 }
 
 function firstStep(workflow, jobName) {
+  // Workflow names come only from the fixed source-controlled inventory.
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
   const source = readFileSync(new URL(`../../workflows/${workflow}`, import.meta.url), "utf8")
   return firstStepInSource(source, workflow, jobName)
 }
@@ -43,7 +47,20 @@ for (const [workflow, job] of workflows) {
     const step = firstStep(workflow, job)
     assert.ok(step, "first step must exist")
     assert.equal(step[1], "Hold production until runtime qualification")
-    assert.doesNotMatch(step[2], /^        (?:if|continue-on-error):/m)
+    if (workflow === "deploy-azure-runtime.yml") {
+      assert.match(step[2], /^        if: inputs.retained_worker != true$/m)
+      assert.doesNotMatch(step[2], /^        continue-on-error:/m)
+    } else
+      assert.ok(
+        !step[2]
+          .split("\n")
+          .some(
+            (line) =>
+              line.startsWith("        if:") || line.startsWith("        continue-on-error:")
+          )
+      )
+    // This parses only the fixed source-controlled shell hold block.
+    // eslint-disable-next-line security/detect-unsafe-regex
     const block = step[2].match(/^        run: \|\n((?: {10}[^\n]*\n?)+)/m)?.[1]
     const script = block?.replace(/^ {10}/gm, "") ?? step[2].match(/^        run: (.+)$/m)?.[1]
     assert.ok(script, "the hold must run directly, before any checkout or credentials")

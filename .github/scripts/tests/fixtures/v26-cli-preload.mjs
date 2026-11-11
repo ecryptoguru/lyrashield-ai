@@ -315,6 +315,7 @@ child.execFileSync = function (file, args, options) {
   const s = state()
   if (file === "sh" && args[0].endsWith("verify-v26-images.sh")) {
     if (s.failure === "images") throw new Error("qualification failed")
+    save({ ...s, imageQualificationArgs: args })
     return "V26_IMAGES_QUALIFIED\n"
   }
   if (file === "docker") {
