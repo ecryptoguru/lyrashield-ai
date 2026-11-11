@@ -60,6 +60,7 @@ describe("caller-bounded PostgreSQL authority reads", () => {
           ? f.mirror.readHeadBounded(limit)
           : f.mirror.readRecordBounded(1, limit))
       ).toEqual(value)
+      expect(f.active.release).toHaveBeenCalledExactlyOnceWith(false)
       const query = vi
         .mocked(f.active.query)
         .mock.calls.find(([sql]) => sql.startsWith("WITH evidence"))!
@@ -86,6 +87,8 @@ describe("caller-bounded PostgreSQL authority reads", () => {
         kind === "head" ? mirror.readHeadBounded(16) : mirror.readRecordBounded(1, 16)
       await expect(read(missing.mirror)).resolves.toBeNull()
       await expect(read(oversized.mirror)).rejects.toThrow("exceeds requested byte limit")
+      expect(missing.active.release).toHaveBeenCalledExactlyOnceWith(false)
+      expect(oversized.active.release).toHaveBeenCalledExactlyOnceWith(true)
     }
   )
 
@@ -153,6 +156,45 @@ describe("caller-bounded PostgreSQL authority reads", () => {
       if (boundary === "acquire") expect(queries).toEqual([])
       if (boundary === "query") expect(queries).not.toContain("COMMIT")
       expect(queries).not.toContain("ROLLBACK")
+      expect(vi.getTimerCount()).toBe(0)
+    }
+  )
+
+  it.each([
+    { kind: "head", state: "missing" },
+    { kind: "record", state: "missing" },
+    { kind: "head", state: "present" },
+    { kind: "record", state: "present" },
+    { kind: "head", state: "oversized" },
+    { kind: "record", state: "oversized" },
+  ])(
+    "rejects $state $kind when a microtask expires the read after the transaction check",
+    async ({ kind, state }) => {
+      vi.useFakeTimers()
+      let now = 0,
+        committed = false,
+        checksAfterCommit = 0
+      vi.spyOn(performance, "now").mockImplementation(() => {
+        if (committed && ++checksAfterCommit === 2)
+          queueMicrotask(() => {
+            now = 10001
+          })
+        return now
+      })
+      const row = {
+        bytes: state === "present" ? canonicalJson(kind === "head" ? head : record) : null,
+        oversized: state === "oversized",
+      }
+      const f = fixture(row)
+      vi.mocked(f.active.query).mockImplementation(async (sql) => {
+        if (sql === "COMMIT") committed = true
+        return { rows: sql.startsWith("WITH evidence") ? [row] : [] }
+      })
+      await expect(
+        kind === "head" ? f.mirror.readHeadBounded(1024) : f.mirror.readRecordBounded(1, 1024)
+      ).rejects.toThrow("timeout")
+      expect(now).toBe(10001)
+      expect(f.active.release).toHaveBeenCalledExactlyOnceWith(true)
       expect(vi.getTimerCount()).toBe(0)
     }
   )

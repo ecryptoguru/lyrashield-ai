@@ -1,6 +1,6 @@
 import { lstat, realpath } from "node:fs/promises"
 import { basename, dirname, join, resolve } from "node:path"
-import { timingSafeEqual } from "node:crypto"
+import { createHash, timingSafeEqual } from "node:crypto"
 import { z } from "zod"
 
 // Matches the existing separate PostgreSQL mirror's identifier contract.
@@ -21,6 +21,16 @@ const compositionSchema = z
     independentSigningSecret: secret,
   })
   .strict()
+
+function effectiveSigningKey(secret: string): Buffer {
+  const key = Buffer.from(secret)
+  // HMAC-SHA256 hashes keys longer than its 64-byte block, then pads shorter
+  // keys with zeros. Unequal raw secrets may therefore be the same signing key.
+  const material = key.length > 64 ? createHash("sha256").update(key).digest() : key
+  const block = Buffer.alloc(64)
+  block.set(material)
+  return block
+}
 
 async function pathIdentity(path: string) {
   const absolute = resolve(path)
@@ -46,9 +56,9 @@ async function pathIdentity(path: string) {
  */
 export async function inspectSupervisorIndependentComposition(input: unknown) {
   const options = compositionSchema.parse(input)
-  const originalKey = Buffer.from(options.originalSigningSecret),
-    independentKey = Buffer.from(options.independentSigningSecret)
-  if (originalKey.length === independentKey.length && timingSafeEqual(originalKey, independentKey))
+  const originalKey = effectiveSigningKey(options.originalSigningSecret),
+    independentKey = effectiveSigningKey(options.independentSigningSecret)
+  if (timingSafeEqual(originalKey, independentKey))
     throw new Error("original and independent signing keys must differ")
   const [original, independent] = await Promise.all([
     pathIdentity(options.originalPath),

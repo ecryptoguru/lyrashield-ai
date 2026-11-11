@@ -187,12 +187,14 @@ ownership, host/IPv6 isolation or physical-action fencing.
 ## Deployment boundary
 
 `inspectSupervisorIndependentComposition()` is a read-only, closed composition preflight.
-It rejects normalized, symbolic-link and hard-link aliases, equal original/independent signing
+It rejects normalized, symbolic-link and hard-link aliases, equivalent effective HMAC-SHA256 signing
 keys, identifiers outside the existing PostgreSQL mirror contract, and open admission before
 constructing or writing journals. Valid configuration still reports `productionEligible: false`
 and returns no journal, credential-isolation proof or physical capability. Path inspection does
 not establish native ownership against later replacement, and separate client objects do not
 prove separate credentials.
+Key comparison follows SHA-256 HMAC block normalization, including trailing-zero aliases and
+hashing keys longer than the block; distinct raw strings alone do not establish different keys.
 
 Production composition requires separately authenticated persisted full canonical command and
 workspace/scan/operation/attempt/epoch scope, current revocation, expiry, policy and grant bindings.

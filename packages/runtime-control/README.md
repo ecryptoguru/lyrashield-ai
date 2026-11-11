@@ -56,6 +56,9 @@ noncanonical returned bytes. These reads retain the existing schema and three re
 The local PostgreSQL fixture checks exact-limit reads, withheld oversized text, missing rows and
 worker denial through the bounded methods. Monotonic checks supplement the transaction timer so
 late immediate acquisition/query/commit responses remain unavailable even before timer delivery.
+Bounded reads retain the checked-out client across the transaction-to-read await gap, then
+validate the read-level deadline immediately before returning missing or present evidence.
+Expiry or invalid evidence destroys that client instead of returning it to the pool as healthy.
 
 `sql/authority-mirror.sql` is an install-once schema for the separate trusted
 authority database. It is **not** a product Prisma migration or a runtime

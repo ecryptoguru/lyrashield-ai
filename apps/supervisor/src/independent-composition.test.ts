@@ -10,6 +10,7 @@ import {
 } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { createHmac } from "node:crypto"
 import { afterEach, describe, expect, it } from "vitest"
 import { inspectSupervisorIndependentComposition } from "./independent-composition"
 
@@ -88,4 +89,35 @@ describe("closed supervisor independent-journal composition inspection", () => {
       expect(await readdir(f.root)).toEqual(files)
     }
   )
+
+  it.each(["one-zero", "full-block-padding"])(
+    "rejects effective HMAC key alias $0",
+    async (alias) => {
+      const f = await fixture()
+      f.options.originalSigningSecret = "x".repeat(32)
+      f.options.independentSigningSecret =
+        f.options.originalSigningSecret + "\0".repeat(alias === "one-zero" ? 1 : 32)
+      const tag = (key: string) =>
+        createHmac("sha256", key).update("composition-test").digest("hex")
+      expect(tag(f.options.originalSigningSecret)).toBe(tag(f.options.independentSigningSecret))
+      const before = await readFile(f.options.originalPath),
+        files = await readdir(f.root)
+      await expect(inspectSupervisorIndependentComposition(f.options)).rejects.toThrow(
+        "keys must differ"
+      )
+      expect(await readFile(f.options.originalPath)).toEqual(before)
+      expect(await readdir(f.root)).toEqual(files)
+    }
+  )
+
+  it("hashes keys longer than the HMAC block instead of truncating their shared prefix", async () => {
+    const f = await fixture()
+    f.options.originalSigningSecret = "x".repeat(65)
+    f.options.independentSigningSecret = f.options.originalSigningSecret + "\0"
+    const tag = (key: string) => createHmac("sha256", key).update("composition-test").digest("hex")
+    expect(tag(f.options.originalSigningSecret)).not.toBe(tag(f.options.independentSigningSecret))
+    expect(await inspectSupervisorIndependentComposition(f.options)).toMatchObject({
+      productionEligible: false,
+    })
+  })
 })
