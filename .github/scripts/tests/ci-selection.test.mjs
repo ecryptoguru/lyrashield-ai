@@ -161,8 +161,7 @@ test("only web CSS and public assets narrow runtime gates; mixed, renamed and se
     "Build app and shared packages",
     "Typecheck portable browser harness",
     "Lint portable browser harness",
-    "Cache Playwright browser",
-    "Install Playwright browser",
+    "Prepare pinned CI browser",
     "Portable browser harness",
   ]) {
     const step = [
