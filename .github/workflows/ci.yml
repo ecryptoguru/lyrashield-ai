@@ -728,30 +728,10 @@ jobs:
         if: needs.changes.outputs.app == 'true' || (needs.changes.outputs.shared == 'true' && needs.changes.outputs.tooling-only != 'true')
         run: node .github/scripts/ci-selection.mjs build app
 
-      - name: Cache Playwright browser
-        if: needs.changes.outputs.app == 'true' || needs.changes.outputs.database-tests == 'true'
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cache/ms-playwright
-          # Hash the installed @playwright/test version out of the lockfile so
-          # a Playwright upgrade invalidates the cache automatically.
-          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
-          restore-keys: |
-            playwright-${{ runner.os }}-
-
-      - name: Install Playwright browser
+      - name: Prepare pinned CI browser
         if: needs.changes.outputs.app == 'true' || needs.changes.outputs.database-tests == 'true'
         timeout-minutes: 15
-        run: |
-          # Playwright needs Ubuntu packages, not GitHub's preconfigured Google
-          # Chrome repository. Disable that unrelated repository so an upstream
-          # metadata publication race cannot break apt update.
-          for source in /etc/apt/sources.list.d/google-chrome.list /etc/apt/sources.list.d/google-chrome.sources; do
-            if [ -f "$source" ]; then
-              sudo mv "$source" "$source.disabled"
-            fi
-          done
-          pnpm exec playwright install --with-deps chromium
+        run: node .github/scripts/ci-browser.mjs start
 
       - name: Browser E2E (includes functional mobile shell at 390px)
         if: needs.changes.outputs.database-tests == 'true'
@@ -783,6 +763,10 @@ jobs:
           DATABASE_URL="$RLS_RUNTIME_DATABASE_URL" \
             DATABASE_SYSTEM_URL="postgresql://lyrashield:lyrashield@localhost:5432/lyrashield?schema=public" \
             pnpm test:auth-mail-browser
+
+      - name: Remove owned CI browser container
+        if: ${{ always() }}
+        run: node .github/scripts/ci-browser.mjs stop
 
       - name: Remove disposable database containers
         if: ${{ always() }}
@@ -881,41 +865,14 @@ jobs:
         if: needs.changes.outputs.motion-tests == 'true'
         run: pnpm --filter @lyrashield/marketing-motion build
 
-      # Cache the Playwright browser binary so the install step does not
-      # re-download chromium on every run. Keyed on the @playwright/test
-      # version so a version bump busts the cache. On a hit the browser
-      # download is skipped (only --with-deps system packages run), which is
-      # what makes the install step reliably fit its timeout. Added after the
-      # step timed out at 8 minutes three runs in a row (2026-08-19/20).
-
-      - name: Cache Playwright browser
-        if: needs.changes.outputs.marketing-tests == 'true'
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cache/ms-playwright
-          # Hash the installed @playwright/test version out of the lockfile so
-          # a Playwright upgrade invalidates the cache automatically.
-          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
-          restore-keys: |
-            playwright-${{ runner.os }}-
-
-      - name: Install Playwright browser
+      - name: Prepare pinned CI browser
         if: needs.changes.outputs.marketing-tests == 'true'
         timeout-minutes: 15
-        run: |
-          # Playwright needs Ubuntu packages, not GitHub's preconfigured Google
-          # Chrome repository. Disable that unrelated repository so an upstream
-          # metadata publication race cannot break apt update.
-          for source in /etc/apt/sources.list.d/google-chrome.list /etc/apt/sources.list.d/google-chrome.sources; do
-            if [ -f "$source" ]; then
-              sudo mv "$source" "$source.disabled"
-            fi
-          done
-          pnpm exec playwright install --with-deps chromium
+        run: node .github/scripts/ci-browser.mjs start
 
-      - name: Install FFmpeg for synthetic motion controller fixtures
+      - name: Validate FFmpeg for synthetic motion controller fixtures
         if: needs.changes.outputs.marketing-tests == 'true'
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+        run: node .github/scripts/ci-browser.mjs prepare-ffmpeg
 
       - name: Marketing browser E2E
         id: marketing_browser
@@ -935,6 +892,10 @@ jobs:
             apps/marketing/test-results/
           retention-days: 3
           if-no-files-found: warn
+
+      - name: Remove owned CI browser container
+        if: ${{ always() }}
+        run: node .github/scripts/ci-browser.mjs stop
 
   lint-and-typecheck:
     name: Lint, Typecheck, Test & Build
@@ -1254,27 +1215,16 @@ jobs:
       - name: Build
         run: pnpm --filter @lyrashield/desktop-frontend build
 
-      - name: Cache Playwright browser for Desktop
-        if: needs.changes.outputs.app != 'true' && needs.changes.outputs.shared != 'true'
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
-          restore-keys: |
-            playwright-${{ runner.os }}-
-
-      - name: Install Playwright Chromium for desktop browser harness
+      - name: Prepare pinned CI browser
         if: needs.changes.outputs.app != 'true' && needs.changes.outputs.shared != 'true'
         timeout-minutes: 15
-        run: |
-          for source in /etc/apt/sources.list.d/google-chrome.list /etc/apt/sources.list.d/google-chrome.sources; do
-            if [ -f "$source" ]; then
-              sudo mv "$source" "$source.disabled"
-            fi
-          done
-          pnpm exec playwright install --with-deps chromium
+        run: node .github/scripts/ci-browser.mjs start
 
       - name: Portable browser harness for Desktop
         if: needs.changes.outputs.app != 'true' && needs.changes.outputs.shared != 'true'
         timeout-minutes: 10
         run: pnpm test:browser-harness
+
+      - name: Remove owned CI browser container
+        if: ${{ always() }}
+        run: node .github/scripts/ci-browser.mjs stop
