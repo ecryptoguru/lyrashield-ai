@@ -123,6 +123,9 @@ If all commits are independently visible despite a lost reply, startup reconstru
 never perform this repair. A new hold must bind the current original tail; stale selection is
 rejected before any write and does not latch a confirmed journal or prevent STOP. An existing
 confirmed, immediately linked hold can be reused after newer unrelated confirmed history.
+Other mismatched selectors also preserve prior initialization only after unchanged local,
+object-store and database histories and current stream/event authority are independently confirmed.
+Pending history or revoked/unavailable authority keeps initialization blocked.
 Tests interrupt original/hold local acknowledgements and confirmation,
 object record/head acknowledgements and database commit replies, including positive PREPARED and
 terminal originals, and verify no repeated physical effects.

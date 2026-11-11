@@ -269,6 +269,108 @@ async function setup() {
 }
 
 describe("explicit supervisor same-operation recovery", () => {
+  it.each([
+    "workspaceId",
+    "operationId",
+    "attemptId",
+    "commandId",
+    "scanId",
+    "epochId",
+    "supervisorInstanceId",
+    "expectedCommandHash",
+  ])("preserves confirmed service startup and STOP after wrong %s selection", async (field) => {
+    const f = await setup()
+    const first = await f.service.execute(prepare)
+    await f.service.execute({
+      ...prepare,
+      commandId: "prepare-mismatch-newer",
+      attempt: {
+        ...binding,
+        attemptId: "attempt-mismatch-newer",
+        operationId: "operation-mismatch-newer",
+      },
+    })
+    const records = await f.factory.journal.load()
+    expect(records).toHaveLength(4)
+    const before = await Promise.all([
+      readFile(f.options.originalPath, "utf8"),
+      readFile(f.options.independentPath, "utf8"),
+    ])
+    const writes = [f.store.writes, f.mirror.writes]
+    const request = {
+      ...selector(prepare),
+      [field]: field === "expectedCommandHash" ? "f".repeat(64) : "another-identity",
+    }
+    await expect(f.service.recover(request)).rejects.toMatchObject({ code: "RECOVERY_CONFLICT" })
+    expect(
+      await Promise.all([
+        readFile(f.options.originalPath, "utf8"),
+        readFile(f.options.independentPath, "utf8"),
+      ])
+    ).toEqual(before)
+    expect([f.store.writes, f.mirror.writes]).toEqual(writes)
+    expect(await f.factory.journal.load()).toEqual(records)
+    await f.service.initialize()
+    expect((await f.service.getAttempt(binding.attemptId))?.status).toBe("PREPARED")
+    expect(f.effects).toEqual({ create: 0, start: 0, inspect: 0, stop: 0, provider: 0 })
+    expect(
+      (
+        await f.service.execute({
+          type: "STOP",
+          commandId: "stop-after-wrong-selector",
+          attemptId: binding.attemptId,
+          expectedReceiptHash: first.receipt.hash,
+        })
+      ).status
+    ).toBe("NEVER_DISPATCHED")
+  })
+
+  it.each(["pending", "stream", "attempt", "recovery", "unavailable"])(
+    "does not restore startup or STOP after %s recovery uncertainty",
+    async (failure) => {
+      const f = await setup()
+      const first = await f.service.execute(prepare)
+      if (failure === "pending") {
+        f.store.loseOn = "command_intent"
+        await expect(
+          f.service.execute({
+            ...prepare,
+            commandId: "prepare-pending-newer",
+            attempt: {
+              ...binding,
+              attemptId: "attempt-pending-newer",
+              operationId: "operation-pending-newer",
+            },
+          })
+        ).rejects.toMatchObject({ code: "AUTHORITY_UNKNOWN" })
+      } else if (failure === "unavailable") f.authority.unavailable = true
+      else f.authority[failure as "stream" | "attempt" | "recovery"] = false
+      const before = await readFile(f.options.originalPath, "utf8")
+      const request =
+        failure === "pending"
+          ? { ...selector(prepare), workspaceId: "wrong-workspace" }
+          : selector(prepare)
+      const code =
+        failure === "pending"
+          ? "RECOVERY_CONFLICT"
+          : failure === "unavailable"
+            ? "AUTHORITY_UNKNOWN"
+            : "AUTHORITY_CONFLICT"
+      await expect(f.service.recover(request)).rejects.toMatchObject({ code })
+      expect(await readFile(f.options.originalPath, "utf8")).toBe(before)
+      await expect(f.service.initialize()).rejects.toMatchObject({ code })
+      await expect(
+        f.service.execute({
+          type: "STOP",
+          commandId: "stop-after-uncertain-recovery",
+          attemptId: binding.attemptId,
+          expectedReceiptHash: first.receipt.hash,
+        })
+      ).rejects.toMatchObject({ code })
+      expect(f.effects).toEqual({ create: 0, start: 0, inspect: 0, stop: 0, provider: 0 })
+    }
+  )
+
   it.each(["adapter", "service"])(
     "rejects stale %s recovery without writes or blocking STOP",
     async (owner) => {

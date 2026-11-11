@@ -107,6 +107,30 @@ export function validRecoverySuffix(originals: Record[]): boolean {
   )
 }
 
+/** Read-only proof before a selector rejection may preserve prior service initialization. */
+async function recoveryPosition(ctx: RecoveryContext, originals: Record[], wrappedCount: number) {
+  let pending: Record | undefined
+  let pendingStart: number
+  try {
+    pendingStart = await ctx.confirmedCount()
+    if (originals.length > pendingStart) pending = originals.at(-1)
+  } catch (error) {
+    if (!(error instanceof IndependentAuthorityError) || error.code !== "REPLAY_REQUIRED")
+      throw error
+    pending = originals.at(-1)
+    pendingStart = wrappedCount - 1
+    if (pendingStart < 0) rejected("pending independent event has no local wrapper")
+  }
+  let confirmedHistory = false
+  if (!pending) {
+    // Prove unchanged original/wrapper/R2/database histories and current stream
+    // authority before a no-mutation rejection can preserve service startup.
+    await ctx.confirmedHistory()
+    confirmedHistory = true
+  }
+  return { pending, pendingStart, confirmedHistory }
+}
+
 /** Explicit durability repair and a durable UNKNOWN hold; never execution/revocation. */
 export async function recoverSignedEvent(
   ctx: RecoveryContext,
@@ -114,14 +138,21 @@ export async function recoverSignedEvent(
 ): Promise<SupervisorJournalRecovery<SupervisorJournalEvent>> {
   await ctx.assertStreamAuthorized()
   const { originals, wrapped } = await ctx.localHistory()
+  const { pending, pendingStart, confirmedHistory } = await recoveryPosition(
+    ctx,
+    originals,
+    wrapped.length
+  )
   const intents = originals.filter(
     (record) =>
       record.payload.type === "command_intent" &&
       record.payload.command.commandId === request.commandId
   )
-  if (intents.length !== 1) rejected("recovery requires one original command identity")
+  if (intents.length !== 1)
+    rejected("recovery requires one original command identity", confirmedHistory)
   const intent = intents[0]!
-  if (intent.payload.type !== "command_intent") rejected("original command is unavailable")
+  if (intent.payload.type !== "command_intent")
+    rejected("original command is unavailable", confirmedHistory)
   const command = intent.payload.command
   const binding = ctx.bindingFor(intent, originals)
   if (
@@ -136,22 +167,10 @@ export async function recoverSignedEvent(
       expectedCommandHash: sha256Hex(canonicalJson(command)),
     }) !== canonicalJson(request)
   ) {
-    rejected("recovery selector differs from the original authenticated command")
-  }
-  let pending: Record | undefined
-  let pendingStart: number
-  try {
-    pendingStart = await ctx.confirmedCount()
-    if (originals.length > pendingStart) pending = originals.at(-1)
-  } catch (error) {
-    if (!(error instanceof IndependentAuthorityError) || error.code !== "REPLAY_REQUIRED")
-      throw error
-    pending = originals.at(-1)
-    pendingStart = wrapped.length - 1
-    if (pendingStart < 0) rejected("pending independent event has no local wrapper")
+    rejected("recovery selector differs from the original authenticated command", confirmedHistory)
   }
   if (pending && eventCommandId(pending.payload) !== request.commandId) {
-    rejected("pending event has another or an unbound command identity")
+    rejected("pending event has another or an unbound command identity", confirmedHistory)
   }
   const reverse = [...originals].reverse()
   const existing = reverse.find(
@@ -162,16 +181,19 @@ export async function recoverSignedEvent(
   )
   const selected =
     pending ?? reverse.find((record) => eventCommandId(record.payload) === request.commandId)
-  if (!selected) rejected("original recovery event is unavailable")
+  if (!selected) rejected("original recovery event is unavailable", confirmedHistory)
   const recoveredRecord = originFor(selected, originals, request.commandId)
   if (canonicalJson(ctx.bindingFor(recoveredRecord, originals)) !== canonicalJson(binding))
-    rejected("original recovery event belongs to another attempt authority")
+    rejected("original recovery event belongs to another attempt authority", confirmedHistory)
   let holdRecord =
     existing && originFor(existing, originals, request.commandId).hash === recoveredRecord.hash
       ? existing
       : undefined
   if (!holdRecord && recoveredRecord.hash !== originals.at(-1)!.hash)
-    rejected("recovery requires the current original tail or its existing linked hold", !pending)
+    rejected(
+      "recovery requires the current original tail or its existing linked hold",
+      confirmedHistory
+    )
   const authorize = async () => {
     await ctx.assertStreamAuthorized()
     if (

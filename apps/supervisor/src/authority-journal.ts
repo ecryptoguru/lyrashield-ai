@@ -417,12 +417,6 @@ export class SupervisorAuthorityJournal
     const parsed = supervisorRecoveryRequestSchema.safeParse(input)
     if (!parsed.success)
       throw new IndependentAuthorityError("INVALID_RECOVERY", "invalid recovery selector")
-    if (
-      parsed.data.epochId !== this.options.epochId ||
-      parsed.data.supervisorInstanceId !== this.options.supervisorInstanceId
-    ) {
-      throw new IndependentAuthorityError("RECOVERY_CONFLICT", "recovery belongs to another stream")
-    }
     return this.serialized(() =>
       recoverSignedEvent(
         {
