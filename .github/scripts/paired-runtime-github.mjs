@@ -14,6 +14,8 @@ const ENV = "azure-production",
 const ISSUER_ENV = "release-qualification",
   ISSUER_JOB = ".github/workflows/issue-runtime-qualification.yml"
 const qualificationKinds = new Set([
+  "held-baseline",
+  "promotion-action-lease",
   "qualified-fleet",
   "qualified-release",
   "sandbox-qualification",
@@ -33,6 +35,8 @@ const sha = /^[a-f0-9]{40}$/,
   hash = /^[a-f0-9]{64}$/,
   id = /^[1-9][0-9]{0,19}$/
 const kinds = new Set([
+  "held-baseline",
+  "promotion-action-lease",
   "qualified-fleet",
   "hold-acquisition",
   "handoff",
@@ -299,6 +303,7 @@ export async function readAuthenticatedOwner(jobWorkflow = JOB) {
 export async function issueRecordWitness(kind, body, jobWorkflow = JOB) {
   check(
     kinds.has(kind) &&
+      !["held-baseline", "promotion-action-lease"].includes(kind) &&
       (!qualificationKinds.has(kind) || jobWorkflow === ISSUER_JOB) &&
       typeof body === "string" &&
       Buffer.byteLength(body) <= 4096 &&
@@ -382,8 +387,21 @@ async function authenticateRecord(kind, digest, dir, jobWorkflow = JOB) {
   const raw = privateBytes(dir, digest + ".json")
   check(sha256(raw) === digest && json(raw).kind === kind)
   const body = json(raw)
-  if (["qualified-release", "hold-acquisition", "arm", "restore", "qualified-fleet"].includes(kind))
-    check((kind === "qualified-fleet" ? body.pair?.owner : body.owner) === owner)
+  if (
+    [
+      "qualified-release",
+      "hold-acquisition",
+      "arm",
+      "restore",
+      "qualified-fleet",
+      "held-baseline",
+      "promotion-action-lease",
+    ].includes(kind)
+  )
+    check(
+      (["qualified-fleet", "held-baseline"].includes(kind) ? body.pair?.owner : body.owner) ===
+        owner
+    )
   if (kind === "handoff")
     check(
       body.authorization === "original-owner"
