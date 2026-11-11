@@ -249,6 +249,7 @@ export function verifySandboxCoveragePublication(expected, { run = gh, when = Da
     ...binding,
     engineRevision,
     coveragePredicateChecksum: hash(JSON.stringify(coverage)),
+    nativeManifests: Object.freeze({ ...qualification.platformManifests }),
     checkedAt: new Date(when).toISOString(),
   })
 }
