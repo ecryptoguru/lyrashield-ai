@@ -28,8 +28,13 @@ const require = createRequire(import.meta.url)
 const label = "lyrashield.ci-browser"
 const maxBuffer = 32 * 1024 * 1024
 
-function runCommand(command, args, { timeout = 30_000, binary = false } = {}) {
-  const result = spawnSync(command, args, { encoding: binary ? null : "utf8", timeout, maxBuffer })
+function runCommand(command, args, { timeout = 30_000, binary = false, input } = {}) {
+  const result = spawnSync(command, args, {
+    encoding: binary ? null : "utf8",
+    timeout,
+    maxBuffer,
+    input,
+  })
   if (result.error || result.status !== 0)
     throw new Error(`${command} ${args[0]} failed; exit ${result.status ?? "unavailable"}`)
   return result.stdout
@@ -170,15 +175,41 @@ export async function startBrowser({
       "/tmp/ci-browser/node_modules/playwright",
       "/tmp/ci-browser/node_modules/playwright-core",
     ])
-    for (const [index, name] of ["playwright", "playwright-core"].entries())
-      run("docker", ["cp", `${dirs[index]}/.`, `${id}:/tmp/ci-browser/node_modules/${name}`], {
-        timeout: 60_000,
-      })
-    run("docker", [
-      "cp",
-      fileURLToPath(new URL("ci-browser-container.mjs", import.meta.url)),
-      `${id}:/tmp/ci-browser/container.mjs`,
-    ])
+    // docker cp cannot address live tmpfs contents. Stream only the resolved,
+    // version-checked packages through the unprivileged container process.
+    for (const [index, name] of ["playwright", "playwright-core"].entries()) {
+      const archive = run("tar", ["-C", dirs[index], "-cf", "-", "."], { binary: true })
+      if (archive.length > maxBuffer) throw new Error("CI browser package archive is too large")
+      run(
+        "docker",
+        [
+          "exec",
+          "--interactive",
+          "--workdir",
+          `/tmp/ci-browser/node_modules/${name}`,
+          id,
+          "tar",
+          "-xf",
+          "-",
+        ],
+        { timeout: 60_000, input: archive }
+      )
+    }
+    run(
+      "docker",
+      [
+        "exec",
+        "--interactive",
+        id,
+        "node",
+        "-e",
+        'require("fs").writeFileSync("/tmp/ci-browser/container.mjs", require("fs").readFileSync(0))',
+      ],
+      {
+        // eslint-disable-next-line security/detect-non-literal-fs-filename -- This fixed helper URL is resolved beside the current module.
+        input: readFileSync(new URL("ci-browser-container.mjs", import.meta.url)),
+      }
+    )
     console.log(
       run("docker", ["exec", id, "node", "/tmp/ci-browser/container.mjs", "verify"], {
         timeout: 120_000,

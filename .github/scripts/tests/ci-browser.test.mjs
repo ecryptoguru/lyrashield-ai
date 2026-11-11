@@ -54,6 +54,7 @@ function fixture(options = {}) {
       if (options.hostFfmpeg) return ""
       throw new Error("host FFmpeg unavailable")
     }
+    if (command === "tar" && options.failTransfer) throw new Error("package transfer failed")
     if (args[0] === "image")
       return JSON.stringify([
         {
@@ -135,13 +136,41 @@ test("uses the exact amd64 image and a loopback-only nonroot mount-free containe
       "PW_TEST_CONNECT_WS_ENDPOINT=ws://127.0.0.1:31777/\n"
     )
     assert.deepEqual(
-      f.calls.filter((call) => call.args[0] === "cp").map((call) => call.args[1]),
+      f.calls.filter((call) => call.command === "tar").map((call) => call.args),
       [
-        "/locked/playwright/.",
-        "/locked/playwright-core/.",
-        new URL("../ci-browser-container.mjs", import.meta.url).pathname,
+        ["-C", "/locked/playwright", "-cf", "-", "."],
+        ["-C", "/locked/playwright-core", "-cf", "-", "."],
       ]
     )
+    const transfers = f.calls.filter((call) => call.args.includes("--interactive"))
+    assert.equal(transfers.length, 3)
+    assert.ok(transfers.every((call) => Buffer.isBuffer(call.config.input)))
+    assert.deepEqual(
+      transfers.slice(0, 2).map((call) => call.args),
+      [
+        [
+          "exec",
+          "--interactive",
+          "--workdir",
+          "/tmp/ci-browser/node_modules/playwright",
+          id,
+          "tar",
+          "-xf",
+          "-",
+        ],
+        [
+          "exec",
+          "--interactive",
+          "--workdir",
+          "/tmp/ci-browser/node_modules/playwright-core",
+          id,
+          "tar",
+          "-xf",
+          "-",
+        ],
+      ]
+    )
+    assert.ok(!f.calls.some((call) => call.args[0] === "cp"))
     stopBrowser(f.input)
     assert.deepEqual(f.calls.at(-1).args, ["rm", "--force", id])
     stopBrowser(f.input)
@@ -150,7 +179,7 @@ test("uses the exact amd64 image and a loopback-only nonroot mount-free containe
   }
 })
 
-for (const failure of ["failVerify", "failWait", "failServer"])
+for (const failure of ["failTransfer", "failVerify", "failWait", "failServer"])
   test(`${failure} fails closed, removes only its container and publishes no endpoint`, async () => {
     const f = fixture({ [failure]: true })
     try {
