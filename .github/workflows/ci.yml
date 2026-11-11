@@ -496,6 +496,10 @@ jobs:
         if: needs.changes.outputs.database-tests == 'true'
         run: pnpm exec turbo run build --filter=@lyrashield/agent-plugin... --concurrency=2
 
+      - name: Fetch exact historical evidence reader for ops contracts
+        if: needs.changes.outputs.ops-tests == 'true'
+        run: git fetch --no-tags --depth=1 origin ed84ce06889e6a9c047db220fcabfa0c643200ad
+
       - name: Test affected suites
         if: needs.changes.outputs.database-tests == 'true' || needs.changes.outputs.ops-tests == 'true'
         # The core suite includes the general restricted-role RLS tests against

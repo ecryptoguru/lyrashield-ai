@@ -4,6 +4,7 @@ import {
   qualifyReferralForWorkspace,
   updateScanStatus,
   verifyStoredManifestChecksum,
+  withWorkspaceRLS,
   type ScanStatus,
 } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
@@ -43,14 +44,44 @@ export async function resumePendingScanFinalization(params: {
     },
   })
   const resultManifest = pendingFinalization?.resultManifest
-  if (
-    resultManifest &&
-    ["RUNNING", "VERIFYING"].includes(pendingFinalization.status) &&
-    verifyStoredManifestChecksum(resultManifest) === "MISMATCH"
-  ) {
+  const active =
+    pendingFinalization &&
+    ["QUEUED", "PREFLIGHT", "RUNNING", "VERIFYING"].includes(pendingFinalization.status)
+  const checksum = resultManifest && active ? verifyStoredManifestChecksum(resultManifest) : null
+  if (checksum === "MISMATCH")
     throw new Error("Stored scan result manifest failed checksum verification")
-  }
   const terminalOutcome = storedTerminalOutcome(resultManifest?.manifest)
+  if (
+    active &&
+    pendingFinalization.status !== "VERIFYING" &&
+    checksum === "MATCH" &&
+    terminalOutcome &&
+    resultManifest
+  ) {
+    // Older retry paths could regress a scan after its immutable manifest committed.
+    // Restore only the exact checked checkpoint, without rerunning preflight or the engine.
+    await withWorkspaceRLS(workspaceId, async (tx) => {
+      const changed = await tx.scan.updateMany({
+        where: {
+          id: scanId,
+          workspaceId,
+          status: pendingFinalization.status,
+          resultManifest: { is: { id: resultManifest.id, checksum: resultManifest.checksum } },
+        },
+        data: { status: "VERIFYING" },
+      })
+      if (changed.count !== 1) throw new Error("Scan changed during manifest recovery")
+      await tx.scanEvent.create({
+        data: {
+          scanId,
+          stage: "verifying",
+          level: "info",
+          message: "Restored finalization from the stored result manifest",
+        },
+      })
+    })
+    pendingFinalization.status = "VERIFYING"
+  }
   if (pendingFinalization?.status === "FAILED") {
     return {
       status: "failed",
@@ -124,15 +155,13 @@ export async function resumePendingScanFinalization(params: {
     return { status: "completed", summary: pendingFinalization.summary ?? "Scan completed" }
   }
   if (
-    ["RUNNING", "VERIFYING"].includes(pendingFinalization?.status ?? "") &&
+    ["QUEUED", "PREFLIGHT", "RUNNING", "VERIFYING"].includes(pendingFinalization?.status ?? "") &&
     pendingFinalization?.events?.length
   ) {
     const interruptedMessage =
-      "Provider-billable analysis was interrupted and was not replayed automatically"
-    await updateScanStatus(scanId, "FAILED" as ScanStatus, {
-      errorCategory: "BILLABLE_PHASE_INTERRUPTED",
-      errorMessage: interruptedMessage,
-    })
+      "Provider-billable analysis was already claimed and was not replayed automatically"
+    // Stalled delivery does not prove its predecessor stopped. Leave its scan,
+    // reservation and working directory intact; the durable marker holds ambiguous execution for review.
     return {
       status: "failed",
       errorCategory: "BILLABLE_PHASE_INTERRUPTED",

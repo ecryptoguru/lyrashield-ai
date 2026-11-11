@@ -1,7 +1,7 @@
 import type { Job } from "bullmq"
 import {
   getSystemPrisma,
-  updateScanStatus,
+  updateUnclaimedScanStatus,
   verifyStoredScanExecutionPlan,
   type ScanStatus,
 } from "@lyrashield/db"
@@ -136,7 +136,7 @@ export async function verifyScanJobAuthority(
   ) {
     if (scanRecord) {
       try {
-        await updateScanStatus(
+        await updateUnclaimedScanStatus(
           scanId,
           "FAILED" as ScanStatus,
           {
@@ -192,7 +192,7 @@ export async function verifyScanJobAuthority(
         errorCategory: denial.errorCategory,
       })
       try {
-        await updateScanStatus(
+        await updateUnclaimedScanStatus(
           scanId,
           "FAILED" as ScanStatus,
           {

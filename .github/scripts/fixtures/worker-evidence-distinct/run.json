@@ -1,0 +1,127 @@
+{
+  "schema_version": "1.2",
+  "run_id": "drill-distinct-owner-revision",
+  "run_name": "drill-distinct-owner-revision",
+  "start_time": "2026-11-02T21:02:45.516521+00:00",
+  "end_time": null,
+  "status": "running",
+  "phase": "running",
+  "auth_mode": "api_key",
+  "targets_info": [],
+  "llm_usage": {
+    "requests": 0,
+    "input_tokens": 0,
+    "input_tokens_details": [
+      {
+        "cache_write_tokens": 0,
+        "cached_tokens": 0
+      }
+    ],
+    "output_tokens": 0,
+    "output_tokens_details": [
+      {
+        "reasoning_tokens": 0
+      }
+    ],
+    "total_tokens": 0,
+    "agents": []
+  },
+  "seq": 4,
+  "turn_count": 0,
+  "evidence_format": "1.1",
+  "scope_violations": {
+    "entries": [],
+    "dropped": 0,
+    "total": 0
+  },
+  "scan_quality": {
+    "schema": "lyrashield-scan-quality/1.0",
+    "generated_at": "2026-11-02T21:02:45.574887+00:00",
+    "run_id": "drill-distinct-owner-revision",
+    "observed": {
+      "agents_total": 0,
+      "agents_finished": 0,
+      "agents_incomplete": 0,
+      "agents_incomplete_statuses": {},
+      "findings_filed": 2,
+      "web_search_calls": 0,
+      "proxy_requests_admitted": 0,
+      "proxy_requests_denied": 0,
+      "evidence_export": "partial",
+      "sandbox": null,
+      "scan_status": "running",
+      "terminal_reason": null
+    },
+    "declared": {
+      "coverage_entries": 0,
+      "outcomes": {}
+    },
+    "surfaces": [
+      {
+        "surface": "example.test",
+        "origins": [
+          "finding"
+        ],
+        "declared_coverage_entries": 0,
+        "findings": 2,
+        "admitted_requests": 0,
+        "denied_requests": 0,
+        "assessment": "observed"
+      }
+    ],
+    "unassessed": [],
+    "assessment": "inconclusive",
+    "assessment_reasons": [
+      "finalization_incomplete",
+      "http_evidence_pending"
+    ],
+    "note": "Counts derive only from observed runtime activity and the model-declared coverage ledger. 'declared' surfaces are agent-reported, not machine-verified; 'unassessed' surfaces were in scope but have no recorded exercise. Zero findings do not demonstrate that the target is secure."
+  },
+  "result_manifest": {
+    "schema_version": 1,
+    "artifacts": {
+      "vulnerabilities.json": {
+        "path": "vulnerabilities.json",
+        "sha256": "110e53c83878ad6f0b9eea8bbe8021d9d368629f95a675935a15ebf86f8a48d6",
+        "bytes": 1174
+      },
+      "vulnerabilities.csv": {
+        "path": "vulnerabilities.csv",
+        "sha256": "163a941d94d28d63239aa80f7de4fe6b7d7e0c0b9ca095a36aabd9e7621ca3c6",
+        "bytes": 207
+      },
+      "findings.sarif": {
+        "path": "findings.sarif",
+        "sha256": "6d68d55d65311833325a17b523553e7532ce5535c2388760e376589a38b3e00b",
+        "bytes": 4527
+      },
+      "coverage.json": {
+        "path": "coverage.json",
+        "sha256": "ed5a50c8b060e18120a5f0d327132f813766ad3dd1571bd4322b367623ea2bb7",
+        "bytes": 812
+      },
+      "http_exchanges.json": {
+        "path": "http_exchanges.json",
+        "sha256": "b7b71afe6f6a0b9d2a2ed4bc3dcc7a880ee8f289f6059da0d835005eea2e5c7c",
+        "bytes": 2081
+      },
+      "vulnerabilities/": {
+        "files": {
+          "vuln-0001.md": "884ee9172f232ff427469e24bb0cb6112e5a33cd67b6013c586940b2366832c0",
+          "vuln-0002.md": "0f1f9be5bbc5fdd75a209b8cdf63af503aa03e10b6dfe56e060b3ce503107b1b"
+        }
+      }
+    }
+  },
+  "report_artifacts_revision": 4,
+  "receipt_persisted": true,
+  "evidence_export": {
+    "status": "partial",
+    "exchanges": 2,
+    "missing_request_ids": [
+      "72"
+    ],
+    "artifact": "http_exchanges.json",
+    "sha256": "b7b71afe6f6a0b9d2a2ed4bc3dcc7a880ee8f289f6059da0d835005eea2e5c7c"
+  }
+}

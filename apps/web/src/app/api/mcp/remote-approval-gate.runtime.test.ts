@@ -19,6 +19,24 @@ vi.mock("@lyrashield/config", async (importOriginal) => {
   }
 })
 
+// The guard inspects both the target ID and the outer operation ID passed to
+// the tool. Hexadecimal fixture IDs cannot accidentally spell a role marker.
+vi.mock("@lyrashield/db/src/client", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@lyrashield/db/src/client")>()
+  return {
+    ...actual,
+    prisma: actual.prisma.$extends({
+      query: {
+        agentOperation: {
+          create({ args, query }) {
+            return query({ ...args, data: { ...args.data, id: args.data.id ?? randomUUID() } })
+          },
+        },
+      },
+    }),
+  }
+})
+
 import {
   CANONICAL_OPERATIONS,
   claimOrGetAgentOperation,
@@ -64,7 +82,13 @@ describe.skipIf(!databaseUrl || !runtimeUrl)(
         data: { workspaceId, userId, role: "OWNER", status: "active" },
       })
       const target = await owner.target.create({
-        data: { workspaceId, name: "Mismatch target", type: "REPO", repoFullName: "o/mismatch" },
+        data: {
+          id: randomUUID(),
+          workspaceId,
+          name: "Mismatch target",
+          type: "REPO",
+          repoFullName: "o/mismatch",
+        },
       })
       targetId = target.id
 

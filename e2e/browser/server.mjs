@@ -28,6 +28,7 @@ const server = await createServer({
       "next/navigation": fileURLToPath(new URL("./next-navigation.ts", import.meta.url)),
       "next/image": fileURLToPath(new URL("./next-image.tsx", import.meta.url)),
       "react-dom/client": webRequire.resolve("react-dom/client"),
+      "react-dom": webRequire.resolve("react-dom"),
       "react/jsx-runtime": webRequire.resolve("react/jsx-runtime"),
       "react/jsx-dev-runtime": webRequire.resolve("react/jsx-dev-runtime"),
       react: webRequire.resolve("react"),

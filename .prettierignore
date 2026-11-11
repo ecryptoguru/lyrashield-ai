@@ -22,3 +22,5 @@ docs/marketplace/**/skills/lyrashield/SKILL.md
 
 # Preserve engine-generated artifact bytes and their result-manifest digests.
 apps/worker/src/engine/fixtures/run-json-1.2/*.json
+# Hash-bound owned-writer drill inputs are verified byte-for-byte.
+.github/scripts/fixtures/worker-evidence-distinct/*.json

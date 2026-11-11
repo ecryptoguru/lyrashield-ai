@@ -34,7 +34,7 @@ vi.mock("@lyrashield/db", () => ({
     "STOPPED_BUDGET",
     "TIMED_OUT",
   ]),
-  updateScanStatus: mocks.updateScanStatus,
+  updateUnclaimedScanStatus: mocks.updateScanStatus,
 }))
 vi.mock("@lyrashield/logger", () => ({
   logger: { warn: vi.fn(), error: vi.fn(), info: vi.fn() },

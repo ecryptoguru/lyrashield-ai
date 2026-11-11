@@ -7,7 +7,15 @@ import {
 } from "@lyrashield/db"
 import { assertOAuthDelegatedScope, requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
-import { CreateScanInputSchema, CreateScanSchema } from "@lyrashield/types"
+import { env } from "@lyrashield/config"
+import {
+  CreateScanInputSchema,
+  CreateScanSchema,
+  EngineBudgetCeilingTextSchema,
+  resolvePlanEngineBudget,
+  resolveScanProfile,
+  ScanExecutionPlanInputError,
+} from "@lyrashield/types"
 import { evaluateScanEntitlement, isTrialAvailable } from "@lyrashield/billing"
 import { logger } from "@lyrashield/logger"
 import { NextResponse } from "next/server"
@@ -45,12 +53,13 @@ const EligibilityQuerySchema = CreateScanSchema.pick({
   goal: true,
   mode: true,
   policyId: true,
+  engineBudgetCeilingUsd: true,
   workflow: true,
   baseRef: true,
   headRef: true,
   attachmentIds: true,
   authorizationRef: true,
-})
+}).extend({ engineBudgetCeilingUsd: EngineBudgetCeilingTextSchema.optional() })
 
 type EligibilityBlocker = { code: string; message: string }
 
@@ -200,9 +209,7 @@ async function evaluatePolicyAndWorkflow(
   limitations: string[]
 }> {
   const blockers: EligibilityBlocker[] = []
-  const shouldResolvePolicy =
-    Boolean(input.policyId) || input.workflow === "AUTHENTICATED_ASSESSMENT"
-  const policy = shouldResolvePolicy ? await findScanPolicy(workspaceId, input.policyId) : undefined
+  const policy = await findScanPolicy(workspaceId, input.policyId)
   if (input.policyId && !policy) {
     blockers.push({ code: "POLICY_NOT_FOUND", message: "Policy not found in this workspace" })
     return { blockers, limitations: [] }
@@ -216,7 +223,24 @@ async function evaluatePolicyAndWorkflow(
     authorizationRef: input.authorizationRef,
     policy,
   })
-  return { blockers: [...blockers, ...workflow.blockers], limitations: workflow.limitations }
+  if (workflow.blockers.length) return workflow
+  try {
+    const profile = resolveScanProfile({ targetType: target.type, mode: input.mode })
+    resolvePlanEngineBudget(
+      profile.maxBudgetUsd,
+      profile.usesAi,
+      input.workflow ?? "REVIEW_TARGET",
+      {
+        policyMaxBudgetUsd: policy?.maxBudgetUsd?.toNumber(),
+        platformMaxBudgetUsd: env.PLATFORM_MAX_SCAN_BUDGET_USD,
+        engineBudgetCeilingUsd: input.engineBudgetCeilingUsd,
+      }
+    )
+  } catch (error) {
+    if (!(error instanceof ScanExecutionPlanInputError)) throw error
+    return { blockers: [{ code: "SCAN_PLAN_INVALID", message: error.message }], limitations: [] }
+  }
+  return workflow
 }
 
 async function prepareReviewOptions(target: { type: string; apiSpecUrl?: unknown }) {
@@ -244,6 +268,17 @@ async function prepareReviewOptions(target: { type: string; apiSpecUrl?: unknown
   return { reviewOptions, advisory, targetRelayAvailable }
 }
 
+function parseEligibilityQuery(searchParams: URLSearchParams) {
+  const raw: Record<string, unknown> = Object.fromEntries(searchParams)
+  // attachmentIds is a repeated query param — Object.fromEntries would keep
+  // only the last occurrence, so rebuild it from getAll before validation.
+  const attachmentParams = searchParams.getAll("attachmentIds")
+  if (attachmentParams.length > 0) raw.attachmentIds = attachmentParams
+  const ceilings = searchParams.getAll("engineBudgetCeilingUsd")
+  if (ceilings.length > 1) raw.engineBudgetCeilingUsd = ceilings
+  return EligibilityQuerySchema.safeParse(raw)
+}
+
 /**
  * Read-only scan eligibility preflight.
  *
@@ -258,12 +293,7 @@ async function prepareReviewOptions(target: { type: string; apiSpecUrl?: unknown
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
-    const raw: Record<string, unknown> = Object.fromEntries(searchParams)
-    // attachmentIds is a repeated query param — Object.fromEntries would keep
-    // only the last occurrence, so rebuild it from getAll before validation.
-    const attachmentParams = searchParams.getAll("attachmentIds")
-    if (attachmentParams.length > 0) raw.attachmentIds = attachmentParams
-    const parsed = EligibilityQuerySchema.safeParse(raw)
+    const parsed = parseEligibilityQuery(searchParams)
     if (!parsed.success) {
       return apiError(
         "INVALID_PARAM",

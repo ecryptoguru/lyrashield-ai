@@ -56,6 +56,10 @@ describe("openapi workflow/provenance contract", () => {
   it("documents the recorded workflow inputs on CreateScan", () => {
     const createScan = spec.components.schemas.CreateScan
     const props = createScan.properties as Record<string, unknown>
+    expect(props.engineBudgetCeilingUsd).toMatchObject({ type: "number", exclusiveMinimum: 0 })
+    expect(spec.paths["/scans/eligibility"].get.parameters).toContainEqual(
+      expect.objectContaining({ name: "engineBudgetCeilingUsd", in: "query", required: false })
+    )
     expect(props.workflow).toBeDefined()
     expect(props.baseRef).toBeDefined()
     expect(props.headRef).toBeDefined()
