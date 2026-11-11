@@ -34,6 +34,7 @@ const ownerJobs = new Set([JOB, ".github/workflows/deploy-azure.yml"])
 const ENTRIES = new Map([
   [".github/workflows/release-production.yml", "push"],
   [".github/workflows/deploy-azure.yml", "workflow_dispatch"],
+  [".github/workflows/qualify-runtime-issuer.yml", "workflow_dispatch"],
 ])
 const sha = /^[a-f0-9]{40}$/,
   hash = /^[a-f0-9]{64}$/,
@@ -237,6 +238,20 @@ export function verifyRecordWitness(token, jwks, identity, kind, digest, when, j
     jobWorkflow,
     qualification ? ISSUER_ENV : ENV
   )
+}
+
+// The Azure credential is usable only inside the isolated reusable issuer.
+// This token is never a qualification record or a deployment authorization.
+export function verifyQualificationIssuerToken(token, jwks, identity, when) {
+  check(identity.repoId === "1286618458" && identity.ownerId === "116722580")
+  claims(token, jwks, identity, "api://AzureADTokenExchange", when, ISSUER_JOB, ISSUER_ENV)
+}
+
+export async function readQualificationIssuerToken() {
+  const identity = currentRun()
+  const token = await requestToken("api://AzureADTokenExchange")
+  verifyQualificationIssuerToken(token, await keys(), identity, Math.floor(Date.now() / 1000))
+  return { token, identity }
 }
 async function keys() {
   return getLimited(ISSUER + "/.well-known/jwks", {}, 65536)

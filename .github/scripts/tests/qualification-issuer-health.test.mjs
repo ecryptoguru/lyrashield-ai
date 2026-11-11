@@ -1,0 +1,90 @@
+import assert from "node:assert/strict"
+import test from "node:test"
+import { readFileSync } from "node:fs"
+import { createRequire } from "node:module"
+import { checkIssuerHealth, verifyHealthSignature } from "../qualification-issuer-health.mjs"
+
+const fixture = JSON.parse(
+  // Fixed public signature fixture, with no private key or credential.
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
+  readFileSync(new URL("./fixtures/qualification-key-health.json", import.meta.url), "utf8")
+)
+const { parse } = createRequire(
+  new URL("../../../packages/agent-plugin/package.json", import.meta.url)
+)("yaml")
+
+test("actual managed RSA signature verifies only exact bytes, pinned key version and algorithm", () => {
+  verifyHealthSignature(fixture.raw, fixture.result)
+  assert.equal(JSON.parse(fixture.raw).productionQualification, false)
+  assert.throws(() => verifyHealthSignature(fixture.raw + " ", fixture.result))
+  for (const field of ["keyId", "algorithm", "signature"])
+    assert.throws(() =>
+      verifyHealthSignature(fixture.raw, { ...fixture.result, [field]: "foreign" })
+    )
+  assert.throws(() => verifyHealthSignature(fixture.raw, { ...fixture.result, qualified: true }))
+  assert.throws(() => verifyHealthSignature("x".repeat(4097), fixture.result))
+})
+
+test("unverified identity never exchanges credentials or signs", async () => {
+  const calls = []
+  await assert.rejects(
+    checkIssuerHealth({
+      readIdentity: async () => {
+        throw new Error("identity unavailable")
+      },
+      run: (args) => calls.push(args),
+    })
+  )
+  assert.deepEqual(calls, [])
+})
+
+test("signing failures log out and cannot return a qualified receipt", async () => {
+  for (const failure of ["login", "keyvault", "malformed-signature"]) {
+    const calls = []
+    await assert.rejects(
+      checkIssuerHealth({
+        readIdentity: async () => ({
+          token: "fixture-token",
+          identity: { source: "a".repeat(40), owner: "42:1" },
+        }),
+        run: (args) => {
+          calls.push(args)
+          if (args[0] === failure) throw new Error("unavailable")
+          if (args[0] === "keyvault") return fixture.result
+          return null
+        },
+      })
+    )
+    assert.deepEqual(calls.at(-1), ["logout"])
+    const signing = calls.find((args) => args[0] === "keyvault")
+    if (signing) {
+      assert.equal(signing[signing.indexOf("--id") + 1], fixture.result.keyId)
+      assert.equal(signing[signing.indexOf("--algorithm") + 1], "RS256")
+    }
+  }
+})
+
+test("only the isolated main reusable issuer can access signing, with no candidate input or deploy output", () => {
+  const issuer = parse(readFileSync(".github/workflows/issue-runtime-qualification.yml", "utf8"))
+  const caller = parse(readFileSync(".github/workflows/qualify-runtime-issuer.yml", "utf8"))
+  assert.deepEqual(issuer.on, { workflow_call: null })
+  assert.deepEqual(caller.on, { workflow_dispatch: null })
+  assert.equal(caller.jobs.signer.uses, "./.github/workflows/issue-runtime-qualification.yml")
+  const job = issuer.jobs["verify-signing-boundary"]
+  assert.equal(job.environment, "release-qualification")
+  assert.equal(job["runs-on"], "ubuntu-24.04")
+  assert.equal(job["timeout-minutes"], 10)
+  assert.deepEqual(job.permissions, { contents: "read", actions: "read", "id-token": "write" })
+  for (const condition of ["1286618458", "116722580", "refs/heads/main", "workflow_dispatch"])
+    assert.ok(job.if.includes(condition))
+  assert.equal(job.steps[0].with.ref, "${{ github.sha }}")
+  assert.equal(job.steps[0].with["persist-credentials"], false)
+  assert.equal(job.steps.filter((step) => step.run).length, 1)
+  assert.equal(
+    job.steps.find((step) => step.run).run,
+    "node .github/scripts/qualification-issuer-health.mjs"
+  )
+  assert.equal(job.outputs, undefined)
+  assert.equal(issuer.on.workflow_call?.inputs, undefined)
+  assert.doesNotMatch(JSON.stringify(issuer), /secrets\.|deploy-azure|qualified_release_digest/)
+})
