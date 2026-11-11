@@ -5,7 +5,11 @@ import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from "nod
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { execFileSync } from "node:child_process"
-import { verifyRecordWitness, verifiedArtifact } from "../paired-runtime-github.mjs"
+import {
+  issueRecordWitness,
+  verifyRecordWitness,
+  verifiedArtifact,
+} from "../paired-runtime-github.mjs"
 import { readGuestResult } from "../paired-live-transport.mjs"
 import { protectedLiveAdapter } from "../paired-runtime-live.mjs"
 
@@ -89,6 +93,79 @@ test("real signature binds issuer, audience, immutable repository, exact run, bo
   const token = jwt(claims).split(".")
   token[1] = Buffer.from(JSON.stringify({ ...claims, extra: "tampered" })).toString("base64url")
   assert.throws(() => verifyRecordWitness(token.join("."), keys, x, "evidence", digest, now))
+})
+
+test("deployment witnesses cannot issue qualification or automatic approval records", () => {
+  for (const kind of [
+    "qualified-fleet",
+    "qualified-release",
+    "sandbox-qualification",
+    "financial-qualification",
+    "reader-qualification",
+    "arm-approval",
+    "rebind-approval",
+    "handoff",
+  ]) {
+    const qualified = { ...claims, aud: `urn:lyrashield:paired:v1:${kind}:${digest}` }
+    assert.throws(() => verifyRecordWitness(jwt(qualified), keys, x, kind, digest, now))
+  }
+})
+
+test("deployment qualification issuance fails before requesting an identity token", async (t) => {
+  let requests = 0
+  t.mock.method(globalThis, "fetch", async () => {
+    requests++
+    throw new Error("No identity request authorized")
+  })
+  for (const kind of [
+    "qualified-fleet",
+    "qualified-release",
+    "sandbox-qualification",
+    "financial-qualification",
+    "reader-qualification",
+    "arm-approval",
+    "rebind-approval",
+    "handoff",
+  ]) {
+    await assert.rejects(issueRecordWitness(kind, JSON.stringify({ kind })))
+  }
+  assert.equal(requests, 0)
+})
+
+test("qualification witnesses bind the isolated issuer job and environment separately from the consumer", () => {
+  const kind = "sandbox-qualification"
+  const workflow = ".github/workflows/issue-runtime-qualification.yml"
+  const qualified = {
+    ...claims,
+    aud: `urn:lyrashield:paired:v1:${kind}:${digest}`,
+    sub: `repo:${repo}:environment:release-qualification`,
+    environment: "release-qualification",
+    job_workflow_ref: `${repo}/${workflow}@refs/heads/main`,
+  }
+  verifyRecordWitness(jwt(qualified), keys, x, kind, digest, now, workflow)
+  for (const field of [
+    "environment",
+    "sub",
+    "job_workflow_ref",
+    "job_workflow_sha",
+    "run_attempt",
+    "sha",
+    "ref",
+    "workflow_ref",
+  ]) {
+    assert.throws(() =>
+      verifyRecordWitness(
+        jwt({ ...qualified, [field]: "foreign" }),
+        keys,
+        x,
+        kind,
+        digest,
+        now,
+        workflow
+      )
+    )
+  }
+  assert.throws(() => verifyRecordWitness(jwt(qualified), keys, x, kind, digest, now))
 })
 
 test("historical artifact uses real bounded ZIP plus signed witness, refuses substituted archive, locator, raw body and expired issuance", async (t) => {
@@ -484,4 +561,96 @@ process.stdout.write(fs.readFileSync(root+map[path]))`,
   )
   assert.equal((await verifiedArtifact("evidence", bodyDigest, callerPath)).raw, body)
   await assert.rejects(verifiedArtifact("evidence", bodyDigest))
+
+  // A qualification producer is a different protected job in this run;
+  // consuming it still requires the deployment job's own owner witness.
+  const qualificationKind = "sandbox-qualification"
+  const qualificationBody = JSON.stringify({ kind: qualificationKind, owner })
+  const qualificationDigest = hash(qualificationBody)
+  const qualificationAudience =
+    "urn:lyrashield:paired:v1:" + qualificationKind + ":" + qualificationDigest
+  const issuerPath = ".github/workflows/issue-runtime-qualification.yml"
+  const issuerClaims = {
+    ...makeClaims(qualificationAudience),
+    sub: `repo:${repo}:environment:release-qualification`,
+    environment: "release-qualification",
+    job_workflow_ref: repo + "/" + issuerPath + "@refs/heads/main",
+  }
+  put(qualificationDigest + ".locator.json", JSON.stringify(locator))
+  put(qualificationDigest + ".json", qualificationBody)
+  const replaceQualificationWitness = (token) => {
+    const bytes = execFileSync(
+      "python3",
+      [
+        "-I",
+        "-c",
+        'import io,sys,zipfile; b=io.BytesIO(); z=zipfile.ZipFile(b,"w"); z.writestr("paired-witness.json",sys.stdin.read()); z.close(); sys.stdout.buffer.write(b.getvalue())',
+      ],
+      {
+        input: JSON.stringify({
+          version: 1,
+          kind: qualificationKind,
+          digest: qualificationDigest,
+          token,
+        }),
+      }
+    )
+    put("zip", bytes)
+    put(
+      "artifact",
+      JSON.stringify({
+        ...JSON.parse(files.artifact),
+        name: "paired-v1-42-1-" + qualificationKind + "-" + qualificationDigest,
+        size_in_bytes: bytes.length,
+        digest: "sha256:" + hash(bytes),
+      })
+    )
+  }
+  replaceQualificationWitness(jwt(issuerClaims))
+  t.mock.method(globalThis, "fetch", async (value) => {
+    const url = new URL(value)
+    if (url.hostname === "token.actions.githubusercontent.com")
+      return new Response(JSON.stringify(keys))
+    assert.equal(url.hostname, "issuer-caller.actions.githubusercontent.com")
+    const aud = url.searchParams.get("audience")
+    assert.ok(aud === qualificationAudience || aud === "urn:lyrashield:paired:v1:owner:42:1")
+    return new Response(
+      JSON.stringify({ value: aud === qualificationAudience ? jwt(issuerClaims) : ownerToken })
+    )
+  })
+  const issued = JSON.parse(
+    await issueRecordWitness(qualificationKind, qualificationBody, issuerPath)
+  )
+  assert.equal(issued.kind, qualificationKind)
+  assert.equal(issued.digest, qualificationDigest)
+  assert.doesNotThrow(() =>
+    verifyRecordWitness(
+      issued.token,
+      keys,
+      identity,
+      qualificationKind,
+      qualificationDigest,
+      nowSeconds,
+      issuerPath
+    )
+  )
+  assert.equal(
+    (await verifiedArtifact(qualificationKind, qualificationDigest, callerPath)).raw,
+    qualificationBody
+  )
+  await assert.rejects(verifiedArtifact(qualificationKind, qualificationDigest))
+  replaceQualificationWitness(jwt(makeClaims(qualificationAudience)))
+  await assert.rejects(verifiedArtifact(qualificationKind, qualificationDigest, callerPath))
+
+  // A completed historical run uses the same issuer policy, without
+  // confusing the later consumer's run identity with the issuing run.
+  set("GITHUB_RUN_ID", "43")
+  put("attempt", JSON.stringify({ ...run, status: "completed", conclusion: "success" }))
+  replaceQualificationWitness(jwt(issuerClaims))
+  assert.equal(
+    (await verifiedArtifact(qualificationKind, qualificationDigest, callerPath)).raw,
+    qualificationBody
+  )
+  replaceQualificationWitness(jwt(makeClaims(qualificationAudience)))
+  await assert.rejects(verifiedArtifact(qualificationKind, qualificationDigest, callerPath))
 })

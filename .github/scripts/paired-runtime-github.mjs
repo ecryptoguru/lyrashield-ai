@@ -18,6 +18,18 @@ const REPO = "ecryptoguru/lyrashield-ai",
   ISSUER = "https://token.actions.githubusercontent.com"
 const ENV = "azure-production",
   JOB = ".github/workflows/deploy-azure-runtime.yml"
+const ISSUER_ENV = "release-qualification",
+  ISSUER_JOB = ".github/workflows/issue-runtime-qualification.yml"
+const qualificationKinds = new Set([
+  "qualified-fleet",
+  "qualified-release",
+  "sandbox-qualification",
+  "financial-qualification",
+  "reader-qualification",
+  "arm-approval",
+  "rebind-approval",
+  "handoff",
+])
 const ownerJobs = new Set([JOB, ".github/workflows/deploy-azure.yml"])
 const ENTRIES = new Map([
   [".github/workflows/release-production.yml", "push"],
@@ -147,8 +159,12 @@ async function getLimited(url, options, max) {
     throw new Error("Protected identity service unavailable")
   }
 }
-function claims(token, jwks, identity, aud, when, jobWorkflow = JOB) {
-  check(ownerJobs.has(jobWorkflow))
+function claims(token, jwks, identity, aud, when, jobWorkflow = JOB, environment = ENV) {
+  check(
+    environment === ENV
+      ? ownerJobs.has(jobWorkflow)
+      : environment === ISSUER_ENV && jobWorkflow === ISSUER_JOB
+  )
   check(typeof token === "string" && token.length <= 16384)
   const parts = token.split(".")
   check(parts.length === 3 && parts.every((x) => /^[\w-]+$/.test(x)))
@@ -181,8 +197,8 @@ function claims(token, jwks, identity, aud, when, jobWorkflow = JOB) {
   check(
     c.iss === ISSUER &&
       c.aud === aud &&
-      c.sub === `repo:${REPO}:environment:${ENV}` &&
-      c.environment === ENV &&
+      c.sub === `repo:${REPO}:environment:${environment}` &&
+      c.environment === environment &&
       c.repository === REPO &&
       c.repository_id === x.repoId &&
       c.repository_owner_id === x.ownerId &&
@@ -210,7 +226,17 @@ function claims(token, jwks, identity, aud, when, jobWorkflow = JOB) {
 }
 export function verifyRecordWitness(token, jwks, identity, kind, digest, when, jobWorkflow = JOB) {
   check(kinds.has(kind) && hash.test(digest))
-  claims(token, jwks, identity, audience(kind, digest), when, jobWorkflow)
+  const qualification = qualificationKinds.has(kind)
+  check(!qualification || jobWorkflow === ISSUER_JOB)
+  claims(
+    token,
+    jwks,
+    identity,
+    audience(kind, digest),
+    when,
+    jobWorkflow,
+    qualification ? ISSUER_ENV : ENV
+  )
 }
 async function keys() {
   return getLimited(ISSUER + "/.well-known/jwks", {}, 65536)
@@ -265,6 +291,7 @@ export async function readAuthenticatedOwner(jobWorkflow = JOB) {
 export async function issueRecordWitness(kind, body, jobWorkflow = JOB) {
   check(
     kinds.has(kind) &&
+      (!qualificationKinds.has(kind) || jobWorkflow === ISSUER_JOB) &&
       typeof body === "string" &&
       Buffer.byteLength(body) <= 4096 &&
       json(body).kind === kind
@@ -330,8 +357,10 @@ async function authenticateRecord(kind, digest, dir, jobWorkflow = JOB) {
     loc.runId === process.env.GITHUB_RUN_ID && loc.attempt === process.env.GITHUB_RUN_ATTEMPT
   const run = gh(`actions/runs/${loc.runId}/attempts/${loc.attempt}`),
     x = runIdentity(repo, run, loc.source, owner, !same)
-  const witnessJobWorkflow = same ? jobWorkflow : JOB
-  if (same) check((await readAuthenticatedOwner(witnessJobWorkflow)) === owner)
+  const witnessJobWorkflow = qualificationKinds.has(kind) ? ISSUER_JOB : same ? jobWorkflow : JOB
+  // The consuming deployment authenticates its own ownership, while the
+  // qualification artifact independently proves the isolated producer job.
+  if (same) check((await readAuthenticatedOwner(jobWorkflow)) === owner)
   const artifact = gh("actions/artifacts/" + loc.artifactId),
     w = artifact.workflow_run
   check(
