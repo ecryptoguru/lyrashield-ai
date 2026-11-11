@@ -11,8 +11,10 @@
  * with tmpfs PostgreSQL data and label lyrashield.authority-restore=<ownerToken>.
  * Only the exact qualified offline PG17.11 image/version is accepted. The system-definer
  * allowlist is empty; system/extension additions and other versions require separate review.
- * Source/permission checks are bounded snapshots, not proof against dynamic SQL or later drift.
- * This checks restore fences; it neither closes nor opens epochs and grants nothing.
+ * Source/permission/history reads are separate bounded observations, not a coherent authority
+ * snapshot. Container ownership does not exclude concurrent catalog, grant or epoch writers.
+ * Qualification is withheld and restored helpers are never executed by this diagnostic.
+ * It neither closes nor opens epochs and grants nothing.
  */
 import { spawnSync } from "node:child_process"
 import { constants, closeSync, fstatSync, openSync, readSync } from "node:fs"
@@ -24,7 +26,6 @@ import {
   requireCheck,
   validateRestoreAuthorityConfig,
   dispatchVerificationSql,
-  dispatchDigestProbeSql,
   mirrorVerificationSql,
   parseRetainedJournal,
   retainedJournalSql,
@@ -168,11 +169,6 @@ export async function verifyRestoredAuthority(
       "roles",
     ]
   )
-  for (const role of config.dispatch.deniedRoles)
-    assertRestoredChecks(await read(config.dispatch.target, dispatchDigestProbeSql(role)), [
-      "resolution",
-      "digest",
-    ])
   if (config.mirror) {
     const mirror = config.mirror
     const retained = parseRetainedJournal(
@@ -187,9 +183,10 @@ export async function verifyRestoredAuthority(
       assertRetainedJournal(stream, await read(mirror.target, retainedJournalSql(stream)))
   }
   return {
-    schema: "lyrashield-offline-authority-restore-result/1",
-    dispatch: "VERIFIED_CLOSED",
-    mirror: config.mirror ? "VERIFIED_CLOSED_RETAINED_BYTES" : "NOT_REQUESTED",
+    schema: "lyrashield-offline-authority-restore-result/2",
+    dispatch: "UNQUALIFIED",
+    mirror: config.mirror ? "UNQUALIFIED" : "NOT_REQUESTED",
+    consistentAuthorityStateQualified: false,
     admissionAllowed: false,
     managedFailoverQualified: false,
   }

@@ -572,15 +572,25 @@ CI success is synthetic evidence, not a fresh production recovery proof.
 The separate `verify-restored-authority.mjs` verifier remains offline-only and
 unwired from the production backup workflow. Its owned fixture pins PostgreSQL
 17.11 and requires `pgcrypto` 1.3 in `public`, with the extension-owned
-`digest(bytea,text)` implementation. After checking the migration, exact invoker
-helper definitions, role fences and closed epoch, it executes the no-policy
-digest helper under every configured denied role in a bounded read-only
-transaction. The probe checks function resolution and a fixed synthetic digest;
-it permits only the two reviewed extension-owned `digest` signatures across
-`pg_catalog`/`public`, rejecting extra overloads, defaulted or variadic candidates
-before helper execution. It exposes no restored policy rows. Missing extension, schema usage, table read,
-RLS helper or digest execution grants fail closed. Verification installs nothing
-and never repairs grants or opens authority.
+`digest(bytea,text)` implementation. It passively checks migration/source,
+extension identity, role grants and closed-state observations in bounded read-only
+transactions. Missing extension, schema usage, table read, RLS helper or digest
+execution grants fail closed. Restored helpers are never executed by the
+standalone diagnostic. Its result schema `/2` reports `UNQUALIFIED` for dispatch
+and any requested mirror, with `consistentAuthorityStateQualified=false`,
+`admissionAllowed=false` and `managedFailoverQualified=false`.
+
+Container ownership, network isolation and a pinned image do not establish
+sole-writer exclusion. Catalog/role/closed-epoch checks and independently retained
+mirror/journal reads occur in separate transactions; the mirror is a separate
+database. A concurrent owner can replace a helper, change grants or open an epoch
+after an earlier observation. These reads therefore do not establish one
+coherent authority state. There is no universal writer-enforced lock or other
+qualified exclusion contract, and an advisory lock would not supply one. Passing
+passive checks must never become `VERIFIED_CLOSED` or production applicability.
+The trusted synthetic fixture retains digest execution probes for compatibility
+testing only; it rejects unreviewed defaulted/variadic overloads before execution.
+Verification installs nothing, repairs no grants and opens no authority.
 
 Run the synthetic compatibility fixture with
 `RESTORE_AUTHORITY_RUNTIME_TEST=1 node --test .github/scripts/tests/restore-authority-postgres.runtime.test.mjs`.

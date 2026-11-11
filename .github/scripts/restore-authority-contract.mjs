@@ -253,7 +253,14 @@ export function dispatchVerificationSql(deniedRoles) {
     .join(" AND ")
   const roleChecks = deniedRoles
     .map(
-      (role) => `${restrictedRole(role)} AND NOT EXISTS (
+      (role) => `${restrictedRole(role)}
+    AND pg_catalog.has_schema_privilege(${literal(role)},'public','USAGE')
+    AND pg_catalog.has_schema_privilege(${literal(role)},'app','USAGE')
+    AND pg_catalog.has_table_privilege(${literal(role)},'public."Policy"','SELECT')
+    AND pg_catalog.has_function_privilege(${literal(role)},'app.scan_policy_digest(text)','EXECUTE')
+    AND pg_catalog.has_function_privilege(${literal(role)},'app.current_workspace_id()','EXECUTE')
+    AND pg_catalog.has_function_privilege(${literal(role)},'public.digest(bytea,text)','EXECUTE')
+    AND NOT EXISTS (
     SELECT 1 FROM unnest(${tableArray(dispatchTables)}) name WHERE
       ${reachablePrivilege(role, "table", "format('public.%I',name)", allPrivileges)})`
     )
@@ -279,7 +286,7 @@ export function dispatchVerificationSql(deniedRoles) {
     'roles', ${roleChecks})::text;`
 }
 
-/** Execute only after source/privilege checks, without writes or restoring missing grants. */
+/** Trusted synthetic fixture probe only; the standalone diagnostic must never execute it. */
 export function dispatchDigestProbeSql(role) {
   roleName(role)
   // PostgreSQL jsonb::text uses this canonical spacing. The NULL policy branch always hashes

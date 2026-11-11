@@ -13,7 +13,7 @@ import {
   RESTORE_AUTHORITY_POSTGRES_IMAGE,
   RESTORE_AUTHORITY_POSTGRES_VERSION,
 } from "../restore-authority-contract.mjs"
-import { assertOwnedRestoreTarget } from "../verify-restored-authority.mjs"
+import { assertOwnedRestoreTarget, verifyRestoredAuthority } from "../verify-restored-authority.mjs"
 
 const repository = new URL("../../../", import.meta.url)
 const migrations = new URL("../../../packages/db/prisma/migrations/", import.meta.url)
@@ -371,6 +371,36 @@ test(
       assert.deepEqual(observation, { resolution: false, digest: null })
       rejected(verify())
     })
+    await t.test(
+      "concurrent helper and epoch drift cannot qualify passive observations",
+      async () => {
+        restoreDispatch()
+        let reads = 0
+        const result = await verifyRestoredAuthority(config, async (_, querySql) => {
+          reads++
+          const observed = JSON.parse(sql(querySql, "lyrashield_restore"))
+          assert.equal(observed.closed, true)
+          sql(
+            `CREATE OR REPLACE FUNCTION app.scan_policy_digest(policy_id text) RETURNS text LANGUAGE plpgsql STABLE AS $$ BEGIN RAISE EXCEPTION 'changed helper must never execute'; END; $$;
+           INSERT INTO public."ScanAuthorityEpoch" (id,epoch,"isOpen","openKey","openedAt","updatedAt") VALUES ('concurrent-open',2,true,'open',now(),now());`,
+            "lyrashield_restore"
+          )
+          return observed
+        })
+        assert.equal(reads, 1, "no restored helper may execute after the catalog observation")
+        assert.equal(result.dispatch, "UNQUALIFIED")
+        assert.equal(result.consistentAuthorityStateQualified, false)
+        assert.equal(result.admissionAllowed, false)
+        assert.equal(
+          sql(
+            'SELECT count(*) FROM public."ScanAuthorityEpoch" WHERE "isOpen";',
+            "lyrashield_restore"
+          ),
+          "1"
+        )
+        rejected(verify())
+      }
+    )
     for (const schema of ["pg_catalog", "public"])
       for (const [label, argumentsSql] of [
         ["defaulted", "bytea,text,int DEFAULT 0"],
@@ -674,7 +704,8 @@ test(
       () => {
         const result = verify(mirrorConfig)
         assert.equal(result.status, 0, result.stderr)
-        assert.equal(JSON.parse(result.stdout).mirror, "VERIFIED_CLOSED_RETAINED_BYTES")
+        assert.equal(JSON.parse(result.stdout).mirror, "UNQUALIFIED")
+        assert.equal(JSON.parse(result.stdout).consistentAuthorityStateQualified, false)
         assert.equal(JSON.parse(result.stdout).managedFailoverQualified, false)
       }
     )

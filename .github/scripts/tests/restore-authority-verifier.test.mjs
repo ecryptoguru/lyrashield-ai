@@ -39,8 +39,6 @@ const closed = {
   triggers: true,
   helpers: true,
   extension: true,
-  resolution: true,
-  digest: true,
   systemDefiners: true,
   privilegedFunctions: true,
   closed: true,
@@ -254,16 +252,17 @@ test("public/app verification never claims mirror or admission qualification", a
       return closed
     }),
     {
-      schema: "lyrashield-offline-authority-restore-result/1",
-      dispatch: "VERIFIED_CLOSED",
+      schema: "lyrashield-offline-authority-restore-result/2",
+      dispatch: "UNQUALIFIED",
       mirror: "NOT_REQUESTED",
+      consistentAuthorityStateQualified: false,
       admissionAllowed: false,
       managedFailoverQualified: false,
     }
   )
-  assert.equal(reads, 2)
+  assert.equal(reads, 1)
 })
-test("every denied role must execute the digest helper after static authority checks", async () => {
+test("standalone diagnostic withholds qualification and never executes restored helpers", async () => {
   const value = config()
   value.dispatch.deniedRoles.push("authority_worker_restore")
   const observations = []
@@ -271,25 +270,23 @@ test("every denied role must execute the digest helper after static authority ch
     observations.push(sql)
     return closed
   })
-  assert.equal(observations.length, 3)
+  assert.equal(observations.length, 1)
   assert.ok(observations[0].includes("'migration'"))
-  for (const [index, role] of value.dispatch.deniedRoles.entries()) {
-    assert.equal(observations[index + 1], dispatchDigestProbeSql(role))
-    assert.match(observations[index + 1], /SET LOCAL row_security=on/)
-    assert.match(observations[index + 1], /SET LOCAL search_path=pg_catalog,public/)
-    assert.match(observations[index + 1], /app\.scan_policy_digest\(NULL::text\)/)
-    assert.match(observations[index + 1], /to_regprocedure\('digest\(bytea,text\)'\)/)
-    assert.match(observations[index + 1], /count\(\*\)=2 AND bool_and/)
-    assert.match(observations[index + 1], /n\.nspname IN \('pg_catalog','public'\)/)
-    assert.match(
-      observations[index + 1],
-      /p\.pronargdefaults=0 AND p\.proargdefaults IS NULL AND p\.provariadic=0/
-    )
-    assert.match(
-      observations[index + 1],
-      /IF resolved THEN\s+EXECUTE 'SELECT app\.scan_policy_digest/
-    )
-    assert.match(observations[index + 1], /set_config\('lyrashield.restore_digest_probe'/)
+  assert.doesNotMatch(
+    observations[0],
+    /DO \$restore_probe\$|EXECUTE 'SELECT app\.scan_policy_digest/
+  )
+  for (const role of value.dispatch.deniedRoles) {
+    const probe = dispatchDigestProbeSql(role)
+    assert.match(probe, /SET LOCAL row_security=on/)
+    assert.match(probe, /SET LOCAL search_path=pg_catalog,public/)
+    assert.match(probe, /app\.scan_policy_digest\(NULL::text\)/)
+    assert.match(probe, /to_regprocedure\('digest\(bytea,text\)'\)/)
+    assert.match(probe, /count\(\*\)=2 AND bool_and/)
+    assert.match(probe, /n\.nspname IN \('pg_catalog','public'\)/)
+    assert.match(probe, /p\.pronargdefaults=0 AND p\.proargdefaults IS NULL AND p\.provariadic=0/)
+    assert.match(probe, /IF resolved THEN\s+EXECUTE 'SELECT app\.scan_policy_digest/)
+    assert.match(probe, /set_config\('lyrashield.restore_digest_probe'/)
   }
   observations.length = 0
   await assert.rejects(
@@ -300,6 +297,21 @@ test("every denied role must execute the digest helper after static authority ch
   )
   assert.equal(observations.length, 1, "unverified helpers must never execute")
   assert.throws(() => dispatchDigestProbeSql("runtime';SELECT 1;--"))
+})
+test("drift after a closed observation cannot produce VERIFIED_CLOSED or invoke a changed helper", async () => {
+  let reads = 0
+  let changed = false
+  const result = await verifyRestoredAuthority(config(), async (_, sql) => {
+    reads++
+    assert.equal(changed, false, "no later executable read may follow the static observation")
+    assert.doesNotMatch(sql, /DO \$restore_probe\$/)
+    changed = true // Represents an owner opening the epoch or replacing a helper after this read.
+    return closed
+  })
+  assert.equal(reads, 1)
+  assert.equal(result.dispatch, "UNQUALIFIED")
+  assert.equal(result.consistentAuthorityStateQualified, false)
+  assert.equal(result.admissionAllowed, false)
 })
 test("mirror requires an independent target, protected closed schema, and exact retained history", async () => {
   const value = withMirror()
@@ -315,7 +327,8 @@ test("mirror requires an independent target, protected closed schema, and exact 
         ? mirrorClosed
         : retainedStream
   const result = await verifyRestoredAuthority(value, read, () => retainedBytes)
-  assert.equal(result.mirror, "VERIFIED_CLOSED_RETAINED_BYTES")
+  assert.equal(result.mirror, "UNQUALIFIED")
+  assert.equal(result.consistentAuthorityStateQualified, false)
   for (const field of Object.keys(mirrorClosed)) {
     await assert.rejects(
       verifyRestoredAuthority(
@@ -335,6 +348,28 @@ test("mirror requires an independent target, protected closed schema, and exact 
     ),
     { code: "RETAINED_JOURNAL_MISMATCH" }
   )
+})
+test("separate mirror and journal observations never qualify one coherent authority state", async () => {
+  let metadataRead = false
+  let laterDrift = false
+  const result = await verifyRestoredAuthority(
+    withMirror(),
+    async (_, sql) => {
+      if (sql.includes("'migration'")) return closed
+      if (sql.includes("'protected'")) {
+        metadataRead = true
+        return mirrorClosed
+      }
+      assert.equal(metadataRead, true)
+      laterDrift = true // Mirror owner can activate its stream or change grants before this read.
+      return retainedStream
+    },
+    () => retainedBytes
+  )
+  assert.equal(laterDrift, true)
+  assert.equal(result.dispatch, "UNQUALIFIED")
+  assert.equal(result.mirror, "UNQUALIFIED")
+  assert.equal(result.consistentAuthorityStateQualified, false)
 })
 test("retained journal checksum, scope and complete record sequence are required", () => {
   parseRetainedJournal(retainedBytes, sha256(retainedBytes))
