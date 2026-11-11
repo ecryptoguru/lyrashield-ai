@@ -1,0 +1,8 @@
+{
+  "raw": "{\"checkedAt\":\"2026-11-11T10:10:30.928145+00:00\",\"keyId\":\"https://lyrashieldqualb2f8f58b.vault.azure.net/keys/runtime-qualification/04fcf77a4e4e47629eae1de963b8560f\",\"productionQualification\":false,\"purpose\":\"signing-primitive-check-only\",\"schema\":\"lyrashield-qualification-key-health/1\"}",
+  "result": {
+    "algorithm": "RS256",
+    "keyId": "https://lyrashieldqualb2f8f58b.vault.azure.net/keys/runtime-qualification/04fcf77a4e4e47629eae1de963b8560f",
+    "signature": "Lm8WygcHC+gaYnQnIrzrA//nqLgZJdWAHoKsGf3xgLANRdnwT9OJVofSAV8CYJ28zp6Q2TgQRtlM2RJcffPYmtjW5BBPQx18WfuM14O7bDZff9HsmSTJvODP8C6p6wC1Y10LNlSJx/rZbqMiD9AT7LHpKODrOUSMt4uYSFUSSkWGF0ZAQdovPldrCEOsNtZNwZZA0aIIQLqZ6Rou0GemRQ8m+M5OkqjRrfqgBjZkYs8zLK9tybmroXcjhkgXX+8HqzCMcfcC+jZIDY0BHGjOOLRdZIMJ8cnhHG1mHRBESaORg8k3X/7cZOmETdm/OQFwnSSVHAjMSI0GaqTCst2oAjVhWFK8xCFdhPz0kzYlEoGWBC0I6oITlqpYas4ahrsaoc+r20I4W7g3NEyd8LpNBVNmF9WIemFaO1rlKevsjPp9vWT4H5QjVRgV5jcKlk5cICxPY0sGMcT6AT3rhelfwVr7SN4nIsMqAgkjAtmzfaWm/u6FC4Kt1fRwmyu3x0Xt"
+  }
+}

@@ -9,6 +9,7 @@ import {
   issueRecordWitness,
   verifyRecordWitness,
   verifiedArtifact,
+  verifyQualificationIssuerToken,
 } from "../paired-runtime-github.mjs"
 import { readGuestResult } from "../paired-live-transport.mjs"
 import { protectedLiveAdapter } from "../paired-runtime-live.mjs"
@@ -93,6 +94,39 @@ test("real signature binds issuer, audience, immutable repository, exact run, bo
   const token = jwt(claims).split(".")
   token[1] = Buffer.from(JSON.stringify({ ...claims, extra: "tampered" })).toString("base64url")
   assert.throws(() => verifyRecordWitness(token.join("."), keys, x, "evidence", digest, now))
+})
+
+test("Azure issuer token requires immutable owner, exact main reusable job and qualification environment", () => {
+  const identity = {
+    ...x,
+    repoId: "1286618458",
+    ownerId: "116722580",
+    path: ".github/workflows/qualify-runtime-issuer.yml",
+    event: "workflow_dispatch",
+  }
+  const valid = {
+    ...claims,
+    aud: "api://AzureADTokenExchange",
+    environment: "release-qualification",
+    sub: "repo:" + repo + ":environment:release-qualification",
+    repository_id: identity.repoId,
+    repository_owner_id: identity.ownerId,
+    event_name: identity.event,
+    workflow_ref: repo + "/" + identity.path + "@refs/heads/main",
+    job_workflow_ref: repo + "/.github/workflows/issue-runtime-qualification.yml@refs/heads/main",
+  }
+  verifyQualificationIssuerToken(jwt(valid), keys, identity, now)
+  for (const field of Object.keys(valid)) {
+    assert.throws(() =>
+      verifyQualificationIssuerToken(jwt({ ...valid, [field]: "foreign" }), keys, identity, now)
+    )
+  }
+  for (const field of ["repoId", "ownerId"])
+    assert.throws(() =>
+      verifyQualificationIssuerToken(jwt(valid), keys, { ...identity, [field]: "foreign" }, now)
+    )
+  assert.throws(() => verifyQualificationIssuerToken(jwt(valid), keys, identity, now + 61))
+  assert.throws(() => verifyQualificationIssuerToken(jwt(valid), { keys: [] }, identity, now))
 })
 
 test("deployment witnesses cannot issue qualification or automatic approval records", () => {
