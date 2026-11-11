@@ -61,9 +61,11 @@ export function createSupervisorHandler(
       }
       if (
         error instanceof IndependentAuthorityError &&
-        (error.code === "INVALID_CURSOR" || error.code === "CURSOR_CONFLICT")
+        ["INVALID_CURSOR", "CURSOR_CONFLICT", "INVALID_RECOVERY", "RECOVERY_CONFLICT"].includes(
+          error.code
+        )
       ) {
-        sendJson(response, error.code === "INVALID_CURSOR" ? 400 : 409, {
+        sendJson(response, error.code.startsWith("INVALID_") ? 400 : 409, {
           code: error.code,
           message: error.message,
         })
@@ -95,6 +97,16 @@ async function handleRequest(
   if (request.method === "POST" && url.pathname === "/v1/commands") {
     const command = await readJson(request)
     sendJson(response, 200, await service.execute(command))
+    return
+  }
+  if (request.method === "POST" && url.pathname === "/v1/recovery") {
+    if (url.searchParams.size)
+      throw new RuntimeControlError(
+        "INVALID_RECOVERY",
+        "recovery query parameters are not allowed",
+        400
+      )
+    sendJson(response, 200, await service.recover(await readJson(request)))
     return
   }
   if (request.method === "GET" && url.pathname === "/v1/journal") {

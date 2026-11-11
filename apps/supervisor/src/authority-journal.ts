@@ -9,6 +9,7 @@ import {
   authorityEventSchema,
   canonicalJson,
   supervisorJournalCursorSchema,
+  supervisorRecoveryRequestSchema,
   type AttemptBinding,
   type AuthorityEvent,
   type IndependentAuthorityJournalOptions,
@@ -16,8 +17,15 @@ import {
   type JournalRecord,
   type SupervisorJournalPage,
   type SupervisorJournalReader,
+  type SupervisorJournalRecovery,
+  type SupervisorJournalRecoveryPort,
 } from "@lyrashield/runtime-control"
 import { supervisorJournalEventSchema, type SupervisorJournalEvent } from "./journal-events"
+import {
+  recoverSignedEvent,
+  validRecoverySuffix,
+  type RecoveryAuthorizer,
+} from "./authority-recovery"
 
 type OriginalRecord = JournalRecord<SupervisorJournalEvent>
 type OriginalEventPosition = Pick<OriginalRecord, "payload" | "sequence">
@@ -56,6 +64,9 @@ type DurabilityOptions = Omit<
   // Mandatory even for genesis: authenticate the persisted active stream/epoch
   // independently of whether there are any events to authorize.
   authorizeStream: (stream: { epochId: string; supervisorInstanceId: string }) => Promise<boolean>
+  // Independently compare current persisted command/attempt/epoch/grant authority;
+  // request IDs/digest only select the original record and never grant permission.
+  authorizeRecovery: RecoveryAuthorizer
 }
 
 export interface SupervisorAuthorityJournalOptions extends DurabilityOptions {
@@ -111,7 +122,10 @@ function bindingFor(
  * incomplete durability. Only append of the same pending payload can replay it.
  */
 export class SupervisorAuthorityJournal
-  implements JournalPort<SupervisorJournalEvent>, SupervisorJournalReader<SupervisorJournalEvent>
+  implements
+    JournalPort<SupervisorJournalEvent>,
+    SupervisorJournalReader<SupervisorJournalEvent>,
+    SupervisorJournalRecoveryPort<SupervisorJournalEvent>
 {
   private readonly independent: IndependentAuthorityJournal<OriginalRecord>
   private serial: Promise<void> = Promise.resolve()
@@ -286,9 +300,14 @@ export class SupervisorAuthorityJournal
     const originals = this.originals ?? (await this.loadOriginal())
     this.originals = originals
     const wrapped = await this.loadLocal()
-    if (wrapped.length > originals.length || originals.length > wrapped.length + 1) {
+    const guardedSuffix = originals.length === wrapped.length + 2 && validRecoverySuffix(originals)
+    if (
+      wrapped.length > originals.length ||
+      (originals.length > wrapped.length + 1 && !guardedSuffix)
+    ) {
       conflict("original and independent local streams disagree")
     }
+    if (guardedSuffix) this.eventFor(originals.at(-1)!, originals)
     for (const [index, record] of wrapped.entries()) {
       const original = originals[index]
       if (!original || !same(record.payload, this.eventFor(original, originals))) {
@@ -319,63 +338,114 @@ export class SupervisorAuthorityJournal
   }
 
   async append(input: SupervisorJournalEvent): Promise<OriginalRecord> {
-    return this.serialized(async () => {
-      await this.assertStreamAuthorized()
-      const payload = supervisorJournalEventSchema.parse(input)
-      if (Buffer.byteLength(canonicalJson(payload)) > MAX_SUPERVISOR_JOURNAL_RECORD_BYTES - 1024) {
-        throw new IndependentAuthorityError(
-          "RECORD_TOO_LARGE",
-          "supervisor event exceeds read limit"
-        )
+    return this.serialized(() => this.appendCurrent(input))
+  }
+
+  private async stageRecoveryHold(
+    input: SupervisorJournalEvent,
+    originals: OriginalRecord[]
+  ): Promise<OriginalRecord> {
+    const payload = supervisorJournalEventSchema.parse(input)
+    const record = await this.options.original.append(payload)
+    const history = [...originals, record]
+    if (!validRecoverySuffix(history)) conflict("invalid local recovery guard")
+    this.eventFor(record, history)
+    this.originals = history
+    return record
+  }
+
+  private async appendCurrent(input: SupervisorJournalEvent): Promise<OriginalRecord> {
+    await this.assertStreamAuthorized()
+    const payload = supervisorJournalEventSchema.parse(input)
+    if (Buffer.byteLength(canonicalJson(payload)) > MAX_SUPERVISOR_JOURNAL_RECORD_BYTES - 1024) {
+      throw new IndependentAuthorityError("RECORD_TOO_LARGE", "supervisor event exceeds read limit")
+    }
+    const { originals } = await this.localHistory()
+    let pending: OriginalRecord | undefined
+    try {
+      const confirmed = await this.independent.loadConfirmed()
+      if (originals.length > confirmed.length) pending = originals.at(-1)
+    } catch (error) {
+      if (!(error instanceof IndependentAuthorityError) || error.code !== "REPLAY_REQUIRED") {
+        throw error
       }
-      const { originals } = await this.localHistory()
-      let pending: OriginalRecord | undefined
-      try {
-        const confirmed = await this.independent.loadConfirmed()
-        if (originals.length > confirmed.length) pending = originals.at(-1)
-      } catch (error) {
-        if (!(error instanceof IndependentAuthorityError) || error.code !== "REPLAY_REQUIRED") {
-          throw error
-        }
-        pending = originals.at(-1)
-        if (!pending) conflict("pending independent event has no original")
-      }
-      if (pending && !same(pending.payload, payload)) {
-        throw new IndependentAuthorityError("IDENTITY_CONFLICT", "replay the same original payload")
-      }
-      // Validate local epoch/binding before signing a new original. Persisted
-      // authorization uses the actual signed original, never a synthetic receipt.
-      const candidate: OriginalEventPosition = pending ?? {
-        sequence: originals.length + 1,
-        payload,
-      }
-      const candidateHistory = pending ? originals : [...originals, candidate]
-      const candidateBinding = bindingFor(candidate, candidateHistory)
-      if (
-        candidateBinding.authorityEpochId !== this.options.epochId ||
-        payload.supervisorInstanceId !== this.options.supervisorInstanceId
-      ) {
-        conflict("original event belongs to a foreign epoch or supervisor")
-      }
-      if (pending && !this.options.original.confirmRecord) {
-        throw new IndependentAuthorityError(
-          "AUTHORITY_UNKNOWN",
-          "pending original requires explicit fsync confirmation"
-        )
-      }
-      const original = pending
-        ? await this.options.original.confirmRecord!(pending)
-        : await this.options.original.append(payload)
-      if (pending && !same(original, pending)) {
-        conflict("original replay confirmation changed the signed envelope")
-      }
-      const history = pending ? originals : [...originals, original]
-      this.originals = history
-      const event = this.eventFor(original, history)
-      await this.independent.appendIntent(event)
-      await this.confirmedHistory()
-      return structuredClone(original)
-    })
+      pending = originals.at(-1)
+      if (!pending) conflict("pending independent event has no original")
+    }
+    if (pending && !same(pending.payload, payload)) {
+      throw new IndependentAuthorityError("IDENTITY_CONFLICT", "replay the same original payload")
+    }
+    // Validate local epoch/binding before signing a new original. Persisted
+    // authorization uses the actual signed original, never a synthetic receipt.
+    const candidate: OriginalEventPosition = pending ?? {
+      sequence: originals.length + 1,
+      payload,
+    }
+    const candidateHistory = pending ? originals : [...originals, candidate]
+    const candidateBinding = bindingFor(candidate, candidateHistory)
+    if (
+      candidateBinding.authorityEpochId !== this.options.epochId ||
+      payload.supervisorInstanceId !== this.options.supervisorInstanceId
+    ) {
+      conflict("original event belongs to a foreign epoch or supervisor")
+    }
+    if (pending && !this.options.original.confirmRecord) {
+      throw new IndependentAuthorityError(
+        "AUTHORITY_UNKNOWN",
+        "pending original requires explicit fsync confirmation"
+      )
+    }
+    const original = pending
+      ? await this.options.original.confirmRecord!(pending)
+      : await this.options.original.append(payload)
+    if (pending && !same(original, pending)) {
+      conflict("original replay confirmation changed the signed envelope")
+    }
+    const history = pending ? originals : [...originals, original]
+    this.originals = history
+    const event = this.eventFor(original, history)
+    await this.independent.appendIntent(event)
+    await this.confirmedHistory()
+    return structuredClone(original)
+  }
+
+  async recoverStored(input: unknown): Promise<SupervisorJournalRecovery<SupervisorJournalEvent>> {
+    const parsed = supervisorRecoveryRequestSchema.safeParse(input)
+    if (!parsed.success)
+      throw new IndependentAuthorityError("INVALID_RECOVERY", "invalid recovery selector")
+    if (
+      parsed.data.epochId !== this.options.epochId ||
+      parsed.data.supervisorInstanceId !== this.options.supervisorInstanceId
+    ) {
+      throw new IndependentAuthorityError("RECOVERY_CONFLICT", "recovery belongs to another stream")
+    }
+    return this.serialized(() =>
+      recoverSignedEvent(
+        {
+          localHistory: () => this.localHistory(),
+          confirmedCount: async () => (await this.independent.loadConfirmed()).length,
+          confirmedHistory: () => this.confirmedHistory(),
+          bindingFor,
+          confirmPending: async (record, originals) => {
+            if (!this.options.original.confirmRecord)
+              throw new IndependentAuthorityError(
+                "AUTHORITY_UNKNOWN",
+                "original fsync confirmation is unavailable"
+              )
+            const confirmed = await this.options.original.confirmRecord(record)
+            if (!same(confirmed, record)) conflict("recovery changed the original signed record")
+            this.originals = originals
+            await this.independent.appendIntent(this.eventFor(record, originals))
+          },
+          stageHold: (event, originals) => this.stageRecoveryHold(event, originals),
+          assertStreamAuthorized: () => this.assertStreamAuthorized(),
+          authorizeRecord: (record, originals) =>
+            this.options.authorize(this.eventFor(record, originals), bindingFor(record, originals)),
+          authorizeRecovery: this.options.authorizeRecovery,
+        },
+        parsed.data
+      )
+    )
   }
 
   async readCursor(input: unknown): Promise<SupervisorJournalPage<SupervisorJournalEvent>> {

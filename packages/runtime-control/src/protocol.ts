@@ -61,6 +61,38 @@ export interface SupervisorJournalReader<T> {
   readCursor(input: unknown): Promise<SupervisorJournalPage<T>>
 }
 
+export const supervisorRecoveryRequestSchema = z
+  .object({
+    epochId: safeIdSchema,
+    supervisorInstanceId: safeIdSchema,
+    workspaceId: safeIdSchema,
+    scanId: safeIdSchema,
+    operationId: safeIdSchema,
+    attemptId: safeIdSchema,
+    commandId: safeIdSchema,
+    expectedCommandHash: receiptHashSchema,
+  })
+  .strict()
+export type SupervisorRecoveryRequest = z.infer<typeof supervisorRecoveryRequestSchema>
+
+export interface SupervisorJournalRecovery<T> {
+  request: SupervisorRecoveryRequest
+  recoveredRecord: JournalRecord<T>
+  holdRecord: JournalRecord<T>
+  records: JournalRecord<T>[]
+}
+
+export interface SupervisorJournalRecoveryPort<T> {
+  recoverStored(input: unknown): Promise<SupervisorJournalRecovery<T>>
+}
+
+export interface SupervisorRecoveryResult<T> {
+  status: "UNKNOWN"
+  command: SupervisorCommandResult
+  recoveredRecord: JournalRecord<T>
+  holdRecord: JournalRecord<T>
+}
+
 const envNameSchema = z.string().regex(/^[A-Za-z_][A-Za-z0-9_]{0,127}$/)
 
 const environmentSchema = z

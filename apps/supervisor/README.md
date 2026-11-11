@@ -96,14 +96,40 @@ does not authorize creation, start, teardown or provider effects. The adapter's 
 against delayed intent confirmation do not qualify native Docker delayed-daemon behavior,
 cgroup ownership, process isolation, managed-provider durability or production admission.
 
-Service-owned same-operation recovery is an **open P2 integration blocker**. With real signed
-files, a lost PREPARE journal acknowledgement followed by an identical command retry one
-millisecond later fails `IDENTITY_CONFLICT` because the service regenerates `observedAt`.
-Restart initialization fails `REPLAY_REQUIRED` while durability is pending. Explicit trusted
-adapter replay of the stored original payload confirms only journal durability; a fresh service
-still returns `UNKNOWN`, with no executor/provider effect replay. The service has no authenticated
-recovery route that completes this handoff. Keep admission closed until that recovery integration
-retains the exact original identity and reconciles effects independently.
+Authenticated `POST /v1/recovery` performs explicit service-owned durability recovery. Its strict
+body contains `epochId`, `supervisorInstanceId`, `workspaceId`, `scanId`, `operationId`, `attemptId`,
+`commandId` and `expectedCommandHash` (SHA-256 of the canonical accepted command). These values
+select the original signed record; they never authorize recovery. The mandatory injected
+`authorizeRecovery(request, original, command, binding)` port must independently compare the
+current persisted operation, attempt, command, epoch and grant authority, before and after
+confirmation. Event and active-stream authorization are also revalidated. Invalid selectors,
+changed content, revoked authority and unavailable stores stay closed or unresolved.
+
+The route can be called while normal service initialization is rejected by pending durability.
+It confirms the stored exact original envelope, then reconstructs the service state with a
+separately signed `command_recovery_hold`; the response and duplicate command remain `UNKNOWN`.
+Recovery retains the original `observedAt`, sequence, predecessor, hash, payload and signature.
+The hold uses the original timestamp deterministically, links its original sequence/hash and
+command digest, and survives lost acknowledgements and another signed-journal reopen. No
+executor, provider, inspection or teardown effect is repeated by recovery. Physical disposition
+still requires independent reconciliation and qualified authority.
+
+The original local hold is written and fsynced **before** any pending original is confirmed
+remotely. Only an immediately linked, same-command, same-attempt/epoch two-record local suffix
+is allowed during interrupted recovery. Ordinary startup and readback stay `REPLAY_REQUIRED`
+until both originals and wrappers are confirmed across local, object-store and database histories.
+If all commits are independently visible despite a lost reply, startup reconstructs the durable
+`UNKNOWN` hold. Recovery of the same stored hold reuses its exact signed identity; read endpoints
+never perform this repair. Tests interrupt original/hold local acknowledgements and confirmation,
+object record/head acknowledgements and database commit replies, including positive PREPARED and
+terminal originals, and verify no repeated physical effects.
+
+Legacy pending `attempt_status` events without a producer `commandId` cannot be attributed safely
+and remain closed; new events carry that binding. This injected prototype does not qualify real
+protected storage, persisted authority, a recovery-only production startup, continuing bounded
+history, native process ownership or atomic physical fencing. The production entrypoint remains
+closed and local-only, so trusted recovery is unavailable there. Task 3 and Cloud admission remain
+held until those integrations and native qualifications are complete.
 
 ## Deployment boundary
 

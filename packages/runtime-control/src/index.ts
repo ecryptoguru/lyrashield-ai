@@ -52,6 +52,7 @@ export {
   supervisorCommandResultSchema,
   supervisorCommandSchema,
   supervisorJournalCursorSchema,
+  supervisorRecoveryRequestSchema,
   supervisorReceiptSchema,
 } from "./protocol"
 export type {
@@ -77,6 +78,10 @@ export type {
   SupervisorJournalCursor,
   SupervisorJournalPage,
   SupervisorJournalReader,
+  SupervisorJournalRecovery,
+  SupervisorJournalRecoveryPort,
+  SupervisorRecoveryRequest,
+  SupervisorRecoveryResult,
   SupervisorPort,
   SupervisorReceipt,
 } from "./protocol"

@@ -28,7 +28,11 @@ interface SupervisorOperationsContext {
   applyResource: (record: JournalRecord<SupervisorJournalEvent>) => void
   assertCurrentReceipt: (attempt: AttemptState, expected: string) => void
   appendIntent: (command: SupervisorCommand) => Promise<void>
-  appendAttemptStatus: (attempt: AttemptState, status: AttemptState["status"]) => Promise<void>
+  appendAttemptStatus: (
+    attempt: AttemptState,
+    status: AttemptState["status"],
+    commandId: string
+  ) => Promise<void>
   appendTerminal: (
     command: SupervisorCommand,
     status: CommandStatus,
@@ -63,7 +67,7 @@ export class SupervisorOperations {
       this.ctx.assertCurrentReceipt(attempt, command.expectedReceiptHash)
       await this.ctx.appendIntent(command)
     }
-    await this.ctx.appendAttemptStatus(attempt, "STOPPING")
+    await this.ctx.appendAttemptStatus(attempt, "STOPPING", command.commandId)
     const revocationOutcome = (async () => {
       await priorRevocation
       await this.revokeAllKnownOrPotentialGrants(attempt, command.commandId)
@@ -83,7 +87,7 @@ export class SupervisorOperations {
           "provider grant revocation is unresolved"
         )
       }
-      await this.ctx.appendAttemptStatus(attempt, "NEVER_DISPATCHED")
+      await this.ctx.appendAttemptStatus(attempt, "NEVER_DISPATCHED", command.commandId)
       return this.ctx.appendTerminal(command, "NEVER_DISPATCHED")
     }
     let anyDispatch = recorded.length > 0
@@ -148,7 +152,7 @@ export class SupervisorOperations {
       )
     }
     const status = anyDispatch ? "STOPPED" : "NEVER_DISPATCHED"
-    await this.ctx.appendAttemptStatus(attempt, status)
+    await this.ctx.appendAttemptStatus(attempt, status, command.commandId)
     return this.ctx.appendTerminal(command, status)
   }
 
@@ -212,11 +216,11 @@ export class SupervisorOperations {
             resourceUnresolved = true
             continue
           }
-          await this.ctx.appendAttemptStatus(attempt, "UNKNOWN")
+          await this.ctx.appendAttemptStatus(attempt, "UNKNOWN", command.commandId)
           return this.ctx.appendTerminal(command, "UNKNOWN", "executor ownership is unresolved")
         }
         if (!stopRequested && inspection.running !== true) {
-          await this.ctx.appendAttemptStatus(attempt, "UNKNOWN")
+          await this.ctx.appendAttemptStatus(attempt, "UNKNOWN", command.commandId)
           return this.ctx.appendTerminal(command, "UNKNOWN", "resource is not confirmed running")
         }
         observedPresent = true
@@ -243,7 +247,7 @@ export class SupervisorOperations {
         }
       } else if (planned && !current) {
         if (!stopRequested) {
-          await this.ctx.appendAttemptStatus(attempt, "UNKNOWN")
+          await this.ctx.appendAttemptStatus(attempt, "UNKNOWN", command.commandId)
           return this.ctx.appendTerminal(command, "UNKNOWN", "executor creation is unresolved")
         }
         createUnresolved = true
@@ -274,14 +278,14 @@ export class SupervisorOperations {
       // inspected ABSENT in this reconcile pass.
       const anyDispatch = attempt.resources.size > 0 || observedPresent
       const status = anyDispatch ? "STOPPED" : "NEVER_DISPATCHED"
-      await this.ctx.appendAttemptStatus(attempt, status)
+      await this.ctx.appendAttemptStatus(attempt, status, command.commandId)
       return this.ctx.appendTerminal(command, status)
     }
     if (observedPresent) {
-      await this.ctx.appendAttemptStatus(attempt, "RUNNING")
+      await this.ctx.appendAttemptStatus(attempt, "RUNNING", command.commandId)
       return this.ctx.appendTerminal(command, "STARTED")
     }
-    await this.ctx.appendAttemptStatus(attempt, "UNKNOWN")
+    await this.ctx.appendAttemptStatus(attempt, "UNKNOWN", command.commandId)
     return this.ctx.appendTerminal(command, "UNKNOWN", "terminal cleanup has not been established")
   }
 

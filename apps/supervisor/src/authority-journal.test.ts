@@ -156,6 +156,7 @@ async function setup(
     signingSecret,
     authorize,
     authorizeStream,
+    authorizeRecovery: async () => true,
   }
   return {
     root,
@@ -354,6 +355,7 @@ describe("supervisor independent journal adapter", () => {
       mirror: fixture.mirror,
       authorize: async () => true,
       authorizeStream: async () => true,
+      authorizeRecovery: async () => true,
     })
     try {
       const second = serviceFixture(restarted.journal, () => clock)
@@ -672,6 +674,7 @@ describe("supervisor independent journal adapter", () => {
         mirror: new Mirror(),
         authorize: async () => false,
         authorizeStream: async () => true,
+        authorizeRecovery: async () => true,
       })
     ).toThrow("separate files")
   })
@@ -692,6 +695,7 @@ describe("supervisor independent journal adapter", () => {
       mirror: new Mirror(),
       authorize: async () => true,
       authorizeStream: async () => true,
+      authorizeRecovery: async () => true,
     }
     const first = createSupervisorAuthorityJournal(options)
     const receipt = await first.journal.append(intent)
