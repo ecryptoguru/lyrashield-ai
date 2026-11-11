@@ -80,6 +80,7 @@ describe("provider gateway HTTP boundary", () => {
           "content-type": "application/json",
           authorization: `Bearer ${grant.token}`,
           "x-lyra-request-id": "provider-http-active",
+          "x-lyra-scan-id": "scan-http",
         },
         body: JSON.stringify({ model: "gpt-6-luna", input: "hello", max_output_tokens: 64 }),
       }
