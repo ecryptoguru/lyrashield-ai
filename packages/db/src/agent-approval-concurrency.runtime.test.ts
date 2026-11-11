@@ -148,7 +148,9 @@ describe.skipIf(!process.env.RLS_RUNTIME_DATABASE_URL)(
         const runtimeUser = new URL(process.env.RLS_RUNTIME_DATABASE_URL!).username
         let waiting = false
         for (let attempt = 0; attempt < 100 && !waiting; attempt += 1) {
-          const rows = await tx.$queryRaw<Array<{ waiting: boolean }>>`
+          // Observe from a separate transaction: pg_stat_activity is cached
+          // within the transaction that is deliberately holding the row lock.
+          const rows = await owner.$queryRaw<Array<{ waiting: boolean }>>`
             SELECT EXISTS (
               SELECT 1 FROM pg_stat_activity
               WHERE usename = ${runtimeUser} AND wait_event_type = 'Lock'

@@ -12,7 +12,7 @@ import {
 } from "./evidence"
 import { evaluateRemotePreflight } from "./remote-preflight"
 import { readSetupSourceIdentity } from "./source-preflight"
-import { prisma, resolveScanAttachments, ScanAttachmentError } from "@lyrashield/db"
+import { withWorkspaceRLS, resolveScanAttachments, ScanAttachmentError } from "@lyrashield/db"
 import { assertOAuthDelegatedScope, requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import {
@@ -139,9 +139,9 @@ async function runEvaluation(
       )
     }
 
-    const target = await prisma.target.findFirst({
-      where: { id: targetId, workspaceId, deletedAt: null },
-    })
+    const target = await withWorkspaceRLS(workspaceId, (tx) =>
+      tx.target.findFirst({ where: { id: targetId, workspaceId, deletedAt: null } })
+    )
     if (!target) {
       return apiError("TARGET_NOT_FOUND", "Target not found in this workspace", 404)
     }
@@ -151,10 +151,17 @@ async function runEvaluation(
     assertOAuthDelegatedScope(session, targetId, mode)
     captureSetupTarget(evidence, target)
     if (resolveSource && target.type === "REPO" && target.installationId) {
-      const connection = await prisma.integration.findFirst({
-        where: { workspaceId, type: "GITHUB", externalId: target.installationId, deletedAt: null },
-        select: { id: true, status: true, updatedAt: true },
-      })
+      const connection = await withWorkspaceRLS(workspaceId, (tx) =>
+        tx.integration.findFirst({
+          where: {
+            workspaceId,
+            type: "GITHUB",
+            externalId: target.installationId,
+            deletedAt: null,
+          },
+          select: { id: true, status: true, updatedAt: true },
+        })
+      )
       evidence.connection = connection ?? "UNAVAILABLE"
     } else if (target.type === "REPO" && target.installationId) {
       evidence.connection = "UNAVAILABLE"
@@ -279,21 +286,25 @@ async function recheckSourceBoundary(
   assertOAuthDelegatedScope(session, input.targetId, input.mode)
   const latest = emptySetupEvidence()
   captureSetupActor(latest, session, workspace)
-  const currentTarget = await prisma.target.findFirst({
-    where: { id: input.targetId, workspaceId: input.workspaceId, deletedAt: null },
-  })
+  const currentTarget = await withWorkspaceRLS(input.workspaceId, (tx) =>
+    tx.target.findFirst({
+      where: { id: input.targetId, workspaceId: input.workspaceId, deletedAt: null },
+    })
+  )
   if (!currentTarget) return apiError("TARGET_NOT_FOUND", "Target not found in this workspace", 404)
   captureSetupTarget(latest, currentTarget)
   const connection = target.installationId
-    ? await prisma.integration.findFirst({
-        where: {
-          workspaceId: input.workspaceId,
-          type: "GITHUB",
-          externalId: target.installationId,
-          deletedAt: null,
-        },
-        select: { id: true, status: true, updatedAt: true },
-      })
+    ? await withWorkspaceRLS(input.workspaceId, (tx) =>
+        tx.integration.findFirst({
+          where: {
+            workspaceId: input.workspaceId,
+            type: "GITHUB",
+            externalId: target.installationId,
+            deletedAt: null,
+          },
+          select: { id: true, status: true, updatedAt: true },
+        })
+      )
     : null
   if (
     !isDeepStrictEqual(latest.actor, evidence.actor) ||
