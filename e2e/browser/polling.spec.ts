@@ -306,6 +306,7 @@ test("manual list refresh supersedes a slow poll and resets its ETag baseline", 
   await page.clock.install()
   const held = gate()
   const finished = gate()
+  const freshPoll = gate()
   const headers: (string | null)[] = []
   await page.route("**/api/scans?**", async (route) => {
     headers.push(route.request().headers()["if-none-match"] ?? null)
@@ -315,9 +316,10 @@ test("manual list refresh supersedes a slow poll and resets its ETag baseline", 
       await fulfillPage(route, ["old-poll"], "old-cursor", '"old"')
       finished.release()
     } else if (headers.length === 3) await fulfillPage(route, ["manual-page"], "manual-cursor")
-    else if (headers.length === 4)
-      await fulfillPage(route, ["manual-page"], "manual-cursor", '"fresh"')
-    else await route.fulfill({ status: 304 })
+    else if (headers.length === 4) {
+      await freshPoll.promise
+      await fulfillPage(route, ["fresh-page"], "manual-cursor", '"fresh"')
+    } else await route.fulfill({ status: 304 })
   })
   await page.goto("polling.html?polling=list&filtered=1")
   await expect(page.getByRole("button", { name: "Refresh list" })).toBeVisible()
@@ -333,9 +335,13 @@ test("manual list refresh supersedes a slow poll and resets its ETag baseline", 
   await expect(page.getByLabel("Cursor")).toHaveText("manual-cursor")
   await page.clock.runFor(10_000)
   await expect.poll(() => headers.length).toBe(4)
+  freshPoll.release()
+  // Request arrival does not mean the response was applied or the next timer scheduled.
+  await expect(page.getByRole("listitem")).toHaveText(["fresh-page"])
   await page.clock.runFor(10_000)
   await expect.poll(() => headers.length).toBe(5)
   expect(headers).toEqual([null, '"baseline"', null, null, '"fresh"'])
+  await expect(page.getByRole("listitem")).toHaveText(["fresh-page"])
   await expect(page.getByLabel("Cursor")).toHaveText("manual-cursor")
 })
 
