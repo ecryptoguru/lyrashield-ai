@@ -76,8 +76,6 @@ test("raw bundle is reverified with exact pinned policy, private scratch bytes a
         "github.com",
         "--repo",
         repo,
-        "--signer-workflow",
-        workflow,
         "--cert-identity",
         san,
         "--cert-oidc-issuer",
@@ -107,6 +105,36 @@ test("raw bundle is reverified with exact pinned policy, private scratch bytes a
     checkedAt: new Date(now).toISOString(),
   })
   assert.ok(Object.isFrozen(result))
+})
+
+test("adapter obeys pinned gh's independently sourced flag groups while enforcing exact certificate identity", () => {
+  const contract = JSON.parse(
+    readFileSync(
+      new URL("./fixtures/gh-attestation-argument-contract.json", import.meta.url),
+      "utf8"
+    )
+  )
+  const validate = (args) => {
+    const flags = new Set(args.filter((arg) => arg.startsWith("--")).map((arg) => arg.slice(2)))
+    for (const group of contract.mutuallyExclusive)
+      assert.ok(group.filter((flag) => flags.has(flag)).length <= 1, group.join("/"))
+    for (const group of contract.oneRequired)
+      assert.ok(
+        group.some((flag) => flags.has(flag)),
+        group.join("/")
+      )
+  }
+  // Demonstrate this independent contract rejects the reported regression.
+  assert.throws(() => validate(["--repo", "--cert-identity", "--signer-workflow"]))
+  foundation.verifySandboxAttestationBundle(raw, expected, {
+    when: now,
+    run: (args) => {
+      validate(args)
+      assert.equal(args[args.indexOf("--cert-identity") + 1], san)
+      assert.equal(args.includes("--signer-workflow"), false)
+      return JSON.stringify(rows())
+    },
+  })
 })
 
 test("saved verification JSON and malformed, oversized or unbounded inputs never invoke gh", () => {

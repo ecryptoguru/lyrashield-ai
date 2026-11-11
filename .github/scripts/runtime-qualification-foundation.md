@@ -15,6 +15,13 @@ workflow. It checks run/attempt in the certificate's `runInvocationURI` as well
 as in the provenance predicate. Supplied saved `gh` verification JSON is rejected.
 The predicate alone is never identity proof. Ambiguous results fail closed.
 
+The exact `--cert-identity` value includes the signer workflow and main ref.
+GitHub CLI v2.95.0 makes it mutually exclusive with `--signer-workflow`, so the
+adapter supplies only the exact identity flag. Verified certificate output must
+still match both `subjectAlternativeName` and `buildSignerURI`. The argument
+regression test uses the official version's flag groups as an independent
+contract rather than inferring compatibility from mocked verification output.
+
 The returned frozen result is constructed internally and explicitly carries
 `qualified: false` and `packageCoverage: UNVERIFIED`. It is a provenance check,
 not a `qualified-fleet` record, a native-image/package-coverage receipt, or a
@@ -78,3 +85,17 @@ show issuer identity failures happen before mocked Key Vault operations. Existin
 health tests cover the fixed actual managed-key signature and mocked signing
 failures. No production credentials, native candidate qualification or live
 issuance are established by these tests.
+
+A separate 2026-11-11 offline smoke check executed the exact SHA-256-pinned
+v2.95.0 ARM64 binary in the cached Linux image
+`sha256:4840d514c583a4d3d8cad3940e68dee6f0f6f3635c12fcd0a3d74c21a5b93a54`,
+with networking disabled, a read-only filesystem, no capabilities and an
+unprivileged user. The old identity-flag combination reproduced the CLI parser
+failure. The corrected combination successfully verified GitHub CLI's real
+[`actions/attest-demo` wheel fixture](https://github.com/cli/cli/tree/v2.95.0/pkg/cmd/attestation/test/data),
+and modified artifact bytes failed verification. This smoke check used a local
+artifact instead of an OCI registry subject and pre-fetched official default
+roots through `gh attestation trusted-root`, supplied with the offline-only
+`--custom-trusted-root` flag. The production adapter exposes no custom-root
+interface. No actual LyraShield image bundle, native runtime or production
+qualification was verified by that smoke check.

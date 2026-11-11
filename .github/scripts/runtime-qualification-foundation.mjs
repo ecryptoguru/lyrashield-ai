@@ -101,8 +101,6 @@ export function verifySandboxAttestationBundle(
         "github.com",
         "--repo",
         repo,
-        "--signer-workflow",
-        workflow,
         "--cert-identity",
         identity,
         "--cert-oidc-issuer",
