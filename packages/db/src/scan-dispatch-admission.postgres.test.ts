@@ -237,7 +237,7 @@ describe.skipIf(!enabled)("shadow admission with disposable PostgreSQL", () => {
           workerGrantId: grant.id,
           expiresAt: new Date(Date.now() + 60_000),
         })
-      ).rejects.toMatchObject({ code: "DISPATCH_OPERATION_STATE_INVALID" })
+      ).rejects.toMatchObject({ code: "PREPARATION_AUTHORITY_CLOSED" })
     } finally {
       await broker.close()
     }

@@ -9,3 +9,19 @@ it("checks application-owned reads without requiring external SDK/CI keys in the
     ["CI"]
   )
 })
+
+it("binds preparation fixture credentials and disposal confirmation to that exact file", () => {
+  const keys = [
+    "DISPATCH_AUTHORITY_REVOKER_PASSWORD",
+    "DISPATCH_PREPARATION_BROKER_PASSWORD",
+    "LYRASHIELD_TEST_DB_DISPOSABLE",
+  ]
+  const source = keys.map((key) => `process.env.${key}`).join("; ")
+  expect(
+    findUnownedEnvReads(source, "packages/db/scripts/tests/scan-preparation-fixture.ts", new Set())
+  ).toEqual([])
+  expect(findUnownedEnvReads(source, "packages/db/scripts/tests/other.ts", new Set())).toEqual(
+    [...keys].sort()
+  )
+  expect(findUnownedEnvReads(source, "apps/web/src/other.ts", new Set())).toEqual([...keys].sort())
+})
