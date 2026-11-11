@@ -15,7 +15,7 @@ import {
 import { dispatch as dispatchAffiliate } from "@lyrashield/affiliate"
 import { FIX_GENERATE_QUEUE_NAME, type FixGenerateJobData } from "@lyrashield/integrations"
 import { SCAN_QUEUE_NAME, type ScanJobData, type ScanJobResult } from "./types"
-import { processScanJob } from "./jobs/run-scan.job"
+import { processWorkerScanJob } from "./jobs/scan-job-processor"
 import { processWebhookTrackRetry } from "./jobs/webhook-track-retry.job"
 import { processQueuedFixGenerateJob, type FixGenerateJobResult } from "./jobs/fix-generate.job"
 import { startScheduleRunner } from "./schedules"
@@ -399,7 +399,7 @@ async function main(): Promise<void> {
       markScanJobClaimed()
       await markWorkerActive(job.id ?? "unknown")
       try {
-        return await processScanJob(job)
+        return await processWorkerScanJob(job)
       } finally {
         await clearWorkerActive()
       }
