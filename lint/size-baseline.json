@@ -167,8 +167,8 @@
     },
     "apps/web/src/app/(dashboard)/dashboard/reports/reports-client.tsx|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 351,
-      "maxExcess": 351
+      "totalExcess": 304,
+      "maxExcess": 304
     },
     "apps/web/src/app/(dashboard)/dashboard/reports/reports-views.tsx|max-lines-per-function": {
       "count": 1,
@@ -232,8 +232,8 @@
     },
     "apps/web/src/app/(dashboard)/dashboard/settings/api-keys.tsx|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 107,
-      "maxExcess": 107
+      "totalExcess": 103,
+      "maxExcess": 103
     },
     "apps/web/src/app/(dashboard)/dashboard/settings/two-factor-security.tsx|max-lines-per-function": {
       "count": 1,
@@ -502,8 +502,8 @@
     },
     "apps/worker/src/jobs/run-scan/admission.ts|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 20,
-      "maxExcess": 20
+      "totalExcess": 15,
+      "maxExcess": 15
     },
     "apps/worker/src/jobs/run-scan/execution.ts|max-lines": {
       "count": 1,

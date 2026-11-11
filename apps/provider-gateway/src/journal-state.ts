@@ -4,6 +4,7 @@ import {
   providerGrantStatusSchema,
   type JournalRecord,
   type ProviderGrantStatus,
+  type ProviderGrant,
 } from "@lyrashield/runtime-control"
 import { signToken } from "./grant-tokens"
 import { policyDigest } from "./request-policy"
@@ -48,6 +49,33 @@ export function providerUsageId(
     )
     .digest("hex")
     .slice(0, 40)}`
+}
+
+export function providerResponseIdentity(
+  signingSecret: string,
+  providerId: string,
+  providerResponseId: string
+): string {
+  return createHmac("sha256", signingSecret)
+    .update(canonicalJson({ version: 1, providerId, providerResponseId }))
+    .digest("hex")
+}
+
+export function responseIdentityReused(
+  requests: ReadonlyMap<string, RequestState>,
+  signingSecret: string,
+  state: RequestState,
+  usage: TerminalUsage
+): boolean {
+  const identity = providerResponseIdentity(
+    signingSecret,
+    state.providerId,
+    usage.providerResponseId
+  )
+  return [...requests.values()].some(
+    (request) =>
+      request.requestId !== state.requestId && request.observedResponseIdentity === identity
+  )
 }
 
 export function applyProviderJournalRecord(
@@ -100,18 +128,18 @@ export function applyProviderJournalRecord(
     }
     return
   }
-  if (event.type === "legacy_request_uncertain") {
+  if (event.type === "stream_delivery_uncertain") {
     const existing = state.requests.get(event.requestId)
     if (
       !existing ||
+      !existing.stream ||
+      (existing.outcome !== "PENDING" && existing.outcome !== "SUCCEEDED") ||
       existing.grantId !== event.grantId ||
-      existing.attemptId !== event.attemptId ||
-      existing.outcome !== "SUCCEEDED" ||
-      (existing.usage && existing.retainedResponse)
+      existing.attemptId !== event.attemptId
     )
       throw new ProviderGatewayError(
         "JOURNAL_INTEGRITY",
-        "legacy provider recovery binding is invalid",
+        "stream uncertainty binding is invalid",
         500
       )
     existing.outcome = "UNKNOWN"
@@ -125,6 +153,40 @@ export function applyProviderJournalRecord(
       hash: record.hash,
       signature: record.signature,
     }
+    const grant = state.grants.get(existing.grantId)
+    if (grant) grant.receiptHash = record.hash
+    return
+  }
+  if (
+    event.type === "legacy_request_uncertain" ||
+    event.type === "recovered_completion_uncertain"
+  ) {
+    const existing = state.requests.get(event.requestId)
+    if (
+      !existing ||
+      existing.grantId !== event.grantId ||
+      existing.attemptId !== event.attemptId ||
+      existing.outcome !== "SUCCEEDED" ||
+      (event.type === "legacy_request_uncertain" && existing.usage && existing.retainedResponse)
+    )
+      throw new ProviderGatewayError(
+        "JOURNAL_INTEGRITY",
+        "provider recovery uncertainty binding is invalid",
+        500
+      )
+    existing.outcome = "UNKNOWN"
+    existing.physicalOutstanding = true
+    existing.usageId = undefined
+    existing.usage = undefined
+    existing.retainedResponse = undefined
+    existing.receiptHash = record.hash
+    existing.receipt = {
+      sequence: record.sequence,
+      hash: record.hash,
+      signature: record.signature,
+    }
+    const grant = state.grants.get(existing.grantId)
+    if (grant) grant.receiptHash = record.hash
     return
   }
   const result = event.result
@@ -147,10 +209,49 @@ export function applyProviderJournalRecord(
   existing.responseBytes = result.responseBytes
   existing.usageId = result.usageId
   existing.usage = result.usage
+  if (result.usage)
+    existing.observedResponseIdentity = providerResponseIdentity(
+      signingSecret,
+      existing.providerId,
+      result.usage.providerResponseId
+    )
   existing.retainedResponse = result.retainedResponse
   existing.detail = result.detail
   existing.receiptHash = record.hash
   existing.receipt = { sequence: record.sequence, hash: record.hash, signature: record.signature }
   const grant = state.grants.get(existing.grantId)
   if (grant) grant.receiptHash = record.hash
+}
+
+export function grantResponse(grant: GrantState): ProviderGrant {
+  return {
+    grantId: grant.grantId,
+    token: grant.token,
+    attemptId: grant.request.attemptId,
+    providerId: grant.request.providerId,
+    expiresAt: grant.request.expiresAt,
+    receipt: grant.receiptHash,
+  }
+}
+
+export function requestStatus(request: RequestState, grant: GrantState) {
+  return {
+    version: 1 as const,
+    requestId: request.requestId,
+    grantId: request.grantId,
+    attemptId: request.attemptId,
+    scanId: grant.request.scanId,
+    workspaceId: grant.request.workspaceId,
+    operationId: grant.request.operationId,
+    authorityEpochId: grant.request.authorityEpochId,
+    authorityRevision: grant.request.authorityRevision,
+    providerId: request.providerId,
+    outcome: request.outcome,
+    physicalOutstanding: request.physicalOutstanding,
+    policyDigest: request.policyDigest ?? null,
+    usage: request.usage ?? null,
+    usageId: request.usageId ?? null,
+    reservationMicros: request.reservationMicros,
+    receipt: request.receipt ?? null,
+  }
 }
