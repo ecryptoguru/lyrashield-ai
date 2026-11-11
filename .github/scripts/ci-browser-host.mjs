@@ -84,13 +84,14 @@ async function verify() {
     "Unexpected locked Chromium cache path"
   )
   const binaries = [
-    full,
     join(
       dirname(dirname(dirname(full))),
       "chromium_headless_shell-1234/chrome-headless-shell-linux64/chrome-headless-shell"
     ),
   ]
-  for (const [index, name] of ["chromium", "chromium-headless-shell"].entries()) {
+  // Every selected CI suite uses Playwright's default headless shell. Full
+  // Chromium is downloaded by the unchanged install command but is not used.
+  for (const [index, name] of ["chromium-headless-shell"].entries()) {
     const browser = browsers.find((entry) => entry.name === name)
     item = String(index * 2 + 2)
     assert.equal(browser.revision, "1234")
@@ -185,7 +186,7 @@ async function verify() {
   item = "none"
   const available = statfsSync(browserTemp)
   console.log(
-    `Verified ${manifest.files.length} pinned font assets, overlay families, host libraries and both native WebMCP browsers; bounded lifecycle probe peak=${peakTemporaryBytes} bytes, available=${available.bavail * available.bsize} bytes`
+    `Verified ${manifest.files.length} pinned font assets, overlay families, host libraries and native WebMCP headless shell; bounded lifecycle probe peak=${peakTemporaryBytes} bytes, available=${available.bavail * available.bsize} bytes`
   )
 }
 

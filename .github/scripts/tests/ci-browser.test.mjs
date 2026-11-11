@@ -569,3 +569,27 @@ test("all three CI sites preserve selected browser commands, aggregate and priva
     )
   )
 })
+
+test("CI preflight checks the headless shell used by every selected browser suite", () => {
+  for (const path of [
+    "playwright.config.ts",
+    "e2e/browser/playwright.config.ts",
+    "e2e/auth-mail/playwright.config.ts",
+    "e2e/simplification-recovery.spec.ts",
+    "apps/marketing/playwright.config.ts",
+  ]) {
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- These are fixed reviewed repository configurations.
+    const config = readFileSync(path, "utf8")
+    assert.ok(!/headless:\s*false|channel:\s*["'](?:chrome|chromium)/.test(config), path)
+    for (const override of config.match(/executablePath:[^\n]+/g) ?? [])
+      assert.ok(override.includes("process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH"), path)
+  }
+  const workflow = readFileSync(".github/workflows/ci.yml", "utf8")
+  assert.ok(!workflow.includes("PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH"))
+  assert.ok(!workflow.includes("PWDEBUG"))
+  const host = readFileSync(".github/scripts/ci-browser-host.mjs", "utf8")
+  assert.match(host, /const binaries = \[\s*join\(/)
+  assert.ok(host.includes('["chromium-headless-shell"].entries()'))
+  assert.ok(host.includes('"--enable-experimental-web-platform-features"'))
+  assert.ok(host.includes('"--enable-blink-features=WebMCP"'))
+})
