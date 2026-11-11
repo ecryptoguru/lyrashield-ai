@@ -11,6 +11,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 const mocks = vi.hoisted(() => ({
   withWorkspaceRLS: vi.fn(),
   evaluateVerdictApplicability: vi.fn(),
+  evaluateGateForTarget: vi.fn(),
   parseAssessmentSnapshot: vi.fn(),
   isLaunchReportShareablePayload: vi.fn(),
   parseLaunchReportProvenance: vi.fn(),
@@ -25,6 +26,9 @@ vi.mock("./report-service", () => ({
 vi.mock("./gate-service", () => ({
   evaluateVerdictApplicability: mocks.evaluateVerdictApplicability,
   parseAssessmentSnapshot: mocks.parseAssessmentSnapshot,
+}))
+vi.mock("./gate-evaluation-service", () => ({
+  evaluateGateForTarget: mocks.evaluateGateForTarget,
 }))
 vi.mock("./launch-report-html", () => ({
   isLaunchReportShareablePayload: mocks.isLaunchReportShareablePayload,
@@ -176,6 +180,13 @@ function makeTx() {
 }
 
 function setupIssuance(tx: ReturnType<typeof makeTx>) {
+  const manifest = {
+    target: { id: "target-1", type: "REPO" },
+    terminalOutcome: { status: "COMPLETED" },
+  }
+  const checksumInput = JSON.stringify(manifest)
+  const manifestChecksum = createHash("sha256").update(checksumInput).digest("hex")
+  mocks.evaluateGateForTarget.mockResolvedValue({ gateVerdictId: "verdict-1" })
   tx.target.findFirst.mockResolvedValue({
     id: "target-1",
     name: "Release App",
@@ -184,8 +195,11 @@ function setupIssuance(tx: ReturnType<typeof makeTx>) {
   })
   tx.gateVerdict.findFirst.mockResolvedValue({
     id: "verdict-1",
+    scanId: "scan-1",
     state: "NOT_READY",
     standardVersion: "lyrashield-gate/2.4.0",
+    verdictChecksum: "e".repeat(64),
+    assessmentVersion: 2,
     evaluatedAt: new Date("2026-11-05T00:00:00.000Z"),
     coverageStatement: ["sast"],
     nonCoverage: [],
@@ -195,6 +209,7 @@ function setupIssuance(tx: ReturnType<typeof makeTx>) {
     identity: { kind: "COMMIT", value: commit },
     scanId: "scan-1",
     policyId: "policy-1",
+    manifestChecksum,
     completedAtMs: Date.parse("2026-11-05T00:00:00.000Z"),
   })
   mocks.evaluateVerdictApplicability.mockResolvedValue({
@@ -210,7 +225,7 @@ function setupIssuance(tx: ReturnType<typeof makeTx>) {
           endedAt: new Date("2026-11-05T00:00:00.000Z"),
           createdAt: new Date("2026-11-05T00:00:00.000Z"),
           startedAt: new Date("2026-11-05T00:00:00.000Z"),
-          resultManifest: { checksum: "c".repeat(64) },
+          resultManifest: { checksum: manifestChecksum, checksumInput, manifest },
         }
       : null
   )
@@ -237,6 +252,10 @@ describe("issueReleasePacket", () => {
       return provenance?.gateVerdictId === "verdict-1"
         ? {
             gateVerdictId: "verdict-1",
+            verdictChecksum: "e".repeat(64),
+            assessmentVersion: 2,
+            assessedAt: "2026-11-05T00:00:00.000Z",
+            historicalState: "NOT_READY",
             assessedIdentity: { kind: "COMMIT", value: commit },
           }
         : null
