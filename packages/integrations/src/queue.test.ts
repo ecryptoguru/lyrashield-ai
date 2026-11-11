@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => {
   const commandErrors = new Map<string, Error>()
   const commandResults = new Map<string, unknown>()
   let existsError: Error | null = null
+  let redisState: "available" | "missing" | "invalid" = "available"
   const redis = {
     members,
     values,
@@ -61,10 +62,17 @@ const mocks = vi.hoisted(() => {
     setExistsError(error: Error | null) {
       existsError = error
     },
+    setRedisState(state: "available" | "missing" | "invalid") {
+      redisState = state
+    },
+    getRedis() {
+      if (redisState === "invalid") throw new Error("private connection details")
+      return redisState === "missing" ? null : redis
+    },
   }
 })
 
-vi.mock("./redis", () => ({ getRedis: () => mocks.redis }))
+vi.mock("./redis", () => ({ getRedis: () => mocks.getRedis() }))
 vi.mock("ioredis", () => ({
   default: class {
     constructor(
@@ -131,6 +139,7 @@ describe("scan worker availability", () => {
     mocks.commandErrors.clear()
     mocks.commandResults.clear()
     mocks.setExistsError(null)
+    mocks.setRedisState("available")
     mocks.queueAdd.mockReset()
     mocks.queueWorkersCount.mockReset()
     mocks.queueGetRanges.mockReset()
@@ -281,6 +290,18 @@ describe("scan worker availability", () => {
     mocks.commandResults.set("scanWorkerReadiness", "not-a-count")
     await expect(assertScanWorkerAvailable()).rejects.toMatchObject({ reason: "UNKNOWN" })
   })
+
+  it.each(["missing", "invalid"] as const)(
+    "fails closed when Redis configuration is %s without leaking connection details",
+    async (state) => {
+      mocks.setRedisState(state)
+      await expect(assertScanWorkerAvailable()).rejects.toMatchObject({
+        message: "No scan worker is currently available",
+        reason: "REDIS_UNAVAILABLE",
+      })
+      expect(await isScanWorkerAvailable()).toBe(false)
+    }
+  )
 
   it("fails queue admission closed when the stop state cannot be read", async () => {
     await registerScanWorker("worker-1", Date.now())

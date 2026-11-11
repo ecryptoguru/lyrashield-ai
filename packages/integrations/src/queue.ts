@@ -140,9 +140,8 @@ export async function isTargetRelayWorkerAvailable(now = Date.now()): Promise<bo
 async function scanWorkerAvailability(
   now: number
 ): Promise<"AVAILABLE" | ScanWorkerUnavailabilityReason> {
-  if (!getRedis()) return "REDIS_UNAVAILABLE"
-
   try {
+    if (!getRedis()) return "REDIS_UNAVAILABLE"
     const workers = await getScanWorkerRedis().scanWorkerReadiness(SCAN_WORKER_REGISTRY_KEY, now)
     // Managed Redis proxies do not reliably expose other clients' names via
     // CLIENT LIST, which makes BullMQ getWorkersCount() connection-dependent.
@@ -160,7 +159,12 @@ export async function isScanWorkerAvailable(now = Date.now()): Promise<boolean> 
 }
 
 export async function assertScanWorkerAvailable(): Promise<void> {
-  const redis = getRedis()
+  let redis: ReturnType<typeof getRedis>
+  try {
+    redis = getRedis()
+  } catch {
+    throw new ScanWorkerUnavailableError("REDIS_UNAVAILABLE")
+  }
   if (!redis) throw new ScanWorkerUnavailableError("REDIS_UNAVAILABLE")
 
   try {
