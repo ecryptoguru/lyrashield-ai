@@ -7,8 +7,8 @@ export {
   toBrokerReceiptType,
 } from "./broker-receipt"
 export { canonicalJson, sha256Hex } from "./canonical-json"
-export type { JournalPort, JournalRecord } from "./journal"
-export { JournalIntegrityError, SignedJournal } from "./journal"
+export type { JournalPort, JournalRecord, JournalReadLimits } from "./journal"
+export { JournalIntegrityError, JournalReadLimitError, SignedJournal } from "./journal"
 export {
   IndependentAuthorityError,
   IndependentAuthorityJournal,
@@ -31,6 +31,8 @@ export type {
 } from "./postgres-mirror"
 export {
   EXECUTOR_KEYS,
+  MAX_SUPERVISOR_JOURNAL_PAGE_BYTES,
+  MAX_SUPERVISOR_JOURNAL_RECORD_BYTES,
   attemptBindingSchema,
   brokerReceiptTypeSchema,
   commandStatusSchema,
@@ -49,6 +51,8 @@ export {
   stopCommandSchema,
   supervisorCommandResultSchema,
   supervisorCommandSchema,
+  supervisorJournalCursorSchema,
+  supervisorRecoveryRequestSchema,
   supervisorReceiptSchema,
 } from "./protocol"
 export type {
@@ -71,6 +75,13 @@ export type {
   StopCommand,
   SupervisorCommand,
   SupervisorCommandResult,
+  SupervisorJournalCursor,
+  SupervisorJournalPage,
+  SupervisorJournalReader,
+  SupervisorJournalRecovery,
+  SupervisorJournalRecoveryPort,
+  SupervisorRecoveryRequest,
+  SupervisorRecoveryResult,
   SupervisorPort,
   SupervisorReceipt,
 } from "./protocol"
