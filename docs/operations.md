@@ -569,6 +569,50 @@ only its ownership-verified container. Ordinary failure invokes cleanup; hard
 process/daemon/host loss can leave resources for operator inspection. Local or
 CI success is synthetic evidence, not a fresh production recovery proof.
 
+The separate `verify-restored-authority.mjs` verifier remains offline-only and
+unwired from the production backup workflow. Its owned fixture pins PostgreSQL
+17.11 and requires `pgcrypto` 1.3 in `public`, with the extension-owned
+`digest(bytea,text)` implementation. It passively checks migration/source,
+extension identity, role grants and closed-state observations in bounded read-only
+transactions. Missing extension, schema usage, table read, RLS helper or digest
+execution grants fail closed. The standalone diagnostic issues no explicit
+digest execution probes. Its named-relation reads can still invoke restored
+functions through views, RLS policies, rules, operators or concurrent object
+replacement. Read-only transactions do not establish a non-executing inspector;
+`relkind` rejection checks are neither execution guards nor concurrency fences.
+Its result schema `/2` reports `UNQUALIFIED` for dispatch
+and any requested mirror, with `consistentAuthorityStateQualified=false`,
+`admissionAllowed=false` and `managedFailoverQualified=false`.
+
+Container ownership, network isolation and a pinned image do not establish
+sole-writer exclusion. Catalog/role/closed-epoch checks and independently retained
+mirror/journal reads occur in separate transactions; the mirror is a separate
+database. A concurrent owner can replace a helper, change grants or open an epoch
+after an earlier observation. These reads therefore do not establish one
+coherent authority state. There is no universal writer-enforced lock or other
+qualified exclusion contract, and an advisory lock would not supply one. Passing
+passive checks must never become `VERIFIED_CLOSED` or production applicability.
+The trusted synthetic fixture retains digest execution probes for compatibility
+testing only; it rejects unreviewed defaulted/variadic overloads before execution.
+Verification installs nothing, repairs no grants and opens no authority.
+
+Run the synthetic compatibility fixture with
+`RESTORE_AUTHORITY_RUNTIME_TEST=1 node --test .github/scripts/tests/restore-authority-postgres.runtime.test.mjs`.
+The fixture explicitly installs the omitted extension before schema restoration
+and restores only its synthetic prerequisite grants. The current
+`20261111120000_scan_queue_publication_receipts` migration adds checksum CHECK
+constraints that resolve `public.digest(bytea,text)` during `pg_restore`; without
+that extension prerequisite, restoring the `public`/`app` archive fails before
+the verifier runs. The production backup/restore workflow remains unchanged and
+unqualified for this schema until an independently reviewed, appropriately
+privileged pre-restore extension step is implemented and tested.
+`--no-owner --no-acl` archives still need a
+separately reviewed ownership and privilege restoration procedure, and the
+`public`/`app` archive still excludes the independent `lyrashield_authority`
+schema and retained journal. These checks do not qualify Supabase PostgreSQL
+17.6, its session pooler, provider-managed failover, production recovery or R2
+reconciliation.
+
 Existing credentials authenticate only to their original production database
 and R2 endpoint; the passphrase is used locally. Full private production data
 is decrypted on GitHub's ephemeral runner. No restored writes target
