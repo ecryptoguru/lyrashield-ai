@@ -1,3 +1,4 @@
+import { readPrivateRecord } from "./private-record.mjs"
 import {
   verifyPrivateProjection,
   armedAuthority,
@@ -11,17 +12,7 @@ import {
 // switch. The future workflow owns live infrastructure readers and credentials.
 import assert from "node:assert/strict"
 import { isDeepStrictEqual } from "node:util"
-import {
-  constants,
-  lstatSync,
-  fstatSync,
-  mkdirSync,
-  openSync,
-  closeSync,
-  writeFileSync,
-  fsyncSync,
-  readFileSync,
-} from "node:fs"
+import { lstatSync, mkdirSync, openSync, closeSync, writeFileSync, fsyncSync } from "node:fs"
 import { pairedHold, assertPairedWorkDrained, waitForPairedDrain } from "./paired-runtime-hold.mjs"
 import { join } from "node:path"
 import {
@@ -94,25 +85,7 @@ async function privateDirectory(dir) {
 }
 
 function verifiedRecord(dir, stage) {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- private owner directory and constant verified stage
-  const fd = openSync(
-    join(dir, stage),
-    constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK
-  )
-  try {
-    const stat = fstatSync(fd)
-    assert.ok(
-      stat.isFile() &&
-        stat.uid === process.getuid() &&
-        (stat.mode & 0o077) === 0 &&
-        stat.nlink === 1 &&
-        stat.size <= 4096
-    )
-    // eslint-disable-next-line security/detect-non-literal-fs-filename -- verified bounded open descriptor
-    return JSON.parse(readFileSync(fd, "utf8"))
-  } finally {
-    closeSync(fd)
-  }
+  return JSON.parse(readPrivateRecord(dir, stage))
 }
 
 async function persist(dir, stage, pair, workerFailure, intent) {

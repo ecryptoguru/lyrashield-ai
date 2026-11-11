@@ -1,17 +1,10 @@
+import { readPrivateRecord } from "./private-record.mjs"
 import { qualifyReleaseSource } from "./qualify-release-source.mjs"
 // Trust the protected job and its immutable run attempt, not a caller's
 // repository name, artifact filename, or self-reported GitHub environment.
 import { createHash, createPublicKey, verify } from "node:crypto"
 import { execFileSync } from "node:child_process"
-import {
-  readFileSync,
-  openSync,
-  closeSync,
-  fstatSync,
-  lstatSync,
-  writeFileSync,
-  constants,
-} from "node:fs"
+import { lstatSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 
 const REPO = "ecryptoguru/lyrashield-ai",
@@ -326,30 +319,7 @@ export async function issueRecordWitness(kind, body, jobWorkflow = JOB) {
   return JSON.stringify({ version: 1, kind, digest, token })
 }
 function privateBytes(dir, name, max = 4096) {
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- fixed protected directory and validated hash/descriptor
-  const directory = lstatSync(dir)
-  check(
-    directory.isDirectory() && directory.uid === process.getuid() && (directory.mode & 0o077) === 0
-  )
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- fixed protected directory and validated hash/descriptor
-  const fd = openSync(
-    join(dir, name),
-    constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK
-  )
-  try {
-    const st = fstatSync(fd)
-    check(
-      st.uid === process.getuid() &&
-        st.isFile() &&
-        st.nlink === 1 &&
-        (st.mode & 0o077) === 0 &&
-        st.size <= max
-    )
-    // eslint-disable-next-line security/detect-non-literal-fs-filename -- fixed protected directory and validated hash/descriptor
-    return readFileSync(fd, "utf8")
-  } finally {
-    closeSync(fd)
-  }
+  return readPrivateRecord(dir, name, max)
 }
 // Fixed private directory populated by the protected release transport. The
 // locator is a hint only; GitHub, the OIDC signature and content hashes decide.

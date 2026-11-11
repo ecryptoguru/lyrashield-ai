@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import {
   EXECUTOR_KEYS,
   SignedJournal,
+  toBrokerReceiptType,
   type ExecutorPlan,
   type ProviderGrant,
   type ProviderGrantRequest,
@@ -214,6 +215,141 @@ async function serviceWith<G extends SupervisorPort = FakeProviderGateway>(
 }
 
 describe("SupervisorService", () => {
+  it("records broker command acceptance before PREPARE completion and replays neither", async () => {
+    const stored = await journal()
+    const { service, executor, gateway } = await serviceWith(stored)
+    const command = prepareCommand()
+    const result = await service.execute(command)
+    const records = await stored.load()
+    expect(records.map((record) => record.payload.type)).toEqual([
+      "command_intent",
+      "attempt_prepared",
+    ])
+    expect(records.map((record) => toBrokerReceiptType(record.payload))).toEqual([
+      "COMMAND_ACCEPTED",
+      "PREPARE_COMPLETED",
+    ])
+    expect(records[0]?.payload).toMatchObject({ type: "command_intent", command })
+    expect(records[1]?.previousHash).toBe(records[0]?.hash)
+    expect(result.receipt.hash).toBe(records[1]?.hash)
+    expect(await service.execute(command)).toEqual(result)
+    expect(await stored.load()).toEqual(records)
+    expect(executor.createCalls).toBe(0)
+    expect(executor.startCalls).toBe(0)
+    expect(gateway.grant).toBeNull()
+  })
+
+  it("never records PREPARE completion or creates resources without durable acceptance", async () => {
+    const stored = await journal()
+    const blocked: JournalPort<SupervisorJournalEvent> = {
+      load: () => stored.load(),
+      append: async (event) => {
+        if (event.type === "command_intent") throw new Error("synthetic intent storage unavailable")
+        return stored.append(event)
+      },
+    }
+    const { service, executor, gateway } = await serviceWith(blocked)
+    await expect(service.execute(prepareCommand())).rejects.toThrow(
+      "synthetic intent storage unavailable"
+    )
+    expect(await stored.load()).toEqual([])
+    expect(executor.createCalls).toBe(0)
+    expect(executor.startCalls).toBe(0)
+    expect(gateway.grant).toBeNull()
+  })
+
+  it.each(["STOP", "RECONCILE"] as const)(
+    "recovers interrupted PREPARE as UNKNOWN, then converges with %s without replay",
+    async (cleanupType) => {
+      const stored = await journal()
+      const interrupted: JournalPort<SupervisorJournalEvent> = {
+        load: () => stored.load(),
+        append: async (event) => {
+          if (event.type === "attempt_prepared")
+            throw new Error("synthetic completion storage unavailable")
+          return stored.append(event)
+        },
+      }
+      const command = prepareCommand()
+      const { service, executor, gateway } = await serviceWith(interrupted)
+      const inspectExecutor = vi.spyOn(executor, "inspect")
+      const lookupGrant = vi.spyOn(gateway, "findGrantByRequest")
+      const inspectGrant = vi.spyOn(gateway, "inspectGrant")
+      await expect(service.execute(command)).rejects.toThrow(
+        "synthetic completion storage unavailable"
+      )
+      const records = await stored.load()
+      expect(records.map((record) => record.payload.type)).toEqual(["command_intent"])
+      const { service: restarted } = await serviceWith(stored, executor, gateway)
+      const result = await restarted.execute(command)
+      expect(result.status).toBe("UNKNOWN")
+      expect(result.receipt.hash).toBe(records[0]?.hash)
+      expect(await stored.load()).toEqual(records)
+      for (const type of ["START_PAID", "START_UNMETERED"] as const) {
+        await expect(
+          restarted.execute({
+            type,
+            commandId: "cmd-no-prepare-" + type,
+            attemptId: command.attempt.attemptId,
+            executorKey: "engine",
+            expectedReceiptHash: result.receipt.hash,
+          })
+        ).rejects.toMatchObject({ code: "ATTEMPT_NOT_STARTABLE" })
+      }
+      const cleanup = await restarted.execute({
+        type: cleanupType,
+        commandId: "cmd-prepare-reconcile",
+        attemptId: command.attempt.attemptId,
+        expectedReceiptHash: result.receipt.hash,
+      })
+      expect(cleanup.status).toBe("NEVER_DISPATCHED")
+      const cleanedRecords = await stored.load()
+      const { service: afterCleanup } = await serviceWith(stored, executor, gateway)
+      await expect(
+        afterCleanup.execute({ ...command, commandId: "cmd-fresh-prepare" })
+      ).rejects.toMatchObject({ code: "ATTEMPT_CONFLICT" })
+      expect(await stored.load()).toEqual(cleanedRecords)
+      expect((await afterCleanup.getAttempt(command.attempt.attemptId)).status).toBe(
+        "NEVER_DISPATCHED"
+      )
+      expect(executor.createCalls).toBe(0)
+      expect(executor.startCalls).toBe(0)
+      expect(executor.stopCalls).toBe(0)
+      expect(gateway.issueCalls).toBe(0)
+      expect(gateway.revokeCalls).toBe(0)
+      expect(inspectExecutor).not.toHaveBeenCalled()
+      expect(lookupGrant).not.toHaveBeenCalled()
+      expect(inspectGrant).not.toHaveBeenCalled()
+    }
+  )
+
+  it("recovers a durably completed PREPARE after its acknowledgement is lost", async () => {
+    const stored = await journal()
+    const ambiguous: JournalPort<SupervisorJournalEvent> = {
+      load: () => stored.load(),
+      append: async (event) => {
+        const record = await stored.append(event)
+        if (event.type === "attempt_prepared") throw new Error("synthetic acknowledgement lost")
+        return record
+      },
+    }
+    const command = prepareCommand()
+    const { service, executor } = await serviceWith(ambiguous)
+    await expect(service.execute(command)).rejects.toThrow("synthetic acknowledgement lost")
+    const records = await stored.load()
+    expect(records.map((record) => record.payload.type)).toEqual([
+      "command_intent",
+      "attempt_prepared",
+    ])
+    const { service: restarted } = await serviceWith(stored, executor)
+    const result = await restarted.execute(command)
+    expect(result.status).toBe("PREPARED")
+    expect(result.receipt.hash).toBe(records[1]?.hash)
+    expect(await stored.load()).toEqual(records)
+    expect(executor.createCalls).toBe(0)
+    expect(executor.startCalls).toBe(0)
+  })
+
   it("durably accepts STOP during create and never starts the late-created executor", async () => {
     let createEntered: () => void = () => undefined
     let finishCreate: () => void = () => undefined
@@ -704,7 +840,7 @@ describe("SupervisorService", () => {
 
   it("persists no start effect when the journal append fails", async () => {
     const real = await journal()
-    let failIntents = true
+    let failIntents = false
     const failing = {
       load: () => real.load(),
       append: async (event: Parameters<typeof real.append>[0]) => {
