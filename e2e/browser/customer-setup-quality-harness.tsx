@@ -4,6 +4,7 @@ import { TargetAssessmentSummary } from "../../apps/web/src/app/(dashboard)/dash
 import { TargetSpendSummary } from "../../apps/web/src/app/(dashboard)/dashboard/targets/[id]/target-spend-summary"
 import { TargetSetupHealth } from "../../apps/web/src/app/(dashboard)/dashboard/targets/[id]/target-setup-health"
 import { ReleasePacketView } from "../../apps/web/src/app/reports/release-packet/shared/[id]/release-packet-view"
+import { ReleasePacketForm } from "../../apps/web/src/app/(dashboard)/dashboard/reports/release-packet/new/release-packet-form"
 import {
   projectTargetAssessment,
   type TargetAssessmentSource,
@@ -35,6 +36,17 @@ const baseSource: TargetAssessmentSource = {
 export default function CustomerSetupQualityHarness() {
   const [actorId, setActorId] = useState("actor-1")
   const params = new URLSearchParams(location.search)
+  if (params.get("release-packet") === "create") {
+    return (
+      <main className="mx-auto max-w-6xl p-4">
+        <ReleasePacketForm
+          workspaceId="ws-1"
+          targetId="target-1"
+          identity={{ kind: "COMMIT", value: "b".repeat(40) }}
+        />
+      </main>
+    )
+  }
   if (params.has("release-packet")) {
     const signed = params.get("release-packet") === "signed"
     return (
