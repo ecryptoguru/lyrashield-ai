@@ -15,6 +15,23 @@ before same-identity replay can advance independent storage. `SignedJournal` con
 owned file and directory without changing the record. Ports without that capability stay
 unresolved. Read-only confirmed-history calls never perform this repair.
 
+## Bounded object transport
+
+`R2ConditionalObjectStore.readBounded(key, maxBytes)` applies the smaller caller/configured
+limit, with a hard 4 MiB ceiling. It checks declared length before allocation and copies chunks
+into one fixed buffer bounded by that limit; it retains no array of fragment references.
+Monotonic elapsed-time checks surround header completion, each chunk and the successful return,
+so immediately resolving chunks cannot bypass the deadline by starving the abort timer.
+The abort signal still bounds stalled transport. A late response body is disposed without
+consumption after timeout, and exact quoted ETags are preserved for CAS.
+
+Only a fresh 404 is a missing-object observation, and only a fresh 412 is an explicit conditional
+conflict. Neither proves an earlier ambiguous write failed. Timeout, lost acknowledgement and
+changed readback preserve UNKNOWN and require the same stored signed identity. The real
+`SignedJournal` regression tests cover lost record, head and mirror acknowledgements with and
+without reopen, preserving record bytes and avoiding duplicate intent. The S3 client in these
+tests is synthetic; actual R2 conditional-write and credential-isolation qualification remains open.
+
 ## PostgreSQL mirror
 
 `PostgresAuthorityMirror` uses a separately credentialed, caller-owned pool.
@@ -30,6 +47,18 @@ lost commit reply destroys the connection and reports an unavailable outcome;
 it never converts that uncertainty into a failed write or a new operation ID.
 Local synchronous WAL completion does not prove managed PostgreSQL failover
 durability.
+
+`readHeadBounded(maxBytes)` and `readRecordBounded(sequence, maxBytes)` enforce caller-sized
+UTF-8 byte limits in SQL before text reaches the driver. A materialized function result produces
+either canonical bytes or an explicit oversized flag; oversize is an error, while an authenticated
+missing row remains null. Client validation also rejects malformed flags, oversized or
+noncanonical returned bytes. These reads retain the existing schema and three restricted functions.
+The local PostgreSQL fixture checks exact-limit reads, withheld oversized text, missing rows and
+worker denial through the bounded methods. Monotonic checks supplement the transaction timer so
+late immediate acquisition/query/commit responses remain unavailable even before timer delivery.
+Bounded reads retain the checked-out client across the transaction-to-read await gap, then
+validate the read-level deadline immediately before returning missing or present evidence.
+Expiry or invalid evidence destroys that client instead of returning it to the pool as healthy.
 
 `sql/authority-mirror.sql` is an install-once schema for the separate trusted
 authority database. It is **not** a product Prisma migration or a runtime
