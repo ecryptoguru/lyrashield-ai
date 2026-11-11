@@ -4,6 +4,7 @@ import { beforeAll, afterAll, describe, it, expect } from "vitest"
 import { bindScanPreparationContext } from "./scan-preparation-authority"
 import {
   preparationFixture,
+  installPreparationFixtureRole,
   installPreparationRevokerRole,
   insertPreparationAttempt,
   sealPreparationBundle,
@@ -69,6 +70,25 @@ describe.skipIf(!enabled)("isolated epoch closure preparation fence", () => {
     await owner?.end()
     await runtime?.end()
     await revoker?.end()
+  })
+  it("revokes temporary access on the current cloned database even when the broker role exists", async () => {
+    expect((await owner.query("SELECT current_database() name")).rows[0].name).toBe(
+      "lyrashield_epoch_test"
+    )
+    await owner.query(
+      "DO $$ BEGIN EXECUTE format('GRANT TEMPORARY ON DATABASE %I TO PUBLIC',current_database()); END $$"
+    )
+    try {
+      await installPreparationFixtureRole(owner)
+      const result = await owner.query<{ allowed: boolean }>(
+        "SELECT has_database_privilege('dispatch_prepare_broker',current_database(),'TEMPORARY') AS allowed"
+      )
+      expect(result.rows[0]?.allowed).toBe(false)
+    } finally {
+      await owner.query(
+        "DO $$ BEGIN EXECUTE format('REVOKE TEMPORARY ON DATABASE %I FROM PUBLIC',current_database()); END $$"
+      )
+    }
   })
   it("sees a committed writer-first closure and rejects raw checked insertion", async () => {
     const f = await fixture(),

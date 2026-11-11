@@ -17,6 +17,16 @@ immutable identity triggers retain the fields. The transaction ID is audit data,
 never a capability. Replay validates current authority and the original live
 fields; it never replaces or refreshes them.
 
+The migration installs writer triggers even while checked preparation is disabled.
+Once enabled, its exclusive gate can contend with unrelated tenants' writes, and
+busy writers can reject preparation. Production activation requires measured
+contention and a proven safe coordination design. Broker transactions also bind
+persisted workspace, account and user context for RLS; the application roles are
+explicitly denied that resolver, and no production broker role is provisioned by
+this migration. Qualify a separate least-privilege broker role and its STOP/status/
+reconciliation access before activation; skipping context binding is not a safe
+substitute.
+
 Preparation uses the existing broker lock order, then a nonblocking exclusive
 transaction advisory gate. Source DML on Workspace, WorkspaceMember, users,
 BillingAccount, agent connections/operations/provenance, Target, Policy, Scan,

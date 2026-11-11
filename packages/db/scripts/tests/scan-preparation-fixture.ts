@@ -284,10 +284,14 @@ export async function historicalPreparation(owner: pg.Pool, f: PreparationFixtur
 export async function installPreparationFixtureRole(owner: pg.Pool) {
   if (process.env.LYRASHIELD_TEST_DB_DISPOSABLE !== "1")
     throw new Error("Disposable fixture required")
+  const revokeTemporary =
+    "DO $$ BEGIN EXECUTE format('REVOKE TEMPORARY ON DATABASE %I FROM PUBLIC',current_database()); END $$;"
   if (
     (await owner.query("SELECT 1 FROM pg_roles WHERE rolname='dispatch_prepare_broker'")).rowCount
-  )
+  ) {
+    await owner.query(revokeTemporary)
     return
+  }
   const password = process.env.DISPATCH_PREPARATION_BROKER_PASSWORD
   if (!password || password.length !== 48 || !/^[a-f0-9]{48}$/.test(password))
     throw new Error("Fixture broker password unavailable")
@@ -295,7 +299,7 @@ export async function installPreparationFixtureRole(owner: pg.Pool) {
 DO $$ BEGIN IF NOT EXISTS(SELECT 1 FROM pg_roles WHERE rolname='dispatch_prepare_broker') THEN
  CREATE ROLE dispatch_prepare_broker LOGIN PASSWORD '${password}' NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOINHERIT;
 END IF; END $$;
-REVOKE TEMPORARY ON DATABASE lyrashield_test FROM PUBLIC;
+${revokeTemporary}
 GRANT USAGE ON SCHEMA public,app TO dispatch_prepare_broker;
 GRANT SELECT ON "Workspace","WorkspaceMember",users,"BillingAccount",agent_connections,agent_operations,delegated_scan_provenance,"Target","Policy","Scan","UserScanSlot","ScanCapacityReservation","ScanEvent","ScanAuthorityEpoch","ScanWorkerInstanceGrant","ScanDispatchOperation","ScanDispatchAttempt","ScanQueueOutbox","ScanDispatchOutbox","ScanPhysicalExecution","ScanDispatchStart","ScanSupervisorReceipt","ScanPhysicalExecutionTransition","ScanDispatchReleaseReceipt" TO dispatch_prepare_broker;
 GRANT UPDATE("updatedAt") ON "Scan","ScanAuthorityEpoch","ScanWorkerInstanceGrant","ScanCapacityReservation","ScanQueueOutbox" TO dispatch_prepare_broker;
