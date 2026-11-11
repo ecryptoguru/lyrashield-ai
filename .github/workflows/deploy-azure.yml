@@ -101,6 +101,12 @@ jobs:
       id-token: write
       packages: read
     steps:
+      # Applies to both workflow calls and manual recovery dispatches.
+      - name: Hold production until runtime qualification
+        run: |
+          echo '::error::Production release is held pending runtime qualification.'
+          exit 1
+
       - name: Checkout exact deployment source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
