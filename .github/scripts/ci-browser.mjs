@@ -3,13 +3,14 @@ import {
   appendFileSync,
   existsSync,
   mkdirSync,
+  mkdtempSync,
   readFileSync,
   realpathSync,
   rmSync,
   writeFileSync,
 } from "node:fs"
 import { createRequire } from "node:module"
-import { createConnection } from "node:net"
+import { fontconfigOverlay, unpackFonts, FONT_COMPRESSED_LIMIT } from "./ci-browser-fonts.mjs"
 import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import {
@@ -22,18 +23,22 @@ import {
 export const BROWSER_IMAGE =
   "mcr.microsoft.com/playwright@sha256:75d2d72c89da49d06aa7f6e623987392019aebbc52c09fd8cd6e2c94c7c7d71d"
 export const BROWSER_VERSION = "1.62.1"
-export const BROWSER_PORT = 31777
 const root = fileURLToPath(new URL("../..", import.meta.url))
 const require = createRequire(import.meta.url)
 const label = "lyrashield.ci-browser"
 const maxBuffer = 32 * 1024 * 1024
 
-function runCommand(command, args, { timeout = 30_000, binary = false, input } = {}) {
+function runCommand(
+  command,
+  args,
+  { timeout = 30_000, binary = false, input, env, outputLimit = maxBuffer } = {}
+) {
   const result = spawnSync(command, args, {
     encoding: binary ? null : "utf8",
     timeout,
-    maxBuffer,
+    maxBuffer: outputLimit,
     input,
+    env,
   })
   if (result.error || result.status !== 0)
     throw new Error(`${command} ${args[0]} failed; exit ${result.status ?? "unavailable"}`)
@@ -63,25 +68,6 @@ function packageDirectories() {
       throw new Error("Update and qualify the CI browser image with the Playwright lockfile")
   // eslint-disable-next-line security/detect-non-literal-fs-filename -- Paths come from the validated CI identity, locked package resolution or guarded fixture output.
   return [realpathSync(dirname(playwright)), realpathSync(dirname(core))]
-}
-
-async function waitForPort() {
-  const deadline = Date.now() + 60_000
-  while (Date.now() < deadline) {
-    const ready = await new Promise((resolveReady) => {
-      const socket = createConnection({ host: "127.0.0.1", port: BROWSER_PORT })
-      const done = (ready) => {
-        socket.destroy()
-        resolveReady(ready)
-      }
-      socket.setTimeout(1000, () => done(false))
-      socket.once("error", () => done(false))
-      socket.once("connect", () => done(true))
-    })
-    if (ready) return
-    await new Promise((resolveDelay) => setTimeout(resolveDelay, 250))
-  }
-  throw new Error("CI browser loopback server did not become ready")
 }
 
 function verifyOwnedContainer(id, ctx, run) {
@@ -118,6 +104,20 @@ function ownedState(env, run) {
   const state = JSON.parse(readFileSync(ctx.statePath, "utf8"))
   if (state.name !== ctx.name || state.image !== BROWSER_IMAGE)
     throw new Error("CI browser state identity mismatch")
+  if (
+    typeof state.fontDir !== "string" ||
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- Paths come from locked packages or the validated private CI font and trace directories.
+    dirname(state.fontDir) !== realpathSync(env.RUNNER_TEMP) ||
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- Paths come from locked packages or the validated private CI font and trace directories.
+    !state.fontDir.startsWith(join(realpathSync(env.RUNNER_TEMP), `ci-fonts-${ctx.scope}-`))
+  )
+    throw new Error("CI font directory identity mismatch")
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Require the canonical private directory allocated by this job, never a substituted link.
+  if (realpathSync(state.fontDir) !== state.fontDir) throw new Error("CI font directory is a link")
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Paths come from locked packages or the validated private CI font and trace directories.
+  const marker = JSON.parse(readFileSync(join(state.fontDir, ".ci-owned.json"), "utf8"))
+  if (marker.id !== state.id || marker.scope !== ctx.scope || marker.image !== BROWSER_IMAGE)
+    throw new Error("Refusing to remove an unowned font directory")
   verifyOwnedContainer(state.id, ctx, run)
   return state
 }
@@ -129,13 +129,15 @@ export function stopBrowser({ env = process.env, run = runCommand } = {}) {
   if (!id) return
   run("docker", ["rm", "--force", id])
   rmSync(join(env.RUNNER_TEMP, `ci-ffmpeg-${ctx.scope}`), { recursive: true, force: true })
-  if (state) rmSync(ctx.statePath)
+  if (state) {
+    rmSync(state.fontDir, { recursive: true, force: true })
+    rmSync(ctx.statePath)
+  }
 }
 
 export async function startBrowser({
   env = process.env,
   run = runCommand,
-  wait = waitForPort,
   packages = packageDirectories,
   writeState = writeFileSync,
 } = {}) {
@@ -152,8 +154,9 @@ export async function startBrowser({
   )
     throw new Error("CI browser image identity mismatch")
   let id
+  let fontDir
   const state = (containerId) =>
-    JSON.stringify({ id: containerId, name: ctx.name, image: BROWSER_IMAGE })
+    JSON.stringify({ id: containerId, name: ctx.name, image: BROWSER_IMAGE, fontDir })
   try {
     id = run(
       "docker",
@@ -178,7 +181,7 @@ export async function startBrowser({
         "--tmpfs",
         "/tmp:rw,nosuid,nodev,size=512m",
         "--network",
-        "host",
+        "none",
         "--env",
         "HOME=/tmp",
         BROWSER_IMAGE,
@@ -189,86 +192,70 @@ export async function startBrowser({
       { timeout: 60_000 }
     ).trim()
     if (!/^[a-f0-9]{64}$/.test(id)) throw new Error("CI browser container identity unavailable")
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- Paths come from locked packages or the validated private CI font and trace directories.
+    fontDir = realpathSync(mkdtempSync(join(env.RUNNER_TEMP, `ci-fonts-${ctx.scope}-`)))
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- Paths come from locked packages or the validated private CI font and trace directories.
+    writeFileSync(
+      join(fontDir, ".ci-owned.json"),
+      JSON.stringify({ id, scope: ctx.scope, image: BROWSER_IMAGE }),
+      { mode: 0o600, flag: "wx" }
+    )
     writeState(ctx.statePath, state(id), {
       mode: 0o600,
       flag: "wx",
     })
-    run("docker", [
-      "exec",
-      id,
-      "mkdir",
-      "-p",
-      "/tmp/ci-browser/node_modules/playwright",
-      "/tmp/ci-browser/node_modules/playwright-core",
-      "/tmp/ci-browser/artifacts",
+    run("docker", ["exec", id, "mkdir", "-p", "/tmp/ci-browser"])
+    for (const [source, destination] of [
+      ["ci-browser-container.mjs", "container.mjs"],
+      ["ci-browser-fonts.mjs", "fonts.mjs"],
     ])
-    // docker cp cannot address live tmpfs contents. Stream only the resolved,
-    // version-checked packages through the unprivileged container process.
-    for (const [index, name] of ["playwright", "playwright-core"].entries()) {
-      const archive = run("tar", ["-C", dirs[index], "-cf", "-", "."], { binary: true })
-      if (archive.length > maxBuffer) throw new Error("CI browser package archive is too large")
       run(
         "docker",
         [
           "exec",
           "--interactive",
-          "--workdir",
-          `/tmp/ci-browser/node_modules/${name}`,
           id,
-          "tar",
-          "-xf",
-          "-",
+          "node",
+          "-e",
+          `require("fs").writeFileSync("/tmp/ci-browser/${destination}", require("fs").readFileSync(0))`,
         ],
-        { timeout: 60_000, input: archive }
+        // eslint-disable-next-line security/detect-non-literal-fs-filename -- Paths come from locked packages or the validated private CI font and trace directories.
+        { input: readFileSync(new URL(source, import.meta.url)) }
       )
-    }
-    run(
+    const proof = run("docker", ["exec", id, "node", "/tmp/ci-browser/container.mjs", "verify"], {
+      timeout: 120_000,
+    }).trim()
+    if (proof) console.log(proof)
+    const archive = run(
       "docker",
-      [
-        "exec",
-        "--interactive",
-        id,
-        "node",
-        "-e",
-        'require("fs").writeFileSync("/tmp/ci-browser/container.mjs", require("fs").readFileSync(0))',
-      ],
-      {
-        // eslint-disable-next-line security/detect-non-literal-fs-filename -- This fixed helper URL is resolved beside the current module.
-        input: readFileSync(new URL("ci-browser-container.mjs", import.meta.url)),
-      }
+      ["exec", id, "node", "/tmp/ci-browser/container.mjs", "font-archive"],
+      { binary: true, timeout: 120_000, outputLimit: FONT_COMPRESSED_LIMIT }
     )
-    console.log(
-      run("docker", ["exec", id, "node", "/tmp/ci-browser/container.mjs", "verify"], {
-        timeout: 120_000,
-      }).trim()
-    )
-    // Only this disposable, unprivileged, mount-free loopback server permits
-    // launch options. Playwright otherwise strips the native WebMCP test's args.
-    run("docker", [
-      "exec",
-      "--detach",
-      id,
+    const manifest = unpackFonts(archive, join(fontDir, "fonts"))
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- Paths come from locked packages or the validated private CI font and trace directories.
+    writeFileSync(join(fontDir, "manifest.json"), JSON.stringify(manifest), {
+      mode: 0o600,
+      flag: "wx",
+    })
+    const config = join(fontDir, "fonts.conf")
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- Paths come from locked packages or the validated private CI font and trace directories.
+    mkdirSync(join(fontDir, "cache"), { mode: 0o700 })
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- Paths come from locked packages or the validated private CI font and trace directories.
+    writeFileSync(config, fontconfigOverlay(join(fontDir, "fonts"), join(fontDir, "cache")), {
+      mode: 0o600,
+      flag: "wx",
+    })
+    // Download only the locked browser binaries. Apt validation is independently
+    // enforced below through font assets, ldd and native runtime launches.
+    run("node", [join(dirs[0], "cli.js"), "install", "chromium"], { timeout: 12 * 60_000 })
+    const hostProof = run(
       "node",
-      "/tmp/ci-browser/node_modules/playwright/cli.js",
-      "run-server",
-      "--host",
-      "127.0.0.1",
-      "--port",
-      String(BROWSER_PORT),
-      "--max-clients",
-      "24",
-      "--artifacts-dir",
-      "/tmp/ci-browser/artifacts",
-      "--unsafe",
-    ])
-    await wait()
-    console.log(
-      run("docker", ["exec", id, "node", "/tmp/ci-browser/container.mjs", "verify-server"], {
-        timeout: 60_000,
-      }).trim()
-    )
-    // eslint-disable-next-line security/detect-non-literal-fs-filename -- Paths come from the validated CI identity, locked package resolution or guarded fixture output.
-    appendFileSync(env.GITHUB_ENV, `PW_TEST_CONNECT_WS_ENDPOINT=ws://127.0.0.1:${BROWSER_PORT}/\n`)
+      [fileURLToPath(new URL("ci-browser-host.mjs", import.meta.url)), fontDir],
+      { timeout: 180_000, env: { ...env, FONTCONFIG_FILE: config } }
+    ).trim()
+    if (hostProof) console.log(hostProof)
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- Paths come from locked packages or the validated private CI font and trace directories.
+    appendFileSync(env.GITHUB_ENV, `FONTCONFIG_FILE=${config}\n`)
   } catch (error) {
     // A failed Docker acknowledgement may still have created the container.
     // Resolve only the immutable preselected name, then verify its full ID,
@@ -280,7 +267,8 @@ export async function startBrowser({
     }
     // Preserve a substituted state file. Only the bytes published for this
     // acknowledged container can be removed after startup fails.
-    // eslint-disable-next-line security/detect-non-literal-fs-filename -- This state path is derived from the validated immutable CI identity.
+    if (fontDir) rmSync(fontDir, { recursive: true, force: true })
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- Paths come from locked packages or the validated private CI font and trace directories.
     if (id && existsSync(ctx.statePath) && readFileSync(ctx.statePath, "utf8") === state(id))
       rmSync(ctx.statePath)
     throw error

@@ -13,6 +13,7 @@ import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
 import test from "node:test"
 import { createRequire } from "node:module"
+import { createFontArchive } from "../ci-browser-fonts.mjs"
 import {
   BROWSER_IMAGE,
   startBrowser,
@@ -57,7 +58,22 @@ function fixture(options = {}) {
       if (options.hostFfmpeg) return ""
       throw new Error("host FFmpeg unavailable")
     }
-    if (command === "tar" && options.failTransfer) throw new Error("package transfer failed")
+    if (args.includes("font-archive")) {
+      if (options.failTransfer) throw new Error("font archive transfer failed")
+      return createFontArchive([
+        { path: "truetype/freefont/FreeSans.ttf", bytes: Buffer.from("verified-font-fixture") },
+      ])
+    }
+    if (command === "node" && args[0].endsWith("ci-browser-host.mjs")) {
+      if (options.substituteState) {
+        // eslint-disable-next-line security/detect-non-literal-fs-filename -- The test owns all fixture paths.
+        writeFileSync(join(dir, "ci-browser-123-2-app-core-tests.json"), options.substituteState)
+        throw new Error("host check failed after state substitution")
+      }
+      if (options.failHost) throw new Error("host native runtime unavailable")
+    }
+    if (command === "node" && args.includes("install") && options.failInstall)
+      throw new Error("browser binary install unavailable")
     if (args[0] === "image")
       return JSON.stringify([
         {
@@ -99,20 +115,12 @@ function fixture(options = {}) {
   const input = {
     env,
     run,
-    wait: async () => {
-      if (options.substituteState) {
-        // eslint-disable-next-line security/detect-non-literal-fs-filename -- The test owns the temporary state path.
-        writeFileSync(join(dir, "ci-browser-123-2-app-core-tests.json"), options.substituteState)
-        throw new Error("loopback unavailable after state substitution")
-      }
-      if (options.failWait) throw new Error("loopback unavailable")
-    },
     packages: () => ["/locked/playwright", "/locked/playwright-core"],
   }
   return { dir, env, run, calls, input, clean: () => rmSync(dir, { recursive: true, force: true }) }
 }
 
-test("uses the exact amd64 image and a loopback-only nonroot mount-free container", async () => {
+test("extracts pinned fonts without a remote browser and validates the local host runtime", async () => {
   const f = fixture()
   try {
     await startBrowser(f.input)
@@ -122,7 +130,7 @@ test("uses the exact amd64 image and a loopback-only nonroot mount-free containe
     for (const pair of [
       ["--user", "1000:1000"],
       ["--cap-drop", "ALL"],
-      ["--network", "host"],
+      ["--network", "none"],
       ["--security-opt", "no-new-privileges"],
       ["--shm-size", "512m"],
       ["--tmpfs", "/tmp:rw,nosuid,nodev,size=512m"],
@@ -144,57 +152,32 @@ test("uses the exact amd64 image and a loopback-only nonroot mount-free containe
       "--env",
       "HOME=/tmp",
     ])
-    const server = f.calls.find((call) => call.args.includes("run-server"))
-    assert.ok(server.args.includes("--unsafe"))
-    assert.equal(server.args[server.args.indexOf("--host") + 1], "127.0.0.1")
-    assert.equal(
-      server.args[server.args.indexOf("--artifacts-dir") + 1],
-      "/tmp/ci-browser/artifacts"
+    assert.ok(
+      !f.calls.some((call) => call.args.includes("run-server") || call.args.includes("--unsafe"))
+    )
+    const host = f.calls.find(
+      (call) => call.command === "node" && call.args[0].endsWith("ci-browser-host.mjs")
+    )
+    assert.ok(host)
+    const config = host.config.env.FONTCONFIG_FILE
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- The test owns all fixture paths.
+    assert.equal(readFileSync(f.env.GITHUB_ENV, "utf8"), `FONTCONFIG_FILE=${config}\n`)
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- The test owns all fixture paths.
+    assert.ok(!readFileSync(f.env.GITHUB_ENV, "utf8").includes("PW_TEST_CONNECT_WS_ENDPOINT"))
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- The test owns all fixture paths.
+    assert.ok(readFileSync(config, "utf8").includes("/etc/fonts/fonts.conf"))
+    assert.deepEqual(
+      f.calls.find((call) => call.command === "node" && call.args.includes("install")).args,
+      ["/locked/playwright/cli.js", "install", "chromium"]
     )
     assert.ok(
-      f.calls.findIndex((call) => call.args.includes("verify-server")) > f.calls.indexOf(server)
+      f.calls.findIndex((call) => call.args.includes("font-archive")) < f.calls.indexOf(host)
     )
-    assert.equal(
-      // eslint-disable-next-line security/detect-non-literal-fs-filename -- The test owns the temporary directory and all fixture paths.
-      readFileSync(f.env.GITHUB_ENV, "utf8"),
-      "PW_TEST_CONNECT_WS_ENDPOINT=ws://127.0.0.1:31777/\n"
+    assert.ok(
+      f.calls
+        .filter((call) => call.args.includes("--interactive"))
+        .every((call) => Buffer.isBuffer(call.config.input))
     )
-    assert.deepEqual(
-      f.calls.filter((call) => call.command === "tar").map((call) => call.args),
-      [
-        ["-C", "/locked/playwright", "-cf", "-", "."],
-        ["-C", "/locked/playwright-core", "-cf", "-", "."],
-      ]
-    )
-    const transfers = f.calls.filter((call) => call.args.includes("--interactive"))
-    assert.equal(transfers.length, 3)
-    assert.ok(transfers.every((call) => Buffer.isBuffer(call.config.input)))
-    assert.deepEqual(
-      transfers.slice(0, 2).map((call) => call.args),
-      [
-        [
-          "exec",
-          "--interactive",
-          "--workdir",
-          "/tmp/ci-browser/node_modules/playwright",
-          id,
-          "tar",
-          "-xf",
-          "-",
-        ],
-        [
-          "exec",
-          "--interactive",
-          "--workdir",
-          "/tmp/ci-browser/node_modules/playwright-core",
-          id,
-          "tar",
-          "-xf",
-          "-",
-        ],
-      ]
-    )
-    assert.ok(!f.calls.some((call) => call.args[0] === "cp"))
     stopBrowser(f.input)
     assert.deepEqual(f.calls.at(-1).args, ["rm", "--force", id])
     stopBrowser(f.input)
@@ -203,8 +186,8 @@ test("uses the exact amd64 image and a loopback-only nonroot mount-free containe
   }
 })
 
-for (const failure of ["failTransfer", "failVerify", "failWait", "failServer"])
-  test(`${failure} fails closed, removes only its container and publishes no endpoint`, async () => {
+for (const failure of ["failTransfer", "failVerify", "failInstall", "failHost"])
+  test(`${failure} fails closed, removes only its container and publishes no font configuration`, async () => {
     const f = fixture({ [failure]: true })
     try {
       await assert.rejects(startBrowser(f.input))
@@ -337,6 +320,35 @@ test("refuses foreign-container cleanup", async () => {
     await startBrowser(f.input)
     assert.throws(() => stopBrowser(f.input), /unowned/)
     assert.ok(!f.calls.some((call) => call.args[0] === "rm"))
+  } finally {
+    f.clean()
+  }
+})
+
+test("refuses a substituted font directory before container or file removal", async () => {
+  const f = fixture()
+  try {
+    await startBrowser(f.input)
+    const statePath = join(f.dir, "ci-browser-123-2-app-core-tests.json")
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- The test owns the state and foreign fixture directories.
+    const state = JSON.parse(readFileSync(statePath, "utf8"))
+    const foreign = join(f.dir, "ci-fonts-123-2-app-core-tests-foreign")
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- The test owns this foreign-directory fixture.
+    mkdirSync(foreign)
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- The test owns this foreign-directory fixture.
+    writeFileSync(
+      join(foreign, ".ci-owned.json"),
+      JSON.stringify({ id: "b".repeat(64), scope: "123-2-app-core-tests", image: BROWSER_IMAGE })
+    )
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- The test owns the temporary state path.
+    writeFileSync(statePath, JSON.stringify({ ...state, fontDir: foreign }))
+    assert.throws(() => stopBrowser(f.input), /unowned font/)
+    assert.ok(!f.calls.some((call) => call.args[0] === "rm"))
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- The test owns this foreign-directory fixture.
+    assert.ok(existsSync(foreign))
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- Restore the original owned fixture state for cleanup.
+    writeFileSync(statePath, JSON.stringify(state))
+    stopBrowser(f.input)
   } finally {
     f.clean()
   }
