@@ -12,10 +12,13 @@ export const SCAN_ADMISSION_STOP_KEY = "lyrashield:scan-admission:stopped"
 export const SCAN_WORKER_HEARTBEAT_MS = 120_000
 export const SCAN_WORKER_TTL_MS = 300_000
 
+export type ScanWorkerUnavailabilityReason =
+  "ADMISSION_HELD" | "NO_WORKER_LEASE" | "REDIS_UNAVAILABLE" | "PROVENANCE_INVALID" | "UNKNOWN"
+
 export class ScanWorkerUnavailableError extends Error {
   readonly code = "SCAN_SERVICE_UNAVAILABLE"
 
-  constructor() {
+  constructor(readonly reason: ScanWorkerUnavailabilityReason = "UNKNOWN") {
     super("No scan worker is currently available")
     this.name = "ScanWorkerUnavailableError"
   }
@@ -36,7 +39,7 @@ export class ScanEnqueueNotSubmittedError extends ScanWorkerUnavailableError {
 
 function requireRedis() {
   const redis = getRedis()
-  if (!redis) throw new ScanWorkerUnavailableError()
+  if (!redis) throw new ScanWorkerUnavailableError("REDIS_UNAVAILABLE")
   return redis
 }
 
@@ -134,8 +137,10 @@ export async function isTargetRelayWorkerAvailable(now = Date.now()): Promise<bo
   }
 }
 
-export async function isScanWorkerAvailable(now = Date.now()): Promise<boolean> {
-  if (!getRedis()) return false
+async function scanWorkerAvailability(
+  now: number
+): Promise<"AVAILABLE" | ScanWorkerUnavailabilityReason> {
+  if (!getRedis()) return "REDIS_UNAVAILABLE"
 
   try {
     const workers = await getScanWorkerRedis().scanWorkerReadiness(SCAN_WORKER_REGISTRY_KEY, now)
@@ -143,28 +148,34 @@ export async function isScanWorkerAvailable(now = Date.now()): Promise<boolean> 
     // CLIENT LIST, which makes BullMQ getWorkersCount() connection-dependent.
     // The worker owns this short-lived registration, removes it on shutdown,
     // and clears readiness when its heartbeat fails.
-    return Number(workers) > 0
+    if (!Number.isSafeInteger(workers) || workers < 0) return "UNKNOWN"
+    return workers > 0 ? "AVAILABLE" : "NO_WORKER_LEASE"
   } catch {
-    return false
+    return "REDIS_UNAVAILABLE"
   }
+}
+
+export async function isScanWorkerAvailable(now = Date.now()): Promise<boolean> {
+  return (await scanWorkerAvailability(now)) === "AVAILABLE"
 }
 
 export async function assertScanWorkerAvailable(): Promise<void> {
   const redis = getRedis()
-  if (!redis) throw new ScanWorkerUnavailableError()
+  if (!redis) throw new ScanWorkerUnavailableError("REDIS_UNAVAILABLE")
 
   try {
     // This key is in a different Redis Cluster slot from the worker registry.
     if ((await redis.exists(SCAN_ADMISSION_STOP_KEY)) > 0) {
-      throw new ScanWorkerUnavailableError()
+      throw new ScanWorkerUnavailableError("ADMISSION_HELD")
     }
   } catch (error) {
     if (error instanceof ScanWorkerUnavailableError) throw error
     // Admission state is authoritative. Redis uncertainty must fail closed.
-    throw new ScanWorkerUnavailableError()
+    throw new ScanWorkerUnavailableError("REDIS_UNAVAILABLE")
   }
 
-  if (!(await isScanWorkerAvailable())) throw new ScanWorkerUnavailableError()
+  const status = await scanWorkerAvailability(Date.now())
+  if (status !== "AVAILABLE") throw new ScanWorkerUnavailableError(status)
 }
 
 export const QUEUE_PRODUCER_TIMEOUT_MS = 5_000

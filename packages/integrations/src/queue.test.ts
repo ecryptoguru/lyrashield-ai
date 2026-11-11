@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => {
   const values = new Map<string, string>()
   const commandCalls: Array<{ name: string; args: unknown[] }> = []
   const commandErrors = new Map<string, Error>()
+  const commandResults = new Map<string, unknown>()
   let existsError: Error | null = null
   const redis = {
     members,
@@ -14,6 +15,7 @@ const mocks = vi.hoisted(() => {
         commandCalls.push({ name, args })
         const error = commandErrors.get(name)
         if (error) throw error
+        if (commandResults.has(name)) return commandResults.get(name)
 
         const registry = members
         const now = Number(args[1])
@@ -48,6 +50,7 @@ const mocks = vi.hoisted(() => {
     redis,
     commandCalls,
     commandErrors,
+    commandResults,
     queueAdd: vi.fn(),
     queueWorkersCount: vi.fn(),
     queueGetRanges: vi.fn(),
@@ -94,6 +97,7 @@ vi.mock("bullmq", () => ({
 import { registerRelayAwareWorker } from "../../../apps/worker/src/engine/relay-readiness"
 
 import {
+  assertScanWorkerAvailable,
   enqueueScan,
   getScanQueuePosition,
   isScanWorkerAvailable,
@@ -125,6 +129,7 @@ describe("scan worker availability", () => {
     mocks.redis.values.clear()
     mocks.commandCalls.length = 0
     mocks.commandErrors.clear()
+    mocks.commandResults.clear()
     mocks.setExistsError(null)
     mocks.queueAdd.mockReset()
     mocks.queueWorkersCount.mockReset()
@@ -245,6 +250,36 @@ describe("scan worker availability", () => {
       })
     ).rejects.toBeInstanceOf(ScanWorkerUnavailableError)
     expect(mocks.queueAdd).not.toHaveBeenCalled()
+  })
+
+  it("distinguishes a held admission from a missing worker lease internally", async () => {
+    await expect(assertScanWorkerAvailable()).rejects.toMatchObject({
+      code: "SCAN_SERVICE_UNAVAILABLE",
+      reason: "NO_WORKER_LEASE",
+    })
+
+    mocks.redis.values.set(SCAN_ADMISSION_STOP_KEY, "private hold owner")
+    await expect(assertScanWorkerAvailable()).rejects.toMatchObject({
+      code: "SCAN_SERVICE_UNAVAILABLE",
+      reason: "ADMISSION_HELD",
+    })
+  })
+
+  it("reports Redis failures and malformed worker lease results without guessing a cause", async () => {
+    mocks.setExistsError(new Error("private connection details"))
+    await expect(assertScanWorkerAvailable()).rejects.toMatchObject({
+      reason: "REDIS_UNAVAILABLE",
+    })
+
+    mocks.setExistsError(null)
+    mocks.commandErrors.set("scanWorkerReadiness", new Error("private connection details"))
+    await expect(assertScanWorkerAvailable()).rejects.toMatchObject({
+      reason: "REDIS_UNAVAILABLE",
+    })
+
+    mocks.commandErrors.clear()
+    mocks.commandResults.set("scanWorkerReadiness", "not-a-count")
+    await expect(assertScanWorkerAvailable()).rejects.toMatchObject({ reason: "UNKNOWN" })
   })
 
   it("fails queue admission closed when the stop state cannot be read", async () => {
