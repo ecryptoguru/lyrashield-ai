@@ -149,6 +149,139 @@ function readArchive(config) {
   return bytes
 }
 
+async function restorePrerequisiteArchive(
+  { archive, config, id, token, writerPassword },
+  { owned, docker, text, sql, read }
+) {
+  owned()
+  docker(["exec", "-i", id, "sh", "-c", "umask 077; cat > /tmp/backup.dump"], archive)
+  owned()
+  const list = prepareRestoreList(text(["exec", id, "pg_restore", "--list", "/tmp/backup.dump"]))
+  owned()
+  docker(["exec", "-i", id, "sh", "-c", "umask 077; cat > /tmp/restore.list"], list)
+  // Only fixed prerequisite SQL runs as bootstrap owner. Restore authenticates as the
+  // limited writer, rather than SET ROLE inside a superuser-authenticated session.
+  sql(`CREATE EXTENSION pgcrypto WITH SCHEMA public VERSION '1.3';
+    CREATE ROLE ${writer} LOGIN PASSWORD '${writerPassword}' NOSUPERUSER NOBYPASSRLS
+      NOCREATEDB NOCREATEROLE NOINHERIT;
+    GRANT CONNECT,CREATE ON DATABASE ${database} TO ${writer};
+    ALTER SCHEMA public OWNER TO ${writer};
+    GRANT USAGE,CREATE ON SCHEMA public TO ${writer};`)
+  requireCheck(
+    read(`SELECT count(*)=2 AND bool_and(n.nspname='public' AND e.extname='pgcrypto'
+    AND e.extversion='1.3' AND en.nspname='public' AND p.prosrc='pg_digest'
+    AND p.probin='$libdir/pgcrypto' AND l.lanname='c' AND NOT p.prosecdef
+    AND p.proargtypes IN ('17 25'::oidvector,'25 25'::oidvector)
+    AND p.pronargdefaults=0 AND p.provariadic=0)
+    FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid=p.pronamespace
+    JOIN pg_catalog.pg_language l ON l.oid=p.prolang
+    LEFT JOIN pg_catalog.pg_depend d ON d.classid='pg_catalog.pg_proc'::regclass
+      AND d.objid=p.oid AND d.deptype='e'
+    LEFT JOIN pg_catalog.pg_extension e ON e.oid=d.refobjid
+    LEFT JOIN pg_catalog.pg_namespace en ON en.oid=e.extnamespace
+    WHERE p.proname='digest' AND n.nspname IN ('public','pg_catalog');`) === "t",
+    "UNSUPPORTED_EXTENSION"
+  )
+  owned()
+  docker(
+    [
+      "exec",
+      "-e",
+      "PGPASSWORD",
+      id,
+      "pg_restore",
+      "-h",
+      "127.0.0.1",
+      "-U",
+      writer,
+      "-d",
+      database,
+      "--exit-on-error",
+      "--no-owner",
+      "--no-acl",
+      "--use-list=/tmp/restore.list",
+      "/tmp/backup.dump",
+    ],
+    undefined,
+    { PGPASSWORD: writerPassword }
+  )
+  // Reject unexpected restored ownership before installing the explicitly synthetic ACL.
+  requireCheck(
+    read(`SELECT NOT EXISTS (SELECT 1 FROM pg_catalog.pg_class c
+    JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
+    WHERE n.nspname IN ('public','app') AND c.relowner <> '${writer}'::regrole)
+    AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_proc p
+      JOIN pg_catalog.pg_namespace n ON n.oid=p.pronamespace
+      WHERE n.nspname IN ('public','app') AND p.proowner <> '${writer}'::regrole
+        AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_depend d
+          JOIN pg_catalog.pg_extension e ON e.oid=d.refobjid
+          WHERE d.classid='pg_catalog.pg_proc'::regclass AND d.objid=p.oid AND d.deptype='e'
+            AND e.extname='pgcrypto' AND e.extversion='1.3'));`) === "t",
+    "UNSUPPORTED_OWNERSHIP"
+  )
+  sql(`ALTER ROLE ${writer} NOLOGIN PASSWORD NULL;
+    REVOKE ALL ON SCHEMA public,app FROM PUBLIC;
+    REVOKE EXECUTE ON ALL FUNCTIONS IN SCHEMA public,app FROM PUBLIC;
+    ALTER DEFAULT PRIVILEGES FOR ROLE ${writer} IN SCHEMA public,app REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;
+    CREATE ROLE ${probe} NOLOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOINHERIT;
+    GRANT USAGE ON SCHEMA public,app TO ${probe};
+    GRANT SELECT ON public."Policy" TO ${probe};
+    GRANT EXECUTE ON FUNCTION public.digest(bytea,text),app.scan_policy_digest(text),app.current_workspace_id() TO ${probe};`)
+  requireCheck(
+    read(`SELECT NOT EXISTS (SELECT 1 FROM pg_catalog.pg_auth_members
+      WHERE member IN ('${writer}'::regrole,'${probe}'::regrole)
+        OR roleid IN ('${writer}'::regrole,'${probe}'::regrole))
+    AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname IN ('${writer}','${probe}')
+      AND (rolcanlogin OR rolsuper OR rolbypassrls OR rolcreatedb OR rolcreaterole))
+    AND NOT pg_catalog.has_schema_privilege('${probe}','public','CREATE')
+    AND NOT pg_catalog.has_schema_privilege('${probe}','app','CREATE')
+    AND EXISTS (SELECT 1 FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n
+      ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relname='Policy'
+      AND c.relkind='r' AND c.relrowsecurity AND c.relforcerowsecurity)
+    AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n
+      ON n.oid=c.relnamespace WHERE n.nspname IN ('public','app')
+      AND CASE WHEN c.relkind IN ('r','v','m','p','f') THEN (((c.relname <> 'Policy' OR n.nspname <> 'public')
+        AND pg_catalog.has_table_privilege('${probe}',c.oid,'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN'))
+        OR pg_catalog.has_table_privilege('${probe}',c.oid,'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN'))
+        ELSE false END)
+    AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n
+      ON n.oid=c.relnamespace WHERE n.nspname IN ('public','app')
+      AND CASE WHEN c.relkind='S' THEN
+        pg_catalog.has_sequence_privilege('${probe}',c.oid,'USAGE,SELECT,UPDATE') ELSE false END)
+    AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n
+      ON n.oid=p.pronamespace WHERE n.nspname IN ('public','app')
+      AND p.oid NOT IN ('public.digest(bytea,text)'::regprocedure,
+        'app.scan_policy_digest(text)'::regprocedure,'app.current_workspace_id()'::regprocedure)
+      AND pg_catalog.has_function_privilege('${probe}',p.oid,'EXECUTE'));`) === "t",
+    "UNSUPPORTED_ACL"
+  )
+  const diagnostic = await verifyRestoredAuthority(
+    {
+      schema: "lyrashield-offline-authority-restore/1",
+      dispatch: {
+        target: { containerId: id, ownerToken: token, database },
+        deniedRoles: [probe],
+      },
+    },
+    async (_target, source) => JSON.parse(read(source))
+  )
+  return {
+    schema: "lyrashield-isolated-restore-prerequisite-result/1",
+    archiveSha256: config.expectedSha256,
+    sourceRevision: config.sourceRevision,
+    archiveBytes: archive.length,
+    schemaRestore: "OBSERVED",
+    extension: "pgcrypto-1.3-public",
+    privilegeProfile: "synthetic-policy-read/1",
+    sourceAclRestored: false,
+    producerAuthenticatedByHelper: false,
+    productionApplicable: false,
+    authorityDiagnostic: diagnostic,
+    admissionAllowed: false,
+    managedFailoverQualified: false,
+  }
+}
+
 export async function runIsolatedRestorePrerequisite(config, options = {}) {
   const env = options.env ?? process.env
   requireCheck(
@@ -283,133 +416,10 @@ export async function runIsolatedRestorePrerequisite(config, options = {}) {
         String(RESTORE_AUTHORITY_POSTGRES_VERSION),
       "UNSUPPORTED_EXTENSION"
     )
-    owned()
-    docker(["exec", "-i", id, "sh", "-c", "umask 077; cat > /tmp/backup.dump"], archive)
-    owned()
-    const list = prepareRestoreList(text(["exec", id, "pg_restore", "--list", "/tmp/backup.dump"]))
-    owned()
-    docker(["exec", "-i", id, "sh", "-c", "umask 077; cat > /tmp/restore.list"], list)
-    // Only fixed prerequisite SQL runs as bootstrap owner. Restore authenticates as the
-    // limited writer, rather than SET ROLE inside a superuser-authenticated session.
-    sql(`CREATE EXTENSION pgcrypto WITH SCHEMA public VERSION '1.3';
-      CREATE ROLE ${writer} LOGIN PASSWORD '${writerPassword}' NOSUPERUSER NOBYPASSRLS
-        NOCREATEDB NOCREATEROLE NOINHERIT;
-      GRANT CONNECT,CREATE ON DATABASE ${database} TO ${writer};
-      ALTER SCHEMA public OWNER TO ${writer};
-      GRANT USAGE,CREATE ON SCHEMA public TO ${writer};`)
-    requireCheck(
-      read(`SELECT count(*)=2 AND bool_and(n.nspname='public' AND e.extname='pgcrypto'
-      AND e.extversion='1.3' AND en.nspname='public' AND p.prosrc='pg_digest'
-      AND p.probin='$libdir/pgcrypto' AND l.lanname='c' AND NOT p.prosecdef
-      AND p.proargtypes IN ('17 25'::oidvector,'25 25'::oidvector)
-      AND p.pronargdefaults=0 AND p.provariadic=0)
-      FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid=p.pronamespace
-      JOIN pg_catalog.pg_language l ON l.oid=p.prolang
-      LEFT JOIN pg_catalog.pg_depend d ON d.classid='pg_catalog.pg_proc'::regclass
-        AND d.objid=p.oid AND d.deptype='e'
-      LEFT JOIN pg_catalog.pg_extension e ON e.oid=d.refobjid
-      LEFT JOIN pg_catalog.pg_namespace en ON en.oid=e.extnamespace
-      WHERE p.proname='digest' AND n.nspname IN ('public','pg_catalog');`) === "t",
-      "UNSUPPORTED_EXTENSION"
+    return await restorePrerequisiteArchive(
+      { archive, config, id, token, writerPassword },
+      { owned, docker, text, sql, read }
     )
-    owned()
-    docker(
-      [
-        "exec",
-        "-e",
-        "PGPASSWORD",
-        id,
-        "pg_restore",
-        "-h",
-        "127.0.0.1",
-        "-U",
-        writer,
-        "-d",
-        database,
-        "--exit-on-error",
-        "--no-owner",
-        "--no-acl",
-        "--use-list=/tmp/restore.list",
-        "/tmp/backup.dump",
-      ],
-      undefined,
-      { PGPASSWORD: writerPassword }
-    )
-    // Reject unexpected restored ownership before installing the explicitly synthetic ACL.
-    requireCheck(
-      read(`SELECT NOT EXISTS (SELECT 1 FROM pg_catalog.pg_class c
-      JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
-      WHERE n.nspname IN ('public','app') AND c.relowner <> '${writer}'::regrole)
-      AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_proc p
-        JOIN pg_catalog.pg_namespace n ON n.oid=p.pronamespace
-        WHERE n.nspname IN ('public','app') AND p.proowner <> '${writer}'::regrole
-          AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_depend d
-            JOIN pg_catalog.pg_extension e ON e.oid=d.refobjid
-            WHERE d.classid='pg_catalog.pg_proc'::regclass AND d.objid=p.oid AND d.deptype='e'
-              AND e.extname='pgcrypto' AND e.extversion='1.3'));`) === "t",
-      "UNSUPPORTED_OWNERSHIP"
-    )
-    sql(`ALTER ROLE ${writer} NOLOGIN PASSWORD NULL;
-      REVOKE ALL ON SCHEMA public,app FROM PUBLIC;
-      REVOKE EXECUTE ON ALL FUNCTIONS IN SCHEMA public,app FROM PUBLIC;
-      ALTER DEFAULT PRIVILEGES FOR ROLE ${writer} IN SCHEMA public,app REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC;
-      CREATE ROLE ${probe} NOLOGIN NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOINHERIT;
-      GRANT USAGE ON SCHEMA public,app TO ${probe};
-      GRANT SELECT ON public."Policy" TO ${probe};
-      GRANT EXECUTE ON FUNCTION public.digest(bytea,text),app.scan_policy_digest(text),app.current_workspace_id() TO ${probe};`)
-    requireCheck(
-      read(`SELECT NOT EXISTS (SELECT 1 FROM pg_catalog.pg_auth_members
-        WHERE member IN ('${writer}'::regrole,'${probe}'::regrole)
-          OR roleid IN ('${writer}'::regrole,'${probe}'::regrole))
-      AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname IN ('${writer}','${probe}')
-        AND (rolcanlogin OR rolsuper OR rolbypassrls OR rolcreatedb OR rolcreaterole))
-      AND NOT pg_catalog.has_schema_privilege('${probe}','public','CREATE')
-      AND NOT pg_catalog.has_schema_privilege('${probe}','app','CREATE')
-      AND EXISTS (SELECT 1 FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n
-        ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relname='Policy'
-        AND c.relkind='r' AND c.relrowsecurity AND c.relforcerowsecurity)
-      AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n
-        ON n.oid=c.relnamespace WHERE n.nspname IN ('public','app')
-        AND CASE WHEN c.relkind IN ('r','v','m','p','f') THEN (((c.relname <> 'Policy' OR n.nspname <> 'public')
-          AND pg_catalog.has_table_privilege('${probe}',c.oid,'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN'))
-          OR pg_catalog.has_table_privilege('${probe}',c.oid,'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN'))
-          ELSE false END)
-      AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n
-        ON n.oid=c.relnamespace WHERE n.nspname IN ('public','app')
-        AND CASE WHEN c.relkind='S' THEN
-          pg_catalog.has_sequence_privilege('${probe}',c.oid,'USAGE,SELECT,UPDATE') ELSE false END)
-      AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n
-        ON n.oid=p.pronamespace WHERE n.nspname IN ('public','app')
-        AND p.oid NOT IN ('public.digest(bytea,text)'::regprocedure,
-          'app.scan_policy_digest(text)'::regprocedure,'app.current_workspace_id()'::regprocedure)
-        AND pg_catalog.has_function_privilege('${probe}',p.oid,'EXECUTE'));`) === "t",
-      "UNSUPPORTED_ACL"
-    )
-    const diagnostic = await verifyRestoredAuthority(
-      {
-        schema: "lyrashield-offline-authority-restore/1",
-        dispatch: {
-          target: { containerId: id, ownerToken: token, database },
-          deniedRoles: [probe],
-        },
-      },
-      async (_target, source) => JSON.parse(read(source))
-    )
-    return {
-      schema: "lyrashield-isolated-restore-prerequisite-result/1",
-      archiveSha256: config.expectedSha256,
-      sourceRevision: config.sourceRevision,
-      archiveBytes: archive.length,
-      schemaRestore: "OBSERVED",
-      extension: "pgcrypto-1.3-public",
-      privilegeProfile: "synthetic-policy-read/1",
-      sourceAclRestored: false,
-      producerAuthenticatedByHelper: false,
-      productionApplicable: false,
-      authorityDiagnostic: diagnostic,
-      admissionAllowed: false,
-      managedFailoverQualified: false,
-    }
   } finally {
     if (id && /^[a-f0-9]{64}$/.test(id)) {
       // Revalidate immutable ID, image and ownership before removal, including stopped targets.
