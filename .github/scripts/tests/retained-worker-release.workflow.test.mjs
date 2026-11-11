@@ -59,10 +59,16 @@ test("retained runtime checks precede all production mutations and cannot open a
   assert.match(controller, /if \(env.RETAINED_WORKER_SOURCE && !current\)/)
   assert.match(
     step("Verify worker queues are empty before traffic promotion"),
-    /if \[ "\$RETAINED_WORKER" = true \]; then\n            node .github\/scripts\/retained-legacy-runtime.mjs readback/
+    /if \[ "\$RETAINED_WORKER" = true \]; then\n            node .github\/scripts\/v26-cutover.mjs retained-schema\n            node .github\/scripts\/retained-legacy-runtime.mjs readback/
   )
   assert.match(step("Smoke production traffic"), /retained-legacy-runtime.mjs readback/)
   assert.match(step("Smoke production traffic"), /APP_URL\/api\/ready\/scans/)
+  const migration = step("Run database migrations")
+  assert.ok(migration.indexOf("run-database-migrations") < migration.indexOf("retained-schema"))
+  assert.match(
+    migration,
+    /if \[ "\$RETAINED_WORKER" = true \]; then node .github\/scripts\/v26-cutover.mjs retained-schema; fi/
+  )
 })
 test("retained mode excludes every worker, worker-vault and relay deployment mutation", () => {
   for (const name of [

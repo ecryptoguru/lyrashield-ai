@@ -104,6 +104,48 @@ function afterMigration(f) {
   f.set({ candidate: true, active: true, worker: true })
   f.pass("verify")
 }
+test("actual retained controller verifies new producer access without granting access to the old worker", (t) => {
+  const f = fixture(t)
+  f.env.RETAINED_WORKER_SOURCE = "b".repeat(40)
+  f.set({ schema: true, grants: true, delegatedSchema: true })
+  f.pass("prepare")
+  f.pass("retained-schema")
+  assert.deepEqual(f.get().delegatedPrincipals, ["app_runtime"])
+  assert.deepEqual(f.get().grantedSql, [])
+  assert.equal(f.get().stop, null)
+  f.set({ candidate: true })
+  f.pass("retained-schema")
+})
+test("actual retained controller rejects missing migrations, isolation or producer privileges", async (t) => {
+  for (const options of [
+    { delegatedSchema: false },
+    { delegatedRlsDisabled: true },
+    { delegatedSelectMissing: true },
+    { delegatedInsertMissing: true },
+    { grants: false },
+  ])
+    await t.test(JSON.stringify(options), (t) => {
+      const f = fixture(t)
+      f.env.RETAINED_WORKER_SOURCE = "b".repeat(40)
+      f.set({ schema: true, grants: true, delegatedSchema: true, ...options })
+      f.pass("prepare")
+      const result = f.run("retained-schema")
+      assert.notEqual(result.status, 0)
+      assert.doesNotMatch(
+        result.stdout + result.stderr,
+        /app_runtime|worker_runtime|postgresql:|redis:\/\//
+      )
+      assert.deepEqual(f.get().grantedSql, [])
+      assert.equal(f.get().stop, null)
+    })
+})
+test("new schema verification cannot be invoked through ordinary worker promotion", (t) => {
+  const f = fixture(t)
+  f.set({ schema: true, grants: true, delegatedSchema: true })
+  f.pass("prepare")
+  assert.notEqual(f.run("retained-schema").status, 0)
+  assert.deepEqual(f.get().grantedSql, [])
+})
 test("actual controller and VM-state CLIs complete with distinct derived runtime roles and real durable receipt", (t) => {
   const f = fixture(t)
   afterMigration(f)

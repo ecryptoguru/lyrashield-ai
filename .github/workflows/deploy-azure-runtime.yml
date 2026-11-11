@@ -501,11 +501,8 @@ jobs:
               exit 1
             }
           done
-      # Schema first, then code. Migrations previously ran only in CI against a throwaway
-      # database and never against production, so a release needing a schema change served
-      # 500s until someone remembered to run this by hand. Ordering matters: new code must
-      # never meet an old schema, which means migrations must be additive and
-      # backward-compatible with the currently running image.
+      # Apply additive, backward-compatible migrations before new code. Retained
+      # releases verify the new producer's runtime access before any traffic change.
       - name: Verify migration database continuity before maintenance
         if: inputs.held_recovery != true && inputs.webhook_claims_cutover == true
         env:
@@ -577,6 +574,7 @@ jobs:
           set -euo pipefail
           if [ "$V26_CUTOVER" = true ]; then node .github/scripts/v26-cutover.mjs before-migrate; fi
           bash .github/scripts/deploy-azure-preflight.sh run-database-migrations
+          if [ "$RETAINED_WORKER" = true ]; then node .github/scripts/v26-cutover.mjs retained-schema; fi
       - name: Grant observed runtime principals and verify v26 migration
         if: env.V26_CUTOVER == 'true'
         env:
@@ -871,8 +869,12 @@ jobs:
           BULLMQ_REDIS_URL: ${{ secrets.BULLMQ_REDIS_URL }}
           RG: ${{ vars.AZURE_RESOURCE_GROUP }}
           WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
+          APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
+          SCANNER_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
+          DATABASE_DIRECT_URL: ${{ secrets.DATABASE_DIRECT_URL }}
         run: |
           if [ "$RETAINED_WORKER" = true ]; then
+            node .github/scripts/v26-cutover.mjs retained-schema
             node .github/scripts/retained-legacy-runtime.mjs readback
           else
             bash .github/scripts/deploy-azure-rollout.sh verify-worker-queues-are-empty-before-traffic-promotion

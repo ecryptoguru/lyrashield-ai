@@ -52,6 +52,14 @@ probe files. Worker vault writes and relay mutations are excluded from this rout
 A drifted identity, environment, Redis endpoint, unresolved work, unhealthy relay,
 held admission, unavailable readback or maintenance schema fails the release.
 
+Immediately after migration and again before traffic promotion, the controller
+verifies the exact delegated-provenance migration checksum, forced workspace RLS,
+immutable update trigger and effective SELECT/INSERT access for the independently
+observed app/scanner database principals. It repeats the existing v26 table and
+runtime privilege checks. Missing access fails the release without granting it;
+the retained worker receives no access to the new provenance or dispatch tables.
+Current production default ACLs and new-table access have not been read back here.
+
 Dispatch `release-retained-worker.yml` from `main` with `source_sha` set to the
 reviewed merged SHA. It builds only the immutable web image. The image verifier
 checks the new web source and retained worker source separately while retaining
@@ -65,3 +73,15 @@ New-engine URL/API relay capabilities remain unavailable. Features that require
 those changes must remain unavailable or block the exact candidate review.
 Paid scan, billing, positive fix/retest, device and financial acceptance are not
 established by a successful readiness probe or this release route.
+
+The full deployed `b03f0bb` to candidate `65603598` source comparison found no
+ordinary scan wire or stored-plan incompatibility. The old consumer enforces a
+requested engine budget through the existing stored plan limit. The three new
+migrations are additive; durable dispatch remains unselected by live producers.
+This does not qualify that candidate's complete behavior. Current delegated fix
+generation adds execution-time authority and deletion checks absent from the old
+consumer. Current gate evaluation rereads stored retest evidence, while the old
+worker still writes verdicts using receipt-only trust; release packet assessment
+loads that stored verdict, even though its remediation section rechecks trust.
+These active gaps require an updated worker on the retained engine or concrete
+web boundaries and current-reader assessment binding before exact source approval.
