@@ -1,0 +1,178 @@
+// Read-only, unwired foundation. Provenance alone never issues fleet authority.
+import assert from "node:assert/strict"
+import { createHash } from "node:crypto"
+import { execFileSync } from "node:child_process"
+import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
+
+const repo = "ecryptoguru/lyrashield-engine"
+const repositoryId = "1297157605",
+  ownerId = "116722580"
+const workflow = repo + "/.github/workflows/publish-sandbox.yml"
+const sourceRef = "refs/heads/main"
+const identity = "https://github.com/" + workflow + "@" + sourceRef
+const image = "ghcr.io/ecryptoguru/lyrashield-sandbox"
+const predicateType = "https://slsa.dev/provenance/v1"
+// gh v2.95.0 binaries extracted only after verifying the official archive hashes.
+const binaryHashes = Object.freeze({
+  x64: "62c11fbaa08835168c3d1acf8a645ac6268a13a5682c73581388c9df0c622617",
+  arm64: "706b030846db08d0dac0392d6f74416e0bbf0d9ac5ecbd54c9046305c10eac59",
+})
+const hash = (raw) => createHash("sha256").update(raw).digest("hex")
+
+function gh(args) {
+  // No PATH lookup, caller-chosen binary, custom roots or arbitrary command.
+  const path = "/usr/bin/gh"
+  assert.equal(process.platform, "linux")
+  const expected = binaryHashes[process.arch]
+  assert.ok(expected)
+  const file = statSync(path)
+  assert.ok(file.isFile() && file.uid === 0 && (file.mode & 0o022) === 0)
+  assert.equal(hash(readFileSync(path)), expected)
+  try {
+    return execFileSync(path, args, {
+      timeout: 60000,
+      maxBuffer: 2 * 1024 * 1024,
+      stdio: ["ignore", "pipe", "pipe"],
+    }).toString("utf8")
+  } catch {
+    // Registry/verifier errors can include credential material.
+    throw new Error("Protected attestation verification failed")
+  }
+}
+
+export function verifySandboxAttestationBundle(
+  raw,
+  expected,
+  { run = gh, when = Date.now() } = {}
+) {
+  assert.equal(typeof raw, "string")
+  assert.ok(Buffer.byteLength(raw) <= 1024 * 1024)
+  assert.deepEqual(Object.keys(expected).sort(), [
+    "publicationRevision",
+    "publishAttempt",
+    "publishRunId",
+    "sandboxDigest",
+  ])
+  assert.equal(Object.getPrototypeOf(expected), Object.prototype)
+  for (const descriptor of Object.values(Object.getOwnPropertyDescriptors(expected)))
+    assert.ok(Object.hasOwn(descriptor, "value") && typeof descriptor.value === "string")
+  expected = Object.freeze({ ...expected })
+  assert.match(expected.publicationRevision, /^[a-f0-9]{40}$/)
+  assert.match(expected.sandboxDigest, /^sha256:[a-f0-9]{64}$/)
+  for (const field of ["publishRunId", "publishAttempt"])
+    assert.match(expected[field], /^[1-9][0-9]{0,19}$/)
+  assert.ok(Number.isSafeInteger(when) && when > 0)
+  const bundle = JSON.parse(raw)
+  // A saved gh verificationResult is not a signed bundle. The actual bundle is
+  // reverified by the pinned process; no caller supplies verified result JSON.
+  assert.ok(
+    bundle &&
+      !Array.isArray(bundle) &&
+      bundle.mediaType === "application/vnd.dev.sigstore.bundle.v0.3+json" &&
+      bundle.verificationMaterial &&
+      bundle.dsseEnvelope &&
+      !bundle.verificationResult &&
+      !bundle.attestation
+  )
+  const invocation =
+    "https://github.com/" +
+    repo +
+    "/actions/runs/" +
+    expected.publishRunId +
+    "/attempts/" +
+    expected.publishAttempt
+  const directory = mkdtempSync(join(tmpdir(), "lyrashield-attestation-"))
+  const path = join(directory, "bundle.json")
+  let rows
+  try {
+    // Path is generated inside our private directory, never supplied by a caller.
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
+    writeFileSync(path, raw, { mode: 0o600, flag: "wx" })
+    rows = JSON.parse(
+      run([
+        "attestation",
+        "verify",
+        "oci://" + image + "@" + expected.sandboxDigest,
+        "--bundle",
+        path,
+        "--hostname",
+        "github.com",
+        "--repo",
+        repo,
+        "--signer-workflow",
+        workflow,
+        "--cert-identity",
+        identity,
+        "--cert-oidc-issuer",
+        "https://token.actions.githubusercontent.com",
+        "--signer-digest",
+        expected.publicationRevision,
+        "--source-digest",
+        expected.publicationRevision,
+        "--source-ref",
+        sourceRef,
+        "--predicate-type",
+        predicateType,
+        "--deny-self-hosted-runners",
+        "--format",
+        "json",
+      ])
+    )
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+  assert.ok(Array.isArray(rows) && rows.length === 1)
+  const result = rows[0]?.verificationResult
+  const certificate = result?.signature?.certificate
+  assert.ok(certificate)
+  // Fulcio certificate fields are flattened by sigstore-go v1.2.1. Unlike the
+  // predicate, these values come from authenticated GitHub OIDC claims.
+  for (const [field, value] of Object.entries({
+    issuer: "https://token.actions.githubusercontent.com",
+    subjectAlternativeName: identity,
+    buildSignerURI: identity,
+    buildSignerDigest: expected.publicationRevision,
+    runnerEnvironment: "github-hosted",
+    sourceRepositoryURI: "https://github.com/" + repo,
+    sourceRepositoryDigest: expected.publicationRevision,
+    sourceRepositoryRef: sourceRef,
+    sourceRepositoryIdentifier: repositoryId,
+    sourceRepositoryOwnerURI: "https://github.com/ecryptoguru",
+    sourceRepositoryOwnerIdentifier: ownerId,
+    runInvocationURI: invocation,
+  }))
+    assert.equal(certificate[field], value)
+  assert.ok(Array.isArray(result.verifiedTimestamps) && result.verifiedTimestamps.length > 0)
+  for (const timestamp of result.verifiedTimestamps)
+    assert.ok(
+      Number.isFinite(Date.parse(timestamp.timestamp)) && Date.parse(timestamp.timestamp) <= when
+    )
+  const statement = result.statement
+  assert.equal(statement?._type, "https://in-toto.io/Statement/v1")
+  assert.equal(statement.predicateType, predicateType)
+  assert.deepEqual(statement.subject, [
+    { name: image, digest: { sha256: expected.sandboxDigest.slice(7) } },
+  ])
+  assert.equal(statement.predicate?.runDetails?.metadata?.invocationId, invocation)
+  // Internally constructed bounded result, not a qualification record or proof
+  // of native bytes, package inventory, runtime behavior, or a promotion lease.
+  return Object.freeze({
+    schema: "lyrashield-sandbox-provenance-check/1",
+    qualified: false,
+    packageCoverage: "UNVERIFIED",
+    bundleChecksum: hash(raw),
+    publicationRevision: expected.publicationRevision,
+    sandboxDigest: expected.sandboxDigest,
+    publishRunId: expected.publishRunId,
+    publishAttempt: expected.publishAttempt,
+    checkedAt: new Date(when).toISOString(),
+  })
+}
+
+export function issueRuntimeQualification() {
+  // No trusted native inventory, fleet, policy, migrations, independent journal
+  // and rollback readers exist yet. Never exchange a credential on this path.
+  throw new Error("Runtime qualification issuance unavailable: trusted evidence readers required")
+}
