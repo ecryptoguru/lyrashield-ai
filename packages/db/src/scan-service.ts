@@ -1,11 +1,10 @@
 import { targetReadScopeWhere, type ListScansParams } from "./read-query-scope"
 export type { ListScansParams } from "./read-query-scope"
-import type { CreateScanParams, ScanTransaction } from "./scan-service-types"
+import type { CreateScanParams, ScanAdmissionOptions, ScanTransaction } from "./scan-service-types"
 export type { CreateScanParams } from "./scan-service-types"
 export { WorkspaceScanConcurrencyLimitError, lockWorkspaceScanAdmission } from "./scan-slot"
-import { createScanCapacity, readScanCapacity, type ScanCapacityProjection } from "./scan-capacity"
+import { readScanCapacity, type ScanCapacityProjection } from "./scan-capacity"
 import { prisma } from "./client"
-import { Prisma } from "./generated/prisma"
 import type {
   Scan,
   ScanEvent,
@@ -21,7 +20,6 @@ import {
   MAX_CONCURRENT_WORKSPACE_SCANS,
   ScanIdSchema,
 } from "@lyrashield/types"
-import { buildAdmittedScanPlan, computeScanExecutionPlanHash } from "./scan-execution-plan"
 import { isTerminalScanStatus, isValidTransition } from "./scan-transitions"
 import { insertScanBillableClaim, requireUnclaimedScan } from "./scan-billable-claim"
 import { withWorkspaceRLS, type ScopedTransaction } from "./rls"
@@ -33,7 +31,8 @@ import {
   lockWorkspaceScanAdmission,
 } from "./scan-slot"
 import { getWorkspaceContext } from "./extension"
-import { bindDelegatedScanProvenance } from "./delegated-scan-provenance"
+import { parseScanAdmissionOptions } from "./scan-dispatch-admission"
+import { persistAdmittedScan } from "./scan-admission"
 
 export interface ScanWithEvents extends Scan {
   capacity?: ScanCapacityProjection | null
@@ -96,8 +95,10 @@ type ScanStatusMetadata = {
 
 export async function createScan(
   params: CreateScanParams,
-  transaction?: ScanTransaction
+  transaction?: ScanTransaction,
+  options?: ScanAdmissionOptions
 ): Promise<Scan> {
+  const admissionOptions = parseScanAdmissionOptions(options)
   const determinismMode = DeterminismModeSchema.parse(params.determinismMode ?? "default")
   const create = async (tx: ScanTransaction) => {
     await lockUserScanAdmission(tx, params.createdById)
@@ -142,56 +143,14 @@ export async function createScan(
     })
     if (!workspace) throw new Error("Workspace not found")
 
-    // Build the authoritative execution plan from trusted inputs (the stored
-    // target's type, the canonical profile registry, resolved provenance) and
-    // persist it ONCE with the scan row — before queue publication. Updates
-    // require a new scan; the queue carries scan identity only.
-    const executionPlan = await buildAdmittedScanPlan(tx, params, target.type, determinismMode)
-    const executionPlanHash = computeScanExecutionPlanHash(executionPlan)
-
-    const scan = await tx.scan.create({
-      data: {
-        workspaceId: params.workspaceId,
-        targetId: params.targetId,
-        goal: params.goal as Scan["goal"],
-        mode: (params.mode ?? "QUICK") as Scan["mode"],
-        policyId: params.policyId ?? null,
-        status: "QUEUED",
-        accountingVersion: 2,
-        triggerType: params.triggerType ?? "manual",
-        determinismMode,
-        createdById: params.createdById,
-        sponsorAccountId: workspace.agencySponsorAccountId ?? params.createdById,
-        delegatedConnectionId: params.delegatedConnection?.connectionId ?? null,
-        delegatedAuthorizationVersion: params.delegatedConnection?.authorizationVersion ?? null,
-        executionPlan: executionPlan as Prisma.InputJsonValue,
-        executionPlanHash,
-      },
-    })
-    if (params.delegatedOperation) {
-      await bindDelegatedScanProvenance(tx, {
-        workspaceId: params.workspaceId,
-        scanId: scan.id,
-        targetId: params.targetId,
-        executionPlanHash,
-        admission: params.delegatedOperation,
-      })
-    }
-    await createScanCapacity(tx, scan, executionPlan.capabilities.includes("engine"))
-    await tx.scanEvent.create({
-      data: {
-        scanId: scan.id,
-        stage: "queued",
-        level: "info",
-        message: "Scan queued",
-        metadata: {
-          targetId: params.targetId,
-          goal: params.goal,
-          mode: params.mode ?? "QUICK",
-        },
-      },
-    })
-    return scan
+    return persistAdmittedScan(
+      tx,
+      params,
+      target.type,
+      determinismMode,
+      workspace.agencySponsorAccountId,
+      admissionOptions
+    )
   }
   const scan = transaction
     ? await create(transaction)

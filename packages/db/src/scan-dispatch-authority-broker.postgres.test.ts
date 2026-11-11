@@ -362,12 +362,13 @@ describe.skipIf(!enabled)("scan dispatch authority broker", () => {
       client.on("error", () => undefined)
     })
     broker = createScanDispatchAuthorityBroker({ connectionString: brokerUrl })
-    await owner.query(
-      `INSERT INTO "ScanAuthorityEpoch"
-        ("id","epoch","isOpen","openKey","openedAt","closedAt","createdAt","updatedAt")
-       VALUES ($1,(SELECT coalesce(max("epoch"),0)+1 FROM "ScanAuthorityEpoch"),true,'open',CURRENT_TIMESTAMP,NULL,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`,
+    const epoch = await owner.query(
+      'SELECT "isOpen", "openKey", "openedAt", "closedAt" FROM "ScanAuthorityEpoch" WHERE id=$1',
       [sharedEpochId]
     )
+    expect(epoch.rows).toEqual([
+      { isOpen: true, openKey: "open", openedAt: expect.any(Date), closedAt: null },
+    ])
   })
 
   afterAll(async () => {

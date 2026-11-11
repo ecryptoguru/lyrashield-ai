@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 # Owns a disposable network-none PostgreSQL fixture; never accepts a DB URL.
 set -euo pipefail
+if [[ "$#" -gt 1 ]]; then echo 'Usage: scan-dispatch-authority-pg.sh [--admission-only]' >&2; exit 1; fi
+case "${1:-}" in
+  '') test_files=(packages/db/src/scan-dispatch-authority-broker.postgres.test.ts packages/db/src/scan-dispatch-admission.postgres.test.ts) ;;
+  --admission-only) test_files=(packages/db/src/scan-dispatch-admission.postgres.test.ts) ;;
+  *) echo 'Usage: scan-dispatch-authority-pg.sh [--admission-only]' >&2; exit 1 ;;
+esac
 repo_root=$(cd "$(dirname "$0")/../../../.." && pwd)
 cd "$repo_root"
 if [[ -n "${DOCKER_HOST:-}${DOCKER_CONTEXT:-}${DOCKER_TLS_VERIFY:-}${DOCKER_CERT_PATH:-}" ]]; then
@@ -72,6 +78,12 @@ if [[ "$diff_status" -ne 0 ]]; then
 fi
 runtime_password=$(openssl rand -hex 24)
 docker exec -i "$container" psql -X -U postgres -d lyrashield_test -v ON_ERROR_STOP=1 <<SQL
+-- The runner owns this fixture epoch before either independent suite starts.
+INSERT INTO "ScanAuthorityEpoch"
+  ("id","epoch","isOpen","openKey","openedAt","closedAt","createdAt","updatedAt")
+VALUES ('authority-shared-open-epoch',
+  (SELECT coalesce(max("epoch"),0)+1 FROM "ScanAuthorityEpoch"),
+  true,'open',CURRENT_TIMESTAMP,NULL,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP);
 CREATE ROLE dispatch_authority_runtime LOGIN PASSWORD '$runtime_password'
   NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS;
 GRANT USAGE ON SCHEMA public, app TO dispatch_authority_runtime;
@@ -113,4 +125,4 @@ done
 port=$(cat "$dir/fault-port")
 [[ "$port" =~ ^[0-9]+$ ]] || { echo 'Fixture fault relay unavailable' >&2; exit 1; }
 
-BETTER_AUTH_SECRET=fixture-only-secret-32-characters-minimum BETTER_AUTH_URL=http://localhost:3000 NEXT_PUBLIC_APP_URL=http://localhost:3000 DATABASE_URL="postgresql://postgres:${admin_password}@127.0.0.1:${port}/lyrashield_test" RLS_RUNTIME_DATABASE_URL="postgresql://dispatch_authority_runtime:${runtime_password}@127.0.0.1:${port}/lyrashield_test" DISPATCH_AUTHORITY_DATABASE_URL="postgresql://postgres:${admin_password}@127.0.0.1:${port}/lyrashield_test" DISPATCH_AUTHORITY_RUNTIME_DATABASE_URL="postgresql://dispatch_authority_runtime:${runtime_password}@127.0.0.1:${port}/lyrashield_test" FAULT_ARM_PATH="$dir/armed" FAULT_MARKER_PATH="$dir/commit-dropped" LYRASHIELD_TEST_DB_DISPOSABLE=1 SCAN_DISPATCH_AUTHORITY_POSTGRES_TEST=1   pnpm exec vitest run packages/db/src/scan-dispatch-authority-broker.postgres.test.ts
+BETTER_AUTH_SECRET=fixture-only-secret-32-characters-minimum BETTER_AUTH_URL=http://localhost:3000 NEXT_PUBLIC_APP_URL=http://localhost:3000 DATABASE_URL="postgresql://postgres:${admin_password}@127.0.0.1:${port}/lyrashield_test" RLS_RUNTIME_DATABASE_URL="postgresql://dispatch_authority_runtime:${runtime_password}@127.0.0.1:${port}/lyrashield_test" DISPATCH_AUTHORITY_DATABASE_URL="postgresql://postgres:${admin_password}@127.0.0.1:${port}/lyrashield_test" DISPATCH_AUTHORITY_RUNTIME_DATABASE_URL="postgresql://dispatch_authority_runtime:${runtime_password}@127.0.0.1:${port}/lyrashield_test" FAULT_ARM_PATH="$dir/armed" FAULT_MARKER_PATH="$dir/commit-dropped" LYRASHIELD_TEST_DB_DISPOSABLE=1 SCAN_DISPATCH_AUTHORITY_POSTGRES_TEST=1   pnpm exec vitest run "${test_files[@]}"
