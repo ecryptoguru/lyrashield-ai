@@ -8,11 +8,17 @@ export {
 } from "./broker-receipt"
 export { canonicalJson, sha256Hex } from "./canonical-json"
 export type { JournalPort, JournalRecord, JournalReadLimits } from "./journal"
-export { JournalIntegrityError, JournalReadLimitError, SignedJournal } from "./journal"
+export {
+  JournalIntegrityError,
+  JournalReadLimitError,
+  SignedJournal,
+  verifyJournalRecord,
+} from "./journal"
 export {
   IndependentAuthorityError,
   IndependentAuthorityJournal,
   authorityEventSchema,
+  headSchema,
 } from "./independent-journal"
 export type {
   AuthorityEvent,

@@ -102,6 +102,24 @@ function recordEnvelope(
   }
 }
 
+/** Verify one unchanged signed envelope; callers must separately authenticate its chain anchor. */
+export function verifyJournalRecord<T>(
+  value: unknown,
+  secret: string,
+  validatePayload: (value: unknown) => T
+): JournalRecord<T> {
+  validateSecret(secret)
+  const envelope = recordEnvelope(value)
+  const record = { ...envelope, payload: validatePayload(envelope.payload) }
+  const { hash, signature, ...unsigned } = record
+  const expectedHash = recordHash(unsigned)
+  const expectedSignature = signRecord(secret, canonicalJson({ ...unsigned, hash: expectedHash }))
+  if (!secureEqual(hash, expectedHash) || !secureEqual(signature, expectedSignature)) {
+    throw new JournalIntegrityError("journal signature or record hash is invalid")
+  }
+  return record
+}
+
 export class SignedJournal<T> implements JournalPort<T> {
   private loaded = false
   private nextSequence = 1

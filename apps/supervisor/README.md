@@ -137,6 +137,48 @@ history, native process ownership or atomic physical fencing. The production ent
 closed and local-only, so trusted recovery is unavailable there. Task 3 and Cloud admission remain
 held until those integrations and native qualifications are complete.
 
+## Bounded checkpoint reader foundation
+
+`SupervisorCheckpointReader` is a separate read-only foundation with mandatory protected ports.
+`buildCheckpointCandidate()` creates an **unpublished** signed checkpoint candidate for at most
+32 records and 1 MiB of segment bytes. The checkpoint binds the exact epoch, supervisor, sequence
+range, original/wrapper predecessor and end hashes, previous checkpoint hash, and segment digest.
+Every segment retains both original signed envelopes; candidate creation never rewrites or
+re-signs either original journal. A candidate does not prove publication, recovery or physical
+authority.
+
+The mandatory trust port returns an authenticated persisted checkpoint identity with the complete
+checkpoint and current stream authority. Request identities and hashes only select persisted
+state. Production implementations must independently validate committed range ancestry, current
+operation/attempt/command/grant authority, and a rollback-resistant head/revision/index through
+bounded indexed reads. Returning matching caller input or a synthetic success is not authorization.
+Checkpoint metadata must agree in local storage, R2 and PostgreSQL, and the latest checkpoint must
+cover the exact current original/wrapper/R2/PostgreSQL heads. Missing publication, uncertain suffixes,
+revocation, rollback or changed proof fails closed. Reads never publish, repair or discard records.
+
+A page reads one bounded segment twice and validates record durability and current authority
+before and after readback. A one-record page inside a historical 32-record segment measures two
+local segment reads, two local head and index reads, 64 R2-record reads, 64 database-record reads,
+four checkpoint metadata reads per mirror, two current-head reads per mirror, two stream-authority
+reads, four checkpoint-identity checks and 66 record-authority checks. Record transport limits are
+derived from the exact verified envelope size; page responses remain capped at 256 KiB. Work per
+page does not grow with total history. The reader has no writer queue or executor/provider methods.
+Tests traverse all 130 real signed records over multiple pages, reject changed and restored proof,
+and complete STOP while a bounded checkpoint read is held.
+
+The existing cursor transport retains its 64-record ceiling. Protected checkpoint publication,
+immutable local segments, authenticated bounded current-local-head proof, rollback-resistant range
+index, transport byte/deadline enforcement and restart lifecycle are **blocking integrations**.
+The in-process observed revision only detects rollback during that reader's lifetime; a fresh
+reader depends on independently protected persisted authority. The synthetic test publisher still
+reads complete native files outside paging. The legacy signed JSONL 64 MiB writer limit and full
+startup/recovery scans remain continuing-history blockers. No checkpoint garbage collection or
+compaction is implemented, and no pending or historical record is removed.
+
+Production admission and process holds remain closed. Checkpoint tests do not qualify trusted
+staging/mount/UID descriptors, provider-token handoff, worker Docker dispatch, native process
+ownership, host/IPv6 isolation or physical-action fencing.
+
 ## Deployment boundary
 
 The prototype defines immutable container images, bounded argv/environment, network, CPU, memory
