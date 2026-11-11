@@ -84,30 +84,52 @@ async function waitForPort() {
   throw new Error("CI browser loopback server did not become ready")
 }
 
+function verifyOwnedContainer(id, ctx, run) {
+  if (!/^[a-f0-9]{64}$/.test(id)) throw new Error("CI browser container identity unavailable")
+  const [container] = JSON.parse(run("docker", ["inspect", id]))
+  if (
+    container.Id !== id ||
+    container.Name !== `/${ctx.name}` ||
+    container.Config.Labels?.[label] !== ctx.scope ||
+    container.Config.Image !== BROWSER_IMAGE
+  )
+    throw new Error("Refusing to operate on an unowned CI browser container")
+}
+
+function findOwnedContainer(ctx, run) {
+  const id = run("docker", [
+    "ps",
+    "--all",
+    "--no-trunc",
+    "--filter",
+    `name=^/${ctx.name}$`,
+    "--format",
+    "{{.ID}}",
+  ]).trim()
+  if (id) verifyOwnedContainer(id, ctx, run)
+  return id
+}
+
 function ownedState(env, run) {
   const ctx = context(env)
   // eslint-disable-next-line security/detect-non-literal-fs-filename -- Paths come from the validated CI identity, locked package resolution or guarded fixture output.
   if (!existsSync(ctx.statePath)) return undefined
   // eslint-disable-next-line security/detect-non-literal-fs-filename -- Paths come from the validated CI identity, locked package resolution or guarded fixture output.
   const state = JSON.parse(readFileSync(ctx.statePath, "utf8"))
-  if (!/^[a-f0-9]{64}$/.test(state.id) || state.name !== ctx.name || state.image !== BROWSER_IMAGE)
+  if (state.name !== ctx.name || state.image !== BROWSER_IMAGE)
     throw new Error("CI browser state identity mismatch")
-  const [container] = JSON.parse(run("docker", ["inspect", state.id]))
-  if (
-    container.Id !== state.id ||
-    container.Name !== `/${ctx.name}` ||
-    container.Config.Labels?.[label] !== ctx.scope
-  )
-    throw new Error("Refusing to operate on an unowned CI browser container")
+  verifyOwnedContainer(state.id, ctx, run)
   return state
 }
 
 export function stopBrowser({ env = process.env, run = runCommand } = {}) {
+  const ctx = context(env)
   const state = ownedState(env, run)
-  if (!state) return
-  run("docker", ["rm", "--force", state.id])
-  rmSync(join(env.RUNNER_TEMP, `ci-ffmpeg-${context(env).scope}`), { recursive: true, force: true })
-  rmSync(context(env).statePath)
+  const id = state?.id || findOwnedContainer(ctx, run)
+  if (!id) return
+  run("docker", ["rm", "--force", id])
+  rmSync(join(env.RUNNER_TEMP, `ci-ffmpeg-${ctx.scope}`), { recursive: true, force: true })
+  if (state) rmSync(ctx.statePath)
 }
 
 export async function startBrowser({
@@ -115,6 +137,7 @@ export async function startBrowser({
   run = runCommand,
   wait = waitForPort,
   packages = packageDirectories,
+  writeState = writeFileSync,
 } = {}) {
   const ctx = context(env)
   // eslint-disable-next-line security/detect-non-literal-fs-filename -- Paths come from the validated CI identity, locked package resolution or guarded fixture output.
@@ -128,45 +151,48 @@ export async function startBrowser({
     !image.RepoDigests?.includes(BROWSER_IMAGE)
   )
     throw new Error("CI browser image identity mismatch")
-  const id = run(
-    "docker",
-    [
-      "run",
-      "--detach",
-      "--name",
-      ctx.name,
-      "--label",
-      `${label}=${ctx.scope}`,
-      "--platform",
-      "linux/amd64",
-      "--read-only",
-      "--user",
-      "1000:1000",
-      "--cap-drop",
-      "ALL",
-      "--security-opt",
-      "no-new-privileges",
-      "--shm-size",
-      "512m",
-      "--tmpfs",
-      "/tmp:rw,nosuid,nodev,size=512m",
-      "--network",
-      "host",
-      "--env",
-      "HOME=/tmp",
-      BROWSER_IMAGE,
-      "node",
-      "-e",
-      "setInterval(() => {}, 1000)",
-    ],
-    { timeout: 60_000 }
-  ).trim()
-  if (!/^[a-f0-9]{64}$/.test(id)) throw new Error("CI browser container identity unavailable")
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Paths come from the validated CI identity, locked package resolution or guarded fixture output.
-  writeFileSync(ctx.statePath, JSON.stringify({ id, name: ctx.name, image: BROWSER_IMAGE }), {
-    mode: 0o600,
-  })
+  let id
+  const state = (containerId) =>
+    JSON.stringify({ id: containerId, name: ctx.name, image: BROWSER_IMAGE })
   try {
+    id = run(
+      "docker",
+      [
+        "run",
+        "--detach",
+        "--name",
+        ctx.name,
+        "--label",
+        `${label}=${ctx.scope}`,
+        "--platform",
+        "linux/amd64",
+        "--read-only",
+        "--user",
+        "1000:1000",
+        "--cap-drop",
+        "ALL",
+        "--security-opt",
+        "no-new-privileges",
+        "--shm-size",
+        "512m",
+        "--tmpfs",
+        "/tmp:rw,nosuid,nodev,size=512m",
+        "--network",
+        "host",
+        "--env",
+        "HOME=/tmp",
+        BROWSER_IMAGE,
+        "node",
+        "-e",
+        "setInterval(() => {}, 1000)",
+      ],
+      { timeout: 60_000 }
+    ).trim()
+    if (!/^[a-f0-9]{64}$/.test(id)) throw new Error("CI browser container identity unavailable")
+    writeState(ctx.statePath, state(id), {
+      mode: 0o600,
+      flag: "wx",
+    })
     run("docker", [
       "exec",
       id,
@@ -174,6 +200,7 @@ export async function startBrowser({
       "-p",
       "/tmp/ci-browser/node_modules/playwright",
       "/tmp/ci-browser/node_modules/playwright-core",
+      "/tmp/ci-browser/artifacts",
     ])
     // docker cp cannot address live tmpfs contents. Stream only the resolved,
     // version-checked packages through the unprivileged container process.
@@ -230,6 +257,8 @@ export async function startBrowser({
       String(BROWSER_PORT),
       "--max-clients",
       "24",
+      "--artifacts-dir",
+      "/tmp/ci-browser/artifacts",
       "--unsafe",
     ])
     await wait()
@@ -241,7 +270,19 @@ export async function startBrowser({
     // eslint-disable-next-line security/detect-non-literal-fs-filename -- Paths come from the validated CI identity, locked package resolution or guarded fixture output.
     appendFileSync(env.GITHUB_ENV, `PW_TEST_CONNECT_WS_ENDPOINT=ws://127.0.0.1:${BROWSER_PORT}/\n`)
   } catch (error) {
-    stopBrowser({ env, run })
+    // A failed Docker acknowledgement may still have created the container.
+    // Resolve only the immutable preselected name, then verify its full ID,
+    // label and pinned image. State publication cannot redirect cleanup.
+    const cleanupId = /^[a-f0-9]{64}$/.test(id ?? "") ? id : findOwnedContainer(ctx, run)
+    if (cleanupId) {
+      verifyOwnedContainer(cleanupId, ctx, run)
+      run("docker", ["rm", "--force", cleanupId])
+    }
+    // Preserve a substituted state file. Only the bytes published for this
+    // acknowledged container can be removed after startup fails.
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- This state path is derived from the validated immutable CI identity.
+    if (id && existsSync(ctx.statePath) && readFileSync(ctx.statePath, "utf8") === state(id))
+      rmSync(ctx.statePath)
     throw error
   }
 }

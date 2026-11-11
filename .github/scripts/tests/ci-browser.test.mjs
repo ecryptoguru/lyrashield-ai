@@ -7,6 +7,7 @@ import {
   realpathSync,
   rmSync,
   symlinkSync,
+  writeFileSync,
 } from "node:fs"
 import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
@@ -48,6 +49,8 @@ function fixture(options = {}) {
     DATABASE_URL: "must-not-enter-container",
   }
   const calls = []
+  let removed = false
+  let searches = 0
   const run = (command, args, config = {}) => {
     calls.push({ command, args, config })
     if (command === "ffmpeg") {
@@ -63,13 +66,25 @@ function fixture(options = {}) {
           RepoDigests: [options.image ?? BROWSER_IMAGE],
         },
       ])
-    if (args[0] === "run") return `${id}\n`
+    if (args[0] === "run") {
+      if (options.missingStateDirectory) rmSync(dir, { recursive: true })
+      if (options.lostAcknowledgement) throw new Error("Docker create acknowledgement lost")
+      return options.badAcknowledgement ? "unusable-id" : `${id}\n`
+    }
+    if (args[0] === "ps") {
+      searches++
+      return removed || options.noContainer || (options.delayedCreation && searches === 1)
+        ? ""
+        : `${id}\n`
+    }
+    if (args[0] === "rm") removed = true
     if (args[0] === "inspect")
       return JSON.stringify([
         {
           Id: id,
           Name: "/lyrashield-ci-browser-123-2-app-core-tests",
           Config: {
+            Image: BROWSER_IMAGE,
             Labels: {
               "lyrashield.ci-browser": options.foreign ? "other-run" : "123-2-app-core-tests",
             },
@@ -85,6 +100,11 @@ function fixture(options = {}) {
     env,
     run,
     wait: async () => {
+      if (options.substituteState) {
+        // eslint-disable-next-line security/detect-non-literal-fs-filename -- The test owns the temporary state path.
+        writeFileSync(join(dir, "ci-browser-123-2-app-core-tests.json"), options.substituteState)
+        throw new Error("loopback unavailable after state substitution")
+      }
       if (options.failWait) throw new Error("loopback unavailable")
     },
     packages: () => ["/locked/playwright", "/locked/playwright-core"],
@@ -127,6 +147,10 @@ test("uses the exact amd64 image and a loopback-only nonroot mount-free containe
     const server = f.calls.find((call) => call.args.includes("run-server"))
     assert.ok(server.args.includes("--unsafe"))
     assert.equal(server.args[server.args.indexOf("--host") + 1], "127.0.0.1")
+    assert.equal(
+      server.args[server.args.indexOf("--artifacts-dir") + 1],
+      "/tmp/ci-browser/artifacts"
+    )
     assert.ok(
       f.calls.findIndex((call) => call.args.includes("verify-server")) > f.calls.indexOf(server)
     )
@@ -191,6 +215,110 @@ for (const failure of ["failTransfer", "failVerify", "failWait", "failServer"])
       f.clean()
     }
   })
+
+test("ENOENT while publishing state still removes the exact owned container", async () => {
+  const f = fixture({ missingStateDirectory: true })
+  try {
+    await assert.rejects(startBrowser(f.input), { code: "ENOENT" })
+    assert.deepEqual(f.calls.at(-1).args, ["rm", "--force", id])
+    assert.ok(!f.calls.some((call) => call.args.includes("verify")))
+  } finally {
+    f.clean()
+  }
+})
+
+test("ENOSPC while publishing state still removes the exact owned container", async () => {
+  const f = fixture()
+  try {
+    await assert.rejects(
+      startBrowser({
+        ...f.input,
+        writeState: () => {
+          throw Object.assign(new Error("state disk full"), { code: "ENOSPC" })
+        },
+      }),
+      { code: "ENOSPC" }
+    )
+    assert.deepEqual(f.calls.at(-1).args, ["rm", "--force", id])
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- The test owns the temporary environment path.
+    assert.equal(existsSync(f.env.GITHUB_ENV), false)
+  } finally {
+    f.clean()
+  }
+})
+
+test("foreign state substitution cannot redirect startup cleanup", async () => {
+  const foreign = JSON.stringify({
+    id: "b".repeat(64),
+    name: "lyrashield-ci-browser-123-2-app-core-tests",
+    image: BROWSER_IMAGE,
+  })
+  const f = fixture({ substituteState: foreign })
+  try {
+    await assert.rejects(startBrowser(f.input), /state substitution/)
+    assert.deepEqual(f.calls.at(-1).args, ["rm", "--force", id])
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- The test owns the temporary state path.
+    assert.equal(readFileSync(join(f.dir, "ci-browser-123-2-app-core-tests.json"), "utf8"), foreign)
+  } finally {
+    f.clean()
+  }
+})
+
+for (const option of ["lostAcknowledgement", "badAcknowledgement"])
+  test(`${option} resolves only the preselected name and removes its verified full ID`, async () => {
+    const f = fixture({ [option]: true })
+    try {
+      await assert.rejects(startBrowser(f.input))
+      assert.deepEqual(f.calls.find((call) => call.args[0] === "ps").args, [
+        "ps",
+        "--all",
+        "--no-trunc",
+        "--filter",
+        "name=^/lyrashield-ci-browser-123-2-app-core-tests$",
+        "--format",
+        "{{.ID}}",
+      ])
+      assert.deepEqual(f.calls.at(-1).args, ["rm", "--force", id])
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- The test owns the temporary environment path.
+      assert.equal(existsSync(f.env.GITHUB_ENV), false)
+    } finally {
+      f.clean()
+    }
+  })
+
+test("ambiguous creation refuses a foreign container at the preselected name", async () => {
+  const f = fixture({ lostAcknowledgement: true, foreign: true })
+  try {
+    await assert.rejects(startBrowser(f.input), /unowned/)
+    assert.ok(!f.calls.some((call) => call.args[0] === "rm"))
+  } finally {
+    f.clean()
+  }
+})
+
+test("lost acknowledgement with no created container needs no deletion", async () => {
+  const f = fixture({ lostAcknowledgement: true, noContainer: true })
+  try {
+    await assert.rejects(startBrowser(f.input), /acknowledgement lost/)
+    assert.ok(!f.calls.some((call) => call.args[0] === "rm"))
+  } finally {
+    f.clean()
+  }
+})
+
+test("always cleanup can find late creation without any published state", async () => {
+  const f = fixture({ lostAcknowledgement: true, delayedCreation: true })
+  try {
+    await assert.rejects(startBrowser(f.input), /acknowledgement lost/)
+    assert.ok(!f.calls.some((call) => call.args[0] === "rm"))
+    stopBrowser(f.input)
+    assert.deepEqual(f.calls.at(-1).args, ["rm", "--force", id])
+    stopBrowser(f.input)
+    assert.equal(f.calls.filter((call) => call.args[0] === "rm").length, 1)
+  } finally {
+    f.clean()
+  }
+})
 
 for (const option of [{ arch: "arm64" }, { image: "unqualified" }])
   test(`rejects unqualified image ${JSON.stringify(option)}`, async () => {

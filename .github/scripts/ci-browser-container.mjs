@@ -111,7 +111,14 @@ function encode(input) {
 }
 
 async function verifyBrowser(remote = false, full = false) {
-  const server = createServer((_request, response) => {
+  const payload = { verified: false, proof: "ci-browser-remote-download" }
+  const server = createServer((request, response) => {
+    if (request.url === "/download") {
+      response.setHeader("Content-Type", "application/json")
+      response.setHeader("Content-Disposition", 'attachment; filename="ci-browser-proof.json"')
+      response.end(JSON.stringify(payload))
+      return
+    }
     response.setHeader("Content-Type", "text/html")
     response.end("<!doctype html><p>English ไทย 日本語 中文 😀</p>")
   }).listen(0, "127.0.0.1")
@@ -121,6 +128,9 @@ async function verifyBrowser(remote = false, full = false) {
     const launchOptions = {
       headless: true,
       args: flags,
+      ...(remote
+        ? { artifactsDir: "/home/runner/work/lyrashield-ai/lyrashield-ai/test-results/preflight" }
+        : {}),
       ...(full ? { executablePath: chromium.executablePath() } : {}),
     }
     browser = remote
@@ -134,11 +144,33 @@ async function verifyBrowser(remote = false, full = false) {
     await page.goto(`http://127.0.0.1:${server.address().port}`)
     assert.deepEqual(
       await page.evaluate(() => ({
-        context: !!navigator.modelContext,
-        execute: typeof navigator.modelContext?.executeTool === "function",
+        context: !!document.modelContext,
+        register: typeof document.modelContext?.registerTool === "function",
+        tools: typeof document.modelContext?.getTools === "function",
+        execute: typeof document.modelContext?.executeTool === "function",
       })),
-      { context: true, execute: true }
+      { context: true, register: true, tools: true, execute: true }
     )
+    if (remote) {
+      const downloadEvent = page.waitForEvent("download")
+      await page.evaluate(() => {
+        const anchor = document.createElement("a")
+        anchor.href = "/download"
+        document.body.append(anchor)
+        anchor.click()
+      })
+      const download = await downloadEvent
+      assert.equal(download.suggestedFilename(), "ci-browser-proof.json")
+      const file = `/tmp/ci-browser/download-${randomUUID()}.json`
+      try {
+        await download.saveAs(file)
+        // eslint-disable-next-line security/detect-non-literal-fs-filename -- The download uses a random filename in the owned container temporary directory.
+        assert.deepEqual(JSON.parse(readFileSync(file, "utf8")), payload)
+      } finally {
+        // eslint-disable-next-line security/detect-non-literal-fs-filename -- The download uses a random filename in the owned container temporary directory.
+        if (existsSync(file)) unlinkSync(file)
+      }
+    }
     const commands = readdirSync("/proc")
       .filter((entry) => /^\d+$/.test(entry))
       .flatMap((pid) => {
@@ -223,7 +255,9 @@ try {
     console.log("CI browser image, packages, fonts, native libraries, FFmpeg and Chromium verified")
   } else if (command === "verify-server") {
     await verifyBrowser(true)
-    console.log("CI loopback browser server honored native WebMCP launch flags")
+    console.log(
+      "CI loopback browser server honored native WebMCP flags and remote download artifacts"
+    )
   } else if (command === "ffmpeg") process.stdout.write(encode(JSON.parse(process.argv[3])))
   else throw new Error("Unknown container verification command")
 } catch (error) {
