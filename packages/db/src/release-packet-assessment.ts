@@ -22,6 +22,12 @@ export async function signedAssessmentFor(
   input: {
     workspaceId: string
     verdictId: string
+    verdict: {
+      verdictChecksum: string
+      assessmentVersion: number | null
+      evaluatedAt: Date
+      state: string
+    }
     identity: { kind: "COMMIT" | "ARTIFACT_DIGEST"; value: string } | null
     publicKey: string | null
     verificationKeys: readonly ReleasePacketVerificationKey[]
@@ -42,6 +48,10 @@ export async function signedAssessmentFor(
     const provenance = parseLaunchReportProvenance(candidate.provenanceJson)
     return (
       provenance?.gateVerdictId === input.verdictId &&
+      provenance.verdictChecksum === input.verdict.verdictChecksum &&
+      provenance.assessmentVersion === input.verdict.assessmentVersion &&
+      provenance.assessedAt === input.verdict.evaluatedAt.toISOString() &&
+      provenance.historicalState === input.verdict.state &&
       sameIdentity(provenance.assessedIdentity, input.identity)
     )
   })
