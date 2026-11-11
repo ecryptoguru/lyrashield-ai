@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState, type Ref } from "react"
+import { useEffect, useRef, useState, type Ref } from "react"
 import { Check, Copy, KeyRound, Plus, ShieldAlert } from "lucide-react"
 import {
   Badge,
@@ -13,51 +13,17 @@ import {
   Spinner,
 } from "@lyrashield/ui"
 import { InlineConfirm } from "@/components/ui/inline-confirm"
-import { writeClipboard } from "@/components/scorecard-share-composer"
 import { z } from "zod"
-import { apiDelete, apiGet, apiPost, ApiError } from "@/lib/api-client"
+import { apiDelete, apiPost, ApiError } from "@/lib/api-client"
 import { formatDate, formatDateTime } from "@/lib/date-format"
-
-interface ApiKeyRow {
-  id: string
-  name: string
-  prefix: string
-  scopes: string[]
-  lastUsedAt: string | null
-  expiresAt: string | null
-  revokedAt: string | null
-  createdAt: string
-}
+import { apiKeyRowSchema, expiryTime, useApiKeysList, type ApiKeyRow } from "./use-api-keys-list"
+import { useApiKeyCopy } from "./use-api-key-copy"
 
 interface CreatedKey extends ApiKeyRow {
   rawKey: string
 }
 
-const apiKeyRowSchema = z
-  .object({
-    id: z.string(),
-    name: z.string(),
-    prefix: z.string(),
-    scopes: z.array(z.string()),
-    lastUsedAt: z.string().datetime().or(z.string()).nullable(),
-    expiresAt: z.string().datetime().or(z.string()).nullable(),
-    revokedAt: z.string().datetime().or(z.string()).nullable(),
-    createdAt: z.string().datetime().or(z.string()),
-  })
-  .passthrough()
-
-const apiKeysSchema = z.array(apiKeyRowSchema)
-
 const createdKeySchema = apiKeyRowSchema.and(z.object({ rawKey: z.string() }).passthrough())
-const expirySchema = z.string().datetime({ offset: true })
-const clipboardError = "Failed to copy API key. Copy it manually or check your browser permissions."
-
-function expiryTime(value: string | null): number | null {
-  if (!value || !expirySchema.safeParse(value).success) return null
-  const time = Date.parse(value)
-  return Number.isFinite(time) ? time : null
-}
-
 /**
  * Workspace API keys — used by the LyraShield MCP server, CLI, and CI.
  * The raw key is displayed exactly once after creation.
@@ -240,6 +206,36 @@ function CreatedApiKey({
   )
 }
 
+function ApiKeyListError({
+  message,
+  hasKeys,
+  loading,
+  onRetry,
+}: {
+  message: string
+  hasKeys: boolean
+  loading: boolean
+  onRetry: () => Promise<void>
+}) {
+  return (
+    <div role="alert" className="space-y-2 text-sm">
+      <p className="text-destructive">
+        {message}
+        {hasKeys ? " The displayed keys may be out of date." : ""}
+      </p>
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        disabled={loading}
+        onClick={() => void onRetry()}
+      >
+        {loading ? "Retrying…" : "Retry"}
+      </Button>
+    </div>
+  )
+}
+
 function ApiKeyList({
   activeKeys,
   revokedKeys,
@@ -386,76 +382,20 @@ function WorkspaceApiKeysSection({
   const draftRevision = useRef(0)
   const pendingSuccessFocus = useRef<number | null>(null)
   const pendingDismissFocus = useRef<number | null>(null)
-  const listRequest = useRef(0)
-  const mounted = useRef(false)
-  const [keys, setKeys] = useState<ApiKeyRow[] | null>(null)
-  const [loadingKeys, setLoadingKeys] = useState(true)
-  const [listError, setListError] = useState<string | null>(null)
-  const [now, setNow] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [showCreate, setShowCreate] = useState(false)
   const [name, setName] = useState("")
   const [scope, setScope] = useState<"read" | "write">("read")
   const [expiryHours, setExpiryHours] = useState(0)
-  const [copied, setCopied] = useState(false)
-  // Sticky "has copied at least once" flag — `copied` resets after the icon
-  // flash, but the dismiss gate must stay open once the key has been copied.
-  const [hasCopiedKey, setHasCopiedKey] = useState(false)
+  const { copied, hasCopiedKey, setHasCopiedKey, copyKey } = useApiKeyCopy(
+    createdKey?.rawKey,
+    setError
+  )
 
-  const load = useCallback(async () => {
-    const requestId = ++listRequest.current
-    setLoadingKeys(true)
-    try {
-      const data = await apiGet<ApiKeyRow[]>(`/api/api-keys?workspaceId=${workspaceId}`, {
-        schema: apiKeysSchema,
-      })
-      if (requestId !== listRequest.current) return
-      setKeys(data)
-      setListError(null)
-    } catch (err) {
-      if (requestId !== listRequest.current) return
-      setListError(err instanceof ApiError ? err.message : "Failed to load API keys")
-    } finally {
-      if (requestId === listRequest.current) setLoadingKeys(false)
-    }
-  }, [workspaceId])
-
-  useEffect(() => {
-    if (!canManage) return
-    mounted.current = true
-    // A workspace change starts a fresh read and sets its loading state.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void load()
-    return () => {
-      mounted.current = false
-      listRequest.current += 1
-    }
-  }, [canManage, load])
-
-  useEffect(() => {
-    const updateNow = () => setNow(Date.now())
-    updateNow()
-    window.addEventListener("focus", updateNow)
-    document.addEventListener("visibilitychange", updateNow)
-    return () => {
-      window.removeEventListener("focus", updateNow)
-      document.removeEventListener("visibilitychange", updateNow)
-    }
-  }, [])
-
-  useEffect(() => {
-    if (now === null || !keys) return
-    const next = keys
-      .map((key) => expiryTime(key.expiresAt))
-      .filter((time): time is number => time !== null && time > now)
-      .sort((a, b) => a - b)[0]
-    if (next === undefined) return
-    const timer = window.setTimeout(
-      () => setNow(Date.now()),
-      Math.min(next - now + 5, 2_147_483_647)
-    )
-    return () => window.clearTimeout(timer)
-  }, [keys, now])
+  const { keys, loadingKeys, listError, now, load, mounted } = useApiKeysList(
+    workspaceId,
+    canManage
+  )
 
   useEffect(() => {
     if (
@@ -561,24 +501,6 @@ function WorkspaceApiKeysSection({
     }
   }
 
-  async function copyKey() {
-    if (!createdKey) return
-    try {
-      await writeClipboard(createdKey.rawKey)
-      setError((current) => (current === clipboardError ? null : current))
-      setCopied(true)
-      setHasCopiedKey(true)
-      setTimeout(() => setCopied(false), 2000)
-    } catch {
-      setError(clipboardError)
-      setCopied(false)
-      // Clipboard access can be denied outright. Unlock the dismiss button so a
-      // user who copies the key by hand is not trapped with an undismissable
-      // banner — the warning above still tells them it is shown only once.
-      setHasCopiedKey(true)
-    }
-  }
-
   const activeKeys = keys?.filter((k) => !k.revokedAt) ?? []
   const revokedKeys = keys?.filter((k) => k.revokedAt) ?? []
 
@@ -616,21 +538,12 @@ function WorkspaceApiKeysSection({
         ) : null}
 
         {listError ? (
-          <div role="alert" className="space-y-2 text-sm">
-            <p className="text-destructive">
-              {listError}
-              {keys !== null ? " The displayed keys may be out of date." : ""}
-            </p>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              disabled={loadingKeys}
-              onClick={() => void load()}
-            >
-              {loadingKeys ? "Retrying…" : "Retry"}
-            </Button>
-          </div>
+          <ApiKeyListError
+            message={listError}
+            hasKeys={keys !== null}
+            loading={loadingKeys}
+            onRetry={load}
+          />
         ) : null}
 
         <p role="status" className="sr-only">
