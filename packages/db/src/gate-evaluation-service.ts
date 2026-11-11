@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util"
 import {
   computeGateVerdict,
   computeInputChecksum,
@@ -6,6 +7,7 @@ import {
   isTargetTypeCovered,
   type GateEvidenceInput,
   type GateVerdictResult,
+  type GateAssessmentSnapshot,
 } from "@lyrashield/gate"
 import { fingerprintPolicy, snapshotFromManifest, toEpochMs } from "./gate-assessment"
 import { loadGateFindings } from "./gate-retest-input"
@@ -18,6 +20,53 @@ export interface GateEvaluationResult {
   note?: string
 }
 
+async function persistGateEvaluation(
+  tx: ScopedTransaction,
+  context: {
+    workspaceId: string
+    targetId: string
+    scanId: string | null
+    assessmentSnapshot: GateAssessmentSnapshot | null
+    reuseEquivalentVerdict: boolean
+  },
+  evidence: GateEvidenceInput,
+  verdict: GateVerdictResult
+) {
+  const data = {
+    workspaceId: context.workspaceId,
+    targetId: context.targetId,
+    scanId: context.scanId,
+    standardVersion: verdict.standardVersion,
+    state: verdict.state,
+    coverageStatement: verdict.coverageStatement,
+    nonCoverage: verdict.nonCoverage,
+    blockingReasons: verdict.blockingReasons,
+    evidenceSummary: verdict.evidenceSummary,
+    staleness: verdict.staleness,
+    inputChecksum: computeInputChecksum(evidence),
+    verdictChecksum: computeVerdictChecksum(verdict),
+    assessmentVersion: context.assessmentSnapshot?.version ?? null,
+    assessmentSnapshot: context.assessmentSnapshot ?? undefined,
+  }
+  if (context.reuseEquivalentVerdict) {
+    const existing = await tx.gateVerdict.findFirst({
+      where: { workspaceId: data.workspaceId, targetId: data.targetId },
+      orderBy: [{ evaluatedAt: "desc" }, { id: "desc" }],
+    })
+    // Compare every persisted input, verdict field and assessment binding,
+    // rather than trusting the stored state or its claimed checksums alone.
+    if (
+      existing &&
+      Object.entries(data).every(([field, value]) =>
+        isDeepStrictEqual(existing[field as keyof typeof existing] ?? null, value ?? null)
+      )
+    ) {
+      return { id: existing.id }
+    }
+  }
+  return tx.gateVerdict.create({ data, select: { id: true } })
+}
+
 /**
  * Evaluate the Launch Gate for a target and persist the verdict.
  *
@@ -27,10 +76,15 @@ export interface GateEvaluationResult {
  */
 export async function evaluateGateForTarget(
   workspaceId: string,
-  targetId: string
+  targetId: string,
+  options: { transaction?: ScopedTransaction; reuseEquivalentVerdict?: boolean } = {}
 ): Promise<GateEvaluationResult | null> {
+  // Packet issuance supplies its RepeatableRead transaction so assessment and
+  // remediation observe the same evidence without opening a nested transaction.
   const runConsistent = (fn: (tx: ScopedTransaction) => Promise<GateEvaluationResult | null>) =>
-    withWorkspaceRLS(workspaceId, fn, { isolationLevel: "RepeatableRead" })
+    options.transaction
+      ? fn(options.transaction)
+      : withWorkspaceRLS(workspaceId, fn, { isolationLevel: "RepeatableRead" })
   return runConsistent(async (tx) => {
     const target = await tx.target.findFirst({
       where: { id: targetId, workspaceId, deletedAt: null },
@@ -163,28 +217,18 @@ export async function evaluateGateForTarget(
     }
 
     const verdict = computeGateVerdict(evidence)
-    const inputChecksum = computeInputChecksum(evidence)
-    const verdictChecksum = computeVerdictChecksum(verdict)
-
-    const record = await tx.gateVerdict.create({
-      data: {
+    const record = await persistGateEvaluation(
+      tx,
+      {
         workspaceId,
         targetId,
         scanId: latestCompletedScan?.id ?? null,
-        standardVersion: verdict.standardVersion,
-        state: verdict.state,
-        coverageStatement: verdict.coverageStatement,
-        nonCoverage: verdict.nonCoverage,
-        blockingReasons: verdict.blockingReasons,
-        evidenceSummary: verdict.evidenceSummary,
-        staleness: verdict.staleness,
-        inputChecksum,
-        verdictChecksum,
-        assessmentVersion: assessmentSnapshot?.version ?? null,
-        assessmentSnapshot: assessmentSnapshot ?? undefined,
+        assessmentSnapshot,
+        reuseEquivalentVerdict: options.reuseEquivalentVerdict ?? false,
       },
-      select: { id: true },
-    })
+      evidence,
+      verdict
+    )
 
     return { verdict, gateVerdictId: record.id }
   })
