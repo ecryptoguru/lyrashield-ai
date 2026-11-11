@@ -9,7 +9,6 @@ import {
   readFontArchive,
   unpackFonts,
   fontconfigOverlay,
-  verifyBitmapFont,
 } from "../ci-browser-fonts.mjs"
 
 const font = { path: "truetype/freefont/FreeSans.ttf", bytes: Buffer.from("font fixture") }
@@ -78,53 +77,4 @@ test("private fontconfig keeps host rules, gives its cache priority and escapes 
   assert.ok(config.includes("<acceptfont>"))
   assert.ok(config.includes("owned&amp;fonts&quot;"))
   assert.ok(config.includes("cache&lt;private&gt;"))
-})
-
-test("validates bounded PCF tables without depending on Fontconfig legacy encoding support", () => {
-  const bytes = Buffer.alloc(88)
-  bytes.writeUInt32LE(0x70636601, 0)
-  bytes.writeUInt32LE(4, 4)
-  for (const [index, type] of [1, 4, 8, 32].entries()) {
-    const at = 8 + index * 16
-    bytes.writeUInt32LE(type, at)
-    bytes.writeUInt32LE(4, at + 8)
-    bytes.writeUInt32LE(72 + index * 4, at + 12)
-  }
-  verifyBitmapFont(gzipSync(bytes))
-  const bad = Buffer.from(bytes)
-  bad.writeUInt32LE(200, 20)
-  assert.throws(() => verifyBitmapFont(gzipSync(bad)), /table bounds/)
-  const oversized = Buffer.from(bytes)
-  oversized.writeUInt32LE(256, 8)
-  oversized.writeUInt32LE(0xffffffff, 16)
-  assert.throws(() => verifyBitmapFont(gzipSync(oversized)), /table bounds/)
-  assert.throws(() => verifyBitmapFont(gzipSync(Buffer.alloc(8))), /header/)
-  const missing = Buffer.from(bytes)
-  missing.writeUInt32LE(2, 56)
-  assert.throws(() => verifyBitmapFont(gzipSync(missing)), /missing required/)
-})
-
-test("PCF accelerator reservation exception matches only the pinned 48/72-byte layouts", () => {
-  function accelerator(format, stored) {
-    const bytes = Buffer.alloc(104 + stored)
-    bytes.writeUInt32LE(0x70636601, 0)
-    bytes.writeUInt32LE(5, 4)
-    for (const [index, type] of [1, 4, 8, 32, 256].entries()) {
-      const at = 8 + index * 16
-      bytes.writeUInt32LE(type, at)
-      bytes.writeUInt32LE(index === 4 ? format : 0, at + 4)
-      bytes.writeUInt32LE(index === 4 ? 100 : 4, at + 8)
-      bytes.writeUInt32LE(88 + index * 4, at + 12)
-    }
-    return bytes
-  }
-  verifyBitmapFont(gzipSync(accelerator(14, 48)))
-  verifyBitmapFont(gzipSync(accelerator(270, 72)))
-  for (const size of [4, 99, 101, 4096, 1024 * 1024]) {
-    const unrelated = accelerator(14, 48)
-    unrelated.writeUInt32LE(size, 80)
-    assert.throws(() => verifyBitmapFont(gzipSync(unrelated)), /table bounds/)
-  }
-  assert.throws(() => verifyBitmapFont(gzipSync(accelerator(270, 48))), /table bounds/)
-  assert.throws(() => verifyBitmapFont(gzipSync(accelerator(14, 47))), /table bounds/)
 })

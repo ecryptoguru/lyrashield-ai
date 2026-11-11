@@ -158,36 +158,3 @@ export function fontconfigOverlay(fonts, cache) {
       .replaceAll('"', "&quot;")
   return `<?xml version="1.0"?><!DOCTYPE fontconfig SYSTEM "fonts.dtd"><fontconfig><cachedir>${escape(cache)}</cachedir><include ignore_missing="no">/etc/fonts/fonts.conf</include><dir>${escape(fonts)}</dir><selectfont><rejectfont><glob>*</glob></rejectfont><acceptfont><glob>${escape(fonts)}/*</glob></acceptfont></selectfont></fontconfig>\n`
 }
-
-export function verifyBitmapFont(compressed) {
-  const bytes = gunzipSync(compressed, { maxOutputLength: 16 * 1024 * 1024 })
-  if (bytes.length < 8 || bytes.readUInt32LE(0) !== 0x70636601)
-    throw new Error("Invalid legacy PCF font header")
-  const count = bytes.readUInt32LE(4)
-  const start = 8 + count * 16
-  if (!count || count > 32 || start > bytes.length)
-    throw new Error("Invalid legacy PCF font table count")
-  const types = new Set()
-  for (let table = 0; table < count; table++) {
-    const at = 8 + table * 16
-    const type = bytes.readUInt32LE(at)
-    const format = bytes.readUInt32LE(at + 4)
-    const size = bytes.readUInt32LE(at + 8)
-    const offset = bytes.readUInt32LE(at + 12)
-    // The pinned image's BDF accelerators reserve 100 bytes but store 48,
-    // or 72 when the format includes ink bounds. Other sizes need full bounds.
-    const minimum = type === 256 ? (format & 0x100 ? 72 : 48) : 4
-    const stored = type === 256 && size === 100 ? minimum : size
-    if (
-      types.has(type) ||
-      size < minimum ||
-      size > 16 * 1024 * 1024 ||
-      offset < start ||
-      offset + stored > bytes.length
-    )
-      throw new Error("Invalid legacy PCF font table bounds")
-    types.add(type)
-  }
-  if (![1, 4, 8, 32].every((type) => types.has(type)))
-    throw new Error("Legacy PCF font is missing required tables")
-}
