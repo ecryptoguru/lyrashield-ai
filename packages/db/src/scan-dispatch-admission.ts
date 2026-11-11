@@ -18,9 +18,11 @@ export function parseScanAdmissionOptions(options?: ScanAdmissionOptions): ScanA
 /**
  * Called only inside createScan's admission transaction, after the immutable
  * plan, delegated provenance, sponsor-scoped reservation and queued event.
- * No grants or epochs are opened here. UNKNOWN is sticky in both existing SQL
- * state machines: these qualification records cannot be prepared or leased,
- * even after a later epoch opens. Current callers retain the legacy queue path.
+ * No grants or epochs are opened here. An UNKNOWN operation cannot prepare,
+ * and an UNKNOWN outbox cannot lease, even after a later epoch opens. SQL does
+ * allow UNKNOWN outbox -> PUBLISHED with a timestamp; that transition does not
+ * prove queue publication or authorize execution. Current callers retain the
+ * legacy queue path.
  */
 export async function persistShadowScanDispatchAdmission(tx: ScanTransaction, scan: Scan) {
   const scope = scopeDigestSchema.parse(
