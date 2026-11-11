@@ -202,6 +202,52 @@ test("qualification witnesses bind the isolated issuer job and environment separ
   assert.throws(() => verifyRecordWitness(jwt(qualified), keys, x, kind, digest, now))
 })
 
+test("consumer-only held baseline and action lease require signed isolated issuer provenance", async (t) => {
+  const workflow = ".github/workflows/issue-runtime-qualification.yml"
+  let requests = 0
+  t.mock.method(globalThis, "fetch", async () => {
+    requests++
+    throw new Error("must not sign")
+  })
+  for (const kind of ["held-baseline", "promotion-action-lease"]) {
+    const qualified = {
+      ...claims,
+      aud: `urn:lyrashield:paired:v1:${kind}:${digest}`,
+      sub: `repo:${repo}:environment:release-qualification`,
+      environment: "release-qualification",
+      job_workflow_ref: `${repo}/${workflow}@refs/heads/main`,
+    }
+    verifyRecordWitness(jwt(qualified), keys, x, kind, digest, now, workflow)
+    assert.throws(() => verifyRecordWitness(jwt(qualified), keys, x, kind, digest, now))
+    for (const field of [
+      "environment",
+      "sub",
+      "job_workflow_ref",
+      "run_id",
+      "run_attempt",
+      "sha",
+      "aud",
+    ]) {
+      assert.throws(() =>
+        verifyRecordWitness(
+          jwt({ ...qualified, [field]: "foreign" }),
+          keys,
+          x,
+          kind,
+          digest,
+          now,
+          workflow
+        )
+      )
+    }
+    assert.throws(() =>
+      verifyRecordWitness(jwt(qualified), { keys: [] }, x, kind, digest, now, workflow)
+    )
+    await assert.rejects(issueRecordWitness(kind, JSON.stringify({ kind }), workflow))
+  }
+  assert.equal(requests, 0)
+})
+
 test("historical artifact uses real bounded ZIP plus signed witness, refuses substituted archive, locator, raw body and expired issuance", async (t) => {
   const root = mkdtempSync(join(tmpdir(), "paired-record-")),
     dir = join(root, "lyrashield-paired-records")
