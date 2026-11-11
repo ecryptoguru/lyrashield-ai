@@ -3,7 +3,14 @@ import test from "node:test"
 import assert from "node:assert/strict"
 import { randomBytes, randomUUID } from "node:crypto"
 import { spawnSync } from "node:child_process"
-import { mkdtempSync, readFileSync, readdirSync, writeFileSync, rmSync } from "node:fs"
+import {
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  writeFileSync,
+  rmSync,
+  realpathSync,
+} from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import {
@@ -14,6 +21,7 @@ import {
   RESTORE_AUTHORITY_POSTGRES_VERSION,
 } from "../restore-authority-contract.mjs"
 import { assertOwnedRestoreTarget, verifyRestoredAuthority } from "../verify-restored-authority.mjs"
+import { runIsolatedRestorePrerequisite } from "../isolated-restore-prerequisite.mjs"
 
 const repository = new URL("../../../", import.meta.url)
 const migrations = new URL("../../../packages/db/prisma/migrations/", import.meta.url)
@@ -185,6 +193,161 @@ test(
     docker(["exec", "-i", containerId, "sh", "-c", "cat > /tmp/public-app.dump"], dump)
     const archiveList = text(["exec", containerId, "pg_restore", "--list", "/tmp/public-app.dump"])
     assert.doesNotMatch(archiveList, /EXTENSION.*pgcrypto/)
+    await t.test(
+      "unwired prerequisite restores the complete archive using synthetic restricted ownership and grants",
+      async () => {
+        const archivePath = join(realpathSync(root), "prerequisite.dump")
+        writeFileSync(archivePath, dump, { mode: 0o600 })
+        let checkedWriter = false,
+          checkedProbe = false,
+          removedId
+        const execute = (command, args, options) => {
+          if (args.includes("pg_restore") && args.includes("--exit-on-error")) {
+            const target = args[args.indexOf("PGPASSWORD") + 1]
+            const result = spawnSync(
+              command,
+              [
+                "exec",
+                "-i",
+                "-e",
+                "PGPASSWORD",
+                target,
+                "psql",
+                "-X",
+                "-qAt",
+                "-v",
+                "ON_ERROR_STOP=1",
+                "-h",
+                "127.0.0.1",
+                "-U",
+                "isolated_restore_writer",
+                "-d",
+                "lyrashield_restore",
+              ],
+              {
+                ...options,
+                input: `BEGIN READ ONLY; SET LOCAL statement_timeout='10s';
+              SELECT session_user='isolated_restore_writer' AND current_user=session_user
+                AND NOT pg_catalog.pg_has_role(current_user,'restore','MEMBER')
+                AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname=current_user
+                  AND (rolsuper OR rolbypassrls OR rolcreatedb OR rolcreaterole))
+                AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_proc p WHERE p.prosecdef
+                  AND pg_catalog.has_function_privilege(current_user,p.oid,'EXECUTE'));
+              ROLLBACK;`,
+              }
+            )
+            assert.equal(result.status, 0, "synthetic writer privilege check failed")
+            assert.equal(result.stdout.toString("utf8").trim(), "t")
+            checkedWriter = true
+          }
+          if (
+            args.includes("psql") &&
+            options.input.includes("READ ONLY") &&
+            options.input.includes("SELECT NOT EXISTS (SELECT 1 FROM pg_catalog.pg_auth_members")
+          ) {
+            const result = spawnSync(command, args, {
+              ...options,
+              input: `BEGIN READ ONLY;
+            SET LOCAL statement_timeout='10s'; SET LOCAL ROLE isolated_restore_probe;
+            SELECT current_user='isolated_restore_probe'
+              AND NOT pg_catalog.pg_has_role(current_user,'restore','MEMBER')
+              AND NOT pg_catalog.pg_has_role(current_user,'isolated_restore_writer','MEMBER')
+              AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_proc p WHERE p.prosecdef
+                AND pg_catalog.has_function_privilege(current_user,p.oid,'EXECUTE'))
+              AND NOT pg_catalog.has_table_privilege(current_user,'public."ScanAuthorityEpoch"','SELECT')
+              AND pg_catalog.has_function_privilege(current_user,'public.digest(bytea,text)','EXECUTE');
+            ROLLBACK;`,
+            })
+            assert.equal(result.status, 0, "synthetic probe privilege check failed")
+            assert.equal(result.stdout.toString("utf8").trim(), "t")
+            checkedProbe = true
+          }
+          const result = spawnSync(command, args, options)
+          if (args.includes("pg_restore") && args.includes("--exit-on-error"))
+            assert.equal(result.status, 0, result.stderr.toString("utf8"))
+          if (args.includes("psql")) assert.equal(result.status, 0, result.stderr.toString("utf8"))
+          if (args[0] === "rm") removedId = args.at(-1)
+          return result
+        }
+        const result = await runIsolatedRestorePrerequisite(
+          {
+            schema: "lyrashield-isolated-restore-prerequisite/1",
+            archivePath,
+            expectedSha256: sha256(dump),
+            sourceRevision: "f94b82d63d8c14e36642d00ec5a9b19836b4c7c5",
+          },
+          { execute, env: { ...process.env, LYRASHIELD_RESTORE_PREREQUISITE_DISPOSABLE: "1" } }
+        )
+        assert.ok(checkedWriter && checkedProbe)
+        assert.equal(result.authorityDiagnostic.dispatch, "UNQUALIFIED")
+        assert.equal(result.sourceAclRestored, false)
+        assert.equal(result.productionApplicable, false)
+        assert.equal(result.admissionAllowed, false)
+        assert.match(removedId, /^[a-f0-9]{64}$/)
+        assert.equal(docker(["inspect", removedId], undefined, false).status, 1)
+      }
+    )
+    await t.test(
+      "restored CHECK cannot SET ROLE back to the bootstrap superuser session",
+      async () => {
+        sql("CREATE DATABASE prerequisite_attack;")
+        sql(
+          `CREATE SCHEMA app;
+        CREATE FUNCTION app.attempt_owner() RETURNS boolean LANGUAGE plpgsql AS $$
+        BEGIN EXECUTE 'SET ROLE restore'; RETURN true; END $$;
+        CREATE TABLE public.attack (id integer CHECK(app.attempt_owner()));
+        INSERT INTO public.attack VALUES(1);`,
+          "prerequisite_attack"
+        )
+        const attack = docker([
+          "exec",
+          containerId,
+          "pg_dump",
+          "-U",
+          "restore",
+          "-d",
+          "prerequisite_attack",
+          "--format=custom",
+          "--schema=public",
+          "--schema=app",
+          "--no-owner",
+          "--no-acl",
+        ]).stdout
+        const archivePath = join(realpathSync(root), "prerequisite-attack.dump")
+        writeFileSync(archivePath, attack, { mode: 0o600 })
+        let rejectedRole = false,
+          removedId
+        const execute = (command, args, options) => {
+          const result = spawnSync(command, args, options)
+          if (args.includes("pg_restore") && args.includes("--exit-on-error")) {
+            assert.notEqual(result.status, 0)
+            assert.match(result.stderr.toString("utf8"), /permission denied to set role "restore"/)
+            rejectedRole = true
+          }
+          if (args[0] === "rm") removedId = args.at(-1)
+          return result
+        }
+        await assert.rejects(
+          runIsolatedRestorePrerequisite(
+            {
+              schema: "lyrashield-isolated-restore-prerequisite/1",
+              archivePath,
+              expectedSha256: sha256(attack),
+              sourceRevision: "f94b82d63d8c14e36642d00ec5a9b19836b4c7c5",
+            },
+            { execute, env: { ...process.env, LYRASHIELD_RESTORE_PREREQUISITE_DISPOSABLE: "1" } }
+          ),
+          (error) => {
+            assert.equal(error.code, "RESTORE_COMMAND_FAILED")
+            return true
+          }
+        )
+        assert.ok(rejectedRole)
+        assert.match(removedId, /^[a-f0-9]{64}$/)
+        assert.equal(docker(["inspect", removedId], undefined, false).status, 1)
+      }
+    )
+    if (process.env.RESTORE_PREREQUISITE_RUNTIME_ONLY === "1") return
     const publicSchemaEntry = /^\d+; \d+ \d+ SCHEMA - public \S+$/
     assert.equal(archiveList.split("\n").filter((line) => publicSchemaEntry.test(line)).length, 1)
     // Preserve the fresh default public namespace that owns the prerequisite extension. Only
