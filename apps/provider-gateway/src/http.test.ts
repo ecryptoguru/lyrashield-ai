@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from "vitest"
 import { SignedJournal } from "@lyrashield/runtime-control"
 import { createProviderGatewayHandler } from "./http"
 import { ProviderGatewayService, providerJournalEventSchema } from "./service"
+import { fixturePolicy } from "./test-fixtures"
 
 const roots: string[] = []
 const secret = "g".repeat(48)
@@ -30,6 +31,8 @@ describe("provider gateway HTTP boundary", () => {
     const service = new ProviderGatewayService({
       journal,
       signingSecret: secret,
+      responseEncryptionSecret: "e".repeat(48),
+      authorizeGrant: async () => fixturePolicy,
       admission: "open",
       now: () => new Date("2026-11-05T10:00:00.000Z"),
       providers: new Map([
@@ -40,6 +43,7 @@ describe("provider gateway HTTP boundary", () => {
             baseUrl: "https://provider.example.test/openai",
             auth: { kind: "api-key", credential: "fixture-secret", headerName: "api-key" },
             allowedPathPrefixes: ["/openai/"],
+            requestPolicy: fixturePolicy,
           },
         ],
       ]),
@@ -69,14 +73,15 @@ describe("provider gateway HTTP boundary", () => {
     const address = server.address()
     if (!address || typeof address === "string") throw new Error("test server has no port")
     const request = fetch(
-      `http://127.0.0.1:${address.port}/v1/provider/azure-ai/openai/responses`,
+      `http://127.0.0.1:${address.port}/v1/provider/azure-ai${fixturePolicy.endpoint}`,
       {
         method: "POST",
         headers: {
+          "content-type": "application/json",
           authorization: `Bearer ${grant.token}`,
           "x-lyra-request-id": "provider-http-active",
         },
-        body: "{}",
+        body: JSON.stringify({ model: "gpt-6-luna", input: "hello", max_output_tokens: 64 }),
       }
     )
     await started
@@ -97,6 +102,42 @@ describe("provider gateway HTTP boundary", () => {
     await replacement.close()
   })
 
+  it("keeps request status receipts behind control authentication and excludes provider content", async () => {
+    const root = await mkdtemp(join(tmpdir(), "provider-http-status-"))
+    roots.push(root)
+    const journal = new SignedJournal(join(root, "journal.jsonl"), secret, (value) =>
+      providerJournalEventSchema.parse(value)
+    )
+    const service = new ProviderGatewayService({
+      journal,
+      signingSecret: secret,
+      admission: "closed",
+      providers: new Map(),
+    })
+    const server = createServer(
+      createProviderGatewayHandler(service, { controlToken: control, admission: "closed" })
+    )
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve))
+    const address = server.address()
+    if (!address || typeof address === "string") throw new Error("test server has no port")
+    try {
+      const base = `http://127.0.0.1:${address.port}`
+      const unauthorized = await fetch(`${base}/v1/requests/provider-private-status`)
+      expect(unauthorized.status).toBe(401)
+      const absent = await fetch(`${base}/v1/requests/provider-private-status`, {
+        headers: { authorization: `Bearer ${control}` },
+      })
+      expect(absent.status).toBe(404)
+      expect(await absent.json()).toEqual({ code: "REQUEST_NOT_FOUND" })
+      expect(absent.headers.get("cache-control")).toBe("no-store")
+    } finally {
+      await new Promise<void>((resolve, reject) =>
+        server.close((error) => (error ? reject(error) : resolve()))
+      )
+      await journal.close()
+    }
+  })
+
   it("requires control authentication and rejects grant issuance while admission is closed", async () => {
     const root = await mkdtemp(join(tmpdir(), "provider-http-test-"))
     roots.push(root)
@@ -106,6 +147,8 @@ describe("provider gateway HTTP boundary", () => {
     const service = new ProviderGatewayService({
       journal,
       signingSecret: secret,
+      responseEncryptionSecret: "e".repeat(48),
+      authorizeGrant: async () => fixturePolicy,
       admission: "closed",
       providers: new Map(),
     })

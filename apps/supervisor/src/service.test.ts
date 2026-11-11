@@ -658,6 +658,8 @@ describe("SupervisorService", () => {
 
   it("keeps the attempt unsettled with a real gateway and an upstream that ignores abort", async () => {
     const gatewayModule = "../../provider-gateway/src/service.ts"
+    const fixtureModule = "../../provider-gateway/src/test-fixtures.ts"
+    const { fixturePolicy } = await import(fixtureModule)
     const { ProviderGatewayService, providerJournalEventSchema } = await import(gatewayModule)
     const root = await mkdtemp(join(tmpdir(), "supervisor-gateway-test-"))
     roots.push(root)
@@ -670,6 +672,20 @@ describe("SupervisorService", () => {
         providerJournalEventSchema.parse(value)
       ),
       signingSecret: secret,
+      responseEncryptionSecret: "e".repeat(48),
+      authorizeGrant: async (request: ProviderGrantRequest) => {
+        expect(request).toMatchObject({
+          attemptId: "attempt-1",
+          scanId: "scan-1",
+          workspaceId: "workspace-1",
+          operationId: "operation-1",
+          authorityEpochId: "epoch-1",
+          authorityRevision: 3,
+          providerId: "azure-ai",
+          expiresAt,
+        })
+        return fixturePolicy
+      },
       admission: "open",
       providers: new Map([
         [
@@ -679,6 +695,7 @@ describe("SupervisorService", () => {
             baseUrl: "https://provider.example.test/openai",
             auth: { kind: "api-key", credential: "fixture-secret", headerName: "api-key" },
             allowedPathPrefixes: ["/openai/"],
+            requestPolicy: fixturePolicy,
           },
         ],
       ]),
@@ -702,11 +719,14 @@ describe("SupervisorService", () => {
     const pending = gateway
       .proxy({
         providerId: "azure-ai",
-        path: "/openai/responses",
+        path: fixturePolicy.endpoint,
         method: "POST",
         authorization: `Bearer ${grant!.token}`,
         requestId: "unsettled-provider-call",
-        body: Buffer.from("{}"),
+        contentType: "application/json",
+        body: Buffer.from(
+          JSON.stringify({ model: "gpt-6-luna", input: "hello", max_output_tokens: 64 })
+        ),
       })
       .catch((error: unknown) => error)
     await requestStarted
