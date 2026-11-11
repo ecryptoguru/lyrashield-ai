@@ -6,7 +6,7 @@ import { ReportCard } from "./reports-views"
 
 // The screen spans its keyed route boundary, coordinator, and presentational views.
 function screenSource(): string {
-  return ["page.tsx", "reports-client.tsx", "reports-views.tsx"]
+  return ["page.tsx", "reports-client.tsx", "reports-views.tsx", "use-report-share-actions.ts"]
     .map((file) => readFileSync(new URL(`./${file}`, import.meta.url), "utf8"))
     .join("\n")
 }
