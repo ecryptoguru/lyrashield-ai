@@ -183,6 +183,7 @@ function setupIssuance(tx: ReturnType<typeof makeTx>) {
   const manifest = {
     target: { id: "target-1", type: "REPO" },
     terminalOutcome: { status: "COMPLETED" },
+    coverage: [],
   }
   const checksumInput = JSON.stringify(manifest)
   const manifestChecksum = createHash("sha256").update(checksumInput).digest("hex")
@@ -226,6 +227,7 @@ function setupIssuance(tx: ReturnType<typeof makeTx>) {
           createdAt: new Date("2026-11-05T00:00:00.000Z"),
           startedAt: new Date("2026-11-05T00:00:00.000Z"),
           resultManifest: { checksum: manifestChecksum, checksumInput, manifest },
+          coverageReceipts: [],
         }
       : null
   )

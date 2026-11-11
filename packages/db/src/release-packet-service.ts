@@ -15,7 +15,7 @@ import { signedAssessmentFor } from "./release-packet-assessment"
 import { resolveReportDelegationTarget } from "./report-service"
 import { classifyReleaseFindings } from "./release-packet-classification"
 import { loadReceiptBackedRetestFindingIds } from "./retest-evidence-trust"
-import { verifyStoredManifestChecksum } from "./manifest-checksum"
+import { isVerifiedPacketScan } from "./release-packet-evidence"
 import {
   evaluateAssessmentValidity,
   evaluatePacketAuthenticity,
@@ -125,20 +125,12 @@ async function loadAssessedPacketContext(
       status: "COMPLETED",
       deletedAt: null,
     },
-    include: { resultManifest: true },
+    include: { resultManifest: true, coverageReceipts: true },
   })
-  const manifestTarget = currentScan?.resultManifest?.manifest as {
-    target?: { id?: unknown; type?: unknown }
-    terminalOutcome?: { status?: unknown }
-  } | null
   if (
     !currentScan ||
     verdict.scanId !== snapshot.scanId ||
-    verifyStoredManifestChecksum(currentScan.resultManifest) !== "MATCH" ||
-    currentScan.resultManifest?.checksum !== snapshot.manifestChecksum ||
-    manifestTarget?.target?.id !== input.targetId ||
-    manifestTarget.target.type !== target.type ||
-    manifestTarget.terminalOutcome?.status !== "COMPLETED"
+    !isVerifiedPacketScan(currentScan, snapshot, target)
   ) {
     throw new ReleasePacketError(
       "ASSESSMENT_INCOMPLETE",
