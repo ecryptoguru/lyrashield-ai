@@ -16,6 +16,8 @@ import { createRequire } from "node:module"
 import { createFontArchive } from "../ci-browser-fonts.mjs"
 import {
   BROWSER_IMAGE,
+  hostFailureDiagnostic,
+  runCommand,
   startBrowser,
   stopBrowser,
   prepareFfmpeg,
@@ -33,6 +35,37 @@ const { parse } = createRequire(
 )("yaml")
 
 const id = "a".repeat(64)
+test("host failure diagnostics propagate only bounded fixed fields, never child secrets", () => {
+  const diagnostic = "CI_BROWSER_CHECK_FAILED phase=native-libraries item=0 reason=assertion"
+  assert.equal(
+    hostFailureDiagnostic(`secret=do-not-print\n${diagnostic}\nraw private stderr`),
+    diagnostic
+  )
+  for (const unsafe of [
+    "CI_BROWSER_CHECK_FAILED phase=secret-value item=0 reason=assertion",
+    "CI_BROWSER_CHECK_FAILED phase=font-scan item=1000 reason=assertion",
+    `${diagnostic} secret=do-not-print`,
+    "CI_BROWSER_CHECK_FAILED phase=font-scan item=0 reason=private-error",
+    "private child stderr only",
+  ])
+    assert.equal(hostFailureDiagnostic(unsafe), undefined)
+})
+test("real failed child propagates only the opted-in host diagnostic", () => {
+  const diagnostic = "CI_BROWSER_CHECK_FAILED phase=font-scan item=12 reason=assertion"
+  const args = [
+    "-e",
+    `process.stderr.write("private-child-secret\\n${diagnostic}\\n");process.exit(1)`,
+  ]
+  assert.throws(
+    () => runCommand(process.execPath, args, { hostDiagnostic: true }),
+    (error) => error.message.endsWith(diagnostic) && !error.message.includes("private-child-secret")
+  )
+  assert.throws(
+    () => runCommand(process.execPath, args),
+    (error) =>
+      !error.message.includes(diagnostic) && !error.message.includes("private-child-secret")
+  )
+})
 function fixture(options = {}) {
   // eslint-disable-next-line security/detect-non-literal-fs-filename -- The test owns the temporary directory and all fixture paths.
   const dir = realpathSync(mkdtempSync(join(tmpdir(), "ci-browser-test-")))
@@ -159,6 +192,8 @@ test("extracts pinned fonts without a remote browser and validates the local hos
       (call) => call.command === "node" && call.args[0].endsWith("ci-browser-host.mjs")
     )
     assert.ok(host)
+    assert.equal(host.config.hostDiagnostic, true)
+    assert.ok(f.calls.filter((call) => call !== host).every((call) => !call.config.hostDiagnostic))
     const config = host.config.env.FONTCONFIG_FILE
     // eslint-disable-next-line security/detect-non-literal-fs-filename -- The test owns all fixture paths.
     assert.equal(readFileSync(f.env.GITHUB_ENV, "utf8"), `FONTCONFIG_FILE=${config}\n`)

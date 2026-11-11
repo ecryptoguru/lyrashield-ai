@@ -28,10 +28,27 @@ const require = createRequire(import.meta.url)
 const label = "lyrashield.ci-browser"
 const maxBuffer = 32 * 1024 * 1024
 
-function runCommand(
+export function hostFailureDiagnostic(stderr) {
+  return String(stderr ?? "")
+    .split("\n")
+    .find((line) =>
+      /^CI_BROWSER_CHECK_FAILED phase=(runtime|manifest|font-hash|font-scan|font-family|browser-identity|native-libraries|browser-temp|loopback-server|browser-launch|webmcp|trace-lifecycle|artifact-cleanup|resource-telemetry) item=(none|\d{1,3}) reason=(assertion|ENOENT|EACCES|ENOSPC|EIO|ETIMEDOUT|unavailable)$/.test(
+        line
+      )
+    )
+}
+
+export function runCommand(
   command,
   args,
-  { timeout = 30_000, binary = false, input, env, outputLimit = maxBuffer } = {}
+  {
+    timeout = 30_000,
+    binary = false,
+    input,
+    env,
+    outputLimit = maxBuffer,
+    hostDiagnostic = false,
+  } = {}
 ) {
   const result = spawnSync(command, args, {
     encoding: binary ? null : "utf8",
@@ -40,8 +57,12 @@ function runCommand(
     input,
     env,
   })
-  if (result.error || result.status !== 0)
-    throw new Error(`${command} ${args[0]} failed; exit ${result.status ?? "unavailable"}`)
+  if (result.error || result.status !== 0) {
+    const diagnostic = hostDiagnostic ? hostFailureDiagnostic(result.stderr) : undefined
+    throw new Error(
+      `${command} ${args[0]} failed; exit ${result.status ?? "unavailable"}${diagnostic ? `; ${diagnostic}` : ""}`
+    )
+  }
   return result.stdout
 }
 
@@ -251,7 +272,7 @@ export async function startBrowser({
     const hostProof = run(
       "node",
       [fileURLToPath(new URL("ci-browser-host.mjs", import.meta.url)), fontDir],
-      { timeout: 180_000, env: { ...env, FONTCONFIG_FILE: config } }
+      { timeout: 180_000, env: { ...env, FONTCONFIG_FILE: config }, hostDiagnostic: true }
     ).trim()
     if (hostProof) console.log(hostProof)
     // eslint-disable-next-line security/detect-non-literal-fs-filename -- Paths come from locked packages or the validated private CI font and trace directories.

@@ -15,6 +15,8 @@ const playwright = createRequire(require.resolve("@playwright/test/package.json"
 const core = createRequire(playwright).resolve("playwright-core/package.json")
 const { chromium } = createRequire(core)("playwright-core")
 const flags = ["--enable-experimental-web-platform-features", "--enable-blink-features=WebMCP"]
+let phase = "runtime"
+let item = "none"
 
 function run(command, args) {
   const result = spawnSync(command, args, {
@@ -27,38 +29,56 @@ function run(command, args) {
 }
 
 async function verify() {
+  item = "0"
   assert.equal(process.platform, "linux")
+  item = "1"
   assert.equal(process.arch, "x64")
+  item = "2"
   assert.notEqual(process.getuid(), 0)
+  item = "3"
   assert.equal(require("@playwright/test/package.json").version, "1.62.1")
+  item = "4"
   // eslint-disable-next-line security/detect-non-literal-fs-filename -- Paths come from locked packages or the validated private CI font and trace directories.
   assert.equal(JSON.parse(readFileSync(core, "utf8")).version, "1.62.1")
+  phase = "manifest"
+  item = "0"
   // eslint-disable-next-line security/detect-non-literal-fs-filename -- Paths come from locked packages or the validated private CI font and trace directories.
   const directory = realpathSync(process.argv[2])
+  item = "1"
   // eslint-disable-next-line security/detect-non-literal-fs-filename -- Paths come from locked packages or the validated private CI font and trace directories.
   const manifest = JSON.parse(readFileSync(join(directory, "manifest.json"), "utf8"))
-  for (const file of manifest.files) {
+  for (const [index, file] of manifest.files.entries()) {
+    item = String(index)
+    phase = "font-hash"
     const path = join(directory, "fonts", file.path)
     // eslint-disable-next-line security/detect-non-literal-fs-filename -- Paths come from locked packages or the validated private CI font and trace directories.
     assert.equal(createHash("sha256").update(readFileSync(path)).digest("hex"), file.sha256)
     // Fontconfig does not decode these legacy X11 PCF encodings, including in
     // the pinned source image. Their exact bytes are hash-bound above; every
     // scalable Chromium font still must pass fc-scan.
-    if (/\.(?:ttf|ttc|otf|pfb|t1)$/.test(file.path))
+    if (/\.(?:ttf|ttc|otf|pfb|t1)$/.test(file.path)) {
+      phase = "font-scan"
       assert.ok(run("fc-scan", ["--format", "%{family}", path]).trim(), "Font asset is unreadable")
+    }
   }
-  for (const family of FONT_FAMILIES) {
+  phase = "font-family"
+  for (const [index, family] of FONT_FAMILIES.entries()) {
+    item = String(index * 2)
     const [actual, path] = run("fc-match", ["--format", "%{family}\t%{file}", family]).split("\t")
     assert.ok(actual.includes(family), `${family} is unavailable`)
+    item = String(index * 2 + 1)
     assert.ok(
       // eslint-disable-next-line security/detect-non-literal-fs-filename -- Paths come from locked packages or the validated private CI font and trace directories.
       manifest.files.some((file) => join(directory, "fonts", file.path) === realpathSync(path)),
       `${family} did not resolve to a verified overlay font`
     )
   }
+  phase = "browser-identity"
+  item = "0"
   // eslint-disable-next-line security/detect-non-literal-fs-filename -- Paths come from locked packages or the validated private CI font and trace directories.
   const browsers = JSON.parse(readFileSync(join(dirname(core), "browsers.json"), "utf8")).browsers
   const full = chromium.executablePath()
+  item = "1"
   assert.ok(
     full.endsWith("/chromium-1234/chrome-linux64/chrome"),
     "Unexpected locked Chromium cache path"
@@ -70,16 +90,23 @@ async function verify() {
       "chromium_headless_shell-1234/chrome-headless-shell-linux64/chrome-headless-shell"
     ),
   ]
-  for (const name of ["chromium", "chromium-headless-shell"]) {
+  for (const [index, name] of ["chromium", "chromium-headless-shell"].entries()) {
     const browser = browsers.find((entry) => entry.name === name)
+    item = String(index * 2 + 2)
     assert.equal(browser.revision, "1234")
+    item = String(index * 2 + 3)
     assert.equal(browser.browserVersion, "151.0.7922.34")
   }
-  for (const binary of binaries)
+  phase = "native-libraries"
+  for (const [index, binary] of binaries.entries()) {
+    item = String(index)
     assert.ok(
       !run("ldd", [binary]).includes("not found"),
       "Host Chromium native library is unavailable"
     )
+  }
+  phase = "browser-temp"
+  item = "none"
   const browserTemp = join(directory, "browser-tmp")
   // eslint-disable-next-line security/detect-non-literal-fs-filename -- Paths come from locked packages or the validated private CI font and trace directories.
   mkdirSync(browserTemp, { mode: 0o700 })
@@ -93,17 +120,25 @@ async function verify() {
       const stat = lstatSync(file)
       return total + (stat.isSymbolicLink() ? 0 : stat.isDirectory() ? bytesIn(file) : stat.size)
     }, 0)
+  phase = "loopback-server"
   const server = createServer((_request, response) =>
     response.end("<!doctype html><p>English ไทย 日本語 中文 😀</p>")
   ).listen(0, "127.0.0.1")
   await once(server, "listening")
   try {
-    for (const binary of binaries) {
+    for (const [index, binary] of binaries.entries()) {
+      phase = "browser-launch"
+      item = String(index)
       const browser = await chromium.launch({ executablePath: binary, args: flags })
       try {
+        phase = "browser-identity"
+        item = String(index + 6)
         assert.equal(browser.version(), "151.0.7922.34")
+        phase = "webmcp"
+        item = String(index * 2)
         const page = await browser.newPage()
         await page.goto(`http://127.0.0.1:${server.address().port}`)
+        item = String(index * 2 + 1)
         assert.deepEqual(
           await page.evaluate(() => ({
             context: !!document.modelContext,
@@ -115,6 +150,8 @@ async function verify() {
         await page.close()
         // Exercise the original local artifact lifecycle. Successful traces
         // may grow during a browser lifetime, then must disappear on close.
+        phase = "trace-lifecycle"
+        item = String(index)
         for (let iteration = 0; iteration < 3; iteration++) {
           const context = await browser.newContext()
           try {
@@ -131,6 +168,8 @@ async function verify() {
       } finally {
         await browser.close()
       }
+      phase = "artifact-cleanup"
+      item = String(index)
       assert.deepEqual(
         // eslint-disable-next-line security/detect-non-literal-fs-filename -- Paths come from locked packages or the validated private CI font and trace directories.
         readdirSync(browserTemp),
@@ -142,6 +181,8 @@ async function verify() {
     server.close()
     await once(server, "close")
   }
+  phase = "resource-telemetry"
+  item = "none"
   const available = statfsSync(browserTemp)
   console.log(
     `Verified ${manifest.files.length} pinned font assets, overlay families, host libraries and both native WebMCP browsers; bounded lifecycle probe peak=${peakTemporaryBytes} bytes, available=${available.bavail * available.bsize} bytes`
@@ -149,6 +190,11 @@ async function verify() {
 }
 
 verify().catch((error) => {
-  console.error(error.message)
+  const reason = ["ENOENT", "EACCES", "ENOSPC", "EIO", "ETIMEDOUT"].includes(error.code)
+    ? error.code
+    : error.name === "AssertionError"
+      ? "assertion"
+      : "unavailable"
+  console.error(`CI_BROWSER_CHECK_FAILED phase=${phase} item=${item} reason=${reason}`)
   process.exitCode = 1
 })
