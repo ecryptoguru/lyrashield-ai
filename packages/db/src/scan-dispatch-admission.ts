@@ -1,8 +1,8 @@
-import { createHash } from "node:crypto"
-import { ScanJobDataSchema } from "@lyrashield/types"
+import { type ScanFocus } from "@lyrashield/types"
 import { z } from "zod"
 import type { Scan } from "./generated/prisma"
 import type { ScanAdmissionOptions, ScanTransaction } from "./scan-service-types"
+import { buildScanQueuePayload, scanQueueDigest } from "./scan-queue-payload"
 
 const admissionOptionsSchema = z
   .object({ dispatchAuthority: z.literal("shadow").optional() })
@@ -24,7 +24,11 @@ export function parseScanAdmissionOptions(options?: ScanAdmissionOptions): ScanA
  * prove queue publication or authorize execution. Current callers retain the
  * legacy queue path.
  */
-export async function persistShadowScanDispatchAdmission(tx: ScanTransaction, scan: Scan) {
+export async function persistShadowScanDispatchAdmission(
+  tx: ScanTransaction,
+  scan: Scan,
+  focus?: ScanFocus
+) {
   const scope = scopeDigestSchema.parse(
     await tx.$queryRaw`
       SELECT app.scan_dispatch_scope_digest(${scan.id}) AS "requestDigest"
@@ -32,17 +36,7 @@ export async function persistShadowScanDispatchAdmission(tx: ScanTransaction, sc
         AND "deletedAt" IS NULL
     `
   )[0]!
-  // Reconstruct baseline transport fields from the persisted scan, never from
-  // delegated operation IDs or a caller-provided queue payload. Optional legacy
-  // focus is not dispatch authority; this shadow outbox is never published.
-  const payload = ScanJobDataSchema.parse({
-    scanId: scan.id,
-    workspaceId: scan.workspaceId,
-    targetId: scan.targetId,
-    goal: scan.goal,
-    mode: scan.mode,
-    ...(scan.policyId ? { policyId: scan.policyId } : {}),
-  })
+  const payloadInputJson = buildScanQueuePayload(scan, focus)
   const operation = await tx.scanDispatchOperation.create({
     data: {
       scanId: scan.id,
@@ -63,7 +57,8 @@ export async function persistShadowScanDispatchAdmission(tx: ScanTransaction, sc
       scanId: scan.id,
       operationId: operation.operationId,
       jobId: scan.id,
-      payloadDigest: createHash("sha256").update(JSON.stringify(payload)).digest("hex"),
+      payloadDigest: scanQueueDigest(payloadInputJson),
+      payloadInputJson,
       state: "UNKNOWN",
       lastErrorCode: "SHADOW_ADMISSION_CLOSED",
     },
