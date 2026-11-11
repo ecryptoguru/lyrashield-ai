@@ -105,7 +105,7 @@ function renderApiKeys(): Element[] {
     (element) => typeof element.type === "function" && "startCreate" in element.props
   )
   if (!workspace || typeof workspace.type !== "function") throw new Error("Missing key section")
-  return elements((workspace.type as (props: typeof workspace.props) => ReactNode)(workspace.props))
+  return elements((workspace.type as (props: Element["props"]) => ReactNode)(workspace.props))
 }
 
 describe("security settings request bodies", () => {
