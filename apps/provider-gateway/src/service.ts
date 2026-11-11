@@ -1,3 +1,4 @@
+import { createHmac, createHash } from "node:crypto"
 import {
   canonicalJson,
   providerGrantRequestSchema,
@@ -7,10 +8,19 @@ import {
   type JournalPort,
   type JournalRecord,
   type ProviderGrant,
+  type ProviderGrantRequest,
   type ProviderGrantRevocation,
   type ProviderGrantStatus,
 } from "@lyrashield/runtime-control"
 import type { ProviderRoute } from "./config"
+import {
+  authorizeRequest,
+  policyDigest,
+  requestPolicySchema,
+  type RequestPolicy,
+} from "./request-policy"
+import { ResponsesUsageParser, type TerminalUsage } from "./provider-usage"
+import { retainResponse, replayResponse, type RetainedResponse } from "./retained-response"
 import { ProviderGatewayError } from "./errors"
 import { grantIdFor, signToken, verifyToken } from "./grant-tokens"
 import { type ProviderJournalEvent, type GrantState, type RequestState } from "./journal-events"
@@ -30,6 +40,10 @@ const MAX_UPSTREAM_BODY_BYTES = 4 * 1024 * 1024
 export interface ProviderGatewayServiceOptions {
   journal: JournalPort<ProviderJournalEvent>
   signingSecret: string
+  responseEncryptionSecret?: string
+  // Trusted broker adapter must revalidate the persisted attempt/authority
+  // binding and return its approved policy; no request body supplies policy.
+  authorizeGrant?: (request: ProviderGrantRequest) => Promise<RequestPolicy>
   admission: "closed" | "open"
   providers: ReadonlyMap<string, ProviderRoute>
   fetchImpl?: typeof fetch
@@ -82,11 +96,17 @@ export class ProviderGatewayService {
     }
   >()
   private draining = false
+  private failed = false
 
   constructor(private readonly options: ProviderGatewayServiceOptions) {
     if (Buffer.byteLength(options.signingSecret, "utf8") < 32) {
       throw new Error("provider gateway signing secret must be at least 32 bytes")
     }
+    if (
+      options.responseEncryptionSecret !== undefined &&
+      Buffer.byteLength(options.responseEncryptionSecret) < 32
+    )
+      throw new Error("response encryption key must be at least 32 bytes")
   }
 
   async initialize(): Promise<void> {
@@ -122,7 +142,7 @@ export class ProviderGatewayService {
         )
       }
       const request = parsed.data
-      if (this.draining || this.options.admission !== "open")
+      if (this.failed || this.draining || this.options.admission !== "open")
         throw new ProviderGatewayError("ADMISSION_CLOSED", "runtime admission is closed")
       const route = this.options.providers.get(request.providerId)
       if (!route)
@@ -133,6 +153,12 @@ export class ProviderGatewayService {
           "provider grant expiry is not in the future"
         )
       }
+      if (Date.parse(request.expiresAt) - this.now().getTime() > 86_400_000)
+        throw new ProviderGatewayError(
+          "INVALID_GRANT_EXPIRY",
+          "provider grant lifetime exceeds one day",
+          400
+        )
       const existingId = this.grantsByRequest.get(request.grantRequestId)
       if (existingId) {
         const existing = this.grants.get(existingId)
@@ -144,12 +170,19 @@ export class ProviderGatewayService {
             "grant request id was reused with different input"
           )
         }
+        const policy = await this.authorizedPolicy(existing.request, route)
+        if (!existing.policy || policyDigest(policy) !== policyDigest(existing.policy))
+          throw new ProviderGatewayError(
+            "POLICY_CHANGED",
+            "provider grant requires renewed broker authorization"
+          )
         return this.grantResponse(existing)
       }
+      const policy = await this.authorizedPolicy(request, route)
       const grantId = grantIdFor(request)
       const record = await this.options.journal.append({
         type: "grant_issued",
-        grant: { grantRequestId: request.grantRequestId, grantId, request },
+        grant: { grantRequestId: request.grantRequestId, grantId, request, policy },
       })
       this.apply(record)
       const grant = this.grants.get(grantId)
@@ -224,9 +257,37 @@ export class ProviderGatewayService {
     return grant ? grantStatus(grant) : null
   }
 
+  // Private control-plane status only. This is a local journal receipt,
+  // not independent settlement or authorization to release a billing hold.
+  async inspectRequest(requestId: string) {
+    await this.initialize()
+    const request = this.requests.get(requestId)
+    if (!request) return null
+    const grant = this.grants.get(request.grantId)
+    if (!grant) throw new ProviderGatewayError("JOURNAL_INTEGRITY", "request grant is missing", 500)
+    return {
+      version: 1 as const,
+      requestId,
+      grantId: request.grantId,
+      attemptId: request.attemptId,
+      scanId: grant.request.scanId,
+      workspaceId: grant.request.workspaceId,
+      operationId: grant.request.operationId,
+      authorityEpochId: grant.request.authorityEpochId,
+      authorityRevision: grant.request.authorityRevision,
+      providerId: request.providerId,
+      outcome: request.outcome,
+      policyDigest: request.policyDigest ?? null,
+      usage: request.usage ?? null,
+      usageId: request.usageId ?? null,
+      reservationMicros: request.reservationMicros,
+      receipt: request.receipt ?? null,
+    }
+  }
+
   private async prepareProxy(input: ProxyInput) {
     await this.initialize()
-    if (this.draining || this.options.admission !== "open")
+    if (this.failed || this.draining || this.options.admission !== "open")
       throw new ProviderGatewayError("ADMISSION_CLOSED", "runtime admission is closed")
     if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{2,191}$/.test(input.requestId)) {
       throw new ProviderGatewayError("INVALID_REQUEST_ID", "request identity is invalid", 400)
@@ -241,7 +302,15 @@ export class ProviderGatewayService {
     if (!grant) throw new ProviderGatewayError("GRANT_NOT_FOUND", "provider grant not found")
     if (
       grant.request.providerId !== input.providerId ||
-      grant.request.attemptId !== verified.attemptId
+      grant.request.attemptId !== verified.attemptId ||
+      grant.request.providerId !== verified.providerId ||
+      grant.request.scanId !== verified.scanId ||
+      grant.request.workspaceId !== verified.workspaceId ||
+      grant.request.operationId !== verified.operationId ||
+      grant.request.authorityEpochId !== verified.authorityEpochId ||
+      grant.request.authorityRevision !== verified.authorityRevision ||
+      grant.request.expiresAt !== verified.expiresAt ||
+      (grant.policy ? policyDigest(grant.policy) : null) !== verified.policyDigest
     ) {
       throw new ProviderGatewayError(
         "GRANT_BINDING_MISMATCH",
@@ -287,16 +356,28 @@ export class ProviderGatewayService {
           "request id was reused with different input"
         )
       }
-      if (existing.outcome === "SUCCEEDED") {
+      const policy = await this.authorizedPolicy(grant.request, route)
+      if (!grant.policy || policyDigest(policy) !== policyDigest(grant.policy))
+        throw new ProviderGatewayError(
+          "POLICY_CHANGED",
+          "provider grant requires renewed broker authorization"
+        )
+      if (
+        (existing.outcome === "SUCCEEDED" || existing.outcome === "FAILED") &&
+        existing.retainedResponse &&
+        this.options.responseEncryptionSecret
+      ) {
+        const response = replayResponse(
+          this.options.responseEncryptionSecret,
+          this.responseBinding(existing),
+          existing.retainedResponse,
+          existing
+        )
         return {
           kind: "replay" as const,
           response: {
-            statusCode: existing.statusCode ?? 200,
-            headers: { "x-lyra-request-id": input.requestId, "x-lyra-replayed": "true" },
-            body: Buffer.from(
-              JSON.stringify({ requestId: input.requestId, usageId: existing.usageId }),
-              "utf8"
-            ),
+            ...response,
+            headers: { ...response.headers, "x-lyra-replayed": "true" },
             replayed: true,
           },
         }
@@ -307,15 +388,37 @@ export class ProviderGatewayService {
         409
       )
     }
-    if (grant.requestCount >= grant.request.maxRequests) {
+    const policy = await this.authorizedPolicy(grant.request, route)
+    if (!grant.policy || policyDigest(policy) !== policyDigest(grant.policy))
+      throw new ProviderGatewayError(
+        "POLICY_CHANGED",
+        "provider grant requires renewed broker authorization"
+      )
+    const approved = authorizeRequest(policy, {
+      path: `${target.pathname}${target.search}`,
+      method,
+      contentType,
+      body: input.body,
+    })
+    if (
+      this.inFlight.size >= 8 ||
+      [...this.inFlight.values()].filter((active) => active.grantId === grant.grantId).length >=
+        policy.maxConcurrentRequests
+    )
+      throw new ProviderGatewayError(
+        "PROVIDER_CONCURRENCY_EXHAUSTED",
+        "provider concurrency is exhausted",
+        429
+      )
+    if (grant.requestCount >= Math.min(grant.request.maxRequests, policy.maxRequests)) {
       throw new ProviderGatewayError(
         "GRANT_REQUEST_BUDGET_EXHAUSTED",
         "provider grant request budget is exhausted"
       )
     }
     if (
-      grant.reservedCostMicros + grant.request.costReservationMicros >
-      grant.request.maxReservedCostMicros
+      grant.reservedCostMicros + approved.reservationMicros >
+      Math.min(grant.request.maxReservedCostMicros, policy.maxGrantReservedCostMicros)
     ) {
       throw new ProviderGatewayError(
         "GRANT_COST_BUDGET_EXHAUSTED",
@@ -335,15 +438,19 @@ export class ProviderGatewayService {
         contentType,
         accept,
         bodyHash,
-        reservationMicros: grant.request.costReservationMicros,
+        reservationMicros: approved.reservationMicros,
+        policyDigest: policyDigest(policy),
+        model: approved.model,
+        maxOutputTokens: approved.maxOutputTokens,
+        stream: approved.stream,
       },
     })
     this.apply(startRecord)
     const headers: Record<string, string> = {
-      accept: input.accept ?? "application/json",
+      accept,
       "x-lyra-request-id": input.requestId,
     }
-    if (input.contentType) headers["content-type"] = input.contentType
+    headers["content-type"] = contentType
     if (route.auth.kind === "authorization") {
       headers.authorization = route.auth.credential.startsWith("Bearer ")
         ? route.auth.credential
@@ -357,14 +464,25 @@ export class ProviderGatewayService {
       finish = resolve
     })
     this.inFlight.set(input.requestId, { grantId: grant.grantId, controller, done, finish })
-    return { kind: "ready" as const, target, headers, controller }
+    return { kind: "ready" as const, target, headers, controller, policy, approved }
   }
 
   async proxy(input: ProxyInput): Promise<ProxyResponse> {
     const prepared = await this.serialized(() => this.prepareProxy(input))
     if (prepared.kind === "replay") return prepared.response
-    const { target, headers, controller } = prepared
-    const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(120_000)])
+    const { target, headers, controller, policy, approved } = prepared
+    const deadline = setTimeout(() => controller.abort(), policy.deadlineMs)
+    const expiry = setTimeout(
+      () => controller.abort(),
+      Math.max(
+        1,
+        Date.parse(
+          this.grants.get(this.requests.get(input.requestId)?.grantId ?? "")?.request.expiresAt ??
+            ""
+        ) - this.now().getTime()
+      )
+    )
+    const signal = controller.signal
     try {
       let upstream: Response
       try {
@@ -392,12 +510,35 @@ export class ProviderGatewayService {
         )
         throw new ProviderGatewayError("PROVIDER_UNAVAILABLE", "provider outcome is unknown", 502)
       }
+      const parser = new ResponsesUsageParser(policy, {
+        ...approved,
+        policyDigest: policyDigest(policy),
+      })
+      const responseHasher = createHash("sha256")
       let responseBody: Buffer
+      let usage: TerminalUsage | undefined
       try {
         responseBody = await abortable(
-          readBoundedResponse(upstream, MAX_UPSTREAM_BODY_BYTES),
+          readBoundedResponse(upstream, policy.maxResponseBytes, {
+            signal,
+            idleTimeoutMs: policy.idleTimeoutMs,
+            onChunk: (chunk) => {
+              responseHasher.update(chunk)
+              if (upstream.ok) parser.push(chunk)
+            },
+          }),
           signal
         )
+        if (upstream.ok) {
+          const contentType = upstream.headers
+            .get("content-type")
+            ?.split(";")[0]
+            ?.trim()
+            .toLowerCase()
+          if (contentType !== (approved.stream ? "text/event-stream" : "application/json"))
+            throw new Error("provider response encoding mismatch")
+          usage = parser.finish()
+        } else throw new Error("provider returned no affirmative terminal usage")
       } catch {
         await this.serialized(() =>
           this.recordResult(
@@ -406,17 +547,21 @@ export class ProviderGatewayService {
             upstream.status,
             undefined,
             undefined,
-            "provider response unavailable or exceeded the byte cap"
+            "provider response or terminal usage is unavailable"
           )
         )
         throw new ProviderGatewayError(
           "PROVIDER_RESPONSE_UNKNOWN",
-          "provider response exceeded the byte cap",
+          "provider response or terminal usage is unknown",
           502
         )
       }
       const outcome = upstream.ok ? "SUCCEEDED" : "FAILED"
-      const responseHash = sha256Hex(responseBody.toString("base64"))
+      const responseHash = responseHasher.digest("hex")
+      const responseHeaders: Record<string, string> = {
+        "content-type": upstream.headers.get("content-type") ?? "application/octet-stream",
+        "x-lyra-request-id": input.requestId,
+      }
       const result = await this.serialized(async () => {
         if (controller.signal.aborted) {
           await this.recordResult(
@@ -429,18 +574,56 @@ export class ProviderGatewayService {
           )
           throw new ProviderGatewayError("PROVIDER_UNAVAILABLE", "provider outcome is unknown", 502)
         }
+        const state = this.requests.get(input.requestId)
+        if (!state) throw new ProviderGatewayError("JOURNAL_INTEGRITY", "request is missing", 500)
+        if (
+          usage &&
+          [...this.requests.values()].some(
+            (request) =>
+              request.requestId !== input.requestId &&
+              request.providerId === state.providerId &&
+              request.usage?.providerResponseId === usage.providerResponseId
+          )
+        ) {
+          await this.recordResult(
+            input.requestId,
+            "UNKNOWN",
+            upstream.status,
+            undefined,
+            undefined,
+            "provider response identity was reused"
+          )
+          throw new ProviderGatewayError(
+            "PROVIDER_USAGE_UNKNOWN",
+            "provider response identity is ambiguous",
+            502
+          )
+        }
+        const usageId = usage ? this.usageId(state, usage) : undefined
+        if (usageId) responseHeaders["x-lyra-usage-id"] = usageId
+        const binding = this.responseBinding({
+          ...state,
+          statusCode: upstream.status,
+          responseHash,
+          responseBytes: responseBody.byteLength,
+          usage,
+        })
+        const retainedResponse = retainResponse(
+          this.options.responseEncryptionSecret ?? "",
+          binding,
+          { statusCode: upstream.status, headers: responseHeaders, body: responseBody }
+        )
         return this.recordResult(
           input.requestId,
           outcome,
           upstream.status,
           responseHash,
-          responseBody.byteLength
+          responseBody.byteLength,
+          undefined,
+          usage,
+          retainedResponse
         )
       })
-      const responseHeaders: Record<string, string> = {
-        "content-type": upstream.headers.get("content-type") ?? "application/octet-stream",
-        "x-lyra-request-id": input.requestId,
-      }
       if (result.usageId) responseHeaders["x-lyra-usage-id"] = result.usageId
       return {
         statusCode: upstream.status,
@@ -449,8 +632,70 @@ export class ProviderGatewayService {
         replayed: false,
       }
     } finally {
+      clearTimeout(deadline)
+      clearTimeout(expiry)
       this.inFlight.get(input.requestId)?.finish()
       this.inFlight.delete(input.requestId)
+    }
+  }
+
+  private async authorizedPolicy(
+    request: ProviderGrantRequest,
+    route: ProviderRoute
+  ): Promise<RequestPolicy> {
+    if (
+      !this.options.authorizeGrant ||
+      !route.requestPolicy ||
+      !this.options.responseEncryptionSecret ||
+      Buffer.byteLength(this.options.responseEncryptionSecret) < 32
+    )
+      throw new ProviderGatewayError(
+        "BROKER_AUTHORIZATION_REQUIRED",
+        "trusted broker policy and encrypted retention are required"
+      )
+    const policy = requestPolicySchema.parse(await this.options.authorizeGrant(request))
+    if (policyDigest(policy) !== policyDigest(requestPolicySchema.parse(route.requestPolicy)))
+      throw new ProviderGatewayError(
+        "POLICY_DENIED",
+        "broker policy does not match the server-approved adapter"
+      )
+    return policy
+  }
+
+  private usageId(state: RequestState, usage: TerminalUsage): string {
+    return `usage_${createHmac("sha256", this.options.signingSecret)
+      .update(
+        canonicalJson({
+          version: 1,
+          requestId: state.requestId,
+          grantId: state.grantId,
+          attemptId: state.attemptId,
+          providerId: state.providerId,
+          usage,
+        })
+      )
+      .digest("hex")
+      .slice(0, 40)}`
+  }
+
+  private responseBinding(state: RequestState) {
+    return {
+      version: 1,
+      requestId: state.requestId,
+      grantId: state.grantId,
+      attemptId: state.attemptId,
+      providerId: state.providerId,
+      path: state.path,
+      query: state.query,
+      method: state.method,
+      contentType: state.contentType,
+      accept: state.accept,
+      bodyHash: state.bodyHash,
+      policyDigest: state.policyDigest ?? null,
+      statusCode: state.statusCode ?? null,
+      responseHash: state.responseHash ?? null,
+      responseBytes: state.responseBytes ?? null,
+      usage: state.usage ?? null,
     }
   }
 
@@ -471,12 +716,13 @@ export class ProviderGatewayService {
     statusCode?: number,
     responseHash?: string,
     responseBytes?: number,
-    detail?: string
+    detail?: string,
+    usage?: TerminalUsage,
+    retainedResponse?: RetainedResponse
   ): Promise<RequestState> {
-    const usageId =
-      responseHash === undefined
-        ? undefined
-        : `usage_${sha256Hex(`${requestId}\0${responseHash}`).slice(0, 40)}`
+    const state = this.requests.get(requestId)
+    if (!state) throw new ProviderGatewayError("JOURNAL_INTEGRITY", "request is missing", 500)
+    const usageId = usage ? this.usageId(state, usage) : undefined
     const record = await this.options.journal.append({
       type: "request_result",
       result: {
@@ -488,6 +734,8 @@ export class ProviderGatewayService {
         ...(responseHash ? { responseHash } : {}),
         ...(responseBytes !== undefined ? { responseBytes } : {}),
         ...(usageId ? { usageId } : {}),
+        ...(usage ? { usage } : {}),
+        ...(retainedResponse ? { retainedResponse } : {}),
         ...(detail ? { detail } : {}),
       },
     })
@@ -503,8 +751,14 @@ export class ProviderGatewayService {
     if (event.type === "grant_issued") {
       this.grants.set(event.grant.grantId, {
         request: event.grant.request,
+        policy: event.grant.policy,
         grantId: event.grant.grantId,
-        token: signToken(this.options.signingSecret, event.grant.request, event.grant.grantId),
+        token: signToken(
+          this.options.signingSecret,
+          event.grant.request,
+          event.grant.grantId,
+          event.grant.policy ? policyDigest(event.grant.policy) : null
+        ),
         revokedAt: null,
         requestCount: 0,
         reservedCostMicros: 0,
@@ -527,6 +781,7 @@ export class ProviderGatewayService {
         ...request,
         outcome: "PENDING",
         receiptHash: record.hash,
+        receipt: { sequence: record.sequence, hash: record.hash, signature: record.signature },
       })
       const grant = this.grants.get(request.grantId)
       if (grant) {
@@ -536,16 +791,51 @@ export class ProviderGatewayService {
       }
       return
     }
+    if (event.type === "legacy_request_uncertain") {
+      const existing = this.requests.get(event.requestId)
+      if (
+        !existing ||
+        existing.grantId !== event.grantId ||
+        existing.attemptId !== event.attemptId ||
+        existing.outcome !== "SUCCEEDED" ||
+        (existing.usage && existing.retainedResponse)
+      )
+        throw new ProviderGatewayError(
+          "JOURNAL_INTEGRITY",
+          "legacy provider recovery binding is invalid",
+          500
+        )
+      existing.outcome = "UNKNOWN"
+      existing.usageId = undefined
+      existing.usage = undefined
+      existing.retainedResponse = undefined
+      existing.receiptHash = record.hash
+      existing.receipt = {
+        sequence: record.sequence,
+        hash: record.hash,
+        signature: record.signature,
+      }
+      return
+    }
     const result = event.result
     const existing = this.requests.get(result.requestId)
-    if (!existing) return
+    if (
+      !existing ||
+      existing.outcome !== "PENDING" ||
+      result.grantId !== existing.grantId ||
+      result.attemptId !== existing.attemptId
+    )
+      throw new ProviderGatewayError("JOURNAL_INTEGRITY", "provider result binding is invalid", 500)
     existing.outcome = result.outcome
     existing.statusCode = result.statusCode
     existing.responseHash = result.responseHash
     existing.responseBytes = result.responseBytes
     existing.usageId = result.usageId
+    existing.usage = result.usage
+    existing.retainedResponse = result.retainedResponse
     existing.detail = result.detail
     existing.receiptHash = record.hash
+    existing.receipt = { sequence: record.sequence, hash: record.hash, signature: record.signature }
     const grant = this.grants.get(existing.grantId)
     if (grant) grant.receiptHash = record.hash
   }
@@ -555,8 +845,23 @@ export class ProviderGatewayService {
     for (const record of records) this.apply(record)
     for (const request of this.requests.values()) {
       if (request.outcome === "PENDING") {
-        request.outcome = "UNKNOWN"
-        request.detail = "provider gateway restarted with an unresolved request"
+        await this.recordResult(
+          request.requestId,
+          "UNKNOWN",
+          undefined,
+          undefined,
+          undefined,
+          "provider gateway restarted with an unresolved request"
+        )
+      } else if (request.outcome === "SUCCEEDED" && (!request.usage || !request.retainedResponse)) {
+        // Append recovery uncertainty without rewriting historical receipts.
+        const record = await this.options.journal.append({
+          type: "legacy_request_uncertain",
+          requestId: request.requestId,
+          grantId: request.grantId,
+          attemptId: request.attemptId,
+        })
+        this.apply(record)
       }
     }
   }
@@ -576,6 +881,7 @@ export class ProviderGatewayService {
       try {
         resolveResult(await operation())
       } catch (error) {
+        if (!(error instanceof ProviderGatewayError)) this.failed = true
         rejectResult(error)
       }
     })
