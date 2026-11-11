@@ -1,0 +1,42 @@
+name: Protected runtime qualification issuer
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-signing-boundary:
+    # The issuer has no candidate-input or arbitrary-signing interface. Runtime
+    # issuance stays unavailable until independent qualification is integrated.
+    if: >-
+      github.repository_id == '1286618458' &&
+      github.repository_owner_id == '116722580' &&
+      github.ref == 'refs/heads/main' &&
+      github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: release-qualification
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+      - name: Verify issuer identity and exact managed signing key
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node .github/scripts/qualification-issuer-health.mjs
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: qualification-issuer-health-${{ github.run_id }}-${{ github.run_attempt }}
+          path: qualification-issuer-health.json
+          if-no-files-found: error
+          retention-days: 7

@@ -1,0 +1,17 @@
+name: Verify protected qualification signer
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+  id-token: write
+
+jobs:
+  signer:
+    if: >-
+      github.repository_id == '1286618458' &&
+      github.repository_owner_id == '116722580' &&
+      github.ref == 'refs/heads/main'
+    uses: ./.github/workflows/issue-runtime-qualification.yml
