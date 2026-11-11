@@ -100,7 +100,12 @@ function renderTwoFactor(): Element[] {
 
 function renderApiKeys(): Element[] {
   hooks.cursor = 0
-  return elements(ApiKeysSection({ workspaceId: "workspace-1", canManage: true }))
+  const root = ApiKeysSection({ workspaceId: "workspace-1", canManage: true })
+  const workspace = elements(root).find(
+    (element) => typeof element.type === "function" && "startCreate" in element.props
+  )
+  if (!workspace || typeof workspace.type !== "function") throw new Error("Missing key section")
+  return elements((workspace.type as (props: typeof workspace.props) => ReactNode)(workspace.props))
 }
 
 describe("security settings request bodies", () => {
