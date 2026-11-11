@@ -1,5 +1,7 @@
 import assert from "node:assert/strict"
 import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs"
+import fs from "node:fs"
+import { syncBuiltinESMExports } from "node:module"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import test from "node:test"
@@ -209,6 +211,32 @@ test("hold, drain, relay, VM, producers, fresh readback and separately consumed 
   assert.ok(f.stages().includes("release-verified"))
   await assert.rejects(f.release(), { code: "EEXIST" })
   assert.equal(f.log.filter((x) => x === "release").length, 1)
+})
+
+test("a growing verified stage cannot release admission", async (t) => {
+  const f = fixture(t)
+  await f.promote()
+  const path = join(f.root, pair.owner, "pair-held-verified")
+  const original = fs.fstatSync
+  let changed = false
+  t.mock.method(fs, "fstatSync", (fd) => {
+    const stat = original(fd)
+    if (!changed && stat.isFile()) {
+      changed = true
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- only this test's private temporary fixture
+      fs.appendFileSync(path, " ".repeat(4096))
+    }
+    return stat
+  })
+  syncBuiltinESMExports()
+  t.after(() => {
+    t.mock.restoreAll()
+    syncBuiltinESMExports()
+  })
+  await assert.rejects(f.release())
+  assert.equal(changed, true)
+  assert.equal(f.state, "owned")
+  assert.ok(!f.log.includes("release"))
 })
 
 for (const stage of mutations)

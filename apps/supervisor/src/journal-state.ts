@@ -14,16 +14,15 @@ import {
   receiptFromRecord,
 } from "./service-common"
 
-function applyPrepared(
-  event: Extract<SupervisorJournalEvent, { type: "attempt_prepared" }>,
+function prepareAttempt(
+  command: Extract<SupervisorCommand, { type: "PREPARE" }>,
   receipt: SupervisorReceipt,
-  attempts: Map<string, AttemptState>,
-  commands: Map<string, CommandState>
-): void {
-  const attempt: AttemptState = {
-    binding: event.binding,
-    plans: new Map(event.executors.map((plan) => [plan.key, plan])),
-    ...(event.provider ? { provider: event.provider } : {}),
+  status: "PREPARED" | "UNKNOWN"
+): AttemptState {
+  return {
+    binding: command.attempt,
+    plans: new Map(command.executors.map((plan) => [plan.key, plan])),
+    ...(command.provider ? { provider: command.provider } : {}),
     grants: new Map(),
     planned: new Map(),
     resources: new Map(),
@@ -31,10 +30,17 @@ function applyPrepared(
     startPlanned: new Set(),
     startAcknowledged: new Set(),
     receipt,
-    status: "PREPARED",
+    status,
     createdExecutors: new Set(),
   }
-  attempts.set(event.binding.attemptId, attempt)
+}
+
+function applyPrepared(
+  event: Extract<SupervisorJournalEvent, { type: "attempt_prepared" }>,
+  receipt: SupervisorReceipt,
+  attempts: Map<string, AttemptState>,
+  commands: Map<string, CommandState>
+): void {
   const prepareCommand: Extract<SupervisorCommand, { type: "PREPARE" }> = {
     type: "PREPARE",
     commandId: event.commandId,
@@ -42,11 +48,37 @@ function applyPrepared(
     executors: event.executors,
     ...(event.provider ? { provider: event.provider } : {}),
   }
+  attempts.set(event.binding.attemptId, prepareAttempt(prepareCommand, receipt, "PREPARED"))
   commands.set(event.commandId, {
     request: prepareCommand,
     requestHash: commandRequestHash(prepareCommand),
     attemptId: event.binding.attemptId,
     status: "PREPARED",
+    receipt,
+  })
+}
+
+function applyIntent(
+  event: Extract<SupervisorJournalEvent, { type: "command_intent" }>,
+  receipt: SupervisorReceipt,
+  attempts: Map<string, AttemptState>,
+  commands: Map<string, CommandState>
+): void {
+  if (event.command.type === "PREPARE" && !attempts.has(event.command.attempt.attemptId)) {
+    // An accepted intent preserves cleanup identity, never start authority.
+    // Only attempt_prepared may promote this state to PREPARED.
+    attempts.set(event.command.attempt.attemptId, prepareAttempt(event.command, receipt, "UNKNOWN"))
+  }
+  const existing = commands.get(event.command.commandId)
+  if (existing) {
+    existing.receipt = receipt
+    return
+  }
+  commands.set(event.command.commandId, {
+    request: event.command,
+    requestHash: commandRequestHash(event.command),
+    attemptId: commandAttemptId(event.command),
+    status: "RECEIVED",
     receipt,
   })
 }
@@ -63,18 +95,7 @@ export function applyJournalRecord(
     return
   }
   if (event.type === "command_intent") {
-    const existing = commands.get(event.command.commandId)
-    if (existing) {
-      existing.receipt = receipt
-      return
-    }
-    commands.set(event.command.commandId, {
-      request: event.command,
-      requestHash: commandRequestHash(event.command),
-      attemptId: commandAttemptId(event.command),
-      status: "RECEIVED",
-      receipt,
-    })
+    applyIntent(event, receipt, attempts, commands)
     return
   }
   if (event.type === "resource_create_planned") {
