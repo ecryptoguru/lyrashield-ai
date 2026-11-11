@@ -12,6 +12,10 @@ import {
   type SupervisorCommandResult,
   type SupervisorPort,
   type SupervisorReceipt,
+  type SupervisorJournalPage,
+  type SupervisorJournalReader,
+  type SupervisorJournalRecoveryPort,
+  type SupervisorRecoveryResult,
 } from "@lyrashield/runtime-control"
 import type { JournalPort, JournalRecord } from "@lyrashield/runtime-control"
 import { deriveOwnershipId, type ExecutorContext, type RuntimeExecutor } from "./executor"
@@ -26,20 +30,25 @@ import type {
 export { supervisorJournalEventSchema } from "./journal-events"
 export type { SupervisorJournalEvent } from "./journal-events"
 import { applyJournalRecord } from "./journal-state"
+import { restoreJournalState } from "./restore-state"
+import { recoverServiceState } from "./service-recovery"
 import { matchesOwnership, SupervisorOperations } from "./supervisor-operations"
 import {
   RuntimeControlError,
   commandAttemptId,
   commandRequestHash,
   isTerminal,
-  receiptFromRecord,
 } from "./service-common"
 export { RuntimeControlError } from "./service-common"
 
 const START_TYPES = new Set(["START_PAID", "START_UNMETERED"])
 
 export interface SupervisorServiceOptions {
-  journal: JournalPort<SupervisorJournalEvent>
+  journal: JournalPort<SupervisorJournalEvent> &
+    Partial<
+      SupervisorJournalReader<SupervisorJournalEvent> &
+        SupervisorJournalRecoveryPort<SupervisorJournalEvent>
+    >
   executor: RuntimeExecutor
   providerGateway: SupervisorPort
   providerGatewayUrl: string
@@ -83,7 +92,8 @@ export class SupervisorService {
       applyResource: (record) => this.applyResource(record),
       assertCurrentReceipt: (attempt, expected) => this.assertCurrentReceipt(attempt, expected),
       appendIntent: (command) => this.appendIntent(command),
-      appendAttemptStatus: (attempt, status) => this.appendAttemptStatus(attempt, status),
+      appendAttemptStatus: (attempt, status, commandId) =>
+        this.appendAttemptStatus(attempt, status, commandId),
       appendTerminal: (command, status, reason) => this.appendTerminal(command, status, reason),
       hasUnresolvedExecutorEffect: (attempt) => this.hasUnresolvedExecutorEffect(attempt),
       startCommandIdFor: (attemptId, executorKey) => this.startCommandIdFor(attemptId, executorKey),
@@ -99,6 +109,46 @@ export class SupervisorService {
       this.initialized = this.load()
     }
     await this.initialized
+  }
+
+  async readJournal(input: unknown): Promise<SupervisorJournalPage<SupervisorJournalEvent>> {
+    if (!this.options.journal.readCursor) {
+      throw new RuntimeControlError(
+        "JOURNAL_AUTHORITY_UNAVAILABLE",
+        "independent journal readback is unavailable",
+        503
+      )
+    }
+    return this.options.journal.readCursor(input)
+  }
+
+  async recover(input: unknown): Promise<SupervisorRecoveryResult<SupervisorJournalEvent>> {
+    return recoverServiceState(
+      {
+        journal: this.options.journal,
+        busy: () =>
+          this.draining ||
+          this.activeCommands > 0 ||
+          this.inFlightStarts.size > 0 ||
+          this.pendingRevocations.size > 0,
+        initialization: () => this.initialized,
+        restoreInitialization: (prior) => {
+          this.initialized = prior
+        },
+        serialized: (operation) => this.serialized(operation),
+        install: (records) => restoreJournalState(records, this.attempts, this.commands),
+        resultFor: (commandId) => this.resultFor(commandId),
+        enter: (run) => {
+          this.activeCommands += 1
+          this.initialized = run.then(() => undefined)
+          void this.initialized.catch(() => undefined)
+        },
+        leave: () => {
+          this.activeCommands -= 1
+        },
+      },
+      input
+    )
   }
 
   async execute(input: unknown): Promise<SupervisorCommandResult> {
@@ -449,14 +499,14 @@ export class SupervisorService {
       })
       this.applyResource(resourceRecord)
       this.abortIfStopAccepted(command.attemptId)
-      await this.appendAttemptStatus(attempt, "RUNNING")
+      await this.appendAttemptStatus(attempt, "RUNNING", command.commandId)
       await this.appendTerminal(command, "STARTED")
       return this.resultFor(command.commandId)
     } catch (error) {
       if (!physicalAttempted && !inFlight.stop) throw error
       if (inFlight.stop) await inFlight.stop.persisted
       const reason = error instanceof Error ? error.message : "executor effect is ambiguous"
-      await this.appendAttemptStatus(attempt, "UNKNOWN")
+      await this.appendAttemptStatus(attempt, "UNKNOWN", command.commandId)
       await this.appendTerminal(command, "UNKNOWN", reason.slice(0, 512))
       return this.resultFor(command.commandId)
     } finally {
@@ -507,13 +557,15 @@ export class SupervisorService {
 
   private async appendAttemptStatus(
     attempt: AttemptState,
-    status: AttemptState["status"]
+    status: AttemptState["status"],
+    commandId: string
   ): Promise<void> {
     const record = await this.options.journal.append({
       type: "attempt_status",
       supervisorInstanceId: this.options.supervisorInstanceId,
       observedAt: this.nowIso(),
       attemptId: attempt.binding.attemptId,
+      commandId,
       status,
     })
     this.apply(record)
@@ -563,32 +615,7 @@ export class SupervisorService {
   }
 
   private async load(): Promise<void> {
-    const records = await this.options.journal.load()
-    for (const record of records) this.apply(record)
-    for (const [commandId, command] of this.commands) {
-      if (command.status === "UNKNOWN") {
-        const attempt = this.attempts.get(command.attemptId)
-        if (attempt && attempt.status !== "STOPPED" && attempt.status !== "NEVER_DISPATCHED") {
-          attempt.status = "UNKNOWN"
-        }
-      }
-      if (command.request && !isTerminal(command.status) && command.status !== "PREPARED") {
-        const event = records.find(
-          (record) =>
-            record.payload.type === "command_intent" &&
-            record.payload.command.commandId === commandId
-        )
-        if (event) {
-          command.status = "UNKNOWN"
-          command.reason = "service restarted with an unresolved effect; use RECONCILE"
-          command.receipt = receiptFromRecord(event)
-          const attempt = this.attempts.get(command.attemptId)
-          if (attempt && attempt.status !== "STOPPED" && attempt.status !== "NEVER_DISPATCHED") {
-            attempt.status = "UNKNOWN"
-          }
-        }
-      }
-    }
+    restoreJournalState(await this.options.journal.load(), this.attempts, this.commands)
   }
 
   private async serialized<T>(operation: () => Promise<T>): Promise<T> {

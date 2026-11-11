@@ -152,7 +152,20 @@ export const supervisorJournalEventSchema = z.discriminatedUnion("type", [
       type: z.literal("attempt_status"),
       ...brokerEnvelope,
       attemptId: z.string(),
+      // Old signed records remain unchanged; new status producers bind the command.
+      commandId: z.string().optional(),
       status: z.enum(["PREPARED", "RUNNING", "STOPPING", "STOPPED", "NEVER_DISPATCHED", "UNKNOWN"]),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("command_recovery_hold"),
+      ...brokerEnvelope,
+      commandId: z.string(),
+      attemptId: z.string(),
+      expectedCommandHash: z.string().regex(/^[a-f0-9]{64}$/),
+      recoveredSequence: z.number().int().positive().safe(),
+      recoveredHash: z.string().regex(/^[a-f0-9]{64}$/),
     })
     .strict(),
 ])
