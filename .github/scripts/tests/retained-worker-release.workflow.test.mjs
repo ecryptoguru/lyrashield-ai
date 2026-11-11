@@ -18,7 +18,7 @@ const step = (name) => {
   return runtime.slice(start, end < 0 ? runtime.length : end)
 }
 
-test("the usable retained release qualifies current main and builds only an immutable web image", () => {
+test("the held retained release preserves source and immutable-image checks behind qualification", () => {
   assert.match(release, /workflow_dispatch:/)
   assert.doesNotMatch(release, /confirmation:|workflow_call:/)
   assert.match(release, /if: github.ref == 'refs\/heads\/main'/)
@@ -38,6 +38,17 @@ test("the usable retained release qualifies current main and builds only an immu
   assert.match(release, /worker_source_sha: \$\{\{ needs.approve.outputs.worker_source_sha \}\}/)
   assert.match(release, /"\$SOURCE" "\$ENGINE" "\$WORKER_SOURCE"/)
   assert.match(release, /cancel-in-progress: false/)
+  assert.match(release, /\n  build:\n[\s\S]*?\n    needs: approve\n/)
+  assert.match(release, /\n  deploy:\n[\s\S]*?\n    needs: \[approve, build\]\n/)
+  assert.doesNotMatch(release, /continue-on-error:|if:.*always\(/)
+  assert.ok(
+    release.indexOf("Hold production until runtime qualification") <
+      release.indexOf("Checkout trusted main validator")
+  )
+  assert.match(
+    release,
+    /current worker protections, sandbox and isolated runtime authority remain unqualified/
+  )
 })
 test("retained runtime checks precede all production mutations and cannot open a maintenance path", () => {
   const guard = runtime.indexOf(

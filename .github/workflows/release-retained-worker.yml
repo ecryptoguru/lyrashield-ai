@@ -1,10 +1,10 @@
-name: Release web with retained legacy worker
+name: Release web with retained legacy worker (held)
 
 on:
   workflow_dispatch:
     inputs:
       source_sha:
-        description: Exact current main revision approved for a web and scanner release
+        description: Exact current main candidate; deployment remains held pending runtime qualification
         required: true
         type: string
 
@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   approve:
-    name: Qualify current main and protected retained identities
+    name: Check retained release prerequisites (held)
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -33,6 +33,10 @@ jobs:
       engine_revision: ${{ steps.approval.outputs.engineRevision }}
       egress_digest: ${{ steps.approval.outputs.egressDigest }}
     steps:
+      - name: Hold production until runtime qualification
+        run: |
+          echo "Retained-worker production qualification hold: current worker protections, sandbox and isolated runtime authority remain unqualified."
+          exit 1
       - name: Checkout trusted main validator
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

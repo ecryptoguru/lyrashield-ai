@@ -127,7 +127,6 @@ jobs:
       ((vars.AZURE_APP_CONTAINER_APP_NAME != '') || (vars.AZURE_SCANNER_CONTAINER_APP_NAME != ''))
     steps:
       - name: Hold production until runtime qualification
-        if: inputs.retained_worker != true
         run: exit 1
       - name: Checkout deployment source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -218,7 +217,6 @@ jobs:
       ((vars.AZURE_APP_CONTAINER_APP_NAME != '') || (vars.AZURE_SCANNER_CONTAINER_APP_NAME != ''))
     steps:
       - name: Hold production until runtime qualification
-        if: inputs.retained_worker != true
         run: exit 1
       # Deployment checks and the live admission reader use repository scripts.
       - name: Checkout for deployment checks
