@@ -4,13 +4,46 @@ import type { RequestState } from "./journal-events"
 import { policyDigest, type RequestPolicy, authorizeRequest } from "./request-policy"
 import { ResponsesUsageParser, type TerminalUsage } from "./provider-usage"
 import { abortable, readBoundedResponse } from "./proxy-utils"
+import { retainResponse } from "./retained-response"
+import { providerUsageId } from "./journal-state"
+
+// Pure payload preparation; the service fences authority and durably records it.
+export function prepareRetainedResponse(
+  encryptionSecret: string,
+  signingSecret: string,
+  state: RequestState,
+  response: { statusCode: number; headers: Record<string, string>; body: Buffer },
+  responseHash: string,
+  usage: TerminalUsage | undefined,
+  streamed: boolean
+) {
+  if (usage && !streamed)
+    response.headers["x-lyra-usage-id"] = providerUsageId(signingSecret, state, usage)
+  return retainResponse(
+    encryptionSecret,
+    responseBinding({
+      ...state,
+      statusCode: response.statusCode,
+      responseHash,
+      responseBytes: response.body.byteLength,
+      usage,
+    }),
+    response
+  )
+}
 
 export async function readProviderResponse(
   upstream: Response,
   policy: RequestPolicy,
   approved: ReturnType<typeof authorizeRequest>,
   signal: AbortSignal,
-  recordUnknown: () => Promise<unknown>
+  recordUnknown: () => Promise<unknown>,
+  delivery: {
+    deadlineAt?: number
+    start?: () => Promise<void>
+    write?: (chunk: Uint8Array) => Promise<void>
+    complete?: () => Promise<void>
+  } = {}
 ) {
   const parser = new ResponsesUsageParser(policy, {
     ...approved,
@@ -20,23 +53,28 @@ export async function readProviderResponse(
   let responseBody: Buffer
   let usage: TerminalUsage | undefined
   try {
+    if (
+      !upstream.ok ||
+      upstream.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase() !==
+        (approved.stream ? "text/event-stream" : "application/json")
+    )
+      throw new Error("provider response encoding or outcome is unavailable")
+    await delivery.start?.()
     responseBody = await abortable(
       readBoundedResponse(upstream, policy.maxResponseBytes, {
         signal,
+        deadlineAt: delivery.deadlineAt,
         idleTimeoutMs: policy.idleTimeoutMs,
-        onChunk: (chunk) => {
+        onChunk: async (chunk) => {
           responseHasher.update(chunk)
-          if (upstream.ok) parser.push(chunk)
+          parser.push(chunk)
+          await delivery.write?.(chunk)
         },
       }),
       signal
     )
-    if (upstream.ok) {
-      const contentType = upstream.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase()
-      if (contentType !== (approved.stream ? "text/event-stream" : "application/json"))
-        throw new Error("provider response encoding mismatch")
-      usage = parser.finish()
-    } else throw new Error("provider returned no affirmative terminal usage")
+    usage = parser.finish()
+    await delivery.complete?.()
   } catch {
     await recordUnknown()
     throw new ProviderGatewayError(
