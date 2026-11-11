@@ -1,10 +1,12 @@
 import { z } from "zod"
+import { performance } from "node:perf_hooks"
 import { canonicalJson } from "./canonical-json"
 import {
   authorityEventSchema,
   headSchema,
   type AuthorityHead,
   type AuthorityMirror,
+  type BoundedAuthorityMirror,
 } from "./independent-journal"
 import type { JournalRecord } from "./journal"
 
@@ -49,13 +51,33 @@ function decode(value: unknown): unknown {
   return parsed
 }
 
+function readLimit(maxBytes: number): number {
+  if (!Number.isSafeInteger(maxBytes) || maxBytes < 1 || maxBytes > MAX_BYTES)
+    throw new Error("invalid authority mirror read byte limit")
+  return maxBytes
+}
+
+function boundedBytes(
+  result: { rows: Record<string, unknown>[] },
+  maxBytes: number
+): unknown | null {
+  const row = result.rows[0]
+  if (!row || typeof row.oversized !== "boolean")
+    throw new Error("authority mirror returned invalid bounded response")
+  if (row.oversized) throw new Error("authority mirror exceeds requested byte limit")
+  if (row.bytes === null) return null
+  if (typeof row.bytes !== "string" || Buffer.byteLength(row.bytes) > maxBytes)
+    throw new Error("authority mirror returned invalid bounded bytes")
+  return decode(row.bytes)
+}
+
 /**
  * PostgreSQL is a mirror, never authority to resume an epoch after a restore.
  * Stream provisioning and signing are outside this adapter. The caller must
  * authenticate all returned bytes against the local and independent journals.
  * SQL errors (including a lost commit reply) propagate as UNKNOWN to that caller.
  */
-export class PostgresAuthorityMirror implements AuthorityMirror {
+export class PostgresAuthorityMirror implements AuthorityMirror, BoundedAuthorityMirror {
   constructor(
     private readonly client: AuthoritySqlPool,
     private readonly epochId: string,
@@ -78,6 +100,13 @@ export class PostgresAuthorityMirror implements AuthorityMirror {
     let connection: AuthoritySqlConnection | undefined
     let timer: ReturnType<typeof setTimeout> | undefined
     let failed = true
+    const expiresAt = performance.now() + 10000
+    const assertActive = () => {
+      if (expired || performance.now() >= expiresAt) {
+        expired = true
+        throw new Error("authority mirror outcome is unavailable after timeout")
+      }
+    }
     const deadline = new Promise<never>((_resolve, reject) => {
       timer = setTimeout(() => {
         expired = true
@@ -88,7 +117,10 @@ export class PostgresAuthorityMirror implements AuthorityMirror {
     const pending = Promise.resolve()
       .then(() => this.client.connect())
       .then((value) => {
-        if (expired) value.release(true)
+        if (expired || performance.now() >= expiresAt) {
+          value.release(true)
+          assertActive()
+        }
         return value
       })
     try {
@@ -96,9 +128,9 @@ export class PostgresAuthorityMirror implements AuthorityMirror {
       const acquired = connection
       const active: AuthoritySqlConnection = {
         query: async (text, values) => {
-          if (expired) throw new Error("authority mirror transaction expired")
+          assertActive()
           const value = await acquired.query(text, values)
-          if (expired) throw new Error("authority mirror transaction expired")
+          assertActive()
           return value
         },
         release: (destroy) => acquired.release(destroy),
@@ -116,6 +148,7 @@ export class PostgresAuthorityMirror implements AuthorityMirror {
         })(),
         deadline,
       ])
+      assertActive()
       failed = false
       return result
     } finally {
@@ -155,6 +188,45 @@ export class PostgresAuthorityMirror implements AuthorityMirror {
     if (record.sequence !== sequence || record.payload.epochId !== this.epochId) {
       throw new Error("authority mirror record identity mismatch")
     }
+    return record
+  }
+
+  async readHeadBounded(maxBytes: number): Promise<AuthorityHead | null> {
+    readLimit(maxBytes)
+    const result = await this.transaction((connection) =>
+      connection.query(
+        `WITH evidence AS MATERIALIZED (SELECT lyrashield_authority.read_head($1,$2) AS bytes)
+         SELECT CASE WHEN octet_length(bytes) <= $3::integer THEN bytes END AS bytes,
+                COALESCE(octet_length(bytes) > $3::integer, false) AS oversized FROM evidence`,
+        [this.epochId, this.supervisorInstanceId, String(maxBytes)]
+      )
+    )
+    const value = boundedBytes(result, maxBytes)
+    if (value === null) return null
+    const head = headSchema.parse(value)
+    this.bind(head)
+    return head
+  }
+
+  async readRecordBounded(
+    sequence: number,
+    maxBytes: number
+  ): Promise<JournalRecord<unknown> | null> {
+    z.number().int().positive().safe().parse(sequence)
+    readLimit(maxBytes)
+    const result = await this.transaction((connection) =>
+      connection.query(
+        `WITH evidence AS MATERIALIZED (SELECT lyrashield_authority.read_record($1,$2,$3::bigint) AS bytes)
+         SELECT CASE WHEN octet_length(bytes) <= $4::integer THEN bytes END AS bytes,
+                COALESCE(octet_length(bytes) > $4::integer, false) AS oversized FROM evidence`,
+        [this.epochId, this.supervisorInstanceId, String(sequence), String(maxBytes)]
+      )
+    )
+    const value = boundedBytes(result, maxBytes)
+    if (value === null) return null
+    const record = recordSchema.parse(value)
+    if (record.sequence !== sequence || record.payload.epochId !== this.epochId)
+      throw new Error("authority mirror record identity mismatch")
     return record
   }
 

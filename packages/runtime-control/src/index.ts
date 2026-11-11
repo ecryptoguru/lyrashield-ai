@@ -24,6 +24,8 @@ export type {
   AuthorityEvent,
   AuthorityHead,
   AuthorityMirror,
+  BoundedAuthorityMirror,
+  BoundedConditionalObjectStore,
   ConditionalObjectStore,
   IndependentAuthorityJournalOptions,
   StoredObject,

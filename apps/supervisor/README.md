@@ -139,6 +139,11 @@ held until those integrations and native qualifications are complete.
 
 ## Bounded checkpoint reader foundation
 
+The R2 and PostgreSQL adapters now expose caller-bounded read methods. R2 uses fixed-capacity
+accumulation and monotonic deadline checks inside the fragment loop; PostgreSQL withholds
+oversized text in SQL and distinguishes it from a missing row. These transport foundations do
+not install the checkpoint publisher, protected authority or production wiring described below.
+
 `SupervisorCheckpointReader` is a separate read-only foundation with mandatory protected ports.
 `buildCheckpointCandidate()` creates an **unpublished** signed checkpoint candidate for at most
 32 records and 1 MiB of segment bytes. The checkpoint binds the exact epoch, supervisor, sequence
@@ -180,6 +185,20 @@ staging/mount/UID descriptors, provider-token handoff, worker Docker dispatch, n
 ownership, host/IPv6 isolation or physical-action fencing.
 
 ## Deployment boundary
+
+`inspectSupervisorIndependentComposition()` is a read-only, closed composition preflight.
+It rejects normalized, symbolic-link and hard-link aliases, equal original/independent signing
+keys, identifiers outside the existing PostgreSQL mirror contract, and open admission before
+constructing or writing journals. Valid configuration still reports `productionEligible: false`
+and returns no journal, credential-isolation proof or physical capability. Path inspection does
+not establish native ownership against later replacement, and separate client objects do not
+prove separate credentials.
+
+Production composition requires separately authenticated persisted full canonical command and
+workspace/scan/operation/attempt/epoch scope, current revocation, expiry, policy and grant bindings.
+The existing broker command digest covers command type, operation and attempt only; it is not
+the complete supervisor command commitment required for authenticated recovery. That authority
+resolver and the production independent-journal factory remain uninstalled and closed.
 
 The prototype defines immutable container images, bounded argv/environment, network, CPU, memory
 and PID limits. Local process execution is held. Host source mounts and the broker's signed attempt
