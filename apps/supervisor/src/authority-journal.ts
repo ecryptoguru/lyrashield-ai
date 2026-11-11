@@ -23,6 +23,8 @@ import {
 import { supervisorJournalEventSchema, type SupervisorJournalEvent } from "./journal-events"
 import {
   recoverSignedEvent,
+  RecoverySelectionError,
+  validRecoveryHold,
   validRecoverySuffix,
   type RecoveryAuthorizer,
 } from "./authority-recovery"
@@ -346,6 +348,8 @@ export class SupervisorAuthorityJournal
     originals: OriginalRecord[]
   ): Promise<OriginalRecord> {
     const payload = supervisorJournalEventSchema.parse(input)
+    if (!validRecoveryHold(payload, originals.at(-1), originals))
+      throw new RecoverySelectionError("recovery guard does not bind the current original tail")
     const record = await this.options.original.append(payload)
     const history = [...originals, record]
     if (!validRecoverySuffix(history)) conflict("invalid local recovery guard")

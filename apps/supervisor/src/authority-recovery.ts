@@ -38,8 +38,18 @@ export function eventCommandId(event: SupervisorJournalEvent): string | null {
       : null
 }
 
-function rejected(message: string): never {
-  throw new IndependentAuthorityError("RECOVERY_CONFLICT", message)
+/** A selector/preflight rejection guarantees that recovery has not mutated any journal. */
+export class RecoverySelectionError extends IndependentAuthorityError {
+  constructor(
+    message: string,
+    readonly confirmedHistory = false
+  ) {
+    super("RECOVERY_CONFLICT", message)
+  }
+}
+
+function rejected(message: string, confirmedHistory = false): never {
+  throw new RecoverySelectionError(message, confirmedHistory)
 }
 
 function originFor(hold: Record, originals: Record[], commandId: string): Record {
@@ -48,9 +58,10 @@ function originFor(hold: Record, originals: Record[], commandId: string): Record
   const original = originals[event.recoveredSequence - 1]
   if (
     !original ||
-    original.sequence >= hold.sequence ||
-    original.hash !== event.recoveredHash ||
-    eventCommandId(original.payload) !== commandId
+    original.sequence + 1 !== hold.sequence ||
+    hold.previousHash !== original.hash ||
+    event.commandId !== commandId ||
+    !validRecoveryHold(event, original, originals)
   ) {
     rejected("recovery hold does not bind an original command record")
   }
@@ -58,11 +69,12 @@ function originFor(hold: Record, originals: Record[], commandId: string): Record
 }
 
 /** The sole permitted two-record local suffix: original followed by its UNKNOWN guard. */
-export function validRecoverySuffix(originals: Record[]): boolean {
-  const hold = originals.at(-1)
-  const original = originals.at(-2)
-  if (!hold || !original || hold.payload.type !== "command_recovery_hold") return false
-  const event = hold.payload
+export function validRecoveryHold(
+  event: SupervisorJournalEvent,
+  original: Record | undefined,
+  originals: Record[]
+): boolean {
+  if (!original || event.type !== "command_recovery_hold") return false
   const intents = originals.filter(
     (record) =>
       record.payload.type === "command_intent" &&
@@ -75,12 +87,23 @@ export function validRecoverySuffix(originals: Record[]): boolean {
     eventCommandId(original.payload) === event.commandId &&
     event.recoveredSequence === original.sequence &&
     event.recoveredHash === original.hash &&
-    hold.previousHash === original.hash &&
     event.supervisorInstanceId === original.payload.supervisorInstanceId &&
     event.observedAt === original.payload.observedAt &&
     event.attemptId ===
       (command.type === "PREPARE" ? command.attempt.attemptId : command.attemptId) &&
     event.expectedCommandHash === sha256Hex(canonicalJson(command))
+  )
+}
+
+export function validRecoverySuffix(originals: Record[]): boolean {
+  const hold = originals.at(-1)
+  const original = originals.at(-2)
+  return (
+    !!hold &&
+    !!original &&
+    hold.sequence === original.sequence + 1 &&
+    hold.previousHash === original.hash &&
+    validRecoveryHold(hold.payload, original, originals)
   )
 }
 
@@ -143,6 +166,12 @@ export async function recoverSignedEvent(
   const recoveredRecord = originFor(selected, originals, request.commandId)
   if (canonicalJson(ctx.bindingFor(recoveredRecord, originals)) !== canonicalJson(binding))
     rejected("original recovery event belongs to another attempt authority")
+  let holdRecord =
+    existing && originFor(existing, originals, request.commandId).hash === recoveredRecord.hash
+      ? existing
+      : undefined
+  if (!holdRecord && recoveredRecord.hash !== originals.at(-1)!.hash)
+    rejected("recovery requires the current original tail or its existing linked hold", !pending)
   const authorize = async () => {
     await ctx.assertStreamAuthorized()
     if (
@@ -156,10 +185,6 @@ export async function recoverSignedEvent(
     }
   }
   await authorize()
-  let holdRecord =
-    existing && originFor(existing, originals, request.commandId).hash === recoveredRecord.hash
-      ? existing
-      : undefined
   if (!holdRecord) {
     // Write the local UNKNOWN guard before confirming any original remotely.
     // Interrupted recovery therefore cannot expose a confirmed positive disposition

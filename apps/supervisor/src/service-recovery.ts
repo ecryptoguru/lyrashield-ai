@@ -7,11 +7,13 @@ import {
 } from "@lyrashield/runtime-control"
 import type { SupervisorJournalEvent } from "./journal-events"
 import { RuntimeControlError } from "./service-common"
+import { RecoverySelectionError } from "./authority-recovery"
 
 interface RecoveryServiceContext {
   journal: Partial<SupervisorJournalRecoveryPort<SupervisorJournalEvent>>
   busy(): boolean
   initialization(): Promise<void> | null
+  restoreInitialization(prior: Promise<void> | null): void
   serialized<T>(operation: () => Promise<T>): Promise<T>
   install(records: JournalRecord<SupervisorJournalEvent>[]): void
   resultFor(commandId: string): SupervisorCommandResult
@@ -50,6 +52,13 @@ export function recoverServiceState(
         recoveredRecord: recovered.recoveredRecord,
         holdRecord: recovered.holdRecord,
       }
+    })
+    .catch((error) => {
+      // Restore only a no-mutation rejection with fully confirmed histories.
+      // Pending or unknown authority/durability still leaves startup blocked.
+      if (error instanceof RecoverySelectionError && error.confirmedHistory)
+        ctx.restoreInitialization(prior)
+      throw error
     })
     .finally(() => ctx.leave())
   ctx.enter(run)

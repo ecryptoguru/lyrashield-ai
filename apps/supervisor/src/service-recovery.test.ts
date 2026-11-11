@@ -269,6 +269,73 @@ async function setup() {
 }
 
 describe("explicit supervisor same-operation recovery", () => {
+  it.each(["adapter", "service"])(
+    "rejects stale %s recovery without writes or blocking STOP",
+    async (owner) => {
+      const f = await setup()
+      const first = await f.service.execute(prepare)
+      const newer: SupervisorCommand = {
+        ...prepare,
+        commandId: "prepare-newer",
+        attempt: { ...binding, attemptId: "attempt-newer", operationId: "operation-newer" },
+      }
+      await f.service.execute(newer)
+      const records = await f.factory.journal.load()
+      expect(records).toHaveLength(4)
+      const bytes = await Promise.all([
+        readFile(f.options.originalPath, "utf8"),
+        readFile(f.options.independentPath, "utf8"),
+      ])
+      const writes = [f.store.writes, f.mirror.writes]
+      const recover =
+        owner === "adapter"
+          ? f.factory.journal.recoverStored(selector(prepare))
+          : f.service.recover(selector(prepare))
+      await expect(recover).rejects.toMatchObject({ code: "RECOVERY_CONFLICT" })
+      expect(
+        await Promise.all([
+          readFile(f.options.originalPath, "utf8"),
+          readFile(f.options.independentPath, "utf8"),
+        ])
+      ).toEqual(bytes)
+      expect([f.store.writes, f.mirror.writes]).toEqual(writes)
+      expect(await f.factory.journal.load()).toEqual(records)
+      expect((await f.service.getAttempt(binding.attemptId))?.status).toBe("PREPARED")
+      expect(f.effects).toEqual({ create: 0, start: 0, inspect: 0, stop: 0, provider: 0 })
+      const stopped = await f.service.execute({
+        type: "STOP",
+        commandId: "stop-after-stale-recovery",
+        attemptId: binding.attemptId,
+        expectedReceiptHash: first.receipt.hash,
+      })
+      expect(stopped.status).toBe("NEVER_DISPATCHED")
+      expect(f.effects.create + f.effects.start).toBe(0)
+    }
+  )
+
+  it("reuses an existing confirmed hold after newer unrelated confirmed history without writes", async () => {
+    const f = await setup()
+    f.store.loseOn = "command_intent"
+    await expect(f.service.execute(prepare)).rejects.toMatchObject({ code: "AUTHORITY_UNKNOWN" })
+    const original = await f.service.recover(selector(prepare))
+    await f.service.execute({
+      ...prepare,
+      commandId: "prepare-after-hold",
+      attempt: { ...binding, attemptId: "attempt-after-hold", operationId: "operation-after-hold" },
+    })
+    const records = await f.factory.journal.load()
+    const bytes = await readFile(f.options.originalPath, "utf8")
+    const writes = [f.store.writes, f.mirror.writes]
+    const recovered = await f.service.recover(selector(prepare))
+    expect(recovered.holdRecord).toEqual(original.holdRecord)
+    expect(recovered.recoveredRecord).toEqual(original.recoveredRecord)
+    expect(recovered.command.status).toBe("UNKNOWN")
+    expect(await readFile(f.options.originalPath, "utf8")).toBe(bytes)
+    expect([f.store.writes, f.mirror.writes]).toEqual(writes)
+    expect(await f.factory.journal.load()).toEqual(records)
+    expect(f.effects).toEqual({ create: 0, start: 0, inspect: 0, stop: 0, provider: 0 })
+  })
+
   it.each(["R2", "database"])(
     "recovers an identical timed retry after a lost %s reply without effects",
     async (storage) => {

@@ -120,7 +120,10 @@ is allowed during interrupted recovery. Ordinary startup and readback stay `REPL
 until both originals and wrappers are confirmed across local, object-store and database histories.
 If all commits are independently visible despite a lost reply, startup reconstructs the durable
 `UNKNOWN` hold. Recovery of the same stored hold reuses its exact signed identity; read endpoints
-never perform this repair. Tests interrupt original/hold local acknowledgements and confirmation,
+never perform this repair. A new hold must bind the current original tail; stale selection is
+rejected before any write and does not latch a confirmed journal or prevent STOP. An existing
+confirmed, immediately linked hold can be reused after newer unrelated confirmed history.
+Tests interrupt original/hold local acknowledgements and confirmation,
 object record/head acknowledgements and database commit replies, including positive PREPARED and
 terminal originals, and verify no repeated physical effects.
 

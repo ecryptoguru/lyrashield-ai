@@ -127,13 +127,14 @@ export class SupervisorService {
       {
         journal: this.options.journal,
         busy: () =>
-          !!(
-            this.draining ||
-            this.activeCommands ||
-            this.inFlightStarts.size ||
-            this.pendingRevocations.size
-          ),
+          this.draining ||
+          this.activeCommands > 0 ||
+          this.inFlightStarts.size > 0 ||
+          this.pendingRevocations.size > 0,
         initialization: () => this.initialized,
+        restoreInitialization: (prior) => {
+          this.initialized = prior
+        },
         serialized: (operation) => this.serialized(operation),
         install: (records) => restoreJournalState(records, this.attempts, this.commands),
         resultFor: (commandId) => this.resultFor(commandId),
