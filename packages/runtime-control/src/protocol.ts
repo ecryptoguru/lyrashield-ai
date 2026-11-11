@@ -1,4 +1,6 @@
 import { z } from "zod"
+import type { AuthorityEvent } from "./independent-journal"
+import type { JournalRecord } from "./journal"
 
 /**
  * Canonical supervisor executor keys. The tenth key is singular `scanner`
@@ -31,6 +33,34 @@ const safeIdSchema = z
   .refine((value) => !value.includes(".."), "identifier traversal is not allowed")
 
 const receiptHashSchema = z.string().regex(/^[a-f0-9]{64}$/)
+
+export const MAX_SUPERVISOR_JOURNAL_PAGE_BYTES = 256 * 1024
+export const MAX_SUPERVISOR_JOURNAL_RECORD_BYTES = 128 * 1024
+
+/** A cursor is bound to the original signed stream, including its predecessor. */
+export const supervisorJournalCursorSchema = z
+  .object({
+    epochId: safeIdSchema,
+    supervisorInstanceId: safeIdSchema,
+    afterSequence: z.number().int().nonnegative().safe(),
+    afterHash: receiptHashSchema,
+    limit: z.number().int().min(1).max(100),
+  })
+  .strict()
+export type SupervisorJournalCursor = z.infer<typeof supervisorJournalCursorSchema>
+
+export interface SupervisorJournalPage<T> {
+  // Each independently signed wrapper retains the complete original signed
+  // envelope at payload.payload. Neither envelope is reconstructed or re-signed.
+  records: JournalRecord<AuthorityEvent<JournalRecord<T>>>[]
+  nextCursor: SupervisorJournalCursor
+  hasMore: boolean
+}
+
+export interface SupervisorJournalReader<T> {
+  readCursor(input: unknown): Promise<SupervisorJournalPage<T>>
+}
+
 const envNameSchema = z.string().regex(/^[A-Za-z_][A-Za-z0-9_]{0,127}$/)
 
 const environmentSchema = z

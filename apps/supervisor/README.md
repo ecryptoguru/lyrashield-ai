@@ -46,6 +46,39 @@ Required runtime configuration:
 The service binds to `127.0.0.1:8790` unless explicitly configured otherwise. Do not expose the
 control API directly to a sandbox or the public internet.
 
+## Independent journal adapter and readback
+
+`createSupervisorAuthorityJournal()` supplies a `JournalPort` for `SupervisorService` using two
+separate signed local files. The original supervisor record is retained unchanged inside the
+independent authority event's payload. The wrapper has its own sequence, predecessor, hash and
+signature; the original canonical envelope is never rewritten or re-signed. Its event identity
+is derived from the original record hash, so a lost acknowledgement cannot create a new identity.
+
+The factory requires an exact epoch and supervisor identity, protected object-store and PostgreSQL
+mirror ports, and an injected `authorize(event, binding)` implementation. That implementation must
+atomically compare the persisted epoch, operation, scan, workspace, attempt and authority revision.
+Every append and read revalidates that authority around local/R2/database readback. A read never
+repairs a pending append. Replay requires the same original payload; a missing acknowledgement or
+negative read remains unresolved, and conflicting histories latch the adapter closed.
+Explicit replay re-fsyncs the exact original file and any recovered pending wrapper, without
+changing their envelopes. A local port that cannot confirm an existing record stays unresolved;
+ordinary cursor reads perform no such repair.
+
+Authenticated `GET /v1/journal` accepts exactly `epochId`, `supervisorInstanceId`, `afterSequence`,
+`afterHash` and `limit`. The predecessor is the original stream's hash (64 zeroes at sequence 0),
+and the limit is 1–100. Responses contain independently signed records with the original signed
+envelope at `records[i].payload.payload`, a `nextCursor`, and `hasMore`. Pages are capped at 256 KiB;
+new original events are capped below 128 KiB so a cursor can make progress. A wrong epoch,
+supervisor or predecessor is rejected. The endpoint requires the existing control credential and
+returns `no-store` responses.
+
+The production entrypoint still uses its closed local-only configuration: this endpoint returns
+503 there. Replacing that factory requires the real protected storage and persisted authority
+implementation, plus an atomic per-action executor/provider fence. Journal confirmation alone
+does not authorize creation, start, teardown or provider effects. The adapter's tests of STOP
+against delayed intent confirmation do not qualify native Docker delayed-daemon behavior,
+cgroup ownership, process isolation, managed-provider durability or production admission.
+
 ## Deployment boundary
 
 The prototype defines immutable container images, bounded argv/environment, network, CPU, memory

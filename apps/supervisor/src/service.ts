@@ -12,6 +12,8 @@ import {
   type SupervisorCommandResult,
   type SupervisorPort,
   type SupervisorReceipt,
+  type SupervisorJournalPage,
+  type SupervisorJournalReader,
 } from "@lyrashield/runtime-control"
 import type { JournalPort, JournalRecord } from "@lyrashield/runtime-control"
 import { deriveOwnershipId, type ExecutorContext, type RuntimeExecutor } from "./executor"
@@ -39,7 +41,8 @@ export { RuntimeControlError } from "./service-common"
 const START_TYPES = new Set(["START_PAID", "START_UNMETERED"])
 
 export interface SupervisorServiceOptions {
-  journal: JournalPort<SupervisorJournalEvent>
+  journal: JournalPort<SupervisorJournalEvent> &
+    Partial<SupervisorJournalReader<SupervisorJournalEvent>>
   executor: RuntimeExecutor
   providerGateway: SupervisorPort
   providerGatewayUrl: string
@@ -99,6 +102,17 @@ export class SupervisorService {
       this.initialized = this.load()
     }
     await this.initialized
+  }
+
+  async readJournal(input: unknown): Promise<SupervisorJournalPage<SupervisorJournalEvent>> {
+    if (!this.options.journal.readCursor) {
+      throw new RuntimeControlError(
+        "JOURNAL_AUTHORITY_UNAVAILABLE",
+        "independent journal readback is unavailable",
+        503
+      )
+    }
+    return this.options.journal.readCursor(input)
   }
 
   async execute(input: unknown): Promise<SupervisorCommandResult> {

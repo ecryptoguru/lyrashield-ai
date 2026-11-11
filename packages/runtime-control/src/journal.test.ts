@@ -1,7 +1,7 @@
-import { mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises"
+import { mkdtemp, open, readFile, rm, symlink, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { afterEach, describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import { z } from "zod"
 import { SignedJournal } from "./journal"
 
@@ -16,6 +16,7 @@ async function root(): Promise<string> {
 }
 
 afterEach(async () => {
+  vi.restoreAllMocks()
   await Promise.all(roots.splice(0).map((path) => rm(path, { recursive: true, force: true })))
 })
 
@@ -119,5 +120,50 @@ describe("SignedJournal failure latching", () => {
     await expect(reloaded.load()).rejects.toThrow(/incomplete|invalid/)
     await expect(reloaded.load()).rejects.toThrow()
     await expect(reloaded.append({ kind: "start", value: 2 })).rejects.toThrow()
+  })
+})
+
+describe("SignedJournal explicit replay confirmation", () => {
+  it("fsyncs exact bytes only on explicit confirmation and preserves sequence", async () => {
+    const path = join(await root(), "original.jsonl")
+    const journal = new SignedJournal(path, secret, (value) => payloadSchema.parse(value))
+    const record = await journal.append({ kind: "prepare", value: 1 })
+    const bytes = await readFile(path, "utf8")
+    const handle = await open(path, "r")
+    const prototype = Object.getPrototypeOf(handle)
+    await handle.close()
+    const sync = vi.spyOn(prototype, "sync")
+    expect(await journal.load()).toEqual([record])
+    expect(sync).not.toHaveBeenCalled()
+    expect(await journal.confirmRecord(record)).toEqual(record)
+    expect(sync.mock.calls.length).toBeGreaterThanOrEqual(2)
+    expect(await readFile(path, "utf8")).toBe(bytes)
+    const next = await journal.append({ kind: "start", value: 2 })
+    expect(next.sequence).toBe(2)
+    expect(next.previousHash).toBe(record.hash)
+  })
+
+  it("latches on fsync failure without signing a replacement record", async () => {
+    const path = join(await root(), "original.jsonl")
+    const journal = new SignedJournal(path, secret, (value) => payloadSchema.parse(value))
+    const record = await journal.append({ kind: "prepare", value: 1 })
+    const bytes = await readFile(path, "utf8")
+    const handle = await open(path, "r")
+    const prototype = Object.getPrototypeOf(handle)
+    await handle.close()
+    vi.spyOn(prototype, "sync").mockRejectedValueOnce(new Error("fsync unavailable"))
+    await expect(journal.confirmRecord(record)).rejects.toThrow("fsync unavailable")
+    await expect(journal.append({ kind: "start", value: 2 })).rejects.toThrow("fsync unavailable")
+    expect(await readFile(path, "utf8")).toBe(bytes)
+  })
+
+  it("rejects confirmation with a changed envelope", async () => {
+    const path = join(await root(), "original.jsonl")
+    const journal = new SignedJournal(path, secret, (value) => payloadSchema.parse(value))
+    const record = await journal.append({ kind: "prepare", value: 1 })
+    await expect(journal.confirmRecord({ ...record, signature: "f".repeat(64) })).rejects.toThrow(
+      "does not match"
+    )
+    await expect(journal.load()).rejects.toThrow("does not match")
   })
 })

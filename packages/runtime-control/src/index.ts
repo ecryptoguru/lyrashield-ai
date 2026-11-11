@@ -31,6 +31,8 @@ export type {
 } from "./postgres-mirror"
 export {
   EXECUTOR_KEYS,
+  MAX_SUPERVISOR_JOURNAL_PAGE_BYTES,
+  MAX_SUPERVISOR_JOURNAL_RECORD_BYTES,
   attemptBindingSchema,
   brokerReceiptTypeSchema,
   commandStatusSchema,
@@ -49,6 +51,7 @@ export {
   stopCommandSchema,
   supervisorCommandResultSchema,
   supervisorCommandSchema,
+  supervisorJournalCursorSchema,
   supervisorReceiptSchema,
 } from "./protocol"
 export type {
@@ -71,6 +74,9 @@ export type {
   StopCommand,
   SupervisorCommand,
   SupervisorCommandResult,
+  SupervisorJournalCursor,
+  SupervisorJournalPage,
+  SupervisorJournalReader,
   SupervisorPort,
   SupervisorReceipt,
 } from "./protocol"

@@ -11,6 +11,8 @@ const MAX_JOURNAL_BYTES = 64 * 1024 * 1024
 export interface JournalPort<T> {
   append(payload: T): Promise<JournalRecord<T>>
   load(): Promise<JournalRecord<T>[]>
+  /** Explicitly fsync an existing exact record without appending or re-signing it. */
+  confirmRecord?(record: JournalRecord<T>): Promise<JournalRecord<T>>
 }
 
 export interface JournalRecord<T> {
@@ -205,6 +207,56 @@ export class SignedJournal<T> implements JournalPort<T> {
       this.latch(error)
       throw error
     }
+  }
+
+  async confirmRecord(record: JournalRecord<T>): Promise<JournalRecord<T>> {
+    if (this.closed) throw new JournalIntegrityError("journal is closed")
+    const operation = this.serial.then(async () => {
+      this.assertUsable()
+      try {
+        await this.ensureLoaded()
+        const records = await this.readAll()
+        if (
+          records.length + 1 !== this.nextSequence ||
+          this.verifyChain(records) !== this.previousHash ||
+          canonicalJson(records[record.sequence - 1]) !== canonicalJson(record)
+        ) {
+          throw new JournalIntegrityError("journal confirmation does not match the signed record")
+        }
+        // A successful read does not establish that a previous fsync completed.
+        // Reconfirm the exact owned file and directory only during explicit replay.
+        // eslint-disable-next-line security/detect-non-literal-fs-filename
+        const file = await open(
+          this.path,
+          constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK
+        )
+        try {
+          await this.assertFileIdentity(file)
+          await file.sync()
+          await this.assertFileIdentity(file)
+        } finally {
+          await file.close()
+        }
+        await this.syncDirectory()
+        await this.assertLockIdentity()
+        const readback = await this.readAll()
+        if (
+          canonicalJson(readback) !== canonicalJson(records) ||
+          this.verifyChain(readback) !== this.previousHash
+        ) {
+          throw new JournalIntegrityError("journal changed during replay confirmation")
+        }
+        return structuredClone(record)
+      } catch (error) {
+        this.latch(error)
+        throw error
+      }
+    })
+    this.serial = operation.then(
+      () => undefined,
+      () => undefined
+    )
+    return operation
   }
 
   private assertUsable(): void {
