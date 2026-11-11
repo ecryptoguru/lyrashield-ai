@@ -569,6 +569,27 @@ only its ownership-verified container. Ordinary failure invokes cleanup; hard
 process/daemon/host loss can leave resources for operator inspection. Local or
 CI success is synthetic evidence, not a fresh production recovery proof.
 
+The separate `verify-restored-authority.mjs` verifier remains offline-only and
+unwired from the production backup workflow. Its owned fixture pins PostgreSQL
+17.11 and requires `pgcrypto` 1.3 in `public`, with the extension-owned
+`digest(bytea,text)` implementation. After checking the migration, exact invoker
+helper definitions, role fences and closed epoch, it executes the no-policy
+digest helper under every configured denied role in a bounded read-only
+transaction. The probe checks function resolution and a fixed synthetic digest;
+it exposes no restored policy rows. Missing extension, schema usage, table read,
+RLS helper or digest execution grants fail closed. Verification installs nothing
+and never repairs grants or opens authority.
+
+Run the synthetic compatibility fixture with
+`RESTORE_AUTHORITY_RUNTIME_TEST=1 node --test .github/scripts/tests/restore-authority-postgres.runtime.test.mjs`.
+The fixture explicitly installs the omitted extension and restores only its
+synthetic prerequisite grants. `--no-owner --no-acl` archives still need a
+separately reviewed ownership and privilege restoration procedure, and the
+`public`/`app` archive still excludes the independent `lyrashield_authority`
+schema and retained journal. These checks do not qualify Supabase PostgreSQL
+17.6, its session pooler, provider-managed failover, production recovery or R2
+reconciliation.
+
 Existing credentials authenticate only to their original production database
 and R2 endpoint; the passphrase is used locally. Full private production data
 is decrypted on GitHub's ephemeral runner. No restored writes target

@@ -12,6 +12,7 @@ import {
   RESTORE_AUTHORITY_POSTGRES_VERSION,
   validateRestoreAuthorityConfig,
   dispatchVerificationSql,
+  dispatchDigestProbeSql,
   mirrorVerificationSql,
   parseRetainedJournal,
   assertRetainedJournal,
@@ -37,6 +38,9 @@ const closed = {
   tables: true,
   triggers: true,
   helpers: true,
+  extension: true,
+  resolution: true,
+  digest: true,
   systemDefiners: true,
   privilegedFunctions: true,
   closed: true,
@@ -257,7 +261,35 @@ test("public/app verification never claims mirror or admission qualification", a
       managedFailoverQualified: false,
     }
   )
-  assert.equal(reads, 1)
+  assert.equal(reads, 2)
+})
+test("every denied role must execute the digest helper after static authority checks", async () => {
+  const value = config()
+  value.dispatch.deniedRoles.push("authority_worker_restore")
+  const observations = []
+  await verifyRestoredAuthority(value, async (_, sql) => {
+    observations.push(sql)
+    return closed
+  })
+  assert.equal(observations.length, 3)
+  assert.ok(observations[0].includes("'migration'"))
+  for (const [index, role] of value.dispatch.deniedRoles.entries()) {
+    assert.equal(observations[index + 1], dispatchDigestProbeSql(role))
+    assert.match(observations[index + 1], /SET LOCAL row_security=on/)
+    assert.match(observations[index + 1], /SET LOCAL search_path=pg_catalog,public/)
+    assert.match(observations[index + 1], /app\.scan_policy_digest\(NULL::text\)/)
+    assert.match(observations[index + 1], /to_regprocedure\('digest\(bytea,text\)'\)/)
+    assert.match(observations[index + 1], /'digest', CASE WHEN .* THEN app\.scan_policy_digest/s)
+  }
+  observations.length = 0
+  await assert.rejects(
+    verifyRestoredAuthority(value, async (_, sql) => {
+      observations.push(sql)
+      return { ...closed, extension: false }
+    })
+  )
+  assert.equal(observations.length, 1, "unverified helpers must never execute")
+  assert.throws(() => dispatchDigestProbeSql("runtime';SELECT 1;--"))
 })
 test("mirror requires an independent target, protected closed schema, and exact retained history", async () => {
   const value = withMirror()
@@ -267,7 +299,7 @@ test("mirror requires an independent target, protected closed schema, and exact 
     code: "MIRROR_TARGET_NOT_INDEPENDENT",
   })
   const read = async (_, sql) =>
-    sql.includes("'migration'")
+    sql.includes("'migration'") || sql.includes("'digest'")
       ? closed
       : sql.includes("'protected'")
         ? mirrorClosed
@@ -332,6 +364,11 @@ test("generated observations stay read-only and bind executable source rather th
   assert.match(dispatch, /p\.prosrc=/)
   assert.match(dispatch, /t\.tgtype=/)
   assert.match(dispatch, /checksum='[a-f0-9]{64}'/)
+  assert.match(dispatch, /e\.extname='pgcrypto'/)
+  assert.match(dispatch, /e\.extversion='1\.3'/)
+  assert.match(dispatch, /extension_schema\.nspname='public'/)
+  assert.match(dispatch, /d\.deptype='e'/)
+  assert.match(dispatch, /p\.prosrc='pg_digest'/)
   assert.match(mirror, /NOT EXISTS .*active/s)
   assert.match(mirror, /p\.proconfig\s*=ARRAY\['search_path=pg_catalog'\]/)
   for (const name of [
@@ -339,6 +376,7 @@ test("generated observations stay read-only and bind executable source rather th
     "scan_target_snapshot_digest",
     "scan_policy_digest",
     "scan_dispatch_scope_digest",
+    "current_workspace_id",
   ]) {
     assert.ok(dispatch.includes(`p.proname='${name}'`))
   }

@@ -24,6 +24,7 @@ import {
   requireCheck,
   validateRestoreAuthorityConfig,
   dispatchVerificationSql,
+  dispatchDigestProbeSql,
   mirrorVerificationSql,
   parseRetainedJournal,
   retainedJournalSql,
@@ -160,12 +161,18 @@ export async function verifyRestoredAuthority(
       "tables",
       "triggers",
       "helpers",
+      "extension",
       "systemDefiners",
       "privilegedFunctions",
       "closed",
       "roles",
     ]
   )
+  for (const role of config.dispatch.deniedRoles)
+    assertRestoredChecks(await read(config.dispatch.target, dispatchDigestProbeSql(role)), [
+      "resolution",
+      "digest",
+    ])
   if (config.mirror) {
     const mirror = config.mirror
     const retained = parseRetainedJournal(

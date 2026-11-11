@@ -9,6 +9,7 @@ import { join } from "node:path"
 import {
   sha256,
   DISPATCH_MIGRATION,
+  dispatchDigestProbeSql,
   RESTORE_AUTHORITY_POSTGRES_IMAGE,
   RESTORE_AUTHORITY_POSTGRES_VERSION,
 } from "../restore-authority-contract.mjs"
@@ -182,7 +183,7 @@ test(
       "--no-acl",
     ]).stdout
     docker(["exec", "-i", containerId, "sh", "-c", "cat > /tmp/public-app.dump"], dump)
-    const restoreDispatch = (restrictedAcl = true) => {
+    const restoreDispatch = (restrictedAcl = true, installExtension = true) => {
       sql("DROP DATABASE IF EXISTS lyrashield_restore; CREATE DATABASE lyrashield_restore;")
       docker([
         "exec",
@@ -199,6 +200,10 @@ test(
         "--exit-on-error",
         "/tmp/public-app.dump",
       ])
+      // Explicit synthetic prerequisites only; the read-only verifier never installs extensions
+      // or grants privileges on the inspected target. The public/app archive omits pgcrypto.
+      if (installExtension)
+        sql("CREATE EXTENSION pgcrypto WITH SCHEMA public;", "lyrashield_restore")
       // Fixture prerequisite only: --no-acl archives do NOT restore safe function permissions.
       // The verifier never applies this ACL setup or repairs any supplied/restored target.
       // Real restore integration needs a separately reviewed privilege-restoration step.
@@ -207,6 +212,14 @@ test(
           "REVOKE EXECUTE ON ALL FUNCTIONS IN SCHEMA public,app FROM PUBLIC;",
           "lyrashield_restore"
         )
+      sql(
+        `GRANT USAGE ON SCHEMA public,app TO authority_app_restore;
+         GRANT SELECT ON public."Policy" TO authority_app_restore;
+         GRANT EXECUTE ON FUNCTION app.scan_policy_digest(text) TO authority_app_restore;
+         GRANT EXECUTE ON FUNCTION app.current_workspace_id() TO authority_app_restore;
+         ${installExtension ? "GRANT EXECUTE ON FUNCTION public.digest(bytea,text) TO authority_app_restore;" : ""}`,
+        "lyrashield_restore"
+      )
     }
     restoreDispatch()
     const config = {
@@ -239,6 +252,26 @@ test(
       assert.equal(result.stdout, "")
       assert.match(result.stderr, /^restore\/authority\/[a-z_]+; admission remains closed\n$/)
     }
+    await t.test("public/app archive omits pgcrypto and missing extension remains rejected", () => {
+      restoreDispatch(true, false)
+      assert.equal(
+        sql(
+          "SELECT count(*) FROM pg_catalog.pg_extension WHERE extname='pgcrypto';",
+          "lyrashield_restore"
+        ),
+        "0"
+      )
+      rejected(verify())
+      assert.equal(
+        sql(
+          "SELECT count(*) FROM pg_catalog.pg_extension WHERE extname='pgcrypto';",
+          "lyrashield_restore"
+        ),
+        "0",
+        "verification must not install the omitted extension"
+      )
+      restoreDispatch()
+    })
     await t.test(
       "no-acl archive alone cannot establish safe privileged function permissions",
       () => {
@@ -267,6 +300,13 @@ test(
         assert.equal(JSON.parse(result.stdout).admissionAllowed, false)
         assert.equal(
           sql(
+            "SET ROLE authority_app_restore; SET search_path=pg_catalog,public; SELECT app.scan_policy_digest(NULL::text); RESET ROLE;",
+            "lyrashield_restore"
+          ),
+          sha256('{"schemaVersion": "scan-policy/none"}')
+        )
+        assert.equal(
+          sql(
             "SELECT count(*) FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid=p.pronamespace WHERE p.prosecdef AND (n.nspname ~ '^pg_' OR n.nspname='information_schema');",
             "lyrashield_restore"
           ),
@@ -290,7 +330,59 @@ test(
         )
       }
     )
+    await t.test("digest probe rejects name shadowing before executing the shadow", () => {
+      restoreDispatch()
+      sql(
+        "CREATE FUNCTION pg_catalog.digest(bytea,text) RETURNS bytea LANGUAGE plpgsql IMMUTABLE STRICT AS $$ BEGIN RAISE EXCEPTION 'unreviewed shadow executed'; END; $$;",
+        "lyrashield_restore"
+      )
+      const observation = JSON.parse(
+        sql(
+          `BEGIN READ ONLY; SET LOCAL statement_timeout='10s'; ${dispatchDigestProbeSql("authority_app_restore")} ROLLBACK;`,
+          "lyrashield_restore"
+        )
+      )
+      assert.deepEqual(observation, { resolution: false, digest: null })
+      rejected(verify())
+    })
     for (const [label, mutation] of [
+      [
+        "extension installed in an unresolved schema",
+        "CREATE SCHEMA extensions; ALTER EXTENSION pgcrypto SET SCHEMA extensions;",
+      ],
+      [
+        "unreviewed extension version",
+        "UPDATE pg_catalog.pg_extension SET extversion='unreviewed' WHERE extname='pgcrypto';",
+      ],
+      [
+        "digest detached from extension membership",
+        "ALTER EXTENSION pgcrypto DROP FUNCTION public.digest(bytea,text);",
+      ],
+      [
+        "missing helper execution grant",
+        "REVOKE EXECUTE ON FUNCTION app.scan_policy_digest(text) FROM authority_app_restore;",
+      ],
+      [
+        "missing digest execution grant",
+        "REVOKE EXECUTE ON FUNCTION public.digest(bytea,text) FROM authority_app_restore;",
+      ],
+      [
+        "missing helper schema usage grant",
+        "REVOKE USAGE ON SCHEMA app FROM authority_app_restore;",
+      ],
+      ["missing Policy read grant", 'REVOKE SELECT ON public."Policy" FROM authority_app_restore;'],
+      [
+        "missing RLS helper execution grant",
+        "REVOKE EXECUTE ON FUNCTION app.current_workspace_id() FROM authority_app_restore;",
+      ],
+      [
+        "altered RLS helper",
+        "CREATE OR REPLACE FUNCTION app.current_workspace_id() RETURNS text LANGUAGE sql STABLE AS $$ SELECT 'untrusted'::text $$;",
+      ],
+      [
+        "digest resolved from an unreviewed system-schema shadow",
+        "CREATE FUNCTION pg_catalog.digest(bytea,text) RETURNS bytea LANGUAGE sql IMMUTABLE STRICT AS $$ SELECT public.digest($1,$2) $$;",
+      ],
       [
         "altered migration checksum",
         `UPDATE public."_prisma_migrations" SET checksum=repeat('a',64) WHERE migration_name='${DISPATCH_MIGRATION}';`,

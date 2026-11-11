@@ -23,6 +23,17 @@ const mirrorSql = readFileSync(
   new URL("../../packages/runtime-control/sql/authority-mirror.sql", import.meta.url),
   "utf8"
 )
+// eslint-disable-next-line security/detect-non-literal-fs-filename
+const rlsSql = readFileSync(
+  new URL(
+    "../../packages/db/prisma/migrations/20260705100000_batch3_rls/migration.sql",
+    import.meta.url
+  ),
+  "utf8"
+)
+const rlsHelperBody = rlsSql.match(
+  /CREATE OR REPLACE FUNCTION app\.current_workspace_id\(\)[^]*?AS \$\$([^]*?)\$\$;/
+)?.[1]
 export const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex")
 const literal = (value) => "'" + value.replaceAll("'", "''") + "'"
 const identifier = /^[a-zA-Z_][a-zA-Z0-9_]{0,62}$/
@@ -141,6 +152,7 @@ requireCheck(
     dispatchHelpers.every((helper) => bodies.has(helper.name)),
   "SOURCE_CONTRACT_UNAVAILABLE"
 )
+requireCheck(typeof rlsHelperBody === "string", "SOURCE_CONTRACT_UNAVAILABLE")
 const tableArray = (names) => `ARRAY[${names.map((name) => literal(name)).join(",")}]::text[]`
 const allPrivileges = "SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN"
 function restrictedRole(role) {
@@ -236,13 +248,42 @@ export function dispatchVerificationSql(deniedRoles) {
       FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
       WHERE n.nspname='public' AND c.relname=ANY(${tableArray(dispatchTables)})),
     'triggers', ${triggerChecks},
-    'helpers', ${helpers},
+    'helpers', ${helpers} AND EXISTS (
+      SELECT 1 FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid=p.pronamespace
+      JOIN pg_catalog.pg_language language ON language.oid=p.prolang
+      WHERE ${functionContract("app", { name: "current_workspace_id", result: "text", language: "sql", volatility: "s", body: rlsHelperBody, config: ["search_path=pg_catalog, app"] })}),
+    'extension', EXISTS (
+      SELECT 1 FROM pg_catalog.pg_extension e
+      JOIN pg_catalog.pg_namespace extension_schema ON extension_schema.oid=e.extnamespace
+      JOIN pg_catalog.pg_depend d ON d.refclassid='pg_catalog.pg_extension'::regclass
+        AND d.refobjid=e.oid AND d.classid='pg_catalog.pg_proc'::regclass AND d.deptype='e'
+      JOIN pg_catalog.pg_proc p ON p.oid=d.objid
+      JOIN pg_catalog.pg_namespace n ON n.oid=p.pronamespace
+      JOIN pg_catalog.pg_language language ON language.oid=p.prolang
+      WHERE e.extname='pgcrypto' AND e.extversion='1.3' AND extension_schema.nspname='public'
+        AND n.nspname='public' AND p.proname='digest' AND p.proargtypes='17 25'::oidvector
+        AND p.prorettype=17 AND language.lanname='c' AND p.prosrc='pg_digest'
+        AND p.probin='$libdir/pgcrypto' AND NOT p.prosecdef AND p.proisstrict AND p.provolatile='i'),
     'systemDefiners', ${systemDefinersAbsent},
     'privilegedFunctions', ${deniedRoles.map((role) => reviewedDefinersOnly(role)).join(" AND ")},
     'closed', NOT EXISTS (SELECT 1 FROM public."ScanAuthorityEpoch" WHERE "isOpen" OR "openKey" IS NOT NULL OR "closedAt" IS NULL)
       AND EXISTS (SELECT 1 FROM public."ScanAuthorityEpoch" WHERE id='scan-authority-baseline' AND epoch=1
         AND NOT "isOpen" AND "openKey" IS NULL AND "openedAt" IS NULL AND "closedAt" IS NOT NULL),
     'roles', ${roleChecks})::text;`
+}
+
+/** Execute only after source/privilege checks, without writes or restoring missing grants. */
+export function dispatchDigestProbeSql(role) {
+  roleName(role)
+  // PostgreSQL jsonb::text uses this canonical spacing. The NULL policy branch always hashes
+  // these synthetic bytes, including on an empty database, and never returns restored row data.
+  const expected = sha256('{"schemaVersion": "scan-policy/none"}')
+  const resolved =
+    "pg_catalog.to_regprocedure('digest(bytea,text)')='public.digest(bytea,text)'::regprocedure"
+  return `SET LOCAL ROLE ${literal(role)};
+    SET LOCAL row_security=on; SET LOCAL search_path=pg_catalog,public;
+    SELECT json_build_object('resolution', ${resolved},
+      'digest', CASE WHEN ${resolved} THEN app.scan_policy_digest(NULL::text)=${literal(expected)} END)::text;`
 }
 
 const mirrorFunctions = [
