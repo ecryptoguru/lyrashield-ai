@@ -1,5 +1,5 @@
 import { prisma } from "./client"
-import { createHash, randomBytes } from "crypto"
+import { createHash } from "crypto"
 
 const SHARE_TOKEN_PATTERN = /^[a-f0-9]{64}$/i
 import { logger } from "@lyrashield/logger"
@@ -10,6 +10,13 @@ import { withWorkspaceRLS, type ScopedTransaction } from "./rls"
 import { parseLaunchReportProvenance } from "./launch-report-provenance"
 import { isLaunchReportShareablePayload } from "./launch-report-html"
 import { lockActiveTargetForDerivedWrite } from "./target-write-lock"
+
+export {
+  generateShareToken,
+  generateReleasePacketShareToken,
+  revokeShareToken,
+  revokeReleasePacketShareToken,
+} from "./report-share-tokens"
 
 export interface CreateReportParams {
   workspaceId: string
@@ -330,70 +337,6 @@ export async function createReport(
   return report
 }
 
-export async function generateShareToken(
-  reportId: string,
-  workspaceId: string,
-  options: {
-    targetId?: string | null
-    requireActiveTarget?: boolean
-    client?: ScopedTransaction
-  } = {}
-): Promise<{ token: string; tokenHash: string; expiresAt: Date }> {
-  const token = randomBytes(32).toString("hex")
-  const tokenHash = createHash("sha256").update(token).digest("hex")
-  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
-
-  const update = async (tx: ScopedTransaction) => {
-    if (options.requireActiveTarget) {
-      const targetId = options.targetId
-      if (!targetId || !(await lockActiveTargetForDerivedWrite(tx, workspaceId, targetId))) {
-        throw new Error("FORBIDDEN")
-      }
-    }
-    const updated = await tx.report.updateMany({
-      where: { id: reportId, workspaceId, deletedAt: null },
-      data: {
-        shareTokenHash: tokenHash,
-        shareExpiresAt: expiresAt,
-        revokedAt: null,
-      },
-    })
-    if (updated.count !== 1) throw new Error("Report not found")
-  }
-  if (options.client) await update(options.client)
-  else await withWorkspaceRLS(workspaceId, update)
-
-  return { token, tokenHash, expiresAt }
-}
-
-export async function revokeShareToken(
-  reportId: string,
-  workspaceId: string,
-  options: {
-    targetId?: string | null
-    requireActiveTarget?: boolean
-    client?: ScopedTransaction
-  } = {}
-): Promise<Date> {
-  const revokedAt = new Date()
-  const update = async (tx: ScopedTransaction) => {
-    if (options.requireActiveTarget) {
-      const targetId = options.targetId
-      if (!targetId || !(await lockActiveTargetForDerivedWrite(tx, workspaceId, targetId))) {
-        throw new Error("FORBIDDEN")
-      }
-    }
-    const updated = await tx.report.updateMany({
-      where: { id: reportId, workspaceId, deletedAt: null },
-      data: { revokedAt },
-    })
-    if (updated.count !== 1) throw new Error("Report not found")
-  }
-  if (options.client) await update(options.client)
-  else await withWorkspaceRLS(workspaceId, update)
-  return revokedAt
-}
-
 export async function getReportByShareToken(
   token: string
 ): Promise<Pick<Report, "id" | "workspaceId" | "shareExpiresAt"> | null> {
@@ -467,7 +410,9 @@ async function readShareableReport(
       ? await readActiveSharedReport(tx, workspaceId, reportId, shareToken)
       : await tx.report.findFirst({ where: { id: reportId, workspaceId, deletedAt: null } })
 
-    if (!report) return null
+    // Release packets have their own permission-checked readers; never project
+    // their linked scan or snapshot into a generic report, even with a valid token.
+    if (!report || report.type === "release_packet") return null
     if (
       !reportSnapshotScanBindingMatches(report.contentJson, report.scanId, report.type, {
         requireExplicit: options.requireExplicitSnapshotBinding,
