@@ -1,11 +1,15 @@
 import { z } from "zod"
 import { providerGrantRequestSchema, type ProviderGrantRequest } from "@lyrashield/runtime-control"
+import { requestPolicySchema, type RequestPolicy } from "./request-policy"
+import { terminalUsageSchema, type TerminalUsage } from "./provider-usage"
+import { retainedResponseSchema, type RetainedResponse } from "./retained-response"
 
 const issuedGrantSchema = z
   .object({
     grantRequestId: z.string(),
     grantId: z.string(),
     request: providerGrantRequestSchema,
+    policy: requestPolicySchema.optional(),
   })
   .strict()
 const revocationEventSchema = z
@@ -26,6 +30,13 @@ const requestStartedSchema = z
     accept: z.string().max(1_024),
     bodyHash: z.string(),
     reservationMicros: z.number().int().nonnegative(),
+    policyDigest: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/)
+      .optional(),
+    model: z.string().optional(),
+    maxOutputTokens: z.number().int().positive().optional(),
+    stream: z.boolean().optional(),
   })
   .strict()
 const requestResultSchema = z
@@ -38,6 +49,8 @@ const requestResultSchema = z
     responseHash: z.string().optional(),
     responseBytes: z.number().int().nonnegative().optional(),
     usageId: z.string().optional(),
+    usage: terminalUsageSchema.optional(),
+    retainedResponse: retainedResponseSchema.optional(),
     detail: z.string().max(512).optional(),
   })
   .strict()
@@ -47,6 +60,14 @@ export const providerJournalEventSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("grant_revoked"), revocation: revocationEventSchema }).strict(),
   z.object({ type: z.literal("request_started"), request: requestStartedSchema }).strict(),
   z.object({ type: z.literal("request_result"), result: requestResultSchema }).strict(),
+  z
+    .object({
+      type: z.literal("legacy_request_uncertain"),
+      requestId: z.string(),
+      grantId: z.string(),
+      attemptId: z.string(),
+    })
+    .strict(),
 ])
 export type ProviderJournalEvent = z.infer<typeof providerJournalEventSchema>
 
@@ -58,6 +79,7 @@ export interface GrantState {
   requestCount: number
   reservedCostMicros: number
   receiptHash: string
+  policy?: RequestPolicy
 }
 
 export interface RequestState {
@@ -72,11 +94,21 @@ export interface RequestState {
   accept: string
   bodyHash: string
   reservationMicros: number
+  policyDigest?: string
+  model?: string
+  maxOutputTokens?: number
+  stream?: boolean
   outcome: "PENDING" | "SUCCEEDED" | "FAILED" | "UNKNOWN"
+  // A durable dispatch intent remains physically outstanding until trusted
+  // terminal evidence is recorded. Local abort/timeout is not stop proof.
+  physicalOutstanding: boolean
   statusCode?: number
   responseHash?: string
   responseBytes?: number
   usageId?: string
+  usage?: TerminalUsage
+  retainedResponse?: RetainedResponse
   detail?: string
   receiptHash: string
+  receipt?: { sequence: number; hash: string; signature: string }
 }

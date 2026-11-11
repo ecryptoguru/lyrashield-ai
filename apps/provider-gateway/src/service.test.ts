@@ -4,6 +4,7 @@ import { join } from "node:path"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { SignedJournal, type ProviderGrantRequest } from "@lyrashield/runtime-control"
 import type { ProviderRoute } from "./config"
+import { fixturePolicy } from "./test-fixtures"
 import { ProviderGatewayService, providerJournalEventSchema } from "./service"
 
 const roots: string[] = []
@@ -40,18 +41,35 @@ function request(maxRequests = 2): ProviderGrantRequest {
   }
 }
 
+function providerBody(id = "response-1") {
+  return JSON.stringify({
+    id,
+    model: "gpt-6-luna",
+    status: "completed",
+    usage: {
+      input_tokens: 3,
+      output_tokens: 2,
+      total_tokens: 5,
+      input_tokens_details: { cached_tokens: 0 },
+    },
+  })
+}
+const inputBody = Buffer.from(
+  JSON.stringify({ model: "gpt-6-luna", input: "hello", max_output_tokens: 64 })
+)
 const route: ProviderRoute = {
   id: "azure-ai",
   baseUrl: "https://provider.example.test/openai",
   auth: { kind: "api-key", credential: "real-provider-secret", headerName: "api-key" },
   allowedPathPrefixes: ["/openai/"],
+  requestPolicy: fixturePolicy,
 }
 
 async function createService(
   journalPort?: Awaited<ReturnType<typeof journal>>,
   fetchImpl: typeof fetch = vi.fn(
     async () =>
-      new Response(JSON.stringify({ id: "response-1", usage: { input_tokens: 3 } }), {
+      new Response(providerBody(), {
         status: 200,
         headers: { "content-type": "application/json" },
       })
@@ -62,6 +80,8 @@ async function createService(
   return new ProviderGatewayService({
     journal: activeJournal,
     signingSecret: secret,
+    responseEncryptionSecret: "e".repeat(48),
+    authorizeGrant: async () => fixturePolicy,
     admission,
     providers: new Map([[route.id, route]]),
     fetchImpl,
@@ -90,11 +110,12 @@ describe("ProviderGatewayService", () => {
     const grant = await service.issueGrant(request())
     const input = {
       providerId: "azure-ai",
-      path: "/openai/responses",
+      path: fixturePolicy.endpoint,
       method: "POST",
       authorization: `Bearer ${grant.token}`,
       requestId: "provider-in-flight",
-      body: Buffer.from("{}"),
+      contentType: "application/json",
+      body: inputBody,
     }
     const pending = service.proxy(input)
     const pendingResult = pending.catch((error: unknown) => error)
@@ -137,11 +158,12 @@ describe("ProviderGatewayService", () => {
     const pending = service
       .proxy({
         providerId: "azure-ai",
-        path: "/openai/responses",
+        path: fixturePolicy.endpoint,
         method: "POST",
         authorization: `Bearer ${grant.token}`,
         requestId: "provider-ignores-abort",
-        body: Buffer.from("{}"),
+        contentType: "application/json",
+        body: inputBody,
       })
       .catch((error: unknown) => error)
     await started
@@ -165,11 +187,12 @@ describe("ProviderGatewayService", () => {
     const grant = await service.issueGrant(request(1))
     const input = {
       providerId: "azure-ai",
-      path: "/openai/responses",
+      path: fixturePolicy.endpoint,
       method: "POST",
       authorization: `Bearer ${grant.token}`,
       requestId: "provider-first-reservation",
-      body: Buffer.from("{}"),
+      contentType: "application/json",
+      body: inputBody,
     }
     const pending = service.proxy(input).catch((error: unknown) => error)
     await started
@@ -185,7 +208,7 @@ describe("ProviderGatewayService", () => {
     const fetchImpl = vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
       expect(new Headers(init?.headers).get("api-key")).toBe("real-provider-secret")
       expect(new Headers(init?.headers).get("authorization")).toBeNull()
-      return new Response(JSON.stringify({ id: "response-1", usage: { input_tokens: 3 } }), {
+      return new Response(providerBody(), {
         status: 200,
         headers: { "content-type": "application/json" },
       })
@@ -196,12 +219,12 @@ describe("ProviderGatewayService", () => {
     expect(grant.token).not.toContain("real-provider-secret")
     const response = await service.proxy({
       providerId: "azure-ai",
-      path: "/openai/responses?api-version=1",
+      path: fixturePolicy.endpoint,
       method: "POST",
       authorization: `Bearer ${grant.token}`,
       requestId: "provider-request-1",
       contentType: "application/json",
-      body: Buffer.from(JSON.stringify({ model: "gpt-6-luna", input: "hello" })),
+      body: inputBody,
     })
     expect(response.statusCode).toBe(200)
     expect(response.headers["x-lyra-usage-id"]).toMatch(/^usage_/)
@@ -211,7 +234,7 @@ describe("ProviderGatewayService", () => {
   it("returns the immutable request identity on replay without a second provider request", async () => {
     const fetchImpl = vi.fn(
       async () =>
-        new Response(JSON.stringify({ id: "response-1" }), {
+        new Response(providerBody(), {
           status: 200,
           headers: { "content-type": "application/json" },
         })
@@ -220,15 +243,17 @@ describe("ProviderGatewayService", () => {
     const grant = await service.issueGrant(request())
     const input = {
       providerId: "azure-ai",
-      path: "/openai/responses",
+      path: fixturePolicy.endpoint,
       method: "POST",
       authorization: `Bearer ${grant.token}`,
       requestId: "provider-request-reused",
       contentType: "application/json",
-      body: Buffer.from('{"input":"same"}'),
+      body: inputBody,
     }
-    await service.proxy(input)
+    const original = await service.proxy(input)
     const replayed = await service.proxy(input)
+    expect(replayed.body).toEqual(original.body)
+    expect(replayed.headers["x-lyra-usage-id"]).toBe(original.headers["x-lyra-usage-id"])
     expect(replayed.replayed).toBe(true)
     expect(fetchImpl).toHaveBeenCalledTimes(1)
     await expect(
@@ -240,28 +265,31 @@ describe("ProviderGatewayService", () => {
   it("enforces the request budget and records no second upstream request", async () => {
     const fetchImpl = vi.fn(
       async () =>
-        new Response("{}", { status: 200, headers: { "content-type": "application/json" } })
+        new Response(providerBody(), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        })
     )
     const service = await createService(await journal(), fetchImpl)
     const grant = await service.issueGrant(request(1))
     await service.proxy({
       providerId: "azure-ai",
-      path: "/openai/responses",
+      path: fixturePolicy.endpoint,
       method: "POST",
       authorization: `Bearer ${grant.token}`,
       requestId: "provider-budget-1",
       contentType: "application/json",
-      body: Buffer.from("{}"),
+      body: inputBody,
     })
     await expect(
       service.proxy({
         providerId: "azure-ai",
-        path: "/openai/responses",
+        path: fixturePolicy.endpoint,
         method: "POST",
         authorization: `Bearer ${grant.token}`,
         requestId: "provider-budget-2",
         contentType: "application/json",
-        body: Buffer.from("{}"),
+        body: inputBody,
       })
     ).rejects.toThrow(/budget is exhausted/)
     expect(fetchImpl).toHaveBeenCalledTimes(1)
@@ -274,11 +302,12 @@ describe("ProviderGatewayService", () => {
     await expect(
       service.proxy({
         providerId: "azure-ai",
-        path: "/openai/responses",
+        path: fixturePolicy.endpoint,
         method: "POST",
         authorization: `Bearer ${grant.token}`,
         requestId: "provider-revoked",
-        body: Buffer.from("{}"),
+        contentType: "application/json",
+        body: inputBody,
       })
     ).rejects.toThrow(/revoked/)
     const second = await service.issueGrant({ ...request(), grantRequestId: "grant-request-2" })
@@ -289,7 +318,8 @@ describe("ProviderGatewayService", () => {
         method: "POST",
         authorization: `Bearer ${second.token}`,
         requestId: "provider-path",
-        body: Buffer.from("{}"),
+        contentType: "application/json",
+        body: inputBody,
       })
     ).rejects.toThrow(/allowlisted/)
   })
@@ -307,12 +337,12 @@ describe("ProviderGatewayService", () => {
     const grant = await service.issueGrant(request())
     const input = {
       providerId: "azure-ai",
-      path: "/openai/responses",
+      path: fixturePolicy.endpoint,
       method: "POST",
       authorization: `Bearer ${grant.token}`,
       requestId: "provider-unknown",
       contentType: "application/json",
-      body: Buffer.from("{}"),
+      body: inputBody,
     }
     await expect(service.proxy(input)).rejects.toThrow(/unknown/)
     await expect(service.proxy(input)).rejects.toThrow(/cannot be replayed/)
@@ -322,7 +352,7 @@ describe("ProviderGatewayService", () => {
   it("replays an exact canonical path+query and rejects silent query drift", async () => {
     const fetchImpl = vi.fn(
       async () =>
-        new Response(JSON.stringify({ id: "response-1" }), {
+        new Response(providerBody(), {
           status: 200,
           headers: { "content-type": "application/json" },
         })
@@ -331,12 +361,12 @@ describe("ProviderGatewayService", () => {
     const grant = await service.issueGrant(request())
     const queried = {
       providerId: "azure-ai",
-      path: "/openai/responses?api-version=1&flag=a",
+      path: fixturePolicy.endpoint,
       method: "POST",
       authorization: `Bearer ${grant.token}`,
       requestId: "provider-request-query",
       contentType: "application/json",
-      body: Buffer.from('{"input":"same"}'),
+      body: inputBody,
     }
     await service.proxy(queried)
     const replayed = await service.proxy(queried)
@@ -351,7 +381,7 @@ describe("ProviderGatewayService", () => {
   it("binds forwarded content negotiation headers into the request identity", async () => {
     const fetchImpl = vi.fn(
       async () =>
-        new Response(JSON.stringify({ id: "response-1" }), {
+        new Response(providerBody(), {
           status: 200,
           headers: { "content-type": "application/json" },
         })
@@ -360,13 +390,13 @@ describe("ProviderGatewayService", () => {
     const grant = await service.issueGrant(request())
     const negotiated = {
       providerId: "azure-ai",
-      path: "/openai/files",
+      path: fixturePolicy.endpoint,
       method: "POST",
       authorization: `Bearer ${grant.token}`,
       requestId: "provider-request-typed",
       contentType: "application/json",
       accept: "application/json",
-      body: Buffer.from('{"input":"same"}'),
+      body: inputBody,
     }
     await service.proxy(negotiated)
     // Case/whitespace-equivalent headers still match the recorded identity.
