@@ -9,6 +9,9 @@
  * headBytes, records: [{sequence, recordBytes}]}]. Authenticate them before use.
  * Targets must be freshly owned, network-none, nonprivileged, mount-free containers
  * with tmpfs PostgreSQL data and label lyrashield.authority-restore=<ownerToken>.
+ * Only the exact qualified offline PG17.11 image/version is accepted. The system-definer
+ * allowlist is empty; system/extension additions and other versions require separate review.
+ * Source/permission checks are bounded snapshots, not proof against dynamic SQL or later drift.
  * This checks restore fences; it neither closes nor opens epochs and grants nothing.
  */
 import { spawnSync } from "node:child_process"
@@ -16,6 +19,8 @@ import { constants, closeSync, fstatSync, openSync, readSync } from "node:fs"
 import { pathToFileURL } from "node:url"
 import {
   RestoreAuthorityError,
+  RESTORE_AUTHORITY_POSTGRES_IMAGE,
+  RESTORE_AUTHORITY_POSTGRES_VERSION,
   requireCheck,
   validateRestoreAuthorityConfig,
   dispatchVerificationSql,
@@ -38,6 +43,7 @@ export function assertLocalRestoreEnvironment(env) {
 export function assertOwnedRestoreTarget(observed, target) {
   requireCheck(
     observed?.Id === target.containerId &&
+      observed.Image === RESTORE_AUTHORITY_POSTGRES_IMAGE &&
       observed.Name === `/lyrashield-authority-restore-${target.ownerToken}` &&
       observed.Config?.Labels?.["lyrashield.authority-restore"] === target.ownerToken &&
       observed.State?.Running === true &&
@@ -130,7 +136,7 @@ function query(target, sql) {
     SET LOCAL statement_timeout='10s'; SET LOCAL lock_timeout='3s';
     SET LOCAL row_security=off; SET LOCAL standard_conforming_strings=on;
     SELECT json_build_object('visible',rolsuper OR rolbypassrls,
-      'version',current_setting('server_version_num')::int BETWEEN 170000 AND 179999)::text
+      'version',current_setting('server_version_num')::int=${RESTORE_AUTHORITY_POSTGRES_VERSION})::text
       FROM pg_catalog.pg_roles WHERE rolname=current_user;
     ${sql}
     ROLLBACK;`
@@ -149,7 +155,16 @@ export async function verifyRestoredAuthority(
   validateRestoreAuthorityConfig(config)
   assertRestoredChecks(
     await read(config.dispatch.target, dispatchVerificationSql(config.dispatch.deniedRoles)),
-    ["migration", "tables", "triggers", "helpers", "privilegedFunctions", "closed", "roles"]
+    [
+      "migration",
+      "tables",
+      "triggers",
+      "helpers",
+      "systemDefiners",
+      "privilegedFunctions",
+      "closed",
+      "roles",
+    ]
   )
   if (config.mirror) {
     const mirror = config.mirror
@@ -159,7 +174,7 @@ export async function verifyRestoredAuthority(
     )
     assertRestoredChecks(
       await read(mirror.target, mirrorVerificationSql(mirror.runtimeRole, mirror.deniedRoles)),
-      ["protected", "functions", "privilegedFunctions", "roles", "closed"]
+      ["protected", "functions", "systemDefiners", "privilegedFunctions", "roles", "closed"]
     )
     for (const stream of retained.streams)
       assertRetainedJournal(stream, await read(mirror.target, retainedJournalSql(stream)))

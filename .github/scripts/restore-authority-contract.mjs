@@ -2,6 +2,13 @@ import { createHash } from "node:crypto"
 import { readFileSync } from "node:fs"
 
 export const DISPATCH_MIGRATION = "20261105130000_durable_dispatch_authority"
+// Offline linux/arm64 fixture qualification, not a production/provider version allowance.
+// Its fresh PG17.11 catalog contains no SECURITY DEFINER functions, also after installing the
+// checked-out pgcrypto/btree_gist extensions. No system-definer identity is therefore allowlisted.
+// Additional images/versions or definer extensions require separate catalog qualification.
+export const RESTORE_AUTHORITY_POSTGRES_IMAGE =
+  "sha256:eee6c6e1b0894fa4fe0075eb054af9fd1cf39a35321c2d4110626cfe506411fb"
+export const RESTORE_AUTHORITY_POSTGRES_VERSION = 170011
 // Only fixed checked-out SQL, never caller-controlled paths, owns these expectations.
 // eslint-disable-next-line security/detect-non-literal-fs-filename
 const dispatchSql = readFileSync(
@@ -183,10 +190,15 @@ function reviewedDefinersOnly(role, approved = "false") {
   return `NOT EXISTS (SELECT 1 FROM pg_catalog.pg_proc p
     JOIN pg_catalog.pg_namespace n ON n.oid=p.pronamespace
     JOIN pg_catalog.pg_language language ON language.oid=p.prolang
-    WHERE p.prosecdef AND n.nspname !~ '^pg_' AND n.nspname <> 'information_schema'
+    WHERE p.prosecdef
       AND ${reachablePrivilege(role, "function", "p.oid", "EXECUTE")}
       AND (${approved}) IS NOT TRUE)`
 }
+// An empty reviewed system-definer catalog is rechecked after restore, even for functions that
+// currently have no runtime EXECUTE grant. Namespace spelling never creates a trust exemption.
+const systemDefinersAbsent = `NOT EXISTS (SELECT 1 FROM pg_catalog.pg_proc p
+  JOIN pg_catalog.pg_namespace n ON n.oid=p.pronamespace
+  WHERE p.prosecdef AND (n.nspname ~ '^pg_' OR n.nspname='information_schema'))`
 export function dispatchVerificationSql(deniedRoles) {
   roles(deniedRoles)
   const triggerChecks = triggers
@@ -225,6 +237,7 @@ export function dispatchVerificationSql(deniedRoles) {
       WHERE n.nspname='public' AND c.relname=ANY(${tableArray(dispatchTables)})),
     'triggers', ${triggerChecks},
     'helpers', ${helpers},
+    'systemDefiners', ${systemDefinersAbsent},
     'privilegedFunctions', ${deniedRoles.map((role) => reviewedDefinersOnly(role)).join(" AND ")},
     'closed', NOT EXISTS (SELECT 1 FROM public."ScanAuthorityEpoch" WHERE "isOpen" OR "openKey" IS NOT NULL OR "closedAt" IS NULL)
       AND EXISTS (SELECT 1 FROM public."ScanAuthorityEpoch" WHERE id='scan-authority-baseline' AND epoch=1
@@ -289,6 +302,7 @@ export function mirrorVerificationSql(runtimeRole, deniedRoles) {
         WHERE n.nspname='lyrashield_authority' AND c.relname IN ('stream','record') AND c.relkind='r'
           AND NOT EXISTS (SELECT 1 FROM pg_catalog.aclexplode(COALESCE(c.relacl,pg_catalog.acldefault('r',c.relowner))) a WHERE a.grantee=0)),
     'functions', ${functions},
+    'systemDefiners', ${systemDefinersAbsent},
     'privilegedFunctions', ${reviewedDefinersOnly(runtimeRole, approved)} AND ${deniedRoles.map((role) => reviewedDefinersOnly(role)).join(" AND ")},
     'roles', ${restrictedRole(runtimeRole)} AND pg_catalog.has_schema_privilege(${literal(runtimeRole)},'lyrashield_authority','USAGE')
       AND NOT ${reachablePrivilege(runtimeRole, "schema", "'lyrashield_authority'", "CREATE")}

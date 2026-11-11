@@ -6,7 +6,12 @@ import { spawnSync } from "node:child_process"
 import { mkdtempSync, readFileSync, readdirSync, writeFileSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { sha256, DISPATCH_MIGRATION } from "../restore-authority-contract.mjs"
+import {
+  sha256,
+  DISPATCH_MIGRATION,
+  RESTORE_AUTHORITY_POSTGRES_IMAGE,
+  RESTORE_AUTHORITY_POSTGRES_VERSION,
+} from "../restore-authority-contract.mjs"
 import { assertOwnedRestoreTarget } from "../verify-restored-authority.mjs"
 
 const repository = new URL("../../../", import.meta.url)
@@ -87,8 +92,8 @@ test(
       JSON.parse(text(["context", "inspect", context]))[0].Endpoints.docker.Host,
       /^unix:\/\/\//
     )
-    image = text(["image", "inspect", "postgres:17-alpine", "--format", "{{.Id}}"])
-    assert.match(image, /^sha256:[a-f0-9]{64}$/)
+    image = text(["image", "inspect", RESTORE_AUTHORITY_POSTGRES_IMAGE, "--format", "{{.Id}}"])
+    assert.equal(image, RESTORE_AUTHORITY_POSTGRES_IMAGE)
     containerId = text([
       "run",
       "-d",
@@ -130,6 +135,22 @@ test(
       ownerToken,
       database: "lyrashield_restore",
     })
+    await t.test(
+      "pinned known-good PostgreSQL catalog has no system definers and legitimate built-ins execute as invokers",
+      () => {
+        assert.equal(
+          sql("SELECT current_setting('server_version_num');"),
+          String(RESTORE_AUTHORITY_POSTGRES_VERSION)
+        )
+        assert.equal(sql("SELECT count(*) FROM pg_catalog.pg_proc WHERE prosecdef;"), "0")
+        assert.equal(
+          sql(
+            "SELECT count(*) FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_roles owner ON owner.oid=p.proowner JOIN pg_catalog.pg_language language ON language.oid=p.prolang WHERE p.oid='pg_catalog.pg_backend_pid()'::regprocedure AND owner.oid=10 AND language.lanname='internal' AND p.prosrc='pg_backend_pid' AND NOT p.prosecdef AND p.probin IS NULL;"
+          ),
+          "1"
+        )
+      }
+    )
     sql(`CREATE ROLE authority_app_restore NOLOGIN NOSUPERUSER NOCREATEROLE NOCREATEDB NOBYPASSRLS;
       CREATE ROLE authority_mirror_restore NOLOGIN NOSUPERUSER NOCREATEROLE NOCREATEDB NOBYPASSRLS;
       CREATE ROLE authority_worker_restore NOLOGIN NOSUPERUSER NOCREATEROLE NOCREATEDB NOBYPASSRLS;
@@ -244,6 +265,22 @@ test(
         assert.equal(result.status, 0, result.stderr)
         assert.equal(JSON.parse(result.stdout).mirror, "NOT_REQUESTED")
         assert.equal(JSON.parse(result.stdout).admissionAllowed, false)
+        assert.equal(
+          sql(
+            "SELECT count(*) FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid=p.pronamespace WHERE p.prosecdef AND (n.nspname ~ '^pg_' OR n.nspname='information_schema');",
+            "lyrashield_restore"
+          ),
+          "0"
+        )
+        // Existing built-in invokers remain callable; this proves functionality,
+        // not authentication of the entire mutable catalog or absence of dynamic SQL bypasses.
+        assert.equal(
+          sql(
+            "SET ROLE authority_app_restore; SELECT pg_catalog.pg_backend_pid()>0; RESET ROLE;",
+            "lyrashield_restore"
+          ),
+          "t"
+        )
         assert.equal(
           sql(
             'SELECT row_to_json(e)::text FROM public."ScanAuthorityEpoch" e;',
@@ -362,7 +399,22 @@ test(
           : "")
       )
     }
-    for (const schema of ["public", "app"])
+    await t.test("restored system-definer absence is required even before an EXECUTE grant", () => {
+      restoreDispatch()
+      sql(
+        "CREATE FUNCTION information_schema.unreviewed_private() RETURNS void LANGUAGE plpgsql SECURITY DEFINER AS $$ BEGIN RETURN; END; $$; REVOKE ALL ON FUNCTION information_schema.unreviewed_private() FROM PUBLIC;",
+        "lyrashield_restore"
+      )
+      assert.equal(
+        sql(
+          "SELECT has_function_privilege('authority_app_restore','information_schema.unreviewed_private()','EXECUTE');",
+          "lyrashield_restore"
+        ),
+        "f"
+      )
+      rejected(verify())
+    })
+    for (const schema of ["public", "app", "information_schema", "pg_catalog"])
       for (const mode of ["direct", "PUBLIC", "inherited", "SET ROLE"])
         await t.test(
           `rejects ${schema} privileged epoch opener reachable by application ${mode}`,
@@ -465,13 +517,19 @@ test(
         assert.equal(JSON.parse(result.stdout).managedFailoverQualified, false)
       }
     )
-    for (const schema of ["lyrashield_authority", "public", "app"])
+    for (const schema of [
+      "lyrashield_authority",
+      "public",
+      "app",
+      "information_schema",
+      "pg_catalog",
+    ])
       for (const mode of ["direct", "PUBLIC", "inherited", "SET ROLE"])
         await t.test(
           `rejects ${schema} privileged stream opener reachable by mirror ${mode}`,
           () => {
             sql(
-              `CREATE SCHEMA IF NOT EXISTS ${schema};
+              `${schema === "app" ? "CREATE SCHEMA IF NOT EXISTS app;" : ""}
             GRANT USAGE ON SCHEMA ${schema} TO authority_mirror_restore,authority_restore_group;
             CREATE FUNCTION ${schema}.unreviewed_open() RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
             BEGIN UPDATE lyrashield_authority.stream SET active=true; END; $$;

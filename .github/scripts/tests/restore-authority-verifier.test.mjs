@@ -8,6 +8,8 @@ import { join } from "node:path"
 import { spawnSync } from "node:child_process"
 import {
   sha256,
+  RESTORE_AUTHORITY_POSTGRES_IMAGE,
+  RESTORE_AUTHORITY_POSTGRES_VERSION,
   validateRestoreAuthorityConfig,
   dispatchVerificationSql,
   mirrorVerificationSql,
@@ -35,6 +37,7 @@ const closed = {
   tables: true,
   triggers: true,
   helpers: true,
+  systemDefiners: true,
   privilegedFunctions: true,
   closed: true,
   roles: true,
@@ -42,6 +45,7 @@ const closed = {
 const mirrorClosed = {
   protected: true,
   functions: true,
+  systemDefiners: true,
   privilegedFunctions: true,
   closed: true,
   roles: true,
@@ -68,6 +72,7 @@ function withMirror() {
 function inventory(value) {
   return {
     Id: value.containerId,
+    Image: RESTORE_AUTHORITY_POSTGRES_IMAGE,
     Name: `/lyrashield-authority-restore-${value.ownerToken}`,
     Config: { Labels: { "lyrashield.authority-restore": value.ownerToken } },
     State: { Running: true },
@@ -128,6 +133,12 @@ test("Docker host overrides and missing disposable opt-in fail before any databa
   }
 })
 for (const [label, mutate] of [
+  [
+    "unqualified image",
+    (item) => {
+      item.Image = "sha256:" + "b".repeat(64)
+    },
+  ],
   [
     "ID drift",
     (item) => {
@@ -333,7 +344,9 @@ test("generated observations stay read-only and bind executable source rather th
   }
   for (const sql of [dispatch, mirror]) {
     assert.match(sql, /'privilegedFunctions'/)
-    assert.match(sql, /WHERE p\.prosecdef AND n\.nspname !~/)
+    assert.match(sql, /WHERE p\.prosecdef\s+AND EXISTS/)
+    assert.doesNotMatch(sql, /n\.nspname !~|n\.nspname <> 'information_schema'/)
+    assert.match(sql, /'systemDefiners', NOT EXISTS/)
     assert.match(sql, /has_function_privilege\(reachable\.oid,p\.oid,'EXECUTE'\)/)
     assert.match(sql, /pg_has_role\('[a-z_]+',reachable\.oid,'MEMBER'\)/)
     assert.match(sql, /p\.proargnames/)
@@ -357,4 +370,51 @@ test("CLI rejection never emits private input bytes or database details", (t) =>
   assert.equal(result.status, 1)
   assert.equal(result.stdout, "")
   assert.equal(result.stderr, "restore/authority/invalid_configuration; admission remains closed\n")
+})
+test("CLI requires the separately qualified PostgreSQL version even on an owned pinned image", (t) => {
+  const root = mkdtempSync(join(tmpdir(), "restore-authority-version-"))
+  t.after(() => rmSync(root, { recursive: true, force: true }))
+  const value = config(),
+    path = join(root, "config.json"),
+    docker = join(root, "docker")
+  writeFileSync(path, JSON.stringify(value), { mode: 0o600 })
+  for (const version of [RESTORE_AUTHORITY_POSTGRES_VERSION, 170006]) {
+    writeFileSync(
+      docker,
+      `#!${process.execPath}
+      const fs = require('node:fs'), args = process.argv.slice(2);
+      if (args[0] === 'context' && args[1] === 'show') console.log('default');
+      else if (args[0] === 'context') console.log(JSON.stringify([{Endpoints:{docker:{Host:'unix:///synthetic.sock'}}}]));
+      else if (args[0] === 'inspect') console.log(${JSON.stringify(JSON.stringify([inventory(value.dispatch.target)]))});
+      else if (args[0] === 'exec') {
+        const input = fs.readFileSync(0, 'utf8'), expected = /server_version_num'\\)::int=(\\d+)/.exec(input);
+        if (!expected) process.exit(1);
+        console.log(JSON.stringify({visible:true, version:${version}===Number(expected[1])}));
+        console.log(${JSON.stringify(JSON.stringify(closed))});
+      } else process.exit(1);`,
+      { mode: 0o700 }
+    )
+    const result = spawnSync(
+      process.execPath,
+      [new URL("../verify-restored-authority.mjs", import.meta.url).pathname, "--config", path],
+      {
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          PATH: `${root}:${process.env.PATH}`,
+          LYRASHIELD_RESTORE_AUTHORITY_DISPOSABLE: "1",
+        },
+      }
+    )
+    if (version === RESTORE_AUTHORITY_POSTGRES_VERSION)
+      assert.equal(result.status, 0, result.stderr)
+    else {
+      assert.equal(result.status, 1)
+      assert.equal(result.stdout, "")
+      assert.equal(
+        result.stderr,
+        "restore/authority/restored_authority_rejected; admission remains closed\n"
+      )
+    }
+  }
 })
