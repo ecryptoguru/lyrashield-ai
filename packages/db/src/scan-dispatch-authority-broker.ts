@@ -29,15 +29,18 @@
  * Reads (SELECT ... FOR SHARE / FOR UPDATE): ScanAuthorityEpoch,
  * ScanWorkerInstanceGrant, ScanDispatchOperation, Scan, ScanDispatchAttempt,
  * ScanCapacityReservation, ScanPhysicalExecution, ScanDispatchOutbox,
- * ScanDispatchStart, plus EXECUTE on app.scan_dispatch_scope_digest(text),
+ * ScanDispatchStart, ScanQueueOutbox, Workspace, Target, Policy, UserScanSlot,
+ * ScanEvent, plus EXECUTE on app.scan_dispatch_scope_digest(text),
  * app.scan_target_snapshot_digest(text) and app.scan_policy_digest(text).
  *
  * leasePrismaUnit least-privilege grant list: the identity that leases the
  * connection for this broker (leasePrismaUnit) must hold no more than SELECT
- * on the nine tables above; INSERT on ScanDispatchAttempt,
+ * on the tables above; INSERT on ScanDispatchAttempt,
  * ScanPhysicalExecution, ScanDispatchOutbox, ScanDispatchStart and ScanEvent;
  * UPDATE on Scan, ScanCapacityReservation and ScanDispatchOperation; EXECUTE
- * on the three app.* digest functions. No INSERT/UPDATE/DELETE on
+ * on the three app.* digest functions. The publication fence requires
+ * UPDATE(updatedAt) on ScanQueueOutbox for PostgreSQL row locking, but no
+ * queue-state, payload or publication-receipt write privileges. No INSERT/UPDATE/DELETE on
  * ScanWorkerInstanceGrant, ScanAuthorityEpoch, ScanSupervisorReceipt,
  * ScanPhysicalExecutionTransition or ScanDispatchReleaseReceipt, and no
  * DELETE on any table. The disposable fixture runs as owner/superuser, so

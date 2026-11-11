@@ -1,5 +1,5 @@
 import type { prisma } from "./client"
-import type { DeterminismMode, ScanWorkflow } from "@lyrashield/types"
+import type { DeterminismMode, ScanFocus, ScanWorkflow } from "@lyrashield/types"
 
 export type ScanTransaction = Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
 
@@ -20,6 +20,8 @@ export interface CreateScanParams {
   engineBudgetCeilingUsd?: number
   createdById: string
   triggerType?: string
+  /** Server-normalized emphasis, bound into immutable queue payload bytes. */
+  focus?: ScanFocus
   determinismMode?: DeterminismMode
   /**
    * Optional workflow input (defaults to REVIEW_TARGET). The server constructs
