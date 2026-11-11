@@ -9,6 +9,7 @@ import {
   readFontArchive,
   unpackFonts,
   fontconfigOverlay,
+  verifyBitmapFont,
 } from "../ci-browser-fonts.mjs"
 
 const font = { path: "truetype/freefont/FreeSans.ttf", bytes: Buffer.from("font fixture") }
@@ -72,7 +73,29 @@ test("private fontconfig keeps host rules, gives its cache priority and escapes 
   const config = fontconfigOverlay('/tmp/owned&fonts"', "/tmp/cache<private>")
   assert.ok(config.includes('<include ignore_missing="no">/etc/fonts/fonts.conf</include>'))
   assert.ok(config.indexOf("<cachedir>") < config.indexOf("<include"))
-  assert.ok(config.includes("<reset-dirs/>"))
+  assert.ok(!config.includes("<reset-dirs"))
+  assert.ok(config.includes("<rejectfont><glob>*</glob></rejectfont>"))
+  assert.ok(config.includes("<acceptfont>"))
   assert.ok(config.includes("owned&amp;fonts&quot;"))
   assert.ok(config.includes("cache&lt;private&gt;"))
+})
+
+test("validates bounded PCF tables without depending on Fontconfig legacy encoding support", () => {
+  const bytes = Buffer.alloc(88)
+  bytes.writeUInt32LE(0x70636601, 0)
+  bytes.writeUInt32LE(4, 4)
+  for (const [index, type] of [1, 4, 8, 32].entries()) {
+    const at = 8 + index * 16
+    bytes.writeUInt32LE(type, at)
+    bytes.writeUInt32LE(4, at + 8)
+    bytes.writeUInt32LE(72 + index * 4, at + 12)
+  }
+  verifyBitmapFont(gzipSync(bytes))
+  const bad = Buffer.from(bytes)
+  bad.writeUInt32LE(200, 20)
+  assert.throws(() => verifyBitmapFont(gzipSync(bad)), /table bounds/)
+  assert.throws(() => verifyBitmapFont(gzipSync(Buffer.alloc(8))), /header/)
+  const missing = Buffer.from(bytes)
+  missing.writeUInt32LE(2, 56)
+  assert.throws(() => verifyBitmapFont(gzipSync(missing)), /missing required/)
 })

@@ -6,7 +6,7 @@ import { createRequire } from "node:module"
 import { dirname, join } from "node:path"
 import { createServer } from "node:http"
 import { once } from "node:events"
-import { FONT_FAMILIES } from "./ci-browser-fonts.mjs"
+import { FONT_FAMILIES, verifyBitmapFont } from "./ci-browser-fonts.mjs"
 
 const require = createRequire(import.meta.url)
 const playwright = createRequire(require.resolve("@playwright/test/package.json")).resolve(
@@ -14,7 +14,6 @@ const playwright = createRequire(require.resolve("@playwright/test/package.json"
 )
 const core = createRequire(playwright).resolve("playwright-core/package.json")
 const { chromium } = createRequire(core)("playwright-core")
-const { registry } = createRequire(core)(join(dirname(core), "lib/coreBundle.js"))
 const flags = ["--enable-experimental-web-platform-features", "--enable-blink-features=WebMCP"]
 
 function run(command, args) {
@@ -42,7 +41,13 @@ async function verify() {
     const path = join(directory, "fonts", file.path)
     // eslint-disable-next-line security/detect-non-literal-fs-filename -- Paths come from locked packages or the validated private CI font and trace directories.
     assert.equal(createHash("sha256").update(readFileSync(path)).digest("hex"), file.sha256)
-    if (/\.(?:ttf|ttc|otf|pfb|t1|pcf\.gz)$/.test(file.path))
+    // Fontconfig does not decode these legacy X11 PCF encodings, including in
+    // the pinned source image. Validate their exact hash and bounded native
+    // structure; every scalable Chromium font still must pass fc-scan.
+    if (file.path.endsWith(".pcf.gz")) {
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- The path is bound to an already validated private font manifest.
+      verifyBitmapFont(readFileSync(path))
+    } else if (/\.(?:ttf|ttc|otf|pfb|t1)$/.test(file.path))
       assert.ok(run("fc-scan", ["--format", "%{family}", path]).trim(), "Font asset is unreadable")
   }
   for (const family of FONT_FAMILIES) {
@@ -56,9 +61,17 @@ async function verify() {
   }
   // eslint-disable-next-line security/detect-non-literal-fs-filename -- Paths come from locked packages or the validated private CI font and trace directories.
   const browsers = JSON.parse(readFileSync(join(dirname(core), "browsers.json"), "utf8")).browsers
+  const full = chromium.executablePath()
+  assert.ok(
+    full.endsWith("/chromium-1234/chrome-linux64/chrome"),
+    "Unexpected locked Chromium cache path"
+  )
   const binaries = [
-    chromium.executablePath(),
-    registry.findExecutable("chromium-headless-shell").executablePath(),
+    full,
+    join(
+      dirname(dirname(dirname(full))),
+      "chromium_headless_shell-1234/chrome-headless-shell-linux64/chrome-headless-shell"
+    ),
   ]
   for (const name of ["chromium", "chromium-headless-shell"]) {
     const browser = browsers.find((entry) => entry.name === name)
