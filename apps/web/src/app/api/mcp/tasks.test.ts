@@ -9,6 +9,7 @@ const retryScanCancellationMock = vi.fn()
 const completeAgentOperationMock = vi.fn()
 const failAgentOperationMock = vi.fn()
 const getAgentOperationMock = vi.fn()
+const getDelegatedOperationAccessMock = vi.fn()
 const listAgentOperationsForTasksMock = vi.fn()
 const checkDelegatedOperationAuthorizationMock = vi.fn()
 const cancelScanMock = vi.fn()
@@ -28,6 +29,7 @@ vi.mock("@lyrashield/db", () => ({
   failAgentOperation: (...a: unknown[]) => failAgentOperationMock(...a),
   toJsonObject: (value: object) => JSON.parse(JSON.stringify(value)),
   getAgentOperation: (...a: unknown[]) => getAgentOperationMock(...a),
+  getDelegatedOperationAccess: (...a: unknown[]) => getDelegatedOperationAccessMock(...a),
   listAgentOperationsForTasks: (...a: unknown[]) => listAgentOperationsForTasksMock(...a),
   checkDelegatedOperationAuthorization: (...a: unknown[]) =>
     checkDelegatedOperationAuthorizationMock(...a),
@@ -192,10 +194,38 @@ beforeEach(() => {
   failAgentOperationMock.mockReset()
   failAgentOperationMock.mockResolvedValue({})
   getAgentOperationMock.mockReset()
+  getDelegatedOperationAccessMock.mockReset()
   listAgentOperationsForTasksMock.mockReset()
   cancelScanMock.mockReset()
   requirePermissionMock.mockResolvedValue({})
-  requireOAuthPermissionMock.mockResolvedValue({})
+  requireOAuthPermissionMock.mockResolvedValue({
+    workspace: {
+      member: { id: "member-1", role: "OWNER", updatedAt: new Date("2026-11-05T10:00:00Z") },
+    },
+  })
+  // The route reads delegated task state through the live access projection.
+  // Derive it from the test's operation fixture so authorization, disclosure,
+  // and revocation cases keep exercising the same operation.
+  getDelegatedOperationAccessMock.mockImplementation(async (params: unknown) => {
+    const operationId = (params as { operationId: string }).operationId
+    const operation = await getAgentOperationMock(operationId)
+    if (!operation) return null
+    const status =
+      operation.status === "COMPLETED" && operation.result?.isError ? "FAILED" : operation.status
+    return {
+      operation,
+      disclosure: "FULL",
+      status: {
+        operationId: operation.id,
+        status,
+        reasonCode: null,
+        resultLocation: operation.resultReference,
+        recovery: status === "COMPLETED" ? "none" : "poll",
+        createdAt: operation.createdAt.toISOString(),
+        updatedAt: operation.updatedAt.toISOString(),
+      },
+    }
+  })
   scanFindFirstMock.mockResolvedValue(makeScan())
   scanFindManyMock.mockResolvedValue([makeScan()])
   checkDelegatedOperationAuthorizationMock.mockReturnValue({
@@ -879,6 +909,7 @@ describe("MCP tasks over the hosted endpoint", () => {
   it("tasks/list only returns the principal's own operations", async () => {
     oauthConnection()
     listAgentOperationsForTasksMock.mockResolvedValue([makeOperation()])
+    getAgentOperationMock.mockResolvedValue(makeOperation())
     scanFindManyMock.mockResolvedValue([makeScan()])
     const res = await POST(
       req({

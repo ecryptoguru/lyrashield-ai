@@ -1,11 +1,12 @@
-import { getAiSecurityScoreSnapshot, withWorkspaceRLS } from "@lyrashield/db"
-import { requirePermission, resolveOAuthReadScope } from "@lyrashield/auth/server"
+import { getAiSecurityScoreSnapshot, withDelegatedReadAuthority } from "@lyrashield/db"
+import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
 import { authErrorResponse } from "../../../../../lib/api-auth"
 import { apiError } from "../../../../../lib/api-response"
 import { jsonWithEtag } from "../../../../../lib/http-etag"
 import { z } from "zod"
+import { delegatedReadPrincipal, delegatedScanAccess } from "@/lib/delegated-target-read-scope"
 
 const WorkspaceSchema = z.string().min(1)
 
@@ -22,18 +23,28 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const workspaceId = parsedWorkspace.data
 
   try {
-    const { session } = await requirePermission(workspaceId, PERMISSIONS.scan.view)
-    if (resolveOAuthReadScope(session).targetIds !== undefined) {
-      const scan = await withWorkspaceRLS(workspaceId, (tx) =>
-        tx.scan.findFirst({
-          where: { id, workspaceId, deletedAt: null },
-          select: { targetId: true },
+    const { session, workspace } = await requirePermission(workspaceId, PERMISSIONS.scan.view)
+    const principal = delegatedReadPrincipal(session, workspace)
+    const load = async (
+      client?: Parameters<typeof getAiSecurityScoreSnapshot>[2],
+      authority?: { allowedProfiles: string[] }
+    ) => {
+      if (principal) {
+        const access = await delegatedScanAccess(session, workspace, id, client)
+        if (!access || access.statusOnly) return undefined
+        return getAiSecurityScoreSnapshot(id, workspaceId, client, {
+          requireActiveTarget: true,
+          allowedProfiles: authority!.allowedProfiles,
         })
-      )
-      if (!scan) return apiError("SCAN_NOT_FOUND", "Scan not found", 404)
-      resolveOAuthReadScope(session, scan.targetId, true)
+      }
+      return getAiSecurityScoreSnapshot(id, workspaceId)
     }
-    const snapshot = await getAiSecurityScoreSnapshot(id, workspaceId)
+    const snapshot = principal
+      ? await withDelegatedReadAuthority(principal, (tx, authority) => load(tx, authority))
+      : await load()
+    if (snapshot === undefined) {
+      return apiError("SCAN_NOT_FOUND", "Scan not found", 404)
+    }
 
     const data = snapshot
       ? {

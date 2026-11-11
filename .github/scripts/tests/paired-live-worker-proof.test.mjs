@@ -94,7 +94,7 @@ else if(a[0]==="run"){if(a.at(-2)==="rpc"){process.stdout.write("1");process.exi
     put("cmdline", f.wrongProcess ? "sleep\0infinity\0" : "node\0tsx\0apps/worker/src/index.ts\0")
     put(
       "config",
-      `LYRASHIELD_WORKER_IMAGE=${worker}\nLYRASHIELD_SANDBOX_IMAGE=${sandbox}\nLYRASHIELD_RUN_RECORD_V1_1=${f.run ?? 0}\nLYRASHIELD_PENDING_HTTP_EVIDENCE=${f.pending ?? 0}\n`
+      `LYRASHIELD_WORKER_IMAGE=${worker}\nLYRASHIELD_SANDBOX_IMAGE=${sandbox}\nLYRASHIELD_RUN_RECORD_V1_1=${f.run ?? 0}\nLYRASHIELD_PENDING_HTTP_EVIDENCE=${f.pending ?? 0}\nLYRASHIELD_SANDBOX_SBOM_COVERAGE_VERIFY_PATH=/tmp/coverage.json\nLYRASHIELD_SANDBOX_SBOM_COVERAGE_EXPECTED_PATH=/tmp/coverage-predicate.json\nLYRASHIELD_SANDBOX_SBOM_COVERAGE_REPO=ecryptoguru/lyrashield-engine\nLYRASHIELD_SANDBOX_SBOM_COVERAGE_REF=refs/heads/main\nLYRASHIELD_SANDBOX_SBOM_COVERAGE_ENGINE_REVISION=${"d".repeat(40)}\nLYRASHIELD_SANDBOX_SBOM_COVERAGE_WORKFLOW_REVISION=${"e".repeat(40)}\nLYRASHIELD_SANDBOX_SBOM_COVERAGE_RUN_ID=42487812345\nLYRASHIELD_SANDBOX_SBOM_COVERAGE_RUN_ATTEMPT=1\n`
     )
     rmSync(sibling, { force: true })
     if (f.disk !== undefined)

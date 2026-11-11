@@ -15,6 +15,16 @@ export function scanCreationConflict(
       status: 409,
       message: `This workspace already has ${MAX_CONCURRENT_WORKSPACE_SCANS} reviews running. Wait for one to finish before starting another.`,
     }
+  if (
+    (error && typeof error === "object" && (error as { code?: string }).code === "P2002") ||
+    (error instanceof Error && error.message === "Target already has an active scan")
+  )
+    return {
+      reason: "scan_in_progress",
+      code: "SCAN_IN_PROGRESS",
+      message: "Target already has an active scan. Cancel it or wait for completion.",
+      status: 409,
+    }
   return null
 }
 

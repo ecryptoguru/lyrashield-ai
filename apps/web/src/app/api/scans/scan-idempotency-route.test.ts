@@ -173,7 +173,12 @@ describe("scan operation route regressions", () => {
     const res = await POST(request())
     expect(res.status).toBe(403)
     expect(assertOAuthDelegatedScope).toHaveBeenCalledOnce()
-    expect(prisma.target.findFirst).toHaveBeenCalledOnce()
+    // Delegated denial happens before the target lookup so an out-of-grant
+    // target is never probed and no operation is claimed.
+    expect(prisma.target.findFirst).not.toHaveBeenCalled()
+    expect(claimOrGetAgentOperation).not.toHaveBeenCalled()
+    expect(createScan).not.toHaveBeenCalled()
+    expect(enqueueScanJob).not.toHaveBeenCalled()
   })
   it("does not claim a rejected target", async () => {
     vi.mocked(prisma.target.findFirst).mockResolvedValue(null)

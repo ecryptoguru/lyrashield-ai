@@ -467,6 +467,8 @@ const envSchema = z
         "LAUNCH_REPORT_SIGNING_PRIVATE_KEY must be a PEM-formatted key starting with '-----BEGIN'"
       ),
     LAUNCH_REPORT_SIGNING_PUBLIC_KEY: z.string().optional().or(z.literal("")),
+    // Optional public-key allowlist for packet signature rotation/revocation.
+    RELEASE_PACKET_VERIFICATION_KEYS_JSON: z.string().max(262144).optional().or(z.literal("")),
     // Key Vault secret names holding the launch-report signing key pair in
     // production (mirrors the license-signing secret-name pattern).
     LAUNCH_REPORT_SIGNING_PRIVATE_KEY_SECRET_NAME: z

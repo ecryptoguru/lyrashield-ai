@@ -94,6 +94,7 @@ vi.mock("@/components/ui/sheet", () => ({
 }))
 
 import { CreateScanSheet } from "./create-scan-sheet"
+import { ScanSubmissionFooter } from "./scan-submission-feedback"
 import type { ManualScanOption } from "@/lib/scan-presets"
 import type { ScanEligibilityState, TargetItem } from "./scan-types"
 
@@ -318,6 +319,31 @@ describe("unavailable live-review recovery", () => {
     hooks.cursor = 0
     hooks.effects = []
     vi.clearAllMocks()
+  })
+  it("blocks a Standard launch review when its underlying mode is unavailable", () => {
+    const launch = { ...option, id: "WEB_APP_STANDARD_LAUNCH_REVIEW", goal: "LAUNCH_REVIEW" }
+    const tree = renderTree({
+      selectedOption: launch,
+      availableOptions: [launch],
+      enabledOptions: [launch],
+      startDisabled: false,
+      eligibility: {
+        status: "ready",
+        eligibility: {
+          allowed: true,
+          code: null,
+          message: null,
+          plan: "UNKNOWN",
+          isTrial: false,
+          remainingMinutes: 0,
+          supportedModes: [
+            { ...option, id: "WEB_APP_STANDARD", available: false, disabledReason: "Unavailable" },
+          ],
+        },
+      },
+    })
+    const footer = findElement(tree, (element) => element.type === ScanSubmissionFooter)!
+    expect((footer.props as { startDisabled: boolean }).startDisabled).toBe(true)
   })
   it("disables unavailable review cards and keeps the surface alternative keyboard reachable", () => {
     const surface = {

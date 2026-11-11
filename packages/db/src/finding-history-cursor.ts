@@ -1,4 +1,4 @@
-import type { FindingHistoryCollection } from "./finding-service"
+import type { FindingHistoryCollection } from "./finding-history-service"
 
 export const HISTORY_PREVIEW_LIMIT = 25
 

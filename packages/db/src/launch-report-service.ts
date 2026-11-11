@@ -22,7 +22,7 @@
 import { timingSafeEqual } from "node:crypto"
 import { logger } from "@lyrashield/logger"
 import { env } from "@lyrashield/config"
-import { withWorkspaceRLS } from "./rls"
+import { withWorkspaceRLS, type ScopedTransaction } from "./rls"
 import { evaluateVerdictApplicability, parseAssessmentSnapshot } from "./gate-service"
 import type { GateApplicabilityResult } from "@lyrashield/gate"
 import {
@@ -39,11 +39,35 @@ import {
 } from "./launch-report-provenance"
 import { signLaunchReportChecksum, LAUNCH_REPORT_SIGNING_KEY_ID } from "./launch-report-signing"
 import { isLaunchReportShareablePayload } from "./launch-report-html"
-import type { GateVerdict } from "./generated/prisma"
+import type { GateVerdict, Prisma } from "./generated/prisma"
 
 export interface LaunchReportResult {
   reportId: string
   payload: LaunchReportShareablePayload
+}
+
+async function persistLaunchReport(
+  tx: ScopedTransaction,
+  data: {
+    workspaceId: string
+    createdById: string
+    contentJson: Prisma.InputJsonValue
+    provenanceJson: Prisma.InputJsonValue
+  }
+) {
+  return tx.report.create({
+    data: {
+      workspaceId: data.workspaceId,
+      type: "launch_readiness",
+      title: "LyraShield Launch Readiness Report",
+      status: "generated",
+      format: "html",
+      createdById: data.createdById,
+      contentJson: data.contentJson,
+      provenanceJson: data.provenanceJson,
+    },
+    select: { id: true },
+  })
 }
 
 export type ReleaseIdentityConfirmation = "MATCH" | "MISMATCH" | "UNAVAILABLE"
@@ -74,7 +98,12 @@ export async function generateLaunchReport(
   workspaceId: string,
   targetId: string,
   createdById: string,
-  opts: { appDisplayName?: string; signingPrivateKey?: string; now?: Date } = {}
+  opts: {
+    appDisplayName?: string
+    signingPrivateKey?: string
+    now?: Date
+    client?: ScopedTransaction
+  } = {}
 ): Promise<LaunchReportResult | null> {
   // Phase A — one consistent observation of verdict + applicability inputs.
   // `applicabilityCheckedAt` is the instant the evaluator observed at the
@@ -85,27 +114,34 @@ export async function generateLaunchReport(
     applicability: GateApplicabilityResult | null
   } = { verdict: null, applicability: null }
   try {
-    await withWorkspaceRLS(
-      workspaceId,
-      async (tx) => {
-        const selected = await tx.gateVerdict.findFirst({
-          where: { workspaceId, targetId },
-          // id tiebreaker for same-millisecond verdicts (see getLatestGateVerdict).
-          orderBy: [{ evaluatedAt: "desc" }, { id: "desc" }],
-        })
-        // Captured outside the callback so a later statement failure in this
-        // transaction still leaves the selected binding available.
-        selection.verdict = selected
-        if (!selected) return
-        selection.applicability = await evaluateVerdictApplicability(tx, workspaceId, selected, {
-          now: applicabilityCheckedAt,
-        })
-      },
-      // RepeatableRead pins every statement to one snapshot: the verdict, the
-      // policy fingerprint, and the drift checks can never disagree about the
-      // database instant they describe.
-      { isolationLevel: "RepeatableRead" }
-    )
+    const read = async (tx: ScopedTransaction) => {
+      const selected = await tx.gateVerdict.findFirst({
+        where: {
+          workspaceId,
+          targetId,
+          target: { workspaceId, deletedAt: null },
+        },
+        // id tiebreaker for same-millisecond verdicts (see getLatestGateVerdict).
+        orderBy: [{ evaluatedAt: "desc" }, { id: "desc" }],
+      })
+      // Captured outside the callback so a later statement failure in this
+      // transaction still leaves the selected binding available.
+      selection.verdict = selected
+      if (!selected) return
+      selection.applicability = await evaluateVerdictApplicability(tx, workspaceId, selected, {
+        now: applicabilityCheckedAt,
+      })
+    }
+    if (opts.client) await read(opts.client)
+    else
+      await withWorkspaceRLS(
+        workspaceId,
+        read,
+        // RepeatableRead pins every statement to one snapshot: the verdict, the
+        // policy fingerprint, and the drift checks can never disagree about the
+        // database instant they describe.
+        { isolationLevel: "RepeatableRead" }
+      )
   } catch (error) {
     if (!selection.verdict) throw error
     // The verdict was selected; only the evaluation failed. Issue an honest
@@ -215,21 +251,16 @@ export async function generateLaunchReport(
   })
 
   // Phase B — payload + private provenance are written atomically in one row.
-  const report = await withWorkspaceRLS(workspaceId, (tx) =>
-    tx.report.create({
-      data: {
-        workspaceId,
-        type: "launch_readiness",
-        title: "LyraShield Launch Readiness Report",
-        status: "generated",
-        format: "html",
-        createdById,
-        contentJson: { ...payload },
-        provenanceJson: { ...provenance },
-      },
-      select: { id: true },
+  const persist = (tx: ScopedTransaction) =>
+    persistLaunchReport(tx, {
+      workspaceId,
+      createdById,
+      contentJson: { ...payload },
+      provenanceJson: { ...provenance },
     })
-  )
+  const report = opts.client
+    ? await persist(opts.client)
+    : await withWorkspaceRLS(workspaceId, persist)
 
   logger.info("Launch readiness report generated", {
     reportId: report.id,
@@ -254,13 +285,15 @@ export async function generateLaunchReport(
  */
 export async function getLaunchReportDetail(
   reportId: string,
-  workspaceId: string
+  workspaceId: string,
+  client?: ScopedTransaction
 ): Promise<{
   verdictLabel: LaunchReportVerdictLabel | null
   stale: boolean
+  currentApplicability: "UNKNOWN"
   provenance: LaunchReportProvenance | null
 } | null> {
-  return withWorkspaceRLS(workspaceId, async (tx) => {
+  const read = async (tx: ScopedTransaction) => {
     const report = await tx.report.findFirst({
       where: { id: reportId, workspaceId, deletedAt: null },
       select: { type: true, contentJson: true, provenanceJson: true },
@@ -268,15 +301,25 @@ export async function getLaunchReportDetail(
     if (!report || report.type !== "launch_readiness") return null
     const content: unknown = report.contentJson
     if (!isLaunchReportShareablePayload(content)) {
-      return { verdictLabel: null, stale: true, provenance: null }
+      return {
+        verdictLabel: null,
+        stale: true,
+        currentApplicability: "UNKNOWN" as const,
+        provenance: null,
+      }
     }
     const payload = content
     return {
       verdictLabel: payload.verdictLabel,
-      stale: payload.stale,
+      stale:
+        payload.stale ||
+        !Number.isFinite(Date.parse(payload.expiresAt ?? "")) ||
+        Date.parse(payload.expiresAt ?? "") <= Date.now(),
+      currentApplicability: "UNKNOWN" as const,
       provenance: parseLaunchReportProvenance(report.provenanceJson),
     }
-  })
+  }
+  return client ? read(client) : withWorkspaceRLS(workspaceId, read)
 }
 
 /**

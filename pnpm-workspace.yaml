@@ -67,6 +67,12 @@ overrides:
   # GHSA-7r86-cg39-jmmj and GHSA-23c5-xmqv-rm74: keep affected minimatch lines patched.
   "minimatch@<3.1.4": "^3.1.5"
   "minimatch@>=10 <10.2.3": "^10.2.3"
+  # GHSA-3g3m-2fjr-6pw4 and GHSA-g3hv-75wg-m249: patch Sentry's build-time traversal chain.
+  "@sentry/bundler-plugin-core@5.3.0>glob": "14.0.2"
+  "@sentry/bundler-plugins@10.70.0>glob": "14.0.2"
+  "glob@14.0.2>minimatch": "11.0.1"
+  # GHSA-474x-hrwr-fgx4: bound the XML parser used for the prerendered RSS feed.
+  "@astrojs/rss@4.0.19>fast-xml-parser": "5.12.0"
   # GHSA-ggr8-5vv4-36mx: @prisma/config pins an affected pre-8 release.
   "deepmerge-ts@<8.0.0": "^8.0.0"
   # GHSA-2464-fhr4-w9xw, GHSA-p3m5-59mp-jv5r, and GHSA-673q-mjm6-r5xr.

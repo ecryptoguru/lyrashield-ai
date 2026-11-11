@@ -2,12 +2,21 @@ import { withCookieMutation } from "../../../../lib/api-auth"
 import { z } from "zod"
 import { assertOAuthDelegatedScope, requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
-import { generateLaunchReport, generateShareToken } from "@lyrashield/db"
+import {
+  generateLaunchReport,
+  generateShareToken,
+  withDelegatedReadAuthority,
+  type DelegatedReadAuthority,
+} from "@lyrashield/db"
 import { resolveLaunchReportSigningPrivateKey } from "@lyrashield/billing"
 import { logger } from "@lyrashield/logger"
 import { env } from "@lyrashield/config"
 import { authErrorResponse } from "../../../../lib/api-auth"
 import { apiError, apiSuccess } from "../../../../lib/api-response"
+import {
+  delegatedReadPrincipal,
+  resolveDelegatedTargetReadScope,
+} from "../../../../lib/delegated-target-read-scope"
 
 const GenerateSchema = z
   .object({
@@ -46,11 +55,10 @@ async function post(request: Request) {
     }
     const { workspaceId, targetId, appDisplayName, share } = parsed.data
 
-    const { session } = await requirePermission(workspaceId, PERMISSIONS.report.create)
+    const { session, workspace } = await requirePermission(workspaceId, PERMISSIONS.report.create)
 
-    // Delegated-scope gate (W0.3): generation mints a report — and optionally a
-    // public share token — for exactly the requested target, so a narrowed
-    // OAuth connection is denied here, before key resolution or any mutation.
+    const principal = delegatedReadPrincipal(session, workspace)
+    await resolveDelegatedTargetReadScope(session, workspace, targetId)
     assertOAuthDelegatedScope(session, targetId)
 
     // Resolve the signing key server-side (env in dev, Key Vault in prod). Null
@@ -62,35 +70,57 @@ async function post(request: Request) {
       return null
     })
 
-    const result = await generateLaunchReport(workspaceId, targetId, session.userId, {
-      appDisplayName,
-      signingPrivateKey: signingPrivateKey ?? undefined,
-    })
-    if (!result) {
-      return apiError(
-        "NOT_EVALUATED",
-        "No gate verdict exists for this target yet. Run the launch gate first.",
-        404
+    const execute = async (
+      client?: NonNullable<Parameters<typeof generateLaunchReport>[3]>["client"],
+      authority?: DelegatedReadAuthority
+    ) => {
+      if (principal && authority && !authority.targetIds?.includes(targetId)) {
+        return apiError("FORBIDDEN", "Launch report target is no longer authorized", 403)
+      }
+      const result = await generateLaunchReport(workspaceId, targetId, session.userId, {
+        appDisplayName,
+        signingPrivateKey: signingPrivateKey ?? undefined,
+        ...(client ? { client } : {}),
+      })
+      if (!result) {
+        return apiError(
+          "NOT_EVALUATED",
+          "No gate verdict exists for this target yet. Run the launch gate first.",
+          404
+        )
+      }
+
+      let shareUrl: string | null = null
+      if (share) {
+        const { token } = await generateShareToken(result.reportId, workspaceId, {
+          targetId,
+          requireActiveTarget: !client,
+          ...(client ? { client } : {}),
+        })
+        const base = env.NEXT_PUBLIC_APP_URL.replace(/\/+$/, "")
+        shareUrl = `${base}/reports/shared/${result.reportId}?token=${token}`
+      }
+
+      return apiSuccess(
+        {
+          reportId: result.reportId,
+          verdict: result.payload.verdictLabel,
+          signed: Boolean(result.payload.signature),
+          stale: result.payload.stale,
+          shareUrl,
+        },
+        201
       )
     }
 
-    let shareUrl: string | null = null
-    if (share) {
-      const { token } = await generateShareToken(result.reportId, workspaceId)
-      const base = env.NEXT_PUBLIC_APP_URL.replace(/\/+$/, "")
-      shareUrl = `${base}/reports/shared/${result.reportId}?token=${token}`
-    }
-
-    return apiSuccess(
-      {
-        reportId: result.reportId,
-        verdict: result.payload.verdictLabel,
-        signed: Boolean(result.payload.signature),
-        stale: result.payload.stale,
-        shareUrl,
-      },
-      201
-    )
+    // Await inside the try so authority/write failures reach this
+    // route's error mapping instead of escaping as unhandled rejections.
+    return await (principal
+      ? withDelegatedReadAuthority(
+          { ...principal, targetId, requiredOperation: "report.create" },
+          (tx, authority) => execute(tx, authority)
+        )
+      : execute())
   } catch (error) {
     const authErr = authErrorResponse(error)
     if (authErr) return authErr

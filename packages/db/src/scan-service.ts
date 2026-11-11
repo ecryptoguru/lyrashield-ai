@@ -9,6 +9,7 @@ import { Prisma } from "./generated/prisma"
 import type {
   Scan,
   ScanEvent,
+  ScanMode,
   ScanStatus,
   ScanResultManifest,
   ScanCoverageReceipt,
@@ -23,7 +24,7 @@ import {
 import { buildAdmittedScanPlan, computeScanExecutionPlanHash } from "./scan-execution-plan"
 import { isTerminalScanStatus, isValidTransition } from "./scan-transitions"
 import { insertScanBillableClaim, requireUnclaimedScan } from "./scan-billable-claim"
-import { withWorkspaceRLS } from "./rls"
+import { withWorkspaceRLS, type ScopedTransaction } from "./rls"
 import {
   releaseUnstartedScanSlot,
   lockUserScanAdmission,
@@ -32,6 +33,7 @@ import {
   lockWorkspaceScanAdmission,
 } from "./scan-slot"
 import { getWorkspaceContext } from "./extension"
+import { bindDelegatedScanProvenance } from "./delegated-scan-provenance"
 
 export interface ScanWithEvents extends Scan {
   capacity?: ScanCapacityProjection | null
@@ -70,6 +72,10 @@ export interface GetScanWithEventsOptions {
    * the full window — never an empty one.
    */
   eventsAfter?: string
+  /** Delegated detail reads must re-prove the target is still active. */
+  requireActiveTarget?: boolean
+  /** Delegated reads remain bounded by the connection's current profile grant. */
+  allowedProfiles?: string[]
 }
 
 export const ACTIVE_SCAN_STATUSES: ScanStatus[] = [
@@ -162,6 +168,15 @@ export async function createScan(
         executionPlanHash,
       },
     })
+    if (params.delegatedOperation) {
+      await bindDelegatedScanProvenance(tx, {
+        workspaceId: params.workspaceId,
+        scanId: scan.id,
+        targetId: params.targetId,
+        executionPlanHash,
+        admission: params.delegatedOperation,
+      })
+    }
     await createScanCapacity(tx, scan, executionPlan.capabilities.includes("engine"))
     await tx.scanEvent.create({
       data: {
@@ -355,9 +370,10 @@ export async function addScanEvent(
 export async function getScanWithEvents(
   scanId: string,
   workspaceId: string,
-  options?: GetScanWithEventsOptions
+  options?: GetScanWithEventsOptions,
+  client?: ScopedTransaction
 ): Promise<ScanWithEvents | null> {
-  return withWorkspaceRLS(workspaceId, async (tx) => {
+  const read = async (tx: ScopedTransaction) => {
     const eventsAfter = options?.eventsAfter
     let eventCursor: { createdAt: Date; id: string } | null = null
     if (eventsAfter) {
@@ -371,7 +387,15 @@ export async function getScanWithEvents(
     }
 
     const scan = await tx.scan.findFirst({
-      where: { id: scanId, workspaceId, deletedAt: null },
+      where: {
+        id: scanId,
+        workspaceId,
+        deletedAt: null,
+        ...(options?.requireActiveTarget ? { target: { deletedAt: null } } : {}),
+        ...(options?.allowedProfiles !== undefined
+          ? { mode: { in: options.allowedProfiles as ScanMode[] } }
+          : {}),
+      },
       include: {
         events: {
           where: {
@@ -426,7 +450,8 @@ export async function getScanWithEvents(
       coverageReceipts: scan.coverageReceipts,
       target: scan.target,
     }
-  })
+  }
+  return client ? read(client) : withWorkspaceRLS(workspaceId, read)
 }
 
 /**
@@ -602,7 +627,10 @@ function toScanListItem(
   return { ...rest, findingCount: findingCandidates?.length ?? 0 }
 }
 
-export async function listScans(params: ListScansParams): Promise<{
+export async function listScans(
+  params: ListScansParams,
+  client?: ScopedTransaction
+): Promise<{
   items: ScanListItem[]
   nextCursor: string | null
 }> {
@@ -618,6 +646,12 @@ export async function listScans(params: ListScansParams): Promise<{
     deletedAt: null,
     ...(params.scanIds?.length ? { id: { in: params.scanIds } } : {}),
     ...targetReadScopeWhere(params),
+    ...(params.requireActiveTarget
+      ? { target: { workspaceId: params.workspaceId, deletedAt: null } }
+      : {}),
+    ...(params.allowedProfiles !== undefined
+      ? { mode: { in: params.allowedProfiles as ScanMode[] } }
+      : {}),
     ...statusFilter,
   }
 
@@ -625,7 +659,7 @@ export async function listScans(params: ListScansParams): Promise<{
   // query share one connection. The workspaceId predicate above is not a
   // substitute: "Scan" is under FORCE ROW LEVEL SECURITY, so the database policy
   // is the actual isolation boundary and it needs the transaction-local context.
-  const scans = await withWorkspaceRLS(params.workspaceId, (tx) =>
+  const read = (tx: ScopedTransaction) =>
     tx.scan.findMany({
       where,
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -633,7 +667,7 @@ export async function listScans(params: ListScansParams): Promise<{
       ...(params.cursor ? { cursor: { id: params.cursor }, skip: 1 } : {}),
       select: SCAN_LIST_SELECT,
     })
-  )
+  const scans = client ? await read(client) : await withWorkspaceRLS(params.workspaceId, read)
 
   const hasMore = scans.length > limit
   const page = hasMore ? scans.slice(0, limit) : scans

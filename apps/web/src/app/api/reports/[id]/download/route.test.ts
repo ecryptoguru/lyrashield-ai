@@ -9,6 +9,7 @@ const {
   generateReportHTML,
   gatherReportData,
   isReportData,
+  reportSnapshotScanBindingMatches,
   findFirst,
   update,
 } = vi.hoisted(() => ({
@@ -19,9 +20,27 @@ const {
   generateReportHTML: vi.fn(() => "<html>standard</html>"),
   gatherReportData: vi.fn(),
   isReportData: vi.fn((value: unknown) => value !== null && value !== undefined),
+  reportSnapshotScanBindingMatches: vi.fn(
+    (contentJson: unknown, scanId: string | null, type: string) => {
+      if (type === "launch_readiness") return true
+      if (contentJson === null || contentJson === undefined) return true
+      if (!contentJson || typeof contentJson !== "object" || Array.isArray(contentJson))
+        return false
+      if (!Object.hasOwn(contentJson, "scanInfo")) return true
+      const scanInfo = (contentJson as Record<string, unknown>).scanInfo
+      if (scanInfo === null) return scanId === null
+      if (!scanInfo || typeof scanInfo !== "object" || Array.isArray(scanInfo)) return false
+      return (
+        typeof (scanInfo as Record<string, unknown>).scanId === "string" &&
+        (scanInfo as Record<string, unknown>).scanId === scanId
+      )
+    }
+  ),
   findFirst: vi.fn(),
   update: vi.fn(),
 }))
+const resolveDelegatedTargetReadScope = vi.hoisted(() => vi.fn())
+const withDelegatedReadAuthority = vi.hoisted(() => vi.fn())
 
 vi.mock("@lyrashield/db", () => ({
   resolveReportDelegationTarget,
@@ -31,24 +50,81 @@ vi.mock("@lyrashield/db", () => ({
   generateReportHTML,
   gatherReportData,
   isReportData,
+  reportSnapshotScanBindingMatches,
+  withDelegatedReadAuthority,
   prisma: { report: { findFirst, update } },
 }))
 vi.mock("@lyrashield/auth/server", () => ({
   resolveOAuthReadScope,
+  assertOAuthDelegatedScope: (
+    session: {
+      oauth?: { connectionId?: string; allTargets?: boolean; allowedTargetIds?: string[] }
+    },
+    targetId: string | null | undefined
+  ) => {
+    const connection = session.oauth
+    if (!connection?.connectionId) return
+    if (!targetId && !connection.allTargets) throw new Error("FORBIDDEN")
+    if (targetId && !connection.allTargets && !connection.allowedTargetIds?.includes(targetId)) {
+      throw new Error("FORBIDDEN")
+    }
+  },
   requirePermission: vi.fn().mockResolvedValue({ session: { userId: "user-1" } }),
 }))
 vi.mock("@lyrashield/auth", () => ({ PERMISSIONS: { report: { download: "report:download" } } }))
 vi.mock("@lyrashield/logger", () => ({
   logger: { error: vi.fn(), warn: vi.fn() },
 }))
+vi.mock("../../../../../lib/delegated-target-read-scope", () => ({
+  resolveDelegatedTargetReadScope,
+  delegatedReadPrincipal: (session: {
+    oauth?: {
+      connectionId?: string
+      allTargets?: boolean
+      allowedTargetIds?: string[]
+    }
+  }) =>
+    session.oauth?.connectionId
+      ? {
+          workspaceId: "ws-1",
+          userId: "user-1",
+          memberId: "member-1",
+          memberRole: "OWNER",
+          memberUpdatedAt: new Date("2026-11-05T10:00:00Z"),
+          connectionId: session.oauth.connectionId,
+          authorizationVersion: 2,
+          allTargets: session.oauth.allTargets,
+          allowedTargetIds: session.oauth.allowedTargetIds ?? [],
+        }
+      : null,
+}))
 
 import { GET } from "./route"
 import { requirePermission } from "@lyrashield/auth/server"
 import { expectPermissionDenied } from "@/__tests__/route-permission-manifest"
 
+function installDelegatedAuthorityMock() {
+  withDelegatedReadAuthority.mockImplementation(async (params, run) => {
+    const principal = params as { allTargets?: boolean; allowedTargetIds?: string[] }
+    return run(
+      { report: { findFirst, update } },
+      {
+        targetIds: principal.allTargets
+          ? ["target-1", "target-a", "target-b"]
+          : (principal.allowedTargetIds ?? []),
+        allowedProfiles: ["STANDARD"],
+      }
+    )
+  })
+}
+
 describe("GET /api/reports/[id]/download", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    resolveDelegatedTargetReadScope.mockImplementation((session, _workspace, targetId) =>
+      Promise.resolve(resolveOAuthReadScope(session as never, targetId as never, true))
+    )
+    installDelegatedAuthorityMock()
     getShareableReport.mockResolvedValue({ id: "report-1" })
     update.mockResolvedValue({})
   })
@@ -319,6 +395,7 @@ describe("GET /api/reports/[id]/download", () => {
 
 it("denies a read-only ungranted report before download/conditional response", async () => {
   vi.clearAllMocks()
+  installDelegatedAuthorityMock()
   vi.mocked(requirePermission).mockResolvedValueOnce({
     session: {
       oauth: { connectionId: "conn-1", allTargets: false, allowedTargetIds: ["target-1"] },
@@ -354,8 +431,9 @@ it.each([
   { name: "all-target", oauth: { connectionId: "conn-1", allTargets: true, allowedTargetIds: [] } },
 ])("allows immutable report download for $name grants", async ({ oauth }) => {
   vi.clearAllMocks()
+  installDelegatedAuthorityMock()
   vi.mocked(requirePermission).mockResolvedValueOnce({ session: { oauth } } as never)
-  resolveReportDelegationTarget.mockReset().mockResolvedValueOnce({ targetId: "target-1" })
+  resolveReportDelegationTarget.mockReset().mockResolvedValue({ targetId: "target-1" })
   getShareableReport.mockReset().mockResolvedValueOnce({ id: "report-1", title: "Private report" })
   findFirst.mockReset().mockResolvedValueOnce({
     title: "Private report",
@@ -371,13 +449,14 @@ it.each([
   )
   expect(response.status).toBe(200)
   expect(response.headers.get("ETag")).toMatch(/^"[0-9a-f]{64}"$/)
-  if (oauth.allTargets) expect(resolveReportDelegationTarget).not.toHaveBeenCalled()
+  expect(resolveReportDelegationTarget).toHaveBeenCalled()
 })
 
 it.each([null, { targetId: null }])(
   "keeps missing/unbound reports unavailable to selected grants %j",
   async (binding) => {
     vi.clearAllMocks()
+    installDelegatedAuthorityMock()
     vi.mocked(requirePermission).mockResolvedValueOnce({
       session: { oauth: { connectionId: "conn-1", allTargets: false, allowedTargetIds: [] } },
     } as never)

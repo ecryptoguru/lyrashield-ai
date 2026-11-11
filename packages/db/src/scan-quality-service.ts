@@ -14,15 +14,26 @@ import {
   type ScanQualityInput,
   type ScanQualitySurface,
 } from "@lyrashield/types"
-import { withWorkspaceRLS } from "./rls"
+import type { ScanMode } from "./generated/prisma"
+import { withWorkspaceRLS, type ScopedTransaction } from "./rls"
 
 export async function getScanQualitySurface(
   scanId: string,
-  workspaceId: string
+  workspaceId: string,
+  client?: ScopedTransaction,
+  options: { requireActiveTarget?: boolean; allowedProfiles?: string[] } = {}
 ): Promise<ScanQualitySurface | null> {
-  const loaded = await withWorkspaceRLS(workspaceId, async (tx) => {
+  const read = async (tx: ScopedTransaction) => {
     const scan = await tx.scan.findFirst({
-      where: { id: scanId, workspaceId, deletedAt: null },
+      where: {
+        id: scanId,
+        workspaceId,
+        deletedAt: null,
+        ...(options.requireActiveTarget ? { target: { deletedAt: null } } : {}),
+        ...(options.allowedProfiles !== undefined
+          ? { mode: { in: options.allowedProfiles as ScanMode[] } }
+          : {}),
+      },
       select: {
         id: true,
         status: true,
@@ -62,7 +73,8 @@ export async function getScanQualitySurface(
       }),
     ])
     return { scan, receipts, findings, manifest }
-  })
+  }
+  const loaded = client ? await read(client) : await withWorkspaceRLS(workspaceId, read)
 
   if (!loaded) return null
 

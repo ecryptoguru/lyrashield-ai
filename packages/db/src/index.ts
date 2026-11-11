@@ -107,6 +107,12 @@ export { ApprovalStatus } from "./generated/prisma"
 export { Prisma } from "./generated/prisma"
 
 export { prisma } from "./client"
+export {
+  buildCustomerScanUsageProjection,
+  getCustomerScanUsageProjection,
+  type CustomerScanUsageProjection,
+} from "./scan-customer-usage-projection"
+export * from "./release-packet-exports"
 export { getSystemPrisma } from "./system-client"
 export { createBoundedPgAdapter, resolveDbPoolMax } from "./pool"
 export {
@@ -227,6 +233,12 @@ export {
   type ScorecardEventInput,
 } from "./score-service"
 export {
+  getFindingHistoryPage,
+  type FindingHistoryCollection,
+  type FindingHistoryPage,
+} from "./finding-history-service"
+
+export {
   listFindings,
   getFinding,
   updateFindingStatus,
@@ -235,14 +247,11 @@ export {
   getFindingStats,
   listEvidenceFindings,
   getFindingReference,
-  getFindingHistoryPage,
   findingScopeWhere,
   validateFindingScope,
   type ListFindingsParams,
   type FindingScopeParams,
   type FindingStats,
-  type FindingHistoryCollection,
-  type FindingHistoryPage,
 } from "./finding-service"
 export {
   createReport,
@@ -251,6 +260,7 @@ export {
   getReportByShareToken,
   getShareableReport,
   resolveReportDelegationTarget,
+  reportSnapshotScanBindingMatches,
   listReports,
   type CreateReportParams,
   type ShareableReport,
@@ -477,74 +487,7 @@ export {
   AUTH_ASSESSMENT_SESSION_MAX_LIFETIME_MS,
   type AuthenticatedAssessmentAuthorization,
 } from "./live-ai-safety-service"
-export {
-  CANONICAL_OPERATIONS,
-  AUTOMATION_WORKFLOWS,
-  MUTATING_CANONICAL_OPERATIONS,
-  TOOL_OPERATION_MAP,
-  checkDelegatedOperationAuthorization,
-  type CanonicalOperation,
-  type ToolOperationDescriptor,
-  type AuthorizationDenialReason,
-  type AuthorizationCheckParams,
-  type AuthorizationCheckResult,
-} from "./agent-authorization"
-export {
-  createAgentConnection,
-  getAgentConnection,
-  listAgentConnections,
-  resolveOAuthClientDisplayName,
-  pauseAgentConnection,
-  resumeAgentConnection,
-  revokeAgentConnection,
-  toAgentConnectionDTO,
-  type CreateAgentConnectionParams,
-  type AgentConnectionDTO,
-} from "./agent-connection-service"
-export {
-  claimOrGetAgentOperation,
-  completeAgentOperation,
-  failAgentOperation,
-  retainUnknownAgentOperationResult,
-  retryScanCancellation,
-  getAgentOperation,
-  getOperationStatus,
-  toOperationStatusView,
-  hashOperationInput,
-  listRecentAgentOperations,
-  listAgentOperationsForTasks,
-  resolveOperationPrincipal,
-  toJsonObject,
-  type AgentOperationListItem,
-  type ClaimAgentOperationParams,
-  type ClaimOperationResult,
-  type OperationStatusView,
-  type PrincipalIdentity,
-} from "./agent-operation-service"
-export {
-  CONNECTOR_PROVIDERS,
-  CONNECTOR_ALLOWED_PLANS,
-  connectorPrincipal,
-  isConnectorProvider,
-  defaultConnectorAdmission,
-  resolveConnectorConnection,
-  listConnectorConnections,
-  checkConnectorAuthorization,
-  invokeConnectorTool,
-  upsertConnectorConnection,
-  setConnectorConnectionStatus,
-  ConnectorConnectionError,
-  type ConnectorAuthzResult,
-  type ConnectorCredentialShape,
-  type ConnectorDenial,
-  type ConnectorDenialCode,
-  type ConnectorInvocationParams,
-  type ConnectorInvocationResult,
-  type ConnectorInvocationSuccess,
-  type ConnectorProviderId,
-  type ConnectorToolSpec,
-  type UpsertConnectorConnectionParams,
-} from "./connector-service"
+export * from "./delegated-exports"
 export { getScanQualitySurface } from "./scan-quality-service"
 
 export {
@@ -572,3 +515,13 @@ export {
   getFixPrExecution,
   markFixPrRecovery,
 } from "./fix-pr-execution-service"
+
+export { lockActiveTargetForDerivedWrite } from "./target-write-lock"
+export { classifyRetestResolution } from "./release-packet-classification"
+export { loadReceiptBackedRetestFindingIds } from "./retest-evidence-trust"
+export {
+  releasePacketSigningKeyId,
+  signReleasePacketChecksum,
+  verifyReleasePacketChecksum,
+  type ReleasePacketVerificationKey,
+} from "./release-packet-signing"

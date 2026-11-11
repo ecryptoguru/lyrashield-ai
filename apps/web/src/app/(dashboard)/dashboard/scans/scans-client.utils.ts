@@ -1,4 +1,19 @@
 import { isActiveScan } from "@/lib/scan-presentation"
+import { getDefaultScanOptionId, getManualScanOptions } from "@/lib/scan-presets"
+import { useSyncExternalStore } from "react"
+
+/** Use the mobile server snapshot until the client media query is available. */
+export function useMediaQuery(query: string): boolean {
+  return useSyncExternalStore(
+    (callback) => {
+      const mql = window.matchMedia(query)
+      mql.addEventListener("change", callback)
+      return () => mql.removeEventListener("change", callback)
+    },
+    () => window.matchMedia(query).matches,
+    () => false
+  )
+}
 
 // ── Active-scan poll backoff ────────────────────────────────────────────────
 // The list poller ramps down while scans stay active: every 10s for the
@@ -71,6 +86,28 @@ export function findRecoveryPreset<
     options.find((option) => option.available && option.goal === goal && option.mode === mode)
       ?.id ?? ""
   )
+}
+
+/** Preserve an explicitly requested unavailable option so the user sees its blocker. */
+export function resolveInitialScanPreset<T extends { id: string; goal: string; mode: string }>(
+  options: T[],
+  goal: string | undefined,
+  mode: string | undefined,
+  fallbackId: string
+): string {
+  return options.find((option) => option.goal === goal && option.mode === mode)?.id ?? fallbackId
+}
+
+export function getInitialPreset(
+  target: { type: string; apiSpecUrl: string | null } | undefined,
+  goal: string | undefined,
+  mode: string | undefined
+): string {
+  const options = getManualScanOptions({
+    type: target?.type ?? "",
+    hasApiSpec: Boolean(target?.apiSpecUrl),
+  })
+  return resolveInitialScanPreset(options, goal, mode, getDefaultScanOptionId(options))
 }
 
 export function isBillingRecoveryCode(code: string | null): boolean {

@@ -7,13 +7,9 @@ import {
   type GateEvidenceInput,
   type GateVerdictResult,
 } from "@lyrashield/gate"
-import {
-  fingerprintPolicy,
-  isTrustedRetestReceipt,
-  snapshotFromManifest,
-  toEpochMs,
-} from "./gate-assessment"
-import { withWorkspaceRLS } from "./rls"
+import { fingerprintPolicy, snapshotFromManifest, toEpochMs } from "./gate-assessment"
+import { loadGateFindings } from "./gate-retest-input"
+import { withWorkspaceRLS, type ScopedTransaction } from "./rls"
 
 export interface GateEvaluationResult {
   verdict: GateVerdictResult
@@ -33,7 +29,9 @@ export async function evaluateGateForTarget(
   workspaceId: string,
   targetId: string
 ): Promise<GateEvaluationResult | null> {
-  return withWorkspaceRLS(workspaceId, async (tx) => {
+  const runConsistent = (fn: (tx: ScopedTransaction) => Promise<GateEvaluationResult | null>) =>
+    withWorkspaceRLS(workspaceId, fn, { isolationLevel: "RepeatableRead" })
+  return runConsistent(async (tx) => {
     const target = await tx.target.findFirst({
       where: { id: targetId, workspaceId, deletedAt: null },
       select: { id: true, type: true },
@@ -93,44 +91,16 @@ export async function evaluateGateForTarget(
         })
       : []
 
-    const findings = await tx.finding.findMany({
-      where: { workspaceId, targetId, deletedAt: null },
-      select: {
-        id: true,
-        severity: true,
-        status: true,
-        verificationStatus: true,
-        lastSeenAt: true,
-        scanId: true,
-        disposition: true,
-        dispositionActorUserId: true,
-        dispositionReason: true,
-        dispositionAssessmentId: true,
-        dispositionAt: true,
-        canonicalFindingId: true,
-        verificationReceipts: {
-          where: { status: { in: ["VALIDATED", "VERIFIED"] } },
-          select: {
-            status: true,
-            method: true,
-            scanId: true,
-            verifierVersion: true,
-            evidence: true,
-          },
-        },
-      },
-    })
-
+    const { findings, trustedRetests } = await loadGateFindings(tx, workspaceId, targetId)
     const preparedFindings = findings.map((finding) => {
-      const trustedRetest = finding.verificationReceipts.some((receipt) =>
-        isTrustedRetestReceipt(receipt, finding.scanId)
-      )
+      const trustedRetest = trustedRetests.has(finding.id)
       const positiveReceipt = latestCompletedScan
         ? finding.verificationReceipts.some(
             (receipt) =>
               receipt.scanId === latestCompletedScan.id &&
               (receipt.status === "VALIDATED" || receipt.status === "VERIFIED") &&
-              Boolean(receipt.method)
+              Boolean(receipt.method) &&
+              receipt.method !== "RETEST"
           )
         : false
       const applicableDisposition =

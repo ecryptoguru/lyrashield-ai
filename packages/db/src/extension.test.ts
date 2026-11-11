@@ -230,13 +230,13 @@ describe("Prisma Extension — model set correctness (matches schema columns)", 
     expect(SOFT_DELETE_MODELS.has("ScanEvent")).toBe(true)
   })
 
-  it("workspace-scoped set contains only auto-scopable models with workspaceId (36)", () => {
-    // AgentConnection, AgentOperation, and LoopClosure are protected by their
-    // matching strict RLS migrations. SyncCursor has a required workspaceId;
-    // the license family and ArtifactDeletionTask are documented exclusions
-    // (see scoping.ts and scoping-schema-sync.test.ts). ScanAttachment is a
-    // direct workspace-owned table under FORCE RLS.
-    expect(WORKSPACE_SCOPED_MODELS.size).toBe(36)
+  it("workspace-scoped set contains only auto-scopable models with workspaceId (37)", () => {
+    // AgentConnection, AgentOperation, DelegatedScanProvenance, and LoopClosure
+    // are protected by matching strict RLS migrations. SyncCursor has a required
+    // workspaceId; the license family and ArtifactDeletionTask are documented
+    // exclusions (see scoping.ts and scoping-schema-sync.test.ts). ScanAttachment
+    // is a direct workspace-owned table under FORCE RLS.
+    expect(WORKSPACE_SCOPED_MODELS.size).toBe(37)
     for (const m of [
       "ScanEvent",
       "Evidence",

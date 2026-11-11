@@ -71,7 +71,12 @@ async function post(request: Request, { params }: { params: Promise<{ id: string
         )
       }
     }
-    const updated = await approveApproval(approvalId, workspaceId, session.userId)
+    const updated = await approveApproval(
+      approvalId,
+      workspaceId,
+      session.userId,
+      approval.inputHash
+    )
     if (fixContext) {
       const execution = await executeApprovedFixPr({ ...fixContext, approvalId })
       if (execution.status !== "opened") {

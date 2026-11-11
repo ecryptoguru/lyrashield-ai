@@ -1,0 +1,407 @@
+import type {
+  CommandStatus,
+  ExecutorKey,
+  JournalRecord,
+  ProviderGrantRequest,
+  ProviderGrantStatus,
+  ResourceOwnership,
+  StopCommand,
+  SupervisorCommand,
+  SupervisorCommandResult,
+} from "@lyrashield/runtime-control"
+import { deriveOwnershipId } from "./executor"
+import type {
+  AttemptState,
+  CommandState,
+  GrantBinding,
+  SupervisorJournalEvent,
+} from "./journal-events"
+import { RuntimeControlError } from "./service-common"
+import type { SupervisorServiceOptions } from "./service"
+
+interface SupervisorOperationsContext {
+  options: SupervisorServiceOptions
+  attempts: Map<string, AttemptState>
+  commands: Map<string, CommandState>
+  nowIso: () => string
+  apply: (record: JournalRecord<SupervisorJournalEvent>) => void
+  applyResource: (record: JournalRecord<SupervisorJournalEvent>) => void
+  assertCurrentReceipt: (attempt: AttemptState, expected: string) => void
+  appendIntent: (command: SupervisorCommand) => Promise<void>
+  appendAttemptStatus: (attempt: AttemptState, status: AttemptState["status"]) => Promise<void>
+  appendTerminal: (
+    command: SupervisorCommand,
+    status: CommandStatus,
+    reason?: string
+  ) => Promise<SupervisorCommandResult>
+  hasUnresolvedExecutorEffect: (attempt: AttemptState) => boolean
+  startCommandIdFor: (attemptId: string, executorKey: ExecutorKey) => string | null
+}
+
+export function matchesOwnership(expected: ResourceOwnership, actual: ResourceOwnership): boolean {
+  return (
+    expected.executorKey === actual.executorKey &&
+    expected.kind === actual.kind &&
+    expected.ownershipId === actual.ownershipId &&
+    (!expected.cgroupPath || expected.cgroupPath === actual.cgroupPath) &&
+    (!expected.containerId || expected.containerId === actual.containerId) &&
+    (!expected.processGroupId || expected.processGroupId === actual.processGroupId)
+  )
+}
+
+export class SupervisorOperations {
+  constructor(private readonly ctx: SupervisorOperationsContext) {}
+
+  async stop(
+    command: StopCommand,
+    alreadyAccepted = false,
+    priorRevocation?: Promise<void>
+  ): Promise<SupervisorCommandResult> {
+    const attempt = this.ctx.attempts.get(command.attemptId)
+    if (!attempt) throw new RuntimeControlError("ATTEMPT_NOT_FOUND", "attempt not found", 404)
+    if (!alreadyAccepted) {
+      this.ctx.assertCurrentReceipt(attempt, command.expectedReceiptHash)
+      await this.ctx.appendIntent(command)
+    }
+    await this.ctx.appendAttemptStatus(attempt, "STOPPING")
+    const revocationOutcome = (async () => {
+      await priorRevocation
+      await this.revokeAllKnownOrPotentialGrants(attempt, command.commandId)
+      return false
+    })().catch(() => true)
+
+    const recorded = [...attempt.resources.values()].reverse()
+    const plannedOnly = [...attempt.planned.values()].filter(
+      (planned) => !attempt.resources.has(planned.executorKey)
+    )
+    if (recorded.length === 0 && plannedOnly.length === 0) {
+      const revocationUnresolved = await revocationOutcome
+      if (revocationUnresolved) {
+        return this.ctx.appendTerminal(
+          command,
+          "UNKNOWN",
+          "provider grant revocation is unresolved"
+        )
+      }
+      await this.ctx.appendAttemptStatus(attempt, "NEVER_DISPATCHED")
+      return this.ctx.appendTerminal(command, "NEVER_DISPATCHED")
+    }
+    let anyDispatch = recorded.length > 0
+    let createUnresolved = this.ctx.hasUnresolvedExecutorEffect(attempt)
+    let resourceUnresolved = false
+    for (const resource of recorded) {
+      const inspection = await this.ctx.options.executor.stop(resource).catch(() => ({
+        state: "UNKNOWN" as const,
+        detail: "owned resource teardown failed",
+      }))
+      if (inspection.state !== "ABSENT") {
+        resourceUnresolved = true
+      }
+    }
+    // Create-intent window: create may have taken effect without a recorded
+    // resource_bound event. Inspect the planned ownership identity, but keep
+    // the outcome UNKNOWN until a create acknowledgement is established.
+    for (const planned of plannedOnly) {
+      const inspection = await this.ctx.options.executor.inspect(planned).catch(() => ({
+        state: "UNKNOWN" as const,
+        detail: "planned executor inspection failed",
+      }))
+      if (inspection.state === "UNKNOWN") {
+        resourceUnresolved = true
+        continue
+      }
+      if (inspection.state !== "PRESENT") {
+        createUnresolved = true
+        continue
+      }
+      anyDispatch = true
+      if (!inspection.ownership || !matchesOwnership(planned, inspection.ownership)) {
+        resourceUnresolved = true
+        continue
+      }
+      const owned = inspection.ownership
+      const boundRecord = await this.ctx.options.journal.append({
+        type: "resource_bound",
+        supervisorInstanceId: this.ctx.options.supervisorInstanceId,
+        observedAt: this.ctx.nowIso(),
+        commandId: command.commandId,
+        attemptId: attempt.binding.attemptId,
+        ownership: owned,
+      })
+      this.ctx.applyResource(boundRecord)
+      const stopped = await this.ctx.options.executor.stop(owned).catch(() => ({
+        state: "UNKNOWN" as const,
+        detail: "planned executor teardown failed",
+      }))
+      if (stopped.state !== "ABSENT") {
+        resourceUnresolved = true
+      }
+    }
+    const revocationUnresolved = await revocationOutcome
+    if (revocationUnresolved || createUnresolved || resourceUnresolved) {
+      return this.ctx.appendTerminal(
+        command,
+        "UNKNOWN",
+        revocationUnresolved
+          ? "provider grant or settlement is unresolved"
+          : "executor cleanup or creation is unresolved"
+      )
+    }
+    const status = anyDispatch ? "STOPPED" : "NEVER_DISPATCHED"
+    await this.ctx.appendAttemptStatus(attempt, status)
+    return this.ctx.appendTerminal(command, status)
+  }
+
+  async reconcile(
+    command: Extract<SupervisorCommand, { type: "RECONCILE" }>
+  ): Promise<SupervisorCommandResult> {
+    const attempt = this.ctx.attempts.get(command.attemptId)
+    if (!attempt) throw new RuntimeControlError("ATTEMPT_NOT_FOUND", "attempt not found", 404)
+    this.ctx.assertCurrentReceipt(attempt, command.expectedReceiptHash)
+    await this.ctx.appendIntent(command)
+    const stopRequested =
+      this.ctx.options.admission !== "open" ||
+      attempt.status === "STOPPING" ||
+      attempt.status === "UNKNOWN"
+    const revocationOutcome = stopRequested
+      ? this.revokeAllKnownOrPotentialGrants(attempt, command.commandId).then(
+          () => false,
+          () => true
+        )
+      : Promise.resolve(false)
+
+    let observedPresent = false
+    let createUnresolved = this.ctx.hasUnresolvedExecutorEffect(attempt)
+    let resourceUnresolved = false
+    for (const plan of attempt.plans.values()) {
+      const current = attempt.resources.get(plan.key)
+      const planned = attempt.planned.get(plan.key)
+      if (!current && !planned) continue
+      const startCommandId = this.ctx.startCommandIdFor(attempt.binding.attemptId, plan.key)
+      const candidate =
+        current ??
+        planned ??
+        ({
+          executorKey: plan.key,
+          kind: plan.spec.kind,
+          ownershipId: deriveOwnershipId(
+            attempt.binding.attemptId,
+            startCommandId ?? command.commandId,
+            plan.key
+          ),
+          ...(plan.spec.kind === "process" ? { cgroupPath: plan.spec.cgroupPath } : {}),
+        } satisfies ResourceOwnership)
+      const inspection = await this.ctx.options.executor.inspect(candidate).catch(() => ({
+        state: "UNKNOWN" as const,
+        detail: "resource inspection failed",
+      }))
+      if (inspection.state === "UNKNOWN") {
+        if (stopRequested) {
+          resourceUnresolved = true
+          continue
+        }
+        return this.ctx.appendTerminal(
+          command,
+          "UNKNOWN",
+          inspection.detail ?? "resource inspection unavailable"
+        )
+      }
+      if (inspection.state === "PRESENT") {
+        if (!inspection.ownership || !matchesOwnership(candidate, inspection.ownership)) {
+          if (stopRequested) {
+            resourceUnresolved = true
+            continue
+          }
+          await this.ctx.appendAttemptStatus(attempt, "UNKNOWN")
+          return this.ctx.appendTerminal(command, "UNKNOWN", "executor ownership is unresolved")
+        }
+        if (!stopRequested && inspection.running !== true) {
+          await this.ctx.appendAttemptStatus(attempt, "UNKNOWN")
+          return this.ctx.appendTerminal(command, "UNKNOWN", "resource is not confirmed running")
+        }
+        observedPresent = true
+        const owned = current ?? inspection.ownership ?? candidate
+        if (!current && inspection.ownership) {
+          const record = await this.ctx.options.journal.append({
+            type: "resource_bound",
+            supervisorInstanceId: this.ctx.options.supervisorInstanceId,
+            observedAt: this.ctx.nowIso(),
+            commandId: startCommandId ?? command.commandId,
+            attemptId: attempt.binding.attemptId,
+            ownership: inspection.ownership,
+          })
+          this.ctx.applyResource(record)
+        }
+        if (stopRequested) {
+          const stopped = await this.ctx.options.executor.stop(owned).catch(() => ({
+            state: "UNKNOWN" as const,
+            detail: "resource teardown failed",
+          }))
+          if (stopped.state !== "ABSENT") {
+            resourceUnresolved = true
+          }
+        }
+      } else if (planned && !current) {
+        if (!stopRequested) {
+          await this.ctx.appendAttemptStatus(attempt, "UNKNOWN")
+          return this.ctx.appendTerminal(command, "UNKNOWN", "executor creation is unresolved")
+        }
+        createUnresolved = true
+      }
+    }
+    if (stopRequested) {
+      const revocationUnresolved = await revocationOutcome
+      if (revocationUnresolved || createUnresolved || resourceUnresolved) {
+        return this.ctx.appendTerminal(
+          command,
+          "UNKNOWN",
+          revocationUnresolved
+            ? "provider grant or settlement is unresolved"
+            : "executor cleanup or creation is unresolved"
+        )
+      }
+      let activeGrants: GrantBinding[]
+      try {
+        activeGrants = [...attempt.grants.values(), ...(await this.lookupPotentialGrants(attempt))]
+      } catch {
+        return this.ctx.appendTerminal(command, "UNKNOWN", "provider grant status is unavailable")
+      }
+      if (activeGrants.some((grant) => !grant.revoked)) {
+        return this.ctx.appendTerminal(command, "UNKNOWN", "provider grants remain active")
+      }
+      // A create intent alone is not dispatch. NEVER_DISPATCHED stays honest
+      // only when no resource was ever bound and every planned executor was
+      // inspected ABSENT in this reconcile pass.
+      const anyDispatch = attempt.resources.size > 0 || observedPresent
+      const status = anyDispatch ? "STOPPED" : "NEVER_DISPATCHED"
+      await this.ctx.appendAttemptStatus(attempt, status)
+      return this.ctx.appendTerminal(command, status)
+    }
+    if (observedPresent) {
+      await this.ctx.appendAttemptStatus(attempt, "RUNNING")
+      return this.ctx.appendTerminal(command, "STARTED")
+    }
+    await this.ctx.appendAttemptStatus(attempt, "UNKNOWN")
+    return this.ctx.appendTerminal(command, "UNKNOWN", "terminal cleanup has not been established")
+  }
+
+  async ensureProviderGrant(attempt: AttemptState, grantRequestId: string): Promise<void> {
+    const policy = attempt.provider
+    if (!policy)
+      throw new RuntimeControlError("PROVIDER_POLICY_REQUIRED", "provider policy is missing", 400)
+    const request: ProviderGrantRequest = {
+      grantRequestId,
+      attemptId: attempt.binding.attemptId,
+      scanId: attempt.binding.scanId,
+      workspaceId: attempt.binding.workspaceId,
+      operationId: attempt.binding.operationId,
+      authorityEpochId: attempt.binding.authorityEpochId,
+      authorityRevision: attempt.binding.authorityRevision,
+      expiresAt: attempt.binding.expiresAt,
+      providerId: policy.providerId,
+      maxRequests: policy.maxRequests,
+      costReservationMicros: policy.costReservationMicros,
+      maxReservedCostMicros: policy.maxReservedCostMicros,
+    }
+    const existing = attempt.grants.get(policy.providerId)
+    if (existing && !existing.revoked) return
+    const grant = await this.ctx.options.providerGateway.issueGrant(request)
+    if (grant.attemptId !== attempt.binding.attemptId || grant.providerId !== policy.providerId) {
+      throw new RuntimeControlError(
+        "GRANT_BINDING_MISMATCH",
+        "provider gateway returned a foreign grant"
+      )
+    }
+    const record = await this.ctx.options.journal.append({
+      type: "provider_grants_bound",
+      supervisorInstanceId: this.ctx.options.supervisorInstanceId,
+      observedAt: this.ctx.nowIso(),
+      commandId: grantRequestId,
+      attemptId: attempt.binding.attemptId,
+      grants: [{ providerId: grant.providerId, grantId: grant.grantId, revoked: false }],
+    })
+    this.ctx.apply(record)
+  }
+
+  async revokeAllKnownOrPotentialGrants(attempt: AttemptState, commandId: string): Promise<void> {
+    const known = [...attempt.grants.values()]
+    const discovered = await this.lookupPotentialGrants(attempt)
+    if (known.some((grant) => !discovered.some((found) => found.grantId === grant.grantId))) {
+      throw new Error("known provider grant could not be independently located")
+    }
+    const all = new Map<string, GrantBinding>()
+    for (const grant of [...known, ...discovered]) all.set(grant.grantId, grant)
+    let settlementUnresolved = false
+    for (const grant of all.values()) {
+      if (grant.unsettled) settlementUnresolved = true
+      if (grant.revoked) continue
+      const status: ProviderGrantStatus = await this.ctx.options.providerGateway.revokeGrant({
+        grantId: grant.grantId,
+        attemptId: attempt.binding.attemptId,
+        reason: "supervisor-stop",
+      })
+      if (
+        !status.revokedAt ||
+        status.grantId !== grant.grantId ||
+        status.attemptId !== attempt.binding.attemptId ||
+        status.providerId !== grant.providerId
+      )
+        throw new Error("provider gateway did not acknowledge the bound revocation")
+      if (status.requestCount > 0) settlementUnresolved = true
+      all.set(grant.grantId, { ...grant, revoked: true })
+    }
+    if (all.size > 0) {
+      const record = await this.ctx.options.journal.append({
+        type: "provider_grants_revoked",
+        supervisorInstanceId: this.ctx.options.supervisorInstanceId,
+        observedAt: this.ctx.nowIso(),
+        commandId,
+        attemptId: attempt.binding.attemptId,
+        grantIds: [...all.keys()],
+      })
+      this.ctx.apply(record)
+    }
+    // The prototype has no authoritative provider settlement protocol. A
+    // revoked local token cannot prove an upstream request stopped or was free.
+    if (settlementUnresolved) throw new Error("provider settlement is unresolved")
+  }
+
+  private async lookupPotentialGrants(attempt: AttemptState): Promise<GrantBinding[]> {
+    const found: GrantBinding[] = []
+    for (const state of this.ctx.commands.values()) {
+      const request = state.request
+      if (
+        !request ||
+        request.type !== "START_PAID" ||
+        request.attemptId !== attempt.binding.attemptId
+      )
+        continue
+      const grant = await this.ctx.options.providerGateway.findGrantByRequest(request.commandId)
+      if (!grant) {
+        if (state.status === "REJECTED" && !attempt.planned.has(request.executorKey)) continue
+        throw new Error("provider grant outcome remains unresolved")
+      }
+      if (grant.attemptId !== attempt.binding.attemptId) {
+        throw new RuntimeControlError(
+          "GRANT_BINDING_MISMATCH",
+          "provider gateway returned a foreign grant"
+        )
+      }
+      const status = await this.ctx.options.providerGateway.inspectGrant(grant.grantId)
+      if (
+        !status ||
+        status.grantId !== grant.grantId ||
+        status.attemptId !== attempt.binding.attemptId ||
+        status.providerId !== grant.providerId
+      )
+        throw new Error("provider grant status is unavailable or foreign")
+      found.push({
+        providerId: grant.providerId,
+        grantId: grant.grantId,
+        revoked: Boolean(status.revokedAt),
+        unsettled: status.requestCount > 0,
+      })
+    }
+    return found
+  }
+}

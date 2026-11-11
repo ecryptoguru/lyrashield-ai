@@ -457,6 +457,15 @@ export function verifyImageSources(pair) {
   }
 }
 
+export function verifyRollbackAvailability(pair) {
+  verifyImageSources(pair)
+  for (const role of ["relay", "app", "scanner"]) {
+    const t = target(role, pair)
+    const row = revisions(t).find((candidate) => candidate.name === t.candidate)
+    verifyImage(row, t.image)
+  }
+}
+
 export function verifyCompatibleMaintenance() {
   // Re-probe the existing read-only classifiers. The v26 prepare command can
   // mutate state, so it is never called here.

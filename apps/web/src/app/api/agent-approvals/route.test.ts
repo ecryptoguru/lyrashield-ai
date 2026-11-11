@@ -1,6 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 vi.mock("@lyrashield/db", () => ({
+  ApprovalMutationError: class extends Error {
+    constructor(
+      readonly code: string,
+      message: string
+    ) {
+      super(message)
+    }
+  },
   createApproval: vi.fn(),
   listApprovals: vi.fn(),
 }))
@@ -22,7 +30,7 @@ vi.mock("../../../lib/rate-limit", () => ({
   checkApprovalCreateRateLimit: (...args: unknown[]) => checkApprovalCreateRateLimit(...args),
 }))
 
-import { createApproval } from "@lyrashield/db"
+import { ApprovalMutationError, createApproval } from "@lyrashield/db"
 import { POST } from "./route"
 
 function request(body: unknown) {
@@ -91,5 +99,14 @@ describe("POST /api/agent-approvals", () => {
       expect(response.status).toBe(400)
       expect(createApproval).not.toHaveBeenCalled()
     }
+  })
+
+  it("reports unsupported stored input as a validation error", async () => {
+    vi.mocked(createApproval).mockRejectedValueOnce(
+      new ApprovalMutationError("UNSUPPORTED_INPUT", "Input cannot be stored safely")
+    )
+    const response = await POST(request(VALID_BODY))
+    expect(response.status).toBe(422)
+    await expect(response.json()).resolves.toMatchObject({ error: { code: "VALIDATION_ERROR" } })
   })
 })

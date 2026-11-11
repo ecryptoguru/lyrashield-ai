@@ -1,11 +1,10 @@
 import { scanCreationConflict } from "../../../lib/scan-admission-conflicts"
 import { releaseUnstartedScanSlot } from "@lyrashield/db"
 import { withCookieMutation, authErrorResponse } from "../../../lib/api-auth"
-import { serializeScanListItem, scanListEtag, ScanIdQuerySchema } from "./scan-list-response"
+import { serializeScanListItem } from "./scan-list-response"
 import {
   prisma,
   createScan,
-  listScans,
   updateScanStatus,
   claimOrGetAgentOperation,
   completeAgentOperation,
@@ -16,24 +15,14 @@ import {
   LiveAiSafetyError,
   ScanAttachmentError,
 } from "@lyrashield/db"
-import {
-  assertOAuthDelegatedScope,
-  requirePermission,
-  resolveOAuthReadScope,
-} from "@lyrashield/auth/server"
+import { assertOAuthDelegatedScope, requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
-import {
-  CreateScanInputSchema,
-  MAX_CONCURRENT_WORKSPACE_SCANS,
-  ScanExecutionPlanInputError,
-  ScanStatusSchema,
-} from "@lyrashield/types"
-import { parseScanStateFilter, scanStateStatuses } from "@/lib/scan-presentation"
+import { CreateScanInputSchema, ScanExecutionPlanInputError } from "@lyrashield/types"
 import { logger } from "@lyrashield/logger"
-import { NextResponse } from "next/server"
 import { assertScanAllowed } from "@lyrashield/billing"
 import {
   authAssessmentAdmission,
+  assertSelectableScanPolicy,
   findCurrentDomainProof,
   findScanPolicy,
   resolveCanonicalReviewMode,
@@ -41,8 +30,8 @@ import {
   resolveAvailableUrlReview,
 } from "../../../lib/scan-admission"
 import { revalidateDashboardAggregates } from "../../../lib/cache"
-import { publicScanProvenance, publicScanResult } from "../../../lib/scan-provenance"
-import { apiError, apiSuccess, parsePaginationParams } from "../../../lib/api-response"
+import { publicScanProvenance } from "../../../lib/scan-provenance"
+import { apiError, apiSuccess } from "../../../lib/api-response"
 import {
   assertScanWorkerAvailable,
   enqueueScanJob,
@@ -55,10 +44,16 @@ import {
   clientIpFromRequest,
 } from "../../../lib/rate-limit"
 import { createScanRefusalContext } from "../../../lib/scan-refusal"
+import {
+  claimOrdinaryScanOperation,
+  isDelegatedScanAdmissionError,
+  resolveDelegatedScanAdmission,
+  type DelegatedScanAdmission,
+} from "./scan-operation-admission"
 
 /** Full lowercase git object IDs (SHA-1 = 40, SHA-256 = 64) pass through as
  * immutable revisions; anything else resolves through the installation. */
-const FULL_GIT_OBJECT_ID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/
+const FULL_GIT_OBJECT_ID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/i
 
 async function resolveRepoRevision(
   installationId: number,
@@ -66,7 +61,7 @@ async function resolveRepoRevision(
   repo: string,
   ref: string
 ): Promise<string> {
-  if (FULL_GIT_OBJECT_ID.test(ref)) return ref
+  if (FULL_GIT_OBJECT_ID.test(ref)) return ref.toLowerCase()
   return getBranchRefSha(installationId, owner, repo, ref)
 }
 
@@ -77,7 +72,7 @@ async function resolveRepoRevision(
  * normal multi-product use unaffected.
  */
 
-async function post(request: Request) {
+async function parseCreateScanRequest(request: Request) {
   let body: unknown
   try {
     body = await request.json()
@@ -89,19 +84,43 @@ async function post(request: Request) {
   if (!parsed.success) {
     return apiError("VALIDATION_ERROR", parsed.error.message, 400)
   }
+  return parsed.data
+}
 
-  const data = parsed.data
+async function post(request: Request) {
+  const data = await parseCreateScanRequest(request)
+  if (data instanceof Response) return data
   const workspaceId = data.workspaceId
 
   let operationClaim: Awaited<ReturnType<typeof claimOrGetAgentOperation>> | null = null
   let submittedScanId: string | undefined
   let operationCompleted = false
+  let delegatedScanAdmission: DelegatedScanAdmission | undefined
   // Captured once auth succeeds so catch-block refusals can attribute the actor.
   let actorUserId: string | undefined
   const { submission, refuseScan } = createScanRefusalContext(request)
   try {
-    const { session } = await requirePermission(workspaceId, PERMISSIONS.scan.create)
+    const { session, workspace } = await requirePermission(workspaceId, PERMISSIONS.scan.create)
+    assertSelectableScanPolicy(session, data.policyId)
     actorUserId = session.userId
+
+    // Deny out-of-grant targets before lookup so their existence is not exposed.
+    assertOAuthDelegatedScope(session, data.targetId, data.mode)
+
+    const delegatedAdmission = await resolveDelegatedScanAdmission({
+      request,
+      workspaceId,
+      oauth: session.oauth,
+    })
+    if (delegatedAdmission.kind === "invalid") return delegatedAdmission.response
+    if (delegatedAdmission.kind === "admitted") {
+      delegatedScanAdmission = delegatedAdmission.admission
+      operationClaim = {
+        status: "NEW",
+        operation: delegatedAdmission.operation,
+        admissionProof: delegatedAdmission.admission.admissionProof,
+      }
+    }
 
     const target = await prisma.target.findFirst({
       where: { id: data.targetId, workspaceId, deletedAt: null },
@@ -119,8 +138,6 @@ async function post(request: Request) {
         workflow: data.workflow,
       })
     }
-
-    assertOAuthDelegatedScope(session, data.targetId, data.mode)
 
     // Resolve workspace-scoped attachment IDs before any billing/queue work.
     // The stored rows — never client-supplied fields — prove ownership,
@@ -283,65 +300,18 @@ async function post(request: Request) {
       })
     }
 
-    // W3-01: durable operation identity is opt-in. Callers that send an
-    // Idempotency-Key get identical-retry replay semantics; without the
-    // header the route behaves exactly as before.
-    const idempotencyKey = request.headers.get("idempotency-key")?.trim()
-    if (idempotencyKey !== undefined) {
-      if (idempotencyKey.length < 1 || idempotencyKey.length > 128) {
-        return apiError("VALIDATION_ERROR", "Idempotency-Key must be 1-128 characters", 400)
-      }
-      const claim = await claimOrGetAgentOperation({
-        workspaceId,
-        operationName: "scan.create",
-        idempotencyKey,
-        input: { ...data, mode: canonicalMode, policyId: policy?.id ?? null },
-        connectionId: session.oauth?.connectionId,
-        authorizationVersion: session.oauth?.authorizationVersion,
-        apiKeyId: session.apiKey?.keyId,
-        userId: session.apiKey || session.oauth ? undefined : session.userId,
-      })
-      if (claim.status === "CONFLICT") {
-        return apiError("IDEMPOTENCY_CONFLICT", claim.message, 409)
-      }
-      if (claim.status === "REPLAY") {
-        if (!claim.operation.result || !claim.operation.resultReference) {
-          return apiError(
-            "OPERATION_RESULT_UNAVAILABLE",
-            "The recorded scan cannot be replayed. Inspect its operation status.",
-            409,
-            undefined,
-            { operationId: claim.operation.id }
-          )
-        }
-        return apiSuccess(
-          {
-            ...publicScanResult(claim.operation.result as Record<string, unknown>),
-            operationId: claim.operation.id,
-          },
-          200
-        )
-      }
-      if (claim.status === "FAILED") {
-        return apiError(
-          "OPERATION_FAILED",
-          "This operation previously failed. Inspect its status before starting another scan.",
-          409,
-          undefined,
-          { operationId: claim.operation.id }
-        )
-      }
-      if (claim.status === "IN_PROGRESS") {
-        return apiError(
-          "OPERATION_IN_PROGRESS",
-          "An identical scan start is already in progress. Poll the operation status instead of retrying.",
-          409,
-          undefined,
-          { operationId: claim.operation.id }
-        )
-      }
-      operationClaim = claim
-    }
+    const ordinaryClaim = await claimOrdinaryScanOperation({
+      request,
+      workspaceId,
+      input: { ...data, mode: canonicalMode, policyId: policy?.id ?? null },
+      oauth: session.oauth,
+      apiKeyId: session.apiKey?.keyId,
+      userId: session.userId,
+      member: workspace.member,
+      delegated: Boolean(delegatedScanAdmission),
+    })
+    if (ordinaryClaim.response) return ordinaryClaim.response
+    if (ordinaryClaim.claim) operationClaim = ordinaryClaim.claim
 
     // Spend controls, cheapest check first. The existing per-target guard below stops the
     // same target running twice; neither of these bounded a workspace fanning out across
@@ -618,6 +588,7 @@ async function post(request: Request) {
       // references — the deduped, scope/checksum-validated list resolved
       // above. This API never treats the list as proof of staged input.
       ...(attachmentIds.length > 0 ? { attachmentIds } : {}),
+      ...(delegatedScanAdmission ? { delegatedOperation: delegatedScanAdmission } : {}),
     })
 
     submittedScanId = scan.id
@@ -716,6 +687,17 @@ async function post(request: Request) {
       201
     )
   } catch (error) {
+    if (isDelegatedScanAdmissionError(error)) {
+      return apiError(
+        "OPERATION_ADMISSION_INVALID",
+        "This delegated operation can no longer start a scan. Inspect its status.",
+        409,
+        undefined,
+        operationClaim && "operation" in operationClaim
+          ? { operationId: operationClaim.operation.id }
+          : undefined
+      )
+    }
     const conflict = scanCreationConflict(error)
     if (conflict)
       return refuseScan({
@@ -726,22 +708,6 @@ async function post(request: Request) {
         mode: data.mode,
         workflow: data.workflow,
       })
-    if (
-      (error && typeof error === "object" && (error as { code?: string }).code === "P2002") ||
-      (error instanceof Error && error.message === "Target already has an active scan")
-    ) {
-      return refuseScan({
-        workspaceId,
-        actorUserId,
-        reason: "scan_in_progress",
-        code: "SCAN_IN_PROGRESS",
-        message: "Target already has an active scan. Cancel it or wait for completion.",
-        status: 409,
-        targetId: data.targetId,
-        mode: data.mode,
-        workflow: data.workflow,
-      })
-    }
     if (error instanceof Error && error.message === "Target not found in this workspace") {
       return refuseScan({
         workspaceId,
@@ -788,111 +754,6 @@ async function post(request: Request) {
   }
 }
 
-export async function GET(request: Request) {
-  try {
-    const { searchParams } = new URL(request.url)
-    const workspaceId = searchParams.get("workspaceId")
-    const targetId = searchParams.get("targetId")
-    const rawStatus = searchParams.get("status")
-    const rawScanIds = searchParams.get("ids")
-    // URL-backed state filter (ALL | ACTIVE | COMPLETED | NEEDS_ATTENTION |
-    // CANCELLED). Composes with, but never replaces, the legacy status param.
-    const stateFilter = parseScanStateFilter(searchParams.get("state"))
-
-    if (!workspaceId) {
-      return apiError("MISSING_PARAM", "workspaceId is required", 400)
-    }
-
-    let scanIds: string[] | undefined
-    if (rawScanIds !== null) {
-      const parsed = ScanIdQuerySchema.safeParse(rawScanIds.split(",").map((id) => id.trim()))
-      if (!parsed.success) {
-        return apiError(
-          "INVALID_PARAM",
-          `ids must contain 1-${MAX_CONCURRENT_WORKSPACE_SCANS} valid scan IDs`,
-          400
-        )
-      }
-      scanIds = parsed.data
-    }
-
-    // Support a single status value or a comma-separated list of statuses.
-    let statusFilter: Parameters<typeof listScans>[0]["statuses"] | undefined
-    let singleStatus: Parameters<typeof listScans>[0]["status"] | undefined
-    if (rawStatus) {
-      const parts = rawStatus
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean)
-      if (parts.length > 1) {
-        const parsed = parts.map((s) => ScanStatusSchema.safeParse(s))
-        const invalid = parsed.find((r) => !r.success)
-        if (invalid) {
-          return apiError("INVALID_PARAM", "status contains an invalid scan status value", 400)
-        }
-        statusFilter = parsed.map((r) => (r as { success: true; data: typeof singleStatus }).data!)
-      } else {
-        const parsed = ScanStatusSchema.safeParse(parts[0])
-        if (!parsed.success) {
-          return apiError("INVALID_PARAM", "status must be a valid scan status", 400)
-        }
-        singleStatus = parsed.data
-      }
-    }
-
-    const { session } = await requirePermission(workspaceId, PERMISSIONS.scan.view)
-    const readScope = resolveOAuthReadScope(session, targetId)
-
-    const { cursor, limit } = parsePaginationParams(searchParams, 25)
-
-    // Intersect the state filter with an explicit legacy status filter so both
-    // contracts stay meaningful when combined.
-    const stateStatuses = scanStateStatuses(stateFilter)
-    const explicitStatuses = statusFilter ?? (singleStatus ? [singleStatus] : undefined)
-    let effectiveStatuses: string[] | undefined
-    if (stateStatuses && explicitStatuses) {
-      effectiveStatuses = explicitStatuses.filter((status) => stateStatuses.includes(status))
-      if (effectiveStatuses.length === 0) {
-        return NextResponse.json(
-          { success: true, data: { items: [], nextCursor: null } },
-          { status: 200, headers: { "Cache-Control": "private, no-store" } }
-        )
-      }
-    } else if (stateStatuses) {
-      effectiveStatuses = stateStatuses
-    }
-
-    const { items, nextCursor } = await listScans({
-      workspaceId,
-      ...(scanIds ? { scanIds } : {}),
-      ...readScope,
-      ...(effectiveStatuses
-        ? { statuses: effectiveStatuses as Parameters<typeof listScans>[0]["statuses"] }
-        : statusFilter
-          ? { statuses: statusFilter }
-          : singleStatus
-            ? { status: singleStatus }
-            : {}),
-      ...(cursor ? { cursor } : {}),
-      limit,
-    })
-
-    const serialized = items.map(serializeScanListItem)
-    const etag = scanListEtag(serialized, nextCursor)
-    if (request.headers.get("if-none-match") === etag) {
-      return new Response(null, { status: 304, headers: { ETag: etag } })
-    }
-
-    return NextResponse.json(
-      { success: true, data: { items: serialized, nextCursor } },
-      { status: 200, headers: { ETag: etag } }
-    )
-  } catch (error) {
-    const authErr = authErrorResponse(error)
-    if (authErr) return authErr
-    logger.error("Failed to list scans", { error: String(error) })
-    return apiError("INTERNAL_ERROR", "Failed to list scans", 500)
-  }
-}
+export { GET } from "./scan-list-route"
 
 export const POST = withCookieMutation(post)

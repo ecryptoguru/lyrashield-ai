@@ -22,11 +22,20 @@ on:
         required: false
         default: ""
         type: string
+      qualified_release_digest:
+        required: false
+        default: ""
+        type: string
   workflow_dispatch:
     inputs:
       source_sha:
         description: Current main SHA to deploy
         required: true
+        type: string
+      qualified_release_digest:
+        description: Optional protected paired-release record digest
+        required: false
+        default: ""
         type: string
 concurrency:
   group: deploy-azure-${{ vars.AZURE_RESOURCE_GROUP || 'production' }}-${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
@@ -42,7 +51,7 @@ env:
   WEB_IMAGE: ghcr.io/${{ github.repository }}/lyrashield-web
   WORKER_IMAGE: ghcr.io/${{ github.repository }}/lyrashield-worker
   EGRESS_PROXY_IMAGE: ghcr.io/${{ github.repository }}/lyrashield-egress-proxy
-  ENGINE_REVISION: 3001517530300ca5f602536bfadcbd3c95ad3039
+  ENGINE_REVISION: 079194b176d9bf0b46e45f9bdc88ed18c5bf1806
   MARKETING_URL: ${{ vars.LYRASHIELD_MARKETING_URL || 'https://lyrashieldai.com' }}
   APP_URL: ${{ vars.LYRASHIELD_APP_URL || 'https://app.lyrashieldai.com' }}
   SCANNER_URL: ${{ vars.LYRASHIELD_SCANNER_URL || 'https://scanner.lyrashieldai.com' }}
@@ -90,6 +99,7 @@ jobs:
       actions: read
       contents: read
       id-token: write
+      packages: read
     steps:
       # Applies to both workflow calls and manual recovery dispatches.
       - name: Hold production until runtime qualification
@@ -127,6 +137,26 @@ jobs:
 
       - name: Ensure Container Apps extension
         run: az extension add --name containerapp --yes --only-show-errors
+
+      - name: Authenticate qualified rollback image reads
+        if: inputs.qualified_release_digest != ''
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ github.token }}
+
+      - name: Preflight protected paired release
+        if: inputs.qualified_release_digest != ''
+        env:
+          APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
+          EGRESS_NAME: ${{ vars.AZURE_EGRESS_PROXY_CONTAINER_APP_NAME }}
+          GH_TOKEN: ${{ github.token }}
+          PAIRED_JOB_WORKFLOW: .github/workflows/deploy-azure.yml
+          PAIRED_QUALIFIED_RELEASE_SHA256: ${{ inputs.qualified_release_digest }}
+          RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+          SCANNER_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
+        run: node .github/scripts/paired-runtime-workflow.mjs preflight
 
       - name: Block automatic retry of incomplete v26 maintenance
         env:
@@ -662,6 +692,7 @@ jobs:
       worker_digest: ${{ needs.resolve-images.outputs.worker_digest }}
       egress_proxy_image: ${{ needs.resolve-images.outputs.egress_proxy_image }}
       egress_proxy_digest: ${{ needs.resolve-images.outputs.egress_proxy_digest }}
+      qualified_release_digest: ${{ inputs.qualified_release_digest }}
     secrets: inherit
 
   verify-held-recovery-outcome:

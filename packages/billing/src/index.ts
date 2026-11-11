@@ -258,6 +258,7 @@ export {
   resolveLaunchReportSigningPrivateKey,
   resolveLaunchReportSigningPublicKey,
 } from "./launch-report-keys"
+export { resolveReleasePacketVerificationKeys } from "./release-packet-verification-keys"
 
 export {
   ScanCapacityWaitingError,

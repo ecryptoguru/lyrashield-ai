@@ -1,0 +1,199 @@
+import { z } from "zod"
+import {
+  executorKeySchema,
+  resourceOwnershipSchema,
+  type JournalRecord,
+  type SupervisorCommand,
+  type SupervisorReceipt,
+} from "@lyrashield/runtime-control"
+import type { AttemptState, CommandState, SupervisorJournalEvent } from "./journal-events"
+import {
+  RuntimeControlError,
+  commandAttemptId,
+  commandRequestHash,
+  receiptFromRecord,
+} from "./service-common"
+
+function applyPrepared(
+  event: Extract<SupervisorJournalEvent, { type: "attempt_prepared" }>,
+  receipt: SupervisorReceipt,
+  attempts: Map<string, AttemptState>,
+  commands: Map<string, CommandState>
+): void {
+  const attempt: AttemptState = {
+    binding: event.binding,
+    plans: new Map(event.executors.map((plan) => [plan.key, plan])),
+    ...(event.provider ? { provider: event.provider } : {}),
+    grants: new Map(),
+    planned: new Map(),
+    resources: new Map(),
+    createAcknowledged: new Set(),
+    startPlanned: new Set(),
+    startAcknowledged: new Set(),
+    receipt,
+    status: "PREPARED",
+    createdExecutors: new Set(),
+  }
+  attempts.set(event.binding.attemptId, attempt)
+  const prepareCommand: Extract<SupervisorCommand, { type: "PREPARE" }> = {
+    type: "PREPARE",
+    commandId: event.commandId,
+    attempt: event.binding,
+    executors: event.executors,
+    ...(event.provider ? { provider: event.provider } : {}),
+  }
+  commands.set(event.commandId, {
+    request: prepareCommand,
+    requestHash: commandRequestHash(prepareCommand),
+    attemptId: event.binding.attemptId,
+    status: "PREPARED",
+    receipt,
+  })
+}
+
+export function applyJournalRecord(
+  record: JournalRecord<SupervisorJournalEvent>,
+  attempts: Map<string, AttemptState>,
+  commands: Map<string, CommandState>
+): void {
+  const event = record.payload
+  const receipt = receiptFromRecord(record)
+  if (event.type === "attempt_prepared") {
+    applyPrepared(event, receipt, attempts, commands)
+    return
+  }
+  if (event.type === "command_intent") {
+    const existing = commands.get(event.command.commandId)
+    if (existing) {
+      existing.receipt = receipt
+      return
+    }
+    commands.set(event.command.commandId, {
+      request: event.command,
+      requestHash: commandRequestHash(event.command),
+      attemptId: commandAttemptId(event.command),
+      status: "RECEIVED",
+      receipt,
+    })
+    return
+  }
+  if (event.type === "resource_create_planned") {
+    const ownership = resourceOwnershipSchema.safeParse({
+      executorKey: event.executorKey,
+      kind: event.kind,
+      ownershipId: event.ownershipId,
+      ...(event.cgroupPath ? { cgroupPath: event.cgroupPath } : {}),
+    })
+    if (!ownership.success)
+      throw new RuntimeControlError("JOURNAL_INTEGRITY", "invalid planned ownership", 500)
+    const attempt = attempts.get(event.attemptId)
+    if (attempt) {
+      attempt.planned.set(ownership.data.executorKey, ownership.data)
+      attempt.receipt = receipt
+    }
+    const command = commands.get(event.commandId)
+    if (command) command.receipt = receipt
+    return
+  }
+  if (event.type === "resource_create_acknowledged" || event.type === "resource_start_planned") {
+    const attempt = attempts.get(event.attemptId)
+    if (
+      !attempt ||
+      !attempt.planned.has(event.executorKey) ||
+      (event.type === "resource_create_acknowledged" &&
+        !attempt.resources.has(event.executorKey)) ||
+      (event.type === "resource_start_planned" &&
+        !attempt.createAcknowledged.has(event.executorKey))
+    ) {
+      throw new RuntimeControlError(
+        "JOURNAL_INTEGRITY",
+        "executor effect evidence is out of order",
+        500
+      )
+    }
+    if (event.type === "resource_create_acknowledged")
+      attempt.createAcknowledged.add(event.executorKey)
+    else attempt.startPlanned.add(event.executorKey)
+    attempt.receipt = receipt
+    const command = commands.get(event.commandId)
+    if (command) command.receipt = receipt
+    return
+  }
+  if (event.type === "resource_bound" || event.type === "resource_started") {
+    const parsed = z
+      .object({
+        executorKey: executorKeySchema,
+        kind: z.enum(["container", "process"]),
+        ownershipId: z.string(),
+        containerId: z.string().optional(),
+        processGroupId: z.number().optional(),
+        cgroupPath: z.string().optional(),
+      })
+      .passthrough()
+      .parse(event.ownership)
+    const ownership = resourceOwnershipSchema.safeParse(parsed)
+    if (!ownership.success)
+      throw new RuntimeControlError("JOURNAL_INTEGRITY", "invalid resource ownership", 500)
+    if (event.type === "resource_started" && event.executorKey !== ownership.data.executorKey) {
+      throw new RuntimeControlError("JOURNAL_INTEGRITY", "started executor identity mismatch", 500)
+    }
+    const attempt = attempts.get(event.attemptId)
+    if (attempt) {
+      if (event.type === "resource_started") {
+        if (!attempt.startPlanned.has(event.executorKey)) {
+          throw new RuntimeControlError("JOURNAL_INTEGRITY", "executor start was not planned", 500)
+        }
+        attempt.startAcknowledged.add(event.executorKey)
+      }
+      attempt.resources.set(ownership.data.executorKey, ownership.data)
+      attempt.createdExecutors.add(ownership.data.executorKey)
+      attempt.receipt = receipt
+    }
+    const command = commands.get(event.commandId)
+    if (command) command.receipt = receipt
+    return
+  }
+  if (event.type === "provider_grants_bound") {
+    const attempt = attempts.get(event.attemptId)
+    if (attempt) {
+      for (const grant of event.grants) attempt.grants.set(grant.providerId, grant)
+      attempt.receipt = receipt
+    }
+    const command = commands.get(event.commandId)
+    if (command) command.receipt = receipt
+    return
+  }
+  if (event.type === "provider_grants_revoked") {
+    const attempt = attempts.get(event.attemptId)
+    if (attempt) {
+      for (const grantId of event.grantIds) {
+        for (const grant of attempt.grants.values()) {
+          if (grant.grantId === grantId) grant.revoked = true
+        }
+      }
+      attempt.receipt = receipt
+    }
+    const command = commands.get(event.commandId)
+    if (command) command.receipt = receipt
+    return
+  }
+  if (event.type === "attempt_status") {
+    const attempt = attempts.get(event.attemptId)
+    if (attempt) {
+      attempt.status = event.status
+      attempt.receipt = receipt
+    }
+    return
+  }
+  if (event.type !== "command_terminal") {
+    throw new RuntimeControlError("JOURNAL_INTEGRITY", "unrecognized journal event", 500)
+  }
+  const command = commands.get(event.commandId)
+  if (command) {
+    command.status = event.status
+    command.reason = event.reason
+    command.receipt = receipt
+  }
+  const attempt = attempts.get(event.attemptId)
+  if (attempt) attempt.receipt = receipt
+}

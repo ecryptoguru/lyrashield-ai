@@ -389,6 +389,7 @@ describe("getLaunchReportDetail — authenticated private reader", () => {
     await expect(getLaunchReportDetail("report-1", "workspace-1")).resolves.toEqual({
       verdictLabel: null,
       stale: true,
+      currentApplicability: "UNKNOWN",
       provenance: null,
     })
   })

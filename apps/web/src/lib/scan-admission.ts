@@ -26,12 +26,16 @@ const URL_TARGET_TYPES = new Set(["WEB_APP", "API"])
 
 export { TARGET_RELAY_UNAVAILABLE_MESSAGE }
 
+/** Delegated OAuth grants currently carry no policy selection scope. */
+export function assertSelectableScanPolicy(session: { oauth?: unknown }, policyId?: string): void {
+  if (session.oauth && policyId !== undefined) throw new Error("FORBIDDEN")
+}
+
 export async function getTargetRelayAvailability(targetType: string): Promise<boolean> {
   return !URL_TARGET_TYPES.has(targetType) || (await isTargetRelayWorkerAvailable())
 }
 
 export { findCurrentDomainProof, resolveUrlReviewMode }
-export type { UrlReviewMode } from "@lyrashield/types"
 
 /** Shared worker/API admission with an advisory snapshot when already fetched. */
 export async function resolveAvailableUrlReview(
@@ -103,7 +107,21 @@ export async function findScanPolicy(workspaceId: string, policyId?: string) {
       ? { id: policyId, workspaceId, deletedAt: null }
       : { workspaceId, name: "Default Policy", deletedAt: null },
     orderBy: policyId ? undefined : [{ createdAt: "asc" }, { id: "asc" }],
-    select: { id: true, destructiveTestsAllowed: true, maxBudgetUsd: true },
+    select: {
+      id: true,
+      scanWindow: true,
+      blockedPaths: true,
+      allowedDomains: true,
+      rateLimit: true,
+      networkEgressPolicy: true,
+      destructiveTestsAllowed: true,
+      approvalRequired: true,
+      maxBudgetUsd: true,
+      maxDurationMinutes: true,
+      piiRedactionEnabled: true,
+      evidenceRetentionDays: true,
+      updatedAt: true,
+    },
   })
 }
 

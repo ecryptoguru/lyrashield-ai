@@ -60,6 +60,7 @@ vi.mock("@lyrashield/db", () => ({
 vi.mock("@lyrashield/auth/server", () => ({
   assertOAuthDelegatedScope: vi.fn(),
   requirePermission: vi.fn().mockResolvedValue({ session: { userId: "user-1" } }),
+  resolveOAuthReadScope: vi.fn(() => ({})),
 }))
 
 vi.mock("@lyrashield/auth", () => ({

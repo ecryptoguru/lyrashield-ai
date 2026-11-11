@@ -6,7 +6,8 @@ import {
 } from "@lyrashield/security/ai-security"
 import { createHash } from "node:crypto"
 import { logger } from "@lyrashield/logger"
-import { withWorkspaceRLS } from "./rls"
+import type { ScanMode } from "./generated/prisma"
+import { withWorkspaceRLS, type ScopedTransaction } from "./rls"
 
 export interface AiSecurityScoreInput {
   signals?: AISecuritySignal[]
@@ -131,12 +132,33 @@ export async function createAiSecurityScoreSnapshot(
 }
 
 /** Returns a snapshot only if it belongs to the workspace. */
-export async function getAiSecurityScoreSnapshot(scanId: string, workspaceId: string) {
-  return withWorkspaceRLS(workspaceId, async (tx) => {
+export async function getAiSecurityScoreSnapshot(
+  scanId: string,
+  workspaceId: string,
+  client?: ScopedTransaction,
+  options: { requireActiveTarget?: boolean; allowedProfiles?: string[] } = {}
+) {
+  const read = async (tx: ScopedTransaction) => {
     return tx.aiSecurityScoreSnapshot.findFirst({
-      where: { scanId, workspaceId },
+      where: {
+        scanId,
+        workspaceId,
+        ...(options.requireActiveTarget || options.allowedProfiles !== undefined
+          ? {
+              scan: {
+                workspaceId,
+                deletedAt: null,
+                ...(options.requireActiveTarget ? { target: { deletedAt: null } } : {}),
+                ...(options.allowedProfiles !== undefined
+                  ? { mode: { in: options.allowedProfiles as ScanMode[] } }
+                  : {}),
+              },
+            }
+          : {}),
+      },
     })
-  })
+  }
+  return client ? read(client) : withWorkspaceRLS(workspaceId, read)
 }
 
 /** Returns the most recent non-expired AI security score for a target. */

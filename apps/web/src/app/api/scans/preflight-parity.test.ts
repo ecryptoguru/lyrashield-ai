@@ -54,6 +54,9 @@ vi.mock("@lyrashield/db", () => {
     }),
     WorkspaceScanConcurrencyLimitError: class WorkspaceScanConcurrencyLimitError extends Error {},
     prisma,
+    withWorkspaceRLS: vi.fn(async (_workspaceId: string, fn: (tx: typeof prisma) => unknown) =>
+      fn(prisma)
+    ),
     createScan: vi.fn(),
     listScans: vi.fn(),
     updateScanStatus: vi.fn(),

@@ -182,7 +182,15 @@ async function setCachedToken(
   localTokenCache.set(identity, { token, expiresAt })
 }
 
-export async function getInstallationToken(installationId: number): Promise<string> {
+export interface GitHubReadOptions {
+  signal?: AbortSignal
+  retries?: number
+}
+
+export async function getInstallationToken(
+  installationId: number,
+  options?: GitHubReadOptions
+): Promise<string> {
   const cached = await getCachedToken(installationId)
   if (cached) {
     return cached.token
@@ -195,7 +203,9 @@ export async function getInstallationToken(installationId: number): Promise<stri
     {
       method: "POST",
       headers: { Authorization: `Bearer ${jwt}`, ...GITHUB_HEADERS },
-    }
+      signal: options?.signal,
+    },
+    options?.retries
   )
 
   if (!res.ok) {
@@ -439,12 +449,15 @@ export function getInstallAppUrl(): string {
 export async function getDefaultBranch(
   installationId: number,
   owner: string,
-  repo: string
+  repo: string,
+  options?: GitHubReadOptions
 ): Promise<string> {
-  const token = await getInstallationToken(installationId)
-  const res = await githubFetch(`${GITHUB_API_BASE}/repos/${owner}/${repo}`, {
-    headers: { Authorization: `Bearer ${token}`, ...GITHUB_HEADERS },
-  })
+  const token = await getInstallationToken(installationId, options)
+  const res = await githubFetch(
+    `${GITHUB_API_BASE}/repos/${owner}/${repo}`,
+    { headers: { Authorization: `Bearer ${token}`, ...GITHUB_HEADERS }, signal: options?.signal },
+    options?.retries
+  )
   if (!res.ok) {
     throw new Error(`Failed to get repo info: ${res.status}`)
   }
@@ -452,16 +465,23 @@ export async function getDefaultBranch(
   return data.default_branch
 }
 
+function encodeGitRef(ref: string): string {
+  return ref.split("/").map(encodeURIComponent).join("/")
+}
+
 export async function getBranchRefSha(
   installationId: number,
   owner: string,
   repo: string,
-  branch: string
+  branch: string,
+  options?: GitHubReadOptions
 ): Promise<string> {
-  const token = await getInstallationToken(installationId)
+  const token = await getInstallationToken(installationId, options)
+  const encodedBranch = encodeGitRef(branch)
   const res = await githubFetch(
-    `${GITHUB_API_BASE}/repos/${owner}/${repo}/git/refs/heads/${branch}`,
-    { headers: { Authorization: `Bearer ${token}`, ...GITHUB_HEADERS } }
+    `${GITHUB_API_BASE}/repos/${owner}/${repo}/git/refs/heads/${encodedBranch}`,
+    { headers: { Authorization: `Bearer ${token}`, ...GITHUB_HEADERS }, signal: options?.signal },
+    options?.retries
   )
   if (!res.ok) {
     throw new Error(`Failed to get branch ref: ${res.status}`)
@@ -481,14 +501,15 @@ export async function getMergeBaseSha(
   owner: string,
   repo: string,
   base: string,
-  head: string
+  head: string,
+  options?: GitHubReadOptions
 ): Promise<string | null> {
-  const token = await getInstallationToken(installationId)
-  // Callers pass resolved SHAs or git-validated refs only — no encoding, same
-  // contract as getBranchRefSha above.
+  const token = await getInstallationToken(installationId, options)
+  // Preserve slash-separated ref paths while encoding URL-significant characters.
   const res = await githubFetch(
-    `${GITHUB_API_BASE}/repos/${owner}/${repo}/compare/${base}...${head}`,
-    { headers: { Authorization: `Bearer ${token}`, ...GITHUB_HEADERS } }
+    `${GITHUB_API_BASE}/repos/${owner}/${repo}/compare/${encodeGitRef(base)}...${encodeGitRef(head)}`,
+    { headers: { Authorization: `Bearer ${token}`, ...GITHUB_HEADERS }, signal: options?.signal },
+    options?.retries
   )
   if (!res.ok) {
     throw new Error(`Failed to compare refs: ${res.status}`)

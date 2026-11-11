@@ -28,12 +28,54 @@ import {
   patchScopeForPlan,
   validateComposerFixArtifact,
 } from "@lyrashield/fix"
-import { withWorkspaceRLS } from "@lyrashield/db"
+import {
+  getCurrentDelegatedScanAuthority,
+  withWorkspaceRLS,
+  type ScopedTransaction,
+} from "@lyrashield/db"
+import { hasPermission, PERMISSIONS } from "@lyrashield/auth"
 import type { FixGenerateJobData } from "@lyrashield/integrations"
 import { prepareComposerFixProposal } from "./composer-fix-proposal"
 import { ComposerFixUnavailableError } from "./composer-fix"
 import { ZodError } from "zod"
 import { resolveAccountBilling } from "@lyrashield/billing"
+
+interface FixScanAuthorityFields {
+  id: string
+  createdById: string | null
+  targetId: string | null
+  mode: string
+  delegatedConnectionId: string | null
+  delegatedAuthorizationVersion: number | null
+}
+
+async function hasCurrentFixAuthority(
+  tx: ScopedTransaction,
+  workspaceId: string,
+  scan: FixScanAuthorityFields
+): Promise<boolean> {
+  if (!scan.delegatedConnectionId) return true
+  if (!scan.createdById || !scan.targetId || !scan.delegatedAuthorizationVersion || !scan.mode) {
+    return false
+  }
+  const authority = await getCurrentDelegatedScanAuthority(tx, {
+    workspaceId,
+    userId: scan.createdById,
+    scanId: scan.id,
+    targetId: scan.targetId,
+    connectionId: scan.delegatedConnectionId,
+    authorizationVersion: scan.delegatedAuthorizationVersion,
+    operationName: "fix_proposal.create",
+    profile: scan.mode,
+  })
+  return Boolean(
+    authority &&
+    hasPermission(
+      authority.memberRole as Parameters<typeof hasPermission>[0],
+      PERMISSIONS.fix.create
+    )
+  )
+}
 
 export interface FixGenerateJobResult {
   status: "stored" | "rejected" | "skipped"
@@ -51,7 +93,17 @@ async function prepareFixJob(workspaceId: string, fixProposalId: string) {
             id: true,
             targetId: true,
             scanId: true,
-            scan: { select: { createdById: true } },
+            scan: {
+              select: {
+                id: true,
+                createdById: true,
+                deletedAt: true,
+                targetId: true,
+                mode: true,
+                delegatedConnectionId: true,
+                delegatedAuthorizationVersion: true,
+              },
+            },
             baseCommit: true,
             implicatedFiles: true,
             target: {
@@ -78,6 +130,15 @@ async function prepareFixJob(workspaceId: string, fixProposalId: string) {
     if (proposal.status !== "draft") return { skip: "proposal is no longer a draft" as const }
 
     const finding = proposal.finding
+    if (finding.target?.deletedAt) {
+      return { skip: "target no longer accepts fix work" as const }
+    }
+    if (finding.scan.deletedAt || finding.scan.targetId !== finding.targetId) {
+      return { skip: "finding lifecycle no longer accepts fix work" as const }
+    }
+    if (!(await hasCurrentFixAuthority(tx, workspaceId, finding.scan))) {
+      return { skip: "delegated authority no longer accepts fix work" as const }
+    }
 
     // The engine's structured fix lives in the finding's evidence (claim_context
     // / code_location artifacts). Pull the latest code_location with a fix.
@@ -133,9 +194,42 @@ async function linkGeneratedPatch(params: {
     // have marked this proposal ready or failed while we were uploading.
     const current = await tx.fixProposal.findUnique({
       where: { id: params.fixProposalId },
-      select: { status: true },
+      select: {
+        status: true,
+        deletedAt: true,
+        finding: {
+          select: {
+            workspaceId: true,
+            deletedAt: true,
+            targetId: true,
+            scan: {
+              select: {
+                id: true,
+                createdById: true,
+                deletedAt: true,
+                targetId: true,
+                mode: true,
+                delegatedConnectionId: true,
+                delegatedAuthorizationVersion: true,
+              },
+            },
+          },
+        },
+      },
     })
     if (current?.status !== "draft") return false
+    const lockedFinding = current.finding
+    if (
+      !lockedFinding ||
+      current.deletedAt ||
+      lockedFinding.workspaceId !== params.workspaceId ||
+      lockedFinding.deletedAt ||
+      lockedFinding.scan.deletedAt ||
+      lockedFinding.scan.targetId !== lockedFinding.targetId ||
+      !(await hasCurrentFixAuthority(tx, params.workspaceId, lockedFinding.scan))
+    ) {
+      return false
+    }
     const claimed = await tx.fixProposal.updateMany({
       where: {
         id: params.fixProposalId,
@@ -163,23 +257,57 @@ async function linkGeneratedPatch(params: {
   })
 }
 
-async function settleFailedGeneration(workspaceId: string, fixProposalId: string) {
+async function settleFailedGeneration(
+  workspaceId: string,
+  fixProposalId: string,
+  reason = "Fix generation could not complete after retries. Check metadata access, resolver availability and evidence storage, then request a new proposal."
+) {
   await withWorkspaceRLS(workspaceId, async (tx) => {
     const current = await tx.fixProposal.findFirst({
       where: {
         id: fixProposalId,
         status: "draft",
-        finding: { workspaceId, deletedAt: null },
+        finding: {
+          workspaceId,
+          deletedAt: null,
+          target: { deletedAt: null },
+          scan: { deletedAt: null },
+        },
         deletedAt: null,
       },
-      select: { summary: true },
+      select: {
+        summary: true,
+        finding: {
+          select: {
+            targetId: true,
+            scan: {
+              select: {
+                id: true,
+                createdById: true,
+                deletedAt: true,
+                targetId: true,
+                mode: true,
+                delegatedConnectionId: true,
+                delegatedAuthorizationVersion: true,
+              },
+            },
+          },
+        },
+      },
     })
     if (!current) return
+    if (
+      current.finding.scan.deletedAt ||
+      current.finding.scan.targetId !== current.finding.targetId ||
+      !(await hasCurrentFixAuthority(tx, workspaceId, current.finding.scan))
+    ) {
+      return
+    }
     await tx.fixProposal.updateMany({
       where: { id: fixProposalId, status: "draft", finding: { workspaceId }, deletedAt: null },
       data: {
         status: "failed",
-        summary: `${current.summary.slice(0, 2500)}\n\nFix generation could not complete after retries. Check metadata access, resolver availability and evidence storage, then request a new proposal.`,
+        summary: `${current.summary.slice(0, 2500)}\n\n${reason.slice(0, 500)}`,
       },
     })
   })
@@ -225,14 +353,10 @@ export async function processFixGenerateJob(
         error instanceof Error
           ? error.message.slice(0, 500)
           : "Automatic Composer update unavailable"
-      await withWorkspaceRLS(workspaceId, (tx) =>
-        tx.fixProposal.updateMany({
-          where: { id: fixProposalId, status: "draft", finding: { workspaceId } },
-          data: {
-            status: "failed",
-            summary: `${prepared.summary.slice(0, 2500)}\n\nAutomatic Composer update unavailable: ${reason}`,
-          },
-        })
+      await settleFailedGeneration(
+        workspaceId,
+        fixProposalId,
+        `Automatic Composer update unavailable: ${reason}`
       )
       return { status: "rejected", reason }
     }
@@ -279,14 +403,10 @@ export async function processFixGenerateJob(
         )
       : validatePatchDiff(diff, anchorFile, implicatedFiles, policy)
     if (!validation.ok) {
-      await withWorkspaceRLS(workspaceId, (tx) =>
-        tx.fixProposal.updateMany({
-          where: { id: fixProposalId, status: "draft", finding: { workspaceId }, deletedAt: null },
-          data: {
-            status: "failed",
-            summary: `${prepared.summary.slice(0, 2500)}\n\nAutomatic fix unavailable (${validation.code}): ${validation.reason.slice(0, 500)}`,
-          },
-        })
+      await settleFailedGeneration(
+        workspaceId,
+        fixProposalId,
+        `Automatic fix unavailable (${validation.code}): ${validation.reason.slice(0, 500)}`
       )
       logger.warn("Generated fix failed scope validation", {
         fixProposalId,

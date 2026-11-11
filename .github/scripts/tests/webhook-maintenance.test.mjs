@@ -32,7 +32,7 @@ function setup(t, scenario = "normal") {
   const config = path.join(directory, "config")
   writeFileSync(
     config,
-    `LYRASHIELD_WORKER_IMAGE=${image}\nLYRASHIELD_SANDBOX_IMAGE=example@sha256:${"d".repeat(64)}\nLYRASHIELD_SANDBOX_NETWORK=sandbox\n`
+    `LYRASHIELD_WORKER_IMAGE=${image}\nLYRASHIELD_SANDBOX_IMAGE=example@sha256:${"d".repeat(64)}\nLYRASHIELD_SANDBOX_NETWORK=sandbox\nLYRASHIELD_SANDBOX_SBOM_COVERAGE_VERIFY_PATH=/tmp/coverage.json\nLYRASHIELD_SANDBOX_SBOM_COVERAGE_EXPECTED_PATH=/tmp/coverage-predicate.json\nLYRASHIELD_SANDBOX_SBOM_COVERAGE_REPO=ecryptoguru/lyrashield-engine\nLYRASHIELD_SANDBOX_SBOM_COVERAGE_REF=refs/heads/main\nLYRASHIELD_SANDBOX_SBOM_COVERAGE_ENGINE_REVISION=${"a".repeat(40)}\nLYRASHIELD_SANDBOX_SBOM_COVERAGE_WORKFLOW_REVISION=${"b".repeat(40)}\nLYRASHIELD_SANDBOX_SBOM_COVERAGE_RUN_ID=42487812345\nLYRASHIELD_SANDBOX_SBOM_COVERAGE_RUN_ATTEMPT=1\n`
   )
   writeFileSync(
     state,

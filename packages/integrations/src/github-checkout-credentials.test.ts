@@ -115,6 +115,45 @@ describe("checkout credentials", () => {
   )
 })
 describe("remaining installation token cache", () => {
+  it("encodes branch path segments and honors a bounded read signal and retry limit", async () => {
+    const fetchMock = provider()
+    await github.getInstallationToken(73431)
+    const cached = mocks.set.mock.calls[0]![1]
+    mocks.get.mockResolvedValue(cached)
+    fetchMock.mockReset()
+    fetchMock.mockResolvedValue(new Response(JSON.stringify({ object: { sha: "a".repeat(40) } })))
+    const controller = new AbortController()
+    await expect(
+      github.getBranchRefSha(73431, "owner", "private", "feature/a#b%2F", {
+        signal: controller.signal,
+        retries: 0,
+      })
+    ).resolves.toBe("a".repeat(40))
+    expect(fetchMock.mock.calls[0]![0]).toBe(
+      "https://api.github.com/repos/owner/private/git/refs/heads/feature/a%23b%252F"
+    )
+    expect(fetchMock.mock.calls[0]![1].signal).toBe(controller.signal)
+    fetchMock.mockReset()
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ merge_base_commit: { sha: "b".repeat(40) } }))
+    )
+    await github.getMergeBaseSha(73431, "owner", "private", "release/a#b", "feature/c%2F", {
+      signal: controller.signal,
+      retries: 0,
+    })
+    expect(fetchMock.mock.calls[0]![0]).toBe(
+      "https://api.github.com/repos/owner/private/compare/release/a%23b...feature/c%252F"
+    )
+    fetchMock.mockReset()
+    fetchMock.mockResolvedValue(new Response("unavailable", { status: 503 }))
+    await expect(
+      github.getBranchRefSha(73431, "owner", "private", "main", {
+        signal: controller.signal,
+        retries: 0,
+      })
+    ).rejects.toThrow("Failed to get branch ref: 503")
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
   it("stores an authenticated encrypted value scoped to app, installation and default grant", async () => {
     provider()
     await github.getInstallationToken(73432)

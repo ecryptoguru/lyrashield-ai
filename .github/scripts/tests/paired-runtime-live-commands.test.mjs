@@ -8,6 +8,7 @@ import {
   azureServingRoute,
   stageAtZeroTraffic,
   retirePreviousRevision,
+  verifyRollbackAvailability,
   verifyZeroTrafficCandidate,
 } from "../paired-runtime-cloud.mjs"
 
@@ -324,4 +325,69 @@ test("historical promotion fetches the exact qualified Git object in isolation a
   // eslint-disable-next-line security/detect-non-literal-fs-filename -- private generated test fixture path
   assert.deepEqual(readFileSync(join(dir, "promoted"), "utf8").trim().split("\n"), [a, d])
   assert.equal(git("rev-parse", "HEAD"), b)
+})
+
+test("rollback availability proves exact registry images and archived named revisions with reads only", (t) => {
+  const { dir, env, calls } = fixture(t)
+  const product = "a".repeat(40),
+    engine = "b".repeat(40),
+    web = "sha256:" + "1".repeat(64),
+    proxy = "sha256:" + "2".repeat(64),
+    worker = "sha256:" + "3".repeat(64),
+    sandbox = "sha256:" + "4".repeat(64)
+  const pair = {
+    productRevision: product,
+    engineRevision: engine,
+    webDigest: web,
+    proxyDigest: proxy,
+    workerDigest: worker,
+    sandboxDigest: sandbox,
+    app: { candidate: "app--rollback", previous: "app--older" },
+    scanner: { candidate: "scanner--rollback", previous: "scanner--older" },
+    relay: { candidate: "relay--rollback", previous: "relay--older" },
+  }
+  env("APP_NAME", "app")
+  env("SCANNER_NAME", "scanner")
+  env("EGRESS_NAME", "relay")
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- private generated test fixture path
+  writeFileSync(
+    join(dir, "az"),
+    `#!/usr/bin/env node
+const fs=require("node:fs"),a=process.argv.slice(2),root=process.env.RECORDER;fs.appendFileSync(root+"/calls",JSON.stringify(a)+"\\n")
+if(a.slice(0,3).join(" ")!=="containerapp revision list")process.exit(19)
+const name=a[a.indexOf("--name")+1], rows={app:"app--rollback",scanner:"scanner--rollback",relay:"relay--rollback"}
+if(process.env.DROP_REVISION===name)delete rows[name]
+const image=name==="relay"?"ghcr.io/ecryptoguru/lyrashield-ai/lyrashield-egress-proxy@"+process.env.TEST_PROXY:"ghcr.io/ecryptoguru/lyrashield-ai/lyrashield-web@"+process.env.TEST_WEB
+console.log(JSON.stringify(Object.entries(rows).filter(([key])=>key===name).map(([,revision])=>({name:revision,properties:{template:{containers:[{image}]}}}))))
+`,
+    { mode: 0o700 }
+  )
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- private generated test fixture path
+  writeFileSync(
+    join(dir, "docker"),
+    `#!/usr/bin/env node
+const fs=require("node:fs"),a=process.argv.slice(2),root=process.env.RECORDER;fs.appendFileSync(root+"/docker-calls",JSON.stringify(a)+"\\n")
+const ref=a[a.indexOf("inspect")+1]??""
+if(a.includes("--raw")){console.log(JSON.stringify({manifests:[{platform:{os:"linux",architecture:"amd64"}},{platform:{os:"linux",architecture:"arm64"}}]}));process.exit(0)}
+const labels=ref.includes("/lyrashield-worker@")?{"org.opencontainers.image.revision":process.env.TEST_PRODUCT,"io.lyrashield.engine.revision":process.env.TEST_ENGINE}:ref.includes("/lyrashield-sandbox@")?{"org.opencontainers.image.revision":process.env.TEST_ENGINE}:{"org.opencontainers.image.revision":process.env.TEST_PRODUCT}
+console.log(JSON.stringify({config:{Labels:labels}}))
+`,
+    { mode: 0o700 }
+  )
+  env("TEST_PRODUCT", product)
+  env("TEST_ENGINE", engine)
+  env("TEST_WEB", web)
+  env("TEST_PROXY", proxy)
+  assert.equal(verifyRollbackAvailability(pair), undefined)
+  const reads = calls()
+  assert.equal(reads.length, 3)
+  assert.ok(reads.every((args) => args.slice(0, 3).join(" ") === "containerapp revision list"))
+  assert.ok(!reads.some((args) => /deactivate|activate|copy|create|delete/.test(args.join(" "))))
+  assert.equal(verifyRollbackAvailability(pair), undefined)
+  assert.throws(() =>
+    verifyRollbackAvailability({
+      ...pair,
+      scanner: { candidate: "scanner--missing", previous: "scanner--older" },
+    })
+  )
 })
