@@ -1,22 +1,57 @@
 import {
+  canonicalJson,
+  providerGrantRequestSchema,
+  type JournalPort,
   sha256Hex,
   type JournalRecord,
   type ProviderGrantRequest,
 } from "@lyrashield/runtime-control"
 import type { ProviderRoute } from "./config"
 import type { GrantState, ProviderJournalEvent, RequestState } from "./journal-events"
-import type { ProviderGatewayServiceOptions } from "./service"
 import { ProviderGatewayError } from "./errors"
-import { verifyToken } from "./grant-tokens"
-import { authorizeRequest, policyDigest, type RequestPolicy } from "./request-policy"
+import { verifyToken, grantIdFor } from "./grant-tokens"
+import {
+  authorizeRequest,
+  policyDigest,
+  requestPolicySchema,
+  type RequestPolicy,
+} from "./request-policy"
 import { replayResponse } from "./retained-response"
 import { responseBinding } from "./proxy-response"
 import { resolveProviderUrl, normalizeHeaderValue } from "./proxy-utils"
+
+export interface ProviderGatewayServiceOptions {
+  journal: JournalPort<ProviderJournalEvent>
+  signingSecret: string
+  responseEncryptionSecret?: string
+  // Trusted broker adapter must revalidate the persisted attempt/authority
+  // binding and return its approved policy; no request body supplies policy.
+  authorizeGrant?: (request: ProviderGrantRequest) => Promise<RequestPolicy>
+  admission: "closed" | "open"
+  providers: ReadonlyMap<string, ProviderRoute>
+  fetchImpl?: typeof fetch
+  now?: () => Date
+}
+
+export interface ProxyResponse {
+  statusCode: number
+  headers: Record<string, string>
+  body: Buffer
+  replayed: boolean
+  streamed?: true
+}
+export interface DeliveryState {
+  grantId?: string
+  controller: AbortController
+  done: Promise<void>
+  finish: () => void
+}
 
 const MAX_UPSTREAM_BODY_BYTES = 4 * 1024 * 1024
 const MAX_OUTSTANDING_PROVIDER_REQUESTS = 8
 
 export interface ProxyInput {
+  scanId?: string
   providerId: string
   path: string
   method: string
@@ -35,6 +70,7 @@ export interface InFlightRequest {
 export interface ProxyRequestContext {
   options: ProviderGatewayServiceOptions
   admissionClosed: boolean
+  bindGrant?: (grant: GrantState) => void
   grants: ReadonlyMap<string, GrantState>
   requests: ReadonlyMap<string, RequestState>
   inFlight: Map<string, InFlightRequest>
@@ -114,7 +150,9 @@ export async function prepareProxyRequest(context: ProxyRequestContext, input: P
   const verified = verifyToken(context.options.signingSecret, token)
   const grant = context.grants.get(verified.grantId)
   if (!grant) throw new ProviderGatewayError("GRANT_NOT_FOUND", "provider grant not found")
+  context.bindGrant?.(grant)
   if (
+    (input.scanId !== undefined && grant.request.scanId !== input.scanId) ||
     grant.request.providerId !== input.providerId ||
     grant.request.attemptId !== verified.attemptId ||
     grant.request.providerId !== verified.providerId ||
@@ -246,3 +284,89 @@ export type ReadyProxyRequest = Extract<
   Awaited<ReturnType<typeof prepareProxyRequest>>,
   { kind: "ready" }
 >
+
+export async function prepareGrantIssue(
+  context: ProxyRequestContext & { grantsByRequest: ReadonlyMap<string, string> },
+  input: unknown,
+  now: () => Date
+): Promise<GrantState> {
+  const parsed = providerGrantRequestSchema.safeParse(input)
+  if (!parsed.success) {
+    throw new ProviderGatewayError(
+      "INVALID_GRANT_REQUEST",
+      "provider grant request is invalid",
+      400
+    )
+  }
+  const request = parsed.data
+  if (context.admissionClosed)
+    throw new ProviderGatewayError("ADMISSION_CLOSED", "runtime admission is closed")
+  const route = context.options.providers.get(request.providerId)
+  if (!route) throw new ProviderGatewayError("PROVIDER_NOT_ALLOWED", "provider is not configured")
+  if (Date.parse(request.expiresAt) <= now().getTime()) {
+    throw new ProviderGatewayError("GRANT_EXPIRED", "provider grant expiry is not in the future")
+  }
+  if (Date.parse(request.expiresAt) - now().getTime() > 86_400_000)
+    throw new ProviderGatewayError(
+      "INVALID_GRANT_EXPIRY",
+      "provider grant lifetime exceeds one day",
+      400
+    )
+  const existingId = context.grantsByRequest.get(request.grantRequestId)
+  if (existingId) {
+    const existing = context.grants.get(existingId)
+    if (!existing)
+      throw new ProviderGatewayError("JOURNAL_INTEGRITY", "grant index is corrupt", 500)
+    if (canonicalJson(existing.request) !== canonicalJson(request)) {
+      throw new ProviderGatewayError(
+        "IDEMPOTENCY_CONFLICT",
+        "grant request id was reused with different input"
+      )
+    }
+    const policy = await context.authorizedPolicy(existing.request, route)
+    if (!existing.policy || policyDigest(policy) !== policyDigest(existing.policy))
+      throw new ProviderGatewayError(
+        "POLICY_CHANGED",
+        "provider grant requires renewed broker authorization"
+      )
+    context.assertGrantActive(existing)
+    return existing
+  }
+  const policy = await context.authorizedPolicy(request, route)
+  if (Date.parse(request.expiresAt) <= now().getTime())
+    throw new ProviderGatewayError("GRANT_EXPIRED", "provider grant is expired")
+  const grantId = grantIdFor(request)
+  const record = await context.options.journal.append({
+    type: "grant_issued",
+    grant: { grantRequestId: request.grantRequestId, grantId, request, policy },
+  })
+  context.apply(record)
+  const grant = context.grants.get(grantId)
+  if (!grant)
+    throw new ProviderGatewayError("JOURNAL_INTEGRITY", "issued grant was not reconstructed", 500)
+  return grant
+}
+
+export async function authorizedPolicy(
+  options: ProviderGatewayServiceOptions,
+  request: ProviderGrantRequest,
+  route: ProviderRoute
+): Promise<RequestPolicy> {
+  if (
+    !options.authorizeGrant ||
+    !route.requestPolicy ||
+    !options.responseEncryptionSecret ||
+    Buffer.byteLength(options.responseEncryptionSecret) < 32
+  )
+    throw new ProviderGatewayError(
+      "BROKER_AUTHORIZATION_REQUIRED",
+      "trusted broker policy and encrypted retention are required"
+    )
+  const policy = requestPolicySchema.parse(await options.authorizeGrant(request))
+  if (policyDigest(policy) !== policyDigest(requestPolicySchema.parse(route.requestPolicy)))
+    throw new ProviderGatewayError(
+      "POLICY_DENIED",
+      "broker policy does not match the server-approved adapter"
+    )
+  return policy
+}
