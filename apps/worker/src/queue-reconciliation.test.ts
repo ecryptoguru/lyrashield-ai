@@ -19,11 +19,13 @@ const mocks = vi.hoisted(() => ({
     scan: { count: vi.fn(), findFirst: vi.fn(), findMany: vi.fn(), findUnique: vi.fn() },
   },
   updateScanStatus: vi.fn(),
+  legacyLifecycle: vi.fn(),
+  releaseSlot: vi.fn(),
 }))
 
 vi.mock("@lyrashield/integrations", () => ({ getRedis: () => mocks.redis }))
 vi.mock("@lyrashield/db", () => ({
-  releaseUnstartedScanSlot: vi.fn().mockResolvedValue(undefined),
+  releaseUnstartedScanSlot: mocks.releaseSlot,
   getSystemPrisma: () => mocks.prisma,
   prisma: mocks.prisma,
   TERMINAL_SCAN_STATUSES: new Set([
@@ -40,6 +42,9 @@ vi.mock("@lyrashield/logger", () => ({
   logger: { warn: vi.fn(), error: vi.fn(), info: vi.fn() },
 }))
 vi.mock("./queue", () => ({ getScanQueue: () => mocks.queue }))
+vi.mock("./worker-authority-startup", () => ({
+  legacyWorkerLifecycleEnabled: mocks.legacyLifecycle,
+}))
 
 import {
   RECONCILIATION_IDLE_BACKSTOP_MS,
@@ -52,6 +57,7 @@ import {
 describe("scan queue reconciliation", () => {
   beforeEach(() => {
     vi.resetAllMocks()
+    mocks.legacyLifecycle.mockReturnValue(true)
     mocks.lockRedis.owner = null
     mocks.redis.duplicate.mockReturnValue(mocks.lockRedis)
     mocks.lockRedis.on.mockReturnValue(mocks.lockRedis)
@@ -92,6 +98,24 @@ describe("scan queue reconciliation", () => {
   afterEach(() => {
     vi.useRealTimers()
   })
+
+  it.each(["broker", "closed", "invalid"])(
+    "retains all queue/scan/slot state in %s startup mode",
+    async () => {
+      mocks.legacyLifecycle.mockReturnValue(false)
+      await reconcileScanQueueIfNeeded(0)
+      await reconcileScanQueue()
+      await reconcileExactQueuedScanOrphan("scan-1", "ws-1")
+      await reconcileFailedQueueJob("scan-1", "lost acknowledgement", 1, 1)
+      expect(mocks.prisma.scan.count).not.toHaveBeenCalled()
+      expect(mocks.prisma.scan.findMany).not.toHaveBeenCalled()
+      expect(mocks.prisma.scan.findUnique).not.toHaveBeenCalled()
+      expect(mocks.updateScanStatus).not.toHaveBeenCalled()
+      expect(mocks.redis.duplicate).not.toHaveBeenCalled()
+      expect(mocks.queue.getJob).not.toHaveBeenCalled()
+      expect(mocks.queue.getJobs).not.toHaveBeenCalled()
+    }
+  )
 
   it("reconciles every periodic tick while a nonterminal scan exists", async () => {
     mocks.prisma.scan.count.mockResolvedValue(1)
@@ -217,6 +241,7 @@ describe("scan queue reconciliation", () => {
       jobState: null,
     })
     expect(mocks.updateScanStatus).not.toHaveBeenCalled()
+    expect(mocks.releaseSlot).not.toHaveBeenCalled()
     expect(mocks.queue.getJob).not.toHaveBeenCalled()
   })
 

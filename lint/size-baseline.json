@@ -502,8 +502,8 @@
     },
     "apps/worker/src/jobs/run-scan/admission.ts|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 20,
-      "maxExcess": 20
+      "totalExcess": 15,
+      "maxExcess": 15
     },
     "apps/worker/src/jobs/run-scan/execution.ts|max-lines": {
       "count": 1,
