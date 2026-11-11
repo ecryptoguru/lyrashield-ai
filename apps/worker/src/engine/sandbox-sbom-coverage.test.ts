@@ -1,6 +1,6 @@
 /**
- * Tests for the product consumer of the signed bounded SBOM coverage
- * attestation, mirroring the engine's `test_sandbox_sbom_coverage.py` and
+ * Tests for bounded SBOM coverage content policy using fabricated JSON,
+ * mirroring the engine's `test_sandbox_sbom_coverage.py` and
  * `test_sandbox_attestation_verification.py` style: positive acceptance of a
  * well-formed aggregate, and negative cases for missing platform receipts,
  * wrong digests, and altered receipts. The five known rootfs hard failures
@@ -133,7 +133,7 @@ function verify(aggregate: unknown, records: unknown, identity = IDENTITY) {
 }
 
 describe("verifySandboxSbomCoverage", () => {
-  it("accepts a signed bounded coverage attestation for both platforms", () => {
+  it("accepts structurally matching coverage JSON for both platforms", () => {
     const aggregate = buildAggregate()
     expect(() => verify(aggregate, buildRecords(aggregate))).not.toThrow()
   })
@@ -197,7 +197,7 @@ describe("verifySandboxSbomCoverage", () => {
     expect(() => verify(aggregate, records)).toThrow(/sandbox SBOM coverage/)
   })
 
-  it("rejects an attestation from an untrusted signer", () => {
+  it("rejects JSON naming an unapproved signer", () => {
     const aggregate = buildAggregate()
     const records = buildRecords(aggregate)
     records[0].verificationResult.signature.certificate.buildSignerURI =
@@ -252,7 +252,7 @@ describe("five known rootfs hard failures remain failures", () => {
     expect(() => verify(aggregate, buildRecords(aggregate))).toThrow(/sandbox SBOM coverage/)
   })
 
-  it("rejects smuggled resolved-status claims in the signed predicate", () => {
+  it("rejects smuggled resolved-status claims in the coverage predicate", () => {
     const aggregate = buildAggregate()
     const waived = structuredClone(aggregate) as Aggregate & { unresolved?: string[] }
     waived.unresolved = []
@@ -263,8 +263,8 @@ describe("five known rootfs hard failures remain failures", () => {
   })
 
   it("rejects coverage for the failed local candidate image", () => {
-    // No accepted signed record exists for the candidate image digest: the
-    // only signed attestation binds the qualified index, so verification
+    // No matching record exists for the candidate image digest: the
+    // fixture binds the qualified index, so content validation
     // under the candidate digest fails closed.
     const aggregate = buildAggregate()
     const candidate = {

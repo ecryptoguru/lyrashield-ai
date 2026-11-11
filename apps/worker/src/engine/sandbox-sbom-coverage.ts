@@ -1,12 +1,11 @@
 /**
- * Product consumer for the signed bounded SBOM coverage attestation
- * (`lyrashield.sandbox.sbom-coverage.v1`), scoped strictly to sandbox images.
+ * Structural and content policy for bounded sandbox SBOM coverage
+ * (`lyrashield.sandbox.sbom-coverage.v1`).
  *
- * The verifier consumes already-cryptographically-verified `gh attestation
- * verify` JSON output and applies run/content policy to it — it does not
- * verify signatures itself (that is `gh attestation verify` with the fixed
- * signer policy). All failures are fail-closed: any missing or invalid
- * evidence throws.
+ * This module does not authenticate the input or verify signatures. A JSON
+ * file can be fabricated even if its fields match the expected verifier
+ * output. The production gate remains held until an independent protected
+ * issuer verifies the actual bundle and binds the exact qualification.
  *
  * Constants (policy, scope, limitations, limits, required applications)
  * mirror the engine aggregate builder
@@ -114,7 +113,7 @@ interface SandboxSbomCoverageIdentity {
 }
 
 export interface SandboxSbomCoverageVerifyOptions {
-  /** JSON emitted by `gh attestation verify --format json` (already verified). */
+  /** Untrusted JSON shaped like `gh attestation verify --format json` output. */
   records: unknown
   /** The exact aggregate predicate the signer must have attested. */
   expectedAggregate: unknown
@@ -344,8 +343,8 @@ function validateGoApplications(value: unknown, arch: string): void {
 }
 
 /**
- * Apply run/content policy to already-verified `gh attestation verify`
- * output. Mirrors the engine's `check_sandbox_attestations.py::accepted`
+ * Apply run/content policy to verifier-shaped JSON. This does not establish
+ * authenticity. Mirrors the engine's `check_sandbox_attestations.py::accepted`
  * for the coverage predicate: fixed signer, source revision, source ref,
  * GitHub-hosted runner, run invocation, exact subject and exact predicate.
  *
@@ -405,8 +404,8 @@ function findAcceptedCoverageAttestation(
 }
 
 /**
- * Verify the signed bounded SBOM coverage attestation for the running
- * sandbox image. Throws fail-closed on any mismatch; returns void on success.
+ * Check bounded coverage fields for the sandbox image. Passing these content
+ * checks does not establish that an attestation was signed or verified.
  */
 export function verifySandboxSbomCoverage(options: SandboxSbomCoverageVerifyOptions): void {
   const { records, expectedAggregate, identity, imageName, repo, revision, ref } = options
@@ -490,11 +489,9 @@ export function readJsonEvidence(path: string, label: string, expectedOwner: num
 }
 
 /**
- * Fail-closed production gate for the running sandbox image. Reads the
- * already-verified `gh attestation verify` output and the expected
- * aggregate from files named by env, then verifies the signed coverage
- * attestation for the exact image digest in `LYRASHIELD_IMAGE`. Scoped to
- * the pinned sandbox image; any other image is rejected by the caller first.
+ * Fail-closed production gate for the running sandbox image. Reads and checks
+ * verifier-shaped JSON and its expected aggregate, then rejects admission
+ * until a protected issuer can authenticate the actual qualification.
  */
 export function assertSandboxSbomCoverageVerified(
   runtimeEnv: NodeJS.ProcessEnv,
@@ -545,4 +542,8 @@ export function assertSandboxSbomCoverageVerified(
     revision: workflowRevision,
     ref,
   })
+  // Matching a JSON rendering of verification output does not authenticate
+  // the underlying bundle. Keep production admission closed until a protected
+  // issuer verifies the attestation and signs the exact qualification tuple.
+  fail("protected qualification issuer is unavailable")
 }

@@ -441,11 +441,8 @@ describe("repository scan runtime configuration", () => {
     LYRASHIELD_ENGINE_SANDBOX_NETWORK: "lyrashield-sandbox",
   }
 
-  // Minimal signed-coverage evidence for the `a`*64 sandbox digest used by the
-  // production cases below. Written to a temp dir; the consumer reads the
-  // verify output and expected aggregate sync from these paths. The signer
-  // certificate binds the workflow run revision (`github.sha`), not the
-  // engine source pin.
+  // Fabricated verifier-shaped JSON for the `a`*64 sandbox digest. These
+  // fixtures exercise content policy; they do not establish signature trust.
   const coverageEvidenceEnv = (certificateDigest = "e".repeat(40)): Record<string, string> => {
     const dir = mkdtempSync(join(tmpdir(), "lyrashield-sbom-coverage-test-"))
     const digestHex = "a".repeat(64)
@@ -573,7 +570,7 @@ describe("repository scan runtime configuration", () => {
         DOCKER_HOST: "ssh://scanner@isolated-worker",
         ...coverageEvidenceEnv(),
       })
-    ).not.toThrow()
+    ).toThrow(/protected qualification issuer is unavailable/)
   })
 
   it("accepts a local Docker daemon only with the explicit single-VM opt-in", () => {
@@ -601,7 +598,7 @@ describe("repository scan runtime configuration", () => {
         LYRASHIELD_ALLOW_LOCAL_SANDBOX_HOST: "1",
         ...coverageEvidenceEnv(),
       })
-    ).not.toThrow()
+    ).toThrow(/protected qualification issuer is unavailable/)
 
     // The opt-in never rescues a missing egress-restricted network.
     expect(() =>
@@ -640,6 +637,18 @@ describe("repository scan runtime configuration", () => {
         LYRASHIELD_IMAGE: `ghcr.io/ecryptoguru/lyrashield-sandbox@sha256:${"a".repeat(64)}`,
       })
     ).toThrow("sandbox SBOM coverage")
+  })
+
+  it("rejects fabricated verification-output JSON until an independent issuer is installed", () => {
+    expect(() =>
+      assertRepositoryScanRuntimeConfigured({
+        ...runtimeEnv,
+        NODE_ENV: "production",
+        DOCKER_HOST: "ssh://scanner@isolated-worker",
+        LYRASHIELD_IMAGE: `ghcr.io/ecryptoguru/lyrashield-sandbox@sha256:${"a".repeat(64)}`,
+        ...coverageEvidenceEnv(),
+      })
+    ).toThrow(/protected qualification issuer is unavailable/)
   })
 
   it("rejects coverage whose signer certificate binds only the engine revision", () => {
