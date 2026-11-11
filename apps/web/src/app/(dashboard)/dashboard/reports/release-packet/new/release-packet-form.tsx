@@ -106,12 +106,18 @@ export function ReleasePacketForm({
             <p className="font-medium">Release packet created.</p>
             <p className="break-all font-mono text-xs">SHA-256: {result.packetChecksum}</p>
             <div className="flex flex-wrap gap-3">
+              <Link
+                href={`/dashboard/reports/release-packet/${encodeURIComponent(result.reportId)}`}
+                className="text-primary min-h-11 inline-flex items-center font-medium hover:underline"
+              >
+                Open packet
+              </Link>
               {result.shareUrl && (
                 <a
                   href={result.shareUrl}
                   className="text-primary min-h-11 inline-flex items-center font-medium hover:underline"
                 >
-                  Open private packet
+                  Open private link
                 </a>
               )}
               <Link
