@@ -191,6 +191,20 @@ describe("POST /api/reports/[id]", () => {
     })
   })
 
+  it.each(["share", "revoke"])(
+    "404s when the type-bound %s mutation rejects a packet",
+    async (action) => {
+      const mutate = action === "share" ? generateShareToken : revokeShareToken
+      mutate.mockRejectedValueOnce(new Error("Report not found"))
+      const response = await POST(actionRequest({ workspaceId: "ws-1", action }), postParams)
+      expect(response.status).toBe(404)
+      await expect(response.json()).resolves.toMatchObject({
+        success: false,
+        error: { code: "REPORT_NOT_FOUND" },
+      })
+    }
+  )
+
   it("denies sharing or revoking without report:create", async () => {
     vi.mocked(requirePermission).mockRejectedValueOnce(new Error("FORBIDDEN") as never)
     const response = await POST(actionRequest({ workspaceId: "ws-1", action: "share" }), postParams)
