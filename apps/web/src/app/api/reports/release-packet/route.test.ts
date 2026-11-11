@@ -4,7 +4,7 @@ const mocks = vi.hoisted(() => ({
   requirePermission: vi.fn(),
   assertScope: vi.fn(),
   issueReleasePacket: vi.fn(),
-  generateShareToken: vi.fn(),
+  generateReleasePacketShareToken: vi.fn(),
   resolveKey: vi.fn(),
   resolvePrivateKey: vi.fn(),
   resolveVerificationKeys: vi.fn(),
@@ -18,7 +18,7 @@ vi.mock("@lyrashield/auth/server", () => ({
 vi.mock("@lyrashield/auth", () => ({ PERMISSIONS: { report: { create: "report:create" } } }))
 vi.mock("@lyrashield/db", () => ({
   issueReleasePacket: mocks.issueReleasePacket,
-  generateShareToken: mocks.generateShareToken,
+  generateReleasePacketShareToken: mocks.generateReleasePacketShareToken,
   ReleasePacketError: class ReleasePacketError extends Error {
     constructor(
       readonly code: string,
@@ -64,7 +64,7 @@ describe("POST /api/reports/release-packet", () => {
       reportId: "report-1",
       payload: { packetChecksum: "a".repeat(64) },
     })
-    mocks.generateShareToken.mockResolvedValue({ token: "b".repeat(64) })
+    mocks.generateReleasePacketShareToken.mockResolvedValue({ token: "b".repeat(64) })
   })
 
   it("issues an exact-release packet and returns a revocable private link", async () => {
@@ -90,6 +90,7 @@ describe("POST /api/reports/release-packet", () => {
         verificationKeys: [{ id: "key", publicKey: "public-key", revoked: false }],
       })
     )
+    expect(mocks.generateReleasePacketShareToken).toHaveBeenCalledWith("report-1", "ws-1")
     expect(body.data).toEqual({
       reportId: "report-1",
       packetChecksum: "a".repeat(64),
@@ -122,6 +123,6 @@ describe("POST /api/reports/release-packet", () => {
     expect(mocks.issueReleasePacket).toHaveBeenCalledWith(
       expect.objectContaining({ signingPrivateKey: null })
     )
-    expect(mocks.generateShareToken).not.toHaveBeenCalled()
+    expect(mocks.generateReleasePacketShareToken).not.toHaveBeenCalled()
   })
 })

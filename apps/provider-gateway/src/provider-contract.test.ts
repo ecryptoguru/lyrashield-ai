@@ -272,7 +272,7 @@ describe("server-authorized provider contract", () => {
     expect(fetchImpl).not.toHaveBeenCalled()
   })
 
-  it("retains fragmented SSE with exact authenticated replay after restart", async () => {
+  it("retains fragmented SSE exactly but withholds recovered completion without reconciliation", async () => {
     const raw =
       sseFrame("response.created", {
         response: { id: terminal.id, model: terminal.model, status: "in_progress" },
@@ -288,6 +288,10 @@ describe("server-authorized provider contract", () => {
     const input = streamingInput(await proxyInput(service))
     const original = await service.proxy(input)
     expect(original.body).toEqual(Buffer.from(raw))
+    const replayed = await service.proxy(input)
+    expect(replayed.body).toEqual(original.body)
+    expect(replayed.headers).toEqual({ ...original.headers, "x-lyra-replayed": "true" })
+    expect(replayed.replayed).toBe(true)
     const stored = await readFile(path, "utf8")
     expect(stored).not.toContain("private provider content")
     expect(stored).not.toContain("private input")
@@ -300,10 +304,13 @@ describe("server-authorized provider contract", () => {
       ...serviceOptions,
       journal: replacementJournal,
     })
-    const replayed = await replacement.proxy(input)
-    expect(replayed.body).toEqual(original.body)
-    expect(replayed.headers).toEqual({ ...original.headers, "x-lyra-replayed": "true" })
-    expect(replayed.replayed).toBe(true)
+    await expect(replacement.proxy(input)).rejects.toMatchObject({ code: "REQUEST_UNKNOWN" })
+    expect(await replacement.inspectRequest(input.requestId)).toMatchObject({
+      outcome: "UNKNOWN",
+      physicalOutstanding: true,
+      usage: null,
+      usageId: null,
+    })
     expect(fetchImpl).toHaveBeenCalledTimes(1)
     await replacementJournal.close()
   })
@@ -331,8 +338,24 @@ describe("server-authorized provider contract", () => {
     { ...terminal, usage: { ...terminal.usage, total_tokens: 17 } },
     { ...terminal, usage: { ...terminal.usage, input_tokens_details: { cached_tokens: 13 } } },
     { ...terminal, usage: { ...terminal.usage, cache_creation_input_tokens: 1 } },
+    // Current official Responses usage can include this cache-write bucket;
+    // responses-text-v1 has no qualified semantics/rates for it and stays closed.
+    {
+      ...terminal,
+      usage: {
+        ...terminal.usage,
+        input_tokens_details: { cached_tokens: 2, cache_write_tokens: 0 },
+      },
+    },
+    {
+      ...terminal,
+      usage: {
+        ...terminal.usage,
+        input_tokens_details: { cached_tokens: 2, cache_write_tokens: 1 },
+      },
+    },
   ])(
-    "keeps malformed or missing terminal usage UNKNOWN and never resubmits (%#)",
+    "keeps unsupported, malformed or missing terminal usage UNKNOWN and never resubmits (%#)",
     async (value) => {
       const { service, fetchImpl } = await setup({ fetchImpl: vi.fn(async () => response(value)) })
       const input = await proxyInput(service)
@@ -475,7 +498,7 @@ describe("server-authorized provider contract", () => {
     expect(fetchImpl).toHaveBeenCalledTimes(1)
   })
 
-  it("recovers durable response bytes after a lost journal acknowledgement without resubmitting", async () => {
+  it("withholds a persisted response after a lost journal acknowledgement without resubmitting", async () => {
     const original = await setup()
     let lost = false
     const faultJournal: JournalPort<ProviderJournalEvent> = {
@@ -504,7 +527,14 @@ describe("server-authorized provider contract", () => {
       ...original.serviceOptions,
       journal: replacementJournal,
     })
-    expect((await replacement.proxy(input)).body.toString()).toBe(JSON.stringify(terminal))
+    await expect(replacement.proxy(input)).rejects.toMatchObject({ code: "REQUEST_UNKNOWN" })
+    expect(await replacement.inspectRequest(input.requestId)).toMatchObject({
+      outcome: "UNKNOWN",
+      physicalOutstanding: true,
+      usage: null,
+      usageId: null,
+      reservationMicros: 288,
+    })
     expect(original.fetchImpl).toHaveBeenCalledTimes(1)
     await replacementJournal.close()
   })
@@ -548,7 +578,7 @@ describe("server-authorized provider contract", () => {
     })
     const recovered = await scratch.journal.load()
     expect(recovered.at(-1)?.payload).toMatchObject({
-      type: "legacy_request_uncertain",
+      type: "recovered_completion_uncertain",
       requestId: input.requestId,
     })
     expect(
