@@ -1,17 +1,10 @@
 import { ReportActionSchema } from "@lyrashield/types"
-import {
-  generateReleasePacketShareToken,
-  revokeReleasePacketShareToken,
-  withDelegatedReadAuthority,
-  type ScopedTransaction,
-  type DelegatedReadAuthority,
-} from "@lyrashield/db"
+import { generateReleasePacketShareToken, revokeReleasePacketShareToken } from "@lyrashield/db"
 import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
 import { authErrorResponse, withCookieMutation } from "../../../../../lib/api-auth"
 import { apiError, apiSuccess } from "../../../../../lib/api-response"
-import { delegatedReadPrincipal } from "../../../../../lib/delegated-target-read-scope"
 
 const BodySchema = ReportActionSchema.strict()
 
@@ -29,32 +22,27 @@ async function post(request: Request, { params }: { params: Promise<{ id: string
       return apiError("INVALID_PARAM", parsed.error.issues[0]?.message ?? "Invalid input", 400)
     }
     const { workspaceId, action } = parsed.data
-    const { session, workspace } = await requirePermission(workspaceId, PERMISSIONS.report.create)
-    const principal = delegatedReadPrincipal(session, workspace)
-    if (session.oauth && (!principal || principal.workspaceId !== workspaceId)) {
-      return apiError("FORBIDDEN", "Release packet is not authorized", 403)
+    const { session } = await requirePermission(workspaceId, PERMISSIONS.report.create)
+    // Report-creation delegation does not consent to managing existing links.
+    if (session.oauth) {
+      return apiError(
+        "FORBIDDEN",
+        "Use a browser session or workspace API key to manage this link",
+        403
+      )
     }
 
-    const mutate = async (client?: ScopedTransaction, authority?: DelegatedReadAuthority) => {
-      const options = { ...(client ? { client } : {}), ...(authority ? { authority } : {}) }
-      if (action === "share") {
-        const { token, expiresAt } = await generateReleasePacketShareToken(id, workspaceId, options)
-        const query = new URLSearchParams({ token, workspaceId })
-        return privateSuccess({
-          token,
-          expiresAt: expiresAt.toISOString(),
-          shareUrl: `/reports/release-packet/shared/${encodeURIComponent(id)}?${query.toString()}`,
-        })
-      }
-      const revokedAt = await revokeReleasePacketShareToken(id, workspaceId, options)
-      return privateSuccess({ revoked: true, revokedAt: revokedAt.toISOString() })
+    if (action === "share") {
+      const { token, expiresAt } = await generateReleasePacketShareToken(id, workspaceId)
+      const query = new URLSearchParams({ token, workspaceId })
+      return privateSuccess({
+        token,
+        expiresAt: expiresAt.toISOString(),
+        shareUrl: `/reports/release-packet/shared/${encodeURIComponent(id)}?${query.toString()}`,
+      })
     }
-    return principal
-      ? await withDelegatedReadAuthority(
-          { ...principal, requiredOperation: "report.create" },
-          (client, authority) => mutate(client, authority)
-        )
-      : await mutate()
+    const revokedAt = await revokeReleasePacketShareToken(id, workspaceId)
+    return privateSuccess({ revoked: true, revokedAt: revokedAt.toISOString() })
   } catch (error) {
     const authErr = authErrorResponse(error)
     if (authErr) return authErr

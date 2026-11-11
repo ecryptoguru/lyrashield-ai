@@ -216,7 +216,7 @@ describe("release packet cannot cross the generic report boundary", () => {
     await expect(getReportByShareToken(token)).resolves.toBeNull()
   })
 
-  it("creates a packet private link and rotation invalidates the prior token", async () => {
+  it("creates a packet link and a repeated browser share request rotates the prior token", async () => {
     report.shareTokenHash = ""
     const created = await packetPost(packetRequest("share"), params)
     const first = (await created.json()).data
@@ -254,35 +254,28 @@ describe("release packet cannot cross the generic report boundary", () => {
     }
   )
 
-  it.each([
-    { action: "share" as const, targetIds: ["other-target"], allowedProfiles: ["STANDARD"] },
-    { action: "revoke" as const, targetIds: ["other-target"], allowedProfiles: ["STANDARD"] },
-    { action: "share" as const, targetIds: ["target-fixture"], allowedProfiles: ["DEEP"] },
-    { action: "revoke" as const, targetIds: ["target-fixture"], allowedProfiles: ["DEEP"] },
-  ])(
-    "binds delegated scope to the actual write (%j)",
-    async ({ action, targetIds, allowedProfiles }) => {
-      mocks.principal.mockReturnValue({ workspaceId: report.workspaceId })
+  it.each(["share", "revoke"] as const)(
+    "denies OAuth %s and retries without changing the packet token",
+    async (action) => {
       const original = { ...report }
-      mocks.withAuthority.mockImplementation(async (_principal, run) =>
-        run((await import("../../../../../../../packages/db/src/client")).prisma, {
-          targetIds,
-          allowedProfiles,
-        })
-      )
-      expect((await packetPost(packetRequest(action), params)).status).toBe(404)
+      mocks.requirePermission.mockResolvedValue({
+        session: {
+          userId: "oauth-fixture",
+          oauth: {
+            connectionId: "connection-fixture",
+            authorizationVersion: 4,
+            workspaceId: report.workspaceId,
+            scopes: ["lyrashield.write"],
+            allowedOperations: ["report.create"],
+          },
+        },
+      })
+      for (let retry = 0; retry < 2; retry++) {
+        expect((await packetPost(packetRequest(action), params)).status).toBe(403)
+      }
       expect(report).toEqual(original)
-      expect(mocks.updateMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: expect.objectContaining({
-            type: "release_packet",
-            scan: expect.objectContaining({
-              targetId: { in: targetIds },
-              mode: { in: allowedProfiles },
-            }),
-          }),
-        })
-      )
+      expect(mocks.updateMany).not.toHaveBeenCalled()
+      expect(mocks.withAuthority).not.toHaveBeenCalled()
     }
   )
 })
