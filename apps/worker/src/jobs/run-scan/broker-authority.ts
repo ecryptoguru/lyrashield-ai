@@ -42,7 +42,7 @@ export interface WorkerBrokerInstallation {
   verifyAuthority(authority: WorkerBrokerAuthority): Promise<boolean>
   broker: Pick<
     ReturnType<typeof createScanDispatchAuthorityBroker>,
-    "prepare" | "status" | "stop" | "reconcile"
+    "status" | "stop" | "reconcile"
   >
   publication: Pick<ReturnType<typeof createScanQueueOutboxDispatcher>, "verifyDispatch">
 }
@@ -231,14 +231,11 @@ async function dispatchBoundJob(
       return retainedBrokerScanResult("BROKER_PUBLICATION_UNAVAILABLE")
     if (!(await installationIsCurrent(installation)))
       return retainedBrokerScanResult("BROKER_AUTHORITY_UNAVAILABLE")
-    const prepared = await bounded(() =>
-      installation.broker.prepare({ ...identity, expiresAt: installation.authority.expiresAt })
-    )
-    if (prepared.operationId !== operation.operationId || prepared.kind === "unknown")
-      return retainedBrokerScanResult("BROKER_OUTCOME_UNKNOWN")
-    return retainedBrokerScanResult(
-      prepared.kind === "waiting" ? "BROKER_CAPACITY_WAITING" : "BROKER_DISPATCH_PENDING"
-    )
+    // Current member/permission/delegation/sponsor checks above are read-only
+    // snapshots. They are not fenced inside the broker's preparation transaction.
+    // Keep PREPARE structurally unavailable until that atomic authority fence is
+    // integrated; another asynchronous recheck would retain the revocation race.
+    return retainedBrokerScanResult("BROKER_PREPARATION_FENCE_UNAVAILABLE")
   })
 }
 

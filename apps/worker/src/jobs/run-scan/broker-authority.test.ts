@@ -170,6 +170,14 @@ function fixture() {
   return { installation, broker, publication, processor, job }
 }
 
+function barrier() {
+  let release: () => void = () => undefined
+  const wait = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  return { wait, release: () => release() }
+}
+
 describe("broker worker boundary and retained authority", () => {
   beforeEach(() => {
     vi.resetAllMocks()
@@ -219,21 +227,14 @@ describe("broker worker boundary and retained authority", () => {
     expect((await invalid(job)).errorCategory).toBe("BROKER_AUTHORITY_CLOSED")
     expect(mocks.legacy).toHaveBeenCalledTimes(1)
   })
-  it("prepares the persisted identity after publication but cannot call either start", async () => {
+  it("validates publication but keeps preparation and both starts structurally closed", async () => {
     const { job, processor, broker, publication } = fixture()
-    expect((await processor(job)).errorCategory).toBe("BROKER_DISPATCH_PENDING")
+    expect((await processor(job)).errorCategory).toBe("BROKER_PREPARATION_FENCE_UNAVAILABLE")
     expect(publication.verifyDispatch).toHaveBeenCalledWith(
       { operationId: "op-1", workspaceId: "ws-1" },
       expect.objectContaining({ id: "scan-1", data })
     )
-    expect(broker.prepare).toHaveBeenCalledWith(
-      expect.objectContaining({
-        operationId: "op-1",
-        workerInstanceId: "worker-1",
-        workerGrantId: "grant-1",
-        authorityEpochId: "epoch-1",
-      })
-    )
+    expect(broker.prepare).not.toHaveBeenCalled()
     expect(broker.startPaid).not.toHaveBeenCalled()
     expect(broker.startUnmetered).not.toHaveBeenCalled()
     expect(mocks.legacy).not.toHaveBeenCalled()
@@ -296,20 +297,18 @@ describe("broker worker boundary and retained authority", () => {
       expect(mocks.legacy).not.toHaveBeenCalled()
     }
   )
-  it("retains duplicate and lost-ACK delivery under the same operation", async () => {
+  it("retains duplicate and lost status acknowledgements under the same operation", async () => {
     const { processor, job, broker } = fixture()
-    broker.prepare.mockImplementationOnce(async () => {
-      broker.status.mockResolvedValue({
-        kind: "available",
-        operationId: "op-1",
-        state: "PREPARING",
-        attemptId: "attempt-1",
-      })
-      throw new Error("ACK lost after durable prepare")
-    })
+    broker.status.mockRejectedValueOnce(new Error("status acknowledgement lost"))
     expect((await processor(job)).errorCategory).toBe("BROKER_OUTCOME_UNKNOWN")
+    broker.status.mockResolvedValue({
+      kind: "available",
+      operationId: "op-1",
+      state: "PREPARING",
+      attemptId: "attempt-1",
+    })
     expect((await processor(job)).errorCategory).toBe("BROKER_DISPATCH_PENDING")
-    expect(broker.prepare).toHaveBeenCalledTimes(1)
+    expect(broker.prepare).not.toHaveBeenCalled()
     expect(mocks.legacy).not.toHaveBeenCalled()
   })
   it("rechecks qualification at the final fence and never falls back after revocation", async () => {
@@ -320,6 +319,54 @@ describe("broker worker boundary and retained authority", () => {
     expect(broker.startPaid).not.toHaveBeenCalled()
     expect(mocks.legacy).not.toHaveBeenCalled()
   })
+  it.each(["member", "permission", "delegation", "sponsor"])(
+    "cannot prepare when %s changes concurrently during publication validation",
+    async (cause) => {
+      const { processor, job, broker, publication } = fixture()
+      if (cause === "delegation") {
+        mocks.scan.mockResolvedValue({
+          ...stored,
+          delegatedConnectionId: "connection-1",
+          delegatedAuthorizationVersion: 1,
+        })
+        mocks.connection.mockResolvedValue({
+          userId: "user-1",
+          status: "ACTIVE",
+          authorizationVersion: 1,
+          expiresAt: new Date(Date.now() + 60000),
+          allowedOperations: ["scan.create"],
+          allTargets: true,
+        })
+      }
+      const entered = barrier(),
+        released = barrier()
+      const positivePublication = publication.verifyDispatch.getMockImplementation()
+      if (!positivePublication) throw new Error("publication fixture unavailable")
+      publication.verifyDispatch.mockImplementationOnce(async () => {
+        entered.release()
+        await released.wait
+        return positivePublication()
+      })
+      const delivery = processor(job)
+      await entered.wait // The previous admission snapshot allowed this job.
+      await Promise.resolve().then(() => {
+        if (cause === "member") mocks.member.mockResolvedValue(null)
+        if (cause === "permission") mocks.member.mockResolvedValue({ role: "VIEWER" })
+        if (cause === "delegation")
+          mocks.connection.mockResolvedValue({ status: "REVOKED", authorizationVersion: 2 })
+        if (cause === "sponsor")
+          mocks.entitlement.mockResolvedValue({ allowed: true, accountId: "changed-sponsor" })
+      })
+      released.release()
+      expect((await delivery).errorCategory).toBe("BROKER_PREPARATION_FENCE_UNAVAILABLE")
+      expect(broker.prepare).not.toHaveBeenCalled()
+      expect(broker.startPaid).not.toHaveBeenCalled()
+      expect(broker.startUnmetered).not.toHaveBeenCalled()
+      expect(broker.stop).not.toHaveBeenCalled()
+      expect(mocks.update).not.toHaveBeenCalled()
+      expect(mocks.legacy).not.toHaveBeenCalled()
+    }
+  )
   it("never synthesizes a prepared receipt or starts from PREPARED/UNKNOWN", async () => {
     const { processor, job, broker } = fixture()
     broker.status.mockResolvedValue({
@@ -401,7 +448,7 @@ describe("broker worker boundary and retained authority", () => {
       adapter: createBrokerWorkerAuthorityAdapter(installation),
     })
     expect((await restarted(job)).errorCategory).toBe("BROKER_DISPATCH_PENDING")
-    expect(broker.prepare).toHaveBeenCalledTimes(1)
+    expect(broker.prepare).not.toHaveBeenCalled()
     expect(mocks.legacy).not.toHaveBeenCalled()
     expect(Object.isFrozen(workerAuthorityStartup)).toBe(true)
     expect(legacyWorkerLifecycleEnabled({ kind: "closed" })).toBe(false)
