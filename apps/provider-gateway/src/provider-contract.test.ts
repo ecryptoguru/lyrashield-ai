@@ -350,6 +350,12 @@ describe("server-authorized provider contract", () => {
   )
 
   it.each([
+    sseFrame("response.created", { response: { id: "", model: terminal.model } }) +
+      sseFrame("response.completed", { response: terminal }),
+    sseFrame("response.output_text.delta", { response_id: "", delta: "early text" }) +
+      sseFrame("response.completed", { response: terminal }),
+    sseFrame("response.created", { response: { id: " ", model: terminal.model } }) +
+      sseFrame("response.completed", { response: { ...terminal, id: " " } }),
     sseFrame("response.created", { response: { id: "foreign-id", model: terminal.model } }) +
       sseFrame("response.completed", { response: terminal }),
     sseFrame("response.completed", { response: terminal }) +

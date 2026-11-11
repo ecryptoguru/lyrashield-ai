@@ -4,10 +4,15 @@ import { costMicros } from "./request-policy"
 import { ProviderGatewayError } from "./errors"
 
 const tokenCount = z.number().int().nonnegative().max(1_000_000)
+const responseIdentifierSchema = z
+  .string()
+  .min(1)
+  .max(256)
+  .refine((value) => value.trim().length > 0)
 export const terminalUsageSchema = z
   .object({
     version: z.literal(1),
-    providerResponseId: z.string().min(1).max(256),
+    providerResponseId: responseIdentifierSchema,
     model: z.string().min(1).max(128),
     inputTokens: tokenCount,
     cachedInputTokens: tokenCount,
@@ -20,7 +25,7 @@ export type TerminalUsage = z.infer<typeof terminalUsageSchema>
 
 const responseSchema = z
   .object({
-    id: z.string().min(1).max(256),
+    id: responseIdentifierSchema,
     model: z.string().min(1).max(128),
     status: z.literal("completed"),
     error: z.null().optional(),
@@ -134,23 +139,24 @@ export class ResponsesUsageParser {
     if (["response.failed", "response.incomplete", "response.error"].includes(type)) invalid()
     const response = Reflect.get(parsed, "response")
     if (response && typeof response === "object") {
-      const id = Reflect.get(response, "id")
+      const parsedId = responseIdentifierSchema.safeParse(Reflect.get(response, "id"))
+      if (!parsedId.success) invalid()
+      const id = parsedId.data
       const model = Reflect.get(response, "model")
       if (
-        typeof id !== "string" ||
-        (this.responseId && this.responseId !== id) ||
+        (this.responseId !== undefined && this.responseId !== id) ||
         (model !== undefined && model !== this.expected.model)
       )
         invalid()
       this.responseId = id
     }
     const responseId = Reflect.get(parsed, "response_id")
-    if (
-      responseId !== undefined &&
-      (typeof responseId !== "string" || (this.responseId && this.responseId !== responseId))
-    )
-      invalid()
-    if (typeof responseId === "string") this.responseId = responseId
+    if (responseId !== undefined) {
+      const parsedId = responseIdentifierSchema.safeParse(responseId)
+      if (!parsedId.success || (this.responseId !== undefined && this.responseId !== parsedId.data))
+        invalid()
+      this.responseId = parsedId.data
+    }
     if (type === "response.completed") this.terminal = this.parseResponse(response)
   }
 
@@ -161,7 +167,7 @@ export class ResponsesUsageParser {
     const usage = response.usage
     if (
       response.model !== this.expected.model ||
-      (this.responseId && response.id !== this.responseId) ||
+      (this.responseId !== undefined && response.id !== this.responseId) ||
       usage.total_tokens !== usage.input_tokens + usage.output_tokens ||
       usage.input_tokens_details.cached_tokens > usage.input_tokens ||
       (usage.output_tokens_details?.reasoning_tokens ?? 0) > usage.output_tokens ||
