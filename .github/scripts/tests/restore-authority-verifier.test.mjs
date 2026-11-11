@@ -399,7 +399,7 @@ test("CLI rejection never emits private input bytes or database details", (t) =>
   const root = mkdtempSync(join(tmpdir(), "restore-authority-cli-"))
   t.after(() => rmSync(root, { recursive: true, force: true }))
   const path = join(root, "config.json")
-  writeFileSync(path, JSON.stringify({ secret: "PRIVATE_SENTINEL" }), { mode: 0o600 })
+  writeFileSync(path, JSON.stringify({ invalidField: "PRIVATE_SENTINEL" }), { mode: 0o600 })
   const result = spawnSync(
     process.execPath,
     [new URL("../verify-restored-authority.mjs", import.meta.url).pathname, "--config", path],
