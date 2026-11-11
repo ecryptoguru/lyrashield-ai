@@ -130,6 +130,125 @@ async function setup(
 }
 
 describe("independent authority journal", () => {
+  it("reads a confirmed snapshot without writing and preserves the signed envelope", async () => {
+    const { journal, local, store, mirror } = await setup()
+    expect(await journal.loadConfirmed()).toEqual([])
+    expect(store.writes).toBe(0)
+    const receipt = await journal.appendIntent(event)
+    const writes = store.writes
+    const restarted = new IndependentAuthorityJournal({
+      local,
+      store,
+      mirror,
+      epochId: "epoch-2",
+      supervisorInstanceId: "supervisor-1",
+      signingSecret: "k".repeat(48),
+      payloadSchema: z.object({ action: z.string() }).strict(),
+      authorize: async () => true,
+    })
+    const snapshot = await restarted.loadConfirmed()
+    expect(snapshot).toEqual([receipt])
+    snapshot[0]!.payload.payload.action = "STOP"
+    expect(await restarted.loadConfirmed()).toEqual([receipt])
+    expect(store.writes).toBe(writes)
+    expect(mirror.applications).toBe(1)
+  })
+
+  it.each(["storage", "database"])(
+    "does not repair a lost %s acknowledgement while reading history",
+    async (source) => {
+      const { journal, store, mirror } = await setup()
+      if (source === "storage") store.loseCreateAcknowledgement = true
+      else mirror.loseAcknowledgement = true
+      await expect(journal.appendIntent(event)).rejects.toMatchObject({ code: "AUTHORITY_UNKNOWN" })
+      const writes = store.writes
+      const applications = mirror.applications
+      await expect(journal.loadConfirmed()).rejects.toMatchObject({ code: "REPLAY_REQUIRED" })
+      expect(store.writes).toBe(writes)
+      expect(mirror.applications).toBe(applications)
+      const recovered = await journal.appendIntent(event)
+      expect(await journal.loadConfirmed()).toEqual([recovered])
+    }
+  )
+
+  it("rejects local-only history without publishing it during recovery reads", async () => {
+    const { journal, local, store, mirror } = await setup()
+    await local.append(event)
+    await expect(journal.loadConfirmed()).rejects.toMatchObject({ code: "REPLAY_REQUIRED" })
+    expect(store.writes).toBe(0)
+    expect(mirror.applications).toBe(0)
+  })
+
+  it.each(["independent", "database", "local"])(
+    "fails closed after %s history changes following a successful snapshot",
+    async (source) => {
+      const { journal, store, mirror, root } = await setup()
+      await journal.appendIntent(event)
+      expect(await journal.loadConfirmed()).toHaveLength(1)
+      if (source === "independent") {
+        const key = [...store.objects.keys()].find((item) => item.endsWith("/records/1"))!
+        store.objects.set(key, { bytes: Buffer.from("{}"), etag: "altered" })
+      } else if (source === "database") mirror.head = null
+      else await writeFile(join(root, "local.jsonl"), "")
+      await expect(journal.loadConfirmed()).rejects.toMatchObject({
+        code: source === "local" ? "AUTHORITY_UNKNOWN" : "AUTHORITY_CONFLICT",
+      })
+    }
+  )
+
+  it("revalidates persisted authority before returning recovery history", async () => {
+    let permitted = true
+    const { journal } = await setup(new Store(), new Mirror(), async () => permitted)
+    await journal.appendIntent(event)
+    permitted = false
+    await expect(journal.loadConfirmed()).rejects.toMatchObject({ code: "AUTHORITY_CONFLICT" })
+    permitted = true
+    await expect(journal.loadConfirmed()).rejects.toMatchObject({ code: "AUTHORITY_CONFLICT" })
+  })
+
+  it("does not return cached history while independent storage is unavailable", async () => {
+    const { journal, store } = await setup()
+    const receipt = await journal.appendIntent(event)
+    store.failNextRead = true
+    await expect(journal.loadConfirmed()).rejects.toMatchObject({ code: "AUTHORITY_UNKNOWN" })
+    expect(await journal.loadConfirmed()).toEqual([receipt])
+  })
+
+  it("waits for a pending append rather than exposing a partial recovery snapshot", async () => {
+    let entered: () => void = () => undefined
+    let release: () => void = () => undefined
+    const blocked = new Promise<void>((resolve) => {
+      entered = resolve
+    })
+    const resume = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    class PausingMirror extends Mirror {
+      override async compareAndAppend(
+        previous: AuthorityHead | null,
+        head: AuthorityHead,
+        record: JournalRecord<unknown>
+      ) {
+        entered()
+        await resume
+        return super.compareAndAppend(previous, head, record)
+      }
+    }
+    const { journal } = await setup(new Store(), new PausingMirror())
+    const append = journal.appendIntent(event)
+    await blocked
+    let returned = false
+    const read = journal.loadConfirmed().then((records) => {
+      returned = true
+      return records
+    })
+    await Promise.resolve()
+    expect(returned).toBe(false)
+    release()
+    const receipt = await append
+    expect(await read).toEqual([receipt])
+  })
+
   it("persists and reads back the same signed intent in all three authorities", async () => {
     const { journal, local, store, mirror } = await setup()
     const first = await journal.appendIntent(event)

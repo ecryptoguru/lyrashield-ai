@@ -140,6 +140,45 @@ export class IndependentAuthorityJournal<T> {
     return run
   }
 
+  /**
+   * Read authenticated, fully mirrored history without repairing or advancing it.
+   * An unresolved append must be replayed through its original event identity.
+   * This is recovery evidence, never permission to perform a physical action.
+   */
+  async loadConfirmed(): Promise<JournalRecord<AuthorityEvent<T>>[]> {
+    const run = this.serial.then(() => this.loadConfirmedSerial())
+    this.serial = run.then(
+      () => undefined,
+      () => undefined
+    )
+    return run
+  }
+
+  private async loadConfirmedSerial(): Promise<JournalRecord<AuthorityEvent<T>>[]> {
+    if (this.failed) throw this.failed
+    try {
+      await this.initialize()
+      if (this.pending) {
+        throw new IndependentAuthorityError(
+          "REPLAY_REQUIRED",
+          "replay the unresolved event identity"
+        )
+      }
+      await this.assertConfirmed()
+      for (const record of this.records!) await this.assertAuthorized(record.payload)
+      // Recheck after authorization reads so a concurrent durable-head change
+      // cannot be returned as a successfully reconciled recovery snapshot.
+      await this.assertConfirmed()
+      return structuredClone(this.records!)
+    } catch (error) {
+      if (error instanceof IndependentAuthorityError) {
+        if (error.code === "AUTHORITY_CONFLICT") this.failed = error
+        throw error
+      }
+      throw unknown("independent authority history is unresolved")
+    }
+  }
+
   private async appendSerial(input: AuthorityEvent<T>): Promise<JournalRecord<AuthorityEvent<T>>> {
     if (this.failed) throw this.failed
     const event = this.eventSchema.parse(input)
