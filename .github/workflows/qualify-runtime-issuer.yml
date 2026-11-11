@@ -2,6 +2,12 @@ name: Verify protected qualification signer
 
 on:
   workflow_dispatch:
+    inputs:
+      fresh_sandbox_publication:
+        description: "Optional exact fresh sandbox publication selector for protected verification"
+        type: string
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -15,3 +21,5 @@ jobs:
       github.repository_owner_id == '116722580' &&
       github.ref == 'refs/heads/main'
     uses: ./.github/workflows/issue-runtime-qualification.yml
+    with:
+      fresh_sandbox_publication: ${{ inputs.fresh_sandbox_publication }}

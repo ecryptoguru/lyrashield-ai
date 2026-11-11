@@ -66,11 +66,20 @@ test("signing failures log out and cannot return a qualified receipt", async () 
   }
 })
 
-test("only the isolated main reusable issuer can access signing, with no candidate input or deploy output", () => {
+test("isolated issuer verifies optional publication before fixed health signing, with no deploy output", () => {
   const issuer = parse(readFileSync(".github/workflows/issue-runtime-qualification.yml", "utf8"))
   const caller = parse(readFileSync(".github/workflows/qualify-runtime-issuer.yml", "utf8"))
-  assert.deepEqual(issuer.on, { workflow_call: null })
-  assert.deepEqual(caller.on, { workflow_dispatch: null })
+  const input = "fresh_sandbox_publication"
+  assert.deepEqual(Object.keys(issuer.on.workflow_call.inputs), [input])
+  assert.deepEqual(Object.keys(caller.on.workflow_dispatch.inputs), [input])
+  for (const definition of [
+    issuer.on.workflow_call.inputs[input],
+    caller.on.workflow_dispatch.inputs[input],
+  ]) {
+    assert.equal(definition.type, "string")
+    assert.equal(definition.required, false)
+    assert.equal(definition.default, "")
+  }
   assert.equal(caller.jobs.signer.uses, "./.github/workflows/issue-runtime-qualification.yml")
   const job = issuer.jobs["verify-signing-boundary"]
   assert.equal(job.environment, "release-qualification")
@@ -81,12 +90,13 @@ test("only the isolated main reusable issuer can access signing, with no candida
     assert.ok(job.if.includes(condition))
   assert.equal(job.steps[0].with.ref, "${{ github.sha }}")
   assert.equal(job.steps[0].with["persist-credentials"], false)
-  assert.equal(job.steps.filter((step) => step.run).length, 1)
-  assert.equal(
-    job.steps.find((step) => step.run).run,
-    "node .github/scripts/qualification-issuer-health.mjs"
-  )
+  assert.deepEqual(caller.jobs.signer.with, { [input]: "${{ inputs.fresh_sandbox_publication }}" })
+  const commands = job.steps.filter((step) => step.run)
+  assert.equal(commands.length, 2)
+  assert.equal(commands[0].run, "node .github/scripts/verify-sandbox-publication.mjs")
+  assert.equal(commands[0].if, "inputs.fresh_sandbox_publication != ''")
+  assert.equal(commands[0].env.FRESH_SANDBOX_PUBLICATION, "${{ inputs.fresh_sandbox_publication }}")
+  assert.equal(commands[1].run, "node .github/scripts/qualification-issuer-health.mjs")
   assert.equal(job.outputs, undefined)
-  assert.equal(issuer.on.workflow_call?.inputs, undefined)
   assert.doesNotMatch(JSON.stringify(issuer), /secrets\.|deploy-azure|qualified_release_digest/)
 })

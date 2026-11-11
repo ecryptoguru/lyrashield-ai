@@ -1,9 +1,42 @@
 # Protected qualification verifier foundation
 
-`runtime-qualification-foundation.mjs` is an unwired, read-only verifier. It does
+`runtime-qualification-foundation.mjs` is a protected, read-only verifier. It does
 not issue qualification, publish artifacts, exchange Azure credentials, or change
-the unconditional production and worker holds. The health-only reusable issuer
-still has no candidate inputs or deployment outputs.
+the unconditional production and worker holds. The reusable issuer can now
+authenticate a fresh sandbox publication before its fixed health signature;
+it has no runtime-signing or deployment outputs.
+
+The manual `qualify-runtime-issuer.yml` workflow accepts an optional
+`fresh_sandbox_publication` selector containing exactly `engineRevision`,
+`publicationRevision`, `sandboxDigest`, `publishRunId`, and `publishAttempt`.
+The selector only identifies what to verify. It cannot supply a record, saved
+verification JSON, evidence file, tool path, trust root, or signing payload.
+An empty selector preserves the existing health-only check.
+
+The protected reusable job authenticates its current main identity, then invokes
+the byte-pinned verifier to fetch actual OCI bundles for provenance, selected
+runtime/platform binding, and bounded coverage. Every predicate must independently
+pass cryptographic verification, the exact workflow/source/subject/repository
+identity and publication run/attempt checks. Coverage must match the shared worker
+policy, including distinct amd64/arm64 receipts, native manifest concordance,
+all twelve Go applications, bounds, scopes, and limitations. The selected runtime
+revision may differ from the publication workflow revision; both remain bound.
+
+The uploaded result is `lyrashield-sandbox-publication-verification/1`, with
+`signedBoundedCoverageVerified: true`, `nativeInventoryRechecked: false`, and
+`qualified: false`. Its coverage checksum hashes the verified predicate's JSON
+rendering. It authenticates the publisher's claims; it does not independently
+remeasure native bytes, validate the referenced engine CI run, issue fleet
+authority, or release admission. The issuer still needs those independent
+readers and managed runtime signing before promotion can be enabled. A fresh
+build produces a fresh digest; it does not qualify or reproduce a retained image
+by implication.
+
+The protected workflow does not install tools or log in to a registry. Its exact
+root-owned Linux `/usr/bin/gh` binary and registry read access must already be
+available; missing or different tool bytes and unavailable bundles fail closed.
+Local verification through a trusted test adapter does not qualify that hosted
+process environment.
 
 `verifySandboxAttestationBundle` takes a raw Sigstore v0.3 bundle and an expected
 sandbox digest, publication source revision and publication run/attempt. It invokes the
