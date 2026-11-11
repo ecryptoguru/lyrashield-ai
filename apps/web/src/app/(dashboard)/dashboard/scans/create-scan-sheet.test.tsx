@@ -331,6 +331,8 @@ describe("unavailable live-review recovery", () => {
         status: "ready",
         eligibility: {
           allowed: true,
+          code: null,
+          message: null,
           plan: "UNKNOWN",
           isTrial: false,
           remainingMinutes: 0,

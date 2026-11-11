@@ -5,6 +5,7 @@ import { TargetAssessmentSummary } from "./target-assessment-summary"
 import { TargetSpendSummary } from "./target-spend-summary"
 
 const base: TargetAssessmentProjection = {
+  proposedReview: { goal: "LAUNCH_REVIEW", mode: "STANDARD", workflow: "REVIEW_TARGET" },
   target: { id: "target-1", name: "App", type: "REPO", environment: "PRODUCTION" },
   assessment: null,
   assessmentState: "available",
