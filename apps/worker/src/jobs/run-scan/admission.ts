@@ -53,6 +53,24 @@ function dispatchPolicyError(
   return null
 }
 
+function executionPermission(triggerType: string | null) {
+  return triggerType === "schedule"
+    ? PERMISSIONS.schedule.create
+    : triggerType === "retest"
+      ? PERMISSIONS.retest.create
+      : PERMISSIONS.scan.create
+}
+
+async function recordAdmissionDenial(
+  workspaceId: string,
+  targetId: string | null,
+  scanId: string,
+  error: { errorCategory: string; errorMessage: string }
+) {
+  await updateUnclaimedScanStatus(scanId, "FAILED" as ScanStatus, error)
+  await refreshGateVerdictAfterTerminalScan(workspaceId, targetId, scanId)
+}
+
 export async function verifyScanAdmission(params: {
   scanId: string
   workspaceId: string
@@ -82,6 +100,8 @@ export async function verifyScanAdmission(params: {
    */
   authAssessmentPermitted?: boolean
   currentPolicy?: Awaited<ReturnType<typeof readExecutionPolicy>>
+  /** Internal broker validation retains operation/scan state on a denial. */
+  recordFailure?: boolean
 }): Promise<{ ok: true } | { ok: false; result: ScanJobResult }> {
   const {
     scanId,
@@ -105,15 +125,9 @@ export async function verifyScanAdmission(params: {
     where: { workspaceId, userId: scanRecord.createdById, status: "active" },
     select: { role: true },
   })
-  const executionPermission =
-    scanRecord.triggerType === "schedule"
-      ? PERMISSIONS.schedule.create
-      : scanRecord.triggerType === "retest"
-        ? PERMISSIONS.retest.create
-        : PERMISSIONS.scan.create
   let admissionError: { errorCategory: string; errorMessage: string } | null = null
   const policyError = dispatchPolicyError(scanRecord.policyId, params.currentPolicy, executionPlan)
-  if (!creator || !hasPermission(creator.role, executionPermission)) {
+  if (!creator || !hasPermission(creator.role, executionPermission(scanRecord.triggerType))) {
     admissionError = {
       errorCategory: "SCAN_AUTHORIZATION_REVOKED",
       errorMessage: "The scan creator no longer has permission to run this review.",
@@ -254,8 +268,8 @@ export async function verifyScanAdmission(params: {
     }
   }
   if (admissionError) {
-    await updateUnclaimedScanStatus(scanId, "FAILED" as ScanStatus, admissionError)
-    await refreshGateVerdictAfterTerminalScan(workspaceId, targetId, scanId)
+    if (params.recordFailure !== false)
+      await recordAdmissionDenial(workspaceId, targetId, scanId, admissionError)
     return { ok: false, result: { status: "failed", ...admissionError } }
   }
   return { ok: true }
