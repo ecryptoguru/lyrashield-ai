@@ -51,6 +51,33 @@ export function providerUsageId(
     .slice(0, 40)}`
 }
 
+export function providerResponseIdentity(
+  signingSecret: string,
+  providerId: string,
+  providerResponseId: string
+): string {
+  return createHmac("sha256", signingSecret)
+    .update(canonicalJson({ version: 1, providerId, providerResponseId }))
+    .digest("hex")
+}
+
+export function responseIdentityReused(
+  requests: ReadonlyMap<string, RequestState>,
+  signingSecret: string,
+  state: RequestState,
+  usage: TerminalUsage
+): boolean {
+  const identity = providerResponseIdentity(
+    signingSecret,
+    state.providerId,
+    usage.providerResponseId
+  )
+  return [...requests.values()].some(
+    (request) =>
+      request.requestId !== state.requestId && request.observedResponseIdentity === identity
+  )
+}
+
 export function applyProviderJournalRecord(
   state: ProviderJournalState,
   signingSecret: string,
@@ -130,18 +157,21 @@ export function applyProviderJournalRecord(
     if (grant) grant.receiptHash = record.hash
     return
   }
-  if (event.type === "legacy_request_uncertain") {
+  if (
+    event.type === "legacy_request_uncertain" ||
+    event.type === "recovered_completion_uncertain"
+  ) {
     const existing = state.requests.get(event.requestId)
     if (
       !existing ||
       existing.grantId !== event.grantId ||
       existing.attemptId !== event.attemptId ||
       existing.outcome !== "SUCCEEDED" ||
-      (existing.usage && existing.retainedResponse)
+      (event.type === "legacy_request_uncertain" && existing.usage && existing.retainedResponse)
     )
       throw new ProviderGatewayError(
         "JOURNAL_INTEGRITY",
-        "legacy provider recovery binding is invalid",
+        "provider recovery uncertainty binding is invalid",
         500
       )
     existing.outcome = "UNKNOWN"
@@ -155,6 +185,8 @@ export function applyProviderJournalRecord(
       hash: record.hash,
       signature: record.signature,
     }
+    const grant = state.grants.get(existing.grantId)
+    if (grant) grant.receiptHash = record.hash
     return
   }
   const result = event.result
@@ -177,6 +209,12 @@ export function applyProviderJournalRecord(
   existing.responseBytes = result.responseBytes
   existing.usageId = result.usageId
   existing.usage = result.usage
+  if (result.usage)
+    existing.observedResponseIdentity = providerResponseIdentity(
+      signingSecret,
+      existing.providerId,
+      result.usage.providerResponseId
+    )
   existing.retainedResponse = result.retainedResponse
   existing.detail = result.detail
   existing.receiptHash = record.hash

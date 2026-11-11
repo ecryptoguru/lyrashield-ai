@@ -55,10 +55,19 @@ Completed bytes, status and the allowlisted forwarded headers are encrypted with
 a separately configured secret and request/response identity as authenticated associated data.
 The signed journal records the encrypted response and terminal usage before any completed response
 is returned. An exact duplicate decrypts and verifies those retained bytes and never contacts the
-provider. A lost result acknowledgement closes local admission; restart can replay a durable
-completed result. Unresolved restart records receive a durable `UNKNOWN` result. Legacy HTTP/hash-
-only successes receive a separate uncertainty event without rewriting their historical records.
+provider while that service retains its acknowledged completion. A lost result acknowledgement
+closes local admission. On restart, every recovered success becomes `UNKNOWN` and restores its
+physical/funding hold before broker authorization. A local journal cannot distinguish a persisted
+completion whose file sync or acknowledgement failed from an acknowledged completion. Independent
+authenticated reconciliation is required before recovered replay, usage or hold release; no such
+adapter is installed. A separate recovery uncertainty event preserves historical authenticated
+usage and encrypted bytes privately without rewriting them. Unresolved restart records also receive
+a durable `UNKNOWN` result. Recovery write failures keep initialization and admission closed.
 Wrong encryption keys or invalid retained bytes fail replay and never cause resubmission.
+
+A private HMAC response-identity tombstone is reconstructed from signed terminal evidence and
+survives uncertainty even when usage and replay are withheld. Cross-request response-ID reuse is
+rejected. The tombstone is excluded from request status and customer-accounting payloads.
 
 The HTTP adapter now delivers SSE incrementally. Provider reads pause until each downstream
 write is acknowledged and, when required, the writable stream drains. At most one 64 KiB delivery
@@ -88,6 +97,26 @@ signed uncertainty event preserves that hold if delivery/acknowledgement becomes
 the completion journal write; historical records are not rewritten. Retention still uses the bounded
 local signed journal. Managed keys, external encrypted object retention, capacity/lifecycle and
 physical isolation qualification and independent settlement remain outstanding.
+
+## Wire-format qualification
+
+This adapter uses raw `fetch`; the gateway installs no provider SDK and pins no SDK version.
+Its internal `responses-text-v1` policy, synthetic test endpoint (`api-version=1`) and synthetic
+prices do not pin or qualify a production provider API version.
+
+Checked on 2026-11-11 against the official
+[OpenAI Responses create/streaming reference](https://developers.openai.com/api/reference/resources/responses/methods/create)
+and [Azure Responses guide](https://learn.microsoft.com/en-us/azure/foundry/openai/how-to/responses?view=foundry-classic).
+The OpenAI example ends with `response.completed`, a response ID/model, completed status and
+input/output/total usage, including cached-token details. Missing terminal usage stays `UNKNOWN`.
+The current documented `cache_write_tokens` input bucket is outside this narrow adapter's
+qualified pricing semantics; its strict parser rejects that shape, including zero values.
+Documented sequence numbers and the full event corpus are not qualified by this slice.
+Azure documents streaming through the `/openai/v1/` endpoint with deployment-specific model
+configuration; the synthetic route and exact returned-model comparison are not a qualified Azure
+deployment adapter. Neither documentation check proves independent settlement, exactly-once
+provider execution, acknowledged local durability or physical stop after abort. These remain
+closed-admission qualification blockers; no live provider request was used for this check.
 
 `GET /v1/requests/:requestId` is a private control-authenticated version 1 status adapter. It returns
 persisted attempt/scan/workspace/authority binding, outcome, approved policy digest, reservation,

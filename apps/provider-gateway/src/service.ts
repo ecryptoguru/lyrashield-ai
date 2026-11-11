@@ -18,6 +18,7 @@ import {
   requestStatus,
   grantResponse,
   providerUsageId,
+  responseIdentityReused,
 } from "./journal-state"
 import {
   prepareProxyRequest,
@@ -416,12 +417,7 @@ export class ProviderGatewayService {
       if (!state) throw new ProviderGatewayError("JOURNAL_INTEGRITY", "request is missing", 500)
       if (
         usage &&
-        [...this.requests.values()].some(
-          (request) =>
-            request.requestId !== requestId &&
-            request.providerId === state.providerId &&
-            request.usage?.providerResponseId === usage.providerResponseId
-        )
+        responseIdentityReused(this.requests, this.options.signingSecret, state, usage)
       ) {
         await this.recordResult(
           requestId,
@@ -590,10 +586,11 @@ export class ProviderGatewayService {
           undefined,
           "provider gateway restarted with an unresolved request"
         )
-      } else if (request.outcome === "SUCCEEDED" && (!request.usage || !request.retainedResponse)) {
-        // Append recovery uncertainty without rewriting historical receipts.
+      } else if (request.outcome === "SUCCEEDED") {
+        // A persisted completion cannot prove its acknowledgement survived.
+        // Independent reconciliation is required before recovered replay/usage.
         const record = await this.options.journal.append({
-          type: "legacy_request_uncertain",
+          type: "recovered_completion_uncertain",
           requestId: request.requestId,
           grantId: request.grantId,
           attemptId: request.attemptId,

@@ -1,5 +1,5 @@
 import { performance } from "node:perf_hooks"
-import { mkdtemp, rm, copyFile, readFile } from "node:fs/promises"
+import { mkdtemp, rm, copyFile, readFile, open, writeFile, type FileHandle } from "node:fs/promises"
 import { createServer, type ServerResponse } from "node:http"
 import { EventEmitter } from "node:events"
 import { tmpdir } from "node:os"
@@ -566,6 +566,65 @@ describe("bounded scan-bound SSE delivery", () => {
     })
   })
 
+  it.each([false, true])(
+    "rejects a completed response ID reused after disconnect (restart=%s)",
+    async (restart) => {
+      const fetchImpl = vi.fn(async () => source().response)
+      const f = await fixture(fetchImpl, {
+        ...fixturePolicy,
+        maxConcurrentRequests: 2,
+        deadlineMs: 10_000,
+        idleTimeoutMs: 1_000,
+      })
+      const client = sink()
+      const fault: JournalPort<ProviderJournalEvent> = {
+        load: () => f.journal.load(),
+        append: async (event) => {
+          const record = await f.journal.append(event)
+          if (event.type === "request_result" && event.result.outcome === "SUCCEEDED")
+            client.controller.abort()
+          return record
+        },
+      }
+      let service = new ProviderGatewayService({ ...f.options, journal: fault })
+      await expect(service.proxy(f.input, client.value)).rejects.toMatchObject({
+        code: "PROVIDER_UNAVAILABLE",
+      })
+      if (restart) {
+        await f.journal.close()
+        const journal = new SignedJournal(f.path, secret, (value) =>
+          providerJournalEventSchema.parse(value)
+        )
+        journals.push(journal)
+        service = new ProviderGatewayService({ ...f.options, journal })
+      }
+      const original = await service.inspectRequest(f.input.requestId)
+      expect(original).toMatchObject({
+        outcome: "UNKNOWN",
+        physicalOutstanding: true,
+        usage: null,
+        usageId: null,
+        reservationMicros: 288,
+      })
+      expect(original).not.toHaveProperty("observedResponseIdentity")
+      expect(JSON.stringify(original)).not.toContain(terminal.id)
+      const secondInput = { ...f.input, requestId: "provider-duplicate-after-disconnect" }
+      await expect(service.proxy(secondInput, sink().value)).rejects.toMatchObject({
+        code: "PROVIDER_USAGE_UNKNOWN",
+      })
+      expect(await service.inspectRequest(secondInput.requestId)).toMatchObject({
+        outcome: "UNKNOWN",
+        physicalOutstanding: true,
+        usage: null,
+        usageId: null,
+      })
+      await expect(service.proxy(secondInput, sink().value)).rejects.toMatchObject({
+        code: "REQUEST_UNKNOWN",
+      })
+      expect(fetchImpl).toHaveBeenCalledTimes(2)
+    }
+  )
+
   it("bounds total bytes and individual SSE messages while leaving incomplete work held", async () => {
     for (const kind of ["total", "message"]) {
       const payload = Buffer.from(
@@ -629,6 +688,199 @@ describe("bounded scan-bound SSE delivery", () => {
       outcome: "UNKNOWN",
       physicalOutstanding: true,
     })
+    expect(f.options.fetchImpl).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([false, true])(
+    "quarantines completed retained bytes before recovered authorization (previously replayed=%s)",
+    async (replayed) => {
+      const f = await fixture(vi.fn(async () => source().response))
+      await f.service.proxy(f.input, sink().value)
+      if (replayed) await f.service.proxy(f.input, sink().value)
+      const completed = await f.journal.load()
+      await f.journal.close()
+      const journal = new SignedJournal(f.path, secret, (value) =>
+        providerJournalEventSchema.parse(value)
+      )
+      journals.push(journal)
+      const authorizeGrant = vi.fn(f.options.authorizeGrant)
+      const replacement = new ProviderGatewayService({ ...f.options, journal, authorizeGrant })
+      await replacement.initialize()
+      expect(authorizeGrant).not.toHaveBeenCalled()
+      expect(await replacement.inspectRequest(f.input.requestId)).toMatchObject({
+        outcome: "UNKNOWN",
+        physicalOutstanding: true,
+        usage: null,
+        usageId: null,
+        reservationMicros: 288,
+      })
+      expect((await journal.load()).slice(0, completed.length)).toEqual(completed)
+      expect((await replacement.inspectGrant(f.grant.grantId))?.receipt).toBe(
+        (await replacement.inspectRequest(f.input.requestId))?.receipt?.hash
+      )
+      expect(await readFile(f.path, "utf8")).not.toContain("private streamed text")
+      await expect(replacement.proxy(f.input, sink().value)).rejects.toMatchObject({
+        code: "REQUEST_UNKNOWN",
+      })
+      await expect(
+        replacement.proxy(
+          { ...f.input, requestId: "provider-after-recovered-completion" },
+          sink().value
+        )
+      ).rejects.toMatchObject({
+        code: "PROVIDER_CONCURRENCY_EXHAUSTED",
+      })
+      expect(f.options.fetchImpl).toHaveBeenCalledTimes(1)
+    }
+  )
+
+  it("keeps a real sync-latched persisted completion held after crash recovery", async () => {
+    const f = await fixture(
+      vi.fn(async () => source().response),
+      {
+        ...fixturePolicy,
+        maxConcurrentRequests: 2,
+        deadlineMs: 10_000,
+        idleTimeoutMs: 1_000,
+      }
+    )
+    const probe = await open(f.path, "r")
+    const prototype: Pick<FileHandle, "sync"> = Object.getPrototypeOf(probe)
+    const identity = await probe.stat()
+    const originalSync = prototype.sync
+    await probe.close()
+    let failed = false
+    const sync = vi.spyOn(prototype, "sync").mockImplementation(async function (this: FileHandle) {
+      await originalSync.call(this)
+      const stat = await this.stat()
+      if (
+        !failed &&
+        stat.dev === identity.dev &&
+        stat.ino === identity.ino &&
+        (await readFile(f.path, "utf8")).includes('"outcome":"SUCCEEDED"')
+      ) {
+        failed = true
+        throw new Error("persisted completion sync acknowledgement lost")
+      }
+    })
+    try {
+      await expect(f.service.proxy(f.input, sink().value)).rejects.toThrow(
+        "persisted completion sync acknowledgement lost"
+      )
+      expect(failed).toBe(true)
+      await expect(
+        f.journal.append({
+          type: "stream_delivery_uncertain",
+          requestId: f.input.requestId,
+          grantId: f.grant.grantId,
+          attemptId: grantRequest.attemptId,
+        })
+      ).rejects.toThrow("persisted completion sync acknowledgement lost")
+      await expect(f.service.proxy(f.input, sink().value)).rejects.toMatchObject({
+        code: "ADMISSION_CLOSED",
+      })
+    } finally {
+      sync.mockRestore()
+    }
+    const root = await mkdtemp(join(tmpdir(), "gateway-sync-crash-"))
+    roots.push(root)
+    const path = join(root, "journal.jsonl")
+    await copyFile(f.path, path)
+    const journal = new SignedJournal(path, secret, (value) =>
+      providerJournalEventSchema.parse(value)
+    )
+    journals.push(journal)
+    const replacement = new ProviderGatewayService({ ...f.options, journal })
+    await expect(replacement.proxy(f.input, sink().value)).rejects.toMatchObject({
+      code: "REQUEST_UNKNOWN",
+    })
+    expect(await replacement.inspectRequest(f.input.requestId)).toMatchObject({
+      outcome: "UNKNOWN",
+      physicalOutstanding: true,
+      usage: null,
+      usageId: null,
+      reservationMicros: 288,
+    })
+    const records = await journal.load()
+    expect(
+      records.find((record) => record.payload.type === "request_result")?.payload
+    ).toMatchObject({ result: { outcome: "SUCCEEDED", retainedResponse: expect.any(Object) } })
+    expect(records.at(-1)?.payload.type).toBe("recovered_completion_uncertain")
+    await expect(
+      replacement.proxy(
+        { ...f.input, requestId: "provider-duplicate-after-sync-loss" },
+        sink().value
+      )
+    ).rejects.toMatchObject({ code: "PROVIDER_USAGE_UNKNOWN" })
+    expect(f.options.fetchImpl).toHaveBeenCalledTimes(2)
+  })
+
+  it("counts recovered completed and replayed entries against the global hold limit", async () => {
+    let sequence = 0
+    const fetchImpl = vi.fn(
+      async () =>
+        source(
+          pieces.map((piece) =>
+            Buffer.from(piece.toString().replaceAll(terminal.id, `response-completed-${sequence}`))
+          )
+        ).response
+    )
+    const f = await fixture(fetchImpl)
+    for (; sequence < 8; sequence++)
+      await f.service.proxy(
+        { ...f.input, requestId: `provider-completed-${sequence}` },
+        sink().value
+      )
+    await f.service.proxy({ ...f.input, requestId: "provider-completed-7" }, sink().value)
+    await f.journal.close()
+    const journal = new SignedJournal(f.path, secret, (value) =>
+      providerJournalEventSchema.parse(value)
+    )
+    journals.push(journal)
+    const replacement = new ProviderGatewayService({ ...f.options, journal })
+    await replacement.initialize()
+    for (let index = 0; index < 8; index++)
+      expect(await replacement.inspectRequest(`provider-completed-${index}`)).toMatchObject({
+        outcome: "UNKNOWN",
+        physicalOutstanding: true,
+        usage: null,
+        usageId: null,
+        reservationMicros: 288,
+      })
+    const grant = await replacement.issueGrant({
+      ...grantRequest,
+      grantRequestId: "grant-after-recovered-completions",
+      attemptId: "attempt-after-recovered-completions",
+    })
+    await expect(
+      replacement.proxy(
+        {
+          ...f.input,
+          authorization: `Bearer ${grant.token}`,
+          requestId: "provider-after-global-recovery",
+        },
+        sink().value
+      )
+    ).rejects.toMatchObject({ code: "PROVIDER_CONCURRENCY_EXHAUSTED" })
+    expect(fetchImpl).toHaveBeenCalledTimes(8)
+  })
+
+  it("rejects a tampered recovered response-ID tombstone before broker authorization", async () => {
+    const f = await fixture(vi.fn(async () => source().response))
+    await f.service.proxy(f.input, sink().value)
+    const root = await mkdtemp(join(tmpdir(), "gateway-tombstone-tamper-"))
+    roots.push(root)
+    const path = join(root, "journal.jsonl")
+    const bytes = await readFile(f.path, "utf8")
+    await writeFile(path, bytes.replace(terminal.id, "response-forged-1"), { mode: 0o600 })
+    const journal = new SignedJournal(path, secret, (value) =>
+      providerJournalEventSchema.parse(value)
+    )
+    journals.push(journal)
+    const authorizeGrant = vi.fn(f.options.authorizeGrant)
+    const replacement = new ProviderGatewayService({ ...f.options, journal, authorizeGrant })
+    await expect(replacement.initialize()).rejects.toThrow(/hash|signature/i)
+    expect(authorizeGrant).not.toHaveBeenCalled()
     expect(f.options.fetchImpl).toHaveBeenCalledTimes(1)
   })
 

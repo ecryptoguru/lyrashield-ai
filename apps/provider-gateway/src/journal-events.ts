@@ -76,6 +76,14 @@ export const providerJournalEventSchema = z.discriminatedUnion("type", [
       attemptId: z.string(),
     })
     .strict(),
+  z
+    .object({
+      type: z.literal("recovered_completion_uncertain"),
+      requestId: z.string(),
+      grantId: z.string(),
+      attemptId: z.string(),
+    })
+    .strict(),
 ])
 export type ProviderJournalEvent = z.infer<typeof providerJournalEventSchema>
 
@@ -115,6 +123,9 @@ export interface RequestState {
   responseBytes?: number
   usageId?: string
   usage?: TerminalUsage
+  // Private tombstone derived from authenticated terminal evidence. It survives
+  // uncertainty even when customer-accounting usage and replay are withheld.
+  observedResponseIdentity?: string
   retainedResponse?: RetainedResponse
   detail?: string
   receiptHash: string
