@@ -263,6 +263,7 @@ test("qualification has no arbitrary signer, candidate payload or credential-exc
   assert.deepEqual(Object.keys(foundation).sort(), [
     "issueRuntimeQualification",
     "verifySandboxAttestationBundle",
+    "verifySandboxCoveragePublication",
   ])
   for (const input of [
     undefined,

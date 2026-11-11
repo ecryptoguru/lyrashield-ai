@@ -1,9 +1,65 @@
-# Protected qualification verifier foundation
+# Protected sandbox publication verification
 
-`runtime-qualification-foundation.mjs` is an unwired, read-only verifier. It does
+`runtime-qualification-foundation.mjs` is a protected, read-only verifier. It does
 not issue qualification, publish artifacts, exchange Azure credentials, or change
-the unconditional production and worker holds. The health-only reusable issuer
-still has no candidate inputs or deployment outputs.
+the unconditional production and worker holds. The protected reusable issuer
+consumes that verifier and managed-signs only an internally constructed held
+publication record. The worker can authenticate and bind that record to its
+exact image and engine; it still rejects admission for missing independently
+measured native inventory and runtime authority. There are no deployment outputs.
+
+The manual `qualify-runtime-issuer.yml` workflow accepts an optional
+`fresh_sandbox_publication` selector containing exactly `engineRevision`,
+`publicationRevision`, `sandboxDigest`, `publishRunId`, and `publishAttempt`.
+The selector only identifies what to verify. It cannot supply a record, saved
+verification JSON, evidence file, tool path, trust root, or signing payload.
+An empty selector preserves the existing health-only check.
+
+The protected reusable job authenticates its current main identity, then invokes
+the byte-pinned verifier to fetch actual OCI bundles for provenance, selected
+runtime/platform binding, and bounded coverage. Every predicate must independently
+pass cryptographic verification, the exact workflow/source/subject/repository
+identity and publication run/attempt checks. Coverage must match the shared worker
+policy, including distinct amd64/arm64 receipts, native manifest concordance,
+all twelve Go applications, bounds, scopes, and limitations. The selected runtime
+revision may differ from the publication workflow revision; both remain bound.
+
+`issue-sandbox-publication.mjs` authenticates the protected main issuer before
+candidate reads, verifies all three predicates before credential exchange,
+and constructs `lyrashield-held-sandbox-publication/1` internally. It uses the
+existing fixed managed RSA key version and verifies the returned signature
+against the shared source-controlled public key. Login, signing and verification
+failures log out and return no record. Caller bytes are never signing payloads.
+The artifact retains the exact signed JSON bytes and signature together.
+
+The record binds the selected engine, publication workflow revision and run,
+image index, distinct native manifests, issuer source/run and a maximum 24-hour
+validity. `signedBoundedCoverageVerified` is true; `qualified`,
+`nativeInventoryRechecked`, and `runtimeAuthorityVerified` must remain false.
+Its coverage checksum hashes the verified predicate's JSON rendering. This
+authenticates publisher claims; it does not independently remeasure native
+bytes, validate the referenced engine CI run or release admission. A fresh
+build produces a fresh digest and cannot qualify a retained image by implication.
+
+The protected Ubuntu job provisions GitHub CLI 2.95.0 from the fixed official
+amd64 release archive, checks both the archive and extracted executable hashes,
+and installs only the exact binary as root-owned `/usr/bin/gh`. Downloads have
+explicit time and retry bounds. The adapter independently rechecks the installed
+binary before use; unavailable OCI bundles fail closed. This provisioning is
+workflow-only and was tested with mocked commands, without a local install or
+download. The new Linux provisioning/OCI/signing composition has not been run
+in hosted CI. Local cryptographic verification does not qualify that environment.
+
+The host runtime configuration may select only
+`LYRASHIELD_SANDBOX_PUBLICATION_RECORD_PATH=/etc/lyrashield/sandbox-publication-record.json`.
+`run-worker.sh` requires a root-owned mode-0444 regular file, rejects symlinks,
+and binds it read-only outside the worker-writable shared root. Inherited process
+values cannot select this control. The worker reads through the existing bounded,
+race-checked evidence reader and verifies exact signed bytes, fixed key version,
+schema, image/engine and expiry. Even an authentic held record fails admission;
+the legacy eight-key coverage path remains available when no record is selected.
+No artifact download, host installation of the record or production action is
+wired into these workflows.
 
 `verifySandboxAttestationBundle` takes a raw Sigstore v0.3 bundle and an expected
 sandbox digest, publication source revision and publication run/attempt. It invokes the
@@ -37,8 +93,8 @@ independent image/runtime evidence.
 The production process adapter accepts only Linux `/usr/bin/gh`, owned by root
 and without group/other write permission, with the exact v2.95.0 binary SHA-256
 for amd64 or arm64. There is no PATH lookup, caller-provided executable or custom
-trust root. Tool installation is deliberately not wired to the health workflow;
-an absent or different binary fails closed. The `run` test seam is trusted test
+trust root. Provisioning runs only for the optional publication check; an empty
+selector preserves the existing health check. The `run` test seam is trusted test
 code and is never a workflow input or a saved verification result reader.
 
 The binary pins were derived after checking these official release archive
@@ -66,8 +122,9 @@ issuance requires independently authenticated readers for all of the following:
 - Runtime policy and migration checksums, independent journal proof, authority
   epoch, coherent rollback archive, and protected fleet readback. Missing or
   uncertain authority cannot be replaced by a caller-provided `passed` boolean.
-- Canonical immutable record construction and managed RSA signing outside
-  worker-writable paths, with explicit validity limits and protected storage.
+- Full runtime record construction and managed RSA signing outside
+  worker-writable paths, with protected storage. The held publication record
+  implements only the authenticated publication portion of that boundary.
 - A separate signed 15-minute promotion lease bound to the record hash, tuple,
   action, consumer run/attempt, authority epoch and nonce, with durable replay
   protection checked before every mutation and admission release.
@@ -82,8 +139,11 @@ does not manufacture a record that would satisfy that consumer.
 The unit tests use synthetic verifier output only to exercise policy, tamper,
 ambiguity and replay rejection. They also use locally signed RSA OIDC tokens to
 show issuer identity failures happen before mocked Key Vault operations. Existing
-health tests cover the fixed actual managed-key signature and mocked signing
-failures. No production credentials, native candidate qualification or live
+health tests cover the fixed actual managed-key signature. Locally generated RSA
+keys exercise exact held-record signatures, tampering, wrong keys, image/engine
+mismatch, expiry and admission upgrades. Issuer and host tests cover verification
+before signing, failure cleanup, fixed paths and read-only ownership controls.
+No production credentials, native candidate qualification or live held-record
 issuance are established by these tests.
 
 A separate 2026-11-11 offline smoke check executed the exact SHA-256-pinned

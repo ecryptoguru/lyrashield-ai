@@ -691,6 +691,15 @@ function verifyPreflightEnvironment(controls) {
       assert.equal(env[name], controls[name], name)
       if (!Object.hasOwn(controls, name)) workerNames.delete(name)
     }
+    // The held publication record and legacy coverage inputs are alternative
+    // configured evidence paths, with the same selection in both consumers.
+    const publicationPath = "LYRASHIELD_SANDBOX_PUBLICATION_RECORD_PATH"
+    assert.equal(env[publicationPath], controls[publicationPath])
+    if (!Object.hasOwn(controls, publicationPath)) workerNames.delete(publicationPath)
+    else {
+      for (const name of workerNames)
+        if (name.startsWith("LYRASHIELD_SANDBOX_SBOM_COVERAGE_")) workerNames.delete(name)
+    }
     const passedNames = new Set()
     for (let i = 0; i < tokens.length; i++) {
       if (tokens[i] === "--env") passedNames.add(tokens[i + 1].split("=")[0])
@@ -709,6 +718,9 @@ for (const [mode, controls] of Object.entries({
     LYRASHIELD_PENDING_HTTP_EVIDENCE: "1",
     LLM_API_MODE: "responses",
     DEDUPE_LLM_API_MODE: "chat_completions",
+  },
+  "held publication path": {
+    LYRASHIELD_SANDBOX_PUBLICATION_RECORD_PATH: "/etc/lyrashield/sandbox-publication-record.json",
   },
 })) {
   test(`preflight environment loads @lyrashield/config in production and matches the worker launcher: ${mode}`, () => {
