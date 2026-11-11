@@ -64,6 +64,7 @@ function releaseRecord(overrides = {}) {
       brokerDigest: D("broker"),
       supervisorDigest: D("supervisor"),
       providerGatewayDigest: D("provider-gateway"),
+      runtimePolicyDigest: D("runtime-policy"),
     },
     rollback: {
       archiveSha256: rollbackArchive,
@@ -80,6 +81,7 @@ function releaseRecord(overrides = {}) {
       brokerDigest: D("rollback-broker"),
       supervisorDigest: D("rollback-supervisor"),
       providerGatewayDigest: D("rollback-provider-gateway"),
+      runtimePolicyDigest: D("rollback-runtime-policy"),
     },
   }
   Object.assign(record, overrides)
@@ -88,7 +90,19 @@ function releaseRecord(overrides = {}) {
 
 function fixture(t, overrides = {}) {
   const { record, rollbackPair } = releaseRecord(overrides.record)
-  const archive = { kind: "qualified-fleet", pair: rollbackPair }
+  const archive = {
+    kind: "qualified-fleet",
+    pair: rollbackPair,
+    controlPlane: Object.fromEntries(
+      [
+        "migrationChecksum",
+        "brokerDigest",
+        "supervisorDigest",
+        "providerGatewayDigest",
+        "runtimePolicyDigest",
+      ].map((key) => [key, record.rollback?.[key]])
+    ),
+  }
   const events = []
   const adapter = {
     stageStore: { kind: "fixture-stage-store" },
@@ -398,6 +412,45 @@ test("default authority remains unavailable and no action can run", async (t) =>
     f.events.some((event) => event.startsWith("action:")),
     false
   )
+})
+
+test("held-baseline is not accepted as admission-open qualified-fleet recovery authority", async (t) => {
+  const f = fixture(t)
+  f.archive.kind = "held-baseline"
+  f.archive.purpose = "rollback-only"
+  await assert.rejects(preflightQualifiedRelease(qualified, f.deps), /rollback record unavailable/)
+  assert.equal(
+    f.events.some((event) => event.startsWith("authority:")),
+    false
+  )
+  assert.equal(
+    f.events.some((event) => event.startsWith("rollback-archive:")),
+    false
+  )
+})
+
+test("rollback comparison binds migration, broker, supervisor, gateway and runtime policy", async (t) => {
+  for (const field of [
+    "migrationChecksum",
+    "brokerDigest",
+    "supervisorDigest",
+    "providerGatewayDigest",
+    "runtimePolicyDigest",
+  ]) {
+    const f = fixture(t)
+    f.archive.controlPlane[field] = D("different")
+    await assert.rejects(
+      preflightQualifiedRelease(qualified, f.deps),
+      /rollback tuple mismatch/,
+      field
+    )
+    assert.equal(
+      f.events.some((event) => event.startsWith("authority:")),
+      false
+    )
+    delete f.archive.controlPlane[field]
+    await assert.rejects(preflightQualifiedRelease(qualified, f.deps), /rollback tuple mismatch/)
+  }
 })
 
 test("missing, unavailable or forward-incompatible rollback fails before authority and mutation", async (t) => {

@@ -5,6 +5,7 @@ import { pairedReleaseReceipt } from "../../ops/monitoring/paired-release-hold.m
 import * as cloud from "./paired-runtime-cloud.mjs"
 import { vmStageStore } from "./paired-stage-store.mjs"
 import { guest, liveRedis } from "./paired-live-transport.mjs"
+import { readHeldBaselineArchive } from "./paired-runtime-qualification.mjs"
 import {
   readAuthenticatedOwner,
   readProtectedRecord,
@@ -239,6 +240,20 @@ function protectedApprovals(sandboxes) {
     verifyQualifiedArchive: async (id) => {
       const r = await archive(id)
       sandboxes.set(sha(JSON.stringify(binding(r.pair))), r.sandboxProof)
+      return true
+    },
+    async verifyHeldBaselineArchive(id, expected) {
+      const r = await readHeldBaselineArchive(id, expected)
+      cloud.verifyImageSources(r.pair)
+      await candidateProofs(r, r.pair)
+      const continuity = record(await verifiedArtifact("continuity", r.connectionProof))
+      ok(
+        continuity.purpose === "fleet-authority" &&
+          continuity.environment === "azure-production" &&
+          s256.test(continuity.databaseIdentity) &&
+          s256.test(continuity.redisUrlHash)
+      )
+      // Read-only evidence; do not populate the qualified-fleet recovery map.
       return true
     },
     async verifyRecoveryHandoff(id, oldOwner, newOwner) {
