@@ -176,10 +176,11 @@ export function verifyBitmapFont(compressed) {
     const offset = bytes.readUInt32LE(at + 12)
     // The pinned image's BDF accelerators reserve 100 bytes but store 48,
     // or 72 when the format includes ink bounds. Other sizes need full bounds.
-    const stored = type === 256 && size === 100 ? (format & 0x100 ? 72 : 48) : size
+    const minimum = type === 256 ? (format & 0x100 ? 72 : 48) : 4
+    const stored = type === 256 && size === 100 ? minimum : size
     if (
       types.has(type) ||
-      size < 4 ||
+      size < minimum ||
       size > 16 * 1024 * 1024 ||
       offset < start ||
       offset + stored > bytes.length

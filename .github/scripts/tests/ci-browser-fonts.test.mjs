@@ -120,7 +120,7 @@ test("PCF accelerator reservation exception matches only the pinned 48/72-byte l
   }
   verifyBitmapFont(gzipSync(accelerator(14, 48)))
   verifyBitmapFont(gzipSync(accelerator(270, 72)))
-  for (const size of [101, 4096]) {
+  for (const size of [4, 99, 101, 4096, 1024 * 1024]) {
     const unrelated = accelerator(14, 48)
     unrelated.writeUInt32LE(size, 80)
     assert.throws(() => verifyBitmapFont(gzipSync(unrelated)), /table bounds/)
