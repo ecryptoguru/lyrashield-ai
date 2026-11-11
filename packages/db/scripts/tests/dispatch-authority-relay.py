@@ -111,7 +111,7 @@ def relay(connection):
             body = read_exact(process.stdout, length - 4)
             if header[:1] == b"C" and body == b"COMMIT\x00":
                 with transaction_lock:
-                    matches = target
+                    matches = target and transaction["begin"] and transaction["attempt_insert"]
                 if os.path.isfile(arm):
                     print(
                         f"commit_observed target={int(target)} matches={int(matches)} fired={int(fired.is_set())}",
