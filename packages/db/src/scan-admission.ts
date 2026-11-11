@@ -65,6 +65,6 @@ export async function persistAdmittedScan(
     },
   })
   if (admissionOptions.dispatchAuthority === "shadow")
-    await persistShadowScanDispatchAdmission(tx, scan)
+    await persistShadowScanDispatchAdmission(tx, scan, params.focus)
   return scan
 }
