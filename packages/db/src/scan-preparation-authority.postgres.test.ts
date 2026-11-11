@@ -278,15 +278,15 @@ describe.skipIf(!enabled)("checked preparation intent authority", () => {
     expect(row).toEqual({ authorityTransactionId: expect.stringMatching(/^\d+$/), bounded: true })
   })
   it.each([
-    ['"authorityAcceptedAt"', "clock_timestamp()"],
-    ['"authorityTransactionId"', "'spoof'"],
-    ['"authorityDeadlineAt"', "'infinity'::timestamp"],
-  ])("rejects caller metadata %s", async (column, value) => {
+    { authorityAcceptedAt: new Date() },
+    { authorityTransactionId: "spoof" },
+    { authorityDeadlineAt: "infinity" as const },
+  ])("rejects caller metadata %j", async (authorityMetadata) => {
     const f = await preparationFixture(owner),
       c = await lockedClient(f)
     try {
       await c.query("SELECT app.acquire_scan_preparation_gate()")
-      await expect(insertPreparationAttempt(c, f, "," + column, "," + value)).rejects.toThrow(
+      await expect(insertPreparationAttempt(c, f, { authorityMetadata })).rejects.toThrow(
         "server-derived"
       )
     } finally {
@@ -1070,7 +1070,7 @@ describe.skipIf(!enabled)("checked preparation intent authority", () => {
     )
     try {
       await c.query("SELECT app.acquire_scan_preparation_gate()")
-      await expect(insertPreparationAttempt(c, f, "", "", expiry)).rejects.toThrow("expired")
+      await expect(insertPreparationAttempt(c, f, { expiresAt: expiry })).rejects.toThrow("expired")
     } finally {
       await c.query("ROLLBACK")
       c.release()
@@ -1090,7 +1090,7 @@ describe.skipIf(!enabled)("checked preparation intent authority", () => {
       p = await lockedClient(second)
     try {
       await p.query("SELECT app.acquire_scan_preparation_gate()")
-      const attemptId = await insertPreparationAttempt(p, second, "", "", secondExpiry)
+      const attemptId = await insertPreparationAttempt(p, second, { expiresAt: secondExpiry })
       await owner.query(
         "SELECT pg_sleep(greatest(extract(epoch FROM ($1::timestamp AT TIME ZONE 'UTC'-clock_timestamp())),0)+0.01)",
         [secondExpiry]

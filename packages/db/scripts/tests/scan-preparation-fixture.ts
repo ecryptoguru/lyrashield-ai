@@ -149,14 +149,41 @@ export function preparationInput(f: PreparationFixture) {
 export async function insertPreparationAttempt(
   client: pg.PoolClient,
   f: PreparationFixture,
-  metadataColumn = "",
-  metadataValue = "",
-  expiresAt?: Date
+  options: {
+    expiresAt?: Date
+    authorityMetadata?: {
+      authorityAcceptedAt?: Date
+      authorityTransactionId?: string
+      authorityDeadlineAt?: Date | "infinity"
+    }
+  } = {}
 ) {
   const attemptId = `${f.operationId}-attempt`
+  const values = [
+    f.operationId,
+    attemptId,
+    f.epochId,
+    f.grantId,
+    f.scanId,
+    options.expiresAt ?? null,
+  ]
+  // Legacy rows are inserted before the additive metadata columns exist.
+  // Both statements are fixed SQL; caller metadata is always a bound value.
+  if (options.authorityMetadata) {
+    await client.query(
+      `INSERT INTO "ScanDispatchAttempt"("operationId","attemptId","scanId","workspaceId","initiatingUserId","sponsorAccountId","targetId","targetSnapshotDigest","executionPlanHash","scopeDigest","policyId","policyVersion","policyDigest","attachmentIds",mode,goal,"maxBudgetUsd","maxRuntimeMs","authorityEpochId","workerInstanceGrantId","expiresAt","authorityAcceptedAt","authorityTransactionId","authorityDeadlineAt") SELECT $1,$2,s.id,s."workspaceId",s."createdById",s."sponsorAccountId",s."targetId",app.scan_target_snapshot_digest(s."targetId"),s."executionPlanHash",app.scan_dispatch_scope_digest(s.id),s."policyId",'dispatch-v1',app.scan_policy_digest(s."policyId"),'{}',s.mode,s.goal,(s."executionPlan"#>>'{limits,maxBudgetUsd}')::numeric,60000,$3,$4,coalesce($6::timestamp,CURRENT_TIMESTAMP+interval '10 minutes'),$7::timestamp,$8::text,$9::timestamp FROM "Scan" s WHERE s.id=$5`,
+      [
+        ...values,
+        options.authorityMetadata.authorityAcceptedAt ?? null,
+        options.authorityMetadata.authorityTransactionId ?? null,
+        options.authorityMetadata.authorityDeadlineAt ?? null,
+      ]
+    )
+    return attemptId
+  }
   await client.query(
-    `INSERT INTO "ScanDispatchAttempt"("operationId","attemptId","scanId","workspaceId","initiatingUserId","sponsorAccountId","targetId","targetSnapshotDigest","executionPlanHash","scopeDigest","policyId","policyVersion","policyDigest","attachmentIds",mode,goal,"maxBudgetUsd","maxRuntimeMs","authorityEpochId","workerInstanceGrantId","expiresAt"${metadataColumn}) SELECT $1,$2,s.id,s."workspaceId",s."createdById",s."sponsorAccountId",s."targetId",app.scan_target_snapshot_digest(s."targetId"),s."executionPlanHash",app.scan_dispatch_scope_digest(s.id),s."policyId",'dispatch-v1',app.scan_policy_digest(s."policyId"),'{}',s.mode,s.goal,(s."executionPlan"#>>'{limits,maxBudgetUsd}')::numeric,60000,$3,$4,coalesce($6::timestamp,CURRENT_TIMESTAMP+interval '10 minutes')${metadataValue} FROM "Scan" s WHERE s.id=$5`,
-    [f.operationId, attemptId, f.epochId, f.grantId, f.scanId, expiresAt ?? null]
+    `INSERT INTO "ScanDispatchAttempt"("operationId","attemptId","scanId","workspaceId","initiatingUserId","sponsorAccountId","targetId","targetSnapshotDigest","executionPlanHash","scopeDigest","policyId","policyVersion","policyDigest","attachmentIds",mode,goal,"maxBudgetUsd","maxRuntimeMs","authorityEpochId","workerInstanceGrantId","expiresAt") SELECT $1,$2,s.id,s."workspaceId",s."createdById",s."sponsorAccountId",s."targetId",app.scan_target_snapshot_digest(s."targetId"),s."executionPlanHash",app.scan_dispatch_scope_digest(s.id),s."policyId",'dispatch-v1',app.scan_policy_digest(s."policyId"),'{}',s.mode,s.goal,(s."executionPlan"#>>'{limits,maxBudgetUsd}')::numeric,60000,$3,$4,coalesce($6::timestamp,CURRENT_TIMESTAMP+interval '10 minutes') FROM "Scan" s WHERE s.id=$5`,
+    values
   )
   return attemptId
 }
@@ -255,12 +282,14 @@ export async function historicalPreparation(owner: pg.Pool, f: PreparationFixtur
 }
 
 export async function installPreparationFixtureRole(owner: pg.Pool) {
+  if (process.env.LYRASHIELD_TEST_DB_DISPOSABLE !== "1")
+    throw new Error("Disposable fixture required")
   if (
     (await owner.query("SELECT 1 FROM pg_roles WHERE rolname='dispatch_prepare_broker'")).rowCount
   )
     return
   const password = process.env.DISPATCH_PREPARATION_BROKER_PASSWORD
-  if (!password || !/^[a-f0-9]{48}$/.test(password))
+  if (!password || password.length !== 48 || !/^[a-f0-9]{48}$/.test(password))
     throw new Error("Fixture broker password unavailable")
   await owner.query(`
 DO $$ BEGIN IF NOT EXISTS(SELECT 1 FROM pg_roles WHERE rolname='dispatch_prepare_broker') THEN
@@ -299,7 +328,7 @@ export async function installPreparationRevokerRole(owner: pg.Pool) {
   if (process.env.LYRASHIELD_TEST_DB_DISPOSABLE !== "1")
     throw new Error("Disposable fixture required")
   const password = process.env.DISPATCH_AUTHORITY_REVOKER_PASSWORD
-  if (!password || !/^[a-f0-9]{48}$/.test(password))
+  if (!password || password.length !== 48 || !/^[a-f0-9]{48}$/.test(password))
     throw new Error("Fixture revoker password unavailable")
   await owner.query(`
 DO $$ BEGIN IF NOT EXISTS(SELECT 1 FROM pg_roles WHERE rolname='dispatch_authority_revoker') THEN
