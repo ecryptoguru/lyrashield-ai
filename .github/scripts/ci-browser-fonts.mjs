@@ -176,7 +176,13 @@ export function verifyBitmapFont(compressed) {
     // Legacy BDF accelerator tables reserve 100 bytes in the TOC even when
     // their optional ink bounds are absent and only 48 bytes are stored.
     const stored = type === 256 ? Math.min(size, 48) : size
-    if (types.has(type) || size < 4 || offset < start || offset + stored > bytes.length)
+    if (
+      types.has(type) ||
+      size < 4 ||
+      size > 16 * 1024 * 1024 ||
+      offset < start ||
+      offset + stored > bytes.length
+    )
       throw new Error("Invalid legacy PCF font table bounds")
     types.add(type)
   }
