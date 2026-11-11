@@ -1,6 +1,12 @@
-import { createHash } from "node:crypto"
+import { createHash, generateKeyPairSync } from "node:crypto"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { buildLaunchReportPayload, computeLaunchReportChecksum } from "./launch-report-payload"
+import { isLaunchReportShareablePayload } from "./launch-report-html"
+import { signLaunchReportChecksum, verifyLaunchReportSignature } from "./launch-report-signing"
+
+const signingKeys = generateKeyPairSync("ed25519")
+const privateKey = signingKeys.privateKey.export({ type: "pkcs8", format: "pem" }).toString()
+const publicKey = signingKeys.publicKey.export({ type: "spki", format: "pem" }).toString()
 
 const policy = {
   id: "policy-1",
@@ -32,6 +38,7 @@ const mocks = vi.hoisted(() => ({
   policyFindFirst: vi.fn(),
   scanFindFirst: vi.fn(),
   findingFindFirst: vi.fn(),
+  findingFindMany: vi.fn(),
   findingVerificationFindFirst: vi.fn(),
   reportCreate: vi.fn(),
   reportFindFirst: vi.fn(),
@@ -41,10 +48,11 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("./client", () => ({
   prisma: {
+    $queryRaw: mocks.findingFindMany,
     gateVerdict: { findFirst: mocks.gateVerdictFindFirst },
     policy: { findFirst: mocks.policyFindFirst },
     scan: { findFirst: mocks.scanFindFirst },
-    finding: { findFirst: mocks.findingFindFirst },
+    finding: { findFirst: mocks.findingFindFirst, findMany: mocks.findingFindMany },
     findingVerification: { findFirst: mocks.findingVerificationFindFirst },
     report: { create: mocks.reportCreate, findFirst: mocks.reportFindFirst },
   },
@@ -60,6 +68,7 @@ vi.mock("./rls", () => ({
 }))
 vi.mock("./report-service", () => ({
   getReportByShareToken: mocks.getReportByShareToken,
+  readActiveSharedReport: (..._args: unknown[]) => mocks.reportFindFirst(),
 }))
 vi.mock("@lyrashield/logger", () => ({
   logger: { info: vi.fn(), error: vi.fn(), warn: vi.fn() },
@@ -141,10 +150,19 @@ function verdictRow(overrides: Record<string, unknown> = {}) {
     nonCoverage: [],
     blockingReasons: [],
     evidenceSummary: {
-      verified: 3,
-      retestConfirmed: 1,
+      detected: 0,
+      validated: 0,
+      verified: 0,
+      retestConfirmed: 0,
+      inconclusive: 0,
+      insufficientPositiveEvidence: 0,
+      blockingUnverified: 0,
       unresolvedCritical: 0,
       unresolvedHigh: 0,
+      unresolvedMedium: 0,
+      unresolvedLow: 0,
+      acceptedRisk: 0,
+      falsePositive: 0,
     },
     staleness: { current: true },
     inputChecksum: "in-1",
@@ -177,7 +195,40 @@ describe("generateLaunchReport — issue-time applicability and private binding"
     mocks.policyFindFirst.mockResolvedValue(policy)
     mocks.scanFindFirst.mockResolvedValue(null)
     mocks.findingFindFirst.mockResolvedValue(null)
+    mocks.findingFindMany.mockResolvedValue([])
     mocks.findingVerificationFindFirst.mockResolvedValue(null)
+  })
+
+  it("refuses to issue a report from a legacy untrusted retest verdict", async () => {
+    mocks.findingFindMany.mockResolvedValue([
+      {
+        id: "finding-1",
+        targetId: "target-1",
+        scanId: "baseline",
+        dedupeKey: "f",
+        severity: "HIGH",
+        status: "FIXED",
+        verificationStatus: "DETECTED",
+        lastSeenAt: EVALUATED_AT,
+        disposition: null,
+        dispositionActorUserId: null,
+        dispositionReason: null,
+        dispositionAssessmentId: null,
+        dispositionAt: null,
+        canonicalFindingId: null,
+        verificationReceipts: [
+          {
+            status: "VALIDATED",
+            method: "RETEST",
+            scanId: "scan-1",
+            verifierVersion: "result-integrity-v2",
+            evidence: {},
+          },
+        ],
+      },
+    ])
+    await expect(issue()).rejects.toMatchObject({ code: "UNTRUSTED_GATE_EVIDENCE" })
+    expect(mocks.reportCreate).not.toHaveBeenCalled()
   })
 
   it("returns null and writes nothing when the target has no verdict", async () => {
@@ -396,6 +447,20 @@ describe("getLaunchReportDetail — authenticated private reader", () => {
 })
 
 describe("getSharedLaunchReport — public frozen payload", () => {
+  const provenance = {
+    schemaVersion: "lyrashield-report-provenance/1.0.0",
+    gateVerdictId: "verdict-1",
+    verdictChecksum: "vc-1",
+    assessmentVersion: 2,
+    assessedIdentity: { kind: "COMMIT", value: COMMIT },
+    assessedAt: EVALUATED_AT.toISOString(),
+    issuedAt: EVALUATED_AT.toISOString(),
+    applicabilityCheckedAt: EVALUATED_AT.toISOString(),
+    applicability: "applicable",
+    reasonCodes: [],
+    historicalState: "READY",
+    effectiveState: "READY",
+  }
   beforeEach(() => vi.clearAllMocks())
 
   it("marks an expired payload stale at read time without rewriting stored bytes", async () => {
@@ -403,15 +468,180 @@ describe("getSharedLaunchReport — public frozen payload", () => {
     const storedPayload = validLaunchPayload({
       expiresAt: new Date(Date.now() - 1_000).toISOString(),
     })
+    storedPayload.signature = signLaunchReportChecksum(storedPayload.reportChecksum, privateKey)
     mocks.reportFindFirst.mockResolvedValue({
       type: "launch_readiness",
       contentJson: storedPayload,
     })
     const payload = await getSharedLaunchReport("report-1", "a".repeat(64))
     expect(payload?.stale).toBe(true)
+    expect(payload?.payload).toEqual(storedPayload)
+    expect(isLaunchReportShareablePayload(payload?.payload)).toBe(true)
+    expect(
+      verifyLaunchReportSignature(
+        payload!.payload.reportChecksum,
+        payload!.payload.signature!,
+        publicKey
+      )
+    ).toBe(true)
     expect(storedPayload.stale).toBe(false)
     // Stored row untouched — the flag lives only on the returned copy.
     expect(mocks.reportCreate).not.toHaveBeenCalled()
+  })
+
+  it("shows a signed report as historical when its bound retest evidence is untrusted", async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(EVALUATED_AT.getTime() + 60_000))
+    try {
+      mocks.gateVerdictFindFirst.mockResolvedValue(verdictRow())
+      mocks.policyFindFirst.mockResolvedValue(policy)
+      mocks.scanFindFirst.mockResolvedValue(null)
+      mocks.findingFindFirst.mockResolvedValue(null)
+      mocks.findingVerificationFindFirst.mockResolvedValue(null)
+      mocks.findingFindMany.mockResolvedValue([])
+      mocks.reportCreate.mockResolvedValue({ id: "report-1" })
+      const issued = await generateLaunchReport("workspace-1", "target-1", "user-1", {
+        now: new Date(),
+        signingPrivateKey: privateKey,
+      })
+      const provenance = mocks.reportCreate.mock.calls[0]![0].data.provenanceJson
+      const storedPayload = issued!.payload
+      mocks.getReportByShareToken.mockResolvedValue({ id: "report-1", workspaceId: "workspace-1" })
+      mocks.reportFindFirst.mockResolvedValue({
+        type: "launch_readiness",
+        contentJson: storedPayload,
+        provenanceJson: provenance,
+      })
+      mocks.findingFindMany.mockResolvedValue([
+        {
+          id: "finding-1",
+          targetId: "target-1",
+          scanId: "baseline",
+          dedupeKey: "f",
+          severity: "HIGH",
+          status: "FIXED",
+          verificationStatus: "DETECTED",
+          lastSeenAt: EVALUATED_AT,
+          disposition: null,
+          dispositionActorUserId: null,
+          dispositionReason: null,
+          dispositionAssessmentId: null,
+          dispositionAt: null,
+          canonicalFindingId: null,
+          verificationReceipts: [
+            {
+              status: "VALIDATED",
+              method: "RETEST",
+              scanId: "scan-1",
+              verifierVersion: "result-integrity-v2",
+              evidence: {},
+            },
+          ],
+        },
+      ])
+      const result = await getSharedLaunchReport("report-1", "a".repeat(64))
+      expect(result?.stale).toBe(true)
+      expect(result?.payload).toEqual(storedPayload)
+      expect(storedPayload.stale).toBe(false)
+      expect(isLaunchReportShareablePayload(result?.payload)).toBe(true)
+      expect(
+        verifyLaunchReportSignature(
+          result!.payload.reportChecksum,
+          result!.payload.signature!,
+          publicKey
+        )
+      ).toBe(true)
+      expect(mocks.reportCreate).toHaveBeenCalledTimes(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it("keeps a bound report current and marks it historical after a new assessment", async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(EVALUATED_AT.getTime() + 60_000))
+    try {
+      mocks.gateVerdictFindFirst.mockResolvedValue(verdictRow())
+      mocks.policyFindFirst.mockResolvedValue(policy)
+      mocks.scanFindFirst.mockResolvedValue(null)
+      mocks.findingFindFirst.mockResolvedValue(null)
+      mocks.findingVerificationFindFirst.mockResolvedValue(null)
+      mocks.findingFindMany.mockResolvedValue([])
+      const issued = await issue(new Date())
+      mocks.getReportByShareToken.mockResolvedValue({ id: "report-1", workspaceId: "workspace-1" })
+      mocks.reportFindFirst.mockResolvedValue({
+        type: "launch_readiness",
+        contentJson: issued.payload,
+        provenanceJson: issued.provenance,
+      })
+      const result = await getSharedLaunchReport("report-1", "a".repeat(64))
+      expect(result?.stale).toBe(false)
+      expect(isLaunchReportShareablePayload(result?.payload)).toBe(true)
+      mocks.scanFindFirst.mockResolvedValue({ id: "newer-scan" })
+      const stale = await getSharedLaunchReport("report-1", "a".repeat(64))
+      expect(stale?.stale).toBe(true)
+      expect(stale?.payload).toEqual(result?.payload)
+      expect(isLaunchReportShareablePayload(stale?.payload)).toBe(true)
+      mocks.scanFindFirst.mockResolvedValue(null)
+      mocks.policyFindFirst.mockResolvedValue({ ...policy, name: "Changed policy" })
+      expect((await getSharedLaunchReport("report-1", "a".repeat(64)))?.stale).toBe(true)
+      mocks.policyFindFirst.mockResolvedValue(policy)
+      const tampered = structuredClone(result!.payload)
+      tampered.counts.unresolvedHigh = 99
+      const {
+        reportChecksum: _old,
+        signature: _signature,
+        signingKeyId: _keyId,
+        ...unsigned
+      } = tampered
+      void _old
+      void _signature
+      void _keyId
+      tampered.reportChecksum = computeLaunchReportChecksum(unsigned)
+      expect(isLaunchReportShareablePayload(tampered)).toBe(true)
+      mocks.reportFindFirst.mockResolvedValue({
+        type: "launch_readiness",
+        contentJson: tampered,
+        provenanceJson: issued.provenance,
+      })
+      expect((await getSharedLaunchReport("report-1", "a".repeat(64)))?.stale).toBe(true)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it("treats a checksum-valid payload that does not match its bound verdict as historical", async () => {
+    const storedPayload = validLaunchPayload({
+      expiresAt: new Date(Date.now() + DAY_MS).toISOString(),
+      verdictLabel: "Ready to launch",
+    })
+    mocks.getReportByShareToken.mockResolvedValue({ id: "report-1", workspaceId: "workspace-1" })
+    mocks.reportFindFirst.mockResolvedValue({
+      type: "launch_readiness",
+      contentJson: storedPayload,
+      provenanceJson: provenance,
+    })
+    mocks.gateVerdictFindFirst.mockResolvedValue(verdictRow({ state: "NOT_READY" }))
+    expect((await getSharedLaunchReport("report-1", "a".repeat(64)))?.stale).toBe(true)
+  })
+
+  it("denies a share revoked after token lookup", async () => {
+    mocks.getReportByShareToken.mockResolvedValue({ id: "report-1", workspaceId: "workspace-1" })
+    mocks.reportFindFirst.mockResolvedValue(null)
+    expect(await getSharedLaunchReport("report-1", "a".repeat(64))).toBeNull()
+  })
+
+  it("presents an unbound legacy report as historical", async () => {
+    const storedPayload = validLaunchPayload({
+      expiresAt: new Date(Date.now() + DAY_MS).toISOString(),
+    })
+    mocks.getReportByShareToken.mockResolvedValue({ id: "report-1", workspaceId: "workspace-1" })
+    mocks.reportFindFirst.mockResolvedValue({
+      type: "launch_readiness",
+      contentJson: storedPayload,
+      provenanceJson: null,
+    })
+    expect((await getSharedLaunchReport("report-1", "a".repeat(64)))?.stale).toBe(true)
   })
 
   it("rejects malformed and checksum-mismatched shared payloads", async () => {
@@ -458,6 +688,8 @@ describe("confirmSharedLaunchReportIdentity — confirmation without disclosure"
       shareExpiresAt: new Date(Date.now() + DAY_MS),
     })
     mocks.reportFindFirst.mockResolvedValue({
+      type: "launch_readiness",
+      shareExpiresAt: new Date(Date.now() + DAY_MS),
       contentJson: payload,
       provenanceJson: provenance,
     })

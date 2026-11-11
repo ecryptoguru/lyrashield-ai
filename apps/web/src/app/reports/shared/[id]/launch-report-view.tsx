@@ -28,11 +28,17 @@ function formatDate(iso: string): string {
   })
 }
 
-export function SharedLaunchReportView({ payload }: { payload: LaunchReportShareablePayload }) {
+export function SharedLaunchReportView({
+  payload,
+  historical: readTimeHistorical = false,
+}: {
+  payload: LaunchReportShareablePayload
+  historical?: boolean
+}) {
   const tone = VERDICT_TONE[payload.verdictLabel] ?? VERDICT_TONE["Not enough evidence"]!
   const Icon = tone.Icon
   const verifyUrl = `/reports/verify`
-  const historical = payload.stale
+  const historical = payload.stale || readTimeHistorical
   // A stale report's historical verdict must not render as a live pass/fail:
   // the green/amber verdict badge is muted so the banner owns the meaning.
   const badgeVariant = historical ? "muted" : tone.variant
@@ -58,8 +64,8 @@ export function SharedLaunchReportView({ payload }: { payload: LaunchReportShare
           role="status"
           className="mb-6 rounded-md border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200"
         >
-          This historical report is superseded, expired or predates current applicability rules. Ask
-          the team to run a current gate assessment.
+          This report is historical or could not be confirmed against retained evidence. Ask the
+          team to run a current gate assessment.
         </div>
       )}
 

@@ -122,3 +122,55 @@ describe("receipt-backed deterministic retest", () => {
     }
   })
 })
+
+describe("batched retest candidate binding", () => {
+  it("rejects a legacy composer finding observed in its retest but ignores another target", async () => {
+    const input = fixture()
+    const finding = {
+      ...input.finding,
+      targetId: input.targetId,
+      dedupeKey: "legacy",
+      verificationReceipts: [input.receipt],
+    }
+    const source = {
+      targetId: input.targetId,
+      findingId: finding.id,
+      scanId: input.baseline.id,
+      dedupeKey: "legacy",
+      scannerSource: "sca",
+      payload: { dedupeKey: "legacy" },
+    }
+    const observed = {
+      targetId: input.targetId,
+      findingId: null,
+      scanId: input.retestScan.id,
+      dedupeKey: "new-key",
+      scannerSource: "sca",
+      payload: {
+        dependencyIdentityVersion: "composer-lock/1",
+        dependencyLegacyDedupeKey: "legacy",
+      },
+    }
+    let candidates = [source, observed]
+    const tx = {
+      scan: { findMany: async () => [input.baseline, input.retestScan] },
+      retest: { findMany: async () => [input.retest] },
+      findingCandidate: { findMany: async () => candidates },
+    } as unknown as import("./rls").ScopedTransaction
+    const { loadReceiptBackedRetestFindingIdsAcrossTargets } =
+      await import("./retest-evidence-trust")
+    expect(
+      await loadReceiptBackedRetestFindingIdsAcrossTargets(tx, {
+        workspaceId: input.workspaceId,
+        findings: [finding],
+      })
+    ).toEqual(new Set())
+    candidates = [source, { ...observed, targetId: "other-target" }]
+    expect(
+      await loadReceiptBackedRetestFindingIdsAcrossTargets(tx, {
+        workspaceId: input.workspaceId,
+        findings: [finding],
+      })
+    ).toEqual(new Set([finding.id]))
+  })
+})

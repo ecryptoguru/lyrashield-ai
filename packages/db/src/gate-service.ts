@@ -13,6 +13,7 @@ import {
   type GateVerdictResult,
 } from "@lyrashield/gate"
 import { fingerprintPolicy, parseAssessmentSnapshot } from "./gate-assessment"
+import { findMismatchedGateEvidence, invalidateUntrustedGateEvidence } from "./gate-reader-evidence"
 import { withWorkspaceRLS, type ScopedTransaction } from "./rls"
 
 export { parseAssessmentSnapshot }
@@ -61,6 +62,9 @@ export async function evaluateVerdictApplicability(
     state: string
     evaluatedAt: Date
     assessmentSnapshot: unknown
+    scanId: string | null
+    evidenceSummary: unknown
+    blockingReasons: unknown
   },
   options: GateApplicabilityOptions = {}
 ): Promise<GateApplicabilityResult> {
@@ -118,7 +122,7 @@ export async function evaluateVerdictApplicability(
         }),
       ])
     : [null, null, null]
-  return evaluateGateApplicability(verdict.state as GateVerdictResult["state"], {
+  const result = evaluateGateApplicability(verdict.state as GateVerdictResult["state"], {
     snapshot,
     expectedCommit: options.expectedCommit,
     expectedArtifactDigest: options.expectedArtifactDigest,
@@ -127,6 +131,13 @@ export async function evaluateVerdictApplicability(
     newerAssessmentAttempt: Boolean(newerAssessmentAttempt),
     evidenceChanged: Boolean(findingChanged || verificationChanged),
   })
+  if (
+    snapshot &&
+    (await findMismatchedGateEvidence(tx, workspaceId, [verdict])).has(verdict.targetId)
+  ) {
+    return invalidateUntrustedGateEvidence(result)
+  }
+  return result
 }
 
 /**
@@ -138,7 +149,7 @@ export async function getCurrentGateVerdict(
   targetId: string,
   options: GateApplicabilityOptions = {}
 ) {
-  return withWorkspaceRLS(workspaceId, async (tx) => {
+  const read = async (tx: ScopedTransaction) => {
     const historical = await tx.gateVerdict.findFirst({
       where: { workspaceId, targetId },
       orderBy: [{ evaluatedAt: "desc" }, { id: "desc" }],
@@ -160,5 +171,6 @@ export async function getCurrentGateVerdict(
       },
       historical,
     }
-  })
+  }
+  return withWorkspaceRLS(workspaceId, read, { isolationLevel: "RepeatableRead" })
 }

@@ -1,8 +1,7 @@
 import {
   getReportByShareToken,
-  getShareableReport,
+  getShareableReportByToken,
   getSharedLaunchReport,
-  type LaunchReportShareablePayload,
 } from "@lyrashield/db"
 import { notFound } from "next/navigation"
 import { SharedReportView } from "./shared-report-view"
@@ -34,10 +33,12 @@ export default async function SharedReportPage({
   // token-gated and fail-closed (unknown/revoked/expired → 404).
   const launchPayload = await getSharedLaunchReport(report.id, token)
   if (launchPayload) {
-    return <SharedLaunchReportView payload={launchPayload as LaunchReportShareablePayload} />
+    return (
+      <SharedLaunchReportView payload={launchPayload.payload} historical={launchPayload.stale} />
+    )
   }
 
-  const shareable = await getShareableReport(report.id, report.workspaceId)
+  const shareable = await getShareableReportByToken(report.id, report.workspaceId, token)
   if (!shareable || shareable.type === "release_packet") return notFound()
 
   return <SharedReportView report={shareable} />

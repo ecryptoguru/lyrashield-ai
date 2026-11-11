@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
   reportFindFirst: vi.fn(),
+  queryRaw: vi.fn(),
   updateMany: vi.fn(),
   scanFindFirst: vi.fn(),
   groupBy: vi.fn(),
@@ -17,6 +18,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("../../../../../../../packages/db/src/client", () => ({
   prisma: {
+    $queryRaw: mocks.queryRaw,
     report: { findFirst: mocks.reportFindFirst, updateMany: mocks.updateMany },
     scan: { findFirst: mocks.scanFindFirst },
     finding: { groupBy: mocks.groupBy },
@@ -96,6 +98,14 @@ describe("release packet cannot cross the generic report boundary", () => {
       })
     )
     mocks.reportFindFirst.mockResolvedValue(report)
+    mocks.queryRaw.mockImplementation(async (_sql, id, workspaceId, hash) =>
+      id === report.id &&
+      workspaceId === report.workspaceId &&
+      hash === report.shareTokenHash &&
+      !report.revokedAt
+        ? [report]
+        : []
+    )
     mocks.tokenFindFirst.mockImplementation(async ({ where }) =>
       where.shareTokenHash === report.shareTokenHash && report.revokedAt === null
         ? { id: report.id, workspaceId: report.workspaceId, shareExpiresAt: report.shareExpiresAt }
@@ -136,6 +146,28 @@ describe("release packet cannot cross the generic report boundary", () => {
       SharedReportPage({ ...params, searchParams: Promise.resolve({ token }) })
     ).rejects.toThrow("NEXT_NOT_FOUND")
     expect(mocks.requirePermission).not.toHaveBeenCalled()
+    expect(mocks.scanFindFirst).not.toHaveBeenCalled()
+    expect(mocks.groupBy).not.toHaveBeenCalled()
+  })
+
+  it("denies the generic page when a token is revoked after lookup", async () => {
+    report.type = "developer"
+    mocks.queryRaw.mockResolvedValue([])
+    await expect(
+      SharedReportPage({ ...params, searchParams: Promise.resolve({ token }) })
+    ).rejects.toThrow("NEXT_NOT_FOUND")
+    expect(mocks.scanFindFirst).not.toHaveBeenCalled()
+    expect(mocks.groupBy).not.toHaveBeenCalled()
+  })
+
+  it("denies the generic API when a token is revoked after lookup", async () => {
+    report.type = "developer"
+    mocks.queryRaw.mockResolvedValue([])
+    const response = await sharedGet(
+      new Request(`http://localhost/api/reports/shared/${report.id}?token=${token}`),
+      params
+    )
+    expect(response.status).toBe(404)
     expect(mocks.scanFindFirst).not.toHaveBeenCalled()
     expect(mocks.groupBy).not.toHaveBeenCalled()
   })

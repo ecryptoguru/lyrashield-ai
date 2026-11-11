@@ -261,6 +261,7 @@ export {
   revokeReleasePacketShareToken,
   getReportByShareToken,
   getShareableReport,
+  getShareableReportByToken,
   resolveReportDelegationTarget,
   reportSnapshotScanBindingMatches,
   listReports,

@@ -4,8 +4,9 @@ import {
   type GateVerdictResult,
 } from "@lyrashield/gate"
 import { fingerprintPolicy, parseAssessmentSnapshot } from "./gate-assessment"
+import { findMismatchedGateEvidence, invalidateUntrustedGateEvidence } from "./gate-reader-evidence"
 import type { GateApplicabilityOptions } from "./gate-service"
-import { withWorkspaceRLS } from "./rls"
+import { withWorkspaceRLS, type ScopedTransaction } from "./rls"
 
 /**
  * Batched form of getCurrentGateVerdict for read surfaces that evaluate every
@@ -27,7 +28,7 @@ export async function getCurrentGateVerdicts(
 
   const nowMs = (options.now ?? new Date()).getTime()
 
-  await withWorkspaceRLS(workspaceId, async (tx) => {
+  const read = async (tx: ScopedTransaction) => {
     // 1) Latest verdict per target — DISTINCT ON over the existing
     // (workspaceId, targetId, evaluatedAt) index. RLS applies: this runs
     // inside the transaction after SET LOCAL app.current_workspace_id.
@@ -146,23 +147,36 @@ export async function getCurrentGateVerdicts(
       verificationChangedTargets = new Set(verificationRows.map((row) => row.targetId))
     }
 
-    // 4) Apply the same applicability rules per target, in memory. The raw
-    // row is MAPPED explicitly into the historical payload — never asserted
-    // to be the Prisma model type (raw queries return JSON as parsed objects
-    // and timestamps as Date, which this mapping preserves).
-    for (const row of verdicts) {
-      const snapshot = snapshotByTarget.get(row.targetId) ?? null
-      const policy = snapshot ? (policyById.get(snapshot.policyId) ?? null) : null
-      const applicability = evaluateGateApplicability(row.state as GateVerdictResult["state"], {
-        snapshot,
-        expectedCommit: options.expectedCommit,
-        expectedArtifactDigest: options.expectedArtifactDigest,
-        policyFingerprint: fingerprintPolicy(policy as Record<string, unknown> | null),
-        nowMs,
-        newerAssessmentAttempt: newerAttemptTargets.has(row.targetId),
-        evidenceChanged:
-          findingChangedTargets.has(row.targetId) || verificationChangedTargets.has(row.targetId),
+    // Evaluate applicability and validate the finding evidence set-wide.
+    const applicabilityByTarget = new Map(
+      verdicts.map((row) => {
+        const snapshot = snapshotByTarget.get(row.targetId) ?? null
+        const policy = snapshot ? (policyById.get(snapshot.policyId) ?? null) : null
+        const applicability = evaluateGateApplicability(row.state as GateVerdictResult["state"], {
+          snapshot,
+          expectedCommit: options.expectedCommit,
+          expectedArtifactDigest: options.expectedArtifactDigest,
+          policyFingerprint: fingerprintPolicy(policy as Record<string, unknown> | null),
+          nowMs,
+          newerAssessmentAttempt: newerAttemptTargets.has(row.targetId),
+          evidenceChanged:
+            findingChangedTargets.has(row.targetId) || verificationChangedTargets.has(row.targetId),
+        })
+        return [row.targetId, applicability] as const
       })
+    )
+    const mismatches = await findMismatchedGateEvidence(
+      tx,
+      workspaceId,
+      verdicts.filter((row) => snapshotByTarget.get(row.targetId) !== null)
+    )
+
+    // Map historical rows separately; an invalid current result never rewrites history.
+    for (const row of verdicts) {
+      const current = applicabilityByTarget.get(row.targetId)!
+      const applicability = mismatches.has(row.targetId)
+        ? invalidateUntrustedGateEvidence(current)
+        : current
       results.set(row.targetId, {
         schemaVersion: "lyrashield-gate-response/2.0.0",
         state: applicability.effectiveState,
@@ -193,7 +207,8 @@ export async function getCurrentGateVerdicts(
         },
       })
     }
-  })
+  }
+  await withWorkspaceRLS(workspaceId, read, { isolationLevel: "RepeatableRead" })
 
   return results
 }

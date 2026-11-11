@@ -63,9 +63,13 @@ export function isLaunchReportShareablePayload(
   }
 }
 
-export function generateLaunchReportHTML(payload: LaunchReportShareablePayload): string {
+export function generateLaunchReportHTML(
+  payload: LaunchReportShareablePayload,
+  options: { historical?: boolean } = {}
+): string {
   const expiresAt = payload.expiresAt ? new Date(payload.expiresAt).getTime() : Number.NaN
-  const historical = payload.stale || !Number.isFinite(expiresAt) || expiresAt <= Date.now()
+  const historical =
+    options.historical || payload.stale || !Number.isFinite(expiresAt) || expiresAt <= Date.now()
   const count = (value: number | null) => (value === null ? "Not evaluated" : String(value))
   const coverage =
     payload.coverageStatement.length > 0

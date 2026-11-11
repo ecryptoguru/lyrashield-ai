@@ -360,7 +360,7 @@ export async function getReportByShareToken(
 }
 
 /** A locator grants no access: bind capability and DB time to the content SELECT. */
-async function readActiveSharedReport(
+export async function readActiveSharedReport(
   tx: ScopedTransaction,
   workspaceId: string,
   reportId: string,
@@ -386,6 +386,15 @@ export async function getShareableReport(
   } = {}
 ): Promise<ShareableReport | null> {
   return readShareableReport(reportId, workspaceId, undefined, false, options)
+}
+
+/** Revalidate the public capability in the same transaction as the content read. */
+export async function getShareableReportByToken(
+  reportId: string,
+  workspaceId: string,
+  token: string
+): Promise<ShareableReport | null> {
+  return readShareableReport(reportId, workspaceId, token)
 }
 
 async function readShareableReport(

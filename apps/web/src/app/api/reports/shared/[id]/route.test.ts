@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const getReportByShareToken = vi.fn()
-const getShareableReport = vi.fn()
+const getShareableReportByToken = vi.fn()
 
-vi.mock("@lyrashield/db", () => ({ getReportByShareToken, getShareableReport }))
+vi.mock("@lyrashield/db", () => ({ getReportByShareToken, getShareableReportByToken }))
 
 const { GET } = await import("./route")
 
@@ -50,7 +50,7 @@ describe("GET /api/reports/shared/[id]", () => {
     })
 
     expect(response.status).toBe(404)
-    expect(getShareableReport).not.toHaveBeenCalled()
+    expect(getShareableReportByToken).not.toHaveBeenCalled()
   })
 
   it("returns the shareable report when the token and id match", async () => {
@@ -59,7 +59,7 @@ describe("GET /api/reports/shared/[id]", () => {
       workspaceId: "ws-1",
       shareExpiresAt: null,
     })
-    getShareableReport.mockResolvedValue({
+    getShareableReportByToken.mockResolvedValue({
       id: "report-1",
       title: "Assurance report",
       type: "developer",
@@ -77,7 +77,7 @@ describe("GET /api/reports/shared/[id]", () => {
 
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toMatchObject({ success: true })
-    expect(getShareableReport).toHaveBeenCalledWith("report-1", "ws-1")
+    expect(getShareableReportByToken).toHaveBeenCalledWith("report-1", "ws-1", "b".repeat(64))
   })
 
   it("never serves a private release packet through the public shared-report route", async () => {
@@ -86,7 +86,7 @@ describe("GET /api/reports/shared/[id]", () => {
       workspaceId: "ws-1",
       shareExpiresAt: null,
     })
-    getShareableReport.mockResolvedValue({
+    getShareableReportByToken.mockResolvedValue({
       id: "report-1",
       title: "Private release packet",
       type: "release_packet",
@@ -123,7 +123,7 @@ describe("GET /api/reports/shared/[id]", () => {
       workspaceId: "ws-1",
       shareExpiresAt: null,
     })
-    getShareableReport.mockResolvedValue({ id: "report-1", title: "Shared report" })
+    getShareableReportByToken.mockResolvedValue({ id: "report-1", title: "Shared report" })
 
     const first = await GET(request("report-1", "d".repeat(64)), {
       params: Promise.resolve({ id: "report-1" }),

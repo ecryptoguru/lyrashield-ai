@@ -153,6 +153,7 @@ function fixture() {
         typeof where.scanId === "object" || where.scanId === baseline.id
           ? [
               {
+                targetId: input.targetId,
                 findingId: finding.id,
                 scanId: baseline.id,
                 dedupeKey: finding.dedupeKey,

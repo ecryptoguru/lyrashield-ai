@@ -23,7 +23,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ repo
   const payload = await getSharedLaunchReport(reportId, token)
   if (!payload) return new Response(null, { status: 404 })
 
-  const { text, color, labelColor } = badgeFor(payload.verdictLabel, payload.stale)
+  const { text, color, labelColor } = badgeFor(payload.payload.verdictLabel, payload.stale)
 
   const label = "launch gate"
   const labelWidth = 92

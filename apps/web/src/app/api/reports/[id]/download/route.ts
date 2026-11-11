@@ -1,5 +1,6 @@
 import {
   getShareableReport,
+  getLaunchReportDetail,
   resolveReportDelegationTarget,
   generateLaunchReportHTML,
   generateReportHTML,
@@ -78,10 +79,13 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
       let html: string
       if (reportRecord?.type === "launch_readiness") {
-        if (!isLaunchReportShareablePayload(reportRecord.contentJson)) {
+        const content: unknown = reportRecord.contentJson
+        if (!isLaunchReportShareablePayload(content)) {
           return apiError("REPORT_SNAPSHOT_MISSING", "Report snapshot is unavailable", 409)
         }
-        html = generateLaunchReportHTML(reportRecord.contentJson)
+        const launchPayload = content
+        const detail = await getLaunchReportDetail(id, workspaceId, client)
+        html = generateLaunchReportHTML(launchPayload, { historical: detail?.stale !== false })
       } else if (isReportData(reportRecord?.contentJson)) {
         if (
           !reportRecord ||

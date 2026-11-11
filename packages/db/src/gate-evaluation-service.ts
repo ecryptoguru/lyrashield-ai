@@ -10,7 +10,7 @@ import {
   type GateAssessmentSnapshot,
 } from "@lyrashield/gate"
 import { fingerprintPolicy, snapshotFromManifest, toEpochMs } from "./gate-assessment"
-import { loadGateFindings } from "./gate-retest-input"
+import { loadGateFindings, prepareGateFindingInputs } from "./gate-retest-input"
 import { withWorkspaceRLS, type ScopedTransaction } from "./rls"
 
 export interface GateEvaluationResult {
@@ -146,37 +146,6 @@ export async function evaluateGateForTarget(
       : []
 
     const { findings, trustedRetests } = await loadGateFindings(tx, workspaceId, targetId)
-    const preparedFindings = findings.map((finding) => {
-      const trustedRetest = trustedRetests.has(finding.id)
-      const positiveReceipt = latestCompletedScan
-        ? finding.verificationReceipts.some(
-            (receipt) =>
-              receipt.scanId === latestCompletedScan.id &&
-              (receipt.status === "VALIDATED" || receipt.status === "VERIFIED") &&
-              Boolean(receipt.method) &&
-              receipt.method !== "RETEST"
-          )
-        : false
-      const applicableDisposition =
-        Boolean(finding.dispositionActorUserId) &&
-        Boolean(finding.dispositionReason) &&
-        Boolean(finding.dispositionAt) &&
-        finding.dispositionAssessmentId === latestCompletedScan?.id &&
-        (finding.disposition === "ACCEPTED_RISK" || finding.disposition === "FALSE_POSITIVE")
-      return { finding, trustedRetest, positiveReceipt, applicableDisposition }
-    })
-    const byFindingId = new Map(preparedFindings.map((entry) => [entry.finding.id, entry]))
-    const duplicateResolved = (
-      entry: (typeof preparedFindings)[number],
-      seen = new Set<string>()
-    ): boolean => {
-      if (entry.trustedRetest || entry.applicableDisposition) return true
-      if (entry.finding.status !== "DUPLICATE" || !entry.finding.canonicalFindingId) return false
-      if (seen.has(entry.finding.id)) return false
-      seen.add(entry.finding.id)
-      const canonical = byFindingId.get(entry.finding.canonicalFindingId)
-      return canonical ? duplicateResolved(canonical, seen) : false
-    }
 
     const evidence: GateEvidenceInput = {
       targetId,
@@ -194,20 +163,7 @@ export async function evaluateGateForTarget(
         status: r.status as GateEvidenceInput["coverageReceipts"][number]["status"],
         reason: r.reason,
       })),
-      findings: preparedFindings.map((entry) => ({
-        id: entry.finding.id,
-        severity: entry.finding.severity,
-        status: entry.finding.status,
-        verificationStatus: entry.finding.verificationStatus,
-        retestConfirmedResolved: entry.finding.status === "FIXED" && entry.trustedRetest,
-        hasPositiveEvidence: entry.positiveReceipt || entry.trustedRetest,
-        hasApplicableDisposition: entry.applicableDisposition,
-        applicableDisposition: entry.applicableDisposition
-          ? (entry.finding.disposition as "ACCEPTED_RISK" | "FALSE_POSITIVE")
-          : null,
-        duplicateCanonicalResolved: duplicateResolved(entry),
-        lastSeenAtMs: entry.finding.lastSeenAt.getTime(),
-      })),
+      findings: prepareGateFindingInputs(findings, trustedRetests, latestCompletedScan?.id ?? null),
       requiredScanners: isTargetTypeCovered(target.type)
         ? requiredScannersForTarget(target.type, latestCompletedScan?.mode)
         : [],

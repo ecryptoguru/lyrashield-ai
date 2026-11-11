@@ -1,0 +1,239 @@
+import { createHash } from "node:crypto"
+import { Client } from "pg"
+import { afterAll, beforeAll, describe, expect, it } from "vitest"
+import { findMismatchedGateEvidence } from "./gate-reader-evidence"
+import { readActiveSharedReport } from "./report-service"
+import { loadReceiptBackedRetestFindingIdsAcrossTargets } from "./retest-evidence-trust"
+import type { ScopedTransaction } from "./rls"
+
+const url = process.env.GATE_READER_TEST_DATABASE_URL
+const client = new Client({ connectionString: url })
+const zero = {
+  detected: 0,
+  validated: 0,
+  verified: 0,
+  retestConfirmed: 0,
+  inconclusive: 0,
+  blockingUnverified: 0,
+}
+let queryCount = 0
+const raw = async (strings: TemplateStringsArray, ...values: unknown[]) => {
+  queryCount++
+  const sql = strings.reduce(
+    (text, part, i) => text + part + (i < values.length ? `$${i + 1}` : ""),
+    ""
+  )
+  return (await client.query(sql, values)).rows
+}
+
+describe.skipIf(!url)("per-target gate bounds against PostgreSQL", () => {
+  beforeAll(async () => {
+    await client.connect()
+    await client.query(`CREATE TEMP TABLE "Finding" (
+      "id" text, "workspaceId" text, "targetId" text, "severity" text, "status" text,
+      "verificationStatus" text, "lastSeenAt" timestamp, "scanId" text, "dedupeKey" text,
+      "disposition" text, "dispositionActorUserId" text, "dispositionReason" text,
+      "dispositionAssessmentId" text, "dispositionAt" timestamp, "canonicalFindingId" text, "deletedAt" timestamp
+    ); CREATE TEMP TABLE "FindingVerification" (
+      "id" text, "workspaceId" text, "findingId" text, "status" text, "method" text, "scanId" text,
+      "verifierVersion" text, "evidence" jsonb, "createdAt" timestamp
+    ); CREATE TEMP TABLE "Scan" (
+      "id" text, "workspaceId" text, "targetId" text, "status" text, "deletedAt" timestamp
+    ); CREATE TEMP TABLE "ScanResultManifest" (
+      "scanId" text, "checksum" text, "checksumInput" text, "manifest" jsonb
+    ); CREATE TEMP TABLE "ScanCoverageReceipt" (
+      "id" text, "scanId" text, "scanner" text, "controlId" text, "status" text,
+      "reason" text, "subject" text, "metadata" jsonb
+    ); CREATE TEMP TABLE "Retest" (
+      "id" text, "workspaceId" text, "findingId" text, "scanId" text, "status" text
+    ); CREATE TEMP TABLE "Report" (
+      "id" text, "workspaceId" text, "shareTokenHash" text, "revokedAt" timestamp,
+      "deletedAt" timestamp, "shareExpiresAt" timestamp
+    ); CREATE TEMP TABLE "FindingCandidate" (
+      "workspaceId" text, "targetId" text, "findingId" text, "scanId" text,
+      "dedupeKey" text, "scannerSource" text, "payload" jsonb
+    );`)
+  })
+  afterAll(async () => {
+    await client.end()
+  })
+
+  it("isolates more than 10,000 findings to their target and preserves batch/single parity", async () => {
+    await client.query(
+      `INSERT INTO "Finding" ("id", "workspaceId", "targetId", "severity", "status", "verificationStatus", "lastSeenAt", "scanId", "dedupeKey") SELECT 'f-' || n, 'ws', 'large', 'LOW', 'OPEN', 'DETECTED', NOW(), 'scan', 'k-' || n FROM generate_series(1,10001) AS n`
+    )
+    const tx = { $queryRaw: raw } as unknown as ScopedTransaction
+    const verdicts = ["large", "small"].map((targetId) => ({
+      targetId,
+      scanId: "scan",
+      evidenceSummary: zero,
+      blockingReasons: [],
+    }))
+    queryCount = 0
+    expect(await findMismatchedGateEvidence(tx, "ws", verdicts)).toEqual(new Set(["large"]))
+    expect(queryCount).toBe(1)
+    expect(await findMismatchedGateEvidence(tx, "ws", [verdicts[0]!])).toEqual(new Set(["large"]))
+    expect(await findMismatchedGateEvidence(tx, "ws", [verdicts[1]!])).toEqual(new Set())
+  })
+
+  it("isolates candidate and scan coverage limits without rejecting a valid other target", async () => {
+    function fixture(targetId: string) {
+      const makeScan = (id: string, rev: string) => {
+        const manifest = {
+          target: { id: targetId, type: "REPO", urlChecksum: null },
+          sourceExecution: { sourceRevision: rev },
+          terminalOutcome: { status: "COMPLETED" },
+          coverage: [{ scanner: "sca", controlId: "sca", status: "COMPLETED" }],
+        }
+        const checksumInput = JSON.stringify(manifest)
+        const checksum = createHash("sha256").update(checksumInput).digest("hex")
+        return {
+          id,
+          workspaceId: "ws",
+          targetId,
+          status: "COMPLETED",
+          resultManifest: { checksum, checksumInput, manifest },
+          coverageReceipts: [
+            {
+              id: `coverage-${id}`,
+              scanId: id,
+              scanner: "sca",
+              controlId: "sca",
+              status: "COMPLETED",
+              reason: null,
+              subject: null,
+              metadata: null,
+            },
+          ],
+        }
+      }
+      const baseline = makeScan(`${targetId}-base`, "b".repeat(40))
+      const retestScan = makeScan(`${targetId}-retest`, "c".repeat(40))
+      const identity = (scan: typeof baseline) => ({
+        scanId: scan.id,
+        manifestChecksum: scan.resultManifest.checksum,
+        sourceRevision: scan.resultManifest.manifest.sourceExecution.sourceRevision,
+        targetUrlChecksum: null,
+      })
+      const finding = {
+        id: `${targetId}-finding`,
+        targetId,
+        scanId: baseline.id,
+        dedupeKey: `${targetId}-key`,
+        verificationReceipts: [
+          {
+            status: "VALIDATED",
+            method: "RETEST",
+            scanId: retestScan.id,
+            verifierVersion: "result-integrity-v3",
+            evidence: {
+              retestId: `${targetId}-receipt`,
+              scannerSource: "sca",
+              baseline: identity(baseline),
+              retest: identity(retestScan),
+              coverageReceiptIds: [`coverage-${baseline.id}`, `coverage-${retestScan.id}`],
+            },
+          },
+        ],
+      }
+      return {
+        baseline,
+        retestScan,
+        finding,
+        retest: {
+          id: `${targetId}-receipt`,
+          workspaceId: "ws",
+          findingId: finding.id,
+          scanId: retestScan.id,
+          status: "passed",
+        },
+      }
+    }
+    const a = fixture("large")
+    const b = fixture("small")
+    await client.query(
+      `INSERT INTO "FindingCandidate" SELECT 'ws', 'large', NULL, 'large-retest', 'other-' || n, 'sca', '{}'::jsonb FROM generate_series(1,20001) AS n`
+    )
+    await client.query(
+      `INSERT INTO "FindingCandidate" VALUES ('ws', 'small', 'small-finding', 'small-base', 'small-key', 'sca', '{}'::jsonb)`
+    )
+    const scans = [a.baseline, a.retestScan, b.baseline, b.retestScan]
+    for (const scan of scans) {
+      await client.query('INSERT INTO "Scan" VALUES ($1,$2,$3,$4,NULL)', [
+        scan.id,
+        scan.workspaceId,
+        scan.targetId,
+        scan.status,
+      ])
+      await client.query('INSERT INTO "ScanResultManifest" VALUES ($1,$2,$3,$4)', [
+        scan.id,
+        scan.resultManifest.checksum,
+        scan.resultManifest.checksumInput,
+        JSON.stringify(scan.resultManifest.manifest),
+      ])
+      const coverage = scan.coverageReceipts[0]!
+      await client.query('INSERT INTO "ScanCoverageReceipt" VALUES ($1,$2,$3,$4,$5,$6,$7,$8)', [
+        coverage.id,
+        coverage.scanId,
+        coverage.scanner,
+        coverage.controlId,
+        coverage.status,
+        coverage.reason,
+        coverage.subject,
+        coverage.metadata,
+      ])
+    }
+    for (const retest of [a.retest, b.retest])
+      await client.query('INSERT INTO "Retest" VALUES ($1,$2,$3,$4,$5)', [
+        retest.id,
+        retest.workspaceId,
+        retest.findingId,
+        retest.scanId,
+        retest.status,
+      ])
+    const tx = { $queryRaw: raw } as unknown as ScopedTransaction
+    async function evaluate(findings: (typeof a.finding)[]) {
+      const unverified = new Set<string>()
+      const trusted = await loadReceiptBackedRetestFindingIdsAcrossTargets(tx, {
+        workspaceId: "ws",
+        findings,
+        bounded: true,
+        unverifiedTargetIds: unverified,
+      })
+      return { trusted, unverified }
+    }
+    const both = await evaluate([a.finding, b.finding])
+    expect(both).toEqual({ trusted: new Set([b.finding.id]), unverified: new Set(["large"]) })
+    expect(await evaluate([a.finding])).toEqual({
+      trusted: new Set(),
+      unverified: new Set(["large"]),
+    })
+    expect(await evaluate([b.finding])).toEqual({
+      trusted: new Set([b.finding.id]),
+      unverified: new Set(),
+    })
+    await client.query(
+      `INSERT INTO "ScanCoverageReceipt" SELECT 'extra-' || n, 'large-base', 'sca', 'extra-' || n, 'COMPLETED', NULL, NULL, NULL FROM generate_series(1,512) AS n`
+    )
+    const coverage = await evaluate([a.finding, b.finding])
+    expect(coverage).toEqual({ trusted: new Set([b.finding.id]), unverified: new Set(["large"]) })
+  })
+  it("revalidates the share capability at the content read", async () => {
+    const token = "a".repeat(64)
+    const hash = createHash("sha256").update(token).digest("hex")
+    await client.query(
+      `INSERT INTO "Report" VALUES ($1, $2, $3, NULL, NULL, now() + interval '1 hour')`,
+      ["report", "ws", hash]
+    )
+    const tx = { $queryRaw: raw } as unknown as ScopedTransaction
+    expect((await readActiveSharedReport(tx, "ws", "report", token))?.id).toBe("report")
+    expect(await readActiveSharedReport(tx, "other", "report", token)).toBeNull()
+    await client.query('UPDATE "Report" SET "revokedAt" = now() WHERE "id" = $1', ["report"])
+    expect(await readActiveSharedReport(tx, "ws", "report", token)).toBeNull()
+    await client.query(
+      'UPDATE "Report" SET "revokedAt" = NULL, "shareTokenHash" = $1 WHERE "id" = $2',
+      ["rotated", "report"]
+    )
+    expect(await readActiveSharedReport(tx, "ws", "report", token)).toBeNull()
+  })
+})

@@ -24,6 +24,7 @@ import { logger } from "@lyrashield/logger"
 import { env } from "@lyrashield/config"
 import { withWorkspaceRLS, type ScopedTransaction } from "./rls"
 import { evaluateVerdictApplicability, parseAssessmentSnapshot } from "./gate-service"
+import { isDeepStrictEqual } from "node:util"
 import type { GateApplicabilityResult } from "@lyrashield/gate"
 import {
   buildLaunchReportPayload,
@@ -94,6 +95,14 @@ export type ReleaseIdentityConfirmation = "MATCH" | "MISMATCH" | "UNAVAILABLE"
  * @param opts.signingPrivateKey  Signing key resolved by the caller (env in
  *   dev, Azure Key Vault in production); omitted -> env fallback -> unsigned.
  */
+export class UntrustedGateEvidenceError extends Error {
+  readonly code = "UNTRUSTED_GATE_EVIDENCE"
+  constructor() {
+    super("The stored gate verdict needs a fresh assessment before a report can be issued.")
+    this.name = "UntrustedGateEvidenceError"
+  }
+}
+
 export async function generateLaunchReport(
   workspaceId: string,
   targetId: string,
@@ -160,54 +169,13 @@ export async function generateLaunchReport(
   const verdict = selection.verdict
   const applicability = selection.applicability
   if (!verdict) return null
+  if (applicability?.reasons.some((reason) => reason.code === "UNTRUSTED_GATE_EVIDENCE")) {
+    throw new UntrustedGateEvidenceError()
+  }
 
   const issuedAt = opts.now ?? new Date()
 
-  // Stored evidenceSummary comes from the gate's versioned output. Verdicts
-  // persisted before the per-severity counts existed lack
-  // unresolvedCritical/unresolvedHigh — a missing value reading as 0 would
-  // silently understate unresolved work, so re-derive from blockingReasons
-  // (which carried the CRITICAL/HIGH truth for those older verdicts).
-  const storedSummary = verdict.evidenceSummary as LaunchReportSource["evidenceSummary"] & {
-    unresolvedCritical?: number
-    unresolvedHigh?: number
-  }
-  const blockingReasons = verdict.blockingReasons as LaunchReportSource["blockingReasons"]
-  const legacyCritical = blockingReasons.filter((b) => b.severity === "CRITICAL").length
-  const legacyHigh = blockingReasons.filter((b) => b.severity === "HIGH").length
-  const evidenceSummary: LaunchReportSource["evidenceSummary"] = {
-    verified: storedSummary.verified,
-    retestConfirmed: storedSummary.retestConfirmed,
-    unresolvedMedium: storedSummary.unresolvedMedium,
-    unresolvedLow: storedSummary.unresolvedLow,
-    acceptedRisk: storedSummary.acceptedRisk,
-    falsePositive: storedSummary.falsePositive,
-    unresolvedCritical:
-      typeof storedSummary.unresolvedCritical === "number"
-        ? storedSummary.unresolvedCritical
-        : legacyCritical,
-    unresolvedHigh:
-      typeof storedSummary.unresolvedHigh === "number" ? storedSummary.unresolvedHigh : legacyHigh,
-  }
-
-  // `stale` now means "not applicable at issue": expired, policy drift, newer
-  // attempt, evidence drift, missing binding — or "unknown" when the check
-  // itself failed. The stored staleness snapshot is never trusted: it freezes
-  // whatever was true when the verdict was computed, not when the report
-  // issues.
-  const current = applicability?.applicable === true
-
-  const source: LaunchReportSource = {
-    standardVersion: verdict.standardVersion,
-    state: verdict.state as LaunchReportSource["state"],
-    coverageStatement: verdict.coverageStatement as string[],
-    nonCoverage: verdict.nonCoverage as LaunchReportSource["nonCoverage"],
-    blockingReasons,
-    evidenceSummary,
-    staleness: { current },
-    verdictChecksum: verdict.verdictChecksum,
-    evaluatedAt: verdict.evaluatedAt,
-  }
+  const source = reportSourceFromVerdict(verdict, applicability?.applicable === true)
 
   const payload = buildLaunchReportPayload(source, {
     appDisplayName: opts.appDisplayName,
@@ -275,6 +243,87 @@ export async function generateLaunchReport(
   return { reportId: report.id, payload }
 }
 
+function reportSourceFromVerdict(verdict: GateVerdict, current: boolean): LaunchReportSource {
+  // Stored evidenceSummary comes from the gate's versioned output. Verdicts
+  // persisted before the per-severity counts existed lack
+  // unresolvedCritical/unresolvedHigh — a missing value reading as 0 would
+  // silently understate unresolved work, so re-derive from blockingReasons
+  // (which carried the CRITICAL/HIGH truth for those older verdicts).
+  const storedSummary = verdict.evidenceSummary as LaunchReportSource["evidenceSummary"] & {
+    unresolvedCritical?: number
+    unresolvedHigh?: number
+  }
+  const blockingReasons = verdict.blockingReasons as LaunchReportSource["blockingReasons"]
+  const legacyCritical = blockingReasons.filter((b) => b.severity === "CRITICAL").length
+  const legacyHigh = blockingReasons.filter((b) => b.severity === "HIGH").length
+  const evidenceSummary: LaunchReportSource["evidenceSummary"] = {
+    verified: storedSummary.verified,
+    retestConfirmed: storedSummary.retestConfirmed,
+    unresolvedMedium: storedSummary.unresolvedMedium,
+    unresolvedLow: storedSummary.unresolvedLow,
+    acceptedRisk: storedSummary.acceptedRisk,
+    falsePositive: storedSummary.falsePositive,
+    unresolvedCritical:
+      typeof storedSummary.unresolvedCritical === "number"
+        ? storedSummary.unresolvedCritical
+        : legacyCritical,
+    unresolvedHigh:
+      typeof storedSummary.unresolvedHigh === "number" ? storedSummary.unresolvedHigh : legacyHigh,
+  }
+
+  // `stale` now means "not applicable at issue": expired, policy drift, newer
+  // attempt, evidence drift, missing binding — or "unknown" when the check
+  // itself failed. The stored staleness snapshot is never trusted: it freezes
+  // whatever was true when the verdict was computed, not when the report
+  // issues.
+
+  return {
+    standardVersion: verdict.standardVersion,
+    state: verdict.state as LaunchReportSource["state"],
+    coverageStatement: verdict.coverageStatement as string[],
+    nonCoverage: verdict.nonCoverage as LaunchReportSource["nonCoverage"],
+    blockingReasons,
+    evidenceSummary,
+    staleness: { current },
+    verdictChecksum: verdict.verdictChecksum,
+    evaluatedAt: verdict.evaluatedAt,
+  }
+}
+
+/** A signed report remains immutable; only its current presentation is qualified. */
+async function reportEvidenceMatches(
+  tx: ScopedTransaction,
+  workspaceId: string,
+  provenance: LaunchReportProvenance | null,
+  payload: LaunchReportShareablePayload
+): Promise<boolean> {
+  if (!provenance || provenance.applicability !== "applicable") return false
+  try {
+    const verdict = await tx.gateVerdict.findFirst({
+      where: { id: provenance.gateVerdictId, workspaceId },
+    })
+    const snapshot = verdict ? parseAssessmentSnapshot(verdict.assessmentSnapshot) : null
+    if (
+      !verdict ||
+      verdict.verdictChecksum !== provenance.verdictChecksum ||
+      verdict.assessmentVersion !== provenance.assessmentVersion ||
+      verdict.evaluatedAt.toISOString() !== provenance.assessedAt ||
+      verdict.state !== provenance.historicalState ||
+      !isDeepStrictEqual(snapshot?.identity ?? null, provenance.assessedIdentity) ||
+      payload.issuedAt !== provenance.issuedAt
+    )
+      return false
+    const expected = buildLaunchReportPayload(reportSourceFromVerdict(verdict, true), {
+      appDisplayName: payload.appDisplayName,
+      issuedAt: new Date(provenance.issuedAt),
+    })
+    if (expected.reportChecksum !== payload.reportChecksum) return false
+    return (await evaluateVerdictApplicability(tx, workspaceId, verdict)).applicable
+  } catch {
+    return false
+  }
+}
+
 /**
  * Private detail for the authenticated report reader: the frozen issue-time
  * binding plus the payload's public verdict label. Returns null when the
@@ -309,17 +358,24 @@ export async function getLaunchReportDetail(
       }
     }
     const payload = content
+    const provenance = parseLaunchReportProvenance(report.provenanceJson)
+    const expired =
+      !Number.isFinite(Date.parse(payload.expiresAt ?? "")) ||
+      Date.parse(payload.expiresAt ?? "") <= Date.now()
+    const stale =
+      payload.stale ||
+      expired ||
+      !(await reportEvidenceMatches(tx, workspaceId, provenance, payload))
     return {
       verdictLabel: payload.verdictLabel,
-      stale:
-        payload.stale ||
-        !Number.isFinite(Date.parse(payload.expiresAt ?? "")) ||
-        Date.parse(payload.expiresAt ?? "") <= Date.now(),
+      stale,
       currentApplicability: "UNKNOWN" as const,
-      provenance: parseLaunchReportProvenance(report.provenanceJson),
+      provenance,
     }
   }
-  return client ? read(client) : withWorkspaceRLS(workspaceId, read)
+  return client
+    ? read(client)
+    : withWorkspaceRLS(workspaceId, read, { isolationLevel: "RepeatableRead" })
 }
 
 /**
@@ -331,28 +387,33 @@ export async function getLaunchReportDetail(
 export async function getSharedLaunchReport(
   reportId: string,
   token: string
-): Promise<LaunchReportShareablePayload | null> {
-  const { getReportByShareToken } = await import("./report-service")
+): Promise<{ payload: LaunchReportShareablePayload; stale: boolean } | null> {
+  const { getReportByShareToken, readActiveSharedReport } = await import("./report-service")
   const resolved = await getReportByShareToken(token)
   if (!resolved || resolved.id !== reportId) return null
 
-  return withWorkspaceRLS(resolved.workspaceId, async (tx) => {
-    const report = await tx.report.findFirst({
-      where: { id: reportId, workspaceId: resolved.workspaceId, deletedAt: null },
-      select: { contentJson: true, type: true },
-    })
-    if (!report || report.type !== "launch_readiness") return null
-    const content: unknown = report.contentJson
-    if (!isLaunchReportShareablePayload(content)) return null
-    const payload = content
-    const expiresAtMs = payload.expiresAt ? new Date(payload.expiresAt).getTime() : Number.NaN
-    // Stored bytes and their signature remain immutable. This is a read-time
-    // presentation flag so legacy or expired reports never render as current.
-    if (!Number.isFinite(expiresAtMs) || expiresAtMs <= Date.now()) {
-      return { ...payload, stale: true }
-    }
-    return payload
-  })
+  return withWorkspaceRLS(
+    resolved.workspaceId,
+    async (tx) => {
+      const report = await readActiveSharedReport(tx, resolved.workspaceId, reportId, token)
+      if (!report || report.type !== "launch_readiness") return null
+      const content: unknown = report.contentJson
+      if (!isLaunchReportShareablePayload(content)) return null
+      const payload = content
+      const expiresAtMs = payload.expiresAt ? new Date(payload.expiresAt).getTime() : Number.NaN
+      // Stored bytes and their signature remain immutable. This is a read-time
+      // presentation flag so legacy or expired reports never render as current.
+      if (payload.stale || !Number.isFinite(expiresAtMs) || expiresAtMs <= Date.now()) {
+        return { payload, stale: true }
+      }
+      const provenance = parseLaunchReportProvenance(report.provenanceJson)
+      if (!(await reportEvidenceMatches(tx, resolved.workspaceId, provenance, payload))) {
+        return { payload, stale: true }
+      }
+      return { payload, stale: false }
+    },
+    { isolationLevel: "RepeatableRead" }
+  )
 }
 
 /**
@@ -369,21 +430,19 @@ export async function confirmSharedLaunchReportIdentity(input: {
   reportChecksum: string
   identity: { kind: "COMMIT" | "ARTIFACT_DIGEST"; value: string }
 }): Promise<ReleaseIdentityConfirmation> {
-  const { getReportByShareToken } = await import("./report-service")
+  const { getReportByShareToken, readActiveSharedReport } = await import("./report-service")
   const resolved = await getReportByShareToken(input.token)
   if (!resolved?.shareExpiresAt || resolved.id !== input.reportId) return "UNAVAILABLE"
 
   return withWorkspaceRLS(resolved.workspaceId, async (tx) => {
-    const report = await tx.report.findFirst({
-      where: {
-        id: input.reportId,
-        workspaceId: resolved.workspaceId,
-        type: "launch_readiness",
-        deletedAt: null,
-      },
-      select: { contentJson: true, provenanceJson: true },
-    })
-    if (!report) return "UNAVAILABLE"
+    const report = await readActiveSharedReport(
+      tx,
+      resolved.workspaceId,
+      input.reportId,
+      input.token
+    )
+    if (!report || report.type !== "launch_readiness" || !report.shareExpiresAt)
+      return "UNAVAILABLE"
 
     const content: unknown = report.contentJson
     if (!isLaunchReportShareablePayload(content)) return "UNAVAILABLE"
