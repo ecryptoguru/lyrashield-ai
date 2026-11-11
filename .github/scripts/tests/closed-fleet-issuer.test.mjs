@@ -1,5 +1,6 @@
 import assert from "node:assert/strict"
 import test from "node:test"
+import { createPublicKey } from "node:crypto"
 import {
   createClosedFleetIssuer,
   issueRuntimeFleetQualification,
@@ -7,6 +8,61 @@ import {
 } from "../closed-fleet-issuer.ts"
 import { canonicalJson, evidenceKinds } from "../fleet-qualification-schema.ts"
 import { fixture, now, rawBundle } from "./fixtures/closed-fleet-fixtures.mjs"
+
+test("trust roles cannot share an RSA key through modulus aliases or relabeled key identities", () => {
+  const spki = (jwk) =>
+    createPublicKey({ key: jwk, format: "jwk" }).export({ type: "spki", format: "der" })
+  for (const role of ["inventory", "intent"]) {
+    const f = fixture()
+    const original = f.ports.trust.source.publicKey
+    const alias = {
+      ...original,
+      n: Buffer.concat([Buffer.from([0]), Buffer.from(original.n, "base64url")]).toString(
+        "base64url"
+      ),
+    }
+    assert.notEqual(alias.n, original.n)
+    assert.deepEqual(spki(alias), spki(original)) // The old string comparison accepted this same-key alias.
+    f.ports.trust[role] = { keyId: f.ports.trust[role].keyId, publicKey: alias }
+    assert.throws(() => createClosedFleetIssuer(f.ports))
+    assert.deepEqual(f.calls, [])
+
+    const relabeled = fixture()
+    relabeled.ports.trust[role] = {
+      keyId: relabeled.ports.trust[role].keyId,
+      publicKey: relabeled.ports.trust.source.publicKey,
+    }
+    assert.throws(() => createClosedFleetIssuer(relabeled.ports))
+    assert.deepEqual(relabeled.calls, [])
+  }
+})
+
+test("noncanonical RSA integers and malformed key material are rejected before signing", () => {
+  const f = fixture(),
+    original = f.ports.trust.source.publicKey
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+  const last = alphabet.indexOf(original.n.at(-1))
+  const trailingBits = original.n.slice(0, -1) + alphabet[last + 1]
+  assert.deepEqual(Buffer.from(trailingBits, "base64url"), Buffer.from(original.n, "base64url"))
+  for (const change of [
+    { n: trailingBits },
+    { n: "A" },
+    { n: "A".repeat(1025) },
+    { e: "AAEAAQ" },
+  ]) {
+    const changed = fixture()
+    changed.ports.trust.source.publicKey = { ...original, ...change }
+    assert.throws(() => createClosedFleetIssuer(changed.ports))
+    assert.deepEqual(changed.calls, [])
+  }
+  const managed = fixture()
+  managed.ports.managedKey.publicKey.n = Buffer.concat([
+    Buffer.from([0]),
+    Buffer.from(managed.ports.managedKey.publicKey.n, "base64url"),
+  ]).toString("base64url")
+  assert.throws(() => createClosedFleetIssuer(managed.ports))
+  assert.deepEqual(managed.calls, [])
+})
 
 test("complete independently signed inputs produce only a canonical closed candidate and verified managed-RSA signature", async () => {
   const f = fixture()

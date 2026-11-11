@@ -28,6 +28,10 @@ request objects or unsigned saved JSON. Each has a separate pinned RSA key and
 key identity, distinct from the managed signer and issuance-intent authority.
 Signatures, role, owner, exact fleet checksum, authority epoch and validity must
 match before any credential exchange. Strict Zod schemas reject unknown fields.
+RSA trust separation compares SHA-256 fingerprints of imported, normalized SPKI
+public keys, including modulus and exponent. Relabeling a key or adding a leading
+zero to its JWK integer cannot create another trust root. Nonminimal or
+noncanonical base64url integer encodings and malformed key material are rejected.
 
 | Port      | Required bindings                                                                                                                                                                    |
 | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |

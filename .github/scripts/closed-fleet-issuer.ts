@@ -39,9 +39,23 @@ function requireProof(condition: unknown): asserts condition {
   if (!condition) throw new Error("Closed fleet qualification proof unavailable or mismatched")
 }
 function key(pin: KeyPin, bits: number) {
+  for (const encoded of [pin.publicKey.n, pin.publicKey.e]) {
+    const bytes = Buffer.from(encoded, "base64url")
+    requireProof(bytes.length > 0 && bytes[0] !== 0 && bytes.toString("base64url") === encoded)
+  }
   const result = createPublicKey({ key: pin.publicKey, format: "jwk" })
-  requireProof(result.asymmetricKeyDetails?.modulusLength === bits)
+  requireProof(
+    result.asymmetricKeyType === "rsa" &&
+      result.asymmetricKeyDetails?.modulusLength === bits &&
+      result.asymmetricKeyDetails.publicExponent === 65537n
+  )
   return result
+}
+function keyFingerprint(pin: KeyPin, bits: number) {
+  // SPKI represents the imported modulus AND exponent, independent of JWK text.
+  return createHash("sha256")
+    .update(key(pin, bits).export({ type: "spki", format: "der" }))
+    .digest("hex")
 }
 function authenticate(envelope: unknown, pin: KeyPin, bits = 2048): SignedEnvelope {
   const result = signedEnvelopeSchema.parse(envelope)
@@ -120,14 +134,14 @@ function checkedPorts(ports: IssuerPorts) {
   }
   for (const kind of [...evidenceKinds, "intent"] as const) {
     if (kind !== "intent") requireProof(typeof ports.readers?.[kind] === "function")
-    key(trust[kind], 2048)
   }
   requireProof(new Set(Object.values(trust).map((pin) => pin.keyId)).size === 8)
-  requireProof(new Set(Object.values(trust).map((pin) => pin.publicKey.n)).size === 8)
+  const fingerprints = Object.values(trust).map((pin) => keyFingerprint(pin, 2048))
+  requireProof(new Set(fingerprints).size === 8)
   const signer = managedKeySchema.parse(ports.managedKey ?? managedKey)
-  key(signer, 3072)
-  for (const pin of Object.values(trust))
-    requireProof(pin.keyId !== signer.keyId && pin.publicKey.n !== signer.publicKey.n)
+  const signerFingerprint = keyFingerprint(signer, 3072)
+  for (const pin of Object.values(trust)) requireProof(pin.keyId !== signer.keyId)
+  requireProof(!fingerprints.includes(signerFingerprint))
   return { trust, signer }
 }
 function parseCredential(value: Awaited<ReturnType<IssuerPorts["issuer"]>>, when: number) {

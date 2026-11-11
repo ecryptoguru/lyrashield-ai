@@ -32,7 +32,15 @@ export const keyPinSchema = z
   .object({
     keyId: z.string().min(1).max(512),
     publicKey: z
-      .object({ kty: z.literal("RSA"), n: z.string().regex(/^[\w-]+$/), e: z.literal("AQAB") })
+      .object({
+        kty: z.literal("RSA"),
+        n: z
+          .string()
+          .min(1)
+          .max(1024)
+          .regex(/^[\w-]+$/),
+        e: z.literal("AQAB"),
+      })
       .strict(),
   })
   .strict()
