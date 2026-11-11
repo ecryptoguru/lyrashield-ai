@@ -256,7 +256,9 @@ export {
 export {
   createReport,
   generateShareToken,
+  generateReleasePacketShareToken,
   revokeShareToken,
+  revokeReleasePacketShareToken,
   getReportByShareToken,
   getShareableReport,
   resolveReportDelegationTarget,
