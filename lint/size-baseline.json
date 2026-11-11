@@ -615,11 +615,6 @@
       "totalExcess": 62,
       "maxExcess": 62
     },
-    "packages/db/src/gate-evaluation-service.ts|max-lines-per-function": {
-      "count": 1,
-      "totalExcess": 6,
-      "maxExcess": 6
-    },
     "packages/db/src/gate-verdict-batch.ts|max-lines-per-function": {
       "count": 1,
       "totalExcess": 2,
