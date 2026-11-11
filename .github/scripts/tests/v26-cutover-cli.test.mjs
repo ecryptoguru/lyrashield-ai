@@ -104,6 +104,48 @@ function afterMigration(f) {
   f.set({ candidate: true, active: true, worker: true })
   f.pass("verify")
 }
+test("actual retained controller verifies new producer access without granting access to the old worker", (t) => {
+  const f = fixture(t)
+  f.env.RETAINED_WORKER_SOURCE = "b".repeat(40)
+  f.set({ schema: true, grants: true, delegatedSchema: true })
+  f.pass("prepare")
+  f.pass("retained-schema")
+  assert.deepEqual(f.get().delegatedPrincipals, ["app_runtime"])
+  assert.deepEqual(f.get().grantedSql, [])
+  assert.equal(f.get().stop, null)
+  f.set({ candidate: true })
+  f.pass("retained-schema")
+})
+test("actual retained controller rejects missing migrations, isolation or producer privileges", async (t) => {
+  for (const options of [
+    { delegatedSchema: false },
+    { delegatedRlsDisabled: true },
+    { delegatedSelectMissing: true },
+    { delegatedInsertMissing: true },
+    { grants: false },
+  ])
+    await t.test(JSON.stringify(options), (t) => {
+      const f = fixture(t)
+      f.env.RETAINED_WORKER_SOURCE = "b".repeat(40)
+      f.set({ schema: true, grants: true, delegatedSchema: true, ...options })
+      f.pass("prepare")
+      const result = f.run("retained-schema")
+      assert.notEqual(result.status, 0)
+      assert.doesNotMatch(
+        result.stdout + result.stderr,
+        /app_runtime|worker_runtime|postgresql:|redis:\/\//
+      )
+      assert.deepEqual(f.get().grantedSql, [])
+      assert.equal(f.get().stop, null)
+    })
+})
+test("new schema verification cannot be invoked through ordinary worker promotion", (t) => {
+  const f = fixture(t)
+  f.set({ schema: true, grants: true, delegatedSchema: true })
+  f.pass("prepare")
+  assert.notEqual(f.run("retained-schema").status, 0)
+  assert.deepEqual(f.get().grantedSql, [])
+})
 test("actual controller and VM-state CLIs complete with distinct derived runtime roles and real durable receipt", (t) => {
   const f = fixture(t)
   afterMigration(f)
@@ -308,4 +350,23 @@ test("workflow tag@digest controller inputs remain usable for the next release w
   assert.equal(prepared.schema, "current")
   assert.match(prepared.webImage, /lyrashield-web:[a-f0-9]{40}@sha256:/)
   assert.match(prepared.workerImage, /lyrashield-worker:[a-f0-9]{40}@sha256:/)
+})
+
+test("actual controller composes mixed source image checks and refuses retained-worker schema maintenance", (t) => {
+  const f = fixture(t)
+  f.env.RETAINED_WORKER_SOURCE = "b".repeat(40)
+  const rejected = f.run("prepare")
+  assert.notEqual(rejected.status, 0)
+  assert.equal(f.get().stop, null)
+  assert.equal(f.get().active, true)
+  assert.equal(f.get().worker, true)
+  assert.equal(f.get().imageQualificationArgs, undefined)
+  f.set({ schema: true })
+  f.pass("prepare")
+  assert.equal(f.get().imageQualificationArgs[3], f.env.DEPLOY_SHA)
+  assert.equal(f.get().imageQualificationArgs[4], f.env.ENGINE_REVISION)
+  assert.equal(f.get().imageQualificationArgs[5], f.env.RETAINED_WORKER_SOURCE)
+  assert.equal(f.get().stop, null)
+  assert.equal(f.get().active, true)
+  assert.equal(f.get().worker, true)
 })

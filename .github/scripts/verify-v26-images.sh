@@ -5,6 +5,9 @@ web=${1:?web digest reference required}
 worker=${2:?worker digest reference required}
 source=${3:?source revision required}
 engine=${4:?engine revision required}
+worker_source=${5:-$source}
+case "$worker_source" in *[!a-f0-9]*|'') exit 1;; esac
+[ "${#worker_source}" -eq 40 ] || exit 1
 case "$source" in *[!a-f0-9]*|'') exit 1;; esac
 case "$engine" in *[!a-f0-9]*|'') exit 1;; esac
 [ "${#source}" -eq 40 ] && [ "${#engine}" -eq 40 ] || exit 1
@@ -14,7 +17,9 @@ for image in "$web" "$worker"; do
   case "$digest" in *[!a-f0-9]*|'') exit 1;; esac
   [ "${#digest}" -eq 64 ] || exit 1
   docker pull "$image" >/dev/null
-  [ "$(docker image inspect "$image" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')" = "$source" ] || exit 1
+  expected_source=$source
+  [ "$image" != "$worker" ] || expected_source=$worker_source
+  [ "$(docker image inspect "$image" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')" = "$expected_source" ] || exit 1
   [ "$(docker image inspect "$image" --format '{{index .Config.Labels "io.lyrashield.accounting.protocol"}}')" = 'reservations/2' ] || exit 1
 done
 [ "$(docker image inspect "$worker" --format '{{index .Config.Labels "io.lyrashield.engine.revision"}}')" = "$engine" ] || exit 1

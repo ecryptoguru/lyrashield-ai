@@ -3,6 +3,8 @@ name: Deploy Azure runtime
 on:
   workflow_call:
     inputs:
+      retained_worker: { required: false, default: false, type: boolean }
+      worker_source_sha: { required: false, default: "", type: string }
       source_sha:
         required: true
         type: string
@@ -56,6 +58,9 @@ permissions:
   packages: read
 env:
   DEPLOY_SHA: ${{ inputs.source_sha }}
+  RETAINED_WORKER_SOURCE: ${{ inputs.worker_source_sha }}
+  RETAINED_WORKER: ${{ inputs.retained_worker }}
+  EGRESS_PROXY_DIGEST: ${{ inputs.egress_proxy_digest }}
   V26_CUTOVER: "false"
   WEB_DIGEST: ${{ inputs.web_digest }}
   WORKER_DIGEST: ${{ inputs.worker_digest }}
@@ -275,13 +280,23 @@ jobs:
         if: inputs.qualified_release_digest != ''
         env:
           APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
-          EGRESS_NAME: ${{ vars.AZURE_EGRESS_PROXY_CONTAINER_APP_NAME }}
+          EGRESS_NAME: ${{ inputs.retained_worker != true && vars.AZURE_EGRESS_PROXY_CONTAINER_APP_NAME || '' }}
           GH_TOKEN: ${{ github.token }}
           PAIRED_JOB_WORKFLOW: .github/workflows/deploy-azure-runtime.yml
           PAIRED_QUALIFIED_RELEASE_SHA256: ${{ inputs.qualified_release_digest }}
           RG: ${{ vars.AZURE_RESOURCE_GROUP }}
           SCANNER_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
         run: node .github/scripts/paired-runtime-workflow.mjs preflight
+      - name: Verify protected retained worker and relay before runtime mutations
+        if: inputs.retained_worker == true
+        env:
+          RETAINED_WORKER_APPROVAL: ${{ vars.LYRASHIELD_RETAINED_WORKER_APPROVAL }}
+          LYRASHIELD_AI_RESULT_CACHE_MODE: ${{ vars.LYRASHIELD_AI_RESULT_CACHE_MODE || 'off' }}
+          RETAINED_EGRESS_NAME: ${{ vars.AZURE_EGRESS_PROXY_CONTAINER_APP_NAME }}
+          RG: ${{ vars.AZURE_RESOURCE_GROUP }}
+          WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
+          BULLMQ_REDIS_URL: ${{ secrets.BULLMQ_REDIS_URL }}
+        run: node .github/scripts/retained-legacy-runtime.mjs readback
       - name: Recheck v26 maintenance before any production mutation
         env:
           RG: ${{ vars.AZURE_RESOURCE_GROUP }}
@@ -458,7 +473,7 @@ jobs:
           AZURE_KEY_VAULT_NAME: ${{ vars.AZURE_KEY_VAULT_NAME || 'lyrashieldprodsecrets' }}
           AZURE_APP_CONTAINER_APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
           AZURE_SCANNER_CONTAINER_APP_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
-          AZURE_EGRESS_PROXY_CONTAINER_APP_NAME: ${{ vars.AZURE_EGRESS_PROXY_CONTAINER_APP_NAME }}
+          AZURE_EGRESS_PROXY_CONTAINER_APP_NAME: ${{ inputs.retained_worker != true && vars.AZURE_EGRESS_PROXY_CONTAINER_APP_NAME || '' }}
           GHCR_USERNAME: ${{ github.repository_owner }}
           WEB_IMAGE: ${{ inputs.web_image }}
           WEB_DIGEST: ${{ inputs.web_digest }}
@@ -471,7 +486,7 @@ jobs:
           RG: ${{ vars.AZURE_RESOURCE_GROUP }}
           APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
           SCANNER_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
-          EGRESS_NAME: ${{ vars.AZURE_EGRESS_PROXY_CONTAINER_APP_NAME }}
+          EGRESS_NAME: ${{ inputs.retained_worker != true && vars.AZURE_EGRESS_PROXY_CONTAINER_APP_NAME || '' }}
         run: |
           set -euo pipefail
           for name in "$APP_NAME" "$SCANNER_NAME" "$EGRESS_NAME"; do
@@ -484,11 +499,8 @@ jobs:
               exit 1
             }
           done
-      # Schema first, then code. Migrations previously ran only in CI against a throwaway
-      # database and never against production, so a release needing a schema change served
-      # 500s until someone remembered to run this by hand. Ordering matters: new code must
-      # never meet an old schema, which means migrations must be additive and
-      # backward-compatible with the currently running image.
+      # Apply additive, backward-compatible migrations before new code. Retained
+      # releases verify the new producer's runtime access before any traffic change.
       - name: Verify migration database continuity before maintenance
         if: inputs.held_recovery != true && inputs.webhook_claims_cutover == true
         env:
@@ -560,6 +572,7 @@ jobs:
           set -euo pipefail
           if [ "$V26_CUTOVER" = true ]; then node .github/scripts/v26-cutover.mjs before-migrate; fi
           bash .github/scripts/deploy-azure-preflight.sh run-database-migrations
+          if [ "$RETAINED_WORKER" = true ]; then node .github/scripts/v26-cutover.mjs retained-schema; fi
       - name: Grant observed runtime principals and verify v26 migration
         if: env.V26_CUTOVER == 'true'
         env:
@@ -593,13 +606,13 @@ jobs:
       # different secret stores. Keep the VM's Key Vault copy in lockstep so a
       # Redis rotation cannot leave the production worker on an exhausted plan.
       - name: Sync BullMQ Redis secret to worker Key Vault
-        if: inputs.held_recovery != true
+        if: inputs.retained_worker != true && inputs.held_recovery != true
         env:
           AZURE_KEY_VAULT_NAME: ${{ vars.AZURE_KEY_VAULT_NAME || 'lyrashieldprodsecrets' }}
           BULLMQ_REDIS_URL: ${{ secrets.BULLMQ_REDIS_URL }}
         run: bash .github/scripts/deploy-azure-preflight.sh sync-bullmq-redis-secret-to-worker-key-vault
       - name: Sync billing reconciliation credentials to worker Key Vault
-        if: inputs.held_recovery != true
+        if: inputs.retained_worker != true && inputs.held_recovery != true
         env:
           AZURE_KEY_VAULT_NAME: ${{ vars.AZURE_KEY_VAULT_NAME || 'lyrashieldprodsecrets' }}
           POLAR_ENVIRONMENT: ${{ vars.POLAR_ENVIRONMENT }}
@@ -703,7 +716,7 @@ jobs:
           AZURE_CONTAINER_APPS_SECRET_KEY_VAULT_NAME: ${{ vars.AZURE_CONTAINER_APPS_SECRET_KEY_VAULT_NAME }}
         run: bash .github/scripts/deploy-azure-preflight.sh sync-upstash-secrets-to-container-apps
       - name: Sync isolated AI result-cache secrets to worker and app Key Vaults
-        if: inputs.held_recovery != true
+        if: inputs.retained_worker != true && inputs.held_recovery != true
         id: sync-ai-result-cache
         env:
           LYRASHIELD_AI_RESULT_CACHE_MODE: ${{ vars.LYRASHIELD_AI_RESULT_CACHE_MODE || 'off' }}
@@ -775,6 +788,7 @@ jobs:
           AZURE_APP_SECRET_KEY_VAULT_NAME: ${{ vars.AZURE_APP_SECRET_KEY_VAULT_NAME }}
         run: bash .github/scripts/deploy-azure-preflight.sh sync-github-app-secrets-to-app-container-app
       - name: Sync isolated worker GitHub credentials
+        if: inputs.retained_worker != true
         env:
           HELD_RECOVERY: ${{ inputs.held_recovery }}
           GITHUB_APP_ID: ${{ secrets.LYRASHIELD_GITHUB_APP_ID }}
@@ -819,11 +833,11 @@ jobs:
         run: bash .github/scripts/deploy-azure-rollout.sh deploy-scanner-container-app
       - name: Deploy egress-proxy Container App
         id: deploy-egress-proxy
-        if: vars.AZURE_EGRESS_PROXY_CONTAINER_APP_NAME != ''
+        if: inputs.retained_worker != true && vars.AZURE_EGRESS_PROXY_CONTAINER_APP_NAME != ''
         env:
           IMAGE: ${{ inputs.egress_proxy_image }}@${{ inputs.egress_proxy_digest }}
           AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
-          AZURE_EGRESS_PROXY_CONTAINER_APP_NAME: ${{ vars.AZURE_EGRESS_PROXY_CONTAINER_APP_NAME }}
+          AZURE_EGRESS_PROXY_CONTAINER_APP_NAME: ${{ inputs.retained_worker != true && vars.AZURE_EGRESS_PROXY_CONTAINER_APP_NAME || '' }}
           AZURE_KEY_VAULT_NAME: ${{ vars.AZURE_KEY_VAULT_NAME || 'lyrashieldprodsecrets' }}
         run: bash .github/scripts/deploy-azure-rollout.sh deploy-egress-proxy-container-app
       - name: Smoke candidate revisions
@@ -834,7 +848,7 @@ jobs:
           APP_REVISION: ${{ steps.deploy-app.outputs.revision }}
           SCANNER_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
           SCANNER_REVISION: ${{ steps.deploy-scanner.outputs.revision }}
-          EGRESS_NAME: ${{ vars.AZURE_EGRESS_PROXY_CONTAINER_APP_NAME }}
+          EGRESS_NAME: ${{ inputs.retained_worker != true && vars.AZURE_EGRESS_PROXY_CONTAINER_APP_NAME || '' }}
           WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
           APP_FQDN: ${{ steps.deploy-app.outputs.fqdn }}
           SCANNER_FQDN: ${{ steps.deploy-scanner.outputs.fqdn }}
@@ -847,11 +861,22 @@ jobs:
         if: inputs.held_recovery != true && inputs.webhook_claims_cutover != true && env.V26_CUTOVER != 'true'
         id: worker-preflight
         env:
+          RETAINED_WORKER_APPROVAL: ${{ vars.LYRASHIELD_RETAINED_WORKER_APPROVAL }}
+          LYRASHIELD_AI_RESULT_CACHE_MODE: ${{ vars.LYRASHIELD_AI_RESULT_CACHE_MODE || 'off' }}
+          RETAINED_EGRESS_NAME: ${{ vars.AZURE_EGRESS_PROXY_CONTAINER_APP_NAME }}
+          BULLMQ_REDIS_URL: ${{ secrets.BULLMQ_REDIS_URL }}
           RG: ${{ vars.AZURE_RESOURCE_GROUP }}
           WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
-        run: bash .github/scripts/deploy-azure-rollout.sh verify-worker-queues-are-empty-before-traffic-promotion
-      # The prepared candidate path can itself follow a long deployment
-      # preflight. Refresh before its VM promotion and subsequent Azure calls.
+          APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
+          SCANNER_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
+          DATABASE_DIRECT_URL: ${{ secrets.DATABASE_DIRECT_URL }}
+        run: |
+          if [ "$RETAINED_WORKER" = true ]; then
+            node .github/scripts/v26-cutover.mjs retained-schema
+            node .github/scripts/retained-legacy-runtime.mjs readback
+          else
+            bash .github/scripts/deploy-azure-rollout.sh verify-worker-queues-are-empty-before-traffic-promotion
+          fi
       - name: Refresh Azure OIDC login before webhook worker boot
         if: inputs.webhook_claims_cutover == true || inputs.held_recovery == true || env.V26_CUTOVER == 'true'
         uses: Azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
@@ -879,17 +904,26 @@ jobs:
           SCANNER_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
           SCANNER_CANDIDATE: ${{ steps.deploy-scanner.outputs.revision }}
           SCANNER_PREVIOUS: ${{ steps.rollout.outputs.scanner_previous }}
-          EGRESS_NAME: ${{ vars.AZURE_EGRESS_PROXY_CONTAINER_APP_NAME }}
+          EGRESS_NAME: ${{ inputs.retained_worker != true && vars.AZURE_EGRESS_PROXY_CONTAINER_APP_NAME || '' }}
           EGRESS_CANDIDATE: ${{ steps.deploy-egress-proxy.outputs.revision }}
           EGRESS_PREVIOUS: ${{ steps.rollout.outputs.egress_previous }}
         run: bash .github/scripts/deploy-azure-rollout.sh promote-healthy-candidate-revisions
       - name: Smoke production traffic
         id: smoke-public
         env:
+          RETAINED_WORKER_APPROVAL: ${{ vars.LYRASHIELD_RETAINED_WORKER_APPROVAL }}
+          LYRASHIELD_AI_RESULT_CACHE_MODE: ${{ vars.LYRASHIELD_AI_RESULT_CACHE_MODE || 'off' }}
+          RETAINED_EGRESS_NAME: ${{ vars.AZURE_EGRESS_PROXY_CONTAINER_APP_NAME }}
+          BULLMQ_REDIS_URL: ${{ secrets.BULLMQ_REDIS_URL }}
           RG: ${{ vars.AZURE_RESOURCE_GROUP }}
-          EGRESS_NAME: ${{ vars.AZURE_EGRESS_PROXY_CONTAINER_APP_NAME }}
+          EGRESS_NAME: ${{ inputs.retained_worker != true && vars.AZURE_EGRESS_PROXY_CONTAINER_APP_NAME || '' }}
           WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
-        run: bash .github/scripts/deploy-azure-rollout.sh smoke-production-traffic
+        run: |
+          bash .github/scripts/deploy-azure-rollout.sh smoke-production-traffic
+          if [ "$RETAINED_WORKER" = true ]; then
+            node .github/scripts/retained-legacy-runtime.mjs readback
+            curl --fail --silent --show-error --max-time 10 "$APP_URL/api/ready/scans"
+          fi
       - name: Deactivate superseded Container App revisions
         id: revision-cleanup
         continue-on-error: true
@@ -902,7 +936,7 @@ jobs:
           SCANNER_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
           SCANNER_CURRENT: ${{ steps.deploy-scanner.outputs.revision }}
           SCANNER_ROLLBACK: ${{ steps.rollout.outputs.scanner_previous }}
-          EGRESS_NAME: ${{ vars.AZURE_EGRESS_PROXY_CONTAINER_APP_NAME }}
+          EGRESS_NAME: ${{ inputs.retained_worker != true && vars.AZURE_EGRESS_PROXY_CONTAINER_APP_NAME || '' }}
           EGRESS_CURRENT: ${{ steps.deploy-egress-proxy.outputs.revision }}
           EGRESS_ROLLBACK: ${{ steps.rollout.outputs.egress_previous }}
         run: bash .github/scripts/deploy-azure-rollout.sh deactivate-superseded-container-app-revisions
@@ -920,11 +954,9 @@ jobs:
       # Queues drain before app traffic promotion. The early guard proves durable
       # billing claims for every writer and rollback image; engine pins alone do not.
       # CI enforces both ENGINE_REVISION and the reverse engine worker contract.
-      # Digest-exact worker promotion persists its isolated credential-vault name
-      # with the image, restores prior configuration on failure and rolls app
-      # traffic back through the guarded cleanup steps below.
+      # Replacement promotion retains its credential vault and guarded rollback.
       - name: Refresh Azure OIDC login before ordinary worker promotion
-        if: ${{ !cancelled() && steps.smoke-public.outcome == 'success' && inputs.held_recovery != true && inputs.webhook_claims_cutover != true && env.V26_CUTOVER != 'true' }}
+        if: ${{ inputs.retained_worker != true && !cancelled() && steps.smoke-public.outcome == 'success' && inputs.held_recovery != true && inputs.webhook_claims_cutover != true && env.V26_CUTOVER != 'true' }}
         id: ordinary-worker-login
         uses: Azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
         with:
@@ -932,7 +964,7 @@ jobs:
           tenant-id: ${{ secrets.AZURE_DEPLOY_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_DEPLOY_SUBSCRIPTION_ID }}
       - name: Promote verified worker digest on VM
-        if: ${{ !cancelled() && steps.ordinary-worker-login.outcome == 'success' && inputs.held_recovery != true && inputs.webhook_claims_cutover != true && env.V26_CUTOVER != 'true' }}
+        if: ${{ inputs.retained_worker != true && !cancelled() && steps.ordinary-worker-login.outcome == 'success' && inputs.held_recovery != true && inputs.webhook_claims_cutover != true && env.V26_CUTOVER != 'true' }}
         id: worker-vm
         env:
           RG: ${{ vars.AZURE_RESOURCE_GROUP }}
@@ -963,7 +995,7 @@ jobs:
           APP_PREVIOUS: ${{ steps.rollout.outputs.app_previous }}
           SCANNER_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
           SCANNER_PREVIOUS: ${{ steps.rollout.outputs.scanner_previous }}
-          EGRESS_NAME: ${{ vars.AZURE_EGRESS_PROXY_CONTAINER_APP_NAME }}
+          EGRESS_NAME: ${{ inputs.retained_worker != true && vars.AZURE_EGRESS_PROXY_CONTAINER_APP_NAME || '' }}
           EGRESS_PREVIOUS: ${{ steps.rollout.outputs.egress_previous }}
           WORKER_VM_NAME: ${{ vars.AZURE_WORKER_VM_NAME || 'lyrashield-worker' }}
           RG: ${{ vars.AZURE_RESOURCE_GROUP }}
@@ -999,7 +1031,7 @@ jobs:
           SCANNER_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
           SCANNER_CANDIDATE: ${{ steps.deploy-scanner.outputs.revision }}
           SCANNER_PREVIOUS: ${{ steps.rollout.outputs.scanner_previous }}
-          EGRESS_NAME: ${{ vars.AZURE_EGRESS_PROXY_CONTAINER_APP_NAME }}
+          EGRESS_NAME: ${{ inputs.retained_worker != true && vars.AZURE_EGRESS_PROXY_CONTAINER_APP_NAME || '' }}
           EGRESS_CANDIDATE: ${{ steps.deploy-egress-proxy.outputs.revision }}
           EGRESS_PREVIOUS: ${{ steps.rollout.outputs.egress_previous }}
         run: bash .github/scripts/deploy-azure-rollout.sh deactivate-zero-traffic-candidates-after-failed-rollout

@@ -31,6 +31,62 @@ const expectedMigrations = () =>
     finished: true,
     rolled_back: false,
   }))
+function delegatedSchemaQuery(sql, args, s) {
+  if (sql.includes("_prisma_migrations") && args[0] === "20261105120000_delegated_scan_provenance")
+    return rows(
+      s.delegatedSchema
+        ? [
+            {
+              checksum: hash(read(`packages/db/prisma/migrations/${args[0]}/migration.sql`)),
+              finished: true,
+              rolled_back: false,
+            },
+          ]
+        : []
+    )
+  if (sql.includes("_prisma_migrations")) return rows(s.schema ? expectedMigrations() : [])
+  if (sql.includes("delegated_scan_provenance") && sql.includes("pg_catalog.pg_policy"))
+    return rows([
+      {
+        relrowsecurity: true,
+        relforcerowsecurity: !s.delegatedRlsDisabled,
+        polname: "delegated_scan_provenance_workspace",
+        polcmd: "*",
+        polpermissive: true,
+        roles: "{0}",
+        using_expression: '("workspaceId" = app.current_workspace_id())',
+        check_expression: '("workspaceId" = app.current_workspace_id())',
+      },
+    ])
+  if (sql.includes("delegated_scan_provenance") && sql.includes("pg_catalog.pg_trigger"))
+    return rows([
+      {
+        tgname: "delegated_scan_provenance_immutable",
+        tgtype: 19,
+        tgenabled: "O",
+        unconditional: true,
+        function_schema: "app",
+        proname: "reject_delegated_scan_provenance_update",
+        pronargs: 0,
+        prosecdef: false,
+        returns_trigger: true,
+        prosrc:
+          "\nBEGIN\n  RAISE EXCEPTION 'delegated scan provenance is immutable' USING ERRCODE = '23514';\nEND;\n",
+      },
+    ])
+  if (sql.includes("delegated_scan_provenance") && sql.includes("has_table_privilege")) {
+    save({ ...s, delegatedPrincipals: args[0] })
+    return rows(
+      args[0].map((rolname) => ({
+        rolname,
+        rolsuper: false,
+        rolbypassrls: false,
+        can_select: !s.delegatedSelectMissing,
+        can_insert: !s.delegatedInsertMissing,
+      }))
+    )
+  }
+}
 class Client {
   constructor(options) {
     this.role = principal(options.connectionString)
@@ -66,7 +122,8 @@ class Client {
       return rows([{ slot: s.schema, capacity: s.schema, version: s.schema, settled: s.schema }])
     if (sql.includes("slot_present"))
       return rows([{ slot_present: false, reservation_present: false }])
-    if (sql.includes("_prisma_migrations")) return rows(s.schema ? expectedMigrations() : [])
+    const delegated = delegatedSchemaQuery(sql, args, s)
+    if (delegated !== undefined) return delegated
     if (sql.includes("AS approvals"))
       return rows([{ approvals: "0", operations: "0", webhook_tracks: "0" }])
     if (sql.includes(" AS type_name")) {
@@ -315,6 +372,7 @@ child.execFileSync = function (file, args, options) {
   const s = state()
   if (file === "sh" && args[0].endsWith("verify-v26-images.sh")) {
     if (s.failure === "images") throw new Error("qualification failed")
+    save({ ...s, imageQualificationArgs: args })
     return "V26_IMAGES_QUALIFIED\n"
   }
   if (file === "docker") {
