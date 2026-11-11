@@ -20,7 +20,8 @@ fields; it never replaces or refreshes them.
 Preparation uses the existing broker lock order, then a nonblocking exclusive
 transaction advisory gate. Source DML on Workspace, WorkspaceMember, users,
 BillingAccount, agent connections/operations/provenance, Target, Policy, Scan,
-UserScanSlot and ScanCapacityReservation takes the shared gate before row DML.
+UserScanSlot, ScanCapacityReservation, ScanAuthorityEpoch and ScanWorkerInstanceGrant
+takes the shared gate before row DML.
 A transaction already holding the exclusive gate cannot mutate these sources,
 even after `SET CONSTRAINTS ALL IMMEDIATE`. Gate acquisition and validation are
 separate same-client READ COMMITTED statements; other isolation levels fail
@@ -48,6 +49,9 @@ operation provenance. Accounting-v2 capacity remains the admitted RESERVED
 funding record. This prototype does not establish full balance/funding projection,
 annual allowance, complimentary entitlement or provider qualification parity.
 Those authorities and physical consumption revalidation remain activation gates.
+Delegated membership predicates reject NULL arrays and NULL elements, including
+mixed valid/NULL arrays. Stored allowed profiles use canonical uppercase
+normalization before comparison.
 
 Acceptance and controlling deadlines use a captured database UTC wall clock,
 floored to milliseconds. Deadline is at most ten seconds, attempt/grant expiry,
@@ -55,9 +59,13 @@ and any controlling subscription, FREE trial or delegation expiry. An expired
 historical trial does not truncate active paid entitlement. This is checked-intent
 validity, not authorization at COMMIT or physical action. WAL/replication delay
 cannot be proved by a timestamp trigger. Lost COMMIT acknowledgement or an
-acknowledgement observed after deadline returns transport UNKNOWN while retaining
+acknowledgement or final caller continuation observed after the conservatively
+mapped monotonic deadline returns transport UNKNOWN while retaining
 actual durable history, which can still be PREPARING. Status exposes preparation
 eligibility separately, and expired intent remains stoppable/reconcilable.
+The same deadline bounds COMMIT and post-COMMIT liveness readback; stalled clients
+are destroyed. A final synchronous elapsed check follows transaction finalizers
+and the broker caller continuation. Local wall clock is not an authority source.
 
 Future supervisor integration must persist and authenticate the exact canonical
 SupervisorCommand, executor specification, policy and grant commitment before a
@@ -69,3 +77,7 @@ Run `bash packages/db/scripts/tests/scan-dispatch-authority-pg.sh` for the isola
 restricted-role PostgreSQL/Redis suite, staged historical migration compatibility,
 COMMIT fault relay, concurrency and schema parity checks. The runner accepts no
 external database URL and owns only its disposable local fixtures.
+Epoch closure tests run in a separate cloned test database after the shared suite
+has ended. The migration now installs 14 functions and 21 triggers; restore
+qualification must verify this additive catalog and its exact bodies/ACLs, rather
+than infer coverage from the original dispatch-authority allowlist.

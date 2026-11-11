@@ -1,6 +1,6 @@
 import pg from "pg"
 import { writeFile, readFile } from "node:fs/promises"
-import { beforeAll, afterAll, describe, it, expect } from "vitest"
+import { beforeAll, afterAll, describe, it, expect, vi } from "vitest"
 import { hasPermission, PERMISSIONS } from "../../auth/src/permissions"
 import {
   resolveScanProfile,
@@ -15,6 +15,7 @@ import {
   preparationInput,
   applyPreparationFixtureMigration,
   installPreparationFixtureRole,
+  installPreparationRevokerRole,
   insertPreparationAttempt,
   sealPreparationBundle,
   legacyPreparationFixture,
@@ -64,6 +65,7 @@ describe.skipIf(!enabled)("checked preparation intent authority", () => {
     await queueWorker.open()
     await applyPreparationFixtureMigration(owner)
     await installPreparationFixtureRole(owner)
+    await installPreparationRevokerRole(owner)
     runtime = new pg.Pool({
       connectionString: process.env.DISPATCH_PREPARATION_BROKER_DATABASE_URL,
       max: 4,
@@ -503,7 +505,7 @@ describe.skipIf(!enabled)("checked preparation intent authority", () => {
     expect(await broker.prepare(input)).toEqual({
       kind: "unknown",
       operationId: f.operationId,
-      reasonCode: "COMMIT_OBSERVED_AFTER_AUTHORITY_DEADLINE",
+      reasonCode: "PREPARATION_ACKNOWLEDGEMENT_DEADLINE",
     })
     expect(await readFile(marker, "utf8")).toBe("dispatch-prepare-commit-response-delayed\n")
     const original = (
@@ -749,7 +751,7 @@ describe.skipIf(!enabled)("checked preparation intent authority", () => {
       c.release()
     }
   })
-  it("retains the additive closed catalog: one private definer, invoker guards and nineteen enabled triggers", async () => {
+  it("retains the additive closed catalog: one private definer, invoker guards and twenty-one enabled triggers", async () => {
     const names = [
       "scan_preparation_context",
       "require_scan_preparation_role",
@@ -786,7 +788,7 @@ describe.skipIf(!enabled)("checked preparation intent authority", () => {
         [names]
       )
     ).rows
-    expect(triggers).toHaveLength(19)
+    expect(triggers).toHaveLength(21)
     for (const t of triggers) {
       expect(t.tgenabled).toBe("O")
       expect(t.tgdeferrable).toBe(t.tgname === "scan_checked_preparation_bundle")
@@ -826,5 +828,294 @@ describe.skipIf(!enabled)("checked preparation intent authority", () => {
         "REVOKE EXECUTE ON FUNCTION fence_unreviewed.denied() FROM dispatch_prepare_broker"
       )
     }
+  })
+  it.each(["revokedAt"])(
+    "fences restricted grant %s writes in both ordering directions",
+    async (field) => {
+      const revoker = new pg.Pool({
+        connectionString: process.env.DISPATCH_AUTHORITY_REVOKER_DATABASE_URL,
+        max: 2,
+      })
+      const statement = `UPDATE "ScanWorkerInstanceGrant" SET "${field}"=clock_timestamp() AT TIME ZONE 'UTC' WHERE id=$1`
+      const first = await preparationFixture(owner, 1, "authority-race"),
+        c = await lockedClient(first),
+        w = await revoker.connect()
+      try {
+        await w.query("BEGIN")
+        await w.query(statement, [first.grantId])
+        expect(
+          (await c.query("SELECT app.acquire_scan_preparation_gate() acquired")).rows[0].acquired
+        ).toBe(false)
+        await w.query("COMMIT")
+        await c.query("SELECT app.acquire_scan_preparation_gate()")
+        await expect(insertPreparationAttempt(c, first)).rejects.toMatchObject({ code: "23514" })
+      } finally {
+        await c.query("ROLLBACK")
+        await w.query("ROLLBACK")
+        c.release()
+        w.release()
+      }
+      expect(
+        (
+          await owner.query(
+            'SELECT count(*)::int n FROM "ScanDispatchAttempt" WHERE "operationId"=$1',
+            [first.operationId]
+          )
+        ).rows[0].n
+      ).toBe(0)
+      const second = await preparationFixture(owner, 1, "authority-race"),
+        p = await lockedClient(second),
+        r = await revoker.connect()
+      try {
+        await p.query("SELECT app.acquire_scan_preparation_gate()")
+        const attemptId = await insertPreparationAttempt(p, second)
+        await r.query("BEGIN")
+        const revoke = r.query(statement, [second.grantId])
+        await waitingForLock("ShareLock")
+        await sealPreparationBundle(p, second, attemptId)
+        await p.query("COMMIT")
+        await revoke
+        await r.query("COMMIT")
+        expect(
+          (
+            await owner.query('SELECT state FROM "ScanDispatchOperation" WHERE "operationId"=$1', [
+              second.operationId,
+            ])
+          ).rows[0].state
+        ).toBe("PREPARING")
+        await expect(broker.prepare(preparationInput(second))).rejects.toMatchObject({
+          code: "WORKER_GRANT_INVALID",
+        })
+      } finally {
+        await p.query("ROLLBACK")
+        await r.query("ROLLBACK")
+        p.release()
+        r.release()
+        await revoker.end()
+      }
+    }
+  )
+  it.each(["ScanWorkerInstanceGrant", "ScanAuthorityEpoch"])(
+    "rejects same-transaction %s mutation after sealing and SET CONSTRAINTS",
+    async (table) => {
+      const f = await preparationFixture(owner, 1, "authority-race"),
+        c = await lockedClient(f)
+      try {
+        await c.query("SELECT app.acquire_scan_preparation_gate()")
+        const attemptId = await insertPreparationAttempt(c, f)
+        await sealPreparationBundle(c, f, attemptId)
+        await c.query("SET CONSTRAINTS ALL IMMEDIATE")
+        await expect(
+          c.query(`UPDATE "${table}" SET "updatedAt"=CURRENT_TIMESTAMP WHERE id=$1`, [
+            table === "ScanWorkerInstanceGrant" ? f.grantId : f.epochId,
+          ])
+        ).rejects.toThrow("writes are forbidden")
+      } finally {
+        await c.query("ROLLBACK")
+        c.release()
+      }
+      const privileges = (
+        await owner.query(
+          "SELECT has_table_privilege('dispatch_authority_revoker','public.\"ScanWorkerInstanceGrant\"','UPDATE') broad_grant,has_table_privilege('dispatch_authority_revoker','public.\"ScanAuthorityEpoch\"','UPDATE') broad_epoch,has_column_privilege('dispatch_prepare_broker','public.\"ScanWorkerInstanceGrant\"','revokedAt','UPDATE') broker_revoke,has_column_privilege('dispatch_prepare_broker','public.\"ScanAuthorityEpoch\"','isOpen','UPDATE') broker_close"
+        )
+      ).rows[0]
+      expect(privileges).toEqual({
+        broad_grant: false,
+        broad_epoch: false,
+        broker_revoke: false,
+        broker_close: false,
+      })
+    }
+  )
+  it.each(["scopes", "allowedProfiles", "allowedOperations", "allowedTargetIds"])(
+    "rejects NULL elements in delegated %s through restricted SQL",
+    async (field) => {
+      for (const withAllowed of [false, true]) {
+        const f = await preparationFixture(owner, 1, "null-delegated", undefined, true),
+          w = await writerTransaction(f)
+        const allowed =
+          field === "scopes"
+            ? "lyrashield.write"
+            : field === "allowedProfiles"
+              ? "safe"
+              : field === "allowedOperations"
+                ? "scan.create"
+                : f.targetId
+        try {
+          await w.query(
+            `UPDATE agent_connections SET "${field}"=$2::text[] WHERE "workspaceId"=$1`,
+            [f.workspaceId, withAllowed ? [allowed, null] : [null]]
+          )
+          await w.query("COMMIT")
+        } finally {
+          await w.query("ROLLBACK")
+          w.release()
+        }
+        await expect(broker.prepare(preparationInput(f))).rejects.toMatchObject({
+          code: "DATABASE_REJECTED",
+        })
+        const c = await lockedClient(f)
+        try {
+          await c.query("SELECT app.acquire_scan_preparation_gate()")
+          await expect(insertPreparationAttempt(c, f)).rejects.toThrow(
+            "delegation revoked or unproven"
+          )
+        } finally {
+          await c.query("ROLLBACK")
+          c.release()
+        }
+      }
+    }
+  )
+  it("matches canonical lowercase delegated profile normalization", async () => {
+    const f = await preparationFixture(owner, 1, "lowercase", undefined, true),
+      w = await writerTransaction(f)
+    try {
+      await w.query(
+        'UPDATE agent_connections SET "allowedProfiles"=ARRAY[\'safe\'] WHERE "workspaceId"=$1',
+        [f.workspaceId]
+      )
+      await w.query("COMMIT")
+    } finally {
+      await w.query("ROLLBACK")
+      w.release()
+    }
+    expect((await broker.prepare(preparationInput(f))).kind).toBe("committed")
+  })
+  it.each(["LIVE_DELAY", "LIVE_STALL"])(
+    "bounds %s after a true post-COMMIT liveness result",
+    async (mode) => {
+      const f = await preparationFixture(owner),
+        input = preparationInput(f)
+      input.expiresAt = (
+        await owner.query(
+          "SELECT (clock_timestamp() AT TIME ZONE 'UTC')+interval '3 seconds' expiry"
+        )
+      ).rows[0].expiry
+      const arm = process.env[mode + "_ARM_PATH"]!,
+        marker = process.env[mode + "_MARKER_PATH"]!
+      await writeFile(arm, "armed", { flag: "wx", mode: 0o600 })
+      const start = performance.now(),
+        result = await broker.prepare(input)
+      expect(performance.now() - start).toBeLessThan(3800)
+      expect(result).toEqual({
+        kind: "unknown",
+        operationId: f.operationId,
+        reasonCode: "PREPARATION_ACKNOWLEDGEMENT_DEADLINE",
+      })
+      expect(await readFile(marker, "utf8")).toBe("live=true\n")
+      await expect(broker.status(f.operationId)).resolves.toMatchObject({
+        kind: "available",
+        state: "PREPARING",
+        preparationEligibility: "EXPIRED",
+        attemptId: expect.any(String),
+      })
+      expect(
+        (
+          await owner.query(
+            'SELECT count(*)::int n FROM "ScanDispatchAttempt" WHERE "operationId"=$1',
+            [f.operationId]
+          )
+        ).rows[0].n
+      ).toBe(1)
+    },
+    6000
+  )
+  it("checks elapsed time after the pg release callback and final caller continuation", async () => {
+    const f = await preparationFixture(owner),
+      input = preparationInput(f)
+    input.expiresAt = (
+      await owner.query("SELECT (clock_timestamp() AT TIME ZONE 'UTC')+interval '1 second' expiry")
+    ).rows[0].expiry
+    const original = pg.Pool.prototype.emit
+    let armed = true
+    const spy = vi.spyOn(pg.Pool.prototype, "emit").mockImplementation(function (event, ...args) {
+      if (
+        event === "release" &&
+        armed &&
+        (args[1] as { user?: string })?.user === "dispatch_prepare_broker"
+      ) {
+        armed = false
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1100)
+      }
+      return original.call(this, event, ...args)
+    })
+    try {
+      expect(await broker.prepare(input)).toEqual({
+        kind: "unknown",
+        operationId: f.operationId,
+        reasonCode: "PREPARATION_ACKNOWLEDGEMENT_DEADLINE",
+      })
+    } finally {
+      spy.mockRestore()
+    }
+    expect(armed).toBe(false)
+    await expect(broker.status(f.operationId)).resolves.toMatchObject({
+      kind: "available",
+      state: "PREPARING",
+      preparationEligibility: "EXPIRED",
+    })
+  })
+  it("retains immutable grant expiry and rejects expiry before raw insertion or bundle completion", async () => {
+    const expiry = (
+      await owner.query("SELECT (clock_timestamp() AT TIME ZONE 'UTC')+interval '2 seconds' expiry")
+    ).rows[0].expiry
+    const f = await preparationFixture(owner, 1, "authority-race", undefined, false, "RESERVED", {
+        grantExpiresAt: expiry,
+      }),
+      c = await lockedClient(f)
+    await owner.query(
+      "SELECT pg_sleep(greatest(extract(epoch FROM ($1::timestamp AT TIME ZONE 'UTC'-clock_timestamp())),0)+0.01)",
+      [expiry]
+    )
+    try {
+      await c.query("SELECT app.acquire_scan_preparation_gate()")
+      await expect(insertPreparationAttempt(c, f, "", "", expiry)).rejects.toThrow("expired")
+    } finally {
+      await c.query("ROLLBACK")
+      c.release()
+    }
+    const secondExpiry = (
+      await owner.query("SELECT (clock_timestamp() AT TIME ZONE 'UTC')+interval '2 seconds' expiry")
+    ).rows[0].expiry
+    const second = await preparationFixture(
+        owner,
+        1,
+        "authority-race",
+        undefined,
+        false,
+        "RESERVED",
+        { grantExpiresAt: secondExpiry }
+      ),
+      p = await lockedClient(second)
+    try {
+      await p.query("SELECT app.acquire_scan_preparation_gate()")
+      const attemptId = await insertPreparationAttempt(p, second, "", "", secondExpiry)
+      await owner.query(
+        "SELECT pg_sleep(greatest(extract(epoch FROM ($1::timestamp AT TIME ZONE 'UTC'-clock_timestamp())),0)+0.01)",
+        [secondExpiry]
+      )
+      await expect(sealPreparationBundle(p, second, attemptId)).rejects.toThrow(
+        "original live transaction bundle"
+      )
+    } finally {
+      await p.query("ROLLBACK")
+      p.release()
+    }
+    expect(
+      (
+        await owner.query(
+          'SELECT count(*)::int n FROM "ScanDispatchAttempt" WHERE "operationId" IN ($1,$2)',
+          [f.operationId, second.operationId]
+        )
+      ).rows[0].n
+    ).toBe(0)
+    expect(
+      (
+        await owner.query(
+          "SELECT has_column_privilege('dispatch_authority_revoker','public.\"ScanWorkerInstanceGrant\"','expiresAt','UPDATE') expiry_mutation"
+        )
+      ).rows[0].expiry_mutation
+    ).toBe(false)
   })
 })

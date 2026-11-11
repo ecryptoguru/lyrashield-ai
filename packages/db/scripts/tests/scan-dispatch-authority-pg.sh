@@ -121,6 +121,7 @@ docker exec "$container" psql -X -v ON_ERROR_STOP=1 -U postgres -d lyrashield_te
 runtime_password=$(openssl rand -hex 24)
 queue_runtime_password=$(openssl rand -hex 24)
 preparation_password=$(openssl rand -hex 24)
+revoker_password=$(openssl rand -hex 24)
 docker exec -i "$container" psql -X -U postgres -d lyrashield_test -v ON_ERROR_STOP=1 <<SQL
 -- The runner owns this fixture epoch before either independent suite starts.
 INSERT INTO "ScanAuthorityEpoch"
@@ -174,7 +175,7 @@ kill "$relay_pid" 2>/dev/null || true
 wait "$relay_pid" 2>/dev/null || true
 relay_pid=''
 python3 "$repo_root/packages/db/scripts/tests/dispatch-authority-relay.py" \
-  "$container" "$dir/fault-port" "$dir/armed" "$dir/commit-dropped" "$dir/delay-armed" "$dir/commit-delayed" \
+  "$container" "$dir/fault-port" "$dir/armed" "$dir/commit-dropped" "$dir/delay-armed" "$dir/commit-delayed" "$dir/live-delay-armed" "$dir/live-delayed" "$dir/live-stall-armed" "$dir/live-stalled" \
   >"$dir/relay.out" 2>"$dir/relay.err" &
 relay_pid=$!
 for _ in {1..100}; do
@@ -187,7 +188,7 @@ port=$(cat "$dir/fault-port")
 
 # Suites share the one-shot fault relay; serialize files while tests explicitly
 # exercise concurrent admissions, publishers and broker calls within each file.
-TZ=UTC DISPATCH_PREPARATION_BROKER_PASSWORD="$preparation_password" DISPATCH_PREPARATION_BROKER_DATABASE_URL="postgresql://dispatch_prepare_broker:${preparation_password}@127.0.0.1:${port}/lyrashield_test" BETTER_AUTH_SECRET=fixture-only-secret-32-characters-minimum BETTER_AUTH_URL=http://localhost:3000 NEXT_PUBLIC_APP_URL=http://localhost:3000 DATABASE_URL="postgresql://postgres:${admin_password}@127.0.0.1:${port}/lyrashield_test" RLS_RUNTIME_DATABASE_URL="postgresql://dispatch_authority_runtime:${runtime_password}@127.0.0.1:${port}/lyrashield_test" DISPATCH_AUTHORITY_DATABASE_URL="postgresql://postgres:${admin_password}@127.0.0.1:${port}/lyrashield_test" DISPATCH_AUTHORITY_RUNTIME_DATABASE_URL="postgresql://dispatch_authority_runtime:${runtime_password}@127.0.0.1:${port}/lyrashield_test" QUEUE_OUTBOX_DATABASE_URL="postgresql://dispatch_queue_publisher:${queue_runtime_password}@127.0.0.1:${port}/lyrashield_test" REDIS_URL="redis://outbox-publisher:${redis_publisher_password}@127.0.0.1:${redis_port}/0" FAULT_ARM_PATH="$dir/armed" FAULT_MARKER_PATH="$dir/commit-dropped" DELAY_ARM_PATH="$dir/delay-armed" DELAY_MARKER_PATH="$dir/commit-delayed" LYRASHIELD_TEST_DB_DISPOSABLE=1 SCAN_DISPATCH_AUTHORITY_POSTGRES_TEST=1   pnpm exec vitest run --no-file-parallelism "${test_files[@]}"
+TZ=UTC DISPATCH_AUTHORITY_REVOKER_PASSWORD="$revoker_password" DISPATCH_AUTHORITY_REVOKER_DATABASE_URL="postgresql://dispatch_authority_revoker:${revoker_password}@127.0.0.1:${port}/lyrashield_test" DISPATCH_PREPARATION_BROKER_PASSWORD="$preparation_password" DISPATCH_PREPARATION_BROKER_DATABASE_URL="postgresql://dispatch_prepare_broker:${preparation_password}@127.0.0.1:${port}/lyrashield_test" BETTER_AUTH_SECRET=fixture-only-secret-32-characters-minimum BETTER_AUTH_URL=http://localhost:3000 NEXT_PUBLIC_APP_URL=http://localhost:3000 DATABASE_URL="postgresql://postgres:${admin_password}@127.0.0.1:${port}/lyrashield_test" RLS_RUNTIME_DATABASE_URL="postgresql://dispatch_authority_runtime:${runtime_password}@127.0.0.1:${port}/lyrashield_test" DISPATCH_AUTHORITY_DATABASE_URL="postgresql://postgres:${admin_password}@127.0.0.1:${port}/lyrashield_test" DISPATCH_AUTHORITY_RUNTIME_DATABASE_URL="postgresql://dispatch_authority_runtime:${runtime_password}@127.0.0.1:${port}/lyrashield_test" QUEUE_OUTBOX_DATABASE_URL="postgresql://dispatch_queue_publisher:${queue_runtime_password}@127.0.0.1:${port}/lyrashield_test" REDIS_URL="redis://outbox-publisher:${redis_publisher_password}@127.0.0.1:${redis_port}/0" FAULT_ARM_PATH="$dir/armed" FAULT_MARKER_PATH="$dir/commit-dropped" DELAY_ARM_PATH="$dir/delay-armed" DELAY_MARKER_PATH="$dir/commit-delayed" LIVE_DELAY_ARM_PATH="$dir/live-delay-armed" LIVE_DELAY_MARKER_PATH="$dir/live-delayed" LIVE_STALL_ARM_PATH="$dir/live-stall-armed" LIVE_STALL_MARKER_PATH="$dir/live-stalled" LYRASHIELD_TEST_DB_DISPOSABLE=1 SCAN_DISPATCH_AUTHORITY_POSTGRES_TEST=1   pnpm exec vitest run --no-file-parallelism "${test_files[@]}"
 
 # Admission-only does not load preparation fixtures. Apply the additive SQL only
 # after admission validation; never seed or relabel new rows as legacy.
@@ -210,3 +211,10 @@ port=$(cat "$dir/schema-port")
 DATABASE_URL="postgresql://postgres:${admin_password}@127.0.0.1:${port}/lyrashield_test" pnpm --filter @lyrashield/db exec prisma migrate resolve --applied 20261111130000_scan_preparation_authority_fence
 DATABASE_URL="postgresql://postgres:${admin_password}@127.0.0.1:${port}/lyrashield_test" SHADOW_DATABASE_URL="postgresql://postgres:${admin_password}@127.0.0.1:${port}/lyrashield_authority_shadow" pnpm --filter @lyrashield/db exec prisma migrate diff --exit-code --from-migrations prisma/migrations --to-schema prisma/schema.prisma
 DATABASE_URL="postgresql://postgres:${admin_password}@127.0.0.1:${port}/lyrashield_test" pnpm --filter @lyrashield/db exec prisma migrate diff --exit-code --from-config-datasource --to-schema prisma/schema.prisma
+
+# Epoch closure uses an independent clone after all source fixture clients end;
+# it cannot close the shared epoch used by another suite or depend on file order.
+if [[ "${1:-}" != '--admission-only' ]]; then
+  docker exec -e "PGPASSWORD=$admin_password" "$container" psql -h 127.0.0.1 -X -v ON_ERROR_STOP=1 -U postgres -d lyrashield_test -c 'CREATE DATABASE lyrashield_epoch_test TEMPLATE lyrashield_test' >/dev/null
+  TZ=UTC BETTER_AUTH_SECRET=fixture-only-secret-32-characters-minimum BETTER_AUTH_URL=http://localhost:3000 NEXT_PUBLIC_APP_URL=http://localhost:3000 DATABASE_URL="postgresql://postgres:${admin_password}@127.0.0.1:${port}/lyrashield_epoch_test" DISPATCH_PREPARATION_BROKER_DATABASE_URL="postgresql://dispatch_prepare_broker:${preparation_password}@127.0.0.1:${port}/lyrashield_epoch_test" DISPATCH_AUTHORITY_REVOKER_PASSWORD="$revoker_password" DISPATCH_AUTHORITY_REVOKER_DATABASE_URL="postgresql://dispatch_authority_revoker:${revoker_password}@127.0.0.1:${port}/lyrashield_epoch_test" REDIS_URL="redis://outbox-publisher:${redis_publisher_password}@127.0.0.1:${redis_port}/0" LYRASHIELD_TEST_DB_DISPOSABLE=1 SCAN_DISPATCH_AUTHORITY_POSTGRES_TEST=1 pnpm exec vitest run packages/db/src/scan-preparation-epoch.postgres.test.ts
+fi

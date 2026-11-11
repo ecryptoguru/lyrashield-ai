@@ -53,7 +53,8 @@ import pg from "pg"
 import { createPgConnectionConfig } from "./connection-config"
 import {
   bindScanPreparationContext,
-  preparationAcknowledgementIsLive,
+  commitPreparationAcknowledgement,
+  preparationAcknowledgementDeadlinePassed,
 } from "./scan-preparation-authority"
 import {
   ScanDispatchAuthorityError,
@@ -80,7 +81,10 @@ export type DispatchBrokerResult<T extends object = Record<string, never>> =
   | {
       kind: "unknown"
       operationId: string
-      reasonCode: "COMMIT_OUTCOME_UNKNOWN" | "COMMIT_OBSERVED_AFTER_AUTHORITY_DEADLINE"
+      reasonCode:
+        | "COMMIT_OUTCOME_UNKNOWN"
+        | "COMMIT_OBSERVED_AFTER_AUTHORITY_DEADLINE"
+        | "PREPARATION_ACKNOWLEDGEMENT_DEADLINE"
     }
 
 type TransactionOutcome<T extends object> =
@@ -198,17 +202,20 @@ async function runDispatchTransaction<T>(
     if (typeof value !== "object" || value === null)
       throw new Error("dispatch broker transaction returned an invalid value")
     commitAttempted = true
-    await client.query("COMMIT")
-    if (
-      "authorityDeadlineAt" in value &&
-      value.authorityDeadlineAt instanceof Date &&
-      !(await preparationAcknowledgementIsLive(client, value.authorityDeadlineAt))
-    )
-      return {
-        kind: "unknown",
-        operationId,
-        reasonCode: "COMMIT_OBSERVED_AFTER_AUTHORITY_DEADLINE",
-      }
+    if ("authorityDeadlineAt" in value && value.authorityDeadlineAt instanceof Date) {
+      const deadline =
+        "acknowledgementDeadlineMonotonicMs" in value
+          ? Number(value.acknowledgementDeadlineMonotonicMs)
+          : NaN
+      if (
+        !Number.isFinite(deadline) ||
+        !(await commitPreparationAcknowledgement(client, value.authorityDeadlineAt, deadline)) ||
+        preparationAcknowledgementDeadlinePassed(deadline)
+      )
+        return { kind: "unknown", operationId, reasonCode: "PREPARATION_ACKNOWLEDGEMENT_DEADLINE" }
+    } else {
+      await client.query("COMMIT")
+    }
     return { kind: "committed", operationId, value }
   } catch (error) {
     if (!commitAttempted) {

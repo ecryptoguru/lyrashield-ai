@@ -23,7 +23,8 @@ export async function preparationFixture(
   prefix = "fence",
   planInput?: Parameters<typeof buildScanExecutionPlan>[0],
   delegated = false,
-  capacityState: "RESERVED" | "WAITING" = "RESERVED"
+  capacityState: "RESERVED" | "WAITING" = "RESERVED",
+  authority: { epochId?: string; grantExpiresAt?: Date } = {}
 ) {
   const suffix = `${prefix}-${randomUUID()}`
   const f: PreparationFixture = {
@@ -33,7 +34,7 @@ export async function preparationFixture(
     scanId: `${suffix}-scan`,
     operationId: `${suffix}-operation`,
     grantId: `${suffix}-grant`,
-    epochId: "authority-shared-open-epoch",
+    epochId: authority.epochId ?? "authority-shared-open-epoch",
     instanceId: `${suffix}-instance`,
   }
   const plan = ScanExecutionPlanSchema.parse({
@@ -123,8 +124,14 @@ export async function preparationFixture(
     [f.scanId, f.userId, f.workspaceId, capacityState, capacityState === "RESERVED" ? 2 : 0]
   )
   await owner.query(
-    `INSERT INTO "ScanWorkerInstanceGrant"(id,"authorityEpochId","instanceId","credentialHash","issuedAt","expiresAt","createdAt","updatedAt") VALUES($1,$2,$3,$4,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP+interval '1 hour',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`,
-    [f.grantId, f.epochId, f.instanceId, createHash("sha256").update(f.grantId).digest("hex")]
+    `INSERT INTO "ScanWorkerInstanceGrant"(id,"authorityEpochId","instanceId","credentialHash","issuedAt","expiresAt","createdAt","updatedAt") VALUES($1,$2,$3,$4,CURRENT_TIMESTAMP,coalesce($5::timestamp,CURRENT_TIMESTAMP+interval '1 hour'),CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`,
+    [
+      f.grantId,
+      f.epochId,
+      f.instanceId,
+      createHash("sha256").update(f.grantId).digest("hex"),
+      authority.grantExpiresAt ?? null,
+    ]
   )
   return f
 }
@@ -143,12 +150,13 @@ export async function insertPreparationAttempt(
   client: pg.PoolClient,
   f: PreparationFixture,
   metadataColumn = "",
-  metadataValue = ""
+  metadataValue = "",
+  expiresAt?: Date
 ) {
   const attemptId = `${f.operationId}-attempt`
   await client.query(
-    `INSERT INTO "ScanDispatchAttempt"("operationId","attemptId","scanId","workspaceId","initiatingUserId","sponsorAccountId","targetId","targetSnapshotDigest","executionPlanHash","scopeDigest","policyId","policyVersion","policyDigest","attachmentIds",mode,goal,"maxBudgetUsd","maxRuntimeMs","authorityEpochId","workerInstanceGrantId","expiresAt"${metadataColumn}) SELECT $1,$2,s.id,s."workspaceId",s."createdById",s."sponsorAccountId",s."targetId",app.scan_target_snapshot_digest(s."targetId"),s."executionPlanHash",app.scan_dispatch_scope_digest(s.id),s."policyId",'dispatch-v1',app.scan_policy_digest(s."policyId"),'{}',s.mode,s.goal,(s."executionPlan"#>>'{limits,maxBudgetUsd}')::numeric,60000,$3,$4,CURRENT_TIMESTAMP+interval '10 minutes'${metadataValue} FROM "Scan" s WHERE s.id=$5`,
-    [f.operationId, attemptId, f.epochId, f.grantId, f.scanId]
+    `INSERT INTO "ScanDispatchAttempt"("operationId","attemptId","scanId","workspaceId","initiatingUserId","sponsorAccountId","targetId","targetSnapshotDigest","executionPlanHash","scopeDigest","policyId","policyVersion","policyDigest","attachmentIds",mode,goal,"maxBudgetUsd","maxRuntimeMs","authorityEpochId","workerInstanceGrantId","expiresAt"${metadataColumn}) SELECT $1,$2,s.id,s."workspaceId",s."createdById",s."sponsorAccountId",s."targetId",app.scan_target_snapshot_digest(s."targetId"),s."executionPlanHash",app.scan_dispatch_scope_digest(s.id),s."policyId",'dispatch-v1',app.scan_policy_digest(s."policyId"),'{}',s.mode,s.goal,(s."executionPlan"#>>'{limits,maxBudgetUsd}')::numeric,60000,$3,$4,coalesce($6::timestamp,CURRENT_TIMESTAMP+interval '10 minutes')${metadataValue} FROM "Scan" s WHERE s.id=$5`,
+    [f.operationId, attemptId, f.epochId, f.grantId, f.scanId, expiresAt ?? null]
   )
   return attemptId
 }
@@ -283,5 +291,31 @@ CREATE POLICY fixture_preparation_epoch_lock ON "ScanAuthorityEpoch" FOR UPDATE 
 CREATE POLICY fixture_preparation_grant ON "ScanWorkerInstanceGrant" FOR SELECT TO dispatch_prepare_broker USING (true);
 CREATE POLICY fixture_preparation_grant_lock ON "ScanWorkerInstanceGrant" FOR UPDATE TO dispatch_prepare_broker USING (true);
 CREATE POLICY fixture_preparation_queue ON "ScanQueueOutbox" FOR ALL TO dispatch_prepare_broker USING (EXISTS(SELECT 1 FROM "ScanDispatchOperation" o WHERE o."operationId"="ScanQueueOutbox"."operationId" AND o."workspaceId"=app.current_workspace_id()));
+`)
+}
+
+/** Restricted fixture revoker; never grants a production role or broad UPDATE. */
+export async function installPreparationRevokerRole(owner: pg.Pool) {
+  if (process.env.LYRASHIELD_TEST_DB_DISPOSABLE !== "1")
+    throw new Error("Disposable fixture required")
+  const password = process.env.DISPATCH_AUTHORITY_REVOKER_PASSWORD
+  if (!password || !/^[a-f0-9]{48}$/.test(password))
+    throw new Error("Fixture revoker password unavailable")
+  await owner.query(`
+DO $$ BEGIN IF NOT EXISTS(SELECT 1 FROM pg_roles WHERE rolname='dispatch_authority_revoker') THEN
+ CREATE ROLE dispatch_authority_revoker LOGIN PASSWORD '${password}' NOSUPERUSER NOBYPASSRLS NOCREATEDB NOCREATEROLE NOINHERIT;
+END IF; EXECUTE format('REVOKE TEMPORARY ON DATABASE %I FROM PUBLIC',current_database()); END $$;
+GRANT USAGE ON SCHEMA public,app TO dispatch_authority_revoker;
+GRANT SELECT ON "ScanWorkerInstanceGrant","ScanAuthorityEpoch" TO dispatch_authority_revoker;
+GRANT UPDATE("revokedAt","updatedAt") ON "ScanWorkerInstanceGrant" TO dispatch_authority_revoker;
+GRANT UPDATE("isOpen","openKey","closedAt","updatedAt") ON "ScanAuthorityEpoch" TO dispatch_authority_revoker;
+DO $$ BEGIN
+ IF NOT EXISTS(SELECT 1 FROM pg_policies WHERE tablename='ScanWorkerInstanceGrant' AND policyname='fixture_authority_revoker') THEN
+  CREATE POLICY fixture_authority_revoker ON "ScanWorkerInstanceGrant" FOR ALL TO dispatch_authority_revoker USING(id LIKE 'authority-race-%') WITH CHECK(id LIKE 'authority-race-%');
+ END IF;
+ IF NOT EXISTS(SELECT 1 FROM pg_policies WHERE tablename='ScanAuthorityEpoch' AND policyname='fixture_authority_revoker') THEN
+  CREATE POLICY fixture_authority_revoker ON "ScanAuthorityEpoch" FOR ALL TO dispatch_authority_revoker USING(id LIKE 'authority-race-%') WITH CHECK(id LIKE 'authority-race-%');
+ END IF;
+END $$;
 `)
 }

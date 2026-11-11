@@ -102,7 +102,7 @@ END $$;
 DO $$ DECLARE name TEXT; BEGIN
   FOREACH name IN ARRAY ARRAY['Workspace','WorkspaceMember','users','BillingAccount',
     'agent_connections','agent_operations','delegated_scan_provenance','Target','Policy',
-    'Scan','UserScanSlot','ScanCapacityReservation'] LOOP
+    'Scan','UserScanSlot','ScanCapacityReservation','ScanAuthorityEpoch','ScanWorkerInstanceGrant'] LOOP
     EXECUTE format('CREATE TRIGGER scan_preparation_writer_gate BEFORE INSERT OR UPDATE OR DELETE ON public.%I FOR EACH STATEMENT EXECUTE FUNCTION app.scan_preparation_writer_gate()',name);
   END LOOP;
 END $$;
@@ -269,9 +269,13 @@ BEGIN
     SELECT * INTO c FROM public.agent_connections WHERE id=s."delegatedConnectionId" AND "workspaceId"=s."workspaceId";
     IF NOT FOUND OR c.status<>'ACTIVE' OR c."revokedAt" IS NOT NULL OR c."userId"<>s."createdById"
       OR c."authorizationVersion" IS DISTINCT FROM s."delegatedAuthorizationVersion"
-      OR NOT ('lyrashield.write'=ANY(c.scopes)) OR NOT (s.mode::text=ANY(c."allowedProfiles"))
-      OR NOT ((CASE WHEN s."triggerType"='retest' THEN 'retest.create' ELSE 'scan.create' END)=ANY(c."allowedOperations"))
-      OR NOT (c."allTargets" OR s."targetId"=ANY(c."allowedTargetIds"))
+      OR ('lyrashield.write'=ANY(c.scopes)) IS NOT TRUE
+      OR (s.mode::text=ANY(ARRAY(SELECT upper(permitted.profile) FROM unnest(c."allowedProfiles") AS permitted(profile)))) IS NOT TRUE
+      OR ((CASE WHEN s."triggerType"='retest' THEN 'retest.create' ELSE 'scan.create' END)=ANY(c."allowedOperations")) IS NOT TRUE
+      OR (c."allTargets" OR s."targetId"=ANY(c."allowedTargetIds")) IS NOT TRUE
+      OR c.scopes IS NULL OR c."allowedProfiles" IS NULL OR c."allowedOperations" IS NULL OR c."allowedTargetIds" IS NULL
+      OR array_position(c.scopes,NULL) IS NOT NULL OR array_position(c."allowedProfiles",NULL) IS NOT NULL
+      OR array_position(c."allowedOperations",NULL) IS NOT NULL OR array_position(c."allowedTargetIds",NULL) IS NOT NULL
       OR (c."expiresAt" IS NOT NULL AND c."expiresAt"<=at_time)
       OR NOT EXISTS(SELECT 1 FROM public.delegated_scan_provenance p JOIN public.agent_operations o ON o.id=p."operationId"
         WHERE p."scanId"=s.id AND p."workspaceId"=s."workspaceId" AND p."targetId"=s."targetId"
@@ -434,7 +438,7 @@ DO $$ DECLARE role_name TEXT; name TEXT; BEGIN
   FOREACH role_name IN ARRAY ARRAY['app_runtime_prod','app_system_prod','app_runtime_ci'] LOOP
     IF EXISTS(SELECT 1 FROM pg_roles WHERE rolname=role_name) THEN
       FOREACH name IN ARRAY ARRAY['Workspace','WorkspaceMember','users','BillingAccount','agent_connections',
-        'agent_operations','delegated_scan_provenance','Target','Policy','Scan','UserScanSlot','ScanCapacityReservation'] LOOP
+        'agent_operations','delegated_scan_provenance','Target','Policy','Scan','UserScanSlot','ScanCapacityReservation','ScanAuthorityEpoch','ScanWorkerInstanceGrant'] LOOP
         EXECUTE format('REVOKE TRUNCATE,TRIGGER ON public.%I FROM %I',name,role_name);
       END LOOP;
       EXECUTE format('REVOKE EXECUTE ON FUNCTION app.scan_preparation_context(text),app.acquire_scan_preparation_gate(),app.check_scan_preparation_authority(text,timestamp) FROM %I',role_name);

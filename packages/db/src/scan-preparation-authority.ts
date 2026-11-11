@@ -8,6 +8,8 @@ import { ScanDispatchAuthorityError } from "./scan-dispatch-authority-error"
 export type CheckedPreparationAuthority = {
   authorityAcceptedAt: Date
   authorityDeadlineAt: Date
+  databaseClockUpperBoundMs: number
+  monotonicClockMs: number
 }
 
 /** Persisted private context only; caller-supplied payer/workspace is never accepted. */
@@ -40,6 +42,7 @@ export async function checkPreparationAuthority(
       "PREPARATION_AUTHORITY_BUSY",
       "Preparation authority is changing"
     )
+  const monotonicClockMs = performance.now()
   const checked = await client.query<{ acceptedAt: Date; deadlineAt: Date }>(
     'SELECT "acceptedAt" AT TIME ZONE \'UTC\' AS "acceptedAt","deadlineAt" AT TIME ZONE \'UTC\' AS "deadlineAt" FROM app.check_scan_preparation_authority($1,$2::timestamp)',
     [operation.scanId, expiresAt]
@@ -78,7 +81,13 @@ export async function checkPreparationAuthority(
       "PREPARATION_AUTHORITY_UNAVAILABLE",
       "Current profile does not cover stored plan"
     )
-  return { authorityAcceptedAt: row.acceptedAt, authorityDeadlineAt: row.deadlineAt }
+  return {
+    authorityAcceptedAt: row.acceptedAt,
+    authorityDeadlineAt: row.deadlineAt,
+    // SQL floors milliseconds. An upper bound never extends the DB deadline.
+    databaseClockUpperBoundMs: row.acceptedAt.getTime() + 1,
+    monotonicClockMs,
+  }
 }
 
 /** A positive transport acknowledgement after the DB deadline is still UNKNOWN. */
@@ -164,5 +173,45 @@ export async function readPrepareReplay(
     ...row,
     authorityAcceptedAt: row.authorityAcceptedAt,
     authorityDeadlineAt: row.authorityDeadlineAt,
+  }
+}
+
+/** Internal monotonic clock mapping; never a public or physical capability. */
+export function withPreparationAcknowledgementDeadline<T extends { authorityDeadlineAt: Date }>(
+  value: T,
+  authority: CheckedPreparationAuthority
+) {
+  return {
+    ...value,
+    acknowledgementDeadlineMonotonicMs:
+      authority.monotonicClockMs +
+      value.authorityDeadlineAt.getTime() -
+      authority.databaseClockUpperBoundMs,
+  }
+}
+
+export function preparationAcknowledgementDeadlinePassed(deadline: number) {
+  return !Number.isFinite(deadline) || performance.now() >= deadline
+}
+
+/** Bound COMMIT and its readback together, including withheld network responses. */
+export async function commitPreparationAcknowledgement(
+  client: pg.PoolClient,
+  deadlineAt: Date,
+  monotonicDeadline: number
+): Promise<boolean> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const expired = new Promise<boolean>((resolve) => {
+    timer = setTimeout(() => resolve(false), Math.max(0, monotonicDeadline - performance.now()))
+  })
+  const acknowledgement = (async () => {
+    await client.query("COMMIT")
+    return await preparationAcknowledgementIsLive(client, deadlineAt)
+  })()
+  try {
+    const live = await Promise.race([acknowledgement, expired])
+    return live && !preparationAcknowledgementDeadlinePassed(monotonicDeadline)
+  } finally {
+    clearTimeout(timer)
   }
 }
