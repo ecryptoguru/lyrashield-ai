@@ -169,8 +169,8 @@ describe("worker Docker runtime", () => {
     expect(dockerIgnore.split("\n")).toContain("lyrashield-engine/")
   })
 
-  it("pins and records the exact engine revision used by production workers", () => {
-    const reviewedEngineRevision = "3001517530300ca5f602536bfadcbd3c95ad3039"
+  it("pins and records the exact engine revision for release worker builds", () => {
+    const reviewedEngineRevision = "079194b176d9bf0b46e45f9bdc88ed18c5bf1806"
     expect(deployWorkflow).toContain(`ENGINE_REVISION: ${reviewedEngineRevision}`)
     expect(desktopReleaseWorkflow).toContain(`ENGINE_REVISION: ${reviewedEngineRevision}`)
     expect(deployWorkflow).toContain("ref: ${{ env.ENGINE_REVISION }}")
