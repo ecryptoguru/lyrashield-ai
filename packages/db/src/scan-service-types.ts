@@ -3,6 +3,12 @@ import type { DeterminismMode, ScanWorkflow } from "@lyrashield/types"
 
 export type ScanTransaction = Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
 
+/** Internal server options, deliberately separate from scan request input. */
+export interface ScanAdmissionOptions {
+  /** Qualification only: both durable records remain quarantined as UNKNOWN. */
+  dispatchAuthority?: "shadow"
+}
+
 export interface CreateScanParams {
   workspaceId: string
   targetId: string
