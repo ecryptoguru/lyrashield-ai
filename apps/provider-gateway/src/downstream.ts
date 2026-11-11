@@ -1,4 +1,5 @@
 import type { ServerResponse } from "node:http"
+import { MAX_DELIVERY_CHUNK_BYTES } from "./proxy-utils"
 
 export interface ProviderStreamSink {
   signal: AbortSignal
@@ -7,6 +8,19 @@ export interface ProviderStreamSink {
   start(statusCode: number, headers: Record<string, string>): void
   write(chunk: Uint8Array): Promise<void>
   complete(): Promise<void>
+}
+
+export async function deliverReplay(
+  response: { statusCode: number; headers: Record<string, string>; body: Buffer },
+  sink: ProviderStreamSink,
+  deliver: (effect: () => void | Promise<void>) => Promise<void>
+): Promise<void> {
+  await deliver(() => sink.start(response.statusCode, response.headers))
+  for (let offset = 0; offset < response.body.byteLength; offset += MAX_DELIVERY_CHUNK_BYTES)
+    await deliver(() =>
+      sink.write(response.body.subarray(offset, offset + MAX_DELIVERY_CHUNK_BYTES))
+    )
+  await deliver(() => sink.complete())
 }
 
 export function httpStreamSink(response: ServerResponse, signal: AbortSignal): ProviderStreamSink {
