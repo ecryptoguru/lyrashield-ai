@@ -1,0 +1,10 @@
+{
+  "version": "2.95.0",
+  "source": "https://github.com/cli/cli/blob/v2.95.0/pkg/cmd/attestation/verify/verify.go",
+  "sourceBlob": "120f94d65889a26e5f7926fbe9fead9095b2cc6b",
+  "mutuallyExclusive": [
+    ["owner", "repo"],
+    ["cert-identity", "cert-identity-regex", "signer-repo", "signer-workflow"]
+  ],
+  "oneRequired": [["owner", "repo"]]
+}
