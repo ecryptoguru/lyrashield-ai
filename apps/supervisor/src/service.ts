@@ -295,6 +295,9 @@ export class SupervisorService {
         "attempt already exists with different input"
       )
     }
+    // The broker must observe durable command acceptance before completion.
+    // An interrupted intent stays unresolved and is never replayed on restart.
+    await this.appendIntent(command)
     const record = await this.options.journal.append({
       type: "attempt_prepared",
       supervisorInstanceId: this.options.supervisorInstanceId,
