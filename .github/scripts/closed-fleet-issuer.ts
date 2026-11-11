@@ -27,11 +27,29 @@ import {
   type SignedEnvelope,
 } from "./fleet-qualification-schema.ts"
 
-const managedKey = managedKeySchema.parse(
+export function resolveManagedKeyPin(configuration: unknown, runtime: unknown): ManagedKey {
+  const issuer = managedKeySchema.omit({ publicKey: true }).parse(configuration)
+  const publicPin = managedKeySchema
+    .pick({ keyId: true, algorithm: true, publicKey: true })
+    .parse(runtime)
+  if (issuer.keyId !== publicPin.keyId || issuer.algorithm !== publicPin.algorithm)
+    throw new Error("Closed fleet signer public key does not match issuer identity")
+  return managedKeySchema.parse({ ...issuer, publicKey: publicPin.publicKey })
+}
+
+const managedKey = resolveManagedKeyPin(
   JSON.parse(
-    // Source-controlled public key/configuration, no private key or credential.
+    // Source-controlled public configuration, no private key or credential.
     // eslint-disable-next-line security/detect-non-literal-fs-filename
     readFileSync(new URL("../qualification-issuer-key.json", import.meta.url), "utf8")
+  ),
+  JSON.parse(
+    // Shared worker-verification pin; its identity must match the issuer.
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
+    readFileSync(
+      new URL("../../packages/security/src/runtime-qualification-key.json", import.meta.url),
+      "utf8"
+    )
   )
 )
 const digest = (raw: string) => "sha256:" + createHash("sha256").update(raw).digest("hex")
@@ -151,33 +169,39 @@ function parseCredential(value: Awaited<ReturnType<IssuerPorts["issuer"]>>, when
   return { ...value, identity, expiresAt: Number(claims.exp) }
 }
 
-async function construct(ports: IssuerPorts, trust: IssuerPorts["trust"], when: number) {
-  const credential = parseCredential(await read(ports.issuer), when)
+async function construct(ports: IssuerPorts, trust: IssuerPorts["trust"], clock: () => number) {
+  const credential = parseCredential(await read(ports.issuer), clock())
   const owner = credential.identity.owner
-  const fleet = evidence("fleet", await read(ports.readers.fleet), trust.fleet, owner, when)
-  const source = evidence("source", await read(ports.readers.source), trust.source, owner, when)
+  const fleet = evidence("fleet", await read(ports.readers.fleet), trust.fleet, owner, clock())
+  const source = evidence("source", await read(ports.readers.source), trust.source, owner, clock())
   const inventory = evidence(
     "inventory",
     await read(ports.readers.inventory),
     trust.inventory,
     owner,
-    when
+    clock()
   )
   const migration = evidence(
     "migration",
     await read(ports.readers.migration),
     trust.migration,
     owner,
-    when
+    clock()
   )
-  const policy = evidence("policy", await read(ports.readers.policy), trust.policy, owner, when)
-  const journal = evidence("journal", await read(ports.readers.journal), trust.journal, owner, when)
+  const policy = evidence("policy", await read(ports.readers.policy), trust.policy, owner, clock())
+  const journal = evidence(
+    "journal",
+    await read(ports.readers.journal),
+    trust.journal,
+    owner,
+    clock()
+  )
   const rollback = evidence(
     "rollback",
     await read(ports.readers.rollback),
     trust.rollback,
     owner,
-    when
+    clock()
   )
   const receipts = { fleet, source, inventory, migration, policy, journal, rollback }
   const bindingDigest = digest(canonicalJson(fleet.data))
@@ -202,13 +226,14 @@ async function construct(ports: IssuerPorts, trust: IssuerPorts["trust"], when: 
   )
   const bundle = await read(ports.sandboxBundle)
   const provenance = verifySandboxAttestationBundle(bundle, source.data.publication, {
-    when: when * 1000,
+    when: clock() * 1000,
     ...(ports.attestationProcess ? { run: ports.attestationProcess } : {}),
   })
   requireProof(inventory.data.provenanceBundleDigest === "sha256:" + provenance.bundleChecksum)
   const evidenceDigests = Object.fromEntries(
     Object.entries(receipts).map(([kind, value]) => [kind, digest(canonicalJson(value.envelope))])
   )
+  const when = clock()
   const candidate = candidateSchema.parse({
     schema: "lyrashield-closed-fleet-candidate/1",
     kind: "closed-fleet-candidate",
@@ -277,8 +302,9 @@ export function createClosedFleetIssuer(ports: IssuerPorts) {
     async issueCandidate() {
       requireProof(!attempted)
       attempted = true // One-shot after uncertainty; never retry an ambiguous intent.
-      const prepared = await construct(ports, trust, clock())
+      const prepared = await construct(ports, trust, clock)
       const { candidate, raw, credential } = prepared
+      valid(candidate.issuedAt, candidate.expiresAt, clock())
       const intentEnvelope = authenticate(
         await read(() =>
           ports.claimIntent({
@@ -333,6 +359,7 @@ export function createClosedFleetIssuer(ports: IssuerPorts) {
         verifyQualificationIssuerToken(credential.token, credential.jwks, credential.identity, when)
       }
       recheck()
+      let succeeded = false
       try {
         await azure([
           "login",
@@ -365,15 +392,18 @@ export function createClosedFleetIssuer(ports: IssuerPorts) {
           keyId: signed.keyId,
           signature: signed.signature,
         })
-        return Object.freeze({
+        const signedCandidate = Object.freeze({
           raw,
           result: immutableResult,
           intentDigest: digest(canonicalJson(intentEnvelope)),
           signatureVerified: true,
           qualified: false,
         })
+        succeeded = true
+        return signedCandidate
       } finally {
         await azure(["logout"])
+        if (succeeded) valid(candidate.issuedAt, candidate.expiresAt, clock())
       }
     },
   })

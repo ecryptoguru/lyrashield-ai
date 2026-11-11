@@ -4,10 +4,23 @@ import { createPublicKey } from "node:crypto"
 import {
   createClosedFleetIssuer,
   issueRuntimeFleetQualification,
+  resolveManagedKeyPin,
   verifyClosedFleetSignature,
 } from "../closed-fleet-issuer.ts"
 import { canonicalJson, evidenceKinds } from "../fleet-qualification-schema.ts"
 import { fixture, now, rawBundle } from "./fixtures/closed-fleet-fixtures.mjs"
+
+test("joins the managed issuer configuration to the matching pinned public key", () => {
+  const { managedKey } = fixture()
+  const { publicKey, ...issuer } = managedKey
+  const runtime = { keyId: issuer.keyId, algorithm: issuer.algorithm, publicKey }
+  assert.deepEqual(resolveManagedKeyPin(issuer, runtime), managedKey)
+  assert.throws(() =>
+    resolveManagedKeyPin(issuer, { ...runtime, keyId: "https://other.example/key" })
+  )
+  assert.throws(() => resolveManagedKeyPin(issuer, { ...runtime, algorithm: "RS512" }))
+  assert.throws(() => resolveManagedKeyPin({ ...issuer, publicKey }, runtime))
+})
 
 test("trust roles cannot share an RSA key through modulus aliases or relabeled key identities", () => {
   const spki = (jwk) =>
@@ -375,6 +388,73 @@ test("managed signature tampering, wrong key, algorithm or expiry cannot return 
   assert.deepEqual(
     f.calls.map((args) => args[0]),
     ["login", "logout"]
+  )
+})
+
+test("uses the time after credential and evidence reads when constructing a candidate", async () => {
+  const f = fixture(),
+    issuer = f.ports.issuer,
+    refresh = f.ports.refreshJournal
+  let seconds = now
+  f.ports.clock = () => seconds
+  f.claims.iat = now + 1
+  f.claims.nbf = now + 1
+  let firstIssuerRead = true
+  f.ports.issuer = async () => {
+    if (firstIssuerRead) {
+      firstIssuerRead = false
+      seconds++
+    }
+    return issuer()
+  }
+  for (const kind of evidenceKinds) {
+    const reader = f.ports.readers[kind]
+    f.ports.readers[kind] = async () => {
+      seconds++
+      f.records[kind].issuedAt = seconds
+      return reader()
+    }
+  }
+  f.ports.refreshJournal = async (request) => {
+    const previous = await refresh(request)
+    return f.signedEvidence("journal", { ...JSON.parse(previous.raw), issuedAt: seconds })
+  }
+
+  const result = await createClosedFleetIssuer(f.ports).issueCandidate()
+  const candidate = verifyClosedFleetSignature(result.raw, result.result, f.managedKey, seconds)
+  assert.equal(candidate.issuedAt, now + 1 + evidenceKinds.length)
+})
+
+test("does not claim an intent when evidence expires during construction", async () => {
+  const f = fixture(),
+    bundle = f.ports.sandboxBundle
+  let seconds = now
+  f.ports.clock = () => seconds
+  f.ports.sandboxBundle = async () => {
+    seconds = now + 600
+    return bundle()
+  }
+
+  await assert.rejects(createClosedFleetIssuer(f.ports).issueCandidate())
+  assert.deepEqual(f.intents, [])
+  assert.deepEqual(f.calls, [])
+})
+
+test("does not return a candidate that expires during logout", async () => {
+  const f = fixture(),
+    azure = f.ports.azure
+  let seconds = now
+  f.ports.clock = () => seconds
+  f.ports.azure = async (args) => {
+    const result = await azure(args)
+    if (args[0] === "logout") seconds = now + 600
+    return result
+  }
+
+  await assert.rejects(createClosedFleetIssuer(f.ports).issueCandidate())
+  assert.deepEqual(
+    f.calls.map((args) => args[0]),
+    ["login", "keyvault", "logout"]
   )
 })
 
