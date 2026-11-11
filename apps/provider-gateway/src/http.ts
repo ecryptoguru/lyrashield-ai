@@ -1,6 +1,7 @@
 import { timingSafeEqual } from "node:crypto"
 import type { IncomingMessage, RequestListener, ServerResponse } from "node:http"
 import { ProviderGatewayError, type ProviderGatewayService } from "./service"
+import { httpStreamSink } from "./downstream"
 
 const MAX_REQUEST_BYTES = 4 * 1024 * 1024
 
@@ -68,6 +69,10 @@ export function createProviderGatewayHandler(
   }
   return (request, response) => {
     void handleRequest(request, response, service, options).catch((error: unknown) => {
+      if (response.headersSent || response.destroyed) {
+        response.destroy()
+        return
+      }
       if (error instanceof ProviderGatewayError) {
         sendJson(response, error.httpStatus, { code: error.code, message: error.message })
         return
@@ -106,26 +111,47 @@ async function handleRequest(
       })
       return
     }
-    const body = await readBody(request)
-    const upstream = await service.proxy({
-      providerId: proxyMatch[1],
-      path: `${proxyMatch[2]}${url.search}`,
-      method: request.method,
-      authorization: `Bearer ${token}`,
-      requestId,
-      ...(typeof request.headers["content-type"] === "string"
-        ? { contentType: request.headers["content-type"] }
-        : {}),
-      ...(typeof request.headers.accept === "string" ? { accept: request.headers.accept } : {}),
-      body,
-    })
-    response.writeHead(upstream.statusCode, {
-      ...upstream.headers,
-      "cache-control": "no-store",
-      "content-length": upstream.body.byteLength,
-      "x-content-type-options": "nosniff",
-    })
-    response.end(upstream.body)
+    const scanId = request.headers["x-lyra-scan-id"]
+    if (typeof scanId !== "string" || !scanId) {
+      sendJson(response, 400, { code: "SCAN_ID_REQUIRED", message: "scan identity is required" })
+      return
+    }
+    const downstream = new AbortController()
+    const disconnected = () => {
+      if (!response.writableFinished) downstream.abort()
+    }
+    response.on("close", disconnected)
+    response.on("error", disconnected)
+    try {
+      const body = await readBody(request)
+      const upstream = await service.proxy(
+        {
+          scanId,
+          providerId: proxyMatch[1],
+          path: `${proxyMatch[2]}${url.search}`,
+          method: request.method,
+          authorization: `Bearer ${token}`,
+          requestId,
+          ...(typeof request.headers["content-type"] === "string"
+            ? { contentType: request.headers["content-type"] }
+            : {}),
+          ...(typeof request.headers.accept === "string" ? { accept: request.headers.accept } : {}),
+          body,
+        },
+        httpStreamSink(response, downstream.signal)
+      )
+      if (upstream.streamed) return
+      response.writeHead(upstream.statusCode, {
+        ...upstream.headers,
+        "cache-control": "no-store",
+        "content-length": upstream.body.byteLength,
+        "x-content-type-options": "nosniff",
+      })
+      response.end(upstream.body)
+    } finally {
+      response.off("close", disconnected)
+      response.off("error", disconnected)
+    }
     return
   }
   if (!authorizedControl(request, options.controlToken)) {

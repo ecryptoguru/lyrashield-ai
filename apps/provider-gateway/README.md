@@ -46,7 +46,7 @@ identity/model, and requires an affirmative completed terminal response and boun
 consistent token usage. Missing/malformed usage, conflicting/duplicate terminal identities,
 partial streams, HTTP errors, revocation, expiration and unacknowledged provider outcomes remain
 `UNKNOWN`. Grant validity is rechecked after asynchronous authorization and journal writes,
-immediately before serialized provider dispatch and response return; queued revocations block
+immediately before serialized provider dispatch and each delivery effect; queued revocations block
 dispatch and replay. Usage identity authenticates the request/attempt and terminal token buckets; it is
 not derived from the output hash. This narrow adapter does not support other provider APIs or
 usage/cache-write shapes.
@@ -60,10 +60,34 @@ completed result. Unresolved restart records receive a durable `UNKNOWN` result.
 only successes receive a separate uncertainty event without rewriting their historical records.
 Wrong encryption keys or invalid retained bytes fail replay and never cause resubmission.
 
-The service buffers the bounded response until terminal validation and durable retention complete.
-It preserves exact SSE bytes but does not yet stream incremental bytes to the engine/client.
-Retention currently uses the bounded local signed journal; managed key rotation, external encrypted
-object retention, capacity/lifecycle qualification and independent settlement remain outstanding.
+The HTTP adapter now delivers SSE incrementally. Provider reads pause until each downstream
+write is acknowledged and, when required, the writable stream drains. At most one 64 KiB delivery
+chunk is outstanding per stream; fixed response storage bounds tiny-fragment overhead, the total
+response remains capped at 4 MiB, and an individual SSE frame/fragment is capped at 256 KiB.
+The server-approved idle and absolute deadlines also bound stalled downstream delivery. At most
+eight downstream deliveries, including concurrent replays, can be active in one service instance.
+
+Every HTTP provider request requires `x-lyra-scan-id` and `x-lyra-request-id`, with the scan identity
+matching the signed grant and persisted request. Each header/write/end effect shares the grant
+and revocation serialization fence; writes acknowledge outside that fence so stalled consumers
+cannot block revocation. Revocation, expiry and disconnect abort further delivery. The HTTP adapter
+destroys an already-started failed stream instead of appending an error JSON body to provider bytes.
+
+Streamed bytes, including a provider terminal event, are provisional. HTTP 200 or transport EOF
+alone is not a completed gateway or settlement receipt. Terminal usage, complete bounded provider
+bytes, downstream completion and durable encrypted retention must all succeed before request
+status becomes replayable. The streaming response exposes no precomputed usage/settlement header;
+the private status adapter supplies the durable receipt after completion. Buffered responses keep
+the existing usage-ID header. Exact retained bytes can be streamed again with backpressure without
+another provider call. Failure of a replay delivery does not create new provider work or erase the
+original authenticated completed receipt.
+
+Partial/malformed streams, downstream disconnect, unacknowledged provider aborts and a crash with
+only a dispatch intent remain `UNKNOWN`, retaining physical and funding reservations. A separate
+signed uncertainty event preserves that hold if delivery/acknowledgement becomes uncertain around
+the completion journal write; historical records are not rewritten. Retention still uses the bounded
+local signed journal. Managed keys, external encrypted object retention, capacity/lifecycle and
+physical isolation qualification and independent settlement remain outstanding.
 
 `GET /v1/requests/:requestId` is a private control-authenticated version 1 status adapter. It returns
 persisted attempt/scan/workspace/authority binding, outcome, approved policy digest, reservation,

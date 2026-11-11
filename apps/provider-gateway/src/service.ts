@@ -1,3 +1,4 @@
+import { performance } from "node:perf_hooks"
 import { createHmac, createHash } from "node:crypto"
 import {
   canonicalJson,
@@ -22,6 +23,7 @@ import {
 import { ResponsesUsageParser, type TerminalUsage } from "./provider-usage"
 import { retainResponse, replayResponse, type RetainedResponse } from "./retained-response"
 import { ProviderGatewayError } from "./errors"
+import type { ProviderStreamSink } from "./downstream"
 import { grantIdFor, signToken, verifyToken } from "./grant-tokens"
 import { type ProviderJournalEvent, type GrantState, type RequestState } from "./journal-events"
 import {
@@ -29,6 +31,7 @@ import {
   readBoundedResponse,
   resolveProviderUrl,
   normalizeHeaderValue,
+  MAX_DELIVERY_CHUNK_BYTES,
 } from "./proxy-utils"
 
 export { ProviderGatewayError } from "./errors"
@@ -65,6 +68,7 @@ function grantStatus(grant: GrantState): ProviderGrantStatus {
 }
 
 interface ProxyInput {
+  scanId?: string
   providerId: string
   path: string
   method: string
@@ -79,6 +83,13 @@ interface ProxyResponse {
   headers: Record<string, string>
   body: Buffer
   replayed: boolean
+  streamed?: true
+}
+interface DeliveryState {
+  grantId?: string
+  controller: AbortController
+  done: Promise<void>
+  finish: () => void
 }
 
 export class ProviderGatewayService {
@@ -97,6 +108,7 @@ export class ProviderGatewayService {
     }
   >()
   private draining = false
+  private readonly deliveries = new Map<symbol, DeliveryState>()
   private failed = false
 
   constructor(private readonly options: ProviderGatewayServiceOptions) {
@@ -118,7 +130,7 @@ export class ProviderGatewayService {
   async drain(): Promise<void> {
     this.draining = true
     await this.serial
-    const active = [...this.inFlight.values()]
+    const active = [...this.inFlight.values(), ...this.deliveries.values()]
     for (const request of active) request.controller.abort()
     await Promise.all(active.map((request) => request.done))
     await this.serial
@@ -248,6 +260,9 @@ export class ProviderGatewayService {
         for (const active of this.inFlight.values()) {
           if (active.grantId === grant.grantId) active.controller.abort()
         }
+        for (const active of this.deliveries.values()) {
+          if (active.grantId === grant.grantId) active.controller.abort()
+        }
       }
       const current = this.grants.get(grant.grantId)
       if (!current)
@@ -291,7 +306,7 @@ export class ProviderGatewayService {
     }
   }
 
-  private async prepareProxy(input: ProxyInput) {
+  private async prepareProxy(input: ProxyInput, delivery?: DeliveryState) {
     await this.initialize()
     if (this.failed || this.draining || this.options.admission !== "open")
       throw new ProviderGatewayError("ADMISSION_CLOSED", "runtime admission is closed")
@@ -306,7 +321,9 @@ export class ProviderGatewayService {
     const verified = verifyToken(this.options.signingSecret, token)
     const grant = this.grants.get(verified.grantId)
     if (!grant) throw new ProviderGatewayError("GRANT_NOT_FOUND", "provider grant not found")
+    if (delivery) delivery.grantId = grant.grantId
     if (
+      (input.scanId !== undefined && input.scanId !== grant.request.scanId) ||
       grant.request.providerId !== input.providerId ||
       grant.request.attemptId !== verified.attemptId ||
       grant.request.providerId !== verified.providerId ||
@@ -473,15 +490,84 @@ export class ProviderGatewayService {
     return { kind: "ready" as const, target, headers, controller, policy, approved, grant }
   }
 
-  async proxy(input: ProxyInput): Promise<ProxyResponse> {
-    const prepared = await this.serialized(() => this.prepareProxy(input))
+  async proxy(input: ProxyInput, sink?: ProviderStreamSink): Promise<ProxyResponse> {
+    if (sink && !input.scanId)
+      throw new ProviderGatewayError(
+        "SCAN_ID_REQUIRED",
+        "scan-bound downstream delivery is required",
+        400
+      )
+    if (sink?.signal.aborted)
+      throw new ProviderGatewayError("DOWNSTREAM_DISCONNECTED", "downstream is disconnected", 409)
+    if (!sink) return this.executeProxy(input)
+    if (this.deliveries.size >= MAX_OUTSTANDING_PROVIDER_REQUESTS)
+      throw new ProviderGatewayError(
+        "DELIVERY_CONCURRENCY_EXHAUSTED",
+        "delivery concurrency is exhausted",
+        429
+      )
+    const identity = Symbol()
+    let finish: () => void = () => undefined
+    const done = new Promise<void>((resolve) => {
+      finish = resolve
+    })
+    const delivery = { controller: new AbortController(), done, finish }
+    this.deliveries.set(identity, delivery)
+    try {
+      return await this.executeProxy(input, sink, delivery)
+    } finally {
+      this.deliveries.delete(identity)
+      finish()
+    }
+  }
+
+  private async executeProxy(
+    input: ProxyInput,
+    sink?: ProviderStreamSink,
+    delivery?: DeliveryState
+  ): Promise<ProxyResponse> {
+    const prepared = await this.serialized(() => this.prepareProxy(input, delivery))
     if (prepared.kind === "replay") {
       // Honor revocations queued while broker authorization was awaited.
       await this.serialized(async () => this.assertGrantActive(prepared.grant))
       this.assertGrantActive(prepared.grant)
+      if (sink && this.requests.get(input.requestId)?.stream) {
+        const policy = prepared.grant.policy
+        if (!policy || !delivery)
+          throw new ProviderGatewayError("JOURNAL_INTEGRITY", "replay policy is unavailable", 500)
+        const deadlineAt = performance.now() + policy.deadlineMs
+        const timeout = setTimeout(
+          () => delivery.controller.abort(),
+          Math.min(
+            policy.deadlineMs,
+            Math.max(1, Date.parse(prepared.grant.request.expiresAt) - this.now().getTime())
+          )
+        )
+        const signal = AbortSignal.any([sink.signal, delivery.controller.signal])
+        try {
+          await this.deliverEffect(prepared.grant, signal, policy.idleTimeoutMs, deadlineAt, () =>
+            sink.start(prepared.response.statusCode, prepared.response.headers)
+          )
+          for (
+            let offset = 0;
+            offset < prepared.response.body.byteLength;
+            offset += MAX_DELIVERY_CHUNK_BYTES
+          )
+            await this.deliverEffect(prepared.grant, signal, policy.idleTimeoutMs, deadlineAt, () =>
+              sink.write(prepared.response.body.subarray(offset, offset + MAX_DELIVERY_CHUNK_BYTES))
+            )
+          await this.deliverEffect(prepared.grant, signal, policy.idleTimeoutMs, deadlineAt, () =>
+            sink.complete()
+          )
+          return { ...prepared.response, streamed: true }
+        } finally {
+          clearTimeout(timeout)
+        }
+      }
       return prepared.response
     }
     const { target, headers, controller, policy, approved, grant } = prepared
+    const deadlineAt = performance.now() + policy.deadlineMs
     const deadline = setTimeout(() => controller.abort(), policy.deadlineMs)
     const expiry = setTimeout(
       () => controller.abort(),
@@ -493,7 +579,10 @@ export class ProviderGatewayService {
         ) - this.now().getTime()
       )
     )
-    const signal = controller.signal
+    const activeSink = approved.stream ? sink : undefined
+    const signal = sink
+      ? AbortSignal.any([controller.signal, sink.signal, delivery!.controller.signal])
+      : controller.signal
     try {
       let upstream: Response
       try {
@@ -502,7 +591,7 @@ export class ProviderGatewayService {
         // slow providers never hold the control-plane serialization lock.
         const dispatched = await this.serialized(async () => {
           this.assertGrantActive(grant)
-          if (controller.signal.aborted)
+          if (signal.aborted || performance.now() >= deadlineAt)
             throw new ProviderGatewayError(
               "PROVIDER_UNAVAILABLE",
               "provider dispatch was aborted",
@@ -538,16 +627,35 @@ export class ProviderGatewayService {
         policyDigest: policyDigest(policy),
       })
       const responseHasher = createHash("sha256")
+      const responseHeaders: Record<string, string> = {
+        "content-type": upstream.headers.get("content-type") ?? "application/octet-stream",
+        "x-lyra-request-id": input.requestId,
+      }
       let responseBody: Buffer
       let usage: TerminalUsage | undefined
       try {
+        if (
+          !upstream.ok ||
+          upstream.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase() !==
+            (approved.stream ? "text/event-stream" : "application/json")
+        )
+          throw new Error("provider response encoding or outcome is unavailable")
+        if (activeSink)
+          await this.deliverEffect(grant, signal, policy.idleTimeoutMs, deadlineAt, () =>
+            activeSink.start(upstream.status, responseHeaders)
+          )
         responseBody = await abortable(
           readBoundedResponse(upstream, policy.maxResponseBytes, {
             signal,
+            deadlineAt,
             idleTimeoutMs: policy.idleTimeoutMs,
-            onChunk: (chunk) => {
+            onChunk: async (chunk) => {
               responseHasher.update(chunk)
-              if (upstream.ok) parser.push(chunk)
+              parser.push(chunk)
+              if (activeSink)
+                await this.deliverEffect(grant, signal, policy.idleTimeoutMs, deadlineAt, () =>
+                  activeSink.write(chunk)
+                )
             },
           }),
           signal
@@ -562,7 +670,12 @@ export class ProviderGatewayService {
             throw new Error("provider response encoding mismatch")
           usage = parser.finish()
         } else throw new Error("provider returned no affirmative terminal usage")
+        if (activeSink)
+          await this.deliverEffect(grant, signal, policy.idleTimeoutMs, deadlineAt, () =>
+            activeSink.complete()
+          )
       } catch {
+        controller.abort()
         await this.serialized(() =>
           this.recordResult(
             input.requestId,
@@ -581,12 +694,13 @@ export class ProviderGatewayService {
       }
       const outcome = upstream.ok ? "SUCCEEDED" : "FAILED"
       const responseHash = responseHasher.digest("hex")
-      const responseHeaders: Record<string, string> = {
-        "content-type": upstream.headers.get("content-type") ?? "application/octet-stream",
-        "x-lyra-request-id": input.requestId,
-      }
       const result = await this.serialized(async () => {
-        if (controller.signal.aborted) {
+        if (
+          signal.aborted ||
+          performance.now() >= deadlineAt ||
+          grant.revokedAt ||
+          Date.parse(grant.request.expiresAt) <= this.now().getTime()
+        ) {
           await this.recordResult(
             input.requestId,
             "UNKNOWN",
@@ -623,7 +737,7 @@ export class ProviderGatewayService {
           )
         }
         const usageId = usage ? this.usageId(state, usage) : undefined
-        if (usageId) responseHeaders["x-lyra-usage-id"] = usageId
+        if (usageId && !activeSink) responseHeaders["x-lyra-usage-id"] = usageId
         const binding = this.responseBinding({
           ...state,
           statusCode: upstream.status,
@@ -647,10 +761,10 @@ export class ProviderGatewayService {
           retainedResponse
         )
       })
-      if (result.usageId) responseHeaders["x-lyra-usage-id"] = result.usageId
+      if (result.usageId && !activeSink) responseHeaders["x-lyra-usage-id"] = result.usageId
       await this.serialized(async () => this.assertGrantActive(grant))
       this.assertGrantActive(grant)
-      if (controller.signal.aborted)
+      if (signal.aborted || performance.now() >= deadlineAt)
         throw new ProviderGatewayError(
           "PROVIDER_UNAVAILABLE",
           "provider response return was aborted",
@@ -661,13 +775,49 @@ export class ProviderGatewayService {
         headers: responseHeaders,
         body: responseBody,
         replayed: false,
+        ...(activeSink ? { streamed: true as const } : {}),
       }
+    } catch (error) {
+      if (activeSink) {
+        await this.serialized(async () => {
+          const request = this.requests.get(input.requestId)
+          if (request && (request.outcome === "PENDING" || request.outcome === "SUCCEEDED")) {
+            const record = await this.options.journal.append({
+              type: "stream_delivery_uncertain",
+              requestId: request.requestId,
+              grantId: request.grantId,
+              attemptId: request.attemptId,
+            })
+            this.apply(record)
+          }
+        })
+      }
+      throw error
     } finally {
       clearTimeout(deadline)
       clearTimeout(expiry)
       this.inFlight.get(input.requestId)?.finish()
       this.inFlight.delete(input.requestId)
     }
+  }
+
+  private async deliverEffect(
+    grant: GrantState,
+    signal: AbortSignal,
+    idleTimeoutMs: number,
+    deadlineAt: number,
+    effect: () => void | Promise<void>
+  ): Promise<void> {
+    const submitted = await this.serialized(async () => {
+      this.assertGrantActive(grant)
+      if (signal.aborted || performance.now() >= deadlineAt)
+        throw new ProviderGatewayError("DOWNSTREAM_DISCONNECTED", "delivery was aborted", 409)
+      return { done: effect() }
+    })
+    await abortable(Promise.resolve(submitted.done), signal, idleTimeoutMs)
+    this.assertGrantActive(grant)
+    if (signal.aborted || performance.now() >= deadlineAt)
+      throw new ProviderGatewayError("DOWNSTREAM_DISCONNECTED", "delivery was aborted", 409)
   }
 
   private assertGrantActive(grant: GrantState): void {
@@ -830,6 +980,35 @@ export class ProviderGatewayService {
         grant.reservedCostMicros += request.reservationMicros
         grant.receiptHash = record.hash
       }
+      return
+    }
+    if (event.type === "stream_delivery_uncertain") {
+      const existing = this.requests.get(event.requestId)
+      if (
+        !existing ||
+        !existing.stream ||
+        (existing.outcome !== "PENDING" && existing.outcome !== "SUCCEEDED") ||
+        existing.grantId !== event.grantId ||
+        existing.attemptId !== event.attemptId
+      )
+        throw new ProviderGatewayError(
+          "JOURNAL_INTEGRITY",
+          "stream uncertainty binding is invalid",
+          500
+        )
+      existing.outcome = "UNKNOWN"
+      existing.physicalOutstanding = true
+      existing.usageId = undefined
+      existing.usage = undefined
+      existing.retainedResponse = undefined
+      existing.receiptHash = record.hash
+      existing.receipt = {
+        sequence: record.sequence,
+        hash: record.hash,
+        signature: record.signature,
+      }
+      const grant = this.grants.get(existing.grantId)
+      if (grant) grant.receiptHash = record.hash
       return
     }
     if (event.type === "legacy_request_uncertain") {
