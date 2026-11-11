@@ -171,11 +171,12 @@ export function verifyBitmapFont(compressed) {
   for (let table = 0; table < count; table++) {
     const at = 8 + table * 16
     const type = bytes.readUInt32LE(at)
+    const format = bytes.readUInt32LE(at + 4)
     const size = bytes.readUInt32LE(at + 8)
     const offset = bytes.readUInt32LE(at + 12)
-    // Legacy BDF accelerator tables reserve 100 bytes in the TOC even when
-    // their optional ink bounds are absent and only 48 bytes are stored.
-    const stored = type === 256 ? Math.min(size, 48) : size
+    // The pinned image's BDF accelerators reserve 100 bytes but store 48,
+    // or 72 when the format includes ink bounds. Other sizes need full bounds.
+    const stored = type === 256 && size === 100 ? (format & 0x100 ? 72 : 48) : size
     if (
       types.has(type) ||
       size < 4 ||
