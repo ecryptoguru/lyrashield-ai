@@ -11,6 +11,7 @@ const journal = new SignedJournal(config.journalPath, config.signingSecret, (val
 const service = new ProviderGatewayService({
   journal,
   signingSecret: config.signingSecret,
+  responseEncryptionSecret: config.responseEncryptionSecret,
   admission: config.admission,
   providers: config.providers,
 })

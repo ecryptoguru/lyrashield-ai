@@ -1,3 +1,5 @@
+import { requestPolicySchema, type RequestPolicy } from "./request-policy"
+
 export interface ProviderRoute {
   id: string
   baseUrl: string
@@ -5,6 +7,7 @@ export interface ProviderRoute {
     | { kind: "authorization"; credential: string }
     | { kind: "api-key"; credential: string; headerName: string }
   allowedPathPrefixes: string[]
+  requestPolicy?: RequestPolicy
 }
 
 export interface ProviderGatewayConfig {
@@ -12,6 +15,7 @@ export interface ProviderGatewayConfig {
   port: number
   journalPath: string
   signingSecret: string
+  responseEncryptionSecret: string
   controlToken: string
   admission: "closed" | "open"
   providers: Map<string, ProviderRoute>
@@ -24,6 +28,7 @@ interface RouteDescriptor {
   secretEnv: string
   headerName?: string
   allowedPathPrefixes: string[]
+  requestPolicy?: unknown
 }
 
 function required(env: NodeJS.ProcessEnv, name: string): string {
@@ -59,10 +64,11 @@ function parseRoutes(raw: string, env: NodeJS.ProcessEnv): Map<string, ProviderR
       throw new Error(`invalid provider route descriptor for ${String(descriptor.id)}`)
     }
     const base = new URL(descriptor.baseUrl)
+    if (base.username || base.password || base.hash || base.search)
+      throw new Error("provider base URL must not contain credentials, a query or a fragment")
     if (
       base.protocol !== "https:" &&
-      base.hostname !== "127.0.0.1" &&
-      base.hostname !== "localhost"
+      !(base.protocol === "http:" && ["127.0.0.1", "localhost"].includes(base.hostname))
     ) {
       throw new Error("provider routes require HTTPS except for local synthetic upstreams")
     }
@@ -85,6 +91,9 @@ function parseRoutes(raw: string, env: NodeJS.ProcessEnv): Map<string, ProviderR
       baseUrl: base.toString(),
       auth,
       allowedPathPrefixes: descriptor.allowedPathPrefixes,
+      ...(descriptor.requestPolicy !== undefined
+        ? { requestPolicy: requestPolicySchema.parse(descriptor.requestPolicy) }
+        : {}),
     })
   }
   return providers
@@ -110,6 +119,10 @@ export function loadProviderGatewayConfig(
     port,
     journalPath: required(env, "LYRASHIELD_PROVIDER_GATEWAY_JOURNAL_PATH"),
     signingSecret: required(env, "LYRASHIELD_PROVIDER_GATEWAY_SIGNING_SECRET"),
+    responseEncryptionSecret: required(
+      env,
+      "LYRASHIELD_PROVIDER_GATEWAY_RESPONSE_ENCRYPTION_SECRET"
+    ),
     controlToken: required(env, "LYRASHIELD_PROVIDER_GATEWAY_CONTROL_TOKEN"),
     admission,
     providers: parseRoutes(required(env, "LYRASHIELD_PROVIDER_ROUTES_JSON"), env),

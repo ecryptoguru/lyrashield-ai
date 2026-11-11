@@ -132,6 +132,12 @@ async function handleRequest(
     sendJson(response, 401, { code: "UNAUTHORIZED", message: "control credential required" })
     return
   }
+  const requestStatusMatch = /^\/v1\/requests\/([A-Za-z0-9._:-]{3,192})$/.exec(url.pathname)
+  if (request.method === "GET" && requestStatusMatch?.[1]) {
+    const status = await service.inspectRequest(requestStatusMatch[1])
+    sendJson(response, status ? 200 : 404, status ?? { code: "REQUEST_NOT_FOUND" })
+    return
+  }
   if (request.method === "POST" && url.pathname === "/v1/grants") {
     sendJson(response, 200, await service.issueGrant(await readJson(request)))
     return
