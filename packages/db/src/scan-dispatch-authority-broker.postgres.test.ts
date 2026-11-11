@@ -5,6 +5,12 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { createScanDispatchAuthorityBroker } from "./scan-dispatch-authority-broker"
 import { buildScanExecutionPlan, ScanExecutionPlanSchema } from "@lyrashield/types"
 import { computeScanExecutionPlanHash } from "./scan-execution-plan"
+import {
+  applyPreparationFixtureMigration,
+  installPreparationFixtureRole,
+  legacyPreparationFixture,
+  historicalPreparation,
+} from "../scripts/tests/scan-preparation-fixture"
 import { publishFixtureOutbox, queueFixtureWorker } from "../scripts/tests/queue-outbox-fixture"
 
 const enabled =
@@ -18,6 +24,7 @@ const brokerUrl = process.env.DISPATCH_AUTHORITY_DATABASE_URL
 const sharedEpochId = "authority-shared-open-epoch"
 let owner: pg.Pool
 let broker: ReturnType<typeof createScanDispatchAuthorityBroker>
+let legacyBroker: ReturnType<typeof createScanDispatchAuthorityBroker>
 const queueWorker = queueFixtureWorker()
 
 type Fixture = {
@@ -73,6 +80,14 @@ async function createFixture(
   await owner.query(
     'INSERT INTO "Workspace" ("id","name","slug","mode","plan","deploymentType","retentionDays","telemetryEnabled","createdAt","updatedAt") VALUES ($1,$1,$1,\'VIBE\',\'FREE\',\'saas\',30,false,$2,$2)',
     [fixture.workspaceId, now]
+  )
+  await owner.query(
+    `INSERT INTO "WorkspaceMember" (id,"workspaceId","userId",role,status,"createdAt","updatedAt") VALUES($1,$2,$3,'VIEWER','active',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`,
+    [`member-${suffix}`, fixture.workspaceId, fixture.userId]
+  )
+  await owner.query(
+    `INSERT INTO "BillingAccount" (id,"accountId",status,"currentPlan","createdAt","updatedAt") VALUES($1,$2,'active','PRO',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`,
+    [`billing-${suffix}`, fixture.userId]
   )
   await owner.query(
     'INSERT INTO "Target" ("id","workspaceId","type","name","environment","status","createdAt","updatedAt") VALUES ($1,$2,\'REPO\',$1,\'STAGING\',\'active\',$3,$3)',
@@ -372,8 +387,14 @@ describe.skipIf(!enabled)("scan dispatch authority broker", () => {
     owner.on("connect", (client) => {
       client.on("error", () => undefined)
     })
-    broker = createScanDispatchAuthorityBroker({ connectionString: brokerUrl })
     await queueWorker.open()
+    await applyPreparationFixtureMigration(owner)
+    await installPreparationFixtureRole(owner)
+    broker = createScanDispatchAuthorityBroker({
+      connectionString: process.env.DISPATCH_PREPARATION_BROKER_DATABASE_URL!,
+      preparationAuthority: "checked-intent-v1",
+    })
+    legacyBroker = createScanDispatchAuthorityBroker({ connectionString: brokerUrl })
     const epoch = await owner.query(
       'SELECT "isOpen", "openKey", "openedAt", "closedAt" FROM "ScanAuthorityEpoch" WHERE id=$1',
       [sharedEpochId]
@@ -386,6 +407,7 @@ describe.skipIf(!enabled)("scan dispatch authority broker", () => {
   afterAll(async () => {
     await queueWorker.close()
     await broker?.close()
+    await legacyBroker?.close()
     await owner?.end()
   })
 
@@ -501,23 +523,12 @@ describe.skipIf(!enabled)("scan dispatch authority broker", () => {
   })
 
   it("commits paid-start funding, the lifetime claim and START_PAID atomically", async () => {
-    const fixture = await createFixture()
-    const expiresAt = (
-      await owner.query<{ expiresAt: Date }>(
-        "SELECT CURRENT_TIMESTAMP + interval '10 minutes' AS \"expiresAt\""
-      )
-    ).rows[0]!.expiresAt
-    const prepared = await broker.prepare({
-      operationId: fixture.operationId,
-      workerInstanceId: fixture.instanceId,
-      workerGrantId: fixture.grantId,
-      authorityEpochId: fixture.epochId,
-      expiresAt,
-    })
+    const fixture = await legacyPreparationFixture(owner)
+    const prepared = await historicalPreparation(owner, fixture)
     if (prepared.kind !== "committed") throw new Error("fixture preparation did not commit")
     await markPrepared(fixture, prepared.attemptId, prepared.commandId)
 
-    const started = await broker.startPaid({
+    const started = await legacyBroker.startPaid({
       operationId: fixture.operationId,
       attemptId: prepared.attemptId,
       workerInstanceId: fixture.instanceId,
@@ -547,7 +558,7 @@ describe.skipIf(!enabled)("scan dispatch authority broker", () => {
       commands: "1",
     })
 
-    const replay = await broker.startPaid({
+    const replay = await legacyBroker.startPaid({
       operationId: fixture.operationId,
       attemptId: prepared.attemptId,
       workerInstanceId: fixture.instanceId,
@@ -558,23 +569,12 @@ describe.skipIf(!enabled)("scan dispatch authority broker", () => {
   })
 
   it("commits unmetered start without capacity or billing side effects", async () => {
-    const fixture = await createFixture({ maxBudgetUsd: 0 })
-    const expiresAt = (
-      await owner.query<{ expiresAt: Date }>(
-        "SELECT CURRENT_TIMESTAMP + interval '10 minutes' AS \"expiresAt\""
-      )
-    ).rows[0]!.expiresAt
-    const prepared = await broker.prepare({
-      operationId: fixture.operationId,
-      workerInstanceId: fixture.instanceId,
-      workerGrantId: fixture.grantId,
-      authorityEpochId: fixture.epochId,
-      expiresAt,
-    })
+    const fixture = await legacyPreparationFixture(owner, 0)
+    const prepared = await historicalPreparation(owner, fixture)
     if (prepared.kind !== "committed") throw new Error("fixture preparation did not commit")
     await markPrepared(fixture, prepared.attemptId, prepared.commandId)
 
-    const started = await broker.startUnmetered({
+    const started = await legacyBroker.startUnmetered({
       operationId: fixture.operationId,
       attemptId: prepared.attemptId,
       workerInstanceId: fixture.instanceId,
@@ -616,7 +616,7 @@ describe.skipIf(!enabled)("scan dispatch authority broker", () => {
     })
     expect(Number(state.rows[0]!.maxBudget)).toBe(0)
 
-    const replay = await broker.startUnmetered({
+    const replay = await legacyBroker.startUnmetered({
       operationId: fixture.operationId,
       attemptId: prepared.attemptId,
       workerInstanceId: fixture.instanceId,
@@ -627,24 +627,13 @@ describe.skipIf(!enabled)("scan dispatch authority broker", () => {
   })
 
   it("rejects unmetered start when the attempt carries a positive budget", async () => {
-    const fixture = await createFixture()
-    const expiresAt = (
-      await owner.query<{ expiresAt: Date }>(
-        "SELECT CURRENT_TIMESTAMP + interval '10 minutes' AS \"expiresAt\""
-      )
-    ).rows[0]!.expiresAt
-    const prepared = await broker.prepare({
-      operationId: fixture.operationId,
-      workerInstanceId: fixture.instanceId,
-      workerGrantId: fixture.grantId,
-      authorityEpochId: fixture.epochId,
-      expiresAt,
-    })
+    const fixture = await legacyPreparationFixture(owner)
+    const prepared = await historicalPreparation(owner, fixture)
     if (prepared.kind !== "committed") throw new Error("fixture preparation did not commit")
     await markPrepared(fixture, prepared.attemptId, prepared.commandId)
 
     await expect(
-      broker.startUnmetered({
+      legacyBroker.startUnmetered({
         operationId: fixture.operationId,
         attemptId: prepared.attemptId,
         workerInstanceId: fixture.instanceId,
@@ -663,19 +652,8 @@ describe.skipIf(!enabled)("scan dispatch authority broker", () => {
   })
 
   it("rejects unmetered start when PREPARE is not complete", async () => {
-    const fixture = await createFixture({ maxBudgetUsd: 0 })
-    const expiresAt = (
-      await owner.query<{ expiresAt: Date }>(
-        "SELECT CURRENT_TIMESTAMP + interval '10 minutes' AS \"expiresAt\""
-      )
-    ).rows[0]!.expiresAt
-    const prepared = await broker.prepare({
-      operationId: fixture.operationId,
-      workerInstanceId: fixture.instanceId,
-      workerGrantId: fixture.grantId,
-      authorityEpochId: fixture.epochId,
-      expiresAt,
-    })
+    const fixture = await legacyPreparationFixture(owner, 0)
+    const prepared = await historicalPreparation(owner, fixture)
     if (prepared.kind !== "committed") throw new Error("fixture preparation did not commit")
     // Reach the PREPARE-status check: the operation is PREPARED and physical
     // preparation is in flight, but the PREPARE outbox command is only
@@ -685,7 +663,7 @@ describe.skipIf(!enabled)("scan dispatch authority broker", () => {
     })
 
     await expect(
-      broker.startUnmetered({
+      legacyBroker.startUnmetered({
         operationId: fixture.operationId,
         attemptId: prepared.attemptId,
         workerInstanceId: fixture.instanceId,
@@ -721,7 +699,6 @@ describe.skipIf(!enabled)("scan dispatch authority broker", () => {
       expiresAt,
     })
     if (prepared.kind !== "committed") throw new Error("fixture preparation did not commit")
-    await markPrepared(fixture, prepared.attemptId, prepared.commandId)
 
     const stop = await broker.stop({
       operationId: fixture.operationId,
@@ -751,19 +728,8 @@ describe.skipIf(!enabled)("scan dispatch authority broker", () => {
   })
 
   it("reconciles an unknown operation by command only and never creates another attempt", async () => {
-    const fixture = await createFixture()
-    const expiresAt = (
-      await owner.query<{ expiresAt: Date }>(
-        "SELECT CURRENT_TIMESTAMP + interval '10 minutes' AS \"expiresAt\""
-      )
-    ).rows[0]!.expiresAt
-    const prepared = await broker.prepare({
-      operationId: fixture.operationId,
-      workerInstanceId: fixture.instanceId,
-      workerGrantId: fixture.grantId,
-      authorityEpochId: fixture.epochId,
-      expiresAt,
-    })
+    const fixture = await legacyPreparationFixture(owner)
+    const prepared = await historicalPreparation(owner, fixture)
     if (prepared.kind !== "committed") throw new Error("fixture preparation did not commit")
     await owner.query(
       `UPDATE "ScanDispatchOperation"
@@ -1012,14 +978,8 @@ describe.skipIf(!enabled)("scan dispatch authority broker", () => {
       ).rows[0]!.count
     ).toBe("0")
 
-    const reconcileFixture = await createFixture()
-    const reconcilePrepared = await broker.prepare({
-      operationId: reconcileFixture.operationId,
-      workerInstanceId: reconcileFixture.instanceId,
-      workerGrantId: reconcileFixture.grantId,
-      authorityEpochId: reconcileFixture.epochId,
-      expiresAt: await attemptExpiry(),
-    })
+    const reconcileFixture = await legacyPreparationFixture(owner)
+    const reconcilePrepared = await historicalPreparation(owner, reconcileFixture)
     if (reconcilePrepared.kind !== "committed")
       throw new Error("fixture preparation did not commit")
     await owner.query(
@@ -1076,7 +1036,7 @@ describe.skipIf(!enabled)("scan dispatch authority broker", () => {
         authorityEpochId: fixture.epochId,
         expiresAt: await attemptExpiry(),
       })
-    ).rejects.toMatchObject({ code: "DISPATCH_SCOPE_CHANGED" })
+    ).rejects.toMatchObject({ code: "DATABASE_REJECTED" })
   })
 
   it("rejects preparation after the admitted target is deleted", async () => {
@@ -1093,18 +1053,12 @@ describe.skipIf(!enabled)("scan dispatch authority broker", () => {
         authorityEpochId: fixture.epochId,
         expiresAt: await attemptExpiry(),
       })
-    ).rejects.toMatchObject({ code: "DISPATCH_SCOPE_CHANGED" })
+    ).rejects.toMatchObject({ code: "DATABASE_REJECTED" })
   })
 
   it("records one terminal release receipt and rejects a duplicate release", async () => {
-    const fixture = await createFixture()
-    const prepared = await broker.prepare({
-      operationId: fixture.operationId,
-      workerInstanceId: fixture.instanceId,
-      workerGrantId: fixture.grantId,
-      authorityEpochId: fixture.epochId,
-      expiresAt: await attemptExpiry(),
-    })
+    const fixture = await legacyPreparationFixture(owner)
+    const prepared = await historicalPreparation(owner, fixture)
     if (prepared.kind !== "committed") throw new Error("fixture preparation did not commit")
     await markPrepared(fixture, prepared.attemptId, prepared.commandId)
     const release = await advanceToRelease(fixture, prepared.attemptId)

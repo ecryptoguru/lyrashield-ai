@@ -6,14 +6,16 @@ import struct
 import subprocess
 import sys
 import threading
+import time
 
-container, port_file, arm, marker = sys.argv[1:]
+container, port_file, arm, marker, delay_arm, delay_marker = sys.argv[1:]
 listener = socket.socket()
 listener.bind(("127.0.0.1", 0))
 listener.listen(64)
 with open(port_file, "x", encoding="ascii") as output:
     output.write(str(listener.getsockname()[1]))
 fired = threading.Event()
+delayed = threading.Event()
 fired_lock = threading.Lock()
 
 
@@ -56,7 +58,7 @@ def relay(connection):
         fields = dict(zip(parts[::2], parts[1::2]))
         if len(fields) * 2 != len(parts):
             raise ValueError("duplicate startup parameter")
-        target = fields.get(b"user") == b"postgres"
+        target = fields.get(b"user") in (b"postgres", b"dispatch_prepare_broker")
 
         process = subprocess.Popen(
             ["docker", "exec", "-i", container, "nc", "127.0.0.1", "5432"],
@@ -127,6 +129,11 @@ def relay(connection):
                         with open(marker, "x", encoding="ascii") as output:
                             output.write("dispatch-prepare-commit-response-dropped\n")
                         return
+                if matches and os.path.isfile(delay_arm) and not delayed.is_set():
+                    delayed.set()
+                    with open(delay_marker, "x", encoding="ascii") as output:
+                        output.write("dispatch-prepare-commit-response-delayed\n")
+                    time.sleep(10.2)
             if header[:1] == b"C" and body in (b"COMMIT\x00", b"ROLLBACK\x00"):
                 with transaction_lock:
                     transaction.update(begin=False, attempt_insert=False)

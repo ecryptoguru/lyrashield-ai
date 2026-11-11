@@ -52,6 +52,10 @@ import { createId } from "@paralleldrive/cuid2"
 import pg from "pg"
 import { createPgConnectionConfig } from "./connection-config"
 import {
+  bindScanPreparationContext,
+  preparationAcknowledgementIsLive,
+} from "./scan-preparation-authority"
+import {
   ScanDispatchAuthorityError,
   prepareDispatch,
   startUnmeteredDispatch,
@@ -73,7 +77,11 @@ export type DispatchOperationState =
 
 export type DispatchBrokerResult<T extends object = Record<string, never>> =
   | ({ kind: "committed"; operationId: string } & T)
-  | { kind: "unknown"; operationId: string; reasonCode: "COMMIT_OUTCOME_UNKNOWN" }
+  | {
+      kind: "unknown"
+      operationId: string
+      reasonCode: "COMMIT_OUTCOME_UNKNOWN" | "COMMIT_OBSERVED_AFTER_AUTHORITY_DEADLINE"
+    }
 
 type TransactionOutcome<T extends object> =
   | { kind: "committed"; operationId: string; value: T }
@@ -88,7 +96,14 @@ export type PrepareDispatchInput = {
 }
 
 export type PrepareDispatchResult =
-  | DispatchBrokerResult<{ state: "PREPARING"; attemptId: string; commandId: string }>
+  | DispatchBrokerResult<{
+      state: "PREPARING"
+      attemptId: string
+      commandId: string
+      authorityAcceptedAt: Date
+      authorityDeadlineAt: Date
+      eligibility: "CHECKED_INTENT_ONLY"
+    }>
   | { kind: "waiting"; operationId: string; state: "WAITING_CAPACITY" }
 
 export type StartPaidDispatchInput = {
@@ -139,6 +154,7 @@ export type DispatchStatus =
       operationId: string
       state: DispatchOperationState
       attemptId: string | null
+      preparationEligibility: "UNAVAILABLE" | "CHECKED_INTENT_ONLY" | "EXPIRED"
     }
   | { kind: "unknown"; operationId: string; reasonCode: "STATUS_UNAVAILABLE" }
 
@@ -147,6 +163,8 @@ export { ScanDispatchAuthorityError }
 type BrokerOptions = {
   connectionString: string
   maximumPoolSize?: number
+  /** Internal installation only. This intent contract cannot execute work. */
+  preparationAuthority?: "checked-intent-v1"
 }
 
 type LockedOperation = {
@@ -174,11 +192,23 @@ async function runDispatchTransaction<T>(
     await client.query("SET LOCAL lock_timeout = '3s'")
     await client.query("SET LOCAL idle_in_transaction_session_timeout = '20s'")
     await client.query("SET LOCAL synchronous_commit = 'remote_apply'")
+    await client.query("SET LOCAL timezone = 'UTC'")
+    await bindScanPreparationContext(client, operationId)
     const value = await work(client)
     if (typeof value !== "object" || value === null)
       throw new Error("dispatch broker transaction returned an invalid value")
     commitAttempted = true
     await client.query("COMMIT")
+    if (
+      "authorityDeadlineAt" in value &&
+      value.authorityDeadlineAt instanceof Date &&
+      !(await preparationAcknowledgementIsLive(client, value.authorityDeadlineAt))
+    )
+      return {
+        kind: "unknown",
+        operationId,
+        reasonCode: "COMMIT_OBSERVED_AFTER_AUTHORITY_DEADLINE",
+      }
     return { kind: "committed", operationId, value }
   } catch (error) {
     if (!commitAttempted) {
@@ -287,18 +317,28 @@ async function lockOperation(
 
 async function getDispatchStatus(pool: pg.Pool, operationId: string): Promise<DispatchStatus> {
   try {
-    const result = await pool.query<{
-      operationId: string
-      state: DispatchOperationState
-      attemptId: string | null
-    }>(
-      `SELECT o."operationId", o."state"::text AS state, a."attemptId"
+    const result = await runDispatchTransaction(pool, operationId, async (client) => {
+      const result = await client.query<{
+        operationId: string
+        state: DispatchOperationState
+        attemptId: string | null
+        preparationEligibility: "UNAVAILABLE" | "CHECKED_INTENT_ONLY" | "EXPIRED"
+      }>(
+        `SELECT o."operationId", o."state"::text AS state, a."attemptId",
+       CASE WHEN a."authorityAcceptedAt" IS NULL THEN 'UNAVAILABLE'
+         WHEN a."authorityDeadlineAt"<=clock_timestamp() AT TIME ZONE 'UTC' THEN 'EXPIRED'
+         ELSE 'CHECKED_INTENT_ONLY' END AS "preparationEligibility"
        FROM "ScanDispatchOperation" o
        LEFT JOIN "ScanDispatchAttempt" a ON a."operationId" = o."operationId"
        WHERE o."operationId"=$1`,
-      [operationId]
-    )
-    const row = result.rows[0]
+        [operationId]
+      )
+      return result.rows[0] ?? { missing: true }
+    })
+    if (result.kind === "unknown")
+      return { kind: "unknown", operationId, reasonCode: "STATUS_UNAVAILABLE" }
+    const row = result.value
+    if ("missing" in row) return { kind: "unknown", operationId, reasonCode: "STATUS_UNAVAILABLE" }
     if (!row) return { kind: "unknown", operationId, reasonCode: "STATUS_UNAVAILABLE" }
     return { kind: "available", ...row }
   } catch {
@@ -479,6 +519,7 @@ export function createScanDispatchAuthorityBroker(options: BrokerOptions) {
   })
 
   const ctx = {
+    preparationAuthority: options.preparationAuthority,
     transaction: <T>(
       operationId: string,
       work: (client: pg.PoolClient) => Promise<T>
@@ -488,8 +529,24 @@ export function createScanDispatchAuthorityBroker(options: BrokerOptions) {
 
   return {
     prepare: (input: PrepareDispatchInput) => prepareDispatch(ctx, input),
-    startPaid: (input: StartPaidDispatchInput) => startPaidDispatch(ctx, input),
-    startUnmetered: (input: StartUnmeteredDispatchInput) => startUnmeteredDispatch(ctx, input),
+    startPaid: (input: StartPaidDispatchInput) =>
+      ctx.preparationAuthority
+        ? Promise.reject(
+            new ScanDispatchAuthorityError(
+              "PREPARATION_AUTHORITY_CLOSED",
+              "Checked intent execution is closed"
+            )
+          )
+        : startPaidDispatch(ctx, input),
+    startUnmetered: (input: StartUnmeteredDispatchInput) =>
+      ctx.preparationAuthority
+        ? Promise.reject(
+            new ScanDispatchAuthorityError(
+              "PREPARATION_AUTHORITY_CLOSED",
+              "Checked intent execution is closed"
+            )
+          )
+        : startUnmeteredDispatch(ctx, input),
     stop: (input: StopDispatchInput) => stopDispatch(pool, input),
     reconcile: (input: ReconcileDispatchInput) => reconcileDispatch(pool, input),
     status: (operationId: string) => getDispatchStatus(pool, operationId),

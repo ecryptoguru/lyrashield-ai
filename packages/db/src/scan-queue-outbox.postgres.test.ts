@@ -12,6 +12,10 @@ import {
 import { createScanQueueOutboxStore } from "./scan-queue-outbox-store"
 import { createScanDispatchAuthorityBroker } from "./scan-dispatch-authority-broker"
 import { fixtureQueueTransport, queueFixtureWorker } from "../scripts/tests/queue-outbox-fixture"
+import {
+  applyPreparationFixtureMigration,
+  installPreparationFixtureRole,
+} from "../scripts/tests/scan-preparation-fixture"
 import { getScanQueue } from "../../integrations/src/queue"
 import type { ScanFocus } from "@lyrashield/types"
 
@@ -36,7 +40,15 @@ async function fixture(focus?: ScanFocus, shadow = false, legacy = false) {
   const scan = await owner.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT set_config('app.current_workspace_id',${workspaceId},true)`
     return createScan(
-      { workspaceId, targetId, createdById: userId, goal: "TEST_APP", mode: "SAFE", focus },
+      {
+        workspaceId,
+        targetId,
+        createdById: userId,
+        goal: "TEST_APP",
+        mode: "SAFE",
+        focus,
+        source: { revision: "a".repeat(40) },
+      },
       tx as never,
       shadow ? { dispatchAuthority: "shadow" } : undefined
     )
@@ -108,6 +120,13 @@ describe.skipIf(!enabled)("closed outbox dispatcher with restricted PostgreSQL a
     runtime.on("error", () => undefined)
     runtime.on("connect", (client) => client.on("error", () => undefined))
     await queueWorker.open()
+    const sqlOwner = new pg.Pool({ connectionString: ownerUrl.href })
+    try {
+      await applyPreparationFixtureMigration(sqlOwner)
+      await installPreparationFixtureRole(sqlOwner)
+    } finally {
+      await sqlOwner.end()
+    }
   })
   afterAll(async () => {
     await queueWorker.close()
@@ -255,6 +274,17 @@ describe.skipIf(!enabled)("closed outbox dispatcher with restricted PostgreSQL a
   })
   it("rejects a fast consumer before publication confirmation and binds focus at broker preparation", async () => {
     const { scan, scope } = await fixture("payments")
+    await owner.workspaceMember.create({
+      data: {
+        workspaceId: scan.workspaceId,
+        userId: scan.createdById,
+        role: "VIEWER",
+        status: "active",
+      },
+    })
+    await owner.billingAccount.create({
+      data: { accountId: scan.createdById, status: "active", currentPlan: "PRO" },
+    })
     const grant = await owner.scanWorkerInstanceGrant.create({
       data: {
         authorityEpochId: "authority-shared-open-epoch",
@@ -264,7 +294,8 @@ describe.skipIf(!enabled)("closed outbox dispatcher with restricted PostgreSQL a
       },
     })
     const broker = createScanDispatchAuthorityBroker({
-      connectionString: process.env.DATABASE_URL!,
+      connectionString: process.env.DISPATCH_PREPARATION_BROKER_DATABASE_URL!,
+      preparationAuthority: "checked-intent-v1",
     })
     const prepare = {
       operationId: scope.operationId,

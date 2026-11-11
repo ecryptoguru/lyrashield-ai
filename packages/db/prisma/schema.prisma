@@ -2186,6 +2186,11 @@ model ScanDispatchAttempt {
   workerInstanceGrantId         String
   expiresAt                     DateTime
   createdAt                     DateTime @default(now())
+  /// Checked PREPARE intent, never permission for physical consumption. Legacy NULLs remain unavailable.
+  authorityAcceptedAt           DateTime?
+  authorityDeadlineAt           DateTime?
+  /// PostgreSQL transaction identity is audit metadata, never a capability.
+  authorityTransactionId        String?
 
   operation           ScanDispatchOperation      @relation(fields: [operationId], references: [operationId], onDelete: Restrict)
   authorityEpoch      ScanAuthorityEpoch      @relation(fields: [authorityEpochId], references: [id], onDelete: Restrict)
