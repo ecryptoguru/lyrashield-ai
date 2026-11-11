@@ -3,6 +3,9 @@ import { readFile, writeFile } from "node:fs/promises"
 import pg from "pg"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { createScanDispatchAuthorityBroker } from "./scan-dispatch-authority-broker"
+import { buildScanExecutionPlan, ScanExecutionPlanSchema } from "@lyrashield/types"
+import { computeScanExecutionPlanHash } from "./scan-execution-plan"
+import { publishFixtureOutbox, queueFixtureWorker } from "../scripts/tests/queue-outbox-fixture"
 
 const enabled =
   process.env.SCAN_DISPATCH_AUTHORITY_POSTGRES_TEST === "1" &&
@@ -15,6 +18,7 @@ const brokerUrl = process.env.DISPATCH_AUTHORITY_DATABASE_URL
 const sharedEpochId = "authority-shared-open-epoch"
 let owner: pg.Pool
 let broker: ReturnType<typeof createScanDispatchAuthorityBroker>
+const queueWorker = queueFixtureWorker()
 
 type Fixture = {
   userId: string
@@ -47,6 +51,21 @@ async function createFixture(
     instanceId: `authority-worker-${suffix}`,
   }
   const now = new Date()
+  const plan = ScanExecutionPlanSchema.parse({
+    ...buildScanExecutionPlan({
+      targetType: "REPO",
+      mode: "SAFE",
+      source: { revision: "a".repeat(40) },
+    }),
+    limits: {
+      maxBudgetUsd: options.maxBudgetUsd ?? 1,
+      maxDurationMs: 60000,
+      maxEngineMs: 48000,
+      scannerReserveMs: 12000,
+    },
+    capabilities: ["engine", "sca"],
+    attachmentIds: [],
+  })
   await owner.query(
     'INSERT INTO "users" ("id", "name", "email", "createdAt", "updatedAt") VALUES ($1,$1,$2,$3,$3)',
     [fixture.userId, `${fixture.userId}@example.test`, now]
@@ -69,11 +88,8 @@ async function createFixture(
       fixture.scanId,
       fixture.workspaceId,
       fixture.targetId,
-      JSON.stringify({
-        limits: { maxBudgetUsd: options.maxBudgetUsd ?? 1, maxDurationMs: 60000 },
-        attachmentIds: [],
-      }),
-      "c".repeat(64),
+      JSON.stringify(plan),
+      computeScanExecutionPlanHash(plan),
       fixture.userId,
       now,
     ]
@@ -88,12 +104,7 @@ async function createFixture(
      VALUES ($1,$2,$3,3,$4,'QUEUED',$5,$5)`,
     [fixture.operationId, fixture.scanId, fixture.workspaceId, scope.rows[0]!.requestDigest, now]
   )
-  await owner.query(
-    `INSERT INTO "ScanQueueOutbox"
-      ("id","scanId","operationId","jobId","payloadDigest","state","attempts","createdAt","updatedAt")
-     VALUES ($1,$2,$3,$2,$4,'PENDING',0,$5,$5)`,
-    [`queue-${suffix}`, fixture.scanId, fixture.operationId, "d".repeat(64), now]
-  )
+  await publishFixtureOutbox(owner, fixture.scanId, fixture.operationId)
   await owner.query(
     'INSERT INTO "UserScanSlot" ("userId","scanId","workspaceId","createdAt") VALUES ($1,$2,$3,$4)',
     [fixture.userId, fixture.scanId, fixture.workspaceId, now]
@@ -362,6 +373,7 @@ describe.skipIf(!enabled)("scan dispatch authority broker", () => {
       client.on("error", () => undefined)
     })
     broker = createScanDispatchAuthorityBroker({ connectionString: brokerUrl })
+    await queueWorker.open()
     const epoch = await owner.query(
       'SELECT "isOpen", "openKey", "openedAt", "closedAt" FROM "ScanAuthorityEpoch" WHERE id=$1',
       [sharedEpochId]
@@ -372,6 +384,7 @@ describe.skipIf(!enabled)("scan dispatch authority broker", () => {
   })
 
   afterAll(async () => {
+    await queueWorker.close()
     await broker?.close()
     await owner?.end()
   })
@@ -787,6 +800,16 @@ describe.skipIf(!enabled)("scan dispatch authority broker", () => {
       )
     ).rows[0]!.expiresAt
     await writeFile(arm, "arm", { flag: "wx", mode: 0o600 })
+
+    // The one-shot fault targets preparation, never an unrelated owner COMMIT.
+    const unrelated = await owner.connect()
+    try {
+      await unrelated.query("BEGIN")
+      await unrelated.query("SELECT 1")
+      await unrelated.query("COMMIT")
+    } finally {
+      unrelated.release()
+    }
 
     const first = await broker.prepare({
       operationId: fixture.operationId,

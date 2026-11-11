@@ -86,6 +86,13 @@ describe("internal shadow dispatch admission", () => {
           scanId: "scan-1",
           operationId: "dispatch-1",
           jobId: "scan-1",
+          payloadInputJson: JSON.stringify({
+            scanId: "scan-1",
+            workspaceId: "ws-1",
+            targetId: "target-1",
+            goal: "TEST_APP",
+            mode: "STANDARD",
+          }),
           payloadDigest: createHash("sha256")
             .update(
               JSON.stringify({
