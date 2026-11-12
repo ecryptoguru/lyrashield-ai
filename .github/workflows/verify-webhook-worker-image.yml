@@ -3,6 +3,10 @@ name: Verify exact webhook worker image without production access
 on:
   workflow_call:
     inputs:
+      cold_release:
+        description: Run native cold single-worker checks for the protected release caller
+        type: boolean
+        default: false
       product_source_sha:
         description: Immutable product commit recorded in this worker image's OCI provenance
         required: true
@@ -16,6 +20,9 @@ on:
         required: true
         type: string
     outputs:
+      cold_sandbox_image:
+        description: Authenticated immutable sandbox used by same-run native checks
+        value: ${{ jobs.verify-worker-image.outputs.cold_sandbox_image }}
       rehearsal_harness_sha:
         description: SHA-256 fingerprint of the exact-image rehearsal workflow and scripts
         value: ${{ jobs.verify-worker-image.outputs.rehearsal_harness_sha }}
@@ -30,6 +37,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     outputs:
+      cold_sandbox_image: ${{ steps.cold-sandbox.outputs.sandbox_image }}
       rehearsal_harness_sha: ${{ steps.harness.outputs.sha }}
     permissions:
       contents: read
@@ -183,6 +191,65 @@ jobs:
           bash apps/worker/scripts/verify-worker-image.sh \
             "$CANONICAL_WORKER_IMAGE" "$EXPECTED_SOURCE_SHA" "$EXPECTED_ENGINE_REVISION"
 
+      - name: Prepare pinned GitHub attestation verifier on the disposable runner
+        if: inputs.cold_release == true
+        working-directory: product
+        run: bash .github/scripts/prepare-qualification-verifier.sh
+      - name: Reauthenticate immutable sandbox publication and native inventory
+        if: inputs.cold_release == true
+        id: cold-sandbox
+        working-directory: product
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node --import tsx .github/scripts/verify-cold-sandbox.mjs
+      - name: Checkout pinned engine for native installed-SDK probes
+        if: inputs.cold_release == true
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.repository_owner }}/lyrashield-engine
+          ref: ${{ inputs.engine_revision }}
+          path: cold-engine
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Setup Python for cold native probes
+        if: inputs.cold_release == true
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Exercise actual installed engine SDK over native TCP and SIGKILL
+        if: inputs.cold_release == true
+        working-directory: harness
+        env:
+          HARNESS_SHA: ${{ github.sha }}
+        run: |
+          python3.12 .github/scripts/run-cold-engine-native-probes.py \
+            --candidate "$CANONICAL_WORKER_IMAGE" "$EXPECTED_SOURCE_SHA" \
+            --engine-repo "$GITHUB_WORKSPACE/cold-engine" --harness-sha "$HARNESS_SHA" \
+            --receipt "$RUNNER_TEMP/cold-native-probe-receipt.json"
+      - name: Exercise actual sandbox credentials and live network denial
+        if: inputs.cold_release == true
+        working-directory: harness
+        env:
+          HARNESS_SHA: ${{ github.sha }}
+          SANDBOX_IMAGE: ${{ steps.cold-sandbox.outputs.sandbox_image }}
+        run: |
+          python3.12 .github/scripts/run-cold-engine-native-probes.py \
+            --candidate "$CANONICAL_WORKER_IMAGE" "$EXPECTED_SOURCE_SHA" \
+            --engine-repo "$GITHUB_WORKSPACE/cold-engine" --harness-sha "$HARNESS_SHA" \
+            --sandbox-image "$SANDBOX_IMAGE" --docker-socket /var/run/docker.sock \
+            --receipt "$RUNNER_TEMP/cold-sandbox-native-receipt.json"
+      - name: Retain actual native probe evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always() && inputs.cold_release == true
+        with:
+          name: cold-native-probes-${{ inputs.product_source_sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/cold-native-probe-receipt.json
+            ${{ runner.temp }}/cold-sandbox-native-receipt.json
+            ${{ runner.temp }}/cold-sandbox-publication.json
+          if-no-files-found: error
+          retention-days: 7
+
       - name: Verify runtime and system TLS using the exact worker image
         working-directory: product
         env:
@@ -295,6 +362,74 @@ jobs:
           fi
           docker stop --time 15 "$container" >/dev/null
           echo "Exact production-mode worker startup reached readiness on disposable services." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Verify cold database epoch failure in the exact running image
+        if: inputs.cold_release == true
+        shell: bash
+        env:
+          POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
+        run: |
+          set -euo pipefail
+          network="webhook-smoke-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          container="cold-epoch-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          cp harness/.github/scripts/cold-database-epoch-image-probe.mjs "$RUNNER_TEMP/cold-database-epoch-image-probe.mjs"
+          chmod 0444 "$RUNNER_TEMP/cold-database-epoch-image-probe.mjs"
+          cold_node() {
+            docker run --rm --network "$network" --read-only \
+              --tmpfs /tmp:rw,noexec,nosuid,size=64m --cap-drop ALL \
+              --security-opt no-new-privileges:true --cpus 2 --memory 2g --pids-limit 256 \
+              --workdir /app/apps/worker --entrypoint node \
+              --env NODE_ENV=test --env LYRASHIELD_TEST_DB_DISPOSABLE=1 \
+              --env 'DATABASE_URL=postgresql://app_runtime_ci:runtime-ci-only@postgres:5432/lyrashield?schema=public' \
+              --env 'DATABASE_SYSTEM_URL=postgresql://lyrashield:lyrashield@postgres:5432/lyrashield?schema=public' \
+              --env REDIS_URL=redis://redis:6379 \
+              --env BETTER_AUTH_SECRET=dummy-ci-only-secret-not-a-real-credential-32chars \
+              --env BETTER_AUTH_URL=http://127.0.0.1:3100 --env NEXT_PUBLIC_APP_URL=http://127.0.0.1:3100 \
+              "$CANONICAL_WORKER_IMAGE" --import tsx "$@"
+          }
+          epoch=$(cold_node src/operations/capture-cold-database-epoch.ts)
+          [[ "$epoch" =~ ^[a-f0-9]{64}$ ]]
+          trap 'docker rm -f "$container" >/dev/null 2>&1 || true' EXIT
+          docker run --detach --name "$container" --network "$network" --read-only \
+            --tmpfs /tmp:rw,noexec,nosuid,size=64m --cap-drop ALL \
+            --security-opt no-new-privileges:true --cpus 2 --memory 2g --pids-limit 256 \
+            --mount "type=bind,src=$RUNNER_TEMP/cold-database-epoch-image-probe.mjs,dst=/app/apps/worker/.ci-cold-database-epoch-image-probe.mjs,readonly" \
+            --workdir /app/apps/worker --entrypoint node \
+            --env NODE_ENV=test --env LYRASHIELD_TEST_DB_DISPOSABLE=1 \
+            --env 'DATABASE_URL=postgresql://app_runtime_ci:runtime-ci-only@postgres:5432/lyrashield?schema=public' \
+            --env 'DATABASE_SYSTEM_URL=postgresql://lyrashield:lyrashield@postgres:5432/lyrashield?schema=public' \
+            --env REDIS_URL=redis://redis:6379 \
+            --env BETTER_AUTH_SECRET=dummy-ci-only-secret-not-a-real-credential-32chars \
+            --env BETTER_AUTH_URL=http://127.0.0.1:3100 --env NEXT_PUBLIC_APP_URL=http://127.0.0.1:3100 \
+            --env LYRASHIELD_COLD_SINGLE_WORKER=1 --env "LYRASHIELD_COLD_DATABASE_EPOCH_SHA256=$epoch" \
+            --env "COLD_PROBE_WORKER_IMAGE=$CANONICAL_WORKER_IMAGE" --env "COLD_PROBE_PRODUCT_REVISION=$EXPECTED_SOURCE_SHA" \
+            "$CANONICAL_WORKER_IMAGE" --import tsx .ci-cold-database-epoch-image-probe.mjs >/dev/null
+          ready=false
+          for attempt in $(seq 1 30); do
+            if docker exec "$container" test -f /tmp/cold-epoch-await-restart; then ready=true; break; fi
+            [ "$(docker inspect "$container" --format '{{.State.Running}}')" = true ] || break
+            sleep 1
+          done
+          [ "$ready" = true ]
+          docker restart "$POSTGRES_CONTAINER" >/dev/null
+          for attempt in $(seq 1 30); do
+            [ "$(docker inspect "$POSTGRES_CONTAINER" --format '{{.State.Health.Status}}')" != healthy ] || break
+            sleep 1
+          done
+          [ "$(docker inspect "$POSTGRES_CONTAINER" --format '{{.State.Health.Status}}')" = healthy ]
+          docker exec "$container" touch /tmp/cold-epoch-restarted
+          [ "$(timeout 120 docker wait "$container")" = 0 ]
+          docker logs "$container" > "$RUNNER_TEMP/cold-database-epoch-image-receipt.json"
+          docker rm "$container" >/dev/null
+          trap - EXIT
+      - name: Retain actual database epoch restart evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always() && inputs.cold_release == true
+        with:
+          name: cold-database-epoch-${{ inputs.product_source_sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/cold-database-epoch-image-receipt.json
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Remove disposable service network
         if: always()

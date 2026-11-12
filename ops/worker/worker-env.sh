@@ -43,6 +43,7 @@ lyrashield_worker_env_args() {
   lwe_shared_root=${3:-/var/lib/lyrashield/worker}
 
   unset LYRASHIELD_RUN_RECORD_V1_1 LYRASHIELD_PENDING_HTTP_EVIDENCE LLM_API_MODE DEDUPE_LLM_API_MODE
+  unset LYRASHIELD_COLD_SINGLE_WORKER LYRASHIELD_COLD_DATABASE_EPOCH_SHA256
   unset LYRASHIELD_SANDBOX_PUBLICATION_RECORD_PATH
   unset LYRASHIELD_SANDBOX_SBOM_COVERAGE_VERIFY_PATH LYRASHIELD_SANDBOX_SBOM_COVERAGE_EXPECTED_PATH \
     LYRASHIELD_SANDBOX_SBOM_COVERAGE_REPO LYRASHIELD_SANDBOX_SBOM_COVERAGE_REF \
@@ -70,6 +71,21 @@ lyrashield_worker_env_args() {
     echo "Worker image engine revision label must be a 40-character SHA" >&2
     return 1
   }
+
+  # Cold profile authority comes only from the protected host configuration.
+  # Override any env-file/process value so credentials cannot select this gate.
+  case "${LYRASHIELD_COLD_SINGLE_WORKER:-0}" in
+    0) printf '%s\n' "--env LYRASHIELD_COLD_SINGLE_WORKER=0" "--env LYRASHIELD_COLD_DATABASE_EPOCH_SHA256=" ;;
+    1)
+      case "${LYRASHIELD_COLD_DATABASE_EPOCH_SHA256:-}" in
+        ''|*[!a-f0-9]*) echo "Cold worker requires the captured database epoch" >&2; return 1 ;;
+      esac
+      [ "${#LYRASHIELD_COLD_DATABASE_EPOCH_SHA256}" -eq 64 ] || return 1
+      printf '%s\n' "--env LYRASHIELD_COLD_SINGLE_WORKER=1" \
+        "--env LYRASHIELD_COLD_DATABASE_EPOCH_SHA256=$LYRASHIELD_COLD_DATABASE_EPOCH_SHA256"
+      ;;
+    *) echo "Invalid cold single-worker profile" >&2; return 1 ;;
+  esac
 
   # Enable web search by default only when an API key is present in the worker env.
   if [ -z "${LYRASHIELD_WEB_SEARCH_ENABLED:-}" ]; then

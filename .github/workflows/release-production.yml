@@ -8,7 +8,7 @@ permissions:
   contents: read
 
 # Verify the exact merged source against genuine PR CI receipts before routing.
-# Deploy once without repeating the PR test/build pipeline on main.
+# Build once and qualify the exact images before the automated cold fleet rollout.
 concurrency:
   group: release-production-${{ github.ref }}
   cancel-in-progress: false
@@ -49,63 +49,13 @@ jobs:
           HEAD_SHA: ${{ github.sha }}
         run: bash .github/scripts/classify-main-change-gap.sh
 
-  qualify-azure-release:
-    name: Require a protected qualified release record
-    needs: routing
-    if: needs.routing.outputs.current-main == 'true' && needs.routing.outputs.azure-deploy == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    environment:
-      name: azure-production
-    permissions:
-      contents: read
-    outputs:
-      digest: ${{ steps.require.outputs.digest }}
-      prepared_run_id: ${{ steps.require.outputs.prepared_run_id }}
-      prepared_run_attempt: ${{ steps.require.outputs.prepared_run_attempt }}
-    steps:
-      # Azure remains fail-closed until the protected qualification issuer is wired.
-      - name: Hold production until runtime qualification
-        run: |
-          echo '::error::Production release is held pending runtime qualification.'
-          exit 1
-
-      - name: Require the protected qualified release digest
-        id: require
-        env:
-          QUALIFIED_RELEASE_DIGEST: ${{ vars.LYRASHIELD_QUALIFIED_RELEASE_DIGEST }}
-          PREPARED_RUN_ID: ${{ vars.LYRASHIELD_PREPARED_CANDIDATE_RUN_ID }}
-          PREPARED_RUN_ATTEMPT: ${{ vars.LYRASHIELD_PREPARED_CANDIDATE_RUN_ATTEMPT }}
-        run: |
-          if [[ ! "$QUALIFIED_RELEASE_DIGEST" =~ ^[a-f0-9]{64}$ ]]; then
-            {
-              echo "## Azure release held before deployment"
-              echo
-              echo "No 64-character qualified release digest is configured in the protected \`azure-production\` environment."
-              echo "Production will not deploy without a signed qualified release record and rollback tuple."
-            } >> "$GITHUB_STEP_SUMMARY"
-            echo "::error::Set LYRASHIELD_QUALIFIED_RELEASE_DIGEST in the azure-production environment to a qualified release record digest before deploying."
-            exit 1
-          fi
-          if [[ ! "$PREPARED_RUN_ID" =~ ^[1-9][0-9]{0,19}$ || ! "$PREPARED_RUN_ATTEMPT" =~ ^[1-9][0-9]{0,19}$ ]]; then
-            echo '::error::A previously verified candidate run and attempt are required before deployment.'
-            exit 1
-          fi
-          {
-            echo "digest=$QUALIFIED_RELEASE_DIGEST"
-            echo "prepared_run_id=$PREPARED_RUN_ID"
-            echo "prepared_run_attempt=$PREPARED_RUN_ATTEMPT"
-          } >> "$GITHUB_OUTPUT"
-
   deploy-azure:
-    needs: [routing, qualify-azure-release]
+    needs: routing
     if: needs.routing.outputs.current-main == 'true' && needs.routing.outputs.azure-deploy == 'true'
     uses: ./.github/workflows/deploy-azure.yml
     with:
       source_sha: ${{ github.sha }}
-      qualified_release_digest: ${{ needs.qualify-azure-release.outputs.digest }}
-      prepared_candidate_run_id: ${{ needs.qualify-azure-release.outputs.prepared_run_id }}
-      prepared_candidate_run_attempt: ${{ needs.qualify-azure-release.outputs.prepared_run_attempt }}
+      cold_release: true
     secrets: inherit
     permissions:
       actions: read

@@ -6,6 +6,13 @@ import { pathToFileURL } from "node:url"
 // These files define the exact-image worker rehearsal. Keep this list narrow
 // and update it whenever the reusable workflow gains another executable input.
 export const WORKER_IMAGE_REHEARSAL_HARNESS_FILES = [
+  ".github/scripts/run-cold-engine-native-probes.py",
+  ".github/scripts/cold-engine-native-probe.py",
+  ".github/scripts/cold-sandbox-native-probe.py",
+  ".github/scripts/verify-cold-sandbox.mjs",
+  ".github/cold-sandbox-publication.json",
+  ".github/scripts/run-engine-physical-ceiling-drill.py",
+  ".github/scripts/cold-database-epoch-image-probe.mjs",
   ".github/scripts/disposable-worker-rehearsal-role.sql",
   ".github/scripts/fixtures/worker-evidence-distinct/receipt.json",
   ".github/scripts/fixtures/worker-evidence-distinct/run.json",
