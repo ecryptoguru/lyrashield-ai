@@ -1,3 +1,7 @@
+import {
+  assertColdDatabaseEpoch,
+  configureColdDatabaseEpochFailureHandler,
+} from "./cold-database-epoch"
 import { randomUUID } from "node:crypto"
 import { hostname } from "node:os"
 import { unlink, writeFile } from "node:fs/promises"
@@ -401,6 +405,11 @@ async function main(): Promise<void> {
   assertRepositoryScanRuntimeConfigured()
   await assertEngineTempRootReady()
   await assertWorkerStartupResources()
+
+  configureColdDatabaseEpochFailureHandler(() => {
+    void shutdown("DATABASE_EPOCH_CHANGED", 1)
+  })
+  await assertColdDatabaseEpoch()
 
   worker = new Worker<ScanJobData, ScanJobResult>(
     SCAN_QUEUE_NAME,

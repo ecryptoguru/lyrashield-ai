@@ -5,6 +5,7 @@ import { engineWorkspacePath } from "../../engine/workspace-path"
 import { createHash, randomUUID } from "node:crypto"
 
 const mocks = vi.hoisted(() => ({
+  assertColdDatabaseEpoch: vi.fn(),
   logger: { warn: vi.fn(), error: vi.fn(), info: vi.fn() },
   prisma: {
     targetDomainVerification: { findFirst: vi.fn() },
@@ -40,6 +41,9 @@ const mocks = vi.hoisted(() => ({
   },
 }))
 
+vi.mock("../../cold-database-epoch", () => ({
+  assertColdDatabaseEpoch: mocks.assertColdDatabaseEpoch,
+}))
 vi.mock("@lyrashield/evidence-storage", () => ({
   uploadEncryptedArtifact: mocks.uploadEncryptedArtifact,
   readEncryptedArtifact: mocks.readEncryptedArtifact,
@@ -177,6 +181,32 @@ describe("executeScanTarget relay lifecycle", () => {
     mocks.revokeRelayGrant.mockResolvedValue(undefined)
     mocks.addScanEvent.mockResolvedValue({ id: "evt-1" })
     mocks.runEngine.mockResolvedValue(engineResult)
+  })
+
+  it.each(["changed", "missing", "unavailable"])(
+    "blocks a new paid claim and engine dispatch when the database epoch is %s",
+    async () => {
+      mocks.assertColdDatabaseEpoch.mockRejectedValue(new Error("Database admission closed"))
+      const input = params()
+      await expect(executeScanTarget(input)).rejects.toThrow("Database admission closed")
+      expect(input.markBillablePhaseStarted).not.toHaveBeenCalled()
+      expect(mocks.addScanEvent.mock.calls.some((call) => call[1] === "billable_boundary")).toBe(
+        false
+      )
+      expect(mocks.registerRelayGrant).not.toHaveBeenCalled()
+      expect(mocks.runEngine).not.toHaveBeenCalled()
+    }
+  )
+
+  it("rechecks the database epoch after the paid claim before native engine dispatch", async () => {
+    mocks.assertColdDatabaseEpoch
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error("Database admission closed"))
+    const input = params()
+    await expect(executeScanTarget(input)).rejects.toThrow("Database admission closed")
+    expect(input.markBillablePhaseStarted).toHaveBeenCalledOnce()
+    expect(mocks.runEngine).not.toHaveBeenCalled()
+    expect(mocks.revokeRelayGrant).toHaveBeenCalledOnce()
   })
 
   it("prepares private Git credentials before billable work and sends a credential-free canonical URL", async () => {

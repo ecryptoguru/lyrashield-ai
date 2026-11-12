@@ -1,3 +1,4 @@
+import { assertColdDatabaseEpoch } from "../../cold-database-epoch"
 import { prepareRelayRegistration, relaySetupFailure } from "./relay-registration"
 import { claimBoundedEngineCapacity } from "./capacity-lifecycle"
 import { prepareRepositoryAuth } from "../../engine/repository-auth"
@@ -458,6 +459,7 @@ export async function executeScanTarget(params: {
     // Keep the profile's deterministic-scanner reserve available even when
     // the model is healthy until its own wall-clock cap.
     const claimElapsedMs = elapsedScanMs()
+    await assertColdDatabaseEpoch()
     const capacity = await claimBoundedEngineCapacity(params)
     capacityLimited = capacity.capacityLimited
     const relayFailure = await relay?.activate()
@@ -518,6 +520,7 @@ export async function executeScanTarget(params: {
           },
         }
       }
+      await assertColdDatabaseEpoch()
       inputs?.handoff()
       engineStartedAtMs = Date.now()
       engineResult = await runEngine(
