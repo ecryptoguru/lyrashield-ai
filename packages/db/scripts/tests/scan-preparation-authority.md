@@ -27,6 +27,25 @@ this migration. Qualify a separate least-privilege broker role and its STOP/stat
 reconciliation access before activation; skipping context binding is not a safe
 substitute.
 
+For a reviewed direct-login broker identity, provisioning must explicitly grant
+that identity `EXECUTE` on `app.scan_preparation_context(text)` and
+`app.require_scan_preparation_role()`, plus the narrowly scoped table, row-lock
+and RLS access required for its intended status/STOP operations. Do not grant
+the resolver to PUBLIC or application runtime roles. The internal read-only
+`assertDispatchStopRolePrerequisites` preflight checks the named active login,
+direct resolver grant, minimum SQL privileges and the existing privilege guard.
+It grants nothing and does not establish correct RLS policies, cross-tenant
+isolation, receipt authenticity or production readiness. Verify those separately
+with the exact deployed role and representative isolated fixtures.
+
+Checked PREPARE stays PENDING after cancellation: neither a matching database
+receipt row nor a missing local supervisor attempt proves physical absence.
+The existing supervisor rejects STOP for an unknown attempt, and no authenticated
+receipt ingestion and key/epoch binding currently connects a signed absence proof
+to the database. Until those are implemented and qualified, the attempt and its
+slot/capacity holds must remain unresolved; do not relax the SQL consumption or
+terminal-release guards.
+
 Preparation uses the existing broker lock order, then a nonblocking exclusive
 transaction advisory gate. Source DML on Workspace, WorkspaceMember, users,
 BillingAccount, agent connections/operations/provenance, Target, Policy, Scan,

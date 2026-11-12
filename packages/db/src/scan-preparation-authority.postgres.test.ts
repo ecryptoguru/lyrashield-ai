@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto"
 import pg from "pg"
 import { writeFile, readFile } from "node:fs/promises"
 import { beforeAll, afterAll, describe, it, expect, vi } from "vitest"
@@ -9,7 +10,11 @@ import {
 } from "@lyrashield/types"
 import { computeScanExecutionPlanHash, canonicalizeScanExecutionPlan } from "./scan-execution-plan"
 import { createScanDispatchAuthorityBroker } from "./scan-dispatch-authority-broker"
-import { bindScanPreparationContext, checkPreparationAuthority } from "./scan-preparation-authority"
+import {
+  assertDispatchStopRolePrerequisites,
+  bindScanPreparationContext,
+  checkPreparationAuthority,
+} from "./scan-preparation-authority"
 import {
   preparationFixture,
   preparationInput,
@@ -582,6 +587,131 @@ describe.skipIf(!enabled)("checked preparation intent authority", () => {
         [r.attemptId, f.operationId]
       )
     ).rejects.toThrow("original live transaction bundle")
+  })
+  it("keeps a cancelled checked attempt held when only a forged receipt exists", async () => {
+    const f = await preparationFixture(owner)
+    const prepared = await broker.prepare(preparationInput(f))
+    if (prepared.kind !== "committed") throw new Error("fixture commit unavailable")
+    const stopped = await broker.stop({
+      ...preparationInput(f),
+      attemptId: prepared.attemptId,
+      reasonCode: "USER_CANCELLED",
+    })
+    expect(stopped).toMatchObject({ kind: "committed", state: "STOPPING" })
+
+    await expect(
+      runtime.query('INSERT INTO "ScanSupervisorReceipt" DEFAULT VALUES')
+    ).rejects.toMatchObject({ code: "42501" })
+    await expect(
+      writer.query('INSERT INTO "ScanSupervisorReceipt" DEFAULT VALUES')
+    ).rejects.toMatchObject({ code: "42501" })
+    const hash = createHash("sha256").update(f.operationId).digest("hex")
+    await owner.query(
+      `INSERT INTO "ScanSupervisorReceipt" ("id","supervisorInstanceId","operationId","attemptId","authorityEpochId","commandId",sequence,"previousReceiptHash","receiptHash",signature,"receiptType","evidenceDigest","observedAt") VALUES ($1,$2,$3,$4,$5,$6,1,NULL,$7,$8,'NEVER_DISPATCHED',$7,CURRENT_TIMESTAMP)`,
+      [
+        `forged-${f.operationId}`,
+        `forged-supervisor-${f.operationId}`,
+        f.operationId,
+        prepared.attemptId,
+        f.epochId,
+        prepared.commandId,
+        hash,
+        "x".repeat(64),
+      ]
+    )
+    await expect(
+      owner.query(
+        `UPDATE "ScanDispatchOutbox" SET status='REJECTED',"deliveredAt"=CURRENT_TIMESTAMP WHERE id=$1`,
+        [prepared.commandId]
+      )
+    ).rejects.toThrow("checked preparation consumption is closed")
+    await expect(
+      owner.query(
+        `INSERT INTO "ScanPhysicalExecutionTransition"(id,"operationId","attemptId",revision,"fromState","toState","supervisorReceiptId") VALUES($1,$2,$3,2,'RESERVED','NEVER_DISPATCHED',$4)`,
+        [
+          `transition-${f.operationId}`,
+          f.operationId,
+          prepared.attemptId,
+          `forged-${f.operationId}`,
+        ]
+      )
+    ).rejects.toThrow("terminal physical release requires every command resolved")
+    const held = await owner.query(
+      `SELECT o.state::text AS operation, p.state::text AS physical, c.status::text AS command,
+         r.state::text AS capacity, EXISTS(SELECT 1 FROM "UserScanSlot" s WHERE s."scanId"=$2) AS slot
+       FROM "ScanDispatchOperation" o JOIN "ScanPhysicalExecution" p ON p."operationId"=o."operationId"
+       JOIN "ScanDispatchOutbox" c ON c.id=$3 JOIN "ScanCapacityReservation" r ON r."scanId"=$2
+       WHERE o."operationId"=$1`,
+      [f.operationId, f.scanId, prepared.commandId]
+    )
+    expect(held.rows).toEqual([
+      {
+        operation: "STOPPING",
+        physical: "RESERVED",
+        command: "PENDING",
+        capacity: "RESERVED",
+        slot: true,
+      },
+    ])
+  })
+  it("allows a separately provisioned restricted broker to read and stop a historical attempt", async () => {
+    const f = await legacyPreparationFixture(owner)
+    const closed = createScanDispatchAuthorityBroker({
+      connectionString: process.env.DISPATCH_PREPARATION_BROKER_DATABASE_URL!,
+    })
+    try {
+      await expect(closed.status(f.operationId)).resolves.toMatchObject({
+        kind: "available",
+        state: "PREPARING",
+      })
+      await owner.query(
+        "REVOKE EXECUTE ON FUNCTION app.scan_preparation_context(text) FROM dispatch_prepare_broker"
+      )
+      try {
+        await expect(closed.status(f.operationId)).resolves.toMatchObject({
+          kind: "unknown",
+          reasonCode: "STATUS_UNAVAILABLE",
+        })
+        await expect(
+          closed.stop({
+            ...preparationInput(f),
+            attemptId: `${f.operationId}-attempt`,
+            reasonCode: "USER_CANCELLED",
+          })
+        ).rejects.toMatchObject({ code: "DATABASE_REJECTED" })
+      } finally {
+        await owner.query(
+          "GRANT EXECUTE ON FUNCTION app.scan_preparation_context(text) TO dispatch_prepare_broker"
+        )
+      }
+      await expect(
+        closed.stop({
+          ...preparationInput(f),
+          attemptId: `${f.operationId}-attempt`,
+          reasonCode: "USER_CANCELLED",
+        })
+      ).resolves.toMatchObject({ kind: "committed", state: "STOPPING" })
+    } finally {
+      await closed.close()
+    }
+  })
+  it("requires the explicitly provisioned restricted identity for the status/STOP preflight", async () => {
+    const restricted = await runtime.connect()
+    const app = await writer.connect()
+    try {
+      await expect(
+        assertDispatchStopRolePrerequisites(restricted, "dispatch_prepare_broker")
+      ).resolves.toBeUndefined()
+      await expect(
+        assertDispatchStopRolePrerequisites(restricted, "other_broker")
+      ).rejects.toThrow()
+      await expect(
+        assertDispatchStopRolePrerequisites(app, "dispatch_authority_runtime")
+      ).rejects.toThrow()
+    } finally {
+      restricted.release()
+      app.release()
+    }
   })
   it("binds immutable REVIEW_CHANGES source revisions and rejects goal mismatch", async () => {
     const f = await preparationFixture(owner, 1, "diff", {

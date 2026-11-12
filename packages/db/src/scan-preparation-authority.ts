@@ -12,6 +12,53 @@ export type CheckedPreparationAuthority = {
   monotonicClockMs: number
 }
 
+/**
+ * Read-only prerequisite check for a separately provisioned, direct-login
+ * status/STOP broker. This does not prove its RLS policies or authenticate a
+ * supervisor; both require separate qualification before activation.
+ */
+export async function assertDispatchStopRolePrerequisites(
+  client: pg.PoolClient,
+  expectedRole: string
+) {
+  if (
+    !/^[a-z][a-z0-9_]{0,62}$/.test(expectedRole) ||
+    ["public", "postgres", "app_runtime_prod", "app_system_prod", "app_runtime_ci"].includes(
+      expectedRole
+    )
+  )
+    throw new Error("A distinct restricted broker login is required")
+  const result = await client.query<{ ok: boolean }>(
+    `SELECT session_user = $1 AND current_user = $1
+       AND r.rolcanlogin AND NOT (r.rolsuper OR r.rolbypassrls OR r.rolcreaterole OR r.rolcreatedb)
+       AND has_schema_privilege(current_user, 'app', 'USAGE')
+       AND has_schema_privilege(current_user, 'public', 'USAGE')
+       AND EXISTS (
+         SELECT 1 FROM pg_catalog.pg_proc p
+         CROSS JOIN LATERAL pg_catalog.aclexplode(p.proacl) acl
+         WHERE p.oid = 'app.scan_preparation_context(text)'::regprocedure
+           AND acl.grantee = r.oid AND acl.privilege_type = 'EXECUTE'
+       )
+       AND has_function_privilege(current_user, 'app.require_scan_preparation_role()', 'EXECUTE')
+       AND (SELECT bool_and(has_table_privilege(current_user, format('public.%I', name), 'SELECT'))
+         FROM unnest(ARRAY['Scan','ScanAuthorityEpoch','ScanWorkerInstanceGrant',
+           'ScanDispatchOperation','ScanDispatchAttempt','ScanDispatchOutbox']) AS name)
+       AND (SELECT bool_and(has_any_column_privilege(current_user, format('public.%I', name), 'UPDATE'))
+         FROM unnest(ARRAY['Scan','ScanAuthorityEpoch','ScanWorkerInstanceGrant',
+           'ScanDispatchOperation','ScanDispatchAttempt']) AS name)
+       AND has_table_privilege(current_user, 'public."ScanDispatchOutbox"', 'INSERT')
+       AND NOT has_any_column_privilege(current_user, 'public."ScanDispatchOutbox"', 'UPDATE')
+       AND has_column_privilege(current_user, 'public."ScanDispatchOperation"', 'state', 'UPDATE')
+       AND has_column_privilege(current_user, 'public."ScanDispatchOperation"', 'updatedAt', 'UPDATE') AS ok
+     FROM pg_catalog.pg_roles r WHERE r.rolname = current_user`,
+    [expectedRole]
+  )
+  if (result.rows[0]?.ok !== true) throw new Error("Restricted broker role is not provisioned")
+  // Checks effective SET roles, disallowed writers, unreviewed definers,
+  // TEMP/DDL powers and the direct-session boundary; it grants nothing.
+  await client.query("SELECT app.require_scan_preparation_role()")
+}
+
 /** Persisted private context only; caller-supplied payer/workspace is never accepted. */
 export async function bindScanPreparationContext(client: pg.PoolClient, operationId: string) {
   const row = (
