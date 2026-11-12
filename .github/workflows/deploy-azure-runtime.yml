@@ -224,7 +224,6 @@ jobs:
         with:
           ref: ${{ env.DEPLOY_SHA }}
           persist-credentials: false
-
       - name: Revalidate runtime source and retry eligibility
         env:
           GH_TOKEN: ${{ github.token }}
@@ -233,7 +232,6 @@ jobs:
           GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: bash .github/scripts/assert-current-main.sh && node .github/scripts/assert-no-prior-runtime-promotion.mjs
-
       # Myra fail-closed check (Deep Review v18): confirmed writes require the
       # Google calendar provider and usable credentials; the mock adapter and
       # its fault switches must never reach production.
@@ -257,11 +255,9 @@ jobs:
           MYRA_MOCK_CALENDAR_PENDING_CONFERENCE: ${{ vars.MYRA_MOCK_CALENDAR_PENDING_CONFERENCE }}
           MYRA_MOCK_CALENDAR_EXTERNAL_CONFLICT: ${{ vars.MYRA_MOCK_CALENDAR_EXTERNAL_CONFLICT }}
         run: node .github/scripts/verify-myra-deployment-config.mjs
-
       - name: Prepare checksum-pinned protected Linux verifier
         if: inputs.qualified_release_digest != ''
         run: bash .github/scripts/prepare-qualification-verifier.sh
-
       - name: Log in to Azure
         # v16 4.3: OIDC federated login — no stored client secret. The
         # workload identity (client id) must carry the same role assignments

@@ -122,6 +122,7 @@ test("actual retained controller rejects missing migrations, isolation or produc
     { delegatedRlsDisabled: true },
     { delegatedSelectMissing: true },
     { delegatedInsertMissing: true },
+    { delegatedDeletePresent: true },
     { grants: false },
   ])
     await t.test(JSON.stringify(options), (t) => {

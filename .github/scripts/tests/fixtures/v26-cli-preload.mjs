@@ -83,6 +83,7 @@ function delegatedSchemaQuery(sql, args, s) {
         rolbypassrls: false,
         can_select: !s.delegatedSelectMissing,
         can_insert: !s.delegatedInsertMissing,
+        can_delete: !!s.delegatedDeletePresent,
       }))
     )
   }
