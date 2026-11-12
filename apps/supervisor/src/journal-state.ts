@@ -48,6 +48,13 @@ function applyPrepared(
     executors: event.executors,
     ...(event.provider ? { provider: event.provider } : {}),
   }
+  const existing = commands.get(event.commandId)
+  if (
+    existing &&
+    (existing.attemptId !== event.binding.attemptId ||
+      existing.requestHash !== commandRequestHash(prepareCommand))
+  )
+    throw new RuntimeControlError("JOURNAL_INTEGRITY", "prepared command identity changed", 500)
   attempts.set(event.binding.attemptId, prepareAttempt(prepareCommand, receipt, "PREPARED"))
   commands.set(event.commandId, {
     request: prepareCommand,
@@ -64,15 +71,20 @@ function applyIntent(
   attempts: Map<string, AttemptState>,
   commands: Map<string, CommandState>
 ): void {
+  const existing = commands.get(event.command.commandId)
+  if (existing) {
+    if (
+      existing.attemptId !== commandAttemptId(event.command) ||
+      existing.requestHash !== commandRequestHash(event.command)
+    )
+      throw new RuntimeControlError("JOURNAL_INTEGRITY", "command intent identity changed", 500)
+    existing.receipt = receipt
+    return
+  }
   if (event.command.type === "PREPARE" && !attempts.has(event.command.attempt.attemptId)) {
     // An accepted intent preserves cleanup identity, never start authority.
     // Only attempt_prepared may promote this state to PREPARED.
     attempts.set(event.command.attempt.attemptId, prepareAttempt(event.command, receipt, "UNKNOWN"))
-  }
-  const existing = commands.get(event.command.commandId)
-  if (existing) {
-    existing.receipt = receipt
-    return
   }
   commands.set(event.command.commandId, {
     request: event.command,
