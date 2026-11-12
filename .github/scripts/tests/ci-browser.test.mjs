@@ -16,6 +16,7 @@ import { createRequire } from "node:module"
 import { createFontArchive } from "../ci-browser-fonts.mjs"
 import {
   BROWSER_IMAGE,
+  browserFailureReason,
   hostFailureDiagnostic,
   runCommand,
   startBrowser,
@@ -35,12 +36,41 @@ const { parse } = createRequire(
 )("yaml")
 
 const id = "a".repeat(64)
+test("browser errors expose only fixed failure categories", () => {
+  assert.equal(browserFailureReason({ name: "TimeoutError", message: "private URL" }), "timeout")
+  assert.equal(
+    browserFailureReason({
+      message: "page.screenshot: Target page, context or browser has been closed; secret",
+    }),
+    "target-closed"
+  )
+  assert.equal(browserFailureReason({ message: "Protocol error: private detail" }), "protocol")
+  assert.equal(
+    browserFailureReason({ message: "net::ERR_CONNECTION_RESET private URL" }),
+    "network"
+  )
+  assert.equal(browserFailureReason({ code: "ENOSPC", message: "private path" }), "ENOSPC")
+  assert.equal(browserFailureReason({ message: "private secret" }), "unavailable")
+})
 test("host failure diagnostics propagate only bounded fixed fields, never child secrets", () => {
   const diagnostic = "CI_BROWSER_CHECK_FAILED phase=native-libraries item=0 reason=assertion"
   assert.equal(
     hostFailureDiagnostic(`secret=do-not-print\n${diagnostic}\nraw private stderr`),
     diagnostic
   )
+  for (const phase of [
+    "trace-context",
+    "trace-start",
+    "trace-page",
+    "trace-goto",
+    "trace-screenshot",
+    "trace-stop",
+    "trace-size",
+    "trace-close",
+  ]) {
+    const traceDiagnostic = `CI_BROWSER_CHECK_FAILED phase=${phase} item=2 reason=target-closed`
+    assert.equal(hostFailureDiagnostic(`secret=hidden\n${traceDiagnostic}`), traceDiagnostic)
+  }
   for (const unsafe of [
     "CI_BROWSER_CHECK_FAILED phase=secret-value item=0 reason=assertion",
     "CI_BROWSER_CHECK_FAILED phase=font-scan item=1000 reason=assertion",
