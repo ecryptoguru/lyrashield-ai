@@ -6,14 +6,18 @@ import struct
 import subprocess
 import sys
 import threading
+import time
 
-container, port_file, arm, marker = sys.argv[1:]
+container, port_file, arm, marker, delay_arm, delay_marker, live_delay_arm, live_delay_marker, live_stall_arm, live_stall_marker = sys.argv[1:]
 listener = socket.socket()
 listener.bind(("127.0.0.1", 0))
 listener.listen(64)
 with open(port_file, "x", encoding="ascii") as output:
     output.write(str(listener.getsockname()[1]))
 fired = threading.Event()
+delayed = threading.Event()
+live_delayed = threading.Event()
+live_stalled = threading.Event()
 fired_lock = threading.Lock()
 
 
@@ -56,7 +60,7 @@ def relay(connection):
         fields = dict(zip(parts[::2], parts[1::2]))
         if len(fields) * 2 != len(parts):
             raise ValueError("duplicate startup parameter")
-        target = fields.get(b"user") == b"postgres"
+        target = fields.get(b"user") in (b"postgres", b"dispatch_prepare_broker")
 
         process = subprocess.Popen(
             ["docker", "exec", "-i", container, "nc", "127.0.0.1", "5432"],
@@ -67,7 +71,7 @@ def relay(connection):
         process.stdin.write(startup_header + startup)
         process.stdin.flush()
 
-        transaction = {"begin": False, "attempt_insert": False}
+        transaction = {"begin": False, "attempt_insert": False, "liveness": False}
         transaction_lock = threading.Lock()
 
         def to_database():
@@ -92,6 +96,9 @@ def relay(connection):
                         elif transaction["begin"] and normalized.lstrip().startswith(b"INSERT"):
                             if b'"SCANDISPATCHATTEMPT"' in normalized:
                                 transaction["attempt_insert"] = True
+                    with transaction_lock:
+                        if not transaction["begin"] and b"CLOCK_TIMESTAMP()" in normalized and normalized.endswith(b" AS LIVE"):
+                            transaction["liveness"] = True
                     process.stdin.write(header + body)
                     process.stdin.flush()
             except (EOFError, OSError, ValueError):
@@ -109,6 +116,22 @@ def relay(connection):
             if length < 4 or length > 16 * 1024 * 1024:
                 raise ValueError("invalid PostgreSQL frame")
             body = read_exact(process.stdout, length - 4)
+            if header[:1] == b"D":
+                with transaction_lock:
+                    is_live_query = target and transaction["liveness"]
+                    transaction["liveness"] = False
+                if is_live_query:
+                    with fired_lock:
+                        delay = os.path.isfile(live_delay_arm) and not live_delayed.is_set()
+                        stall = os.path.isfile(live_stall_arm) and not live_stalled.is_set()
+                        if delay: live_delayed.set()
+                        elif stall: live_stalled.set()
+                    if delay or stall:
+                        selected_marker = live_delay_marker if delay else live_stall_marker
+                        with open(selected_marker, "x", encoding="ascii") as output:
+                            output.write("live=true\n" if body.endswith(b"t") else "live=false\n")
+                        time.sleep(4 if delay else 8)
+                        if stall: return
             if header[:1] == b"C" and body == b"COMMIT\x00":
                 with transaction_lock:
                     matches = target and transaction["begin"] and transaction["attempt_insert"]
@@ -127,6 +150,11 @@ def relay(connection):
                         with open(marker, "x", encoding="ascii") as output:
                             output.write("dispatch-prepare-commit-response-dropped\n")
                         return
+                if matches and os.path.isfile(delay_arm) and not delayed.is_set():
+                    delayed.set()
+                    with open(delay_marker, "x", encoding="ascii") as output:
+                        output.write("dispatch-prepare-commit-response-delayed\n")
+                    time.sleep(10.2)
             if header[:1] == b"C" and body in (b"COMMIT\x00", b"ROLLBACK\x00"):
                 with transaction_lock:
                     transaction.update(begin=False, attempt_insert=False)

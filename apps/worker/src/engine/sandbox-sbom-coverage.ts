@@ -166,7 +166,7 @@ function requireDigest(value: unknown, label: string): string {
  * both architecture receipts present, bounded scopes matched, LIMITATIONS
  * propagated, and rootfs digests recorded.
  */
-function validateSandboxSbomCoverageAggregate(
+export function validateSandboxSbomCoverageAggregate(
   aggregate: unknown,
   identity: SandboxSbomCoverageIdentity
 ): void {

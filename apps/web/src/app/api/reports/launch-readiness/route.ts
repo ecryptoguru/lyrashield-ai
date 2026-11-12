@@ -122,6 +122,13 @@ async function post(request: Request) {
         )
       : execute())
   } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "UNTRUSTED_GATE_EVIDENCE") {
+      return apiError(
+        "UNTRUSTED_GATE_EVIDENCE",
+        "Run a new assessment and then evaluate the launch gate again before generating a report.",
+        409
+      )
+    }
     const authErr = authErrorResponse(error)
     if (authErr) return authErr
     logger.error("Launch report generation failed", { error: String(error) })

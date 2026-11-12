@@ -54,6 +54,11 @@ export interface ConditionalObjectStore {
   ): Promise<"written" | "conflict">
 }
 
+export interface BoundedConditionalObjectStore extends ConditionalObjectStore {
+  /** Enforce this limit during transport, before accumulating an oversized response. */
+  readBounded(key: string, maxBytes: number): Promise<StoredObject | null>
+}
+
 export interface AuthorityMirror {
   readHead(): Promise<AuthorityHead | null>
   readRecord(sequence: number): Promise<JournalRecord<unknown> | null>
@@ -67,6 +72,12 @@ export interface AuthorityMirror {
     head: AuthorityHead,
     record: JournalRecord<unknown>
   ): Promise<"written" | "conflict">
+}
+
+export interface BoundedAuthorityMirror extends AuthorityMirror {
+  /** Enforce caller-sized limits in SQL before text reaches the driver. */
+  readHeadBounded(maxBytes: number): Promise<AuthorityHead | null>
+  readRecordBounded(sequence: number, maxBytes: number): Promise<JournalRecord<unknown> | null>
 }
 
 export class IndependentAuthorityError extends Error {

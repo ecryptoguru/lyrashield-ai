@@ -1,10 +1,12 @@
 import { z } from "zod"
+import { performance } from "node:perf_hooks"
 import { canonicalJson } from "./canonical-json"
 import {
   authorityEventSchema,
   headSchema,
   type AuthorityHead,
   type AuthorityMirror,
+  type BoundedAuthorityMirror,
 } from "./independent-journal"
 import type { JournalRecord } from "./journal"
 
@@ -18,6 +20,10 @@ export interface AuthoritySqlConnection extends AuthoritySqlClient {
 export interface AuthoritySqlPool extends AuthoritySqlClient {
   /** Must check out a fresh idle connection, never a caller's transaction. */
   connect(): Promise<AuthoritySqlConnection>
+}
+
+interface TransactionRelease {
+  release?: (destroy: boolean) => void
 }
 
 const id = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/)
@@ -49,13 +55,33 @@ function decode(value: unknown): unknown {
   return parsed
 }
 
+function readLimit(maxBytes: number): number {
+  if (!Number.isSafeInteger(maxBytes) || maxBytes < 1 || maxBytes > MAX_BYTES)
+    throw new Error("invalid authority mirror read byte limit")
+  return maxBytes
+}
+
+function boundedBytes(
+  result: { rows: Record<string, unknown>[] },
+  maxBytes: number
+): unknown | null {
+  const row = result.rows[0]
+  if (!row || typeof row.oversized !== "boolean")
+    throw new Error("authority mirror returned invalid bounded response")
+  if (row.oversized) throw new Error("authority mirror exceeds requested byte limit")
+  if (row.bytes === null) return null
+  if (typeof row.bytes !== "string" || Buffer.byteLength(row.bytes) > maxBytes)
+    throw new Error("authority mirror returned invalid bounded bytes")
+  return decode(row.bytes)
+}
+
 /**
  * PostgreSQL is a mirror, never authority to resume an epoch after a restore.
  * Stream provisioning and signing are outside this adapter. The caller must
  * authenticate all returned bytes against the local and independent journals.
  * SQL errors (including a lost commit reply) propagate as UNKNOWN to that caller.
  */
-export class PostgresAuthorityMirror implements AuthorityMirror {
+export class PostgresAuthorityMirror implements AuthorityMirror, BoundedAuthorityMirror {
   constructor(
     private readonly client: AuthoritySqlPool,
     private readonly epochId: string,
@@ -72,23 +98,38 @@ export class PostgresAuthorityMirror implements AuthorityMirror {
   }
 
   private async transaction<T>(
-    operation: (connection: AuthoritySqlConnection) => Promise<T>
+    operation: (connection: AuthoritySqlConnection) => Promise<T>,
+    completion?: TransactionRelease,
+    expiresAt = performance.now() + 10000
   ): Promise<T> {
     let expired = false
     let connection: AuthoritySqlConnection | undefined
     let timer: ReturnType<typeof setTimeout> | undefined
     let failed = true
-    const deadline = new Promise<never>((_resolve, reject) => {
-      timer = setTimeout(() => {
+    const assertActive = () => {
+      if (expired || performance.now() >= expiresAt) {
         expired = true
-        reject(new Error("authority mirror outcome is unavailable after timeout"))
-      }, 10000)
+        throw new Error("authority mirror outcome is unavailable after timeout")
+      }
+    }
+    assertActive()
+    const deadline = new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(
+        () => {
+          expired = true
+          reject(new Error("authority mirror outcome is unavailable after timeout"))
+        },
+        Math.max(0, expiresAt - performance.now())
+      )
     })
     // A connection arriving after acquisition timeout is discarded without running SQL.
     const pending = Promise.resolve()
       .then(() => this.client.connect())
       .then((value) => {
-        if (expired) value.release(true)
+        if (expired || performance.now() >= expiresAt) {
+          value.release(true)
+          assertActive()
+        }
         return value
       })
     try {
@@ -96,9 +137,9 @@ export class PostgresAuthorityMirror implements AuthorityMirror {
       const acquired = connection
       const active: AuthoritySqlConnection = {
         query: async (text, values) => {
-          if (expired) throw new Error("authority mirror transaction expired")
+          assertActive()
           const value = await acquired.query(text, values)
-          if (expired) throw new Error("authority mirror transaction expired")
+          assertActive()
           return value
         },
         release: (destroy) => acquired.release(destroy),
@@ -116,13 +157,19 @@ export class PostgresAuthorityMirror implements AuthorityMirror {
         })(),
         deadline,
       ])
+      assertActive()
       failed = false
       return result
     } finally {
       if (timer) clearTimeout(timer)
       // Destroy immediately on error. Waiting for ROLLBACK on a lost socket can
       // hide UNKNOWN forever; disconnect aborts any uncommitted transaction.
-      connection?.release(failed)
+      if (connection && completion && !failed) {
+        // Bounded reads retain the client across their final await/parse gap.
+        // Their synchronous final check determines whether it may return to the pool.
+        const acquired = connection
+        completion.release = (destroy) => acquired.release(destroy)
+      } else connection?.release(failed)
     }
   }
 
@@ -156,6 +203,78 @@ export class PostgresAuthorityMirror implements AuthorityMirror {
       throw new Error("authority mirror record identity mismatch")
     }
     return record
+  }
+
+  private async boundedRead<T>(
+    maxBytes: number,
+    operation: (connection: AuthoritySqlConnection) => Promise<{ rows: Record<string, unknown>[] }>,
+    decodeValue: (value: unknown | null) => T,
+    checkInput?: () => void
+  ): Promise<T> {
+    const expiresAt = performance.now() + 10000
+    const completion: TransactionRelease = {}
+    let failed = true
+    const assertReadDeadline = () => {
+      if (performance.now() >= expiresAt)
+        throw new Error("authority mirror outcome is unavailable after timeout")
+    }
+    try {
+      readLimit(maxBytes)
+      checkInput?.()
+      const result = await this.transaction(operation, completion, expiresAt)
+      assertReadDeadline()
+      const value = decodeValue(boundedBytes(result, maxBytes))
+      assertReadDeadline()
+      failed = false
+      return value
+    } catch (error) {
+      assertReadDeadline()
+      throw error
+    } finally {
+      completion.release?.(failed)
+    }
+  }
+
+  readHeadBounded(maxBytes: number): Promise<AuthorityHead | null> {
+    return this.boundedRead(
+      maxBytes,
+      (connection) =>
+        connection.query(
+          `WITH evidence AS MATERIALIZED (SELECT lyrashield_authority.read_head($1,$2) AS bytes)
+         SELECT CASE WHEN octet_length(bytes) <= $3::integer THEN bytes END AS bytes,
+                COALESCE(octet_length(bytes) > $3::integer, false) AS oversized FROM evidence`,
+          [this.epochId, this.supervisorInstanceId, String(maxBytes)]
+        ),
+      (value) => {
+        if (value === null) return null
+        const head = headSchema.parse(value)
+        this.bind(head)
+        return head
+      }
+    )
+  }
+
+  readRecordBounded(sequence: number, maxBytes: number): Promise<JournalRecord<unknown> | null> {
+    return this.boundedRead(
+      maxBytes,
+      (connection) =>
+        connection.query(
+          `WITH evidence AS MATERIALIZED (SELECT lyrashield_authority.read_record($1,$2,$3::bigint) AS bytes)
+         SELECT CASE WHEN octet_length(bytes) <= $4::integer THEN bytes END AS bytes,
+                COALESCE(octet_length(bytes) > $4::integer, false) AS oversized FROM evidence`,
+          [this.epochId, this.supervisorInstanceId, String(sequence), String(maxBytes)]
+        ),
+      (value) => {
+        if (value === null) return null
+        const record = recordSchema.parse(value)
+        if (record.sequence !== sequence || record.payload.epochId !== this.epochId)
+          throw new Error("authority mirror record identity mismatch")
+        return record
+      },
+      () => {
+        z.number().int().positive().safe().parse(sequence)
+      }
+    )
   }
 
   async compareAndAppend(

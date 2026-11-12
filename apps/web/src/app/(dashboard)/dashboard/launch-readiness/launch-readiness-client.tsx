@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { useLaunchReadinessWebMcp } from "./launch-readiness-webmcp"
+import { ReleaseCheckSummary } from "./release-check-summary"
 import {
   Rocket,
   ChevronDown,
@@ -20,8 +21,8 @@ import { apiGet } from "@/lib/api-client"
 import { launchReadinessReportSchema } from "@/lib/api-schemas"
 import { LaunchReadinessDetails, LaunchVerdictCard } from "./launch-readiness-summary"
 import {
-  gateReasonSentence,
   parseReleaseReference,
+  readinessTargetPageHref,
   type ReleaseCheckResult,
 } from "@/lib/launch-readiness"
 
@@ -61,6 +62,9 @@ const releaseCheckSchema = z
 
 const launchReadinessResponseSchema = launchReadinessReportSchema.extend({
   releaseCheck: releaseCheckSchema.optional(),
+  targets: z.array(z.object({ targetId: z.string(), targetName: z.string() })),
+  nextCursor: z.string().nullable(),
+  partial: z.boolean(),
 })
 
 const VERDICT_CONFIG = {
@@ -142,26 +146,17 @@ function SeverityBreakdown({ bySeverity }: { bySeverity: Record<string, number> 
   )
 }
 
-const HISTORICAL_STATE_LABEL: Record<string, string> = {
-  READY: "Ready to launch",
-  NOT_READY: "Not ready",
-  INSUFFICIENT_EVIDENCE: "Not enough evidence",
-}
-
-function identityText(identity: { kind: "COMMIT" | "ARTIFACT_DIGEST"; value: string } | null) {
-  if (!identity) return null
-  return identity.kind === "COMMIT" ? `commit ${identity.value}` : `artifact ${identity.value}`
-}
-
 export function LaunchReadinessClient({
   workspaceId,
   initialReport,
-  targets,
+  targets: initialTargets,
   initialTargetId,
   initialReleaseRef,
   initialReleaseCheck,
   initialCheckError,
   checkNeedsTarget,
+  nextTargetsHref: initialNextTargetsHref = null,
+  firstTargetsHref: initialFirstTargetsHref = null,
 }: {
   workspaceId: string
   initialReport: LaunchReadinessReport
@@ -171,9 +166,14 @@ export function LaunchReadinessClient({
   initialReleaseCheck: ReleaseCheckResult | null
   initialCheckError: string | null
   checkNeedsTarget: boolean
+  nextTargetsHref?: string | null
+  firstTargetsHref?: string | null
 }) {
   const router = useRouter()
   const [report, setReport] = useState<LaunchReadinessReport>(initialReport)
+  const [targets, setTargets] = useState(initialTargets)
+  const [nextTargetsHref, setNextTargetsHref] = useState(initialNextTargetsHref)
+  const [firstTargetsHref, setFirstTargetsHref] = useState(initialFirstTargetsHref)
   const [releaseCheck, setReleaseCheck] = useState<ReleaseCheckResult | null>(initialReleaseCheck)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -182,13 +182,15 @@ export function LaunchReadinessClient({
   const [formError, setFormError] = useState<string | null>(initialCheckError)
   const [draftDirty, setDraftDirty] = useState(false)
   const draftVersion = useRef(0)
+  const requestVersion = useRef(0)
 
-  useLaunchReadinessWebMcp({ workspaceId, onReport: setReport })
+  useLaunchReadinessWebMcp({ workspaceId })
 
   const loadReport = useCallback(
     (signal?: AbortSignal, options?: { silent?: boolean; refreshCheck?: boolean }) => {
       const silent = options?.silent === true
       const refreshCheck = options?.refreshCheck === true || !draftDirty
+      const request = ++requestVersion.current
       if (!silent) setLoading(true)
       // Carry the URL's check state so a refresh re-runs the same check rather
       // than silently dropping back to the informational view.
@@ -199,12 +201,30 @@ export function LaunchReadinessClient({
         params.set("targetId", initialTargetId)
       }
       params.set("workspaceId", workspaceId)
-      apiGet<LaunchReadinessReport & { releaseCheck?: ReleaseCheckResult | null }>(
-        `/api/launch-readiness?${params.toString()}`,
-        { signal, schema: launchReadinessResponseSchema }
-      )
+      apiGet<
+        LaunchReadinessReport & {
+          releaseCheck?: ReleaseCheckResult | null
+          targets: { targetId: string; targetName: string }[]
+          nextCursor: string | null
+          partial: boolean
+        }
+      >(`/api/launch-readiness?${params.toString()}`, {
+        signal,
+        schema: launchReadinessResponseSchema,
+      })
         .then((data) => {
+          if (request !== requestVersion.current) return
           setReport(data)
+          setTargets(data.targets)
+          const pageHref = (cursor?: string | null) =>
+            readinessTargetPageHref({
+              targetId: params.get("targetId") ?? undefined,
+              commit: params.get("commit") ?? undefined,
+              artifactDigest: params.get("artifactDigest") ?? undefined,
+              cursor,
+            })
+          setNextTargetsHref(data.nextCursor ? pageHref(data.nextCursor) : null)
+          setFirstTargetsHref(params.has("cursor") && data.partial ? pageHref() : null)
           if (refreshCheck && refreshVersion === draftVersion.current) {
             setReleaseCheck(data.releaseCheck ?? null)
             setFormError(null)
@@ -212,20 +232,13 @@ export function LaunchReadinessClient({
           setError(null)
         })
         .catch(() => {
-          // A silent background refresh must not replace a perfectly good report
-          // with an error screen; the explicit Refresh action still surfaces it.
-          if (!silent) {
-            setError("Failed to load launch readiness report. Please try again.")
-            setReleaseCheck(null)
-          } else if (checkRequested && refreshCheck && refreshVersion === draftVersion.current) {
-            setReleaseCheck(null)
-            setFormError(
-              "Could not refresh release applicability. Current applicability is unavailable; try again."
-            )
-          }
+          if (request !== requestVersion.current) return
+          // A failed revalidation cannot establish that an earlier verdict is still current.
+          setError("Current readiness could not be verified. Please try again.")
+          setReleaseCheck(null)
         })
         .finally(() => {
-          if (!silent) setLoading(false)
+          if (request === requestVersion.current) setLoading(false)
         })
     },
     [draftDirty, initialTargetId, workspaceId]
@@ -354,15 +367,22 @@ export function LaunchReadinessClient({
                   href: `/dashboard/findings?status=ALL${scopeQuery}`,
                   label: "Review findings",
                 }
-              : report.verdict === "INCONCLUSIVE" || report.verdict === "NOT_EVALUATED"
+              : !scopedTarget &&
+                  report.verdict === "INCONCLUSIVE" &&
+                  (nextTargetsHref || firstTargetsHref)
                 ? {
-                    href: `/dashboard/scans?new=1${scopeQuery}`,
-                    label: scopedTarget ? "Scan this target" : "Choose a target to scan",
+                    href: (nextTargetsHref ?? firstTargetsHref)!,
+                    label: nextTargetsHref ? "Review next targets" : "Review first targets",
                   }
-                : {
-                    href: `/dashboard/reports${scopedTarget ? `?targetId=${encodeURIComponent(scopedTarget.targetId)}` : ""}`,
-                    label: "Review assurance report",
-                  }
+                : report.verdict === "INCONCLUSIVE" || report.verdict === "NOT_EVALUATED"
+                  ? {
+                      href: `/dashboard/scans?new=1${scopeQuery}`,
+                      label: scopedTarget ? "Scan this target" : "Choose a target to scan",
+                    }
+                  : {
+                      href: `/dashboard/reports${scopedTarget ? `?targetId=${encodeURIComponent(scopedTarget.targetId)}` : ""}`,
+                      label: "Review assurance report",
+                    }
 
   const checkActive = Boolean(releaseRef) || Boolean(releaseCheck?.requested) || Boolean(formError)
 
@@ -386,11 +406,34 @@ export function LaunchReadinessClient({
     <div className="space-y-6">
       <PageHeader title="Launch Readiness" icon={Rocket} />
 
+      {(firstTargetsHref || nextTargetsHref) && (
+        <nav aria-label="Target pages" className="flex flex-wrap gap-4 text-sm">
+          <span>Targets are shown in pages.</span>
+          {firstTargetsHref && (
+            <Link className="underline" href={firstTargetsHref}>
+              First targets
+            </Link>
+          )}
+          {nextTargetsHref && (
+            <Link className="underline" href={nextTargetsHref}>
+              Next targets
+            </Link>
+          )}
+        </nav>
+      )}
+
       <LaunchVerdictCard
         report={report}
         config={config}
         summary={verdictSummary}
-        scope={scopedTarget?.targetName ?? "All workspace targets"}
+        scope={
+          scopedTarget?.targetName ??
+          (initialTargetId
+            ? "Selected target unavailable"
+            : firstTargetsHref || nextTargetsHref
+              ? "Targets on this page"
+              : "All workspace targets")
+        }
         releaseNeedsAttention={releaseNeedsAttention}
         action={nextAction}
       />
@@ -477,96 +520,7 @@ export function LaunchReadinessClient({
         )}
       </details>
 
-      {/* Release check result — match state, identities, and applicability */}
-      {releaseCheck?.requested && (
-        <Card
-          className={`p-5 ${
-            releaseCheck.match === "match"
-              ? "border-emerald-500/20 bg-emerald-500/5"
-              : releaseCheck.match === "mismatch"
-                ? "border-destructive/20 bg-destructive/5"
-                : "border-border bg-muted/30"
-          }`}
-        >
-          <div role="status" aria-live="polite">
-            <h3 className="font-semibold">
-              {releaseCheck.match === "match"
-                ? "Release reference matches this assessment."
-                : releaseCheck.match === "mismatch"
-                  ? "This assessment covers a different release."
-                  : "Cannot confirm this release from the retained assessment."}
-            </h3>
-            <dl className="text-muted-foreground mt-3 space-y-1 text-sm">
-              <div className="flex flex-wrap gap-x-2">
-                <dt className="font-medium">Target:</dt>
-                <dd>{releaseCheck.targetName ?? "Unknown target"}</dd>
-              </div>
-              <div className="flex flex-wrap gap-x-2">
-                <dt className="font-medium">Requested:</dt>
-                <dd>
-                  <code className="break-all">{identityText(releaseCheck.requested)}</code>
-                </dd>
-              </div>
-              <div className="flex flex-wrap gap-x-2">
-                <dt className="font-medium">Assessed:</dt>
-                <dd>
-                  {releaseCheck.assessed ? (
-                    <code className="break-all">{identityText(releaseCheck.assessed)}</code>
-                  ) : (
-                    "No release identity is retained in this assessment."
-                  )}
-                </dd>
-              </div>
-              {releaseCheck.historicalState && (
-                <div className="flex flex-wrap gap-x-2">
-                  <dt className="font-medium">Historical verdict:</dt>
-                  <dd>
-                    {HISTORICAL_STATE_LABEL[releaseCheck.historicalState] ??
-                      releaseCheck.historicalState}
-                    {" · effective now: "}
-                    {HISTORICAL_STATE_LABEL[releaseCheck.state] ?? releaseCheck.state}
-                  </dd>
-                </div>
-              )}
-            </dl>
-            {releaseCheck.reasons.length > 0 && (
-              <ul className="mt-3 space-y-1">
-                {releaseCheck.reasons.map((reason) => (
-                  <li key={reason.code} className="text-foreground/80 text-sm">
-                    {gateReasonSentence(reason)}
-                  </li>
-                ))}
-              </ul>
-            )}
-            <div className="mt-4 flex flex-wrap gap-3 text-sm">
-              {releaseCheck.blockingFindings > 0 && (
-                <Link
-                  href={`/dashboard/findings?target=${encodeURIComponent(releaseCheck.targetId)}`}
-                  className="text-accent font-medium underline underline-offset-4"
-                >
-                  Inspect blocking findings
-                </Link>
-              )}
-              {releaseCheck.reasons.some((r) => r.code === "NEWER_ASSESSMENT_ATTEMPT") && (
-                <Link
-                  href={`/dashboard/scans?target=${encodeURIComponent(releaseCheck.targetId)}`}
-                  className="text-accent font-medium underline underline-offset-4"
-                >
-                  Review the newer assessment
-                </Link>
-              )}
-              {(releaseCheck.match !== "match" || !releaseCheck.applicable) && (
-                <Link
-                  href={`/dashboard/scans?new=1&target=${encodeURIComponent(releaseCheck.targetId)}`}
-                  className="text-accent font-medium underline underline-offset-4"
-                >
-                  Open scan creation
-                </Link>
-              )}
-            </div>
-          </div>
-        </Card>
-      )}
+      <ReleaseCheckSummary releaseCheck={releaseCheck} />
 
       <LaunchReadinessDetails report={report}>
         <Card className="p-5">

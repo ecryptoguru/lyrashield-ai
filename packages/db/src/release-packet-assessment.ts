@@ -4,6 +4,11 @@ import { isLaunchReportShareablePayload } from "./launch-report-html"
 import { parseLaunchReportProvenance } from "./launch-report-provenance"
 import { LAUNCH_REPORT_SIGNING_KEY_ID, verifyLaunchReportSignature } from "./launch-report-signing"
 import { assessmentKeyStatus, type ReleasePacketVerificationKey } from "./release-packet-signing"
+import { LAUNCH_REPORT_PAYLOAD_VERSION } from "./launch-report-payload"
+import {
+  launchReportBindingKey,
+  matchesLaunchReportIdentityCommitment,
+} from "./launch-report-identity"
 
 function sameIdentity(
   left: { kind: string; value: string } | null,
@@ -23,6 +28,7 @@ export async function signedAssessmentFor(
     workspaceId: string
     verdictId: string
     verdict: {
+      targetId: string
       verdictChecksum: string
       assessmentVersion: number | null
       evaluatedAt: Date
@@ -75,9 +81,33 @@ export async function signedAssessmentFor(
     verifiedAt: input.now.toISOString(),
     ...(Number.isFinite(expiresAt) ? { expiresAt: new Date(expiresAt).toISOString() } : {}),
   }
-  if (payload.stale || !Number.isFinite(expiresAt) || expiresAt <= input.now.getTime()) {
+  if (
+    payload.payloadVersion !== LAUNCH_REPORT_PAYLOAD_VERSION ||
+    payload.stale ||
+    !Number.isFinite(expiresAt) ||
+    expiresAt <= input.now.getTime()
+  ) {
     return { ...common, state: "HISTORICAL", reason: "The signed assessment is historical." }
   }
+  if (
+    !matchesLaunchReportIdentityCommitment(
+      payload.identityCommitment,
+      launchReportBindingKey(report.provenanceJson),
+      {
+        workspaceId: input.workspaceId,
+        targetId: input.verdict.targetId,
+        verdictId: input.verdictId,
+        verdictChecksum: input.verdict.verdictChecksum,
+        assessmentVersion: input.verdict.assessmentVersion,
+        identity: input.identity,
+      }
+    )
+  )
+    return {
+      ...common,
+      state: "INVALID",
+      reason: "The signed assessment identity binding is invalid.",
+    }
   if (!payload.signature) {
     return {
       ...common,

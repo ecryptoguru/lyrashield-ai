@@ -24,13 +24,22 @@ import { logger } from "@lyrashield/logger"
 import { env } from "@lyrashield/config"
 import { withWorkspaceRLS, type ScopedTransaction } from "./rls"
 import { evaluateVerdictApplicability, parseAssessmentSnapshot } from "./gate-service"
+import { loadBoundedGateVerdicts } from "./gate-verdict-read"
+import { isDeepStrictEqual } from "node:util"
 import type { GateApplicabilityResult } from "@lyrashield/gate"
 import {
   buildLaunchReportPayload,
+  LAUNCH_REPORT_PAYLOAD_VERSION,
   type LaunchReportShareablePayload,
   type LaunchReportSource,
   type LaunchReportVerdictLabel,
 } from "./launch-report-payload"
+import {
+  launchReportBindingKey,
+  launchReportIdentityCommitment,
+  matchesLaunchReportIdentityCommitment,
+  newLaunchReportBindingKey,
+} from "./launch-report-identity"
 import {
   buildLaunchReportProvenance,
   parseLaunchReportProvenance,
@@ -94,6 +103,14 @@ export type ReleaseIdentityConfirmation = "MATCH" | "MISMATCH" | "UNAVAILABLE"
  * @param opts.signingPrivateKey  Signing key resolved by the caller (env in
  *   dev, Azure Key Vault in production); omitted -> env fallback -> unsigned.
  */
+export class UntrustedGateEvidenceError extends Error {
+  readonly code = "UNTRUSTED_GATE_EVIDENCE"
+  constructor() {
+    super("The stored gate verdict needs a fresh assessment before a report can be issued.")
+    this.name = "UntrustedGateEvidenceError"
+  }
+}
+
 export async function generateLaunchReport(
   workspaceId: string,
   targetId: string,
@@ -115,18 +132,14 @@ export async function generateLaunchReport(
   } = { verdict: null, applicability: null }
   try {
     const read = async (tx: ScopedTransaction) => {
-      const selected = await tx.gateVerdict.findFirst({
-        where: {
-          workspaceId,
-          targetId,
-          target: { workspaceId, deletedAt: null },
-        },
-        // id tiebreaker for same-millisecond verdicts (see getLatestGateVerdict).
-        orderBy: [{ evaluatedAt: "desc" }, { id: "desc" }],
+      const [selected] = await loadBoundedGateVerdicts(tx, workspaceId, {
+        targetIds: [targetId],
+        requireActiveTarget: true,
       })
+      if (selected?.evidenceTooLarge) throw new UntrustedGateEvidenceError()
       // Captured outside the callback so a later statement failure in this
       // transaction still leaves the selected binding available.
-      selection.verdict = selected
+      selection.verdict = selected ?? null
       if (!selected) return
       selection.applicability = await evaluateVerdictApplicability(tx, workspaceId, selected, {
         now: applicabilityCheckedAt,
@@ -160,9 +173,91 @@ export async function generateLaunchReport(
   const verdict = selection.verdict
   const applicability = selection.applicability
   if (!verdict) return null
+  if (applicability?.reasons.some((reason) => reason.code === "UNTRUSTED_GATE_EVIDENCE")) {
+    throw new UntrustedGateEvidenceError()
+  }
 
   const issuedAt = opts.now ?? new Date()
+  const snapshot = parseAssessmentSnapshot(verdict.assessmentSnapshot)
+  const bindingKey = newLaunchReportBindingKey()
+  const identityCommitment = launchReportIdentityCommitment(bindingKey, {
+    workspaceId,
+    targetId: verdict.targetId,
+    verdictId: verdict.id,
+    verdictChecksum: verdict.verdictChecksum,
+    assessmentVersion: verdict.assessmentVersion,
+    identity: snapshot?.identity ?? null,
+  })
 
+  const source = reportSourceFromVerdict(verdict, applicability?.applicable === true)
+
+  const payload = buildLaunchReportPayload(source, {
+    appDisplayName: opts.appDisplayName,
+    issuedAt,
+    identityCommitment,
+  })
+
+  // Sign the payload checksum when a signing key is available. The key is
+  // resolved by the caller (env in dev, Azure Key Vault in production) and
+  // injected; without it the report is still issued (checksum present,
+  // signature absent) and the verification endpoint reports unsigned.
+  let signature: string | undefined
+  const privateKey = opts.signingPrivateKey ?? env.LAUNCH_REPORT_SIGNING_PRIVATE_KEY
+  if (privateKey) {
+    signature = signLaunchReportChecksum(payload.reportChecksum, privateKey)
+    payload.signature = signature
+    payload.signingKeyId = LAUNCH_REPORT_SIGNING_KEY_ID
+  }
+
+  // Assessed identity comes from the bound verdict's assessment snapshot —
+  // never from a caller-supplied release identity (issuance enforces none) and
+  // never reconstructed from the target's current branch or latest scan.
+  const provenance = buildLaunchReportProvenance({
+    verdictId: verdict.id,
+    verdictChecksum: verdict.verdictChecksum,
+    assessmentVersion: verdict.assessmentVersion,
+    assessedIdentity: snapshot?.identity ?? null,
+    assessedAt: verdict.evaluatedAt,
+    issuedAt,
+    applicabilityCheckedAt,
+    applicability: applicability
+      ? applicability.applicable
+        ? "applicable"
+        : "not_applicable"
+      : "unknown",
+    reasonCodes: applicability
+      ? applicability.reasons.map((reason) => reason.code)
+      : [APPLICABILITY_EVALUATION_FAILED],
+    historicalState: verdict.state,
+    effectiveState: applicability?.effectiveState ?? null,
+  })
+
+  // Phase B — payload + private provenance are written atomically in one row.
+  const persist = (tx: ScopedTransaction) =>
+    persistLaunchReport(tx, {
+      workspaceId,
+      createdById,
+      contentJson: { ...payload },
+      provenanceJson: { ...provenance, identityBindingKey: bindingKey },
+    })
+  const report = opts.client
+    ? await persist(opts.client)
+    : await withWorkspaceRLS(workspaceId, persist)
+
+  logger.info("Launch readiness report generated", {
+    reportId: report.id,
+    workspaceId,
+    targetId,
+    gateVerdictId: verdict.id,
+    state: payload.verdictLabel,
+    applicability: provenance.applicability,
+    signed: Boolean(signature),
+  })
+
+  return { reportId: report.id, payload }
+}
+
+function reportSourceFromVerdict(verdict: GateVerdict, current: boolean): LaunchReportSource {
   // Stored evidenceSummary comes from the gate's versioned output. Verdicts
   // persisted before the per-severity counts existed lack
   // unresolvedCritical/unresolvedHigh — a missing value reading as 0 would
@@ -195,9 +290,8 @@ export async function generateLaunchReport(
   // itself failed. The stored staleness snapshot is never trusted: it freezes
   // whatever was true when the verdict was computed, not when the report
   // issues.
-  const current = applicability?.applicable === true
 
-  const source: LaunchReportSource = {
+  return {
     standardVersion: verdict.standardVersion,
     state: verdict.state as LaunchReportSource["state"],
     coverageStatement: verdict.coverageStatement as string[],
@@ -208,71 +302,80 @@ export async function generateLaunchReport(
     verdictChecksum: verdict.verdictChecksum,
     evaluatedAt: verdict.evaluatedAt,
   }
+}
 
-  const payload = buildLaunchReportPayload(source, {
-    appDisplayName: opts.appDisplayName,
-    issuedAt,
-  })
-
-  // Sign the payload checksum when a signing key is available. The key is
-  // resolved by the caller (env in dev, Azure Key Vault in production) and
-  // injected; without it the report is still issued (checksum present,
-  // signature absent) and the verification endpoint reports unsigned.
-  let signature: string | undefined
-  const privateKey = opts.signingPrivateKey ?? env.LAUNCH_REPORT_SIGNING_PRIVATE_KEY
-  if (privateKey) {
-    signature = signLaunchReportChecksum(payload.reportChecksum, privateKey)
-    payload.signature = signature
-    payload.signingKeyId = LAUNCH_REPORT_SIGNING_KEY_ID
-  }
-
-  // Assessed identity comes from the bound verdict's assessment snapshot —
-  // never from a caller-supplied release identity (issuance enforces none) and
-  // never reconstructed from the target's current branch or latest scan.
-  const snapshot = parseAssessmentSnapshot(verdict.assessmentSnapshot)
-  const provenance = buildLaunchReportProvenance({
-    verdictId: verdict.id,
-    verdictChecksum: verdict.verdictChecksum,
-    assessmentVersion: verdict.assessmentVersion,
-    assessedIdentity: snapshot?.identity ?? null,
-    assessedAt: verdict.evaluatedAt,
-    issuedAt,
-    applicabilityCheckedAt,
-    applicability: applicability
-      ? applicability.applicable
-        ? "applicable"
-        : "not_applicable"
-      : "unknown",
-    reasonCodes: applicability
-      ? applicability.reasons.map((reason) => reason.code)
-      : [APPLICABILITY_EVALUATION_FAILED],
-    historicalState: verdict.state,
-    effectiveState: applicability?.effectiveState ?? null,
-  })
-
-  // Phase B — payload + private provenance are written atomically in one row.
-  const persist = (tx: ScopedTransaction) =>
-    persistLaunchReport(tx, {
-      workspaceId,
-      createdById,
-      contentJson: { ...payload },
-      provenanceJson: { ...provenance },
+/** Bind the frozen public payload and private provenance to one immutable verdict. */
+async function loadBoundReportVerdict(
+  tx: ScopedTransaction,
+  workspaceId: string,
+  provenance: LaunchReportProvenance | null,
+  payload: LaunchReportShareablePayload,
+  bindingKey: string | null
+): Promise<GateVerdict | null> {
+  if (!provenance) return null
+  try {
+    const [verdict] = await loadBoundedGateVerdicts(tx, workspaceId, {
+      verdictId: provenance.gateVerdictId,
     })
-  const report = opts.client
-    ? await persist(opts.client)
-    : await withWorkspaceRLS(workspaceId, persist)
+    if (verdict?.evidenceTooLarge) return null
+    const snapshot = verdict ? parseAssessmentSnapshot(verdict.assessmentSnapshot) : null
+    const expectedEffective =
+      provenance.applicability === "applicable"
+        ? verdict?.state
+        : provenance.applicability === "not_applicable"
+          ? "INSUFFICIENT_EVIDENCE"
+          : null
+    if (
+      !verdict ||
+      verdict.verdictChecksum !== provenance.verdictChecksum ||
+      verdict.assessmentVersion !== provenance.assessmentVersion ||
+      verdict.evaluatedAt.toISOString() !== provenance.assessedAt ||
+      verdict.state !== provenance.historicalState ||
+      provenance.effectiveState !== expectedEffective ||
+      !isDeepStrictEqual(snapshot?.identity ?? null, provenance.assessedIdentity) ||
+      payload.issuedAt !== provenance.issuedAt ||
+      payload.payloadVersion !== LAUNCH_REPORT_PAYLOAD_VERSION ||
+      !matchesLaunchReportIdentityCommitment(payload.identityCommitment, bindingKey, {
+        workspaceId,
+        targetId: verdict.targetId,
+        verdictId: verdict.id,
+        verdictChecksum: verdict.verdictChecksum,
+        assessmentVersion: verdict.assessmentVersion,
+        identity: snapshot?.identity ?? null,
+      })
+    )
+      return null
+    const expected = buildLaunchReportPayload(
+      reportSourceFromVerdict(verdict, provenance.applicability === "applicable"),
+      {
+        appDisplayName: payload.appDisplayName,
+        issuedAt: new Date(provenance.issuedAt),
+        identityCommitment: payload.identityCommitment,
+      }
+    )
+    return expected.reportChecksum === payload.reportChecksum ? verdict : null
+  } catch {
+    return null
+  }
+}
 
-  logger.info("Launch readiness report generated", {
-    reportId: report.id,
-    workspaceId,
-    targetId,
-    gateVerdictId: verdict.id,
-    state: payload.verdictLabel,
-    applicability: provenance.applicability,
-    signed: Boolean(signature),
-  })
-
-  return { reportId: report.id, payload }
+/** A signed report remains immutable; only its current presentation is qualified. */
+async function reportEvidenceMatches(
+  tx: ScopedTransaction,
+  workspaceId: string,
+  provenance: LaunchReportProvenance | null,
+  payload: LaunchReportShareablePayload,
+  bindingKey: string | null
+): Promise<boolean> {
+  if (!provenance || provenance.applicability !== "applicable") return false
+  try {
+    const verdict = await loadBoundReportVerdict(tx, workspaceId, provenance, payload, bindingKey)
+    return (
+      verdict !== null && (await evaluateVerdictApplicability(tx, workspaceId, verdict)).applicable
+    )
+  } catch {
+    return false
+  }
 }
 
 /**
@@ -309,17 +412,30 @@ export async function getLaunchReportDetail(
       }
     }
     const payload = content
+    const provenance = parseLaunchReportProvenance(report.provenanceJson)
+    const expired =
+      !Number.isFinite(Date.parse(payload.expiresAt ?? "")) ||
+      Date.parse(payload.expiresAt ?? "") <= Date.now()
+    const stale =
+      payload.stale ||
+      expired ||
+      !(await reportEvidenceMatches(
+        tx,
+        workspaceId,
+        provenance,
+        payload,
+        launchReportBindingKey(report.provenanceJson)
+      ))
     return {
       verdictLabel: payload.verdictLabel,
-      stale:
-        payload.stale ||
-        !Number.isFinite(Date.parse(payload.expiresAt ?? "")) ||
-        Date.parse(payload.expiresAt ?? "") <= Date.now(),
+      stale,
       currentApplicability: "UNKNOWN" as const,
-      provenance: parseLaunchReportProvenance(report.provenanceJson),
+      provenance,
     }
   }
-  return client ? read(client) : withWorkspaceRLS(workspaceId, read)
+  return client
+    ? read(client)
+    : withWorkspaceRLS(workspaceId, read, { isolationLevel: "RepeatableRead" })
 }
 
 /**
@@ -331,28 +447,49 @@ export async function getLaunchReportDetail(
 export async function getSharedLaunchReport(
   reportId: string,
   token: string
-): Promise<LaunchReportShareablePayload | null> {
-  const { getReportByShareToken } = await import("./report-service")
+): Promise<{ payload: LaunchReportShareablePayload; stale: boolean } | null> {
+  const {
+    getReportByShareToken,
+    readActiveSharedReport,
+    sharedReportSnapshotBinding,
+    sharedReportStillActive,
+  } = await import("./report-service")
   const resolved = await getReportByShareToken(token)
   if (!resolved || resolved.id !== reportId) return null
 
-  return withWorkspaceRLS(resolved.workspaceId, async (tx) => {
-    const report = await tx.report.findFirst({
-      where: { id: reportId, workspaceId: resolved.workspaceId, deletedAt: null },
-      select: { contentJson: true, type: true },
-    })
-    if (!report || report.type !== "launch_readiness") return null
-    const content: unknown = report.contentJson
-    if (!isLaunchReportShareablePayload(content)) return null
-    const payload = content
-    const expiresAtMs = payload.expiresAt ? new Date(payload.expiresAt).getTime() : Number.NaN
-    // Stored bytes and their signature remain immutable. This is a read-time
-    // presentation flag so legacy or expired reports never render as current.
-    if (!Number.isFinite(expiresAtMs) || expiresAtMs <= Date.now()) {
-      return { ...payload, stale: true }
-    }
-    return payload
-  })
+  const qualified = await withWorkspaceRLS(
+    resolved.workspaceId,
+    async (tx) => {
+      const report = await readActiveSharedReport(tx, resolved.workspaceId, reportId, token)
+      if (!report || report.type !== "launch_readiness") return null
+      const content: unknown = report.contentJson
+      if (!isLaunchReportShareablePayload(content)) return null
+      const payload = content
+      const expiresAtMs = payload.expiresAt ? new Date(payload.expiresAt).getTime() : Number.NaN
+      // Stored bytes and their signature remain immutable. This is a read-time
+      // presentation flag so legacy or expired reports never render as current.
+      const provenance = parseLaunchReportProvenance(report.provenanceJson)
+      const stale =
+        payload.stale ||
+        !Number.isFinite(expiresAtMs) ||
+        expiresAtMs <= Date.now() ||
+        !(await reportEvidenceMatches(
+          tx,
+          resolved.workspaceId,
+          provenance,
+          payload,
+          launchReportBindingKey(report.provenanceJson)
+        ))
+      return { result: { payload, stale }, binding: sharedReportSnapshotBinding(report) }
+    },
+    { isolationLevel: "RepeatableRead" }
+  )
+  if (
+    !qualified ||
+    !(await sharedReportStillActive(resolved.workspaceId, reportId, token, qualified.binding))
+  )
+    return null
+  return qualified.result
 }
 
 /**
@@ -369,38 +506,68 @@ export async function confirmSharedLaunchReportIdentity(input: {
   reportChecksum: string
   identity: { kind: "COMMIT" | "ARTIFACT_DIGEST"; value: string }
 }): Promise<ReleaseIdentityConfirmation> {
-  const { getReportByShareToken } = await import("./report-service")
+  const {
+    getReportByShareToken,
+    readActiveSharedReport,
+    sharedReportSnapshotBinding,
+    sharedReportStillActive,
+  } = await import("./report-service")
   const resolved = await getReportByShareToken(input.token)
   if (!resolved?.shareExpiresAt || resolved.id !== input.reportId) return "UNAVAILABLE"
 
-  return withWorkspaceRLS(resolved.workspaceId, async (tx) => {
-    const report = await tx.report.findFirst({
-      where: {
-        id: input.reportId,
-        workspaceId: resolved.workspaceId,
-        type: "launch_readiness",
-        deletedAt: null,
-      },
-      select: { contentJson: true, provenanceJson: true },
-    })
-    if (!report) return "UNAVAILABLE"
+  const qualified = await withWorkspaceRLS(
+    resolved.workspaceId,
+    async (tx) => {
+      const report = await readActiveSharedReport(
+        tx,
+        resolved.workspaceId,
+        input.reportId,
+        input.token
+      )
+      if (!report || report.type !== "launch_readiness" || !report.shareExpiresAt) return null
 
-    const content: unknown = report.contentJson
-    if (!isLaunchReportShareablePayload(content)) return "UNAVAILABLE"
-    const payload = content
-    const provenance = parseLaunchReportProvenance(report.provenanceJson)
-    if (
-      payload.reportChecksum !== input.reportChecksum ||
-      !provenance?.assessedIdentity ||
-      provenance.assessedIdentity.kind !== input.identity.kind
-    ) {
-      return "UNAVAILABLE"
-    }
+      const content: unknown = report.contentJson
+      if (!isLaunchReportShareablePayload(content)) return null
+      const payload = content
+      const provenance = parseLaunchReportProvenance(report.provenanceJson)
+      if (
+        payload.reportChecksum !== input.reportChecksum ||
+        !provenance?.assessedIdentity ||
+        provenance.assessedIdentity.kind !== input.identity.kind
+      ) {
+        return null
+      }
 
-    const expected = Buffer.from(provenance.assessedIdentity.value.toLowerCase(), "utf8")
-    const supplied = Buffer.from(input.identity.value.toLowerCase(), "utf8")
-    return expected.length === supplied.length && timingSafeEqual(expected, supplied)
-      ? "MATCH"
-      : "MISMATCH"
-  })
+      if (
+        !(await loadBoundReportVerdict(
+          tx,
+          resolved.workspaceId,
+          provenance,
+          payload,
+          launchReportBindingKey(report.provenanceJson)
+        ))
+      )
+        return null
+
+      const expected = Buffer.from(provenance.assessedIdentity.value.toLowerCase(), "utf8")
+      const supplied = Buffer.from(input.identity.value.toLowerCase(), "utf8")
+      const result: ReleaseIdentityConfirmation =
+        expected.length === supplied.length && timingSafeEqual(expected, supplied)
+          ? "MATCH"
+          : "MISMATCH"
+      return { result, binding: sharedReportSnapshotBinding(report) }
+    },
+    { isolationLevel: "RepeatableRead" }
+  )
+  if (
+    !qualified ||
+    !(await sharedReportStillActive(
+      resolved.workspaceId,
+      input.reportId,
+      input.token,
+      qualified.binding
+    ))
+  )
+    return "UNAVAILABLE"
+  return qualified.result
 }

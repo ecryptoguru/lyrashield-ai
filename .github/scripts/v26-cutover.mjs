@@ -9,6 +9,7 @@ import { runFirstV26Phase } from "./v26-cutover-orchestration.mjs"
 import { classifyV26Schema } from "./v26-schema-classifier.mjs"
 import { collectLegacyAccountingDiagnostic } from "./v26-accounting-diagnostic.mjs"
 import { collectV26PostMigrationReadback } from "./v26-post-migration-readback.mjs"
+import { verifyRetainedRuntimeSchema } from "./retained-runtime-schema.mjs"
 import {
   observeRuntimeDatabase,
   fingerprint,
@@ -450,6 +451,8 @@ async function main() {
         throw new Error("Incomplete first-v26 cutover requires deliberate operator repair")
       const schema = await classifyV26Schema(client, migrations)
       const current = schema === "current"
+      if (env.RETAINED_WORKER_SOURCE && !current)
+        throw new Error("Retained-worker releases require the current v26 schema")
       if (
         !current &&
         (Number(env.GITHUB_RUN_ATTEMPT) !== 1 || env.WEBHOOK_CLAIMS_CUTOVER === "true")
@@ -468,6 +471,7 @@ async function main() {
           workerImage,
           env.DEPLOY_SHA,
           env.ENGINE_REVISION,
+          env.RETAINED_WORKER_SOURCE || env.DEPLOY_SHA,
         ],
         1800000
       )
@@ -499,6 +503,36 @@ async function main() {
       state.request.runId !== env.GITHUB_RUN_ID
     )
       throw new Error("v26 controller invocation changed")
+    if (command === "retained-schema") {
+      if (!env.RETAINED_WORKER_SOURCE || state.schema !== "current")
+        throw new Error("Retained runtime schema mode unavailable")
+      const connection = await observeRuntimeDatabase(client, { runtime: false })
+      if (connection.databaseIdentity !== state.request.databaseIdentity)
+        throw new Error("Retained runtime migration connection changed")
+      const observed = await observeFleet(state.request.databaseIdentity, true, false)
+      if (
+        JSON.stringify([...observed.principals].sort()) !==
+        JSON.stringify([...state.appPrincipals].sort())
+      )
+        throw new Error("Retained runtime principals changed")
+      await checkMigrated(client, state)
+      const name = "20261105120000_delegated_scan_provenance"
+      await verifyRetainedRuntimeSchema(client, {
+        principals: observed.principals,
+        migration: {
+          name,
+          checksum: fingerprint(
+            // This is the exact migration from the checked-out release source.
+            // eslint-disable-next-line security/detect-non-literal-fs-filename
+            readFileSync(
+              new URL(`../../packages/db/prisma/migrations/${name}/migration.sql`, import.meta.url)
+            )
+          ),
+        },
+      })
+      console.log("Retained runtime schema compatibility verified")
+      return
+    }
     let accountingChecksum, postMigrationChecksum
     await runFirstV26Phase(command, {
       claim: () => vm("claim", state.request, state.baseline),

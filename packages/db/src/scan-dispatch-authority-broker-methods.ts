@@ -1,6 +1,13 @@
 import { createHash } from "node:crypto"
 import { createId } from "@paralleldrive/cuid2"
 import type pg from "pg"
+import { ScanDispatchAuthorityError } from "./scan-dispatch-authority-error"
+import {
+  checkPreparationAuthority,
+  readPrepareReplay,
+  withPreparationAcknowledgementDeadline,
+  preparationAcknowledgementDeadlinePassed,
+} from "./scan-preparation-authority"
 import { requirePublishedScanQueueAuthority } from "./scan-queue-outbox-store"
 import { ScanQueueOutboxError, scanQueueDigest } from "./scan-queue-payload"
 import type {
@@ -12,25 +19,7 @@ import type {
   StartUnmeteredDispatchResult,
 } from "./scan-dispatch-authority-broker"
 
-export class ScanDispatchAuthorityError extends Error {
-  constructor(
-    readonly code:
-      | "OPERATION_NOT_FOUND"
-      | "AUTHORITY_EPOCH_CLOSED"
-      | "WORKER_GRANT_INVALID"
-      | "DISPATCH_OPERATION_STATE_INVALID"
-      | "DISPATCH_SCOPE_CHANGED"
-      | "DISPATCH_REPLAY_CONFLICT"
-      | "CAPACITY_NOT_READY"
-      | "QUEUE_PUBLICATION_NOT_CONFIRMED"
-      | "DATABASE_REJECTED",
-    message: string,
-    options?: ErrorOptions
-  ) {
-    super(message, options)
-    this.name = "ScanDispatchAuthorityError"
-  }
-}
+export { ScanDispatchAuthorityError } from "./scan-dispatch-authority-error"
 
 export type LockedOperation = {
   operationId: string
@@ -48,6 +37,7 @@ type TransactionOutcome<T extends object> =
   | Extract<DispatchBrokerResult, { kind: "unknown" }>
 
 export type DispatchBrokerContext = {
+  preparationAuthority?: "checked-intent-v1"
   transaction: <T>(
     operationId: string,
     work: (client: pg.PoolClient) => Promise<T>
@@ -92,45 +82,6 @@ async function checkPrepareGrant(
       "WORKER_GRANT_INVALID",
       "Worker instance grant is not live"
     )
-}
-
-async function readPrepareReplay(
-  client: pg.PoolClient,
-  input: PrepareDispatchInput
-): Promise<{
-  attemptId: string
-  commandId: string
-  workerInstanceId: string
-  workerInstanceGrantId: string
-  authorityEpochId: string
-} | null> {
-  const existing = await client.query<{
-    attemptId: string
-    commandId: string
-    workerInstanceId: string
-    workerInstanceGrantId: string
-    authorityEpochId: string
-  }>(
-    `SELECT a."attemptId", o."id" AS "commandId", g."instanceId" AS "workerInstanceId",
-            a."workerInstanceGrantId", a."authorityEpochId"
-     FROM "ScanDispatchAttempt" a
-     JOIN "ScanDispatchOutbox" o ON o."operationId" = a."operationId" AND o."commandType"='PREPARE'
-     JOIN "ScanWorkerInstanceGrant" g ON g."id" = a."workerInstanceGrantId"
-     WHERE a."operationId"=$1`,
-    [input.operationId]
-  )
-  const row = existing.rows[0]
-  if (!row) return null
-  if (
-    row.workerInstanceId !== input.workerInstanceId ||
-    row.workerInstanceGrantId !== input.workerGrantId ||
-    row.authorityEpochId !== input.authorityEpochId
-  )
-    throw new ScanDispatchAuthorityError(
-      "DISPATCH_REPLAY_CONFLICT",
-      "Preparation replay changed worker authority"
-    )
-  return row
 }
 
 async function checkPrepareCapacity(
@@ -231,7 +182,14 @@ async function createPrepareAttempt(
   input: PrepareDispatchInput,
   expiresAt: string,
   focusDigest: string | null
-): Promise<{ waiting: false; state: "PREPARING"; attemptId: string; commandId: string }> {
+): Promise<{
+  waiting: false
+  state: "PREPARING"
+  attemptId: string
+  commandId: string
+  authorityAcceptedAt: Date
+  authorityDeadlineAt: Date
+}> {
   const attemptId = createId()
   const commandId = createId()
   await client.query(
@@ -299,30 +257,56 @@ async function createPrepareAttempt(
     'UPDATE "ScanDispatchOperation" SET "state"=\'PREPARING\', "updatedAt"=CURRENT_TIMESTAMP WHERE "operationId"=$1',
     [operation.operationId]
   )
-  return { waiting: false as const, state: "PREPARING" as const, attemptId, commandId }
+  const checked = await client.query<{ authorityAcceptedAt: Date; authorityDeadlineAt: Date }>(
+    'SELECT "authorityAcceptedAt" AT TIME ZONE \'UTC\' AS "authorityAcceptedAt","authorityDeadlineAt" AT TIME ZONE \'UTC\' AS "authorityDeadlineAt" FROM "ScanDispatchAttempt" WHERE "operationId"=$1',
+    [operation.operationId]
+  )
+  return {
+    waiting: false as const,
+    state: "PREPARING" as const,
+    attemptId,
+    commandId,
+    ...checked.rows[0]!,
+  }
 }
 
 export async function prepareDispatch(
   ctx: DispatchBrokerContext,
   input: PrepareDispatchInput
 ): Promise<PrepareDispatchResult> {
+  if (ctx.preparationAuthority !== "checked-intent-v1")
+    throw new ScanDispatchAuthorityError(
+      "PREPARATION_AUTHORITY_CLOSED",
+      "Checked preparation authority is not installed"
+    )
   try {
     const expiresAt = timestampWithoutTimeZone(input.expiresAt)
     const outcome = await ctx.transaction(input.operationId, async (client) => {
       const operation = await ctx.lockOperation(client, input)
       await checkPrepareGrant(client, input, expiresAt)
+      const authority = await checkPreparationAuthority(client, operation, expiresAt)
       const replay = await readPrepareReplay(client, input)
       if (replay) {
+        if (operation.state !== "PREPARING")
+          throw new ScanDispatchAuthorityError(
+            "DISPATCH_OPERATION_STATE_INVALID",
+            "Preparation replay requires original PREPARING intent"
+          )
         await requireBrokerQueuePublication(
           client,
           { operationId: operation.operationId, workspaceId: operation.workspaceId },
           true
         )
-        return {
-          state: "PREPARING" as const,
-          attemptId: replay.attemptId,
-          commandId: replay.commandId,
-        }
+        return withPreparationAcknowledgementDeadline(
+          {
+            state: "PREPARING" as const,
+            attemptId: replay.attemptId,
+            commandId: replay.commandId,
+            authorityAcceptedAt: replay.authorityAcceptedAt,
+            authorityDeadlineAt: replay.authorityDeadlineAt,
+          },
+          authority
+        )
       }
       if (!["QUEUED", "WAITING_CAPACITY"].includes(operation.state))
         throw new ScanDispatchAuthorityError(
@@ -335,26 +319,41 @@ export async function prepareDispatch(
       })
       if (await checkPrepareCapacity(client, operation)) return { waiting: true as const }
       const { digest, scanRow } = await loadPrepareScope(client, operation)
-      return await createPrepareAttempt(
-        client,
-        operation,
-        digest,
-        scanRow,
-        input,
-        expiresAt,
-        payload.focus === undefined ? null : scanQueueDigest(JSON.stringify(payload.focus))
+      return withPreparationAcknowledgementDeadline(
+        await createPrepareAttempt(
+          client,
+          operation,
+          digest,
+          scanRow,
+          input,
+          expiresAt,
+          payload.focus === undefined ? null : scanQueueDigest(JSON.stringify(payload.focus))
+        ),
+        authority
       )
     })
     if (outcome.kind === "unknown") return outcome
-    if (outcome.value.waiting)
+    if (!("state" in outcome.value))
       return { kind: "waiting", operationId: input.operationId, state: "WAITING_CAPACITY" }
-    return {
-      kind: "committed",
+    const result = {
+      kind: "committed" as const,
       operationId: input.operationId,
       state: outcome.value.state,
       attemptId: outcome.value.attemptId,
       commandId: outcome.value.commandId,
+      authorityAcceptedAt: outcome.value.authorityAcceptedAt,
+      authorityDeadlineAt: outcome.value.authorityDeadlineAt,
+      eligibility: "CHECKED_INTENT_ONLY" as const,
     }
+    // After transaction finalizers and this caller continuation; no await or
+    // untrusted getters remain between this elapsed check and the return.
+    if (preparationAcknowledgementDeadlinePassed(outcome.value.acknowledgementDeadlineMonotonicMs))
+      return {
+        kind: "unknown",
+        operationId: result.operationId,
+        reasonCode: "PREPARATION_ACKNOWLEDGEMENT_DEADLINE",
+      }
+    return result
   } catch (error) {
     if (error instanceof ScanDispatchAuthorityError) throw error
     throw new ScanDispatchAuthorityError("DATABASE_REJECTED", "Preparation transaction rejected", {

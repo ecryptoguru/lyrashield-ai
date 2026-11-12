@@ -7,13 +7,19 @@ import { mkdtempSync, writeFileSync, readFileSync, chmodSync, rmSync } from "nod
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
-function qualification(t, header = "reservations/2") {
+function qualification(
+  t,
+  header = "reservations/2",
+  retainedSource = "",
+  wrongWorkerSource = false
+) {
   const directory = mkdtempSync(join(tmpdir(), "v26-web-env-"))
   t.after(() => rmSync(directory, { recursive: true, force: true }))
   const source = randomBytes(20).toString("hex")
+  const workerSource = retainedSource || source
   const engine = randomBytes(20).toString("hex")
   const web = `ghcr.io/ecryptoguru/lyrashield-ai/lyrashield-web:${source}@sha256:${randomBytes(32).toString("hex")}`
-  const worker = `ghcr.io/ecryptoguru/lyrashield-ai/lyrashield-worker:${source}@sha256:${randomBytes(32).toString("hex")}`
+  const worker = `ghcr.io/ecryptoguru/lyrashield-ai/lyrashield-worker:${workerSource}@sha256:${randomBytes(32).toString("hex")}`
   const log = join(directory, "docker.jsonl")
   const executable = (name, body) => {
     const path = join(directory, name)
@@ -28,7 +34,7 @@ function qualification(t, header = "reservations/2") {
     `#!${process.execPath}
 const fs=require("node:fs"),{spawnSync}=require("node:child_process");
 const args=process.argv.slice(2);fs.appendFileSync(process.env.V26_ENV_TEST_LOG,JSON.stringify(args)+"\\n");
-if(args[0]==="image"){console.log(args.some(value=>value.includes("accounting.protocol"))?"reservations/2":args.some(value=>value.includes("engine.revision"))?process.env.V26_ENV_TEST_ENGINE:process.env.V26_ENV_TEST_SOURCE);process.exit(0)}
+if(args[0]==="image"){console.log(args.some(value=>value.includes("accounting.protocol"))?"reservations/2":args.some(value=>value.includes("engine.revision"))?process.env.V26_ENV_TEST_ENGINE:args[2].includes("lyrashield-worker")?process.env.V26_ENV_TEST_WORKER_SOURCE:process.env.V26_ENV_TEST_SOURCE);process.exit(0)}
 if(args[0]==="exec"){
  const code=args[args.indexOf("-e")+1];
  const fetchMock='globalThis.fetch=async()=>({status:503,headers:new Headers({"x-lyrashield-accounting-protocol":'+JSON.stringify(process.env.V26_ENV_TEST_HEADER)+'})});';
@@ -40,7 +46,14 @@ if(args[0]==="exec"){
   executable("sleep", "#!/bin/sh\nexit 0\n")
   const result = spawnSync(
     "sh",
-    [".github/scripts/verify-v26-images.sh", web, worker, source, engine],
+    [
+      ".github/scripts/verify-v26-images.sh",
+      web,
+      worker,
+      source,
+      engine,
+      ...(retainedSource ? [retainedSource] : []),
+    ],
     {
       encoding: "utf8",
       timeout: 20000,
@@ -48,6 +61,7 @@ if(args[0]==="exec"){
         PATH: `${directory}:${process.env.PATH}`,
         V26_ENV_TEST_LOG: log,
         V26_ENV_TEST_SOURCE: source,
+        V26_ENV_TEST_WORKER_SOURCE: wrongWorkerSource ? source : workerSource,
         V26_ENV_TEST_ENGINE: engine,
         V26_ENV_TEST_HEADER: header,
       },
@@ -60,6 +74,7 @@ if(args[0]==="exec"){
     .split("\n")
     .map((line) => JSON.parse(line))
   const webRun = calls.find((args) => args[0] === "run" && args.includes(web))
+  if (!webRun) return { result, calls }
   assert.ok(webRun)
   const environment = Object.fromEntries(
     webRun.flatMap((value, index) => {
@@ -121,4 +136,14 @@ test("web qualification executes the embedded response/header check and rejects 
   assert.notEqual(result.status, 0)
   assert.doesNotMatch(result.stdout, /V26_IMAGES_QUALIFIED/)
   assert.match(result.stderr, /Compiled web admission protocol unavailable/)
+})
+
+test("the actual image qualification script accepts distinct immutable worker source without relaxing engine/accounting checks", (t) => {
+  const retained = "b".repeat(40)
+  const positive = qualification(t, "reservations/2", retained)
+  assert.equal(positive.result.status, 0, positive.result.stderr)
+  const wrongIdentity = qualification(t, "reservations/2", retained, true)
+  assert.notEqual(wrongIdentity.result.status, 0)
+  const wrongProtocol = qualification(t, "reservations/1", retained)
+  assert.notEqual(wrongProtocol.result.status, 0)
 })

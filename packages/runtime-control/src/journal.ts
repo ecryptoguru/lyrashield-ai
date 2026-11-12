@@ -102,6 +102,37 @@ function recordEnvelope(
   }
 }
 
+function validatedEnvelope<T>(
+  value: unknown,
+  validatePayload: (value: unknown) => T
+): JournalRecord<T> {
+  const envelope = recordEnvelope(value)
+  // Capture before validation: validators may strip fields or mutate their input.
+  const input = canonicalJson(value)
+  const record = { ...envelope, payload: validatePayload(envelope.payload) }
+  if (input !== canonicalJson(record)) {
+    throw new JournalIntegrityError("journal envelope changed during validation")
+  }
+  return record
+}
+
+/** Verify one unchanged signed envelope; callers must separately authenticate its chain anchor. */
+export function verifyJournalRecord<T>(
+  value: unknown,
+  secret: string,
+  validatePayload: (value: unknown) => T
+): JournalRecord<T> {
+  validateSecret(secret)
+  const record = validatedEnvelope(value, validatePayload)
+  const { hash, signature, ...unsigned } = record
+  const expectedHash = recordHash(unsigned)
+  const expectedSignature = signRecord(secret, canonicalJson({ ...unsigned, hash: expectedHash }))
+  if (!secureEqual(hash, expectedHash) || !secureEqual(signature, expectedSignature)) {
+    throw new JournalIntegrityError("journal signature or record hash is invalid")
+  }
+  return record
+}
+
 export class SignedJournal<T> implements JournalPort<T> {
   private loaded = false
   private nextSequence = 1
@@ -502,8 +533,7 @@ export class SignedJournal<T> implements JournalPort<T> {
       } catch {
         throw new JournalIntegrityError("journal contains an incomplete or invalid record")
       }
-      const envelope = recordEnvelope(parsed)
-      records.push({ ...envelope, payload: this.validatePayload(envelope.payload) })
+      records.push(validatedEnvelope(parsed, this.validatePayload))
     }
     return records
   }

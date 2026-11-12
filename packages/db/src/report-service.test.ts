@@ -8,6 +8,7 @@ vi.mock("./client", () => ({
   prisma: {
     $transaction: vi.fn(),
     $executeRaw: vi.fn(),
+    $queryRaw: vi.fn(),
     report: { findFirst: vi.fn() },
     scan: { findFirst: vi.fn() },
     finding: { findMany: vi.fn(), groupBy: vi.fn() },
@@ -17,11 +18,13 @@ vi.mock("./system-client", () => ({ getSystemPrisma: vi.fn(() => systemPrisma) }
 
 import { randomBytes } from "crypto"
 import { prisma } from "./client"
+import { buildLaunchReportPayload } from "./launch-report-payload"
 import {
   generateReleasePacketShareToken,
   generateShareToken,
   getReportByShareToken,
   getShareableReport,
+  getShareableReportByToken,
   revokeShareToken,
   revokeReleasePacketShareToken,
 } from "./report-service"
@@ -29,6 +32,7 @@ import {
 const mockPrisma = prisma as unknown as {
   $transaction: ReturnType<typeof vi.fn>
   $executeRaw: ReturnType<typeof vi.fn>
+  $queryRaw: ReturnType<typeof vi.fn>
   report: { findFirst: ReturnType<typeof vi.fn> }
   scan: { findFirst: ReturnType<typeof vi.fn> }
   finding: { findMany: ReturnType<typeof vi.fn>; groupBy: ReturnType<typeof vi.fn> }
@@ -63,6 +67,51 @@ describe("getShareableReport", () => {
       expect(mockPrisma.finding.groupBy).not.toHaveBeenCalled()
     }
   )
+
+  it("returns only safe launch metadata for an active token and valid payload", async () => {
+    const payload = buildLaunchReportPayload(
+      {
+        standardVersion: "lyrashield-gate/2.4.0",
+        state: "READY",
+        coverageStatement: [],
+        nonCoverage: [],
+        blockingReasons: [],
+        evidenceSummary: {
+          verified: 0,
+          retestConfirmed: 0,
+          unresolvedCritical: 0,
+          unresolvedHigh: 0,
+        },
+        staleness: { current: true },
+        verdictChecksum: "fixture",
+        evaluatedAt: new Date("2026-11-12T00:00:00Z"),
+      },
+      { issuedAt: new Date("2026-11-12T00:01:00Z") }
+    )
+    const row = {
+      id: "report-1",
+      workspaceId: "ws-1",
+      type: "launch_readiness",
+      scanId: null,
+      contentJson: payload,
+      status: "generated",
+      format: "html",
+      shareTokenHash: "fixture",
+      shareExpiresAt: null,
+      revokedAt: null,
+      createdAt: new Date(),
+    }
+    mockPrisma.$queryRaw.mockResolvedValue([row])
+    const result = await getShareableReportByToken("report-1", "ws-1", "a".repeat(64))
+    expect(result).toMatchObject({ id: "report-1", type: "launch_readiness" })
+    expect(result).not.toHaveProperty("contentJson")
+    mockPrisma.$queryRaw.mockResolvedValueOnce([row]).mockResolvedValueOnce([])
+    expect(await getShareableReportByToken("report-1", "ws-1", "a".repeat(64))).toBeNull()
+    mockPrisma.$queryRaw.mockResolvedValue([
+      { ...row, contentJson: { ...payload, reportChecksum: "forged" } },
+    ])
+    expect(await getShareableReportByToken("report-1", "ws-1", "a".repeat(64))).toBeNull()
+  })
 
   it("does not load a scan outside the report workspace", async () => {
     mockPrisma.report.findFirst.mockResolvedValue({

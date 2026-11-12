@@ -7,6 +7,7 @@ import { dirname, join } from "node:path"
 import { createServer } from "node:http"
 import { once } from "node:events"
 import { FONT_FAMILIES } from "./ci-browser-fonts.mjs"
+import { browserFailureReason } from "./ci-browser.mjs"
 
 const require = createRequire(import.meta.url)
 const playwright = createRequire(require.resolve("@playwright/test/package.json")).resolve(
@@ -26,6 +27,51 @@ function run(command, args) {
   })
   assert.equal(result.status, 0, `${command} host runtime check failed`)
   return result.stdout
+}
+
+async function probeTraceLifecycle(
+  browser,
+  server,
+  index,
+  browserTemp,
+  bytesIn,
+  peakTemporaryBytes
+) {
+  // Exercise the original local artifact lifecycle. Successful traces
+  // may grow during a browser lifetime, then must disappear on close.
+  for (let iteration = 0; iteration < 3; iteration++) {
+    phase = "trace-context"
+    item = String(index * 3 + iteration)
+    const context = await browser.newContext()
+    let traceFailed = false
+    try {
+      phase = "trace-start"
+      await context.tracing.start({ snapshots: true, screenshots: true })
+      phase = "trace-page"
+      const probe = await context.newPage()
+      phase = "trace-goto"
+      await probe.goto(`http://127.0.0.1:${server.address().port}`)
+      phase = "trace-screenshot"
+      await probe.screenshot()
+      phase = "trace-stop"
+      await context.tracing.stop()
+      phase = "trace-size"
+      peakTemporaryBytes = Math.max(peakTemporaryBytes, bytesIn(browserTemp))
+    } catch (error) {
+      traceFailed = true
+      throw error
+    } finally {
+      try {
+        await context.close()
+      } catch (error) {
+        if (!traceFailed) {
+          phase = "trace-close"
+          throw error
+        }
+      }
+    }
+  }
+  return peakTemporaryBytes
 }
 
 async function verify() {
@@ -149,23 +195,14 @@ async function verify() {
           { context: true, tools: true, execute: true }
         )
         await page.close()
-        // Exercise the original local artifact lifecycle. Successful traces
-        // may grow during a browser lifetime, then must disappear on close.
-        phase = "trace-lifecycle"
-        item = String(index)
-        for (let iteration = 0; iteration < 3; iteration++) {
-          const context = await browser.newContext()
-          try {
-            await context.tracing.start({ snapshots: true, screenshots: true })
-            const probe = await context.newPage()
-            await probe.goto(`http://127.0.0.1:${server.address().port}`)
-            await probe.screenshot()
-            await context.tracing.stop()
-            peakTemporaryBytes = Math.max(peakTemporaryBytes, bytesIn(browserTemp))
-          } finally {
-            await context.close()
-          }
-        }
+        peakTemporaryBytes = await probeTraceLifecycle(
+          browser,
+          server,
+          index,
+          browserTemp,
+          bytesIn,
+          peakTemporaryBytes
+        )
       } finally {
         await browser.close()
       }
@@ -191,11 +228,7 @@ async function verify() {
 }
 
 verify().catch((error) => {
-  const reason = ["ENOENT", "EACCES", "ENOSPC", "EIO", "ETIMEDOUT"].includes(error.code)
-    ? error.code
-    : error.name === "AssertionError"
-      ? "assertion"
-      : "unavailable"
+  const reason = browserFailureReason(error)
   console.error(`CI_BROWSER_CHECK_FAILED phase=${phase} item=${item} reason=${reason}`)
   process.exitCode = 1
 })

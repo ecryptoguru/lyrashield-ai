@@ -66,27 +66,64 @@ test("signing failures log out and cannot return a qualified receipt", async () 
   }
 })
 
-test("only the isolated main reusable issuer can access signing, with no candidate input or deploy output", () => {
+test("isolated issuer verifies optional publication before fixed health signing, with no deploy output", () => {
   const issuer = parse(readFileSync(".github/workflows/issue-runtime-qualification.yml", "utf8"))
   const caller = parse(readFileSync(".github/workflows/qualify-runtime-issuer.yml", "utf8"))
-  assert.deepEqual(issuer.on, { workflow_call: null })
-  assert.deepEqual(caller.on, { workflow_dispatch: null })
+  const input = "fresh_sandbox_publication"
+  const inventory = "fresh_sandbox_inventory"
+  assert.deepEqual(Object.keys(issuer.on.workflow_call.inputs), [input, inventory])
+  assert.deepEqual(Object.keys(caller.on.workflow_dispatch.inputs), [input, inventory])
+  for (const definition of [
+    issuer.on.workflow_call.inputs[input],
+    caller.on.workflow_dispatch.inputs[input],
+    issuer.on.workflow_call.inputs[inventory],
+    caller.on.workflow_dispatch.inputs[inventory],
+  ]) {
+    assert.equal(definition.type, "string")
+    assert.equal(definition.required, false)
+    assert.equal(definition.default, "")
+  }
   assert.equal(caller.jobs.signer.uses, "./.github/workflows/issue-runtime-qualification.yml")
   const job = issuer.jobs["verify-signing-boundary"]
   assert.equal(job.environment, "release-qualification")
   assert.equal(job["runs-on"], "ubuntu-24.04")
   assert.equal(job["timeout-minutes"], 10)
-  assert.deepEqual(job.permissions, { contents: "read", actions: "read", "id-token": "write" })
+  assert.deepEqual(job.permissions, {
+    contents: "read",
+    actions: "read",
+    "id-token": "write",
+    packages: "read",
+  })
   for (const condition of ["1286618458", "116722580", "refs/heads/main", "workflow_dispatch"])
     assert.ok(job.if.includes(condition))
   assert.equal(job.steps[0].with.ref, "${{ github.sha }}")
   assert.equal(job.steps[0].with["persist-credentials"], false)
-  assert.equal(job.steps.filter((step) => step.run).length, 1)
+  assert.deepEqual(caller.jobs.signer.with, {
+    [input]: "${{ inputs.fresh_sandbox_publication }}",
+    [inventory]: "${{ inputs.fresh_sandbox_inventory }}",
+  })
+  const commands = job.steps.filter((step) => step.run)
+  assert.equal(commands.length, 4)
+  assert.equal(commands[0].run, "bash .github/scripts/prepare-qualification-verifier.sh")
   assert.equal(
-    job.steps.find((step) => step.run).run,
-    "node .github/scripts/qualification-issuer-health.mjs"
+    commands[0].if,
+    "inputs.fresh_sandbox_publication != '' || inputs.fresh_sandbox_inventory != ''"
   )
+  assert.equal(commands[1].run, "node .github/scripts/issue-sandbox-publication.mjs")
+  assert.equal(commands[1].if, "inputs.fresh_sandbox_publication != ''")
+  assert.equal(commands[1].env.FRESH_SANDBOX_PUBLICATION, "${{ inputs.fresh_sandbox_publication }}")
+  assert.equal(commands[2].run, "node .github/scripts/issue-sandbox-inventory.mjs")
+  assert.equal(commands[2].if, "inputs.fresh_sandbox_inventory != ''")
+  assert.equal(commands[2].env.FRESH_SANDBOX_INVENTORY, "${{ inputs.fresh_sandbox_inventory }}")
+  assert.equal(commands[3].run, "node .github/scripts/qualification-issuer-health.mjs")
+  const artifact = job.steps.find((step) => step.with?.path === "sandbox-publication-record.json")
+  assert.equal(artifact.if, "inputs.fresh_sandbox_publication != ''")
+  assert.equal(artifact.with["if-no-files-found"], "error")
+  const inventoryArtifact = job.steps.find(
+    (step) => step.with?.path === "sandbox-inventory-record.json"
+  )
+  assert.equal(inventoryArtifact.if, "inputs.fresh_sandbox_inventory != ''")
+  assert.equal(inventoryArtifact.with["if-no-files-found"], "error")
   assert.equal(job.outputs, undefined)
-  assert.equal(issuer.on.workflow_call?.inputs, undefined)
   assert.doesNotMatch(JSON.stringify(issuer), /secrets\.|deploy-azure|qualified_release_digest/)
 })

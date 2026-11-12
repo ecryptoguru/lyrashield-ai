@@ -262,7 +262,9 @@ test("subject substitution, extra subjects, predicate drift and absent timestamp
 test("qualification has no arbitrary signer, candidate payload or credential-exchange interface", () => {
   assert.deepEqual(Object.keys(foundation).sort(), [
     "issueRuntimeQualification",
+    "verifyInventoryAttestation",
     "verifySandboxAttestationBundle",
+    "verifySandboxCoveragePublication",
   ])
   for (const input of [
     undefined,

@@ -21,7 +21,7 @@ function requireKeys(value, expected, label) {
   }
 }
 
-export function verifyPreparedRun(run, { runId, sourceSha }) {
+export function verifyPreparedRun(run, { runId, sourceSha, expectedAttempt, repository }) {
   if (
     !Number.isSafeInteger(Number(runId)) ||
     run?.id !== Number(runId) ||
@@ -36,7 +36,12 @@ export function verifyPreparedRun(run, { runId, sourceSha }) {
     run.status !== "completed" ||
     run.conclusion !== "success" ||
     !Number.isSafeInteger(run.run_attempt) ||
-    run.run_attempt < 1
+    run.run_attempt < 1 ||
+    (expectedAttempt !== undefined &&
+      (!RUN_ID.test(expectedAttempt) ||
+        String(run.run_attempt) !== expectedAttempt ||
+        run.repository?.full_name !== repository ||
+        run.head_repository?.full_name !== repository))
   ) {
     throw new Error("Prepared candidate run is not the successful main-source build")
   }
@@ -57,15 +62,7 @@ export function verifyCandidateReceipt(
 ) {
   requireKeys(
     receipt,
-    [
-      "schemaVersion",
-      "sourceSha",
-      "engineRevision",
-      "runId",
-      "runAttempt",
-      "rehearsal",
-      "images",
-    ],
+    ["schemaVersion", "sourceSha", "engineRevision", "runId", "runAttempt", "rehearsal", "images"],
     "Candidate receipt"
   )
   requireKeys(receipt.rehearsal, ["harnessSha", "harnessRevision"], "Rehearsal provenance")
@@ -81,8 +78,7 @@ export function verifyCandidateReceipt(
     !DIGEST.test(receipt.rehearsal.harnessSha ?? "") ||
     !SHA.test(receipt.rehearsal.harnessRevision ?? "") ||
     (rehearsalHarnessSha && receipt.rehearsal.harnessSha !== rehearsalHarnessSha) ||
-    (rehearsalHarnessRevision &&
-      receipt.rehearsal.harnessRevision !== rehearsalHarnessRevision)
+    (rehearsalHarnessRevision && receipt.rehearsal.harnessRevision !== rehearsalHarnessRevision)
   ) {
     throw new Error(
       "Candidate receipt does not bind the requested source, engine, preparation run and rehearsal harness"
@@ -122,16 +118,19 @@ function ghApi(resource, options = {}) {
 
 function main() {
   const historicalFinalization = process.argv[2] === "--historical-finalization"
-  if (process.argv.length !== (historicalFinalization ? 3 : 2)) {
+  const pairedCandidate = process.argv[2] === "--paired-candidate"
+  if (process.argv.length !== (historicalFinalization || pairedCandidate ? 3 : 2)) {
     throw new Error("Unknown recovery candidate verifier argument")
   }
   const runId = process.env.LYRASHIELD_WEBHOOK_RECOVERY_PREPARED_RUN_ID ?? ""
+  const expectedAttempt = process.env.LYRASHIELD_WEBHOOK_RECOVERY_PREPARED_RUN_ATTEMPT ?? ""
   const sourceSha = process.env.DEPLOY_SHA ?? ""
   const engineRevision = process.env.ENGINE_REVISION ?? ""
   const repository = process.env.GITHUB_REPOSITORY ?? ""
   const outputPath = process.env.GITHUB_OUTPUT ?? ""
   if (
     !RUN_ID.test(runId) ||
+    (pairedCandidate && !RUN_ID.test(expectedAttempt)) ||
     !SHA.test(sourceSha) ||
     (!historicalFinalization && !SHA.test(engineRevision)) ||
     !/^[a-z0-9_.-]+\/[a-z0-9_.-]+$/.test(repository) ||
@@ -147,7 +146,18 @@ function main() {
   }
   const rehearsalHarnessSha = workerImageRehearsalHarnessSha(process.cwd())
   const run = JSON.parse(ghApi(`repos/${repository}/actions/runs/${runId}`))
-  const runAttempt = verifyPreparedRun(run, { runId, sourceSha })
+  const runOptions = {
+    runId,
+    sourceSha,
+    ...(pairedCandidate ? { expectedAttempt, repository } : {}),
+  }
+  const runAttempt = verifyPreparedRun(run, runOptions)
+  if (pairedCandidate) {
+    const attemptRun = JSON.parse(
+      ghApi(`repos/${repository}/actions/runs/${runId}/attempts/${expectedAttempt}`)
+    )
+    verifyPreparedRun(attemptRun, runOptions)
+  }
   const name = `webhook-recovery-candidate-${sourceSha}`
   const artifactList = JSON.parse(
     ghApi(`repos/${repository}/actions/runs/${runId}/artifacts?per_page=100`)
@@ -199,6 +209,10 @@ function main() {
       rehearsalHarnessSha: historicalFinalization ? null : rehearsalHarnessSha,
       rehearsalHarnessRevision: historicalFinalization ? null : sourceSha,
     })
+    if (pairedCandidate) {
+      const latest = JSON.parse(ghApi(`repos/${repository}/actions/runs/${runId}`))
+      verifyPreparedRun(latest, runOptions)
+    }
     for (const [key, value] of Object.entries(outputs)) {
       appendFileSync(outputPath, `${key}=${value}\n`)
     }

@@ -3,7 +3,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { z } from "zod"
-import { SignedJournal } from "./journal"
+import { SignedJournal, verifyJournalRecord } from "./journal"
 
 const roots: string[] = []
 const payloadSchema = z.object({ kind: z.string(), value: z.number() }).strict()
@@ -21,6 +21,52 @@ afterEach(async () => {
 })
 
 describe("SignedJournal", () => {
+  it("verifies the exact input envelope before payload validation can remove or normalize fields", async () => {
+    const path = join(await root(), "record.jsonl")
+    const journal = new SignedJournal(path, secret, (value) => payloadSchema.parse(value))
+    const signed = await journal.append({ kind: "prepare", value: 1 })
+    const strippingSchema = z.object({ kind: z.string(), value: z.number() })
+    const validate = (value: unknown) => strippingSchema.parse(value)
+    expect(verifyJournalRecord(signed, secret, validate)).toEqual(signed)
+    expect(() => verifyJournalRecord({ ...signed, extra: true }, secret, validate)).toThrow(
+      /envelope/i
+    )
+    expect(() =>
+      verifyJournalRecord(
+        { ...signed, payload: { ...signed.payload, extra: true } },
+        secret,
+        validate
+      )
+    ).toThrow(/envelope/i)
+    const mutable = { ...signed, payload: { ...signed.payload, extra: true } }
+    expect(() =>
+      verifyJournalRecord(mutable, secret, (value) => {
+        const payload = value as { kind: string; value: number; extra?: boolean }
+        delete payload.extra
+        return payload
+      })
+    ).toThrow(/envelope/i)
+    await journal.close()
+  })
+
+  it.each(["envelope", "payload"])(
+    "rejects unsigned fields in persisted %s even if the payload validator strips them",
+    async (target) => {
+      const path = join(await root(), "record.jsonl")
+      const original = new SignedJournal(path, secret, (value) => payloadSchema.parse(value))
+      const signed = await original.append({ kind: "prepare", value: 1 })
+      await original.close()
+      const altered =
+        target === "envelope"
+          ? { ...signed, extra: true }
+          : { ...signed, payload: { ...signed.payload, extra: true } }
+      await writeFile(path, `${JSON.stringify(altered)}\n`)
+      const strippingSchema = z.object({ kind: z.string(), value: z.number() })
+      const reloaded = new SignedJournal(path, secret, (value) => strippingSchema.parse(value))
+      await expect(reloaded.load()).rejects.toThrow(/envelope/i)
+    }
+  )
+
   it("fences overlapping writers and permits a verified graceful handover", async () => {
     const path = join(await root(), "exclusive.jsonl")
     const first = new SignedJournal(path, secret, (value) => payloadSchema.parse(value))

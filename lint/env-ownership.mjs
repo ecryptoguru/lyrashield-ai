@@ -14,10 +14,13 @@ export const externalEnvOwners = {
   LYRASHIELD_LOG_DESTINATION: ["packages/mcp/src/stdio-transport.ts"],
   LYRASHIELD_OAUTH_ACCESS_TOKEN: ["packages/credentials/src/index.ts"],
   LYRASHIELD_WORKER_STOP_RECEIPT: ["apps/worker/src/operations/verify-queue-orphan-fixture.ts"],
+  DISPATCH_AUTHORITY_REVOKER_PASSWORD: ["packages/db/scripts/tests/scan-preparation-fixture.ts"],
+  DISPATCH_PREPARATION_BROKER_PASSWORD: ["packages/db/scripts/tests/scan-preparation-fixture.ts"],
   LYRASHIELD_TEST_DB_DISPOSABLE: [
     "packages/config/src/env.ts",
     "packages/auth/src/password-reset-capture.ts",
     "packages/myra/src/server/password-reset-capture.ts",
+    "packages/db/scripts/tests/scan-preparation-fixture.ts",
   ],
   NEXT_PHASE: ["packages/config/src/env.ts", "packages/auth/src/auth.ts"],
   NEXT_RUNTIME: ["apps/web/src/instrumentation.ts"],

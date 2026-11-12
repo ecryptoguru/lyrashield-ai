@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 const {
   resolveReportDelegationTarget,
   getShareableReport,
+  getLaunchReportDetail,
   generateLaunchReportHTML,
   isLaunchReportShareablePayload,
   generateReportHTML,
@@ -15,6 +16,7 @@ const {
 } = vi.hoisted(() => ({
   resolveReportDelegationTarget: vi.fn(),
   getShareableReport: vi.fn(),
+  getLaunchReportDetail: vi.fn(),
   generateLaunchReportHTML: vi.fn(() => "<html>launch</html>"),
   isLaunchReportShareablePayload: vi.fn((value: unknown) => value !== null && value !== undefined),
   generateReportHTML: vi.fn(() => "<html>standard</html>"),
@@ -45,6 +47,7 @@ const withDelegatedReadAuthority = vi.hoisted(() => vi.fn())
 vi.mock("@lyrashield/db", () => ({
   resolveReportDelegationTarget,
   getShareableReport,
+  getLaunchReportDetail,
   generateLaunchReportHTML,
   isLaunchReportShareablePayload,
   generateReportHTML,
@@ -126,6 +129,7 @@ describe("GET /api/reports/[id]/download", () => {
     )
     installDelegatedAuthorityMock()
     getShareableReport.mockResolvedValue({ id: "report-1" })
+    getLaunchReportDetail.mockResolvedValue({ stale: false })
     update.mockResolvedValue({})
   })
 
@@ -145,7 +149,7 @@ describe("GET /api/reports/[id]/download", () => {
 
     expect(response.status).toBe(200)
     expect(await response.text()).toBe("<html>launch</html>")
-    expect(generateLaunchReportHTML).toHaveBeenCalledWith(payload)
+    expect(generateLaunchReportHTML).toHaveBeenCalledWith(payload, { historical: false })
     expect(generateReportHTML).not.toHaveBeenCalled()
     expect(requirePermission).toHaveBeenCalledWith("ws-1", "report:download")
     expect(response.headers.get("Content-Disposition")).toBe(
@@ -325,6 +329,24 @@ describe("GET /api/reports/[id]/download", () => {
     expect(response.status).toBe(409)
     expect(generateLaunchReportHTML).not.toHaveBeenCalled()
     expect(update).not.toHaveBeenCalled()
+  })
+
+  it("renders a retained inconsistent report as historical without changing its signed snapshot", async () => {
+    const payload = { verdictLabel: "Ready to launch", stale: false, reportChecksum: "signed" }
+    getLaunchReportDetail.mockResolvedValue({ stale: true })
+    findFirst.mockResolvedValue({
+      contentJson: payload,
+      scanId: null,
+      title: "Report",
+      type: "launch_readiness",
+    })
+    const response = await GET(
+      new Request("http://localhost/api/reports/report-1/download?workspaceId=ws-1"),
+      { params: Promise.resolve({ id: "report-1" }) }
+    )
+    expect(response.status).toBe(200)
+    expect(generateLaunchReportHTML).toHaveBeenCalledWith(payload, { historical: true })
+    expect(payload.stale).toBe(false)
   })
 
   it("does not reconstruct a missing launch snapshot from live scan state", async () => {

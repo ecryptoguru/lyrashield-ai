@@ -93,15 +93,9 @@ export default async function DashboardPage() {
   } = overview
 
   const targetCount = targets.total
-  const readiness = projectGateReadinessReport(
-    findingGroups.map((group) => ({
-      severity: group.severity,
-      status: group.status,
-      verified: group.verified,
-      count: group.count,
-    })),
-    gateTargets
-  )
+  const readiness = projectGateReadinessReport(findingGroups, gateTargets, {
+    partial: gateTargets.partial,
+  })
 
   // W1-02/W1-03: one canonical decision drives BOTH the header CTA and the
   // next-action panel, consumes the uncached gate result and leads with an
@@ -119,6 +113,7 @@ export default async function DashboardPage() {
       blockingFindings: target.blockingFindings,
       reasons: target.reasons,
     })),
+    hasMoreGateTargets: gateTargets.partial,
     activeScan: overview.activeScan,
   })
 

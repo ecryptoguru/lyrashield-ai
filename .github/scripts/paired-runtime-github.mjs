@@ -1,5 +1,7 @@
 import { readPrivateRecord } from "./private-record.mjs"
 import { qualifyReleaseSource } from "./qualify-release-source.mjs"
+import { assertExpectedPublisherHold } from "./sandbox-publisher-hold.mjs"
+import { protectedGh } from "./protected-gh.mjs"
 // Trust the protected job and its immutable run attempt, not a caller's
 // repository name, artifact filename, or self-reported GitHub environment.
 import { createHash, createPublicKey, verify } from "node:crypto"
@@ -481,6 +483,29 @@ assert f.filename=='paired-witness.json' and 0<f.file_size<=24576 and not (f.fla
 assert stat.S_IFMT(f.external_attr >> 16) in (0,stat.S_IFREG)
 sys.stdout.buffer.write(z.read(f))`
 
+function engineApi(path) {
+  const base = "repos/ecryptoguru/lyrashield-engine"
+  return json(local("gh", ["api", "--hostname", "github.com", base + "/" + path]))
+}
+
+function protectedEngineApi(path) {
+  return json(
+    protectedGh(["api", "--hostname", "github.com", "repos/ecryptoguru/lyrashield-engine/" + path])
+  )
+}
+
+export function verifyHeldEnginePublisherRun(runId, attempt, source, get = protectedEngineApi) {
+  check(id.test(runId) && id.test(attempt) && sha.test(source))
+  const run = get("actions/runs/" + runId + "/attempts/" + attempt)
+  const jobs = get("actions/runs/" + runId + "/attempts/" + attempt + "/jobs?per_page=100")
+  const workflowBlob = get("contents/.github/workflows/publish-sandbox.yml?ref=" + source)
+  assertExpectedPublisherHold({ run, jobs, workflowBlob }, { source, runId, attempt })
+  const current = get("compare/" + source + "...main")
+  check(
+    current.merge_base_commit?.sha === source && ["ahead", "identical"].includes(current.status)
+  )
+}
+
 export function verifyEngineRun(runId, attempt, source, workflow) {
   check(
     id.test(runId) &&
@@ -488,8 +513,7 @@ export function verifyEngineRun(runId, attempt, source, workflow) {
       sha.test(source) &&
       ["ci.yml", "publish-sandbox.yml"].includes(workflow)
   )
-  const base = "repos/ecryptoguru/lyrashield-engine"
-  const get = (path) => json(local("gh", ["api", "--hostname", "github.com", base + "/" + path]))
+  const get = engineApi
   const r = get("actions/runs/" + runId + "/attempts/" + attempt)
   check(
     String(r.id) === runId &&
@@ -498,9 +522,13 @@ export function verifyEngineRun(runId, attempt, source, workflow) {
       r.head_repository?.id === r.repository?.id &&
       r.head_sha === source &&
       r.status === "completed" &&
-      r.conclusion === "success" &&
       r.path === ".github/workflows/" + workflow
   )
+  if (workflow === "publish-sandbox.yml" && r.conclusion === "failure") {
+    verifyHeldEnginePublisherRun(runId, attempt, source)
+    return
+  }
+  check(r.conclusion === "success")
   if (workflow === "publish-sandbox.yml") {
     check(
       (r.event === "workflow_dispatch" && r.head_branch === "main") ||
@@ -512,7 +540,7 @@ export function verifyEngineRun(runId, attempt, source, workflow) {
     )
   }
 }
-export function verifySandboxAttestation(p, runId, attempt) {
+export function verifySandboxAttestation(p, runId, attempt, { run = protectedGh } = {}) {
   check(
     /^sha256:[a-f0-9]{64}$/.test(p.sandboxDigest) &&
       sha.test(p.engineRevision) &&
@@ -522,10 +550,11 @@ export function verifySandboxAttestation(p, runId, attempt) {
   const repo = "ecryptoguru/lyrashield-engine",
     ref = "oci://ghcr.io/ecryptoguru/lyrashield-sandbox@" + p.sandboxDigest
   const rows = json(
-    local("gh", [
+    run([
       "attestation",
       "verify",
       ref,
+      "--bundle-from-oci",
       "--repo",
       repo,
       "--signer-workflow",

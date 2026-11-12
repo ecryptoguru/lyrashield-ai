@@ -162,6 +162,12 @@ describe.skipIf(!enabled)("restricted PostgreSQL authority mirror", () => {
     await expect(
       new PostgresAuthorityMirror(worker, epoch, supervisor).readHead()
     ).rejects.toMatchObject({ code: "42501" })
+    await expect(
+      new PostgresAuthorityMirror(worker, epoch, supervisor).readHeadBounded(1024)
+    ).rejects.toMatchObject({ code: "42501" })
+    await expect(
+      new PostgresAuthorityMirror(worker, epoch, supervisor).readRecordBounded(1, 1024)
+    ).rejects.toMatchObject({ code: "42501" })
     await expect(runtime.query("DELETE FROM lyrashield_authority.record")).rejects.toMatchObject({
       code: "42501",
     })
@@ -189,6 +195,46 @@ describe.skipIf(!enabled)("restricted PostgreSQL authority mirror", () => {
     expect(owners.rows).toHaveLength(3)
     for (const fn of owners.rows)
       expect(fn).toEqual({ name: "authority_owner", proconfig: ["search_path=pg_catalog"] })
+  })
+
+  it("enforces UTF-8 caller limits in SQL without sending oversized text to the driver", async () => {
+    const { epoch, supervisor, mirror } = await fixture()
+    const event = append(epoch, supervisor)
+    Reflect.set(event.record.payload as object, "payload", { value: "é".repeat(1024) })
+    expect(await mirror.compareAndAppend(null, event.head, event.record)).toBe("written")
+    const headBytes = canonicalJson(event.head),
+      recordBytes = canonicalJson(event.record)
+    const headLimit = Buffer.byteLength(headBytes),
+      recordLimit = Buffer.byteLength(recordBytes)
+    expect(await mirror.readHeadBounded(headLimit)).toEqual(event.head)
+    expect(canonicalJson(await mirror.readRecordBounded(1, recordLimit))).toBe(recordBytes)
+    await expect(mirror.readHeadBounded(headLimit - 1)).rejects.toThrow("requested byte limit")
+    const transferred: Record<string, unknown>[] = []
+    const guarded = new PostgresAuthorityMirror(
+      {
+        query: (sql, values) => runtime.query(sql, values),
+        connect: async () => {
+          const connection = await runtime.connect()
+          return {
+            query: async (sql, values) => {
+              const result = await connection.query(sql, values)
+              if (sql.startsWith("WITH evidence")) transferred.push(...result.rows)
+              return result
+            },
+            release: (destroy) => connection.release(destroy),
+          }
+        },
+      },
+      epoch,
+      supervisor
+    )
+    await expect(guarded.readRecordBounded(1, recordLimit - 1)).rejects.toThrow(
+      "requested byte limit"
+    )
+    expect(transferred).toEqual([{ bytes: null, oversized: true }])
+    expect(await mirror.readRecordBounded(2, 1)).toBeNull()
+    const empty = await fixture()
+    expect(await empty.mirror.readHeadBounded(1)).toBeNull()
   })
 
   it("rolls record and head back together without leaving a partial append", async () => {

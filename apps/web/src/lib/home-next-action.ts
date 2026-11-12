@@ -38,6 +38,8 @@ interface HomeDecisionInput {
     GateReadinessTarget,
     "targetId" | "targetName" | "state" | "applicable" | "blockingFindings" | "reasons"
   >[]
+  /** More target pages remain outside this bounded read. */
+  hasMoreGateTargets?: boolean
   /** A queued/running scan; the decision leads with its progress. */
   activeScan?: { id: string; targetName: string | null } | null
 }
@@ -158,6 +160,17 @@ export function deriveHomeDecision(input: HomeDecisionInput): HomeDecision {
         cta: "Review blockers",
       }
       return { action, primaryAction: { href: blockerHref, label: "Review blockers" } }
+    }
+    if (input.hasMoreGateTargets) {
+      const action: HomeNextAction = {
+        eyebrow: "Next step",
+        title: "Review remaining targets",
+        description:
+          "More targets have not been checked on this page. Review the remaining target pages before a workspace launch decision.",
+        href: "/dashboard/launch-readiness",
+        cta: "Open Launch Readiness",
+      }
+      return { action, primaryAction: { href: action.href, label: action.cta } }
     }
     // A verdict blocked ONLY by a missing enforced release identity does not
     // need another scan: the assessment itself is usable and is shown with the

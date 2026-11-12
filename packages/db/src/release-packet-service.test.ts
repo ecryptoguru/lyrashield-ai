@@ -7,6 +7,7 @@ import {
   type ReleasePacketPayload,
 } from "@lyrashield/types"
 import { beforeEach, describe, expect, it, vi } from "vitest"
+import { launchReportIdentityCommitment } from "./launch-report-identity"
 
 const mocks = vi.hoisted(() => ({
   withWorkspaceRLS: vi.fn(),
@@ -61,6 +62,15 @@ import {
 
 const scanStartedAt = new Date("2026-11-05T00:00:00.000Z")
 const commit = "b".repeat(40)
+const identityBindingKey = "a".repeat(64)
+const identityCommitment = launchReportIdentityCommitment(identityBindingKey, {
+  workspaceId: "ws-1",
+  targetId: "target-1",
+  verdictId: "verdict-1",
+  verdictChecksum: "e".repeat(64),
+  assessmentVersion: 2,
+  identity: { kind: "COMMIT", value: commit },
+})
 const packetKeyPair = generateKeyPairSync("ed25519")
 const packetPrivateKey = packetKeyPair.privateKey
   .export({ type: "pkcs8", format: "pem" })
@@ -196,6 +206,7 @@ function setupIssuance(tx: ReturnType<typeof makeTx>) {
   })
   tx.gateVerdict.findFirst.mockResolvedValue({
     id: "verdict-1",
+    targetId: "target-1",
     scanId: "scan-1",
     state: "NOT_READY",
     standardVersion: "lyrashield-gate/2.4.0",
@@ -267,12 +278,14 @@ describe("issueReleasePacket", () => {
       {
         id: "launch-report-1",
         contentJson: {
+          payloadVersion: "lyrashield-launch-report/3.0.0",
+          identityCommitment,
           reportChecksum: "d".repeat(64),
           signature: "signature",
           signingKeyId: "lyrashield-launch-report-ed25519-1",
           expiresAt: "2026-11-07T00:00:00.000Z",
         },
-        provenanceJson: { gateVerdictId: "verdict-1" },
+        provenanceJson: { gateVerdictId: "verdict-1", identityBindingKey },
       },
     ])
   })
@@ -333,12 +346,14 @@ describe("issueReleasePacket", () => {
       {
         id: "launch-report-1",
         contentJson: {
+          payloadVersion: "lyrashield-launch-report/3.0.0",
+          identityCommitment,
           reportChecksum: "d".repeat(64),
           signature: "signature",
           signingKeyId: "lyrashield-launch-report-ed25519-1",
           expiresAt: new Date(Date.now() + 60_000).toISOString(),
         },
-        provenanceJson: { gateVerdictId: "verdict-1" },
+        provenanceJson: { gateVerdictId: "verdict-1", identityBindingKey },
       },
     ])
 

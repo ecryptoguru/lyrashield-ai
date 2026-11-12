@@ -28,11 +28,22 @@ const require = createRequire(import.meta.url)
 const label = "lyrashield.ci-browser"
 const maxBuffer = 32 * 1024 * 1024
 
+export function browserFailureReason(error) {
+  if (["ENOENT", "EACCES", "ENOSPC", "EIO", "ETIMEDOUT"].includes(error?.code)) return error.code
+  if (error?.name === "AssertionError") return "assertion"
+  if (error?.name === "TimeoutError") return "timeout"
+  const message = typeof error?.message === "string" ? error.message : ""
+  if (message.includes("Target page, context or browser has been closed")) return "target-closed"
+  if (message.includes("Protocol error")) return "protocol"
+  if (/\bnet::ERR_[A-Z0-9_]+\b/.test(message)) return "network"
+  return "unavailable"
+}
+
 export function hostFailureDiagnostic(stderr) {
   return String(stderr ?? "")
     .split("\n")
     .find((line) =>
-      /^CI_BROWSER_CHECK_FAILED phase=(runtime|manifest|font-hash|font-scan|font-family|browser-identity|native-libraries|browser-temp|loopback-server|browser-launch|webmcp|trace-lifecycle|artifact-cleanup|resource-telemetry) item=(none|\d{1,3}) reason=(assertion|ENOENT|EACCES|ENOSPC|EIO|ETIMEDOUT|unavailable)$/.test(
+      /^CI_BROWSER_CHECK_FAILED phase=(runtime|manifest|font-hash|font-scan|font-family|browser-identity|native-libraries|browser-temp|loopback-server|browser-launch|webmcp|trace-lifecycle|trace-context|trace-start|trace-page|trace-goto|trace-screenshot|trace-stop|trace-size|trace-close|artifact-cleanup|resource-telemetry) item=(none|\d{1,3}) reason=(assertion|ENOENT|EACCES|ENOSPC|EIO|ETIMEDOUT|timeout|target-closed|protocol|network|unavailable)$/.test(
         line
       )
     )

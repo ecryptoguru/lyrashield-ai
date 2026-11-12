@@ -613,6 +613,52 @@ schema and retained journal. These checks do not qualify Supabase PostgreSQL
 17.6, its session pooler, provider-managed failover, production recovery or R2
 reconciliation.
 
+The separate `isolated-restore-prerequisite.mjs` preparation helper is also
+unwired. Its caller must authenticate producer metadata before supplying the
+expected archive SHA-256 and source revision; comparing against a digest
+calculated from the same supplied file does not authenticate the producer.
+An owner-only `0600` config in a canonical `0700` directory uses schema
+`lyrashield-isolated-restore-prerequisite/1` and exactly `archivePath`,
+`expectedSha256` and `sourceRevision`. Run it only with
+`LYRASHIELD_RESTORE_PREREQUISITE_DISPOSABLE=1 node .github/scripts/isolated-restore-prerequisite.mjs --config /private/config.json`.
+It accepts a regular private custom archive of at most 64 MiB, verifies the
+expected digest before parsing, and transfers those verified bytes through stdin.
+The supported TOC contains both `public` and `app`, PostgreSQL 17 headers and
+only its reviewed object classes. Legacy, extension, ACL, other-namespace, view
+and unknown entries fail closed. This allowlist is a compatibility boundary,
+not authentication or a general SQL safety proof.
+
+The helper creates only its exact pinned local PostgreSQL 17.11 target, with
+no network, host ports or host mounts; bounded memory, processes and tmpfs
+storage; and a unique container ID/ownership label. It installs fixed
+`public.pgcrypto` 1.3 before restore, preserves the default public namespace
+by suppressing exactly its one schema-create TOC entry, and uses
+`pg_restore --exit-on-error --no-owner --no-acl` without `--clean`.
+Restore authenticates as a separate synthetic NOSUPERUSER/NOBYPASSRLS writer,
+so `SET ROLE` cannot recover the bootstrap owner's authority. After restore,
+the writer becomes NOLOGIN and an explicitly synthetic `synthetic-policy-read/1`
+profile grants a separate restricted probe only schema usage, Policy read and
+the reviewed digest/RLS-helper execution permissions. PUBLIC function execution
+is revoked. Catalog checks retain dispatch-table, membership and unreviewed
+definer denials; no explicit restored-helper execution probe is issued.
+
+Every child environment excludes inherited provider credentials and connection
+settings. The helper rechecks the exact target before operations and cleanup,
+including stopped targets; identity substitution refuses removal and successful
+output. Caller-owned archive/config files remain the caller's cleanup
+responsibility. Hard runner/daemon loss remains outside guaranteed cleanup.
+Read-only relation/catalog queries can still invoke restored code; these
+observations do not prove a consistent authority state or sole-writer exclusion.
+The result retains authority `UNQUALIFIED`, `sourceAclRestored=false`,
+`productionApplicable=false` and admission/failover qualification false.
+This helper does not reconstruct production owners, source ACLs, the separate
+authority schema/journal, or the full app runtime grant profile. It does not
+replace the workflow's superuser app-readiness check or qualify its PostgreSQL
+image, Supabase 17.6/session pooler, real R2 reconciliation or production recovery.
+The owned PostgreSQL fixture covers complete migration-archive restoration,
+effective synthetic writer/probe boundaries and a restored CHECK attempting
+to regain the bootstrap role. Workflow integration requires separate review.
+
 Existing credentials authenticate only to their original production database
 and R2 endpoint; the passphrase is used locally. Full private production data
 is decrypted on GitHub's ephemeral runner. No restored writes target

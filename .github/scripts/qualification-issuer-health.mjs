@@ -1,10 +1,14 @@
 // Exercises the protected signing boundary without issuing runtime authority.
 import assert from "node:assert/strict"
-import { createHash, createPublicKey, randomUUID, verify } from "node:crypto"
+import { createHash, randomUUID } from "node:crypto"
 import { execFileSync } from "node:child_process"
 import { readFileSync, writeFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 import { readQualificationIssuerToken } from "./paired-runtime-github.mjs"
+import {
+  runtimeQualificationKeyId,
+  verifyRuntimeQualificationSignature,
+} from "../../packages/security/src/sandbox-publication-record.ts"
 
 const configuration = JSON.parse(
   // Fixed source-controlled public-key path, never supplied by a caller.
@@ -12,6 +16,7 @@ const configuration = JSON.parse(
   readFileSync(new URL("../qualification-issuer-key.json", import.meta.url), "utf8")
 )
 const keyId = configuration.keyId
+assert.equal(keyId, runtimeQualificationKeyId)
 
 function azure(args) {
   try {
@@ -28,17 +33,7 @@ function azure(args) {
 }
 
 export function verifyHealthSignature(raw, result) {
-  assert.equal(typeof raw, "string")
-  assert.ok(Buffer.byteLength(raw) <= 4096)
-  assert.deepEqual(Object.keys(result).sort(), ["algorithm", "keyId", "signature"])
-  assert.equal(result.algorithm, "RS256")
-  assert.equal(result.keyId, keyId)
-  assert.match(result.signature, /^[A-Za-z0-9+/]{512}$/)
-  const signature = Buffer.from(result.signature, "base64")
-  assert.equal(signature.toString("base64"), result.signature)
-  const publicKey = createPublicKey({ key: configuration.publicKey, format: "jwk" })
-  assert.equal(publicKey.asymmetricKeyDetails.modulusLength, 3072)
-  assert.ok(verify("RSA-SHA256", Buffer.from(raw), publicKey, signature))
+  verifyRuntimeQualificationSignature(raw, result)
 }
 
 export async function checkIssuerHealth({

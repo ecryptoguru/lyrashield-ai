@@ -26,6 +26,14 @@ on:
         required: false
         default: ""
         type: string
+      prepared_candidate_run_id:
+        required: false
+        default: ""
+        type: string
+      prepared_candidate_run_attempt:
+        required: false
+        default: ""
+        type: string
   workflow_dispatch:
     inputs:
       source_sha:
@@ -34,6 +42,16 @@ on:
         type: string
       qualified_release_digest:
         description: Optional protected paired-release record digest
+        required: false
+        default: ""
+        type: string
+      prepared_candidate_run_id:
+        description: Exact previously rehearsed candidate run ID
+        required: false
+        default: ""
+        type: string
+      prepared_candidate_run_attempt:
+        description: Exact previously rehearsed candidate attempt
         required: false
         default: ""
         type: string
@@ -91,6 +109,7 @@ jobs:
       held_recovery_original_run_id: ${{ steps.verify-held.outputs.held_recovery_original_run_id }}
       held_recovery_original_owner: ${{ steps.verify-held.outputs.held_recovery_original_owner }}
       held_recovery_original_source_sha: ${{ steps.verify-held.outputs.held_recovery_original_source_sha }}
+      prepared_artifact_digest: ${{ steps.prepared.outputs.prepared_artifact_digest }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     environment:
@@ -119,6 +138,33 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           SOURCE_SHA: ${{ env.DEPLOY_SHA }}
         run: bash .github/scripts/assert-current-main.sh
+
+      - name: Require a complete prepared candidate selector for qualified releases
+        env:
+          QUALIFIED_RELEASE: ${{ inputs.qualified_release_digest }}
+          HELD_RECOVERY: ${{ inputs.held_recovery_original_run_id }}
+          PREPARED_RUN: ${{ inputs.prepared_candidate_run_id }}
+          PREPARED_ATTEMPT: ${{ inputs.prepared_candidate_run_attempt }}
+        run: |
+          set -euo pipefail
+          if [ -n "$QUALIFIED_RELEASE" ] && [ -z "$HELD_RECOVERY" ]; then
+            [[ "$PREPARED_RUN" =~ ^[1-9][0-9]{0,19}$ && "$PREPARED_ATTEMPT" =~ ^[1-9][0-9]{0,19}$ ]]
+          else
+            [ -z "$PREPARED_RUN" ] && [ -z "$PREPARED_ATTEMPT" ]
+          fi
+
+      - name: Read the exact prebuilt candidate before paired preflight
+        if: inputs.prepared_candidate_run_id != ''
+        id: prepared
+        env:
+          GH_TOKEN: ${{ github.token }}
+          LYRASHIELD_WEBHOOK_RECOVERY_PREPARED_RUN_ID: ${{ inputs.prepared_candidate_run_id }}
+          LYRASHIELD_WEBHOOK_RECOVERY_PREPARED_RUN_ATTEMPT: ${{ inputs.prepared_candidate_run_attempt }}
+        run: node .github/scripts/verify-webhook-recovery-candidate.mjs --paired-candidate
+
+      - name: Prepare checksum-pinned protected Linux verifier
+        if: inputs.qualified_release_digest != ''
+        run: bash .github/scripts/prepare-qualification-verifier.sh
 
       - name: Validate required Azure writer configuration
         env:
@@ -154,9 +200,22 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PAIRED_JOB_WORKFLOW: .github/workflows/deploy-azure.yml
           PAIRED_QUALIFIED_RELEASE_SHA256: ${{ inputs.qualified_release_digest }}
+          PREPARED_SOURCE_SHA: ${{ steps.prepared.outputs.prepared_source_sha }}
+          PREPARED_ENGINE_REVISION: ${{ steps.prepared.outputs.engine_revision }}
+          PREPARED_WEB_DIGEST: ${{ steps.prepared.outputs.web_digest }}
+          PREPARED_WORKER_DIGEST: ${{ steps.prepared.outputs.worker_digest }}
+          PREPARED_EGRESS_DIGEST: ${{ steps.prepared.outputs.egress_proxy_digest }}
+          PREPARED_RUN_ID: ${{ steps.prepared.outputs.prepared_run_id }}
+          PREPARED_RUN_ATTEMPT: ${{ steps.prepared.outputs.prepared_run_attempt }}
+          PAIRED_PREPARED: ${{ inputs.prepared_candidate_run_id != '' }}
           RG: ${{ vars.AZURE_RESOURCE_GROUP }}
           SCANNER_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
-        run: node .github/scripts/paired-runtime-workflow.mjs preflight
+        run: |
+          if [ "$PAIRED_PREPARED" = true ]; then
+            node .github/scripts/paired-prepared-candidate.mjs
+          else
+            node .github/scripts/paired-runtime-workflow.mjs preflight
+          fi
 
       - name: Block automatic retry of incomplete v26 maintenance
         env:
@@ -232,6 +291,8 @@ jobs:
     timeout-minutes: 60
     if: ${{ !cancelled() &&
       inputs.held_recovery_original_run_id == '' &&
+      inputs.prepared_candidate_run_id == '' &&
+      inputs.qualified_release_digest == '' &&
       github.ref == 'refs/heads/main' &&
       needs.validate-manual-production-dispatch.result == 'success' &&
       needs.preflight-compatible-baseline.result == 'success' }}
@@ -450,15 +511,15 @@ jobs:
             "${{ env.ENGINE_REVISION }}"
 
   resolve-prepared-images:
-    name: Bind held recovery to previously rehearsed image digests
+    name: Bind release to previously rehearsed image digests
     needs:
       - validate-manual-production-dispatch
       - preflight-compatible-baseline
     if: ${{ !cancelled() &&
-      inputs.held_recovery_original_run_id != '' &&
       needs.validate-manual-production-dispatch.result == 'success' &&
       needs.preflight-compatible-baseline.result == 'success' &&
-      needs.preflight-compatible-baseline.outputs.held_recovery_verified == 'true' }}
+      ((inputs.held_recovery_original_run_id != '' && needs.preflight-compatible-baseline.outputs.held_recovery_verified == 'true') ||
+      (inputs.held_recovery_original_run_id == '' && inputs.prepared_candidate_run_id != '' && inputs.qualified_release_digest != '')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
@@ -490,8 +551,23 @@ jobs:
         id: verify
         env:
           GH_TOKEN: ${{ github.token }}
-          LYRASHIELD_WEBHOOK_RECOVERY_PREPARED_RUN_ID: ${{ inputs.held_recovery_prepared_run_id }}
-        run: node .github/scripts/verify-webhook-recovery-candidate.mjs
+          LYRASHIELD_WEBHOOK_RECOVERY_PREPARED_RUN_ID: ${{ inputs.held_recovery_prepared_run_id || inputs.prepared_candidate_run_id }}
+          LYRASHIELD_WEBHOOK_RECOVERY_PREPARED_RUN_ATTEMPT: ${{ inputs.prepared_candidate_run_attempt }}
+          PAIRED_PREPARED: ${{ inputs.prepared_candidate_run_id != '' }}
+        run: |
+          if [ "$PAIRED_PREPARED" = true ]; then
+            node .github/scripts/verify-webhook-recovery-candidate.mjs --paired-candidate
+          else
+            node .github/scripts/verify-webhook-recovery-candidate.mjs
+          fi
+      - name: Recheck the candidate artifact used by protected preflight
+        if: inputs.prepared_candidate_run_id != ''
+        env:
+          PREFLIGHT_ARTIFACT: ${{ needs.preflight-compatible-baseline.outputs.prepared_artifact_digest }}
+          CURRENT_ARTIFACT: ${{ steps.verify.outputs.prepared_artifact_digest }}
+        run: |
+          [[ "$PREFLIGHT_ARTIFACT" =~ ^sha256:[a-f0-9]{64}$ ]]
+          test "$PREFLIGHT_ARTIFACT" = "$CURRENT_ARTIFACT"
 
   resolve-images:
     name: Select verified release image digests
@@ -513,6 +589,7 @@ jobs:
         id: select
         env:
           HELD_RECOVERY: ${{ inputs.held_recovery_original_run_id != '' }}
+          PAIRED_PREPARED: ${{ inputs.prepared_candidate_run_id != '' }}
           BUILD_RESULT: ${{ needs.build.result }}
           PREPARED_RESULT: ${{ needs.resolve-prepared-images.result }}
           BUILT_WEB_IMAGE: ${{ needs.build.outputs.web_image }}
@@ -531,7 +608,7 @@ jobs:
           PREPARED_ENGINE_REVISION: ${{ needs.resolve-prepared-images.outputs.engine_revision }}
         run: |
           set -euo pipefail
-          if [ "$HELD_RECOVERY" = true ]; then
+          if [ "$HELD_RECOVERY" = true ] || [ "$PAIRED_PREPARED" = true ]; then
             [ "$PREPARED_RESULT" = success ] && [ "$BUILD_RESULT" = skipped ] || exit 1
             prefix=PREPARED
           else

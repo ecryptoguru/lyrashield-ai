@@ -166,6 +166,18 @@ describe("deriveHomeDecision — one canonical action", () => {
     )
   })
 
+  it("routes a partial gate read to the remaining target pages", () => {
+    const decision = deriveHomeDecision({
+      ...base,
+      targets: { ...base.targets, total: 6 },
+      lastEvaluatedAssessment: evaluatedAssessment(),
+      gateTargets: [gateFor("t-1", "READY")],
+      hasMoreGateTargets: true,
+    })
+    expect(decision.action?.cta).toBe("Open Launch Readiness")
+    expect(decision.action?.title).toBe("Review remaining targets")
+  })
+
   it("offers the report only when every active target's gate is READY", () => {
     const decision = deriveHomeDecision({
       ...base,
