@@ -50,6 +50,53 @@ function read(path) {
   return JSON.parse(protectedGh(["api", "--hostname", "github.com", `repos/${repo}/${path}`]))
 }
 
+function verifyVerifierCi(revision, get) {
+  const ancestry = get(`compare/${revision}...main`)
+  assert.ok(
+    ancestry?.merge_base_commit?.sha === revision &&
+      ["ahead", "identical"].includes(ancestry.status)
+  )
+  const workflow = get("actions/workflows/ci.yml")
+  assert.ok(
+    Number.isSafeInteger(workflow?.id) &&
+      workflow.id > 0 &&
+      workflow.path === ".github/workflows/ci.yml"
+  )
+  const list = get(
+    `actions/workflows/${workflow.id}/runs?event=push&head_sha=${revision}&per_page=100`
+  )
+  assert.ok(
+    Number.isSafeInteger(list?.total_count) &&
+      list.total_count > 0 &&
+      list.total_count <= 100 &&
+      Array.isArray(list.workflow_runs) &&
+      list.workflow_runs.length === list.total_count
+  )
+  assert.ok(list.workflow_runs.every((run) => Number.isSafeInteger(run.id) && run.id > 0))
+  const sorted = [...list.workflow_runs].sort((a, b) => b.id - a.id)
+  assert.ok(sorted.length === 1 || sorted[0].id !== sorted[1].id)
+  const runId = sorted[0].id
+  const current = get(`actions/runs/${runId}`)
+  assert.ok(Number.isSafeInteger(current?.run_attempt) && current.run_attempt > 0)
+  const attempt = get(`actions/runs/${runId}/attempts/${current.run_attempt}`)
+  for (const item of [current, attempt]) {
+    assert.ok(
+      item?.id === runId &&
+        item.workflow_id === workflow.id &&
+        item.run_attempt === current.run_attempt &&
+        item.status === "completed" &&
+        item.conclusion === "success" &&
+        item.event === "push" &&
+        item.head_branch === "main" &&
+        item.head_sha === revision &&
+        item.path === ".github/workflows/ci.yml" &&
+        item.repository?.id === 1297157605 &&
+        item.head_repository?.id === 1297157605
+    )
+  }
+  return `${runId}:${current.run_attempt}`
+}
+
 export function verifyIndependentSandboxInventory(
   expected,
   {
@@ -96,11 +143,7 @@ export function verifyIndependentSandboxInventory(
   assert.match(INVENTORY_VERIFIER_TREE, /^[a-f0-9]{40}$/)
   assert.equal(source?.sha, expected.verifierRevision)
   assert.equal(source?.tree?.sha, INVENTORY_VERIFIER_TREE)
-  const ancestry = get(`compare/${expected.verifierRevision}...main`)
-  assert.ok(
-    ancestry?.merge_base_commit?.sha === expected.verifierRevision &&
-      ["ahead", "identical"].includes(ancestry.status)
-  )
+  const verifierCi = verifyVerifierCi(expected.verifierRevision, get)
   const verifierRun = get(
     `actions/runs/${expected.verifierRunId}/attempts/${expected.verifierAttempt}`
   )
@@ -220,6 +263,7 @@ export function verifyIndependentSandboxInventory(
         entry.finalHeaders <= limits.finalHeaders
     )
   }
+  assert.equal(verifyVerifierCi(expected.verifierRevision, get), verifierCi)
   return Object.freeze({
     ...expected,
     qualified: false,

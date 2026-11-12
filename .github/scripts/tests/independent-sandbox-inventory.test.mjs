@@ -145,7 +145,20 @@ function fixture() {
     repository: { id: 1297157605 },
     head_repository: { id: 1297157605 },
   }
-  return { predicate, row, run, tree: INVENTORY_VERIFIER_TREE }
+  const ci = {
+    id: 61,
+    workflow_id: 7,
+    run_attempt: 1,
+    status: "completed",
+    conclusion: "success",
+    event: "push",
+    head_branch: "main",
+    head_sha: input.verifierRevision,
+    path: ".github/workflows/ci.yml",
+    repository: { id: 1297157605 },
+    head_repository: { id: 1297157605 },
+  }
+  return { predicate, row, run, ci, tree: INVENTORY_VERIFIER_TREE }
 }
 function options(v) {
   return {
@@ -156,6 +169,13 @@ function options(v) {
       if (path === "actions/runs/52/attempts/2") return v.run
       if (path === "git/commits/" + input.verifierRevision)
         return { sha: input.verifierRevision, tree: { sha: v.tree } }
+      if (path === "actions/workflows/ci.yml") return { id: 7, path: ".github/workflows/ci.yml" }
+      if (
+        path ===
+        `actions/workflows/7/runs?event=push&head_sha=${input.verifierRevision}&per_page=100`
+      )
+        return { total_count: 1, workflow_runs: [v.ci] }
+      if (path === "actions/runs/61/attempts/1" || path === "actions/runs/61") return v.ci
       if (path === "compare/" + input.verifierRevision + "...main")
         return { merge_base_commit: { sha: input.verifierRevision }, status: "ahead" }
       throw Error("unexpected API path")
@@ -184,6 +204,8 @@ test("rejects changed identity, source, run, scope, native bytes, tools and auth
   const changes = [
     (v) => (v.tree = "9".repeat(40)),
     (v) => (v.run.conclusion = "failure"),
+    (v) => (v.ci.conclusion = "failure"),
+    (v) => (v.ci.conclusion = "cancelled"),
     (v) => (v.row.verificationResult.signature.certificate.runInvocationURI += "0"),
     (v) => (v.predicate.engineRevision = "9".repeat(40)),
     (v) => (v.predicate.platforms.arm64.configDigest = hash("9")),
@@ -199,4 +221,44 @@ test("rejects changed identity, source, run, scope, native bytes, tools and auth
     change(value)
     assert.throws(() => verifyIndependentSandboxInventory(input, options(value)))
   }
+})
+
+test("a non-ancestor, incomplete run list, or newer pending verifier CI never falls back to success", () => {
+  for (const change of ["main", "incomplete", "newer"]) {
+    const value = fixture()
+    const base = options(value)
+    const read = base.read
+    base.read = (path) => {
+      if (change === "main" && path === `compare/${input.verifierRevision}...main`)
+        return { merge_base_commit: { sha: "9".repeat(40) }, status: "diverged" }
+      if (
+        path ===
+        `actions/workflows/7/runs?event=push&head_sha=${input.verifierRevision}&per_page=100`
+      ) {
+        if (change === "incomplete") return { total_count: 2, workflow_runs: [value.ci] }
+        if (change === "newer")
+          return { total_count: 2, workflow_runs: [value.ci, { ...value.ci, id: 62 }] }
+      }
+      if (change === "newer" && path === "actions/runs/62")
+        return { ...value.ci, id: 62, status: "in_progress", conclusion: null }
+      if (change === "newer" && path === "actions/runs/62/attempts/1")
+        return { ...value.ci, id: 62, status: "in_progress", conclusion: null }
+      return read(path)
+    }
+    assert.throws(() => verifyIndependentSandboxInventory(input, base))
+  }
+})
+
+test("allows an unchanged reviewed verifier after main advances, but rechecks ancestry", () => {
+  const value = fixture()
+  const base = options(value)
+  assert.doesNotThrow(() => verifyIndependentSandboxInventory(input, base))
+  const read = base.read
+  let comparisons = 0
+  base.read = (path) => {
+    if (path === `compare/${input.verifierRevision}...main` && ++comparisons === 2)
+      return { merge_base_commit: { sha: "9".repeat(40) }, status: "diverged" }
+    return read(path)
+  }
+  assert.throws(() => verifyIndependentSandboxInventory(input, base))
 })
