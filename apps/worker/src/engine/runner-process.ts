@@ -344,5 +344,7 @@ async function startEngineProcess(
 export async function runEngineProcess(...args: Parameters<typeof startEngineProcess>) {
   await assertColdDatabaseEpoch()
   args[5] = withColdDatabaseEpochCancellation(args[5])
-  return startEngineProcess(...args)
+  const result = await startEngineProcess(...args)
+  await assertColdDatabaseEpoch()
+  return result
 }

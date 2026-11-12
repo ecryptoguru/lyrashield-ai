@@ -1,3 +1,4 @@
+import { ColdDatabaseEpochError } from "../../cold-database-epoch"
 import { withWorkspaceRLS, updateUnclaimedScanStatus, type ScanStatus } from "@lyrashield/db"
 import { ScanBillableClaimError } from "@lyrashield/db/src/scan-billable-claim"
 import type { ScanExecutionResult } from "./execution"
@@ -6,6 +7,7 @@ import { refreshGateVerdictAfterTerminalScan } from "./lifecycle-utils"
 
 export function isBillableExecutionContention(error: unknown): boolean {
   return (
+    error instanceof ColdDatabaseEpochError ||
     error instanceof ScanBillableClaimError ||
     (error instanceof Error && error.message === "capacity_execution_already_started")
   )

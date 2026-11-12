@@ -34,6 +34,7 @@ vi.mock("./usage", () => ({
 }))
 
 import type { AISecuritySignal, EngineTriageArtifact } from "@lyrashield/security"
+import { ColdDatabaseEpochError } from "../../cold-database-epoch"
 import { runEngineTriageOverlay } from "./triage"
 
 const checksum = "a".repeat(64)
@@ -156,6 +157,15 @@ describe("runEngineTriageOverlay", () => {
       reconciliationReason: undefined,
     })
     mocks.addScanEvent.mockResolvedValue(undefined)
+  })
+
+  it("propagates an epoch interruption instead of settling the main engine's affirmative usage", async () => {
+    mocks.runEngineTriage.mockRejectedValueOnce(new ColdDatabaseEpochError())
+    await expect(runEngineTriageOverlay(params() as never)).rejects.toBeInstanceOf(
+      ColdDatabaseEpochError
+    )
+    expect(mocks.persistEngineUsageCheckpoint).not.toHaveBeenCalled()
+    expect(mocks.addScanEvent).not.toHaveBeenCalled()
   })
 
   it("applies the non-authoritative artifact and checkpoints merged provider usage", async () => {

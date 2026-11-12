@@ -85,7 +85,7 @@ describe("cold main and triage process boundary", () => {
       await vi.advanceTimersByTimeAsync(5000)
       expect(child.kill).toHaveBeenCalledWith("SIGKILL")
       child.emit("close", null)
-      await expect(running).resolves.toMatchObject({ cancelled: true, exitCode: -1 })
+      await expect(running).rejects.toThrow("admission remains closed")
       mocks.query.mockResolvedValue([{ epoch }])
       await expect(
         runEngineProcess(command(kind), "/tmp", "scan-1", null, profile)
@@ -108,7 +108,7 @@ describe("cold main and triage process boundary", () => {
     expect(child.kill).toHaveBeenCalledWith("SIGTERM")
     expect(mocks.query).toHaveBeenCalledTimes(2)
     child.emit("close", null)
-    await expect(running).resolves.toMatchObject({ cancelled: true })
+    await expect(running).rejects.toThrow("admission remains closed")
   })
 
   it("terminates when the runtime epoch becomes unavailable despite an uncancelled scan", async () => {
@@ -123,7 +123,7 @@ describe("cold main and triage process boundary", () => {
     expect(child.kill).toHaveBeenCalledWith("SIGTERM")
     expect(shouldCancel).not.toHaveBeenCalled()
     child.emit("close", null)
-    await expect(running).resolves.toMatchObject({ cancelled: true })
+    await expect(running).rejects.toThrow("admission remains closed")
   })
 
   it("keeps checking epochs when an existing cancellation status read hangs", async () => {
@@ -138,7 +138,7 @@ describe("cold main and triage process boundary", () => {
     await vi.advanceTimersByTimeAsync(1000)
     expect(child.kill).toHaveBeenCalledWith("SIGTERM")
     child.emit("close", null)
-    await expect(running).resolves.toMatchObject({ cancelled: true })
+    await expect(running).rejects.toThrow("admission remains closed")
   })
 
   it("preserves ordinary cancellation without querying a database incarnation", async () => {
