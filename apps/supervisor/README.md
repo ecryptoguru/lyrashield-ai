@@ -75,19 +75,25 @@ new original events are capped below 128 KiB so a cursor can make progress. A wr
 supervisor or predecessor is rejected. The endpoint requires the existing control credential and
 returns `no-store` responses.
 
-Cursor reconciliation uses one authenticated original snapshot rather than reloading the entire
-original file for each event. A captured snapshot that changes while queued is rejected for retry;
-source and independent heads are rechecked around authority validation. The closed prototype
-limits cursor history to 64 records, 512 KiB of original bytes and 1 MiB of wrapper bytes, with
-bounded file reads before joining STOP/append serialization. Over-limit readback returns
-`READ_LIMIT`, proves no recovery, performs no repair, and does not latch the writer. Append,
-startup history and STOP keep the complete history available above the cursor ceiling.
+With native signed journals and bounded object-store/database adapters, cursor reconciliation
+reads indexed ranges of the original and wrapper files. The active writer builds its byte-offset
+and hash index while verifying the complete chain at startup, and advances it only after a signed
+append is fsynced. Each page rechecks file ownership, inode, size and nanosecond change timestamps;
+selected envelopes and their chain anchors are reverified. It authenticates the current heads and
+the selected records against both independent mirrors before and after authority validation.
+Cached attempt bindings avoid scanning old history for each returned event. No checkpoint service,
+new signing key, compaction or rewritten envelope is required for this read path.
 
-For ten records and a one-record page, tests measure three bounded original loads, five bounded
-wrapper loads, twenty R2-record reads, twenty database-record reads, ten event-authority calls and
-three stream-authority calls. A cold adapter adds one wrapper load and ten record reads per mirror.
-The fixed ceiling is a **production blocker**, not a scalable recovery design: authenticated
-checkpoints/compaction or genuinely bounded paging are still required. No history is discarded.
+Native cursor pages have no 64-record history ceiling. Original reads are capped at 1 MiB and
+wrapper reads at 2 MiB; responses retain the 256 KiB limit. Warm one-record pages read each local
+range twice, six bounded object-store objects and four bounded database records, independently of
+the total history size. Transport adapters enforce their existing per-operation deadlines; a
+five-second warm-page budget stops further reads after expiry. Restart still verifies complete
+history, and the existing 64 MiB file/writer cap remains. Pending durability stays unresolved and
+can be repaired only by explicit exact replay. No read publishes or deletes evidence.
+
+Custom ports without indexed reads or bounded independent mirrors retain the closed 64-record
+fallback. They cannot qualify the native paged path. Neither path enables production admission.
 
 The production entrypoint still uses its closed local-only configuration: this endpoint returns
 503 there. Replacing that factory requires the real protected storage and persisted authority
@@ -171,7 +177,7 @@ page does not grow with total history. The reader has no writer queue or executo
 Tests traverse all 130 real signed records over multiple pages, reject changed and restored proof,
 and complete STOP while a bounded checkpoint read is held.
 
-The existing cursor transport retains its 64-record ceiling. Protected checkpoint publication,
+The optional checkpoint reader is separate from native indexed cursor paging. Protected checkpoint publication,
 immutable local segments, authenticated bounded current-local-head proof, rollback-resistant range
 index, transport byte/deadline enforcement and restart lifecycle are **blocking integrations**.
 The in-process observed revision only detects rollback during that reader's lifetime; a fresh

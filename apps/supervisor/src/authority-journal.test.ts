@@ -128,6 +128,32 @@ function same(left: unknown, right: unknown): boolean {
   return canonicalJson(left) === canonicalJson(right)
 }
 
+function boundedPorts(fixture: Awaited<ReturnType<typeof setup>>) {
+  const store = Object.assign(fixture.store, {
+    readBounded: async (key: string, maxBytes: number) => {
+      const object = await fixture.store.read(key)
+      if (object && object.bytes.byteLength > maxBytes)
+        throw new Error("bounded object exceeds limit")
+      return object
+    },
+  })
+  const mirror = Object.assign(fixture.mirror, {
+    readHeadBounded: async (maxBytes: number) => {
+      const head = await fixture.mirror.readHead()
+      if (head && Buffer.byteLength(canonicalJson(head)) > maxBytes)
+        throw new Error("bounded head exceeds limit")
+      return head
+    },
+    readRecordBounded: async (sequence: number, maxBytes: number) => {
+      const record = await fixture.mirror.readRecord(sequence)
+      if (record && Buffer.byteLength(canonicalJson(record)) > maxBytes)
+        throw new Error("bounded record exceeds limit")
+      return record
+    },
+  })
+  return { store, mirror }
+}
+
 async function setup(
   authorize: SupervisorAuthorityJournalOptions["authorize"] = async () => true,
   authorizeStream: SupervisorAuthorityJournalOptions["authorizeStream"] = async () => true
@@ -172,6 +198,159 @@ async function setup(
 }
 
 describe("supervisor independent journal adapter", () => {
+  it("uses native bounded ranges beyond64 without checkpoint services or whole-history page reads", async () => {
+    const f = await setup()
+    const { store, mirror } = boundedPorts(f)
+    await f.journal.append(intent)
+    for (let index = 1; index < 130; index++) {
+      await f.journal.append({
+        ...intent,
+        command: { ...intent.command, commandId: `prepare-${index}` },
+      })
+    }
+    const originals = await f.original.load()
+    const wrapped = await f.local.load()
+    const originalLoad = vi.spyOn(f.original, "load")
+    const wrapperLoad = vi.spyOn(f.local, "load")
+    const originalRange = vi.spyOn(f.original, "readRange")
+    const wrapperRange = vi.spyOn(f.local, "readRange")
+    const objectReads = vi.spyOn(store, "readBounded")
+    const mirrorReads = vi.spyOn(mirror, "readRecordBounded")
+    const all = []
+    let next = { ...cursor, limit: 7 }
+    for (;;) {
+      const page = await f.journal.readCursor(next)
+      expect(Buffer.byteLength(canonicalJson(page))).toBeLessThanOrEqual(
+        MAX_SUPERVISOR_JOURNAL_PAGE_BYTES
+      )
+      all.push(...page.records)
+      next = page.nextCursor
+      if (!page.hasMore) break
+    }
+    expect(all).toEqual(wrapped)
+    expect(all.map((record) => record.payload.payload)).toEqual(originals)
+    expect(next.afterSequence).toBe(130)
+    expect(originalLoad).not.toHaveBeenCalled()
+    expect(wrapperLoad).not.toHaveBeenCalled()
+    originalRange.mockClear()
+    wrapperRange.mockClear()
+    objectReads.mockClear()
+    mirrorReads.mockClear()
+    expect((await f.journal.readCursor({ ...cursor, limit: 1 })).records).toEqual(
+      wrapped.slice(0, 1)
+    )
+    expect(originalRange).toHaveBeenCalledTimes(2)
+    expect(wrapperRange).toHaveBeenCalledTimes(2)
+    expect(objectReads).toHaveBeenCalledTimes(6)
+    expect(mirrorReads).toHaveBeenCalledTimes(4)
+    await f.original.close()
+    await f.local.close()
+    const original = new SignedJournal(
+      f.originalPath,
+      signingSecret,
+      supervisorJournalEventSchema.parse
+    )
+    const local = new SignedJournal(f.independentPath, signingSecret, (value) =>
+      authorityEventSchema(z.custom<JournalRecord<SupervisorJournalEvent>>()).parse(value)
+    )
+    const restarted = new SupervisorAuthorityJournal({ ...f.options, original, local })
+    expect(
+      (await restarted.readCursor({ ...next, afterSequence: 123, afterHash: originals[122]!.hash }))
+        .records
+    ).toEqual(wrapped.slice(123))
+    await original.close()
+    await local.close()
+  }, 30000)
+
+  it("holds bounded readback after lost acknowledgement and recovers only by exact replay", async () => {
+    const f = await setup()
+    boundedPorts(f)
+    f.store.loseAcknowledgement = true
+    await expect(f.journal.append(intent)).rejects.toMatchObject({ code: "AUTHORITY_UNKNOWN" })
+    const writes = f.store.writes
+    await expect(f.journal.readCursor(cursor)).rejects.toMatchObject({ code: "REPLAY_REQUIRED" })
+    expect(f.store.writes).toBe(writes)
+    const original = await f.journal.append(intent)
+    expect((await f.journal.readCursor(cursor)).records[0]?.payload.payload).toEqual(original)
+    expect(await f.original.load()).toHaveLength(1)
+    await f.original.close()
+    await f.local.close()
+  })
+
+  it("stops new IO when the page budget expires and keeps exact replay and STOP available", async () => {
+    const f = await setup()
+    const { store, mirror } = boundedPorts(f)
+    await f.journal.append(intent)
+    let now = 0
+    const clock = vi.spyOn(performance, "now").mockImplementation(() => now)
+    const bounded = store.readBounded.bind(store)
+    const read = vi.spyOn(store, "readBounded").mockImplementation(async (key, limit) => {
+      const object = await bounded(key, limit)
+      now = 5001
+      return object
+    })
+    const mirrorRead = vi.spyOn(mirror, "readHeadBounded")
+    try {
+      const writes = [f.store.writes, f.mirror.writes]
+      await expect(f.journal.readCursor(cursor)).rejects.toMatchObject({
+        code: "AUTHORITY_UNKNOWN",
+      })
+      expect(read).toHaveBeenCalledTimes(1)
+      expect(mirrorRead).not.toHaveBeenCalled()
+      expect([f.store.writes, f.mirror.writes]).toEqual(writes)
+    } finally {
+      clock.mockRestore()
+      read.mockRestore()
+      mirrorRead.mockRestore()
+    }
+    await expect(f.journal.readCursor({ ...cursor, afterSequence: 2 })).rejects.toMatchObject({
+      code: "CURSOR_CONFLICT",
+    })
+    await expect(
+      f.journal.readCursor({ ...cursor, afterHash: "f".repeat(64) })
+    ).rejects.toMatchObject({ code: "CURSOR_CONFLICT" })
+    await f.journal.append({
+      ...intent,
+      command: {
+        type: "STOP",
+        commandId: "stop-after-timeout",
+        attemptId: binding.attemptId,
+        expectedReceiptHash: "b".repeat(64),
+      },
+    })
+    expect((await f.journal.readCursor(cursor)).records).toHaveLength(2)
+    await f.original.close()
+    await f.local.close()
+  })
+
+  it("rejects a changed remote record and revoked stream through the bounded path", async () => {
+    let active = true
+    const f = await setup(
+      async () => true,
+      async () => active
+    )
+    boundedPorts(f)
+    await f.journal.append(intent)
+    active = false
+    await expect(f.journal.readCursor(cursor)).rejects.toMatchObject({ code: "AUTHORITY_CONFLICT" })
+    const other = await setup()
+    boundedPorts(other)
+    await other.journal.append(intent)
+    other.store.hideRecords = true
+    await expect(other.journal.readCursor(cursor)).rejects.toMatchObject({
+      code: "AUTHORITY_UNKNOWN",
+    })
+    other.store.hideRecords = false
+    const key = [...other.store.objects.keys()].find((key) => key.endsWith("/records/1"))!
+    other.store.objects.set(key, { bytes: Buffer.from("tampered"), etag: "changed" })
+    await expect(other.journal.readCursor(cursor)).rejects.toMatchObject({
+      code: "AUTHORITY_CONFLICT",
+    })
+    await f.original.close()
+    await f.local.close()
+    await other.original.close()
+    await other.local.close()
+  })
   it("requires persisted stream authority even for an empty genesis cursor", async () => {
     const eventAuthority = vi.fn(async () => false)
     const streamAuthority = vi.fn(async () => false)

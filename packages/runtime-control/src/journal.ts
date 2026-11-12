@@ -1,11 +1,21 @@
-import { createHmac, timingSafeEqual } from "node:crypto"
-import { constants, type Stats } from "node:fs"
+import { constants, type Stats, type BigIntStats } from "node:fs"
 import { lstat, open, unlink, type FileHandle } from "node:fs/promises"
 import { dirname } from "node:path"
-import { canonicalJson, sha256Hex } from "./canonical-json"
+import { canonicalJson } from "./canonical-json"
+import { readIndexedJournalRange } from "./journal-range"
+import {
+  JournalIntegrityError,
+  JournalReadLimitError,
+  recordHash,
+  signRecord,
+  secureEqual,
+  validateSecret,
+  validatedEnvelope,
+  type JournalRecord,
+} from "./journal-record"
+export { JournalIntegrityError, JournalReadLimitError, verifyJournalRecord } from "./journal-record"
+export type { JournalRecord } from "./journal-record"
 
-const JOURNAL_VERSION = 1
-const MIN_SECRET_BYTES = 32
 const MAX_JOURNAL_BYTES = 64 * 1024 * 1024
 
 export interface JournalPort<T> {
@@ -14,123 +24,20 @@ export interface JournalPort<T> {
   /** Explicitly fsync an existing exact record without appending or re-signing it. */
   confirmRecord?(record: JournalRecord<T>): Promise<JournalRecord<T>>
   loadBounded?(limits: JournalReadLimits): Promise<JournalRecord<T>[]>
+  /** Indexed read from the authenticated active writer; startup still verifies the full chain. */
+  readRange?(afterSequence: number, limits: JournalReadLimits): Promise<JournalRange<T>>
+}
+
+export interface JournalRange<T> {
+  records: JournalRecord<T>[]
+  head: JournalRecord<T> | null
+  previousHash: string
+  hasMore: boolean
 }
 
 export interface JournalReadLimits {
   maxBytes: number
   maxRecords: number
-}
-
-export class JournalReadLimitError extends Error {
-  readonly code = "JOURNAL_READ_LIMIT"
-}
-
-export interface JournalRecord<T> {
-  version: 1
-  sequence: number
-  previousHash: string
-  hash: string
-  signature: string
-  payload: T
-}
-
-export class JournalIntegrityError extends Error {
-  readonly code = "JOURNAL_INTEGRITY"
-
-  constructor(message: string) {
-    super(message)
-    this.name = "JournalIntegrityError"
-  }
-}
-
-function secureEqual(left: string, right: string): boolean {
-  const leftBytes = Buffer.from(left, "utf8")
-  const rightBytes = Buffer.from(right, "utf8")
-  return leftBytes.length === rightBytes.length && timingSafeEqual(leftBytes, rightBytes)
-}
-
-function signRecord(secret: string, input: string): string {
-  return createHmac("sha256", secret).update(input, "utf8").digest("hex")
-}
-
-function recordHash(record: Omit<JournalRecord<unknown>, "hash" | "signature">): string {
-  return sha256Hex(
-    canonicalJson({
-      version: record.version,
-      sequence: record.sequence,
-      previousHash: record.previousHash,
-      payload: record.payload,
-    })
-  )
-}
-
-function validateSecret(secret: string): void {
-  if (Buffer.byteLength(secret, "utf8") < MIN_SECRET_BYTES) {
-    throw new Error(`journal signing secret must be at least ${MIN_SECRET_BYTES} bytes`)
-  }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value)
-}
-
-function recordEnvelope(
-  value: unknown
-): Omit<JournalRecord<unknown>, "payload"> & { payload: unknown } {
-  if (!isRecord(value)) throw new JournalIntegrityError("journal record is not an object")
-  const { version, sequence, previousHash, hash, signature, payload } = value
-  if (
-    version !== JOURNAL_VERSION ||
-    !Number.isSafeInteger(sequence) ||
-    (sequence as number) < 1 ||
-    typeof previousHash !== "string" ||
-    !/^[a-f0-9]{64}$/.test(previousHash) ||
-    typeof hash !== "string" ||
-    !/^[a-f0-9]{64}$/.test(hash) ||
-    typeof signature !== "string" ||
-    !/^[a-f0-9]{64}$/.test(signature)
-  ) {
-    throw new JournalIntegrityError("journal envelope is malformed")
-  }
-  return {
-    version: JOURNAL_VERSION,
-    sequence: sequence as number,
-    previousHash,
-    hash,
-    signature,
-    payload,
-  }
-}
-
-function validatedEnvelope<T>(
-  value: unknown,
-  validatePayload: (value: unknown) => T
-): JournalRecord<T> {
-  const envelope = recordEnvelope(value)
-  // Capture before validation: validators may strip fields or mutate their input.
-  const input = canonicalJson(value)
-  const record = { ...envelope, payload: validatePayload(envelope.payload) }
-  if (input !== canonicalJson(record)) {
-    throw new JournalIntegrityError("journal envelope changed during validation")
-  }
-  return record
-}
-
-/** Verify one unchanged signed envelope; callers must separately authenticate its chain anchor. */
-export function verifyJournalRecord<T>(
-  value: unknown,
-  secret: string,
-  validatePayload: (value: unknown) => T
-): JournalRecord<T> {
-  validateSecret(secret)
-  const record = validatedEnvelope(value, validatePayload)
-  const { hash, signature, ...unsigned } = record
-  const expectedHash = recordHash(unsigned)
-  const expectedSignature = signRecord(secret, canonicalJson({ ...unsigned, hash: expectedHash }))
-  if (!secureEqual(hash, expectedHash) || !secureEqual(signature, expectedSignature)) {
-    throw new JournalIntegrityError("journal signature or record hash is invalid")
-  }
-  return record
 }
 
 export class SignedJournal<T> implements JournalPort<T> {
@@ -145,6 +52,8 @@ export class SignedJournal<T> implements JournalPort<T> {
   private lockAcquired = false
   private lockIdentity: { dev: number; ino: number } | null = null
   private fileIdentity: { dev: number; ino: number } | null = null
+  private rangeIndex: { offset: number; length: number; hash: string }[] = []
+  private indexedStat: string | null = null
 
   constructor(
     private readonly path: string,
@@ -209,6 +118,83 @@ export class SignedJournal<T> implements JournalPort<T> {
     )
       throw new JournalReadLimitError("invalid journal read limits")
     return this.loadWithLimits(bounds)
+  }
+
+  async readRange(afterSequence: number, limits: JournalReadLimits): Promise<JournalRange<T>> {
+    const bounds = { maxBytes: limits.maxBytes, maxRecords: limits.maxRecords }
+    if (
+      !Number.isSafeInteger(afterSequence) ||
+      afterSequence < 0 ||
+      !Number.isSafeInteger(bounds.maxBytes) ||
+      bounds.maxBytes < 1 ||
+      bounds.maxBytes > MAX_JOURNAL_BYTES ||
+      !Number.isSafeInteger(bounds.maxRecords) ||
+      bounds.maxRecords < 1 ||
+      bounds.maxRecords > 100
+    )
+      throw new JournalReadLimitError("invalid journal range limits")
+    if (this.closed) throw new JournalIntegrityError("journal is closed")
+    const run = this.serial.then(async () => {
+      this.assertUsable()
+      try {
+        await this.ensureLoaded()
+        if (afterSequence >= this.nextSequence)
+          throw new JournalReadLimitError("cursor is beyond the journal head")
+        await this.assertLockIdentity()
+        if (!this.fileIdentity) {
+          // Detect a file created outside this writer even for empty genesis.
+          try {
+            // eslint-disable-next-line security/detect-non-literal-fs-filename
+            await lstat(this.path)
+            throw new JournalIntegrityError("journal appeared outside the active writer")
+          } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error
+          }
+          return { records: [], head: null, previousHash: "0".repeat(64), hasMore: false }
+        }
+        // eslint-disable-next-line security/detect-non-literal-fs-filename
+        const file = await open(
+          this.path,
+          constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK
+        )
+        try {
+          await this.assertFileIdentity(file)
+          this.assertIndexedStat(await file.stat({ bigint: true }))
+          const range = await readIndexedJournalRange(
+            file,
+            this.rangeIndex,
+            afterSequence,
+            bounds,
+            this.secret,
+            this.validatePayload
+          )
+          this.assertIndexedStat(await file.stat({ bigint: true }))
+          await this.assertFileIdentity(file)
+          await this.assertLockIdentity()
+          return range
+        } finally {
+          await file.close()
+        }
+      } catch (error) {
+        if (!(error instanceof JournalReadLimitError)) this.latch(error)
+        throw error
+      }
+    })
+    this.serial = run.then(
+      () => undefined,
+      () => undefined
+    )
+    return run
+  }
+
+  private statStamp(stat: BigIntStats): string {
+    return `${stat.dev}:${stat.ino}:${stat.size}:${stat.mtimeNs}:${stat.ctimeNs}`
+  }
+
+  private assertIndexedStat(stat: BigIntStats): void {
+    if (!this.indexedStat || this.statStamp(stat) !== this.indexedStat) {
+      throw new JournalIntegrityError("journal changed outside the authenticated range index")
+    }
   }
 
   private async loadWithLimits(limits?: JournalReadLimits): Promise<JournalRecord<T>[]> {
@@ -484,10 +470,12 @@ export class SignedJournal<T> implements JournalPort<T> {
       throw error
     }
     let raw: string
+    let indexedStat: string
     const maxBytes = limits?.maxBytes ?? MAX_JOURNAL_BYTES
     try {
       await this.assertFileIdentity(file)
       const before = await file.stat()
+      const stamp = this.statStamp(await file.stat({ bigint: true }))
       if (before.size > maxBytes) {
         if (limits) throw new JournalReadLimitError("journal exceeds bounded read size")
         throw new JournalIntegrityError("journal exceeds size cap")
@@ -506,10 +494,12 @@ export class SignedJournal<T> implements JournalPort<T> {
         chunks.push(buffer.subarray(0, bytesRead))
       }
       const after = await file.stat()
+      indexedStat = this.statStamp(await file.stat({ bigint: true }))
       if (
         before.size !== after.size ||
         before.mtimeMs !== after.mtimeMs ||
-        before.ctimeMs !== after.ctimeMs
+        before.ctimeMs !== after.ctimeMs ||
+        stamp !== indexedStat
       ) {
         throw new JournalIntegrityError("journal changed while reading")
       }
@@ -520,10 +510,20 @@ export class SignedJournal<T> implements JournalPort<T> {
     }
     if (raw && !raw.endsWith("\n"))
       throw new JournalIntegrityError("journal contains an incomplete record")
-    if (!raw.trim()) return []
+    const rangeIndex: typeof this.rangeIndex = []
+    if (!raw.trim()) {
+      this.rangeIndex = rangeIndex
+      this.indexedStat = indexedStat
+      return []
+    }
     const records: JournalRecord<T>[] = []
+    let position = 0
     for (const line of raw.split("\n")) {
-      if (!line) continue
+      const length = Buffer.byteLength(line) + 1
+      if (!line) {
+        position += length
+        continue
+      }
       if (limits && records.length >= limits.maxRecords) {
         throw new JournalReadLimitError("journal exceeds bounded record count")
       }
@@ -533,8 +533,13 @@ export class SignedJournal<T> implements JournalPort<T> {
       } catch {
         throw new JournalIntegrityError("journal contains an incomplete or invalid record")
       }
-      records.push(validatedEnvelope(parsed, this.validatePayload))
+      const record = validatedEnvelope(parsed, this.validatePayload)
+      records.push(record)
+      rangeIndex.push({ offset: position, length, hash: record.hash })
+      position += length
     }
+    this.rangeIndex = rangeIndex
+    this.indexedStat = indexedStat
     return records
   }
 
@@ -576,6 +581,12 @@ export class SignedJournal<T> implements JournalPort<T> {
       await file.sync()
       await this.assertFileIdentity(file)
       await this.assertLockIdentity()
+      this.rangeIndex.push({
+        offset: before.size,
+        length: Buffer.byteLength(line),
+        hash: record.hash,
+      })
+      this.indexedStat = this.statStamp(await file.stat({ bigint: true }))
     } finally {
       await file.close()
     }

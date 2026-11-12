@@ -1,7 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto"
 import { z } from "zod"
 import { canonicalJson } from "./canonical-json"
-import type { JournalPort, JournalRecord } from "./journal"
+import type { JournalPort, JournalRecord, JournalRange, JournalReadLimits } from "./journal"
 
 // This is an offline protocol foundation, not a production admission gate.
 // The caller must supply independently protected storage, a durable database
@@ -159,6 +159,111 @@ export class IndependentAuthorityJournal<T> {
    */
   async loadConfirmed(): Promise<JournalRecord<AuthorityEvent<T>>[]> {
     const run = this.serial.then(() => this.loadConfirmedSerial())
+    this.serial = run.then(
+      () => undefined,
+      () => undefined
+    )
+    return run
+  }
+
+  /** Bounded warm read, anchored to the fully verified startup chain and all three current heads. */
+  async loadConfirmedRange(
+    afterSequence: number,
+    limits: JournalReadLimits
+  ): Promise<JournalRange<AuthorityEvent<T>>> {
+    const run = this.serial.then(async () => {
+      if (this.failed) throw this.failed
+      try {
+        const local = this.options.local
+        const store = this.options.store as BoundedConditionalObjectStore
+        const mirror = this.options.mirror as BoundedAuthorityMirror
+        if (
+          !local.readRange ||
+          !store.readBounded ||
+          !mirror.readHeadBounded ||
+          !mirror.readRecordBounded
+        ) {
+          throw unknown("bounded independent journal ports are unavailable")
+        }
+        await this.initialize()
+        if (this.pending)
+          throw new IndependentAuthorityError(
+            "REPLAY_REQUIRED",
+            "replay the unresolved event identity"
+          )
+        const deadline = performance.now() + 5000
+        const assertDeadline = () => {
+          if (performance.now() >= deadline) throw unknown("bounded journal read deadline exceeded")
+        }
+        const range = await local.readRange(afterSequence, limits)
+        assertDeadline()
+        const expected = this.confirmed ? this.records![this.confirmed - 1]! : null
+        if (!same(range.head, expected))
+          throw conflict("local range head differs from confirmed history")
+        if (
+          range.previousHash !== (this.records![afterSequence - 1]?.hash ?? "0".repeat(64)) ||
+          !same(
+            range.records,
+            this.records!.slice(afterSequence, afterSequence + range.records.length)
+          ) ||
+          range.hasMore !== afterSequence + range.records.length < this.confirmed
+        ) {
+          throw conflict("local range differs from confirmed history")
+        }
+        const verifyHeads = async () => {
+          assertDeadline()
+          const object = await store.readBounded(`${this.prefix}/head`, 64 * 1024)
+          assertDeadline()
+          const head = object
+            ? this.parseHead(JSON.parse(Buffer.from(object.bytes).toString("utf8")))
+            : null
+          const value = await mirror.readHeadBounded(64 * 1024)
+          assertDeadline()
+          const mirrored = value ? this.parseHead(value) : null
+          const signed = expected ? this.headFor(expected) : null
+          if (!same(head, signed) || !same(mirrored, signed))
+            throw conflict("bounded authority heads disagree")
+          assertDeadline()
+        }
+        const verifyRecords = async () => {
+          const selected = [...range.records]
+          if (expected && !selected.some((record) => record.sequence === expected.sequence))
+            selected.push(expected)
+          for (const record of selected) {
+            assertDeadline()
+            const bytes = this.recordBytes(record)
+            const object = await store.readBounded(
+              `${this.prefix}/records/${record.sequence}`,
+              bytes.byteLength
+            )
+            assertDeadline()
+            const mirrored = await mirror.readRecordBounded(
+              record.sequence,
+              Buffer.byteLength(canonicalJson(record))
+            )
+            assertDeadline()
+            if (!object || !mirrored) throw unknown("bounded authority record is unavailable")
+            if (!Buffer.from(object.bytes).equals(bytes) || !same(mirrored, record))
+              throw conflict("bounded authority record differs")
+            await this.assertAuthorized(record.payload)
+            assertDeadline()
+          }
+        }
+        await verifyHeads()
+        await verifyRecords()
+        if (!same(range, await local.readRange(afterSequence, limits)))
+          throw conflict("local range changed during readback")
+        await verifyRecords()
+        await verifyHeads()
+        return range
+      } catch (error) {
+        if (error instanceof IndependentAuthorityError) {
+          if (error.code === "AUTHORITY_CONFLICT") this.failed = error
+          throw error
+        }
+        throw unknown("bounded independent history is unresolved")
+      }
+    })
     this.serial = run.then(
       () => undefined,
       () => undefined
