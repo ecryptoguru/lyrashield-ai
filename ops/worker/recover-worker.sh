@@ -95,7 +95,9 @@ systemctl reset-failed lyrashield-worker.service
 starting=1
 systemctl start lyrashield-worker.service
 ready=0
-for attempt in $(seq 1 30); do
+attempt=0
+while [ "$attempt" -lt 30 ]; do
+  attempt=$((attempt + 1))
   if [ "$(docker inspect lyrashield-worker --format '{{.State.Health.Status}}' 2>/dev/null || true)" = healthy ]; then
     ready=1
     break

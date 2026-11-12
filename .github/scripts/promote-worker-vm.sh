@@ -1083,7 +1083,9 @@ if [ "$cold_release" -eq 1 ]; then
   assert_cold_paid_authority worker_candidate_oneshot "$cold_epoch"
 fi
 temporary=$(mktemp "${config}.XXXXXX")
-cold_publication= cold_publish_run= cold_publish_attempt=
+cold_publication=''
+cold_publish_run=''
+cold_publish_attempt=''
 if [ "$cold_release" -eq 1 ]; then
   cold_publication=$(/usr/bin/python3 -c 'import json;print(json.load(open("/etc/lyrashield/cold-sandbox/expected.json"))["workflowRevision"])')
   cold_publish_run=$(/usr/bin/python3 -c 'import json;print(json.load(open("/etc/lyrashield/cold-sandbox/expected.json"))["runId"])')
