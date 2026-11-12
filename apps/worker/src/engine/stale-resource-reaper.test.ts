@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest"
 import {
+  assertNoNativeScanResources,
   reapStaleScanResources,
   type StaleResourceReaperDependencies,
 } from "./stale-resource-reaper"
@@ -71,6 +72,48 @@ describe("reapStaleScanResources", () => {
       skippedRunning: 0,
     })
     expect(deps.removeContainer).not.toHaveBeenCalled()
+    expect(deps.removeDirectory).not.toHaveBeenCalled()
+  })
+})
+
+describe("native cold-start gate", () => {
+  it("accepts only a successfully inspected empty native inventory", async () => {
+    await expect(assertNoNativeScanResources(async () => "\n")).resolves.toBeUndefined()
+  })
+
+  it("rejects running, stopped or malformed labeled native ownership", async () => {
+    await expect(assertNoNativeScanResources(async () => "old-container\n")).rejects.toThrow(
+      /cold host barrier/
+    )
+  })
+
+  it("rejects a lost native inventory acknowledgement", async () => {
+    await expect(
+      assertNoNativeScanResources(async () => {
+        throw new Error("Docker acknowledgement lost")
+      })
+    ).rejects.toThrow(/acknowledgement lost/)
+  })
+
+  it("rejects startup cleanup when database ownership or removal is uncertain", async () => {
+    await expect(
+      reapStaleScanResources({
+        dependencies: dependencies({
+          activeScanIds: vi.fn().mockRejectedValue(new Error("database unavailable")),
+        }),
+        minimumAgeMs: 0,
+        failOnError: true,
+      })
+    ).rejects.toThrow(/database unavailable/)
+    const deps = dependencies({
+      containers: vi
+        .fn()
+        .mockResolvedValue([{ id: "old", scanId: "old-scan", createdAt: 0, running: false }]),
+      removeContainer: vi.fn().mockRejectedValue(new Error("remove acknowledgement lost")),
+    })
+    await expect(
+      reapStaleScanResources({ dependencies: deps, minimumAgeMs: 0, failOnError: true })
+    ).rejects.toThrow(/acknowledgement lost/)
     expect(deps.removeDirectory).not.toHaveBeenCalled()
   })
 })

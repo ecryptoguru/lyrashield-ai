@@ -26,7 +26,11 @@ case "$1 ${2:-}" in
   *) echo "Unexpected Docker operation: $*" >&2; exit 90 ;;
 esac
 MOCK
-chmod +x "$tmp/bin/docker"
+cat > "$tmp/bin/flock" <<'MOCK'
+#!/bin/sh
+exit 0
+MOCK
+chmod +x "$tmp/bin/docker" "$tmp/bin/flock"
 
 digest=$(printf 'a%.0s' {1..64})
 cat > "$tmp/runtime.conf" <<EOF
@@ -42,6 +46,7 @@ run_case() {
   local log="$tmp/$name.docker.log" output="$tmp/$name.output" status=0
   : > "$log"
   PATH="$tmp/bin:$PATH" \
+    LYRASHIELD_WORKER_COLD_START_DIR="$tmp/cold-start" \
     LYRASHIELD_WORKER_RUNTIME_CONFIG="$tmp/runtime.conf" \
     LYRASHIELD_WORKER_ENV_FILE="$tmp/worker.env" \
     LYRASHIELD_WORKER_ENV_LIB="$tmp/worker-env.sh" \
@@ -88,3 +93,27 @@ run_case malformed-boolean 'bridge|TRUE|false' no
 run_case multiple-networks $'bridge|true|false\nbridge|true|false' no
 run_case valid-network 'bridge|true|false' yes
 run_case configured-network 'bridge|true|false' yes private-sandbox
+
+# A crash may leave a late accepted Docker create. An empty inventory cannot
+# authorize another owner: both barrier and prior-start fences reject before
+# any native or registry operation.
+for fence in pending owner-started; do
+  : > "$tmp/cold-start/$fence"
+  log="$tmp/$fence.docker.log"
+  : > "$log"
+  status=0
+  PATH="$tmp/bin:$PATH" \
+    LYRASHIELD_WORKER_COLD_START_DIR="$tmp/cold-start" \
+    MOCK_DOCKER_LOG="$log" \
+    LYRASHIELD_WORKER_RUNTIME_CONFIG="$tmp/runtime.conf" \
+    LYRASHIELD_WORKER_ENV_FILE="$tmp/worker.env" \
+    LYRASHIELD_WORKER_ENV_LIB="$tmp/worker-env.sh" \
+    sh "$script" >"$tmp/$fence.output" 2>&1 || status=$?
+  [ "$status" -eq 1 ] && [ ! -s "$log" ] &&
+    grep -Fq 'Unresolved cold host barrier' "$tmp/$fence.output" || {
+      echo "FAIL: $fence did not prevent native restart" >&2
+      exit 1
+    }
+  rm "$tmp/cold-start/$fence"
+  echo "PASS: $fence blocks native restart"
+done

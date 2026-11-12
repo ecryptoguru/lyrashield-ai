@@ -175,6 +175,7 @@ ENV PATH="/opt/lyrashield-venv/bin:$PATH"
 
 COPY --from=worker-deps /worker-runtime ./apps/worker
 COPY --from=worker-engine /opt/lyrashield-venv /opt/lyrashield-venv
+COPY ops/worker/cold-start-barrier.mjs /opt/lyrashield-worker-host/cold-start-barrier.mjs
 COPY ops/worker/run-worker.sh /opt/lyrashield-worker-host/run-worker.sh
 COPY ops/worker/worker-env.sh /opt/lyrashield-worker-host/worker-env.sh
 COPY ops/worker/webhook-cutover-recovery.mjs /opt/lyrashield-worker-host/webhook-cutover-recovery.mjs

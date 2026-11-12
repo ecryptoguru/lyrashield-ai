@@ -44,6 +44,18 @@ fi
 : "${LYRASHIELD_SANDBOX_IMAGE:?Set an immutable sandbox image in the runtime configuration}"
 : "${LYRASHIELD_SANDBOX_NETWORK:=lyrashield-sandbox}"
 
+# Held for the attached worker lifetime; the explicit cold barrier uses this
+# same lock only after systemd has stopped the previous owner.
+cold_start_directory=${LYRASHIELD_WORKER_COLD_START_DIR:-/var/lib/lyrashield/worker-cold-start}
+install -d -m 700 "$cold_start_directory"
+exec 9>"$cold_start_directory/owner.lock"
+flock -n 9 || { echo "Another native worker owner holds the host" >&2; exit 1; }
+if [ -e "$cold_start_directory/pending" ] || [ -e "$cold_start_directory/owner-started" ]; then
+  echo "Unresolved cold host barrier; admission remains held" >&2
+  exit 1
+fi
+
+
 # Fixed host path: a matching /2 image is insufficient during empty-state
 # maintenance. This runs before registry login, pulls or any consumer startup.
 empty_state_fence=/var/lib/lyrashield/webhook-empty-state/fence.json
@@ -257,7 +269,12 @@ done <"$pin_file"
 
 install -d -m 700 "$worker_shared_root" "$worker_shared_root/lyrashield_runs" "$worker_shared_root/tmp"
 
-docker rm -f lyrashield-worker >/dev/null 2>&1 || true
+# Never erase a running owner, nor ignore a lost Docker removal acknowledgement.
+remaining_worker=$(docker ps -a --filter 'name=^/lyrashield-worker$' --format '{{.ID}}')
+if [ -n "$remaining_worker" ]; then
+  echo "Previous native worker ownership is unresolved; run the cold host barrier" >&2
+  exit 1
+fi
 docker run --rm \
   --network none \
   --user 0:0 \
@@ -269,6 +286,10 @@ docker run --rm \
 # Intentional word splitting: worker-env.sh emits one `--env` argument pair per
 # line and every emitted value is whitespace-free.
 # shellcheck disable=SC2086
+# A daemon may finish an accepted create after its client dies. Every native
+# owner therefore burns this cold-start fence before create; only the explicit
+# stopped-owner/daemon barrier may clear it. Automatic restart stays fail closed.
+(umask 077; set -C; : > "$cold_start_directory/owner-started")
 docker create \
   --name lyrashield-worker \
   --network bridge \

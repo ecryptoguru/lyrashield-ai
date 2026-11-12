@@ -55,6 +55,27 @@ async function activeScanIds(): Promise<Set<string>> {
   return new Set(scans.map((scan) => scan.id))
 }
 
+/** A cold single-owner restart cannot admit work while native sandboxes remain.
+ * Do not interpret malformed labels or stopped containers as proof of cleanup.
+ * The host barrier owns termination; this gate never releases paid claims.
+ */
+export async function assertNoNativeScanResources(
+  list: () => Promise<string> = async () => {
+    const { stdout } = await execFileAsync(
+      "docker",
+      ["container", "ls", "--all", "--quiet", "--filter", "label=strix-run-id"],
+      { timeout: 10_000, maxBuffer: 64 * 1024 }
+    )
+    return stdout
+  }
+): Promise<void> {
+  if ((await list()).trim()) {
+    throw new Error(
+      "Native scan ownership is unresolved; an exclusive cold host barrier is required"
+    )
+  }
+}
+
 async function containers(): Promise<StaleContainer[]> {
   const { stdout } = await execFileAsync(
     "docker",
@@ -157,16 +178,19 @@ export async function reapStaleScanResources({
   dependencies = defaults,
   now = Date.now(),
   minimumAgeMs,
+  failOnError = false,
 }: {
   dependencies?: StaleResourceReaperDependencies
   now?: number
   minimumAgeMs: number
+  failOnError?: boolean
 }): Promise<StaleResourceReaperResult> {
   const empty = { containersRemoved: 0, directoriesRemoved: 0, skippedActive: 0, skippedRunning: 0 }
   let activeIds: Set<string>
   try {
     activeIds = await dependencies.activeScanIds()
   } catch (error) {
+    if (failOnError) throw error
     logger.warn("Stale-resource reaper skipped because active scan ownership is unavailable", {
       error: error instanceof Error ? error.message : String(error),
     })
@@ -189,6 +213,7 @@ export async function reapStaleScanResources({
       await dependencies.removeContainer(container.id)
       result.containersRemoved += 1
     } catch (error) {
+      if (failOnError) throw error
       logger.warn("Stale-resource reaper could not remove container", {
         containerId: container.id,
         scanId: container.scanId,
@@ -207,6 +232,7 @@ export async function reapStaleScanResources({
       await dependencies.removeDirectory(directory.path)
       result.directoriesRemoved += 1
     } catch (error) {
+      if (failOnError) throw error
       logger.warn("Stale-resource reaper could not remove directory", {
         path: directory.path,
         scanId: directory.scanId,
