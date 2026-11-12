@@ -5,6 +5,7 @@ import {
   mkdirSync,
   openSync,
   closeSync,
+  fsyncSync,
   unlinkSync,
   readFileSync,
   writeFileSync,
@@ -12,7 +13,7 @@ import {
   lstatSync,
   constants,
 } from "node:fs"
-import { resolve } from "node:path"
+import { resolve, dirname } from "node:path"
 import { fileURLToPath } from "node:url"
 
 const directory = "/var/lib/lyrashield/worker-cold-start"
@@ -138,6 +139,86 @@ export function executeColdBarrier(options, command) {
   }
 }
 
+/** Commit the fence before physical effects and the receipt before fence release. */
+export function executeDurableColdBarrier(
+  options,
+  command,
+  io = {
+    openSync,
+    closeSync,
+    fsyncSync,
+    writeFileSync,
+    renameSync,
+    unlinkSync,
+    readFileSync,
+  }
+) {
+  const syncDirectory = (path) => {
+    const fd = io.openSync(path, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW)
+    try {
+      io.fsyncSync(fd)
+    } finally {
+      io.closeSync(fd)
+    }
+  }
+  const persistPending = () => {
+    const fd = io.openSync(
+      pending,
+      constants.O_WRONLY | constants.O_CREAT | constants.O_TRUNC | constants.O_NOFOLLOW,
+      0o600
+    )
+    try {
+      io.fsyncSync(fd)
+    } finally {
+      io.closeSync(fd)
+    }
+    syncDirectory(directory)
+    // The state directory may have just been created. Persist its parent entry.
+    syncDirectory(dirname(directory))
+  }
+  persistPending()
+  const result = executeColdBarrier(options, command)
+  const receipt = {
+    ...options,
+    ...result,
+    bootId: io.readFileSync("/proc/sys/kernel/random/boot_id", "utf8").trim(),
+    finishedAt: new Date().toISOString(),
+  }
+  const temporary = `${directory}/receipt-${process.pid}.json`
+  const fd = io.openSync(
+    temporary,
+    constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW,
+    0o600
+  )
+  try {
+    io.writeFileSync(fd, JSON.stringify(receipt))
+    io.fsyncSync(fd)
+  } finally {
+    io.closeSync(fd)
+  }
+  io.renameSync(temporary, `${directory}/receipt.json`)
+  syncDirectory(directory)
+  try {
+    try {
+      io.unlinkSync(`${directory}/owner-started`)
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error
+    }
+    io.unlinkSync(pending)
+    syncDirectory(directory)
+  } catch (error) {
+    // If removal acknowledgement or its sync fails, restore the in-memory
+    // fence too; never let a failed maintenance attempt admit a new owner.
+    try {
+      persistPending()
+    } catch {
+      /* original durability failure remains */
+    }
+    throw error
+  }
+  return receipt
+}
+
 function main() {
   if (process.getuid?.() !== 0) throw new Error("Cold barrier requires root on the exclusive host")
   for (const name of ["DOCKER_HOST", "DOCKER_CONTEXT", "DOCKER_TLS_VERIFY", "DOCKER_CERT_PATH"]) {
@@ -191,34 +272,13 @@ function main() {
       throw new Error("Cold host barrier failed; fence remains held")
     return
   }
-  const fd = openSync(
-    pending,
-    constants.O_WRONLY | constants.O_CREAT | constants.O_TRUNC | constants.O_NOFOLLOW,
-    0o600
-  )
-  closeSync(fd)
   const command = (program, arguments_) =>
     execFileSync(program, arguments_, {
       encoding: "utf8",
       timeout: 120_000,
       maxBuffer: 1024 * 1024,
     })
-  const result = executeColdBarrier(options, command)
-  const receipt = {
-    ...options,
-    ...result,
-    bootId: readFileSync("/proc/sys/kernel/random/boot_id", "utf8").trim(),
-    finishedAt: new Date().toISOString(),
-  }
-  const receiptTemporary = `${directory}/receipt-${process.pid}.json`
-  writeFileSync(receiptTemporary, JSON.stringify(receipt), { flag: "wx", mode: 0o600 })
-  renameSync(receiptTemporary, `${directory}/receipt.json`)
-  try {
-    unlinkSync(`${directory}/owner-started`)
-  } catch (error) {
-    if (error.code !== "ENOENT") throw error
-  }
-  unlinkSync(pending)
+  const receipt = executeDurableColdBarrier(options, command)
   console.log(JSON.stringify(receipt))
 }
 

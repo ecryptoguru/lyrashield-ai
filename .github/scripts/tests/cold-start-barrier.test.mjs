@@ -1,9 +1,13 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
+import * as filesystem from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import {
   classifyColdContainers,
   executeColdBarrier,
+  executeDurableColdBarrier,
 } from "../../../ops/worker/cold-start-barrier.mjs"
 const options = {
   workerImage: `ghcr.io/ecryptoguru/lyrashield-worker@sha256:${"a".repeat(64)}`,
@@ -109,4 +113,123 @@ test("launcher checks persistent fence before any consumer or registry operation
   assert.ok(
     worker.indexOf("await assertNoNativeScanResources()") < worker.indexOf("worker = new Worker")
   )
+})
+
+function durabilityFixture(failSync = 0) {
+  const events = []
+  let syncs = 0
+  const io = {
+    openSync(path) {
+      events.push(`open:${path}`)
+      return path
+    },
+    closeSync(fd) {
+      events.push(`close:${fd}`)
+    },
+    fsyncSync(fd) {
+      events.push(`sync:${fd}`)
+      if (++syncs === failSync) throw new Error("durability acknowledgement lost")
+    },
+    writeFileSync(fd) {
+      events.push(`write:${fd}`)
+    },
+    renameSync(from, to) {
+      events.push(`rename:${to}`)
+    },
+    unlinkSync(path) {
+      events.push(`unlink:${path}`)
+    },
+    readFileSync() {
+      return "boot-id\n"
+    },
+  }
+  const f = fixture()
+  const command = (program, args) => {
+    events.push(`command:${program} ${args.join(" ")}`)
+    return f.command(program, args)
+  }
+  return { events, io, command }
+}
+
+test("durable pending precedes native effects, durable receipt precedes fence removal", () => {
+  const f = durabilityFixture()
+  executeDurableColdBarrier(options, f.command, f.io)
+  const nativeStop = f.events.findIndex(
+    (e) => e === "command:systemctl stop lyrashield-worker.service"
+  )
+  const pendingSync = f.events.findIndex((e) => e.endsWith("/pending") && e.startsWith("sync:"))
+  const parentSync = f.events.indexOf("sync:/var/lib/lyrashield")
+  const rename = f.events.indexOf("rename:/var/lib/lyrashield/worker-cold-start/receipt.json")
+  const receiptSync = f.events.findIndex((e) => e.startsWith("sync:") && e.includes("/receipt-"))
+  const durableReceiptDirectory = f.events.indexOf(
+    "sync:/var/lib/lyrashield/worker-cold-start",
+    rename
+  )
+  const firstUnlink = f.events.findIndex((e) => e.startsWith("unlink:"))
+  assert.ok(pendingSync < parentSync && parentSync < nativeStop)
+  assert.ok(
+    receiptSync < rename &&
+      rename < durableReceiptDirectory &&
+      durableReceiptDirectory < firstUnlink
+  )
+  assert.equal(f.events.at(-2), "sync:/var/lib/lyrashield/worker-cold-start")
+})
+
+for (const failSync of [1, 2, 3, 4, 5, 6]) {
+  test(`durability failure at sync ${failSync} never returns a success receipt`, () => {
+    const f = durabilityFixture(failSync)
+    assert.throws(
+      () => executeDurableColdBarrier(options, f.command, f.io),
+      /durability acknowledgement lost/
+    )
+    if (failSync <= 3) assert.ok(!f.events.some((e) => e.startsWith("command:")))
+    if (failSync <= 5) assert.ok(!f.events.some((e) => e.startsWith("unlink:")))
+    if (failSync === 6)
+      assert.equal(
+        f.events.filter((e) => e === "open:/var/lib/lyrashield/worker-cold-start/pending").length,
+        2
+      )
+  })
+}
+
+function realDurabilityFixture(t) {
+  const parent = filesystem.mkdtempSync(join(tmpdir(), "cold-durability-"))
+  const state = join(parent, "state")
+  filesystem.mkdirSync(state, { mode: 0o700 })
+  t.after(() => filesystem.rmSync(parent, { recursive: true, force: true }))
+  const path = (value) =>
+    value
+      .replace("/var/lib/lyrashield/worker-cold-start", state)
+      .replace("/var/lib/lyrashield", parent)
+  const io = {
+    ...filesystem,
+    openSync: (value, ...args) => filesystem.openSync(path(value), ...args),
+    renameSync: (from, to) => filesystem.renameSync(path(from), path(to)),
+    unlinkSync: (value) => filesystem.unlinkSync(path(value)),
+    readFileSync: () => "boot-id\n",
+  }
+  return { state, io }
+}
+
+test("real file/directory fsync publishes receipt before removing startup fences", (t) => {
+  const f = realDurabilityFixture(t)
+  filesystem.writeFileSync(join(f.state, "owner-started"), "", { mode: 0o600 })
+  executeDurableColdBarrier(options, fixture().command, f.io)
+  assert.equal(filesystem.existsSync(join(f.state, "pending")), false)
+  assert.equal(filesystem.existsSync(join(f.state, "owner-started")), false)
+  assert.equal(filesystem.statSync(join(f.state, "receipt.json")).mode & 0o777, 0o600)
+  assert.equal(
+    JSON.parse(filesystem.readFileSync(join(f.state, "receipt.json"), "utf8")).bootId,
+    "boot-id"
+  )
+})
+
+test("native acknowledgement failure retains actual durable pending marker", (t) => {
+  const f = realDurabilityFixture(t)
+  assert.throws(
+    () => executeDurableColdBarrier(options, fixture({ fail: "systemctl stop" }).command, f.io),
+    /lost native acknowledgement/
+  )
+  assert.equal(filesystem.statSync(join(f.state, "pending")).mode & 0o777, 0o600)
+  assert.equal(filesystem.existsSync(join(f.state, "receipt.json")), false)
 })

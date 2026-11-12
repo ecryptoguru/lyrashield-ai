@@ -192,8 +192,12 @@ empty. Failure leaves `/var/lib/lyrashield/worker-cold-start/pending` in place.
 Success writes a root-owned mode-0600 `receipt.json` with boot ID, old image
 references, removed IDs and completion time, then clears both startup fences.
 
-The launcher holds a host ownership lock for its lifetime and writes
-`owner-started` before creating the native worker. A later automatic restart
+The launcher holds a host ownership lock for its lifetime, writes
+`owner-started` and requires Linux `sync -f` to persist the state filesystem before
+any native execution. Missing or failed sync denies startup. The host barrier
+fsyncs its pending marker and state-directory entries before stopping owners,
+then fsyncs the receipt and renamed directory entry before clearing startup
+fences. Fence removal is followed by another directory fsync. A later automatic restart
 rejects that fence: an empty container snapshot cannot prove that a delayed
 Docker create has drained. Repeat the explicit cold barrier before restarting;
 do not remove fences by hand. Production worker startup also rejects any

@@ -55,6 +55,16 @@ if [ -e "$cold_start_directory/pending" ] || [ -e "$cold_start_directory/owner-s
   exit 1
 fi
 
+# A daemon may finish an accepted create after its client dies. Every native
+# owner therefore burns this cold-start fence before create; only the explicit
+# stopped-owner/daemon barrier may clear it. Automatic restart stays fail closed.
+(umask 077; set -C; : > "$cold_start_directory/owner-started")
+# Linux syncfs commits the marker and its directory entry on the same filesystem.
+# An unavailable primitive or failed sync must stop before any native execution.
+command -v sync >/dev/null 2>&1 && sync -f "$cold_start_directory" || {
+  echo "Cold owner fence could not be persisted; startup denied" >&2
+  exit 1
+}
 
 # Fixed host path: a matching /2 image is insufficient during empty-state
 # maintenance. This runs before registry login, pulls or any consumer startup.
@@ -286,10 +296,6 @@ docker run --rm \
 # Intentional word splitting: worker-env.sh emits one `--env` argument pair per
 # line and every emitted value is whitespace-free.
 # shellcheck disable=SC2086
-# A daemon may finish an accepted create after its client dies. Every native
-# owner therefore burns this cold-start fence before create; only the explicit
-# stopped-owner/daemon barrier may clear it. Automatic restart stays fail closed.
-(umask 077; set -C; : > "$cold_start_directory/owner-started")
 docker create \
   --name lyrashield-worker \
   --network bridge \
