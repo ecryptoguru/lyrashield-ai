@@ -1,7 +1,7 @@
 {
-  "tree": "f7470f608c604fce97357fcf72af1027dc3558b9",
+  "tree": "eb8632087e936d4637820546d32617c08198c002",
   "files": {
-    ".github/workflows/verify-sandbox-inventory.yml": "sha256:b4ff5b1921d2ef0236d040756af3223c313e78d62d9cf01d102da9fa5fb6ca08",
+    ".github/workflows/verify-sandbox-inventory.yml": "sha256:db6774b7fae0896b4b679faee6c32bc50266bf30c76d790c414ef0843575c37c",
     "scripts/acquire_sandbox_inventory.py": "sha256:f61ed46c1f553d6e93eaf5a44e900561bffb5d1dc9c1704f2b12debcb6c1b3ff",
     "scripts/bind_sandbox_inventory.py": "sha256:61513d887583be0794982e06ed4cdef9ff6375e078a8830053a0697711f57904",
     "scripts/catalog_pax_capability_headers.py": "sha256:c71ce0ae4d3f71c8ca97bfbd710fe6bc8610d02d57b3375816e0e827d5f6bd22",
@@ -10,7 +10,7 @@
     "scripts/check_sandbox_sbom_coverage.py": "sha256:175c8b269bfcb5c36b9ee5052df6fec1a91e7980292d6a539bfe1e9bea9fc31b",
     "scripts/check_sbom_inventory.py": "sha256:035f050850d73a6a7cb18c434c5f88e4ced7176d64c25f07ca47e33e8d499ab8",
     "scripts/model_oci_metadata_overlay.py": "sha256:5f71ac4c74225784fcf2b9bc4dd14934727a1d114c9d0ebd46e19446bce4e71a",
-    "scripts/prepare_independent_inventory_tools.sh": "sha256:99c8490a503de906bd8e12d375d7fdaaf85547a3ed0c4c1b32388a6e36a38275",
+    "scripts/prepare_independent_inventory_tools.sh": "sha256:478de12538c19c66ef701112dd1a23c0dcb184472e3f35ba2bb6e42723ea0c4b",
     "scripts/prepare_sandbox_sbom.py": "sha256:5689be191856abdeb27d25626ead245274440e0029f756a2611a413d8972951c",
     "scripts/probe_pax_capability.py": "sha256:a152410a1cf4c43e4dd61140c7e694be69b27d5eda64ba7d25fa47f9aef6bbe4",
     "scripts/reconstruct_oci_layers.py": "sha256:fe3bc5dbdf1310bd2bc6140b0e1c9a7b0990cdf787abab76de51721010744568",
