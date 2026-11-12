@@ -198,11 +198,11 @@ jobs:
       - name: Reauthenticate immutable sandbox publication and native inventory
         if: inputs.cold_release == true
         id: cold-sandbox
-        working-directory: product
+        working-directory: product/apps/worker
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          node --import tsx .github/scripts/verify-cold-sandbox.mjs
+          node --import tsx ../../.github/scripts/verify-cold-sandbox.mjs
           sudo chown root:root "$RUNNER_TEMP/cold-sandbox" "$RUNNER_TEMP/cold-sandbox/verification.json" "$RUNNER_TEMP/cold-sandbox/expected.json"
           sudo chmod 0555 "$RUNNER_TEMP/cold-sandbox"
       - name: Prove external systemd cold recovery without production resources

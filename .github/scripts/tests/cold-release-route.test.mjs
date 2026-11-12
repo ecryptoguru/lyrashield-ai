@@ -121,6 +121,32 @@ test("same-run release images and successful native checks are required before A
   )
   assert.equal(runtime.on.workflow_call.inputs.cold_release.default, false)
 })
+test("cold sandbox verification resolves the worker's installed TypeScript loader", () => {
+  const harness = parse(readFileSync(".github/workflows/verify-webhook-worker-image.yml", "utf8"))
+  const step = harness.jobs["verify-worker-image"].steps.find(
+    (entry) => entry.name === "Reauthenticate immutable sandbox publication and native inventory"
+  )
+  assert.equal(step["working-directory"], "product/apps/worker")
+  assert.equal(
+    step.run.split("\n")[0],
+    "node --import tsx ../../.github/scripts/verify-cold-sandbox.mjs"
+  )
+  const result = spawnSync(
+    process.execPath,
+    ["--import", "tsx", "../../.github/scripts/verify-cold-sandbox.mjs"],
+    {
+      cwd: "apps/worker",
+      encoding: "utf8",
+      env: { PATH: process.env.PATH, EXPECTED_ENGINE_REVISION: "invalid" },
+    }
+  )
+  assert.equal(result.status, 1)
+  assert.match(
+    result.stderr,
+    /Cold sandbox publication or native image binding verification failed/
+  )
+  assert.doesNotMatch(result.stderr, /ERR_MODULE_NOT_FOUND/)
+})
 test("sandbox signature and actual native config drift fail closed", () => {
   const selector = JSON.parse(readFileSync(".github/cold-sandbox-publication.json", "utf8"))
   const config = "sha256:" + "1".repeat(64),
