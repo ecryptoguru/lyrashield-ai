@@ -1,3 +1,4 @@
+import { assertColdDatabaseEpoch } from "../../cold-database-epoch"
 import { resolveScanBudgetUsd } from "../../engine/command-builder"
 import { withWorkspaceRLS, updateScanStatus, type ScanStatus } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
@@ -54,4 +55,10 @@ export async function failScanWithTimeout(
         notificationError instanceof Error ? notificationError.message : String(notificationError),
     })
   }
+}
+
+/** Confirm database incarnation and fresh cancellation state before handing inputs to the engine. */
+export async function engineDispatchStatus(isScanCancelled: (force?: boolean) => Promise<boolean>) {
+  await assertColdDatabaseEpoch()
+  return isScanCancelled(true).catch(() => null)
 }

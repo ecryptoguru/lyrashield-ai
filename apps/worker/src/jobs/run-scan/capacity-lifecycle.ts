@@ -1,3 +1,4 @@
+import { assertColdDatabaseEpoch } from "../../cold-database-epoch"
 import {
   isConfirmedScanClaimRollback,
   ScanBillableClaimError,
@@ -245,6 +246,7 @@ export async function claimBoundedEngineCapacity(
     throw new Error("Scan analysis deadline exhausted before engine execution")
   }
 
+  await assertColdDatabaseEpoch()
   const capacity = await claimEngineCapacity(
     params.accountingVersion,
     params.workspaceId,

@@ -28,7 +28,7 @@ import {
   runEngine,
   type EngineRunResult,
 } from "../../engine/runner"
-import { effectiveEngineBudget } from "./execution-policy"
+import { effectiveEngineBudget, engineDispatchStatus } from "./execution-policy"
 import type { TargetType } from "../../engine/command-builder"
 import {
   AUTHENTICATED_ASSESSMENT_BETA_LIMITS,
@@ -485,7 +485,7 @@ export async function executeScanTarget(params: {
         }
       }
       // Bypass preflight’s cancellation cache after relay setup and input publication.
-      const cancelled = await isScanCancelled(true).catch(() => null)
+      const cancelled = await engineDispatchStatus(isScanCancelled)
       if (cancelled !== false) {
         return {
           ok: false,

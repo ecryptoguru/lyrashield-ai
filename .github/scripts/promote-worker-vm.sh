@@ -245,9 +245,26 @@ webhook_cutover=0
 v26_cutover=0
 webhook_recovery=0
 paired_release_held=0
+cold_release=0
+cold_operation=promote
 prior_worker_ref=
 paired_sandbox=
 case "${1:-}" in
+  --cold-prepare|--cold-open-admission|--cold-contain)
+    cold_operation=${1#--cold-}
+    cold_release=1
+    paired_release_held=1
+    shift
+    prior_worker_ref=${1:?exact previous worker reference required}
+    shift
+    ;;
+  --cold-release-stopped)
+    cold_release=1
+    paired_release_held=1
+    shift
+    prior_worker_ref=${1:?exact previous worker digest reference is required}
+    shift
+    ;;
   --paired-release-stopped)
     paired_release_held=1
     shift
@@ -351,10 +368,58 @@ redis_eval() {
   worker_oneshot "$@"
 }
 
+wait_cold_queues_drained() {
+  # Admission is already stopped. Existing jobs finish naturally; never cancel,
+  # delete keys, requeue or restart an ambiguous paid delivery to obtain emptiness.
+  drain_deadline=$(( $(date +%s) + 600 ))
+  while :; do
+    observed=$(worker_oneshot "$recovery_queue_count") || return 1
+    [ "$observed" != "$recovery_queue_expected" ] || return 0
+    [ "$(date +%s)" -lt "$drain_deadline" ] || {
+      echo 'Cold release drain deadline exceeded; admission remains held' >&2
+      return 1
+    }
+    sleep 5
+  done
+}
+
+assert_cold_paid_authority() {
+  authority_runner=$1
+  authority_pin=$2
+  authority=$($authority_runner 'const {prisma,getSystemPrisma}=await import("@lyrashield/db"); const system=getSystemPrisma();const {assertRecoveryDatabase,RECOVERY_UNKNOWN_SQL}=await import("file:///opt/lyrashield-worker-host/worker-recovery-probe.mjs");try {const sql="SELECT current_database() AS database, extract(epoch from pg_postmaster_start_time())::text AS epoch";const [runtimeIdentity,systemIdentity]=await Promise.all([prisma.$queryRawUnsafe(sql),system.$queryRawUnsafe(sql)]);if(JSON.stringify(runtimeIdentity)!==JSON.stringify(systemIdentity))throw new Error("Cold DB authorities disagree");await assertRecoveryDatabase({expected:process.argv[1],query:async query=>({rows:await (query===RECOVERY_UNKNOWN_SQL?system:prisma).$queryRawUnsafe(query)})});console.log("COLD_PAID_AUTHORITY_VERIFIED")}finally{await Promise.all([prisma.$disconnect(),system.$disconnect()])}' "$authority_pin")
+  [ "$authority" = COLD_PAID_AUTHORITY_VERIFIED ]
+}
+
+record_cold_barrier() {
+  /usr/bin/python3 - "/var/lib/lyrashield/cold-release-$LYRASHIELD_PAIRED_RELEASE_OWNER/context.json" /var/lib/lyrashield/worker-cold-start/receipt.json "$LYRASHIELD_PAIRED_RELEASE_OWNER" "$target" "$expected_app" "$expected_engine" <<'PYBIND'
+import hashlib,json,os,stat,sys
+context_path,receipt_path,owner,image,product,engine=sys.argv[1:]
+with open(context_path) as source: context=json.load(source)
+if context['identity']['owner']!=owner or context['identity']['image']!=image or context['identity']['product']!=product or context['identity']['engine']!=engine: raise SystemExit(1)
+fd=os.open(receipt_path,os.O_RDONLY|os.O_NOFOLLOW)
+with os.fdopen(fd,'rb') as source:
+ metadata=os.fstat(source.fileno())
+ if metadata.st_uid!=0 or stat.S_IMODE(metadata.st_mode)!=0o600 or metadata.st_size>65536: raise SystemExit(1)
+ context['barrierSha256']=hashlib.sha256(source.read()).hexdigest()
+temporary=context_path+'.next'
+fd=os.open(temporary,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600)
+with os.fdopen(fd,'w') as output:
+ json.dump(context,output);output.flush();os.fsync(output.fileno())
+os.replace(temporary,context_path)
+fd=os.open(os.path.dirname(context_path),os.O_RDONLY|os.O_DIRECTORY);os.fsync(fd);os.close(fd)
+PYBIND
+}
+
 # Dormant paired release path: the protected caller supplies the reviewed module
 # payload and an exact external owner. The persistent latch is never ours to clear.
 assert_paired_release_hold() {
   [ "$paired_release_held" -eq 1 ] || return 0
+  if [ "$cold_release" -eq 1 ]; then
+    # Source/image/native qualification belongs to the protected same-run
+    # caller. The host independently checks the actual completed cold barrier.
+    /usr/bin/python3 /opt/lyrashield-worker-host/cold-release-host.py assert-barrier \
+      "$prior_worker_ref" "${LYRASHIELD_COLD_OLD_SANDBOX_IMAGE:?}" "$LYRASHIELD_PAIRED_RELEASE_OWNER" "$target" "$expected_app" "$expected_engine" "$paired_sandbox" || return 1
+  fi
   : "${LYRASHIELD_PAIRED_RELEASE_OWNER:?}" "${LYRASHIELD_PAIRED_RELEASE_HOLD_MODULE_BASE64:?}"
   # shellcheck disable=SC2016
   verified=$(redis_eval '
@@ -375,8 +440,76 @@ try {
   [ "$verified" = MATCH ] || { echo "Paired release hold verification failed" >&2; return 1; }
 }
 
+# All cold operations use the same authenticated persistent hold and source tuple.
+# The runner supplied module is pinned above; no caller boolean qualifies a host.
+cold_owned_hold() {
+  operation=$1
+  redis_eval '
+const [module,operation,owner,product,engine,digest]=process.argv.slice(1);
+const bytes=Buffer.from(module,"base64");const {createHash}=await import("node:crypto");
+if(bytes.length>8192 || createHash("sha256").update(bytes).digest("hex")!=="cd027329d8a0436030580f2190a92c78a5ab8a87fdd0fb36fcc8f0ace9568177")throw new Error("Unreviewed hold module");
+const {ownedHold}=await import("data:text/javascript;base64,"+module);
+const {default:Redis}=await import("ioredis");const redis=new Redis(process.env.REDIS_URL,{maxRetriesPerRequest:1});
+try{await ownedHold(redis,operation,owner,product,engine,digest);console.log("COLD_HOLD_VERIFIED")}finally{await redis.quit()}' \
+    "$LYRASHIELD_PAIRED_RELEASE_HOLD_MODULE_BASE64" "$operation" "$LYRASHIELD_PAIRED_RELEASE_OWNER" "$expected_app" "$expected_engine" "${target##*@}"
+}
+if [ "$cold_release" -eq 1 ] && [ "$cold_operation" = prepare ]; then
+  : "${LYRASHIELD_COLD_OLD_SANDBOX_IMAGE:?}"
+  [ "$(docker image inspect "$(worker_image_from_config)" --format '{{.Id}}')" = "$(docker image inspect "$prior_worker_ref" --format '{{.Id}}')" ]
+  refresh_worker_secrets
+  assert_worker_environment_fresh
+  if [ "$(sed -n 's/^LYRASHIELD_COLD_SINGLE_WORKER=//p' "$config")" = 1 ] || [ -n "$(sed -n 's/^LYRASHIELD_COLD_DATABASE_EPOCH_SHA256=//p' "$config")" ]; then
+    observed_epoch=$(worker_oneshot 'const {captureColdDatabaseEpoch}=await import("./src/operations/capture-cold-database-epoch.ts");console.log(await captureColdDatabaseEpoch());')
+    original_epoch=$(lyrashield_preserve_cold_epoch "$config" "$observed_epoch")
+  fi
+  [ "$(cold_owned_hold claim)" = COLD_HOLD_VERIFIED ]
+  wait_cold_queues_drained
+  if [ -n "${original_epoch:-}" ]; then assert_cold_paid_authority worker_oneshot "$original_epoch"; fi
+  /usr/bin/python3 "$host_assets_dir/cold-start-barrier.py" --worker-image "$prior_worker_ref" \
+    --sandbox-image "$LYRASHIELD_COLD_OLD_SANDBOX_IMAGE" --network lyrashield-sandbox --confirm COLD_SINGLE_WORKER
+  record_cold_barrier
+  assert_paired_release_hold
+  echo 'COLD_PREPARED_HELD'
+  exit 0
+fi
+if [ "$cold_release" -eq 1 ] && [ "$cold_operation" = contain ]; then
+  # A Redis error must not leave the candidate consuming while cleanup rolls
+  # traffic back. Always attempt its stop; success requires independent readback
+  # of BOTH the exact persistent hold and absence of the native worker.
+  cold_owned_hold claim >/dev/null 2>&1 || true
+  systemctl stop "$timer" "$service" || true
+  [ "$(systemctl show "$service" --property=ActiveState --value)" = inactive ]
+  [ "$(systemctl show "$service" --property=MainPID --value)" = 0 ]
+  remaining_worker=$(docker ps -a --filter "name=^/$container$" --format '{{.State}}')
+  case "$remaining_worker" in ''|exited|dead) ;; *) exit 1 ;; esac
+  [ "$(cold_owned_hold assert)" = COLD_HOLD_VERIFIED ]
+  echo 'COLD_CONTAINED_HELD'
+  exit 0
+fi
 # Validate ownership before changing timers, host assets, config or the worker.
 assert_paired_release_hold
+if [ "$cold_release" -eq 1 ] && [ "$cold_operation" = open-admission ]; then
+  [ "$(worker_image_from_config)" = "$target" ]
+  [ "$(docker inspect "$container" --format '{{.Image}}')" = "$(docker image inspect "$target" --format '{{.Id}}')" ]
+  [ "$(docker inspect "$container" --format '{{.State.Health.Status}}')" = healthy ]
+  assert_empty_queues
+  [ "$(worker_oneshot 'const {assertColdDatabaseEpoch}=await import("./src/cold-database-epoch.ts");await assertColdDatabaseEpoch();console.log("COLD_EPOCH_VERIFIED")')" = COLD_EPOCH_VERIFIED ]
+  # Native/source/image/DB/fleet gates have completed in the protected pipeline.
+  # Record that pre-open qualification durably before releasing the owned latch.
+  # The subsequent unpaid URL canary is post-release health, not qualification.
+  /usr/bin/python3 - "$promotion_state_dir/cold-release-$LYRASHIELD_PAIRED_RELEASE_OWNER/pre-open-qualified.json" "$LYRASHIELD_PAIRED_RELEASE_OWNER" "$expected_app" "$expected_engine" "$target" <<'PYMARKER'
+import json,os,sys
+path,owner,product,engine,image=sys.argv[1:]
+fd=os.open(path,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600)
+with os.fdopen(fd,'w') as output:
+ json.dump(dict(owner=owner,productRevision=product,engineRevision=engine,workerImage=image,state='pre-open-qualified'),output);output.flush();os.fsync(output.fileno())
+directory=os.open(os.path.dirname(path),os.O_RDONLY|os.O_DIRECTORY)
+os.fsync(directory);os.close(directory)
+PYMARKER
+  [ "$(cold_owned_hold release)" = COLD_HOLD_VERIFIED ]
+  echo 'COLD_PRE_OPEN_QUALIFIED'
+  exit 0
+fi
 
 assert_cutover_receipt() {
   if [ "$v26_cutover" -eq 1 ]; then
@@ -604,8 +737,11 @@ rollback() {
       exit "$status"
     fi
     restored=1
-    if [ "$host_assets_changed" -eq 1 ]; then restore_host_assets || restored=0; fi
-    if [ "$config_changed" -eq 1 ]; then cp -p "$backup" "$config" || restored=0; fi
+    # Cold rollback holds without restoring a legacy launcher or erasing the pin.
+    if [ "$cold_release" -eq 0 ]; then
+      if [ "$host_assets_changed" -eq 1 ]; then restore_host_assets || restored=0; fi
+      if [ "$config_changed" -eq 1 ]; then cp -p "$backup" "$config" || restored=0; fi
+    fi
     if ! contain_paired_worker; then
       echo "CONTAINMENT FAILED: restored paired release units are not verified inactive and disabled; manual recovery required; admission untouched" >&2
     else
@@ -636,7 +772,11 @@ rollback() {
   exit "$status"
 }
 if [ -n "$prior_worker_ref" ]; then
-  [ "$old_image" = "$prior_worker_ref" ]
+  if [ "$cold_release" -eq 1 ]; then
+    [ "$(docker image inspect "$old_image" --format '{{.Id}}')" = "$(docker image inspect "$prior_worker_ref" --format '{{.Id}}')" ]
+  else
+    [ "$old_image" = "$prior_worker_ref" ]
+  fi
   [ "$(systemctl is-active "$service" 2>/dev/null || true)" = inactive ]
   assert_recovery_worker_stopped
 fi
@@ -667,7 +807,11 @@ if [ "$maintenance_cutover" -eq 1 ]; then
     assert_legacy_worker_stopped
   fi
 elif [ "$paired_release_held" -eq 1 ] && [ -n "${prior_worker_ref:-}" ]; then
-  [ "$old_image" = "$prior_worker_ref" ]
+  if [ "$cold_release" -eq 1 ]; then
+    [ "$(docker image inspect "$old_image" --format '{{.Id}}')" = "$(docker image inspect "$prior_worker_ref" --format '{{.Id}}')" ]
+  else
+    [ "$old_image" = "$prior_worker_ref" ]
+  fi
   [ "$(systemctl is-active "$service" 2>/dev/null || true)" = inactive ]
   assert_recovery_worker_stopped
 elif ! worker_is_healthy; then
@@ -838,6 +982,11 @@ do
     exit 1
   fi
 done
+if [ "$cold_release" -eq 1 ]; then
+  for asset in cold-start-barrier.py recover-worker.sh worker-recovery-probe.mjs lyrashield-worker-recover.service; do
+    [ -f "$asset_stage/$asset" ] && [ ! -L "$asset_stage/$asset" ] || exit 1
+  done
+fi
 
 host_backup=$(mktemp -d "$promotion_state_dir/worker-host-backup.XXXXXX")
 cp -p "$host_libexec_dir/lyrashield-run-worker" "$host_backup/run-worker.sh"
@@ -872,6 +1021,12 @@ install -m 0644 "$asset_stage/lyrashield-worker-secrets.service" "$systemd_dir/l
 install -m 0644 "$asset_stage/lyrashield-worker-egress.service" "$systemd_dir/lyrashield-worker-egress.service"
 install -m 0644 "$asset_stage/lyrashield-worker-egress-refresh.service" "$systemd_dir/lyrashield-worker-egress-refresh.service"
 install -m 0644 "$asset_stage/lyrashield-worker-egress-refresh.timer" "$systemd_dir/lyrashield-worker-egress-refresh.timer"
+if [ "$cold_release" -eq 1 ]; then
+  install -m 0755 "$asset_stage/cold-start-barrier.py" "$host_assets_dir/cold-start-barrier.py"
+  install -m 0755 "$asset_stage/recover-worker.sh" "$host_libexec_dir/lyrashield-recover-worker"
+  install -m 0644 "$asset_stage/worker-recovery-probe.mjs" "$host_assets_dir/worker-recovery-probe.mjs"
+  install -m 0644 "$asset_stage/lyrashield-worker-recover.service" "$systemd_dir/lyrashield-worker-recover.service"
+fi
 systemctl daemon-reload
 
 if [ "$webhook_cutover" -eq 1 ]; then
@@ -917,12 +1072,39 @@ fi
 if [ "$maintenance_cutover" -eq 0 ] || [ ! -e "$backup" ]; then
   cp -p "$config" "$backup"
 fi
+cold_epoch=
+if [ "$cold_release" -eq 1 ]; then
+  promotion_step=capturing-cold-database-epoch
+  assert_paired_release_hold
+  observed_epoch=$(worker_candidate_oneshot 'const {captureColdDatabaseEpoch}=await import("./src/operations/capture-cold-database-epoch.ts");console.log(await captureColdDatabaseEpoch());')
+  cold_epoch=$(lyrashield_preserve_cold_epoch "$config" "$observed_epoch")
+  case "$cold_epoch" in ''|*[!a-f0-9]*) exit 1 ;; esac
+  [ "${#cold_epoch}" -eq 64 ] || exit 1
+  assert_cold_paid_authority worker_candidate_oneshot "$cold_epoch"
+fi
 temporary=$(mktemp "${config}.XXXXXX")
-awk -v image="$target" -v vault="$credential_vault" -v sandbox="$paired_sandbox" 'BEGIN { found=0 } /^LYRASHIELD_WORKER_IMAGE=/ { print "LYRASHIELD_WORKER_IMAGE=" image; found=1; next } /^LYRASHIELD_SANDBOX_IMAGE=/ && sandbox != "" { print "LYRASHIELD_SANDBOX_IMAGE=" sandbox; sandbox_count++; next } /^LYRASHIELD_GITHUB_CREDENTIAL_VAULT_NAME=/ { next } { print } END { if (!found || (sandbox != "" && sandbox_count != 1)) exit 1; print "LYRASHIELD_GITHUB_CREDENTIAL_VAULT_NAME=" vault }' "$config" > "$temporary"
+cold_publication=''
+cold_publish_run=''
+cold_publish_attempt=''
+if [ "$cold_release" -eq 1 ]; then
+  cold_publication=$(/usr/bin/python3 -c 'import json;print(json.load(open("/etc/lyrashield/cold-sandbox/expected.json"))["workflowRevision"])')
+  cold_publish_run=$(/usr/bin/python3 -c 'import json;print(json.load(open("/etc/lyrashield/cold-sandbox/expected.json"))["runId"])')
+  cold_publish_attempt=$(/usr/bin/python3 -c 'import json;print(json.load(open("/etc/lyrashield/cold-sandbox/expected.json"))["runAttempt"])')
+fi
+awk -v image="$target" -v vault="$credential_vault" -v sandbox="$paired_sandbox" -v cold="$cold_release" -v epoch="$cold_epoch" -v engine="$expected_engine" -v owner="${LYRASHIELD_PAIRED_RELEASE_OWNER:-}" -v publication="$cold_publication" -v publish_run="$cold_publish_run" -v publish_attempt="$cold_publish_attempt" 'BEGIN { found=0 } /^LYRASHIELD_WORKER_IMAGE=/ { print "LYRASHIELD_WORKER_IMAGE=" image; found=1; next } /^LYRASHIELD_SANDBOX_IMAGE=/ && sandbox != "" { print "LYRASHIELD_SANDBOX_IMAGE=" sandbox; sandbox_count++; next } /^LYRASHIELD_GITHUB_CREDENTIAL_VAULT_NAME=/ { next } cold == 1 && /^LYRASHIELD_COLD_(SINGLE_WORKER|DATABASE_EPOCH_SHA256|RELEASE_OWNER)=/ { next } cold == 1 && /^LYRASHIELD_SANDBOX_(PUBLICATION_RECORD_PATH|SBOM_COVERAGE_)/ { next } { print } END { if (!found || (sandbox != "" && sandbox_count != 1)) exit 1; print "LYRASHIELD_GITHUB_CREDENTIAL_VAULT_NAME=" vault; if (cold == 1) { print "LYRASHIELD_COLD_SINGLE_WORKER=1"; print "LYRASHIELD_COLD_RELEASE_OWNER=" owner; print "LYRASHIELD_COLD_DATABASE_EPOCH_SHA256=" epoch; if (publication == "" || publish_run == "" || publish_attempt == "") exit 1; print "LYRASHIELD_SANDBOX_SBOM_COVERAGE_VERIFY_PATH=/etc/lyrashield/cold-sandbox/verification.json"; print "LYRASHIELD_SANDBOX_SBOM_COVERAGE_EXPECTED_PATH=/etc/lyrashield/cold-sandbox/expected.json"; print "LYRASHIELD_SANDBOX_SBOM_COVERAGE_REPO=ecryptoguru/lyrashield-engine"; print "LYRASHIELD_SANDBOX_SBOM_COVERAGE_REF=refs/heads/main"; print "LYRASHIELD_SANDBOX_SBOM_COVERAGE_ENGINE_REVISION=" engine; print "LYRASHIELD_SANDBOX_SBOM_COVERAGE_WORKFLOW_REVISION=" publication; print "LYRASHIELD_SANDBOX_SBOM_COVERAGE_RUN_ID=" publish_run; print "LYRASHIELD_SANDBOX_SBOM_COVERAGE_RUN_ATTEMPT=" publish_attempt } }' "$config" > "$temporary"
 chmod 0600 "$temporary"
 chown root:root "$temporary"
 mv "$temporary" "$config"
 config_changed=1
+if [ "$cold_release" -eq 1 ]; then
+  sync -f "$config"
+  sync -f "$(dirname "$config")"
+  # The old launcher is now replaced and stopped. Flush any legacy create
+  # accepted after preparation before the first guarded native owner can start.
+  /usr/bin/python3 "$host_assets_dir/cold-start-barrier.py" --worker-image "$prior_worker_ref" \
+    --sandbox-image "$LYRASHIELD_COLD_OLD_SANDBOX_IMAGE" --network lyrashield-sandbox --confirm COLD_SINGLE_WORKER
+  record_cold_barrier
+fi
 
 assert_paired_release_hold
 promotion_step=restarting-worker
@@ -1005,10 +1187,17 @@ if [ "$paired_release_held" -eq 1 ]; then
     [ -n "$running_id" ] && [ "$running_id" = "$(docker image inspect "$target" --format '{{.Id}}')" ] || exit 1
   fi
   assert_paired_release_hold
+  if [ "$cold_release" -eq 1 ]; then
+    [ "$(docker exec "$container" printenv LYRASHIELD_WORKER_CONCURRENCY)" = 1 ] || exit 1
+  fi
   promotion_complete=1
   trap - EXIT HUP INT TERM
   cleanup_host_assets
-  echo "Worker paired release promotion passed for ${target##*@}; scan admission HELD"
+  if [ "$cold_release" -eq 1 ]; then
+    echo "Cold single-worker candidate passed for ${target##*@}; scan admission HELD for independent live acceptance"
+  else
+    echo "Worker paired release promotion passed for ${target##*@}; scan admission HELD"
+  fi
   exit 0
 fi
 promotion_step=resuming-admission

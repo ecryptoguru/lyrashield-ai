@@ -25,3 +25,13 @@ it("binds preparation fixture credentials and disposal confirmation to that exac
   )
   expect(findUnownedEnvReads(source, "apps/web/src/other.ts", new Set())).toEqual([...keys].sort())
 })
+
+it("binds cold worker launcher values to the database epoch guard only", () => {
+  const keys = ["LYRASHIELD_COLD_DATABASE_EPOCH_SHA256", "LYRASHIELD_COLD_SINGLE_WORKER"]
+  const source = keys.map((key) => `process.env.${key}`).join("; ")
+  expect(findUnownedEnvReads(source, "apps/worker/src/cold-database-epoch.ts", new Set())).toEqual(
+    []
+  )
+  expect(findUnownedEnvReads(source, "apps/worker/src/other.ts", new Set())).toEqual(keys)
+  expect(findUnownedEnvReads(source, "apps/web/src/other.ts", new Set())).toEqual(keys)
+})

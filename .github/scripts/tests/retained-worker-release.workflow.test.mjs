@@ -5,6 +5,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { spawnSync } from "node:child_process"
 import test from "node:test"
+import { runInNewContext } from "node:vm"
 
 const runtime = readFileSync(
   new URL("../../workflows/deploy-azure-runtime.yml", import.meta.url),
@@ -93,8 +94,33 @@ test("retained mode excludes every worker, worker-vault and relay deployment mut
     "Deploy egress-proxy Container App",
     "Refresh Azure OIDC login before ordinary worker promotion",
     "Promote verified worker digest on VM",
-  ])
-    assert.match(step(name), /if: (?:\$\{\{ )?inputs.retained_worker != true/)
+  ]) {
+    const condition = step(name).match(/^        if: (.+)$/m)?.[1]
+    assert.ok(condition, name)
+    assert.match(condition, /\binputs\.retained_worker != true\b/)
+    const expression = condition
+      .replace(/^\$\{\{\s*|\s*\}\}$/g, "")
+      .replace(/steps\.([a-z0-9-]+)/g, 'steps["$1"]')
+    assert.equal(
+      runInNewContext(
+        expression,
+        {
+          inputs: {
+            cold_release: false,
+            retained_worker: true,
+            held_recovery: false,
+            webhook_claims_cutover: false,
+          },
+          env: { V26_CUTOVER: "false" },
+          steps: {},
+          cancelled: () => false,
+        },
+        { timeout: 1000 }
+      ),
+      false,
+      name + " must reject retained mode regardless of guard order"
+    )
+  }
   for (const name of [
     "Prepare private registry and zero-downtime rollout",
     "Smoke candidate revisions",

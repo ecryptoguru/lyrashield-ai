@@ -442,8 +442,8 @@
     },
     "apps/worker/src/engine/runner-process.ts|max-lines-per-function": {
       "count": 2,
-      "totalExcess": 60,
-      "maxExcess": 41
+      "totalExcess": 42,
+      "maxExcess": 32
     },
     "apps/worker/src/engine/scanner-orchestrator.ts|max-lines": {
       "count": 1,

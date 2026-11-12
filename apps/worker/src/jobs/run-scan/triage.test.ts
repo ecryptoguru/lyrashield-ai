@@ -34,6 +34,8 @@ vi.mock("./usage", () => ({
 }))
 
 import type { AISecuritySignal, EngineTriageArtifact } from "@lyrashield/security"
+import { EngineProcessStopUnconfirmedError } from "../../engine/runner-process"
+import { ColdDatabaseEpochError } from "../../cold-database-epoch"
 import { runEngineTriageOverlay } from "./triage"
 
 const checksum = "a".repeat(64)
@@ -157,6 +159,20 @@ describe("runEngineTriageOverlay", () => {
     })
     mocks.addScanEvent.mockResolvedValue(undefined)
   })
+
+  it.each(["epoch", "unconfirmed_stop"])(
+    "propagates %s without settling affirmative main-engine usage",
+    async (interruption) => {
+      const error =
+        interruption === "epoch"
+          ? new ColdDatabaseEpochError()
+          : new EngineProcessStopUnconfirmedError()
+      mocks.runEngineTriage.mockRejectedValueOnce(error)
+      await expect(runEngineTriageOverlay(params() as never)).rejects.toBe(error)
+      expect(mocks.persistEngineUsageCheckpoint).not.toHaveBeenCalled()
+      expect(mocks.addScanEvent).not.toHaveBeenCalled()
+    }
+  )
 
   it("applies the non-authoritative artifact and checkpoints merged provider usage", async () => {
     const input = params()

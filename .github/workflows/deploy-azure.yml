@@ -3,6 +3,10 @@ name: Deploy to Azure
 on:
   workflow_call:
     inputs:
+      cold_release:
+        required: false
+        default: false
+        type: boolean
       source_sha:
         required: false
         type: string
@@ -121,7 +125,8 @@ jobs:
       packages: read
     steps:
       # Applies to both workflow calls and manual recovery dispatches.
-      - name: Hold production until runtime qualification
+      - name: Hold HA and retained release lanes
+        if: inputs.cold_release != true
         run: |
           echo '::error::Production release is held pending runtime qualification.'
           exit 1
@@ -133,6 +138,12 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - name: Authenticate the automated cold release caller
+        if: inputs.cold_release == true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ env.DEPLOY_SHA }}
+        run: node .github/scripts/assert-cold-release-caller.mjs
       - name: Confirm deployment source remains current main
         env:
           GH_TOKEN: ${{ github.token }}
@@ -713,6 +724,7 @@ jobs:
       product_source_sha: ${{ inputs.source_sha || github.sha }}
       engine_revision: ${{ needs.resolve-images.outputs.engine_revision }}
       worker_image: ${{ needs.resolve-images.outputs.worker_image }}@${{ needs.resolve-images.outputs.worker_digest }}
+      cold_release: ${{ inputs.cold_release }}
 
   deploy:
     name: Deploy Azure Container Apps
@@ -770,6 +782,8 @@ jobs:
       egress_proxy_image: ${{ needs.resolve-images.outputs.egress_proxy_image }}
       egress_proxy_digest: ${{ needs.resolve-images.outputs.egress_proxy_digest }}
       qualified_release_digest: ${{ inputs.qualified_release_digest }}
+      cold_release: ${{ inputs.cold_release }}
+      cold_sandbox_image: ${{ needs.verify-built-worker-image.outputs.cold_sandbox_image }}
     secrets: inherit
 
   verify-held-recovery-outcome:

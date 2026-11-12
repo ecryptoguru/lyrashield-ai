@@ -637,7 +637,7 @@ export async function processScanJob(job: Job<ScanJobData, ScanJobResult>): Prom
     } catch (error) {
       if (isBillableExecutionContention(error)) {
         contended = true
-        log.warn("Scan execution retained by prior delivery", { scanId, workspaceId })
+        log.warn("Scan execution retained pending reconciliation", { scanId, workspaceId })
         return retainedBillableScanResult()
       }
       if (error instanceof ScanCapacityWaitingError && !billablePhaseStarted)

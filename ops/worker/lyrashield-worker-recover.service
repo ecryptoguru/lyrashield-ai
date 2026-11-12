@@ -1,0 +1,11 @@
+[Unit]
+Description=Bounded LyraShield native worker recovery
+After=network-online.target
+StartLimitIntervalSec=300s
+StartLimitBurst=3
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/lyrashield-recover-worker
+Restart=no
+TimeoutStartSec=420s

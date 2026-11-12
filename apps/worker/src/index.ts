@@ -1,3 +1,7 @@
+import {
+  assertColdDatabaseEpoch,
+  configureColdDatabaseEpochFailureHandler,
+} from "./cold-database-epoch"
 import { randomUUID } from "node:crypto"
 import { hostname } from "node:os"
 import { unlink, writeFile } from "node:fs/promises"
@@ -37,7 +41,7 @@ import {
 import { assertEvidenceStorageConfigured } from "./engine/evidence-storage"
 import { drainArtifactDeletionTasks } from "@lyrashield/evidence-storage"
 import { assertEngineTempRootReady } from "./engine/workspace-path"
-import { reapStaleScanResources } from "./engine/stale-resource-reaper"
+import { assertNoNativeScanResources, reapStaleScanResources } from "./engine/stale-resource-reaper"
 import {
   assertWorkerDbPoolCapacity,
   observeWorkerRun,
@@ -379,6 +383,16 @@ export function assertWorkerStartupProvenance() {
   return resolveWorkerExecutionProvenance()
 }
 
+async function assertWorkerStartupResources(): Promise<void> {
+  if (env.NODE_ENV === "production") await assertNoNativeScanResources()
+  if (env.LYRASHIELD_STALE_RESOURCE_REAPER_ENABLED === "1") {
+    await reapStaleScanResources({
+      minimumAgeMs: env.LYRASHIELD_STALE_RESOURCE_MIN_AGE_MINUTES * 60_000,
+      failOnError: true,
+    })
+  }
+}
+
 async function main(): Promise<void> {
   assertConfiguredWorkerDbPoolCapacity()
   await initSentry()
@@ -390,6 +404,12 @@ async function main(): Promise<void> {
   assertEvidenceStorageConfigured()
   assertRepositoryScanRuntimeConfigured()
   await assertEngineTempRootReady()
+  await assertWorkerStartupResources()
+
+  configureColdDatabaseEpochFailureHandler(() => {
+    void shutdown("COLD_WORKER_AUTHORITY_LOST", 1)
+  })
+  await assertColdDatabaseEpoch()
 
   worker = new Worker<ScanJobData, ScanJobResult>(
     SCAN_QUEUE_NAME,
@@ -599,11 +619,6 @@ async function main(): Promise<void> {
       })
       logger.info("Stale-resource reaper completed", { ...result })
     }
-    await reap().catch((error) => {
-      logger.warn("Stale-resource reaper failed", {
-        error: error instanceof Error ? error.message : String(error),
-      })
-    })
     staleResourceReaperTimer = setInterval(() => {
       void reap().catch((error) => {
         logger.warn("Stale-resource reaper failed", {
