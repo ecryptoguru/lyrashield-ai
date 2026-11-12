@@ -105,6 +105,8 @@ describe("getShareableReport", () => {
     const result = await getShareableReportByToken("report-1", "ws-1", "a".repeat(64))
     expect(result).toMatchObject({ id: "report-1", type: "launch_readiness" })
     expect(result).not.toHaveProperty("contentJson")
+    mockPrisma.$queryRaw.mockResolvedValueOnce([row]).mockResolvedValueOnce([])
+    expect(await getShareableReportByToken("report-1", "ws-1", "a".repeat(64))).toBeNull()
     mockPrisma.$queryRaw.mockResolvedValue([
       { ...row, contentJson: { ...payload, reportChecksum: "forged" } },
     ])

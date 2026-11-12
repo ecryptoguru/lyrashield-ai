@@ -28,10 +28,17 @@ import { isDeepStrictEqual } from "node:util"
 import type { GateApplicabilityResult } from "@lyrashield/gate"
 import {
   buildLaunchReportPayload,
+  BOUND_LAUNCH_REPORT_PAYLOAD_VERSION,
   type LaunchReportShareablePayload,
   type LaunchReportSource,
   type LaunchReportVerdictLabel,
 } from "./launch-report-payload"
+import {
+  launchReportBindingKey,
+  launchReportIdentityCommitment,
+  matchesLaunchReportIdentityCommitment,
+  newLaunchReportBindingKey,
+} from "./launch-report-identity"
 import {
   buildLaunchReportProvenance,
   parseLaunchReportProvenance,
@@ -174,12 +181,23 @@ export async function generateLaunchReport(
   }
 
   const issuedAt = opts.now ?? new Date()
+  const snapshot = parseAssessmentSnapshot(verdict.assessmentSnapshot)
+  const bindingKey = newLaunchReportBindingKey()
+  const identityCommitment = launchReportIdentityCommitment(bindingKey, {
+    workspaceId,
+    targetId: verdict.targetId,
+    verdictId: verdict.id,
+    verdictChecksum: verdict.verdictChecksum,
+    assessmentVersion: verdict.assessmentVersion,
+    identity: snapshot?.identity ?? null,
+  })
 
   const source = reportSourceFromVerdict(verdict, applicability?.applicable === true)
 
   const payload = buildLaunchReportPayload(source, {
     appDisplayName: opts.appDisplayName,
     issuedAt,
+    identityCommitment,
   })
 
   // Sign the payload checksum when a signing key is available. The key is
@@ -197,7 +215,6 @@ export async function generateLaunchReport(
   // Assessed identity comes from the bound verdict's assessment snapshot —
   // never from a caller-supplied release identity (issuance enforces none) and
   // never reconstructed from the target's current branch or latest scan.
-  const snapshot = parseAssessmentSnapshot(verdict.assessmentSnapshot)
   const provenance = buildLaunchReportProvenance({
     verdictId: verdict.id,
     verdictChecksum: verdict.verdictChecksum,
@@ -224,7 +241,7 @@ export async function generateLaunchReport(
       workspaceId,
       createdById,
       contentJson: { ...payload },
-      provenanceJson: { ...provenance },
+      provenanceJson: { ...provenance, identityBindingKey: bindingKey },
     })
   const report = opts.client
     ? await persist(opts.client)
@@ -295,7 +312,8 @@ async function loadBoundReportVerdict(
   tx: ScopedTransaction,
   workspaceId: string,
   provenance: LaunchReportProvenance | null,
-  payload: LaunchReportShareablePayload
+  payload: LaunchReportShareablePayload,
+  bindingKey: string | null
 ): Promise<GateVerdict | null> {
   if (!provenance) return null
   try {
@@ -317,7 +335,16 @@ async function loadBoundReportVerdict(
       verdict.state !== provenance.historicalState ||
       provenance.effectiveState !== expectedEffective ||
       !isDeepStrictEqual(snapshot?.identity ?? null, provenance.assessedIdentity) ||
-      payload.issuedAt !== provenance.issuedAt
+      payload.issuedAt !== provenance.issuedAt ||
+      payload.payloadVersion !== BOUND_LAUNCH_REPORT_PAYLOAD_VERSION ||
+      !matchesLaunchReportIdentityCommitment(payload.identityCommitment, bindingKey, {
+        workspaceId,
+        targetId: verdict.targetId,
+        verdictId: verdict.id,
+        verdictChecksum: verdict.verdictChecksum,
+        assessmentVersion: verdict.assessmentVersion,
+        identity: snapshot?.identity ?? null,
+      })
     )
       return null
     const expected = buildLaunchReportPayload(
@@ -325,6 +352,7 @@ async function loadBoundReportVerdict(
       {
         appDisplayName: payload.appDisplayName,
         issuedAt: new Date(provenance.issuedAt),
+        identityCommitment: payload.identityCommitment,
       }
     )
     return expected.reportChecksum === payload.reportChecksum ? verdict : null
@@ -338,11 +366,12 @@ async function reportEvidenceMatches(
   tx: ScopedTransaction,
   workspaceId: string,
   provenance: LaunchReportProvenance | null,
-  payload: LaunchReportShareablePayload
+  payload: LaunchReportShareablePayload,
+  bindingKey: string | null
 ): Promise<boolean> {
   if (!provenance || provenance.applicability !== "applicable") return false
   try {
-    const verdict = await loadBoundReportVerdict(tx, workspaceId, provenance, payload)
+    const verdict = await loadBoundReportVerdict(tx, workspaceId, provenance, payload, bindingKey)
     return (
       verdict !== null && (await evaluateVerdictApplicability(tx, workspaceId, verdict)).applicable
     )
@@ -392,7 +421,13 @@ export async function getLaunchReportDetail(
     const stale =
       payload.stale ||
       expired ||
-      !(await reportEvidenceMatches(tx, workspaceId, provenance, payload))
+      !(await reportEvidenceMatches(
+        tx,
+        workspaceId,
+        provenance,
+        payload,
+        launchReportBindingKey(report.provenanceJson)
+      ))
     return {
       verdictLabel: payload.verdictLabel,
       stale,
@@ -415,11 +450,16 @@ export async function getSharedLaunchReport(
   reportId: string,
   token: string
 ): Promise<{ payload: LaunchReportShareablePayload; stale: boolean } | null> {
-  const { getReportByShareToken, readActiveSharedReport } = await import("./report-service")
+  const {
+    getReportByShareToken,
+    readActiveSharedReport,
+    sharedReportSnapshotBinding,
+    sharedReportStillActive,
+  } = await import("./report-service")
   const resolved = await getReportByShareToken(token)
   if (!resolved || resolved.id !== reportId) return null
 
-  return withWorkspaceRLS(
+  const qualified = await withWorkspaceRLS(
     resolved.workspaceId,
     async (tx) => {
       const report = await readActiveSharedReport(tx, resolved.workspaceId, reportId, token)
@@ -430,17 +470,28 @@ export async function getSharedLaunchReport(
       const expiresAtMs = payload.expiresAt ? new Date(payload.expiresAt).getTime() : Number.NaN
       // Stored bytes and their signature remain immutable. This is a read-time
       // presentation flag so legacy or expired reports never render as current.
-      if (payload.stale || !Number.isFinite(expiresAtMs) || expiresAtMs <= Date.now()) {
-        return { payload, stale: true }
-      }
       const provenance = parseLaunchReportProvenance(report.provenanceJson)
-      if (!(await reportEvidenceMatches(tx, resolved.workspaceId, provenance, payload))) {
-        return { payload, stale: true }
-      }
-      return { payload, stale: false }
+      const stale =
+        payload.stale ||
+        !Number.isFinite(expiresAtMs) ||
+        expiresAtMs <= Date.now() ||
+        !(await reportEvidenceMatches(
+          tx,
+          resolved.workspaceId,
+          provenance,
+          payload,
+          launchReportBindingKey(report.provenanceJson)
+        ))
+      return { result: { payload, stale }, binding: sharedReportSnapshotBinding(report) }
     },
     { isolationLevel: "RepeatableRead" }
   )
+  if (
+    !qualified ||
+    !(await sharedReportStillActive(resolved.workspaceId, reportId, token, qualified.binding))
+  )
+    return null
+  return qualified.result
 }
 
 /**
@@ -457,39 +508,68 @@ export async function confirmSharedLaunchReportIdentity(input: {
   reportChecksum: string
   identity: { kind: "COMMIT" | "ARTIFACT_DIGEST"; value: string }
 }): Promise<ReleaseIdentityConfirmation> {
-  const { getReportByShareToken, readActiveSharedReport } = await import("./report-service")
+  const {
+    getReportByShareToken,
+    readActiveSharedReport,
+    sharedReportSnapshotBinding,
+    sharedReportStillActive,
+  } = await import("./report-service")
   const resolved = await getReportByShareToken(input.token)
   if (!resolved?.shareExpiresAt || resolved.id !== input.reportId) return "UNAVAILABLE"
 
-  return withWorkspaceRLS(resolved.workspaceId, async (tx) => {
-    const report = await readActiveSharedReport(
-      tx,
+  const qualified = await withWorkspaceRLS(
+    resolved.workspaceId,
+    async (tx) => {
+      const report = await readActiveSharedReport(
+        tx,
+        resolved.workspaceId,
+        input.reportId,
+        input.token
+      )
+      if (!report || report.type !== "launch_readiness" || !report.shareExpiresAt) return null
+
+      const content: unknown = report.contentJson
+      if (!isLaunchReportShareablePayload(content)) return null
+      const payload = content
+      const provenance = parseLaunchReportProvenance(report.provenanceJson)
+      if (
+        payload.reportChecksum !== input.reportChecksum ||
+        !provenance?.assessedIdentity ||
+        provenance.assessedIdentity.kind !== input.identity.kind
+      ) {
+        return null
+      }
+
+      if (
+        !(await loadBoundReportVerdict(
+          tx,
+          resolved.workspaceId,
+          provenance,
+          payload,
+          launchReportBindingKey(report.provenanceJson)
+        ))
+      )
+        return null
+
+      const expected = Buffer.from(provenance.assessedIdentity.value.toLowerCase(), "utf8")
+      const supplied = Buffer.from(input.identity.value.toLowerCase(), "utf8")
+      const result: ReleaseIdentityConfirmation =
+        expected.length === supplied.length && timingSafeEqual(expected, supplied)
+          ? "MATCH"
+          : "MISMATCH"
+      return { result, binding: sharedReportSnapshotBinding(report) }
+    },
+    { isolationLevel: "RepeatableRead" }
+  )
+  if (
+    !qualified ||
+    !(await sharedReportStillActive(
       resolved.workspaceId,
       input.reportId,
-      input.token
-    )
-    if (!report || report.type !== "launch_readiness" || !report.shareExpiresAt)
-      return "UNAVAILABLE"
-
-    const content: unknown = report.contentJson
-    if (!isLaunchReportShareablePayload(content)) return "UNAVAILABLE"
-    const payload = content
-    const provenance = parseLaunchReportProvenance(report.provenanceJson)
-    if (
-      payload.reportChecksum !== input.reportChecksum ||
-      !provenance?.assessedIdentity ||
-      provenance.assessedIdentity.kind !== input.identity.kind
-    ) {
-      return "UNAVAILABLE"
-    }
-
-    if (!(await loadBoundReportVerdict(tx, resolved.workspaceId, provenance, payload)))
-      return "UNAVAILABLE"
-
-    const expected = Buffer.from(provenance.assessedIdentity.value.toLowerCase(), "utf8")
-    const supplied = Buffer.from(input.identity.value.toLowerCase(), "utf8")
-    return expected.length === supplied.length && timingSafeEqual(expected, supplied)
-      ? "MATCH"
-      : "MISMATCH"
-  })
+      input.token,
+      qualified.binding
+    ))
+  )
+    return "UNAVAILABLE"
+  return qualified.result
 }

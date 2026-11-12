@@ -376,6 +376,32 @@ export async function readActiveSharedReport(
   return rows[0] ?? null
 }
 
+/** Compare the private snapshot without carrying its raw contents beyond an RLS read. */
+export function sharedReportSnapshotBinding(
+  report: Pick<Report, "type" | "scanId" | "contentJson" | "provenanceJson">
+): string {
+  return createHash("sha256")
+    .update(JSON.stringify([report.type, report.scanId, report.contentJson, report.provenanceJson]))
+    .digest("hex")
+}
+
+/** Fresh READ COMMITTED capability check immediately before returning a public result. */
+export async function sharedReportStillActive(
+  workspaceId: string,
+  reportId: string,
+  token: string,
+  snapshotBinding: string
+): Promise<boolean> {
+  return withWorkspaceRLS(
+    workspaceId,
+    async (tx) => {
+      const current = await readActiveSharedReport(tx, workspaceId, reportId, token)
+      return current !== null && sharedReportSnapshotBinding(current) === snapshotBinding
+    },
+    { isolationLevel: "ReadCommitted" }
+  )
+}
+
 export async function getShareableReport(
   reportId: string,
   workspaceId: string,
@@ -495,7 +521,24 @@ async function readShareableReport(
       }
     }
 
-    return { report, scanSummary }
+    const shareable: ShareableReport = {
+      id: report.id,
+      title:
+        report.type === "launch_readiness"
+          ? "LyraShield Launch Readiness Report"
+          : "LyraShield Security Assurance Report",
+      type: report.type,
+      status: report.status,
+      format: report.format,
+      shareUrl: report.shareTokenHash ? `/reports/shared/${report.id}` : null,
+      shareExpiresAt: report.shareExpiresAt,
+      revokedAt: report.revokedAt,
+      createdAt: report.createdAt,
+      scanSummary,
+      assurance: getSnapshotAssurance(report.contentJson),
+      webMcpAssurance: getSnapshotWebMcpAssurance(report.contentJson),
+    }
+    return { shareable, binding: shareToken ? sharedReportSnapshotBinding(report) : null }
   }
   const result = options.client
     ? await read(options.client)
@@ -506,25 +549,13 @@ async function readShareableReport(
       )
 
   if (!result) return null
-  const { report, scanSummary } = result
-
-  return {
-    id: report.id,
-    title:
-      report.type === "launch_readiness"
-        ? "LyraShield Launch Readiness Report"
-        : "LyraShield Security Assurance Report",
-    type: report.type,
-    status: report.status,
-    format: report.format,
-    shareUrl: report.shareTokenHash ? `/reports/shared/${report.id}` : null,
-    shareExpiresAt: report.shareExpiresAt,
-    revokedAt: report.revokedAt,
-    createdAt: report.createdAt,
-    scanSummary,
-    assurance: getSnapshotAssurance(report.contentJson),
-    webMcpAssurance: getSnapshotWebMcpAssurance(report.contentJson),
-  }
+  if (
+    shareToken &&
+    (!result.binding ||
+      !(await sharedReportStillActive(workspaceId, reportId, shareToken, result.binding)))
+  )
+    return null
+  return result.shareable
 }
 
 /**

@@ -1,6 +1,7 @@
 import {
   computeLaunchReportChecksum,
   LAUNCH_REPORT_PAYLOAD_VERSION,
+  BOUND_LAUNCH_REPORT_PAYLOAD_VERSION,
   type LaunchReportShareablePayload,
 } from "./launch-report-payload"
 
@@ -17,7 +18,11 @@ export function isLaunchReportShareablePayload(
   if (!value || typeof value !== "object" || Array.isArray(value)) return false
   const payload = value as Partial<LaunchReportShareablePayload>
   const shapeValid =
-    payload.payloadVersion === LAUNCH_REPORT_PAYLOAD_VERSION &&
+    (payload.payloadVersion === LAUNCH_REPORT_PAYLOAD_VERSION
+      ? payload.identityCommitment === undefined
+      : payload.payloadVersion === BOUND_LAUNCH_REPORT_PAYLOAD_VERSION &&
+        typeof payload.identityCommitment === "string" &&
+        /^[a-f0-9]{64}$/.test(payload.identityCommitment)) &&
     typeof payload.verdictLabel === "string" &&
     VERDICT_LABELS.has(payload.verdictLabel) &&
     typeof payload.standardVersion === "string" &&

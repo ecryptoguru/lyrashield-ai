@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { buildLaunchReportPayload, computeLaunchReportChecksum } from "./launch-report-payload"
 import { isLaunchReportShareablePayload } from "./launch-report-html"
 import { signLaunchReportChecksum, verifyLaunchReportSignature } from "./launch-report-signing"
+import { launchReportIdentityCommitment } from "./launch-report-identity"
 
 const signingKeys = generateKeyPairSync("ed25519")
 const privateKey = signingKeys.privateKey.export({ type: "pkcs8", format: "pem" }).toString()
@@ -93,6 +94,21 @@ vi.mock("./gate-reader-evidence", async (original) => {
 vi.mock("./report-service", () => ({
   getReportByShareToken: mocks.getReportByShareToken,
   readActiveSharedReport: (..._args: unknown[]) => mocks.reportFindFirst(),
+  sharedReportSnapshotBinding: (report: Record<string, unknown>) =>
+    JSON.stringify([report.type, report.scanId, report.contentJson, report.provenanceJson]),
+  sharedReportStillActive: async (
+    _workspaceId: string,
+    _id: string,
+    _token: string,
+    binding: string
+  ) => {
+    const report = await mocks.reportFindFirst()
+    return (
+      report !== null &&
+      JSON.stringify([report.type, report.scanId, report.contentJson, report.provenanceJson]) ===
+        binding
+    )
+  },
 }))
 vi.mock("@lyrashield/logger", () => ({
   logger: { info: vi.fn(), error: vi.fn(), warn: vi.fn() },
@@ -280,7 +296,7 @@ describe("generateLaunchReport — issue-time applicability and private binding"
       historicalState: "READY",
       effectiveState: "READY",
     })
-    // The private binding never widens the signed public payload.
+    // Only the opaque commitment joins the public allowlist; the key remains private.
     expect(Object.keys(payload!).sort()).toEqual([
       "appDisplayName",
       "assessmentDate",
@@ -289,6 +305,7 @@ describe("generateLaunchReport — issue-time applicability and private binding"
       "dispositionCounts",
       "evaluatedAt",
       "expiresAt",
+      "identityCommitment",
       "issuedAt",
       "nonCoverage",
       "notEvaluatedSeverities",
@@ -655,6 +672,18 @@ describe("getSharedLaunchReport — public frozen payload", () => {
     expect(await getSharedLaunchReport("report-1", "a".repeat(64))).toBeNull()
   })
 
+  it("denies a share revoked after qualification and before public release", async () => {
+    mocks.getReportByShareToken.mockResolvedValue({ id: "report-1", workspaceId: "workspace-1" })
+    mocks.reportFindFirst
+      .mockResolvedValueOnce({
+        type: "launch_readiness",
+        contentJson: validLaunchPayload(),
+        provenanceJson: null,
+      })
+      .mockResolvedValueOnce(null)
+    expect(await getSharedLaunchReport("report-1", "a".repeat(64))).toBeNull()
+  })
+
   it("presents an unbound legacy report as historical", async () => {
     const storedPayload = validLaunchPayload({
       expiresAt: new Date(Date.now() + DAY_MS).toISOString(),
@@ -688,6 +717,7 @@ describe("getSharedLaunchReport — public frozen payload", () => {
 })
 
 describe("confirmSharedLaunchReportIdentity — confirmation without disclosure", () => {
+  const identityBindingKey = "d".repeat(64)
   const provenance = {
     schemaVersion: "lyrashield-report-provenance/1.0.0",
     gateVerdictId: "verdict-1",
@@ -701,6 +731,7 @@ describe("confirmSharedLaunchReportIdentity — confirmation without disclosure"
     reasonCodes: [],
     historicalState: "READY",
     effectiveState: "READY",
+    identityBindingKey,
   }
   const payload = buildLaunchReportPayload(
     {
@@ -723,7 +754,17 @@ describe("confirmSharedLaunchReportIdentity — confirmation without disclosure"
       verdictChecksum: "vc-1",
       evaluatedAt: EVALUATED_AT,
     },
-    { issuedAt: EVALUATED_AT }
+    {
+      issuedAt: EVALUATED_AT,
+      identityCommitment: launchReportIdentityCommitment(identityBindingKey, {
+        workspaceId: "workspace-1",
+        targetId: "target-1",
+        verdictId: "verdict-1",
+        verdictChecksum: "vc-1",
+        assessmentVersion: 2,
+        identity: { kind: "COMMIT", value: COMMIT },
+      }),
+    }
   )
 
   beforeEach(() => {
@@ -740,6 +781,74 @@ describe("confirmSharedLaunchReportIdentity — confirmation without disclosure"
       contentJson: payload,
       provenanceJson: provenance,
     })
+  })
+
+  it("binds the signed public report to its exact private verdict and release identity", async () => {
+    mocks.policyFindFirst.mockResolvedValue(policy)
+    mocks.scanFindFirst.mockResolvedValue(null)
+    mocks.findingFindFirst.mockResolvedValue(null)
+    mocks.findingVerificationFindFirst.mockResolvedValue(null)
+    mocks.findingFindMany.mockResolvedValue([])
+    mocks.reportCreate.mockResolvedValue({ id: "report-1" })
+    const result = await generateLaunchReport("workspace-1", "target-1", "user-1", {
+      now: EVALUATED_AT,
+      signingPrivateKey: privateKey,
+    })
+    const issuedProvenance = mocks.reportCreate.mock.calls[0]![0].data.provenanceJson
+    const signed = result!.payload
+    expect(signed.payloadVersion).toBe("lyrashield-launch-report/3.0.0")
+    expect(signed.identityCommitment).toMatch(/^[a-f0-9]{64}$/)
+    expect(verifyLaunchReportSignature(signed.reportChecksum, signed.signature!, publicKey)).toBe(
+      true
+    )
+    expect(JSON.stringify(signed)).not.toContain(COMMIT)
+    expect(JSON.stringify(signed)).not.toContain("target-1")
+    const replacement = {
+      ...verdictRow(),
+      id: "verdict-2",
+      targetId: "target-2",
+      assessmentSnapshot: assessmentSnapshot({
+        identity: { kind: "COMMIT", value: "c".repeat(40) },
+      }),
+    }
+    const swapped = {
+      ...issuedProvenance,
+      gateVerdictId: replacement.id,
+      assessedIdentity: { kind: "COMMIT", value: "c".repeat(40) },
+    }
+    mocks.gateVerdictFindFirst.mockResolvedValue(replacement)
+    mocks.reportFindFirst.mockResolvedValue({
+      type: "launch_readiness",
+      shareExpiresAt: new Date(Date.now() + DAY_MS),
+      contentJson: signed,
+      provenanceJson: swapped,
+    })
+    expect(
+      await confirmSharedLaunchReportIdentity({
+        reportId: "report-1",
+        token: "a".repeat(64),
+        reportChecksum: signed.reportChecksum,
+        identity: { kind: "COMMIT", value: "c".repeat(40) },
+      })
+    ).toBe("UNAVAILABLE")
+  })
+
+  it("never strongly confirms identity from a pre-commitment report", async () => {
+    const legacy = validLaunchPayload()
+    mocks.reportFindFirst.mockResolvedValue({
+      type: "launch_readiness",
+      shareExpiresAt: new Date(Date.now() + DAY_MS),
+      contentJson: legacy,
+      provenanceJson: provenance,
+    })
+    expect(
+      await confirmSharedLaunchReportIdentity({
+        reportId: "report-1",
+        token: "a".repeat(64),
+        reportChecksum: legacy.reportChecksum,
+        identity: { kind: "COMMIT", value: COMMIT },
+      })
+    ).toBe("UNAVAILABLE")
   })
 
   it("confirms the exact token-bound identity without returning its value", async () => {
@@ -762,6 +871,25 @@ describe("confirmSharedLaunchReportIdentity — confirmation without disclosure"
         identity: { kind: "COMMIT", value: "c".repeat(40) },
       })
     ).resolves.toBe("MISMATCH")
+  })
+
+  it("does not disclose a matching identity when the share is revoked after qualification", async () => {
+    mocks.reportFindFirst
+      .mockResolvedValueOnce({
+        type: "launch_readiness",
+        shareExpiresAt: new Date(Date.now() + DAY_MS),
+        contentJson: payload,
+        provenanceJson: provenance,
+      })
+      .mockResolvedValueOnce(null)
+    expect(
+      await confirmSharedLaunchReportIdentity({
+        reportId: "report-1",
+        token: "a".repeat(64),
+        reportChecksum: payload.reportChecksum,
+        identity: { kind: "COMMIT", value: COMMIT },
+      })
+    ).toBe("UNAVAILABLE")
   })
 
   it("rejects swapped provenance identity even when the requested identity matches it", async () => {

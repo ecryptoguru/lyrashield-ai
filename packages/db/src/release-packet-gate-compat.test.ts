@@ -23,6 +23,7 @@ import { releasePacketSigningKeyId } from "./release-packet-signing"
 import { buildLaunchReportPayload, type LaunchReportSource } from "./launch-report-payload"
 import { buildLaunchReportProvenance } from "./launch-report-provenance"
 import { LAUNCH_REPORT_SIGNING_KEY_ID, signLaunchReportChecksum } from "./launch-report-signing"
+import { launchReportIdentityCommitment } from "./launch-report-identity"
 
 const now = new Date("2026-11-11T10:00:00Z")
 const revision = "c".repeat(40)
@@ -254,7 +255,7 @@ describe("release packet current gate compatibility", () => {
     )
   })
 
-  it.each(["valid", "wrong-lineage", "bad-signature"])(
+  it.each(["valid", "wrong-lineage", "bad-signature", "legacy"])(
     "reuses equivalent current evidence while retaining only a %s signed report",
     async (kind) => {
       const { tx, rows } = fixture()
@@ -264,7 +265,19 @@ describe("release packet current gate compatibility", () => {
         assessmentVersion: number
       }
       rows.splice(2)
-      const payload = buildLaunchReportPayload(assessed, { issuedAt: now })
+      const identityBindingKey = "d".repeat(64)
+      const identityCommitment = launchReportIdentityCommitment(identityBindingKey, {
+        workspaceId: input.workspaceId,
+        targetId: input.targetId,
+        verdictId: assessed.id,
+        verdictChecksum: assessed.verdictChecksum,
+        assessmentVersion: assessed.assessmentVersion,
+        identity: input.expectedIdentity,
+      })
+      const payload = buildLaunchReportPayload(assessed, {
+        issuedAt: now,
+        ...(kind === "legacy" ? {} : { identityCommitment }),
+      })
       const report = {
         id: "signed-report-1",
         contentJson: {
@@ -275,19 +288,22 @@ describe("release packet current gate compatibility", () => {
               ? "invalid"
               : signLaunchReportChecksum(payload.reportChecksum, privateKey),
         },
-        provenanceJson: buildLaunchReportProvenance({
-          verdictId: assessed.id,
-          verdictChecksum: kind === "wrong-lineage" ? "f".repeat(64) : assessed.verdictChecksum,
-          assessmentVersion: assessed.assessmentVersion,
-          assessedIdentity: input.expectedIdentity,
-          assessedAt: assessed.evaluatedAt,
-          issuedAt: now,
-          applicabilityCheckedAt: now,
-          applicability: "applicable",
-          reasonCodes: [],
-          historicalState: assessed.state,
-          effectiveState: assessed.state,
-        }),
+        provenanceJson: {
+          ...buildLaunchReportProvenance({
+            verdictId: assessed.id,
+            verdictChecksum: kind === "wrong-lineage" ? "f".repeat(64) : assessed.verdictChecksum,
+            assessmentVersion: assessed.assessmentVersion,
+            assessedIdentity: input.expectedIdentity,
+            assessedAt: assessed.evaluatedAt,
+            issuedAt: now,
+            applicabilityCheckedAt: now,
+            applicability: "applicable",
+            reasonCodes: [],
+            historicalState: assessed.state,
+            effectiveState: assessed.state,
+          }),
+          ...(kind === "legacy" ? {} : { identityBindingKey }),
+        },
       }
       tx.report.findMany.mockResolvedValue([report])
       tx.gateVerdict.create.mockClear()
@@ -295,7 +311,13 @@ describe("release packet current gate compatibility", () => {
       expect(tx.gateVerdict.create).not.toHaveBeenCalled()
       expect(packet.payload.assessment.verdictId).toBe(assessed.id)
       expect(packet.payload.signedAssessment.state).toBe(
-        kind === "valid" ? "SIGNED" : kind === "bad-signature" ? "INVALID" : "UNAVAILABLE"
+        kind === "valid"
+          ? "SIGNED"
+          : kind === "bad-signature"
+            ? "INVALID"
+            : kind === "legacy"
+              ? "HISTORICAL"
+              : "UNAVAILABLE"
       )
       if (kind === "valid") expect(packet.payload.signedAssessment.reportId).toBe(report.id)
     }
