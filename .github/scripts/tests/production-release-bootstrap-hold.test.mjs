@@ -7,6 +7,8 @@ import { parseRetainedApproval } from "../retained-legacy-runtime.mjs"
 const workflows = [
   ["release-retained-worker.yml", "approve"],
   ["deploy-azure.yml", "preflight-compatible-baseline"],
+  ["deploy-azure-runtime.yml", "prepare-dependencies"],
+  ["deploy-azure-runtime.yml", "deploy"],
   ["finalize-held-webhook-recovery.yml", "finalize"],
 ]
 
@@ -85,7 +87,7 @@ for (const [workflow, job] of workflows) {
   })
 }
 
-test("operator approval and retained mode cannot bypass the retained release", () => {
+test("operator approval and retained mode cannot bypass the retained release or runtime holds", () => {
   const source = "a".repeat(40)
   const approval = {
     schema: "lyrashield-retained-worker/1",
@@ -100,7 +102,11 @@ test("operator approval and retained mode cannot bypass the retained release", (
     egressSourceSha: "b03f0bbe2b42f3a49e24e103655187372ba0a5f6",
   }
   assert.deepEqual(parseRetainedApproval(JSON.stringify(approval), source), approval)
-  for (const [workflow, job] of [["release-retained-worker.yml", "approve"]]) {
+  for (const [workflow, job] of [
+    ["release-retained-worker.yml", "approve"],
+    ["deploy-azure-runtime.yml", "prepare-dependencies"],
+    ["deploy-azure-runtime.yml", "deploy"],
+  ]) {
     const step = firstStep(workflow, job)
     const result = spawnSync("bash", ["-e", "-c", holdScript(step)], {
       encoding: "utf8",
@@ -143,6 +149,7 @@ test("cold mode cannot skip the protected authority preflight before any runtime
   // Before authority, permit only this finite set of existing runner setup and
   // read-only configuration/source/target validation. No host or fleet writes.
   const readOnly = new Set([
+    "Hold HA and retained release lanes",
     "Checkout for deployment checks",
     "Authenticate the automated cold release caller",
     "Revalidate runtime source and retry eligibility",
