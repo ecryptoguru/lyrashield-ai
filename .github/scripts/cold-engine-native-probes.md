@@ -12,7 +12,7 @@ python3.12 .github/scripts/run-cold-engine-native-probes.py \
   --harness-sha COMMITTED_PRODUCT_HARNESS_SHA \
   --receipt /private/new-cold-engine-native-receipt.json
 
-python3 .github/scripts/tests/cold-engine-native-probes.test.py
+python3.12 .github/scripts/tests/cold-engine-native-probes.test.py
 ```
 
 The engine pin is `ddb1c5ea6a5014cfc5e1cfadac03a5db7e8cc25d`. The harness must
@@ -49,6 +49,35 @@ provenance. Those are explicit `unverified` fields; a cold release consumer must
 keep its gate closed until it has separate actual evidence for them. Validation
 unit tests and development runs on other source/platforms cannot qualify native
 behavior.
+
+## Native sandbox isolation mode
+
+Add `--sandbox-image ghcr.io/ecryptoguru/lyrashield-sandbox@sha256:DIGEST`
+and `--docker-socket /var/run/docker.sock` to run the separate sandbox probe.
+Both immutable images must already be loaded. This creates a trusted controller
+with the explicitly selected local Docker socket and root fixture identity;
+it must run only against the disposable/local fixture daemon. It never changes
+or restarts that daemon. The actual untrusted sandbox receives no socket or
+host mount, and its engine `session.exec` operations run as `pentester`.
+
+The installed engine's `docker_backend`, `build_sandbox_environment`, network
+admission, session execution and native deletion are exercised on two actual
+selected sandbox containers. Dummy provider keys remain in the controller only.
+The test checks sandbox Docker environment, non-root process environment and
+procfs reads, absence of the controller's private file and Docker socket, and
+absence of host mounts, privileged mode and host PID namespace. It starts real
+listeners, establishes positive loopback and outside-provider canaries, then
+requires sibling and outside-provider direct TCP denial in both directions on
+the actual internal bridge with ICC disabled. No real provider request is sent.
+
+This emits `lyrashield.cold-sandbox-native.v1` with the sandbox index, actual
+native image configuration ID, owned resources and verified deletion. The
+parent preparation workflow must bind the index's authenticated native platform
+manifest separately; local Docker image labels do not authenticate it. The
+fixture uses an empty manifest and no source/attachment/policy mounts. It does
+not qualify full target-relay grant policy, arbitrary repository mount contents,
+worker DB/Redis crash behavior, production host routing or live billing. Failed
+or incomplete native execution cannot satisfy the cold release gate.
 
 ## Budget authority audit
 

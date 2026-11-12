@@ -44,5 +44,23 @@ class ReceiptValidation(unittest.TestCase):
                 native.validate_cases(invalid)
 
 
+    def test_sandbox_negatives_require_actual_positive_canaries_and_all_checks(self):
+        cases = [{"name": native.SANDBOX_CASES[0], "exitCode": 0, "sandboxCount": 2,
+                  **{key: True for key in ("nonRoot", "configEnv", "environment", "procEnvironment",
+                                           "privateFileAbsent", "hostMountsAbsent")}},
+                 {"name": native.SANDBOX_CASES[1], "exitCode": 0, "directions": 2,
+                  **{key: True for key in ("siblingPositiveLoopbackCanary", "outsideProviderPositiveCanary",
+                                           "internalBridge", "iccDisabled")}}]
+        native.validate_sandbox_cases(cases)
+        with self.assertRaises(RuntimeError):
+            native.validate_sandbox_cases(cases[:1])
+        for index, key in ((0, "procEnvironment"), (0, "hostMountsAbsent"),
+                           (1, "outsideProviderPositiveCanary"), (1, "iccDisabled")):
+            invalid = copy.deepcopy(cases)
+            invalid[index][key] = False
+            with self.subTest(key=key), self.assertRaises(RuntimeError):
+                native.validate_sandbox_cases(invalid)
+
+
 if __name__ == "__main__":
     unittest.main()
