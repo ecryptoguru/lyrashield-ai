@@ -4,6 +4,7 @@ import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync 
 import { tmpdir } from "node:os"
 import path from "node:path"
 import test from "node:test"
+import { runInNewContext } from "node:vm"
 
 const runtime = readFileSync(".github/workflows/deploy-azure-runtime.yml", "utf8")
 const caller = readFileSync(".github/workflows/deploy-azure.yml", "utf8")
@@ -269,22 +270,95 @@ test("deployment step order, recovery conditions and app/scanner env key sets st
     [...positions].sort((a, b) => a - b)
   )
 
-  assert.equal(
-    normalizedIf("Deactivate superseded Container App revisions"),
-    "steps.smoke-public.outcome == 'success' && inputs.held_recovery != true"
-  )
-  assert.equal(
-    normalizedIf("Roll back production traffic on health failure"),
-    "inputs.held_recovery != true && inputs.webhook_claims_cutover != true && env.V26_CUTOVER != 'true' && failure() && (steps.promote.outcome == 'failure' || steps.smoke-public.outcome == 'failure' || steps.ordinary-worker-login.outcome == 'failure' || steps.worker-vm.outcome == 'failure')"
-  )
-  assert.equal(
-    normalizedIf("Restore prior ingress mode after failed rollout"),
-    "inputs.held_recovery != true && inputs.webhook_claims_cutover != true && env.V26_CUTOVER != 'true' && failure() && steps.deploy-app.outputs.previous_client_cert_mode != '' && (steps.deploy-app.outcome == 'failure' || steps.deploy-scanner.outcome == 'failure' || steps.deploy-egress-proxy.outcome == 'failure' || steps.smoke-candidates.outcome == 'failure' || steps.worker-preflight.outcome == 'failure' || steps.promote.outcome == 'failure' || steps.smoke-public.outcome == 'failure' || steps.ordinary-worker-login.outcome == 'failure' || steps.worker-vm.outcome == 'failure')"
-  )
-  assert.equal(
-    normalizedIf("Deactivate zero-traffic candidates after failed rollout"),
-    "inputs.held_recovery != true && inputs.webhook_claims_cutover != true && env.V26_CUTOVER != 'true' && failure() && (steps.deploy-app.outcome == 'failure' || steps.deploy-scanner.outcome == 'failure' || steps.deploy-egress-proxy.outcome == 'failure' || steps.smoke-candidates.outcome == 'failure' || steps.worker-preflight.outcome == 'failure' || steps.promote.outcome == 'failure' || steps.smoke-public.outcome == 'failure' || steps.ordinary-worker-login.outcome == 'failure' || steps.worker-vm.outcome == 'failure')"
-  )
+  const evaluate = (
+    name,
+    {
+      cold = false,
+      held = false,
+      cutover = false,
+      v26 = "false",
+      failed = false,
+      failureStep,
+      contained = "success",
+      finished = "success",
+    } = {}
+  ) => {
+    const stepNames = [
+      "deploy-app",
+      "deploy-scanner",
+      "deploy-egress-proxy",
+      "smoke-candidates",
+      "worker-preflight",
+      "promote",
+      "smoke-public",
+      "ordinary-worker-login",
+      "worker-vm",
+      "cold-finish",
+      "cold-contain",
+    ]
+    const steps = Object.fromEntries(
+      stepNames.map((step) => [
+        step,
+        { outcome: "success", outputs: { previous_client_cert_mode: "Ignore" } },
+      ])
+    )
+    steps["cold-contain"].outcome = contained
+    steps["cold-finish"].outcome = finished
+    if (failureStep) steps[failureStep].outcome = "failure"
+    return runInNewContext(
+      normalizedIf(name).replace(/steps\.([a-z0-9-]+)/g, 'steps["$1"]'),
+      {
+        inputs: { cold_release: cold, held_recovery: held, webhook_claims_cutover: cutover },
+        env: { V26_CUTOVER: v26 },
+        steps,
+        failure: () => failed,
+      },
+      { timeout: 1000 }
+    )
+  }
+  const revisionCleanup = "Deactivate superseded Container App revisions"
+  assert.equal(evaluate(revisionCleanup), true)
+  assert.equal(evaluate(revisionCleanup, { held: true }), false)
+  assert.equal(evaluate(revisionCleanup, { failureStep: "smoke-public" }), false)
+  assert.equal(evaluate(revisionCleanup, { cold: true, finished: "skipped" }), false)
+  assert.equal(evaluate(revisionCleanup, { cold: true }), true)
+  const cleanup = [
+    "Roll back production traffic on health failure",
+    "Restore prior ingress mode after failed rollout",
+    "Deactivate zero-traffic candidates after failed rollout",
+  ]
+  for (const name of cleanup) {
+    assert.equal(evaluate(name), false, name)
+    for (const failureStep of ["promote", "smoke-public", "ordinary-worker-login", "worker-vm"]) {
+      assert.equal(evaluate(name, { failed: true, failureStep }), true, name + failureStep)
+      for (const boundary of [{ held: true }, { cutover: true }, { v26: "true" }])
+        assert.equal(evaluate(name, { failed: true, failureStep, ...boundary }), false, name)
+    }
+    for (const failureStep of [
+      "deploy-app",
+      "deploy-scanner",
+      "deploy-egress-proxy",
+      "smoke-candidates",
+      "worker-preflight",
+    ])
+      assert.equal(
+        evaluate(name, { failed: true, failureStep }),
+        name !== cleanup[0],
+        name + failureStep
+      )
+    for (const contained of ["failure", "cancelled", "skipped"])
+      assert.equal(
+        evaluate(name, { cold: true, failed: true, finished: "failure", contained }),
+        false,
+        name
+      )
+    assert.equal(evaluate(name, { cold: true, failed: true, finished: "failure" }), true, name)
+    assert.equal(
+      evaluate(name, { cold: true, finished: "cancelled" }),
+      true,
+      name + " must handle a lost post-release result only after verified containment"
+    )
+  }
 
   for (const name of [
     "Roll back production traffic on health failure",
@@ -411,7 +485,7 @@ test("deployment step order, recovery conditions and app/scanner env key sets st
   assert.doesNotMatch(scanner, /LYRASHIELD_AI_(?:RESULT_CACHE|CACHE_)/)
 
   // Nine bounded federated-login renewals protect the long ordinary and
-  // maintenance paths. Keep the runtime size bound tight to those steps.
+  // maintenance paths. Cold promotion reuses this pipeline without another controller.
   assert.equal((runtime.match(/^      - name: Refresh Azure OIDC login /gm) ?? []).length, 9)
   for (const file of [
     ".github/workflows/deploy-azure.yml",
@@ -421,9 +495,9 @@ test("deployment step order, recovery conditions and app/scanner env key sets st
     "ops/deployment/containerapp.sh",
   ]) {
     const lineCount = readFileSync(file, "utf8").split("\n").length - 1
-    // The reviewed one-time v26 cutover adds explicit maintenance steps.
-    // Its runtime-only budget is 1200; every other file retains its 900-line cap.
-    const limit = file === ".github/workflows/deploy-azure-runtime.yml" ? 1200 : 900
+    // The reviewed cold evidence, host barrier and post-release monitoring steps
+    // extend the existing v26 runtime. Other scripts keep the 900-line cap.
+    const limit = file === ".github/workflows/deploy-azure-runtime.yml" ? 1300 : 900
     assert.ok(lineCount < limit, `${file} has ${lineCount} lines; expected fewer than ${limit}`)
   }
 
