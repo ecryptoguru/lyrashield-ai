@@ -62,6 +62,68 @@ describe("verifySupervisorReceiptHmac", () => {
     ).toEqual({ ok: true, sequence: 1, supervisorInstanceId: INSTANCE })
   })
 
+  it("rejects an unsigned envelope identity when the signed payload has no instance", () => {
+    const record = signRecord({ kind: "attempt_prepared" })
+    expect(
+      verifySupervisorReceiptHmac({ record, expectedInstanceId: INSTANCE, secret: SECRET })
+    ).toMatchObject({ ok: false, code: "MISSING_INSTANCE" })
+    expect(
+      verifySupervisorReceiptHmac({
+        record: { ...record, supervisorInstanceId: "supervisor-other" },
+        expectedInstanceId: "supervisor-other",
+        secret: SECRET,
+      })
+    ).toMatchObject({ ok: false, code: "MISSING_INSTANCE" })
+  })
+
+  it("rejects an inherited instance which is absent from the signed payload bytes", () => {
+    const record = signRecord({ kind: "attempt_prepared" })
+    Object.setPrototypeOf(record.payload, { supervisorInstanceId: INSTANCE })
+    expect(
+      verifySupervisorReceiptHmac({ record, expectedInstanceId: INSTANCE, secret: SECRET })
+    ).toMatchObject({ ok: false, code: "MISSING_INSTANCE" })
+  })
+
+  it("rejects a non-enumerable instance excluded from the signed payload bytes", () => {
+    const record = signRecord({ kind: "attempt_prepared" })
+    Object.defineProperty(record.payload, "supervisorInstanceId", { value: INSTANCE })
+    expect(
+      verifySupervisorReceiptHmac({ record, expectedInstanceId: INSTANCE, secret: SECRET })
+    ).toMatchObject({ ok: false, code: "MISSING_INSTANCE" })
+  })
+
+  it("rejects a mutable accessor as the signed instance", () => {
+    const record = signRecord({ supervisorInstanceId: "supervisor-other" })
+    let reads = 0
+    Object.defineProperty(record.payload, "supervisorInstanceId", {
+      enumerable: true,
+      get: () => (++reads === 1 ? INSTANCE : "supervisor-other"),
+    })
+    expect(
+      verifySupervisorReceiptHmac({ record, expectedInstanceId: INSTANCE, secret: SECRET })
+    ).toMatchObject({ ok: false, code: "MISSING_INSTANCE" })
+  })
+
+  it("rejects an instance omitted by payload serialization", () => {
+    const record = signRecord({ kind: "attempt_prepared" })
+    Object.assign(record.payload as object, {
+      supervisorInstanceId: INSTANCE,
+      toJSON: () => ({ kind: "attempt_prepared" }),
+    })
+    expect(
+      verifySupervisorReceiptHmac({ record, expectedInstanceId: INSTANCE, secret: SECRET })
+    ).toMatchObject({ ok: false, code: "MISSING_INSTANCE" })
+  })
+
+  it("fails closed when a payload cannot be serialized", () => {
+    const record = signRecord({ supervisorInstanceId: INSTANCE })
+    const payload = record.payload as Record<string, unknown>
+    payload.self = payload
+    expect(
+      verifySupervisorReceiptHmac({ record, expectedInstanceId: INSTANCE, secret: SECRET })
+    ).toMatchObject({ ok: false, code: "INVALID_PAYLOAD" })
+  })
+
   it("rejects a tampered payload", () => {
     const record = signRecord({ supervisorInstanceId: INSTANCE, kind: "attempt_prepared" })
     const tampered = { ...record, payload: { supervisorInstanceId: INSTANCE, kind: "forged" } }
