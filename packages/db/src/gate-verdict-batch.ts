@@ -4,8 +4,17 @@ import {
   type GateVerdictResult,
 } from "@lyrashield/gate"
 import { fingerprintPolicy, parseAssessmentSnapshot } from "./gate-assessment"
+import { loadVerifiedAssessedScans } from "./gate-assessed-scan-evidence"
+import { findMismatchedGateEvidence, invalidateUntrustedGateEvidence } from "./gate-reader-evidence"
 import type { GateApplicabilityOptions } from "./gate-service"
-import { withWorkspaceRLS } from "./rls"
+import {
+  loadBoundedGateVerdicts,
+  MAX_GATE_READ_BATCH_TARGETS,
+  type BoundedGateVerdict,
+} from "./gate-verdict-read"
+import { withWorkspaceRLS, type ScopedTransaction } from "./rls"
+
+export { MAX_GATE_READ_BATCH_TARGETS } from "./gate-verdict-read"
 
 /**
  * Batched form of getCurrentGateVerdict for read surfaces that evaluate every
@@ -24,10 +33,12 @@ export async function getCurrentGateVerdicts(
 ): Promise<Map<string, GateVerdictBatchResult>> {
   const results = new Map<string, GateVerdictBatchResult>()
   if (targetIds.length === 0) return results
+  if (targetIds.length > MAX_GATE_READ_BATCH_TARGETS)
+    throw new Error("Gate read target page exceeds the supported limit")
 
   const nowMs = (options.now ?? new Date()).getTime()
 
-  await withWorkspaceRLS(workspaceId, async (tx) => {
+  const read = async (tx: ScopedTransaction) => {
     // 1) Latest verdict per target — DISTINCT ON over the existing
     // (workspaceId, targetId, evaluatedAt) index. RLS applies: this runs
     // inside the transaction after SET LOCAL app.current_workspace_id.
@@ -35,15 +46,7 @@ export async function getCurrentGateVerdicts(
     // soft-delete predicate is due here — same as the per-target read. The
     // array binds with = ANY(...): `IN (${array})` binds a text[] parameter
     // against a text column and fails with P2010 text = text[].
-    const verdicts = await tx.$queryRaw<GateVerdictRawRow[]>`
-      SELECT * FROM (
-        SELECT DISTINCT ON ("targetId") *
-        FROM "GateVerdict"
-        WHERE "workspaceId" = ${workspaceId}
-          AND "targetId" = ANY(${targetIds}::text[])
-        ORDER BY "targetId", "evaluatedAt" DESC, "id" DESC
-      ) latest
-      ORDER BY "targetId"`
+    const verdicts = await loadBoundedGateVerdicts(tx, workspaceId, { targetIds })
 
     if (verdicts.length === 0) return
 
@@ -112,7 +115,7 @@ export async function getCurrentGateVerdicts(
            AND s."targetId" = v."targetId"
            AND s."deletedAt" IS NULL
            AND s."id" <> v."scanId"
-           AND s."createdAt" > v."completedAt"
+           AND (s."createdAt" > v."completedAt" OR s."endedAt" > v."completedAt")
           GROUP BY v."targetId"`,
         tx.$queryRaw<Array<{ targetId: string }>>`
           SELECT v."targetId"
@@ -146,23 +149,41 @@ export async function getCurrentGateVerdicts(
       verificationChangedTargets = new Set(verificationRows.map((row) => row.targetId))
     }
 
-    // 4) Apply the same applicability rules per target, in memory. The raw
-    // row is MAPPED explicitly into the historical payload — never asserted
-    // to be the Prisma model type (raw queries return JSON as parsed objects
-    // and timestamps as Date, which this mapping preserves).
-    for (const row of verdicts) {
-      const snapshot = snapshotByTarget.get(row.targetId) ?? null
-      const policy = snapshot ? (policyById.get(snapshot.policyId) ?? null) : null
-      const applicability = evaluateGateApplicability(row.state as GateVerdictResult["state"], {
-        snapshot,
-        expectedCommit: options.expectedCommit,
-        expectedArtifactDigest: options.expectedArtifactDigest,
-        policyFingerprint: fingerprintPolicy(policy as Record<string, unknown> | null),
-        nowMs,
-        newerAssessmentAttempt: newerAttemptTargets.has(row.targetId),
-        evidenceChanged:
-          findingChangedTargets.has(row.targetId) || verificationChangedTargets.has(row.targetId),
+    // Evaluate applicability and validate the finding evidence set-wide.
+    const applicabilityByTarget = new Map(
+      verdicts.map((row) => {
+        const snapshot = snapshotByTarget.get(row.targetId) ?? null
+        const policy = snapshot ? (policyById.get(snapshot.policyId) ?? null) : null
+        const applicability = evaluateGateApplicability(row.state as GateVerdictResult["state"], {
+          snapshot,
+          expectedCommit: options.expectedCommit,
+          expectedArtifactDigest: options.expectedArtifactDigest,
+          policyFingerprint: fingerprintPolicy(policy as Record<string, unknown> | null),
+          nowMs,
+          newerAssessmentAttempt: newerAttemptTargets.has(row.targetId),
+          evidenceChanged:
+            findingChangedTargets.has(row.targetId) || verificationChangedTargets.has(row.targetId),
+        })
+        return [row.targetId, applicability] as const
       })
+    )
+    const boundVerdicts = verdicts.filter((row) => snapshotByTarget.get(row.targetId) !== null)
+    const assessed = await loadVerifiedAssessedScans(tx, workspaceId, boundVerdicts)
+    const mismatches = await findMismatchedGateEvidence(
+      tx,
+      workspaceId,
+      boundVerdicts.filter((row) => assessed.verified.has(row.targetId)),
+      assessed.verified
+    )
+    for (const targetId of assessed.unverified) mismatches.add(targetId)
+    for (const verdict of verdicts) if (verdict.evidenceTooLarge) mismatches.add(verdict.targetId)
+
+    // Map historical rows separately; an invalid current result never rewrites history.
+    for (const row of verdicts) {
+      const current = applicabilityByTarget.get(row.targetId)!
+      const applicability = mismatches.has(row.targetId)
+        ? invalidateUntrustedGateEvidence(current)
+        : current
       results.set(row.targetId, {
         schemaVersion: "lyrashield-gate-response/2.0.0",
         state: applicability.effectiveState,
@@ -173,29 +194,34 @@ export async function getCurrentGateVerdicts(
           // when supplied, otherwise the assessment's own.
           evaluatedIdentity: applicability.evaluatedIdentity,
         },
-        historical: {
-          id: row.id,
-          workspaceId: row.workspaceId,
-          targetId: row.targetId,
-          scanId: row.scanId,
-          standardVersion: row.standardVersion,
-          state: row.state,
-          coverageStatement: row.coverageStatement,
-          nonCoverage: row.nonCoverage,
-          blockingReasons: row.blockingReasons,
-          evidenceSummary: row.evidenceSummary,
-          staleness: row.staleness,
-          inputChecksum: row.inputChecksum,
-          verdictChecksum: row.verdictChecksum,
-          assessmentVersion: row.assessmentVersion,
-          assessmentSnapshot: row.assessmentSnapshot,
-          evaluatedAt: row.evaluatedAt,
-        },
+        historical: historicalResult(row),
       })
     }
-  })
+  }
+  await withWorkspaceRLS(workspaceId, read, { isolationLevel: "RepeatableRead" })
 
   return results
+}
+
+function historicalResult(row: BoundedGateVerdict): GateVerdictBatchResult["historical"] {
+  return {
+    id: row.id,
+    workspaceId: row.workspaceId,
+    targetId: row.targetId,
+    scanId: row.scanId,
+    standardVersion: row.standardVersion,
+    state: row.state,
+    coverageStatement: row.coverageStatement,
+    nonCoverage: row.nonCoverage,
+    blockingReasons: row.blockingReasons,
+    evidenceSummary: row.evidenceSummary,
+    staleness: row.staleness,
+    inputChecksum: row.inputChecksum,
+    verdictChecksum: row.verdictChecksum,
+    assessmentVersion: row.assessmentVersion,
+    assessmentSnapshot: row.assessmentSnapshot,
+    evaluatedAt: row.evaluatedAt,
+  }
 }
 
 /**
@@ -229,28 +255,4 @@ export interface GateVerdictBatchResult {
     assessmentSnapshot: unknown
     evaluatedAt: Date
   }
-}
-
-/**
- * Raw GateVerdict row from the DISTINCT ON read: camelCase quoted columns,
- * JSON columns arrive as parsed objects, timestamps as Date. This is the
- * $queryRaw wire shape — deliberately NOT the Prisma model type.
- */
-type GateVerdictRawRow = {
-  id: string
-  workspaceId: string
-  targetId: string
-  scanId: string | null
-  standardVersion: string
-  state: string
-  coverageStatement: unknown
-  nonCoverage: unknown
-  blockingReasons: unknown
-  evidenceSummary: unknown
-  staleness: unknown
-  inputChecksum: string
-  verdictChecksum: string
-  assessmentVersion: number | null
-  assessmentSnapshot: unknown
-  evaluatedAt: Date
 }

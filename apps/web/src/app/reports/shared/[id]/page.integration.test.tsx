@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
   reportFindFirst: vi.fn(),
+  queryRaw: vi.fn(),
   updateMany: vi.fn(),
   scanFindFirst: vi.fn(),
   groupBy: vi.fn(),
@@ -17,6 +18,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("../../../../../../../packages/db/src/client", () => ({
   prisma: {
+    $queryRaw: mocks.queryRaw,
     report: { findFirst: mocks.reportFindFirst, updateMany: mocks.updateMany },
     scan: { findFirst: mocks.scanFindFirst },
     finding: { groupBy: mocks.groupBy },
@@ -66,6 +68,7 @@ import { GET as sharedGet } from "../../../api/reports/shared/[id]/route"
 import { GET as reportGet, POST as reportPost } from "../../../api/reports/[id]/route"
 import { POST as packetPost } from "../../../api/reports/release-packet/[id]/route"
 import { getReportByShareToken } from "../../../../../../../packages/db/src/report-service"
+import { buildLaunchReportPayload } from "../../../../../../../packages/db/src/launch-report-payload"
 
 // Synthetic capability, deliberately unrelated to any deployed report.
 const token = "a".repeat(64)
@@ -96,6 +99,14 @@ describe("release packet cannot cross the generic report boundary", () => {
       })
     )
     mocks.reportFindFirst.mockResolvedValue(report)
+    mocks.queryRaw.mockImplementation(async (_sql, id, workspaceId, hash) =>
+      id === report.id &&
+      workspaceId === report.workspaceId &&
+      hash === report.shareTokenHash &&
+      !report.revokedAt
+        ? [report]
+        : []
+    )
     mocks.tokenFindFirst.mockImplementation(async ({ where }) =>
       where.shareTokenHash === report.shareTokenHash && report.revokedAt === null
         ? { id: report.id, workspaceId: report.workspaceId, shareExpiresAt: report.shareExpiresAt }
@@ -136,6 +147,56 @@ describe("release packet cannot cross the generic report boundary", () => {
       SharedReportPage({ ...params, searchParams: Promise.resolve({ token }) })
     ).rejects.toThrow("NEXT_NOT_FOUND")
     expect(mocks.requirePermission).not.toHaveBeenCalled()
+    expect(mocks.scanFindFirst).not.toHaveBeenCalled()
+    expect(mocks.groupBy).not.toHaveBeenCalled()
+  })
+
+  it("does not fall back to the generic page when the launch reader declines", async () => {
+    const payload = buildLaunchReportPayload(
+      {
+        standardVersion: "lyrashield-gate/2.4.0",
+        state: "READY",
+        coverageStatement: [],
+        nonCoverage: [],
+        blockingReasons: [],
+        evidenceSummary: {
+          verified: 0,
+          retestConfirmed: 0,
+          unresolvedCritical: 0,
+          unresolvedHigh: 0,
+        },
+        staleness: { current: true },
+        verdictChecksum: "fixture",
+        evaluatedAt: new Date("2026-11-12T00:00:00Z"),
+      },
+      { issuedAt: new Date("2026-11-12T00:01:00Z") }
+    )
+    mocks.queryRaw.mockResolvedValue([
+      { ...report, type: "launch_readiness", contentJson: payload, scanId: null },
+    ])
+    await expect(
+      SharedReportPage({ ...params, searchParams: Promise.resolve({ token }) })
+    ).rejects.toThrow("NEXT_NOT_FOUND")
+  })
+
+  it("denies the generic page when a token is revoked after lookup", async () => {
+    report.type = "developer"
+    mocks.queryRaw.mockResolvedValue([])
+    await expect(
+      SharedReportPage({ ...params, searchParams: Promise.resolve({ token }) })
+    ).rejects.toThrow("NEXT_NOT_FOUND")
+    expect(mocks.scanFindFirst).not.toHaveBeenCalled()
+    expect(mocks.groupBy).not.toHaveBeenCalled()
+  })
+
+  it("denies the generic API when a token is revoked after lookup", async () => {
+    report.type = "developer"
+    mocks.queryRaw.mockResolvedValue([])
+    const response = await sharedGet(
+      new Request(`http://localhost/api/reports/shared/${report.id}?token=${token}`),
+      params
+    )
+    expect(response.status).toBe(404)
     expect(mocks.scanFindFirst).not.toHaveBeenCalled()
     expect(mocks.groupBy).not.toHaveBeenCalled()
   })

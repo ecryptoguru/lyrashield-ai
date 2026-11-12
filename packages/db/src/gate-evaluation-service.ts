@@ -10,7 +10,8 @@ import {
   type GateAssessmentSnapshot,
 } from "@lyrashield/gate"
 import { fingerprintPolicy, snapshotFromManifest, toEpochMs } from "./gate-assessment"
-import { loadGateFindings } from "./gate-retest-input"
+import { loadVerifiedAssessedScans, MAX_EVIDENCE_BYTES } from "./gate-assessed-scan-evidence"
+import { loadGateFindings, prepareGateFindingInputs } from "./gate-retest-input"
 import { withWorkspaceRLS, type ScopedTransaction } from "./rls"
 
 export interface GateEvaluationResult {
@@ -18,6 +19,28 @@ export interface GateEvaluationResult {
   gateVerdictId: string
   /** Present when the gate could not evaluate at all (e.g. no completed scan). */
   note?: string
+}
+
+export async function loadBoundedCandidateManifest(
+  tx: ScopedTransaction,
+  workspaceId: string,
+  targetId: string,
+  scanId: string
+): Promise<Parameters<typeof snapshotFromManifest>[0]["manifest"]> {
+  const rows = await tx.$queryRaw<
+    { candidateManifest: Parameters<typeof snapshotFromManifest>[0]["manifest"] }[]
+  >`
+    SELECT CASE WHEN octet_length(m."checksumInput") <= ${MAX_EVIDENCE_BYTES}
+      AND octet_length(m."manifest"::text) <= ${MAX_EVIDENCE_BYTES}
+      AND octet_length(m."checksum") = 64 AND m."checksum" ~ '^[0-9a-f]{64}$'
+      AND jsonb_typeof(m."manifest") = 'object'
+      THEN jsonb_build_object('version', m."version", 'checksum', m."checksum", 'manifest', m."manifest")
+      ELSE NULL END AS "candidateManifest"
+    FROM "ScanResultManifest" m JOIN "Scan" s ON s."id" = m."scanId"
+    WHERE s."id" = ${scanId} AND s."workspaceId" = ${workspaceId}
+      AND s."targetId" = ${targetId} AND s."deletedAt" IS NULL AND s."status" = 'COMPLETED'
+  `
+  return rows[0]?.candidateManifest ?? null
 }
 
 async function persistGateEvaluation(
@@ -101,7 +124,6 @@ export async function evaluateGateForTarget(
         status: true,
         mode: true,
         policyId: true,
-        resultManifest: { select: { version: true, checksum: true, manifest: true } },
       },
     })
 
@@ -128,55 +150,30 @@ export async function evaluateGateForTarget(
         })
       : null
     const policyFingerprint = fingerprintPolicy(policy as Record<string, unknown> | null)
-    const assessmentSnapshot = latestCompletedScan
+    const candidateManifest = latestCompletedScan
+      ? await loadBoundedCandidateManifest(tx, workspaceId, targetId, latestCompletedScan.id)
+      : null
+    const candidateSnapshot = latestCompletedScan
       ? snapshotFromManifest({
           scanId: latestCompletedScan.id,
           endedAt: latestCompletedScan.endedAt,
           policyId: latestCompletedScan.policyId,
           policyFingerprint,
-          manifest: latestCompletedScan.resultManifest,
+          manifest: candidateManifest,
         })
       : null
 
-    const coverageReceipts = latestCompletedScan
-      ? await tx.scanCoverageReceipt.findMany({
-          where: { scanId: latestCompletedScan.id },
-          select: { controlId: true, scanner: true, status: true, reason: true },
-        })
-      : []
+    const verifiedScan = candidateSnapshot
+      ? (
+          await loadVerifiedAssessedScans(tx, workspaceId, [
+            { targetId, scanId: candidateSnapshot.scanId, assessmentSnapshot: candidateSnapshot },
+          ])
+        ).verified.get(targetId)
+      : undefined
+    const assessmentSnapshot = verifiedScan ? candidateSnapshot : null
+    const coverageReceipts = verifiedScan?.coverageReceipts ?? []
 
     const { findings, trustedRetests } = await loadGateFindings(tx, workspaceId, targetId)
-    const preparedFindings = findings.map((finding) => {
-      const trustedRetest = trustedRetests.has(finding.id)
-      const positiveReceipt = latestCompletedScan
-        ? finding.verificationReceipts.some(
-            (receipt) =>
-              receipt.scanId === latestCompletedScan.id &&
-              (receipt.status === "VALIDATED" || receipt.status === "VERIFIED") &&
-              Boolean(receipt.method) &&
-              receipt.method !== "RETEST"
-          )
-        : false
-      const applicableDisposition =
-        Boolean(finding.dispositionActorUserId) &&
-        Boolean(finding.dispositionReason) &&
-        Boolean(finding.dispositionAt) &&
-        finding.dispositionAssessmentId === latestCompletedScan?.id &&
-        (finding.disposition === "ACCEPTED_RISK" || finding.disposition === "FALSE_POSITIVE")
-      return { finding, trustedRetest, positiveReceipt, applicableDisposition }
-    })
-    const byFindingId = new Map(preparedFindings.map((entry) => [entry.finding.id, entry]))
-    const duplicateResolved = (
-      entry: (typeof preparedFindings)[number],
-      seen = new Set<string>()
-    ): boolean => {
-      if (entry.trustedRetest || entry.applicableDisposition) return true
-      if (entry.finding.status !== "DUPLICATE" || !entry.finding.canonicalFindingId) return false
-      if (seen.has(entry.finding.id)) return false
-      seen.add(entry.finding.id)
-      const canonical = byFindingId.get(entry.finding.canonicalFindingId)
-      return canonical ? duplicateResolved(canonical, seen) : false
-    }
 
     const evidence: GateEvidenceInput = {
       targetId,
@@ -192,22 +189,9 @@ export async function evaluateGateForTarget(
         controlId: r.controlId,
         scanner: r.scanner,
         status: r.status as GateEvidenceInput["coverageReceipts"][number]["status"],
-        reason: r.reason,
+        reason: r.reason ?? null,
       })),
-      findings: preparedFindings.map((entry) => ({
-        id: entry.finding.id,
-        severity: entry.finding.severity,
-        status: entry.finding.status,
-        verificationStatus: entry.finding.verificationStatus,
-        retestConfirmedResolved: entry.finding.status === "FIXED" && entry.trustedRetest,
-        hasPositiveEvidence: entry.positiveReceipt || entry.trustedRetest,
-        hasApplicableDisposition: entry.applicableDisposition,
-        applicableDisposition: entry.applicableDisposition
-          ? (entry.finding.disposition as "ACCEPTED_RISK" | "FALSE_POSITIVE")
-          : null,
-        duplicateCanonicalResolved: duplicateResolved(entry),
-        lastSeenAtMs: entry.finding.lastSeenAt.getTime(),
-      })),
+      findings: prepareGateFindingInputs(findings, trustedRetests, latestCompletedScan?.id ?? null),
       requiredScanners: isTargetTypeCovered(target.type)
         ? requiredScannersForTarget(target.type, latestCompletedScan?.mode)
         : [],

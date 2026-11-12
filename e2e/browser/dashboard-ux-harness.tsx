@@ -8,6 +8,7 @@ import { ReportCard } from "../../apps/web/src/app/(dashboard)/dashboard/reports
 import { ScoreTrend } from "../../apps/web/src/components/security-visuals"
 import { Switch, FormField, Card, CardContent } from "@lyrashield/ui"
 import { LaunchReadinessClient } from "../../apps/web/src/app/(dashboard)/dashboard/launch-readiness/launch-readiness-client"
+import { readinessTargetPageHref } from "../../apps/web/src/lib/launch-readiness"
 import { WebMcpReceiptProvider } from "../../apps/web/src/components/webmcp/webmcp-receipt-provider"
 import { FirstScanHarness } from "./first-scan-harness"
 import { useState } from "react"
@@ -50,16 +51,31 @@ export default function DashboardUxHarness() {
         </section>
       )}
       {mode === "first-scan" && <FirstScanHarness />}
-      {mode === "readiness" && (
+      {(mode === "readiness" ||
+        mode === "readiness-paged" ||
+        mode === "readiness-refresh" ||
+        mode === "readiness-scoped") && (
         <WebMcpReceiptProvider>
           <LaunchReadinessClient
             workspaceId="workspace-test"
             initialReport={{
-              state: "INSUFFICIENT_EVIDENCE",
-              verdict: "NOT_EVALUATED",
+              state: mode === "readiness-refresh" ? "READY" : "INSUFFICIENT_EVIDENCE",
+              verdict:
+                mode === "readiness-refresh"
+                  ? "GO"
+                  : mode === "readiness-paged" || mode === "readiness-scoped"
+                    ? "INCONCLUSIVE"
+                    : "NOT_EVALUATED",
               score: null,
               triageScore: null,
-              summary: "Add a target and complete a scan before reviewing launch readiness.",
+              summary:
+                mode === "readiness-refresh"
+                  ? "Ready before refresh."
+                  : mode === "readiness-scoped"
+                    ? "Scoped release needs more evidence."
+                    : mode === "readiness-paged"
+                      ? "This page covers only some targets. Check more target pages before assessing the workspace."
+                      : "Add a target and complete a scan before reviewing launch readiness.",
               blockingFindings: 0,
               totalFindings: 0,
               verifiedFindings: 0,
@@ -67,12 +83,50 @@ export default function DashboardUxHarness() {
               conditions: ["No usable review evidence yet."],
               recommendations: ["Complete your first scan."],
             }}
-            targets={[]}
-            initialTargetId=""
-            initialReleaseRef=""
-            initialReleaseCheck={null}
+            targets={
+              mode === "readiness-scoped"
+                ? [{ targetId: "target-1", targetName: "Selected target" }]
+                : mode === "readiness-paged"
+                  ? Array.from({ length: 5 }, (_, i) => ({
+                      targetId: `target-${i + 1}`,
+                      targetName: `Target ${i + 1}`,
+                    }))
+                  : []
+            }
+            initialTargetId={mode === "readiness-scoped" ? "target-1" : ""}
+            initialReleaseRef={mode === "readiness-scoped" ? "a".repeat(40) : ""}
+            initialReleaseCheck={
+              mode === "readiness-scoped"
+                ? {
+                    targetId: "target-1",
+                    targetName: "Selected target",
+                    requested: { kind: "COMMIT", value: "a".repeat(40) },
+                    assessed: { kind: "COMMIT", value: "a".repeat(40) },
+                    match: "match",
+                    historicalState: "READY",
+                    state: "READY",
+                    applicable: true,
+                    blockingFindings: 0,
+                    reasons: [],
+                  }
+                : null
+            }
             initialCheckError={null}
             checkNeedsTarget={false}
+            nextTargetsHref={
+              mode === "readiness-paged" && !params.has("cursor")
+                ? readinessTargetPageHref({
+                    targetId: "target-1",
+                    commit: "a".repeat(40),
+                    cursor: "target-5",
+                  })
+                : null
+            }
+            firstTargetsHref={
+              mode === "readiness-paged" && params.has("cursor")
+                ? readinessTargetPageHref({ targetId: "target-1", commit: "a".repeat(40) })
+                : null
+            }
           />
         </WebMcpReceiptProvider>
       )}

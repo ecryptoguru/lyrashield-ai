@@ -142,8 +142,8 @@
     },
     "apps/web/src/app/(dashboard)/dashboard/launch-readiness/launch-readiness-client.tsx|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 252,
-      "maxExcess": 252
+      "totalExcess": 213,
+      "maxExcess": 213
     },
     "apps/web/src/app/(dashboard)/dashboard/licenses/licenses-client.tsx|max-lines-per-function": {
       "count": 1,
@@ -157,8 +157,8 @@
     },
     "apps/web/src/app/(dashboard)/dashboard/page.tsx|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 246,
-      "maxExcess": 246
+      "totalExcess": 241,
+      "maxExcess": 241
     },
     "apps/web/src/app/(dashboard)/dashboard/projects/projects-client.tsx|max-lines-per-function": {
       "count": 1,
@@ -344,11 +344,6 @@
       "count": 1,
       "totalExcess": 52,
       "maxExcess": 52
-    },
-    "apps/web/src/app/reports/shared/[id]/launch-report-view.tsx|max-lines-per-function": {
-      "count": 1,
-      "totalExcess": 1,
-      "maxExcess": 1
     },
     "apps/web/src/app/reports/shared/[id]/shared-report-view.tsx|max-lines-per-function": {
       "count": 1,
@@ -614,11 +609,6 @@
       "count": 1,
       "totalExcess": 62,
       "maxExcess": 62
-    },
-    "packages/db/src/gate-verdict-batch.ts|max-lines-per-function": {
-      "count": 1,
-      "totalExcess": 2,
-      "maxExcess": 2
     },
     "packages/db/src/notification-service.ts|max-lines-per-function": {
       "count": 1,

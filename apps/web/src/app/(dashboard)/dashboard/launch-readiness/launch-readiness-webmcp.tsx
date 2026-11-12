@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef } from "react"
+import { useEffect } from "react"
 import { registerWebMcpTool, type WebMcpInputSchema } from "@/lib/webmcp/register"
 import { useWebMcpReceiptStore } from "@/components/webmcp/webmcp-receipt-provider"
 import { apiGet } from "@/lib/api-client"
@@ -16,19 +16,8 @@ const launchReadinessInputSchema: WebMcpInputSchema = {
   },
 }
 
-export function useLaunchReadinessWebMcp({
-  workspaceId,
-  onReport,
-}: {
-  workspaceId: string
-  onReport?: (report: LaunchReadinessReport) => void
-}) {
+export function useLaunchReadinessWebMcp({ workspaceId }: { workspaceId: string }) {
   const receiptStore = useWebMcpReceiptStore()
-  const onReportRef = useRef(onReport)
-
-  useEffect(() => {
-    onReportRef.current = onReport
-  }, [onReport])
 
   useEffect(() => {
     const cleanup = registerWebMcpTool<{ focusBlockers?: boolean }>({
@@ -50,11 +39,6 @@ export function useLaunchReadinessWebMcp({
           { signal, schema: launchReadinessReportSchema }
         )
         if (signal.aborted) throw new DOMException("Aborted", "AbortError")
-
-        const onReport = onReportRef.current
-        if (onReport) {
-          onReport(report)
-        }
 
         const focus = input.focusBlockers === true
         const conditions = focus

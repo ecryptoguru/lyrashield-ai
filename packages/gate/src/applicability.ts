@@ -27,6 +27,7 @@ export interface GateApplicabilityReason {
     | "POLICY_CHANGED"
     | "NEWER_ASSESSMENT_ATTEMPT"
     | "EVIDENCE_CHANGED"
+    | "UNTRUSTED_GATE_EVIDENCE"
   message: string
 }
 

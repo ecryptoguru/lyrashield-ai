@@ -23,6 +23,7 @@ import { releasePacketSigningKeyId } from "./release-packet-signing"
 import { buildLaunchReportPayload, type LaunchReportSource } from "./launch-report-payload"
 import { buildLaunchReportProvenance } from "./launch-report-provenance"
 import { LAUNCH_REPORT_SIGNING_KEY_ID, signLaunchReportChecksum } from "./launch-report-signing"
+import { launchReportIdentityCommitment } from "./launch-report-identity"
 
 const now = new Date("2026-11-11T10:00:00Z")
 const revision = "c".repeat(40)
@@ -153,6 +154,7 @@ function fixture() {
         typeof where.scanId === "object" || where.scanId === baseline.id
           ? [
               {
+                targetId: input.targetId,
                 findingId: finding.id,
                 scanId: baseline.id,
                 dedupeKey: finding.dedupeKey,
@@ -176,6 +178,30 @@ function fixture() {
       }),
       findFirst: vi.fn(async ({ where }) => rows.find((row) => row.id === where.id) ?? rows.at(-1)),
     },
+    $queryRaw: vi.fn(async (sql: TemplateStringsArray) => {
+      if (sql.join("?").includes('AS "candidateManifest"'))
+        return [{ candidateManifest: current.resultManifest }]
+      if (sql.join("?").includes('AS "requestedTargetId"'))
+        return [
+          {
+            requestedTargetId: input.targetId,
+            targetId: input.targetId,
+            targetWorkspaceId: input.workspaceId,
+            targetType: "REPO",
+            scanId: current.id,
+            scanWorkspaceId: input.workspaceId,
+            scanTargetId: input.targetId,
+            status: current.status,
+            mode: current.mode,
+            endedAt: current.endedAt,
+            policyId: current.policyId,
+            resultManifest: current.resultManifest,
+            coverageReceipts: current.coverageReceipts,
+            overflow: false,
+          },
+        ]
+      return []
+    }),
     report: {
       create: vi.fn().mockResolvedValue({ id: "packet-1" }),
       findMany: vi.fn().mockResolvedValue([]),
@@ -229,7 +255,7 @@ describe("release packet current gate compatibility", () => {
     )
   })
 
-  it.each(["valid", "wrong-lineage", "bad-signature"])(
+  it.each(["valid", "wrong-lineage", "bad-signature", "legacy"])(
     "reuses equivalent current evidence while retaining only a %s signed report",
     async (kind) => {
       const { tx, rows } = fixture()
@@ -239,7 +265,19 @@ describe("release packet current gate compatibility", () => {
         assessmentVersion: number
       }
       rows.splice(2)
-      const payload = buildLaunchReportPayload(assessed, { issuedAt: now })
+      const identityBindingKey = "d".repeat(64)
+      const identityCommitment = launchReportIdentityCommitment(identityBindingKey, {
+        workspaceId: input.workspaceId,
+        targetId: input.targetId,
+        verdictId: assessed.id,
+        verdictChecksum: assessed.verdictChecksum,
+        assessmentVersion: assessed.assessmentVersion,
+        identity: input.expectedIdentity,
+      })
+      const payload = buildLaunchReportPayload(assessed, {
+        issuedAt: now,
+        ...(kind === "legacy" ? {} : { identityCommitment }),
+      })
       const report = {
         id: "signed-report-1",
         contentJson: {
@@ -250,19 +288,22 @@ describe("release packet current gate compatibility", () => {
               ? "invalid"
               : signLaunchReportChecksum(payload.reportChecksum, privateKey),
         },
-        provenanceJson: buildLaunchReportProvenance({
-          verdictId: assessed.id,
-          verdictChecksum: kind === "wrong-lineage" ? "f".repeat(64) : assessed.verdictChecksum,
-          assessmentVersion: assessed.assessmentVersion,
-          assessedIdentity: input.expectedIdentity,
-          assessedAt: assessed.evaluatedAt,
-          issuedAt: now,
-          applicabilityCheckedAt: now,
-          applicability: "applicable",
-          reasonCodes: [],
-          historicalState: assessed.state,
-          effectiveState: assessed.state,
-        }),
+        provenanceJson: {
+          ...buildLaunchReportProvenance({
+            verdictId: assessed.id,
+            verdictChecksum: kind === "wrong-lineage" ? "f".repeat(64) : assessed.verdictChecksum,
+            assessmentVersion: assessed.assessmentVersion,
+            assessedIdentity: input.expectedIdentity,
+            assessedAt: assessed.evaluatedAt,
+            issuedAt: now,
+            applicabilityCheckedAt: now,
+            applicability: "applicable",
+            reasonCodes: [],
+            historicalState: assessed.state,
+            effectiveState: assessed.state,
+          }),
+          ...(kind === "legacy" ? {} : { identityBindingKey }),
+        },
       }
       tx.report.findMany.mockResolvedValue([report])
       tx.gateVerdict.create.mockClear()
@@ -270,7 +311,13 @@ describe("release packet current gate compatibility", () => {
       expect(tx.gateVerdict.create).not.toHaveBeenCalled()
       expect(packet.payload.assessment.verdictId).toBe(assessed.id)
       expect(packet.payload.signedAssessment.state).toBe(
-        kind === "valid" ? "SIGNED" : kind === "bad-signature" ? "INVALID" : "UNAVAILABLE"
+        kind === "valid"
+          ? "SIGNED"
+          : kind === "bad-signature"
+            ? "INVALID"
+            : kind === "legacy"
+              ? "HISTORICAL"
+              : "UNAVAILABLE"
       )
       if (kind === "valid") expect(packet.payload.signedAssessment.reportId).toBe(report.id)
     }
@@ -307,35 +354,32 @@ describe("release packet current gate compatibility", () => {
     "extra",
     "duplicate",
     "absent",
-  ])(
-    "rejects %s coverage discordance even when the current evaluator returns READY",
-    async (kind) => {
-      const { tx, current } = fixture()
-      tx.finding.findMany.mockResolvedValue([])
-      const manifest = current.resultManifest.manifest as {
-        coverage?: Array<Record<string, unknown>>
-      }
-      const row = manifest.coverage![0]!
-      if (kind === "scanner") row.scanner = "foreign-scanner"
-      if (kind === "control") row.controlId = "foreign-control"
-      if (kind === "reason") row.reason = "Blocked input"
-      if (kind === "subject") row.subject = "other-input"
-      if (kind === "metadata") row.metadata = { evidence: "different" }
-      if (kind === "missing") manifest.coverage!.pop()
-      if (kind === "extra") manifest.coverage!.push({ ...row, controlId: "extra-control" })
-      if (kind === "duplicate") manifest.coverage!.push({ ...row })
-      if (kind === "absent") delete manifest.coverage
-      current.resultManifest.checksumInput = JSON.stringify(current.resultManifest.manifest)
-      current.resultManifest.checksum = createHash("sha256")
-        .update(current.resultManifest.checksumInput)
-        .digest("hex")
-      await expect(issueReleasePacket(input)).rejects.toMatchObject({
-        code: "ASSESSMENT_INCOMPLETE",
-      })
-      expect(tx.gateVerdict.create.mock.calls[0]![0].data.state).toBe("READY")
-      expect(tx.report.create).not.toHaveBeenCalled()
+  ])("rejects %s coverage discordance during current evaluation", async (kind) => {
+    const { tx, current } = fixture()
+    tx.finding.findMany.mockResolvedValue([])
+    const manifest = current.resultManifest.manifest as {
+      coverage?: Array<Record<string, unknown>>
     }
-  )
+    const row = manifest.coverage![0]!
+    if (kind === "scanner") row.scanner = "foreign-scanner"
+    if (kind === "control") row.controlId = "foreign-control"
+    if (kind === "reason") row.reason = "Blocked input"
+    if (kind === "subject") row.subject = "other-input"
+    if (kind === "metadata") row.metadata = { evidence: "different" }
+    if (kind === "missing") manifest.coverage!.pop()
+    if (kind === "extra") manifest.coverage!.push({ ...row, controlId: "extra-control" })
+    if (kind === "duplicate") manifest.coverage!.push({ ...row })
+    if (kind === "absent") delete manifest.coverage
+    current.resultManifest.checksumInput = JSON.stringify(current.resultManifest.manifest)
+    current.resultManifest.checksum = createHash("sha256")
+      .update(current.resultManifest.checksumInput)
+      .digest("hex")
+    await expect(issueReleasePacket(input)).rejects.toMatchObject({
+      code: "ASSESSMENT_INCOMPLETE",
+    })
+    expect(tx.gateVerdict.create.mock.calls[0]![0].data.state).toBe("INSUFFICIENT_EVIDENCE")
+    expect(tx.report.create).not.toHaveBeenCalled()
+  })
 
   it("accepts matching coverage regardless of row order or omitted nullable fields", async () => {
     const { tx, current } = fixture()
@@ -383,7 +427,7 @@ describe("release packet current gate compatibility", () => {
 
   it("requires a supported assessment identity when the completed manifest is absent", async () => {
     const { tx, current } = fixture()
-    tx.scan.findFirst.mockResolvedValue({ ...current, resultManifest: null })
+    current.resultManifest = null as never
     await expect(issueReleasePacket(input)).rejects.toMatchObject({ code: "ASSESSMENT_INCOMPLETE" })
     expect(tx.report.create).not.toHaveBeenCalled()
   })

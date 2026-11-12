@@ -193,6 +193,15 @@ describe("POST /api/reports/launch-readiness delegated target scope (W0.3)", () 
     })
   })
 
+  it("asks for reassessment instead of issuing or sharing an untrusted verdict", async () => {
+    generateLaunchReport.mockRejectedValue(
+      Object.assign(new Error("untrusted"), { code: "UNTRUSTED_GATE_EVIDENCE" })
+    )
+    const response = await post({ workspaceId: "ws-1", targetId: "target-a", share: true })
+    expect(response.status).toBe(409)
+    expect(generateShareToken).not.toHaveBeenCalled()
+  })
+
   it("denies before side effects when the permission gate itself fails", async () => {
     vi.mocked(requirePermission).mockRejectedValueOnce(new Error("FORBIDDEN") as never)
 

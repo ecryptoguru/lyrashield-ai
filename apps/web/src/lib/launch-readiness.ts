@@ -64,6 +64,21 @@ type CanonicalLaunchReadinessReport = Omit<LaunchReadinessReport, "score"> & {
   triageScore: number | null
 }
 
+/** Keep the selected release filter when navigating between bounded target pages. */
+export function readinessTargetPageHref(input: {
+  targetId?: string
+  commit?: string
+  artifactDigest?: string
+  cursor?: string | null
+}): string {
+  const query = new URLSearchParams()
+  if (input.targetId) query.set("targetId", input.targetId)
+  if (input.commit) query.set("commit", input.commit)
+  if (input.artifactDigest) query.set("artifactDigest", input.artifactDigest)
+  if (input.cursor) query.set("cursor", input.cursor)
+  return `/dashboard/launch-readiness${query.size ? `?${query}` : ""}`
+}
+
 export interface GateReadinessTarget {
   targetId: string
   targetName: string
@@ -440,9 +455,21 @@ export function describeReleaseCheck(
 
 export function projectGateReadinessReport(
   groups: FindingReadinessAggregate[],
-  targets: GateReadinessTarget[]
+  targets: GateReadinessTarget[],
+  options: { partial?: boolean } = {}
 ): CanonicalLaunchReadinessReport {
   const triage = generateLaunchReadinessReportFromAggregate(groups, targets.length > 0)
+  if (targets.length === 0 && options.partial) {
+    return {
+      ...triage,
+      state: "INSUFFICIENT_EVIDENCE",
+      verdict: "INCONCLUSIVE",
+      score: null,
+      triageScore: triage.score,
+      summary: "This target page is empty. Return to the first page to review the workspace.",
+      conditions: ["Return to the first target page."],
+    }
+  }
   if (targets.length === 0) {
     return {
       ...triage,
@@ -477,6 +504,20 @@ export function projectGateReadinessReport(
         conditions.length > 0
           ? conditions
           : ["Resolve the blocking findings and complete a trusted retest."],
+    }
+  }
+
+  if (options.partial) {
+    return {
+      ...triage,
+      state: "INSUFFICIENT_EVIDENCE",
+      verdict: "INCONCLUSIVE",
+      score: null,
+      triageScore: triage.score,
+      blockingFindings,
+      summary:
+        "This page covers only some targets. Check more target pages before assessing the workspace.",
+      conditions: ["Review the remaining target pages or check a specific target."],
     }
   }
 

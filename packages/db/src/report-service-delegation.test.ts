@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { LAUNCH_REPORT_PROVENANCE_VERSION } from "./launch-report-provenance"
-import { computeLaunchReportChecksum, LAUNCH_REPORT_PAYLOAD_VERSION } from "./launch-report-payload"
+import {
+  computeLaunchReportChecksum,
+  LEGACY_LAUNCH_REPORT_PAYLOAD_VERSION,
+} from "./launch-report-payload"
 
 /**
  * W0.3 — resolveReportDelegationTarget maps a persisted report to the target
@@ -31,7 +34,7 @@ const verdictFindFirst = vi.mocked(prisma.gateVerdict.findFirst)
 
 function launchReportPayload() {
   const unsigned = {
-    payloadVersion: LAUNCH_REPORT_PAYLOAD_VERSION,
+    payloadVersion: LEGACY_LAUNCH_REPORT_PAYLOAD_VERSION,
     verdictLabel: "Ready to launch",
     standardVersion: "1.0.0",
     appDisplayName: "acme-app",

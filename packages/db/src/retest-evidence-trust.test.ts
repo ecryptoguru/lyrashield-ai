@@ -1,6 +1,11 @@
 import { createHash } from "node:crypto"
 import { describe, expect, it } from "vitest"
-import { isReceiptBackedRetest } from "./retest-evidence-trust"
+import { isReceiptBackedRetest, MAX_RETEST_COVERAGE_RECEIPTS } from "./retest-evidence-trust"
+import {
+  MAX_SCOPED_COVERAGE_ENTRIES,
+  MAX_COVERAGE_GAPS,
+} from "../../../apps/worker/src/engine/engine-output-schema"
+import { VIBE_SECURITY_CONTROLS } from "@lyrashield/security"
 
 function fixture(targetType: "REPO" | "WEB_APP" = "REPO") {
   const identity = (scanId: string, revision: string) => {
@@ -121,4 +126,62 @@ describe("receipt-backed deterministic retest", () => {
       expect(isReceiptBackedRetest(value)).toBe(false)
     }
   })
+})
+
+describe("batched retest candidate binding", () => {
+  it("rejects a legacy composer finding observed in its retest but ignores another target", async () => {
+    const input = fixture()
+    const finding = {
+      ...input.finding,
+      targetId: input.targetId,
+      dedupeKey: "legacy",
+      verificationReceipts: [input.receipt],
+    }
+    const source = {
+      targetId: input.targetId,
+      findingId: finding.id,
+      scanId: input.baseline.id,
+      dedupeKey: "legacy",
+      scannerSource: "sca",
+      payload: { dedupeKey: "legacy" },
+    }
+    const observed = {
+      targetId: input.targetId,
+      findingId: null,
+      scanId: input.retestScan.id,
+      dedupeKey: "new-key",
+      scannerSource: "sca",
+      payload: {
+        dependencyIdentityVersion: "composer-lock/1",
+        dependencyLegacyDedupeKey: "legacy",
+      },
+    }
+    let candidates = [source, observed]
+    const tx = {
+      scan: { findMany: async () => [input.baseline, input.retestScan] },
+      retest: { findMany: async () => [input.retest] },
+      findingCandidate: { findMany: async () => candidates },
+    } as unknown as import("./rls").ScopedTransaction
+    const { loadReceiptBackedRetestFindingIdsAcrossTargets } =
+      await import("./retest-evidence-trust")
+    expect(
+      await loadReceiptBackedRetestFindingIdsAcrossTargets(tx, {
+        workspaceId: input.workspaceId,
+        findings: [finding],
+      })
+    ).toEqual(new Set())
+    candidates = [source, { ...observed, targetId: "other-target" }]
+    expect(
+      await loadReceiptBackedRetestFindingIdsAcrossTargets(tx, {
+        workspaceId: input.workspaceId,
+        findings: [finding],
+      })
+    ).toEqual(new Set([finding.id]))
+  })
+})
+
+it("permits the worker's maximum supported coverage receipts", () => {
+  expect(MAX_RETEST_COVERAGE_RECEIPTS).toBeGreaterThanOrEqual(
+    MAX_SCOPED_COVERAGE_ENTRIES + MAX_COVERAGE_GAPS + 9 + 1 + VIBE_SECURITY_CONTROLS.length
+  )
 })
