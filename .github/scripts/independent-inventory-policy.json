@@ -1,9 +1,9 @@
 {
-  "tree": "82ff4e7b4d3030e34d7a40e743653b084d51defb",
+  "tree": "f7470f608c604fce97357fcf72af1027dc3558b9",
   "files": {
-    ".github/workflows/verify-sandbox-inventory.yml": "sha256:e4ec04d089ce871c1145142b59f082a1496ae7596c3a908d4e94ad37236f4e61",
-    "scripts/acquire_sandbox_inventory.py": "sha256:3afc9c58e20ae9c31924f4ac9f5fa23c31cd1514dd3c319eb61a1bd8d939a6e0",
-    "scripts/bind_sandbox_inventory.py": "sha256:02569b0a332d9f8a60094244ee82764ed939051d835465f6a228a88259d7026e",
+    ".github/workflows/verify-sandbox-inventory.yml": "sha256:b4ff5b1921d2ef0236d040756af3223c313e78d62d9cf01d102da9fa5fb6ca08",
+    "scripts/acquire_sandbox_inventory.py": "sha256:f61ed46c1f553d6e93eaf5a44e900561bffb5d1dc9c1704f2b12debcb6c1b3ff",
+    "scripts/bind_sandbox_inventory.py": "sha256:61513d887583be0794982e06ed4cdef9ff6375e078a8830053a0697711f57904",
     "scripts/catalog_pax_capability_headers.py": "sha256:c71ce0ae4d3f71c8ca97bfbd710fe6bc8610d02d57b3375816e0e827d5f6bd22",
     "scripts/check_go_sbom_coverage.py": "sha256:23912cacb14a3eb51a514db0f7241ac4d0a68d6afafbbf43a46229cf1822b5c8",
     "scripts/check_sandbox_attestations.py": "sha256:49dbe74be3152bf7710ae8f4896bc4ff4fe3b174e5cee89843ed8c280a3e74e9",
@@ -18,7 +18,7 @@
     "scripts/spool_verified_oci_layer.py": "sha256:eb83a1d38325b7a316b709f6621bd3b82121b7448c8f11a44fe8ee41b3a1da94",
     "scripts/verify_oci_layer_binding.py": "sha256:21d0c26e9aed19631ef45b67ca8c14993499ff8822c94c672947464f339b6cee",
     "scripts/verify_pax_capability_stream.py": "sha256:15dc360acbe9f2f23d89a7c91cce1e3ca42e1b5c5d9f37a822d097c4504f0da3",
-    "scripts/verify_sandbox_package_inventory.py": "sha256:50dd86bd0d56b648f0f7fd7a8aa247583b6cf1d072de73ca2b0ff7f3eece3788",
+    "scripts/verify_sandbox_package_inventory.py": "sha256:6bd62684f6c73ce1ca649339c8a1c8bb5bed1379af1fac3af28ea8b02bc96548",
     "scripts/verify_sandbox_platform_index.py": "sha256:8164dd10a6bf7ac396ff235ae99f9162f3b5249d6c578c3e3915d2fbd6a12a36"
   }
 }
