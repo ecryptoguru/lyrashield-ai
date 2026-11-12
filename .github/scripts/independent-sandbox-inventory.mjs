@@ -97,75 +97,7 @@ function verifyVerifierCi(revision, get) {
   return `${runId}:${current.run_attempt}`
 }
 
-export function verifyIndependentSandboxInventory(
-  expected,
-  {
-    when = Date.now(),
-    run = protectedGh,
-    read: get = read,
-    verifyPublication = verifySandboxCoveragePublication,
-    verifyPublisher = verifyHeldEnginePublisherRun,
-  } = {}
-) {
-  exact(expected, [
-    "engineRevision",
-    "publicationRevision",
-    "publishRunId",
-    "publishAttempt",
-    "sandboxDigest",
-    "verifierRevision",
-    "verifierRunId",
-    "verifierAttempt",
-  ])
-  for (const descriptor of Object.values(Object.getOwnPropertyDescriptors(expected)))
-    assert.ok(Object.hasOwn(descriptor, "value") && typeof descriptor.value === "string")
-  for (const field of ["engineRevision", "publicationRevision", "verifierRevision"])
-    assert.match(expected[field], /^[a-f0-9]{40}$/)
-  for (const field of ["publishRunId", "publishAttempt", "verifierRunId", "verifierAttempt"])
-    assert.match(expected[field], /^[1-9][0-9]{0,19}$/)
-  assert.match(expected.sandboxDigest, digest)
-  assert.ok(Number.isSafeInteger(when) && when > 0)
-  const publicationSelector = Object.fromEntries(
-    [
-      "engineRevision",
-      "publicationRevision",
-      "publishRunId",
-      "publishAttempt",
-      "sandboxDigest",
-    ].map((key) => [key, expected[key]])
-  )
-  verifyPublisher(expected.publishRunId, expected.publishAttempt, expected.publicationRevision)
-  const publication = verifyPublication(publicationSelector, { run, when })
-  assert.equal(publication.qualified, false)
-  assert.equal(publication.nativeInventoryRechecked, false)
-  assert.equal(publication.signedBoundedCoverageVerified, true)
-  const source = get(`git/commits/${expected.verifierRevision}`)
-  assert.match(INVENTORY_VERIFIER_TREE, /^[a-f0-9]{40}$/)
-  assert.equal(source?.sha, expected.verifierRevision)
-  assert.equal(source?.tree?.sha, INVENTORY_VERIFIER_TREE)
-  const verifierCi = verifyVerifierCi(expected.verifierRevision, get)
-  const verifierRun = get(
-    `actions/runs/${expected.verifierRunId}/attempts/${expected.verifierAttempt}`
-  )
-  assert.ok(
-    String(verifierRun?.id) === expected.verifierRunId &&
-      String(verifierRun?.run_attempt) === expected.verifierAttempt &&
-      verifierRun.status === "completed" &&
-      verifierRun.conclusion === "success" &&
-      verifierRun.event === "workflow_dispatch" &&
-      verifierRun.head_branch === "main" &&
-      verifierRun.head_sha === expected.verifierRevision &&
-      verifierRun.path === ".github/workflows/verify-sandbox-inventory.yml" &&
-      verifierRun.repository?.id === 1297157605 &&
-      verifierRun.head_repository?.id === 1297157605
-  )
-  const verifier = {
-    publicationRevision: expected.verifierRevision,
-    publishRunId: expected.verifierRunId,
-    publishAttempt: expected.verifierAttempt,
-    sandboxDigest: expected.sandboxDigest,
-  }
-  const predicate = verifyInventoryAttestation(verifier, { run, when })
+function validateInventoryPredicate(predicate, expected, publication) {
   exact(predicate, [
     "schema",
     "status",
@@ -263,6 +195,78 @@ export function verifyIndependentSandboxInventory(
         entry.finalHeaders <= limits.finalHeaders
     )
   }
+}
+
+export function verifyIndependentSandboxInventory(
+  expected,
+  {
+    when = Date.now(),
+    run = protectedGh,
+    read: get = read,
+    verifyPublication = verifySandboxCoveragePublication,
+    verifyPublisher = verifyHeldEnginePublisherRun,
+  } = {}
+) {
+  exact(expected, [
+    "engineRevision",
+    "publicationRevision",
+    "publishRunId",
+    "publishAttempt",
+    "sandboxDigest",
+    "verifierRevision",
+    "verifierRunId",
+    "verifierAttempt",
+  ])
+  for (const descriptor of Object.values(Object.getOwnPropertyDescriptors(expected)))
+    assert.ok(Object.hasOwn(descriptor, "value") && typeof descriptor.value === "string")
+  for (const field of ["engineRevision", "publicationRevision", "verifierRevision"])
+    assert.match(expected[field], /^[a-f0-9]{40}$/)
+  for (const field of ["publishRunId", "publishAttempt", "verifierRunId", "verifierAttempt"])
+    assert.match(expected[field], /^[1-9][0-9]{0,19}$/)
+  assert.match(expected.sandboxDigest, digest)
+  assert.ok(Number.isSafeInteger(when) && when > 0)
+  const publicationSelector = Object.fromEntries(
+    [
+      "engineRevision",
+      "publicationRevision",
+      "publishRunId",
+      "publishAttempt",
+      "sandboxDigest",
+    ].map((key) => [key, expected[key]])
+  )
+  verifyPublisher(expected.publishRunId, expected.publishAttempt, expected.publicationRevision)
+  const publication = verifyPublication(publicationSelector, { run, when })
+  assert.equal(publication.qualified, false)
+  assert.equal(publication.nativeInventoryRechecked, false)
+  assert.equal(publication.signedBoundedCoverageVerified, true)
+  const source = get(`git/commits/${expected.verifierRevision}`)
+  assert.match(INVENTORY_VERIFIER_TREE, /^[a-f0-9]{40}$/)
+  assert.equal(source?.sha, expected.verifierRevision)
+  assert.equal(source?.tree?.sha, INVENTORY_VERIFIER_TREE)
+  const verifierCi = verifyVerifierCi(expected.verifierRevision, get)
+  const verifierRun = get(
+    `actions/runs/${expected.verifierRunId}/attempts/${expected.verifierAttempt}`
+  )
+  assert.ok(
+    String(verifierRun?.id) === expected.verifierRunId &&
+      String(verifierRun?.run_attempt) === expected.verifierAttempt &&
+      verifierRun.status === "completed" &&
+      verifierRun.conclusion === "success" &&
+      verifierRun.event === "workflow_dispatch" &&
+      verifierRun.head_branch === "main" &&
+      verifierRun.head_sha === expected.verifierRevision &&
+      verifierRun.path === ".github/workflows/verify-sandbox-inventory.yml" &&
+      verifierRun.repository?.id === 1297157605 &&
+      verifierRun.head_repository?.id === 1297157605
+  )
+  const verifier = {
+    publicationRevision: expected.verifierRevision,
+    publishRunId: expected.verifierRunId,
+    publishAttempt: expected.verifierAttempt,
+    sandboxDigest: expected.sandboxDigest,
+  }
+  const predicate = verifyInventoryAttestation(verifier, { run, when })
+  validateInventoryPredicate(predicate, expected, publication)
   assert.equal(verifyVerifierCi(expected.verifierRevision, get), verifierCi)
   return Object.freeze({
     ...expected,
