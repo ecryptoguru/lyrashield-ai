@@ -10,6 +10,7 @@ import {
   type GateAssessmentSnapshot,
 } from "@lyrashield/gate"
 import { fingerprintPolicy, snapshotFromManifest, toEpochMs } from "./gate-assessment"
+import { loadVerifiedAssessedScans, MAX_EVIDENCE_BYTES } from "./gate-assessed-scan-evidence"
 import { loadGateFindings, prepareGateFindingInputs } from "./gate-retest-input"
 import { withWorkspaceRLS, type ScopedTransaction } from "./rls"
 
@@ -18,6 +19,28 @@ export interface GateEvaluationResult {
   gateVerdictId: string
   /** Present when the gate could not evaluate at all (e.g. no completed scan). */
   note?: string
+}
+
+export async function loadBoundedCandidateManifest(
+  tx: ScopedTransaction,
+  workspaceId: string,
+  targetId: string,
+  scanId: string
+): Promise<Parameters<typeof snapshotFromManifest>[0]["manifest"]> {
+  const rows = await tx.$queryRaw<
+    { candidateManifest: Parameters<typeof snapshotFromManifest>[0]["manifest"] }[]
+  >`
+    SELECT CASE WHEN octet_length(m."checksumInput") <= ${MAX_EVIDENCE_BYTES}
+      AND octet_length(m."manifest"::text) <= ${MAX_EVIDENCE_BYTES}
+      AND octet_length(m."checksum") = 64 AND m."checksum" ~ '^[0-9a-f]{64}$'
+      AND jsonb_typeof(m."manifest") = 'object'
+      THEN jsonb_build_object('version', m."version", 'checksum', m."checksum", 'manifest', m."manifest")
+      ELSE NULL END AS "candidateManifest"
+    FROM "ScanResultManifest" m JOIN "Scan" s ON s."id" = m."scanId"
+    WHERE s."id" = ${scanId} AND s."workspaceId" = ${workspaceId}
+      AND s."targetId" = ${targetId} AND s."deletedAt" IS NULL AND s."status" = 'COMPLETED'
+  `
+  return rows[0]?.candidateManifest ?? null
 }
 
 async function persistGateEvaluation(
@@ -101,7 +124,6 @@ export async function evaluateGateForTarget(
         status: true,
         mode: true,
         policyId: true,
-        resultManifest: { select: { version: true, checksum: true, manifest: true } },
       },
     })
 
@@ -128,22 +150,28 @@ export async function evaluateGateForTarget(
         })
       : null
     const policyFingerprint = fingerprintPolicy(policy as Record<string, unknown> | null)
-    const assessmentSnapshot = latestCompletedScan
+    const candidateManifest = latestCompletedScan
+      ? await loadBoundedCandidateManifest(tx, workspaceId, targetId, latestCompletedScan.id)
+      : null
+    const candidateSnapshot = latestCompletedScan
       ? snapshotFromManifest({
           scanId: latestCompletedScan.id,
           endedAt: latestCompletedScan.endedAt,
           policyId: latestCompletedScan.policyId,
           policyFingerprint,
-          manifest: latestCompletedScan.resultManifest,
+          manifest: candidateManifest,
         })
       : null
 
-    const coverageReceipts = latestCompletedScan
-      ? await tx.scanCoverageReceipt.findMany({
-          where: { scanId: latestCompletedScan.id },
-          select: { controlId: true, scanner: true, status: true, reason: true },
-        })
-      : []
+    const verifiedScan = candidateSnapshot
+      ? (
+          await loadVerifiedAssessedScans(tx, workspaceId, [
+            { targetId, scanId: candidateSnapshot.scanId, assessmentSnapshot: candidateSnapshot },
+          ])
+        ).verified.get(targetId)
+      : undefined
+    const assessmentSnapshot = verifiedScan ? candidateSnapshot : null
+    const coverageReceipts = verifiedScan?.coverageReceipts ?? []
 
     const { findings, trustedRetests } = await loadGateFindings(tx, workspaceId, targetId)
 
@@ -161,7 +189,7 @@ export async function evaluateGateForTarget(
         controlId: r.controlId,
         scanner: r.scanner,
         status: r.status as GateEvidenceInput["coverageReceipts"][number]["status"],
-        reason: r.reason,
+        reason: r.reason ?? null,
       })),
       findings: prepareGateFindingInputs(findings, trustedRetests, latestCompletedScan?.id ?? null),
       requiredScanners: isTargetTypeCovered(target.type)

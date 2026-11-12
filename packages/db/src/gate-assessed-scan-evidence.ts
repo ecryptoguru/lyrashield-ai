@@ -7,7 +7,7 @@ import type { ScopedTransaction } from "./rls"
 // Current producer: 500 scoped entries + 50 gaps + 9 families + one row per
 // control + one PHP applicability receipt. Oversized evidence is unavailable.
 const MAX_COVERAGE_ROWS = 500 + 50 + 9 + 1 + VIBE_SECURITY_CONTROLS.length
-const MAX_EVIDENCE_BYTES = 16 * 1024 * 1024
+export const MAX_EVIDENCE_BYTES = 16 * 1024 * 1024
 
 type Target = { id: string; workspaceId: string; type: string; deletedAt: Date | null }
 type Scan = Omit<Parameters<typeof isVerifiedPacketScan>[0], "resultManifest"> & {

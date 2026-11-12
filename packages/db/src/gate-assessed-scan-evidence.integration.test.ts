@@ -3,6 +3,7 @@ import { Client } from "pg"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { RESULT_MANIFEST_VERSION } from "@lyrashield/types"
 import { findUnverifiedAssessedScans } from "./gate-assessed-scan-evidence"
+import { loadBoundedCandidateManifest } from "./gate-evaluation-service"
 import type { ScopedTransaction } from "./rls"
 
 const url = process.env.GATE_SCAN_TEST_DATABASE_URL
@@ -87,6 +88,40 @@ describe.skipIf(!url)("bounded assessed scan read against PostgreSQL", () => {
     expect(await findUnverifiedAssessedScans(tx, "ws", [verdict])).toEqual(new Set())
     expect(queries).toBe(1)
     expect(await findUnverifiedAssessedScans(tx, "other", [verdict])).toEqual(new Set(["target"]))
+  })
+
+  it("bounds the producer candidate before transfer and scopes it to the workspace and target", async () => {
+    expect(await loadBoundedCandidateManifest(tx, "ws", "target", "scan")).toMatchObject({
+      checksum,
+      manifest,
+    })
+    expect(await loadBoundedCandidateManifest(tx, "other", "target", "scan")).toBeNull()
+    expect(await loadBoundedCandidateManifest(tx, "ws", "other", "scan")).toBeNull()
+    await client.query(
+      `UPDATE "ScanResultManifest" SET "checksum" = repeat('a', 1024) WHERE "scanId" = 'scan'`
+    )
+    expect(await loadBoundedCandidateManifest(tx, "ws", "target", "scan")).toBeNull()
+    await client.query(`UPDATE "ScanResultManifest" SET "checksum" = $1 WHERE "scanId" = 'scan'`, [
+      checksum,
+    ])
+    await client.query(
+      `UPDATE "ScanResultManifest" SET "checksumInput" = repeat('x', 16777217) WHERE "scanId" = 'scan'`
+    )
+    expect(await loadBoundedCandidateManifest(tx, "ws", "target", "scan")).toBeNull()
+    await client.query(
+      `UPDATE "ScanResultManifest" SET "checksumInput" = $1,
+      "manifest" = jsonb_set("manifest", '{padding}', to_jsonb(repeat('x', 16777217))) WHERE "scanId" = 'scan'`,
+      [bytes]
+    )
+    expect(await loadBoundedCandidateManifest(tx, "ws", "target", "scan")).toBeNull()
+    await client.query(
+      `UPDATE "ScanResultManifest" SET "manifest" = 'null'::jsonb WHERE "scanId" = 'scan'`
+    )
+    expect(await loadBoundedCandidateManifest(tx, "ws", "target", "scan")).toBeNull()
+    await client.query(
+      'UPDATE "ScanResultManifest" SET "manifest" = $1::jsonb WHERE "scanId" = $2',
+      [bytes, "scan"]
+    )
   })
 
   it("fails a legacy manifest, altered receipt, and excessive coverage closed", async () => {
