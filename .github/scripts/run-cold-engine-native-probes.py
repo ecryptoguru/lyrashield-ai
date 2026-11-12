@@ -1,0 +1,153 @@
+#!/usr/bin/env python3
+"""Run fixed installed-engine TCP/SIGKILL probes in an immutable Linux worker image."""
+import argparse
+import hashlib
+import importlib.util
+import json
+from pathlib import Path
+import re
+import subprocess
+import tempfile
+import tomllib
+from uuid import uuid4
+
+ENGINE = "ddb1c5ea6a5014cfc5e1cfadac03a5db7e8cc25d"
+FILES = ("run-cold-engine-native-probes.py", "cold-engine-native-probe.py",
+         "run-engine-physical-ceiling-drill.py")
+CASES = tuple(f"{route}-{stream}-503-cap-no-retry"
+              for route in ("responses", "chat", "litellm") for stream in ("plain", "stream")) + (
+    "engine-budget-denies-before-tcp-dispatch", "engine-lost-ack-no-paid-resume",
+    "engine-sigkill-no-paid-resume")
+
+
+def invoke(command, **kwargs):
+    result = subprocess.run(command, capture_output=True, timeout=120, **kwargs)
+    if result.returncode:
+        # Do not expose subprocess streams: operational environments may hold credentials.
+        raise RuntimeError(f"{Path(command[0]).name} exited {result.returncode}")
+    return result.stdout
+
+
+def validate_cases(cases):
+    if not isinstance(cases, list) or tuple(case.get("name") for case in cases) != CASES:
+        raise RuntimeError("native case set failed or incomplete")
+    for case in cases:
+        if type(case.get("exitCode")) is not int or case["exitCode"] != 0:
+            raise RuntimeError("native case failed")
+        if case["name"].endswith("503-cap-no-retry"):
+            if case.get("physicalRequests") != 1 or case.get("outputCap") != 128 or case.get("retainedPendingCharge") is not True:
+                raise RuntimeError("physical request cap/retry proof failed")
+        elif case["name"] == "engine-budget-denies-before-tcp-dispatch":
+            held = case.get("heldReservationsUsd")
+            if (case.get("configuredCapUsd") != 0.002 or case.get("deniedRequests") != 1
+                    or not isinstance(held, (int, float)) or not 0 < held <= 0.002
+                    or not isinstance(case.get("physicalRequests"), int) or case["physicalRequests"] < 1):
+                raise RuntimeError("finite admission proof failed")
+        elif (case.get("physicalRequests") != 1 or case.get("retainedPendingCharge") is not True
+              or type(case.get("retryExitCode")) is not int or case["retryExitCode"] <= 0):
+            raise RuntimeError("fresh interpreter replay proof failed")
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--candidate", nargs=2, required=True, metavar=("WORKER_IMAGE", "PRODUCT_SHA"))
+    parser.add_argument("--engine-repo", required=True)
+    parser.add_argument("--harness-sha", required=True)
+    parser.add_argument("--receipt", required=True)
+    args = parser.parse_args()
+    image, product = args.candidate
+    out = Path(args.receipt).absolute()
+    if out.exists() or out.is_symlink():
+        raise RuntimeError("receipt already exists")
+    root = Path(__file__).resolve().parents[2]
+    paths = [".github/scripts/" + name for name in FILES]
+    proof = {"schema": "lyrashield.cold-engine-native.v1", "passed": False,
+             "candidate": {"workerImage": image, "productRevision": product, "engineRevision": ENGINE},
+             "harnessRevision": args.harness_sha, "cases": [],
+             "unverified": ["actual-worker-db-redis-crash-claim-slot", "actual-sandbox-credential-egress",
+                            "database-rollback-replay-barrier", "live-provider-billing", "image-provenance"],
+             "limitations": ["Real Linux TCP to controlled fake provider; no paid provider traffic.",
+                             "Engine process crash does not establish worker DB/Redis claim retention.",
+                             "Unsigned receipt requires independent producer/artifact authentication."]}
+    created = None
+    try:
+        if not re.fullmatch(r"ghcr.io/ecryptoguru/lyrashield-ai/lyrashield-worker@sha256:[a-f0-9]{64}", image):
+            raise RuntimeError("canonical immutable worker reference required")
+        if not all(re.fullmatch(r"[a-f0-9]{40}", sha) for sha in (product, args.harness_sha)):
+            raise RuntimeError("exact source commits required")
+        hashes = {}
+        for relative in paths:
+            data = (root / relative).read_bytes()
+            committed = invoke(["git", "-C", str(root), "show", args.harness_sha + ":" + relative])
+            if data != committed:
+                raise RuntimeError("harness differs from its committed source")
+            hashes[relative] = hashlib.sha256(data).hexdigest()
+        proof["harnessFiles"] = hashes
+        proof["harnessSha256"] = hashlib.sha256(json.dumps(hashes, sort_keys=True).encode()).hexdigest()
+        meta = json.loads(invoke(["docker", "image", "inspect", image]))[0]
+        labels = meta.get("Config", {}).get("Labels") or {}
+        if image not in (meta.get("RepoDigests") or []) or meta["Os"] != "linux":
+            raise RuntimeError("local immutable Linux image required; runner never pulls")
+        if labels.get("org.opencontainers.image.revision") != product or labels.get("io.lyrashield.engine.revision") != ENGINE:
+            raise RuntimeError("worker source/engine labels mismatch")
+        proof["imageId"] = meta["Id"]
+        proof["architecture"] = meta["Architecture"]
+        # Reuse reviewed exact-Git materialization and ownership-safe Docker cleanup.
+        spec = importlib.util.spec_from_file_location("physical", root / paths[2])
+        physical = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(physical)
+        with tempfile.TemporaryDirectory(prefix="cold-native-") as temporary:
+            source = Path(temporary) / "engine"
+            physical._materialize_commit(Path(args.engine_repo).resolve(), source, ENGINE)
+            engine_files = {path.relative_to(source).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
+                            for directory in ("lyrashield", "lyrashield_adapter", "strix")
+                            for path in (source / directory).rglob("*.py") if path.is_file()}
+            versions = {entry["name"]: entry["version"] for entry in tomllib.loads((source / "uv.lock").read_text())["package"]
+                        if entry["name"] in ("openai", "openai-agents", "litellm", "httpx")}
+            if len(versions) != 4 or not engine_files:
+                raise RuntimeError("engine fingerprint incomplete")
+            expected = {"engineFiles": engine_files, "versions": versions}
+            proof["engineFilesSha256"] = hashlib.sha256(json.dumps(engine_files, sort_keys=True).encode()).hexdigest()
+            proof["versions"] = versions
+            owner = uuid4().hex
+            name = "cold-native-" + owner
+            created = invoke(["docker", "create", "-i", "--pull", "never", "--name", name,
+                              "--label", "lyrashield.physical-drill-owner=" + owner, "--network", "none",
+                              "--read-only", "--tmpfs", "/tmp:rw,nosuid,nodev,size=256m",
+                              "--cap-drop", "ALL", "--security-opt", "no-new-privileges:true",
+                              "--memory", "2g", "--pids-limit", "256", "--cpus", "2",
+                              "--entrypoint", "/opt/lyrashield-venv/bin/python", image, "-I", "-"]).decode().strip()
+            if not re.fullmatch(r"[a-f0-9]{64}", created):
+                created = None
+                raise RuntimeError("container create ACK unknown; reconcile before retry")
+            data = ("expected=" + repr(expected) + "\n").encode() + (root / paths[1]).read_bytes()
+            try:
+                result = subprocess.run(["docker", "start", "-a", "-i", created], input=data,
+                                        capture_output=True, timeout=300)
+                proof["exitCode"] = result.returncode
+                proof["transcriptSha256"] = hashlib.sha256(result.stdout + b"\n" + result.stderr).hexdigest()
+                marker = b"COLD_NATIVE_RESULT="
+                records = [line[len(marker):] for line in result.stdout.splitlines() if line.startswith(marker)]
+                if result.returncode or len(records) != 1:
+                    raise RuntimeError("native probe failed; transcript retained only as checksum")
+                cases = json.loads(records[0])["cases"]
+                validate_cases(cases)
+                proof["cases"] = cases
+            finally:
+                physical.cleanup_probe(name, owner, meta["Id"], created)
+                created = None
+            proof["cleanupVerified"] = True
+            proof["passed"] = True
+    except Exception as error:
+        proof["error"] = str(error)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with out.open("x") as stream:
+        json.dump(proof, stream, sort_keys=True)
+        stream.write("\n")
+    print(json.dumps({"passed": proof["passed"], "receipt": str(out)}))
+    if not proof["passed"]:
+        raise SystemExit(1)
+
+
+if __name__ == "__main__":
+    main()
