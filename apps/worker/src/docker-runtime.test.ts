@@ -52,6 +52,12 @@ const desktopReleaseWorkflow = readFileSync(
   fileURLToPath(new URL("../../../.github/workflows/release-tauri.yml", import.meta.url)),
   "utf8"
 )
+const recoveryCandidateWorkflow = readFileSync(
+  fileURLToPath(
+    new URL("../../../.github/workflows/prepare-worker-recovery-candidate.yml", import.meta.url)
+  ),
+  "utf8"
+)
 // The path is anchored to this test module rather than derived from external input.
 const ciWorkflow = readFileSync(
   fileURLToPath(new URL("../../../.github/workflows/ci.yml", import.meta.url)),
@@ -170,9 +176,10 @@ describe("worker Docker runtime", () => {
   })
 
   it("pins and records the exact engine revision for release worker builds", () => {
-    const reviewedEngineRevision = "079194b176d9bf0b46e45f9bdc88ed18c5bf1806"
+    const reviewedEngineRevision = "ddb1c5ea6a5014cfc5e1cfadac03a5db7e8cc25d"
     expect(deployWorkflow).toContain(`ENGINE_REVISION: ${reviewedEngineRevision}`)
     expect(desktopReleaseWorkflow).toContain(`ENGINE_REVISION: ${reviewedEngineRevision}`)
+    expect(recoveryCandidateWorkflow).toContain(`ENGINE_REVISION: ${reviewedEngineRevision}`)
     expect(deployWorkflow).toContain("ref: ${{ env.ENGINE_REVISION }}")
     expect(deployWorkflow).toContain("io.lyrashield.engine.revision=${{ env.ENGINE_REVISION }}")
     const housekeepingStep = deployRuntimeWorkflow
