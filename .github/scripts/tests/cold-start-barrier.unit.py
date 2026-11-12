@@ -5,6 +5,8 @@ import json
 import os
 from pathlib import Path
 import tempfile
+import subprocess
+import sys
 import unittest
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -201,6 +203,31 @@ class ColdBarrierTests(unittest.TestCase):
                 self.assertTrue((state / 'pending').exists())
                 if fail_at <= 3:
                     self.assertFalse(f.calls)
+
+    def test_owner_lock_excludes_launcher_through_failed_final_fsync(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory) / 'state'
+            state.mkdir(mode=0o700)
+            (state / 'owner-started').touch(mode=0o600)
+            count = 0
+            def sync(fd):
+                nonlocal count
+                count += 1
+                if count >= 4:
+                    contender = subprocess.run([sys.executable, '-c',
+                        'import fcntl,sys; f=open(sys.argv[1], "w"); fcntl.flock(f, fcntl.LOCK_EX|fcntl.LOCK_NB)',
+                        str(state / 'owner.lock')], capture_output=True)
+                    self.assertNotEqual(contender.returncode, 0, 'concurrent launcher acquired owner lock')
+                if count == 6:
+                    self.assertFalse((state / 'pending').exists())
+                    self.assertFalse((state / 'owner-started').exists())
+                    raise OSError('final directory sync failed')
+                os.fsync(fd)
+            with self.assertRaisesRegex(OSError, 'final directory sync failed'):
+                barrier.execute_durable(OPTIONS, state, Fixture().invoke, sync=sync, boot_id=lambda: "boot-id")
+            self.assertTrue((state / 'pending').exists())
+            with barrier.locked(state / 'owner.lock'):
+                self.assertTrue((state / 'pending').exists())
 
     def test_native_ack_failure_keeps_durable_pending(self):
         with tempfile.TemporaryDirectory() as directory:

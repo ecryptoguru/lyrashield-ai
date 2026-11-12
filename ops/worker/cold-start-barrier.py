@@ -87,7 +87,7 @@ def classify(records, options):
     return owned, foreign
 
 
-def execute_barrier(options, invoke=command, owner_lock=None):
+def execute_barrier(options, invoke=command, owner_lock=None, complete=lambda result: result):
     worker = image_identity(options['workerImage'], invoke)
     sandbox = image_identity(options['sandboxImage'], invoke)
     labels = worker.get('Config', {}).get('Labels') or {}
@@ -131,8 +131,9 @@ def execute_barrier(options, invoke=command, owner_lock=None):
         owned, final_foreign = classify(inventory(), trusted)
         if owned or final_foreign != preserved:
             raise RuntimeError('Native cleanup acknowledgement is incomplete')
-    return {'oldResources': len(old), 'removedResources': len(after),
-            'removedIds': [record['Id'] for record, _ in after], 'preservedIds': list(preserved)}
+        # Keep the native owner lock through durable receipt publication and fence removal.
+        return complete({'oldResources': len(old), 'removedResources': len(after),
+                         'removedIds': [record['Id'] for record, _ in after], 'preservedIds': list(preserved)})
 
 
 def sync_directory(path, sync=os.fsync):
@@ -156,34 +157,35 @@ def persist_pending(state, sync=os.fsync):
 def execute_durable(options, state=STATE, invoke=command, owner_lock=None, sync=os.fsync,
                     boot_id=lambda: Path('/proc/sys/kernel/random/boot_id').read_text().strip()):
     persist_pending(state, sync)
-    result = execute_barrier(options, invoke, owner_lock)
-    receipt = {**options, **result, 'bootId': boot_id(),
-               'finishedAt': datetime.now(timezone.utc).isoformat()}
-    temporary = state / f'receipt-{os.getpid()}.json'
-    fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
-    try:
-        with os.fdopen(fd, 'w', closefd=False) as stream:
-            json.dump(receipt, stream)
-            stream.flush()
-            sync(fd)
-    finally:
-        os.close(fd)
-    os.replace(temporary, state / 'receipt.json')
-    sync_directory(state, sync)
-    try:
+    def complete(result):
+        receipt = {**options, **result, 'bootId': boot_id(),
+                   'finishedAt': datetime.now(timezone.utc).isoformat()}
+        temporary = state / f'receipt-{os.getpid()}.json'
+        fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
         try:
-            (state / 'owner-started').unlink()
-        except FileNotFoundError:
-            pass
-        (state / 'pending').unlink()
+            with os.fdopen(fd, 'w', closefd=False) as stream:
+                json.dump(receipt, stream)
+                stream.flush()
+                sync(fd)
+        finally:
+            os.close(fd)
+        os.replace(temporary, state / 'receipt.json')
         sync_directory(state, sync)
-    except BaseException:
         try:
-            persist_pending(state, sync)
-        except OSError:
-            pass
-        raise
-    return receipt
+            try:
+                (state / 'owner-started').unlink()
+            except FileNotFoundError:
+                pass
+            (state / 'pending').unlink()
+            sync_directory(state, sync)
+        except BaseException:
+            try:
+                persist_pending(state, sync)
+            except OSError:
+                pass
+            raise
+        return receipt
+    return execute_barrier(options, invoke, owner_lock or (lambda: locked(state / "owner.lock")), complete)
 
 
 def immutable_reference(reference, role):

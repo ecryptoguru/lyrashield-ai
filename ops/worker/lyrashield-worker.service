@@ -2,6 +2,7 @@
 Description=LyraShield production scan worker
 After=docker.service network-online.target lyrashield-worker-secrets.service lyrashield-worker-egress.service
 Requires=docker.service lyrashield-worker-secrets.service lyrashield-worker-egress.service
+OnFailure=lyrashield-worker-recover.service
 StartLimitIntervalSec=300s
 StartLimitBurst=3
 

@@ -215,3 +215,31 @@ It uses an invocation-owned Docker-in-Docker daemon, actual daemon restart,
 ID-bound removal and a lost-acknowledgement rejection. Its systemd adapter is
 not production systemd qualification; verify the actual units and exact image
 assets on the exclusive production host before reopening admission.
+
+### Automatic bounded crash recovery
+
+An unexpected worker exit uses the existing `Restart=always` with its start
+limit, then `OnFailure=lyrashield-worker-recover.service`. The independent
+recovery unit has no Docker dependency, so its native daemon barrier survives
+stopping Docker. It preserves the original protected database epoch, claims an
+owned persistent admission stop, refuses changed/unavailable epochs and unquarantined or inconsistent
+paid authority, runs the Python barrier, rechecks the original epoch and starts
+the worker. Foreign admission stops are preserved. Persisted UNKNOWN operations and lifetime-claimed scans remain quarantined with
+their slots while other safe work may resume. Failure leaves recovery held;
+neither paid work nor an epoch pin is automatically reset. Repeated recovery
+starts are limited to three within five minutes.
+
+Install `recover-worker.sh` as `/usr/local/libexec/lyrashield-recover-worker`,
+`worker-recovery-probe.mjs` in the qualified host/image assets and
+`lyrashield-worker-recover.service` beside the worker unit. The probe runs inside
+the exact configured worker image; the host needs Python3 and Linux `sync`, not
+Node. Planned stops remain stopped; routine releases retain their guarded
+promotion procedure.
+
+The existing exact-image pipeline can run
+`LYRASHIELD_RUN_ISOLATED_SYSTEMD_PROOF=1 node .github/scripts/tests/worker-recovery.systemd.mjs`
+to exercise uniquely named transient units on its disposable GitHub Linux runner. It verifies one
+external recovery restart while cycling a simulated native dependency and a
+changed-epoch hold, then stops only its own units. This complements the native
+Docker-in-Docker daemon proof; actual production units still require host
+qualification before relying on automatic recovery.
