@@ -7,9 +7,10 @@ import { fingerprintPolicy, parseAssessmentSnapshot } from "./gate-assessment"
 import { loadVerifiedAssessedScans } from "./gate-assessed-scan-evidence"
 import { findMismatchedGateEvidence, invalidateUntrustedGateEvidence } from "./gate-reader-evidence"
 import type { GateApplicabilityOptions } from "./gate-service"
+import { loadBoundedGateVerdicts, MAX_GATE_READ_BATCH_TARGETS } from "./gate-verdict-read"
 import { withWorkspaceRLS, type ScopedTransaction } from "./rls"
 
-export const MAX_GATE_READ_BATCH_TARGETS = 5
+export { MAX_GATE_READ_BATCH_TARGETS } from "./gate-verdict-read"
 
 /**
  * Batched form of getCurrentGateVerdict for read surfaces that evaluate every
@@ -41,15 +42,7 @@ export async function getCurrentGateVerdicts(
     // soft-delete predicate is due here — same as the per-target read. The
     // array binds with = ANY(...): `IN (${array})` binds a text[] parameter
     // against a text column and fails with P2010 text = text[].
-    const verdicts = await tx.$queryRaw<GateVerdictRawRow[]>`
-      SELECT * FROM (
-        SELECT DISTINCT ON ("targetId") *
-        FROM "GateVerdict"
-        WHERE "workspaceId" = ${workspaceId}
-          AND "targetId" = ANY(${targetIds}::text[])
-        ORDER BY "targetId", "evaluatedAt" DESC, "id" DESC
-      ) latest
-      ORDER BY "targetId"`
+    const verdicts = await loadBoundedGateVerdicts(tx, workspaceId, { targetIds })
 
     if (verdicts.length === 0) return
 
@@ -179,6 +172,7 @@ export async function getCurrentGateVerdicts(
       assessed.verified
     )
     for (const targetId of assessed.unverified) mismatches.add(targetId)
+    for (const verdict of verdicts) if (verdict.evidenceTooLarge) mismatches.add(verdict.targetId)
 
     // Map historical rows separately; an invalid current result never rewrites history.
     for (const row of verdicts) {
@@ -253,28 +247,4 @@ export interface GateVerdictBatchResult {
     assessmentSnapshot: unknown
     evaluatedAt: Date
   }
-}
-
-/**
- * Raw GateVerdict row from the DISTINCT ON read: camelCase quoted columns,
- * JSON columns arrive as parsed objects, timestamps as Date. This is the
- * $queryRaw wire shape — deliberately NOT the Prisma model type.
- */
-type GateVerdictRawRow = {
-  id: string
-  workspaceId: string
-  targetId: string
-  scanId: string | null
-  standardVersion: string
-  state: string
-  coverageStatement: unknown
-  nonCoverage: unknown
-  blockingReasons: unknown
-  evidenceSummary: unknown
-  staleness: unknown
-  inputChecksum: string
-  verdictChecksum: string
-  assessmentVersion: number | null
-  assessmentSnapshot: unknown
-  evaluatedAt: Date
 }

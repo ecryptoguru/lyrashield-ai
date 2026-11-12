@@ -3,6 +3,7 @@ import { Client } from "pg"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { findMismatchedGateEvidence } from "./gate-reader-evidence"
 import { loadVerifiedAssessedScans } from "./gate-assessed-scan-evidence"
+import { loadBoundedGateVerdicts, MAX_GATE_VERDICT_BYTES } from "./gate-verdict-read"
 import {
   computeGateVerdict,
   computeInputChecksum,
@@ -248,6 +249,31 @@ describe.skipIf(!enabled)("gate evidence reader under real PostgreSQL RLS", () =
         'INSERT INTO "FindingVerification" (id,"workspaceId","findingId","scanId",status,method,reason,"verifierVersion",evidence,"idempotencyKey") VALUES ($1,$2,$3,$4,\'VALIDATED\',\'RETEST\',\'fixture\',\'result-integrity-v3\',$5,$1)',
         [`verification-${i}-${suffix}`, ws, finding, retest, JSON.stringify(evidence)]
       )
+      await owner.query(
+        `INSERT INTO "GateVerdict" (id,"workspaceId","targetId","scanId","standardVersion",state,"coverageStatement","nonCoverage","blockingReasons","evidenceSummary",staleness,"inputChecksum","verdictChecksum","assessmentVersion","assessmentSnapshot","evaluatedAt")
+         VALUES ($1,$2,$3,$4,'v','READY',jsonb_build_array(repeat('x',$5)),'[]','[]','{}','{}','i','v',2,'{}',NOW())`,
+        [`verdict-${i}-${suffix}`, ws, target, retest, i === 0 ? MAX_GATE_VERDICT_BYTES + 1 : 1]
+      )
+    }
+  })
+
+  it("bounds verdict transport and enforces workspace RLS", async () => {
+    await runtime.query("BEGIN ISOLATION LEVEL REPEATABLE READ")
+    try {
+      const tx = { $queryRaw: raw } as unknown as ScopedTransaction
+      await runtime.query("SELECT set_config('app.current_workspace_id',$1,true)", [workspaces[0]])
+      const rows = await loadBoundedGateVerdicts(tx, workspaces[0]!, { targetIds: targets })
+      expect(rows).toHaveLength(1)
+      expect(rows[0]).toMatchObject({
+        targetId: targets[0],
+        evidenceTooLarge: true,
+        coverageStatement: null,
+      })
+      expect(
+        await loadBoundedGateVerdicts(tx, workspaces[1]!, { verdictId: `verdict-1-${suffix}` })
+      ).toEqual([])
+    } finally {
+      await runtime.query("ROLLBACK")
     }
   })
   afterAll(async () => {

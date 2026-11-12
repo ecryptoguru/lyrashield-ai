@@ -20,6 +20,7 @@ import {
   type StoredGateEvidence,
 } from "./gate-reader-evidence"
 import { withWorkspaceRLS, type ScopedTransaction } from "./rls"
+import { loadBoundedGateVerdicts } from "./gate-verdict-read"
 
 export { parseAssessmentSnapshot }
 export { evaluateGateForTarget, type GateEvaluationResult } from "./gate-evaluation-service"
@@ -36,13 +37,11 @@ export { handleFixPrMergedAndReevaluate, type FixPrMergeOutcome } from "./fix-pr
  */
 export async function getLatestGateVerdict(workspaceId: string, targetId: string) {
   return withWorkspaceRLS(workspaceId, async (tx) => {
-    return tx.gateVerdict.findFirst({
-      where: { workspaceId, targetId },
-      // id tiebreaker: evaluatedAt is a timestamp — two verdicts in the same
-      // millisecond are possible (e.g. merge + completion in one tick), and
-      // ordering by timestamp alone would make the "latest" nondeterministic.
-      orderBy: [{ evaluatedAt: "desc" }, { id: "desc" }],
-    })
+    const row = (await loadBoundedGateVerdicts(tx, workspaceId, { targetIds: [targetId] }))[0]
+    if (!row) return null
+    const { evidenceTooLarge, ...historical } = row
+    if (evidenceTooLarge) return null
+    return historical
   })
 }
 
@@ -164,13 +163,12 @@ export async function getCurrentGateVerdict(
   options: GateApplicabilityOptions = {}
 ) {
   const read = async (tx: ScopedTransaction) => {
-    const historical = await tx.gateVerdict.findFirst({
-      where: { workspaceId, targetId },
-      orderBy: [{ evaluatedAt: "desc" }, { id: "desc" }],
-    })
-    if (!historical) return null
+    const row = (await loadBoundedGateVerdicts(tx, workspaceId, { targetIds: [targetId] }))[0]
+    if (!row) return null
+    const { evidenceTooLarge, ...historical } = row
 
-    const applicability = await evaluateVerdictApplicability(tx, workspaceId, historical, options)
+    const checked = await evaluateVerdictApplicability(tx, workspaceId, historical, options)
+    const applicability = evidenceTooLarge ? invalidateUntrustedGateEvidence(checked) : checked
 
     return {
       schemaVersion: "lyrashield-gate-response/2.0.0",

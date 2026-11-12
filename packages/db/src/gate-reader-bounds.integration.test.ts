@@ -3,6 +3,7 @@ import { Client } from "pg"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { findMismatchedGateEvidence } from "./gate-reader-evidence"
 import { readActiveSharedReport } from "./report-service"
+import { loadBoundedGateVerdicts, MAX_GATE_VERDICT_BYTES } from "./gate-verdict-read"
 import {
   MAX_RETEST_COVERAGE_RECEIPTS,
   loadReceiptBackedRetestFindingIdsAcrossTargets,
@@ -60,7 +61,53 @@ describe.skipIf(!url)("per-target gate bounds against PostgreSQL", () => {
     ); CREATE TEMP TABLE "FindingCandidate" (
       "id" text, "workspaceId" text, "targetId" text, "findingId" text, "scanId" text,
       "dedupeKey" text, "scannerSource" text, "payload" jsonb
+    ); CREATE TEMP TABLE "Target" (
+      "id" text, "workspaceId" text, "deletedAt" timestamp
+    ); CREATE TEMP TABLE "GateVerdict" (
+      "id" text, "workspaceId" text, "targetId" text, "scanId" text, "standardVersion" text,
+      "state" text, "coverageStatement" jsonb, "nonCoverage" jsonb, "blockingReasons" jsonb,
+      "evidenceSummary" jsonb, "staleness" jsonb, "inputChecksum" text, "verdictChecksum" text,
+      "assessmentVersion" int, "assessmentSnapshot" jsonb, "evaluatedAt" timestamp
     );`)
+  })
+
+  it("bounds latest verdicts before transport and isolates oversized targets", async () => {
+    await client.query(
+      `INSERT INTO "Target" VALUES ('verdict-large', 'ws', NULL), ('verdict-small', 'ws', NULL)`
+    )
+    await client.query(
+      `INSERT INTO "GateVerdict" VALUES
+      ('old-large', 'ws', 'verdict-large', 'scan', 'v', 'READY', '[]', '[]', '[]', '{}', '{}', 'i', 'v', 1, '{}', '2026-01-01'),
+      ('new-large', 'ws', 'verdict-large', 'scan', 'v', 'READY', jsonb_build_array(repeat('x', $1)), '[]', '[]', '{}', '{}', 'i', 'v', 1, '{}', '2026-01-02'),
+      ('small-verdict', 'ws', 'verdict-small', 'scan', 'v', 'READY', '[]', '[]', '[]', '{}', '{}', 'i', 'v', 1, '{}', '2026-01-02')`,
+      [MAX_GATE_VERDICT_BYTES + 1]
+    )
+    const tx = { $queryRaw: raw } as unknown as ScopedTransaction
+    const both = await loadBoundedGateVerdicts(tx, "ws", {
+      targetIds: ["verdict-large", "verdict-small"],
+    })
+    expect(both).toHaveLength(2)
+    expect(both[0]).toMatchObject({
+      id: "new-large",
+      evidenceTooLarge: true,
+      coverageStatement: null,
+      state: "READY",
+    })
+    expect(both[1]).toMatchObject({ id: "small-verdict", evidenceTooLarge: false, state: "READY" })
+    expect(await loadBoundedGateVerdicts(tx, "ws", { targetIds: ["verdict-large"] })).toEqual([
+      both[0],
+    ])
+    expect(await loadBoundedGateVerdicts(tx, "ws", { verdictId: "new-large" })).toEqual([both[0]])
+    expect(await loadBoundedGateVerdicts(tx, "another-ws", { verdictId: "small-verdict" })).toEqual(
+      []
+    )
+    await client.query(`UPDATE "Target" SET "deletedAt" = NOW() WHERE "id" = 'verdict-small'`)
+    expect(
+      await loadBoundedGateVerdicts(tx, "ws", {
+        verdictId: "small-verdict",
+        requireActiveTarget: true,
+      })
+    ).toEqual([])
   })
   afterAll(async () => {
     await client.end()

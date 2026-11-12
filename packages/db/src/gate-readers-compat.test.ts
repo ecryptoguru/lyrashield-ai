@@ -172,6 +172,42 @@ function fixture(targetId: string, version: string) {
 }
 
 describe("gate readers with retained worker receipts", () => {
+  it("returns the same inconclusive result for an oversized verdict in single and batch reads", async () => {
+    const row = {
+      ...fixture("large", "result-integrity-v3").verdict,
+      scanId: null,
+      state: "READY",
+      standardVersion: "",
+      inputChecksum: "",
+      verdictChecksum: "",
+      assessmentSnapshot: null,
+      coverageStatement: null,
+      nonCoverage: null,
+      blockingReasons: null,
+      evidenceSummary: null,
+      staleness: null,
+      evidenceTooLarge: true,
+    }
+    mocks.tx = {
+      $queryRaw: vi.fn(async (strings: TemplateStringsArray) =>
+        strings.join("?").includes("WITH selected AS MATERIALIZED") ? [row] : []
+      ),
+    }
+    const single = await getCurrentGateVerdict("workspace", "large", { now })
+    const batch = await getCurrentGateVerdicts("workspace", ["large"], { now })
+    expect(single).toEqual(batch.get("large"))
+    expect(single).toMatchObject({
+      state: "INSUFFICIENT_EVIDENCE",
+      applicability: {
+        applicable: false,
+        reasons: expect.arrayContaining([
+          expect.objectContaining({ code: "UNTRUSTED_GATE_EVIDENCE" }),
+        ]),
+      },
+      historical: { coverageStatement: null },
+    })
+  })
+
   it("rejects an oversized batch before reading the database", async () => {
     const query = vi.fn()
     mocks.tx = { $queryRaw: query }
@@ -188,7 +224,6 @@ describe("gate readers with retained worker receipts", () => {
     const weak = fixture("weak", "result-integrity-v2")
     const strong = fixture("strong", "result-integrity-v3")
     const data = [weak, strong]
-    let rawCalls = 0
     const findMany = vi.fn((targetIds: string[]) =>
       data.filter((f) => targetIds.includes(f.finding.targetId)).map((f) => f.finding)
     )
@@ -212,6 +247,12 @@ describe("gate readers with retained worker receipts", () => {
       findingCandidate: { findMany: vi.fn().mockResolvedValue(data.map((f) => f.candidate)) },
       $queryRaw: vi.fn(async (strings: TemplateStringsArray, ...values: unknown[]) => {
         const sql = strings.join("?")
+        if (sql.includes("WITH selected AS MATERIALIZED")) {
+          const targets = values[3] as string[]
+          return data
+            .filter((f) => targets.includes(f.verdict.targetId))
+            .map((f) => ({ ...f.verdict, evidenceTooLarge: false }))
+        }
         if (sql.includes('"verificationReceipts"') && sql.includes('"Finding"'))
           return findMany(values[1] as string[])
         if (sql.includes('AS "requestedTargetId"')) {
@@ -269,7 +310,7 @@ describe("gate readers with retained worker receipts", () => {
               .map((f) => f.candidate),
           }))
         }
-        return rawCalls++ === 0 ? data.map((f) => f.verdict) : []
+        return []
       }),
     }
     const batch = await getCurrentGateVerdicts("workspace", ["weak", "strong"], { now })
