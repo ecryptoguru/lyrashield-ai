@@ -81,10 +81,12 @@ export async function GET(request: Request) {
     // several unrelated targets.
     let effectiveTargetId = targetId
     let targets
+    let pageTargets
     if (!targetId && requestedIdentity) {
       const allTargets = cursor
         ? await getGateReadinessTargets(workspaceId, undefined, {}, cursor)
         : await getGateReadinessTargets(workspaceId)
+      pageTargets = allTargets
       effectiveTargetId = resolveReleaseCheckTargetId(
         "",
         true,
@@ -100,6 +102,11 @@ export async function GET(request: Request) {
         cursor && !targetId
           ? await getGateReadinessTargets(workspaceId, targetId, identityOptions, cursor)
           : await getGateReadinessTargets(workspaceId, targetId, identityOptions)
+      // Restricted OAuth grants may read only their explicitly granted target.
+      pageTargets =
+        targetId && !(session.oauth?.connectionId && !session.oauth.allTargets)
+          ? await getGateReadinessTargets(workspaceId, undefined, {}, cursor)
+          : targets
     }
 
     const groups = await withWorkspaceRLS(workspaceId, (tx) =>
@@ -134,11 +141,24 @@ export async function GET(request: Request) {
         )
       : null
 
+    const targetOptions = pageTargets.map((target) => ({
+      targetId: target.targetId,
+      targetName: target.targetName,
+    }))
+    if (
+      effectiveTargetId &&
+      !targetOptions.some((target) => target.targetId === effectiveTargetId)
+    ) {
+      const selected = targets.find((target) => target.targetId === effectiveTargetId)
+      if (selected)
+        targetOptions.push({ targetId: selected.targetId, targetName: selected.targetName })
+    }
     const response = apiSuccess({
       ...report,
       releaseCheck,
-      nextCursor: targets.nextCursor ?? null,
-      partial: targets.partial ?? false,
+      targets: targetOptions,
+      nextCursor: pageTargets.nextCursor ?? null,
+      partial: pageTargets.partial ?? false,
     })
     response.headers.set("Cache-Control", "no-store")
     return response

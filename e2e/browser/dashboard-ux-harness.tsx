@@ -51,7 +51,10 @@ export default function DashboardUxHarness() {
         </section>
       )}
       {mode === "first-scan" && <FirstScanHarness />}
-      {(mode === "readiness" || mode === "readiness-paged" || mode === "readiness-refresh") && (
+      {(mode === "readiness" ||
+        mode === "readiness-paged" ||
+        mode === "readiness-refresh" ||
+        mode === "readiness-scoped") && (
         <WebMcpReceiptProvider>
           <LaunchReadinessClient
             workspaceId="workspace-test"
@@ -60,7 +63,7 @@ export default function DashboardUxHarness() {
               verdict:
                 mode === "readiness-refresh"
                   ? "GO"
-                  : mode === "readiness-paged"
+                  : mode === "readiness-paged" || mode === "readiness-scoped"
                     ? "INCONCLUSIVE"
                     : "NOT_EVALUATED",
               score: null,
@@ -68,9 +71,11 @@ export default function DashboardUxHarness() {
               summary:
                 mode === "readiness-refresh"
                   ? "Ready before refresh."
-                  : mode === "readiness-paged"
-                    ? "This page covers only some targets. Check more target pages before assessing the workspace."
-                    : "Add a target and complete a scan before reviewing launch readiness.",
+                  : mode === "readiness-scoped"
+                    ? "Scoped release needs more evidence."
+                    : mode === "readiness-paged"
+                      ? "This page covers only some targets. Check more target pages before assessing the workspace."
+                      : "Add a target and complete a scan before reviewing launch readiness.",
               blockingFindings: 0,
               totalFindings: 0,
               verifiedFindings: 0,
@@ -79,16 +84,33 @@ export default function DashboardUxHarness() {
               recommendations: ["Complete your first scan."],
             }}
             targets={
-              mode === "readiness-paged"
-                ? Array.from({ length: 5 }, (_, i) => ({
-                    targetId: `target-${i + 1}`,
-                    targetName: `Target ${i + 1}`,
-                  }))
-                : []
+              mode === "readiness-scoped"
+                ? [{ targetId: "target-1", targetName: "Selected target" }]
+                : mode === "readiness-paged"
+                  ? Array.from({ length: 5 }, (_, i) => ({
+                      targetId: `target-${i + 1}`,
+                      targetName: `Target ${i + 1}`,
+                    }))
+                  : []
             }
-            initialTargetId=""
-            initialReleaseRef=""
-            initialReleaseCheck={null}
+            initialTargetId={mode === "readiness-scoped" ? "target-1" : ""}
+            initialReleaseRef={mode === "readiness-scoped" ? "a".repeat(40) : ""}
+            initialReleaseCheck={
+              mode === "readiness-scoped"
+                ? {
+                    targetId: "target-1",
+                    targetName: "Selected target",
+                    requested: { kind: "COMMIT", value: "a".repeat(40) },
+                    assessed: { kind: "COMMIT", value: "a".repeat(40) },
+                    match: "match",
+                    historicalState: "READY",
+                    state: "READY",
+                    applicable: true,
+                    blockingFindings: 0,
+                    reasons: [],
+                  }
+                : null
+            }
             initialCheckError={null}
             checkNeedsTarget={false}
             nextTargetsHref={

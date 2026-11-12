@@ -22,6 +22,7 @@ import { LaunchReadinessDetails, LaunchVerdictCard } from "./launch-readiness-su
 import {
   gateReasonSentence,
   parseReleaseReference,
+  readinessTargetPageHref,
   type ReleaseCheckResult,
 } from "@/lib/launch-readiness"
 
@@ -61,6 +62,9 @@ const releaseCheckSchema = z
 
 const launchReadinessResponseSchema = launchReadinessReportSchema.extend({
   releaseCheck: releaseCheckSchema.optional(),
+  targets: z.array(z.object({ targetId: z.string(), targetName: z.string() })),
+  nextCursor: z.string().nullable(),
+  partial: z.boolean(),
 })
 
 const VERDICT_CONFIG = {
@@ -156,14 +160,14 @@ function identityText(identity: { kind: "COMMIT" | "ARTIFACT_DIGEST"; value: str
 export function LaunchReadinessClient({
   workspaceId,
   initialReport,
-  targets,
+  targets: initialTargets,
   initialTargetId,
   initialReleaseRef,
   initialReleaseCheck,
   initialCheckError,
   checkNeedsTarget,
-  nextTargetsHref = null,
-  firstTargetsHref = null,
+  nextTargetsHref: initialNextTargetsHref = null,
+  firstTargetsHref: initialFirstTargetsHref = null,
 }: {
   workspaceId: string
   initialReport: LaunchReadinessReport
@@ -178,6 +182,9 @@ export function LaunchReadinessClient({
 }) {
   const router = useRouter()
   const [report, setReport] = useState<LaunchReadinessReport>(initialReport)
+  const [targets, setTargets] = useState(initialTargets)
+  const [nextTargetsHref, setNextTargetsHref] = useState(initialNextTargetsHref)
+  const [firstTargetsHref, setFirstTargetsHref] = useState(initialFirstTargetsHref)
   const [releaseCheck, setReleaseCheck] = useState<ReleaseCheckResult | null>(initialReleaseCheck)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -188,7 +195,7 @@ export function LaunchReadinessClient({
   const draftVersion = useRef(0)
   const requestVersion = useRef(0)
 
-  useLaunchReadinessWebMcp({ workspaceId, onReport: setReport })
+  useLaunchReadinessWebMcp({ workspaceId })
 
   const loadReport = useCallback(
     (signal?: AbortSignal, options?: { silent?: boolean; refreshCheck?: boolean }) => {
@@ -205,13 +212,30 @@ export function LaunchReadinessClient({
         params.set("targetId", initialTargetId)
       }
       params.set("workspaceId", workspaceId)
-      apiGet<LaunchReadinessReport & { releaseCheck?: ReleaseCheckResult | null }>(
-        `/api/launch-readiness?${params.toString()}`,
-        { signal, schema: launchReadinessResponseSchema }
-      )
+      apiGet<
+        LaunchReadinessReport & {
+          releaseCheck?: ReleaseCheckResult | null
+          targets: { targetId: string; targetName: string }[]
+          nextCursor: string | null
+          partial: boolean
+        }
+      >(`/api/launch-readiness?${params.toString()}`, {
+        signal,
+        schema: launchReadinessResponseSchema,
+      })
         .then((data) => {
           if (request !== requestVersion.current) return
           setReport(data)
+          setTargets(data.targets)
+          const pageHref = (cursor?: string | null) =>
+            readinessTargetPageHref({
+              targetId: params.get("targetId") ?? undefined,
+              commit: params.get("commit") ?? undefined,
+              artifactDigest: params.get("artifactDigest") ?? undefined,
+              cursor,
+            })
+          setNextTargetsHref(data.nextCursor ? pageHref(data.nextCursor) : null)
+          setFirstTargetsHref(params.has("cursor") && data.partial ? pageHref() : null)
           if (refreshCheck && refreshVersion === draftVersion.current) {
             setReleaseCheck(data.releaseCheck ?? null)
             setFormError(null)
@@ -415,7 +439,11 @@ export function LaunchReadinessClient({
         summary={verdictSummary}
         scope={
           scopedTarget?.targetName ??
-          (firstTargetsHref || nextTargetsHref ? "Targets on this page" : "All workspace targets")
+          (initialTargetId
+            ? "Selected target unavailable"
+            : firstTargetsHref || nextTargetsHref
+              ? "Targets on this page"
+              : "All workspace targets")
         }
         releaseNeedsAttention={releaseNeedsAttention}
         action={nextAction}

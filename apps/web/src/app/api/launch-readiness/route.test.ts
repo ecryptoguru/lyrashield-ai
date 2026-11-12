@@ -81,6 +81,7 @@ describe("GET /api/launch-readiness — release check contract", () => {
       state: "INSUFFICIENT_EVIDENCE",
       nextCursor: "target-1",
       partial: true,
+      targets: [{ targetId: "target-1", targetName: "API" }],
     })
   })
 
@@ -121,6 +122,27 @@ describe("GET /api/launch-readiness — release check contract", () => {
       match: "match",
       targetId: "target-1",
       assessed: { kind: "COMMIT", value: COMMIT_A },
+    })
+  })
+
+  it("returns current page metadata alongside a scoped release check", async () => {
+    mocks.getGateReadinessTargets
+      .mockResolvedValueOnce([READY_TARGET])
+      .mockResolvedValueOnce(
+        Object.assign([{ ...READY_TARGET, targetId: "target-2", targetName: "Worker" }], {
+          partial: true,
+          nextCursor: "target-2",
+        })
+      )
+    const response = await GET(request(`workspaceId=ws-1&targetId=target-1&commit=${COMMIT_A}`))
+    expect((await response.json()).data).toMatchObject({
+      releaseCheck: { targetId: "target-1", match: "match" },
+      partial: true,
+      nextCursor: "target-2",
+      targets: [
+        { targetId: "target-2", targetName: "Worker" },
+        { targetId: "target-1", targetName: "API" },
+      ],
     })
   })
 
@@ -318,6 +340,7 @@ it("reads an explicitly allowed readiness target and limits aggregates to it", a
   mocks.getGateReadinessTargets.mockResolvedValue([READY_TARGET])
   const response = await V1GET(request("workspaceId=ws-1&targetId=target-1"))
   expect(response.status).toBe(200)
+  expect(mocks.getGateReadinessTargets).toHaveBeenCalledTimes(1)
   expect(mocks.groupBy).toHaveBeenCalledWith(
     expect.objectContaining({
       where: { workspaceId: "ws-1", targetId: "target-1", deletedAt: null },

@@ -289,6 +289,90 @@ test("failed background revalidation cannot leave an earlier ready verdict visib
   await expect(page.getByRole("button", { name: "Try again" })).toBeVisible()
 })
 
+test("WebMCP workspace review cannot overwrite the scoped release verdict", async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(document, "modelContext", {
+      configurable: true,
+      value: {
+        registerTool(tool: unknown) {
+          ;(window as typeof window & { reviewTool?: unknown }).reviewTool = tool
+        },
+      },
+    })
+  })
+  await page.route("**/api/launch-readiness?*", (route) =>
+    route.fulfill({
+      json: {
+        success: true,
+        data: {
+          state: "READY",
+          verdict: "GO",
+          score: null,
+          triageScore: 100,
+          summary: "Workspace page is ready.",
+          blockingFindings: 0,
+          totalFindings: 0,
+          verifiedFindings: 0,
+          bySeverity: {},
+          conditions: [],
+          recommendations: [],
+        },
+      },
+    })
+  )
+  await page.goto("?dashboard-ux=readiness-scoped")
+  await expect(page.getByText("Scoped release needs more evidence.")).toBeVisible()
+  const output = await page.evaluate(async () => {
+    const tool = (
+      window as typeof window & { reviewTool?: { execute(input: unknown): Promise<unknown> } }
+    ).reviewTool
+    if (!tool) throw new Error("review_launch_readiness was not registered")
+    return tool.execute({})
+  })
+  expect(JSON.stringify(output)).toContain("Workspace page is ready.")
+  await expect(page.getByText("Scoped release needs more evidence.")).toBeVisible()
+  await expect(page.getByText("Workspace page is ready.")).toHaveCount(0)
+})
+
+test("refresh updates target pagination after targets are added or removed", async ({ page }) => {
+  let partial = true
+  await page.route("**/api/launch-readiness?*", (route) =>
+    route.fulfill({
+      json: {
+        success: true,
+        data: {
+          state: partial ? "INSUFFICIENT_EVIDENCE" : "READY",
+          verdict: partial ? "INCONCLUSIVE" : "GO",
+          score: null,
+          triageScore: null,
+          summary: partial ? "More targets require review." : "All remaining targets are ready.",
+          blockingFindings: 0,
+          totalFindings: 0,
+          verifiedFindings: 0,
+          bySeverity: {},
+          conditions: [],
+          recommendations: [],
+          releaseCheck: null,
+          targets: [{ targetId: "target-1", targetName: "Selected target" }],
+          nextCursor: partial ? "target-5" : null,
+          partial,
+        },
+      },
+    })
+  )
+  await page.goto("?dashboard-ux=readiness-refresh")
+  await expect(page.getByText("Ready before refresh.")).toBeVisible()
+  await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")))
+  await expect(page.getByText("More targets require review.")).toBeVisible()
+  await expect(page.getByRole("link", { name: "Next targets", exact: true })).toBeVisible()
+  await expect(page.getByText("Targets on this page")).toBeVisible()
+  partial = false
+  await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")))
+  await expect(page.getByText("All remaining targets are ready.")).toBeVisible()
+  await expect(page.getByRole("link", { name: "Next targets", exact: true })).toHaveCount(0)
+  await expect(page.getByText("All workspace targets")).toBeVisible()
+})
+
 test("license continuation links retain submitted filters and reset the cursor on the first page", async ({
   page,
 }) => {
