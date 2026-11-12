@@ -7,7 +7,7 @@ export {
   toBrokerReceiptType,
 } from "./broker-receipt"
 export { canonicalJson, sha256Hex } from "./canonical-json"
-export type { JournalPort, JournalRecord, JournalReadLimits } from "./journal"
+export type { JournalPort, JournalRecord, JournalReadLimits, JournalRange } from "./journal"
 export {
   JournalIntegrityError,
   JournalReadLimitError,

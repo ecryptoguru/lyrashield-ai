@@ -15,6 +15,8 @@ import {
   type IndependentAuthorityJournalOptions,
   type JournalPort,
   type JournalRecord,
+  type BoundedAuthorityMirror,
+  type BoundedConditionalObjectStore,
   type SupervisorJournalPage,
   type SupervisorJournalReader,
   type SupervisorJournalRecovery,
@@ -88,15 +90,8 @@ function bindingFor(
   record: OriginalEventPosition,
   records: OriginalEventPosition[]
 ): AttemptBinding {
+  const attemptId = attemptFor(record)
   const event = record.payload
-  const attemptId =
-    event.type === "command_intent"
-      ? event.command.type === "PREPARE"
-        ? event.command.attempt.attemptId
-        : event.command.attemptId
-      : event.type === "attempt_prepared"
-        ? event.binding.attemptId
-        : event.attemptId
   let binding: AttemptBinding | undefined
   for (const prior of records.slice(0, record.sequence)) {
     const payload = prior.payload
@@ -118,6 +113,17 @@ function bindingFor(
   return binding
 }
 
+function attemptFor(record: OriginalEventPosition): string {
+  const event = record.payload
+  return event.type === "command_intent"
+    ? event.command.type === "PREPARE"
+      ? event.command.attempt.attemptId
+      : event.command.attemptId
+    : event.type === "attempt_prepared"
+      ? event.binding.attemptId
+      : event.attemptId
+}
+
 /**
  * Two signed local streams: originals remain intact, while the independent
  * stream signs wrappers containing those exact originals. Reads never repair
@@ -133,6 +139,9 @@ export class SupervisorAuthorityJournal
   private serial: Promise<void> = Promise.resolve()
   private failed: IndependentAuthorityError | null = null
   private originals: OriginalRecord[] | null = null
+  private cursorOriginals: OriginalRecord[] | null = null
+  private readonly cursorBindings = new Map<string, { binding: AttemptBinding; sequence: number }>()
+  private rangeRead = false
   private boundedRead = false
 
   constructor(private readonly options: SupervisorAuthorityJournalOptions) {
@@ -141,6 +150,11 @@ export class SupervisorAuthorityJournal
       local: {
         load: () => this.loadLocal(),
         append: (event) => options.local.append(event),
+        ...(options.local.readRange
+          ? {
+              readRange: (afterSequence, limits) => options.local.readRange!(afterSequence, limits),
+            }
+          : {}),
         ...(options.local.confirmRecord
           ? {
               confirmRecord: (record: WrappedRecord) => options.local.confirmRecord!(record),
@@ -159,9 +173,12 @@ export class SupervisorAuthorityJournal
         if (!original || !same(original, event.payload)) {
           conflict("independent event differs from its original signed envelope")
         }
-        const expected = this.eventFor(original, originals)
+        const binding = this.rangeRead
+          ? this.cursorBindingFor(original)
+          : bindingFor(original, originals)
+        const expected = this.eventFor(original, originals, binding)
         if (!same(event, expected)) conflict("independent event has a foreign authority binding")
-        return options.authorize(event, bindingFor(original, originals))
+        return options.authorize(event, binding)
       },
     })
   }
@@ -182,6 +199,7 @@ export class SupervisorAuthorityJournal
       } finally {
         this.originals = null
         this.boundedRead = false
+        this.rangeRead = false
       }
     })
     this.serial = run.then(
@@ -214,8 +232,34 @@ export class SupervisorAuthorityJournal
     }
   }
 
-  private loadOriginal(): Promise<OriginalRecord[]> {
-    return this.boundedRead ? this.boundedOriginal() : this.options.original.load()
+  private async loadOriginal(): Promise<OriginalRecord[]> {
+    if (this.boundedRead) return this.boundedOriginal()
+    const records = await this.options.original.load()
+    this.cursorOriginals = records
+    this.cursorBindings.clear()
+    for (const record of records) {
+      const event = record.payload
+      if (event.type !== "command_intent" || event.command.type !== "PREPARE") continue
+      const binding = event.command.attempt
+      const prior = this.cursorBindings.get(binding.attemptId)
+      if (prior && !same(prior.binding, binding))
+        conflict("original journal has conflicting attempt authority")
+      if (!prior) this.cursorBindings.set(binding.attemptId, { binding, sequence: record.sequence })
+    }
+    return records
+  }
+
+  private cursorBindingFor(record: OriginalRecord): AttemptBinding {
+    const entry = this.cursorBindings.get(attemptFor(record))
+    if (!entry || entry.sequence > record.sequence)
+      conflict("range has no preceding attempt authority")
+    if (
+      record.payload.type === "attempt_prepared" &&
+      !same(entry.binding, record.payload.binding)
+    ) {
+      conflict("range prepared event differs from attempt authority")
+    }
+    return entry.binding
   }
 
   private loadLocal(): Promise<WrappedRecord[]> {
@@ -279,8 +323,11 @@ export class SupervisorAuthorityJournal
     }
   }
 
-  private eventFor(record: OriginalRecord, originals: OriginalRecord[]): WrappedEvent {
-    const binding = bindingFor(record, originals)
+  private eventFor(
+    record: OriginalRecord,
+    originals: OriginalRecord[],
+    binding = bindingFor(record, originals)
+  ): WrappedEvent {
     if (
       binding.authorityEpochId !== this.options.epochId ||
       record.payload.supervisorInstanceId !== this.options.supervisorInstanceId
@@ -355,6 +402,7 @@ export class SupervisorAuthorityJournal
     if (!validRecoverySuffix(history)) conflict("invalid local recovery guard")
     this.eventFor(record, history)
     this.originals = history
+    this.cursorOriginals = history
     return record
   }
 
@@ -407,6 +455,7 @@ export class SupervisorAuthorityJournal
     }
     const history = pending ? originals : [...originals, original]
     this.originals = history
+    this.cursorOriginals = history
     const event = this.eventFor(original, history)
     await this.independent.appendIntent(event)
     await this.confirmedHistory()
@@ -459,6 +508,86 @@ export class SupervisorAuthorityJournal
       throw new IndependentAuthorityError("CURSOR_CONFLICT", "cursor belongs to another stream")
     }
     if (this.failed) throw this.failed
+    if (
+      this.options.original.readRange &&
+      this.options.local.readRange &&
+      (this.options.store as BoundedConditionalObjectStore).readBounded &&
+      (this.options.mirror as BoundedAuthorityMirror).readHeadBounded &&
+      (this.options.mirror as BoundedAuthorityMirror).readRecordBounded
+    ) {
+      return this.serialized(async () => {
+        await this.assertStreamAuthorized()
+        if (!this.cursorOriginals) await this.confirmedHistory()
+        if (cursor.afterSequence > this.cursorOriginals!.length) {
+          throw new IndependentAuthorityError(
+            "CURSOR_CONFLICT",
+            "cursor is beyond the current head"
+          )
+        }
+        this.originals = this.cursorOriginals
+        this.rangeRead = true
+        const originals = await this.options.original.readRange!(cursor.afterSequence, {
+          maxBytes: 1024 * 1024,
+          maxRecords: cursor.limit,
+        })
+        if (originals.previousHash !== cursor.afterHash) {
+          throw new IndependentAuthorityError(
+            "CURSOR_CONFLICT",
+            "cursor predecessor does not match"
+          )
+        }
+        if (!same(originals.head, this.cursorOriginals!.at(-1) ?? null)) {
+          conflict("original range head changed outside the supervisor")
+        }
+        const confirmed = await this.independent.loadConfirmedRange(cursor.afterSequence, {
+          maxBytes: 2 * 1024 * 1024,
+          maxRecords: originals.records.length || cursor.limit,
+        })
+        if (
+          !same(confirmed.head?.payload.payload ?? null, originals.head) ||
+          !same(
+            confirmed.records.map((record) => record.payload.payload),
+            originals.records
+          )
+        ) {
+          conflict("bounded original and independent streams disagree")
+        }
+        const page: SupervisorJournalPage<SupervisorJournalEvent> = {
+          records: [],
+          nextCursor: cursor,
+          hasMore: originals.hasMore,
+        }
+        for (const record of confirmed.records) {
+          const next = {
+            records: [...page.records, record],
+            nextCursor: {
+              ...cursor,
+              afterSequence: record.sequence,
+              afterHash: record.payload.payload.hash,
+            },
+            hasMore: record.sequence < (originals.head?.sequence ?? 0),
+          }
+          if (Buffer.byteLength(canonicalJson(next)) > MAX_SUPERVISOR_JOURNAL_PAGE_BYTES) {
+            if (!page.records.length)
+              throw new IndependentAuthorityError("READ_LIMIT", "page cannot make bounded progress")
+            break
+          }
+          Object.assign(page, next)
+        }
+        if (
+          !same(
+            originals,
+            await this.options.original.readRange!(cursor.afterSequence, {
+              maxBytes: 1024 * 1024,
+              maxRecords: cursor.limit,
+            })
+          )
+        )
+          conflict("original range changed during readback")
+        await this.assertStreamAuthorized()
+        return page
+      })
+    }
     await this.assertStreamAuthorized()
     const snapshot = await this.captureCursorSnapshot()
     return this.serialized(async () => {

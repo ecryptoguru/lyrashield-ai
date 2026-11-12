@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto"
-import { constants, type Stats } from "node:fs"
+import { constants, type Stats, type BigIntStats } from "node:fs"
 import { lstat, open, unlink, type FileHandle } from "node:fs/promises"
 import { dirname } from "node:path"
 import { canonicalJson, sha256Hex } from "./canonical-json"
@@ -14,6 +14,15 @@ export interface JournalPort<T> {
   /** Explicitly fsync an existing exact record without appending or re-signing it. */
   confirmRecord?(record: JournalRecord<T>): Promise<JournalRecord<T>>
   loadBounded?(limits: JournalReadLimits): Promise<JournalRecord<T>[]>
+  /** Indexed read from the authenticated active writer; startup still verifies the full chain. */
+  readRange?(afterSequence: number, limits: JournalReadLimits): Promise<JournalRange<T>>
+}
+
+export interface JournalRange<T> {
+  records: JournalRecord<T>[]
+  head: JournalRecord<T> | null
+  previousHash: string
+  hasMore: boolean
 }
 
 export interface JournalReadLimits {
@@ -145,6 +154,8 @@ export class SignedJournal<T> implements JournalPort<T> {
   private lockAcquired = false
   private lockIdentity: { dev: number; ino: number } | null = null
   private fileIdentity: { dev: number; ino: number } | null = null
+  private rangeIndex: { offset: number; length: number; hash: string }[] = []
+  private indexedStat: string | null = null
 
   constructor(
     private readonly path: string,
@@ -209,6 +220,131 @@ export class SignedJournal<T> implements JournalPort<T> {
     )
       throw new JournalReadLimitError("invalid journal read limits")
     return this.loadWithLimits(bounds)
+  }
+
+  async readRange(afterSequence: number, limits: JournalReadLimits): Promise<JournalRange<T>> {
+    const bounds = { maxBytes: limits.maxBytes, maxRecords: limits.maxRecords }
+    if (
+      !Number.isSafeInteger(afterSequence) ||
+      afterSequence < 0 ||
+      !Number.isSafeInteger(bounds.maxBytes) ||
+      bounds.maxBytes < 1 ||
+      bounds.maxBytes > MAX_JOURNAL_BYTES ||
+      !Number.isSafeInteger(bounds.maxRecords) ||
+      bounds.maxRecords < 1 ||
+      bounds.maxRecords > 100
+    )
+      throw new JournalReadLimitError("invalid journal range limits")
+    if (this.closed) throw new JournalIntegrityError("journal is closed")
+    const run = this.serial.then(async () => {
+      this.assertUsable()
+      try {
+        await this.ensureLoaded()
+        if (afterSequence >= this.nextSequence)
+          throw new JournalReadLimitError("cursor is beyond the journal head")
+        await this.assertLockIdentity()
+        if (!this.fileIdentity) {
+          // Detect a file created outside this writer even for empty genesis.
+          try {
+            // eslint-disable-next-line security/detect-non-literal-fs-filename
+            await lstat(this.path)
+            throw new JournalIntegrityError("journal appeared outside the active writer")
+          } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error
+          }
+          return { records: [], head: null, previousHash: "0".repeat(64), hasMore: false }
+        }
+        // eslint-disable-next-line security/detect-non-literal-fs-filename
+        const file = await open(
+          this.path,
+          constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK
+        )
+        try {
+          await this.assertFileIdentity(file)
+          this.assertIndexedStat(await file.stat({ bigint: true }))
+          let bytes = 0
+          const read = async (index: number) => {
+            const position = this.rangeIndex[index]!
+            if (bytes + position.length > bounds.maxBytes)
+              throw new JournalReadLimitError("journal range exceeds byte limit")
+            bytes += position.length
+            const buffer = Buffer.alloc(position.length)
+            let offset = 0
+            while (offset < buffer.length) {
+              const result = await file.read(
+                buffer,
+                offset,
+                buffer.length - offset,
+                position.offset + offset
+              )
+              if (!result.bytesRead) throw new JournalIntegrityError("journal range was truncated")
+              offset += result.bytesRead
+            }
+            if (buffer.at(-1) !== 10) throw new JournalIntegrityError("journal range is incomplete")
+            const record = verifyJournalRecord(
+              JSON.parse(buffer.toString("utf8")),
+              this.secret,
+              this.validatePayload
+            )
+            if (
+              record.sequence !== index + 1 ||
+              record.hash !== position.hash ||
+              record.previousHash !== (this.rangeIndex[index - 1]?.hash ?? "0".repeat(64))
+            ) {
+              throw new JournalIntegrityError("journal range differs from authenticated chain")
+            }
+            return record
+          }
+          const head = this.rangeIndex.length ? await read(this.rangeIndex.length - 1) : null
+          const records: JournalRecord<T>[] = []
+          for (
+            let index = afterSequence;
+            index < Math.min(this.rangeIndex.length, afterSequence + bounds.maxRecords);
+            index++
+          ) {
+            if (index === this.rangeIndex.length - 1) {
+              records.push(head!)
+              continue
+            }
+            if (bytes + this.rangeIndex[index]!.length > bounds.maxBytes) {
+              if (!records.length)
+                throw new JournalReadLimitError("journal range cannot make bounded progress")
+              break
+            }
+            records.push(await read(index))
+          }
+          this.assertIndexedStat(await file.stat({ bigint: true }))
+          await this.assertFileIdentity(file)
+          await this.assertLockIdentity()
+          return {
+            records,
+            head,
+            previousHash: this.rangeIndex[afterSequence - 1]?.hash ?? "0".repeat(64),
+            hasMore: afterSequence + records.length < this.rangeIndex.length,
+          }
+        } finally {
+          await file.close()
+        }
+      } catch (error) {
+        if (!(error instanceof JournalReadLimitError)) this.latch(error)
+        throw error
+      }
+    })
+    this.serial = run.then(
+      () => undefined,
+      () => undefined
+    )
+    return run
+  }
+
+  private statStamp(stat: BigIntStats): string {
+    return `${stat.dev}:${stat.ino}:${stat.size}:${stat.mtimeNs}:${stat.ctimeNs}`
+  }
+
+  private assertIndexedStat(stat: BigIntStats): void {
+    if (!this.indexedStat || this.statStamp(stat) !== this.indexedStat) {
+      throw new JournalIntegrityError("journal changed outside the authenticated range index")
+    }
   }
 
   private async loadWithLimits(limits?: JournalReadLimits): Promise<JournalRecord<T>[]> {
@@ -484,10 +620,12 @@ export class SignedJournal<T> implements JournalPort<T> {
       throw error
     }
     let raw: string
+    let indexedStat: string
     const maxBytes = limits?.maxBytes ?? MAX_JOURNAL_BYTES
     try {
       await this.assertFileIdentity(file)
       const before = await file.stat()
+      const stamp = this.statStamp(await file.stat({ bigint: true }))
       if (before.size > maxBytes) {
         if (limits) throw new JournalReadLimitError("journal exceeds bounded read size")
         throw new JournalIntegrityError("journal exceeds size cap")
@@ -506,10 +644,12 @@ export class SignedJournal<T> implements JournalPort<T> {
         chunks.push(buffer.subarray(0, bytesRead))
       }
       const after = await file.stat()
+      indexedStat = this.statStamp(await file.stat({ bigint: true }))
       if (
         before.size !== after.size ||
         before.mtimeMs !== after.mtimeMs ||
-        before.ctimeMs !== after.ctimeMs
+        before.ctimeMs !== after.ctimeMs ||
+        stamp !== indexedStat
       ) {
         throw new JournalIntegrityError("journal changed while reading")
       }
@@ -520,10 +660,20 @@ export class SignedJournal<T> implements JournalPort<T> {
     }
     if (raw && !raw.endsWith("\n"))
       throw new JournalIntegrityError("journal contains an incomplete record")
-    if (!raw.trim()) return []
+    const rangeIndex: typeof this.rangeIndex = []
+    if (!raw.trim()) {
+      this.rangeIndex = rangeIndex
+      this.indexedStat = indexedStat
+      return []
+    }
     const records: JournalRecord<T>[] = []
+    let position = 0
     for (const line of raw.split("\n")) {
-      if (!line) continue
+      const length = Buffer.byteLength(line) + 1
+      if (!line) {
+        position += length
+        continue
+      }
       if (limits && records.length >= limits.maxRecords) {
         throw new JournalReadLimitError("journal exceeds bounded record count")
       }
@@ -533,8 +683,13 @@ export class SignedJournal<T> implements JournalPort<T> {
       } catch {
         throw new JournalIntegrityError("journal contains an incomplete or invalid record")
       }
-      records.push(validatedEnvelope(parsed, this.validatePayload))
+      const record = validatedEnvelope(parsed, this.validatePayload)
+      records.push(record)
+      rangeIndex.push({ offset: position, length, hash: record.hash })
+      position += length
     }
+    this.rangeIndex = rangeIndex
+    this.indexedStat = indexedStat
     return records
   }
 
@@ -576,6 +731,12 @@ export class SignedJournal<T> implements JournalPort<T> {
       await file.sync()
       await this.assertFileIdentity(file)
       await this.assertLockIdentity()
+      this.rangeIndex.push({
+        offset: before.size,
+        length: Buffer.byteLength(line),
+        hash: record.hash,
+      })
+      this.indexedStat = this.statStamp(await file.stat({ bigint: true }))
     } finally {
       await file.close()
     }
