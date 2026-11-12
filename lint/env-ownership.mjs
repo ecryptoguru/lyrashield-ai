@@ -8,6 +8,10 @@ export const externalEnvOwners = {
   CI: ["packages/cli/src/output.ts"],
   HOSTNAME: ["apps/worker/src/index.ts"],
   LOG_ANALYTICS_WORKSPACE_ID: ["apps/worker/src/operations/review-terminal-cost-disposition.ts"],
+  // The protected worker host loader owns these cold-profile values and clears
+  // inherited overrides before supplying them to this specific worker guard.
+  LYRASHIELD_COLD_DATABASE_EPOCH_SHA256: ["apps/worker/src/cold-database-epoch.ts"],
+  LYRASHIELD_COLD_SINGLE_WORKER: ["apps/worker/src/cold-database-epoch.ts"],
   TERMINAL_COST_AZURE_RESOURCE_ID: [
     "apps/worker/src/operations/review-terminal-cost-disposition.ts",
   ],
