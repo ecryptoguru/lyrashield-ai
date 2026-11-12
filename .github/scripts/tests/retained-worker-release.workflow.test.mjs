@@ -1,6 +1,9 @@
 /* eslint-disable security/detect-non-literal-fs-filename -- Only fixed source-controlled workflow URLs are read. */
 import assert from "node:assert/strict"
-import { readFileSync } from "node:fs"
+import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
+import { spawnSync } from "node:child_process"
 import test from "node:test"
 
 const runtime = readFileSync(
@@ -72,7 +75,7 @@ test("retained runtime checks precede all production mutations and cannot open a
     step("Verify worker queues are empty before traffic promotion"),
     /if \[ "\$RETAINED_WORKER" = true \]; then\n            node .github\/scripts\/v26-cutover.mjs retained-schema\n            node .github\/scripts\/retained-legacy-runtime.mjs readback/
   )
-  assert.match(step("Smoke production traffic"), /retained-legacy-runtime.mjs readback/)
+  assert.match(step("Smoke production traffic"), /retained-legacy-runtime.mjs readback-identity\b/)
   assert.match(step("Smoke production traffic"), /APP_URL\/api\/ready\/scans/)
   const migration = step("Run database migrations")
   assert.ok(migration.indexOf("run-database-migrations") < migration.indexOf("retained-schema"))
@@ -125,4 +128,36 @@ test("retained mode preserves real source, schema, billing, image, migration and
   const workerQueue = step("Verify worker queues are empty before traffic promotion")
   assert.ok(workerQueue.includes("verify-worker-queues-are-empty-before-traffic-promotion"))
   assert.match(runtime, /retained_worker: \{ required: false, default: false, type: boolean \}/)
+})
+
+test("post-promotion smoke accepts only HTTP 200 and calls identity readback", (t) => {
+  const dir = mkdtempSync(join(tmpdir(), "retained-smoke-"))
+  t.after(() => rmSync(dir, { recursive: true, force: true }))
+  writeFileSync(join(dir, "bash"), "#!/bin/sh\nexit 0\n")
+  writeFileSync(
+    join(dir, "node"),
+    '#!/bin/sh\n[ -z "${EXPECT_MODE:-}" ] || [ "$2" = "$EXPECT_MODE" ]\n'
+  )
+  writeFileSync(
+    join(dir, "curl"),
+    '#!/bin/sh\nprintf "%s" "${HTTP_STATUS:-200}"\n[ -z "${CURL_FAIL:-}" ]\n'
+  )
+  for (const command of ["bash", "node", "curl"]) chmodSync(join(dir, command), 0o700)
+  const smoke = step("Smoke production traffic").split("        run: |\n")[1]
+  const run = (extra = {}) =>
+    spawnSync("/bin/bash", ["-e", "-c", smoke], {
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        PATH: dir + ":" + process.env.PATH,
+        APP_URL: "https://app.example.test",
+        RETAINED_WORKER: "true",
+        ...extra,
+      },
+    })
+  assert.equal(run().status, 0)
+  for (const status of ["301", "302", "503", "000"])
+    assert.notEqual(run({ HTTP_STATUS: status }).status, 0, status)
+  assert.notEqual(run({ CURL_FAIL: "1" }).status, 0)
+  assert.equal(run({ EXPECT_MODE: "readback-identity" }).status, 0)
 })

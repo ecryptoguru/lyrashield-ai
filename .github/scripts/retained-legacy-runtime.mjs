@@ -89,8 +89,9 @@ export function assertRetainedSource(source, run = execute) {
     throw new Error("Retained compatibility review does not match the checkout")
 }
 
-export function retainedWorkerProbe(approval, redisHash) {
-  if (!HASH.test(redisHash)) throw new Error("Redis identity unavailable")
+export function retainedWorkerProbe(approval, redisHash, requireEmptyQueues = true) {
+  if (!HASH.test(redisHash) || typeof requireEmptyQueues !== "boolean")
+    throw new Error("Retained worker probe configuration unavailable")
   const expected = Buffer.from(JSON.stringify({ ...approval, redisHash })).toString("base64")
   const code = `
     const {createHash}=await import("node:crypto");
@@ -101,17 +102,23 @@ export function retainedWorkerProbe(approval, redisHash) {
        process.env.LYRASHIELD_ENGINE_REVISION!==expected.engineRevision ||
        process.env.LYRASHIELD_IMAGE!==expected.sandboxImage || hash(process.env.REDIS_URL)!==expected.redisHash)
       throw Error("Retained worker identity differs");
-    const {getSystemPrisma}=await import("@lyrashield/db");
-    const {getScanQueue,getWebhookTrackRetryQueue,closeRedis,assertScanWorkerAvailable}=await import("@lyrashield/integrations");
-    const prisma=getSystemPrisma(),scan=getScanQueue(),webhook=getWebhookTrackRetryQueue();
+    const {closeRedis,assertScanWorkerAvailable}=await import("@lyrashield/integrations");
     try {
       await assertScanWorkerAvailable();
+      ${
+        requireEmptyQueues
+          ? `const {getSystemPrisma}=await import("@lyrashield/db");
+      const {getScanQueue,getWebhookTrackRetryQueue}=await import("@lyrashield/integrations");
+      const prisma=getSystemPrisma(),scan=getScanQueue(),webhook=getWebhookTrackRetryQueue();
+      try {
       const counts=await Promise.all([prisma.scan.count({where:{status:{in:["QUEUED","PREFLIGHT","RUNNING","VERIFYING","REQUIRES_APPROVAL"]}}}),
         scan.getJobCounts("wait","active","delayed","prioritized","paused","waiting-children"),
         webhook.getJobCounts("wait","active","delayed","prioritized","paused","waiting-children")]);
       if(counts[0]!==0 || counts.slice(1).some(row=>Object.keys(row).sort().join()!==["wait","active","delayed","prioritized","paused","waiting-children"].sort().join() || Object.values(row).some(value=>value!==0))) throw Error("Retained queues are not empty");
-
-    } finally {await Promise.allSettled([prisma.$disconnect(),scan.close(),webhook.close(),closeRedis()]);}
+      } finally {await Promise.allSettled([prisma.$disconnect(),scan.close(),webhook.close()]);}`
+          : ""
+      }
+    } finally {await Promise.allSettled([closeRedis()]);}
   `
   const inspect = `const {createHash}=require("node:crypto");const row=JSON.parse(require("node:fs").readFileSync(0,"utf8"))[0];const a=JSON.parse(Buffer.from(process.argv[1],"base64").toString());if(!row.State?.Running||row.State?.Health?.Status!=="healthy"||!["${repository}/lyrashield-worker@"+a.workerDigest,"${repository}/lyrashield-worker:"+a.workerSourceSha+"@"+a.workerDigest].includes(row.Config.Image)||row.Config.Labels?.["org.opencontainers.image.revision"]!==a.workerSourceSha||row.Config.Labels?.["io.lyrashield.engine.revision"]!==a.engineRevision||row.Config.Labels?.["io.lyrashield.accounting.protocol"]!=="reservations/2"||createHash("sha256").update(JSON.stringify([...row.Config.Env].sort())).digest("hex")!==a.workerEnvironmentSha256)process.exit(1)`
   return `set -eu; systemctl is-active --quiet lyrashield-worker.service; docker inspect lyrashield-worker | docker exec -i lyrashield-worker node -e ${quote(inspect)} ${quote(expected)}; docker exec -w /app/apps/worker lyrashield-worker node --import tsx --input-type=module -e ${quote(code)} ${quote(expected)}`
@@ -129,7 +136,12 @@ export function assertProbeAcknowledgement(result) {
     throw new Error("Retained worker readback unavailable")
 }
 
-export async function readRetainedRuntime(approval, env, run = execute) {
+export async function readRetainedRuntime(
+  approval,
+  env,
+  run = execute,
+  { requireEmptyQueues = true } = {}
+) {
   assertRetainedMode(env, approval)
   assertRetainedSource(approval.sourceSha, run)
   const { createHash } = await import("node:crypto")
@@ -176,8 +188,12 @@ export async function readRetainedRuntime(approval, env, run = execute) {
   if (!/^[a-z0-9.-]+\.azurecontainerapps\.io$/.test(fqdn ?? ""))
     throw new Error("Retained relay endpoint unavailable")
   const probe =
-    retainedWorkerProbe(approval, createHash("sha256").update(env.BULLMQ_REDIS_URL).digest("hex")) +
-    `; curl --fail --silent --show-error --max-time 10 ${quote(`https://${fqdn}/health`)} >/dev/null; echo RETAINED_WORKER_READY`
+    retainedWorkerProbe(
+      approval,
+      createHash("sha256").update(env.BULLMQ_REDIS_URL).digest("hex"),
+      requireEmptyQueues
+    ) +
+    `; status=$(curl --disable --fail --silent --show-error --max-time 10 --output /dev/null --write-out '%{http_code}' ${quote(`https://${fqdn}/health`)}); [ "$status" = 200 ]; echo RETAINED_WORKER_READY`
   const result = az([
     "vm",
     "run-command",
@@ -205,6 +221,8 @@ async function main() {
       if (env.GITHUB_OUTPUT) appendFileSync(env.GITHUB_OUTPUT, `${key}=${value}\n`)
     }
   } else if (process.argv[2] === "readback") await readRetainedRuntime(approval, env)
+  else if (process.argv[2] === "readback-identity")
+    await readRetainedRuntime(approval, env, execute, { requireEmptyQueues: false })
   else throw new Error("Unknown retained release action")
   console.log("Retained legacy runtime check passed")
 }

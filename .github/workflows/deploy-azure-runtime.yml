@@ -921,8 +921,9 @@ jobs:
         run: |
           bash .github/scripts/deploy-azure-rollout.sh smoke-production-traffic
           if [ "$RETAINED_WORKER" = true ]; then
-            node .github/scripts/retained-legacy-runtime.mjs readback
-            curl --fail --silent --show-error --max-time 10 "$APP_URL/api/ready/scans"
+            node .github/scripts/retained-legacy-runtime.mjs readback-identity
+            status=$(curl --disable --fail --silent --show-error --max-time 10 --output /dev/null --write-out '%{http_code}' "$APP_URL/api/ready/scans")
+            [ "$status" = 200 ]
           fi
       - name: Deactivate superseded Container App revisions
         id: revision-cleanup

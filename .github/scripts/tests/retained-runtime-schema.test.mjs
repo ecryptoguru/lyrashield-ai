@@ -45,6 +45,7 @@ function fixture() {
       rolbypassrls: false,
       can_select: true,
       can_insert: true,
+      can_delete: false,
     })),
   }
   const calls = []
@@ -73,6 +74,7 @@ test("observed producer principals need SELECT/INSERT; no runtime privilege is g
   assert.deepEqual(f.calls.find(({ sql }) => sql.includes("has_table_privilege")).args, [
     input.principals,
   ])
+  assert.match(f.calls.find(({ sql }) => sql.includes("has_table_privilege")).sql, /'DELETE'/)
 })
 
 test("every missing or drifted schema/privilege observation fails before promotion", async (t) => {
@@ -113,6 +115,8 @@ test("every missing or drifted schema/privilege observation fails before promoti
     ["BYPASSRLS role", (s) => (s.grants[0].rolbypassrls = true)],
     ["missing SELECT", (s) => (s.grants[0].can_select = false)],
     ["missing INSERT", (s) => (s.grants[1].can_insert = false)],
+    ["DELETE privilege", (s) => (s.grants[0].can_delete = true)],
+    ["unknown DELETE privilege", (s) => (s.grants[1].can_delete = null)],
     ["query error", (s) => (s.failure = "pg_catalog.pg_policy")],
     ["rollback error", (s) => (s.failure = "ROLLBACK")],
   ]

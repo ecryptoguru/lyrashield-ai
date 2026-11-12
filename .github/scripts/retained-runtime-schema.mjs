@@ -80,7 +80,8 @@ export async function verifyRetainedRuntimeSchema(client, { principals, migratio
     const grants = await client.query(
       `SELECT r.rolname, r.rolsuper, r.rolbypassrls,
         pg_catalog.has_table_privilege(r.oid,c.oid,'SELECT') AS can_select,
-        pg_catalog.has_table_privilege(r.oid,c.oid,'INSERT') AS can_insert
+        pg_catalog.has_table_privilege(r.oid,c.oid,'INSERT') AS can_insert,
+        pg_catalog.has_table_privilege(r.oid,c.oid,'DELETE') AS can_delete
       FROM pg_catalog.pg_roles r CROSS JOIN pg_catalog.pg_class c
       JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
       WHERE r.rolname=ANY($1::text[]) AND n.nspname='public'
@@ -96,7 +97,8 @@ export async function verifyRetainedRuntimeSchema(client, { principals, migratio
           row.rolsuper !== false ||
           row.rolbypassrls !== false ||
           row.can_select !== true ||
-          row.can_insert !== true
+          row.can_insert !== true ||
+          row.can_delete !== false
       )
     )
       throw new Error("Retained runtime provenance access unavailable")

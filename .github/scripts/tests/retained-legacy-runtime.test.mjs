@@ -12,7 +12,6 @@ import {
   parseRetainedApproval,
   assertRetainedMode,
   assertRetainedSource,
-  retainedWorkerProbe,
   assertProbeAcknowledgement,
   readRetainedRuntime,
 } from "../retained-legacy-runtime.mjs"
@@ -236,14 +235,18 @@ function probeFixture(t) {
     join(dir, "docker"),
     `#!/usr/bin/env bash\nset -eu\nif [ "$1" = inspect ]; then cat "$FIXTURE/inspect.json"; exit; fi\nshift\nwhile [ "$1" != node ]; do shift; done\nshift\nexec "$NODE" --import "$FIXTURE/imports.mjs" "$@"\n`
   )
-  for (const cmd of ["systemctl", "curl"])
-    writeFileSync(join(dir, cmd), `#!/bin/sh\n[ -z "\${${cmd.toUpperCase()}_FAIL:-}" ]\n`)
+  writeFileSync(join(dir, "systemctl"), '#!/bin/sh\n[ -z "${SYSTEMCTL_FAIL:-}" ]\n')
+  writeFileSync(
+    join(dir, "curl"),
+    '#!/bin/sh\nprintf "%s" "${HTTP_STATUS:-200}"\n[ -z "${CURL_FAIL:-}" ]\n'
+  )
   for (const cmd of ["docker", "systemctl", "curl"]) chmodSync(join(dir, cmd), 0o700)
-  const script =
-    retainedWorkerProbe(a, createHash("sha256").update(env.BULLMQ_REDIS_URL).digest("hex")) +
-    `; curl --fail https://fixture.region.azurecontainerapps.io/health >/dev/null; echo RETAINED_WORKER_READY`
-  const run = (extra = {}) =>
-    spawnSync("bash", ["-c", script], {
+  const run = async (extra = {}, requireEmptyQueues = true) => {
+    const p = platform()
+    await readRetainedRuntime(a, env, p.run, { requireEmptyQueues })
+    const vm = p.calls.find(([, args]) => args[0] === "vm")
+    const script = vm[1][vm[1].indexOf("--scripts") + 1]
+    return spawnSync("bash", ["-c", script], {
       encoding: "utf8",
       env: {
         ...process.env,
@@ -255,11 +258,12 @@ function probeFixture(t) {
       },
       timeout: 10000,
     })
+  }
   return { run, metadata, dir }
 }
-test("actual guest probe rejects changed identity, environment, health, queues, admission and relay failure", (t) => {
+test("pre-promotion guest probe rejects changed identity, environment, health, queues, admission and relay failure", async (t) => {
   const p = probeFixture(t)
-  const positive = p.run()
+  const positive = await p.run()
   assert.equal(positive.status, 0, positive.stderr)
   for (const extra of [
     { JOBS: "1" },
@@ -271,7 +275,7 @@ test("actual guest probe rejects changed identity, environment, health, queues, 
     { REDIS_URL: "rediss://other.test" },
     { LYRASHIELD_IMAGE: "mutable:latest" },
   ])
-    assert.notEqual(p.run(extra).status, 0, JSON.stringify(extra))
+    assert.notEqual((await p.run(extra)).status, 0, JSON.stringify(extra))
   for (const change of [
     (m) => (m.State.Health.Status = "unhealthy"),
     (m) => (m.Config.Labels["io.lyrashield.accounting.protocol"] = "reservations/1"),
@@ -281,6 +285,20 @@ test("actual guest probe rejects changed identity, environment, health, queues, 
     const m = structuredClone(p.metadata)
     change(m)
     writeFileSync(join(p.dir, "inspect.json"), JSON.stringify([m]))
-    assert.notEqual(p.run().status, 0)
+    assert.notEqual((await p.run()).status, 0)
   }
+})
+
+test("post-promotion identity readback permits newly admitted work but still rejects unhealthy worker", async (t) => {
+  const p = probeFixture(t)
+  assert.equal((await p.run({ JOBS: "1", NONTERMINAL: "1" }, false)).status, 0)
+  assert.notEqual((await p.run({ UNREADY: "1" }, false)).status, 0)
+  assert.notEqual((await p.run({ REDIS_URL: "rediss://other.test" }, false)).status, 0)
+})
+
+test("relay health requires HTTP 200 and rejects redirects or failed requests", async (t) => {
+  const p = probeFixture(t)
+  for (const status of ["301", "302", "503", "000"])
+    assert.notEqual((await p.run({ HTTP_STATUS: status })).status, 0, status)
+  assert.notEqual((await p.run({ CURL_FAIL: "1" })).status, 0)
 })
