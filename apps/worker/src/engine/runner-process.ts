@@ -327,16 +327,8 @@ async function startEngineProcess(
       })
     })
 
-    child.on("error", (err) => {
-      closed = true
-      if (timer) clearTimeout(timer)
-      clearInterval(heartbeatTimer)
-      if (progressTimer) clearInterval(progressTimer)
-      if (cancellationTimer) clearInterval(cancellationTimer)
-      escalation.markExited()
-      stopTracking()
-      reject(err)
-    })
+    // Spawn/kill errors do not prove exit. Keep tracking and escalation until actual close.
+    child.on("error", reject)
   })
 }
 
@@ -344,7 +336,9 @@ async function startEngineProcess(
 export async function runEngineProcess(...args: Parameters<typeof startEngineProcess>) {
   await assertColdDatabaseEpoch()
   args[5] = withColdDatabaseEpochCancellation(args[5])
-  const result = await startEngineProcess(...args)
-  await assertColdDatabaseEpoch()
-  return result
+  try {
+    return await startEngineProcess(...args)
+  } finally {
+    await assertColdDatabaseEpoch()
+  }
 }

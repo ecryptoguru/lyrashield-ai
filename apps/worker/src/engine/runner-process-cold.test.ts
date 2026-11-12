@@ -126,6 +126,43 @@ describe("cold main and triage process boundary", () => {
     await expect(running).rejects.toThrow("admission remains closed")
   })
 
+  it("retains an epoch interruption and live-child escalation when kill emits an error", async () => {
+    const { runEngineProcess, terminateActiveEngineProcesses } = await import("./runner-process")
+    const child = childFixture()
+    child.kill.mockImplementation(() => {
+      child.emit("error", new Error("fixture kill denied"))
+      return false
+    })
+    mocks.spawn.mockReturnValue(child)
+    const running = runEngineProcess(command("scan"), "/tmp", "scan-1", null, profile)
+    const rejected = expect(running).rejects.toThrow("admission remains closed")
+    await vi.advanceTimersByTimeAsync(0)
+    mocks.query.mockResolvedValue([{ epoch: "1794481000.123456" }])
+    await vi.advanceTimersByTimeAsync(1000)
+    await rejected
+    expect(terminateActiveEngineProcesses()).toBe(1)
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(child.kill).toHaveBeenCalledWith("SIGKILL")
+    child.emit("close", null)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(terminateActiveEngineProcesses()).toBe(0)
+  })
+
+  it("preserves an ordinary process error when the database epoch remains valid", async () => {
+    const { runEngineProcess, terminateActiveEngineProcesses } = await import("./runner-process")
+    const child = childFixture()
+    const original = new Error("fixture spawn failure")
+    mocks.spawn.mockReturnValue(child)
+    const running = runEngineProcess(command("scan"), "/tmp", "scan-1", null, profile)
+    await vi.advanceTimersByTimeAsync(0)
+    child.emit("error", original)
+    await expect(running).rejects.toBe(original)
+    expect(terminateActiveEngineProcesses()).toBe(1)
+    child.emit("close", null)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(terminateActiveEngineProcesses()).toBe(0)
+  })
+
   it("keeps checking epochs when an existing cancellation status read hangs", async () => {
     const { runEngineProcess } = await import("./runner-process")
     const child = childFixture()
