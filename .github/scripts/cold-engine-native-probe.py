@@ -10,6 +10,7 @@ import json
 import os
 from pathlib import Path
 import queue
+import secrets
 import subprocess
 import sys
 import tempfile
@@ -21,6 +22,8 @@ assert not any(os.environ.get(key) for key in (
     "OPENAI_API_KEY", "AZURE_AI_API_KEY", "AZURE_OPENAI_API_KEY",
     "ANTHROPIC_API_KEY", "LITELLM_API_KEY",
 )), "probe must receive no provider credentials"
+# Disposable SDK authentication for the loopback fixture; never a provider key.
+fixture_credential = secrets.token_urlsafe(24)
 site = Path(importlib.metadata.distribution("lyrashield-engine").locate_file(""))
 for relative, digest in expected["engineFiles"].items():
     path = site / relative
@@ -76,7 +79,7 @@ class Handler(BaseHTTPRequestHandler):
         size = int(self.headers["content-length"])
         assert 0 < size < 10000
         body = json.loads(self.rfile.read(size))
-        assert self.headers.get("Authorization") == "Bearer cold-fixture"
+        assert self.headers.get("Authorization") == "Bearer " + fixture_credential
         cap = body.get("max_output_tokens", body.get("max_completion_tokens", body.get("max_tokens")))
         assert body["model"] == "gpt-6-luna" and cap == 128
         self.server.posts.append({"path": self.path, "outputCap": cap})
@@ -106,9 +109,9 @@ async def unavailable(route, streaming):
         hooks = ReportUsageHooks(model="openai/gpt-6-luna", max_budget_usd=1,
                                  max_output_tokens=128, report_state=state)
         hooks_module.set_active_hooks(hooks)
-        async with AsyncOpenAI(api_key="cold-fixture", base_url=provider.url, timeout=5) as client:
+        async with AsyncOpenAI(api_key=fixture_credential, base_url=provider.url, timeout=5) as client:
             if route == "litellm":
-                model = LitellmModel("openai/gpt-6-luna", api_key="cold-fixture", base_url=provider.url)
+                model = LitellmModel("openai/gpt-6-luna", api_key=fixture_credential, base_url=provider.url)
                 error = litellm.ServiceUnavailableError
             else:
                 model = (OpenAIResponsesModel if route == "responses" else OpenAIChatCompletionsModel)(
@@ -152,7 +155,7 @@ async def exhausted_budget():
         hooks = ReportUsageHooks(model="openai/gpt-6-luna", max_budget_usd=cap_usd,
                                  max_output_tokens=128, report_state=state)
         hooks_module.set_active_hooks(hooks)
-        async with AsyncOpenAI(api_key="cold-fixture", base_url=provider.url, timeout=5) as client:
+        async with AsyncOpenAI(api_key=fixture_credential, base_url=provider.url, timeout=5) as client:
             for index in range(20):
                 before = len(provider.posts)
                 agent = Agent(name="Root", model=_RequestBoundTurnGuardModel(
@@ -191,7 +194,7 @@ state.hydrate_from_run_dir(); set_global_report_state(state)
 hooks=ReportUsageHooks(model='openai/gpt-6-luna',max_budget_usd=1,max_output_tokens=128)
 set_active_hooks(hooks)
 async def run():
-    async with AsyncOpenAI(api_key='cold-fixture',base_url=sys.argv[2],timeout=3) as client:
+    async with AsyncOpenAI(api_key=sys.argv[3],base_url=sys.argv[2],timeout=3) as client:
         agent=Agent(name='Root',model=_RequestBoundTurnGuardModel(OpenAIResponsesModel('gpt-6-luna',client)),
             model_settings=make_model_settings(None,model_name='openai/gpt-6-luna',bounded_budget=True,max_output_tokens=128))
         try:
@@ -206,7 +209,7 @@ asyncio.run(run())
 
 def interrupted_request(killed):
     with tempfile.TemporaryDirectory() as root, Provider("hold" if killed else "lost-ack") as provider:
-        command = [sys.executable, "-I", "-c", CHILD, str(Path(root).resolve()), provider.url]
+        command = [sys.executable, "-I", "-c", CHILD, str(Path(root).resolve()), provider.url, fixture_credential]
         child = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         bootstrap = queue.Queue()
         reader = threading.Thread(target=lambda: bootstrap.put(child.stdout.readline()), daemon=True)
