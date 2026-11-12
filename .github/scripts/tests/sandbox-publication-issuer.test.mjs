@@ -21,7 +21,7 @@ const publication = {
   nativeManifests: { amd64: "sha256:" + "e".repeat(64), arm64: "sha256:" + "f".repeat(64) },
 }
 const identity = {
-  token: "synthetic-test-token",
+  token: "test",
   identity: { owner: "99:2", source: "1".repeat(40) },
 }
 const readIdentity = async () => identity

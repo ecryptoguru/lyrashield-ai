@@ -280,7 +280,7 @@ test("protected issuer identity failure precedes candidate reads and no credenti
   )
   assert.equal(reads, 0)
   const result = await verifyFreshSandboxPublication(JSON.stringify(expected), {
-    readIdentity: async () => ({ token: "never exchanged" }),
+    readIdentity: async () => ({ token: "none" }),
     verify: (value) => verifySandboxCoveragePublication(value, options(records())),
   })
   assert.equal(result.qualified, false)
