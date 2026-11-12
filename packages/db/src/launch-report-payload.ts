@@ -17,8 +17,8 @@
 import { createHash } from "node:crypto"
 import { GATE_FRESHNESS_MS } from "@lyrashield/gate"
 
-export const LAUNCH_REPORT_PAYLOAD_VERSION = "lyrashield-launch-report/2.0.0"
-export const BOUND_LAUNCH_REPORT_PAYLOAD_VERSION = "lyrashield-launch-report/3.0.0"
+export const LEGACY_LAUNCH_REPORT_PAYLOAD_VERSION = "lyrashield-launch-report/2.0.0"
+export const LAUNCH_REPORT_PAYLOAD_VERSION = "lyrashield-launch-report/3.0.0"
 
 /** The neutral default shown for the app when the customer has not opted in to naming it. */
 export const NEUTRAL_APP_LABEL = "a protected application"
@@ -151,8 +151,8 @@ export function buildLaunchReportPayload(
 
   const base = {
     payloadVersion: opts.identityCommitment
-      ? BOUND_LAUNCH_REPORT_PAYLOAD_VERSION
-      : LAUNCH_REPORT_PAYLOAD_VERSION,
+      ? LAUNCH_REPORT_PAYLOAD_VERSION
+      : LEGACY_LAUNCH_REPORT_PAYLOAD_VERSION,
     ...(opts.identityCommitment ? { identityCommitment: opts.identityCommitment } : {}),
     verdictLabel: VERDICT_LABELS[source.state],
     standardVersion: source.standardVersion,

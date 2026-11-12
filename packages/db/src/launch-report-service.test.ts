@@ -77,6 +77,12 @@ vi.mock("./gate-assessed-scan-evidence", () => ({
     verified: new Map(rows.map((row) => [row.targetId, {}])),
   }),
 }))
+vi.mock("./gate-verdict-read", () => ({
+  loadBoundedGateVerdicts: async () => {
+    const row = await mocks.gateVerdictFindFirst()
+    return row ? [row] : []
+  },
+}))
 vi.mock("./gate-reader-evidence", async (original) => {
   const actual = await original<typeof import("./gate-reader-evidence")>()
   return {
@@ -268,6 +274,15 @@ describe("generateLaunchReport — issue-time applicability and private binding"
       },
     ])
     await expect(issue()).rejects.toMatchObject({ code: "UNTRUSTED_GATE_EVIDENCE" })
+    expect(mocks.reportCreate).not.toHaveBeenCalled()
+  })
+
+  it("refuses to issue when the selected verdict exceeds the transport bound", async () => {
+    mocks.gateVerdictFindFirst.mockResolvedValue(verdictRow({ evidenceTooLarge: true }))
+    mocks.reportCreate.mockResolvedValue({ id: "report-1" })
+    await expect(
+      generateLaunchReport("workspace-1", "target-1", "user-1", { now: EVALUATED_AT })
+    ).rejects.toMatchObject({ code: "UNTRUSTED_GATE_EVIDENCE" })
     expect(mocks.reportCreate).not.toHaveBeenCalled()
   })
 
@@ -882,6 +897,18 @@ describe("confirmSharedLaunchReportIdentity — confirmation without disclosure"
         provenanceJson: provenance,
       })
       .mockResolvedValueOnce(null)
+    expect(
+      await confirmSharedLaunchReportIdentity({
+        reportId: "report-1",
+        token: "a".repeat(64),
+        reportChecksum: payload.reportChecksum,
+        identity: { kind: "COMMIT", value: COMMIT },
+      })
+    ).toBe("UNAVAILABLE")
+  })
+
+  it("cannot confirm identity when its stored verdict exceeds the transport bound", async () => {
+    mocks.gateVerdictFindFirst.mockResolvedValue(verdictRow({ evidenceTooLarge: true }))
     expect(
       await confirmSharedLaunchReportIdentity({
         reportId: "report-1",

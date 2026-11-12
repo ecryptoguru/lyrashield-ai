@@ -17,8 +17,7 @@ import {
 } from "./report-service"
 import type { ScopedTransaction } from "./rls"
 
-const enabled =
-  process.env.LYRASHIELD_TEST_DB_DISPOSABLE === "1" && Boolean(process.env.DATABASE_URL)
+const enabled = process.env.SHARE_RECHECK_POSTGRES_TEST === "1"
 const url = process.env.DATABASE_URL
 const suffix = randomBytes(6).toString("hex")
 const schema = `share_recheck_${suffix}`
@@ -41,6 +40,8 @@ function adapter(client: Client) {
 
 describe.skipIf(!enabled)("shared report revocation under real PostgreSQL RLS", () => {
   beforeAll(async () => {
+    if (process.env.LYRASHIELD_TEST_DB_DISPOSABLE !== "1" || !url)
+      throw new Error("Requires explicit disposable database opt-in")
     const parsed = new URL(url!)
     if (
       !["127.0.0.1", "localhost", "::1", "[::1]"].includes(parsed.hostname) ||

@@ -24,11 +24,12 @@ import { logger } from "@lyrashield/logger"
 import { env } from "@lyrashield/config"
 import { withWorkspaceRLS, type ScopedTransaction } from "./rls"
 import { evaluateVerdictApplicability, parseAssessmentSnapshot } from "./gate-service"
+import { loadBoundedGateVerdicts } from "./gate-verdict-read"
 import { isDeepStrictEqual } from "node:util"
 import type { GateApplicabilityResult } from "@lyrashield/gate"
 import {
   buildLaunchReportPayload,
-  BOUND_LAUNCH_REPORT_PAYLOAD_VERSION,
+  LAUNCH_REPORT_PAYLOAD_VERSION,
   type LaunchReportShareablePayload,
   type LaunchReportSource,
   type LaunchReportVerdictLabel,
@@ -131,18 +132,14 @@ export async function generateLaunchReport(
   } = { verdict: null, applicability: null }
   try {
     const read = async (tx: ScopedTransaction) => {
-      const selected = await tx.gateVerdict.findFirst({
-        where: {
-          workspaceId,
-          targetId,
-          target: { workspaceId, deletedAt: null },
-        },
-        // id tiebreaker for same-millisecond verdicts (see getLatestGateVerdict).
-        orderBy: [{ evaluatedAt: "desc" }, { id: "desc" }],
+      const [selected] = await loadBoundedGateVerdicts(tx, workspaceId, {
+        targetIds: [targetId],
+        requireActiveTarget: true,
       })
+      if (selected?.evidenceTooLarge) throw new UntrustedGateEvidenceError()
       // Captured outside the callback so a later statement failure in this
       // transaction still leaves the selected binding available.
-      selection.verdict = selected
+      selection.verdict = selected ?? null
       if (!selected) return
       selection.applicability = await evaluateVerdictApplicability(tx, workspaceId, selected, {
         now: applicabilityCheckedAt,
@@ -317,9 +314,10 @@ async function loadBoundReportVerdict(
 ): Promise<GateVerdict | null> {
   if (!provenance) return null
   try {
-    const verdict = await tx.gateVerdict.findFirst({
-      where: { id: provenance.gateVerdictId, workspaceId },
+    const [verdict] = await loadBoundedGateVerdicts(tx, workspaceId, {
+      verdictId: provenance.gateVerdictId,
     })
+    if (verdict?.evidenceTooLarge) return null
     const snapshot = verdict ? parseAssessmentSnapshot(verdict.assessmentSnapshot) : null
     const expectedEffective =
       provenance.applicability === "applicable"
@@ -336,7 +334,7 @@ async function loadBoundReportVerdict(
       provenance.effectiveState !== expectedEffective ||
       !isDeepStrictEqual(snapshot?.identity ?? null, provenance.assessedIdentity) ||
       payload.issuedAt !== provenance.issuedAt ||
-      payload.payloadVersion !== BOUND_LAUNCH_REPORT_PAYLOAD_VERSION ||
+      payload.payloadVersion !== LAUNCH_REPORT_PAYLOAD_VERSION ||
       !matchesLaunchReportIdentityCommitment(payload.identityCommitment, bindingKey, {
         workspaceId,
         targetId: verdict.targetId,

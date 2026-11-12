@@ -4,7 +4,7 @@ import { isLaunchReportShareablePayload } from "./launch-report-html"
 import { parseLaunchReportProvenance } from "./launch-report-provenance"
 import { LAUNCH_REPORT_SIGNING_KEY_ID, verifyLaunchReportSignature } from "./launch-report-signing"
 import { assessmentKeyStatus, type ReleasePacketVerificationKey } from "./release-packet-signing"
-import { BOUND_LAUNCH_REPORT_PAYLOAD_VERSION } from "./launch-report-payload"
+import { LAUNCH_REPORT_PAYLOAD_VERSION } from "./launch-report-payload"
 import {
   launchReportBindingKey,
   matchesLaunchReportIdentityCommitment,
@@ -82,7 +82,7 @@ export async function signedAssessmentFor(
     ...(Number.isFinite(expiresAt) ? { expiresAt: new Date(expiresAt).toISOString() } : {}),
   }
   if (
-    payload.payloadVersion !== BOUND_LAUNCH_REPORT_PAYLOAD_VERSION ||
+    payload.payloadVersion !== LAUNCH_REPORT_PAYLOAD_VERSION ||
     payload.stale ||
     !Number.isFinite(expiresAt) ||
     expiresAt <= input.now.getTime()
