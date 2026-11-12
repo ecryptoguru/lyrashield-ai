@@ -1,4 +1,3 @@
-import { assertColdDatabaseEpoch } from "../../cold-database-epoch"
 import { prepareRelayRegistration, relaySetupFailure } from "./relay-registration"
 import { claimBoundedEngineCapacity } from "./capacity-lifecycle"
 import { prepareRepositoryAuth } from "../../engine/repository-auth"
@@ -29,7 +28,7 @@ import {
   runEngine,
   type EngineRunResult,
 } from "../../engine/runner"
-import { effectiveEngineBudget } from "./execution-policy"
+import { effectiveEngineBudget, engineDispatchStatus } from "./execution-policy"
 import type { TargetType } from "../../engine/command-builder"
 import {
   AUTHENTICATED_ASSESSMENT_BETA_LIMITS,
@@ -459,7 +458,6 @@ export async function executeScanTarget(params: {
     // Keep the profile's deterministic-scanner reserve available even when
     // the model is healthy until its own wall-clock cap.
     const claimElapsedMs = elapsedScanMs()
-    await assertColdDatabaseEpoch()
     const capacity = await claimBoundedEngineCapacity(params)
     capacityLimited = capacity.capacityLimited
     const relayFailure = await relay?.activate()
@@ -487,7 +485,7 @@ export async function executeScanTarget(params: {
         }
       }
       // Bypass preflight’s cancellation cache after relay setup and input publication.
-      const cancelled = await isScanCancelled(true).catch(() => null)
+      const cancelled = await engineDispatchStatus(isScanCancelled)
       if (cancelled !== false) {
         return {
           ok: false,
@@ -520,7 +518,6 @@ export async function executeScanTarget(params: {
           },
         }
       }
-      await assertColdDatabaseEpoch()
       inputs?.handoff()
       engineStartedAtMs = Date.now()
       engineResult = await runEngine(

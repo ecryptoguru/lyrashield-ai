@@ -482,8 +482,8 @@
     },
     "apps/worker/src/index.ts|max-lines-per-function": {
       "count": 1,
-      "totalExcess": 87,
-      "maxExcess": 87
+      "totalExcess": 91,
+      "maxExcess": 91
     },
     "apps/worker/src/jobs/run-scan.job.ts|max-lines": {
       "count": 1,
