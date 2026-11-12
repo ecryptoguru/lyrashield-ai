@@ -148,27 +148,30 @@ describe("cold main and triage process boundary", () => {
     expect(terminateActiveEngineProcesses()).toBe(0)
   })
 
-  it("preserves an ordinary process error when the database epoch remains valid", async () => {
-    const { runEngineProcess, terminateActiveEngineProcesses } = await import("./runner-process")
-    const child = childFixture()
-    const original = new Error("fixture spawn failure")
-    mocks.spawn.mockReturnValue(child)
-    const running = runEngineProcess(command("scan"), "/tmp", "scan-1", null, profile)
-    await vi.advanceTimersByTimeAsync(0)
-    const rejected = expect(running).rejects.toBe(original)
-    let settled = false
-    void running.catch(() => {
-      settled = true
-    })
-    child.emit("error", original)
-    await vi.advanceTimersByTimeAsync(1000)
-    expect(settled).toBe(false)
-    expect(terminateActiveEngineProcesses()).toBe(1)
-    child.emit("close", null)
-    await rejected
-    await vi.advanceTimersByTimeAsync(0)
-    expect(terminateActiveEngineProcesses()).toBe(0)
-  })
+  it.each([null, 0])(
+    "preserves a process error when actual close reports %s with a valid epoch",
+    async (exitCode) => {
+      const { runEngineProcess, terminateActiveEngineProcesses } = await import("./runner-process")
+      const child = childFixture()
+      const original = new Error("fixture spawn failure")
+      mocks.spawn.mockReturnValue(child)
+      const running = runEngineProcess(command("scan"), "/tmp", "scan-1", null, profile)
+      await vi.advanceTimersByTimeAsync(0)
+      const rejected = expect(running).rejects.toBe(original)
+      let settled = false
+      void running.catch(() => {
+        settled = true
+      })
+      child.emit("error", original)
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(settled).toBe(false)
+      expect(terminateActiveEngineProcesses()).toBe(1)
+      child.emit("close", exitCode)
+      await rejected
+      await vi.advanceTimersByTimeAsync(0)
+      expect(terminateActiveEngineProcesses()).toBe(0)
+    }
+  )
 
   it.each(["scan", "ai-security-triage"])(
     "retains %s as unknown when a kill error never establishes close",

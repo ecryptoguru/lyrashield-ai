@@ -134,7 +134,8 @@ function deferEngineProcessFailure(
     }, 10_000)
     terminate()
   })
-  child.on("close", () => {
+  // A recorded failure must win before the normal close listener can resolve an exit code of zero.
+  child.prependOnceListener("close", () => {
     clearTimeout(timer)
     if (failure) reject(failure)
   })
