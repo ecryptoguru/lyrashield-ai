@@ -23,7 +23,7 @@ const verified = {
   inventoryPredicateChecksum: "2".repeat(64),
   nativeManifests: { amd64: "sha256:" + "3".repeat(64), arm64: "sha256:" + "4".repeat(64) },
 }
-const identity = { token: "synthetic-token", identity: { owner: "99:2", source: "5".repeat(40) } }
+const identity = { token: "test", identity: { owner: "99:2", source: "5".repeat(40) } }
 
 test("issuer verifies protected inventory before any credentials and signs only held evidence", async () => {
   const calls = [],
