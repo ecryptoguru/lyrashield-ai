@@ -4,9 +4,12 @@ import {
   type GateVerdictResult,
 } from "@lyrashield/gate"
 import { fingerprintPolicy, parseAssessmentSnapshot } from "./gate-assessment"
+import { loadVerifiedAssessedScans } from "./gate-assessed-scan-evidence"
 import { findMismatchedGateEvidence, invalidateUntrustedGateEvidence } from "./gate-reader-evidence"
 import type { GateApplicabilityOptions } from "./gate-service"
 import { withWorkspaceRLS, type ScopedTransaction } from "./rls"
+
+export const MAX_GATE_READ_BATCH_TARGETS = 5
 
 /**
  * Batched form of getCurrentGateVerdict for read surfaces that evaluate every
@@ -25,6 +28,8 @@ export async function getCurrentGateVerdicts(
 ): Promise<Map<string, GateVerdictBatchResult>> {
   const results = new Map<string, GateVerdictBatchResult>()
   if (targetIds.length === 0) return results
+  if (targetIds.length > MAX_GATE_READ_BATCH_TARGETS)
+    throw new Error("Gate read target page exceeds the supported limit")
 
   const nowMs = (options.now ?? new Date()).getTime()
 
@@ -113,7 +118,7 @@ export async function getCurrentGateVerdicts(
            AND s."targetId" = v."targetId"
            AND s."deletedAt" IS NULL
            AND s."id" <> v."scanId"
-           AND s."createdAt" > v."completedAt"
+           AND (s."createdAt" > v."completedAt" OR s."endedAt" > v."completedAt")
           GROUP BY v."targetId"`,
         tx.$queryRaw<Array<{ targetId: string }>>`
           SELECT v."targetId"
@@ -165,11 +170,15 @@ export async function getCurrentGateVerdicts(
         return [row.targetId, applicability] as const
       })
     )
+    const boundVerdicts = verdicts.filter((row) => snapshotByTarget.get(row.targetId) !== null)
+    const assessed = await loadVerifiedAssessedScans(tx, workspaceId, boundVerdicts)
     const mismatches = await findMismatchedGateEvidence(
       tx,
       workspaceId,
-      verdicts.filter((row) => snapshotByTarget.get(row.targetId) !== null)
+      boundVerdicts.filter((row) => assessed.verified.has(row.targetId)),
+      assessed.verified
     )
+    for (const targetId of assessed.unverified) mismatches.add(targetId)
 
     // Map historical rows separately; an invalid current result never rewrites history.
     for (const row of verdicts) {

@@ -51,17 +51,20 @@ export async function loadGateFindings(
 export function prepareGateFindingInputs(
   findings: Awaited<ReturnType<typeof loadGateFindings>>["findings"],
   trustedRetests: Set<string>,
-  scanId: string | null
+  scanId: string | null,
+  positiveReceiptIds?: Set<string>
 ): GateEvidenceInput["findings"] {
   const prepared = findings.map((finding) => {
     const trustedRetest = trustedRetests.has(finding.id)
-    const positiveReceipt = finding.verificationReceipts.some(
-      (receipt) =>
-        receipt.scanId === scanId &&
-        (receipt.status === "VALIDATED" || receipt.status === "VERIFIED") &&
-        Boolean(receipt.method) &&
-        receipt.method !== "RETEST"
-    )
+    const positiveReceipt = positiveReceiptIds
+      ? positiveReceiptIds.has(finding.id)
+      : finding.verificationReceipts.some(
+          (receipt) =>
+            receipt.scanId === scanId &&
+            (receipt.status === "VALIDATED" || receipt.status === "VERIFIED") &&
+            Boolean(receipt.method) &&
+            receipt.method !== "RETEST"
+        )
     const applicableDisposition =
       Boolean(finding.dispositionActorUserId) &&
       Boolean(finding.dispositionReason) &&

@@ -58,18 +58,14 @@ describe.skipIf(!url)("bounded assessed scan read against PostgreSQL", () => {
   beforeAll(async () => {
     await client.connect()
     await client.query(`CREATE TEMP TABLE "Target" ("id" text, "workspaceId" text, "type" text, "deletedAt" timestamp);
-      CREATE TEMP TABLE "Scan" ("id" text, "workspaceId" text, "targetId" text, "deletedAt" timestamp, "status" text, "endedAt" timestamp, "policyId" text);
+      CREATE TEMP TABLE "Scan" ("id" text, "workspaceId" text, "targetId" text, "deletedAt" timestamp, "status" text, "endedAt" timestamp, "policyId" text, "mode" text DEFAULT 'STANDARD');
       CREATE TEMP TABLE "ScanResultManifest" ("scanId" text, "version" integer, "checksum" text, "checksumInput" text, "manifest" jsonb);
-      CREATE TEMP TABLE "ScanCoverageReceipt" ("scanId" text, "scanner" text, "controlId" text, "status" text, "reason" text, "subject" text, "metadata" jsonb);`)
+      CREATE TEMP TABLE "ScanCoverageReceipt" ("id" text, "scanId" text, "scanner" text, "controlId" text, "status" text, "reason" text, "subject" text, "metadata" jsonb);`)
     await client.query('INSERT INTO "Target" VALUES ($1,$2,$3,NULL)', ["target", "ws", "REPO"])
-    await client.query('INSERT INTO "Scan" VALUES ($1,$2,$3,NULL,$4,$5,$6)', [
-      "scan",
-      "ws",
-      "target",
-      "COMPLETED",
-      endedAt,
-      "policy",
-    ])
+    await client.query(
+      'INSERT INTO "Scan" ("id", "workspaceId", "targetId", "deletedAt", "status", "endedAt", "policyId") VALUES ($1,$2,$3,NULL,$4,$5,$6)',
+      ["scan", "ws", "target", "COMPLETED", endedAt, "policy"]
+    )
     await client.query('INSERT INTO "ScanResultManifest" VALUES ($1,$2,$3,$4,$5)', [
       "scan",
       RESULT_MANIFEST_VERSION,
@@ -77,12 +73,10 @@ describe.skipIf(!url)("bounded assessed scan read against PostgreSQL", () => {
       bytes,
       JSON.stringify(manifest),
     ])
-    await client.query('INSERT INTO "ScanCoverageReceipt" VALUES ($1,$2,$3,$4,NULL,NULL,NULL)', [
-      "scan",
-      "sca",
-      "sca",
-      "COMPLETED",
-    ])
+    await client.query(
+      `INSERT INTO "ScanCoverageReceipt" VALUES ('receipt-1',$1,$2,$3,$4,NULL,NULL,NULL)`,
+      ["scan", "sca", "sca", "COMPLETED"]
+    )
   })
   afterAll(async () => {
     await client.end()
@@ -115,7 +109,7 @@ describe.skipIf(!url)("bounded assessed scan read against PostgreSQL", () => {
       "scan",
     ])
     await client.query(
-      `INSERT INTO "ScanCoverageReceipt" SELECT 'scan', 'sca', 'extra-' || n, 'COMPLETED', NULL, NULL, NULL FROM generate_series(1,610) n`
+      `INSERT INTO "ScanCoverageReceipt" SELECT 'extra-' || n, 'scan', 'sca', 'extra-' || n, 'COMPLETED', NULL, NULL, NULL FROM generate_series(1,610) n`
     )
     expect(await findUnverifiedAssessedScans(tx, "ws", [verdict])).toEqual(new Set(["target"]))
   })
@@ -150,14 +144,10 @@ describe.skipIf(!url)("bounded assessed scan read against PostgreSQL", () => {
       "ws",
       "REPO",
     ])
-    await client.query('INSERT INTO "Scan" VALUES ($1,$2,$3,NULL,$4,$5,$6)', [
-      "other-scan",
-      "ws",
-      "other-target",
-      "COMPLETED",
-      endedAt,
-      "policy",
-    ])
+    await client.query(
+      'INSERT INTO "Scan" ("id", "workspaceId", "targetId", "deletedAt", "status", "endedAt", "policyId") VALUES ($1,$2,$3,NULL,$4,$5,$6)',
+      ["other-scan", "ws", "other-target", "COMPLETED", endedAt, "policy"]
+    )
     await client.query('INSERT INTO "ScanResultManifest" VALUES ($1,$2,$3,$4,$5)', [
       "other-scan",
       RESULT_MANIFEST_VERSION,
@@ -166,7 +156,7 @@ describe.skipIf(!url)("bounded assessed scan read against PostgreSQL", () => {
       fullBytes,
     ])
     await client.query(
-      `INSERT INTO "ScanCoverageReceipt" SELECT 'other-scan', 'sca', 'control-' || n, 'COMPLETED', NULL, NULL, NULL FROM generate_series(0,609) n`
+      `INSERT INTO "ScanCoverageReceipt" SELECT 'other-' || n, 'other-scan', 'sca', 'control-' || n, 'COMPLETED', NULL, NULL, NULL FROM generate_series(0,609) n`
     )
     queries = 0
     expect(await findUnverifiedAssessedScans(tx, "ws", [verdict, otherVerdict])).toEqual(

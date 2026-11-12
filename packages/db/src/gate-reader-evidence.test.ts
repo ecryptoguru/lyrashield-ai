@@ -77,8 +77,8 @@ describe("gate reader retest compatibility", () => {
     ])
     expect([...mismatches]).toEqual(["weak-target"])
     expect(findMany).toHaveBeenCalledTimes(1)
-    expect(findMany.mock.calls[0]![1]).toEqual(["weak-target", "trusted-target"])
-    expect(findMany.mock.calls[0]![2]).toBe("workspace")
+    expect(findMany.mock.calls[0]![1]).toBe("workspace")
+    expect(findMany.mock.calls[0]![2]).toEqual(["weak-target", "trusted-target"])
   })
 
   it("does not treat RETEST as independent positive evidence for an unresolved medium finding", async () => {

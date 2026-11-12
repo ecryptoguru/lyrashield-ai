@@ -292,6 +292,7 @@ export {
   evaluateVerdictApplicability,
   getCurrentGateVerdict,
   getCurrentGateVerdicts,
+  MAX_GATE_READ_BATCH_TARGETS,
   getLatestGateVerdict,
   parseAssessmentSnapshot,
   handleFixPrMergedAndReevaluate,

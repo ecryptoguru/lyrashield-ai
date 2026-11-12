@@ -5,6 +5,7 @@ import { LaunchReadinessClient } from "./launch-readiness-client"
 import {
   describeReleaseCheck,
   parseReleaseReference,
+  readinessTargetPageHref,
   resolveReleaseCheckTargetId,
   type ReleaseIdentityInput,
 } from "@/lib/launch-readiness"
@@ -25,6 +26,7 @@ export default async function LaunchReadinessPage({
     targetId?: string | string[]
     commit?: string | string[]
     artifactDigest?: string | string[]
+    cursor?: string | string[]
   }>
 }) {
   const session = await getCachedSession()
@@ -53,6 +55,10 @@ export default async function LaunchReadinessPage({
   const rawTargetId = typeof params.targetId === "string" ? params.targetId.trim() : ""
   const rawCommit = typeof params.commit === "string" ? params.commit.trim() : ""
   const rawDigest = typeof params.artifactDigest === "string" ? params.artifactDigest.trim() : ""
+  const rawCursor =
+    typeof params.cursor === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(params.cursor)
+      ? params.cursor
+      : ""
   const commit = rawCommit ? parseReleaseReference(rawCommit) : null
   const digest = rawDigest ? parseReleaseReference(rawDigest) : null
   const requestedIdentity: ReleaseIdentityInput | null =
@@ -68,7 +74,9 @@ export default async function LaunchReadinessPage({
           : null)
   const checkRequested = Boolean(rawCommit || rawDigest)
 
-  const allTargets = await getGateReadinessTargets(workspaceId)
+  const allTargets = rawCursor
+    ? await getGateReadinessTargets(workspaceId, undefined, {}, rawCursor)
+    : await getGateReadinessTargets(workspaceId)
 
   // A release reference without a target auto-selects only when there is
   // exactly one authorized target — otherwise the user must choose rather
@@ -76,7 +84,7 @@ export default async function LaunchReadinessPage({
   const resolvedTargetId = resolveReleaseCheckTargetId(
     rawTargetId,
     checkRequested,
-    allTargets.map((target) => target.targetId)
+    allTargets.partial ? [] : allTargets.map((target) => target.targetId)
   )
   const checkNeedsTarget = checkRequested && !checkError && !resolvedTargetId
   const effectiveTargetId = checkError ? "" : resolvedTargetId
@@ -95,7 +103,9 @@ export default async function LaunchReadinessPage({
         where: {
           workspaceId,
           deletedAt: null,
-          ...(effectiveTargetId ? { targetId: effectiveTargetId } : {}),
+          ...(effectiveTargetId
+            ? { targetId: effectiveTargetId }
+            : { targetId: { in: allTargets.map((target) => target.targetId) } }),
         },
         _count: { _all: true },
       })
@@ -115,20 +125,36 @@ export default async function LaunchReadinessPage({
 
   const initialReport = projectGateReadinessReport(
     groups.map((g) => ({ ...g, count: g._count._all })),
-    targets
+    targets,
+    { partial: !effectiveTargetId && allTargets.partial }
   )
 
+  const targetOptions = allTargets.map((target) => ({
+    targetId: target.targetId,
+    targetName: target.targetName,
+  }))
+  if (effectiveTargetId && !targetOptions.some((target) => target.targetId === effectiveTargetId)) {
+    const selected = targets.find((target) => target.targetId === effectiveTargetId)
+    if (selected)
+      targetOptions.push({ targetId: selected.targetId, targetName: selected.targetName })
+  }
+  const pageHref = (cursor?: string | null) =>
+    readinessTargetPageHref({
+      targetId: rawTargetId,
+      commit: rawCommit,
+      artifactDigest: rawDigest,
+      cursor,
+    })
   return (
     <LaunchReadinessClient
       // The URL owns the check state; remount on navigation so a changed or
       // cleared reference can never leave a previous result on screen.
-      key={`${rawTargetId}|${rawCommit}|${rawDigest}`}
+      key={`${rawTargetId}|${rawCommit}|${rawDigest}|${rawCursor}`}
       workspaceId={workspaceId}
       initialReport={initialReport}
-      targets={allTargets.map((target) => ({
-        targetId: target.targetId,
-        targetName: target.targetName,
-      }))}
+      targets={targetOptions}
+      nextTargetsHref={allTargets.nextCursor ? pageHref(allTargets.nextCursor) : null}
+      firstTargetsHref={rawCursor ? pageHref() : null}
       initialTargetId={effectiveTargetId}
       initialReleaseRef={requestedIdentity?.value ?? (rawCommit || rawDigest)}
       initialReleaseCheck={releaseCheck}

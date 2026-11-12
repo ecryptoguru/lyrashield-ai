@@ -2,6 +2,15 @@ import { createHash, randomUUID } from "node:crypto"
 import { Client } from "pg"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { findMismatchedGateEvidence } from "./gate-reader-evidence"
+import { loadVerifiedAssessedScans } from "./gate-assessed-scan-evidence"
+import {
+  computeGateVerdict,
+  computeInputChecksum,
+  computeVerdictChecksum,
+  requiredScannersForTarget,
+  type GateEvidenceInput,
+} from "@lyrashield/gate"
+import { RESULT_MANIFEST_VERSION } from "@lyrashield/types"
 import type { ScopedTransaction } from "./rls"
 
 const ownerUrl = process.env.GATE_READER_OWNER_DATABASE_URL
@@ -28,6 +37,17 @@ const summary = {
   falsePositive: 0,
 }
 const zero = Object.fromEntries(Object.keys(summary).map((key) => [key, 0]))
+const assessedAt = new Date(Date.now() - 60_000)
+const lastSeen = new Date(assessedAt.getTime() - 1000)
+let currentVerdict:
+  | (ReturnType<typeof computeGateVerdict> & {
+      targetId: string
+      scanId: string
+      inputChecksum: string
+      verdictChecksum: string
+      assessmentSnapshot: unknown
+    })
+  | undefined
 let rowsSeen: string[] = []
 let calls = 0
 const raw = async (strings: TemplateStringsArray, ...values: unknown[]) => {
@@ -81,14 +101,19 @@ describe.skipIf(!enabled)("gate evidence reader under real PostgreSQL RLS", () =
         'INSERT INTO "Target" (id,"workspaceId",type,name,"updatedAt") VALUES ($1,$2,\'REPO\',$1,NOW())',
         [target, ws]
       )
+      const policyId = `policy-${i}-${suffix}`
+      await owner.query(
+        'INSERT INTO "Policy" (id,"workspaceId",name,"updatedAt") VALUES ($1,$2,$1,NOW())',
+        [policyId, ws]
+      )
       for (const scan of [baseline, retest])
         await owner.query(
-          'INSERT INTO "Scan" (id,"workspaceId","targetId",goal,status,"createdById","updatedAt") VALUES ($1,$2,$3,\'TEST_APP\',\'COMPLETED\',\'fixture\',NOW())',
-          [scan, ws, target]
+          'INSERT INTO "Scan" (id,"workspaceId","targetId","policyId",goal,status,"createdById","endedAt","updatedAt") VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW())',
+          [scan, ws, target, policyId, "TEST_APP", "COMPLETED", "fixture", assessedAt]
         )
       await owner.query(
-        'INSERT INTO "Finding" (id,"workspaceId","targetId","scanId",title,summary,severity,status,"verificationStatus","dedupeKey","updatedAt") VALUES ($1,$2,$3,$4,\'fixture\',\'fixture\',\'HIGH\',\'FIXED\',\'DETECTED\',$1,NOW())',
-        [finding, ws, target, baseline]
+        'INSERT INTO "Finding" (id,"workspaceId","targetId","scanId",title,summary,severity,status,"verificationStatus","dedupeKey","lastSeenAt","updatedAt") VALUES ($1,$2,$3,$4,\'fixture\',\'fixture\',\'HIGH\',\'FIXED\',\'DETECTED\',$1,$5,NOW())',
+        [finding, ws, target, baseline, lastSeen]
       )
       const evidenceIdentity = new Map<
         string,
@@ -108,18 +133,84 @@ describe.skipIf(!enabled)("gate evidence reader under real PostgreSQL RLS", () =
             target: { id: target, type: "REPO", urlChecksum: null },
             sourceExecution: { sourceRevision: revision },
             terminalOutcome: { status: "COMPLETED" },
-            coverage: [{ scanner: "sca", controlId: "sca", status: "COMPLETED" }],
+            coverage: requiredScannersForTarget("REPO", "SAFE").map((scanner) => ({
+              scanner,
+              controlId: scanner,
+              status: "COMPLETED",
+            })),
           }
           const checksumInput = JSON.stringify(manifest)
           const checksum = createHash("sha256").update(checksumInput).digest("hex")
           await owner.query(
-            'INSERT INTO "ScanResultManifest" (id,"scanId",manifest,checksum,"checksumInput") VALUES ($1,$2,$3,$4,$5)',
-            [`manifest-${scanId}`, scanId, checksumInput, checksum, checksumInput]
+            'INSERT INTO "ScanResultManifest" (id,"scanId",version,manifest,checksum,"checksumInput") VALUES ($1,$2,$3,$4,$5,$6)',
+            [
+              `manifest-${scanId}`,
+              scanId,
+              RESULT_MANIFEST_VERSION,
+              checksumInput,
+              checksum,
+              checksumInput,
+            ]
           )
-          await owner.query(
-            'INSERT INTO "ScanCoverageReceipt" (id,"scanId",scanner,"controlId",status) VALUES ($1,$2,$3,$4,$5)',
-            [`coverage-${scanId}`, scanId, "sca", "sca", "COMPLETED"]
-          )
+          for (const scanner of requiredScannersForTarget("REPO", "SAFE")) {
+            await owner.query(
+              'INSERT INTO "ScanCoverageReceipt" (id,"scanId",scanner,"controlId",status) VALUES ($1,$2,$3,$4,$5)',
+              [`coverage-${scanId}-${scanner}`, scanId, scanner, scanner, "COMPLETED"]
+            )
+          }
+          if (scanId === retest) {
+            const gateInput: GateEvidenceInput = {
+              targetId: target,
+              latestCompletedScan: {
+                id: retest,
+                endedAtMs: assessedAt.getTime(),
+                status: "COMPLETED",
+                mode: "SAFE",
+              },
+              coverageReceipts: requiredScannersForTarget("REPO", "SAFE").map((scanner) => ({
+                scanner,
+                controlId: scanner,
+                status: "COMPLETED",
+                reason: null,
+              })),
+              findings: [
+                {
+                  id: finding,
+                  severity: "HIGH",
+                  status: "FIXED",
+                  verificationStatus: "DETECTED",
+                  retestConfirmedResolved: true,
+                  hasPositiveEvidence: true,
+                  hasApplicableDisposition: false,
+                  applicableDisposition: null,
+                  duplicateCanonicalResolved: true,
+                  lastSeenAtMs: lastSeen.getTime(),
+                },
+              ],
+              requiredScanners: requiredScannersForTarget("REPO", "SAFE"),
+              targetTypeCovered: true,
+              policyFingerprint: "fixture-policy",
+              assessmentIdentityComplete: true,
+            }
+            const evaluated = computeGateVerdict(gateInput)
+            currentVerdict = {
+              targetId: target,
+              scanId: retest,
+              ...evaluated,
+              inputChecksum: computeInputChecksum(gateInput),
+              verdictChecksum: computeVerdictChecksum(evaluated),
+              assessmentSnapshot: {
+                version: 2,
+                scanId: retest,
+                completedAtMs: assessedAt.getTime(),
+                manifestChecksum: checksum,
+                manifestVersion: RESULT_MANIFEST_VERSION,
+                policyId,
+                policyFingerprint: "fixture-policy",
+                identity: { kind: "COMMIT", value: revision },
+              },
+            }
+          }
           evidenceIdentity.set(scanId, {
             scanId,
             manifestChecksum: checksum,
@@ -149,7 +240,9 @@ describe.skipIf(!enabled)("gate evidence reader under real PostgreSQL RLS", () =
         baseline: identity(baseline),
         retest: identity(retest),
         coverageReceiptIds:
-          i === 0 ? [`coverage-${baseline}`, `coverage-${retest}`] : ["receipt-a", "receipt-b"],
+          i === 0
+            ? [`coverage-${baseline}-sca`, `coverage-${retest}-sca`]
+            : ["receipt-a", "receipt-b"],
       }
       await owner.query(
         'INSERT INTO "FindingVerification" (id,"workspaceId","findingId","scanId",status,method,reason,"verifierVersion",evidence,"idempotencyKey") VALUES ($1,$2,$3,$4,\'VALIDATED\',\'RETEST\',\'fixture\',\'result-integrity-v3\',$5,$1)',
@@ -163,6 +256,26 @@ describe.skipIf(!enabled)("gate evidence reader under real PostgreSQL RLS", () =
         await owner.query('DELETE FROM "Workspace" WHERE id = ANY($1::text[])', [workspaces])
     } finally {
       await Promise.all([owner.end(), runtime.end()])
+    }
+  })
+
+  it("recomputes a checksum-bound READY from the real scoped manifest and coverage", async () => {
+    if (!currentVerdict) throw new Error("Missing gate fixture")
+    await runtime.query("BEGIN ISOLATION LEVEL REPEATABLE READ")
+    try {
+      const tx = { $queryRaw: raw } as unknown as ScopedTransaction
+      await runtime.query("SELECT set_config('app.current_workspace_id',$1,true)", [workspaces[0]])
+      const assessed = await loadVerifiedAssessedScans(tx, workspaces[0]!, [currentVerdict])
+      expect(assessed.unverified).toEqual(new Set())
+      expect(
+        await findMismatchedGateEvidence(tx, workspaces[0]!, [currentVerdict], assessed.verified)
+      ).toEqual(new Set())
+      const fake = { ...currentVerdict, state: "NOT_READY" }
+      expect(
+        await findMismatchedGateEvidence(tx, workspaces[0]!, [fake], assessed.verified)
+      ).toEqual(new Set([targets[0]]))
+    } finally {
+      await runtime.query("ROLLBACK")
     }
   })
 
@@ -188,7 +301,7 @@ describe.skipIf(!enabled)("gate evidence reader under real PostgreSQL RLS", () =
       calls = 0
       expect(await findMismatchedGateEvidence(tx, workspaces[0]!, verdicts)).toEqual(new Set())
       expect(rowsSeen).toEqual([targets[0]])
-      expect(calls).toBe(4)
+      expect(calls).toBe(5)
       expect(await findMismatchedGateEvidence(tx, workspaces[1]!, [verdicts[1]!])).toEqual(
         new Set()
       )

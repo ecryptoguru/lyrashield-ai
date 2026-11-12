@@ -256,77 +256,6 @@ export async function loadReceiptBackedRetestFindingIdsAcrossTargets(
   const findingIds = entries.map(({ finding }) => finding.id)
   const targetIds = [...new Set(entries.map(({ finding }) => finding.targetId))]
   const targetId = targetIds.length === 1 ? targetIds[0]! : { in: targetIds }
-  const [scans, retests] = input.bounded
-    ? await Promise.all([
-        tx.$queryRaw<EvidenceScan[]>`
-          SELECT s."id", s."workspaceId", s."targetId", s."status"::text AS "status",
-            CASE WHEN m."scanId" IS NULL THEN NULL ELSE jsonb_build_object(
-              'checksum', m."checksum", 'checksumInput', m."checksumInput", 'manifest', m."manifest"
-            ) END AS "resultManifest",
-            COALESCE(coverage.items, '[]'::jsonb) AS "coverageReceipts"
-          FROM "Scan" s
-          LEFT JOIN "ScanResultManifest" m ON m."scanId" = s."id"
-          LEFT JOIN LATERAL (
-            SELECT jsonb_agg(to_jsonb(c)) AS items FROM (
-              SELECT "id", "scanId", "scanner", "controlId", "status"::text AS "status",
-                "reason", "subject", "metadata"
-              FROM "ScanCoverageReceipt" WHERE "scanId" = s."id" LIMIT ${MAX_RETEST_COVERAGE_RECEIPTS + 1}
-            ) c
-          ) coverage ON true
-          WHERE s."workspaceId" = ${input.workspaceId} AND s."id" = ANY(${scanIds}::text[])
-            AND s."targetId" = ANY(${targetIds}::text[]) AND s."deletedAt" IS NULL`,
-        tx.$queryRaw<
-          Array<{
-            id: string
-            workspaceId: string
-            findingId: string
-            scanId: string
-            status: string
-          }>
-        >`
-          SELECT "id", "workspaceId", "findingId", "scanId", "status"
-          FROM "Retest" WHERE "workspaceId" = ${input.workspaceId}
-            AND "id" = ANY(${entries.map(({ evidence }) => evidence.retestId)}::text[])
-            AND "findingId" = ANY(${findingIds}::text[])`,
-      ])
-    : await Promise.all([
-        tx.scan.findMany({
-          where: {
-            id: { in: scanIds },
-            workspaceId: input.workspaceId,
-            targetId,
-            deletedAt: null,
-          },
-          select: {
-            id: true,
-            workspaceId: true,
-            targetId: true,
-            status: true,
-            resultManifest: { select: { checksum: true, checksumInput: true, manifest: true } },
-            coverageReceipts: {
-              ...(input.bounded ? { take: MAX_RETEST_COVERAGE_RECEIPTS + 1 } : {}),
-              select: {
-                id: true,
-                scanId: true,
-                scanner: true,
-                controlId: true,
-                status: true,
-                reason: true,
-                subject: true,
-                metadata: true,
-              },
-            },
-          },
-        }),
-        tx.retest.findMany({
-          where: {
-            workspaceId: input.workspaceId,
-            id: { in: entries.map(({ evidence }) => evidence.retestId) },
-            findingId: { in: findingIds },
-          },
-          select: { id: true, workspaceId: true, findingId: true, scanId: true, status: true },
-        }),
-      ])
   const requestsByTarget = new Map<
     string,
     { targetId: string; scanIds: Set<string>; retestScanIds: Set<string>; findingIds: Set<string> }
@@ -345,25 +274,111 @@ export async function loadReceiptBackedRetestFindingIdsAcrossTargets(
     requestsByTarget.set(finding.targetId, request)
   }
   const overloaded = new Set<string>()
-  if (input.bounded) {
-    for (const scan of scans) {
-      if (
-        scan.targetId &&
-        scan.coverageReceipts.length > MAX_RETEST_COVERAGE_RECEIPTS &&
-        requestsByTarget.get(scan.targetId)?.scanIds.has(scan.id)
-      ) {
-        overloaded.add(scan.targetId)
-      }
-    }
+  if (input.bounded)
+    for (const request of requestsByTarget.values())
+      if (request.scanIds.size > 256) overloaded.add(request.targetId)
+  const asRequests = () =>
+    [...requestsByTarget.values()]
+      .filter((r) => !overloaded.has(r.targetId))
+      .map((r) => ({
+        targetId: r.targetId,
+        scanIds: [...r.scanIds],
+        retestScanIds: [...r.retestScanIds],
+        findingIds: [...r.findingIds],
+      }))
+  let eligibleRequests = asRequests()
+  if (input.bounded && eligibleRequests.length) {
+    const overBudget = await tx.$queryRaw<Array<{ targetId: string }>>`
+      SELECT request."targetId"
+      FROM jsonb_to_recordset(${JSON.stringify(eligibleRequests)}::jsonb) AS request("targetId" text, "scanIds" text[])
+      JOIN "Scan" s ON s."workspaceId" = ${input.workspaceId} AND s."targetId" = request."targetId"
+        AND s."id" = ANY(request."scanIds") AND s."deletedAt" IS NULL
+      LEFT JOIN "ScanResultManifest" m ON m."scanId" = s."id"
+      LEFT JOIN LATERAL (
+        SELECT count(*) AS rows, COALESCE(sum(octet_length(to_jsonb(c)::text)), 0) AS bytes FROM (
+          SELECT "id", "scanId", "scanner", "controlId", "status"::text AS "status", "reason", "subject", "metadata"
+          FROM "ScanCoverageReceipt" WHERE "scanId" = s."id" LIMIT ${MAX_RETEST_COVERAGE_RECEIPTS + 1}
+        ) c
+      ) coverage ON true
+      GROUP BY request."targetId"
+      HAVING bool_or(coverage.rows > ${MAX_RETEST_COVERAGE_RECEIPTS}) OR
+        sum(COALESCE(octet_length(m."checksumInput"),0) + COALESCE(octet_length(m."manifest"::text),0) + coverage.bytes) > 16777216`
+    for (const row of overBudget) overloaded.add(row.targetId)
+    eligibleRequests = asRequests()
   }
-  const eligibleRequests = [...requestsByTarget.values()]
-    .filter((request) => !overloaded.has(request.targetId))
-    .map((request) => ({
-      targetId: request.targetId,
-      scanIds: [...request.scanIds],
-      retestScanIds: [...request.retestScanIds],
-      findingIds: [...request.findingIds],
-    }))
+  const eligibleEntries = entries.filter(({ finding }) => !overloaded.has(finding.targetId))
+  const [scans, retests] =
+    input.bounded && eligibleRequests.length === 0
+      ? [[], []]
+      : input.bounded
+        ? await Promise.all([
+            tx.$queryRaw<EvidenceScan[]>`
+            SELECT s."id", s."workspaceId", s."targetId", s."status"::text AS "status",
+              CASE WHEN m."scanId" IS NULL THEN NULL ELSE jsonb_build_object('checksum', m."checksum", 'checksumInput', m."checksumInput", 'manifest', m."manifest") END AS "resultManifest",
+              COALESCE(coverage.items, '[]'::jsonb) AS "coverageReceipts"
+            FROM jsonb_to_recordset(${JSON.stringify(eligibleRequests)}::jsonb) AS request("targetId" text, "scanIds" text[])
+            JOIN "Scan" s ON s."workspaceId" = ${input.workspaceId} AND s."targetId" = request."targetId"
+              AND s."id" = ANY(request."scanIds") AND s."deletedAt" IS NULL
+            LEFT JOIN "ScanResultManifest" m ON m."scanId" = s."id"
+            LEFT JOIN LATERAL (
+              SELECT jsonb_agg(to_jsonb(c)) AS items FROM (
+                SELECT "id", "scanId", "scanner", "controlId", "status"::text AS "status", "reason", "subject", "metadata"
+                FROM "ScanCoverageReceipt" WHERE "scanId" = s."id" LIMIT ${MAX_RETEST_COVERAGE_RECEIPTS + 1}
+              ) c
+            ) coverage ON true`,
+            tx.$queryRaw<
+              Array<{
+                id: string
+                workspaceId: string
+                findingId: string
+                scanId: string
+                status: string
+              }>
+            >`
+            SELECT "id", "workspaceId", "findingId", "scanId", CASE WHEN "status" = 'passed' THEN 'passed' ELSE 'other' END AS "status"
+            FROM "Retest" WHERE "workspaceId" = ${input.workspaceId}
+              AND "id" = ANY(${eligibleEntries.map(({ evidence }) => evidence.retestId)}::text[])
+              AND "findingId" = ANY(${eligibleEntries.map(({ finding }) => finding.id)}::text[])`,
+          ])
+        : await Promise.all([
+            tx.scan.findMany({
+              where: {
+                id: { in: scanIds },
+                workspaceId: input.workspaceId,
+                targetId,
+                deletedAt: null,
+              },
+              select: {
+                id: true,
+                workspaceId: true,
+                targetId: true,
+                status: true,
+                resultManifest: { select: { checksum: true, checksumInput: true, manifest: true } },
+                coverageReceipts: {
+                  ...(input.bounded ? { take: MAX_RETEST_COVERAGE_RECEIPTS + 1 } : {}),
+                  select: {
+                    id: true,
+                    scanId: true,
+                    scanner: true,
+                    controlId: true,
+                    status: true,
+                    reason: true,
+                    subject: true,
+                    metadata: true,
+                  },
+                },
+              },
+            }),
+            tx.retest.findMany({
+              where: {
+                workspaceId: input.workspaceId,
+                id: { in: entries.map(({ evidence }) => evidence.retestId) },
+                findingId: { in: findingIds },
+              },
+              select: { id: true, workspaceId: true, findingId: true, scanId: true, status: true },
+            }),
+          ])
+
   type Candidate = {
     targetId: string
     findingId: string | null
@@ -372,44 +387,55 @@ export async function loadReceiptBackedRetestFindingIdsAcrossTargets(
     scannerSource: string
     payload: Prisma.JsonValue
   }
-  const candidates = input.bounded
-    ? eligibleRequests.length
-      ? await tx.$queryRaw<Candidate[]>`
-          SELECT candidate.*
+  let candidates: Candidate[]
+  if (input.bounded) {
+    const groups = eligibleRequests.length
+      ? await tx.$queryRaw<Array<{ targetId: string; overflow: boolean; items: Candidate[] }>>`
+          SELECT request."targetId", result.overflow, result.items
           FROM jsonb_to_recordset(${JSON.stringify(eligibleRequests)}::jsonb) AS request(
             "targetId" text, "scanIds" text[], "retestScanIds" text[], "findingIds" text[]
           )
           CROSS JOIN LATERAL (
-            SELECT "targetId", "findingId", "scanId", "dedupeKey", "scannerSource", "payload"
-            FROM "FindingCandidate"
-            WHERE "workspaceId" = ${input.workspaceId} AND "targetId" = request."targetId"
-              AND "scanId" = ANY(request."scanIds")
-              AND ("findingId" = ANY(request."findingIds") OR "scanId" = ANY(request."retestScanIds"))
-            LIMIT 20001
-          ) AS candidate`
+            WITH candidate_cap AS MATERIALIZED (
+              SELECT "id", octet_length(jsonb_build_object('targetId', "targetId", 'findingId', "findingId", 'scanId', "scanId", 'dedupeKey', "dedupeKey", 'scannerSource', "scannerSource", 'payload', "payload")::text) AS bytes
+              FROM "FindingCandidate"
+              WHERE "workspaceId" = ${input.workspaceId} AND "targetId" = request."targetId"
+                AND "scanId" = ANY(request."scanIds")
+                AND ("findingId" = ANY(request."findingIds") OR "scanId" = ANY(request."retestScanIds"))
+              LIMIT 20001
+            ), stats AS (
+              SELECT count(*) AS rows, COALESCE(sum(c.bytes), 0) AS bytes FROM candidate_cap c
+            )
+            SELECT stats.rows > 20000 OR stats.bytes > 4194304 AS overflow,
+              CASE WHEN stats.rows <= 20000 AND stats.bytes <= 4194304
+                THEN (SELECT COALESCE(jsonb_agg(jsonb_build_object(
+                  'targetId', c."targetId", 'findingId', c."findingId", 'scanId', c."scanId",
+                  'dedupeKey', c."dedupeKey", 'scannerSource', c."scannerSource", 'payload', c."payload"
+                )), '[]'::jsonb) FROM "FindingCandidate" c JOIN candidate_cap ids ON ids."id" = c."id"
+                WHERE c."workspaceId" = ${input.workspaceId} AND c."targetId" = request."targetId")
+                ELSE '[]'::jsonb END AS items FROM stats
+          ) result`
       : []
-    : await tx.findingCandidate.findMany({
-        where: {
-          workspaceId: input.workspaceId,
-          targetId,
-          scanId: { in: scanIds },
-          OR: [{ findingId: { in: findingIds } }, { scanId: { in: retestScanIds } }],
-        },
-        select: {
-          targetId: true,
-          findingId: true,
-          scanId: true,
-          dedupeKey: true,
-          scannerSource: true,
-          payload: true,
-        },
-      })
-  if (input.bounded) {
-    const counts = new Map<string, number>()
-    for (const candidate of candidates)
-      counts.set(candidate.targetId, (counts.get(candidate.targetId) ?? 0) + 1)
-    for (const [targetId, count] of counts) if (count > 20000) overloaded.add(targetId)
+    for (const group of groups) if (group.overflow) overloaded.add(group.targetId)
     for (const targetId of overloaded) input.unverifiedTargetIds?.add(targetId)
+    candidates = groups.flatMap((group) => (group.overflow ? [] : group.items))
+  } else {
+    candidates = await tx.findingCandidate.findMany({
+      where: {
+        workspaceId: input.workspaceId,
+        targetId,
+        scanId: { in: scanIds },
+        OR: [{ findingId: { in: findingIds } }, { scanId: { in: retestScanIds } }],
+      },
+      select: {
+        targetId: true,
+        findingId: true,
+        scanId: true,
+        dedupeKey: true,
+        scannerSource: true,
+        payload: true,
+      },
+    })
   }
   const scansById = new Map(scans.map((scan) => [scan.id, scan]))
   const retestsById = new Map(retests.map((retest) => [retest.id, retest]))

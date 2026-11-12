@@ -13,12 +13,21 @@ import {
   type GateVerdictResult,
 } from "@lyrashield/gate"
 import { fingerprintPolicy, parseAssessmentSnapshot } from "./gate-assessment"
-import { findMismatchedGateEvidence, invalidateUntrustedGateEvidence } from "./gate-reader-evidence"
+import { loadVerifiedAssessedScans } from "./gate-assessed-scan-evidence"
+import {
+  findMismatchedGateEvidence,
+  invalidateUntrustedGateEvidence,
+  type StoredGateEvidence,
+} from "./gate-reader-evidence"
 import { withWorkspaceRLS, type ScopedTransaction } from "./rls"
 
 export { parseAssessmentSnapshot }
 export { evaluateGateForTarget, type GateEvaluationResult } from "./gate-evaluation-service"
-export { getCurrentGateVerdicts, type GateVerdictBatchResult } from "./gate-verdict-batch"
+export {
+  getCurrentGateVerdicts,
+  MAX_GATE_READ_BATCH_TARGETS,
+  type GateVerdictBatchResult,
+} from "./gate-verdict-batch"
 export { handleFixPrMergedAndReevaluate, type FixPrMergeOutcome } from "./fix-pr-merge-service"
 
 /**
@@ -57,14 +66,11 @@ export interface GateApplicabilityOptions {
 export async function evaluateVerdictApplicability(
   tx: ScopedTransaction,
   workspaceId: string,
-  verdict: {
+  verdict: StoredGateEvidence & {
     targetId: string
-    state: string
     evaluatedAt: Date
     assessmentSnapshot: unknown
     scanId: string | null
-    evidenceSummary: unknown
-    blockingReasons: unknown
   },
   options: GateApplicabilityOptions = {}
 ): Promise<GateApplicabilityResult> {
@@ -99,7 +105,10 @@ export async function evaluateVerdictApplicability(
             targetId: verdict.targetId,
             deletedAt: null,
             id: { not: snapshot.scanId },
-            createdAt: { gt: new Date(snapshot.completedAtMs) },
+            OR: [
+              { createdAt: { gt: new Date(snapshot.completedAtMs) } },
+              { endedAt: { gt: new Date(snapshot.completedAtMs) } },
+            ],
           },
           select: { id: true },
         }),
@@ -131,11 +140,16 @@ export async function evaluateVerdictApplicability(
     newerAssessmentAttempt: Boolean(newerAssessmentAttempt),
     evidenceChanged: Boolean(findingChanged || verificationChanged),
   })
-  if (
-    snapshot &&
-    (await findMismatchedGateEvidence(tx, workspaceId, [verdict])).has(verdict.targetId)
-  ) {
-    return invalidateUntrustedGateEvidence(result)
+  if (snapshot) {
+    const assessed = await loadVerifiedAssessedScans(tx, workspaceId, [verdict])
+    if (assessed.unverified.has(verdict.targetId)) return invalidateUntrustedGateEvidence(result)
+    if (
+      (await findMismatchedGateEvidence(tx, workspaceId, [verdict], assessed.verified)).has(
+        verdict.targetId
+      )
+    ) {
+      return invalidateUntrustedGateEvidence(result)
+    }
   }
   return result
 }

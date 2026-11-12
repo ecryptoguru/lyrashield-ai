@@ -1,11 +1,12 @@
 import { isDeepStrictEqual } from "node:util"
+import { VIBE_SECURITY_CONTROLS } from "@lyrashield/security"
 import { parseAssessmentSnapshot, snapshotFromManifest } from "./gate-assessment"
 import { isVerifiedPacketScan } from "./release-packet-evidence"
 import type { ScopedTransaction } from "./rls"
 
-// Current producer: 500 scoped entries + 50 gaps + 9 families + 50 controls +
-// one PHP applicability receipt. Oversized evidence is unavailable, never truncated.
-const MAX_COVERAGE_ROWS = 610
+// Current producer: 500 scoped entries + 50 gaps + 9 families + one row per
+// control + one PHP applicability receipt. Oversized evidence is unavailable.
+const MAX_COVERAGE_ROWS = 500 + 50 + 9 + 1 + VIBE_SECURITY_CONTROLS.length
 const MAX_EVIDENCE_BYTES = 16 * 1024 * 1024
 
 type Target = { id: string; workspaceId: string; type: string; deletedAt: Date | null }
@@ -21,6 +22,15 @@ type Scan = Omit<Parameters<typeof isVerifiedPacketScan>[0], "resultManifest"> &
         version: number
       })
     | null
+}
+
+export interface VerifiedAssessedScan {
+  targetType: string
+  scanId: string
+  mode: string
+  endedAt: Date
+  policyFingerprint: string
+  coverageReceipts: Scan["coverageReceipts"]
 }
 
 /** A historical assessment is usable only while its exact scan evidence remains verifiable. */
@@ -71,12 +81,13 @@ export function isVerifiedAssessedScan(input: {
  * One set-based read inside the caller's RLS transaction. Callers must bound the
  * number of verdicts separately; per-scan bounds do not bound the whole batch.
  */
-export async function findUnverifiedAssessedScans(
+export async function loadVerifiedAssessedScans(
   tx: ScopedTransaction,
   workspaceId: string,
   verdicts: { targetId: string; scanId: string | null; assessmentSnapshot: unknown }[]
-): Promise<Set<string>> {
+): Promise<{ unverified: Set<string>; verified: Map<string, VerifiedAssessedScan> }> {
   const unverified = new Set<string>()
+  const verified = new Map<string, VerifiedAssessedScan>()
   const requested = verdicts.flatMap((verdict) => {
     const snapshot = parseAssessmentSnapshot(verdict.assessmentSnapshot)
     if (!snapshot || verdict.scanId !== snapshot.scanId) {
@@ -85,7 +96,7 @@ export async function findUnverifiedAssessedScans(
     }
     return [{ verdict, snapshot }]
   })
-  if (requested.length === 0) return unverified
+  if (requested.length === 0) return { unverified, verified }
 
   const rows = await tx.$queryRaw<
     {
@@ -97,6 +108,7 @@ export async function findUnverifiedAssessedScans(
       scanWorkspaceId: string | null
       scanTargetId: string | null
       status: string | null
+      mode: string | null
       endedAt: Date | null
       policyId: string | null
       resultManifest: Scan["resultManifest"]
@@ -107,7 +119,7 @@ export async function findUnverifiedAssessedScans(
     SELECT requested."targetId" AS "requestedTargetId",
       t."id" AS "targetId", t."workspaceId" AS "targetWorkspaceId", t."type"::text AS "targetType",
       s."id" AS "scanId", s."workspaceId" AS "scanWorkspaceId", s."targetId" AS "scanTargetId",
-      s."status"::text AS "status", s."endedAt", s."policyId",
+      s."status"::text AS "status", s."mode"::text AS "mode", s."endedAt", s."policyId",
       CASE WHEN m."scanId" IS NOT NULL AND
         octet_length(m."checksumInput") <= ${MAX_EVIDENCE_BYTES} AND
         octet_length(m."manifest"::text) <= ${MAX_EVIDENCE_BYTES}
@@ -124,15 +136,21 @@ export async function findUnverifiedAssessedScans(
     LEFT JOIN "ScanResultManifest" m ON m."scanId" = s."id"
     LEFT JOIN LATERAL (
       WITH bounded AS MATERIALIZED (
-        SELECT "scanner", "controlId", "status"::text AS "status", "reason", "subject", "metadata"
+        SELECT "id", octet_length(jsonb_build_object(
+          'scanner', "scanner", 'controlId', "controlId", 'status', "status"::text,
+          'reason', "reason", 'subject', "subject", 'metadata', "metadata"
+        )::text) AS bytes
         FROM "ScanCoverageReceipt" WHERE "scanId" = s."id" LIMIT ${MAX_COVERAGE_ROWS + 1}
       ), stats AS (
-        SELECT count(*) AS count, COALESCE(sum(octet_length(to_jsonb(bounded)::text)), 0) AS bytes
+        SELECT count(*) AS count, COALESCE(sum(bounded.bytes), 0) AS bytes
         FROM bounded
       )
       SELECT stats.count > ${MAX_COVERAGE_ROWS} OR stats.bytes > ${MAX_EVIDENCE_BYTES} AS overflow,
         CASE WHEN stats.count <= ${MAX_COVERAGE_ROWS} AND stats.bytes <= ${MAX_EVIDENCE_BYTES}
-          THEN (SELECT COALESCE(jsonb_agg(to_jsonb(bounded)), '[]'::jsonb) FROM bounded)
+          THEN (SELECT COALESCE(jsonb_agg(jsonb_build_object(
+            'scanner', c."scanner", 'controlId', c."controlId", 'status', c."status"::text,
+            'reason', c."reason", 'subject', c."subject", 'metadata', c."metadata"
+          )), '[]'::jsonb) FROM "ScanCoverageReceipt" c JOIN bounded ids ON ids."id" = c."id" WHERE c."scanId" = s."id")
           ELSE NULL END AS items
       FROM stats
     ) coverage ON true`
@@ -167,8 +185,32 @@ export async function findUnverifiedAssessedScans(
             coverageReceipts: row.coverageReceipts,
           }
         : null
-    if (!isVerifiedAssessedScan({ workspaceId, verdict, target, scan, overflow: row.overflow }))
+    if (
+      !isVerifiedAssessedScan({ workspaceId, verdict, target, scan, overflow: row.overflow }) ||
+      !target ||
+      !scan ||
+      !row.mode ||
+      !scan.endedAt
+    ) {
       unverified.add(verdict.targetId)
+    } else {
+      verified.set(verdict.targetId, {
+        targetType: target.type,
+        scanId: scan.id,
+        mode: row.mode,
+        endedAt: scan.endedAt,
+        policyFingerprint: parseAssessmentSnapshot(verdict.assessmentSnapshot)!.policyFingerprint,
+        coverageReceipts: scan.coverageReceipts,
+      })
+    }
   }
-  return unverified
+  return { unverified, verified }
+}
+
+export async function findUnverifiedAssessedScans(
+  tx: ScopedTransaction,
+  workspaceId: string,
+  verdicts: { targetId: string; scanId: string | null; assessmentSnapshot: unknown }[]
+): Promise<Set<string>> {
+  return (await loadVerifiedAssessedScans(tx, workspaceId, verdicts)).unverified
 }

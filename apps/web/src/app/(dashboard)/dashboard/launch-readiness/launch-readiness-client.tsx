@@ -162,6 +162,8 @@ export function LaunchReadinessClient({
   initialReleaseCheck,
   initialCheckError,
   checkNeedsTarget,
+  nextTargetsHref = null,
+  firstTargetsHref = null,
 }: {
   workspaceId: string
   initialReport: LaunchReadinessReport
@@ -171,6 +173,8 @@ export function LaunchReadinessClient({
   initialReleaseCheck: ReleaseCheckResult | null
   initialCheckError: string | null
   checkNeedsTarget: boolean
+  nextTargetsHref?: string | null
+  firstTargetsHref?: string | null
 }) {
   const router = useRouter()
   const [report, setReport] = useState<LaunchReadinessReport>(initialReport)
@@ -182,6 +186,7 @@ export function LaunchReadinessClient({
   const [formError, setFormError] = useState<string | null>(initialCheckError)
   const [draftDirty, setDraftDirty] = useState(false)
   const draftVersion = useRef(0)
+  const requestVersion = useRef(0)
 
   useLaunchReadinessWebMcp({ workspaceId, onReport: setReport })
 
@@ -189,6 +194,7 @@ export function LaunchReadinessClient({
     (signal?: AbortSignal, options?: { silent?: boolean; refreshCheck?: boolean }) => {
       const silent = options?.silent === true
       const refreshCheck = options?.refreshCheck === true || !draftDirty
+      const request = ++requestVersion.current
       if (!silent) setLoading(true)
       // Carry the URL's check state so a refresh re-runs the same check rather
       // than silently dropping back to the informational view.
@@ -204,6 +210,7 @@ export function LaunchReadinessClient({
         { signal, schema: launchReadinessResponseSchema }
       )
         .then((data) => {
+          if (request !== requestVersion.current) return
           setReport(data)
           if (refreshCheck && refreshVersion === draftVersion.current) {
             setReleaseCheck(data.releaseCheck ?? null)
@@ -212,20 +219,13 @@ export function LaunchReadinessClient({
           setError(null)
         })
         .catch(() => {
-          // A silent background refresh must not replace a perfectly good report
-          // with an error screen; the explicit Refresh action still surfaces it.
-          if (!silent) {
-            setError("Failed to load launch readiness report. Please try again.")
-            setReleaseCheck(null)
-          } else if (checkRequested && refreshCheck && refreshVersion === draftVersion.current) {
-            setReleaseCheck(null)
-            setFormError(
-              "Could not refresh release applicability. Current applicability is unavailable; try again."
-            )
-          }
+          if (request !== requestVersion.current) return
+          // A failed revalidation cannot establish that an earlier verdict is still current.
+          setError("Current readiness could not be verified. Please try again.")
+          setReleaseCheck(null)
         })
         .finally(() => {
-          if (!silent) setLoading(false)
+          if (request === requestVersion.current) setLoading(false)
         })
     },
     [draftDirty, initialTargetId, workspaceId]
@@ -354,15 +354,22 @@ export function LaunchReadinessClient({
                   href: `/dashboard/findings?status=ALL${scopeQuery}`,
                   label: "Review findings",
                 }
-              : report.verdict === "INCONCLUSIVE" || report.verdict === "NOT_EVALUATED"
+              : !scopedTarget &&
+                  report.verdict === "INCONCLUSIVE" &&
+                  (nextTargetsHref || firstTargetsHref)
                 ? {
-                    href: `/dashboard/scans?new=1${scopeQuery}`,
-                    label: scopedTarget ? "Scan this target" : "Choose a target to scan",
+                    href: (nextTargetsHref ?? firstTargetsHref)!,
+                    label: nextTargetsHref ? "Review next targets" : "Review first targets",
                   }
-                : {
-                    href: `/dashboard/reports${scopedTarget ? `?targetId=${encodeURIComponent(scopedTarget.targetId)}` : ""}`,
-                    label: "Review assurance report",
-                  }
+                : report.verdict === "INCONCLUSIVE" || report.verdict === "NOT_EVALUATED"
+                  ? {
+                      href: `/dashboard/scans?new=1${scopeQuery}`,
+                      label: scopedTarget ? "Scan this target" : "Choose a target to scan",
+                    }
+                  : {
+                      href: `/dashboard/reports${scopedTarget ? `?targetId=${encodeURIComponent(scopedTarget.targetId)}` : ""}`,
+                      label: "Review assurance report",
+                    }
 
   const checkActive = Boolean(releaseRef) || Boolean(releaseCheck?.requested) || Boolean(formError)
 
@@ -386,11 +393,30 @@ export function LaunchReadinessClient({
     <div className="space-y-6">
       <PageHeader title="Launch Readiness" icon={Rocket} />
 
+      {(firstTargetsHref || nextTargetsHref) && (
+        <nav aria-label="Target pages" className="flex flex-wrap gap-4 text-sm">
+          <span>Targets are shown in pages.</span>
+          {firstTargetsHref && (
+            <Link className="underline" href={firstTargetsHref}>
+              First targets
+            </Link>
+          )}
+          {nextTargetsHref && (
+            <Link className="underline" href={nextTargetsHref}>
+              Next targets
+            </Link>
+          )}
+        </nav>
+      )}
+
       <LaunchVerdictCard
         report={report}
         config={config}
         summary={verdictSummary}
-        scope={scopedTarget?.targetName ?? "All workspace targets"}
+        scope={
+          scopedTarget?.targetName ??
+          (firstTargetsHref || nextTargetsHref ? "Targets on this page" : "All workspace targets")
+        }
         releaseNeedsAttention={releaseNeedsAttention}
         action={nextAction}
       />

@@ -20,13 +20,18 @@ const zero = {
   blockingUnverified: 0,
 }
 let queryCount = 0
+let findingRows: Record<string, unknown>[] = []
+let candidateGroups: Record<string, unknown>[] = []
 const raw = async (strings: TemplateStringsArray, ...values: unknown[]) => {
   queryCount++
   const sql = strings.reduce(
     (text, part, i) => text + part + (i < values.length ? `$${i + 1}` : ""),
     ""
   )
-  return (await client.query(sql, values)).rows
+  const rows = (await client.query(sql, values)).rows
+  if (sql.includes('"targetEvidenceTooLarge"')) findingRows = rows
+  if (sql.includes("candidate_cap")) candidateGroups = rows
+  return rows
 }
 
 describe.skipIf(!url)("per-target gate bounds against PostgreSQL", () => {
@@ -53,7 +58,7 @@ describe.skipIf(!url)("per-target gate bounds against PostgreSQL", () => {
       "id" text, "workspaceId" text, "shareTokenHash" text, "revokedAt" timestamp,
       "deletedAt" timestamp, "shareExpiresAt" timestamp
     ); CREATE TEMP TABLE "FindingCandidate" (
-      "workspaceId" text, "targetId" text, "findingId" text, "scanId" text,
+      "id" text, "workspaceId" text, "targetId" text, "findingId" text, "scanId" text,
       "dedupeKey" text, "scannerSource" text, "payload" jsonb
     );`)
   })
@@ -77,6 +82,47 @@ describe.skipIf(!url)("per-target gate bounds against PostgreSQL", () => {
     expect(queryCount).toBe(1)
     expect(await findMismatchedGateEvidence(tx, "ws", [verdicts[0]!])).toEqual(new Set(["large"]))
     expect(await findMismatchedGateEvidence(tx, "ws", [verdicts[1]!])).toEqual(new Set())
+  })
+
+  it("does not transport a target's excessive aggregate receipt bytes", async () => {
+    await client.query(
+      `INSERT INTO "Finding" ("id", "workspaceId", "targetId", "severity", "status", "verificationStatus", "lastSeenAt", "scanId", "dedupeKey") SELECT 'byte-f-' || n, 'ws', 'byte-target', 'LOW', 'OPEN', 'DETECTED', NOW(), 'scan', 'k-' || n FROM generate_series(1,5) AS n`
+    )
+    await client.query(
+      `INSERT INTO "FindingVerification" SELECT 'byte-v-' || n, 'ws', 'byte-f-' || n, 'VALIDATED', 'RETEST', 'scan', 'v1', jsonb_build_object('blob', repeat('x', 900000)), NOW() FROM generate_series(1,5) AS n`
+    )
+    const tx = { $queryRaw: raw } as unknown as ScopedTransaction
+    const verdicts = ["byte-target", "empty-target"].map((targetId) => ({
+      targetId,
+      scanId: "scan",
+      evidenceSummary: zero,
+      blockingReasons: [],
+    }))
+    expect(await findMismatchedGateEvidence(tx, "ws", verdicts)).toEqual(new Set(["byte-target"]))
+    expect(
+      findingRows.every(
+        (row) =>
+          row.targetEvidenceTooLarge === true &&
+          Array.isArray(row.verificationReceipts) &&
+          row.verificationReceipts.length === 0
+      )
+    ).toBe(true)
+  })
+
+  it("does not transport arbitrary verifier version text", async () => {
+    await client.query(
+      `INSERT INTO "Finding" ("id", "workspaceId", "targetId", "severity", "status", "verificationStatus", "lastSeenAt", "scanId", "dedupeKey") VALUES ('version-f', 'ws', 'version-target', 'LOW', 'OPEN', 'DETECTED', NOW(), 'scan', 'key')`
+    )
+    await client.query(
+      `INSERT INTO "FindingVerification" VALUES ('version-v', 'ws', 'version-f', 'VALIDATED', 'RETEST', 'scan', repeat('x', 2000000), '{}'::jsonb, NOW())`
+    )
+    const tx = { $queryRaw: raw } as unknown as ScopedTransaction
+    await findMismatchedGateEvidence(tx, "ws", [
+      { targetId: "version-target", scanId: "scan", evidenceSummary: zero, blockingReasons: [] },
+    ])
+    expect(findingRows[0]?.verificationReceipts).toEqual([
+      expect.objectContaining({ verifierVersion: null }),
+    ])
   })
 
   it("isolates candidate and scan coverage limits without rejecting a valid other target", async () => {
@@ -155,10 +201,10 @@ describe.skipIf(!url)("per-target gate bounds against PostgreSQL", () => {
     const a = fixture("large")
     const b = fixture("small")
     await client.query(
-      `INSERT INTO "FindingCandidate" SELECT 'ws', 'large', NULL, 'large-retest', 'other-' || n, 'sca', '{}'::jsonb FROM generate_series(1,20001) AS n`
+      `INSERT INTO "FindingCandidate" SELECT 'candidate-' || n, 'ws', 'large', NULL, 'large-retest', 'other-' || n, 'sca', '{}'::jsonb FROM generate_series(1,20001) AS n`
     )
     await client.query(
-      `INSERT INTO "FindingCandidate" VALUES ('ws', 'small', 'small-finding', 'small-base', 'small-key', 'sca', '{}'::jsonb)`
+      `INSERT INTO "FindingCandidate" VALUES ('small-candidate', 'ws', 'small', 'small-finding', 'small-base', 'small-key', 'sca', '{}'::jsonb)`
     )
     const scans = [a.baseline, a.retestScan, b.baseline, b.retestScan]
     for (const scan of scans) {
@@ -240,6 +286,9 @@ describe.skipIf(!url)("per-target gate bounds against PostgreSQL", () => {
     ]
     expect(await findMismatchedGateEvidence(tx, "ws", verdict)).toEqual(new Set(["small"]))
     await client.query(`DELETE FROM "FindingVerification" WHERE "id" = 'new-invalid'`)
+    await client.query(
+      `INSERT INTO "FindingVerification" SELECT 'extra-' || n, 'ws', 'small-finding', 'VERIFIED', 'MANUAL', 'small-retest', 'v1', NULL, '2025-01-01'::timestamp FROM generate_series(1,101) AS n`
+    )
     expect(await findMismatchedGateEvidence(tx, "ws", verdict)).toEqual(new Set())
     await client.query(
       `INSERT INTO "ScanCoverageReceipt" SELECT 'small-extra-' || n, 'small-base', 'unused', 'extra-' || n, 'COMPLETED', NULL, NULL, NULL FROM generate_series(1,${MAX_RETEST_COVERAGE_RECEIPTS - 1}) AS n`
@@ -254,6 +303,30 @@ describe.skipIf(!url)("per-target gate bounds against PostgreSQL", () => {
       trusted: new Set([b.finding.id]),
       unverified: new Set(),
     })
+    await client.query(`DELETE FROM "FindingCandidate" WHERE "targetId" = 'large'`)
+    await client.query(
+      `INSERT INTO "FindingCandidate" SELECT 'blob-candidate-' || n, 'ws', 'large', NULL, 'large-retest', 'blob-' || n, 'sca', jsonb_build_object('blob', repeat('x', 900000)) FROM generate_series(1,5) AS n`
+    )
+    expect(await evaluate([a.finding, b.finding])).toEqual({
+      trusted: new Set([b.finding.id]),
+      unverified: new Set(["large"]),
+    })
+    expect(candidateGroups.find((group) => group.targetId === "large")).toMatchObject({
+      overflow: true,
+      items: [],
+    })
+    await client.query(
+      `UPDATE "ScanResultManifest" SET "checksumInput" = repeat('x', 17000000) WHERE "scanId" = 'large-base'`
+    )
+    expect(await evaluate([a.finding, b.finding])).toEqual({
+      trusted: new Set([b.finding.id]),
+      unverified: new Set(["large"]),
+    })
+    await client.query('UPDATE "ScanResultManifest" SET "checksumInput" = $1 WHERE "scanId" = $2', [
+      a.baseline.resultManifest.checksumInput,
+      "large-base",
+    ])
+
     await client.query(
       `INSERT INTO "ScanCoverageReceipt" SELECT 'extra-' || n, 'large-base', 'sca', 'extra-' || n, 'COMPLETED', NULL, NULL, NULL FROM generate_series(1,${MAX_RETEST_COVERAGE_RECEIPTS}) AS n`
     )

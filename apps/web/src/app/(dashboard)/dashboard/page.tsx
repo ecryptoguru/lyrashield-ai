@@ -100,7 +100,8 @@ export default async function DashboardPage() {
       verified: group.verified,
       count: group.count,
     })),
-    gateTargets
+    gateTargets,
+    { partial: gateTargets.partial }
   )
 
   // W1-02/W1-03: one canonical decision drives BOTH the header CTA and the
@@ -119,6 +120,7 @@ export default async function DashboardPage() {
       blockingFindings: target.blockingFindings,
       reasons: target.reasons,
     })),
+    hasMoreGateTargets: gateTargets.partial,
     activeScan: overview.activeScan,
   })
 

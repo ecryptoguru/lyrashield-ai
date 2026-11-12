@@ -71,6 +71,44 @@ describe("GET /api/launch-readiness — release check contract", () => {
     })
   })
 
+  it("returns a continuation and never claims workspace readiness from a partial page", async () => {
+    mocks.getGateReadinessTargets.mockResolvedValue(
+      Object.assign([READY_TARGET], { partial: true, nextCursor: "target-1" })
+    )
+    const response = await GET(request("workspaceId=ws-1"))
+    const body = await response.json()
+    expect(body.data).toMatchObject({
+      state: "INSUFFICIENT_EVIDENCE",
+      nextCursor: "target-1",
+      partial: true,
+    })
+  })
+
+  it("does not auto-select a single target from a partial page", async () => {
+    mocks.getGateReadinessTargets.mockResolvedValue(
+      Object.assign([READY_TARGET], { partial: true, nextCursor: "target-1" })
+    )
+    const response = await GET(request(`workspaceId=ws-1&commit=${COMMIT_A}`))
+    const body = await response.json()
+    expect(body.data.releaseCheck).toBeNull()
+    expect(body.data.state).toBe("INSUFFICIENT_EVIDENCE")
+    expect(body.data.nextCursor).toBe("target-1")
+    expect(mocks.getGateReadinessTargets).toHaveBeenCalledTimes(1)
+  })
+
+  it("accepts a continuation cursor and rejects repeated or malformed cursors", async () => {
+    const response = await GET(request("workspaceId=ws-1&cursor=target-1"))
+    expect(response.status).toBe(200)
+    expect(mocks.getGateReadinessTargets).toHaveBeenCalledWith(
+      "ws-1",
+      undefined,
+      expect.any(Object),
+      "target-1"
+    )
+    expect((await GET(request("workspaceId=ws-1&cursor=a&cursor=b"))).status).toBe(400)
+    expect((await GET(request("workspaceId=ws-1&cursor=%20"))).status).toBe(400)
+  })
+
   it("reports a matching commit for a target-scoped check", async () => {
     const response = await GET(request(`workspaceId=ws-1&targetId=target-1&commit=${COMMIT_A}`))
     expect(response.status).toBe(200)

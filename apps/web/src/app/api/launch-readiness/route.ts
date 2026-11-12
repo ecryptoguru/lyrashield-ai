@@ -19,6 +19,12 @@ const ReadinessQuerySchema = z
   .object({
     workspaceId: z.string().min(1),
     targetId: z.string().min(1).optional(),
+    cursor: z
+      .string()
+      .min(1)
+      .max(128)
+      .regex(/^[A-Za-z0-9_-]+$/)
+      .optional(),
     commit: z
       .string()
       .regex(RELEASE_COMMIT_PATTERN)
@@ -39,7 +45,7 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url)
     // Repeated query values are ambiguous — an identity check must name exactly
     // one release, so duplicates are rejected rather than first-wins.
-    for (const param of ["workspaceId", "targetId", "commit", "artifactDigest"]) {
+    for (const param of ["workspaceId", "targetId", "commit", "artifactDigest", "cursor"]) {
       if (searchParams.getAll(param).length > 1) {
         return apiError("INVALID_PARAM", `${param} may only be supplied once`, 400)
       }
@@ -47,13 +53,14 @@ export async function GET(request: Request) {
     const parsed = ReadinessQuerySchema.safeParse({
       workspaceId: searchParams.get("workspaceId"),
       targetId: searchParams.get("targetId") ?? undefined,
+      cursor: searchParams.get("cursor") ?? undefined,
       commit: searchParams.get("commit")?.trim() ?? undefined,
       artifactDigest: searchParams.get("artifactDigest")?.trim() ?? undefined,
     })
     if (!parsed.success) {
       return apiError("INVALID_PARAM", parsed.error.issues[0]?.message ?? "Invalid input", 400)
     }
-    const { workspaceId, targetId, commit, artifactDigest } = parsed.data
+    const { workspaceId, targetId, commit, artifactDigest, cursor } = parsed.data
 
     const { session } = await requirePermission(workspaceId, PERMISSIONS.finding.view)
     resolveOAuthReadScope(session, targetId, true)
@@ -75,11 +82,13 @@ export async function GET(request: Request) {
     let effectiveTargetId = targetId
     let targets
     if (!targetId && requestedIdentity) {
-      const allTargets = await getGateReadinessTargets(workspaceId)
+      const allTargets = cursor
+        ? await getGateReadinessTargets(workspaceId, undefined, {}, cursor)
+        : await getGateReadinessTargets(workspaceId)
       effectiveTargetId = resolveReleaseCheckTargetId(
         "",
         true,
-        allTargets.map((target) => target.targetId)
+        allTargets.partial ? [] : allTargets.map((target) => target.targetId)
       )
       if (effectiveTargetId) {
         targets = await getGateReadinessTargets(workspaceId, effectiveTargetId, identityOptions)
@@ -87,7 +96,10 @@ export async function GET(request: Request) {
         targets = allTargets
       }
     } else {
-      targets = await getGateReadinessTargets(workspaceId, targetId, identityOptions)
+      targets =
+        cursor && !targetId
+          ? await getGateReadinessTargets(workspaceId, targetId, identityOptions, cursor)
+          : await getGateReadinessTargets(workspaceId, targetId, identityOptions)
     }
 
     const groups = await withWorkspaceRLS(workspaceId, (tx) =>
@@ -96,7 +108,9 @@ export async function GET(request: Request) {
         where: {
           workspaceId,
           deletedAt: null,
-          ...(effectiveTargetId ? { targetId: effectiveTargetId } : {}),
+          ...(effectiveTargetId
+            ? { targetId: effectiveTargetId }
+            : { targetId: { in: targets.map((target) => target.targetId) } }),
         },
         _count: { _all: true },
       })
@@ -104,7 +118,8 @@ export async function GET(request: Request) {
 
     const report = projectGateReadinessReport(
       groups.map((group) => ({ ...group, count: group._count._all })),
-      targets
+      targets,
+      { partial: targets.partial }
     )
 
     // The release check is reported separately from the projected report so a
@@ -119,7 +134,12 @@ export async function GET(request: Request) {
         )
       : null
 
-    const response = apiSuccess({ ...report, releaseCheck })
+    const response = apiSuccess({
+      ...report,
+      releaseCheck,
+      nextCursor: targets.nextCursor ?? null,
+      partial: targets.partial ?? false,
+    })
     response.headers.set("Cache-Control", "no-store")
     return response
   } catch (error) {

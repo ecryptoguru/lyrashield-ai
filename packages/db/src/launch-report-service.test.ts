@@ -66,6 +66,30 @@ vi.mock("./rls", () => ({
     }
   ),
 }))
+vi.mock("./gate-assessed-scan-evidence", () => ({
+  loadVerifiedAssessedScans: async (
+    _tx: unknown,
+    _workspaceId: string,
+    rows: { targetId: string }[]
+  ) => ({
+    unverified: new Set<string>(),
+    verified: new Map(rows.map((row) => [row.targetId, {}])),
+  }),
+}))
+vi.mock("./gate-reader-evidence", async (original) => {
+  const actual = await original<typeof import("./gate-reader-evidence")>()
+  return {
+    ...actual,
+    findMismatchedGateEvidence: async (
+      _tx: unknown,
+      _workspaceId: string,
+      rows: { targetId: string }[]
+    ) => {
+      const findings = await mocks.findingFindMany()
+      return findings?.length ? new Set(rows.map((row) => row.targetId)) : new Set<string>()
+    },
+  }
+})
 vi.mock("./report-service", () => ({
   getReportByShareToken: mocks.getReportByShareToken,
   readActiveSharedReport: (..._args: unknown[]) => mocks.reportFindFirst(),
