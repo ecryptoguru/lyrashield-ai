@@ -29,12 +29,6 @@ jobs:
       marketing-deploy: ${{ steps.classify.outputs.marketing-deploy }}
       current-main: ${{ steps.classify.outputs.current-main }}
     steps:
-      # Temporary fail-closed gate until the protected qualification issuer is wired.
-      - name: Hold production until runtime qualification
-        run: |
-          echo '::error::Production release is held pending runtime qualification.'
-          exit 1
-
       - name: Checkout merged source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -70,6 +64,12 @@ jobs:
       prepared_run_id: ${{ steps.require.outputs.prepared_run_id }}
       prepared_run_attempt: ${{ steps.require.outputs.prepared_run_attempt }}
     steps:
+      # Azure remains fail-closed until the protected qualification issuer is wired.
+      - name: Hold production until runtime qualification
+        run: |
+          echo '::error::Production release is held pending runtime qualification.'
+          exit 1
+
       - name: Require the protected qualified release digest
         id: require
         env:

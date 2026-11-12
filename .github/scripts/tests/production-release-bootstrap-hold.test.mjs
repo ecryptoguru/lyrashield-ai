@@ -5,12 +5,11 @@ import { spawnSync } from "node:child_process"
 import { parseRetainedApproval } from "../retained-legacy-runtime.mjs"
 
 const workflows = [
-  ["release-production.yml", "routing"],
+  ["release-production.yml", "qualify-azure-release"],
   ["release-retained-worker.yml", "approve"],
   ["deploy-azure.yml", "preflight-compatible-baseline"],
   ["deploy-azure-runtime.yml", "prepare-dependencies"],
   ["deploy-azure-runtime.yml", "deploy"],
-  ["deploy-marketing.yml", "deploy-marketing"],
   ["finalize-held-webhook-recovery.yml", "finalize"],
 ]
 

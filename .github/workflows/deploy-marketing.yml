@@ -46,12 +46,6 @@ jobs:
       name: cloudflare-production
       url: https://lyrashieldai.com
     steps:
-      # The coordinated release hold also covers marketing and its D1 migrations.
-      - name: Hold production until runtime qualification
-        run: |
-          echo '::error::Production release is held pending runtime qualification.'
-          exit 1
-
       # Routing compares the current source with Cloudflare's exact homepage
       # revision marker, so a later docs-only push still carries any earlier
       # undeployed marketing or shared changes into CI and deployment routing.
