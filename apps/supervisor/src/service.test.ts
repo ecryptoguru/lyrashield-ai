@@ -267,6 +267,31 @@ describe("SupervisorService", () => {
     expect(gateway.issueCalls).toBe(0)
   })
 
+  it("rejects an altered paid-start intent on restart without repeating an effect", async () => {
+    const stored = await journal()
+    const { service, executor, gateway } = await serviceWith(stored)
+    const prepared = await service.execute(prepareCommand())
+    const command = {
+      type: "START_PAID" as const,
+      commandId: "cmd-start-identity",
+      attemptId: "attempt-1",
+      executorKey: "engine" as const,
+      expectedReceiptHash: prepared.receipt.hash,
+    }
+    expect((await service.execute(command)).status).toBe("STARTED")
+    await stored.append({
+      type: "command_intent",
+      supervisorInstanceId: "supervisor-test-1",
+      observedAt: now.toISOString(),
+      command: { ...command, expectedReceiptHash: "f".repeat(64) },
+    })
+    const { service: restarted } = await serviceWith(stored, executor, gateway)
+    await expect(restarted.initialize()).rejects.toMatchObject({ code: "JOURNAL_INTEGRITY" })
+    expect(executor.createCalls).toBe(1)
+    expect(executor.startCalls).toBe(1)
+    expect(gateway.issueCalls).toBe(1)
+  })
+
   it("records broker command acceptance before PREPARE completion and replays neither", async () => {
     const stored = await journal()
     const { service, executor, gateway } = await serviceWith(stored)
