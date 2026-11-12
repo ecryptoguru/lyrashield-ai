@@ -6,7 +6,9 @@ script="$repo/ops/worker/run-worker.sh"
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
-mkdir -p "$tmp/bin"
+mkdir -p "$tmp/bin" "$tmp/cold-start"
+sed "s|/var/lib/lyrashield/worker-cold-start|$tmp/cold-start|g" "$script" > "$tmp/run-worker.sh"
+script="$tmp/run-worker.sh"
 cat > "$tmp/bin/docker" <<'MOCK'
 #!/bin/sh
 set -eu

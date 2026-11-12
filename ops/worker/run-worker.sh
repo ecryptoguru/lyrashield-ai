@@ -22,6 +22,7 @@ if [ ! -r "$environment_file" ]; then
   exit 1
 fi
 
+unset LYRASHIELD_COLD_SINGLE_WORKER LYRASHIELD_COLD_DATABASE_EPOCH_SHA256 LYRASHIELD_COLD_RELEASE_OWNER
 unset LYRASHIELD_SANDBOX_PUBLICATION_RECORD_PATH
 set -a
 # shellcheck disable=SC1090
@@ -46,7 +47,8 @@ fi
 
 # Held for the attached worker lifetime; the explicit cold barrier uses this
 # same lock only after systemd has stopped the previous owner.
-cold_start_directory=${LYRASHIELD_WORKER_COLD_START_DIR:-/var/lib/lyrashield/worker-cold-start}
+cold_start_directory=/var/lib/lyrashield/worker-cold-start
+[ "${LYRASHIELD_WORKER_COLD_START_DIR:-$cold_start_directory}" = "$cold_start_directory" ] || exit 1
 install -d -m 700 "$cold_start_directory"
 exec 9>"$cold_start_directory/owner.lock"
 flock -n 9 || { echo "Another native worker owner holds the host" >&2; exit 1; }
@@ -58,7 +60,39 @@ fi
 # A daemon may finish an accepted create after its client dies. Every native
 # owner therefore burns this cold-start fence before create; only the explicit
 # stopped-owner/daemon barrier may clear it. Automatic restart stays fail closed.
-(umask 077; set -C; : > "$cold_start_directory/owner-started")
+if [ "${LYRASHIELD_COLD_SINGLE_WORKER:-0}" = 1 ]; then
+  marker_product=$(docker image inspect "$LYRASHIELD_WORKER_IMAGE" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')
+  marker_engine=$(docker image inspect "$LYRASHIELD_WORKER_IMAGE" --format '{{index .Config.Labels "io.lyrashield.engine.revision"}}')
+  /usr/bin/python3 - "$cold_start_directory" "$LYRASHIELD_WORKER_IMAGE" "${LYRASHIELD_COLD_RELEASE_OWNER:?}" "$marker_product" "$marker_engine" "${LYRASHIELD_COLD_DATABASE_EPOCH_SHA256:?}" <<'PYOWNER'
+import datetime,hashlib,json,os,re,stat,sys
+state,image,owner,product,engine,epoch=sys.argv[1:]
+if not re.fullmatch(r'[1-9][0-9]{0,19}:[1-9][0-9]{0,9}',owner) or not re.fullmatch('[a-f0-9]{64}',epoch) or any(not re.fullmatch('[a-f0-9]{40}',v) for v in (product,engine)): raise SystemExit(1)
+def canon(value):
+ name,digest=value.split('@');return name.split(':')[0]+'@'+digest
+def read_root(path):
+ fd=os.open(path,os.O_RDONLY|os.O_NOFOLLOW)
+ with os.fdopen(fd,'rb') as source:
+  metadata=os.fstat(source.fileno())
+  if metadata.st_uid!=0 or stat.S_IMODE(metadata.st_mode)!=0o600 or metadata.st_size>65536: raise SystemExit(1)
+  raw=source.read();return raw,json.loads(raw)
+raw,receipt=read_root(state+'/receipt.json')
+boot=open('/proc/sys/kernel/random/boot_id').read().strip()
+finished=datetime.datetime.fromisoformat(receipt['finishedAt'].replace('Z','+00:00'))
+age=(datetime.datetime.now(datetime.timezone.utc)-finished).total_seconds()
+if receipt['bootId']!=boot or not 0<=age<=180 or receipt['network']!='lyrashield-sandbox': raise SystemExit(1)
+checksum=hashlib.sha256(raw).hexdigest()
+if canon(receipt['workerImage'])!=canon(image):
+ _,context=read_root('/var/lib/lyrashield/cold-release-'+owner+'/context.json')
+ identity=context['identity']
+ if context.get('barrierSha256')!=checksum or identity.get('owner')!=owner or canon(identity.get('image',''))!=canon(image) or identity.get('product')!=product or identity.get('engine')!=engine or canon(context['oldWorker'])!=canon(receipt['workerImage']) or canon(context['oldSandbox'])!=canon(receipt['sandboxImage']): raise SystemExit(1)
+fd=os.open(state+'/owner-started',os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600)
+with os.fdopen(fd,'w') as output:
+ json.dump(dict(owner=owner,workerImage=image,productRevision=product,engineRevision=engine,epochSha256=epoch,bootId=boot,receiptSha256=checksum),output);output.flush();os.fsync(output.fileno())
+fd=os.open(state,os.O_RDONLY|os.O_DIRECTORY);os.fsync(fd);os.close(fd)
+PYOWNER
+else
+  (umask 077; set -C; : > "$cold_start_directory/owner-started")
+fi
 # Linux syncfs commits the marker and its directory entry on the same filesystem.
 # An unavailable primitive or failed sync must stop before any native execution.
 command -v sync >/dev/null 2>&1 && sync -f "$cold_start_directory" || {
@@ -293,6 +327,17 @@ docker run --rm \
   "$LYRASHIELD_WORKER_IMAGE" \
   -c "chown -R lyrashield:lyrashield '$worker_shared_root' && chmod 700 '$worker_shared_root' '$worker_shared_root/lyrashield_runs' '$worker_shared_root/tmp'"
 
+cold_evidence_mount=
+if [ "${LYRASHIELD_COLD_SINGLE_WORKER:-0}" = 1 ]; then
+  [ -d /etc/lyrashield/cold-sandbox ] && [ ! -L /etc/lyrashield/cold-sandbox ] &&
+    [ "$(stat -c '%u:%a' /etc/lyrashield/cold-sandbox)" = 0:555 ] || exit 1
+  for evidence in verification.json expected.json; do
+    [ -f "/etc/lyrashield/cold-sandbox/$evidence" ] && [ ! -L "/etc/lyrashield/cold-sandbox/$evidence" ] &&
+      [ "$(stat -c '%u:%a' "/etc/lyrashield/cold-sandbox/$evidence")" = 0:444 ] || exit 1
+  done
+  cold_evidence_mount='--mount type=bind,src=/etc/lyrashield/cold-sandbox,dst=/etc/lyrashield/cold-sandbox,readonly'
+fi
+
 # Intentional word splitting: worker-env.sh emits one `--env` argument pair per
 # line and every emitted value is whitespace-free.
 # shellcheck disable=SC2086
@@ -302,7 +347,7 @@ docker create \
   "$@" \
   --env-file "$environment_file" \
   $env_args \
-  $publication_record_mount \
+  $publication_record_mount $cold_evidence_mount \
   --group-add "$socket_group" \
   --mount type=bind,src=/var/run/docker.sock,dst=/var/run/docker.sock \
   --mount type=bind,src="$worker_shared_root",dst="$worker_shared_root" \

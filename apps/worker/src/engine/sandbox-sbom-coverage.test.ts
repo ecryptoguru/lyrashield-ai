@@ -7,7 +7,52 @@
  * must remain failures — no waivers.
  */
 
-import { describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
+import { mkdtempSync, writeFileSync, rmSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
+
+const coldFiles = vi.hoisted(() => ({
+  paths: new Map<string, string>(),
+  fds: new Set<number>(),
+  owner: 0,
+  writable: false,
+  mount: true,
+}))
+vi.mock("node:fs", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs")>()
+  return {
+    ...actual,
+    openSync: (path: string, flags: number) => {
+      const mapped = coldFiles.paths.get(path)
+      const fd = actual.openSync(mapped ?? path, flags)
+      if (mapped) coldFiles.fds.add(fd)
+      return fd
+    },
+    closeSync: (fd: number) => {
+      coldFiles.fds.delete(fd)
+      actual.closeSync(fd)
+    },
+    fstatSync: (fd: number) => {
+      const value = actual.fstatSync(fd)
+      return coldFiles.fds.has(fd)
+        ? Object.assign(value, {
+            uid: coldFiles.owner,
+            mode: (value.mode & ~0o777) | (coldFiles.writable ? 0o644 : 0o444),
+          })
+        : value
+    },
+    lstatSync: (path: string) => {
+      if (coldFiles.paths.size && path === "/etc/lyrashield/cold-sandbox")
+        return { isDirectory: () => true, uid: coldFiles.owner, mode: 0o40555 }
+      return actual.lstatSync(coldFiles.paths.get(path) ?? path)
+    },
+    readFileSync: (path: string, encoding: "utf8") =>
+      path === "/proc/self/mountinfo" && coldFiles.paths.size
+        ? `1 0 0:1 / /etc/lyrashield/cold-sandbox ${coldFiles.mount ? "ro" : "rw"} - tmpfs tmpfs ro\n`
+        : actual.readFileSync(path, encoding),
+  }
+})
 
 import {
   SBOM_COVERAGE_LIMITATIONS,
@@ -18,6 +63,7 @@ import {
   SBOM_COVERAGE_REQUIRED_APPS,
   SBOM_COVERAGE_SCOPE,
   verifySandboxSbomCoverage,
+  assertSandboxSbomCoverageVerified,
 } from "./sandbox-sbom-coverage"
 
 const IMAGE_NAME = "ghcr.io/ecryptoguru/lyrashield-sandbox"
@@ -274,5 +320,91 @@ describe("five known rootfs hard failures remain failures", () => {
     expect(() => verify(aggregate, buildRecords(aggregate), candidate)).toThrow(
       /sandbox SBOM coverage/
     )
+  })
+})
+
+// Synthetic verifier JSON checks the controlled mount contract only. Authenticity
+// is established by the protected producer's real pinned-GH OCI verification.
+describe("cold protected sandbox evidence mount", () => {
+  let directory = ""
+  afterEach(() => {
+    coldFiles.paths.clear()
+    coldFiles.fds.clear()
+    coldFiles.owner = 0
+    coldFiles.writable = false
+    coldFiles.mount = true
+    if (directory) rmSync(directory, { recursive: true, force: true })
+    directory = ""
+  })
+  function runtime() {
+    directory = mkdtempSync(join(tmpdir(), "cold-sbom-"))
+    const aggregate = buildAggregate()
+    for (const [name, value] of [
+      ["verification", buildRecords(aggregate)],
+      ["expected", aggregate],
+    ] as const) {
+      const path = join(directory, name + ".json")
+      writeFileSync(path, JSON.stringify(value))
+      coldFiles.paths.set("/etc/lyrashield/cold-sandbox/" + name + ".json", path)
+    }
+    return {
+      LYRASHIELD_COLD_SINGLE_WORKER: "1",
+      LYRASHIELD_COLD_DATABASE_EPOCH_SHA256: "1".repeat(64),
+      LYRASHIELD_PRODUCT_REVISION: "2".repeat(40),
+      LYRASHIELD_WORKER_IMAGE_DIGEST: "sha256:" + "3".repeat(64),
+      LYRASHIELD_WORKER_CONCURRENCY: "1",
+      LYRASHIELD_ENGINE_REVISION: ENGINE_REVISION,
+      LYRASHIELD_SANDBOX_SBOM_COVERAGE_VERIFY_PATH:
+        "/etc/lyrashield/cold-sandbox/verification.json",
+      LYRASHIELD_SANDBOX_SBOM_COVERAGE_EXPECTED_PATH: "/etc/lyrashield/cold-sandbox/expected.json",
+      LYRASHIELD_SANDBOX_SBOM_COVERAGE_REPO: REPO,
+      LYRASHIELD_SANDBOX_SBOM_COVERAGE_REF: REF,
+      LYRASHIELD_SANDBOX_SBOM_COVERAGE_ENGINE_REVISION: ENGINE_REVISION,
+      LYRASHIELD_SANDBOX_SBOM_COVERAGE_WORKFLOW_REVISION: WORKFLOW_REVISION,
+      LYRASHIELD_SANDBOX_SBOM_COVERAGE_RUN_ID: "123",
+      LYRASHIELD_SANDBOX_SBOM_COVERAGE_RUN_ATTEMPT: "2",
+    }
+  }
+  it("accepts matching bytes only through the root-owned read-only cold mount", () => {
+    expect(() =>
+      assertSandboxSbomCoverageVerified(runtime(), IMAGE_NAME + "@" + INDEX_DIGEST)
+    ).not.toThrow()
+  })
+  it("flags cannot replace mount ownership, read-only state, epoch or image binding", () => {
+    const env = runtime()
+    for (const changed of [
+      { LYRASHIELD_COLD_DATABASE_EPOCH_SHA256: "" },
+      { LYRASHIELD_WORKER_CONCURRENCY: "2" },
+      { LYRASHIELD_ENGINE_REVISION: "f".repeat(40) },
+      { LYRASHIELD_SANDBOX_SBOM_COVERAGE_VERIFY_PATH: "/tmp/approval.json" },
+    ]) {
+      expect(() =>
+        assertSandboxSbomCoverageVerified({ ...env, ...changed }, IMAGE_NAME + "@" + INDEX_DIGEST)
+      ).toThrow()
+    }
+    coldFiles.owner = 1001
+    expect(() => assertSandboxSbomCoverageVerified(env, IMAGE_NAME + "@" + INDEX_DIGEST)).toThrow()
+    coldFiles.owner = 0
+    coldFiles.mount = false
+    expect(() => assertSandboxSbomCoverageVerified(env, IMAGE_NAME + "@" + INDEX_DIGEST)).toThrow()
+    coldFiles.mount = true
+    coldFiles.writable = true
+    expect(() => assertSandboxSbomCoverageVerified(env, IMAGE_NAME + "@" + INDEX_DIGEST)).toThrow()
+  })
+  it("tampered verification bytes and noncold authority stay closed", () => {
+    const env = runtime()
+    const aggregate = buildAggregate()
+    const records = buildRecords(aggregate, { subjectDigest: "f".repeat(64) })
+    writeFileSync(
+      coldFiles.paths.get(env.LYRASHIELD_SANDBOX_SBOM_COVERAGE_VERIFY_PATH)!,
+      JSON.stringify(records)
+    )
+    expect(() => assertSandboxSbomCoverageVerified(env, IMAGE_NAME + "@" + INDEX_DIGEST)).toThrow()
+    expect(() =>
+      assertSandboxSbomCoverageVerified(
+        { ...env, LYRASHIELD_COLD_SINGLE_WORKER: "0" },
+        IMAGE_NAME + "@" + INDEX_DIGEST
+      )
+    ).toThrow()
   })
 })

@@ -72,7 +72,7 @@ env:
   LYRASHIELD_CANARY_PRODUCT_REVISION: ${{ inputs.source_sha }}
   LYRASHIELD_CANARY_ENGINE_REVISION: ${{ inputs.engine_revision }}
   LYRASHIELD_CANARY_WORKER_DIGEST: ${{ inputs.worker_digest }}
-  LYRASHIELD_CANARY_PROOF_COMMAND: .github/scripts/cold-canary-proof-azure.sh
+  LYRASHIELD_CANARY_PROOF_COMMAND: ${{ github.workspace }}/.github/scripts/cold-canary-proof-azure.sh
   DEPLOY_SHA: ${{ inputs.source_sha }}
   RETAINED_WORKER_SOURCE: ${{ inputs.worker_source_sha }}
   RETAINED_WORKER: ${{ inputs.retained_worker }}
@@ -263,6 +263,11 @@ jobs:
       # Myra fail-closed check (Deep Review v18): confirmed writes require the
       # Google calendar provider and usable credentials; the mock adapter and
       # its fault switches must never reach production.
+      - name: Verify unpaid canary credentials and exact owned target before mutation
+        if: inputs.cold_release == true
+        env:
+          LYRASHIELD_CANARY_API_KEY: ${{ secrets.LYRASHIELD_CANARY_API_KEY }}
+        run: node .github/scripts/cold-unpaid-canary.mjs --preflight
       - name: Verify Myra deployment configuration
         if: vars.AZURE_APP_CONTAINER_APP_NAME != ''
         env:
@@ -475,11 +480,12 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ github.token }}
 
-      - name: Verify unpaid canary credentials and exact owned target before mutation
+      - name: Download authenticated same-run cold image evidence
         if: inputs.cold_release == true
-        env:
-          LYRASHIELD_CANARY_API_KEY: ${{ secrets.LYRASHIELD_CANARY_API_KEY }}
-        run: node .github/scripts/cold-unpaid-canary.mjs --preflight
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: cold-native-probes-${{ inputs.source_sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/cold-native
       - name: Stop admission and complete the native cold host barrier
         if: inputs.cold_release == true
         id: cold-prepare
@@ -966,23 +972,23 @@ jobs:
             status=$(curl --disable --fail --silent --show-error --max-time 10 --output /dev/null --write-out '%{http_code}' "$APP_URL/api/ready/scans")
             [ "$status" = 200 ]
           fi
-      - name: Provisionally release only the owned cold admission hold
+      - name: Record pre-open qualification and release only the owned admission hold
         if: inputs.cold_release == true
         id: cold-open
         run: node .github/scripts/cold-release-azure.mjs open
-      - name: Execute one unpaid authenticated shared-queue canary
+      - name: Monitor one unpaid authenticated shared-queue URL canary
         if: inputs.cold_release == true
         id: cold-canary
         env:
           LYRASHIELD_CANARY_API_KEY: ${{ secrets.LYRASHIELD_CANARY_API_KEY }}
         run: node .github/scripts/cold-unpaid-canary.mjs
-      - name: Independently verify stored acceptance and finish the cold release
+      - name: Independently verify stored post-release URL health
         if: inputs.cold_release == true
         id: cold-finish
         run: |
           node .github/scripts/cold-release-azure.mjs finish
           curl --disable --fail --silent --show-error --max-time 10 "$APP_URL/api/ready/scans" > "$RUNNER_TEMP/cold-scan-readiness.json"
-      - name: Retain exact unpaid acceptance and readiness evidence
+      - name: Retain exact unpaid URL health and readiness evidence
         if: always() && inputs.cold_release == true && steps.cold-canary.outcome == 'success'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -993,12 +999,13 @@ jobs:
           if-no-files-found: error
           retention-days: 7
       - name: Hold admission and stop the worker on cold release uncertainty
+        id: cold-contain
         if: always() && inputs.cold_release == true && steps.cold-prepare.outcome != 'skipped' && steps.cold-finish.outcome != 'success'
         run: node .github/scripts/cold-release-azure.mjs contain
       - name: Deactivate superseded Container App revisions
         id: revision-cleanup
         continue-on-error: true
-        if: steps.smoke-public.outcome == 'success' && inputs.held_recovery != true
+        if: steps.smoke-public.outcome == 'success' && inputs.held_recovery != true && (inputs.cold_release != true || steps.cold-finish.outcome == 'success')
         env:
           RG: ${{ vars.AZURE_RESOURCE_GROUP }}
           APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
@@ -1013,7 +1020,7 @@ jobs:
         run: bash .github/scripts/deploy-azure-rollout.sh deactivate-superseded-container-app-revisions
       - name: Remove excess scanner secrets
         id: scanner-secret-removal
-        if: steps.smoke-public.outcome == 'success' && inputs.held_recovery != true && vars.AZURE_SCANNER_CONTAINER_APP_NAME != ''
+        if: steps.smoke-public.outcome == 'success' && inputs.held_recovery != true && (inputs.cold_release != true || steps.cold-finish.outcome == 'success') && vars.AZURE_SCANNER_CONTAINER_APP_NAME != ''
         env:
           RG: ${{ vars.AZURE_RESOURCE_GROUP }}
           SCANNER_NAME: ${{ vars.AZURE_SCANNER_CONTAINER_APP_NAME }}
@@ -1048,19 +1055,19 @@ jobs:
       # changes traffic only, after every candidate had already passed readiness.
       - name: Refresh Azure OIDC login before ordinary failure cleanup
         if: >
-          inputs.held_recovery != true && inputs.webhook_claims_cutover != true && env.V26_CUTOVER != 'true' && failure() &&
+          inputs.held_recovery != true && inputs.webhook_claims_cutover != true && env.V26_CUTOVER != 'true' && (inputs.cold_release != true || steps.cold-contain.outcome == 'success') && (failure() || (inputs.cold_release == true && (steps.promote.outcome == 'success' || steps.promote.outcome == 'failure' || steps.promote.outcome == 'cancelled') && steps.cold-finish.outcome != 'success')) &&
           (steps.deploy-app.outcome == 'failure' || steps.deploy-scanner.outcome == 'failure' ||
           steps.deploy-egress-proxy.outcome == 'failure' || steps.smoke-candidates.outcome == 'failure' ||
           steps.worker-preflight.outcome == 'failure' ||
           steps.promote.outcome == 'failure' || steps.smoke-public.outcome == 'failure' ||
-          steps.ordinary-worker-login.outcome == 'failure' || steps.worker-vm.outcome == 'failure')
+          steps.ordinary-worker-login.outcome == 'failure' || steps.worker-vm.outcome == 'failure' || (inputs.cold_release == true && steps.promote.outcome != 'skipped' && steps.cold-finish.outcome != 'success'))
         uses: Azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
         with:
           client-id: ${{ secrets.AZURE_DEPLOY_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_DEPLOY_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_DEPLOY_SUBSCRIPTION_ID }}
       - name: Roll back production traffic on health failure
-        if: inputs.held_recovery != true && inputs.webhook_claims_cutover != true && env.V26_CUTOVER != 'true' && failure() && (steps.promote.outcome == 'failure' || steps.smoke-public.outcome == 'failure' || steps.ordinary-worker-login.outcome == 'failure' || steps.worker-vm.outcome == 'failure')
+        if: inputs.held_recovery != true && inputs.webhook_claims_cutover != true && env.V26_CUTOVER != 'true' && (inputs.cold_release != true || steps.cold-contain.outcome == 'success') && (failure() || (inputs.cold_release == true && (steps.promote.outcome == 'success' || steps.promote.outcome == 'failure' || steps.promote.outcome == 'cancelled') && steps.cold-finish.outcome != 'success')) && (steps.promote.outcome == 'failure' || steps.smoke-public.outcome == 'failure' || steps.ordinary-worker-login.outcome == 'failure' || steps.worker-vm.outcome == 'failure' || (inputs.cold_release == true && steps.promote.outcome != 'skipped' && steps.cold-finish.outcome != 'success'))
         env:
           APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
           APP_PREVIOUS: ${{ steps.rollout.outputs.app_previous }}
@@ -1075,12 +1082,12 @@ jobs:
         run: bash .github/scripts/deploy-azure-rollout.sh roll-back-production-traffic-on-health-failure
       - name: Restore prior ingress mode after failed rollout
         if: >
-          inputs.held_recovery != true && inputs.webhook_claims_cutover != true && env.V26_CUTOVER != 'true' && failure() && steps.deploy-app.outputs.previous_client_cert_mode != '' &&
+          inputs.held_recovery != true && inputs.webhook_claims_cutover != true && env.V26_CUTOVER != 'true' && (inputs.cold_release != true || steps.cold-contain.outcome == 'success') && (failure() || (inputs.cold_release == true && (steps.promote.outcome == 'success' || steps.promote.outcome == 'failure' || steps.promote.outcome == 'cancelled') && steps.cold-finish.outcome != 'success')) && steps.deploy-app.outputs.previous_client_cert_mode != '' &&
           (steps.deploy-app.outcome == 'failure' || steps.deploy-scanner.outcome == 'failure' ||
           steps.deploy-egress-proxy.outcome == 'failure' || steps.smoke-candidates.outcome == 'failure' ||
           steps.worker-preflight.outcome == 'failure' ||
           steps.promote.outcome == 'failure' || steps.smoke-public.outcome == 'failure' ||
-          steps.ordinary-worker-login.outcome == 'failure' || steps.worker-vm.outcome == 'failure')
+          steps.ordinary-worker-login.outcome == 'failure' || steps.worker-vm.outcome == 'failure' || (inputs.cold_release == true && steps.promote.outcome != 'skipped' && steps.cold-finish.outcome != 'success'))
         env:
           RG: ${{ vars.AZURE_RESOURCE_GROUP }}
           APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
@@ -1088,12 +1095,12 @@ jobs:
         run: bash .github/scripts/deploy-azure-rollout.sh restore-prior-ingress-mode-after-failed-rollout
       - name: Deactivate zero-traffic candidates after failed rollout
         if: >
-          inputs.held_recovery != true && inputs.webhook_claims_cutover != true && env.V26_CUTOVER != 'true' && failure() &&
+          inputs.held_recovery != true && inputs.webhook_claims_cutover != true && env.V26_CUTOVER != 'true' && (inputs.cold_release != true || steps.cold-contain.outcome == 'success') && (failure() || (inputs.cold_release == true && (steps.promote.outcome == 'success' || steps.promote.outcome == 'failure' || steps.promote.outcome == 'cancelled') && steps.cold-finish.outcome != 'success')) &&
           (steps.deploy-app.outcome == 'failure' || steps.deploy-scanner.outcome == 'failure' ||
           steps.deploy-egress-proxy.outcome == 'failure' || steps.smoke-candidates.outcome == 'failure' ||
           steps.worker-preflight.outcome == 'failure' ||
           steps.promote.outcome == 'failure' || steps.smoke-public.outcome == 'failure' ||
-          steps.ordinary-worker-login.outcome == 'failure' || steps.worker-vm.outcome == 'failure')
+          steps.ordinary-worker-login.outcome == 'failure' || steps.worker-vm.outcome == 'failure' || (inputs.cold_release == true && steps.promote.outcome != 'skipped' && steps.cold-finish.outcome != 'success'))
         env:
           RG: ${{ vars.AZURE_RESOURCE_GROUP }}
           APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}

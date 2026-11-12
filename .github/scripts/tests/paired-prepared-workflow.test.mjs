@@ -29,15 +29,13 @@ test("qualified normal releases consume exactly one rehearsed prebuilt image tup
     /io\.lyrashield\.accounting\.protocol=reservations\/2/
   )
   assert.ok(
-    release.jobs["qualify-azure-release"].steps.some(
-      (step) => step.name === "Hold production until runtime qualification"
-    )
+    release.jobs.routing.steps.some((step) => step.run?.includes("qualify-release-source.mjs"))
   )
-  assert.ok(
-    deploy.jobs["preflight-compatible-baseline"].steps.some(
-      (step) => step.name === "Hold production until runtime qualification"
-    )
+  assert.equal(release.jobs["deploy-azure"].with.cold_release, true)
+  const hold = deploy.jobs["preflight-compatible-baseline"].steps.find(
+    (step) => step.name === "Hold HA and retained release lanes"
   )
+  assert.equal(hold.if, "inputs.cold_release != true")
   assert.ok(deploy.on.workflow_call.inputs.prepared_candidate_run_id)
   assert.ok(deploy.on.workflow_call.inputs.prepared_candidate_run_attempt)
   assert.ok(deploy.jobs.build.if.includes("inputs.qualified_release_digest == ''"))

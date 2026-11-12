@@ -5,7 +5,6 @@ import { spawnSync } from "node:child_process"
 import { parseRetainedApproval } from "../retained-legacy-runtime.mjs"
 
 const workflows = [
-  ["release-production.yml", "qualify-azure-release"],
   ["release-retained-worker.yml", "approve"],
   ["deploy-azure.yml", "preflight-compatible-baseline"],
   ["deploy-azure-runtime.yml", "prepare-dependencies"],
@@ -62,14 +61,23 @@ for (const [workflow, job] of workflows) {
   test(`${workflow} blocks production before any deployment action`, () => {
     const step = firstStep(workflow, job)
     assert.ok(step, "first step must exist")
-    assert.equal(step[1], "Hold production until runtime qualification")
-    assert.ok(
-      !step[2]
-        .split("\n")
-        .some(
-          (line) => line.startsWith("        if:") || line.startsWith("        continue-on-error:")
-        )
+    const coldWorkflow = workflow.startsWith("deploy-azure")
+    assert.equal(
+      step[1],
+      coldWorkflow
+        ? "Hold HA and retained release lanes"
+        : "Hold production until runtime qualification"
     )
+    if (coldWorkflow) assert.match(step[2], /if: inputs.cold_release != true/)
+    else
+      assert.ok(
+        !step[2]
+          .split("\n")
+          .some(
+            (line) =>
+              line.startsWith("        if:") || line.startsWith("        continue-on-error:")
+          )
+      )
     const result = spawnSync("bash", ["-e", "-c", holdScript(step)], {
       encoding: "utf8",
       env: { PATH: process.env.PATH },

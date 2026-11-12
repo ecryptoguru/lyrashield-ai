@@ -35,7 +35,7 @@ jobs:
   verify-worker-image:
     name: Exercise exact compatible worker image on disposable services
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 60
     outputs:
       cold_sandbox_image: ${{ steps.cold-sandbox.outputs.sandbox_image }}
       rehearsal_harness_sha: ${{ steps.harness.outputs.sha }}
@@ -201,7 +201,22 @@ jobs:
         working-directory: product
         env:
           GH_TOKEN: ${{ github.token }}
-        run: node --import tsx .github/scripts/verify-cold-sandbox.mjs
+        run: |
+          node --import tsx .github/scripts/verify-cold-sandbox.mjs
+          sudo chown root:root "$RUNNER_TEMP/cold-sandbox" "$RUNNER_TEMP/cold-sandbox/verification.json" "$RUNNER_TEMP/cold-sandbox/expected.json"
+          sudo chmod 0555 "$RUNNER_TEMP/cold-sandbox"
+      - name: Prove external systemd cold recovery without production resources
+        if: inputs.cold_release == true
+        working-directory: product
+        env:
+          LYRASHIELD_RUN_ISOLATED_SYSTEMD_PROOF: "1"
+        run: node .github/scripts/tests/worker-recovery.systemd.mjs
+      - name: Prove recovery preserves original PostgreSQL epoch and paid holds
+        if: inputs.cold_release == true
+        working-directory: product
+        env:
+          LYRASHIELD_RUN_WORKER_RECOVERY_POSTGRES_PROOF: "1"
+        run: node .github/scripts/tests/worker-auto-recovery.postgres.mjs
       - name: Checkout pinned engine for native installed-SDK probes
         if: inputs.cold_release == true
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -238,6 +253,15 @@ jobs:
             --engine-repo "$GITHUB_WORKSPACE/cold-engine" --harness-sha "$HARNESS_SHA" \
             --sandbox-image "$SANDBOX_IMAGE" --docker-socket /var/run/docker.sock \
             --receipt "$RUNNER_TEMP/cold-sandbox-native-receipt.json"
+      - name: Prove funded admission survives actual worker SIGKILL and queue redelivery
+        if: inputs.cold_release == true
+        working-directory: product
+        run: |
+          docker pull postgres@sha256:eee6c6e1b0894fa4fe0075eb054af9fd1cf39a35321c2d4110626cfe506411fb
+          docker pull redis@sha256:858f009f9709ce576febc734aa78b8f6d624b82571f9ddb6bda4377c833b3499
+          bash .github/scripts/run-cold-paid-claim-image-probe.sh \
+            --candidate "$CANONICAL_WORKER_IMAGE" "$EXPECTED_SOURCE_SHA" "$EXPECTED_ENGINE_REVISION" \
+            --receipt "$RUNNER_TEMP/cold-paid-claim-image-receipt.json"
       - name: Retain actual native probe evidence
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always() && inputs.cold_release == true
@@ -247,6 +271,9 @@ jobs:
             ${{ runner.temp }}/cold-native-probe-receipt.json
             ${{ runner.temp }}/cold-sandbox-native-receipt.json
             ${{ runner.temp }}/cold-sandbox-publication.json
+            ${{ runner.temp }}/cold-paid-claim-image-receipt.json
+            ${{ runner.temp }}/cold-sandbox/verification.json
+            ${{ runner.temp }}/cold-sandbox/expected.json
           if-no-files-found: error
           retention-days: 7
 
@@ -307,7 +334,59 @@ jobs:
           set -euo pipefail
           network="webhook-smoke-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           container="webhook-startup-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          trap 'docker rm -f "$container" >/dev/null 2>&1 || true' EXIT
+          daemon="webhook-startup-docker-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          socket_volume="webhook-startup-docker-socket-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          docker volume create --label "lyrashield.startup-owner=${GITHUB_RUN_ID}:${GITHUB_RUN_ATTEMPT}" "$socket_volume" >/dev/null
+          cleanup_startup() {
+            status=$?
+            docker rm -f "$container" >/dev/null 2>&1 || true
+            if ! docker rm -f "$daemon" >/dev/null 2>&1; then status=1; fi
+            if [ -n "$(docker ps -aq --filter "name=^/$daemon$")" ]; then status=1; fi
+            [ "$status" -ne 0 ] || docker volume rm "$socket_volume" >/dev/null
+            exit "$status"
+          }
+          trap cleanup_startup EXIT
+          # The startup gate observes a real invocation-owned nested daemon.
+          # It has no host Docker socket, TCP listener or external network.
+          docker run --detach --name "$daemon" --privileged --network none \
+            --label "lyrashield.startup-owner=${GITHUB_RUN_ID}:${GITHUB_RUN_ATTEMPT}" \
+            --env DOCKER_TLS_CERTDIR= \
+            --mount "type=volume,src=$socket_volume,dst=/cold" \
+            --entrypoint dockerd \
+            docker.io/library/docker@sha256:08a98015fce594af7c382883bea080ea206de74402a95da9dc52b6428c8cd121 \
+            --host=unix:///cold/docker.sock --pidfile=/cold/dockerd.pid --shutdown-timeout=5 >/dev/null
+          daemon_ready=false
+          for attempt in $(seq 1 60); do
+            if docker exec "$daemon" docker --host unix:///cold/docker.sock info >/dev/null 2>&1; then daemon_ready=true; break; fi
+            [ "$(docker inspect "$daemon" --format '{{.State.Running}}')" = true ] || break
+            sleep 1
+          done
+          [ "$daemon_ready" = true ]
+          [ -z "$(docker exec "$daemon" docker --host unix:///cold/docker.sock container ls --all --quiet)" ]
+          socket_group=$(docker exec "$daemon" stat -c '%g' /cold/docker.sock)
+          cold_flags=(--mount "type=volume,src=$socket_volume,dst=/cold"
+            --group-add "$socket_group" --env DOCKER_HOST=unix:///cold/docker.sock)
+          if [ "${{ inputs.cold_release }}" = true ]; then
+            epoch=$(docker run --rm --network "$network" --entrypoint node --workdir /app/apps/worker \
+              --env NODE_ENV=test --env LYRASHIELD_TEST_DB_DISPOSABLE=1 \
+              --env 'DATABASE_URL=postgresql://app_runtime_ci:runtime-ci-only@postgres:5432/lyrashield?schema=public' \
+              --env REDIS_URL=redis://redis:6379 \
+              --env BETTER_AUTH_SECRET=dummy-ci-only-secret-not-a-real-credential-32chars \
+              --env BETTER_AUTH_URL=http://127.0.0.1:3100 --env NEXT_PUBLIC_APP_URL=http://127.0.0.1:3100 \
+              "$CANONICAL_WORKER_IMAGE" --import tsx --input-type=module -e 'const {captureColdDatabaseEpoch}=await import("./src/operations/capture-cold-database-epoch.ts");console.log(await captureColdDatabaseEpoch());')
+            [[ "$epoch" =~ ^[a-f0-9]{64}$ ]]
+            cold_flags+=(--mount "type=bind,src=$RUNNER_TEMP/cold-sandbox,dst=/etc/lyrashield/cold-sandbox,readonly"
+              --env LYRASHIELD_COLD_SINGLE_WORKER=1 --env "LYRASHIELD_COLD_DATABASE_EPOCH_SHA256=$epoch"
+              --env "LYRASHIELD_IMAGE=${{ steps.cold-sandbox.outputs.sandbox_image }}"
+              --env LYRASHIELD_SANDBOX_SBOM_COVERAGE_VERIFY_PATH=/etc/lyrashield/cold-sandbox/verification.json
+              --env LYRASHIELD_SANDBOX_SBOM_COVERAGE_EXPECTED_PATH=/etc/lyrashield/cold-sandbox/expected.json
+              --env LYRASHIELD_SANDBOX_SBOM_COVERAGE_REPO=ecryptoguru/lyrashield-engine
+              --env LYRASHIELD_SANDBOX_SBOM_COVERAGE_REF=refs/heads/main
+              --env "LYRASHIELD_SANDBOX_SBOM_COVERAGE_ENGINE_REVISION=$EXPECTED_ENGINE_REVISION"
+              --env "LYRASHIELD_SANDBOX_SBOM_COVERAGE_WORKFLOW_REVISION=$(node -p 'require("./product/.github/cold-sandbox-publication.json").publicationRevision')"
+              --env "LYRASHIELD_SANDBOX_SBOM_COVERAGE_RUN_ID=$(node -p 'require("./product/.github/cold-sandbox-publication.json").publishRunId')"
+              --env "LYRASHIELD_SANDBOX_SBOM_COVERAGE_RUN_ATTEMPT=$(node -p 'require("./product/.github/cold-sandbox-publication.json").publishAttempt')")
+          fi
           docker run --detach \
             --name "$container" \
             --network "$network" \
@@ -345,7 +424,7 @@ jobs:
             --env S3_SECRET_KEY=synthetic-ci-secret \
             --env LYRASHIELD_EVIDENCE_KEK=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= \
             --env 'LYRASHIELD_EVIDENCE_KEK_KEYRING={}' \
-            "$CANONICAL_WORKER_IMAGE" >/dev/null
+            "${cold_flags[@]}" "$CANONICAL_WORKER_IMAGE" >/dev/null
           ready=false
           for attempt in $(seq 1 30); do
             if docker exec "$container" test -f /tmp/lyrashield-worker-ready; then
@@ -387,9 +466,8 @@ jobs:
               --env BETTER_AUTH_URL=http://127.0.0.1:3100 --env NEXT_PUBLIC_APP_URL=http://127.0.0.1:3100 \
               "$CANONICAL_WORKER_IMAGE" --import tsx "$@"
           }
-          epoch=$(cold_node src/operations/capture-cold-database-epoch.ts)
+          epoch=$(cold_node --input-type=module -e 'const {captureColdDatabaseEpoch}=await import("./src/operations/capture-cold-database-epoch.ts");console.log(await captureColdDatabaseEpoch());')
           [[ "$epoch" =~ ^[a-f0-9]{64}$ ]]
-          trap 'docker rm -f "$container" >/dev/null 2>&1 || true' EXIT
           docker run --detach --name "$container" --network "$network" --read-only \
             --tmpfs /tmp:rw,noexec,nosuid,size=64m --cap-drop ALL \
             --security-opt no-new-privileges:true --cpus 2 --memory 2g --pids-limit 256 \

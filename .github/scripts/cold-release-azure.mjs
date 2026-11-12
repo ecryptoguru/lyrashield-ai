@@ -1,8 +1,12 @@
 // Protected same-run Azure orchestration. No host GitHub verifier or paid POST retry.
 import assert from "node:assert/strict"
 import { execFileSync } from "node:child_process"
-import { readFileSync } from "node:fs"
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import { fileURLToPath } from "node:url"
+import sandboxSelector from "../cold-sandbox-publication.json" with { type: "json" }
+import { verifySandboxSbomCoverage } from "../../apps/worker/src/engine/sandbox-sbom-coverage.ts"
 import { assertColdReleaseCaller } from "./assert-cold-release-caller.mjs"
 
 const sourcePayload = (relative) => {
@@ -32,7 +36,7 @@ export function coldIdentity(environment = process.env) {
   return identity
 }
 
-export function coldHostScript(operation, identity, payload = "") {
+export function coldHostScript(operation, identity, payload = "", evidence) {
   assert.ok(["prepare", "promote", "open", "contain", "proof", "finish"].includes(operation))
   if (["proof", "finish"].includes(operation)) assert.match(payload, /^[A-Za-z0-9_-]{1,16384}$/)
   const state = "/var/lib/lyrashield/cold-release-" + identity.owner
@@ -60,14 +64,20 @@ old_sandbox=$(/usr/bin/python3 -c 'import json,sys;print(json.load(open(sys.argv
 [ "$(docker exec lyrashield-worker printenv LYRASHIELD_ENGINE_REVISION)" = ${quote(identity.engine)} ]
 docker exec -i -w /app/apps/worker lyrashield-worker node --import tsx --input-type=module - ${quote(payload)} < "$state/proof.mjs" > "$state/proof-result.json"
 printf 'COLD_PROOF:'
-base64 -w 0 "$state/proof-result.json"
-printf '\\n'
+base64 < "$state/proof-result.json" | tr -d '\n'
+printf '\n'
 `
   if (operation === "prepare") {
+    assert.ok(
+      evidence && typeof evidence.verification === "string" && typeof evidence.expected === "string"
+    )
+    assert.ok(
+      Buffer.byteLength(evidence.verification) <= 2 * 1024 * 1024 &&
+        Buffer.byteLength(evidence.expected) <= 2 * 1024 * 1024
+    )
     return (
       prefix +
       `
-[ ! -e /var/lib/lyrashield/cold-acceptance-pending.json ]
 [ ! -L "$state" ]
 mkdir -m 0700 "$state"
 old_worker=$(sed -n 's/^LYRASHIELD_WORKER_IMAGE=//p' /etc/lyrashield/worker-runtime.conf)
@@ -100,12 +110,25 @@ printf '%s' ${quote(sourcePayload("../../ops/worker/cold-start-barrier.py"))} | 
 printf '%s' ${quote(sourcePayload("./cold-release-host.py"))} | base64 -d > "$state/host.py"
 install -o root -g root -m 0755 "$state/barrier.py" /opt/lyrashield-worker-host/cold-start-barrier.py
 install -o root -g root -m 0755 "$state/host.py" /opt/lyrashield-worker-host/cold-release-host.py
+printf '%s' ${quote(Buffer.from(evidence.verification).toString("base64"))} | base64 -d > "$state/verification.json"
+printf '%s' ${quote(Buffer.from(evidence.expected).toString("base64"))} | base64 -d > "$state/expected.json"
 ` +
       promote("--cold-prepare") +
       "echo COLD_AZURE_OK\n"
     )
   }
   let script = prefix + contextCheck
+  if (operation === "promote")
+    script += `
+/usr/bin/python3 /opt/lyrashield-worker-host/cold-release-host.py assert-barrier "$old_worker" "$old_sandbox" ${quote(identity.owner)} ${quote(identity.image)} ${quote(identity.product)} ${quote(identity.engine)} ${quote(identity.sandbox)}
+[ ! -L /etc/lyrashield/cold-sandbox ]
+install -d -o root -g root -m 0555 /etc/lyrashield/cold-sandbox
+install -o root -g root -m 0444 "$state/verification.json" /etc/lyrashield/cold-sandbox/verification.json
+install -o root -g root -m 0444 "$state/expected.json" /etc/lyrashield/cold-sandbox/expected.json
+sync -f /etc/lyrashield/cold-sandbox/verification.json
+sync -f /etc/lyrashield/cold-sandbox/expected.json
+sync -f /etc/lyrashield/cold-sandbox
+`
   if (operation === "proof" || operation === "finish") script += proof
   else
     script += promote(
@@ -117,7 +140,7 @@ install -o root -g root -m 0755 "$state/host.py" /opt/lyrashield-worker-host/col
     )
   if (operation === "finish")
     script += `
-/usr/bin/python3 - "$state/proof-result.json" ${quote(payload)} /var/lib/lyrashield/cold-acceptance-pending.json ${quote(identity.owner)} ${quote(identity.product)} ${quote(identity.engine)} ${quote(identity.image)} <<'PYFINISH'
+/usr/bin/python3 - "$state/proof-result.json" ${quote(payload)} "$state/pre-open-qualified.json" ${quote(identity.owner)} ${quote(identity.product)} ${quote(identity.engine)} ${quote(identity.image)} <<'PYFINISH'
 import base64,json,os,sys
 proof_path,payload,path,owner,product,engine,image=sys.argv[1:]
 expected=json.loads(base64.urlsafe_b64decode(payload+'='*(-len(payload)%4)))
@@ -128,8 +151,11 @@ with open(proof_path) as source:
   if proof.get(field)!=expected.get(field): raise SystemExit(1)
  if proof['productRevision']!=product or proof['engineRevision']!=engine or proof['workerDigest']!=image.split('@')[1]: raise SystemExit(1)
 with open(path) as source:
- if json.load(source)!=dict(owner=owner,productRevision=product,engineRevision=engine,workerImage=image,state='acceptance-pending'): raise SystemExit(1)
-os.rename(path,${quote(state + "/accepted.json")})
+ if json.load(source)!=dict(owner=owner,productRevision=product,engineRevision=engine,workerImage=image,state='pre-open-qualified'): raise SystemExit(1)
+health_path=${quote(state + "/post-release-health.json")}
+fd=os.open(health_path,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600)
+with os.fdopen(fd,'w') as output:
+ json.dump(proof,output);output.flush();os.fsync(output.fileno())
 for directory in (os.path.dirname(path),${quote(state)}):
  fd=os.open(directory,os.O_RDONLY|os.O_DIRECTORY);os.fsync(fd);os.close(fd)
 PYFINISH
@@ -137,14 +163,62 @@ PYFINISH
   return script + "echo COLD_AZURE_OK\n"
 }
 
+// Azure CLI expands @file locally. Large exact-source assets never become one
+// Linux argv value (MAX_ARG_STRLEN), and the protected temporary file is removed.
+export function invokeColdScript(script, environment, execute = execFileSync) {
+  const directory = mkdtempSync(join(tmpdir(), "lyrashield-cold-script-"))
+  const path = join(directory, "script.sh")
+  try {
+    writeFileSync(path, script, { mode: 0o600 })
+    const response = JSON.parse(
+      execute(
+        "az",
+        [
+          "vm",
+          "run-command",
+          "invoke",
+          "--name",
+          environment.WORKER_VM_NAME,
+          "--resource-group",
+          environment.RG,
+          "--command-id",
+          "RunShellScript",
+          "--scripts",
+          "@" + path,
+          "--output",
+          "json",
+          "--only-show-errors",
+        ],
+        { timeout: 1800000, maxBuffer: 2 * 1024 * 1024, stdio: ["ignore", "pipe", "pipe"] }
+      ).toString()
+    )
+    const message = response.value?.map((entry) => entry.message).join("\n")
+    assert.ok(typeof message === "string" && /^COLD_AZURE_OK$/m.test(message))
+    return message
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+}
+
+export function parseColdProof(message) {
+  const matches = [...message.matchAll(/^COLD_PROOF:([A-Za-z0-9+/=]+)$/gm)]
+  assert.equal(matches.length, 1)
+  return JSON.parse(Buffer.from(matches[0][1], "base64").toString())
+}
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   try {
     const operation = process.argv[2]
     const identity = coldIdentity()
-    execFileSync("bash", [".github/scripts/assert-current-main.sh"], {
-      stdio: "inherit",
-      env: { ...process.env, SOURCE_SHA: identity.product },
-    })
+    // Closing the exact original hold must remain possible when newer main supersedes
+    // a running release. Other mutations require current main again immediately.
+    if (operation !== "contain")
+      execFileSync("bash", [".github/scripts/assert-current-main.sh"], {
+        stdio: "inherit",
+        env: { ...process.env, SOURCE_SHA: identity.product },
+      })
+    else
+      assert.equal(execFileSync("git", ["rev-parse", "HEAD"]).toString().trim(), identity.product)
     let payload = process.argv[3] ?? ""
     if (operation === "finish") {
       const receipt = JSON.parse(
@@ -155,37 +229,45 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
       assert.equal(receipt.workerDigest, process.env.WORKER_DIGEST)
       payload = Buffer.from(JSON.stringify(receipt.proofPayload)).toString("base64url")
     }
-    const script = coldHostScript(operation, identity, payload)
-    const response = JSON.parse(
-      execFileSync(
-        "az",
-        [
-          "vm",
-          "run-command",
-          "invoke",
-          "--name",
-          process.env.WORKER_VM_NAME,
-          "--resource-group",
-          process.env.RG,
-          "--command-id",
-          "RunShellScript",
-          "--scripts",
-          script,
-          "--output",
-          "json",
-          "--only-show-errors",
-        ],
-        { timeout: 1800000, maxBuffer: 2 * 1024 * 1024, stdio: ["ignore", "pipe", "pipe"] }
-      ).toString()
-    )
-    const message = response.value?.map((entry) => entry.message).join("\n")
-    assert.ok(typeof message === "string" && /^COLD_AZURE_OK$/m.test(message))
+    let evidence
+    if (operation === "prepare") {
+      assert.equal(sandboxSelector.engineRevision, identity.engine)
+      assert.equal(
+        "ghcr.io/ecryptoguru/lyrashield-sandbox@" + sandboxSelector.sandboxDigest,
+        identity.sandbox
+      )
+      evidence = {
+        verification: readFileSync(
+          process.env.RUNNER_TEMP + "/cold-native/cold-sandbox/verification.json",
+          "utf8"
+        ),
+        expected: readFileSync(
+          process.env.RUNNER_TEMP + "/cold-native/cold-sandbox/expected.json",
+          "utf8"
+        ),
+      }
+      verifySandboxSbomCoverage({
+        records: JSON.parse(evidence.verification),
+        expectedAggregate: JSON.parse(evidence.expected),
+        identity: {
+          engineRevision: identity.engine,
+          workflowRevision: sandboxSelector.publicationRevision,
+          runId: sandboxSelector.publishRunId,
+          runAttempt: sandboxSelector.publishAttempt,
+          indexDigest: sandboxSelector.sandboxDigest,
+        },
+        imageName: "ghcr.io/ecryptoguru/lyrashield-sandbox",
+        repo: "ecryptoguru/lyrashield-engine",
+        revision: sandboxSelector.publicationRevision,
+        ref: "refs/heads/main",
+      })
+    }
+    const script = coldHostScript(operation, identity, payload, evidence)
+    const message = invokeColdScript(script, process.env)
     if (operation === "proof" || operation === "finish") {
-      const matches = [...message.matchAll(/^COLD_PROOF:([A-Za-z0-9+/=]+)$/gm)]
-      assert.equal(matches.length, 1)
-      const result = JSON.parse(Buffer.from(matches[0][1], "base64").toString())
+      const result = parseColdProof(message)
       if (operation === "proof") process.stdout.write(JSON.stringify(result) + "\n")
-      else console.log("Cold release completed with exact-image unpaid acceptance")
+      else console.log("Post-release unpaid URL health verified against the exact stored manifest")
     } else console.log("Cold Azure operation completed: " + operation)
   } catch {
     console.error("Cold Azure operation failed; admission must remain held on uncertainty")

@@ -14,7 +14,15 @@
  * bounded-scope contract.
  */
 
-import { closeSync, constants, fstatSync, lstatSync, openSync, readSync } from "node:fs"
+import {
+  closeSync,
+  constants,
+  fstatSync,
+  lstatSync,
+  openSync,
+  readSync,
+  readFileSync,
+} from "node:fs"
 
 const DIGEST_RE = /^sha256:[0-9a-f]{64}$/
 const SHA256_RE = /^[0-9a-f]{64}$/
@@ -435,7 +443,12 @@ export function verifySandboxSbomCoverage(options: SandboxSbomCoverageVerifyOpti
 const MAX_EVIDENCE_BYTES = 16 * 1024 * 1024
 const SANDBOX_IMAGE_RE = /^ghcr\.io\/ecryptoguru\/lyrashield-sandbox@sha256:([a-f0-9]{64})$/
 
-export function readJsonEvidence(path: string, label: string, expectedOwner: number): unknown {
+export function readJsonEvidence(
+  path: string,
+  label: string,
+  expectedOwner: number,
+  readOnly = false
+): unknown {
   if (typeof constants.O_NOFOLLOW !== "number" || typeof constants.O_NONBLOCK !== "number") {
     fail("safe evidence file flags are unavailable")
   }
@@ -451,6 +464,7 @@ export function readJsonEvidence(path: string, label: string, expectedOwner: num
     if (
       !before.isFile() ||
       before.uid !== expectedOwner ||
+      (readOnly && (before.mode & 0o222) !== 0) ||
       before.size <= 0 ||
       before.size > MAX_EVIDENCE_BYTES
     ) {
@@ -472,6 +486,7 @@ export function readJsonEvidence(path: string, label: string, expectedOwner: num
       after.mtimeMs !== before.mtimeMs ||
       after.ctimeMs !== before.ctimeMs ||
       after.uid !== expectedOwner ||
+      (readOnly && after.mode !== before.mode) ||
       !entry.isFile() ||
       entry.dev !== before.dev ||
       entry.ino !== before.ino
@@ -490,8 +505,8 @@ export function readJsonEvidence(path: string, label: string, expectedOwner: num
 
 /**
  * Fail-closed production gate for the running sandbox image. Reads and checks
- * verifier-shaped JSON and its expected aggregate, then rejects admission
- * until a protected issuer can authenticate the actual qualification.
+ * protected evidence and its expected aggregate. Cold single-worker admission
+ * requires the pipeline-installed root-owned read-only mount; other lanes stay held.
  */
 export function assertSandboxSbomCoverageVerified(
   runtimeEnv: NodeJS.ProcessEnv,
@@ -525,11 +540,45 @@ export function assertSandboxSbomCoverageVerified(
         "_ENGINE_REVISION, _WORKFLOW_REVISION, _RUN_ID, _RUN_ATTEMPT)"
     )
   }
-  const expectedOwner = process.getuid?.()
+  const cold = runtimeEnv.LYRASHIELD_COLD_SINGLE_WORKER === "1"
+  let expectedOwner = process.getuid?.()
   if (expectedOwner === undefined) fail("evidence owner cannot be established")
+  if (cold) {
+    if (
+      runtimeEnv.LYRASHIELD_WORKER_CONCURRENCY !== "1" ||
+      !/^[a-f0-9]{64}$/.test(runtimeEnv.LYRASHIELD_COLD_DATABASE_EPOCH_SHA256 ?? "") ||
+      !/^[a-f0-9]{40}$/.test(runtimeEnv.LYRASHIELD_PRODUCT_REVISION ?? "") ||
+      !/^sha256:[a-f0-9]{64}$/.test(runtimeEnv.LYRASHIELD_WORKER_IMAGE_DIGEST ?? "") ||
+      runtimeEnv.LYRASHIELD_ENGINE_REVISION !== engineRevision ||
+      verifyPath !== "/etc/lyrashield/cold-sandbox/verification.json" ||
+      expectedPath !== "/etc/lyrashield/cold-sandbox/expected.json"
+    )
+      fail("cold sandbox evidence requires the exact protected worker profile")
+    const directory = lstatSync("/etc/lyrashield/cold-sandbox")
+    if (!directory.isDirectory() || directory.uid !== 0 || (directory.mode & 0o777) !== 0o555)
+      fail("cold sandbox evidence directory must be root-owned and read-only")
+    // This is the actual kernel mount table, never a caller verification flag.
+    const mounts = readFileSync("/proc/self/mountinfo", "utf8")
+    if (
+      Buffer.byteLength(mounts) > 262144 ||
+      !mounts.split("\n").some((line) => {
+        const fields = line.split(" - ")[0]?.split(" ")
+        return (
+          fields?.[4] === "/etc/lyrashield/cold-sandbox" && fields[5]?.split(",").includes("ro")
+        )
+      })
+    )
+      fail("cold sandbox evidence requires its protected read-only mount")
+    expectedOwner = 0
+  }
   verifySandboxSbomCoverage({
-    records: readJsonEvidence(verifyPath, "verified attestation output", expectedOwner),
-    expectedAggregate: readJsonEvidence(expectedPath, "expected coverage predicate", expectedOwner),
+    records: readJsonEvidence(verifyPath, "verified attestation output", expectedOwner, cold),
+    expectedAggregate: readJsonEvidence(
+      expectedPath,
+      "expected coverage predicate",
+      expectedOwner,
+      cold
+    ),
     identity: {
       engineRevision,
       workflowRevision,
@@ -542,8 +591,9 @@ export function assertSandboxSbomCoverageVerified(
     revision: workflowRevision,
     ref,
   })
-  // Matching a JSON rendering of verification output does not authenticate
-  // the underlying bundle. Keep production admission closed until a protected
-  // issuer verifies the attestation and signs the exact qualification tuple.
+  // Only the protected same-run pipeline can install this root-owned mount,
+  // after real OCI verification/native checks, while its exact owned hold stays set.
+  // Cold operation never authorizes a retained/HA image or restore/replay lane.
+  if (cold) return
   fail("protected qualification issuer is unavailable")
 }

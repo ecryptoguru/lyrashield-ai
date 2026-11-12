@@ -687,9 +687,7 @@ test("Azure and marketing releases route the exact current merged SHA independen
   assert.match(productionRelease, /^  cancel-in-progress: false$/m)
   assert.match(productionRelease, /HEAD_SHA: \$\{\{ github\.sha \}\}/)
   assert.match(productionRelease, /classify-main-change-gap\.sh/)
-  const routing = productionRelease
-    .split("  routing:\n")[1]
-    .split("\n  qualify-azure-release:")[0]
+  const routing = productionRelease.split("  routing:\n")[1].split("\n  deploy-azure:")[0]
   assert.match(routing, /timeout-minutes: 10/)
   assert.match(routing, /checks: read/)
   assert.match(routing, /pull-requests: read/)
@@ -705,11 +703,8 @@ test("Azure and marketing releases route the exact current merged SHA independen
   for (const route of ["azure", "marketing"]) {
     const release = productionRelease.split(`  deploy-${route}:\n`)[1]?.split(/\n  [a-z-]+:\n/)[0]
     assert.ok(release)
-    if (route === "azure") {
-      assert.match(release, /needs: \[routing, qualify-azure-release\]/)
-    } else {
-      assert.match(release, /needs: routing/)
-    }
+    assert.match(release, /needs: routing/)
+    if (route === "azure") assert.match(release, /cold_release: true/)
     assert.match(release, /needs\.routing\.outputs\.current-main == 'true'/)
     assert.match(release, /source_sha: \$\{\{ github\.sha \}\}/)
     assert.doesNotMatch(release, /needs:.*deploy-/)

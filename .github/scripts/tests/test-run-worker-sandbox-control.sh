@@ -4,7 +4,16 @@ set -euo pipefail
 repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
-mkdir -p "$tmp/bin"
+mkdir -p "$tmp/bin" "$tmp/cold-start"
+sed "s|/var/lib/lyrashield/worker-cold-start|$tmp/cold-start|g" "$repo/ops/worker/run-worker.sh" > "$tmp/run-worker.sh"
+cat > "$tmp/bin/flock" <<'MOCK'
+#!/bin/sh
+exit 0
+MOCK
+cat > "$tmp/bin/sync" <<'MOCK'
+#!/bin/sh
+exit 0
+MOCK
 
 cat > "$tmp/bin/docker" <<'MOCK'
 #!/bin/sh
@@ -18,7 +27,7 @@ case "$1 ${2:-}" in
     esac ;;
   'run --rm')
     case "$*" in *'--entrypoint go '* ) printf 'go version go1.26.8 linux/amd64\n' ;; esac ;;
-  'image inspect'|'login ghcr.io'|'rm -f'|'create --name') : ;;
+  'image inspect'|'login ghcr.io'|'rm -f'|'create --name'|'ps -a') : ;;
   'start --attach') printf 'consumer-started\n' ;;
   *) echo "Unexpected Docker operation: $*" >&2; exit 90 ;;
 esac
@@ -63,6 +72,7 @@ run_case() {
   local name=$1 allowed=$2 policy_fail=${3:-0} helper=${4:-$tmp/refresh-egress}
   local log="$tmp/$name.log" output="$tmp/$name.output" status=0
   : > "$log"
+  rm -f "$tmp/cold-start/owner-started"
   PATH="$tmp/bin:$PATH" \
     LYRASHIELD_WORKER_RUNTIME_CONFIG="$tmp/runtime.conf" \
     LYRASHIELD_WORKER_ENV_FILE="$tmp/worker.env" \
@@ -70,7 +80,7 @@ run_case() {
     LYRASHIELD_WORKER_EGRESS_SCRIPT="$helper" \
     LYRASHIELD_EGRESS_PIN_FILE="$tmp/pins" \
     MOCK_ORDER_LOG="$log" MOCK_POLICY_FAIL="$policy_fail" \
-    sh "$repo/ops/worker/run-worker.sh" > "$output" 2>&1 || status=$?
+    sh "$tmp/run-worker.sh" > "$output" 2>&1 || status=$?
   if [ "$allowed" = yes ]; then
     if [ "$status" -ne 0 ] || ! grep -Fxq consumer-started "$output"; then
       echo "$name: worker did not start after validated control policy" >&2
