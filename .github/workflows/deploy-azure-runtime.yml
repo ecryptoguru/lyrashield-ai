@@ -309,8 +309,10 @@ jobs:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ github.token }}
+      # Cold containment is not isolated runtime authority. Every runtime
+      # promotion requires the existing authenticated source/image/owner and
+      # authority preflight, which currently fails closed before any host write.
       - name: Preflight protected paired release
-        if: inputs.qualified_release_digest != ''
         env:
           APP_NAME: ${{ vars.AZURE_APP_CONTAINER_APP_NAME }}
           EGRESS_NAME: ${{ inputs.retained_worker != true && vars.AZURE_EGRESS_PROXY_CONTAINER_APP_NAME || '' }}

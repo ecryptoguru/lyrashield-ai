@@ -87,7 +87,7 @@ for (const [workflow, job] of workflows) {
   })
 }
 
-test("operator approval and retained mode cannot bypass the retained release or either runtime hold", () => {
+test("operator approval and retained mode cannot bypass the retained release or runtime holds", () => {
   const source = "a".repeat(40)
   const approval = {
     schema: "lyrashield-retained-worker/1",
@@ -121,4 +121,113 @@ test("operator approval and retained mode cannot bypass the retained release or 
     })
     assert.equal(result.status, 1, `${workflow}/${job} must reject a recorded legacy tuple`)
   }
+})
+
+test("cold mode cannot skip the protected authority preflight before any runtime write", () => {
+  const source = readFileSync(
+    new URL("../../workflows/deploy-azure-runtime.yml", import.meta.url),
+    "utf8"
+  )
+  const deploy = source.slice(source.indexOf("\n  deploy:"))
+  const entries = [
+    ...deploy.matchAll(/^      -([^\n]*)\n([\s\S]*?)(?=^      -(?:\s|$)|(?![\s\S]))/gm),
+  ].map((match) => ({
+    name: match[1].match(/^\s+name:\s+(.+)$/)?.[1],
+    body: match[0],
+  }))
+  const guard = entries.findIndex((step) => step.name === "Preflight protected paired release")
+  assert.ok(guard >= 0)
+  assert.doesNotMatch(entries[guard].body, /^        (?:if|continue-on-error):/m)
+  assert.match(
+    entries[guard].body,
+    /run: node \.github\/scripts\/paired-runtime-workflow.mjs preflight/
+  )
+  assert.match(
+    entries[guard].body,
+    /PAIRED_QUALIFIED_RELEASE_SHA256: \$\{\{ inputs.qualified_release_digest \}\}/
+  )
+  // Before authority, permit only this finite set of existing runner setup and
+  // read-only configuration/source/target validation. No host or fleet writes.
+  const readOnly = new Set([
+    "Hold HA and retained release lanes",
+    "Checkout for deployment checks",
+    "Authenticate the automated cold release caller",
+    "Revalidate runtime source and retry eligibility",
+    "Verify unpaid canary credentials and exact owned target before mutation",
+    "Verify Myra deployment configuration",
+    "Prepare checksum-pinned protected Linux verifier",
+    "Log in to Azure",
+    "Ensure Container Apps extension",
+    "Authenticate qualified rollback image reads",
+  ])
+  for (const step of entries.slice(0, guard)) assert.ok(readOnly.has(step.name), step.name)
+  for (const name of [
+    "Stop admission and complete the native cold host barrier",
+    "Classify actual v26 schema and complete writer fleet",
+    "Run database migrations",
+    "Deploy app Container App",
+    "Install exact compatible cold worker while admission remains held",
+    "Promote healthy candidate revisions",
+    "Record pre-open qualification and release only the owned admission hold",
+  ])
+    assert.ok(entries.findIndex((step) => step.name === name) > guard, name)
+})
+
+test("real preflight rejects absent authority selectors despite exact cold/main/image input", () => {
+  const result = spawnSync(
+    process.execPath,
+    [".github/scripts/paired-runtime-workflow.mjs", "preflight"],
+    {
+      encoding: "utf8",
+      env: {
+        PATH: process.env.PATH,
+        GITHUB_REF: "refs/heads/main",
+        GITHUB_EVENT_NAME: "push",
+        DEPLOY_SHA: "a".repeat(40),
+        COLD_RELEASE: "true",
+        INPUT_COLD_RELEASE: "true",
+        LYRASHIELD_COLD_SINGLE_WORKER: "1",
+        WORKER_DIGEST: "sha256:" + "b".repeat(64),
+        PAIRED_QUALIFIED_RELEASE_SHA256: "",
+        LYRASHIELD_RETAINED_WORKER_APPROVAL: "approved",
+      },
+    }
+  )
+  assert.equal(result.status, 1)
+  assert.match(result.stderr, /Paired release controller blocked: qualified release digest/)
+  assert.doesNotMatch(result.stdout, /Paired release controller: preflight/)
+})
+
+test("authority gate leaves dependency preparation, exact-image testing and marketing independent", () => {
+  const runtime = readFileSync(
+    new URL("../../workflows/deploy-azure-runtime.yml", import.meta.url),
+    "utf8"
+  )
+  const preparation = runtime.slice(
+    runtime.indexOf("\n  prepare-dependencies:"),
+    runtime.indexOf("\n  deploy:")
+  )
+  assert.match(preparation, /contents: read/)
+  assert.doesNotMatch(
+    preparation,
+    /id-token: write|environment:|Azure\/login|cold-release-azure.mjs/
+  )
+  const caller = readFileSync(new URL("../../workflows/deploy-azure.yml", import.meta.url), "utf8")
+  const native = caller.slice(
+    caller.indexOf("\n  verify-built-worker-image:"),
+    caller.indexOf("\n  deploy:")
+  )
+  assert.match(native, /uses: \.\/\.github\/workflows\/verify-webhook-worker-image.yml/)
+  assert.match(native, /needs: \[resolve-images, resolve-prepared-images\]/)
+  assert.doesNotMatch(native, /needs:.*deploy|paired-runtime-workflow.mjs/)
+  const release = readFileSync(
+    new URL("../../workflows/release-production.yml", import.meta.url),
+    "utf8"
+  )
+  const marketing = release.slice(release.indexOf("\n  deploy-marketing:"))
+  assert.match(marketing, /needs: routing/)
+  assert.doesNotMatch(
+    marketing,
+    /needs:.*deploy-azure|needs\.deploy-azure|paired-runtime-workflow.mjs/
+  )
 })
