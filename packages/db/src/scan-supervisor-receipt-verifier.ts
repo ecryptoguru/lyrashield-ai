@@ -11,10 +11,11 @@
  *   field order in the source object does not change the signed bytes; the
  *   canonical field list is documented below for audit clarity.
  * - `supervisorInstanceId` is embedded in every journal payload (supervisor
- *   side) and in the returned receipt. The verifier resolves it from either a
- *   top-level `supervisorInstanceId` field or `payload.supervisorInstanceId`,
- *   whichever is present, and requires it to equal the caller's expected
- *   instance. A record without any instance id is rejected.
+ *   side) and in the returned receipt. The verifier requires an own
+ *   enumerable data property `payload.supervisorInstanceId` covered by the
+ *   signature. An optional top-level instance id must agree but never supplies
+ *   the signed identity.
+ *   Legacy payloads without a signed instance are unavailable for verification.
  * - The broker never holds the raw HMAC secret. A future gateway loads the
  *   secret from its key store (keyed by `supervisorInstanceId` /
  *   `keyId` in a ScanSupervisorKey-style metadata table) and supplies it as
@@ -25,6 +26,9 @@
  *   `expectedSequence` / `expectedPreviousHash` when supplied. Callers that
  *   mirror receipts in order must pass both; a single-record verification
  *   without them still validates hash and signature but not contiguity.
+ * - A successful result proves only that the bytes match the supplied key and
+ *   expectations. It does not authenticate the key source, bind an epoch or
+ *   command to persisted authority, or prove absence or permit release.
  *
  * TODO (later step, not in scope): mirroring service (`recordSupervisorReceiptTx`)
  * that, inside a lockOperation transaction, verifies receipts with this
@@ -141,6 +145,7 @@ export type VerifySupervisorReceiptHmacResult =
         | "SIGNATURE_MISMATCH"
         | "KEY_MISMATCH"
         | "MISSING_INSTANCE"
+        | "INVALID_PAYLOAD"
         | "INVALID_SECRET"
       reason: string
     }
@@ -151,26 +156,26 @@ function timingSafeHexEqual(left: string, right: string): boolean {
   return leftBytes.length === rightBytes.length && timingSafeEqual(leftBytes, rightBytes)
 }
 
-function payloadInstanceId(record: SupervisorReceiptRecord): string | null {
-  const payload = record.payload
+function payloadInstanceId(payload: unknown): string | null {
   if (payload !== null && typeof payload === "object" && !Array.isArray(payload)) {
-    const candidate = (payload as Record<string, unknown>).supervisorInstanceId
-    if (typeof candidate === "string") return candidate
+    const property = Object.getOwnPropertyDescriptor(payload, "supervisorInstanceId")
+    if (property?.enumerable && "value" in property && typeof property.value === "string")
+      return property.value
   }
   return null
 }
 
 /**
  * Resolve the instance id without trusting an unsigned envelope over the
- * signed payload. If both are present they must agree; the signed payload wins
- * when only one carries the id.
+ * signed payload. An envelope id is optional and must agree when present;
+ * a missing signed payload id is always unavailable.
  */
 function resolveInstanceId(record: SupervisorReceiptRecord): {
   instanceId: string | null
   envelopePayloadMismatch: boolean
 } {
   const envelope = record.supervisorInstanceId
-  const signed = payloadInstanceId(record)
+  const signed = payloadInstanceId(record.payload)
   if (envelope !== undefined && typeof envelope !== "string") {
     return { instanceId: null, envelopePayloadMismatch: false }
   }
@@ -178,7 +183,7 @@ function resolveInstanceId(record: SupervisorReceiptRecord): {
     return { instanceId: null, envelopePayloadMismatch: true }
   }
   return {
-    instanceId: signed ?? (typeof envelope === "string" ? envelope : null),
+    instanceId: signed,
     envelopePayloadMismatch: false,
   }
 }
@@ -264,11 +269,26 @@ export function verifySupervisorReceiptHmac(
     previousHash: record.previousHash,
     payload: record.payload,
   }
-  const expectedHash = sha256Hex(canonicalizeSupervisorReceipt(unsigned))
+  // Inspect the exact serialized bytes covered by the hash. In-memory values
+  // can have custom serialization; a field omitted by it is not signed.
+  let canonicalUnsigned: string
+  let snapshot: SupervisorReceiptUnsigned
+  try {
+    canonicalUnsigned = canonicalizeSupervisorReceipt(unsigned)
+    snapshot = JSON.parse(canonicalUnsigned) as SupervisorReceiptUnsigned
+  } catch {
+    return { ok: false, code: "INVALID_PAYLOAD", reason: "receipt payload is not serializable" }
+  }
+  const serializedInstance = payloadInstanceId(snapshot.payload)
+  if (!serializedInstance)
+    return { ok: false, code: "MISSING_INSTANCE", reason: "signed payload carries no instance id" }
+  if (serializedInstance !== instanceId)
+    return { ok: false, code: "INSTANCE_MISMATCH", reason: "serialized instance id changed" }
+  const expectedHash = sha256Hex(canonicalUnsigned)
   if (!timingSafeHexEqual(expectedHash, record.hash))
     return { ok: false, code: "HASH_MISMATCH", reason: "receipt hash does not match payload" }
   const expectedSignature = createHmac("sha256", secretBytes)
-    .update(canonicalizeSupervisorReceipt(unsigned, record.hash), "utf8")
+    .update(canonicalizeSupervisorReceipt(snapshot, record.hash), "utf8")
     .digest("hex")
   if (!timingSafeHexEqual(expectedSignature, record.signature))
     return { ok: false, code: "SIGNATURE_MISMATCH", reason: "receipt signature is invalid" }
