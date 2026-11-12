@@ -1,4 +1,8 @@
-import { assertColdDatabaseEpoch, withColdDatabaseEpochCancellation } from "../cold-database-epoch"
+import {
+  assertColdDatabaseEpoch,
+  failClosedColdWorker,
+  withColdDatabaseEpochCancellation,
+} from "../cold-database-epoch"
 import type { RepositoryAuth } from "./repository-auth"
 import { spawn, type ChildProcess } from "child_process"
 import { logger } from "@lyrashield/logger"
@@ -106,6 +110,36 @@ export function createKillEscalation(
     },
   }
 }
+export class EngineProcessStopUnconfirmedError extends Error {
+  constructor() {
+    super("Engine process stop could not be confirmed; execution remains held")
+    this.name = "EngineProcessStopUnconfirmedError"
+  }
+}
+
+/** A spawn/kill error is not exit evidence. Hold the caller until close or a retained unknown stop. */
+function deferEngineProcessFailure(
+  child: ChildProcess,
+  terminate: () => void,
+  reject: (error: Error) => void
+) {
+  let failure: Error | undefined
+  let timer: ReturnType<typeof setTimeout> | undefined
+  child.on("error", (error) => {
+    failure ??= error
+    timer ??= setTimeout(() => {
+      const unknownStop = new EngineProcessStopUnconfirmedError()
+      failClosedColdWorker(unknownStop)
+      reject(unknownStop)
+    }, 10_000)
+    terminate()
+  })
+  child.on("close", () => {
+    clearTimeout(timer)
+    if (failure) reject(failure)
+  })
+}
+
 interface EngineProcessContext {
   runType?: string
   repositoryAuth?: RepositoryAuth
@@ -327,8 +361,7 @@ async function startEngineProcess(
       })
     })
 
-    // Spawn/kill errors do not prove exit. Keep tracking and escalation until actual close.
-    child.on("error", reject)
+    deferEngineProcessFailure(child, terminate, reject)
   })
 }
 

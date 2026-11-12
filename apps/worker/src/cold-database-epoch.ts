@@ -36,11 +36,18 @@ async function boundedDatabaseEpochHash() {
   }
 }
 
-let epochFailed = false
+let workerFailure: Error | undefined
 let onEpochFailure: (() => void) | undefined
 
 export function configureColdDatabaseEpochFailureHandler(handler: () => void) {
   onEpochFailure = handler
+}
+
+/** A live child with an unconfirmed stop also revokes the cold owner's execution authority. */
+export function failClosedColdWorker(error: Error) {
+  if (process.env.LYRASHIELD_COLD_SINGLE_WORKER !== "1" || workerFailure) return
+  workerFailure = error
+  onEpochFailure?.()
 }
 
 export class ColdDatabaseEpochError extends Error {
@@ -55,7 +62,7 @@ export class ColdDatabaseEpochError extends Error {
 /** Never refresh the trusted launcher pin or clear a failure in the running worker. */
 export async function assertColdDatabaseEpoch() {
   if (process.env.LYRASHIELD_COLD_SINGLE_WORKER !== "1") return
-  if (epochFailed) throw new ColdDatabaseEpochError()
+  if (workerFailure) throw workerFailure
   const expected = process.env.LYRASHIELD_COLD_DATABASE_EPOCH_SHA256
   let matches = false
   try {
@@ -66,12 +73,9 @@ export async function assertColdDatabaseEpoch() {
   } catch {
     // Query errors carry deployment details; expose only the closed admission state.
   }
-  if (!matches || epochFailed) {
-    if (!epochFailed) {
-      epochFailed = true
-      onEpochFailure?.()
-    }
-    throw new ColdDatabaseEpochError()
+  if (!matches || workerFailure) {
+    failClosedColdWorker(new ColdDatabaseEpochError())
+    throw workerFailure
   }
 }
 

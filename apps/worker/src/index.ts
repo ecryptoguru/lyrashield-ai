@@ -407,7 +407,7 @@ async function main(): Promise<void> {
   await assertWorkerStartupResources()
 
   configureColdDatabaseEpochFailureHandler(() => {
-    void shutdown("DATABASE_EPOCH_CHANGED", 1)
+    void shutdown("COLD_WORKER_AUTHORITY_LOST", 1)
   })
   await assertColdDatabaseEpoch()
 

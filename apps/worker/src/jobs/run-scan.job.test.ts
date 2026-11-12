@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto"
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { logger } from "@lyrashield/logger"
 import * as coldDatabaseEpoch from "../cold-database-epoch"
+import { EngineProcessStopUnconfirmedError } from "../engine/runner-process"
 
 const completeUsage = vi.hoisted(() => ({
   model: "azure_ai/gpt-6-luna",
@@ -1429,52 +1430,57 @@ describe("processScanJob", () => {
     }
   })
 
-  it("holds affirmative provider usage without charging cancellation after an epoch interruption", async () => {
-    mockStoredScanAuthority({ accountingVersion: 2 })
-    vi.mocked(runEngine).mockResolvedValueOnce({
-      exitCode: 0,
-      cancelled: false,
-      timedOut: false,
-      sandboxRemoved: true,
-      sourceCheckoutPath: null,
-      output: {
-        ingestionIssues: [],
-        vulnerabilities: [],
-        findingsComplete: true,
-        findingCount: 0,
-        runRecord: {
-          run_id: "scan-1",
-          run_name: "scan-1",
-          status: "completed",
-          llm_usage: completeUsage,
+  it.each(["epoch", "unconfirmed_stop"])(
+    "holds affirmative usage without cancellation settlement after %s",
+    async (interruption) => {
+      mockStoredScanAuthority({ accountingVersion: 2 })
+      vi.mocked(runEngine).mockResolvedValueOnce({
+        exitCode: 0,
+        cancelled: false,
+        timedOut: false,
+        sandboxRemoved: true,
+        sourceCheckoutPath: null,
+        output: {
+          ingestionIssues: [],
+          vulnerabilities: [],
+          findingsComplete: true,
+          findingCount: 0,
+          runRecord: {
+            run_id: "scan-1",
+            run_name: "scan-1",
+            status: "completed",
+            llm_usage: completeUsage,
+          },
         },
-      },
-    } as never)
-    vi.mocked(runScannerOrchestrator).mockImplementationOnce(async () => {
-      expect(addScanEvent).toHaveBeenCalledWith(
-        "scan-1",
-        "llm_usage",
-        "info",
-        "AI usage counters recorded",
-        expect.objectContaining({ requestCount: 1, inputTokens: 1000, outputTokens: 100 })
-      )
-      // Recovery may expose cancellation or a rolled-back status. Neither proves a user charge.
-      vi.mocked(prisma.scan.findUnique).mockResolvedValue({ status: "CANCELLED" } as never)
-      throw new coldDatabaseEpoch.ColdDatabaseEpochError()
-    })
-    await expect(processScanJob(mockJob)).resolves.toMatchObject({
-      errorCategory: "BILLABLE_PHASE_INTERRUPTED",
-    })
-    expect(runEngine).toHaveBeenCalledOnce()
-    expect(recordAgentMinutes).not.toHaveBeenCalled()
-    expect(confirmScanCapacityStopped).not.toHaveBeenCalled()
-    expect(releaseStoppedScanSlot).not.toHaveBeenCalled()
-    expect(releaseUnstartedScanSlot).not.toHaveBeenCalled()
-    expect(requeueScanForRetry).not.toHaveBeenCalled()
-    expect(cleanupEngineWorkspace).not.toHaveBeenCalled()
-    expect(persistResultManifest).not.toHaveBeenCalled()
-    expect(completeScanWithScore).not.toHaveBeenCalled()
-  })
+      } as never)
+      vi.mocked(runScannerOrchestrator).mockImplementationOnce(async () => {
+        expect(addScanEvent).toHaveBeenCalledWith(
+          "scan-1",
+          "llm_usage",
+          "info",
+          "AI usage counters recorded",
+          expect.objectContaining({ requestCount: 1, inputTokens: 1000, outputTokens: 100 })
+        )
+        // Recovery may expose cancellation or a rolled-back status. Neither proves a user charge.
+        vi.mocked(prisma.scan.findUnique).mockResolvedValue({ status: "CANCELLED" } as never)
+        throw interruption === "epoch"
+          ? new coldDatabaseEpoch.ColdDatabaseEpochError()
+          : new EngineProcessStopUnconfirmedError()
+      })
+      await expect(processScanJob(mockJob)).resolves.toMatchObject({
+        errorCategory: "BILLABLE_PHASE_INTERRUPTED",
+      })
+      expect(runEngine).toHaveBeenCalledOnce()
+      expect(recordAgentMinutes).not.toHaveBeenCalled()
+      expect(confirmScanCapacityStopped).not.toHaveBeenCalled()
+      expect(releaseStoppedScanSlot).not.toHaveBeenCalled()
+      expect(releaseUnstartedScanSlot).not.toHaveBeenCalled()
+      expect(requeueScanForRetry).not.toHaveBeenCalled()
+      expect(cleanupEngineWorkspace).not.toHaveBeenCalled()
+      expect(persistResultManifest).not.toHaveBeenCalled()
+      expect(completeScanWithScore).not.toHaveBeenCalled()
+    }
+  )
 
   it("bills independently observed partial work at a capacity stop", async () => {
     mockStoredScanAuthority({ accountingVersion: 2 })

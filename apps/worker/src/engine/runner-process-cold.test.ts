@@ -139,11 +139,11 @@ describe("cold main and triage process boundary", () => {
     await vi.advanceTimersByTimeAsync(0)
     mocks.query.mockResolvedValue([{ epoch: "1794481000.123456" }])
     await vi.advanceTimersByTimeAsync(1000)
-    await rejected
     expect(terminateActiveEngineProcesses()).toBe(1)
     await vi.advanceTimersByTimeAsync(5000)
     expect(child.kill).toHaveBeenCalledWith("SIGKILL")
     child.emit("close", null)
+    await rejected
     await vi.advanceTimersByTimeAsync(0)
     expect(terminateActiveEngineProcesses()).toBe(0)
   })
@@ -155,13 +155,68 @@ describe("cold main and triage process boundary", () => {
     mocks.spawn.mockReturnValue(child)
     const running = runEngineProcess(command("scan"), "/tmp", "scan-1", null, profile)
     await vi.advanceTimersByTimeAsync(0)
+    const rejected = expect(running).rejects.toBe(original)
+    let settled = false
+    void running.catch(() => {
+      settled = true
+    })
     child.emit("error", original)
-    await expect(running).rejects.toBe(original)
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(settled).toBe(false)
     expect(terminateActiveEngineProcesses()).toBe(1)
     child.emit("close", null)
+    await rejected
     await vi.advanceTimersByTimeAsync(0)
     expect(terminateActiveEngineProcesses()).toBe(0)
   })
+
+  it.each(["scan", "ai-security-triage"])(
+    "retains %s as unknown when a kill error never establishes close",
+    async (kind) => {
+      const {
+        runEngineProcess,
+        EngineProcessStopUnconfirmedError,
+        terminateActiveEngineProcesses,
+      } = await import("./runner-process")
+      const { configureColdDatabaseEpochFailureHandler } = await import("../cold-database-epoch")
+      const closeWorker = vi.fn()
+      configureColdDatabaseEpochFailureHandler(closeWorker)
+      const child = childFixture()
+      child.kill.mockImplementation(() => {
+        child.emit("error", new Error("fixture kill denied"))
+        return false
+      })
+      mocks.spawn.mockReturnValue(child)
+      const running = runEngineProcess(
+        command(kind),
+        "/tmp",
+        "scan-1",
+        null,
+        profile,
+        vi.fn().mockResolvedValue(true)
+      )
+      const rejected = expect(running).rejects.toBeInstanceOf(EngineProcessStopUnconfirmedError)
+      let settled = false
+      void running.catch(() => {
+        settled = true
+      })
+      await vi.advanceTimersByTimeAsync(1000)
+      await vi.advanceTimersByTimeAsync(9999)
+      expect(settled).toBe(false)
+      await vi.advanceTimersByTimeAsync(1)
+      await rejected
+      expect(closeWorker).toHaveBeenCalledOnce()
+      await expect(
+        runEngineProcess(command(kind), "/tmp", "scan-2", null, profile)
+      ).rejects.toBeInstanceOf(EngineProcessStopUnconfirmedError)
+      expect(mocks.spawn).toHaveBeenCalledOnce()
+      expect(terminateActiveEngineProcesses()).toBe(1)
+      expect(child.kill).toHaveBeenCalledWith("SIGKILL")
+      child.emit("close", null)
+      await vi.advanceTimersByTimeAsync(0)
+      expect(terminateActiveEngineProcesses()).toBe(0)
+    }
+  )
 
   it("keeps checking epochs when an existing cancellation status read hangs", async () => {
     const { runEngineProcess } = await import("./runner-process")
