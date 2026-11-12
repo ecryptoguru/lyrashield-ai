@@ -74,6 +74,22 @@ test("prepared run is a successful manual build of the exact main source", () =>
   }
 })
 
+test("paired preparation binds the requested exact attempt and repository", () => {
+  const bound = {
+    ...run,
+    repository: { full_name: repository },
+    head_repository: { full_name: repository },
+  }
+  assert.equal(verifyPreparedRun(bound, { ...expected, expectedAttempt: "2" }), 2)
+  assert.throws(() => verifyPreparedRun(bound, { ...expected, expectedAttempt: "1" }))
+  assert.throws(() =>
+    verifyPreparedRun(
+      { ...bound, head_repository: { full_name: "other/repo" } },
+      { ...expected, expectedAttempt: "2" }
+    )
+  )
+})
+
 test("candidate receipt yields only canonical immutable image digests", () => {
   assert.deepEqual(verifyCandidateReceipt(receipt, expected), {
     web_image: `ghcr.io/${repository}/lyrashield-web`,
@@ -142,7 +158,7 @@ test("prepared artifact is read as one bounded ZIP receipt and mismatches fail c
   const ghPath = path.join(directory, "gh")
   writeFileSync(
     ghPath,
-    `#!${process.execPath}\nconst fs=require("node:fs"); const resource=process.argv[3]; if(resource.includes("/git/ref/heads/main")) process.stdout.write(process.env.MOCK_MAIN); else if(resource.endsWith("/actions/runs/${runId}")) process.stdout.write(process.env.MOCK_RUN); else if(resource.includes("/artifacts?")) process.stdout.write(process.env.MOCK_LIST); else if(resource.endsWith("/artifacts/42/zip")) process.stdout.write(fs.readFileSync(process.env.MOCK_ZIP)); else process.exit(2);\n`
+    `#!${process.execPath}\nconst fs=require("node:fs"); const resource=process.argv[3]; if(resource.includes("/git/ref/heads/main")) process.stdout.write(process.env.MOCK_MAIN); else if(resource.endsWith("/actions/runs/${runId}")) process.stdout.write(process.env.MOCK_RUN); else if(resource.endsWith("/actions/runs/${runId}/attempts/2")) process.stdout.write(process.env.MOCK_ATTEMPT); else if(resource.includes("/artifacts?")) process.stdout.write(process.env.MOCK_LIST); else if(resource.endsWith("/artifacts/42/zip")) process.stdout.write(fs.readFileSync(process.env.MOCK_ZIP)); else process.exit(2);\n`
   )
   chmodSync(ghPath, 0o755)
   const artifactDigest = `sha256:${createHash("sha256").update(readFileSync(zipPath)).digest("hex")}`
@@ -193,6 +209,23 @@ test("prepared artifact is read as one bounded ZIP receipt and mismatches fail c
   assert.match(
     readFileSync(outputPath, "utf8"),
     new RegExp(`prepared_artifact_digest=${artifactDigest}`)
+  )
+  const pairedRun = {
+    ...run,
+    repository: { full_name: repository },
+    head_repository: { full_name: repository },
+  }
+  const pairedEnv = {
+    MOCK_RUN: JSON.stringify(pairedRun),
+    MOCK_ATTEMPT: JSON.stringify(pairedRun),
+    LYRASHIELD_WEBHOOK_RECOVERY_PREPARED_RUN_ATTEMPT: "2",
+  }
+  assert.equal(invoke(pairedEnv, ["--paired-candidate"]).status, 0)
+  assert.notEqual(
+    invoke({ ...pairedEnv, LYRASHIELD_WEBHOOK_RECOVERY_PREPARED_RUN_ATTEMPT: "1" }, [
+      "--paired-candidate",
+    ]).status,
+    0
   )
   const historical = invoke(
     { MOCK_MAIN: JSON.stringify({ object: { sha: "f".repeat(40) } }), ENGINE_REVISION: "" },

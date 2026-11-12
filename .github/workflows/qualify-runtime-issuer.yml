@@ -8,11 +8,17 @@ on:
         type: string
         required: false
         default: ""
+      fresh_sandbox_inventory:
+        description: "Optional exact independent inventory selector for protected verification"
+        type: string
+        required: false
+        default: ""
 
 permissions:
   contents: read
   actions: read
   id-token: write
+  packages: read
 
 jobs:
   signer:
@@ -23,3 +29,4 @@ jobs:
     uses: ./.github/workflows/issue-runtime-qualification.yml
     with:
       fresh_sandbox_publication: ${{ inputs.fresh_sandbox_publication }}
+      fresh_sandbox_inventory: ${{ inputs.fresh_sandbox_inventory }}

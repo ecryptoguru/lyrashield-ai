@@ -1,0 +1,24 @@
+{
+  "tree": "82ff4e7b4d3030e34d7a40e743653b084d51defb",
+  "files": {
+    ".github/workflows/verify-sandbox-inventory.yml": "sha256:e4ec04d089ce871c1145142b59f082a1496ae7596c3a908d4e94ad37236f4e61",
+    "scripts/acquire_sandbox_inventory.py": "sha256:3afc9c58e20ae9c31924f4ac9f5fa23c31cd1514dd3c319eb61a1bd8d939a6e0",
+    "scripts/bind_sandbox_inventory.py": "sha256:02569b0a332d9f8a60094244ee82764ed939051d835465f6a228a88259d7026e",
+    "scripts/catalog_pax_capability_headers.py": "sha256:c71ce0ae4d3f71c8ca97bfbd710fe6bc8610d02d57b3375816e0e827d5f6bd22",
+    "scripts/check_go_sbom_coverage.py": "sha256:23912cacb14a3eb51a514db0f7241ac4d0a68d6afafbbf43a46229cf1822b5c8",
+    "scripts/check_sandbox_attestations.py": "sha256:49dbe74be3152bf7710ae8f4896bc4ff4fe3b174e5cee89843ed8c280a3e74e9",
+    "scripts/check_sandbox_sbom_coverage.py": "sha256:175c8b269bfcb5c36b9ee5052df6fec1a91e7980292d6a539bfe1e9bea9fc31b",
+    "scripts/check_sbom_inventory.py": "sha256:035f050850d73a6a7cb18c434c5f88e4ced7176d64c25f07ca47e33e8d499ab8",
+    "scripts/model_oci_metadata_overlay.py": "sha256:5f71ac4c74225784fcf2b9bc4dd14934727a1d114c9d0ebd46e19446bce4e71a",
+    "scripts/prepare_independent_inventory_tools.sh": "sha256:99c8490a503de906bd8e12d375d7fdaaf85547a3ed0c4c1b32388a6e36a38275",
+    "scripts/prepare_sandbox_sbom.py": "sha256:5689be191856abdeb27d25626ead245274440e0029f756a2611a413d8972951c",
+    "scripts/probe_pax_capability.py": "sha256:a152410a1cf4c43e4dd61140c7e694be69b27d5eda64ba7d25fa47f9aef6bbe4",
+    "scripts/reconstruct_oci_layers.py": "sha256:fe3bc5dbdf1310bd2bc6140b0e1c9a7b0990cdf787abab76de51721010744568",
+    "scripts/sandbox_sbom_go.py": "sha256:36e72596c4ec3abd0738f00a04fa89cd51c2af2a7c953c1d8916ee230164d223",
+    "scripts/spool_verified_oci_layer.py": "sha256:eb83a1d38325b7a316b709f6621bd3b82121b7448c8f11a44fe8ee41b3a1da94",
+    "scripts/verify_oci_layer_binding.py": "sha256:21d0c26e9aed19631ef45b67ca8c14993499ff8822c94c672947464f339b6cee",
+    "scripts/verify_pax_capability_stream.py": "sha256:15dc360acbe9f2f23d89a7c91cce1e3ca42e1b5c5d9f37a822d097c4504f0da3",
+    "scripts/verify_sandbox_package_inventory.py": "sha256:50dd86bd0d56b648f0f7fd7a8aa247583b6cf1d072de73ca2b0ff7f3eece3788",
+    "scripts/verify_sandbox_platform_index.py": "sha256:8164dd10a6bf7ac396ff235ae99f9162f3b5249d6c578c3e3915d2fbd6a12a36"
+  }
+}

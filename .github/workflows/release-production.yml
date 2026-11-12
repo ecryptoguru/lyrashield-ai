@@ -67,11 +67,15 @@ jobs:
       contents: read
     outputs:
       digest: ${{ steps.require.outputs.digest }}
+      prepared_run_id: ${{ steps.require.outputs.prepared_run_id }}
+      prepared_run_attempt: ${{ steps.require.outputs.prepared_run_attempt }}
     steps:
       - name: Require the protected qualified release digest
         id: require
         env:
           QUALIFIED_RELEASE_DIGEST: ${{ vars.LYRASHIELD_QUALIFIED_RELEASE_DIGEST }}
+          PREPARED_RUN_ID: ${{ vars.LYRASHIELD_PREPARED_CANDIDATE_RUN_ID }}
+          PREPARED_RUN_ATTEMPT: ${{ vars.LYRASHIELD_PREPARED_CANDIDATE_RUN_ATTEMPT }}
         run: |
           if [[ ! "$QUALIFIED_RELEASE_DIGEST" =~ ^[a-f0-9]{64}$ ]]; then
             {
@@ -83,7 +87,15 @@ jobs:
             echo "::error::Set LYRASHIELD_QUALIFIED_RELEASE_DIGEST in the azure-production environment to a qualified release record digest before deploying."
             exit 1
           fi
-          echo "digest=$QUALIFIED_RELEASE_DIGEST" >> "$GITHUB_OUTPUT"
+          if [[ ! "$PREPARED_RUN_ID" =~ ^[1-9][0-9]{0,19}$ || ! "$PREPARED_RUN_ATTEMPT" =~ ^[1-9][0-9]{0,19}$ ]]; then
+            echo '::error::A previously verified candidate run and attempt are required before deployment.'
+            exit 1
+          fi
+          {
+            echo "digest=$QUALIFIED_RELEASE_DIGEST"
+            echo "prepared_run_id=$PREPARED_RUN_ID"
+            echo "prepared_run_attempt=$PREPARED_RUN_ATTEMPT"
+          } >> "$GITHUB_OUTPUT"
 
   deploy-azure:
     needs: [routing, qualify-azure-release]
@@ -92,6 +104,8 @@ jobs:
     with:
       source_sha: ${{ github.sha }}
       qualified_release_digest: ${{ needs.qualify-azure-release.outputs.digest }}
+      prepared_candidate_run_id: ${{ needs.qualify-azure-release.outputs.prepared_run_id }}
+      prepared_candidate_run_attempt: ${{ needs.qualify-azure-release.outputs.prepared_run_attempt }}
     secrets: inherit
     permissions:
       actions: read

@@ -1,10 +1,10 @@
 // Protected read-only verification. Publication evidence never issues fleet authority.
 import assert from "node:assert/strict"
 import { createHash } from "node:crypto"
-import { execFileSync } from "node:child_process"
-import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs"
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { protectedGh } from "./protected-gh.mjs"
 import {
   SBOM_COVERAGE_PREDICATE_TYPE,
   validateSandboxSbomCoverageAggregate,
@@ -19,33 +19,7 @@ const identity = "https://github.com/" + workflow + "@" + sourceRef
 const image = "ghcr.io/ecryptoguru/lyrashield-sandbox"
 const predicateType = "https://slsa.dev/provenance/v1"
 const qualificationType = "https://lyrashieldai.com/attestations/sandbox-qualification/v1"
-// gh v2.95.0 binaries extracted only after verifying the official archive hashes.
-const binaryHashes = Object.freeze({
-  x64: "62c11fbaa08835168c3d1acf8a645ac6268a13a5682c73581388c9df0c622617",
-  arm64: "706b030846db08d0dac0392d6f74416e0bbf0d9ac5ecbd54c9046305c10eac59",
-})
 const hash = (raw) => createHash("sha256").update(raw).digest("hex")
-
-function gh(args) {
-  // No PATH lookup, caller-chosen binary, custom roots or arbitrary command.
-  const path = "/usr/bin/gh"
-  assert.equal(process.platform, "linux")
-  const expected = binaryHashes[process.arch]
-  assert.ok(expected)
-  const file = statSync(path)
-  assert.ok(file.isFile() && file.uid === 0 && (file.mode & 0o022) === 0)
-  assert.equal(hash(readFileSync(path)), expected)
-  try {
-    return execFileSync(path, args, {
-      timeout: 60000,
-      maxBuffer: 2 * 1024 * 1024,
-      stdio: ["ignore", "pipe", "pipe"],
-    }).toString("utf8")
-  } catch {
-    // Registry/verifier errors can include credential material.
-    throw new Error("Protected attestation verification failed")
-  }
-}
 
 function checkedExpected(expected, when) {
   assert.deepEqual(Object.keys(expected).sort(), [
@@ -66,7 +40,7 @@ function checkedExpected(expected, when) {
   return expected
 }
 
-function verificationArguments(expected, type, bundle) {
+function verificationArguments(expected, type, bundle, certificateIdentity = identity) {
   return [
     "attestation",
     "verify",
@@ -77,7 +51,7 @@ function verificationArguments(expected, type, bundle) {
     "--repo",
     repo,
     "--cert-identity",
-    identity,
+    certificateIdentity,
     "--cert-oidc-issuer",
     "https://token.actions.githubusercontent.com",
     "--signer-digest",
@@ -97,7 +71,7 @@ function verificationArguments(expected, type, bundle) {
 export function verifySandboxAttestationBundle(
   raw,
   expected,
-  { run = gh, when = Date.now() } = {}
+  { run = protectedGh, when = Date.now() } = {}
 ) {
   assert.equal(typeof raw, "string")
   assert.ok(Buffer.byteLength(raw) <= 1024 * 1024)
@@ -148,7 +122,7 @@ function invocationFor(expected) {
   )
 }
 
-function verifiedStatement(rows, expected, type, when) {
+function verifiedStatement(rows, expected, type, when, certificateIdentity = identity) {
   assert.ok(Array.isArray(rows) && rows.length === 1)
   const result = rows[0]?.verificationResult
   const certificate = result?.signature?.certificate
@@ -157,8 +131,8 @@ function verifiedStatement(rows, expected, type, when) {
   // predicate, these values come from authenticated GitHub OIDC claims.
   for (const [field, value] of Object.entries({
     issuer: "https://token.actions.githubusercontent.com",
-    subjectAlternativeName: identity,
-    buildSignerURI: identity,
+    subjectAlternativeName: certificateIdentity,
+    buildSignerURI: certificateIdentity,
     buildSignerDigest: expected.publicationRevision,
     runnerEnvironment: "github-hosted",
     sourceRepositoryURI: "https://github.com/" + repo,
@@ -184,7 +158,33 @@ function verifiedStatement(rows, expected, type, when) {
   return statement
 }
 
-export function verifySandboxCoveragePublication(expected, { run = gh, when = Date.now() } = {}) {
+export function verifyInventoryAttestation(
+  expected,
+  { run = protectedGh, when = Date.now() } = {}
+) {
+  expected = checkedExpected(expected, when)
+  const type = "https://lyrashieldai.com/attestations/sandbox-independent-inventory/v1"
+  const inventoryIdentity = `https://github.com/${repo}/.github/workflows/verify-sandbox-inventory.yml@refs/heads/main`
+  const rows = JSON.parse(
+    run(verificationArguments(expected, type, ["--bundle-from-oci"], inventoryIdentity))
+  )
+  assert.ok(Array.isArray(rows) && rows.length <= 30)
+  const matches = []
+  for (const row of rows) {
+    try {
+      matches.push(verifiedStatement([row], expected, type, when, inventoryIdentity))
+    } catch {
+      // Attestations from other runs are not evidence for this invocation.
+    }
+  }
+  assert.equal(matches.length, 1)
+  return matches[0].predicate
+}
+
+export function verifySandboxCoveragePublication(
+  expected,
+  { run = protectedGh, when = Date.now() } = {}
+) {
   assert.equal(Object.getPrototypeOf(expected), Object.prototype)
   assert.deepEqual(Object.keys(expected).sort(), [
     "engineRevision",
@@ -250,6 +250,18 @@ export function verifySandboxCoveragePublication(expected, { run = gh, when = Da
     engineRevision,
     coveragePredicateChecksum: hash(JSON.stringify(coverage)),
     nativeManifests: Object.freeze({ ...qualification.platformManifests }),
+    inventoryBindings: Object.freeze(
+      Object.fromEntries(
+        ["amd64", "arm64"].map((arch) => {
+          const { manifestDigest, configDigest, spdxDocumentDigest, goApplications } =
+            coverage.platforms[arch]
+          return [
+            arch,
+            Object.freeze({ manifestDigest, configDigest, spdxDocumentDigest, goApplications }),
+          ]
+        })
+      )
+    ),
     checkedAt: new Date(when).toISOString(),
   })
 }

@@ -8,6 +8,11 @@ on:
         type: string
         required: false
         default: ""
+      fresh_sandbox_inventory:
+        description: "Optional exact independently verified inventory selector; never runtime authority"
+        type: string
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -29,6 +34,7 @@ jobs:
       contents: read
       actions: read
       id-token: write
+      packages: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -38,7 +44,7 @@ jobs:
         with:
           node-version: "24"
       - name: Prepare checksum-pinned protected Linux verifier
-        if: inputs.fresh_sandbox_publication != ''
+        if: inputs.fresh_sandbox_publication != '' || inputs.fresh_sandbox_inventory != ''
         run: bash .github/scripts/prepare-qualification-verifier.sh
       - name: Authenticate and managed-sign held sandbox publication
         if: inputs.fresh_sandbox_publication != ''
@@ -51,6 +57,19 @@ jobs:
         with:
           name: held-sandbox-publication-${{ github.run_id }}-${{ github.run_attempt }}
           path: sandbox-publication-record.json
+          if-no-files-found: error
+          retention-days: 7
+      - name: Authenticate and managed-sign held independent inventory
+        if: inputs.fresh_sandbox_inventory != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FRESH_SANDBOX_INVENTORY: ${{ inputs.fresh_sandbox_inventory }}
+        run: node .github/scripts/issue-sandbox-inventory.mjs
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: inputs.fresh_sandbox_inventory != ''
+        with:
+          name: held-sandbox-inventory-${{ github.run_id }}-${{ github.run_attempt }}
+          path: sandbox-inventory-record.json
           if-no-files-found: error
           retention-days: 7
       - name: Verify issuer identity and exact managed signing key

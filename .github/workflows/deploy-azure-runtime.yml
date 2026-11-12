@@ -258,6 +258,10 @@ jobs:
           MYRA_MOCK_CALENDAR_EXTERNAL_CONFLICT: ${{ vars.MYRA_MOCK_CALENDAR_EXTERNAL_CONFLICT }}
         run: node .github/scripts/verify-myra-deployment-config.mjs
 
+      - name: Prepare checksum-pinned protected Linux verifier
+        if: inputs.qualified_release_digest != ''
+        run: bash .github/scripts/prepare-qualification-verifier.sh
+
       - name: Log in to Azure
         # v16 4.3: OIDC federated login — no stored client secret. The
         # workload identity (client id) must carry the same role assignments

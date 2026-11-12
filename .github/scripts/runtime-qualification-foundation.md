@@ -41,6 +41,26 @@ authenticates publisher claims; it does not independently remeasure native
 bytes, validate the referenced engine CI run or release admission. A fresh
 build produces a fresh digest and cannot qualify a retained image by implication.
 
+The optional `fresh_sandbox_inventory` selector identifies that same publication
+and the exact independently verifying engine workflow revision, run and attempt.
+The issuer retrieves a separate Sigstore OCI attestation, checks the protected
+verifier workflow, its reviewed source tree, hosted run, tool checksums, resource
+limits and both native inventory bindings against the publisher's signed
+coverage. Only the exact reviewed publisher failure at the deliberate hold is
+accepted; unrelated failed or cancelled steps are not. The managed-signed
+`lyrashield-held-sandbox-inventory/1` record is bounded evidence only: it keeps
+`qualified` and `runtimeAuthorityVerified` false. An empty reviewed-tree pin
+disables this path until the verifier source has been reviewed and pinned.
+
+For a future normal paired release, the image-preparation workflow requires
+the exact merged source and genuine required PR checks before building once.
+It rehearses the digest-pinned worker and verifies the exact web/worker image
+contract. The release must select the exact successful preparation run and
+attempt; protected preflight compares all three candidate image digests and
+source identities with the signed release tuple, and the artifact digest is
+rechecked before the tuple is selected. Production holds and the separate
+runtime authority and promotion-lease requirements remain unchanged.
+
 The protected Ubuntu job provisions GitHub CLI 2.95.0 from the fixed official
 amd64 release archive, checks both the archive and extracted executable hashes,
 and installs only the exact binary as root-owned `/usr/bin/gh`. Downloads have
