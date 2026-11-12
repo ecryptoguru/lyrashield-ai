@@ -175,20 +175,24 @@ not fetch repository source or depend on live public module availability.
 
 ### Exclusive cold single-worker restart
 
-`cold-start-barrier.mjs` is explicit host maintenance for the concurrency-one
+`cold-start-barrier.py` is explicit host maintenance for the concurrency-one
 first-release route. Supply `--worker-image` and `--sandbox-image` with the old
 immutable GHCR references, `--network lyrashield-sandbox` and
-`--confirm COLD_SINGLE_WORKER`. Invoke the image-qualified host asset with Node
+`--confirm COLD_SINGLE_WORKER`. Invoke the image-qualified host asset with `/usr/bin/python3`
 as root only while the persistent scan-admission stop is held. The helper does
 not acquire or release that stop and never alters scan claims, UNKNOWN holds,
 slots or paid work.
 
-The helper rejects foreign containers and unexpected restart policies before
-stopping the authenticated old worker service. It verifies that systemd owner
+The helper rejects foreign active containers and unexpected restart policies
+before stopping the authenticated old worker service. Unrelated stopped
+containers with no restart policy are fingerprinted and preserved, including
+their volumes. Historical worker image-reference spelling may differ: ownership
+binds to the pinned image ID and its exact source/engine labels. CLI image
+references must include immutable digests. It verifies that systemd owner
 and Docker socket/daemon have stopped, then restarts Docker, authenticates native
 sandbox image IDs, run labels, network and bind roots, and removes exact IDs.
-Every acknowledgement must succeed and the final native inventory must be
-empty. Failure leaves `/var/lib/lyrashield/worker-cold-start/pending` in place.
+Every acknowledgement must succeed and the final native inventory must contain
+only the unchanged preserved stopped containers. Failure leaves `/var/lib/lyrashield/worker-cold-start/pending` in place.
 Success writes a root-owned mode-0600 `receipt.json` with boot ID, old image
 references, removed IDs and completion time, then clears both startup fences.
 
@@ -206,7 +210,7 @@ establish database ownership or acknowledge removal. Periodic cleanup preserves
 running resources and never automatically replays paid work.
 
 The isolated native proof is opt-in:
-`LYRASHIELD_RUN_ISOLATED_NATIVE_COLD_PROOF=1 node .github/scripts/tests/cold-start-barrier.native.mjs`.
+`LYRASHIELD_RUN_ISOLATED_NATIVE_COLD_PROOF=1 python3 .github/scripts/tests/cold-start-barrier.native.py`.
 It uses an invocation-owned Docker-in-Docker daemon, actual daemon restart,
 ID-bound removal and a lost-acknowledgement rejection. Its systemd adapter is
 not production systemd qualification; verify the actual units and exact image
