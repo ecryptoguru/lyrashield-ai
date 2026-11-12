@@ -3,7 +3,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 import { spawnSync } from "node:child_process"
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs"
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join, resolve } from "node:path"
 
@@ -68,7 +68,45 @@ test("host validates fixed root-owned read-only record before any runtime operat
   })
   assert.equal(inherited.status, 0)
   assert.equal(inherited.stdout.trim(), "")
-  assert.match(source.slice(source.indexOf("docker create")), /\$publication_record_mount \\\n/)
+})
+
+test("container create includes the validated publication mount alongside cold evidence", (t) => {
+  const dir = mkdtempSync(join(tmpdir(), "sandbox-publication-create-"))
+  t.after(() => rmSync(dir, { recursive: true, force: true }))
+  const argumentsFile = join(dir, "arguments")
+  const publicationMount =
+    "type=bind,src=/etc/lyrashield/sandbox-publication-record.json,dst=/etc/lyrashield/sandbox-publication-record.json,readonly"
+  const coldMount =
+    "type=bind,src=/var/lib/lyrashield/worker-cold-start,dst=/run/lyrashield-cold,readonly"
+  const create = source.match(
+    /^docker create [\\]\n[\s\S]*?^  "\$LYRASHIELD_WORKER_IMAGE" >\/dev\/null$/m
+  )?.[0]
+  assert.ok(create, "actual worker create command must be present")
+  const script = join(dir, "create.sh")
+  writeFileSync(
+    script,
+    `set -eu\ndocker() { printf '%s\\n' "$@" > "$ARGUMENTS_FILE"; }\n${create}\n`
+  )
+  const result = spawnSync("sh", [script], {
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      ARGUMENTS_FILE: argumentsFile,
+      environment_file: join(dir, "worker.env"),
+      env_args: "--env FIXTURE=1",
+      publication_record_mount: "--mount " + publicationMount,
+      cold_evidence_mount: "--mount " + coldMount,
+      socket_group: "0",
+      worker_shared_root: "/var/lib/lyrashield/worker",
+      LYRASHIELD_WORKER_IMAGE: "ghcr.io/fixture/worker@sha256:" + "a".repeat(64),
+    },
+  })
+  assert.equal(result.status, 0, result.stderr)
+  const args = readFileSync(argumentsFile, "utf8").trim().split("\n")
+  for (const mount of [publicationMount, coldMount]) {
+    assert.equal(args.filter((value) => value === mount).length, 1)
+    assert.equal(args[args.indexOf(mount) - 1], "--mount")
+  }
 })
 
 test("shared environment loader accepts only configured fixed record path and preserves legacy hold", () => {

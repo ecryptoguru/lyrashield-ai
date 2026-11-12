@@ -98,7 +98,7 @@ presentation_pattern='^(apps/web/public/.*\.(png|jpe?g|webp|avif|gif|ico|woff2?|
 image_packaging_pattern='(^|/)(Dockerfile[^/]*|\.dockerignore|package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|turbo\.json|tsconfig[^/]*\.json|[^/]*\.config\.(ts|js|mjs|cjs|json)|\.npmrc|\.pnpmfile\.cjs)$'
 image_build_workflow_pattern='^\.github/workflows/(ci|deploy-azure|release-tauri|verify-webhook-worker-image)\.yml$'
 source_input_pattern='\.(tsx?|jsx?|mjs|cjs|css|scss|sass|less|json|prisma|sql|astro|mdx|html|svg|png|jpe?g|webp|avif|gif|ico|woff2?|ttf|otf|mp4|webm|mp3|wav|snap|map)$'
-worker_host_pattern='^ops/worker/(run-worker\.sh|worker-env\.sh|webhook-cutover-(recovery|schema)\.mjs|v26-cutover-identity\.mjs|refresh-(secrets|egress)\.sh|capture-stop-provenance\.sh|lyrashield-worker(-secrets|-egress|-egress-refresh)?\.(service|timer))$'
+worker_host_pattern='^ops/worker/(run-worker\.sh|recover-worker\.sh|worker-env\.sh|worker-recovery-probe\.mjs|cold-start-barrier\.py|webhook-cutover-(recovery|schema)\.mjs|v26-cutover-identity\.mjs|refresh-(secrets|egress)\.sh|capture-stop-provenance\.sh|lyrashield-worker(-recover|-secrets|-egress|-egress-refresh)?\.(service|timer))$'
 
 while IFS= read -r f || [[ -n "$f" ]]; do
   [ -z "$f" ] && continue
