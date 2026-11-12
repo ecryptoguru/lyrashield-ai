@@ -17,6 +17,25 @@ export async function readColdDatabaseEpochHash(reader: DatabaseEpochReader = pr
   return createHash("sha256").update(epoch).digest("hex")
 }
 
+const DATABASE_EPOCH_CHECK_TIMEOUT_MS = 5_000
+
+async function boundedDatabaseEpochHash() {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      readColdDatabaseEpochHash(),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new ColdDatabaseEpochError()),
+          DATABASE_EPOCH_CHECK_TIMEOUT_MS
+        )
+      }),
+    ])
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 let epochFailed = false
 let onEpochFailure: (() => void) | undefined
 
@@ -43,7 +62,7 @@ export async function assertColdDatabaseEpoch() {
     matches =
       typeof expected === "string" &&
       /^[a-f0-9]{64}$/.test(expected) &&
-      (await readColdDatabaseEpochHash()) === expected
+      (await boundedDatabaseEpochHash()) === expected
   } catch {
     // Query errors carry deployment details; expose only the closed admission state.
   }
@@ -53,5 +72,20 @@ export async function assertColdDatabaseEpoch() {
       onEpochFailure?.()
     }
     throw new ColdDatabaseEpochError()
+  }
+}
+
+/** Reuse the engine's cancellation timer, with one incarnation check in flight at a time. */
+export function withColdDatabaseEpochCancellation(shouldCancel?: () => Promise<boolean>) {
+  if (process.env.LYRASHIELD_COLD_SINGLE_WORKER !== "1") return shouldCancel
+  let pending: Promise<void> | undefined
+  return () => {
+    const epochCheck = (pending ??= assertColdDatabaseEpoch().finally(() => {
+      pending = undefined
+    }))
+    return epochCheck.then(
+      () => shouldCancel?.() ?? false,
+      () => true
+    )
   }
 }

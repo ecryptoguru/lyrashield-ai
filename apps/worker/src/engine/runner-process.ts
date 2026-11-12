@@ -1,3 +1,4 @@
+import { assertColdDatabaseEpoch, withColdDatabaseEpochCancellation } from "../cold-database-epoch"
 import type { RepositoryAuth } from "./repository-auth"
 import { spawn, type ChildProcess } from "child_process"
 import { logger } from "@lyrashield/logger"
@@ -110,7 +111,7 @@ interface EngineProcessContext {
   repositoryAuth?: RepositoryAuth
 }
 
-export async function runEngineProcess(
+async function startEngineProcess(
   cmd: EngineCommand,
   absWorkDir: string,
   scanId: string,
@@ -337,4 +338,11 @@ export async function runEngineProcess(
       reject(err)
     })
   })
+}
+
+/** Main analysis and AI triage share this last boundary before a provider-capable process. */
+export async function runEngineProcess(...args: Parameters<typeof startEngineProcess>) {
+  await assertColdDatabaseEpoch()
+  args[5] = withColdDatabaseEpochCancellation(args[5])
+  return startEngineProcess(...args)
 }
