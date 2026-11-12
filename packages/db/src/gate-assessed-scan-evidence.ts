@@ -121,6 +121,7 @@ export async function loadVerifiedAssessedScans(
       s."id" AS "scanId", s."workspaceId" AS "scanWorkspaceId", s."targetId" AS "scanTargetId",
       s."status"::text AS "status", s."mode"::text AS "mode", s."endedAt", s."policyId",
       CASE WHEN m."scanId" IS NOT NULL AND
+        octet_length(m."checksum") = 64 AND m."checksum" ~ '^[0-9a-f]{64}$' AND
         octet_length(m."checksumInput") <= ${MAX_EVIDENCE_BYTES} AND
         octet_length(m."manifest"::text) <= ${MAX_EVIDENCE_BYTES}
         THEN jsonb_build_object('version', m."version", 'checksum', m."checksum",

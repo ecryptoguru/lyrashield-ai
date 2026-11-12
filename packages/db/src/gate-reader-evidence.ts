@@ -144,28 +144,20 @@ export function matchesCurrentGateEvidence(
   }
 }
 
-/** Verify the finding-dependent parts of persisted verdicts without writing new history. */
-export async function findMismatchedGateEvidence(
+type GateFinding = Awaited<ReturnType<typeof loadGateFindings>>["findings"][number] & {
+  targetId: string
+  hasPositiveReceipt: boolean
+  retestEvidenceBytes: number
+  targetEvidenceTooLarge: boolean
+}
+
+async function loadGateFindingEvidence(
   tx: ScopedTransaction,
   workspaceId: string,
-  verdicts: {
-    targetId: string
-    scanId: string | null
-    evidenceSummary: unknown
-    blockingReasons: unknown
-  }[] &
-    Partial<StoredGateEvidence>[],
-  verifiedScans?: Map<string, VerifiedAssessedScan>
-): Promise<Set<string>> {
-  if (verdicts.length === 0) return new Set()
-  type GateFinding = Awaited<ReturnType<typeof loadGateFindings>>["findings"][number] & {
-    targetId: string
-    hasPositiveReceipt: boolean
-    retestEvidenceBytes: number
-    targetEvidenceTooLarge: boolean
-  }
+  verdicts: { targetId: string; scanId: string | null }[]
+): Promise<GateFinding[]> {
   // At most one latest retest and one scoped positive-existence result per finding.
-  const allFindings = await tx.$queryRaw<GateFinding[]>`
+  return tx.$queryRaw<GateFinding[]>`
     WITH findings AS MATERIALIZED (
       SELECT f.*, retest."id" AS "retestId",
         COALESCE(retest."evidenceBytes", 0)::int AS "retestEvidenceBytes",
@@ -212,6 +204,23 @@ export async function findMismatchedGateEvidence(
         )) FROM "FindingVerification" v WHERE v."workspaceId" = ${workspaceId} AND v."id" = findings."retestId"), '[]'::jsonb)
         ELSE '[]'::jsonb END AS "verificationReceipts"
     FROM findings JOIN budgets ON budgets."targetId" = findings."targetId"`
+}
+
+/** Verify the finding-dependent parts of persisted verdicts without writing new history. */
+export async function findMismatchedGateEvidence(
+  tx: ScopedTransaction,
+  workspaceId: string,
+  verdicts: {
+    targetId: string
+    scanId: string | null
+    evidenceSummary: unknown
+    blockingReasons: unknown
+  }[] &
+    Partial<StoredGateEvidence>[],
+  verifiedScans?: Map<string, VerifiedAssessedScan>
+): Promise<Set<string>> {
+  if (verdicts.length === 0) return new Set()
+  const allFindings = await loadGateFindingEvidence(tx, workspaceId, verdicts)
   const groups = new Map<string, typeof allFindings>()
   for (const finding of allFindings) {
     const group = groups.get(finding.targetId) ?? []

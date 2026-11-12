@@ -126,6 +126,14 @@ describe.skipIf(!url)("bounded assessed scan read against PostgreSQL", () => {
 
   it("fails a legacy manifest, altered receipt, and excessive coverage closed", async () => {
     await client.query(
+      `UPDATE "ScanResultManifest" SET "checksum" = repeat('x', 1000000) WHERE "scanId" = 'scan'`
+    )
+    expect(await findUnverifiedAssessedScans(tx, "ws", [verdict])).toEqual(new Set(["target"]))
+    expect(lastRows[0]?.resultManifest).toBeNull()
+    await client.query(`UPDATE "ScanResultManifest" SET "checksum" = $1 WHERE "scanId" = 'scan'`, [
+      checksum,
+    ])
+    await client.query(
       'UPDATE "ScanResultManifest" SET "checksumInput" = NULL WHERE "scanId" = $1',
       ["scan"]
     )

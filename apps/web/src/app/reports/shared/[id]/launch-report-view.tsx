@@ -28,6 +28,18 @@ function formatDate(iso: string): string {
   })
 }
 
+function HistoricalBanner() {
+  return (
+    <div
+      role="status"
+      className="mb-6 rounded-md border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200"
+    >
+      This report is historical or could not be confirmed against retained evidence. Ask the team to
+      run a current gate assessment.
+    </div>
+  )
+}
+
 export function SharedLaunchReportView({
   payload,
   historical: readTimeHistorical = false,
@@ -59,15 +71,7 @@ export function SharedLaunchReportView({
       </div>
 
       {/* Staleness banner — a stale verdict is never presented as current. */}
-      {historical && (
-        <div
-          role="status"
-          className="mb-6 rounded-md border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200"
-        >
-          This report is historical or could not be confirmed against retained evidence. Ask the
-          team to run a current gate assessment.
-        </div>
-      )}
+      {historical && <HistoricalBanner />}
 
       {/* Verdict */}
       <Card className="mb-6 p-6">

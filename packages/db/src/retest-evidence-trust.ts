@@ -234,6 +234,199 @@ export async function loadReceiptBackedRetestFindingIds(
   })
 }
 
+type Candidate = {
+  targetId: string
+  findingId: string | null
+  scanId: string
+  dedupeKey: string
+  scannerSource: string
+  payload: Prisma.JsonValue
+}
+
+async function loadRetestCandidates(
+  tx: ScopedTransaction,
+  input: { workspaceId: string; bounded?: boolean; unverifiedTargetIds?: Set<string> },
+  eligibleRequests: {
+    targetId: string
+    scanIds: string[]
+    retestScanIds: string[]
+    findingIds: string[]
+  }[],
+  overloaded: Set<string>,
+  targetId: string | { in: string[] },
+  scanIds: string[],
+  findingIds: string[],
+  retestScanIds: string[]
+): Promise<Candidate[]> {
+  let candidates: Candidate[]
+  if (input.bounded) {
+    const groups = eligibleRequests.length
+      ? await tx.$queryRaw<Array<{ targetId: string; overflow: boolean; items: Candidate[] }>>`
+          SELECT request."targetId", result.overflow, result.items
+          FROM jsonb_to_recordset(${JSON.stringify(eligibleRequests)}::jsonb) AS request(
+            "targetId" text, "scanIds" text[], "retestScanIds" text[], "findingIds" text[]
+          )
+          CROSS JOIN LATERAL (
+            WITH candidate_cap AS MATERIALIZED (
+              SELECT "id", octet_length(jsonb_build_object('targetId', "targetId", 'findingId', "findingId", 'scanId', "scanId", 'dedupeKey', "dedupeKey", 'scannerSource', "scannerSource", 'payload', "payload")::text) AS bytes
+              FROM "FindingCandidate"
+              WHERE "workspaceId" = ${input.workspaceId} AND "targetId" = request."targetId"
+                AND "scanId" = ANY(request."scanIds")
+                AND ("findingId" = ANY(request."findingIds") OR "scanId" = ANY(request."retestScanIds"))
+              LIMIT 20001
+            ), stats AS (
+              SELECT count(*) AS rows, COALESCE(sum(c.bytes), 0) AS bytes FROM candidate_cap c
+            )
+            SELECT stats.rows > 20000 OR stats.bytes > 4194304 AS overflow,
+              CASE WHEN stats.rows <= 20000 AND stats.bytes <= 4194304
+                THEN (SELECT COALESCE(jsonb_agg(jsonb_build_object(
+                  'targetId', c."targetId", 'findingId', c."findingId", 'scanId', c."scanId",
+                  'dedupeKey', c."dedupeKey", 'scannerSource', c."scannerSource", 'payload', c."payload"
+                )), '[]'::jsonb) FROM "FindingCandidate" c JOIN candidate_cap ids ON ids."id" = c."id"
+                WHERE c."workspaceId" = ${input.workspaceId} AND c."targetId" = request."targetId")
+                ELSE '[]'::jsonb END AS items FROM stats
+          ) result`
+      : []
+    for (const group of groups) if (group.overflow) overloaded.add(group.targetId)
+    for (const targetId of overloaded) input.unverifiedTargetIds?.add(targetId)
+    candidates = groups.flatMap((group) => (group.overflow ? [] : group.items))
+  } else {
+    candidates = await tx.findingCandidate.findMany({
+      where: {
+        workspaceId: input.workspaceId,
+        targetId,
+        scanId: { in: scanIds },
+        OR: [{ findingId: { in: findingIds } }, { scanId: { in: retestScanIds } }],
+      },
+      select: {
+        targetId: true,
+        findingId: true,
+        scanId: true,
+        dedupeKey: true,
+        scannerSource: true,
+        payload: true,
+      },
+    })
+  }
+  return candidates
+}
+
+function trustedRetestFindings(
+  workspaceId: string,
+  entries: {
+    finding: RetestFinding & { targetId: string }
+    receipt: RetestFinding["verificationReceipts"][number]
+    evidence: z.infer<typeof evidenceSchema>
+  }[],
+  scans: EvidenceScan[],
+  retests: { id: string; workspaceId: string; findingId: string; scanId: string; status: string }[],
+  candidates: Candidate[],
+  overloaded: Set<string>
+): Set<string> {
+  const scansById = new Map(scans.map((scan) => [scan.id, scan]))
+  const retestsById = new Map(retests.map((retest) => [retest.id, retest]))
+  // Index the shared candidate set once so a dashboard batch does not perform
+  // a full candidate scan for every finding.
+  const key = (...parts: string[]) => JSON.stringify(parts)
+  const sourcesByFinding = new Map<string, typeof candidates>()
+  const sightingsByScan = new Map<
+    string,
+    { findingIds: Set<string>; dedupeKeys: Set<string>; legacyKeys: Set<string> }
+  >()
+  for (const candidate of candidates) {
+    if (overloaded.has(candidate.targetId)) continue
+    if (candidate.findingId) {
+      const sourceKey = key(candidate.targetId, candidate.scanId, candidate.findingId)
+      const sources = sourcesByFinding.get(sourceKey) ?? []
+      sources.push(candidate)
+      sourcesByFinding.set(sourceKey, sources)
+    }
+    const scanKey = key(candidate.targetId, candidate.scanId)
+    const sightings = sightingsByScan.get(scanKey) ?? {
+      findingIds: new Set(),
+      dedupeKeys: new Set(),
+      legacyKeys: new Set(),
+    }
+    if (candidate.findingId) sightings.findingIds.add(candidate.findingId)
+    sightings.dedupeKeys.add(candidate.dedupeKey)
+    const payload = candidate.payload
+    if (
+      payload &&
+      typeof payload === "object" &&
+      !Array.isArray(payload) &&
+      payload.dependencyIdentityVersion === "composer-lock/1" &&
+      typeof payload.dependencyLegacyDedupeKey === "string"
+    ) {
+      sightings.legacyKeys.add(payload.dependencyLegacyDedupeKey)
+    }
+    sightingsByScan.set(scanKey, sightings)
+  }
+  const trusted = new Set<string>()
+  for (const { finding, receipt, evidence } of entries) {
+    if (overloaded.has(finding.targetId)) continue
+    const sourceCandidates =
+      sourcesByFinding.get(key(finding.targetId, finding.scanId, finding.id)) ?? []
+    const sightings = sightingsByScan.get(key(finding.targetId, receipt.scanId))
+    const observedInRetest = Boolean(
+      sightings &&
+      (sightings.findingIds.has(finding.id) ||
+        sightings.dedupeKeys.has(finding.dedupeKey) ||
+        sourceCandidates.some((candidate) => {
+          const payload = candidate.payload
+          return Boolean(
+            payload &&
+            typeof payload === "object" &&
+            !Array.isArray(payload) &&
+            payload.dependencyIdentityVersion === undefined &&
+            typeof payload.dedupeKey === "string" &&
+            sightings.legacyKeys.has(payload.dedupeKey)
+          )
+        }))
+    )
+    if (
+      isReceiptBackedRetest({
+        workspaceId,
+        targetId: finding.targetId,
+        finding,
+        receipt,
+        retest: retestsById.get(evidence.retestId) ?? null,
+        baseline: scansById.get(finding.scanId) ?? null,
+        retestScan: scansById.get(receipt.scanId) ?? null,
+        sourceCandidates,
+        observedInRetest,
+      })
+    )
+      trusted.add(finding.id)
+  }
+  return trusted
+}
+
+function collectRetestRequests(
+  entries: {
+    finding: RetestFinding & { targetId: string }
+    receipt: RetestFinding["verificationReceipts"][number]
+  }[]
+) {
+  const requestsByTarget = new Map<
+    string,
+    { targetId: string; scanIds: Set<string>; retestScanIds: Set<string>; findingIds: Set<string> }
+  >()
+  for (const { finding, receipt } of entries) {
+    const request = requestsByTarget.get(finding.targetId) ?? {
+      targetId: finding.targetId,
+      scanIds: new Set<string>(),
+      retestScanIds: new Set<string>(),
+      findingIds: new Set<string>(),
+    }
+    request.scanIds.add(finding.scanId)
+    request.scanIds.add(receipt.scanId)
+    request.retestScanIds.add(receipt.scanId)
+    request.findingIds.add(finding.id)
+    requestsByTarget.set(finding.targetId, request)
+  }
+  return requestsByTarget
+}
+
 export async function loadReceiptBackedRetestFindingIdsAcrossTargets(
   tx: ScopedTransaction,
   input: {
@@ -256,23 +449,7 @@ export async function loadReceiptBackedRetestFindingIdsAcrossTargets(
   const findingIds = entries.map(({ finding }) => finding.id)
   const targetIds = [...new Set(entries.map(({ finding }) => finding.targetId))]
   const targetId = targetIds.length === 1 ? targetIds[0]! : { in: targetIds }
-  const requestsByTarget = new Map<
-    string,
-    { targetId: string; scanIds: Set<string>; retestScanIds: Set<string>; findingIds: Set<string> }
-  >()
-  for (const { finding, receipt } of entries) {
-    const request = requestsByTarget.get(finding.targetId) ?? {
-      targetId: finding.targetId,
-      scanIds: new Set<string>(),
-      retestScanIds: new Set<string>(),
-      findingIds: new Set<string>(),
-    }
-    request.scanIds.add(finding.scanId)
-    request.scanIds.add(receipt.scanId)
-    request.retestScanIds.add(receipt.scanId)
-    request.findingIds.add(finding.id)
-    requestsByTarget.set(finding.targetId, request)
-  }
+  const requestsByTarget = collectRetestRequests(entries)
   const overloaded = new Set<string>()
   if (input.bounded)
     for (const request of requestsByTarget.values())
@@ -301,7 +478,8 @@ export async function loadReceiptBackedRetestFindingIdsAcrossTargets(
         ) c
       ) coverage ON true
       GROUP BY request."targetId"
-      HAVING bool_or(coverage.rows > ${MAX_RETEST_COVERAGE_RECEIPTS}) OR
+      HAVING bool_or(coverage.rows > ${MAX_RETEST_COVERAGE_RECEIPTS} OR
+        (m."scanId" IS NOT NULL AND (octet_length(m."checksum") <> 64 OR m."checksum" !~ '^[0-9a-f]{64}$'))) OR
         sum(COALESCE(octet_length(m."checksumInput"),0) + COALESCE(octet_length(m."manifest"::text),0) + coverage.bytes) > 16777216`
     for (const row of overBudget) overloaded.add(row.targetId)
     eligibleRequests = asRequests()
@@ -379,138 +557,15 @@ export async function loadReceiptBackedRetestFindingIdsAcrossTargets(
             }),
           ])
 
-  type Candidate = {
-    targetId: string
-    findingId: string | null
-    scanId: string
-    dedupeKey: string
-    scannerSource: string
-    payload: Prisma.JsonValue
-  }
-  let candidates: Candidate[]
-  if (input.bounded) {
-    const groups = eligibleRequests.length
-      ? await tx.$queryRaw<Array<{ targetId: string; overflow: boolean; items: Candidate[] }>>`
-          SELECT request."targetId", result.overflow, result.items
-          FROM jsonb_to_recordset(${JSON.stringify(eligibleRequests)}::jsonb) AS request(
-            "targetId" text, "scanIds" text[], "retestScanIds" text[], "findingIds" text[]
-          )
-          CROSS JOIN LATERAL (
-            WITH candidate_cap AS MATERIALIZED (
-              SELECT "id", octet_length(jsonb_build_object('targetId', "targetId", 'findingId', "findingId", 'scanId', "scanId", 'dedupeKey', "dedupeKey", 'scannerSource', "scannerSource", 'payload', "payload")::text) AS bytes
-              FROM "FindingCandidate"
-              WHERE "workspaceId" = ${input.workspaceId} AND "targetId" = request."targetId"
-                AND "scanId" = ANY(request."scanIds")
-                AND ("findingId" = ANY(request."findingIds") OR "scanId" = ANY(request."retestScanIds"))
-              LIMIT 20001
-            ), stats AS (
-              SELECT count(*) AS rows, COALESCE(sum(c.bytes), 0) AS bytes FROM candidate_cap c
-            )
-            SELECT stats.rows > 20000 OR stats.bytes > 4194304 AS overflow,
-              CASE WHEN stats.rows <= 20000 AND stats.bytes <= 4194304
-                THEN (SELECT COALESCE(jsonb_agg(jsonb_build_object(
-                  'targetId', c."targetId", 'findingId', c."findingId", 'scanId', c."scanId",
-                  'dedupeKey', c."dedupeKey", 'scannerSource', c."scannerSource", 'payload', c."payload"
-                )), '[]'::jsonb) FROM "FindingCandidate" c JOIN candidate_cap ids ON ids."id" = c."id"
-                WHERE c."workspaceId" = ${input.workspaceId} AND c."targetId" = request."targetId")
-                ELSE '[]'::jsonb END AS items FROM stats
-          ) result`
-      : []
-    for (const group of groups) if (group.overflow) overloaded.add(group.targetId)
-    for (const targetId of overloaded) input.unverifiedTargetIds?.add(targetId)
-    candidates = groups.flatMap((group) => (group.overflow ? [] : group.items))
-  } else {
-    candidates = await tx.findingCandidate.findMany({
-      where: {
-        workspaceId: input.workspaceId,
-        targetId,
-        scanId: { in: scanIds },
-        OR: [{ findingId: { in: findingIds } }, { scanId: { in: retestScanIds } }],
-      },
-      select: {
-        targetId: true,
-        findingId: true,
-        scanId: true,
-        dedupeKey: true,
-        scannerSource: true,
-        payload: true,
-      },
-    })
-  }
-  const scansById = new Map(scans.map((scan) => [scan.id, scan]))
-  const retestsById = new Map(retests.map((retest) => [retest.id, retest]))
-  // Index the shared candidate set once so a dashboard batch does not perform
-  // a full candidate scan for every finding.
-  const key = (...parts: string[]) => JSON.stringify(parts)
-  const sourcesByFinding = new Map<string, typeof candidates>()
-  const sightingsByScan = new Map<
-    string,
-    { findingIds: Set<string>; dedupeKeys: Set<string>; legacyKeys: Set<string> }
-  >()
-  for (const candidate of candidates) {
-    if (overloaded.has(candidate.targetId)) continue
-    if (candidate.findingId) {
-      const sourceKey = key(candidate.targetId, candidate.scanId, candidate.findingId)
-      const sources = sourcesByFinding.get(sourceKey) ?? []
-      sources.push(candidate)
-      sourcesByFinding.set(sourceKey, sources)
-    }
-    const scanKey = key(candidate.targetId, candidate.scanId)
-    const sightings = sightingsByScan.get(scanKey) ?? {
-      findingIds: new Set(),
-      dedupeKeys: new Set(),
-      legacyKeys: new Set(),
-    }
-    if (candidate.findingId) sightings.findingIds.add(candidate.findingId)
-    sightings.dedupeKeys.add(candidate.dedupeKey)
-    const payload = candidate.payload
-    if (
-      payload &&
-      typeof payload === "object" &&
-      !Array.isArray(payload) &&
-      payload.dependencyIdentityVersion === "composer-lock/1" &&
-      typeof payload.dependencyLegacyDedupeKey === "string"
-    ) {
-      sightings.legacyKeys.add(payload.dependencyLegacyDedupeKey)
-    }
-    sightingsByScan.set(scanKey, sightings)
-  }
-  const trusted = new Set<string>()
-  for (const { finding, receipt, evidence } of entries) {
-    if (overloaded.has(finding.targetId)) continue
-    const sourceCandidates =
-      sourcesByFinding.get(key(finding.targetId, finding.scanId, finding.id)) ?? []
-    const sightings = sightingsByScan.get(key(finding.targetId, receipt.scanId))
-    const observedInRetest = Boolean(
-      sightings &&
-      (sightings.findingIds.has(finding.id) ||
-        sightings.dedupeKeys.has(finding.dedupeKey) ||
-        sourceCandidates.some((candidate) => {
-          const payload = candidate.payload
-          return Boolean(
-            payload &&
-            typeof payload === "object" &&
-            !Array.isArray(payload) &&
-            payload.dependencyIdentityVersion === undefined &&
-            typeof payload.dedupeKey === "string" &&
-            sightings.legacyKeys.has(payload.dedupeKey)
-          )
-        }))
-    )
-    if (
-      isReceiptBackedRetest({
-        workspaceId: input.workspaceId,
-        targetId: finding.targetId,
-        finding,
-        receipt,
-        retest: retestsById.get(evidence.retestId) ?? null,
-        baseline: scansById.get(finding.scanId) ?? null,
-        retestScan: scansById.get(receipt.scanId) ?? null,
-        sourceCandidates,
-        observedInRetest,
-      })
-    )
-      trusted.add(finding.id)
-  }
-  return trusted
+  const candidates = await loadRetestCandidates(
+    tx,
+    input,
+    eligibleRequests,
+    overloaded,
+    targetId,
+    scanIds,
+    findingIds,
+    retestScanIds
+  )
+  return trustedRetestFindings(input.workspaceId, entries, scans, retests, candidates, overloaded)
 }

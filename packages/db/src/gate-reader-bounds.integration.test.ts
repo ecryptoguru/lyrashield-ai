@@ -363,6 +363,18 @@ describe.skipIf(!url)("per-target gate bounds against PostgreSQL", () => {
       items: [],
     })
     await client.query(
+      `UPDATE "ScanResultManifest" SET "checksum" = repeat('x', 1000000) WHERE "scanId" = 'large-base'`
+    )
+    expect(await evaluate([a.finding, b.finding])).toEqual({
+      trusted: new Set([b.finding.id]),
+      unverified: new Set(["large"]),
+    })
+    expect(candidateGroups.find((group) => group.targetId === "large")).toBeUndefined()
+    await client.query(
+      `UPDATE "ScanResultManifest" SET "checksum" = $1 WHERE "scanId" = 'large-base'`,
+      [a.baseline.resultManifest.checksum]
+    )
+    await client.query(
       `UPDATE "ScanResultManifest" SET "checksumInput" = repeat('x', 17000000) WHERE "scanId" = 'large-base'`
     )
     expect(await evaluate([a.finding, b.finding])).toEqual({

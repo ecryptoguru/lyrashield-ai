@@ -7,7 +7,11 @@ import { fingerprintPolicy, parseAssessmentSnapshot } from "./gate-assessment"
 import { loadVerifiedAssessedScans } from "./gate-assessed-scan-evidence"
 import { findMismatchedGateEvidence, invalidateUntrustedGateEvidence } from "./gate-reader-evidence"
 import type { GateApplicabilityOptions } from "./gate-service"
-import { loadBoundedGateVerdicts, MAX_GATE_READ_BATCH_TARGETS } from "./gate-verdict-read"
+import {
+  loadBoundedGateVerdicts,
+  MAX_GATE_READ_BATCH_TARGETS,
+  type BoundedGateVerdict,
+} from "./gate-verdict-read"
 import { withWorkspaceRLS, type ScopedTransaction } from "./rls"
 
 export { MAX_GATE_READ_BATCH_TARGETS } from "./gate-verdict-read"
@@ -190,30 +194,34 @@ export async function getCurrentGateVerdicts(
           // when supplied, otherwise the assessment's own.
           evaluatedIdentity: applicability.evaluatedIdentity,
         },
-        historical: {
-          id: row.id,
-          workspaceId: row.workspaceId,
-          targetId: row.targetId,
-          scanId: row.scanId,
-          standardVersion: row.standardVersion,
-          state: row.state,
-          coverageStatement: row.coverageStatement,
-          nonCoverage: row.nonCoverage,
-          blockingReasons: row.blockingReasons,
-          evidenceSummary: row.evidenceSummary,
-          staleness: row.staleness,
-          inputChecksum: row.inputChecksum,
-          verdictChecksum: row.verdictChecksum,
-          assessmentVersion: row.assessmentVersion,
-          assessmentSnapshot: row.assessmentSnapshot,
-          evaluatedAt: row.evaluatedAt,
-        },
+        historical: historicalResult(row),
       })
     }
   }
   await withWorkspaceRLS(workspaceId, read, { isolationLevel: "RepeatableRead" })
 
   return results
+}
+
+function historicalResult(row: BoundedGateVerdict): GateVerdictBatchResult["historical"] {
+  return {
+    id: row.id,
+    workspaceId: row.workspaceId,
+    targetId: row.targetId,
+    scanId: row.scanId,
+    standardVersion: row.standardVersion,
+    state: row.state,
+    coverageStatement: row.coverageStatement,
+    nonCoverage: row.nonCoverage,
+    blockingReasons: row.blockingReasons,
+    evidenceSummary: row.evidenceSummary,
+    staleness: row.staleness,
+    inputChecksum: row.inputChecksum,
+    verdictChecksum: row.verdictChecksum,
+    assessmentVersion: row.assessmentVersion,
+    assessmentSnapshot: row.assessmentSnapshot,
+    evaluatedAt: row.evaluatedAt,
+  }
 }
 
 /**
