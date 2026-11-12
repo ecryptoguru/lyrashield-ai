@@ -215,6 +215,58 @@ async function serviceWith<G extends SupervisorPort = FakeProviderGateway>(
 }
 
 describe("SupervisorService", () => {
+  it.each(["intent", "prepared"] as const)(
+    "rejects a signed %s record that changes an existing command on restart",
+    async (kind) => {
+      const stored = await journal()
+      const { service, executor, gateway } = await serviceWith(stored)
+      const command = prepareCommand()
+      await service.execute(command)
+      const changed = prepareCommand("scanner")
+      const envelope = {
+        supervisorInstanceId: "supervisor-test-1",
+        observedAt: now.toISOString(),
+      }
+      if (kind === "intent") {
+        await stored.append({ ...envelope, type: "command_intent", command: changed })
+      } else {
+        await stored.append({
+          ...envelope,
+          type: "attempt_prepared",
+          commandId: changed.commandId,
+          binding: changed.attempt,
+          executors: changed.executors,
+          provider: changed.provider,
+        })
+      }
+      const { service: restarted } = await serviceWith(stored, executor, gateway)
+      await expect(restarted.initialize()).rejects.toMatchObject({ code: "JOURNAL_INTEGRITY" })
+      expect(executor.createCalls).toBe(0)
+      expect(executor.startCalls).toBe(0)
+      expect(gateway.issueCalls).toBe(0)
+    }
+  )
+
+  it("accepts an exact repeated intent before preparation completes", async () => {
+    const stored = await journal()
+    const command = prepareCommand()
+    const envelope = { supervisorInstanceId: "supervisor-test-1", observedAt: now.toISOString() }
+    await stored.append({ ...envelope, type: "command_intent", command })
+    await stored.append({ ...envelope, type: "command_intent", command })
+    await stored.append({
+      ...envelope,
+      type: "attempt_prepared",
+      commandId: command.commandId,
+      binding: command.attempt,
+      executors: command.executors,
+      provider: command.provider,
+    })
+    const { service, executor, gateway } = await serviceWith(stored)
+    expect((await service.execute(command)).status).toBe("PREPARED")
+    expect(executor.createCalls).toBe(0)
+    expect(gateway.issueCalls).toBe(0)
+  })
+
   it("records broker command acceptance before PREPARE completion and replays neither", async () => {
     const stored = await journal()
     const { service, executor, gateway } = await serviceWith(stored)
