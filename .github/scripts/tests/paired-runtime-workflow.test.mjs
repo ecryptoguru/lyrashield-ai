@@ -740,8 +740,10 @@ test("deploy workflows expose an opt-in protected digest and run read-only prefl
   assert.ok(qualification)
   assert.equal(qualification.environment.name, "azure-production")
   assert.deepEqual(qualification.needs, "routing")
-  assert.match(qualification.steps[0].run, /a-f0-9\]\{64\}/)
-  assert.match(qualification.steps[0].run, /exit 1/)
+  const digestStep = qualification.steps.find((step) => step.id === "require")
+  assert.ok(digestStep)
+  assert.match(digestStep.run, /a-f0-9\]\{64\}/)
+  assert.match(digestStep.run, /exit 1/)
   assert.equal(
     production.jobs["deploy-azure"].with.qualified_release_digest,
     "${{ needs.qualify-azure-release.outputs.digest }}"

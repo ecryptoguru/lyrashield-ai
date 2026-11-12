@@ -29,7 +29,7 @@ test("qualified normal releases consume exactly one rehearsed prebuilt image tup
     /io\.lyrashield\.accounting\.protocol=reservations\/2/
   )
   assert.ok(
-    release.jobs.routing.steps.some(
+    release.jobs["qualify-azure-release"].steps.some(
       (step) => step.name === "Hold production until runtime qualification"
     )
   )
