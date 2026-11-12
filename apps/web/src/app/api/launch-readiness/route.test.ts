@@ -126,14 +126,12 @@ describe("GET /api/launch-readiness — release check contract", () => {
   })
 
   it("returns current page metadata alongside a scoped release check", async () => {
-    mocks.getGateReadinessTargets
-      .mockResolvedValueOnce([READY_TARGET])
-      .mockResolvedValueOnce(
-        Object.assign([{ ...READY_TARGET, targetId: "target-2", targetName: "Worker" }], {
-          partial: true,
-          nextCursor: "target-2",
-        })
-      )
+    mocks.getGateReadinessTargets.mockResolvedValueOnce([READY_TARGET]).mockResolvedValueOnce(
+      Object.assign([{ ...READY_TARGET, targetId: "target-2", targetName: "Worker" }], {
+        partial: true,
+        nextCursor: "target-2",
+      })
+    )
     const response = await GET(request(`workspaceId=ws-1&targetId=target-1&commit=${COMMIT_A}`))
     expect((await response.json()).data).toMatchObject({
       releaseCheck: { targetId: "target-1", match: "match" },
