@@ -177,6 +177,30 @@ function fixture() {
       }),
       findFirst: vi.fn(async ({ where }) => rows.find((row) => row.id === where.id) ?? rows.at(-1)),
     },
+    $queryRaw: vi.fn(async (sql: TemplateStringsArray) => {
+      if (sql.join("?").includes('AS "candidateManifest"'))
+        return [{ candidateManifest: current.resultManifest }]
+      if (sql.join("?").includes('AS "requestedTargetId"'))
+        return [
+          {
+            requestedTargetId: input.targetId,
+            targetId: input.targetId,
+            targetWorkspaceId: input.workspaceId,
+            targetType: "REPO",
+            scanId: current.id,
+            scanWorkspaceId: input.workspaceId,
+            scanTargetId: input.targetId,
+            status: current.status,
+            mode: current.mode,
+            endedAt: current.endedAt,
+            policyId: current.policyId,
+            resultManifest: current.resultManifest,
+            coverageReceipts: current.coverageReceipts,
+            overflow: false,
+          },
+        ]
+      return []
+    }),
     report: {
       create: vi.fn().mockResolvedValue({ id: "packet-1" }),
       findMany: vi.fn().mockResolvedValue([]),
@@ -308,35 +332,32 @@ describe("release packet current gate compatibility", () => {
     "extra",
     "duplicate",
     "absent",
-  ])(
-    "rejects %s coverage discordance even when the current evaluator returns READY",
-    async (kind) => {
-      const { tx, current } = fixture()
-      tx.finding.findMany.mockResolvedValue([])
-      const manifest = current.resultManifest.manifest as {
-        coverage?: Array<Record<string, unknown>>
-      }
-      const row = manifest.coverage![0]!
-      if (kind === "scanner") row.scanner = "foreign-scanner"
-      if (kind === "control") row.controlId = "foreign-control"
-      if (kind === "reason") row.reason = "Blocked input"
-      if (kind === "subject") row.subject = "other-input"
-      if (kind === "metadata") row.metadata = { evidence: "different" }
-      if (kind === "missing") manifest.coverage!.pop()
-      if (kind === "extra") manifest.coverage!.push({ ...row, controlId: "extra-control" })
-      if (kind === "duplicate") manifest.coverage!.push({ ...row })
-      if (kind === "absent") delete manifest.coverage
-      current.resultManifest.checksumInput = JSON.stringify(current.resultManifest.manifest)
-      current.resultManifest.checksum = createHash("sha256")
-        .update(current.resultManifest.checksumInput)
-        .digest("hex")
-      await expect(issueReleasePacket(input)).rejects.toMatchObject({
-        code: "ASSESSMENT_INCOMPLETE",
-      })
-      expect(tx.gateVerdict.create.mock.calls[0]![0].data.state).toBe("READY")
-      expect(tx.report.create).not.toHaveBeenCalled()
+  ])("rejects %s coverage discordance during current evaluation", async (kind) => {
+    const { tx, current } = fixture()
+    tx.finding.findMany.mockResolvedValue([])
+    const manifest = current.resultManifest.manifest as {
+      coverage?: Array<Record<string, unknown>>
     }
-  )
+    const row = manifest.coverage![0]!
+    if (kind === "scanner") row.scanner = "foreign-scanner"
+    if (kind === "control") row.controlId = "foreign-control"
+    if (kind === "reason") row.reason = "Blocked input"
+    if (kind === "subject") row.subject = "other-input"
+    if (kind === "metadata") row.metadata = { evidence: "different" }
+    if (kind === "missing") manifest.coverage!.pop()
+    if (kind === "extra") manifest.coverage!.push({ ...row, controlId: "extra-control" })
+    if (kind === "duplicate") manifest.coverage!.push({ ...row })
+    if (kind === "absent") delete manifest.coverage
+    current.resultManifest.checksumInput = JSON.stringify(current.resultManifest.manifest)
+    current.resultManifest.checksum = createHash("sha256")
+      .update(current.resultManifest.checksumInput)
+      .digest("hex")
+    await expect(issueReleasePacket(input)).rejects.toMatchObject({
+      code: "ASSESSMENT_INCOMPLETE",
+    })
+    expect(tx.gateVerdict.create.mock.calls[0]![0].data.state).toBe("INSUFFICIENT_EVIDENCE")
+    expect(tx.report.create).not.toHaveBeenCalled()
+  })
 
   it("accepts matching coverage regardless of row order or omitted nullable fields", async () => {
     const { tx, current } = fixture()
@@ -384,7 +405,7 @@ describe("release packet current gate compatibility", () => {
 
   it("requires a supported assessment identity when the completed manifest is absent", async () => {
     const { tx, current } = fixture()
-    tx.scan.findFirst.mockResolvedValue({ ...current, resultManifest: null })
+    current.resultManifest = null as never
     await expect(issueReleasePacket(input)).rejects.toMatchObject({ code: "ASSESSMENT_INCOMPLETE" })
     expect(tx.report.create).not.toHaveBeenCalled()
   })

@@ -65,6 +65,8 @@ function setup() {
       findFirst: vi.fn(async () => stored),
     },
     $queryRaw: vi.fn(async (sql: TemplateStringsArray) => {
+      if (sql.join("?").includes("WITH selected AS MATERIALIZED"))
+        return stored ? [{ ...stored, evidenceTooLarge: false }] : []
       if (sql.join("?").includes('AS "candidateManifest"'))
         return [
           {
