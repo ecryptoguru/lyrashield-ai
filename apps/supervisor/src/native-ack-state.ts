@@ -103,7 +103,8 @@ export function applyNativeInvocationAck(
   if (phase === "EXECUTOR_START") {
     const original = attempt.nativeStartIntents?.get(event.executorKey)
     if (
-      !original || original.guardId !== event.guardId ||
+      !original ||
+      original.guardId !== event.guardId ||
       original.bindingInputChecksum !== event.bindingInputChecksum ||
       canonicalJson(original.ownership) !== canonicalJson(event.ownership)
     )
