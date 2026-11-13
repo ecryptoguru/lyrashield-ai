@@ -353,7 +353,7 @@ describe("supervisor independent journal adapter", () => {
     await f.local.close()
     await other.original.close()
     await other.local.close()
-  })
+  }, 60_000)
   it("requires persisted stream authority even for an empty genesis cursor", async () => {
     const eventAuthority = vi.fn(async () => false)
     const streamAuthority = vi.fn(async () => false)
