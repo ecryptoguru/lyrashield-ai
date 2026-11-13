@@ -6,6 +6,8 @@ const hooks = vi.hoisted(() => ({ values: [] as unknown[], cursor: 0 }))
 const post = vi.hoisted(() => vi.fn())
 const refresh = vi.hoisted(() => vi.fn())
 const track = vi.hoisted(() => vi.fn())
+const razorpay = vi.hoisted(() => vi.fn())
+vi.mock("@/lib/razorpay-checkout", () => ({ openRazorpaySubscriptionCheckout: razorpay }))
 vi.mock("react", async (original) => ({
   ...(await original<typeof import("react")>()),
   useRef: (initial: unknown) => {
@@ -102,4 +104,70 @@ it("starts a trial with purchase admission off and refreshes after success", asy
   await actions[0]!.props.onClick!()
   expect(post).toHaveBeenCalledWith("/api/billing/trial/start", { workspaceId: "ws" })
   expect(refresh).toHaveBeenCalledOnce()
+})
+
+it("keeps subscription checkout single-flight after redirect is assigned", async () => {
+  const assign = vi.fn()
+  vi.stubGlobal("window", { location: { assign } })
+  post.mockResolvedValueOnce({ url: "https://checkout.example.test/session" })
+  const actions = render()
+  const checkout = actions.find((button) =>
+    String(button.props["aria-label"]).startsWith("Choose Pro, annual billing")
+  )!
+  await checkout.props.onClick!()
+  expect(assign).toHaveBeenCalledOnce()
+  expect(render().every((button) => button.props.disabled)).toBe(true)
+  await checkout.props.onClick!()
+  expect(post).toHaveBeenCalledOnce()
+  vi.unstubAllGlobals()
+})
+
+import { BuyPackButton } from "./buy-pack-button"
+function renderPack() {
+  hooks.cursor = 0
+  return buttons(BuyPackButton({ workspaceId: "ws" }))[0]!
+}
+it("keeps minute-pack checkout pending after navigation and blocks stale duplicate clicks", async () => {
+  const fetcher = vi.fn().mockResolvedValue({
+    ok: true,
+    json: async () => ({ success: true, data: { url: "https://checkout.example.test/pack" } }),
+  })
+  vi.stubGlobal("fetch", fetcher)
+  vi.stubGlobal("window", { location: { assign: vi.fn() } })
+  const initial = renderPack()
+  await initial.props.onClick!()
+  expect(renderPack().props.disabled).toBe(true)
+  await initial.props.onClick!()
+  expect(fetcher).toHaveBeenCalledOnce()
+  vi.unstubAllGlobals()
+})
+it("releases minute-pack checkout only after an actual request error", async () => {
+  const fetcher = vi.fn().mockRejectedValue(new Error("offline"))
+  vi.stubGlobal("fetch", fetcher)
+  await renderPack().props.onClick!()
+  expect(renderPack().props.disabled).toBe(false)
+  await renderPack().props.onClick!()
+  expect(fetcher).toHaveBeenCalledTimes(2)
+  vi.unstubAllGlobals()
+})
+
+it("keeps an authorized embedded checkout pending while the processing route opens", async () => {
+  post.mockResolvedValueOnce({ subscriptionId: "sub-fixture", keyId: "public-key-fixture" })
+  razorpay.mockImplementationOnce(async (params: { onAuthorized: () => void }) =>
+    params.onAuthorized()
+  )
+  const checkout = render().find((button) =>
+    String(button.props["aria-label"]).startsWith("Choose Pro, annual billing")
+  )!
+  await checkout.props.onClick!()
+  expect(render().every((button) => button.props.disabled)).toBe(true)
+})
+it("releases embedded checkout after the buyer dismisses the modal", async () => {
+  post.mockResolvedValueOnce({ subscriptionId: "sub-fixture", keyId: "public-key-fixture" })
+  razorpay.mockImplementationOnce(async (params: { onDismiss: () => void }) => params.onDismiss())
+  const checkout = render().find((button) =>
+    String(button.props["aria-label"]).startsWith("Choose Pro, annual billing")
+  )!
+  await checkout.props.onClick!()
+  expect(render().every((button) => !button.props.disabled)).toBe(true)
 })

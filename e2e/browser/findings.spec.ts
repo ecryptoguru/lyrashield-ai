@@ -64,9 +64,9 @@ test("returning to Open waits for its own response instead of accepting an old A
     }
   })
   await page.goto("?findings")
-  await page.getByRole("button", { name: "All", exact: true }).click()
+  await page.getByRole("combobox", { name: "Filter by status" }).selectOption("ALL")
   await expect.poll(() => Boolean(releaseAll)).toBe(true)
-  await page.getByRole("button", { name: "Open", exact: true }).click()
+  await page.getByRole("combobox", { name: "Filter by status" }).selectOption("OPEN")
   await expect(page.getByRole("button", { name: /Open finding/ })).toBeVisible()
   releaseAll?.()
   await expect(page.getByRole("button", { name: /Open finding/ })).toBeEnabled()
@@ -118,14 +118,11 @@ test("failed current query can retry without resetting its filter", async ({ pag
     return tries === 1 ? route.abort("failed") : route.fulfill(pageOf("retry", "Retried finding"))
   })
   await page.goto("?findings")
-  await page.getByRole("button", { name: "High", exact: true }).click()
+  await page.getByRole("combobox", { name: "Filter by severity" }).selectOption("HIGH")
   await expect(page.getByText(/Failed to load findings/)).toBeVisible()
   await page.getByRole("button", { name: /Retry/i }).click()
   await expect(page.getByRole("button", { name: /Retried finding/ })).toBeVisible()
-  await expect(page.getByRole("button", { name: "High", exact: true })).toHaveAttribute(
-    "aria-pressed",
-    "true"
-  )
+  await expect(page.getByRole("combobox", { name: "Filter by severity" })).toHaveValue("HIGH")
 })
 
 test("reload revalidates saved additional pages before showing them", async ({ page }) => {
@@ -184,7 +181,7 @@ test("observed-scan scope survives search, filters, Back, pagination, and reload
   await search.fill("")
   await expect(page.getByRole("button", { name: /Initial finding/ })).toBeVisible()
 
-  await page.getByRole("button", { name: "High", exact: true }).click()
+  await page.getByRole("combobox", { name: "Filter by severity" }).selectOption("HIGH")
   await expect(page.getByRole("button", { name: /High finding/ })).toBeVisible()
   await page.goBack()
   await expect(page.getByRole("button", { name: /Initial finding/ })).toBeVisible()
@@ -617,10 +614,7 @@ test("WebMCP filter and Undo own the query while a saved page is restoring", asy
   await expect(page.getByRole("button", { name: /All finding/ })).toBeVisible()
   releaseRestore?.()
   await expect(page.getByRole("button", { name: /Stale Open finding/ })).toHaveCount(0)
-  await expect(page.getByRole("button", { name: "All", exact: true })).toHaveAttribute(
-    "aria-pressed",
-    "true"
-  )
+  await expect(page.getByRole("combobox", { name: "Filter by status" })).toHaveValue("ALL")
   await page.getByRole("button", { name: "Undo" }).click()
   await expect(page.getByRole("button", { name: /Fresh Open finding/ })).toBeVisible()
   expect(requests.filter((url) => new URL(url).searchParams.has("cursor"))).toHaveLength(1)
@@ -680,10 +674,7 @@ test("canceling the current WebMCP filter clears stale rows and offers Retry", a
     (window as typeof window & { reviewAbort?: AbortController }).reviewAbort?.abort()
   )
   releaseAll?.()
-  await expect(page.getByRole("button", { name: "All", exact: true })).toHaveAttribute(
-    "aria-pressed",
-    "true"
-  )
+  await expect(page.getByRole("combobox", { name: "Filter by status" })).toHaveValue("ALL")
   await expect(page.getByRole("button", { name: /Initial finding/ })).toHaveCount(0)
   await expect(page.getByRole("button", { name: "Load more" })).toHaveCount(0)
   await expect(page.getByText(/Failed to load findings/)).toBeVisible()

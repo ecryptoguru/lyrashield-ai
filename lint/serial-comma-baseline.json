@@ -17,9 +17,6 @@
     "packages/types/src/openapi"
   ],
   "files": {
-    "apps/marketing/src/components/landing/EvidenceWorld.astro": {
-      "3ee9f096149c0e6862368a493068ab35427b839c2ec6b21d439d4db26ed4aee0": 1
-    },
     "apps/marketing/src/content/blog/copilot-cli-mcp-security-workflow.mdx": {
       "7a79c4b28cf23a2083af993d8e1277da2530a68bc1271804d1d24caf682bca46": 1
     },
@@ -172,8 +169,6 @@
     },
     "docs/operations.md": {
       "2376f76da19bf7743e5e513779aad2d13c5eb0af980bd8c53fb333cdd028820c": 1,
-      "3036413f9a1ea6aabd0572c7935debbc7ddc8326336e36f281aed834133a4823": 1,
-      "37e925b68b5c649a38615c7fcd0e7b0ee3fe008908560ca5258a615f364ac5b5": 1,
       "3a4867833676b697bb9eb4c7c274f7f02bd6eb6da35bd65279386f905840c7a6": 1,
       "5b39421fd180f30fe42146f7e22c1ce186ad26b36d8350c6ea01d1a721703c92": 1,
       "6f9fc08bb06d2b3994d1b206593a66b10699e6ffabec4062d1a461b329884bb2": 1,
@@ -231,7 +226,6 @@
       "8b85bf6c189fe405bcbf10da09308fb3f23afabca477b7e607d5cd8ec3002f09": 1,
       "8c879e46f5e87b54a310ed5fcccafbfaf35fb9cb86ca125fed01c27ec71cf1d9": 1,
       "8c9369ce079487e35778f52312e19c15f0eef5e8783a822a321180474d866671": 1,
-      "91619e4ab9662d556703532214096067210dba90f1f56cc820bcadd615d59f5f": 1,
       "94b27bf17363b26476f85ee69395068cb4782aee03c08bf9190f786023ab5b25": 1,
       "9a1c4e39d403645ed6eb7cd9b4adc4d184e0634086bdff64ed742013262ccf04": 1,
       "9a487438e8aa3074b5bc1e5b912126dec2eaa067ca2bc566de955016a644dab3": 1,

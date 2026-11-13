@@ -3,11 +3,14 @@ import { z } from "zod"
 import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import {
+  canPurchaseMinutePack,
   createPolarOneTimeCheckout,
   createRazorpayPaymentLink,
   resolveProviderId,
   MINUTE_PACK_MAP,
   billingQuoteNotes,
+  getAccountTrialState,
+  resolveAccountBilling,
   type PackId,
 } from "@lyrashield/billing"
 import { apiError, apiSuccess } from "@/lib/api-response"
@@ -56,6 +59,25 @@ async function post(request: Request) {
     // No findFirst fallback — the workspaceId must be explicitly provided.
     const { session } = await requirePermission(workspaceId, PERMISSIONS.billing.manage)
     const accountId = session.userId
+
+    // Minute packs are an account purchase. Resolve the authenticated buyer's
+    // entitlement, even when an Agency workspace has a different scan sponsor.
+    const [billing, trialState] = await Promise.all([
+      resolveAccountBilling(accountId),
+      getAccountTrialState(accountId),
+    ])
+    if (
+      !canPurchaseMinutePack({
+        effectivePlan: billing?.effectivePlan ?? "FREE",
+        trialState,
+      })
+    ) {
+      return apiError(
+        "PACK_REQUIRES_SUBSCRIPTION",
+        "Subscribe to a plan before buying a minute pack. Pack minutes cannot be used while your trial is expired.",
+        409
+      )
+    }
 
     // A-M08: Rate limit topup creation per account
     const rateLimit = await checkBillingCheckoutRateLimit(`account:${accountId}`)

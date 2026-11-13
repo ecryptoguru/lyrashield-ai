@@ -52,6 +52,18 @@ describe("sanitizeProperties", () => {
     expect(result).toEqual({ utm_source: "x", utm_campaign: "launch" })
   })
 
+  it("keeps setup blocker diagnostics to a code and bounded surface", () => {
+    expect(
+      sanitizeProperties("setup_blocker_viewed", {
+        blocker_code: "DOMAIN_VERIFICATION_REQUIRED",
+        surface: "target",
+        workspace_id: "ws-secret",
+        target_url: "https://private.example",
+        message: "raw provider body",
+      })
+    ).toEqual({ blocker_code: "DOMAIN_VERIFICATION_REQUIRED", surface: "target" })
+  })
+
   it("drops forbidden properties even when allowed by event", () => {
     const result = sanitizeProperties("repos_loaded", {
       repo_count_bucket: "small",

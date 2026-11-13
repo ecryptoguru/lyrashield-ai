@@ -79,6 +79,55 @@ write_secret_optional() {
   printf '%s=%s\n' "$environment_name" "$secret_value" >>"$temporary_file"
 }
 
+# GitHub mint authority lives only in the app vault, with secret-scoped VM grants.
+github_vault=${LYRASHIELD_GITHUB_CREDENTIAL_VAULT_NAME:-}
+case "$github_vault" in
+  ''|*[!A-Za-z0-9-]*) echo "Worker GitHub credential vault is missing or invalid" >&2; exit 1 ;;
+esac
+if [ "$(printf '%s' "$github_vault" | tr '[:upper:]' '[:lower:]')" = "$(printf '%s' "$vault_name" | tr '[:upper:]' '[:lower:]')" ]; then
+  echo "Worker GitHub credential vault must differ from the shared worker vault" >&2
+  exit 1
+fi
+
+write_github_credentials() {
+  # Keep multiline handling separate from the single-line secret loader. Never
+  # emit Azure/OpenSSL diagnostics containing key material or put it in argv.
+  github_id=$(az keyvault secret show --vault-name "$github_vault" --name worker-github-app-id --query value --output tsv 2>/dev/null) || {
+    echo "Required worker GitHub App ID is unavailable" >&2; exit 1;
+  }
+  case "$github_id" in
+    ''|*[!0-9]*) echo "Worker GitHub App ID must be numeric" >&2; exit 1 ;;
+  esac
+  github_pem=$(az keyvault secret show --vault-name "$github_vault" --name worker-github-app-private-key --query value --output tsv 2>/dev/null) || {
+    echo "Required worker GitHub private key is unavailable" >&2; exit 1;
+  }
+  if [ -z "$github_pem" ] || [ "$(printf '%s' "$github_pem" | tr -cd '\r' | wc -c | tr -d ' ')" -ne 0 ]; then
+    echo "Worker GitHub private key is empty or contains CR" >&2; exit 1
+  fi
+  # Construct public delimiters from the two supported unencrypted key kinds.
+  rsa_key_kind='RSA PRIVATE KEY'
+  pkcs8_key_kind='PRIVATE KEY'
+  rsa_header="-----BEGIN $rsa_key_kind-----"
+  pkcs8_header="-----BEGIN $pkcs8_key_kind-----"
+  case "$github_pem" in
+    "$rsa_header"*) footer="-----END $rsa_key_kind-----" ;;
+    "$pkcs8_header"*) footer="-----END $pkcs8_key_kind-----" ;;
+    *) echo "Worker GitHub private key must be an unencrypted PEM" >&2; exit 1 ;;
+  esac
+  case "$github_pem" in
+    *"$footer") ;;
+    *) echo "Worker GitHub private key has an invalid PEM footer" >&2; exit 1 ;;
+  esac
+  if ! printf '%s\n' "$github_pem" | openssl rsa -check -noout -passin pass: >/dev/null 2>&1; then
+    echo "Worker GitHub private key is not a valid RSA PEM" >&2; exit 1
+  fi
+  printf 'GITHUB_APP_ID=%s\n' "$github_id" >>"$temporary_file"
+  printf 'GITHUB_APP_PRIVATE_KEY=' >>"$temporary_file"
+  printf '%s\n' "$github_pem" | awk 'BEGIN { ORS="" } { printf "%s\\n", $0 }' >>"$temporary_file"
+  printf '\n' >>"$temporary_file"
+}
+write_github_credentials
+
 write_secret DATABASE_URL worker-database-url
 write_secret DATABASE_SYSTEM_URL worker-database-system-url
 write_secret REDIS_URL worker-redis-url
@@ -196,6 +245,21 @@ fi
 # accepting jobs it cannot safely execute.
 write_secret LYRASHIELD_EGRESS_PROXY_URL worker-egress-proxy-url
 write_secret LYRASHIELD_EGRESS_PROXY_SECRET worker-egress-proxy-secret
+# Explicit operator activation; absent optional configuration preserves ordinary scans.
+read_secret_optional worker-target-relay-enabled
+case "${secret_value:-0}" in
+  0) ;;
+  1)
+    write_secret LYRASHIELD_TARGET_RELAY_URL worker-egress-proxy-url
+    read_secret worker-relay-signing-secret
+    if [ "${#secret_value}" -lt 32 ]; then
+      echo "Relay signing secret must contain at least 32 characters" >&2
+      exit 1
+    fi
+    printf 'LYRASHIELD_RELAY_SIGNING_SECRET=%s\n' "$secret_value" >>"$temporary_file"
+    ;;
+  *) echo "Worker target relay activation must be 0 or 1" >&2; exit 1 ;;
+esac
 # Optional. When present and LYRASHIELD_WEB_SEARCH_ENABLED=1, enables Parallel Search.
 write_secret_optional LYRASHIELD_WEB_SEARCH_API_KEY worker-web-search-api-key
 # Optional paid-scan overlay. The worker defaults to disabled when these are

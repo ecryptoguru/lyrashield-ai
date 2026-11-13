@@ -151,8 +151,8 @@ jobs:
           # hours against an old build. These assert markers that only exist in the current
           # homepage, so a skipped, failed, or cache-pinned deploy fails the run instead.
           #
-          # If you intentionally change or remove either element, update the marker here in
-          # the same commit. A failure means the live site is not serving this commit.
+          # If you intentionally change or remove these elements, update the marker here in
+          # the same commit. A failure means the revision or feature contract does not match.
           #
           # Retried with backoff: a wrangler deploy that itself succeeds can take a short
           # window to propagate across Cloudflare's edge, and the very first check here once
@@ -160,8 +160,8 @@ jobs:
           # cache-busting query param avoids being served a stale edge-cached response during
           # that window.
           markers=(
-            'data-cta-id="premium-hero-lite-check"'
-            'data-cta-id="story-report-create-account"'
+            'data-cta-id="premium-hero-primary"'
+            'data-cta-id="final-cta-create-account"'
           )
 
           for attempt in $(seq 1 8); do
@@ -170,10 +170,10 @@ jobs:
               "https://lyrashieldai.com/?cachebust=${SOURCE_SHA}-${attempt}")"
             live_revision="$(printf '%s' "$homepage" | sed -n 's/.*<meta name="lyrashield-build-revision" content="\([0-9a-f]\{40\}\)".*/\1/p' | head -n 1)"
 
+            missing=""
             if [ "$live_revision" = "$SOURCE_SHA" ]; then
-              missing=""
               for marker in "${markers[@]}"; do
-                if ! printf '%s' "$homepage" | grep --quiet --fixed-strings "$marker"; then
+                if [[ "$homepage" != *"$marker"* ]]; then
                   missing="$marker"
                   break
                 fi

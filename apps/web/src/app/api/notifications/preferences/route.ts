@@ -1,4 +1,5 @@
-import { withCookieMutation } from "../../../../lib/api-auth"
+import { apiError } from "../../../../lib/api-response"
+import { withApiRequest, withCookieMutation } from "../../../../lib/api-auth"
 import { NextResponse } from "next/server"
 import { prisma } from "@lyrashield/db"
 import { getSession } from "@lyrashield/auth/server"
@@ -15,14 +16,11 @@ const PreferencesSchema = z.object({
   quietHoursEnd: z.number().int().min(0).max(23).nullable().optional(),
 })
 
-export async function GET() {
+async function get() {
   try {
     const session = await getSession()
     if (!session) {
-      return NextResponse.json(
-        { success: false, error: { code: "UNAUTHORIZED", message: "Authentication required" } },
-        { status: 401 }
-      )
+      return apiError("UNAUTHORIZED", "Authentication required", 401)
     }
 
     const prefs = await prisma.notificationPreference.upsert({
@@ -34,10 +32,7 @@ export async function GET() {
     return NextResponse.json({ success: true, data: prefs })
   } catch (error) {
     logger.error("Failed to get notification preferences", { error: String(error) })
-    return NextResponse.json(
-      { success: false, error: { code: "INTERNAL_ERROR", message: "Could not load preferences" } },
-      { status: 500 }
-    )
+    return apiError("INTERNAL_ERROR", "Could not load preferences", 500)
   }
 }
 
@@ -45,41 +40,23 @@ async function patch(request: Request) {
   try {
     const session = await getSession()
     if (!session) {
-      return NextResponse.json(
-        { success: false, error: { code: "UNAUTHORIZED", message: "Authentication required" } },
-        { status: 401 }
-      )
+      return apiError("UNAUTHORIZED", "Authentication required", 401)
     }
     // Notification preferences are account-owned browser state.
     if (session.apiKey || session.oauth) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: {
-            code: "FORBIDDEN",
-            message: "You do not have permission to perform this action",
-          },
-        },
-        { status: 403 }
-      )
+      return apiError("FORBIDDEN", "You do not have permission to perform this action", 403)
     }
 
     let body: unknown
     try {
       body = await request.json()
     } catch {
-      return NextResponse.json(
-        { success: false, error: { code: "INVALID_JSON", message: "Invalid JSON" } },
-        { status: 400 }
-      )
+      return apiError("INVALID_JSON", "Invalid JSON", 400)
     }
 
     const parsed = PreferencesSchema.safeParse(body)
     if (!parsed.success) {
-      return NextResponse.json(
-        { success: false, error: { code: "VALIDATION_ERROR", message: parsed.error.message } },
-        { status: 400 }
-      )
+      return apiError("VALIDATION_ERROR", parsed.error.message, 400)
     }
 
     const data = Object.fromEntries(Object.entries(parsed.data).filter(([, v]) => v !== undefined))
@@ -93,14 +70,10 @@ async function patch(request: Request) {
     return NextResponse.json({ success: true, data: prefs })
   } catch (error) {
     logger.error("Failed to update notification preferences", { error: String(error) })
-    return NextResponse.json(
-      {
-        success: false,
-        error: { code: "INTERNAL_ERROR", message: "Could not update preferences" },
-      },
-      { status: 500 }
-    )
+    return apiError("INTERNAL_ERROR", "Could not update preferences", 500)
   }
 }
 
 export const PATCH = withCookieMutation(patch)
+
+export const GET = withApiRequest(get)

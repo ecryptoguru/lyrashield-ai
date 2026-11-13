@@ -28,6 +28,7 @@ const server = await createServer({
       "next/navigation": fileURLToPath(new URL("./next-navigation.ts", import.meta.url)),
       "next/image": fileURLToPath(new URL("./next-image.tsx", import.meta.url)),
       "react-dom/client": webRequire.resolve("react-dom/client"),
+      "react-dom": webRequire.resolve("react-dom"),
       "react/jsx-runtime": webRequire.resolve("react/jsx-runtime"),
       "react/jsx-dev-runtime": webRequire.resolve("react/jsx-dev-runtime"),
       react: webRequire.resolve("react"),
@@ -35,7 +36,11 @@ const server = await createServer({
     dedupe: ["react", "react-dom"],
   },
   oxc: { jsx: { runtime: "automatic" } },
-  server: { host: "127.0.0.1", port: 3101, strictPort: true },
+  server: {
+    host: "127.0.0.1",
+    port: Number(process.env.BROWSER_HARNESS_PORT ?? 3101),
+    strictPort: true,
+  },
 })
 // The first desktop page pays a cold Tailwind transform that exceeds Playwright's
 // default assertion timeout. Warm it before the browser harness reports ready.

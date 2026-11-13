@@ -12,9 +12,25 @@ import {
   Button,
   Badge,
   buttonVariants,
+  EmptyState,
 } from "@lyrashield/ui"
 import type { PublicControlEvidenceItem } from "@/lib/ai-assurance"
 import { apiPost } from "@/lib/api-client"
+
+function MissingAssuranceTarget() {
+  return (
+    <EmptyState
+      icon={FileText}
+      title="Choose a target for AI assurance"
+      description="AI assurance evidence belongs to a target. Open Targets to add one, then return here to manage its evidence."
+      action={
+        <Link href="/dashboard/targets?add=1" className={buttonVariants()}>
+          Manage targets
+        </Link>
+      }
+    />
+  )
+}
 import { AssuranceInventory, type AssuranceInventoryProps } from "./assurance-inventory"
 import { LocalTime } from "@/components/local-time"
 
@@ -207,13 +223,7 @@ export function AiAssuranceClient({
   }
 
   if (!targetId) {
-    return (
-      <Card>
-        <CardContent className="pt-6">
-          <p className="text-muted-foreground">No targets available in this workspace.</p>
-        </CardContent>
-      </Card>
-    )
+    return <MissingAssuranceTarget />
   }
 
   return (

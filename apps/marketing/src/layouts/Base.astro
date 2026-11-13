@@ -153,6 +153,7 @@ const allJsonLd = [...siteGraph, ...(jsonLd ?? [])]
       article={article}
     />
     {allJsonLd.length > 0 && <JsonLd data={allJsonLd} />}
+    {Astro.url.pathname === "/" && import.meta.env.PUBLIC_MEDIA_URL?.startsWith("https://") && <link rel="preconnect" href={new URL(import.meta.env.PUBLIC_MEDIA_URL).origin} crossorigin="anonymous" />}
     <meta name="theme-color" content="#f5f9fc" data-theme-color />
     {noReferrer && <meta name="referrer" content="no-referrer" />}
     <link rel="preload" as="font" type="font/woff2" href={bricolageWoff2} crossorigin="anonymous" />

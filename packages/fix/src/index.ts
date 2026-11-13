@@ -10,6 +10,7 @@
 export { patchScopeForPlan, type PatchScopePolicy } from "./scope-policy"
 export {
   validatePatchDiff,
+  validateComposerFixArtifact,
   type DiffValidation,
   type DiffValidationOk,
   type DiffValidationRejected,
@@ -18,3 +19,11 @@ export {
 export { diffChecksum } from "./checksum"
 export { applyUnifiedDiff, extractFileDiff } from "./apply-diff"
 export { buildUnifiedDiff } from "./build-diff"
+export {
+  buildComposerUpdateDiff,
+  parseComposerFixArtifact,
+  ComposerFixArtifactSchema,
+  COMPOSER_FIX_MAX_BYTES,
+  type ComposerFixArtifact,
+  type ComposerFixBindings,
+} from "./composer-update"

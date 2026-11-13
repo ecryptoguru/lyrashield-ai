@@ -37,7 +37,7 @@ const definition: AgentDefinition = {
   instructionsPrompt: `Run the read-only review workflow through the LyraShield MCP server:
 1. Inspect the supplied diff and identify the relevant target. Ask for the diff if it is not available to your read tools.
 2. Read the latest evidence, findings and launch-readiness state.
-3. Explain detected, independently verified, retest-confirmed and inconclusive states.
+3. Explain the shipped DETECTED, VALIDATED and INCONCLUSIVE states. Explain that VERIFIED is reserved for a future separate verification step and is not produced by current scans.
 4. If a write is requested, explain that this agent exposes read-only tools. Local stdio authorization uses the credential's REST permissions; hosted OAuth delegation is a separate connection path.
 5. Return a concise summary with dashboard links; do not recreate the dashboard or expose tokens.`,
   stepPrompt: "Continue the read-only review and finish with evidence links.",

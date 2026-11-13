@@ -146,14 +146,6 @@ describe("mergeLlmUsage", () => {
 
 describe("output-parser", () => {
   describe("vulnerability artifact validation", () => {
-    it("parses valid JSON array", () => {
-      const raw = JSON.stringify([SAMPLE_VULN])
-      const result = parseVulnerabilitiesFromOutput(raw)
-      expect(result).toHaveLength(1)
-      expect(result[0]?.id).toBe("vuln-0001")
-      expect(result[0]?.title).toBe("SQL Injection in login endpoint")
-    })
-
     it("retains only bounded Vibe Security control identifiers", () => {
       const raw = JSON.stringify([
         { ...SAMPLE_VULN, control_ids: [11, 11, 0, 51, 14, "3", "x", "05", " 10"] },
@@ -318,20 +310,6 @@ describe("output-parser", () => {
       expect(result?.webSearchCostUsd).toBe(0.00000035)
     })
 
-    it("parses valid run record", () => {
-      const raw = JSON.stringify({
-        run_id: "run-abc",
-        run_name: "scan-123",
-        start_time: "2026-07-05T12:00:00Z",
-        end_time: "2026-07-05T12:30:00Z",
-        status: "completed",
-      })
-      const result = parseRunJson(raw)
-      expect(result).not.toBeNull()
-      expect(result!.run_id).toBe("run-abc")
-      expect(result!.status).toBe("completed")
-    })
-
     it("retains bounded reproducibility metadata", () => {
       const result = parseRunJson(
         JSON.stringify({
@@ -392,10 +370,6 @@ describe("output-parser", () => {
         expect(result?.prompt_cache).not.toHaveProperty("ignored")
       }
     )
-
-    it("returns null for empty string", () => {
-      expect(parseRunJson("")).toBeNull()
-    })
 
     it("returns null for invalid JSON", () => {
       expect(parseRunJson("not json")).toBeNull()
@@ -709,6 +683,9 @@ describe("output-parser", () => {
       expect(result.runRecord).not.toBeNull()
       expect(result.runRecord!.status).toBe("completed")
       expect(result.summary).toContain("1 finding")
+      expect(result.vulnerabilities[0]?.id).toBe("vuln-0001")
+      expect(result.vulnerabilities[0]?.title).toBe("SQL Injection in login endpoint")
+      expect(result.runRecord!.run_id).toBe("r1")
     })
 
     it("handles empty outputs", () => {
@@ -752,17 +729,13 @@ describe("output-parser", () => {
       const key1 = generateDedupeKey(SAMPLE_VULN, "target-1")
       const key2 = generateDedupeKey(SAMPLE_VULN, "target-1")
       expect(key1).toBe(key2)
+      expect(key1).toMatch(/^[a-f0-9]{32}$/)
     })
 
     it("generates different keys for different targets", () => {
       const key1 = generateDedupeKey(SAMPLE_VULN, "target-1")
       const key2 = generateDedupeKey(SAMPLE_VULN, "target-2")
       expect(key1).not.toBe(key2)
-    })
-
-    it("produces a 32-char hex string", () => {
-      const key = generateDedupeKey(SAMPLE_VULN, "target-1")
-      expect(key).toMatch(/^[a-f0-9]{32}$/)
     })
 
     it("does not collapse distinct code locations", () => {
@@ -881,21 +854,5 @@ describe("checkRunRecordSchemaVersion", () => {
     const check = checkRunRecordSchemaVersion("one-oh")
     expect(check?.level).toBe("warn")
     expect(check?.message).toContain("not a parsable")
-  })
-})
-
-describe("parseRunJson schema version", () => {
-  it("rejects an unsupported major instead of guessing the contract", () => {
-    // A foreign-major run record is refused — its fields cannot be trusted to
-    // mean what this reader thinks they mean.
-    expect(
-      parseRunJson(JSON.stringify({ schema_version: "99.0", run_id: "run-1", status: "completed" }))
-    ).toBeNull()
-  })
-
-  it("preserves the producer schema version for a supported record", () => {
-    expect(
-      parseRunJson(JSON.stringify({ schema_version: "1.1", run_id: "run-1", status: "completed" }))
-    ).toMatchObject({ schema_version: "1.1" })
   })
 })

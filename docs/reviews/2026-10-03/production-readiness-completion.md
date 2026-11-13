@@ -2,6 +2,8 @@
 
 **Evidence date:** 2026-10-03, Asia/Kolkata.
 
+> **Historical snapshot:** The PR, candidate, deployment and acceptance statuses below are frozen at the evidence date. Use [PRD §8–9](../../../PRD.md#8-current-production-evidence) and [codebase §11](../../../codebase.md#11-production-topology-and-accepted-evidence) for current release status and open gates.
+
 **Verdict:** The deployed release is healthy. Application and test changes through `8cc339c8e2c0b4414ba5fbfcf2eaea2548b902e2` passed exact-head GitHub CI and security checks. Evidence-updated head `4af7cc3e96e9bc3e825c7a6f946e816f0750103e` passed [CI run 37093942176](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/37093942176) and [security scan 37093942170](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/37093942170). Draft PR [#897](https://github.com/ecryptoguru/lyrashield-ai/pull/897) remains open for review. The candidate has not shipped; payment settlement, migration cutover, worker provenance and clean-profile Desktop acceptance remain unverified. Do not describe LyraShield as unqualified production-ready until those gates are evidenced.
 
 This ledger updates the prior v23 review and its coding handoff. Historical findings remain useful context, but current source and the receipts recorded here take precedence. The original dirty engine checkout was preserved.

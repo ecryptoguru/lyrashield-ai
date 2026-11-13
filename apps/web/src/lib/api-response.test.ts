@@ -52,3 +52,31 @@ describe("request id correlation", () => {
     expect(body.success).toBe(true)
   })
 })
+
+it("preserves rate-limit status, retry headers and structured error details in request context", async () => {
+  const handler = withApiRequest(async () =>
+    apiError(
+      "RATE_LIMITED",
+      "Retry later",
+      429,
+      { "Retry-After": "37", "Cache-Control": "private, no-store" },
+      { remaining: 0 }
+    )
+  )
+  const response = await handler(
+    new Request("https://app.test/api/project", { headers: { "x-request-id": "request-37" } })
+  )
+  expect(response.status).toBe(429)
+  expect(response.headers.get("retry-after")).toBe("37")
+  expect(response.headers.get("cache-control")).toBe("private, no-store")
+  expect(response.headers.get("x-request-id")).toBe("request-37")
+  expect(await response.json()).toEqual({
+    success: false,
+    error: {
+      code: "RATE_LIMITED",
+      message: "Retry later",
+      requestId: "request-37",
+      details: { remaining: 0 },
+    },
+  })
+})

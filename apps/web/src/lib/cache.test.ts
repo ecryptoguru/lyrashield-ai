@@ -7,25 +7,32 @@ vi.mock("next/cache", () => ({
 
 const cookiesGet = vi.fn()
 const workspaceMemberFindMany = vi.fn()
+const approvalCount = vi.fn()
 
 vi.mock("next/headers", () => ({
   cookies: vi.fn(async () => ({ get: (name: string) => cookiesGet(name) })),
 }))
 vi.mock("@lyrashield/db", () => ({
   prisma: {
+    agentApproval: { count: (...args: unknown[]) => approvalCount(...args) },
     workspaceMember: { findMany: (...args: unknown[]) => workspaceMemberFindMany(...args) },
   },
   listFindings: vi.fn(),
 }))
 vi.mock("@lyrashield/auth/server", () => ({ getSession: vi.fn() }))
-vi.mock("@lyrashield/auth", () => ({ hasPermission: vi.fn(), PERMISSIONS: {} }))
+vi.mock("@lyrashield/auth", () => ({
+  hasPermission: vi.fn(),
+  PERMISSIONS: { agent: { view: "agent.view" } },
+}))
 vi.mock("./dashboard-overview", () => ({ getDashboardOverview: vi.fn() }))
 
 import { revalidateTag, unstable_cache } from "next/cache"
 import { getSession } from "@lyrashield/auth/server"
+import { hasPermission } from "@lyrashield/auth"
 import { getDashboardOverview } from "./dashboard-overview"
 import {
   dashboardCacheTag,
+  getCachedPendingApprovals,
   getCachedDashboardOverview,
   getCachedWorkspaceContext,
   revalidateDashboardAggregates,
@@ -121,4 +128,24 @@ describe("getCachedWorkspaceContext credential binding", () => {
     expect(ctx.workspaceId).toBeNull()
     expect(ctx.workspaces).toEqual([])
   })
+})
+
+it("counts only unexpired pending approvals for the workspace badge", async () => {
+  vi.useFakeTimers()
+  const now = new Date("2026-10-28T00:00:00Z")
+  vi.setSystemTime(now)
+  vi.mocked(hasPermission).mockReturnValue(true)
+  approvalCount.mockResolvedValue(1)
+  try {
+    expect(await getCachedPendingApprovals("ws", "OWNER")).toBe(1)
+    expect(approvalCount).toHaveBeenCalledWith({
+      where: {
+        workspaceId: "ws",
+        status: "PENDING",
+        OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+      },
+    })
+  } finally {
+    vi.useRealTimers()
+  }
 })

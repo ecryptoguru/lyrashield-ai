@@ -18,6 +18,8 @@ Use this index to find the owning document and avoid duplicating current truth.
 | Manifest integrity             | [`yellowpaper.md`](./yellowpaper.md#4-evidence-and-integrity), [`../codebase.md`](../codebase.md#5-core-contracts)                         | Worker writer and DB verifier; unit tests plus `packages/db/src/manifest-checksum.runtime.test.ts` with disposable `DATABASE_URL` and `RLS_RUNTIME_DATABASE_URL` for the same database. Null legacy inputs remain unavailable. |
 | Runtime and release evidence   | [`../PRD.md`](../PRD.md#8-current-production-evidence), [`../codebase.md`](../codebase.md#11-production-topology-and-accepted-evidence)    | Dated, revision-bound deployment/runtime claims and open gates. Refresh live state before reusing a dated claim.                                                                                                               |
 
+The [v26 local implementation/disposition record](./handoffs/v26-implementation-2026-10-30.md) maps original review IDs to reviewed source and pending final qualifications. It does not replace dated production evidence. The [admission/capacity cutover and compatible rollback procedure](./operations.md#v26-admissioncapacity-cutover-and-compatible-rollback) owns the new schema/drain/grant boundary.
+
 ## Papers (public + investor safe)
 
 Keep these three documents separate: the litepaper gives a short executive overview, the whitepaper explains the product and the yellowpaper provides technical reference. Product scope and release evidence belong to `PRD.md`; runtime and code ownership belong to `codebase.md`. The papers summarize those owners and must not establish a second release-status ledger.
@@ -30,6 +32,10 @@ Keep these three documents separate: the litepaper gives a short executive overv
 
 - [`user-guide.md`](./user-guide.md) — end-user workflows, options, permissions and limitations.
 - [`webmcp-runtime.md`](./webmcp-runtime.md) — opt-in WebMCP runtime checker: commands, receipt contract, PASS/INCONCLUSIVE semantics and evidence caveats.
+- [`php-security.md`](./php-security.md) — Conditional Standard/Deep PHP project coverage, the browser-local PHP2Shell review, Composer draft fixes and runtime remediation/retest evidence.
+- [`reviews/worker-consumer-qualification-2026-11-02.md`](./reviews/worker-consumer-qualification-2026-11-02.md) — reproducible local current-reader and unchanged pinned-consumer compatibility gates; no deployment claim.
+- [`environment-ownership.md`](./environment-ownership.md) — central application settings and exact external configuration owners.
+- [`low-rate-error-alert-draft.md`](./low-rate-error-alert-draft.md) — proposal only; preserves the approved operator alert policy.
 - [`operations.md`](./operations.md) — founder/operator runbooks: live checkout verification, license signing-key compromise response and affiliate payout operations.
 - [`policies.md`](./policies.md) — public `/api/v1` stability and deprecation contract, public claims policy, accepted security-risk register and the customer threat-model worksheet.
 - [`myra-spec.md`](./myra-spec.md) — master implementation specification for the Myra support agent and demo booking.
@@ -44,7 +50,7 @@ Keep these three documents separate: the litepaper gives a short executive overv
 
 ## Historical archive
 
-- [`Phase2.md`](./Phase2.md) — Phase 2 roadmap archive: dated planning overlays (2026-08-26, 2026-09-25) plus a condensed enterprise-platform roadmap. The newest overlay records the current direction; `PRD.md` remains current truth and the verbatim original is recoverable from Git history.
+- [`Phase2.md`](./Phase2.md) — Phase 2 roadmap archive: dated planning overlays (2026-08-26, 2026-09-25, 2026-11-13 launch-scope deferrals) plus a condensed enterprise-platform roadmap. The newest overlay records the launch scope boundary and the current direction; `PRD.md` remains current truth and the verbatim original is recoverable from Git history.
 
 ## Superseded material
 

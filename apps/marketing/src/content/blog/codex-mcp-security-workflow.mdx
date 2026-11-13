@@ -2,7 +2,7 @@
 title: OpenAI Codex MCP security workflow for PR reviews
 description: Connect OpenAI Codex to LyraShield MCP for bounded scans, evidence-state findings, reviewed fix proposals, retests and a diff-aware SARIF gate.
 pubDate: "2026-07-30"
-updatedDate: 2026-10-02
+updatedDate: 2026-10-11
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification, supply-chain]
 draft: false
@@ -62,7 +62,7 @@ Start a new Codex session with `codex --verbose` and run `codex mcp list` or ask
 
 ## 4. Run an inline scan from a Codex session
 
-In your Codex prompt, target the authorized workspace and request a focused scan. Ask for every finding’s recorded evidence state, supporting evidence, file location, CWE and limitations. Call `lyrashield_scan_target`, then use `lyrashield_get_findings`; do not request “verified findings only,” because detection and retest-confirmed are separate states.
+In your Codex prompt, target the authorized workspace and request a focused scan. Ask for every finding’s recorded evidence state, supporting evidence, file location, CWE and limitations. Call `lyrashield_scan_target`, then use `lyrashield_get_findings`; do not request “verified findings only”: current scans do not produce the reserved independent `VERIFIED` status, and detection and retest validation are distinct outcomes.
 
 A finding retains its recorded evidence state, supporting detail, file location, CWE, severity and limitations when available. Evidence strength and reproducibility depend on that state; detection alone does not imply a reachable sink, a confirmed vulnerable call path or a retest-confirmed outcome. When you ask the agent to show findings, request the evidence block so the PR reviewer can assess the same recorded context without rerunning the scan. A retest-confirmed outcome still requires a fresh applicable retest.
 

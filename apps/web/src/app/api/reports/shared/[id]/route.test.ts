@@ -1,9 +1,9 @@
-import { describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const getReportByShareToken = vi.fn()
-const getShareableReport = vi.fn()
+const getShareableReportByToken = vi.fn()
 
-vi.mock("@lyrashield/db", () => ({ getReportByShareToken, getShareableReport }))
+vi.mock("@lyrashield/db", () => ({ getReportByShareToken, getShareableReportByToken }))
 
 const { GET } = await import("./route")
 
@@ -14,6 +14,8 @@ function request(id: string, token?: string) {
 }
 
 describe("GET /api/reports/shared/[id]", () => {
+  beforeEach(() => vi.clearAllMocks())
+
   it("rejects a request without a token", async () => {
     const response = await GET(request("report-1"), { params: Promise.resolve({ id: "report-1" }) })
     expect(response.status).toBe(400)
@@ -48,7 +50,7 @@ describe("GET /api/reports/shared/[id]", () => {
     })
 
     expect(response.status).toBe(404)
-    expect(getShareableReport).not.toHaveBeenCalled()
+    expect(getShareableReportByToken).not.toHaveBeenCalled()
   })
 
   it("returns the shareable report when the token and id match", async () => {
@@ -57,7 +59,7 @@ describe("GET /api/reports/shared/[id]", () => {
       workspaceId: "ws-1",
       shareExpiresAt: null,
     })
-    getShareableReport.mockResolvedValue({
+    getShareableReportByToken.mockResolvedValue({
       id: "report-1",
       title: "Assurance report",
       type: "developer",
@@ -75,7 +77,52 @@ describe("GET /api/reports/shared/[id]", () => {
 
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toMatchObject({ success: true })
-    expect(getShareableReport).toHaveBeenCalledWith("report-1", "ws-1")
+    expect(getShareableReportByToken).toHaveBeenCalledWith("report-1", "ws-1", "b".repeat(64))
+  })
+
+  it("returns safe metadata for a validated launch-readiness report", async () => {
+    getReportByShareToken.mockResolvedValue({
+      id: "report-1",
+      workspaceId: "ws-1",
+      shareExpiresAt: null,
+    })
+    getShareableReportByToken.mockResolvedValue({
+      id: "report-1",
+      type: "launch_readiness",
+      title: "LyraShield Launch Readiness Report",
+    })
+    const response = await GET(request("report-1", "a".repeat(64)), {
+      params: Promise.resolve({ id: "report-1" }),
+    })
+    expect(response.status).toBe(200)
+    expect(getShareableReportByToken).toHaveBeenCalledWith("report-1", "ws-1", "a".repeat(64))
+    expect(await response.json()).toMatchObject({
+      success: true,
+      data: { type: "launch_readiness" },
+    })
+  })
+
+  it("never serves a private release packet through the public shared-report route", async () => {
+    getReportByShareToken.mockResolvedValue({
+      id: "report-1",
+      workspaceId: "ws-1",
+      shareExpiresAt: null,
+    })
+    getShareableReportByToken.mockResolvedValue({
+      id: "report-1",
+      title: "Private release packet",
+      type: "release_packet",
+    })
+
+    const response = await GET(request("report-1", "e".repeat(64)), {
+      params: Promise.resolve({ id: "report-1" }),
+    })
+
+    expect(response.status).toBe(404)
+    await expect(response.json()).resolves.toMatchObject({
+      success: false,
+      error: { code: "REPORT_NOT_FOUND" },
+    })
   })
 
   it("returns a 500 when the share lookup throws", async () => {
@@ -98,7 +145,7 @@ describe("GET /api/reports/shared/[id]", () => {
       workspaceId: "ws-1",
       shareExpiresAt: null,
     })
-    getShareableReport.mockResolvedValue({ id: "report-1", title: "Shared report" })
+    getShareableReportByToken.mockResolvedValue({ id: "report-1", title: "Shared report" })
 
     const first = await GET(request("report-1", "d".repeat(64)), {
       params: Promise.resolve({ id: "report-1" }),

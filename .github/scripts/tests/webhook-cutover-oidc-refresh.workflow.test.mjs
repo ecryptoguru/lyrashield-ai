@@ -36,11 +36,19 @@ function foldedCondition(body) {
   return value.replace(/\s+/g, " ").trim()
 }
 
-function evaluateCondition(body, inputs, steps, failed) {
+function evaluateCondition(
+  body,
+  inputs,
+  steps,
+  failed,
+  env = { V26_CUTOVER: "false" },
+  cancelled = false
+) {
   const singleLine = body.match(/^        if: (.+)$/m)?.[1]
   const condition = singleLine === ">" ? foldedCondition(body) : singleLine
   assert.ok(condition, "Missing workflow condition")
-  const expression = condition.replace(
+  const unwrapped = condition.startsWith("${{") ? condition.slice(3, -2).trim() : condition
+  const expression = unwrapped.replace(
     /steps\.([a-z][a-z0-9-]*)/g,
     (_, name) => `steps[${JSON.stringify(name)}]`
   )
@@ -48,8 +56,16 @@ function evaluateCondition(body, inputs, steps, failed) {
     "inputs",
     "steps",
     "failure",
+    "env",
+    "cancelled",
     `return (${expression})`
-  )(inputs, steps, () => failed)
+  )(
+    inputs,
+    steps,
+    () => failed,
+    env,
+    () => cancelled
+  )
 }
 
 test("fresh OIDC identity immediately precedes the late Key Vault verifier", () => {
@@ -99,11 +115,134 @@ test("ordinary worker promotion and failure cleanup renew the same OIDC identity
   }
   assert.match(
     promoteLogin.body,
-    /if: inputs\.held_recovery != true && inputs\.webhook_claims_cutover != true/
+    /if: \$\{\{ inputs\.cold_release != true && inputs\.retained_worker != true && !cancelled\(\) && steps\.smoke-public\.outcome == 'success' && inputs\.held_recovery != true && inputs\.webhook_claims_cutover != true && env\.V26_CUTOVER != 'true' \}\}/
   )
   assert.equal(promoteLogin.index + 1, promote.index)
   assert.equal(cleanupLogin.index + 1, rollback.index)
   assert.equal(foldedCondition(cleanupLogin.body), foldedCondition(deactivate.body))
+})
+
+test("ordinary promotion conditions exclude retained mode and require readiness and fresh login", () => {
+  const inputs = {
+    cold_release: false,
+    retained_worker: false,
+    held_recovery: false,
+    webhook_claims_cutover: false,
+  }
+  const steps = {
+    "smoke-public": { outcome: "success" },
+    "ordinary-worker-login": { outcome: "success" },
+  }
+  const cases = [
+    { name: "ordinary", login: true, promote: true },
+    { name: "cold release", inputs: { cold_release: true }, login: false, promote: false },
+    { name: "retained", inputs: { retained_worker: true }, login: false, promote: false },
+    { name: "held recovery", inputs: { held_recovery: true }, login: false, promote: false },
+    {
+      name: "webhook cutover",
+      inputs: { webhook_claims_cutover: true },
+      login: false,
+      promote: false,
+    },
+    { name: "v26 maintenance", v26: "true", login: false, promote: false },
+    { name: "cancelled", cancelled: true, login: false, promote: false },
+    {
+      name: "failed public smoke",
+      outcome: { "smoke-public": "failure", "ordinary-worker-login": "skipped" },
+      login: false,
+      promote: false,
+    },
+    {
+      name: "skipped public smoke",
+      outcome: { "smoke-public": "skipped", "ordinary-worker-login": "skipped" },
+      login: false,
+      promote: false,
+    },
+    {
+      name: "failed fresh login",
+      outcome: { "ordinary-worker-login": "failure" },
+      login: true,
+      promote: false,
+    },
+    {
+      name: "skipped fresh login",
+      outcome: { "ordinary-worker-login": "skipped" },
+      login: true,
+      promote: false,
+    },
+  ]
+  for (const scenario of cases) {
+    const outcomes = Object.fromEntries(
+      Object.entries(steps).map(([name, state]) => [
+        name,
+        { outcome: scenario.outcome?.[name] ?? state.outcome },
+      ])
+    )
+    for (const [name, expected] of [
+      ["Refresh Azure OIDC login before ordinary worker promotion", scenario.login],
+      ["Promote verified worker digest on VM", scenario.promote],
+    ]) {
+      assert.equal(
+        evaluateCondition(
+          step(name).body,
+          { ...inputs, ...scenario.inputs },
+          outcomes,
+          false,
+          { V26_CUTOVER: scenario.v26 ?? "false" },
+          scenario.cancelled
+        ),
+        expected,
+        `${scenario.name}: ${name}`
+      )
+    }
+  }
+})
+
+test("retained web failure renews OIDC and retains traffic and ingress cleanup", () => {
+  const inputs = { retained_worker: true, held_recovery: false, webhook_claims_cutover: false }
+  const steps = Object.fromEntries(
+    [
+      "deploy-app",
+      "deploy-scanner",
+      "deploy-egress-proxy",
+      "smoke-candidates",
+      "worker-preflight",
+      "promote",
+      "smoke-public",
+      "ordinary-worker-login",
+      "worker-vm",
+    ].map((name) => [
+      name,
+      { outcome: ["ordinary-worker-login", "worker-vm"].includes(name) ? "skipped" : "success" },
+    ])
+  )
+  steps["smoke-public"].outcome = "failure"
+  steps["deploy-app"].outputs = { previous_client_cert_mode: "required" }
+  for (const name of [
+    "Refresh Azure OIDC login before ordinary failure cleanup",
+    "Roll back production traffic on health failure",
+    "Restore prior ingress mode after failed rollout",
+    "Deactivate zero-traffic candidates after failed rollout",
+  ]) {
+    const body = step(name).body
+    assert.equal(evaluateCondition(body, inputs, steps, true), true, name)
+    assert.equal(evaluateCondition(body, inputs, steps, false), false, `${name}: no failure`)
+    assert.equal(
+      evaluateCondition(body, { ...inputs, held_recovery: true }, steps, true),
+      false,
+      `${name}: held recovery uses its separate cleanup`
+    )
+    assert.equal(
+      evaluateCondition(body, { ...inputs, webhook_claims_cutover: true }, steps, true),
+      false,
+      `${name}: webhook cutover uses its separate cleanup`
+    )
+    assert.equal(
+      evaluateCondition(body, inputs, steps, true, { V26_CUTOVER: "true" }),
+      false,
+      `${name}: v26 maintenance uses its separate cleanup`
+    )
+  }
 })
 
 test("a failed ordinary worker login triggers rollback and every applicable cleanup", () => {
@@ -133,6 +272,17 @@ test("a failed ordinary worker login triggers rollback and every applicable clea
       evaluateCondition(body, { held_recovery: false, webhook_claims_cutover: false }, steps, true),
       true,
       name
+    )
+    assert.equal(
+      evaluateCondition(
+        body,
+        { held_recovery: false, webhook_claims_cutover: false },
+        steps,
+        true,
+        { V26_CUTOVER: "true" }
+      ),
+      false,
+      `${name} must never run ordinary rollback during v26 maintenance`
     )
     assert.equal(
       evaluateCondition(body, { held_recovery: true, webhook_claims_cutover: false }, steps, true),
@@ -166,10 +316,51 @@ test("long cutover phases renew OIDC before VM boot, release, and archive", () =
   for (const candidate of [bootLogin, releaseLogin, archiveLogin]) {
     assert.deepEqual(loginIdentity(candidate.body), loginIdentity(initial.body))
   }
-  assert.ok(bootLogin.body.includes(mode))
+  assert.equal(
+    bootLogin.body.match(/^        if: (.+)$/m)?.[1],
+    boot.body.match(/^        if: (.+)$/m)?.[1]
+  )
+  for (const input of [
+    { webhook_claims_cutover: true, held_recovery: false },
+    { webhook_claims_cutover: false, held_recovery: true },
+  ]) {
+    assert.equal(
+      evaluateCondition(bootLogin.body, { ...input, cold_release: false }, {}, false),
+      true
+    )
+    assert.equal(
+      evaluateCondition(bootLogin.body, { ...input, cold_release: true }, {}, false),
+      false
+    )
+  }
+  assert.equal(
+    evaluateCondition(
+      bootLogin.body,
+      { cold_release: false, webhook_claims_cutover: false, held_recovery: false },
+      {},
+      false,
+      { V26_CUTOVER: "true" }
+    ),
+    true
+  )
+  assert.equal(
+    evaluateCondition(
+      bootLogin.body,
+      { cold_release: false, webhook_claims_cutover: false, held_recovery: false },
+      {},
+      false
+    ),
+    false
+  )
   assert.equal(bootLogin.index + 1, boot.index)
   assert.ok(releaseLogin.body.includes(mode))
-  assert.equal(releaseLogin.index + 1, firstResume.index)
+  const v26Verify = step("Verify actual v26 candidate fleet with admission held")
+  const v26Release = step("Release only the exact owned v26 admission stop")
+  assert.equal(releaseLogin.index + 1, v26Verify.index)
+  assert.equal(v26Verify.index + 1, v26Release.index)
+  assert.equal(v26Release.index + 1, firstResume.index)
+  for (const candidate of [v26Verify, v26Release])
+    assert.match(candidate.body, /if: env\.V26_CUTOVER == 'true'/)
   assert.equal(firstResume.index + 1, heldRelease.index)
   assert.match(archiveLogin.body, /if: inputs\.held_recovery == true/)
   assert.equal(archiveLogin.index + 1, archive.index)

@@ -2,7 +2,7 @@
 title: Kilo Code MCP security workflow before you ship
 description: Configure LyraShield AI with Kilo Code via MCP to run bounded scans per target, preserve evidence states and enforce diff aware gating on pull requests.
 pubDate: "2026-07-30"
-updatedDate: 2026-10-02
+updatedDate: 2026-10-11
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification, supply-chain]
 draft: false
@@ -111,7 +111,7 @@ With tools listed, run a focused scan from inside Kilo Code rather than switchin
 
 ```text
 Prompt for Kilo Code agent:
-Scan target staging-lyrafin-web using lyrashield_scan_target.
+Scan target staging-web using lyrashield_scan_target.
 Scope limit: src/app/api, src/lib/engines.
 Return findings with their recorded evidence state, CWE, evidence snippet, file and line.
 Include OWASP mapping when applicable.

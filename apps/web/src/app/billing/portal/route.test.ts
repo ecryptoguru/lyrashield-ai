@@ -10,7 +10,7 @@ const state = vi.hoisted(() => {
     provider: "razorpay",
     requirePermission: vi.fn(),
     findBillingAccount: vi.fn().mockImplementation(async () => ({
-      externalId: "cust_1",
+      externalId: "sub_1",
       provider: "razorpay",
     })),
     getPolarPortalUrl: vi.fn().mockResolvedValue("https://polar.example/portal"),
@@ -35,7 +35,7 @@ vi.mock("@lyrashield/billing", () => ({
   getPolarPortalUrl: state.getPolarPortalUrl,
   listAccountBilling: vi.fn().mockImplementation(async () => [
     {
-      externalId: "cust_1",
+      externalId: "sub_1",
       provider: state.provider,
     },
   ]),
@@ -57,7 +57,7 @@ describe("GET /billing/portal", () => {
     state.env.NEXT_PUBLIC_MARKETING_URL = "https://lyrashieldai.com"
     state.requirePermission.mockResolvedValue({ session: { userId: "user_1" } })
     state.findBillingAccount.mockImplementation(async () => ({
-      externalId: "cust_1",
+      externalId: "sub_1",
       provider: state.provider,
     }))
   })
@@ -96,6 +96,7 @@ describe("GET /billing/portal", () => {
       const response = await GET(request())
       expect(response.status).toBe(307)
       expect(response.headers.get("location")).toBe("https://polar.example/portal")
+      expect(state.getPolarPortalUrl).toHaveBeenCalledWith({ subscriptionId: "sub_1" })
     } finally {
       state.provider = "razorpay"
     }

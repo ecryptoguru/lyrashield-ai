@@ -15,12 +15,20 @@
  * Deep/Custom scans consume minutes at 3× the standard rate (DEEP_SCAN_MULTIPLIER).
  */
 
-import { bindAccountRLSContext, withWorkspaceRLS, type ScopedTransaction } from "@lyrashield/db"
+import {
+  lockUserScanAdmission,
+  bindAccountRLSContext,
+  withWorkspaceRLS,
+  type ScopedTransaction,
+} from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 import { DEEP_SCAN_MULTIPLIER } from "@lyrashield/pricing"
 import type { ScanMode } from "@lyrashield/types"
 import { resolveAccountBilling } from "../account"
 import { resolveBalanceCycleStart } from "./balance"
+import { settleReservedCapacity } from "./capacity"
+import { readReservedFundingProjection } from "./funding-projection"
+import { readRetainedScanAccounting } from "./retained-scan"
 
 export interface RecordAgentMinutesOptions {
   /** Scan mode — Deep/Custom applies a 3× multiplier. */
@@ -36,14 +44,11 @@ export interface RecordAgentMinutesOptions {
    * Terminal outcome of the scan. Founder-confirmed billing rules (2026-08-29):
    * - "failed" scans are NEVER billed — the caller must not call this at all
    *   for a failed terminal state (no agent_minutes UsageRecord is written).
-   * - "cancelled" scans bill for the period actually used, WITHOUT the
-   *   1-minute floor. A cancel at 20 seconds bills 20 seconds' worth.
-   *   Rounding rule (documented): minutes are whole-minute ceiling, so a
-   *   cancel at 20s bills 1 minute; the difference vs. a normal scan is that
-   *   the floor is not applied, i.e. ms<=0 bills 0 and there is no forced
-   *   minimum. Sub-minute (per-second) billing is impractical because
-   *   UsageRecord.quantity and all pool/pack arithmetic are integer minutes.
-   * - "completed" (default) applies the 1-minute floor as before.
+   * - Positive elapsed time is rounded up to the next whole minute for
+   *   "completed", "partial" and "cancelled" scans. A cancel at 20 seconds
+   *   consumes 1 minute before the mode multiplier.
+   * - Zero or negative elapsed time records no usage for any outcome.
+   * - Deep/Custom applies its 3× multiplier after whole-minute rounding.
    */
   outcome?: "completed" | "partial" | "failed" | "cancelled"
   /** Resolve uncovered minutes before this transaction commits. Throw to void
@@ -56,6 +61,7 @@ export interface RecordAgentMinutesOptions {
 }
 
 export interface RecordAgentMinutesResult {
+  accountingVersion?: number
   /** Whether a new usage record was created (false = idempotent replay). */
   created: boolean
   /** Minutes recorded (after multiplier, 0 on replay). */
@@ -77,7 +83,7 @@ export async function hasUnsettledScanIntent(
   scanId: string
 ): Promise<boolean> {
   return withWorkspaceRLS(workspaceId, async (tx) => {
-    const scan = await tx.scan.findFirst({
+    const visibleScan = await tx.scan.findFirst({
       where: { id: scanId, workspaceId },
       select: {
         createdById: true,
@@ -85,6 +91,7 @@ export async function hasUnsettledScanIntent(
         events: { where: { stage: "billing_settlement_intent" }, select: { metadata: true } },
       },
     })
+    const scan = visibleScan ?? (await readRetainedScanAccounting(tx, workspaceId, scanId))
     const keys = [
       ...new Set(
         (scan?.events ?? []).flatMap(({ metadata }) => {
@@ -200,10 +207,11 @@ async function readAgentMinuteReceipt(
  * trusted identity bound at admission — job payloads are untrusted.
  */
 async function resolveScanSponsor(tx: MeterTransaction, workspaceId: string, scanId: string) {
-  const scan = await tx.scan.findFirst({
+  const visibleScan = await tx.scan.findFirst({
     where: { id: scanId, workspaceId },
     select: { createdById: true, sponsorAccountId: true },
   })
+  const scan = visibleScan ?? (await readRetainedScanAccounting(tx, workspaceId, scanId))
   if (!scan) throw new Error("settlement_scan_not_found")
   return scan.sponsorAccountId ?? scan.createdById
 }
@@ -242,30 +250,14 @@ export async function recordAgentMinutes(
   // A-L06: Validate input bounds — reject oversized ms values.
   // A single tick should never represent more than 1 hour of wall-clock time;
   // larger values indicate a bug or abuse attempt.
-  const MAX_TICK_MS = 60 * 60 * 1000 // 1 hour
-  if (!Number.isFinite(ms) || ms > MAX_TICK_MS) {
-    logger.warn("Ignoring out-of-range agent-minute tick", {
-      reason:
-        ms > MAX_TICK_MS ? "agent_minute_tick_exceeds_one_hour" : "agent_minute_tick_not_finite",
-    })
+  if (!isValidMinuteTick(ms))
     return { created: false, minutes: 0, idempotencyKey, overageMinutes: 0, accountId: "" }
-  }
 
   // Wall-clock ms → integer minutes.
-  // - Normal/completed scans: ceiling with a 1-minute floor (min 1 if ms > 0).
-  // - Cancelled scans: bill elapsed time only, NO floor (min 0). Rounding rule
-  //   is whole-minute ceiling, so a cancel at 20s still rounds to 1 minute;
-  //   the floor (which would also give 1) is simply not the mechanism. The
-  //   distinction that matters is that a cancelled scan is not forced up to a
-  //   minimum — only genuinely elapsed whole minutes are billed.
-  const rawMinutes =
-    opts.outcome === "cancelled" || opts.outcome === "partial"
-      ? Math.ceil(ms / 60_000)
-      : Math.max(1, Math.ceil(ms / 60_000))
-
-  // Deep/Custom scans consume 3× minutes
-  const isDeep = opts.mode === "DEEP" || opts.mode === "CUSTOM"
-  const minutes = isDeep ? rawMinutes * DEEP_SCAN_MULTIPLIER : rawMinutes
+  // All positive durations round up, including partial and cancelled runs.
+  // The completed floor is redundant for positive ms; nonpositive durations
+  // returned above, so they are never forced to consume a minute.
+  const { rawMinutes, minutes, isDeep } = agentMinuteUnits(ms, opts)
 
   // Resolve the sponsor once (outside the retry loop) under the scan's
   // workspace RLS — the persisted createdById is the trusted identity.
@@ -275,25 +267,8 @@ export async function recordAgentMinutes(
 
   // Independent durable intent precedes terminal persistence. UsageRecord is
   // the atomic settlement receipt; missing receipts remain queryable after death.
-  if (opts.beforeCommit) {
-    await withWorkspaceRLS(workspaceId, async (tx) => {
-      const scan = await tx.scan.findFirst({ where: { id: scanId, workspaceId } })
-      if (!scan) throw new Error("settlement_scan_not_found")
-      await tx.scanEvent.create({
-        data: {
-          scanId,
-          stage: "billing_settlement_intent",
-          message: "Settlement intent; missing usage receipt requires terminal accounting review",
-          metadata: {
-            idempotencyKey,
-            workspaceId,
-            accountId: sponsorAccountId,
-            automaticReplayAllowed: false,
-          },
-        },
-      })
-    })
-  }
+  if (opts.beforeCommit)
+    await recordSettlementIntent(workspaceId, scanId, idempotencyKey, sponsorAccountId)
 
   let finalizationStarted = false
   for (let attempt = 1; attempt <= MAX_TRANSACTION_ATTEMPTS; attempt += 1) {
@@ -301,6 +276,12 @@ export async function recordAgentMinutes(
       return await withWorkspaceRLS(
         workspaceId,
         async (tx) => {
+          const { initiatingScan, retainedCapacity } = await lockMeterScanIdentity(
+            tx,
+            workspaceId,
+            scanId,
+            sponsorAccountId
+          )
           // Dual advisory locks, fixed order (workspace then account): the
           // previous image serializes on the workspace lock alone, so a
           // rolled-back binary cannot race this settlement; the account lock
@@ -319,6 +300,9 @@ export async function recordAgentMinutes(
             await opts.beforeCommit?.()
             return {
               created: false,
+              ...(initiatingScan?.accountingVersion === 2 || retainedCapacity
+                ? { accountingVersion: 2 }
+                : {}),
               minutes: 0,
               idempotencyKey,
               overageMinutes: recordedOverageMinutes(existing.metadata),
@@ -326,6 +310,26 @@ export async function recordAgentMinutes(
             }
           }
 
+          if (retainedCapacity) throw new Error("retained_capacity_requires_review")
+          if (initiatingScan?.accountingVersion === 2) {
+            const settlement = await settleReservedCapacity(tx, {
+              scanId,
+              workspaceId,
+              accountId: sponsorAccountId,
+              ms,
+              idempotencyKey,
+            })
+            if (!settlement) throw new Error("capacity_receipt_missing")
+            finalizationStarted = Boolean(opts.beforeCommit)
+            await opts.beforeCommit?.()
+            return {
+              created: true,
+              ...settlement,
+              idempotencyKey,
+              accountId: sponsorAccountId,
+              accountingVersion: 2,
+            }
+          }
           const overageMinutes = await recordMinutesAndDebitIncrementalSpillover(tx, {
             accountId: sponsorAccountId,
             workspaceId,
@@ -446,29 +450,30 @@ async function recordMinutesAndDebitIncrementalSpillover(
 
   const [grantRecords, priorConsumeRecords] = cycleStart
     ? await Promise.all([
-        tx.usageRecord.findMany({
+        tx.usageRecord.aggregate({
           where: {
             accountId: input.accountId,
             kind: { in: ["pool_grant", "trial_grant"] },
             deletedAt: null,
             cycleStart: { gte: cycleStart },
           },
-          select: { quantity: true },
+          _sum: { quantity: true },
         }),
-        tx.usageRecord.findMany({
+        tx.usageRecord.aggregate({
           where: {
             accountId: input.accountId,
             kind: "agent_minutes",
             deletedAt: null,
             cycleStart: { gte: cycleStart },
           },
-          select: { quantity: true },
+          _sum: { quantity: true },
         }),
       ])
-    : [[], []]
+    : [{ _sum: { quantity: null } }, { _sum: { quantity: null } }]
 
-  const poolMinutes = grantRecords.reduce((sum, record) => sum + record.quantity, 0)
-  const priorConsumed = priorConsumeRecords.reduce((sum, record) => sum + record.quantity, 0)
+  const poolMinutes = grantRecords._sum.quantity ?? 0
+  const reservedFunding = await readReservedFundingProjection(tx, input.accountId, cycleStart)
+  const priorConsumed = (priorConsumeRecords._sum.quantity ?? 0) - reservedFunding.nonPoolMinutes
   const priorSpillover = Math.max(0, priorConsumed - poolMinutes)
   const nextSpillover = Math.max(0, priorConsumed + input.minutes - poolMinutes)
   const incrementalSpillover = nextSpillover - priorSpillover
@@ -530,4 +535,77 @@ async function recordMinutesAndDebitIncrementalSpillover(
     throw error
   }
   return toDecrement
+}
+
+async function lockMeterScanIdentity(
+  tx: ScopedTransaction,
+  workspaceId: string,
+  scanId: string,
+  sponsorAccountId: string
+) {
+  const initiatingScan = await tx.scan.findFirst({
+    where: { id: scanId, workspaceId },
+    select: { createdById: true, accountingVersion: true },
+  })
+  const retainedCapacity = !initiatingScan
+    ? await tx.scanCapacityReservation.findFirst({
+        where: { scanId, workspaceId, accountId: sponsorAccountId },
+      })
+    : null
+  const capacityUserId =
+    initiatingScan?.accountingVersion === 2 ? initiatingScan.createdById : retainedCapacity?.userId
+  if (capacityUserId) await lockUserScanAdmission(tx, capacityUserId)
+  return { initiatingScan, retainedCapacity }
+}
+
+async function recordSettlementIntent(
+  workspaceId: string,
+  scanId: string,
+  idempotencyKey: string,
+  sponsorAccountId: string
+) {
+  await withWorkspaceRLS(workspaceId, async (tx) => {
+    const scan =
+      (await tx.scan.findFirst({ where: { id: scanId, workspaceId } })) ??
+      (await readRetainedScanAccounting(tx, workspaceId, scanId))
+    if (!scan) throw new Error("settlement_scan_not_found")
+    await tx.scanEvent.create({
+      data: {
+        scanId,
+        stage: "billing_settlement_intent",
+        message: "Settlement intent; missing usage receipt requires terminal accounting review",
+        metadata: {
+          idempotencyKey,
+          workspaceId,
+          accountId: sponsorAccountId,
+          automaticReplayAllowed: false,
+        },
+      },
+    })
+  })
+}
+
+function agentMinuteUnits(ms: number, opts: RecordAgentMinutesOptions) {
+  const rawMinutes =
+    opts.outcome === "cancelled" || opts.outcome === "partial"
+      ? Math.ceil(ms / 60_000)
+      : Math.max(1, Math.ceil(ms / 60_000))
+
+  // Deep/Custom scans consume 3× minutes
+  const isDeep = opts.mode === "DEEP" || opts.mode === "CUSTOM"
+  const minutes = isDeep ? rawMinutes * DEEP_SCAN_MULTIPLIER : rawMinutes
+
+  return { rawMinutes, minutes, isDeep }
+}
+
+function isValidMinuteTick(ms: number): boolean {
+  const MAX_TICK_MS = 60 * 60 * 1000
+  if (!Number.isFinite(ms) || ms > MAX_TICK_MS) {
+    logger.warn("Ignoring out-of-range agent-minute tick", {
+      reason:
+        ms > MAX_TICK_MS ? "agent_minute_tick_exceeds_one_hour" : "agent_minute_tick_not_finite",
+    })
+    return false
+  }
+  return true
 }

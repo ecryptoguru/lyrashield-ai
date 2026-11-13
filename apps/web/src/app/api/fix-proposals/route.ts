@@ -1,11 +1,12 @@
-import { listFixProposals } from "@lyrashield/db"
-import { requirePermission } from "@lyrashield/auth/server"
+import { listFixProposals, withDelegatedReadAuthority } from "@lyrashield/db"
+import { requirePermission, resolveOAuthReadScope } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
 import { validateFindingScope } from "@lyrashield/db"
 import { z } from "zod"
 import { authErrorResponse } from "../../../lib/api-auth"
 import { apiError, apiPaginated, parsePaginationParams } from "../../../lib/api-response"
+import { delegatedReadPrincipal } from "../../../lib/delegated-target-read-scope"
 
 const FixProposalQuerySchema = z.object({
   workspaceId: z.string().min(1),
@@ -28,34 +29,55 @@ export async function GET(request: Request) {
     }
     const { workspaceId, findingId, targetId, observedInScanId, status } = parsed.data
 
-    await requirePermission(workspaceId, PERMISSIONS.finding.view)
+    const { session, workspace } = await requirePermission(workspaceId, PERMISSIONS.finding.view)
+    const principal = delegatedReadPrincipal(session, workspace)
+    const load = async (
+      client?: Parameters<typeof listFixProposals>[1],
+      authority?: { targetId?: string; targetIds?: string[]; allowedProfiles: string[] }
+    ) => {
+      const readScope = authority
+        ? { ...authority, requireActiveTarget: true }
+        : resolveOAuthReadScope(session, targetId)
+      const scopeInput = {
+        workspaceId,
+        ...readScope,
+        ...(observedInScanId ? { observedInScanId } : {}),
+      }
+      const scope = client
+        ? await validateFindingScope(scopeInput, client)
+        : await validateFindingScope(scopeInput)
+      if (!scope.available) {
+        return apiError(
+          "INVALID_PARAM",
+          "Selected scan or target is unavailable in this workspace",
+          400
+        )
+      }
 
-    const scope = await validateFindingScope({
-      workspaceId,
-      ...(targetId ? { targetId } : {}),
-      ...(observedInScanId ? { observedInScanId } : {}),
-    })
-    if (!scope.available) {
-      return apiError(
-        "INVALID_PARAM",
-        "Selected scan or target is unavailable in this workspace",
-        400
-      )
+      const { cursor, limit } = parsePaginationParams(searchParams)
+      const listInput = {
+        workspaceId,
+        ...readScope,
+        ...(observedInScanId ? { observedInScanId } : {}),
+        ...(findingId ? { findingId } : {}),
+        ...(status ? { status } : {}),
+        ...(cursor ? { cursor } : {}),
+        limit,
+      }
+      return client ? listFixProposals(listInput, client) : listFixProposals(listInput)
     }
-
-    const { cursor, limit } = parsePaginationParams(searchParams)
-
-    const result = await listFixProposals({
-      workspaceId,
-      ...(targetId ? { targetId } : {}),
-      ...(observedInScanId ? { observedInScanId } : {}),
-      ...(findingId ? { findingId } : {}),
-      ...(status ? { status } : {}),
-      ...(cursor ? { cursor } : {}),
-      limit,
-    })
-
-    return apiPaginated(result.items, result.nextCursor)
+    const result = principal
+      ? await withDelegatedReadAuthority(
+          { ...principal, ...(targetId ? { targetId } : {}) },
+          (tx, authority) => load(tx, authority)
+        )
+      : await load()
+    if (!("items" in result)) return result
+    const items = result.items.map(({ diffRef, ...proposal }) => ({
+      ...proposal,
+      hasStoredPatch: Boolean(diffRef),
+    }))
+    return apiPaginated(items, result.nextCursor)
   } catch (error) {
     const authErr = authErrorResponse(error)
     if (authErr) return authErr

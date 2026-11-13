@@ -36,6 +36,16 @@ afterEach(() => {
 })
 
 describe("app origin proxy boundary", () => {
+  it("strips the internal country hint from non-app hosts", async () => {
+    const response = await proxy(
+      new NextRequest("https://lyrashieldai.com/", {
+        headers: { "x-lyrashield-trusted-country": "IN" },
+      })
+    )
+
+    expect(response.headers.get("x-middleware-request-x-lyrashield-trusted-country")).toBeNull()
+  })
+
   it("rejects a direct or spoofed app request before Redis-backed limiting", async () => {
     process.env.CLOUDFLARE_ORIGIN_MTLS = "required"
     process.env.CLOUDFLARE_AOP_CERT_SHA256 = fingerprint

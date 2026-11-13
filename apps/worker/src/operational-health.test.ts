@@ -5,7 +5,8 @@ const mocks = vi.hoisted(() => ({
   logger: { warn: vi.fn() },
   prisma: {
     webhookEventTrack: { count: vi.fn() },
-    scan: { findFirst: vi.fn(), count: vi.fn() },
+    scan: { count: vi.fn() },
+    $queryRaw: vi.fn(),
   },
 }))
 
@@ -46,7 +47,7 @@ beforeEach(() => {
   resetOperationalHealthState()
   mocks.prisma.webhookEventTrack.count.mockResolvedValue(0)
   mocks.countDeadLetterArtifactDeletionTasks.mockResolvedValue(0)
-  mocks.prisma.scan.findFirst.mockResolvedValue(null)
+  mocks.prisma.$queryRaw.mockResolvedValue([])
   mocks.prisma.scan.count.mockResolvedValue(0)
 })
 
@@ -125,7 +126,9 @@ describe("collectOperationalHealthSnapshot", () => {
     const now = new Date("2026-08-24T12:00:00Z")
     mocks.prisma.webhookEventTrack.count.mockResolvedValue(2)
     mocks.countDeadLetterArtifactDeletionTasks.mockResolvedValue(3)
-    mocks.prisma.scan.findFirst.mockResolvedValue({ endedAt: new Date("2026-08-24T11:40:00Z") })
+    mocks.prisma.$queryRaw.mockResolvedValue([
+      { id: "caaaaaaaaaaaaaaaaaaaaaaaa", endedAt: new Date("2026-08-24T11:40:00Z") },
+    ])
     mocks.prisma.scan.count.mockResolvedValue(1)
 
     const snapshot = await collectOperationalHealthSnapshot({
@@ -145,33 +148,6 @@ describe("collectOperationalHealthSnapshot", () => {
       evidenceFailureCount: 1,
       oldestTerminalUnreconciledCostAgeMs: 1_200_000,
     })
-    expect(mocks.prisma.scan.findFirst).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({
-          billedCostUsd: null,
-          target: { type: "REPO" },
-          events: {
-            none: expect.objectContaining({
-              stage: "terminal_cost_operator_reconciled",
-              AND: expect.arrayContaining([
-                {
-                  metadata: {
-                    path: ["receiptType"],
-                    equals: "terminal_cost_operator_disposition_v1",
-                  },
-                },
-                {
-                  metadata: {
-                    path: ["conclusion", "providerCostUsd"],
-                    equals: "0.000000",
-                  },
-                },
-              ]),
-            }),
-          },
-        }),
-      })
-    )
   })
 
   it("keeps other health signals when the artifact deletion count is unavailable", async () => {

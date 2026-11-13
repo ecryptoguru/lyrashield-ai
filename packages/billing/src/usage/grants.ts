@@ -19,6 +19,7 @@
 import { withAccountRLS, withWorkspaceRLS, type ScopedTransaction } from "@lyrashield/db"
 import { CLOUD_PLAN_MAP, type CloudPlanId } from "@lyrashield/pricing"
 import { logger } from "@lyrashield/logger"
+import { isCurrentPoolGrant, restoreContractPool } from "./grant-contract"
 
 type GrantSource = "subscription" | "annual_monthly" | "trial" | "manual" | "replenishment"
 
@@ -94,7 +95,12 @@ export async function grantMonthlyPool(
     // Serialize grants for the same account across concurrent webhooks and
     // the replenishment job. The previous image took no lock; the unique key
     // remains the race arbiter for old binaries.
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`billing:${params.accountId}`}, 0))`
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`pool:${params.accountId}`}, 0))`
+
+    if (!(await isCurrentPoolGrant(params, tx))) {
+      return { created: false, minutes: 0, idempotencyKey }
+    }
 
     // Mid-cycle plan change at the same cycleStart: the grant key includes
     // the plan, so the replaced plan's grant would otherwise keep counting
@@ -125,6 +131,26 @@ export async function grantMonthlyPool(
       }
     }
 
+    // Returning to an already granted plan reuses its original pool and key.
+    // Explicit bounded bulk writes can see retired rows; read guards hide them.
+    if (SUBSCRIPTION_POOL_SOURCES.includes(params.source) && params.billingAccountId) {
+      await restoreContractPool(params, idempotencyKey, legacyKey, tx)
+    } else if (SUBSCRIPTION_POOL_SOURCES.includes(params.source)) {
+      await tx.usageRecord.updateMany({
+        where: {
+          accountId: params.accountId,
+          kind: "pool_grant",
+          cycleStart: params.cycleStart,
+          idempotencyKey: { in: [idempotencyKey, ...(legacyKey ? [legacyKey] : [])] },
+          deletedAt: { not: null },
+          OR: SUBSCRIPTION_POOL_SOURCES.map((source) => ({
+            metadata: { path: ["source"], equals: source },
+          })),
+        },
+        data: { deletedAt: null },
+      })
+    }
+
     // Legacy rows are workspace-attributed with accountId NULL — visible only
     // through the workspace policy, which is why the workspace context must
     // be bound alongside the account context for this probe.
@@ -137,46 +163,47 @@ export async function grantMonthlyPool(
     })
     if (existing) return { created: false, minutes: 0, idempotencyKey }
 
-    try {
-      await tx.usageRecord.create({
-        data: {
-          workspaceId: params.workspaceId,
+    await tx.usageRecord.create({
+      data: {
+        workspaceId: params.workspaceId,
+        accountId: params.accountId,
+        kind: "pool_grant",
+        quantity: planMinutes,
+        idempotencyKey,
+        cycleStart: params.cycleStart,
+        metadata: {
+          ...(params.billingAccountId ? { billingAccountId: params.billingAccountId } : {}),
+          plan: params.plan,
+          source: params.source,
           accountId: params.accountId,
-          kind: "pool_grant",
-          quantity: planMinutes,
-          idempotencyKey,
-          cycleStart: params.cycleStart,
-          metadata: {
-            ...(params.billingAccountId ? { billingAccountId: params.billingAccountId } : {}),
-            plan: params.plan,
-            source: params.source,
-            accountId: params.accountId,
-            cycleStart: params.cycleStart.toISOString(),
-          },
+          cycleStart: params.cycleStart.toISOString(),
         },
-      })
-      return { created: true, minutes: planMinutes, idempotencyKey }
-    } catch (error) {
-      // Unique-key race: a concurrent delivery granted first.
-      if (
-        error &&
-        typeof error === "object" &&
-        "code" in error &&
-        (error as { code?: string }).code === "P2002"
-      ) {
-        return { created: false, minutes: 0, idempotencyKey }
-      }
-      throw error
-    }
+      },
+    })
+    return { created: true, minutes: planMinutes, idempotencyKey }
   }
 
-  const result = params.tx
-    ? await create(params.tx)
-    : params.workspaceId === null
-      ? await withAccountRLS(params.accountId, create)
-      : await withWorkspaceRLS(params.workspaceId, (tx) => create(tx), {
-          accountId: params.accountId,
-        })
+  let result: GrantMonthlyPoolResult
+  try {
+    result = params.tx
+      ? await create(params.tx)
+      : params.workspaceId === null
+        ? await withAccountRLS(params.accountId, create)
+        : await withWorkspaceRLS(params.workspaceId, create, { accountId: params.accountId })
+  } catch (error) {
+    // An interactive PostgreSQL transaction is aborted after a unique failure.
+    // The owner must roll it back; never swallow it inside a caller-owned tx.
+    if (
+      !params.tx &&
+      error &&
+      typeof error === "object" &&
+      "code" in error &&
+      error.code === "P2002"
+    ) {
+      return { created: false, minutes: 0, idempotencyKey }
+    }
+    throw error
+  }
 
   if (result.created) {
     logger.info("Granted monthly minute pool", {

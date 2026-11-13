@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "allowJs": true,
+    "checkJs": false,
+    "skipLibCheck": true,
+    "types": ["node"],
+    "typeRoots": ["../../apps/web/node_modules/@types"],
+    "paths": { "zod": ["../../apps/web/node_modules/zod/index.d.ts"] }
+  },
+  "include": ["fleet-qualification-schema.ts", "closed-fleet-issuer.ts"]
+}

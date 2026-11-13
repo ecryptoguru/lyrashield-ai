@@ -1,5 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest"
 import { randomUUID } from "node:crypto"
+import { join, resolve } from "node:path"
+import { pathToFileURL } from "node:url"
 import { createId } from "@paralleldrive/cuid2"
 import { prisma } from "./client"
 import { withAccountRLS } from "./rls"
@@ -17,6 +19,14 @@ import {
 } from "./account-deletion"
 
 const suffix = randomUUID().replace(/-/g, "")
+const localEvidenceRoot = resolve(
+  process.env.LYRASHIELD_LOCAL_EVIDENCE_DIR || join(process.cwd(), ".lyrashield", "evidence")
+)
+function integrationConfigUri(workspaceId: string, name: string) {
+  return pathToFileURL(
+    join(localEvidenceRoot, "evidence", workspaceId, "integrations", `${name}.enc`)
+  ).toString()
+}
 const userId = `delete-user-${suffix}`
 const otherOwnerId = `other-owner-${suffix}`
 const otherMemberId = `other-member-${suffix}`
@@ -52,6 +62,13 @@ const auditFailureWorkspaceName = "Account deletion audit rollback fixture"
 const attachmentUserId = `attach-user-${suffix}`
 const attachmentWorkspaceId = `attach-ws-${suffix}`
 const attachmentWorkspaceName = `Attach ${suffix}`
+const integrationFailureUserId = `integration-failure-user-${suffix}`
+const integrationFailureWorkspaceId = `integration-failure-ws-${suffix}`
+const integrationFailureWorkspaceName = `Integration failure ${suffix}`
+const credentialOwnerId = `credential-owner-${suffix}`
+const credentialDeleteUserId = `credential-delete-${suffix}`
+const credentialWorkspaceId = `credential-ws-${suffix}`
+const credentialWorkspaceName = `Credential retention ${suffix}`
 
 const referralCode = `234567${suffix.slice(-2).padStart(2, "2")}`.slice(0, 8)
 const rewardedReferralCode = `765432${suffix.slice(-2).padStart(2, "2")}`.slice(0, 8)
@@ -61,6 +78,12 @@ async function cleanup() {
     () => {}
   )
   await prisma.$executeRaw`DROP FUNCTION IF EXISTS test_reject_account_deleted()`.catch(() => {})
+  await prisma.$executeRaw`DROP TRIGGER IF EXISTS test_reject_integration_config_task ON "ArtifactDeletionTask"`.catch(
+    () => {}
+  )
+  await prisma.$executeRaw`DROP FUNCTION IF EXISTS test_reject_integration_config_task()`.catch(
+    () => {}
+  )
   for (const workspaceId of [
     deletableWorkspaceId,
     retainWorkspaceId,
@@ -71,6 +94,8 @@ async function cleanup() {
     legacyWorkspaceId,
     auditFailureWorkspaceId,
     attachmentWorkspaceId,
+    integrationFailureWorkspaceId,
+    credentialWorkspaceId,
   ]) {
     await prisma.$executeRaw`DELETE FROM "AuditLog" WHERE "workspaceId" = ${workspaceId}`.catch(
       () => {}
@@ -93,6 +118,9 @@ async function cleanup() {
           auditFailureOwnerId,
           myraUserId,
           attachmentUserId,
+          integrationFailureUserId,
+          credentialOwnerId,
+          credentialDeleteUserId,
         ],
       },
     },
@@ -103,7 +131,14 @@ async function cleanup() {
   await prisma.artifactDeletionTask.deleteMany({
     where: {
       workspaceId: {
-        in: [richWorkspaceId, activeWorkspaceId, legacyWorkspaceId, attachmentWorkspaceId],
+        in: [
+          richWorkspaceId,
+          activeWorkspaceId,
+          legacyWorkspaceId,
+          attachmentWorkspaceId,
+          integrationFailureWorkspaceId,
+          credentialWorkspaceId,
+        ],
       },
     },
   })
@@ -177,6 +212,11 @@ describe("account deletion", () => {
         { id: activeUserId, name: "Active", email: `${activeUserId}@example.com` },
         { id: legacyUserId, name: "Legacy", email: `${legacyUserId}@example.com` },
         {
+          id: integrationFailureUserId,
+          name: "Integration failure",
+          email: `${integrationFailureUserId}@example.com`,
+        },
+        {
           id: auditFailureUserId,
           name: "Audit failure",
           email: `${auditFailureUserId}@example.com`,
@@ -185,6 +225,16 @@ describe("account deletion", () => {
           id: auditFailureOwnerId,
           name: "Audit failure owner",
           email: `${auditFailureOwnerId}@example.com`,
+        },
+        {
+          id: credentialOwnerId,
+          name: "Credential owner",
+          email: `${credentialOwnerId}@example.com`,
+        },
+        {
+          id: credentialDeleteUserId,
+          name: "Credential member",
+          email: `${credentialDeleteUserId}@example.com`,
         },
       ],
     })
@@ -198,9 +248,19 @@ describe("account deletion", () => {
         { id: activeWorkspaceId, name: activeWorkspaceName, slug: activeWorkspaceId },
         { id: legacyWorkspaceId, name: legacyWorkspaceName, slug: legacyWorkspaceId },
         {
+          id: integrationFailureWorkspaceId,
+          name: integrationFailureWorkspaceName,
+          slug: integrationFailureWorkspaceId,
+        },
+        {
           id: auditFailureWorkspaceId,
           name: auditFailureWorkspaceName,
           slug: auditFailureWorkspaceId,
+        },
+        {
+          id: credentialWorkspaceId,
+          name: credentialWorkspaceName,
+          slug: credentialWorkspaceId,
         },
       ],
     })
@@ -221,6 +281,12 @@ describe("account deletion", () => {
         { workspaceId: activeWorkspaceId, userId: activeUserId, role: "OWNER", status: "active" },
         { workspaceId: legacyWorkspaceId, userId: legacyUserId, role: "OWNER", status: "active" },
         {
+          workspaceId: integrationFailureWorkspaceId,
+          userId: integrationFailureUserId,
+          role: "OWNER",
+          status: "active",
+        },
+        {
           workspaceId: auditFailureWorkspaceId,
           userId: auditFailureUserId,
           role: "OWNER",
@@ -229,6 +295,18 @@ describe("account deletion", () => {
         {
           workspaceId: auditFailureWorkspaceId,
           userId: auditFailureOwnerId,
+          role: "OWNER",
+          status: "active",
+        },
+        {
+          workspaceId: credentialWorkspaceId,
+          userId: credentialOwnerId,
+          role: "OWNER",
+          status: "active",
+        },
+        {
+          workspaceId: credentialWorkspaceId,
+          userId: credentialDeleteUserId,
           role: "OWNER",
           status: "active",
         },
@@ -378,6 +456,28 @@ describe("account deletion", () => {
         redactionStatus: "complete",
       },
     })
+    const integrationStorageUri = integrationConfigUri(richWorkspaceId, "shared-notification")
+    await prisma.integration.createMany({
+      data: [
+        {
+          workspaceId: richWorkspaceId,
+          type: "SLACK",
+          name: "Slack notifications",
+          externalId: `notifications:${richWorkspaceId}:slack`,
+          configRef: integrationStorageUri,
+          status: "disabled",
+        },
+        {
+          workspaceId: richWorkspaceId,
+          type: "DISCORD",
+          name: "Discord notifications",
+          externalId: `notifications:${richWorkspaceId}:discord`,
+          configRef: integrationStorageUri,
+          status: "active",
+          deletedAt: new Date(),
+        },
+      ],
+    })
     await prisma.notification.create({
       data: {
         workspaceId: richWorkspaceId,
@@ -438,10 +538,20 @@ describe("account deletion", () => {
     const remainingAuditLogs = await prisma.$queryRaw<Array<{ count: bigint }>>`
       SELECT count(*)::bigint AS count FROM "AuditLog" WHERE "workspaceId" = ${richWorkspaceId}`
     expect(remainingAuditLogs).toMatchObject([{ count: 0n }])
-    expect(deletion.artifactDeletionTaskIds).toHaveLength(1)
+    expect(deletion.artifactDeletionTaskIds).toHaveLength(2)
     expect(
       await prisma.artifactDeletionTask.findUnique({
         where: { kind_storageUri: { kind: "EVIDENCE", storageUri: evidenceStorageUri } },
+      })
+    ).toMatchObject({ workspaceId: richWorkspaceId, status: "PENDING" })
+    expect(
+      await prisma.artifactDeletionTask.findUnique({
+        where: {
+          kind_storageUri: {
+            kind: "INTEGRATION_CONFIG",
+            storageUri: integrationStorageUri,
+          },
+        },
       })
     ).toMatchObject({ workspaceId: richWorkspaceId, status: "PENDING" })
   })
@@ -541,6 +651,38 @@ describe("account deletion", () => {
     ).toBe(0)
   })
 
+  it("leaves credentials in shared workspaces untouched when an account is deleted", async () => {
+    const storageUri = integrationConfigUri(credentialWorkspaceId, "shared-workspace")
+    await prisma.integration.create({
+      data: {
+        workspaceId: credentialWorkspaceId,
+        type: "SLACK",
+        name: "Shared Slack",
+        externalId: `notifications:${credentialWorkspaceId}:slack`,
+        configRef: storageUri,
+        status: "disabled",
+      },
+    })
+
+    await deleteUserAccount(credentialDeleteUserId, "DELETE")
+
+    expect(
+      await prisma.workspace.findUnique({ where: { id: credentialWorkspaceId } })
+    ).not.toBeNull()
+    expect(
+      await prisma.integration.findFirst({
+        where: { workspaceId: credentialWorkspaceId, configRef: storageUri },
+      })
+    ).not.toBeNull()
+    expect(
+      await prisma.artifactDeletionTask.findUnique({
+        where: {
+          kind_storageUri: { kind: "INTEGRATION_CONFIG", storageUri },
+        },
+      })
+    ).toBeNull()
+  })
+
   it("fails closed while a deletable workspace has an active scan", async () => {
     const scan = await prisma.scan.create({
       data: {
@@ -570,6 +712,16 @@ describe("account deletion", () => {
         storageUri: "s3://legacy-reports/report.html",
       },
     })
+    const legacyIntegration = await prisma.integration.create({
+      data: {
+        workspaceId: legacyWorkspaceId,
+        type: "GITHUB",
+        name: "Legacy connector",
+        externalId: "942771",
+        configRef: "vault://legacy/credential",
+        status: "disabled",
+      },
+    })
 
     await expect(deleteUserAccount(legacyUserId, legacyWorkspaceName)).rejects.toBeInstanceOf(
       AccountDeletionUnsupportedArtifactError
@@ -577,7 +729,70 @@ describe("account deletion", () => {
     expect(await prisma.workspace.findUnique({ where: { id: legacyWorkspaceId } })).not.toBeNull()
 
     await prisma.report.update({ where: { id: report.id }, data: { storageUri: null } })
+    await expect(deleteUserAccount(legacyUserId, legacyWorkspaceName)).rejects.toBeInstanceOf(
+      AccountDeletionUnsupportedArtifactError
+    )
+    expect(await prisma.workspace.findUnique({ where: { id: legacyWorkspaceId } })).not.toBeNull()
+
+    // Integration.delete uses the soft-delete extension. Clear the credential
+    // reference as a completed disconnect would, otherwise the retained object
+    // correctly remains part of the account-erasure contract.
+    await prisma.integration.update({
+      where: { id: legacyIntegration.id },
+      data: { configRef: null },
+    })
     await deleteUserAccount(legacyUserId, legacyWorkspaceName)
+  })
+
+  it("rolls back account deletion when a credential task cannot be enqueued", async () => {
+    const storageUri = integrationConfigUri(integrationFailureWorkspaceId, "rollback")
+    await prisma.integration.create({
+      data: {
+        workspaceId: integrationFailureWorkspaceId,
+        type: "SLACK",
+        name: "Rollback Slack",
+        externalId: `notifications:${integrationFailureWorkspaceId}:slack`,
+        configRef: storageUri,
+      },
+    })
+    await prisma.$executeRaw`
+      CREATE FUNCTION test_reject_integration_config_task()
+      RETURNS TRIGGER AS $$
+      BEGIN
+        IF NEW.kind = 'INTEGRATION_CONFIG' THEN
+          RAISE EXCEPTION 'integration config deletion fixture failure';
+        END IF;
+        RETURN NEW;
+      END;
+      $$ LANGUAGE plpgsql`
+    await prisma.$executeRaw`
+      CREATE TRIGGER test_reject_integration_config_task
+      BEFORE INSERT ON "ArtifactDeletionTask"
+      FOR EACH ROW EXECUTE FUNCTION test_reject_integration_config_task()`
+
+    await expect(
+      deleteUserAccount(integrationFailureUserId, integrationFailureWorkspaceName)
+    ).rejects.toThrow("integration config deletion fixture failure")
+    expect(
+      await prisma.workspace.findUnique({ where: { id: integrationFailureWorkspaceId } })
+    ).not.toBeNull()
+    expect(await prisma.user.findUnique({ where: { id: integrationFailureUserId } })).not.toBeNull()
+    expect(
+      await prisma.integration.findFirst({
+        where: { workspaceId: integrationFailureWorkspaceId, configRef: storageUri },
+      })
+    ).not.toBeNull()
+
+    await prisma.$executeRaw`DROP TRIGGER test_reject_integration_config_task ON "ArtifactDeletionTask"`
+    await prisma.$executeRaw`DROP FUNCTION test_reject_integration_config_task()`
+    await deleteUserAccount(integrationFailureUserId, integrationFailureWorkspaceName)
+    expect(
+      await prisma.artifactDeletionTask.findUnique({
+        where: {
+          kind_storageUri: { kind: "INTEGRATION_CONFIG", storageUri },
+        },
+      })
+    ).toMatchObject({ workspaceId: integrationFailureWorkspaceId, status: "PENDING" })
   })
 
   it("rolls back account deletion when the retained-workspace audit receipt fails", async () => {

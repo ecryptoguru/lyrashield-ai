@@ -1,0 +1,58 @@
+name: Automatic merge queue
+
+on:
+  pull_request_target:
+    types:
+      [
+        opened,
+        reopened,
+        synchronize,
+        ready_for_review,
+        closed,
+        auto_merge_enabled,
+        auto_merge_disabled,
+      ]
+  workflow_run:
+    workflows: [CI, Release production]
+    types: [completed]
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  checks: read
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: automatic-merge-queue
+  cancel-in-progress: false
+
+jobs:
+  queue:
+    if: github.repository == 'ecryptoguru/lyrashield-ai'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # This privileged job reads only trusted main; PR content is never checked out.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
+        with:
+          app-id: ${{ secrets.LYRASHIELD_GITHUB_APP_ID }}
+          private-key: ${{ secrets.LYRASHIELD_GITHUB_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: lyrashield-ai
+          permission-contents: write
+          permission-pull-requests: write
+      - name: Process one ready pull request
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          GH_READ_TOKEN: ${{ github.token }}
+        run: node .github/scripts/auto-merge-queue.mjs

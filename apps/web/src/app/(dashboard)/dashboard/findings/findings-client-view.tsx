@@ -15,14 +15,16 @@ import {
 import { Skeleton } from "@/components/ui/skeleton"
 import { severityLabel, humanizeToken } from "@/lib/labels"
 import { SEVERITY_BADGE } from "@/lib/severity-badge"
+import { FINDING_PLURAL, TARGET_PLURAL, TARGET_SINGULAR } from "@/lib/terminology"
 import {
-  FINDING_PLURAL,
-  SCAN_PLURAL,
-  SCAN_SINGULAR,
-  TARGET_PLURAL,
-  TARGET_SINGULAR,
-} from "@/lib/terminology"
-import { findingsHref } from "@/lib/finding-list-params"
+  decodeFindingFilters,
+  encodeFindingFilters,
+  FINDING_STATUSES,
+  FINDING_SEVERITIES,
+  FINDING_EVIDENCE,
+  type FindingFilters,
+  findingsHref,
+} from "@/lib/finding-list-params"
 import { SEVERITY_ICON, SEVERITY_COLOR } from "./finding-presentation"
 import type { FindingListItem, SortMode } from "./findings-client"
 
@@ -58,15 +60,9 @@ export function FindingsControls({
   setSortMode,
   updateQueryParams,
 }: FindingsControlsProps) {
-  const filterChips = [
-    { label: "Open", value: "OPEN" },
-    { label: "All", value: "ALL" },
-    { label: "Critical", value: "CRITICAL" },
-    { label: "High", value: "HIGH" },
-    { label: "Medium", value: "MEDIUM" },
-    { label: "Fixed", value: "FIXED" },
-    { label: "Verified", value: "VERIFIED" },
-  ] as const
+  const selection = decodeFindingFilters(filter)
+  const change = (axis: keyof FindingFilters, value: string) =>
+    void handleFilterChange(encodeFindingFilters({ ...selection, [axis]: value }))
 
   return (
     <>
@@ -92,23 +88,60 @@ export function FindingsControls({
         )}
       </div>
       <div className="mb-4 flex flex-col gap-2 lg:flex-row lg:flex-wrap lg:items-center lg:justify-between">
-        <div className="flex flex-wrap items-center gap-2">
-          {filterChips.map((chip) => (
-            <button
-              key={chip.value}
-              type="button"
-              aria-pressed={filter === chip.value}
-              onClick={() => void handleFilterChange(chip.value)}
-              className={cn(
-                "min-h-11 rounded-full border px-3 py-1 text-xs font-medium transition-colors",
-                filter === chip.value
-                  ? "border-primary bg-primary/10 text-primary"
-                  : "border-border text-muted-foreground hover:text-foreground hover:border-foreground/30"
-              )}
+        <div
+          className="grid grid-cols-1 gap-3 sm:grid-cols-3"
+          role="group"
+          aria-label="Combine finding filters"
+        >
+          <label className="space-y-1 text-xs font-medium">
+            Status
+            <Select
+              aria-label="Filter by status"
+              value={selection.status}
+              onChange={(e) => change("status", e.target.value)}
+              className="h-11 w-full"
             >
-              {chip.label}
-            </button>
-          ))}
+              {FINDING_STATUSES.map((value) => (
+                <option key={value} value={value}>
+                  {value === "ALL" ? "All statuses" : humanizeToken(value)}
+                </option>
+              ))}
+            </Select>
+          </label>
+          <label className="space-y-1 text-xs font-medium">
+            Severity
+            <Select
+              aria-label="Filter by severity"
+              value={selection.severity}
+              onChange={(e) => change("severity", e.target.value)}
+              className="h-11 w-full"
+            >
+              {FINDING_SEVERITIES.map((value) => (
+                <option key={value} value={value}>
+                  {value === "ALL" ? "All severities" : severityLabel(value)}
+                </option>
+              ))}
+            </Select>
+          </label>
+          <label className="space-y-1 text-xs font-medium">
+            Evidence
+            <Select
+              aria-label="Filter by evidence"
+              value={selection.evidence}
+              onChange={(e) => change("evidence", e.target.value)}
+              className="h-11 w-full"
+            >
+              {FINDING_EVIDENCE.map((value) => (
+                <option key={value} value={value}>
+                  {value === "ALL"
+                    ? "All evidence states"
+                    : value === "VERIFIED"
+                      ? "Independently verified"
+                      : "Not independently verified"}
+                </option>
+              ))}
+            </Select>
+          </label>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -118,7 +151,7 @@ export function FindingsControls({
               value={targetFilter}
               onChange={(e) => void handleTargetFilterChange(e.target.value)}
               disabled={Boolean(scanId)}
-              className="h-9 w-44"
+              className="h-11 w-full sm:w-44"
             >
               <option value="">All {TARGET_PLURAL.toLowerCase()}</option>
               {targets.map((target) => (
@@ -139,7 +172,7 @@ export function FindingsControls({
           />
 
           {/* Sort control */}
-          <div className="flex w-full min-w-0 max-w-full items-center gap-1 rounded-full border px-3 py-1 sm:w-auto">
+          <div className="flex w-full min-w-0 max-w-full items-center gap-1 rounded-xl border px-3 sm:w-auto">
             <span className="text-muted-foreground text-xs">Sort loaded results</span>
             {sortMode === "severity" ? (
               <SortDesc className="text-muted-foreground h-3 w-3" aria-hidden="true" />
@@ -155,7 +188,7 @@ export function FindingsControls({
               }}
               aria-label="Sort loaded results"
               title="Sort loaded results"
-              className="text-muted-foreground focus-visible:ring-ring min-w-0 flex-1 cursor-pointer rounded-sm bg-transparent text-xs font-medium focus-visible:ring-2 focus-visible:outline-none sm:flex-none"
+              className="text-muted-foreground focus-visible:ring-ring min-h-11 min-w-0 flex-1 cursor-pointer rounded-sm bg-transparent text-xs font-medium focus-visible:ring-2 focus-visible:outline-none sm:flex-none"
             >
               <option value="priority">Priority (recommended)</option>
               <option value="severity">Severity (high first)</option>
@@ -170,6 +203,10 @@ export function FindingsControls({
 
 type FindingsResultsProps = {
   loading: boolean
+  hasConstraints?: boolean
+  onReset?: () => void
+  error?: boolean
+  reviewScanHref?: string
   findings: FindingListItem[]
   sortedFindings: FindingListItem[]
   rowRefs: RefObject<Map<string, HTMLButtonElement | null>>
@@ -187,8 +224,36 @@ type FindingsResultsProps = {
   children?: ReactNode
 }
 
+export function findingsResultUiState({
+  query,
+  filter,
+  scanId,
+  targetFilter,
+  error,
+}: {
+  query: string
+  filter: string
+  scanId: string | null
+  targetFilter: string
+  error: string | null
+}) {
+  return {
+    hasConstraints: Boolean(query || filter !== "ALL"),
+    reviewScanHref: scanId
+      ? `/dashboard/scans/${encodeURIComponent(scanId)}`
+      : targetFilter
+        ? `/dashboard/scans?target=${encodeURIComponent(targetFilter)}`
+        : "/dashboard/scans",
+    error: Boolean(error),
+  }
+}
+
 export function FindingsResults({
   loading,
+  hasConstraints = false,
+  onReset,
+  error = false,
+  reviewScanHref = "/dashboard/scans",
   findings,
   sortedFindings,
   rowRefs,
@@ -210,33 +275,33 @@ export function FindingsResults({
             <Skeleton key={item} className="h-32 w-full" />
           ))}
         </div>
-      ) : findings.length === 0 ? (
+      ) : error ? null : findings.length === 0 ? (
         <EmptyState
           icon={Bug}
-          title={
-            narrowed
-              ? `No ${FINDING_PLURAL.toLowerCase()} match these filters`
-              : `No ${FINDING_PLURAL.toLowerCase()} yet`
-          }
+          title={hasConstraints || narrowed ? "No matching findings" : "No findings in this scope"}
           description={
-            narrowed
-              ? "Nothing in this workspace matches the current filter, target or search. Clear them to see everything."
-              : `Security ${FINDING_PLURAL.toLowerCase()} detected by ${SCAN_PLURAL.toLowerCase()} will appear here. Start a ${SCAN_SINGULAR.toLowerCase()} to get started.`
+            hasConstraints
+              ? "No findings match the selected status, severity, evidence, or search. Reset filters to see all findings within the current target and scan scope."
+              : narrowed
+                ? "Nothing in this workspace matches the current target or scan. Clear the scope to see all findings."
+                : "No findings are recorded in the current scope. Review your scans for assessment status and coverage; an empty list alone does not establish readiness."
           }
           action={
-            narrowed ? (
-              clearHref ? (
-                <Link href={clearHref} className={buttonVariants({ variant: "outline" })}>
-                  Clear filters
-                </Link>
-              ) : onClearFilters ? (
-                <Button variant="outline" onClick={onClearFilters}>
-                  Clear filters
-                </Button>
-              ) : null
+            hasConstraints && onReset ? (
+              <Button onClick={onReset} variant="outline">
+                Reset filters and search
+              </Button>
+            ) : narrowed && clearHref ? (
+              <Link href={clearHref} className={buttonVariants({ variant: "outline" })}>
+                Clear filters
+              </Link>
+            ) : narrowed && onClearFilters ? (
+              <Button variant="outline" onClick={onClearFilters}>
+                Clear filters
+              </Button>
             ) : (
-              <Link href="/dashboard/scans" className={buttonVariants()}>
-                Start a {SCAN_SINGULAR.toLowerCase()}
+              <Link href={reviewScanHref} className={buttonVariants({ variant: "outline" })}>
+                Review scans
               </Link>
             )
           }
@@ -277,7 +342,7 @@ export function FindingsResults({
                         {severityLabel(finding.severity)}
                       </Badge>
                       {finding.verified ? (
-                        <span className="flex items-center gap-1 text-xs text-emerald-500">
+                        <span className="flex items-center gap-1 text-xs text-emerald-800 dark:text-emerald-400">
                           <CheckCircle2 className="h-3 w-3" aria-hidden="true" /> Independently
                           verified
                         </span>

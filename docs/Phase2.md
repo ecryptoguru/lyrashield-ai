@@ -2,9 +2,51 @@
 
 > Curated and condensed on 2026-09-25. This file began as a verbatim extraction from `PRD.md` (commit `69a72afc`, immediately before the 2026-08-21 consolidation). Completed audit and remediation records, implementation history and status tables were removed in this condensation — `codebase.md` owns implementation history, `PRD.md` and `AGENTS.md` own current truth, and the untouched verbatim original remains recoverable in Git history (`10ec5f25^`, also `ae7cabc5`).
 
+## Launch-scope deferrals — 2026-11-13
+
+This overlay records the deferrals and removals that bound the current Cloud launch offering. It supersedes the capability statements in the older overlays below for the duration of the launch; those dated overlays remain accurate records of what was intended at their date, and the roadmap beneath them is unchanged. `PRD.md` owns current product truth and release evidence; this section owns the launch scope boundary.
+
+### Scheduled scans
+
+- **Reason.** The launch path is a one-off review. Recurring occurrence publication, the slot/reservation commit and long-run cursor fairness are not qualified through the same trusted admission fence as an interactive scan (`PRD.md` §8, §9).
+- **Impact.** Schedule creation and enabling are disabled. Stored schedule rows and their run history are preserved and remain readable; no schedule is deleted, and no queued or in-flight occurrence is silently replayed or downgraded — existing work is reconciled through the authenticated shared helpers.
+- **Re-entry condition.** A completed occurrence-publication, settlement and recovery path through the shared fence, plus retained long-window fairness evidence and a dated receipt.
+
+### Authenticated assessments
+
+- **Reason.** The staging beta binds a pre-created test session to a relay grant. Assessment authorization, target-domain verification, integration state and funding parity are not yet inside the qualified controller fence (`PRD.md` §8).
+- **Impact.** Assessment admission stays off. Stored assessments and their evidence are preserved. A Safe/Quick URL or API review does not become an authenticated assessment by renaming a goal or workflow.
+- **Re-entry condition.** Assessment authorization, target-domain verification and funding parity passing the same transaction fence as repository preparation, with recorded end-to-end acceptance.
+
+### Advanced sandbox capabilities not invoked by retained repository execution
+
+- **Reason.** Only the sandbox operations the repository engine actually invokes are retained. The wider optional terminal, file and snapshot surface is unqualified and unnecessary for the launch path.
+- **Impact.** The unused optional surface is deferred rather than deleted: the operations required by repository engine execution stay intact, so repository scans are unaffected.
+- **Re-entry condition.** A traced caller that needs a specific operation, plus a bounded, authorized and qualified implementation of it.
+
+### Enterprise, infrastructure-expansion and speculative integration roadmap
+
+- **Status.** Already deferred further down this document, in `Current Phase 2 direction` and `Explicitly deferred`: enterprise SSO/OIDC and SCIM, advanced policy, private worker, VPC/self-hosting, data residency, IaC/container/cloud-account and reachability scanning, SIEM/Jira/CI integration adapters, plus a large speculative integration catalog.
+- **Reason, impact and re-entry condition.** Unchanged and recorded there. They are cross-referenced here rather than restated, so the launch does not carry a second backlog and nothing is pulled forward by this overlay.
+
+### LyraShield Local/Desktop launch and its deferred roadmap
+
+- **Status.** Untouched. This deferral makes no change to Desktop implementation, packaging, signing, releases or Desktop-only dependency work, and it records no Desktop roadmap item.
+- **Reason.** Desktop has no signed release and is outside this Cloud launch.
+- **Impact.** Desktop MCP clients — for example a vendor's desktop coding assistant — are not this product and keep their supported MCP installation paths.
+- **Re-entry condition.** A separate, explicit Desktop launch decision.
+
+### URL/API Standard, Deep and Custom profiles — removed from the launch offering
+
+- **Reason.** Engine-backed URL/API profiles depend on the target-traffic controller and relay path; the deterministic path is the one with retained qualification.
+- **Impact.** URL and API targets launch with deterministic **Safe** and **Quick** only — no model calls and no agent-minutes. Standard, Deep and Custom are not offered. Historical scans stay readable and immutable at their recorded mode, and an explicit Standard/Deep/Custom request returns an unsupported-profile error before any queue, provider or financial side effect rather than silently downgrading to Safe/Quick.
+- **Re-entry condition.** A future explicit product decision. Phase 2 does not automatically re-enable these profiles, and nothing here schedules their return.
+
+None of these deferrals changes the evidence boundaries in `PRD.md` §8 and §9: unverified work stays `DETECTED` or `INCONCLUSIVE`; preserved data is not a capability claim; no deferral is described as acceptance evidence.
+
 ## Planning overlay — 2026-09-25
 
-This overlay records the current Phase 2 direction as of 2026-09-25 and supersedes the 2026-08-26 overlay below, which is retained in condensed form, as is the archive beneath it. `PRD.md`, `AGENTS.md`, `docs/whitepaper.md` §10 and running code remain authoritative for current implementation and release status.
+This overlay records the Phase 2 direction and open-gate snapshot as of 2026-09-25 and supersedes the 2026-08-26 overlay below, which is retained in condensed form, as is the archive beneath it. The release IDs and gate list below are historical snapshots. `PRD.md`, `AGENTS.md`, `docs/whitepaper.md` §10 and running code remain authoritative for current implementation and release status.
 
 ### What changed since the 2026-08-26 overlay
 

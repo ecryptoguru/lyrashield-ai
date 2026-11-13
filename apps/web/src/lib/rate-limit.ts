@@ -353,6 +353,20 @@ export async function checkInvitationCreateRateLimit(workspaceId: string) {
   return checkInMemory(`invite-create:${workspaceId}`, INVITATION_CREATE_MAX, WINDOW_MS)
 }
 
+/** Explicit external tests are capped per user, workspace, and provider. */
+export async function checkNotificationTestRateLimit(input: {
+  workspaceId: string
+  userId: string
+  channel: "slack" | "discord"
+}) {
+  const key = `notification-test:${JSON.stringify([input.workspaceId, input.userId, input.channel])}`
+  const shared = await checkUpstash(3, "60 s", key)
+  if (shared) return { ...shared, unavailable: false }
+  // Cross-instance uncertainty must not permit an external-message flood.
+  if (isProd) return { limited: true, remaining: 0, retryAfter: 60, unavailable: true }
+  return { ...checkInMemory(key, 3, WINDOW_MS), unavailable: false }
+}
+
 // ─── Sprint 10 rate limits ───────────────────────────────────────────────────
 
 /** A-M08: Bounds billing checkout/topup creation per workspace per minute. */

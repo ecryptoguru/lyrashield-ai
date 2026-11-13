@@ -105,13 +105,19 @@ const ignored = "fenced code"
       '<meta property="article:modified_time" content="2026-07-18T00:00:00.000Z">'
     )
     expect(html).toContain('href="/blog/editorial-policy"')
-    expect(html).toContain('srcset="/images/blog/library/authority-guide-01/hero.avif"')
-    expect(html).toContain('srcset="/images/blog/library/authority-guide-01/hero.webp"')
+    expect(html).toContain(
+      'srcset="/images/blog/responsive/authority-guide-01/hero-480.avif 480w, /images/blog/responsive/authority-guide-01/hero-960.avif 960w, /images/blog/library/authority-guide-01/hero.avif 1600w"'
+    )
+    expect(html).toContain(
+      'srcset="/images/blog/responsive/authority-guide-01/hero-480.webp 480w, /images/blog/responsive/authority-guide-01/hero-960.webp 960w, /images/blog/library/authority-guide-01/hero.webp 1600w"'
+    )
     expect(html).toContain('src="/images/blog/library/authority-guide-01/hero.jpg"')
     expect(html).toContain('width="1600"')
     expect(html).toContain('height="900"')
-    expect(html).toContain('loading="eager"')
-    expect(html).toContain('fetchpriority="high"')
+    expect(html).toContain('loading="lazy"')
+    expect(html.indexOf("Rendered article body.")).toBeLessThan(
+      html.indexOf('class="blog-post__hero"')
+    )
     expect(html).toContain('sizes="(min-width: 1024px) 784px, calc(100vw - 2rem)"')
 
     const jsonLdSource = html.match(
@@ -277,7 +283,7 @@ const ignored = "fenced code"
 
   it("keeps drafts out of every discovery surface", () => {
     const index = source("../pages/blog/[...page].astro")
-    const tags = source("../pages/blog/tags/[tag].astro")
+    const tags = source("../pages/blog/tags/[tag]/[...page].astro")
     const llms = source("../pages/llms.txt.ts")
 
     for (const surface of [index, tags, llms]) {

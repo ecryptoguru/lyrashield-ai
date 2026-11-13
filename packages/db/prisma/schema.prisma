@@ -104,6 +104,7 @@ model Account {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([issuer, accountId])
+  @@unique([providerId, accountId])
   @@index([userId])
   @@map("accounts")
 }
@@ -424,6 +425,73 @@ enum ScanMode {
   CUSTOM
 }
 
+enum ScanDispatchCommandType {
+  PREPARE
+  START_PAID
+  START_UNMETERED
+  STOP
+  RECONCILE
+}
+
+enum ScanDispatchOperationState {
+  QUEUED
+  WAITING_CAPACITY
+  PREPARING
+  PREPARED
+  START_PENDING
+  ACTIVE
+  STOPPING
+  TERMINATED
+  REJECTED
+  UNKNOWN
+}
+
+enum ScanQueueOutboxState {
+  PENDING
+  LEASED
+  PUBLISHED
+  UNKNOWN
+}
+
+enum ScanDispatchOutboxStatus {
+  PENDING
+  LEASED
+  DELIVERED
+  ACCEPTED
+  COMPLETED
+  REJECTED
+  UNKNOWN
+}
+
+enum ScanDispatchStartKind {
+  PAID
+  UNMETERED
+}
+
+enum ScanSupervisorReceiptType {
+  COMMAND_ACCEPTED
+  PREPARE_COMPLETED
+  EXECUTOR_CREATE_INTENT
+  EXECUTOR_CREATED
+  EXECUTOR_STARTED
+  EXECUTOR_EXITED
+  STOPPED
+  NEVER_DISPATCHED
+  UNKNOWN
+}
+
+enum ScanPhysicalExecutionState {
+  RESERVED
+  PREPARING
+  DISPATCH_PENDING
+  ACTIVE
+  STOP_REQUESTED
+  CLEANUP_PENDING
+  STOPPED
+  NEVER_DISPATCHED
+  UNKNOWN
+}
+
 enum ScanStatus {
   QUEUED
   PREFLIGHT
@@ -582,6 +650,7 @@ model Workspace {
   syncCursors              SyncCursor[]
   agentConnections         AgentConnection[]
   agentOperations          AgentOperation[]
+  delegatedScanProvenance  DelegatedScanProvenance[]
   loopClosures             LoopClosure[]
   scanAttachments          ScanAttachment[]
 
@@ -664,6 +733,7 @@ model Target {
   threatModels             ThreatModel[]
   controlEvidence          ControlEvidence[]
   liveAiSafetyPlans        LiveAiSafetyPlan[]
+  delegatedScanProvenance  DelegatedScanProvenance[]
 
   @@unique([workspaceId, repoFullName], where: { deletedAt: null }, map: "Target_workspaceId_repoFullName_key")
   @@unique([workspaceId, url], where: { deletedAt: null }, map: "Target_workspaceId_url_key")
@@ -783,6 +853,8 @@ model LiveAiSafetyRun {
 }
 
 model Policy {
+  authorityIncarnation    String    @default(dbgenerated("(gen_random_uuid())::text"))
+  authorityRevision       Int       @default(1)
   id                      String    @id @default(cuid())
   workspaceId             String
   name                    String
@@ -809,6 +881,7 @@ model Policy {
 }
 
 model Scan {
+  policyBindingRevision         Int        @default(1)
   id                            String     @id @default(cuid())
   workspaceId                   String
   projectId                     String?
@@ -836,6 +909,8 @@ model Scan {
   determinismMode               String?    @default("default")
   durationMs                    Int?
   finalizationStartedAt         DateTime?
+  accountingVersion             Int?
+  accountingSettledAt           DateTime?
   // Immutable server-owned execution plan snapshot + its canonical-JSON sha256.
   // Written once at creation; NULL on scans created before the column existed.
   executionPlan                 Json?
@@ -873,6 +948,7 @@ model Scan {
   coverageReceipts        ScanCoverageReceipt[]
   findingCandidates       FindingCandidate[]
   findingVerifications    FindingVerification[]
+  delegatedScanProvenance DelegatedScanProvenance?
 
   @@index([workspaceId])
   @@index([projectId])
@@ -1191,19 +1267,26 @@ model FixProposal {
 }
 
 model PullRequest {
-  id            String    @id @default(cuid())
-  fixProposalId String
-  provider      String
-  repoOwner     String
-  repoName      String
-  branchName    String
-  prNumber      Int?
-  prUrl         String?
-  status        String    @default("open")
-  deletedAt     DateTime?
-  createdAt     DateTime  @default(now())
-  mergedAt      DateTime?
-  closedAt      DateTime?
+  /// Durable proposal/repository/base/patch identity; independent of approvals and actors.
+  executionKey    String?   @unique
+  baseCommit      String?
+  diffChecksum    String?
+  approvalId      String?
+  requestedById   String?
+  credentialActor Json?
+  id              String    @id @default(cuid())
+  fixProposalId   String
+  provider        String
+  repoOwner       String
+  repoName        String
+  branchName      String
+  prNumber        Int?
+  prUrl           String?
+  status          String    @default("open")
+  deletedAt       DateTime?
+  createdAt       DateTime  @default(now())
+  mergedAt        DateTime?
+  closedAt        DateTime?
 
   fixProposal FixProposal @relation(fields: [fixProposalId], references: [id], onDelete: Cascade)
 
@@ -1634,19 +1717,22 @@ model Notification {
 }
 
 model Schedule {
-  id          String    @id @default(cuid())
-  workspaceId String
-  targetId    String
-  cron        String
-  goal        ScanGoal
-  mode        ScanMode  @default(SAFE)
-  enabled     Boolean   @default(true)
-  lastRunAt   DateTime?
-  nextRunAt   DateTime?
-  createdById String
-  deletedAt   DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id                String    @id @default(cuid())
+  workspaceId       String
+  targetId          String
+  cron              String
+  goal              ScanGoal
+  mode              ScanMode  @default(SAFE)
+  enabled           Boolean   @default(true)
+  lastRunAt         DateTime?
+  nextRunAt         DateTime?
+  lastScanId        String?
+  lastBlockedAt     DateTime?
+  lastBlockedReason String?   @db.VarChar(64)
+  createdById       String
+  deletedAt         DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   target    Target    @relation(fields: [targetId], references: [id], onDelete: Cascade)
@@ -1908,9 +1994,10 @@ model AgentConnection {
   createdAt            DateTime              @default(now())
   updatedAt            DateTime              @updatedAt
 
-  workspace  Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  operations AgentOperation[]
+  workspace               Workspace                 @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user                    User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  operations              AgentOperation[]
+  delegatedScanProvenance DelegatedScanProvenance[]
 
   @@unique([id, workspaceId])
   @@index([workspaceId])
@@ -1950,11 +2037,14 @@ model AgentOperation {
   resultReference      String?
   result               Json?
   error                String?
+  /// SHA-256 of a one-time server-issued admission proof. NULL on legacy rows.
+  admissionProofHash   String?
   createdAt            DateTime             @default(now())
   updatedAt            DateTime             @updatedAt
 
-  workspace  Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  connection AgentConnection? @relation(fields: [connectionId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+  workspace               Workspace                @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  connection              AgentConnection?         @relation(fields: [connectionId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+  delegatedScanProvenance DelegatedScanProvenance?
 
   @@unique([connectionId, operationName, idempotencyKey])
   @@unique([workspaceId, principalType, principalId, operationName, idempotencyKey])
@@ -1963,18 +2053,392 @@ model AgentOperation {
   @@map("agent_operations")
 }
 
+/// Immutable proof that the server admitted exactly one scan for an operation.
+/// Legacy operations have no row and remain unproven.
+model DelegatedScanProvenance {
+  operationId           String   @id
+  workspaceId           String
+  scanId                String   @unique
+  targetId              String
+  connectionId          String
+  authorizationVersion  Int
+  operationInputHash    String
+  scanExecutionPlanHash String
+  createdAt             DateTime @default(now())
+
+  operation  AgentOperation  @relation(fields: [operationId], references: [id], onDelete: Cascade)
+  workspace  Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  scan       Scan            @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  target     Target          @relation(fields: [targetId], references: [id], onDelete: Restrict)
+  connection AgentConnection @relation(fields: [connectionId, workspaceId], references: [id, workspaceId], onDelete: Cascade)
+
+  @@index([workspaceId, targetId, createdAt])
+  @@index([workspaceId, connectionId])
+  @@map("delegated_scan_provenance")
+}
+
+/// Closed-by-default authority epochs. A new epoch must be inserted with a
+/// higher number; a closed epoch can never be reopened.
+model ScanAuthorityEpoch {
+  id        String    @id @default(cuid())
+  epoch     Int       @unique
+  isOpen    Boolean   @default(false)
+  openKey   String?   @unique
+  openedAt  DateTime?
+  closedAt  DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  workerInstanceGrants     ScanWorkerInstanceGrant[]
+  attempts                 ScanDispatchAttempt[]
+  physicalExecutions       ScanPhysicalExecution[]
+  supervisorReceipts       ScanSupervisorReceipt[]
+  supervisorJournalStreams ScanSupervisorJournalStream[]
+  releaseReceipts          ScanDispatchReleaseReceipt[]
+}
+
+/// Supervisor-issued worker identity. Only the credential digest is durable;
+/// the credential itself is never persisted.
+model ScanWorkerInstanceGrant {
+  id               String    @id @default(cuid())
+  authorityEpochId String
+  instanceId       String    @unique
+  credentialHash   String    @unique
+  issuedAt         DateTime  @default(now())
+  expiresAt        DateTime
+  revokedAt        DateTime?
+  lastSeenAt       DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  authorityEpoch     ScanAuthorityEpoch      @relation(fields: [authorityEpochId], references: [id], onDelete: Restrict)
+  attempts           ScanDispatchAttempt[]
+  physicalExecutions ScanPhysicalExecution[]
+
+  @@index([authorityEpochId])
+  @@index([expiresAt])
+  @@index([revokedAt])
+}
+
+/// One durable admission operation per scan. The operation survives before a
+/// worker-bound attempt exists and is the authoritative lost-ACK lookup key.
+model ScanDispatchOperation {
+  operationId     String                     @id @default(cuid())
+  scanId          String                     @unique
+  workspaceId     String
+  protocolVersion Int                        @default(3)
+  requestDigest   String
+  state           ScanDispatchOperationState @default(QUEUED)
+  terminalReason  String?
+  createdAt       DateTime                   @default(now())
+  updatedAt       DateTime                   @updatedAt
+
+  attempt ScanDispatchAttempt?
+
+  @@index([workspaceId, state])
+  @@index([state, updatedAt])
+}
+
+/// BullMQ publication is transport, not execution authority. Queue publication
+/// therefore has its own outbox and deliberately has no attempt foreign key.
+model ScanQueueOutbox {
+  id                          String               @id @default(cuid())
+  scanId                      String               @unique
+  operationId                 String               @unique
+  jobId                       String               @unique
+  payloadDigest               String
+  /// Exact immutable canonical admitted job bytes. NULL legacy rows are unavailable.
+  payloadInputJson            String?
+  /// Private positive queue readback; publication alone never authorizes execution.
+  publicationReceiptInputJson String?
+  publicationReceiptChecksum  String?
+  state                       ScanQueueOutboxState @default(PENDING)
+  attempts                    Int                  @default(0)
+  leaseOwner                  String?
+  leaseExpiresAt              DateTime?
+  publishedAt                 DateTime?
+  lastErrorCode               String?
+  createdAt                   DateTime             @default(now())
+  updatedAt                   DateTime             @updatedAt
+
+  @@index([state, leaseExpiresAt])
+}
+
+/// Immutable broker-authorized execution identity. Scan IDs are deliberately
+/// not foreign keys: ordinary scan deletion must not erase authority evidence.
+model ScanDispatchAttempt {
+  operationId                   String    @id
+  attemptId                     String    @unique
+  scanId                        String
+  workspaceId                   String
+  initiatingUserId              String
+  sponsorAccountId              String
+  targetId                      String
+  targetSnapshotDigest          String
+  executionPlanHash             String
+  scopeDigest                   String
+  policyId                      String?
+  policyVersion                 String
+  policyDigest                  String
+  delegatedAuthorizationVersion Int?
+  attachmentIds                 String[]  @default([])
+  focusDigest                   String?
+  mode                          ScanMode
+  goal                          ScanGoal
+  maxBudgetUsd                  Decimal   @db.Decimal(19, 4)
+  maxRuntimeMs                  Int
+  authorityEpochId              String
+  workerInstanceGrantId         String
+  expiresAt                     DateTime
+  createdAt                     DateTime  @default(now())
+  /// Checked PREPARE intent, never permission for physical consumption. Legacy NULLs remain unavailable.
+  authorityAcceptedAt           DateTime?
+  authorityDeadlineAt           DateTime?
+  /// PostgreSQL transaction identity is audit metadata, never a capability.
+  authorityTransactionId        String?
+
+  operation                 ScanDispatchOperation          @relation(fields: [operationId], references: [operationId], onDelete: Restrict)
+  authorityEpoch            ScanAuthorityEpoch             @relation(fields: [authorityEpochId], references: [id], onDelete: Restrict)
+  workerInstanceGrant       ScanWorkerInstanceGrant        @relation(fields: [workerInstanceGrantId], references: [id], onDelete: Restrict)
+  outbox                    ScanDispatchOutbox[]
+  executionActionIntents    ScanExecutionActionIntent[]
+  executionInvocationGuards ScanExecutionInvocationGuard[]
+  start                     ScanDispatchStart?
+  physicalExecution         ScanPhysicalExecution?
+  supervisorReceipts        ScanSupervisorReceipt[]
+  releaseReceipts           ScanDispatchReleaseReceipt[]
+
+  @@unique([attemptId, scanId])
+  @@unique([operationId, attemptId])
+  @@index([scanId])
+  @@index([workspaceId])
+  @@index([policyId])
+  @@index([sponsorAccountId])
+  @@index([authorityEpochId])
+  @@index([workerInstanceGrantId])
+  @@index([expiresAt])
+}
+
+/// Durable command intent. Commands are represented by a bounded digest, not
+/// by raw payloads or credentials.
+model ScanDispatchOutbox {
+  id                   String                   @id @default(cuid())
+  operationId          String
+  attemptId            String
+  commandType          ScanDispatchCommandType
+  sequence             Int                      @default(1)
+  commandDigest        String
+  commandInputJson     String?
+  commandInputChecksum String?
+  status               ScanDispatchOutboxStatus @default(PENDING)
+  attempts             Int                      @default(0)
+  availableAt          DateTime                 @default(now())
+  leaseOwner           String?
+  leaseExpiresAt       DateTime?
+  deliveredAt          DateTime?
+  createdAt            DateTime                 @default(now())
+  updatedAt            DateTime                 @updatedAt
+
+  attempt  ScanDispatchAttempt     @relation(fields: [operationId, attemptId], references: [operationId, attemptId], onDelete: Restrict)
+  receipts ScanSupervisorReceipt[]
+
+  @@unique([operationId, commandType])
+  @@index([attemptId])
+  @@index([status, availableAt])
+}
+
+/// Immutable start decision. Paid starts retain the existing lifetime billable
+/// claim; unmetered starts require a zero-budget attempt and bind it to an
+/// existing RESERVED capacity reservation without settling or releasing it.
+model ScanDispatchStart {
+  startId              String                @id @default(cuid())
+  operationId          String                @unique
+  attemptId            String                @unique
+  kind                 ScanDispatchStartKind
+  maxBudgetUsd         Decimal               @db.Decimal(19, 4)
+  maxRuntimeMs         Int
+  policyDigest         String
+  fundingDigest        String
+  billableClaimEventId String?
+  providerGrantDigest  String?
+  createdAt            DateTime              @default(now())
+
+  attempt ScanDispatchAttempt @relation(fields: [operationId, attemptId], references: [operationId, attemptId], onDelete: Restrict)
+
+  @@unique([operationId, attemptId])
+}
+
+/// Current physical-execution projection. `scanId` is denormalized so the
+/// partial unique index can prevent overlapping unresolved attempts.
+model ScanPhysicalExecution {
+  attemptId             String                     @id
+  operationId           String
+  scanId                String
+  workspaceId           String
+  authorityEpochId      String
+  workerInstanceGrantId String
+  state                 ScanPhysicalExecutionState @default(RESERVED)
+  unresolvedKey         String?                    @unique
+  revision              Int                        @default(1)
+  lastReceiptId         String?                    @unique
+  createdAt             DateTime                   @default(now())
+  updatedAt             DateTime                   @updatedAt
+
+  attempt             ScanDispatchAttempt               @relation(fields: [attemptId, scanId], references: [attemptId, scanId], onDelete: Restrict)
+  authorityEpoch      ScanAuthorityEpoch                @relation(fields: [authorityEpochId], references: [id], onDelete: Restrict)
+  workerInstanceGrant ScanWorkerInstanceGrant           @relation(fields: [workerInstanceGrantId], references: [id], onDelete: Restrict)
+  lastReceipt         ScanSupervisorReceipt?            @relation("PhysicalLastReceipt", fields: [lastReceiptId], references: [id], onDelete: Restrict)
+  transitions         ScanPhysicalExecutionTransition[]
+
+  @@unique([attemptId, scanId])
+  @@unique([attemptId, operationId])
+  @@index([scanId, state])
+  @@index([workspaceId, state])
+  @@index([authorityEpochId])
+  @@index([workerInstanceGrantId])
+  @@index([revision])
+}
+
+/// Append-only physical lifecycle journal. A transition must increment the
+/// current physical revision by exactly one and cite an authenticated
+/// supervisor receipt. Leaving UNKNOWN requires explicit reconciliation.
+model ScanPhysicalExecutionTransition {
+  id                  String                     @id @default(cuid())
+  attemptId           String
+  operationId         String
+  revision            Int
+  fromState           ScanPhysicalExecutionState
+  toState             ScanPhysicalExecutionState
+  supervisorReceiptId String
+  createdAt           DateTime                   @default(now())
+
+  physicalExecution ScanPhysicalExecution @relation(fields: [attemptId, operationId], references: [attemptId, operationId], onDelete: Restrict)
+  supervisorReceipt ScanSupervisorReceipt @relation(fields: [supervisorReceiptId], references: [id], onDelete: Restrict)
+
+  @@unique([attemptId, revision])
+  @@unique([attemptId, supervisorReceiptId], map: "ScanPhysicalExecutionTransition_attemptId_supervisorReceipt_key")
+  @@index([operationId, revision])
+  @@index([toState, createdAt])
+}
+
+/// Append-only supervisor journal mirrored into PostgreSQL. The HTTP broker
+/// authenticates the supervisor before inserting these rows; the database
+/// enforces command binding, monotonic sequence and terminal evidence.
+/// Private control-owned signed journal. Browser/runtime roles have no access.
+model ScanSupervisorJournalStream {
+  id                   String                        @id @default(cuid())
+  authorityEpochId     String
+  supervisorInstanceId String
+  originalKeyHash      String
+  wrapperKeyHash       String
+  confirmedSequence    BigInt                        @default(0)
+  originalHash         String                        @default("0000000000000000000000000000000000000000000000000000000000000000")
+  wrapperHash          String                        @default("0000000000000000000000000000000000000000000000000000000000000000")
+  headInputJson        String?
+  projectionSequence   Int                           @default(0)
+  projectionHash       String?
+  createdAt            DateTime                      @default(now())
+  updatedAt            DateTime                      @default(now()) @updatedAt
+  authorityEpoch       ScanAuthorityEpoch            @relation(fields: [authorityEpochId], references: [id], onDelete: Restrict)
+  records              ScanSupervisorJournalRecord[]
+
+  @@unique([authorityEpochId, supervisorInstanceId], map: "ScanSupervisorJournalStream_identity_key")
+}
+
+model ScanSupervisorJournalRecord {
+  id                String                      @id @default(cuid())
+  streamId          String
+  sequence          BigInt
+  workspaceId       String
+  operationId       String
+  attemptId         String
+  originalHash      String
+  wrapperHash       String
+  originalInputJson String
+  wrapperInputJson  String
+  createdAt         DateTime                    @default(now())
+  stream            ScanSupervisorJournalStream @relation(fields: [streamId], references: [id], onDelete: Restrict)
+  supervisorReceipt ScanSupervisorReceipt?
+
+  @@unique([streamId, sequence])
+  @@unique([streamId, originalHash])
+  @@unique([streamId, wrapperHash])
+  @@index([operationId, sequence])
+}
+
+model ScanSupervisorReceipt {
+  id                   String                    @id @default(cuid())
+  supervisorInstanceId String
+  operationId          String
+  attemptId            String
+  authorityEpochId     String
+  commandId            String
+  sequence             Int
+  previousReceiptHash  String?
+  receiptHash          String                    @unique
+  signature            String
+  receiptType          ScanSupervisorReceiptType
+  executorKey          String?
+  outcome              String?
+  evidenceDigest       String
+  observedAt           DateTime
+  createdAt            DateTime                  @default(now())
+
+  /// NULL legacy sources cannot qualify command completion.
+  journalRecordId String?                      @unique
+  eventType       String?
+  terminalStatus  String?
+  journalRecord   ScanSupervisorJournalRecord? @relation(fields: [journalRecordId], references: [id], onDelete: Restrict)
+
+  command               ScanDispatchOutbox                  @relation(fields: [commandId], references: [id], onDelete: Restrict)
+  attempt               ScanDispatchAttempt                 @relation(fields: [operationId, attemptId], references: [operationId, attemptId], onDelete: Restrict)
+  authorityEpoch        ScanAuthorityEpoch                  @relation(fields: [authorityEpochId], references: [id], onDelete: Restrict)
+  physicalLastFor       ScanPhysicalExecution?              @relation("PhysicalLastReceipt")
+  transitions           ScanPhysicalExecutionTransition[]
+  dispatchRelease       ScanDispatchReleaseReceipt?
+  invocationResolutions ScanExecutionInvocationResolution[]
+
+  @@unique([supervisorInstanceId, sequence])
+  @@unique([attemptId, sequence])
+  @@index([commandId])
+  @@index([operationId, observedAt])
+  @@index([attemptId, receiptType])
+}
+
+/// Broker-owned terminal release record. This does not release production
+/// capacity by itself; the future integration must require it before deleting a
+/// UserScanSlot or marking a reservation reusable.
+model ScanDispatchReleaseReceipt {
+  id                  String                     @id @default(cuid())
+  operationId         String                     @unique
+  attemptId           String                     @unique
+  authorityEpochId    String
+  physicalState       ScanPhysicalExecutionState
+  supervisorReceiptId String                     @unique
+  releaseDigest       String
+  capacityDisposition String
+  createdAt           DateTime                   @default(now())
+
+  attempt           ScanDispatchAttempt   @relation(fields: [operationId, attemptId], references: [operationId, attemptId], onDelete: Restrict)
+  authorityEpoch    ScanAuthorityEpoch    @relation(fields: [authorityEpochId], references: [id], onDelete: Restrict)
+  supervisorReceipt ScanSupervisorReceipt @relation(fields: [supervisorReceiptId], references: [id], onDelete: Restrict)
+
+  @@index([authorityEpochId, createdAt])
+}
+
 model OnboardingState {
-  id           String   @id @default(cuid())
-  userId       String   @unique
-  currentStep  Int      @default(0)
-  completed    Boolean  @default(false)
-  skipped      Boolean  @default(false)
-  workspaceId  String?
-  targetId     String?
-  selectedGoal String?
-  buildTool    String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id                             String   @id @default(cuid())
+  userId                         String   @unique
+  currentStep                    Int      @default(0)
+  completed                      Boolean  @default(false)
+  skipped                        Boolean  @default(false)
+  workspaceId                    String?
+  targetId                       String?
+  selectedGoal                   String?
+  buildTool                      String?
+  pendingWorkspaceCreatedAuditId String?
+  createdAt                      DateTime @default(now())
+  updatedAt                      DateTime @updatedAt
 
   @@index([userId])
   @@map("onboarding_states")
@@ -2160,6 +2624,12 @@ model MinutePack {
   @@index([accountId])
   @@index([workspaceId, expiresAt])
   @@index([workspaceId, expiresAt, remainingMinutes])
+  // Cross-tenant expiry sweep (packages/billing/src/usage/expiry.ts:33-40):
+  //   WHERE "deletedAt" IS NULL AND "expiresAt" < now() AND "remainingMinutes" > 0
+  // Existing indexes lead with workspaceId or accountId; planner usefulness
+  // depends on selectivity. This expiry-leading partial index is created by
+  // migration 20261008120000_p2_16_minute_pack_expiry_index (the retained P2-16 change).
+  @@index([expiresAt], where: raw("\"remainingMinutes\" > 0 AND \"deletedAt\" IS NULL"), map: "MinutePack_expiresAt_active_partial_idx")
 }
 
 // ─── Sprint 10 / Track B: Local / Self-Hosted Licensing ─────────────────────
@@ -2892,4 +3362,99 @@ model MyraGenerationReservation {
   @@index([monthStart, status])
   @@index([status, createdAt])
   @@map("myra_generation_reservations")
+}
+
+// Durable initiating-user admission; no expiry can authorize overlapping execution.
+model UserScanSlot {
+  userId      String   @id
+  scanId      String   @unique
+  workspaceId String
+  createdAt   DateTime @default(now())
+}
+
+// Retained account-owned funding receipt. No cascading FK: deletion must not erase accounting.
+model ScanCapacityReservation {
+  scanId            String    @id
+  accountId         String
+  workspaceId       String
+  userId            String
+  state             String    @default("WAITING")
+  accountingVersion Int       @default(2)
+  multiplier        Int
+  cycleStart        DateTime?
+  billingAccountId  String?
+  poolMinutes       Int       @default(0)
+  packMinutes       Int       @default(0)
+  packAllocations   Json      @default("[]")
+  graceMinutes      Int       @default(0)
+  overageMinutes    Int       @default(0)
+  fundedMinutes     Int       @default(0)
+  runtimeLimitMs    Int       @default(0)
+  observedMs        Int       @default(0)
+  chargedMinutes    Int       @default(0)
+  absorbedMinutes   Int       @default(0)
+  stoppedAt         DateTime?
+  settledAt         DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([accountId, state, createdAt, scanId])
+}
+
+/// Private exact action evidence; a committed intent never proves invocation.
+model ScanExecutionActionIntent {
+  id                 String              @id @default(cuid())
+  phase              String
+  operationId        String
+  attemptId          String
+  scanId             String
+  workspaceId        String
+  authorityEpochId   String
+  authorityRevision  Int
+  requestId          String
+  prepareCommandId   String
+  authorityInputJson String
+  authorityChecksum  String
+  actionInputJson    String
+  actionChecksum     String
+  ownershipReceiptId String?
+  expiresAt          DateTime
+  createdAt          DateTime            @default(now())
+  attempt            ScanDispatchAttempt @relation(fields: [operationId, attemptId], references: [operationId, attemptId], onDelete: Restrict)
+
+  @@unique([operationId, phase, requestId])
+  @@index([workspaceId])
+}
+
+model ScanExecutionInvocationGuard {
+  id                String                             @id @default(cuid())
+  operationId       String
+  attemptId         String
+  scanId            String
+  workspaceId       String
+  authorityEpochId  String
+  phase             String
+  commandId         String?
+  requestId         String?
+  executorKey       String?
+  authorityChecksum String
+  actionChecksum    String
+  bindingInputJson  String
+  createdAt         DateTime                           @default(now())
+  attempt           ScanDispatchAttempt                @relation(fields: [operationId, attemptId], references: [operationId, attemptId], onDelete: Restrict)
+  resolution        ScanExecutionInvocationResolution?
+
+  @@unique([operationId, phase, actionChecksum], map: "ScanExecutionInvocationGuard_original_action_key")
+  @@index([workspaceId])
+}
+
+model ScanExecutionInvocationResolution {
+  id             String                       @id @default(cuid())
+  guardId        String                       @unique
+  receiptId      String
+  proofInputJson String
+  proofChecksum  String
+  createdAt      DateTime                     @default(now())
+  guard          ScanExecutionInvocationGuard @relation(fields: [guardId], references: [id], onDelete: Restrict)
+  receipt        ScanSupervisorReceipt        @relation(fields: [receiptId], references: [id], onDelete: Restrict)
 }

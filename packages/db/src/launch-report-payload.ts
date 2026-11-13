@@ -17,7 +17,8 @@
 import { createHash } from "node:crypto"
 import { GATE_FRESHNESS_MS } from "@lyrashield/gate"
 
-export const LAUNCH_REPORT_PAYLOAD_VERSION = "lyrashield-launch-report/2.0.0"
+export const LEGACY_LAUNCH_REPORT_PAYLOAD_VERSION = "lyrashield-launch-report/2.0.0"
+export const LAUNCH_REPORT_PAYLOAD_VERSION = "lyrashield-launch-report/3.0.0"
 
 /** The neutral default shown for the app when the customer has not opted in to naming it. */
 export const NEUTRAL_APP_LABEL = "a protected application"
@@ -28,6 +29,8 @@ export type LaunchReportVerdictLabel = "Ready to launch" | "Not ready" | "Not en
 export interface LaunchReportShareablePayload {
   /** Payload format version (this constructor's contract). */
   payloadVersion: string
+  /** Opaque keyed commitment to this report's private issue-time identity. */
+  identityCommitment?: string
   /** Customer-facing verdict label. */
   verdictLabel: LaunchReportVerdictLabel
   /** The named, versioned standard the verdict was judged against. */
@@ -109,7 +112,7 @@ const VERDICT_LABELS: Record<LaunchReportSource["state"], LaunchReportVerdictLab
 function canonicalize(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonicalize)
   if (value && typeof value === "object") {
-    const out: Record<string, unknown> = {}
+    const out: Record<string, unknown> = Object.create(null)
     for (const key of Object.keys(value as Record<string, unknown>).sort()) {
       out[key] = canonicalize((value as Record<string, unknown>)[key])
     }
@@ -137,7 +140,7 @@ export function computeLaunchReportChecksum(
  */
 export function buildLaunchReportPayload(
   source: LaunchReportSource,
-  opts: { appDisplayName?: string; issuedAt?: Date } = {}
+  opts: { appDisplayName?: string; issuedAt?: Date; identityCommitment?: string } = {}
 ): LaunchReportShareablePayload {
   const issuedAt = opts.issuedAt ?? new Date()
 
@@ -147,7 +150,10 @@ export function buildLaunchReportPayload(
   })
 
   const base = {
-    payloadVersion: LAUNCH_REPORT_PAYLOAD_VERSION,
+    payloadVersion: opts.identityCommitment
+      ? LAUNCH_REPORT_PAYLOAD_VERSION
+      : LEGACY_LAUNCH_REPORT_PAYLOAD_VERSION,
+    ...(opts.identityCommitment ? { identityCommitment: opts.identityCommitment } : {}),
     verdictLabel: VERDICT_LABELS[source.state],
     standardVersion: source.standardVersion,
     appDisplayName: opts.appDisplayName?.trim() ? opts.appDisplayName.trim() : NEUTRAL_APP_LABEL,

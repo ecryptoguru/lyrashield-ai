@@ -1,7 +1,45 @@
 import { createRoot } from "react-dom/client"
 
 const root = createRoot(document.getElementById("root")!)
-if (new URLSearchParams(location.search).has("forms")) {
+if (new URLSearchParams(location.search).has("v26-dashboard")) {
+  await import("../../apps/web/src/app/globals.css")
+  const { default: V26DashboardHarness } = await import("./v26-dashboard-harness")
+  root.render(<V26DashboardHarness />)
+} else if (
+  new URLSearchParams(location.search).has("target-assessment") ||
+  new URLSearchParams(location.search).has("release-packet")
+) {
+  ;(globalThis as unknown as { process?: { env: Record<string, string | undefined> } }).process ??=
+    { env: {} }
+  await import("../../apps/web/src/app/globals.css")
+  const { default: CustomerSetupQualityHarness } = await import("./customer-setup-quality-harness")
+  root.render(<CustomerSetupQualityHarness />)
+} else if (new URLSearchParams(location.search).has("approvals")) {
+  await import("../../apps/web/src/app/globals.css")
+  const { default: ApprovalsHarness } = await import("./approvals-harness")
+  root.render(<ApprovalsHarness />)
+} else if (new URLSearchParams(location.search).has("github-connection")) {
+  await import("../../apps/web/src/app/globals.css")
+  const { default: GitHubConnectionHarness } = await import("./github-connection-harness")
+  root.render(<GitHubConnectionHarness />)
+} else if (new URLSearchParams(location.search).has("api-keys")) {
+  await import("../../apps/web/src/app/globals.css")
+  const { default: ApiKeysHarness } = await import("./api-keys-harness")
+  root.render(<ApiKeysHarness />)
+} else if (new URLSearchParams(location.search).has("notification-integrations")) {
+  await import("../../apps/web/src/app/globals.css")
+  const { default: NotificationIntegrationsHarness } =
+    await import("./notification-integrations-harness")
+  root.render(<NotificationIntegrationsHarness />)
+} else if (new URLSearchParams(location.search).has("notification-preferences")) {
+  await import("../../apps/web/src/app/globals.css")
+  const { NotificationPreferencesHarness } = await import("./notification-preferences-harness")
+  root.render(<NotificationPreferencesHarness />)
+} else if (new URLSearchParams(location.search).has("dashboard-ux")) {
+  await import("../../apps/web/src/app/globals.css")
+  const { default: DashboardUxHarness } = await import("./dashboard-ux-harness")
+  root.render(<DashboardUxHarness />)
+} else if (new URLSearchParams(location.search).has("forms")) {
   await import("../../apps/web/src/app/globals.css")
   const { default: FormsHarness } = await import("./forms-harness")
   root.render(<FormsHarness />)
@@ -37,6 +75,10 @@ if (new URLSearchParams(location.search).has("forms")) {
       setLastTraceId: () => {},
     }
   )
+} else if (new URLSearchParams(location.search).has("fixProposals")) {
+  await import("../../apps/web/src/app/globals.css")
+  const { default: FixProposalsHarness } = await import("./fix-proposals-harness")
+  root.render(<FixProposalsHarness />)
 } else if (new URLSearchParams(location.search).has("findings")) {
   await import("../../apps/web/src/app/globals.css")
   const { default: FindingsHarness } = await import("./findings-harness")

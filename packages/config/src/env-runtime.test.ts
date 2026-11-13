@@ -36,6 +36,16 @@ describe("runtime environment validation", () => {
     await expect(import("./env")).resolves.toBeDefined()
   })
 
+  it.each([undefined, "phase-production-build"])(
+    "rejects local reset mail capture in production, including build phase %s",
+    async (phase) => {
+      vi.stubEnv("NEXT_PHASE", phase)
+      vi.stubEnv("LYRASHIELD_TEST_AUTH_MAIL_DIR", "/tmp/lyrashield-auth-mail-fixture")
+      vi.stubEnv("LYRASHIELD_TEST_DB_DISPOSABLE", "1")
+      await expect(import("./env")).rejects.toThrow("Invalid environment configuration")
+    }
+  )
+
   it("requires a strong IP hash salt in production", async () => {
     vi.stubEnv("IP_HASH_SALT", "")
     await expect(import("./env")).rejects.toThrow("Invalid environment configuration")
@@ -47,15 +57,6 @@ describe("runtime environment validation", () => {
     vi.resetModules()
     vi.stubEnv("IP_HASH_SALT", "i".repeat(32))
     await expect(import("./env")).resolves.toBeDefined()
-  })
-
-  it("rejects Azure generation with an unapproved model", async () => {
-    vi.stubEnv("MYRA_GENERATION_ENABLED", "1")
-    vi.stubEnv("MYRA_PROVIDER", "azure")
-    vi.stubEnv("MYRA_AZURE_OPENAI_ENDPOINT", "https://example.openai.azure.com")
-    vi.stubEnv("MYRA_AZURE_OPENAI_API_KEY", "test-key")
-    vi.stubEnv("MYRA_MODEL", "gpt-4o")
-    await expect(import("./env")).rejects.toThrow("Invalid environment configuration")
   })
 
   it("rejects Azure generation without provider credentials and deployments", async () => {

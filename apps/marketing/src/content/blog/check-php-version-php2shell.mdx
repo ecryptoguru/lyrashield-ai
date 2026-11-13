@@ -1,0 +1,101 @@
+---
+title: "How to check your PHP version for PHP2Shell"
+description: "Check CLI, FPM, Apache, containers and vendor backports for PHP2Shell. Separate declared PHP requirements from evidence of the runtime serving requests."
+pubDate: 2026-10-24T00:00:00+05:30
+author: lyrashield-team
+tags: ["web-security", "verification"]
+draft: false
+heroImage: php2shell-version
+faq:
+  - q: "Is php -v enough to confirm my website is patched?"
+    a: "No. It identifies the CLI binary selected in that shell. The website may use a different FPM service, Apache module, container or package revision."
+  - q: "Does an old version string always mean PHP2Shell is unpatched?"
+    a: "No. A distribution may backport fixes. Confirm the vendor's security advisory and installed package revision, then verify the affected workers were restarted."
+  - q: "Does composer.json identify the deployed PHP version?"
+    a: "No. Its PHP constraint expresses supported or required versions. Composer platform overrides can simulate another version for dependency resolution. Neither proves the deployed interpreter."
+---
+
+Check the PHP version inside the service receiving your web requests, then compare it with the fixed release for that branch or your vendor's documented backport. Run `php -v` as a starting point, but identify whether the website uses FPM, an Apache module or another runtime. Keep the package revision and post-restart worker evidence with the version result.
+
+An AI-built application can inherit several conflicting deployment defaults. A repository can request PHP 8.3 while a hosting control panel selects 8.2 and your laptop runs 8.5. The [vibe coding security guide](/blog/vibe-coding-security-guide) recommends tying checks to the actual release. For PHP2Shell, the useful question is which executable serves this hostname now.
+
+## Begin with a read-only CLI check
+
+On a server you administer, collect the selected CLI binary and configuration locations. These commands inspect the current shell environment; they do not change PHP or test exploitation.
+
+```sh
+command -v php
+php -v
+php --ini
+```
+
+Save the result with the environment name and collection time. A screenshot that omits the hostname or container identity becomes difficult to interpret later. Keep the full record private if paths or hostnames reveal internal deployment details.
+
+PHP's [CLI options reference](https://www.php.net/manual/en/features.commandline.options.php) documents the version and configuration inspection options. The output is useful evidence about that invocation. It does not tell you whether nginx sends requests to a separate FPM socket or whether Apache loaded another PHP module hours before a package update.
+
+If the command is missing, resist installing a new interpreter just to obtain a version string. Check the service definition or container configuration first. Adding a CLI package can give you a fresh binary that has no relationship to the web service you meant to inspect.
+
+## Match the result to the right branch
+
+The [October 21 PHP announcement](https://www.php.net/archive/2026.php#2026-10-21-1) identifies 8.2.35, 8.3.36, 8.4.27 and 8.5.12 as fixed releases for CVE-2026-109618 and CVE-2026-109619. Compare within each branch. An upstream 8.4.26 installation is below its fix even though its major and minor version look newer than a patched 8.3 release.
+
+For example, if the runtime reports upstream 8.3.35, compare it with 8.3.36. If it reports a distribution suffix, keep that suffix and investigate the vendor package before deciding. If it reports an unsupported branch, the next question is who supplies its security maintenance. These outcomes call for different follow-up actions, even when a dashboard displays the same warning color.
+
+Version comparisons should parse numeric components. A string comparison can sort patch numbers incorrectly, and a single global minimum obscures the separate branch thresholds. Preserve suffixes when collecting evidence because a vendor's package revision may carry the backport identity. If a tool strips that suffix, collect the package result separately and attach it before accepting the assessment.
+
+For a quick interpretation, use the [PHP2Shell checker](/tools/php2shell-checker) with the exact version evidence you collected. Treat a result based on an upstream version as a version assessment. It cannot independently establish installed vendor patches, a successful restart or the identity of every process behind a load balancer.
+
+## Identify the web request handler
+
+Trace the virtual host or reverse proxy configuration to its PHP handler. An nginx service commonly forwards to FPM; Apache may use mod_php or proxy to FPM. The web server brand alone does not identify the PHP execution model.
+
+For FPM, find the service, pool and socket used by the relevant site. Confirm the executable path and package behind that service, then compare them with the CLI result. A server may keep several PHP branches installed for separate applications. Updating one branch does not replace the others.
+
+For Apache with mod_php, inspect the loaded module and its package source through your platform's supported administration tools. For Apache proxying to FPM, follow the configured backend instead. The [PHP configuration reference](https://www.php.net/manual/en/configuration.file.php) explains why different SAPIs can load different configuration files. Record the web handler beside the version rather than assuming they match.
+
+## Check inside the container, not only on its host
+
+A host's PHP installation does not identify the interpreter inside an application container. Use the container platform's authorized execution or inspection facility to collect the running container's version. With Docker, first find the intended container and inspect its immutable image identity.
+
+```sh
+# Substitute the application container you have already identified.
+docker inspect --format '{{.Image}}' php-app
+docker exec php-app php -v
+docker exec php-app php --ini
+```
+
+The example container name is illustrative. Run the commands only against your own selected application. An execution check still invokes CLI inside that container, so also verify that its web handler uses the same PHP installation.
+
+In a shared cluster, put the namespace, workload and container name in the evidence record. An adjacent maintenance container can have a different interpreter from the application container even when both appear under the same deployment.
+
+Collect the result for every replica or image group. A rolling deployment can leave old and new containers active simultaneously, and a worker process may live longer than a package transaction. Retain the deployment revision and restart evidence with the readback. The [patching walkthrough](/blog/patch-php2shell-docker-fpm-apache) explains how to replace the artifact after inspection.
+
+## Read repository constraints for what they say
+
+A `composer.json` PHP requirement tells dependency tooling which interpreter versions the project supports. It is useful for locating a likely branch, but it is not a production inventory. Composer's [platform configuration documentation](https://getcomposer.org/doc/06-config.md#platform) also permits simulated platform versions during dependency resolution.
+
+Look at Dockerfiles, deployment manifests and build logs after reading the Composer constraint. Distinguish a builder stage from the final runtime stage. A patched interpreter used to install dependencies does not fix a separate older interpreter copied into or inherited by the production image.
+
+Write evidence labels that survive handoff: "Composer constraint," "Dockerfile base," "installed package," and "running worker." Those labels prevent an automated report from upgrading a declaration into runtime confirmation. When deployment access is unavailable, the correct result may be an unresolved runtime identity with a useful source-level finding attached.
+
+## Verify vendor backports without guessing
+
+For vendor packages, collect the full package name, revision, distribution release and repository origin. Ask whether the vendor advisory explicitly covers both CVE identifiers. A package manager saying "up to date" only describes the enabled repositories; a disabled security repository can make that message misleading.
+
+Use the vendor's supported package query rather than trimming the result to the upstream version. Preserve a link to the bulletin and the package revision that contains the patch. PHP's [release notice](https://www.php.net/archive/2026.php#2026-10-21-1) specifically directs distribution users to their vendors for updated packages and backports.
+
+If the vendor has no applicable statement, record that gap and escalate to the runtime owner. Do not invent a fixed revision from a neighboring distribution or an unrelated architecture. Where an unsupported branch remains necessary, require a named support source and a migration plan instead of silently accepting the old version.
+
+## Collect only the runtime information you need
+
+A public `phpinfo()` page exposes much more than a version and is easy to forget after an incident. Prefer existing authenticated operations tooling or a restricted diagnostic route that returns only the specific fields needed. Remove temporary diagnostics after collection and verify that the public route is gone.
+
+Avoid copying environment dumps into public tickets. Configuration paths, extension lists and server variables can expose infrastructure details. Share the branch and patch conclusion publicly only when appropriate; keep raw evidence in the team's approved location.
+
+A minimal completion record should let a colleague answer which service was checked, which binary and configuration it used, what vendor evidence applies and when the workers restarted. Include unknown pools explicitly. If two records disagree, investigate the routing or deployment difference before closing the alert.
+
+## Keep version findings and configuration findings distinct
+
+The separate [October 23 notice](https://www.php.net/archive/2026.php#2026-10-23-1) for CVE-2026-115560 requires configuration and application review. The October 21 patched version list does not establish that later issue is resolved. Review [session upload progress and serializer switching](/blog/cve-2026-115560-session-upload-progress) even after your original version check passes.
+
+LyraShield AI conditionally runs PHP checks in Standard and Deep scans when the target exposes relevant evidence. A repository scan can identify declared runtime risks; it cannot attest every deployed PHP process. Start with the [free Lite Check](/scan) for a passive URL review, or [sign up to select a Deep scan](https://app.lyrashieldai.com/sign-up) for an authorized assessment. Retain the operator readback alongside the finding.

@@ -95,7 +95,7 @@ function fixture(t, options = {}) {
     writeFileSync(receiptPath, JSON.stringify(receipt), { mode: 0o600 })
   writeFileSync(
     configPath,
-    `LYRASHIELD_WORKER_IMAGE=${currentImage}\nLYRASHIELD_SANDBOX_IMAGE=ghcr.io/ecryptoguru/sandbox:fixture@sha256:${"f".repeat(64)}\n`
+    `LYRASHIELD_WORKER_IMAGE=${currentImage}\nLYRASHIELD_SANDBOX_IMAGE=ghcr.io/ecryptoguru/sandbox:fixture@sha256:${"f".repeat(64)}\nLYRASHIELD_SANDBOX_SBOM_COVERAGE_VERIFY_PATH=/tmp/coverage.json\nLYRASHIELD_SANDBOX_SBOM_COVERAGE_EXPECTED_PATH=/tmp/coverage-predicate.json\nLYRASHIELD_SANDBOX_SBOM_COVERAGE_REPO=ecryptoguru/lyrashield-engine\nLYRASHIELD_SANDBOX_SBOM_COVERAGE_REF=refs/heads/main\nLYRASHIELD_SANDBOX_SBOM_COVERAGE_ENGINE_REVISION=${"a".repeat(40)}\nLYRASHIELD_SANDBOX_SBOM_COVERAGE_WORKFLOW_REVISION=${"b".repeat(40)}\nLYRASHIELD_SANDBOX_SBOM_COVERAGE_RUN_ID=42487812345\nLYRASHIELD_SANDBOX_SBOM_COVERAGE_RUN_ATTEMPT=1\n`
   )
   writeFileSync(environmentPath, "")
   writeFileSync(envLibPath, "lyrashield_worker_env_args() { :; }\n")
@@ -799,19 +799,38 @@ test("held recovery skips migration execution and keeps promotion failure forwar
   assert.match(migrationStep, /if: inputs\.held_recovery != true/)
 
   const promoter = readFileSync(".github/scripts/promote-worker-vm.sh", "utf8")
+  assert.match(
+    promoter,
+    /if \[ "\$webhook_cutover" -eq 1 \] \|\| \[ "\$v26_cutover" -eq 1 \]; then maintenance_cutover=1; fi/
+  )
+  assert.match(
+    promoter,
+    /if \[ "\$webhook_cutover" -eq 1 \]; then\n  promotion_step=recording-webhook-candidate/
+  )
+  assert.match(
+    promoter,
+    /if \[ "\$v26_cutover" -eq 1 \]; then\n    receipt_file=\$\{LYRASHIELD_V26_RECEIPT_FILE/
+  )
   const recoveryBranch = promoter.indexOf("promotion_step=recording-webhook-candidate")
   const recoverySchema = promoter.indexOf("assert_recovery_schema", recoveryBranch)
   const restart = promoter.indexOf('systemctl restart "$service"', recoverySchema)
   assert.ok(recoveryBranch >= 0 && recoverySchema > recoveryBranch && restart > recoverySchema)
   const heldFailureStart = promoter.indexOf(
-    'if [ "$promotion_complete" -ne 1 ] && [ "$webhook_cutover" -eq 1 ];'
+    'if [ "$promotion_complete" -ne 1 ] && [ "$maintenance_cutover" -eq 1 ];'
   )
   const genericRollbackStart = promoter.indexOf(
     'if [ "$promotion_complete" -ne 1 ];',
     heldFailureStart + 1
   )
-  assert.ok(heldFailureStart >= 0 && genericRollbackStart > heldFailureStart)
-  const heldFailure = promoter.slice(heldFailureStart, genericRollbackStart)
+  const heldFailureEnd = promoter.indexOf("\n  fi\n", heldFailureStart)
+  assert.ok(
+    heldFailureStart >= 0 &&
+      heldFailureEnd > heldFailureStart &&
+      genericRollbackStart > heldFailureEnd
+  )
+  // End at maintenance's own closing guard; paired promotion has its own policy.
+  const heldFailure = promoter.slice(heldFailureStart, heldFailureEnd + "\n  fi\n".length)
+  assert.match(heldFailure, /\n    exit "\$status"\n  fi\n$/)
   assert.match(heldFailure, /webhook maintenance held, no legacy rollback/)
   assert.doesNotMatch(
     heldFailure,
@@ -839,6 +858,8 @@ set +e
 timer=lyrashield-worker-egress-refresh.timer
 service=lyrashield-worker.service
 webhook_cutover=1
+v26_cutover=0
+maintenance_cutover=1
 promotion_complete=0
 promotion_step=checking-restarted-worker
 systemctl(){ printf 'systemctl %s\\n' "$*" >> "$PROMOTER_TEST_CALLS"; }

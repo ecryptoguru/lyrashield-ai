@@ -13,11 +13,11 @@ describe("agent wizard status display", () => {
     )
 
     expect(markup).toContain("Compatibility evidence")
-    expect(markup).toMatch(/Support tier:.*COMPATIBLE/)
+    expect(markup).toMatch(/Support tier:.*Compatible/)
     expect(markup).toContain("Distribution channel")
     expect(markup).toContain("Client supports (documented):")
     expect(markup).not.toContain("Native components:")
-    expect(markup).toMatch(/State: <span[^>]*>PREPARATION<\/span>/)
+    expect(markup).toMatch(/State: <span[^>]*>Preparation<\/span>/)
     expect(markup).toContain("Distribution status is separate from client compatibility.")
     expect(markup).toContain("A configured file alone does not confirm the client loaded")
     expect(markup).toContain("Native workflow skills")
@@ -26,4 +26,14 @@ describe("agent wizard status display", () => {
     expect(markup).toContain('aria-live="polite"')
     expect(markup).not.toContain("absolute top-2 right-2")
   })
+})
+
+it("uses a readable missing-distribution label", () => {
+  const data = buildAgentWizard("pi", "https://app.lyrashieldai.com")
+  if (!data) throw new Error("Missing agent")
+  const html = renderToStaticMarkup(
+    <AgentWizard data={{ ...data, distribution: null }} docsUrl="https://example.test" />
+  )
+  expect(html).toContain("Not recorded")
+  expect(html).not.toContain("UNKNOWN")
 })

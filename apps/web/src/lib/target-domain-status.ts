@@ -1,6 +1,5 @@
 import { withWorkspaceRLS } from "@lyrashield/db"
 import { normalizeDomainForProof } from "@lyrashield/security"
-export { formatTargetDomainStatus } from "./target-domain-status-format"
 
 /** Read-only summaries expose no DNS challenge tokens or mutation capability. */
 export async function getTargetDomainStatuses(

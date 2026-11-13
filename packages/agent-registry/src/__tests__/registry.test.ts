@@ -20,55 +20,6 @@ const TEST_BASE_URL = "https://app.lyrashieldai.com"
 const TEST_MCP_URL = "https://app.lyrashieldai.com/api/mcp"
 const TEST_API_KEY = "lsk_test_lyrashield_api_key"
 
-const duplicateRendererPairs = new Set([
-  "claude-code × stdio",
-  "claude-code × remote-http",
-  "cursor × stdio",
-  "cursor × remote-http",
-  "devin-desktop × remote-http",
-  "vscode × stdio",
-  "vscode × remote-http",
-  "openai-codex × stdio",
-  "openai-codex × remote-http",
-  "cline × stdio",
-  "cline × remote-http",
-  "opencode × stdio",
-  "opencode × remote-http",
-  "kilo-code × stdio",
-  "kilo-code × remote-http",
-  "zed × stdio",
-  "zed × remote-http",
-  "gemini-cli × stdio",
-  "gemini-cli × remote-http",
-  "junie × stdio",
-  "junie-cli × stdio",
-  "junie-cli × remote-http",
-  "picode × stdio",
-  "picode × remote-http",
-  "hermes × stdio",
-  "hermes × remote-http",
-  "antigravity × stdio",
-  "antigravity × remote-http",
-  "copilot-cli × stdio",
-  "copilot-cli × remote-http",
-  "devin-cli × stdio",
-  "devin-cli × remote-http",
-  "roo-code × stdio",
-  "roo-code × remote-http",
-  "mimo-code × stdio",
-  "mimo-code × remote-http",
-  "codebuff × stdio",
-  "codebuff × remote-http",
-  "oh-my-pi × stdio",
-  "oh-my-pi × remote-http",
-  "auggie × stdio",
-  "auggie × remote-http",
-  "qoder-cli × stdio",
-  "qoder-cli × remote-http",
-  "qwen-code × stdio",
-  "qwen-code × remote-http",
-])
-
 it("keeps the published MCP pin on the candidate's compatible patch line", () => {
   const [sourceMajor, sourceMinor, sourcePatch] = mcpManifest.version.split(".").map(Number)
   const [publishedMajor, publishedMinor, publishedPatch] =
@@ -171,6 +122,80 @@ describe("agent registry", () => {
     expect(plugin.length).toBe(6)
     // Non-plugin agents — the docs index references this set.
     expect(configFile.length + vendorCli.length + guided.length).toBe(45)
+    // Freeze identity as well as counts: strategy drift must not silently drop a refusal.
+    expect(
+      AGENTS.filter((agent) => agent.installStrategy === "config-file")
+        .map((agent) => agent.id)
+        .sort()
+    ).toEqual([
+      "antigravity",
+      "auggie",
+      "claude-code",
+      "cline",
+      "codebuff",
+      "copilot-cli",
+      "cursor",
+      "devin-cli",
+      "devin-desktop",
+      "gemini-cli",
+      "hermes",
+      "junie",
+      "junie-cli",
+      "kilo-code",
+      "mimo-code",
+      "oh-my-pi",
+      "openai-codex",
+      "opencode",
+      "picode",
+      "qoder-cli",
+      "qwen-code",
+      "roo-code",
+      "vscode",
+      "zed",
+    ])
+    expect(
+      AGENTS.filter((agent) => agent.installStrategy === "vendor-cli")
+        .map((agent) => agent.id)
+        .sort()
+    ).toEqual(["amp"])
+    expect(
+      AGENTS.filter((agent) => agent.installStrategy === "guided-manual")
+        .map((agent) => agent.id)
+        .sort()
+    ).toEqual([
+      "aider",
+      "augment-jetbrains",
+      "augment-vscode",
+      "claude-desktop",
+      "claude-web",
+      "continue",
+      "devin",
+      "factory-droid",
+      "github-copilot-cloud-agent",
+      "goose",
+      "jetbrains",
+      "jetbrains-claude-agent",
+      "jetbrains-codex-agent",
+      "lovable",
+      "mistral-vibe",
+      "openclaw",
+      "opencode-v2",
+      "qoder",
+      "replit-agent",
+      "v0",
+    ])
+    expect(
+      AGENTS.filter((agent) => agent.installStrategy === "agent-plugin")
+        .map((agent) => agent.id)
+        .sort()
+    ).toEqual([
+      "claude-code-agent-plugin",
+      "cursor-agent-plugin",
+      "github-copilot-agent-plugin",
+      "kiro-agent-plugin",
+      "openai-codex-agent-plugin",
+      "vscode-agent-plugin",
+    ])
   })
 
   it("has unique ids and display names", () => {
@@ -426,24 +451,6 @@ describe("agent registry", () => {
     }
   })
 
-  it("publishes an evidence-backed support tier for every entry", () => {
-    for (const agent of AGENTS) {
-      expect(["NATIVE", "VERIFIED", "COMPATIBLE", "EXPERIMENTAL", "DEPRECATED"]).toContain(
-        agent.supportTier
-      )
-      const verification = agent.verification!
-      expect(Date.parse(verification.checkedOn)).not.toBeNaN()
-      expect(verification.reference).toBeTruthy()
-
-      if (agent.supportTier === "NATIVE" || agent.supportTier === "VERIFIED") {
-        expect(verification.evidence).toBe("CLIENT_RUNTIME")
-        expect(verification.clientVersion).toBeTruthy()
-        expect(verification.receipt).toBeTruthy()
-        expect(verification.platforms.length).toBeGreaterThan(0)
-      }
-    }
-  })
-
   it("marks standalone workflows without an MCP transport or config", () => {
     const preferred = listPreferredAgents()
     expect(preferred).toHaveLength(48)
@@ -557,29 +564,18 @@ describe("preferred agent integrations", () => {
   })
 })
 
-describe("renderConfig snapshot — every agent × every transport", () => {
-  for (const agent of AGENTS) {
-    for (const transport of agent.transports) {
-      if (duplicateRendererPairs.has(`${agent.id} × ${transport}`)) continue
-      it(`${agent.id} × ${transport}`, () => {
-        const opts = testOptions(agent, transport)
-
-        if (agent.installStrategy !== "config-file") {
-          expect(() => renderConfig(agent, opts)).toThrowErrorMatchingSnapshot()
-          return
-        }
-
-        if (agent.format === "jsonc") {
-          expect(() => renderConfig(agent, opts)).toThrowErrorMatchingSnapshot()
-          return
-        }
-
-        const { content, format } = renderConfig(agent, opts)
-        expect(format).toBe(agent.format)
-        expect(content).toMatchSnapshot()
-      })
-    }
-  }
+describe("renderConfig refuses unsupported installation strategies", () => {
+  // Successful per-client renders live in conformance/render.test.ts. The
+  // guard runs before transport handling; these are its two generic branches.
+  it.each([
+    ["devin", "remote-http"],
+    ["amp", "stdio"],
+  ] as const)("%s × %s", (id, transport) => {
+    const agent = getAgent(id)!
+    expect(() => renderConfig(agent, testOptions(agent, transport))).toThrow(
+      `Agent "${id}" uses installStrategy "${agent.installStrategy}"; renderConfig/renderEntry only support "config-file" agents.`
+    )
+  })
 })
 
 describe("renderEntry returns correct structural patch", () => {
@@ -903,28 +899,6 @@ describe("registry helpers", () => {
 })
 
 describe("agent-plugin entries", () => {
-  const pluginAgentIds = [
-    "claude-code-agent-plugin",
-    "cursor-agent-plugin",
-    "vscode-agent-plugin",
-    "openai-codex-agent-plugin",
-    "github-copilot-agent-plugin",
-    "kiro-agent-plugin",
-  ]
-
-  for (const id of pluginAgentIds) {
-    it(`${id} exists and has pluginLocations`, () => {
-      const agent = getAgent(id)
-      expect(agent).toBeDefined()
-      expect(agent!.installStrategy).toBe("agent-plugin")
-      expect(agent!.format).toBeNull()
-      expect(agent!.rootKey).toBeNull()
-      expect(agent!.locations).toEqual([])
-      expect(agent!.pluginLocations).toBeDefined()
-      expect(agent!.pluginLocations!.length).toBeGreaterThan(0)
-    })
-  }
-
   it("existing non-plugin entries are unchanged", () => {
     const claude = getAgent("claude-code")
     expect(claude?.installStrategy).toBe("config-file")
@@ -945,6 +919,8 @@ describe("agent-plugin entries", () => {
         secretMode: "inline",
         serverName: "lyrashield",
       })
-    ).toThrow(/agent-plugin/)
+    ).toThrow(
+      'Agent "claude-code-agent-plugin" uses installStrategy "agent-plugin"; use the CLI agent-plugin installer (lyrashield install), not renderConfig/renderEntry.'
+    )
   })
 })

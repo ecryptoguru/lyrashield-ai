@@ -547,7 +547,7 @@ export async function runScannerOrchestrator(
               signal.throwIfAborted()
               const advisoryBatch =
                 dependencyInventory.packages.length > 0
-                  ? await queryOsvWithCache(dependencyInventory.packages)
+                  ? await queryOsvWithCache(dependencyInventory.packages, { signal })
                   : undefined
               signal.throwIfAborted()
               return { dependencyInventory, advisoryBatch }

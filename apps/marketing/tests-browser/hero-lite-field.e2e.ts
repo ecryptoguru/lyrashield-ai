@@ -1,11 +1,15 @@
 import { expect, test } from "@playwright/test"
+import { createRequire } from "node:module"
+const sharp = createRequire(new URL("../../marketing-motion/package.json", import.meta.url))(
+  "sharp"
+)
 
 /**
- * Hero URL field (handoff item 3.1b).
+ * Homepage Lite Check field.
  *
  * The field hands the visitor's URL to /scan through sessionStorage. Consent
- * lives in the hero because /scan pre-checks its own box and auto-submits, so a
- * hero form without recorded consent would start a scan nobody agreed to.
+ * lives in the Lite Check section because /scan pre-checks its own box and auto-submits, so a
+ * homepage form without recorded consent would start a scan nobody agreed to.
  *
  * In this preview build PUBLIC_SCANNER_URL is a placeholder, so the field is
  * disabled and cannot be driven. The enabled path is covered by
@@ -16,7 +20,7 @@ const FIELD = "#hero-lite-form"
 const URL_INPUT = "#hero-scan-url"
 const CONSENT = "#hero-scan-authorized"
 
-test("renders the hero field with its own ids and a consent box", async ({ page }) => {
+test("renders one consent-bound form inside the Lite Check section", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await page.goto("/")
 
@@ -25,9 +29,12 @@ test("renders the hero field with its own ids and a consent box", async ({ page 
   await expect(page.locator(CONSENT)).toBeAttached()
   await expect(page.locator("#hero-scan-error")).toBeAttached()
 
-  // The field's ids must not collide with the Lite Check section lower down.
+  await expect(page.locator("#free-scan form")).toHaveCount(1)
+  await expect(page.locator(".premium-hero form")).toHaveCount(0)
+
+  // No second homepage form may duplicate its field IDs.
   for (const id of ["home-lite-scan-form", "home-scan-url", "home-scan-authorized"]) {
-    await expect(page.locator(`#${id}`)).toHaveCount(1)
+    await expect(page.locator(`#${id}`)).toHaveCount(0)
   }
 
   // No horizontal overflow at 390px with the field present.
@@ -64,7 +71,7 @@ test("keeps the no-JavaScript fallback in the served markup", async ({ page, req
   // therefore asserted from the served bytes.
   const html = await (await request.get("/")).text()
   expect(html).toContain("<noscript>")
-  expect(html).toMatch(/<noscript>[\s\S]*?Open the free Lite Check[\s\S]*?<\/noscript>/)
+  expect(html).toMatch(/<noscript>[\s\S]*?Open Lite Check[\s\S]*?<\/noscript>/)
 
   // The form posts natively to /scan, and the input carries no name, so a
   // native GET cannot put the typed URL into the query string.
@@ -127,37 +134,69 @@ const contrastRatio = (foreground: string, background: string) => {
   return (lighter + 0.05) / (darker + 0.05)
 }
 
-test("keeps the hero field and sample card readable in the light theme", async ({ page }) => {
+test("keeps the Lite Check field and illustrative result readable in the light theme", async ({
+  page,
+}) => {
   await page.setViewportSize({ width: 1280, height: 900 })
   await page.emulateMedia({ colorScheme: "light" })
   await page.goto("/")
 
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light")
 
-  // Each target is measured against the surface it renders on: the hero itself
-  // for the field, and the artifact card for the finding rows.
+  // Transparent cinematic surfaces need their composited pixel background,
+  // rather than treating transparent CSS as opaque black.
   const measured = await page.evaluate(() => {
-    const hero = document.querySelector(".premium-hero") as HTMLElement
-    const card = document.querySelector(".premium-hero__artifact-card") as HTMLElement
-    const rows: { selector: string; color: string; background: string }[] = []
+    const hero = document.querySelector(".lite-console__layout") as HTMLElement
+    const card = document.querySelector(".lite-sample") as HTMLElement
+    const rows: {
+      selector: string
+      color: string
+      background: string
+      sample?: { left: number; top: number }
+    }[] = []
     const pick = (selector: string, background: HTMLElement) => {
       const node = document.querySelector(selector) as HTMLElement | null
       // The status line only renders while the scanner is unconnected, so a
       // connected build has nothing to measure there.
       if (!node) return
+      const rect = node.getBoundingClientRect()
       rows.push({
         selector,
         color: getComputedStyle(node).color,
         background: getComputedStyle(background).backgroundColor,
+        ...(getComputedStyle(background).backgroundColor.startsWith("rgba(")
+          ? {
+              sample: {
+                left: Math.max(0, Math.floor(rect.left - 2)),
+                top: Math.floor(rect.top + rect.height / 2),
+              },
+            }
+          : {}),
       })
     }
+    const button = document.querySelector(".premium-hero__field-button") as HTMLElement
+    pick(".premium-hero__field-button", button)
     pick(".premium-hero__field-label", hero)
-    pick(".premium-hero__field-input", hero)
+    pick(
+      ".premium-hero__field-input",
+      document.querySelector(".premium-hero__field-input") as HTMLElement
+    )
     pick(".premium-hero__field-consent", hero)
     pick(".premium-hero__field-status", hero)
-    pick(".premium-hero__artifact-findings li", card)
+    pick(".lite-sample li", card)
     return rows
   })
+
+  const pixels = await page.screenshot()
+  for (const row of measured) {
+    if (!row.sample) continue
+    const pixel = await sharp(pixels)
+      .extract({ ...row.sample, width: 1, height: 1 })
+      .removeAlpha()
+      .raw()
+      .toBuffer()
+    row.background = `rgb(${pixel[0]}, ${pixel[1]}, ${pixel[2]})`
+  }
 
   for (const { selector, color, background } of measured) {
     const ratio = contrastRatio(color, background)
@@ -166,20 +205,82 @@ test("keeps the hero field and sample card readable in the light theme", async (
 
   // The input must actually read as a light control on the light hero rather
   // than a heavy dark box.
-  await expect(page.locator(URL_INPUT)).toHaveCSS("background-color", "rgb(255, 255, 255)")
+  await expect(page.locator(URL_INPUT)).toHaveCSS("background-color", "rgb(245, 249, 252)")
 
   // The error text is hidden until a validation failure, so its colour is read
   // from the stylesheet rather than a computed style.
   const errorRatio = await page.evaluate(() => {
-    const hero = document.querySelector(".premium-hero") as HTMLElement
+    const hero = document.querySelector(".lite-console__layout") as HTMLElement
     const node = document.querySelector(".premium-hero__field-error") as HTMLElement
     return {
       color: getComputedStyle(node).color,
       background: getComputedStyle(hero).backgroundColor,
+      sample: (() => {
+        const rect = document.querySelector(".premium-hero__field-label")!.getBoundingClientRect()
+        return {
+          left: Math.max(0, Math.floor(rect.left - 2)),
+          top: Math.floor(rect.top + rect.height / 2),
+        }
+      })(),
     }
   })
+  if (errorRatio.background.startsWith("rgba(")) {
+    const pixel = await sharp(pixels)
+      .extract({ ...errorRatio.sample, width: 1, height: 1 })
+      .removeAlpha()
+      .raw()
+      .toBuffer()
+    errorRatio.background = `rgb(${pixel[0]}, ${pixel[1]}, ${pixel[2]})`
+  }
   expect(
     contrastRatio(errorRatio.color, errorRatio.background),
     `field error (${errorRatio.color} on ${errorRatio.background})`
   ).toBeGreaterThanOrEqual(4.5)
 })
+
+test("validates consent and hands off an enabled local form without leaking its URL", async ({
+  page,
+}) => {
+  await page.goto("/")
+  // Local previews deliberately disable the scanner. Enable only these browser
+  // controls to exercise the real binder, then intercept the navigation. No
+  // scanner request or authorization policy is changed by this test.
+  await page.locator(FIELD).evaluate((form) => {
+    for (const control of form.querySelectorAll<HTMLInputElement | HTMLButtonElement>("[disabled]"))
+      control.disabled = false
+  })
+  await page.locator(URL_INPUT).fill("https://example.com/private?q=test")
+  await page.locator(FIELD).getByRole("button", { name: "Run Lite Check" }).click()
+  await expect(page.locator("#hero-scan-error")).toContainText("permission")
+  await page.locator(CONSENT).check()
+  await page.locator(URL_INPUT).fill("localhost")
+  await page.locator(FIELD).getByRole("button", { name: "Run Lite Check" }).click()
+  await expect(page.locator("#hero-scan-error")).toContainText("valid public HTTP")
+  await page.route("**/scan?start=1", (route) =>
+    route.fulfill({ contentType: "text/html", body: "<h1>Local handoff captured</h1>" })
+  )
+  await page.locator(URL_INPUT).fill("example.com/private?q=test")
+  await page.locator(URL_INPUT).press("Enter")
+  await expect(page).toHaveURL("http://127.0.0.1:8787/scan?start=1")
+  expect(await page.evaluate(() => sessionStorage.getItem("lyrashield-lite-target"))).toBe(
+    "https://example.com/private?q=test"
+  )
+})
+
+for (const theme of ["light", "dark"] as const) {
+  test(`evidence and Lite warning labels meet text contrast in ${theme}`, async ({ page }) => {
+    await page.emulateMedia({ colorScheme: theme })
+    await page.goto("/")
+    const colors = await page.evaluate(() =>
+      [
+        [".evidence-map__inconclusive", ".evidence-map__inconclusive"],
+        [".lite-sample .is-warn", ".lite-sample"],
+      ].map(([selector, background]) => ({
+        color: getComputedStyle(document.querySelector(selector)!).color,
+        background: getComputedStyle(document.querySelector(background)!).backgroundColor,
+      }))
+    )
+    for (const row of colors)
+      expect(contrastRatio(row.color, row.background)).toBeGreaterThanOrEqual(4.5)
+  })
+}

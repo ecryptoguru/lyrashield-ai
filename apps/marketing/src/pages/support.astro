@@ -34,8 +34,13 @@ const jsonLd: unknown[] = [
 <Base title={title} description={description} canonical={canonical} jsonLd={jsonLd}>
   <article class="mx-auto max-w-3xl px-4 py-16 sm:px-6 lg:px-8 lg:py-24">
     <p class="font-mono text-xs font-semibold tracking-[.2em] text-accent uppercase">Support</p>
-    <h1 class="mt-4 text-4xl font-semibold tracking-tight text-text sm:text-5xl">Connect with confidence.</h1>
+    <h1 class="mt-4 text-4xl font-semibold tracking-tight text-text sm:text-5xl">How can we help?</h1>
     <p class="mt-6 text-lg leading-8 text-text-muted">Setup help, contact routes and how to report a vulnerability. LyraShield is in open beta, so response times are best-effort rather than a contractual SLA.</p>
+    <div class="mt-6 flex flex-wrap gap-3">
+      <a href={`mailto:${supportEmail}`} class="inline-flex min-h-12 items-center rounded-lg bg-accent px-5 text-sm font-semibold text-bg focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent">Email support</a>
+      <a href={`mailto:${supportEmail}?subject=LyraShield%20demo%20request`} class="inline-flex min-h-12 items-center rounded-lg border border-border px-5 text-sm font-semibold text-text focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent">Request a demo time</a>
+    </div>
+    <p class="mt-3 text-sm leading-6 text-text-muted">Include your client name and a timestamp for setup help, or your timezone and suitable times for a demo. Never include tokens or customer data.</p>
     <div class="prose prose-slate mt-12 max-w-none">
       <h2>Where to look first</h2>
       <p>Most setup questions are answered by a guide that already exists. Check these before opening a support thread:</p>

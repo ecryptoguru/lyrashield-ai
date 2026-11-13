@@ -17,7 +17,12 @@ const coreCommand = ["vitest", "run", "--exclude", "**/dist/**"]
 if (coreReportPath) {
   // Keep Vitest's native diagnostics: JSON can replace timeout details with
   // STACK_TRACE_ERROR. The JSON report still powers the named-test guard.
-  coreCommand.push("--reporter=default", "--reporter=json", `--outputFile=${coreReportPath}`)
+  coreCommand.push(
+    "--maxWorkers=2",
+    "--reporter=default",
+    "--reporter=json",
+    `--outputFile=${coreReportPath}`
+  )
 }
 if (process.env.LYRASHIELD_TEST_COVERAGE === "1") {
   coreCommand.push("--coverage")
@@ -48,6 +53,7 @@ const allSuites = [
             .sort()
             .map((file) => `.github/scripts/tests/${file}`)
         : [".github/scripts/tests/*.test.mjs"]),
+      "ops/monitoring/*.test.mjs",
     ],
   },
 ]
@@ -94,10 +100,9 @@ function run(name, command) {
   })
 }
 
-// The combined run starts four independent test processes at once. Two local
-// combined-run timeouts passed when isolated; contention during imports and
-// database setup is plausible but not proven. Run suites sequentially first
-// and report their wall times while retaining every suite and assertion.
+// Keep heavy suites sequential within each runner to bound import, service
+// and build contention. Independent CI jobs may select separate suites; each
+// invocation still reports its requested results and fails on any error.
 const results = []
 for (const suite of suites) {
   results.push(await run(suite.name, suite.command))
@@ -137,6 +142,7 @@ if (coreReportPath && coreResult?.code === 0) {
       "retrieves the expected public source in the top five for at least 90% of 60 questions",
       "executes atomic cleanup, count, TTL, and one warmed EVALSHA per operation",
       "denies a changed input under the same idempotency key without altering the ledger",
+      "returns one live approval for concurrent identical requests, then replaces it after expiry",
     ])
   } catch (error) {
     console.error("\n==> core environment-gated test guard failed:", error)

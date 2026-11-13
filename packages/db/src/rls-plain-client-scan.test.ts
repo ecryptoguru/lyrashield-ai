@@ -231,6 +231,24 @@ const ALLOWLIST: Record<string, string> = {
     "targetDomainVerification read under requirePermission-bound context (extension-wrapped)",
   "apps/web/src/app/api/targets/route.ts":
     "project/integration/target reads under requireWorkspaceAccess/requirePermission-bound context (extension-wrapped)",
+  "apps/web/src/app/(dashboard)/dashboard/ai-assurance/page.tsx":
+    "target picker is bound to the server-selected active workspaceId (explicit workspaceId filter; Prisma extension-wrapped)",
+  "apps/web/src/app/(dashboard)/dashboard/findings/page.tsx":
+    "target picker and requested finding use the authenticated active workspaceId in explicit filters (Prisma extension-wrapped)",
+  "apps/web/src/app/(dashboard)/dashboard/integrations/page.tsx":
+    "integration list uses the server-selected active workspaceId (explicit workspaceId filter; Prisma extension-wrapped)",
+  "apps/web/src/app/(dashboard)/dashboard/projects/page.tsx":
+    "project list is scoped to the server-selected active workspaceId (explicit workspaceId filter; Prisma extension-wrapped)",
+  "apps/web/src/app/(dashboard)/dashboard/scans/[id]/page.tsx":
+    "findings, shareable snapshot, and scan plan reads each carry the active workspaceId (Prisma extension-wrapped)",
+  "apps/web/src/app/(dashboard)/dashboard/scans/page.tsx":
+    "integration and target picker reads use the server-selected active workspaceId (explicit workspaceId filters; Prisma extension-wrapped)",
+  "apps/web/src/app/(dashboard)/dashboard/settings/workspace/page.tsx":
+    "connection, notification, and schedule counts are all filtered by the authorized active workspaceId (Prisma extension-wrapped)",
+  "apps/web/src/app/(dashboard)/dashboard/targets/page.tsx":
+    "target and GitHub integration queries are explicitly scoped to the server-selected active workspaceId (Prisma extension-wrapped)",
+  "apps/web/src/app/(dashboard)/dashboard/team/page.tsx":
+    "pending invitations are explicitly filtered by the server-selected active workspaceId (Prisma extension-wrapped)",
 }
 
 const PLAIN_READ_PATTERN =
@@ -246,6 +264,7 @@ const ROOTS = [
   join(__dirname, "..", "..", "myra", "src"),
   join(__dirname, "..", "..", "..", "apps", "worker", "src"),
   join(__dirname, "..", "..", "..", "apps", "web", "src", "app", "api"),
+  join(__dirname, "..", "..", "..", "apps", "web", "src", "app", "(dashboard)", "dashboard"),
   join(__dirname, "..", "..", "..", "apps", "web", "src", "lib"),
 ] as const
 
@@ -352,6 +371,29 @@ describe("plain-client FORCE-RLS reads (v16 2.2 tripwire)", () => {
     ].join("\n")
     const offenders = scanSource(unboundRead)
     expect(offenders.join("\n")).toContain("prisma.billingReconciliationState.findUnique")
+  })
+
+  it("scans dashboard pages and catches an unscoped dashboard read", () => {
+    const dashboardRoot = join(
+      __dirname,
+      "..",
+      "..",
+      "..",
+      "apps",
+      "web",
+      "src",
+      "app",
+      "(dashboard)",
+      "dashboard"
+    )
+    expect(ROOTS).toContain(dashboardRoot)
+    const dashboardRead = [
+      'import { prisma } from "@lyrashield/db"',
+      "export async function dashboardLookup() {",
+      '  return prisma.notification.findMany({ where: { status: "pending" } })',
+      "}",
+    ].join("\n")
+    expect(scanSource(dashboardRead).join("\n")).toContain("prisma.notification.findMany")
   })
 
   it("the allowlist stays honest: every entry still exists on disk", () => {

@@ -1,3 +1,5 @@
+import { storeHttpExchangeExport } from "./http-exchange-evidence"
+import { resolveEngineBillingOutcome } from "./settlement"
 import {
   addScanEvent,
   assertEvidenceEncrypted,
@@ -100,29 +102,22 @@ async function persistScanEvidence(params: {
     }
   }
 
+  const captureRequiresExport = orchestratorResult.allFindings.some(
+    (finding) => finding.evidence_contract_version === "1.2" && finding.http_exchange_ids?.length
+  )
   let httpExchangeRef: PersistedScanEvidence["httpExchangeRef"] = null
   if (engineResult.output.httpExchangeExport) {
     try {
-      assertCanStart()
-      const uploaded = await uploadScanArtifact({
+      httpExchangeRef = await storeHttpExchangeExport({
+        artifact: engineResult.output.httpExchangeExport,
         workspaceId,
         scanId,
-        type: "http_exchanges",
-        artifactId: "http-exchanges",
-        content: engineResult.output.httpExchangeExport.document,
-        contentType: "application/json; charset=utf-8",
+        captureRequiresExport,
+        assertCanStart,
       })
-      assertEvidenceEncrypted(uploaded.encryptionKeyRef)
-      httpExchangeRef = {
-        checksum: uploaded.checksum,
-        byteLength: uploaded.byteLength,
-        exchangeCount: engineResult.output.httpExchangeExport.exchangeCount,
-        ...(engineResult.output.httpExchangeExport.schemaVersion
-          ? { schemaVersion: engineResult.output.httpExchangeExport.schemaVersion }
-          : {}),
-      }
     } catch (error) {
-      // Validated exchange IDs without the stored export are warnings, not a durable receipt.
+      if (captureRequiresExport) throw error
+      // Legacy references retain their warning-only behavior.
       recordIngestionWarning(
         `http exchange export artifact could not be stored: ${error instanceof Error ? error.message : String(error)}`
       )
@@ -131,6 +126,12 @@ async function persistScanEvidence(params: {
         error: error instanceof Error ? error.message : String(error),
       })
     }
+  }
+
+  if (captureRequiresExport && !httpExchangeRef) {
+    throw new Error(
+      "A 1.2 capture requires a stored HTTP exchange export before persisting findings"
+    )
   }
 
   const persistedFindings = await persistFindings({
@@ -595,13 +596,7 @@ export async function finalizeScanLifecycle(params: {
     // billable results, DB-only finalization must finish before money commits.
     const initialTerminalError = params.terminalErrorAfterMeter()
     await meterEngineRun(
-      budgetExceeded || initialTerminalError?.status === "STOPPED_BUDGET"
-        ? "failed"
-        : initialTerminalError?.status === "PARTIAL"
-          ? "partial"
-          : initialTerminalError
-            ? "failed"
-            : "completed",
+      resolveEngineBillingOutcome(budgetExceeded, initialTerminalError),
       async () => {
         finished = await finishEvidence()
         onDurableResult(

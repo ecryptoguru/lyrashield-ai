@@ -12,7 +12,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@lyrashield/db", () => ({
   prisma: mocks.prisma,
-  updateScanStatus: mocks.updateScanStatus,
+  updateUnclaimedScanStatus: mocks.updateScanStatus,
 }))
 vi.mock("@lyrashield/logger", () => ({
   logger: { warn: vi.fn(), error: vi.fn(), info: vi.fn() },

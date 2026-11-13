@@ -1,3 +1,4 @@
+import { resolveOAuthReadScope } from "../../../../../../../../packages/auth/src/oauth-read-scope"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
@@ -5,7 +6,10 @@ const mocks = vi.hoisted(() => ({
   getFindingHistoryPage: vi.fn(),
   validateFindingScope: vi.fn(),
 }))
-vi.mock("@lyrashield/auth/server", () => ({ requirePermission: mocks.requirePermission }))
+vi.mock("@lyrashield/auth/server", () => ({
+  resolveOAuthReadScope,
+  requirePermission: mocks.requirePermission,
+}))
 vi.mock("@lyrashield/auth", () => ({ PERMISSIONS: { finding: { view: "finding:view" } } }))
 vi.mock("@lyrashield/db", () => ({
   getFindingHistoryPage: mocks.getFindingHistoryPage,
@@ -104,4 +108,45 @@ describe("finding history route", () => {
       }
     )
   })
+})
+
+it("rejects explicit ungranted OAuth targets before reading details", async () => {
+  vi.clearAllMocks()
+  mocks.requirePermission.mockResolvedValueOnce({
+    session: {
+      oauth: { connectionId: "conn-1", allTargets: false, allowedTargetIds: ["target-1"] },
+    },
+  })
+  const response = await GET(
+    new Request(
+      "http://localhost/api/findings/finding-1/history?workspaceId=ws-1&collection=evidence&targetId=target-2"
+    ),
+    { params: Promise.resolve({ id: "finding-1" }) }
+  )
+  expect(response.status).toBe(403)
+  expect(mocks.getFindingHistoryPage).not.toHaveBeenCalled()
+})
+
+it("keeps omitted-target reads inside the OAuth target grant", async () => {
+  vi.clearAllMocks()
+  mocks.requirePermission.mockResolvedValueOnce({
+    session: {
+      oauth: { connectionId: "conn-1", allTargets: false, allowedTargetIds: ["target-1"] },
+    },
+  })
+  mocks.validateFindingScope.mockResolvedValueOnce({ available: true, target: null, scanId: null })
+  mocks.getFindingHistoryPage.mockResolvedValueOnce({ items: [], nextCursor: null, total: 0 })
+  const response = await GET(
+    new Request(
+      "http://localhost/api/findings/finding-1/history?workspaceId=ws-1&collection=evidence"
+    ),
+    { params: Promise.resolve({ id: "finding-1" }) }
+  )
+  expect(response.status).toBe(200)
+  expect(mocks.getFindingHistoryPage).toHaveBeenCalledWith(
+    "finding-1",
+    "ws-1",
+    "evidence",
+    expect.objectContaining({ targetIds: ["target-1"] })
+  )
 })

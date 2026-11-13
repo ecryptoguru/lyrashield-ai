@@ -87,6 +87,7 @@
 /blog/bolt-app-security-checklist/ /blog/bolt-app-security-checklist 301
 /blog/brute-force-account-enumeration/ /blog/brute-force-account-enumeration 301
 /blog/building-release-assurance-lessons-open-beta/ /blog/building-release-assurance-lessons-open-beta 301
+/blog/check-php-version-php2shell/ /blog/check-php-version-php2shell 301
 /blog/cicd-agent-confused-deputy/ /blog/cicd-agent-confused-deputy 301
 /blog/claude-code-mcp-agent-rules-security/ /blog/claude-code-mcp-agent-rules-security 301
 /blog/claude-code-security-workflow/ /blog/claude-code-security-workflow 301
@@ -108,6 +109,7 @@
 /blog/csrf-cookie-auth-ai-apps/ /blog/csrf-cookie-auth-ai-apps 301
 /blog/cursor-app-security-checklist/ /blog/cursor-app-security-checklist 301
 /blog/cursor-mcp-security-workflow/ /blog/cursor-mcp-security-workflow 301
+/blog/cve-2026-115560-session-upload-progress/ /blog/cve-2026-115560-session-upload-progress 301
 /blog/debug-routes-error-leaks/ /blog/debug-routes-error-leaks 301
 /blog/devin-cli-app-security-checklist/ /blog/devin-cli-app-security-checklist 301
 /blog/devin-cli-mcp-security-workflow/ /blog/devin-cli-mcp-security-workflow 301
@@ -158,8 +160,13 @@
 /blog/osv-dependency-scanning/ /blog/osv-dependency-scanning 301
 /blog/password-hashing-vibe-coders/ /blog/password-hashing-vibe-coders 301
 /blog/password-reset-email-verification-security/ /blog/password-reset-email-verification-security 301
+/blog/patch-php2shell-docker-fpm-apache/ /blog/patch-php2shell-docker-fpm-apache 301
 /blog/path-traversal-generated-code/ /blog/path-traversal-generated-code 301
 /blog/payment-entitlement-server-source-truth/ /blog/payment-entitlement-server-source-truth 301
+/blog/php2shell-explained/ /blog/php2shell-explained 301
+/blog/php2shell-investigate-earlier-compromise/ /blog/php2shell-investigate-earlier-compromise 301
+/blog/php2shell-still-flagged-after-updating/ /blog/php2shell-still-flagged-after-updating 301
+/blog/php2shell-wordpress-hosting/ /blog/php2shell-wordpress-hosting 301
 /blog/pi-coding-agent-app-security-checklist/ /blog/pi-coding-agent-app-security-checklist 301
 /blog/pi-coding-agent-mcp-security-workflow/ /blog/pi-coding-agent-mcp-security-workflow 301
 /blog/placeholder-logic-silent-failures/ /blog/placeholder-logic-silent-failures 301
@@ -310,6 +317,7 @@
 /tools/ai-app-security-checklist/ /tools/ai-app-security-checklist 301
 /tools/ai-app-security-scanner/ /tools/ai-app-security-scanner 301
 /tools/jwt-session-inspector/ /tools/jwt-session-inspector 301
+/tools/php2shell-checker/ /tools/php2shell-checker 301
 /tools/secret-exposure-scanner/ /tools/secret-exposure-scanner 301
 /tools/security-headers-checker/ /tools/security-headers-checker 301
 /tools/supabase-rls-checker/ /tools/supabase-rls-checker 301

@@ -10,7 +10,12 @@ import tailwindcss from "@tailwindcss/vite"
 import { parseJsonc } from "./src/lib/jsonc"
 import { tools } from "./src/lib/tools"
 import { listGeneratedIntegrationDocLastmods } from "./src/lib/integration-doc-routes"
-import { isFutureDated } from "./src/lib/blog-publishing"
+import { BUILD_DATE, isFutureDated } from "./src/lib/blog-publishing"
+
+// workerd freezes its module-scope clock at the epoch before the first request.
+// Use the same Node-owned cutoff for config filters and prerendered consumers.
+const buildTimestamp = BUILD_DATE.getTime()
+if (!Number.isFinite(buildTimestamp)) throw new Error("Marketing build timestamp must be finite")
 
 // Code-block palette. Astro's markdown pipeline (@astrojs/markdown-satteri →
 // shiki) defaults to the bundled `github-dark` theme, whose comment token
@@ -128,6 +133,7 @@ function contentLastmod() {
   // here keeps the sitemap lastmod equal to the date the page displays —
   // a git-derived date would disagree with it (the Oct 2026 drift).
   for (const [pageFile, route] of [
+    ["index", "/"],
     ["webmcp", "/webmcp"],
     ["methodology", "/methodology"],
     ["about", "/about"],
@@ -212,7 +218,7 @@ function contentLastmod() {
   ]) {
     setIfAbsent(
       `/blog/tags/${tag}`,
-      "src/pages/blog/tags/[tag].astro",
+      "src/pages/blog/tags/[tag]/[...page].astro",
       "src/content/blog/",
       "src/lib/blog-categories.ts"
     )
@@ -471,8 +477,6 @@ export default defineConfig({
           pathname !== "/terms" &&
           pathname !== "/terms-of-sale" &&
           pathname !== "/docs" &&
-          // Pagination remains crawlable, but declares noindex and canonical /blog.
-          !/^\/blog\/[1-9]\d*\/?$/.test(pathname) &&
           (Boolean(scannerUrlForBuild) || pathname !== "/scan")
         )
       },
@@ -488,7 +492,9 @@ export default defineConfig({
         // crawler anyway. SeoHead's canonical stays the trailing-slash form.
         const rawPathname = new URL(item.url).pathname.replace(/\/$/, "")
         const pathname = rawPathname === "" ? "/" : rawPathname
-        const lastmod = LASTMOD.get(pathname)
+        // Archive pages inherit the owning collection's actual content date.
+        const collectionPath = pathname.replace(/\/\d+$/, "")
+        const lastmod = LASTMOD.get(pathname) || LASTMOD.get(collectionPath)
         const image = SITEMAP_IMAGES.get(pathname)
         const serialized = { ...item }
         if (lastmod) serialized.lastmod = lastmod.toISOString().slice(0, 10)
@@ -589,10 +595,19 @@ export default defineConfig({
     define: {
       __MARKETING_INDEXABLE__: JSON.stringify(indexable),
       __MARKETING_LOCAL_PREVIEW__: JSON.stringify(localPreview),
+      // Keep preview client requests on the explicitly selected app origin;
+      // Cloudflare's local .dev.vars otherwise overrides Vite's public value.
+      ...(localPreview && configuredAppUrl
+        ? { "import.meta.env.PUBLIC_APP_URL": JSON.stringify(configuredAppUrl) }
+        : {}),
+      ...(localPreview
+        ? { "import.meta.env.PUBLIC_TURNSTILE_SITE_KEY": JSON.stringify(turnstileSiteKey) }
+        : {}),
       __MARKETING_SCANNER_URL__: JSON.stringify(scannerUrlForBuild),
       __MARKETING_X_URL__: JSON.stringify(xUrl),
       __MARKETING_MYRA_ENABLED__: JSON.stringify(myraMarketingEnabled),
       __MARKETING_BUILD_REVISION__: JSON.stringify(buildRevision),
+      __MARKETING_BUILD_TIMESTAMP__: JSON.stringify(buildTimestamp),
       __MARKETING_SOURCE_DATES__: JSON.stringify(SOURCE_DATES),
       __MARKETING_GOOGLE_VERIFICATION__: JSON.stringify(googleVerification),
       __MARKETING_BING_VERIFICATION__: JSON.stringify(bingVerification),

@@ -82,6 +82,7 @@ describe("worker readiness lifecycle", () => {
       thirtyDaysMs / (MANAGED_REDIS_DRAIN_DELAY_SECONDS * 1_000) +
       thirtyDaysMs / MANAGED_REDIS_STALLED_INTERVAL_MS
     const baselineBullMqCommands = baselineIdleCommandsPerWorker * MANAGED_REDIS_BULLMQ_WORKER_COUNT
+    // General readiness and optional relay capability share one atomic command.
     const heartbeatCommands = thirtyDaysMs / SCAN_WORKER_HEARTBEAT_MS
     const fixedIdleCommands = baselineBullMqCommands + heartbeatCommands
     const idleReconciliations = thirtyDaysMs / RECONCILIATION_IDLE_BACKSTOP_MS
@@ -142,6 +143,26 @@ describe("worker readiness lifecycle", () => {
 
     stopTracking()
     vi.useRealTimers()
+  })
+
+  it("coalesces overlapping heartbeats so relay probe results cannot publish out of order", async () => {
+    let settle: (() => void) | undefined
+    const pending = new Promise<void>((resolve) => {
+      settle = resolve
+    })
+    const register = vi.fn().mockReturnValueOnce(pending).mockResolvedValue(undefined)
+    const markReady = vi.fn().mockResolvedValue(undefined)
+    const controller = createWorkerHeartbeatController(register, markReady)
+    const interval = controller.heartbeat()
+    const completion = controller.heartbeat()
+    expect(register).toHaveBeenCalledTimes(1)
+    expect(completion).toBe(interval)
+    settle?.()
+    await Promise.all([interval, completion])
+    expect(markReady).toHaveBeenCalledTimes(1)
+    await controller.heartbeat()
+    expect(register).toHaveBeenCalledTimes(2)
+    await controller.stop()
   })
 
   it("bounds a stalled heartbeat and terminates engines immediately", async () => {

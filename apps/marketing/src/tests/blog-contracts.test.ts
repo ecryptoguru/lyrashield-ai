@@ -15,7 +15,8 @@ function batchFor(index: number) {
   if (index <= 111) return "batch-7"
   if (index <= 133) return "batch-8"
   if (index <= 148) return "batch-9"
-  return "batch-11"
+  if (index <= 153) return "batch-11"
+  return "php2shell"
 }
 
 // The published manifest is the canonical record of the approved blog
@@ -47,7 +48,7 @@ describe("blog program contracts", () => {
     expect(clusters.size).toBeGreaterThanOrEqual(7)
   })
 
-  it("contains the reviewed 36-image catalog with every production rendition", () => {
+  it("contains the reviewed image catalog with every production rendition", () => {
     const entries = Object.entries(images)
 
     expect(entries).toHaveLength(IMAGE_CORPUS.authority + IMAGE_CORPUS.shared)

@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
     scan: { findUnique: vi.fn() },
   },
   completeScanWithScore: vi.fn(),
+  withWorkspaceRLS: vi.fn(),
   qualifyReferralForWorkspace: vi.fn(),
   updateScanStatus: vi.fn(),
   verifyStoredManifestChecksum: vi.fn(),
@@ -17,6 +18,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@lyrashield/db", () => ({
   completeScanWithScore: mocks.completeScanWithScore,
   prisma: mocks.prisma,
+  withWorkspaceRLS: mocks.withWorkspaceRLS,
   qualifyReferralForWorkspace: mocks.qualifyReferralForWorkspace,
   updateScanStatus: mocks.updateScanStatus,
   verifyStoredManifestChecksum: mocks.verifyStoredManifestChecksum,
@@ -149,6 +151,39 @@ describe("resumePendingScanFinalization", () => {
     )
   })
 
+  it.each(["QUEUED", "PREFLIGHT", "RUNNING"])(
+    "restores an exact verified checkpoint ahead of a paid marker in %s",
+    async (status) => {
+      const updateMany = vi.fn().mockResolvedValue({ count: 1 })
+      const create = vi.fn()
+      mocks.withWorkspaceRLS.mockImplementation(async (_workspaceId, fn) =>
+        fn({ scan: { updateMany }, scanEvent: { create } })
+      )
+      mocks.prisma.scan.findUnique.mockResolvedValue(
+        scanRow({
+          status,
+          events: [{ id: "paid" }],
+          resultManifest: { id: "manifest", checksum: "sha", manifest: {} },
+        })
+      )
+      mocks.verifyStoredManifestChecksum.mockReturnValue("MATCH")
+      mocks.storedTerminalOutcome.mockReturnValue({ status: "COMPLETED" })
+      await expect(resumePendingScanFinalization(params)).resolves.toMatchObject({
+        status: "completed",
+      })
+      expect(updateMany).toHaveBeenCalledWith({
+        where: {
+          id: "scan-1",
+          workspaceId: "ws-1",
+          status,
+          resultManifest: { is: { id: "manifest", checksum: "sha" } },
+        },
+        data: { status: "VERIFYING" },
+      })
+      expect(mocks.completeScanWithScore).toHaveBeenCalledOnce()
+    }
+  )
+
   it("refuses pending finalization when stored manifest checksum mismatches", async () => {
     mocks.prisma.scan.findUnique.mockResolvedValue(
       scanRow({
@@ -244,23 +279,20 @@ describe("resumePendingScanFinalization", () => {
     })
   })
 
-  it("fails an interrupted billable phase instead of replaying it", async () => {
-    mocks.prisma.scan.findUnique.mockResolvedValue(
-      scanRow({ status: "RUNNING", events: [{ id: "evt-1" }] })
-    )
+  it.each(["QUEUED", "PREFLIGHT", "RUNNING", "VERIFYING"])(
+    "retains ambiguous paid execution in %s without replaying it",
+    async (status) => {
+      mocks.prisma.scan.findUnique.mockResolvedValue(scanRow({ status, events: [{ id: "evt-1" }] }))
 
-    await expect(resumePendingScanFinalization(params)).resolves.toEqual({
-      status: "failed",
-      errorCategory: "BILLABLE_PHASE_INTERRUPTED",
-      errorMessage: expect.stringContaining("not replayed"),
-    })
-    expect(mocks.updateScanStatus).toHaveBeenCalledWith(
-      "scan-1",
-      "FAILED",
-      expect.objectContaining({ errorCategory: "BILLABLE_PHASE_INTERRUPTED" })
-    )
-    expect(mocks.completeScanWithScore).not.toHaveBeenCalled()
-  })
+      await expect(resumePendingScanFinalization(params)).resolves.toEqual({
+        status: "failed",
+        errorCategory: "BILLABLE_PHASE_INTERRUPTED",
+        errorMessage: expect.stringContaining("not replayed"),
+      })
+      expect(mocks.updateScanStatus).not.toHaveBeenCalled()
+      expect(mocks.completeScanWithScore).not.toHaveBeenCalled()
+    }
+  )
 
   it("returns null when there is nothing to resume", async () => {
     mocks.prisma.scan.findUnique.mockResolvedValue(scanRow({ status: "RUNNING" }))

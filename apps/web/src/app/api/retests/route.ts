@@ -1,9 +1,10 @@
-import { listRetests } from "@lyrashield/db"
+import { listRetests, withDelegatedReadAuthority } from "@lyrashield/db"
 import { requirePermission } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
 import { authErrorResponse } from "../../../lib/api-auth"
 import { apiError, apiPaginated, parsePaginationParams } from "../../../lib/api-response"
+import { delegatedReadPrincipal } from "../../../lib/delegated-target-read-scope"
 
 export async function GET(request: Request) {
   try {
@@ -16,18 +17,34 @@ export async function GET(request: Request) {
       return apiError("MISSING_PARAM", "workspaceId is required", 400)
     }
 
-    await requirePermission(workspaceId, PERMISSIONS.retest.view)
-
-    const { cursor, limit } = parsePaginationParams(searchParams)
-
-    const result = await listRetests({
-      workspaceId,
-      ...(findingId ? { findingId } : {}),
-      ...(status ? { status } : {}),
-      ...(cursor ? { cursor } : {}),
-      limit,
-    })
-
+    const { session, workspace } = await requirePermission(workspaceId, PERMISSIONS.retest.view)
+    const principal = delegatedReadPrincipal(session, workspace)
+    const load = async (
+      client?: Parameters<typeof listRetests>[1],
+      authority?: { targetId?: string; targetIds?: string[]; allowedProfiles: string[] }
+    ) => {
+      const readScope = authority
+        ? {
+            ...(authority.targetId ? { targetId: authority.targetId } : {}),
+            ...(authority.targetIds !== undefined ? { targetIds: authority.targetIds } : {}),
+            allowedProfiles: authority.allowedProfiles,
+            requireActiveTarget: true,
+          }
+        : {}
+      const { cursor, limit } = parsePaginationParams(searchParams)
+      const listInput = {
+        workspaceId,
+        ...readScope,
+        ...(findingId ? { findingId } : {}),
+        ...(status ? { status } : {}),
+        ...(cursor ? { cursor } : {}),
+        limit,
+      }
+      return client ? listRetests(listInput, client) : listRetests(listInput)
+    }
+    const result = principal
+      ? await withDelegatedReadAuthority(principal, (tx, authority) => load(tx, authority))
+      : await load()
     return apiPaginated(result.items, result.nextCursor)
   } catch (error) {
     const authErr = authErrorResponse(error)

@@ -1528,5 +1528,75 @@
     "targetWords": 1400,
     "batch": "batch-11",
     "cta": "Pillar + Launch Checklist"
+  },
+  {
+    "index": 154,
+    "title": "PHP2Shell explained: affected versions and fixes",
+    "slug": "php2shell-explained",
+    "query": "php2shell vulnerabilities php runtime - explained",
+    "cluster": "Web",
+    "targetWords": 1400,
+    "batch": "php2shell",
+    "cta": "Pillar + PHP checker"
+  },
+  {
+    "index": 155,
+    "title": "How to check your PHP version for PHP2Shell",
+    "slug": "check-php-version-php2shell",
+    "query": "check php version php2shell - how-to",
+    "cluster": "Web",
+    "targetWords": 1400,
+    "batch": "php2shell",
+    "cta": "Pillar + PHP checker"
+  },
+  {
+    "index": 156,
+    "title": "Patch PHP2Shell in Docker, PHP-FPM and Apache",
+    "slug": "patch-php2shell-docker-fpm-apache",
+    "query": "patch php2shell docker php-fpm apache - how-to",
+    "cluster": "Web",
+    "targetWords": 1400,
+    "batch": "php2shell",
+    "cta": "Pillar + PHP checker"
+  },
+  {
+    "index": 157,
+    "title": "PHP2Shell and WordPress: what to ask your host",
+    "slug": "php2shell-wordpress-hosting",
+    "query": "php2shell wordpress hosting - checklist",
+    "cluster": "Web",
+    "targetWords": 1400,
+    "batch": "php2shell",
+    "cta": "Pillar + PHP checker"
+  },
+  {
+    "index": 158,
+    "title": "CVE-2026-115560: session upload progress review",
+    "slug": "cve-2026-115560-session-upload-progress",
+    "query": "cve-2026-115560 session upload progress - review",
+    "cluster": "Web",
+    "targetWords": 1400,
+    "batch": "php2shell",
+    "cta": "Pillar + PHP checker"
+  },
+  {
+    "index": 159,
+    "title": "PHP2Shell still flagged? Verify vendor backports",
+    "slug": "php2shell-still-flagged-after-updating",
+    "query": "php2shell still flagged after updating vendor backport - verify",
+    "cluster": "Web",
+    "targetWords": 1400,
+    "batch": "php2shell",
+    "cta": "Pillar + PHP checker"
+  },
+  {
+    "index": 160,
+    "title": "Patched PHP2Shell? Check for earlier compromise",
+    "slug": "php2shell-investigate-earlier-compromise",
+    "query": "php2shell earlier compromise investigation - checklist",
+    "cluster": "Web",
+    "targetWords": 1400,
+    "batch": "php2shell",
+    "cta": "Pillar + PHP checker"
   }
 ]

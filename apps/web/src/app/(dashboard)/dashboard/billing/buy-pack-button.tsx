@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { buttonVariants } from "@lyrashield/ui"
 
 interface BuyPackButtonProps {
@@ -14,10 +14,13 @@ interface BuyPackButtonProps {
  * Never links directly to a POST route via GET.
  */
 export function BuyPackButton({ workspaceId, packId = "pack_100" }: BuyPackButtonProps) {
+  const pending = useRef(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   async function handleBuy() {
+    if (pending.current) return
+    pending.current = true
     setLoading(true)
     setError(null)
     try {
@@ -28,15 +31,16 @@ export function BuyPackButton({ workspaceId, packId = "pack_100" }: BuyPackButto
       })
       const data = await res.json()
       if (res.ok && data.success && data.data?.url) {
-        window.location.href = data.data.url
+        window.location.assign(data.data.url)
+        return
       } else {
         setError(data.error?.message ?? "Unable to start this purchase. Please try again.")
       }
     } catch {
       setError("Unable to start this purchase. Check your connection and try again.")
-    } finally {
-      setLoading(false)
     }
+    pending.current = false
+    setLoading(false)
   }
 
   return (

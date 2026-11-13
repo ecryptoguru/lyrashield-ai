@@ -52,8 +52,11 @@ describe("deriveHomeDecision — one canonical action", () => {
       ...base,
       targets: { ...base.targets, total: 0, unassessed: 0 },
     })
-    expect(decision.action?.title).toBe("Add your first target")
-    expect(decision.primaryAction).toEqual({ href: "/dashboard/targets", label: "Add a target" })
+    expect(decision.action?.title).toBe("Start your first scan")
+    expect(decision.primaryAction).toEqual({
+      href: "/dashboard/scans?new=1",
+      label: "Start your first scan",
+    })
   })
 
   it("asks for a first scan when a target exists but nothing has been evaluated", () => {
@@ -161,6 +164,18 @@ describe("deriveHomeDecision — one canonical action", () => {
     expect(decision.action?.description).not.toContain(
       "Every active target's current gate state is READY"
     )
+  })
+
+  it("routes a partial gate read to the remaining target pages", () => {
+    const decision = deriveHomeDecision({
+      ...base,
+      targets: { ...base.targets, total: 6 },
+      lastEvaluatedAssessment: evaluatedAssessment(),
+      gateTargets: [gateFor("t-1", "READY")],
+      hasMoreGateTargets: true,
+    })
+    expect(decision.action?.cta).toBe("Open Launch Readiness")
+    expect(decision.action?.title).toBe("Review remaining targets")
   })
 
   it("offers the report only when every active target's gate is READY", () => {

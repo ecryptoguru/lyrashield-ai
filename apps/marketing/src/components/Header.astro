@@ -34,9 +34,9 @@ const learnItems = [
   { label: "Guides", href: "/blog" },
   { label: "Docs", href: "/docs/integrations" },
   { label: "API reference", href: "/docs/integrations/rest-api" },
-  // #913 renamed this label to "MCP guard evaluation". The restructure moved
+  // #913 renamed this label to "MCP guard behavior and limits". The restructure moved
   // the destination out of the header, so it is kept here rather than dropped.
-  { label: "MCP guard evaluation", href: "/ai-safety" },
+  { label: "MCP guard behavior and limits", href: "/ai-safety" },
   { label: "Support", href: "/support" },
 ]
 ---
@@ -61,7 +61,7 @@ const learnItems = [
     <nav aria-label="Main" class="flex shrink-0 items-center gap-1 sm:gap-2">
       <ul class="hidden shrink-0 items-center gap-1 whitespace-nowrap lg:flex lg:gap-2">
         <li class="relative">
-          <details class="group">
+          <details class="group" name="desktop-navigation">
             <summary class={`inline-flex min-h-11 cursor-pointer list-none items-center gap-1 rounded-lg px-3 text-sm hover:bg-bg-raised hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent ${isActive("/methodology") || isActive("/vibe-security-50") || isActive("/evidence-vault") || isActive("/compare") ? activeClass : "text-text-muted"}`}>
               <span>Product</span>
               <svg data-nav-chevron viewBox="0 0 16 16" class="size-3.5 -translate-y-px transition-transform group-open:rotate-180" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
@@ -87,7 +87,7 @@ const learnItems = [
           </a>
         </li>
         <li class="relative">
-          <details class="group">
+          <details class="group" name="desktop-navigation">
             <summary class={`inline-flex min-h-11 cursor-pointer list-none items-center gap-1 rounded-lg px-3 text-sm hover:bg-bg-raised hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent ${isActive("/tools") || isActive("/scan") ? activeClass : "text-text-muted"}`}>
               <span>Free tools</span>
               <svg data-nav-chevron viewBox="0 0 16 16" class="size-3.5 -translate-y-px transition-transform group-open:rotate-180" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
@@ -110,14 +110,14 @@ const learnItems = [
           </a>
         </li>
         <li class="relative">
-          <details class="group">
+          <details class="group" name="desktop-navigation">
             <summary class={`inline-flex min-h-11 cursor-pointer list-none items-center gap-1 rounded-lg px-3 text-sm hover:bg-bg-raised hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent ${isActive("/blog") || isActive("/docs") || isActive("/support") ? activeClass : "text-text-muted"}`}>
               <span>Learn</span>
               <svg data-nav-chevron viewBox="0 0 16 16" class="size-3.5 -translate-y-px transition-transform group-open:rotate-180" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
                 <path d="m4 6 4 4 4-4" />
               </svg>
             </summary>
-            <div class="absolute top-full right-0 mt-1 grid w-56 gap-1 rounded-xl border border-border bg-bg-raised p-2 shadow-xl">
+            <div class="absolute top-full right-0 mt-1 grid w-max min-w-56 max-w-[calc(100vw-2rem)] gap-1 rounded-xl border border-border bg-bg-raised p-2 whitespace-normal shadow-xl">
               {learnItems.map((item) => (
                 <a href={item.href} class="rounded-lg px-3 py-2 text-sm text-text-muted hover:bg-bg hover:text-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
                   {item.label}
@@ -156,7 +156,7 @@ const learnItems = [
       <!--
         The mobile sheet carries the same destinations as the desktop header as
         one accordion per menu. It is a full-height sheet that scrolls inside
-        the viewport (max-height 100dvh, overflow-y auto), so no destination is
+        the viewport (dynamic available height, overflow-y auto), so no destination is
         dropped to make it fit a short screen. tests-browser/theme.e2e.ts
         asserts it scrolls and reaches every destination.
       -->
@@ -177,19 +177,19 @@ const learnItems = [
           </a>
         </div>
         <div class="mobile-menu__section">
-          <details class="mobile-menu__accordion">
+          <details class="mobile-menu__accordion" name="mobile-navigation">
             <summary class="menu-link">Product</summary>
             <div class="mobile-menu__accordion-body">
               {productItems.map((item) => <a href={item.href} class="menu-link mobile-menu__resource">{item.label}</a>)}
             </div>
           </details>
-          <details class="mobile-menu__accordion">
+          <details class="mobile-menu__accordion" name="mobile-navigation">
             <summary class="menu-link">Free tools</summary>
             <div class="mobile-menu__accordion-body">
               {freeToolItems.map((item) => <a href={item.href} class="menu-link mobile-menu__resource">{item.label}</a>)}
             </div>
           </details>
-          <details class="mobile-menu__accordion">
+          <details class="mobile-menu__accordion" name="mobile-navigation">
             <summary class="menu-link">Learn</summary>
             <div class="mobile-menu__accordion-body">
               {learnItems.map((item) => <a href={item.href} class="menu-link mobile-menu__resource">{item.label}</a>)}
@@ -240,11 +240,17 @@ const learnItems = [
     button?.setAttribute("title", label)
   }
 
+  let requestedTheme = document.documentElement.dataset.themePreference || "system"
+  let themeTransition: ViewTransition | undefined
   button?.addEventListener("click", () => {
-    const current = document.documentElement.dataset.themePreference || "system"
+    const current = requestedTheme
     const next = preferences[(preferences.indexOf(current as ThemePreference) + 1) % preferences.length] ?? "system"
+    requestedTheme = next
     persistTheme(next)
-    applyTheme(next)
+    themeTransition?.skipTransition()
+    if (document.startViewTransition && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      themeTransition = document.startViewTransition(() => applyTheme(requestedTheme as ThemePreference))
+    } else applyTheme(next)
   })
   systemTheme.addEventListener("change", () => {
     if (document.documentElement.dataset.themePreference === "system") applyTheme("system")
@@ -254,6 +260,7 @@ const learnItems = [
     const next = preferences.includes(event.newValue as ThemePreference)
       ? (event.newValue as ThemePreference)
       : "system"
+    requestedTheme = next
     applyTheme(next)
   })
   applyTheme(
@@ -261,6 +268,28 @@ const learnItems = [
       ? (document.documentElement.dataset.themePreference as ThemePreference)
       : "system"
   )
+
+  // Native details preserve keyboard disclosure semantics; dismiss their panels
+  // when the visitor leaves the disclosure, clicks elsewhere or presses Escape.
+  const desktopMenus = document.querySelectorAll<HTMLDetailsElement>('details[name="desktop-navigation"]')
+  desktopMenus.forEach((details) => {
+    details.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape" || !details.open) return
+      details.open = false
+      details.querySelector("summary")?.focus()
+      event.preventDefault()
+    })
+    details.addEventListener("focusout", (event) => {
+      if (!(event.relatedTarget instanceof Node) || !details.contains(event.relatedTarget))
+        details.open = false
+    })
+  })
+  document.addEventListener("pointerdown", (event) => {
+    desktopMenus.forEach((details) => {
+      if (details.open && event.target instanceof Node && !details.contains(event.target))
+        details.open = false
+    })
+  })
 
   const menuToggle = document.querySelector<HTMLButtonElement>("#menu-toggle")
   const menu = document.querySelector<HTMLDialogElement>("#mobile-menu")
@@ -329,7 +358,16 @@ const learnItems = [
 </script>
 
 <style is:global>
-  @media (max-width: 359px) {
+  /* Container em units follow enlarged text; viewport breakpoints do not. */
+  #site-header { container-type: inline-size; }
+  @container (width < 64em) {
+    #site-header nav[aria-label="Main"] > ul { display: none; }
+    #menu-toggle { display: inline-flex; }
+  }
+
+  /* Reflow with enlarged text as well as narrow physical viewports. Icon
+     controls retain 44 CSS pixels while the brand text is free to wrap. */
+  @container (width < 30em) {
     #site-header .header-beta-badge {
       display: none;
     }
@@ -382,7 +420,7 @@ const learnItems = [
     box-sizing: border-box;
     /* No display here: a closed <dialog> must stay hidden, and the
        #mobile-menu[open] rule below sets the grid layout when it opens. */
-    max-height: 100dvh;
+    max-height: calc(100dvh - max(4.5rem, calc(4rem + env(safe-area-inset-top))) - max(1rem, env(safe-area-inset-bottom)));
     align-content: start;
     overflow-y: auto;
     overscroll-behavior: contain;
@@ -417,16 +455,6 @@ const learnItems = [
 
   .mobile-menu__section {
     margin-top: 0.125rem;
-  }
-
-  .mobile-menu__section > p {
-    margin: 0 0 0.125rem;
-    padding: 0 0.75rem;
-    color: var(--text-muted);
-    font-size: 0.6875rem;
-    font-weight: 600;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
   }
 
   .mobile-menu__accordion {
@@ -465,12 +493,6 @@ const learnItems = [
     display: grid;
     gap: 0.125rem;
     padding-bottom: 0.375rem;
-  }
-
-  .mobile-menu__resources {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.25rem;
   }
 
   .mobile-menu__resource {

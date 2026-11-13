@@ -247,3 +247,12 @@ export {
   type ConnectorAdmissionMode,
   type ConnectorAdmissionReason,
 } from "./connector-admission"
+export { isEvidenceStorageUriForWorkspace } from "./evidence-storage-uri"
+
+export { buildEngineArguments } from "./engine-command"
+export type { EngineCommandConfig, EngineTargetInfo, EngineTargetType } from "./engine-command"
+
+export { resolveEngineProfile } from "./engine-profile"
+export type { EngineProfile } from "./engine-profile"
+
+export { resolveScanBudgetUsd } from "./engine-budget"

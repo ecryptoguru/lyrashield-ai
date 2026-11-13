@@ -14,6 +14,18 @@ const aiResultCacheSyncArgs = [
   "sync-ai-result-cache-secrets-to-worker-key-vault",
 ]
 
+// worker-env.sh requires signed SBOM coverage evidence for the pinned
+// sandbox image; fixtures that run the real loader must carry valid values.
+const sbomEvidenceLines =
+  "LYRASHIELD_SANDBOX_SBOM_COVERAGE_VERIFY_PATH=/tmp/coverage.json\n" +
+  "LYRASHIELD_SANDBOX_SBOM_COVERAGE_EXPECTED_PATH=/tmp/coverage-predicate.json\n" +
+  "LYRASHIELD_SANDBOX_SBOM_COVERAGE_REPO=ecryptoguru/lyrashield-engine\n" +
+  "LYRASHIELD_SANDBOX_SBOM_COVERAGE_REF=refs/heads/main\n" +
+  "LYRASHIELD_SANDBOX_SBOM_COVERAGE_ENGINE_REVISION=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n" +
+  "LYRASHIELD_SANDBOX_SBOM_COVERAGE_WORKFLOW_REVISION=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n" +
+  "LYRASHIELD_SANDBOX_SBOM_COVERAGE_RUN_ID=42487812345\n" +
+  "LYRASHIELD_SANDBOX_SBOM_COVERAGE_RUN_ATTEMPT=1\n"
+
 const workflowStepBody = (script, slug) => {
   const marker = `step_${slug}() {\n`
   const start = script.indexOf(marker)
@@ -346,6 +358,10 @@ const preflightEnvFile = [
 
 const installPreflightSecretRefresher = (directory) => {
   writeFileSync(
+    path.join(directory, "egress-pins"),
+    "redis.internal 13.200.201.38 6379\nredis.internal 13.234.196.111 6379\npostgres.internal 13.200.110.68 5432\n"
+  )
+  writeFileSync(
     path.join(directory, "timeout"),
     '#!/bin/sh\nset -eu\ncase "$1 $2" in\n  "--kill-after=10s 120s"|"--kill-after=5s 10s") ;;\n  *) exit 1 ;;\nesac\nshift 2\nexec "$@"\n',
     { mode: 0o700 }
@@ -404,7 +420,8 @@ test("worker preflight reads refreshed Key Vault credentials without restarting 
     writeFileSync(
       runtimeConfig,
       "LYRASHIELD_WORKER_IMAGE=ghcr.io/example/worker@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n" +
-        "LYRASHIELD_SANDBOX_IMAGE=ghcr.io/example/sandbox@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\n"
+        "LYRASHIELD_SANDBOX_IMAGE=ghcr.io/example/sandbox@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\n" +
+        sbomEvidenceLines
     )
     writeFileSync(envFile, preflightEnvFile)
     const empty = {
@@ -424,6 +441,7 @@ test("worker preflight reads refreshed Key Vault credentials without restarting 
           MOCK_LIVE_DATABASE_URL: "postgres://worker:other@postgres.internal:5432/lyrashield",
           LYRASHIELD_WORKER_RUNTIME_CONFIG: runtimeConfig,
           LYRASHIELD_WORKER_ENV_FILE: envFile,
+          LYRASHIELD_EGRESS_PIN_FILE: path.join(directory, "egress-pins"),
           LYRASHIELD_WORKER_ENV_LIB: path.resolve("ops/worker/worker-env.sh"),
           LYRASHIELD_WORKER_HOST_LIBEXEC_DIR: directory,
         },
@@ -437,6 +455,12 @@ test("worker preflight reads refreshed Key Vault credentials without restarting 
     assert.equal(env.TMPDIR, "/tmp")
     assert.ok(tokens.includes("/tmp:rw,nosuid,nodev,noexec,size=64m"))
     assert.ok(!tokens.includes("--mount"))
+    const hosts = tokens.flatMap((token, i) => (token === "--add-host" ? [tokens[i + 1]] : []))
+    assert.deepEqual(hosts, [
+      "redis.internal:13.200.201.38",
+      "redis.internal:13.234.196.111",
+      "postgres.internal:13.200.110.68",
+    ])
     const passedNames = new Set()
     for (let i = 0; i < tokens.length; i++) {
       if (tokens[i] === "--env") passedNames.add(tokens[i + 1].split("=")[0])
@@ -462,6 +486,26 @@ test("worker preflight reads refreshed Key Vault credentials without restarting 
     ]) {
       assert.throws(() => run(state))
     }
+    for (const pins of [
+      "",
+      "bad;host 13.200.201.38 6379\n",
+      "redis.internal bad:address 6379\n",
+      "redis.internal 13.200.201.38 6379 extra\n",
+    ]) {
+      writeFileSync(path.join(directory, "egress-pins"), pins)
+      const before = readFileSync(dockerLog, "utf8")
+        .split("\n")
+        .filter((line) => line.startsWith("run ")).length
+      assert.throws(() => run(JSON.stringify(empty)))
+      assert.equal(
+        readFileSync(dockerLog, "utf8")
+          .split("\n")
+          .filter((line) => line.startsWith("run ")).length,
+        before
+      )
+    }
+    rmSync(path.join(directory, "egress-pins"))
+    assert.throws(() => run(JSON.stringify(empty)))
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
@@ -486,7 +530,8 @@ test("worker preflight reports a stale worker environment without printing endpo
     writeFileSync(
       runtimeConfig,
       "LYRASHIELD_WORKER_IMAGE=ghcr.io/example/worker@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n" +
-        "LYRASHIELD_SANDBOX_IMAGE=ghcr.io/example/sandbox@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\n"
+        "LYRASHIELD_SANDBOX_IMAGE=ghcr.io/example/sandbox@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\n" +
+        sbomEvidenceLines
     )
     writeFileSync(envFile, preflightEnvFile)
     const empty = {
@@ -506,6 +551,7 @@ test("worker preflight reports a stale worker environment without printing endpo
           MOCK_LIVE_DATABASE_URL: liveDatabaseUrl,
           LYRASHIELD_WORKER_RUNTIME_CONFIG: runtimeConfig,
           LYRASHIELD_WORKER_ENV_FILE: envFile,
+          LYRASHIELD_EGRESS_PIN_FILE: path.join(directory, "egress-pins"),
           LYRASHIELD_WORKER_ENV_LIB: path.resolve("ops/worker/worker-env.sh"),
           LYRASHIELD_WORKER_HOST_LIBEXEC_DIR: directory,
         },
@@ -553,7 +599,7 @@ test("worker preflight reports a stale worker environment without printing endpo
   }
 })
 
-test("preflight environment loads @lyrashield/config in production and matches the worker launcher", () => {
+function verifyPreflightEnvironment(controls) {
   const directory = mkdtempSync(path.join(tmpdir(), "worker-preflight-env-"))
   try {
     const dockerLog = path.join(directory, "docker.log")
@@ -572,7 +618,11 @@ test("preflight environment loads @lyrashield/config in production and matches t
     writeFileSync(
       runtimeConfig,
       "LYRASHIELD_WORKER_IMAGE=ghcr.io/example/worker@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n" +
-        "LYRASHIELD_SANDBOX_IMAGE=ghcr.io/example/sandbox@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\n"
+        "LYRASHIELD_SANDBOX_IMAGE=ghcr.io/example/sandbox@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\n" +
+        sbomEvidenceLines +
+        Object.entries(controls)
+          .map(([name, value]) => `${name}=${value}\n`)
+          .join("")
     )
     writeFileSync(envFile, preflightEnvFile)
     const empty = {
@@ -591,6 +641,7 @@ test("preflight environment loads @lyrashield/config in production and matches t
         MOCK_LIVE_DATABASE_URL: "postgres://worker:other@postgres.internal:5432/lyrashield",
         LYRASHIELD_WORKER_RUNTIME_CONFIG: runtimeConfig,
         LYRASHIELD_WORKER_ENV_FILE: envFile,
+        LYRASHIELD_EGRESS_PIN_FILE: path.join(directory, "egress-pins"),
         LYRASHIELD_WORKER_ENV_LIB: path.resolve("ops/worker/worker-env.sh"),
         LYRASHIELD_WORKER_HOST_LIBEXEC_DIR: directory,
       },
@@ -620,13 +671,34 @@ test("preflight environment loads @lyrashield/config in production and matches t
     // worker-side names come from ops/worker/worker-env.sh, which both call.
     const workerNames = new Set()
     for (const file of ["ops/worker/worker-env.sh", "ops/worker/run-worker.sh"]) {
-      let text = ""
-      try {
-        text = readFileSync(file, "utf8")
-      } catch {
-        continue
+      let text = readFileSync(file, "utf8")
+      // The separately qualified Go capsule has its own minimal environment;
+      // these variables must never become worker/preflight environment settings.
+      if (file === "ops/worker/run-worker.sh") {
+        text = text.replace(
+          /# BEGIN GO RESOLVER QUALIFICATION[\s\S]*?# END GO RESOLVER QUALIFICATION/,
+          ""
+        )
       }
-      for (const match of text.matchAll(/--env ([A-Z_]+)=/g)) workerNames.add(match[1])
+      for (const match of text.matchAll(/--env ([A-Z][A-Z0-9_]*)=/g)) workerNames.add(match[1])
+    }
+    // Both writer flags are always explicit. Endpoint overrides are conditional:
+    // an absent dedupe mode inherits the main policy in the engine.
+    for (const name of ["LYRASHIELD_RUN_RECORD_V1_1", "LYRASHIELD_PENDING_HTTP_EVIDENCE"]) {
+      assert.equal(env[name], controls[name] ?? "0", name)
+    }
+    for (const name of ["LLM_API_MODE", "DEDUPE_LLM_API_MODE"]) {
+      assert.equal(env[name], controls[name], name)
+      if (!Object.hasOwn(controls, name)) workerNames.delete(name)
+    }
+    // The held publication record and legacy coverage inputs are alternative
+    // configured evidence paths, with the same selection in both consumers.
+    const publicationPath = "LYRASHIELD_SANDBOX_PUBLICATION_RECORD_PATH"
+    assert.equal(env[publicationPath], controls[publicationPath])
+    if (!Object.hasOwn(controls, publicationPath)) workerNames.delete(publicationPath)
+    else {
+      for (const name of workerNames)
+        if (name.startsWith("LYRASHIELD_SANDBOX_SBOM_COVERAGE_")) workerNames.delete(name)
     }
     const passedNames = new Set()
     for (let i = 0; i < tokens.length; i++) {
@@ -636,7 +708,25 @@ test("preflight environment loads @lyrashield/config in production and matches t
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
-})
+}
+
+for (const [mode, controls] of Object.entries({
+  defaults: {},
+  "main mode with inherited dedupe": { LYRASHIELD_RUN_RECORD_V1_1: "1", LLM_API_MODE: "responses" },
+  "explicit writer and endpoint controls": {
+    LYRASHIELD_RUN_RECORD_V1_1: "1",
+    LYRASHIELD_PENDING_HTTP_EVIDENCE: "1",
+    LLM_API_MODE: "responses",
+    DEDUPE_LLM_API_MODE: "chat_completions",
+  },
+  "held publication path": {
+    LYRASHIELD_SANDBOX_PUBLICATION_RECORD_PATH: "/etc/lyrashield/sandbox-publication-record.json",
+  },
+})) {
+  test(`preflight environment loads @lyrashield/config in production and matches the worker launcher: ${mode}`, () => {
+    verifyPreflightEnvironment(controls)
+  })
+}
 
 for (const failure of ["busy-queue", "vm-error"]) {
   test(`workflow recovers ingress and candidates after ${failure}`, () => {

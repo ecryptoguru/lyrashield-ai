@@ -38,6 +38,27 @@ describe("LaunchReadinessClient triage relabel", () => {
     summary: "No completed assessment evidence is available.",
   }
 
+  it("exposes continuation links outside the collapsed release form", () => {
+    const html = renderToStaticMarkup(
+      <LaunchReadinessClient
+        workspaceId="ws-1"
+        initialReport={inconclusive}
+        targets={[]}
+        initialTargetId=""
+        initialReleaseRef=""
+        initialReleaseCheck={null}
+        initialCheckError={null}
+        checkNeedsTarget={false}
+        nextTargetsHref="/dashboard/launch-readiness?cursor=target-5"
+        firstTargetsHref="/dashboard/launch-readiness"
+      />
+    )
+    expect(html).toContain('aria-label="Target pages"')
+    expect(html).toContain("Next targets")
+    expect(html).toContain("cursor=target-5")
+    expect(html.indexOf("Next targets")).toBeLessThan(html.indexOf("Check a specific release"))
+  })
+
   it("renders a neutral (not green) gauge with zero scans", () => {
     const html = renderToStaticMarkup(
       <LaunchReadinessClient
@@ -159,4 +180,55 @@ describe("LaunchReadinessClient release draft", () => {
       expect(html).not.toContain("in-progress assessment")
     }
   )
+})
+
+it("keeps an explicit release mismatch ahead of a positive historical report", () => {
+  const html = renderToStaticMarkup(
+    <LaunchReadinessClient
+      workspaceId="ws-1"
+      initialReport={REPORT}
+      targets={[{ targetId: "target-1", targetName: "API" }]}
+      initialTargetId="target-1"
+      initialReleaseRef={COMMIT}
+      initialReleaseCheck={{
+        targetId: "target-1",
+        targetName: "API",
+        requested: { kind: "COMMIT", value: COMMIT },
+        assessed: { kind: "COMMIT", value: "b".repeat(40) },
+        match: "mismatch",
+        historicalState: "READY",
+        state: "INSUFFICIENT_EVIDENCE",
+        applicable: false,
+        blockingFindings: 0,
+        reasons: [],
+      }}
+      initialCheckError={null}
+      checkNeedsTarget={false}
+    />
+  )
+  expect(html).toMatch(/<h2[^>]*>Insufficient current evidence<\/h2>/)
+  expect(html).toContain("The retained assessment covers a different release")
+  expect(html).toContain("Review target assessments")
+  expect(html).not.toContain('stroke="var(--color-success)"')
+})
+
+it("keeps a release without target scope in the target chooser", () => {
+  const html = renderToStaticMarkup(
+    <LaunchReadinessClient
+      workspaceId="ws-1"
+      initialReport={REPORT}
+      targets={[
+        { targetId: "target-1", targetName: "API" },
+        { targetId: "target-2", targetName: "Site" },
+      ]}
+      initialTargetId=""
+      initialReleaseRef={COMMIT}
+      initialReleaseCheck={null}
+      initialCheckError={null}
+      checkNeedsTarget
+    />
+  )
+  expect(html).toContain('href="#release-check-target"')
+  expect(html).toContain("Choose a target for this release")
+  expect(html).not.toContain('href="/dashboard/scans?target="')
 })

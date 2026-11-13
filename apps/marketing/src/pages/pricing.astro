@@ -18,7 +18,7 @@ const description =
   "Cloud plans from $29 a month with a free trial of 60 agent-minutes and no card. Prepaid minute packs and annual billing are available; Local launches later."
 // Last content change to this page — the explicit freshness input for the
 // WebPage dateModified (same convention as about.astro's updatedDate).
-const updatedDate = "2026-09-20"
+const updatedDate = "2026-10-30"
 
 const cloudPlans = CLOUD_PLANS.filter((plan) => plan.selfServe)
 const enterprisePlan = getPlan("ENTERPRISE")
@@ -26,7 +26,7 @@ const enterprisePlan = getPlan("ENTERPRISE")
 const pricingFaqs = [
   {
     q: "What is an agent-minute?",
-    a: 'An agent-minute is a unit of wall-clock time — the real elapsed time from when a scan phase starts to when it ends, measured on the server clock. It is not "active-loop time" or "thinking time"; it includes all processing, network I/O and model calls within that phase. Deep and Custom scans consume agent-minutes at 3× the standard rate.',
+    a: 'An agent-minute is a unit of wall-clock time — the real elapsed time from when a scan phase starts to when it ends, measured on the server clock. It is not "active-loop time" or "thinking time"; it includes all processing, network I/O and model calls within that phase. Positive partial minutes round up before the multiplier. Deep and Custom scans consume agent-minutes at 3× the standard rate on plans that include them.',
   },
   {
     q: "Is there a free trial?",
@@ -34,7 +34,7 @@ const pricingFaqs = [
   },
   {
     q: "What happens if I run out of agent-minutes?",
-    a: `You can add a prepaid minute pack at any time. Packs are valid for ${PACK_VALIDITY_DAYS} days and are consumed after your monthly pool. Overage billing at $0.15/min with a spend limit is available on Agency.`,
+    a: `Eligible accounts can add a prepaid minute pack. A FREE account with an expired trial must subscribe first. FREE accounts with an active or unclaimed trial remain eligible along with paid accounts. Packs are valid for ${PACK_VALIDITY_DAYS} days and are consumed after your monthly pool. Overage billing at $0.15/min with a spend limit is available on Agency.`,
   },
   {
     q: "Can I trial Agency?",
@@ -117,7 +117,7 @@ const appUrl =
 ---
 
 <Base title={title} description={description} canonical={canonical} jsonLd={jsonLd}>
-  <div class="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
+  <div class="mx-auto max-w-7xl px-4 py-10 sm:px-6 sm:py-16 lg:px-8">
     <!-- Header -->
     <div class="text-center">
       <h1 class="text-4xl font-bold tracking-tight text-text sm:text-5xl">
@@ -136,38 +136,6 @@ const appUrl =
       <p class="text-sm text-text-muted">
         Start with a free trial: {TRIAL_LINE}. One trial per account.
       </p>
-    </div>
-
-    <!-- Audience chooser: three rows, limits read from CLOUD_PLANS -->
-    <div class="mt-12">
-      <h2 class="text-2xl font-bold text-text">Choose a starting point</h2>
-      <p class="mt-2 text-sm text-text-muted">
-        Match the plan to how you work. Every limit below comes from the plan catalog.
-      </p>
-      <div class="mt-5 divide-y divide-border rounded-xl border border-border bg-bg-raised">
-        {
-          cloudPlans.map((plan) => (
-            <div class="grid gap-2 p-5 sm:grid-cols-[1fr_auto] sm:items-center">
-              <div>
-                <p class="font-semibold text-text">{plan.name}</p>
-                <p class="mt-1 text-sm text-text-muted">{tierIntents[plan.id]}</p>
-                <p class="mt-1 text-xs text-text-muted">
-                  {plan.agentMinutes.toLocaleString()} agent-minutes a month · up to {plan.targetCaps} targets
-                  {plan.deepAllowed ? " · Deep and Custom scans" : ""}
-                </p>
-              </div>
-              <a
-                href={`${appUrl}/sign-up?plan=${plan.id}`}
-                data-analytics-event="plan_choose_click"
-                data-analytics-prop-plan={plan.id.toLowerCase()}
-                class="inline-flex min-h-11 items-center justify-center rounded-lg border border-border bg-bg px-4 text-sm font-semibold text-text hover:border-accent hover:text-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-              >
-                Choose {plan.name}
-              </a>
-            </div>
-          ))
-        }
-      </div>
     </div>
 
     <!-- Cloud / Local Toggle -->
@@ -189,13 +157,13 @@ const appUrl =
           aria-pressed="false"
           class="rounded-md px-4 py-2 text-sm font-medium transition-colors text-text-muted hover:text-text"
         >
-          Local
+          Local <span class="ml-1 text-xs text-text-muted">· Launching later</span>
         </button>
       </div>
     </div>
 
     <!-- Cloud Pricing -->
-    <div id="cloud-pricing" class="mt-12">
+    <div id="cloud-pricing" class="mt-8">
       <!-- Currency + Billing Toggle -->
       <div class="mb-8 flex flex-col items-center gap-4 sm:flex-row sm:justify-center sm:gap-8">
         <div
@@ -236,15 +204,19 @@ const appUrl =
         </div>
       </div>
 
-      <!-- Plan Cards -->
+      <h2 id="cloud-plan-heading" class="mb-5 text-2xl font-bold text-text">Choose a starting point</h2>
+      <p class="mb-6 max-w-3xl text-sm leading-7 text-text-muted">
+        Capacity is measured in agent-minutes. Deep and Custom use a 3× multiplier:
+        10 elapsed agent-minutes consume 30 allowance units. Quick and Standard use 1×.
+        Positive partial minutes round up before the multiplier.{" "}
+        <a href="#minute-definition" class="text-accent underline underline-offset-4">How minutes are counted</a>
+      </p>
+      <!-- Plan Cards: intent, price and capacity stay beside the choice. -->
       <div class="grid grid-cols-1 gap-6 md:grid-cols-3">
         {
           cloudPlans.map((plan) => (
             <div class="rounded-xl border border-border bg-bg-raised p-6 shadow-sm">
-              {/* h2, not h3: these cards are the first headings after the page
-                  h1, so h3 skipped a level (UF-08). Classes are unchanged, so
-                  the visual size and weight are identical. */}
-              <h2 class="text-lg font-semibold text-text">{plan.name}</h2>
+              <h3 class="text-lg font-semibold text-text">{plan.name}</h3>
               <p class="mt-2 text-sm text-text-muted">{tierIntents[plan.id]}</p>
               <div class="mt-4">
                 <span
@@ -278,7 +250,8 @@ const appUrl =
                   /yr
                 </span>
               </div>
-              <ul class="mt-4 space-y-2">
+              <p class="mt-4 text-xs leading-6 text-text-muted">{plan.deepAllowed ? "Quick / Standard: 1× · Deep / Custom: 3× agent-minutes." : "Quick / Standard: 1× agent-minutes."}</p>
+              <ul class="mt-3 space-y-2">
                 {plan.features.map((feature) => (
                   <li class="flex items-start gap-2 text-sm text-text-muted">
                     <svg
@@ -296,7 +269,9 @@ const appUrl =
               </ul>
               <a
                 href={`${appUrl}/sign-up?plan=${plan.id}`}
-                class="mt-6 block w-full rounded-lg bg-accent px-4 py-2.5 text-center text-sm font-semibold text-bg hover:bg-accent/90 transition-colors"
+                data-analytics-event="plan_choose_click"
+                data-analytics-prop-plan={plan.id.toLowerCase()}
+                class="mt-6 flex min-h-12 w-full items-center justify-center rounded-lg bg-accent px-4 py-2.5 text-center text-sm font-semibold text-bg transition-colors hover:bg-accent/90 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent"
               >
                 {`Choose ${plan.name}`}
               </a>
@@ -370,7 +345,7 @@ const appUrl =
           </table>
         </div>
         <p class="mt-3 text-xs text-text-muted">
-          Deep and Custom scans use agent-minutes at 3× the standard rate. Prepaid minute packs are available on every plan.
+          Deep and Custom scans use agent-minutes at 3× the standard rate on plans that include them. Eligible accounts can buy prepaid minute packs. Accounts with an expired free trial must subscribe first.
         </p>
       </div>
 
@@ -431,6 +406,7 @@ const appUrl =
             >From ₹{enterprisePlan.price.inr.monthly.toLocaleString("en-IN")}/mo</span
           >
         </p>
+        <p class="mt-3 text-sm text-text-muted">Availability and delivery terms are agreed with Sales; features marked “on request” require that agreement.</p>
         <ul class="mt-4 space-y-2">
           {enterprisePlan.features.map((feature) => (
             <li class="flex items-start gap-2 text-sm text-text-muted">
@@ -492,14 +468,14 @@ const appUrl =
 
     <!-- Agent-minute definition -->
     <div
-      class="mt-16 rounded-xl border border-border bg-bg-raised p-6"
+      id="minute-definition" class="mt-16 scroll-mt-24 rounded-xl border border-border bg-bg-raised p-6"
     >
       <h2 class="text-xl font-bold text-text">What is an agent-minute?</h2>
       <p class="mt-2 text-sm text-text-muted">
         An agent-minute is a unit of wall-clock time — the real elapsed time from when a scan phase
         starts to when it ends, measured on the server clock. It is not "active-loop time" or
         "thinking time"; it includes all processing, network I/O and model calls within that phase.
-        Deep and Custom scans consume agent-minutes at 3× the standard rate.
+        Positive partial minutes round up before the multiplier. Deep and Custom scans consume agent-minutes at 3× the standard rate on plans that include them.
       </p>
       <p class="mt-3 text-sm text-text-muted">
         Overage (when all included minutes and packs are exhausted) is billed at $0.15/min for

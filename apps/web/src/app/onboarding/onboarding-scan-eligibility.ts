@@ -52,9 +52,11 @@ export async function ensureOnboardingTrialStarted({
     const eligibility = await readScanEligibility(view, workspaceId, targetId, scanRequest)
     if (eligibility.status !== "ready") return false
     trialStart.current.unknown = null
-    if (eligibility.eligibility.allowed || eligibility.eligibility.code !== "TRIAL_AVAILABLE") {
-      return false
+    if (eligibility.eligibility.allowed) {
+      trialStart.current.confirmed = workspaceId
+      return true
     }
+    if (eligibility.eligibility.code !== "TRIAL_AVAILABLE") return false
   }
 
   try {

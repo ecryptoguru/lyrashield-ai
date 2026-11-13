@@ -12,6 +12,7 @@ interface ScannerDiscoveryReceipt {
   bytesScanned: number
   skippedByReason: Record<string, number>
   representativeSkippedPaths?: string[]
+  php?: import("./php-engine-context").PhpRepositoryContext
 }
 
 /** Mutable sink a scanner fills during its run — same out-param pattern as coverageIssues. */
@@ -29,6 +30,8 @@ export interface ScannerCoverageIssue {
     | "sast"
     | "iac"
   status: ScannerCoverageStatus
+  /** Runtime applicability is distinct from execution coverage of the IaC family. */
+  scope?: "php_windows_brotli"
   subject?: string
   reason: string
   metadata?: Record<string, unknown>

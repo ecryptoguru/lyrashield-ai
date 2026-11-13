@@ -13,7 +13,10 @@ vi.mock("@lyrashield/db", () => ({
 vi.mock("@lyrashield/logger", () => ({
   logger: { debug: vi.fn(), info: vi.fn(), warn: loggerWarnMock, error: vi.fn() },
 }))
-vi.mock("@lyrashield/pricing", () => ({ DEEP_SCAN_MULTIPLIER: 3 }))
+vi.mock("@lyrashield/pricing", () => ({
+  DEEP_SCAN_MULTIPLIER: 3,
+  STANDARD_OVERAGE_PER_MINUTE_USD: 0.15,
+}))
 
 import { recordAgentMinutes } from "./meter"
 
@@ -98,6 +101,7 @@ function configureDatabase(
   )
 
   const tx = {
+    scanCapacityReservation: { findFirst: vi.fn().mockResolvedValue(null) },
     scan: {
       findFirst: vi.fn().mockResolvedValue({
         id: "finished",
@@ -107,6 +111,7 @@ function configureDatabase(
     },
     scanEvent: { create: intentCreateMock },
     $executeRaw: executeRawMock,
+    $queryRaw: vi.fn().mockResolvedValue([]),
     user: {
       findUnique: vi.fn().mockResolvedValue({ trialStartedAt: opts?.trial?.startedAt ?? null }),
     },
@@ -167,9 +172,9 @@ function configureDatabase(
     },
     usageRecord: {
       findUnique: receiptReadMock,
-      findMany: vi.fn(async ({ where }) => {
+      aggregate: vi.fn(async ({ where }) => {
         const kinds = Array.isArray(where.kind?.in) ? where.kind.in : [where.kind]
-        return usageRecords
+        const matching = usageRecords
           .filter(
             (record) =>
               (where.accountId === undefined || record.accountId === where.accountId) &&
@@ -179,6 +184,7 @@ function configureDatabase(
               record.cycleStart >= where.cycleStart.gte
           )
           .map(({ quantity }) => ({ quantity }))
+        return { _sum: { quantity: matching.reduce((sum, record) => sum + record.quantity, 0) } }
       }),
       create: usageCreateMock,
     },
@@ -390,6 +396,34 @@ describe("recordAgentMinutes pack debits", () => {
 })
 
 describe("recordAgentMinutes billing-outcome rules (founder-confirmed 2026-08-29)", () => {
+  it.each(["completed", "partial", "cancelled"] as const)(
+    "rounds each positive %s run up before applying its mode multiplier",
+    async (outcome) => {
+      for (const mode of ["STANDARD", "DEEP", "CUSTOM"] as const) {
+        for (const [ms, roundedMinutes] of [
+          [0, 0],
+          [1, 1],
+          [59_999, 1],
+          [60_000, 1],
+          [60_001, 2],
+          [120_000, 2],
+          [120_001, 3],
+        ]) {
+          configureDatabase(600)
+          const multiplier = mode === "STANDARD" ? 1 : 3
+          const result = await recordAgentMinutes("ws_1", `scan_${mode}_${ms}`, ms!, {
+            phase: "engine_run",
+            cycleStart,
+            outcome,
+            mode,
+          })
+          expect(result.minutes, `${mode} ${outcome} at ${ms}ms`).toBe(roundedMinutes! * multiplier)
+          expect(result.created).toBe(ms! > 0)
+        }
+      }
+    }
+  )
+
   it("never bills a failed scan, regardless of elapsed time", async () => {
     configureDatabase(600)
     const result = await recordAgentMinutes("ws_1", "scan_fail", 15 * 60_000, {

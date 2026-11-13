@@ -1,5 +1,7 @@
 # LyraShield next-agent handoff: production-readiness remediation
 
+> **Superseded historical handoff (2026-10-03):** Do not continue the branch or candidate steps below. They preserve the evidence and next-agent state from that date. Current release status and open gates are in [PRD §8–9](../../../PRD.md#8-current-production-evidence) and [codebase §11](../../../codebase.md#11-production-topology-and-accepted-evidence).
+
 **Purpose:** continue the LyraShield production-readiness work from the current web candidate through exact-head review and release evidence. This document is self-contained for the next coding agent.
 
 ## Current state

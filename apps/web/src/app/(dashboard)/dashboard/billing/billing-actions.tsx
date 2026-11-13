@@ -17,6 +17,8 @@ interface BillingActionsProps {
   purchasesAvailable: boolean
   trialAvailable: boolean
   selectedPlan?: string | null
+  /** Stored subscription provider selected by the billing-management route. */
+  managementProvider?: string
   /**
    * The checkout region the SERVER resolved for this request — display only.
    * The client never picks a currency: checkout re-resolves region itself and
@@ -53,6 +55,7 @@ export function BillingActions({
   purchasesAvailable,
   trialAvailable,
   selectedPlan,
+  managementProvider,
   billingRegion = "usd",
 }: BillingActionsProps) {
   const router = useRouter()
@@ -61,20 +64,23 @@ export function BillingActions({
   const [error, setError] = useState<string | null>(null)
   const intent = parsePlanIntent(selectedPlan)
   const canStartSubscription = plan === "FREE" && purchasesAvailable
+  const opensBillingSupport = managementProvider === "razorpay"
 
-  async function act(action: string, work: () => Promise<void>) {
+  async function act(action: string, work: () => Promise<void | "redirecting">) {
     if (!claim()) return
     setLoading(action)
     setError(null)
     try {
-      await work()
+      const outcome = await work()
+      if (outcome === "redirecting") return
+      release()
+      setLoading(null)
     } catch (cause) {
       setError(
         cause instanceof ApiError && cause.status < 500
           ? cause.message
           : "Could not complete this request. Please try again."
       )
-    } finally {
       release()
       setLoading(null)
     }
@@ -91,13 +97,19 @@ export function BillingActions({
       )
       if (data.url) {
         window.location.assign(data.url)
+        return "redirecting"
       } else if (data.subscriptionId && data.keyId) {
+        let authorized = false
         await openRazorpaySubscriptionCheckout({
           keyId: data.keyId,
           subscriptionId: data.subscriptionId,
-          onAuthorized: () => router.push("/dashboard/billing?checkout=processing"),
+          onAuthorized: () => {
+            authorized = true
+            router.push("/dashboard/billing?checkout=processing")
+          },
           onDismiss: () => {},
         })
+        if (authorized) return "redirecting"
       } else {
         throw new Error("Invalid checkout response")
       }
@@ -142,7 +154,9 @@ export function BillingActions({
           {plan !== "FREE"
             ? isComplimentary
               ? "Your complimentary access is already active."
-              : "Use Manage Subscription to review your existing subscription."
+              : opensBillingSupport
+                ? "Contact billing support for cancellation and payment help."
+                : "Use Manage Subscription to review your existing subscription."
             : purchasesAvailable
               ? "Choose a billing interval below when ready."
               : "You can choose a billing interval when new purchases become available."}{" "}
@@ -155,7 +169,7 @@ export function BillingActions({
           href={`/billing/portal?workspaceId=${encodeURIComponent(workspaceId)}`}
           className={buttonVariants({ variant: "outline", size: "sm" })}
         >
-          Manage Subscription
+          {opensBillingSupport ? "Billing support" : "Manage Subscription"}
         </a>
       )}
     </div>

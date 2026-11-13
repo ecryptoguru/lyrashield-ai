@@ -5,7 +5,10 @@ const ping = vi.fn()
 const assertEvidenceStorageConfigured = vi.fn()
 const getRedis = vi.fn(() => ({ ping }))
 
-vi.mock("@lyrashield/db", () => ({ prisma: { $queryRaw: queryRaw } }))
+vi.mock("@lyrashield/db", () => ({
+  prisma: { $queryRaw: queryRaw },
+  SCAN_ACCOUNTING_PROTOCOL: "reservations/2",
+}))
 vi.mock("@lyrashield/evidence-storage", () => ({ assertEvidenceStorageConfigured }))
 vi.mock("@lyrashield/integrations", () => ({ getRedis }))
 vi.mock("@lyrashield/logger", () => ({ setRequestId: vi.fn(), logger: { error: vi.fn() } }))

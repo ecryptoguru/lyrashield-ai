@@ -7,11 +7,9 @@ import {
   buildTask,
   extractOperationIdFromToolResult,
   extractScanIdFromOperation,
-  isTaskMappingExpired,
   isTerminalTaskStatus,
-  operationMatchesPrincipal,
-  parseTaskId,
   resolveTaskView,
+  resolveOperationStatusTaskView,
   scanRowToCallToolResult,
   serializeTaskId,
   storedResultToCallToolResult,
@@ -27,15 +25,16 @@ import {
   checkDelegatedOperationAuthorization,
   completeAgentOperation,
   failAgentOperation,
-  getAgentOperation,
-  listAgentOperationsForTasks,
   retryScanCancellation,
   withWorkspaceRLS,
   type AgentOperation,
 } from "@lyrashield/db"
 import { requireOAuthPermission, type OAuthAuthContext } from "@lyrashield/auth/server"
 import { PERMISSIONS, type Permission } from "@lyrashield/auth"
-import { CANONICAL_OPERATIONS } from "@lyrashield/db"
+import { CANONICAL_OPERATIONS } from "@lyrashield/types"
+import { publicScanToolResult } from "./scan-tool-provenance"
+import { resolveHostedTask, type HostedResolvedTask } from "./hosted-mcp-task-access"
+import { listHostedTasks, SCAN_TASK_SELECT, type ScanTaskRow } from "./hosted-mcp-task-list"
 
 const MCP_TASK_CANCEL_RETRY_AFTER_MS = 2 * 60 * 1000
 
@@ -82,33 +81,6 @@ export interface HostedMcpTaskOptions {
   pollIntervalMs?: number
 }
 
-const SCAN_TASK_SELECT = {
-  id: true,
-  status: true,
-  goal: true,
-  mode: true,
-  triggerType: true,
-  targetId: true,
-  startedAt: true,
-  endedAt: true,
-  durationMs: true,
-  createdAt: true,
-  updatedAt: true,
-  summary: true,
-  errorCategory: true,
-  errorMessage: true,
-  target: {
-    select: { id: true, name: true, type: true, url: true, apiSpecUrl: true, repoFullName: true },
-  },
-} as const
-
-type ScanTaskRow = TaskScanRecord & { targetId: string | null }
-
-interface ResolvedTask {
-  operation: AgentOperation
-  scan: ScanTaskRow | null
-}
-
 function toOperationRecord(operation: AgentOperation): TaskOperationRecord {
   const record: TaskOperationRecord = operation
   return record
@@ -117,6 +89,43 @@ function toOperationRecord(operation: AgentOperation): TaskOperationRecord {
 function notFound(taskId: string): McpError {
   // Uniform, bounded denial — never confirm or deny that a row exists.
   return new McpError(ErrorCode.InvalidParams, `Task not found: ${taskId}`)
+}
+
+function assertTaskCancellable(
+  disclosure: "FULL" | "STATUS_ONLY",
+  scan: TaskScanRecord | null,
+  operation: AgentOperation
+): asserts scan is ScanTaskRow {
+  if (disclosure === "STATUS_ONLY") {
+    throw new McpError(
+      ErrorCode.InvalidRequest,
+      "Task cannot be cancelled without a currently authorized active target."
+    )
+  }
+  if (!scan || scan.id !== extractScanIdFromOperation(toOperationRecord(operation))) {
+    throw new McpError(
+      ErrorCode.InvalidRequest,
+      "Task cannot be cancelled: the recorded submission has not produced a scan."
+    )
+  }
+}
+
+function taskFromResolved(
+  taskId: string,
+  resolved: HostedResolvedTask,
+  pollIntervalMs?: number
+): Task {
+  const view =
+    resolved.disclosure === "STATUS_ONLY"
+      ? resolveOperationStatusTaskView(resolved.status)
+      : resolveTaskView({ operation: toOperationRecord(resolved.operation), scan: resolved.scan })
+  return buildTask({
+    taskId,
+    view,
+    createdAt: resolved.operation.createdAt,
+    ttl: MCP_TASK_TTL_MS,
+    ...(pollIntervalMs !== undefined ? { pollInterval: pollIntervalMs } : {}),
+  })
 }
 
 export function makeHostedMcpTaskBackend(options: HostedMcpTaskOptions): McpTaskBackend {
@@ -134,55 +143,26 @@ export function makeHostedMcpTaskBackend(options: HostedMcpTaskOptions): McpTask
   async function fetchScan(scanId: string): Promise<ScanTaskRow | null> {
     const scan = await withWorkspaceRLS(workspaceId, (tx) =>
       tx.scan.findFirst({
-        where: { id: scanId, workspaceId, deletedAt: null },
+        where: { id: scanId, workspaceId, deletedAt: null, target: { deletedAt: null } },
         select: SCAN_TASK_SELECT,
       })
     )
     return (scan as ScanTaskRow | null) ?? null
   }
 
-  /**
-   * Resolve the durable binding behind a task id under THIS request's
-   * authorization. Returns null for anything malformed, foreign, stale-version
-   * or expired — the caller maps that to a uniform "task not found".
-   */
-  async function resolve(taskId: string, permission: Permission): Promise<ResolvedTask | null> {
-    const operationId = parseTaskId(taskId)
-    if (!operationId) return null
-
-    // Live membership/role/scope/delegated-grant check for this request.
-    try {
-      await requireOAuthPermission(oauth, permission)
-    } catch {
-      return null
-    }
-
-    const operation = await getAgentOperation(operationId, workspaceId)
-    if (!operation) return null
-    // The bound principal and the grant version recorded at creation must
-    // still match this request's connection — a re-scoped/reissued grant
-    // (authorizationVersion bump) invalidates every prior binding.
-    if (!operationMatchesPrincipal(toOperationRecord(operation), principal)) return null
-    if (isTaskMappingExpired(operation.createdAt, new Date())) return null
-
-    const scanId = extractScanIdFromOperation(toOperationRecord(operation))
-    const scan = scanId ? await fetchScan(scanId) : null
-    return { operation, scan }
-  }
-
-  function toTask(taskId: string, resolved: ResolvedTask): Task {
-    const view = resolveTaskView({
-      operation: toOperationRecord(resolved.operation),
-      scan: resolved.scan,
-    })
-    return buildTask({
+  const resolve = (taskId: string, permission: Permission) =>
+    resolveHostedTask({
       taskId,
-      view,
-      createdAt: resolved.operation.createdAt,
-      ttl: MCP_TASK_TTL_MS,
-      ...(options.pollIntervalMs !== undefined ? { pollInterval: options.pollIntervalMs } : {}),
+      permission,
+      workspaceId,
+      oauth,
+      connection,
+      principal,
+      fetchScan,
     })
-  }
+
+  const toTask = (taskId: string, resolved: HostedResolvedTask) =>
+    taskFromResolved(taskId, resolved, options.pollIntervalMs)
 
   return {
     async createTask({ toolName, toolResult }) {
@@ -213,16 +193,14 @@ export function makeHostedMcpTaskBackend(options: HostedMcpTaskOptions): McpTask
         )
       }
 
-      const operation = await getAgentOperation(operationId, workspaceId)
-      if (!operation || !operationMatchesPrincipal(toOperationRecord(operation), principal)) {
+      const resolved = await resolve(serializeTaskId(operationId), PERMISSIONS.scan.view)
+      if (!resolved) {
         throw new McpError(
           ErrorCode.InternalError,
           "The recorded operation could not be bound to a task."
         )
       }
-      const scanId = extractScanIdFromOperation(toOperationRecord(operation))
-      const scan = scanId ? await fetchScan(scanId) : null
-      return toTask(serializeTaskId(operationId), { operation, scan })
+      return toTask(serializeTaskId(operationId), resolved)
     },
 
     async getTask(taskId) {
@@ -234,7 +212,21 @@ export function makeHostedMcpTaskBackend(options: HostedMcpTaskOptions): McpTask
       const resolved = await resolve(taskId, PERMISSIONS.scan.view)
       if (!resolved) throw notFound(taskId)
 
-      const { operation, scan } = resolved
+      const { operation, scan, disclosure } = resolved
+      if (disclosure === "STATUS_ONLY") {
+        const payload = {
+          operationId: operation.id,
+          status: resolved.status.status,
+          ...(resolved.status.resultLocation
+            ? { scan: { id: resolved.status.resultLocation } }
+            : {}),
+        }
+        return {
+          content: [{ type: "text", text: JSON.stringify(payload) }],
+          structuredContent: payload,
+          ...(resolved.status.status === "FAILED" ? { isError: true } : {}),
+        }
+      }
       const view = resolveTaskView({ operation: toOperationRecord(operation), scan })
       if (!isTerminalTaskStatus(view.status)) {
         throw new McpError(
@@ -252,7 +244,7 @@ export function makeHostedMcpTaskBackend(options: HostedMcpTaskOptions): McpTask
       if (operation.result) {
         try {
           const result = storedResultToCallToolResult(operation.result)
-          if (result.isError) return result
+          if (result.isError) return publicScanToolResult(result)
         } catch {
           // fall through to the bounded generic result
         }
@@ -270,17 +262,11 @@ export function makeHostedMcpTaskBackend(options: HostedMcpTaskOptions): McpTask
       const resolved = await resolve(taskId, PERMISSIONS.scan.cancel)
       if (!resolved) throw notFound(taskId)
 
-      const { operation, scan } = resolved
+      const { operation, scan, disclosure } = resolved
+      assertTaskCancellable(disclosure, scan, operation)
       const view = resolveTaskView({ operation: toOperationRecord(operation), scan })
-      if (!scan || scan.id !== extractScanIdFromOperation(toOperationRecord(operation))) {
-        throw new McpError(
-          ErrorCode.InvalidRequest,
-          "Task cannot be cancelled: the recorded submission has not produced a scan."
-        )
-      }
 
-      // Re-verify the delegated cancel grant for THIS request — live
-      // operation grant and target scope, not the binding's snapshot.
+      // Re-verify the delegated cancel grant for THIS request.
       const authCheck = checkDelegatedOperationAuthorization({
         connection,
         workspaceId,
@@ -369,9 +355,7 @@ export function makeHostedMcpTaskBackend(options: HostedMcpTaskOptions): McpTask
       try {
         await cancelScan(scan.id, workspaceId)
       } catch {
-        // Completion/cancellation race: re-resolve from durable state instead
-        // of trusting the error — the SDK requires a terminal-status error
-        // only when the task is still terminal after the race.
+        // Completion/cancellation race: re-read durable state.
         const after = await resolve(taskId, PERMISSIONS.scan.view)
         const afterView = after
           ? resolveTaskView({ operation: toOperationRecord(after.operation), scan: after.scan })
@@ -425,54 +409,23 @@ export function makeHostedMcpTaskBackend(options: HostedMcpTaskOptions): McpTask
     },
 
     async listTasks(cursor) {
+      let member
       try {
-        await requireOAuthPermission(oauth, PERMISSIONS.scan.view)
+        member = (await requireOAuthPermission(oauth, PERMISSIONS.scan.view)).workspace.member
       } catch {
         throw new McpError(ErrorCode.InvalidRequest, "Tasks are unavailable.")
       }
 
-      const page = await listAgentOperationsForTasks({
+      return listHostedTasks({
         workspaceId,
-        principalType: principal.principalType,
-        principalId: principal.principalId,
-        operationName: CANONICAL_OPERATIONS.SCAN_CREATE,
+        oauth,
+        connection,
+        principal,
+        member,
         cursor,
-        limit: 21,
+        ttlMs: MCP_TASK_TTL_MS,
+        ...(options.pollIntervalMs !== undefined ? { pollIntervalMs: options.pollIntervalMs } : {}),
       })
-      // Fetch 21 rows as a has-more probe; only the first 20 are consumed.
-      // The cursor resumes strictly after the 20th, so no valid row is lost
-      // even when principal/version/expiry filtering removes entries.
-      const considered = page.slice(0, 20)
-      const now = new Date()
-      const items = considered.filter(
-        (op) =>
-          operationMatchesPrincipal(toOperationRecord(op), principal) &&
-          !isTaskMappingExpired(op.createdAt, now)
-      )
-      const nextCursor = page.length > 20 ? considered[considered.length - 1]?.id : undefined
-
-      const scanIds = items
-        .map((op) => extractScanIdFromOperation(toOperationRecord(op)))
-        .filter((id): id is string => !!id)
-      const scans =
-        scanIds.length > 0
-          ? await withWorkspaceRLS(workspaceId, (tx) =>
-              tx.scan.findMany({
-                where: { id: { in: scanIds }, workspaceId, deletedAt: null },
-                select: SCAN_TASK_SELECT,
-              })
-            )
-          : []
-      const scanById = new Map(scans.map((s) => [s.id, s as ScanTaskRow]))
-
-      const tasks = items.map((op) => {
-        const scanId = extractScanIdFromOperation(toOperationRecord(op))
-        return toTask(serializeTaskId(op.id), {
-          operation: op,
-          scan: scanId ? (scanById.get(scanId) ?? null) : null,
-        })
-      })
-      return nextCursor ? { tasks, nextCursor } : { tasks }
     },
   }
 }

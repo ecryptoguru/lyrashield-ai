@@ -81,6 +81,7 @@ step_deploy-app-container-app() {
     --set-env-vars \
       "NEXT_PUBLIC_APP_URL=${APP_URL}" \
       "NEXT_PUBLIC_MARKETING_URL=${MARKETING_URL}" \
+      "TURNSTILE_ENFORCE_ACTION=${TURNSTILE_ENFORCE_ACTION:-0}" \
       "BETTER_AUTH_URL=${APP_URL}" \
       "PLATFORM_ADMIN_EMAILS=${PLATFORM_ADMIN_EMAILS}" \
       "IP_HASH_SALT=secretref:ip-hash-salt" \
@@ -190,6 +191,7 @@ step_deploy-scanner-container-app() {
     --set-env-vars \
       "NEXT_PUBLIC_APP_URL=${SCANNER_URL}" \
       "NEXT_PUBLIC_MARKETING_URL=${MARKETING_URL}" \
+      "TURNSTILE_ENFORCE_ACTION=${TURNSTILE_ENFORCE_ACTION:-0}" \
       "BETTER_AUTH_URL=${APP_URL}" \
       "PLATFORM_ADMIN_EMAILS=${PLATFORM_ADMIN_EMAILS}" \
       "IP_HASH_SALT=secretref:ip-hash-salt" \
@@ -220,12 +222,25 @@ step_deploy-scanner-container-app() {
 # Workflow step: Deploy egress-proxy Container App
 step_deploy-egress-proxy-container-app() {
   source ops/deployment/containerapp.sh
+  source .github/scripts/target-relay-config.sh
+  verify_target_relay_key_vault_access
+  local relay_env_args=()
+  if [ "${TARGET_RELAY_ENABLED:-0}" = 1 ]; then
+    az containerapp secret set --name "$AZURE_EGRESS_PROXY_CONTAINER_APP_NAME" \
+      --resource-group "$AZURE_RESOURCE_GROUP" \
+      --secrets "relay-signing-secret=keyvaultref:https://${AZURE_KEY_VAULT_NAME}.vault.azure.net/secrets/worker-relay-signing-secret,identityref:system" \
+      --output none
+    relay_env_args=(--set-env-vars "LYRASHIELD_RELAY_SIGNING_SECRET=secretref:relay-signing-secret")
+  else
+    relay_env_args=(--remove-env-vars LYRASHIELD_RELAY_SIGNING_SECRET)
+  fi
   az containerapp update \
     --name "$AZURE_EGRESS_PROXY_CONTAINER_APP_NAME" \
     --resource-group "$AZURE_RESOURCE_GROUP" \
     --image "$IMAGE" \
     --min-replicas 1 \
     --max-replicas 1 \
+    "${relay_env_args[@]}" \
     --output none
   candidate=$(ca_candidate "$AZURE_EGRESS_PROXY_CONTAINER_APP_NAME" "$AZURE_RESOURCE_GROUP") || {
     echo "::error::Azure did not return the egress-proxy candidate revision and FQDN. Production traffic was not changed."
@@ -368,7 +383,7 @@ step_verify-worker-queues-are-empty-before-traffic-promotion() {
 step_promote-healthy-candidate-revisions() {
   source ops/deployment/containerapp.sh
   restore_previous() {
-    if [ "${WEBHOOK_CLAIMS_CUTOVER:-false}" = true ] || [ "${WEBHOOK_CUTOVER_RECOVERY:-false}" = true ]; then
+    if [ "${V26_CUTOVER:-false}" = true ] || [ "${WEBHOOK_CLAIMS_CUTOVER:-false}" = true ] || [ "${WEBHOOK_CUTOVER_RECOVERY:-false}" = true ]; then
       echo "::error::Maintenance or held recovery keeps previous webhook writers disabled."
       return 0
     fi
@@ -446,11 +461,22 @@ step_deactivate-superseded-container-app-revisions() {
 
 # Workflow step: Remove excess scanner secrets
 step_remove-excess-scanner-secrets() {
-  mapfile -t existing_secrets < <(az containerapp secret list \
-    --name "$SCANNER_NAME" \
-    --resource-group "$RG" \
-    --query '[].name' \
-    --output tsv)
+  # Process substitution hides a failed az exit. Validate the entire response
+  # before removing only the known excess names; never log provider output.
+  local secret_response secret_names
+  secret_response=$(az containerapp secret list --name "$SCANNER_NAME" \
+    --resource-group "$RG" --output json 2>/dev/null) || {
+    echo '::error::scanner-secrets/list-failed'; return 1;
+  }
+  secret_names=$(printf '%s' "$secret_response" | jq -er '
+    if type == "array" and all(.[]; (.name | type == "string") and (.name | test("^[a-z0-9-]+$")))
+    then map(.name) | join("\n") else error("invalid secret inventory") end' 2>/dev/null) || {
+    echo '::error::scanner-secrets/invalid-inventory'; return 1;
+  }
+  existing_secrets=()
+  if [ -n "$secret_names" ]; then
+    while IFS= read -r secret_name; do existing_secrets+=("$secret_name"); done <<< "$secret_names"
+  fi
   excess_secrets=()
   for secret in \
     github-app-id \
@@ -472,7 +498,20 @@ step_remove-excess-scanner-secrets() {
     --name "$SCANNER_NAME" \
     --resource-group "$RG" \
     --secret-names "${excess_secrets[@]}" \
-    --output none
+    --output none 2>/dev/null || {
+    echo '::error::scanner-secrets/remove-failed'; return 1;
+  }
+  # Re-read after mutation: a successful command is not removal evidence.
+  secret_response=$(az containerapp secret list --name "$SCANNER_NAME" \
+    --resource-group "$RG" --output json 2>/dev/null) || {
+    echo '::error::scanner-secrets/readback-failed'; return 1;
+  }
+  printf '%s' "$secret_response" | jq -e '
+    type == "array" and all(.[]; (.name | type == "string") and
+      (.name | test("^[a-z0-9-]+$")) and
+      (.name | test("^github-(app-(id|slug|private-key|client-id|client-secret)|webhook-secret)$") | not))' >/dev/null 2>&1 || {
+    echo '::error::scanner-secrets/readback-mismatch'; return 1;
+  }
 }
 
 # Workflow step: Promote verified worker digest on VM
@@ -482,10 +521,19 @@ step_promote-verified-worker-digest-on-vm() {
   # Until the first promotion installs worker-env.sh on the host the
   # script sources the copy embedded in this payload.
   worker_env_payload=$(base64 --wrap=0 ops/worker/worker-env.sh)
+  [[ "${AZURE_APP_SECRET_KEY_VAULT_NAME:-}" =~ ^[a-zA-Z][a-zA-Z0-9-]{1,22}[a-zA-Z0-9]$ ]] || {
+    echo '::error::A valid app-only worker GitHub credential vault is required.' >&2; exit 1;
+  }
   worker_ref="${WORKER_IMAGE%@*}@${WORKER_DIGEST}"
   promotion_prefix=""
   promotion_flag=""
-  if [ "${WEBHOOK_CUTOVER_RECOVERY:-false}" = true ]; then
+  if [ "${V26_CUTOVER:-false}" = true ]; then
+    state_file="$RUNNER_TEMP/lyrashield-v26-controller.json"
+    request_payload=$(node -e 'const fs=require("node:fs");console.log(Buffer.from(JSON.stringify(JSON.parse(fs.readFileSync(process.argv[1],"utf8")).request)).toString("base64"))' "$state_file")
+    identity_payload=$(base64 --wrap=0 ops/worker/v26-cutover-identity.mjs)
+    promotion_prefix="LYRASHIELD_V26_REQUEST_BASE64='$request_payload' LYRASHIELD_V26_IDENTITY_MODULE_BASE64='$identity_payload' "
+    promotion_flag="--v26-cutover "
+  elif [ "${WEBHOOK_CUTOVER_RECOVERY:-false}" = true ]; then
     : "${LYRASHIELD_WEBHOOK_CUTOVER_ORIGINAL_RUN_ID:?}" \
       "${LYRASHIELD_WEBHOOK_CUTOVER_ORIGINAL_OWNER:?}" \
       "${LYRASHIELD_WEBHOOK_CUTOVER_OWNER_SOURCE_SHA:?}" \
@@ -520,11 +568,13 @@ step_promote-verified-worker-digest-on-vm() {
     --name "$WORKER_VM_NAME" \
     --resource-group "$RG" \
     --command-id RunShellScript \
-    --scripts "printf '%s' '$worker_env_payload' | base64 -d > /tmp/lyrashield-worker-env.sh && printf '%s' '$payload' | base64 -d | LYRASHIELD_WORKER_ENV_LIB=/tmp/lyrashield-worker-env.sh ${promotion_prefix}sh -s -- ${promotion_flag}'$worker_ref' '$DEPLOY_SHA' '$ENGINE_REVISION'" \
+    --scripts "printf '%s' '$worker_env_payload' | base64 -d > /tmp/lyrashield-worker-env.sh && printf '%s' '$payload' | base64 -d | LYRASHIELD_WORKER_ENV_LIB=/tmp/lyrashield-worker-env.sh LYRASHIELD_WORKER_GITHUB_CREDENTIAL_VAULT='$AZURE_APP_SECRET_KEY_VAULT_NAME' ${promotion_prefix}sh -s -- ${promotion_flag}'$worker_ref' '$DEPLOY_SHA' '$ENGINE_REVISION'" \
     --query 'value[0].message' \
     --output tsv)
   printf '%s\n' "$result"
-  if [ "${WEBHOOK_CUTOVER_RECOVERY:-false}" = true ] || [ "${WEBHOOK_CLAIMS_CUTOVER:-false}" = true ]; then
+  if [ "${V26_CUTOVER:-false}" = true ]; then
+    grep -q "Worker v26 cutover passed for ${WORKER_DIGEST}; scan admission held" <<< "$result"
+  elif [ "${WEBHOOK_CUTOVER_RECOVERY:-false}" = true ] || [ "${WEBHOOK_CLAIMS_CUTOVER:-false}" = true ]; then
     grep -q "Worker webhook cutover passed for ${WORKER_DIGEST}; scan admission held" <<< "$result"
   else
     grep -q "Worker promotion passed for ${WORKER_DIGEST}" <<< "$result"

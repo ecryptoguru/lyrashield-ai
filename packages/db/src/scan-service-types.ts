@@ -1,0 +1,65 @@
+import type { prisma } from "./client"
+import type { DeterminismMode, ScanFocus, ScanWorkflow } from "@lyrashield/types"
+
+export type ScanTransaction = Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
+
+/** Internal server options, deliberately separate from scan request input. */
+export interface ScanAdmissionOptions {
+  /** Qualification only: both durable records remain quarantined as UNKNOWN. */
+  dispatchAuthority?: "shadow"
+}
+
+export interface CreateScanParams {
+  workspaceId: string
+  targetId: string
+  goal: string
+  mode?: string
+  policyId?: string
+  /** Revalidate the default (including its absence) selected by manual admission. */
+  verifyWorkspaceDefaultPolicy?: boolean
+  engineBudgetCeilingUsd?: number
+  createdById: string
+  triggerType?: string
+  /** Server-normalized emphasis, bound into immutable queue payload bytes. */
+  focus?: ScanFocus
+  determinismMode?: DeterminismMode
+  /**
+   * Optional workflow input (defaults to REVIEW_TARGET). The server constructs
+   * and persists the authoritative ScanExecutionPlan snapshot — callers supply
+   * workflow intent and already-resolved provenance only, never plan fields,
+   * limits, or capabilities.
+   */
+  workflow?: ScanWorkflow
+  /**
+   * Immutable git object IDs resolved through the authorized source
+   * integration BEFORE the admission lock is taken. Required for
+   * REVIEW_CHANGES (revision + baseRevision + mergeBaseRevision).
+   */
+  source?: {
+    revision: string
+    baseRevision?: string
+    mergeBaseRevision?: string
+  }
+  attachmentIds?: string[]
+  authorizationRef?: string
+  /**
+   * The delegated OAuth connection grant that authorized this scan, when the
+   * caller authenticated through a hosted MCP/agent credential. Persisted on
+   * the scan row so the async execution boundary (verifyScanAdmission) can
+   * re-verify the exact grant — the synchronous request-time allow is never
+   * inherited blindly by the queued job.
+   */
+  delegatedConnection?: { connectionId: string; authorizationVersion: number }
+  /**
+   * Server-issued capability from a hosted MCP claim. When present, the same
+   * scan transaction must reserve the outer operation result and persist the
+   * immutable operation→scan→target provenance row.
+   */
+  delegatedOperation?: {
+    operationId: string
+    operationName?: "scan.create" | "retest.create"
+    admissionProof: string
+    connectionId: string
+    authorizationVersion: number
+  }
+}

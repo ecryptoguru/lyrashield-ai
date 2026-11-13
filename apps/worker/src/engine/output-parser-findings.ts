@@ -14,7 +14,7 @@ import {
   parseEngineConfidence,
   parseEvidenceWarnings,
   parseFixVerification,
-  parseHttpExchangeIds,
+  parseFindingExchangeRefs,
   parseUpdateHistory,
   type EvidenceIngestionContext,
 } from "./output-parser-evidence"
@@ -278,8 +278,8 @@ function validateVulnerability(
     ctx?.issues
   )
   const advisoryCvss = parseAdvisoryCvss(v.advisory_cvss, id, ctx?.issues)
-  const httpExchangeRefs = parseHttpExchangeIds(v.http_exchange_ids, id, ctx)
   const updateHistory = parseUpdateHistory(v.update_history, id, ctx?.issues)
+  const exchangeRefs = parseFindingExchangeRefs(v, id, ctx)
   const updatedAt = evidenceString(v.updated_at, "updated_at", id, ctx?.issues)
   const evidenceWarnings = parseEvidenceWarnings(v.evidence_warnings, id, ctx?.issues)
   const evidenceContractVersion =
@@ -377,8 +377,7 @@ function validateVulnerability(
       ? { contextual_cvss_reasoning: contextualCvssReasoning }
       : {}),
     ...(advisoryCvss !== undefined ? { advisory_cvss: advisoryCvss } : {}),
-    ...(httpExchangeRefs.ids ? { http_exchange_ids: httpExchangeRefs.ids } : {}),
-    ...(httpExchangeRefs.refsDropped ? { http_exchange_refs_dropped: true } : {}),
+    ...exchangeRefs,
     ...(updateHistory !== undefined ? { update_history: updateHistory } : {}),
     ...(updatedAt !== undefined ? { updated_at: updatedAt } : {}),
     ...(evidenceWarnings !== undefined ? { evidence_warnings: evidenceWarnings } : {}),
@@ -478,10 +477,20 @@ export function generateDedupeKey(vuln: EngineVulnerability, targetId: string): 
           dependency: {
             packageEcosystem,
             packageName,
+            ...(packageEcosystem?.toLowerCase() === "packagist" &&
+            typeof dependency?.lockfile_path === "string"
+              ? { lockfilePath: dependency.lockfile_path }
+              : {}),
           },
         }
       : {
           findingClass: vuln.finding_class,
+          ...(vuln.finding_class === "php_runtime_windows_brotli" && location?.file
+            ? { runtimeService: location.file }
+            : vuln.finding_class?.startsWith("php_runtime_") &&
+                typeof dependency?.compose_service === "string"
+              ? { runtimeService: dependency.compose_service }
+              : {}),
           cve: vuln.cve,
           cwe: vuln.cwe,
           endpoint: vuln.endpoint,

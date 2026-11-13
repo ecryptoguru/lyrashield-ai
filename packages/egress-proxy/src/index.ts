@@ -214,6 +214,121 @@ async function readRegisterSession(
   }
 }
 
+const RELAY_ADMIN_ACTIONS = new Set([
+  "register",
+  "register-owned",
+  "revoke",
+  "revoke-owned",
+  "audit",
+])
+
+function handleRelayAdmin(
+  request: IncomingMessage,
+  response: ServerResponse,
+  relay: RelayHandler,
+  token: string,
+  reqUrl: string,
+  action: string
+): void {
+  if (!isAuthorized(request.headers, token)) {
+    sendJson(response, 401, { ok: false, reason: "request_failed", detail: "Unauthorized" })
+    return
+  }
+  const scanId = reqUrl.split("/")[3] ?? ""
+  if (!/^[a-zA-Z0-9_-]{1,128}$/.test(scanId)) {
+    sendJson(response, 400, { ok: false, reason: "invalid_response", detail: "bad scanId" })
+    return
+  }
+  const owned = action === "register-owned" || action === "revoke-owned"
+  const owner = request.headers["x-lyra-relay-owner"]
+  const ownerId = typeof owner === "string" ? owner : undefined
+  if (
+    owned &&
+    (!ownerId ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(ownerId))
+  ) {
+    sendJson(response, 400, { ok: false, reason: "malformed" })
+    return
+  }
+  const header = request.headers["x-lyra-relay-grant"]
+  const grant = typeof header === "string" ? header : undefined
+  if (action === "register" || action === "register-owned") {
+    if (request.method !== "POST") {
+      sendJson(response, 405, { ok: false, reason: "method_not_allowed" })
+      return
+    }
+    // An optional bounded JSON body carries the authenticated-beta session
+    // binding. It arrives only over this admin-authenticated channel — the
+    // grant header stays credential-free.
+    void readRegisterSession(request)
+      .then((parsed) => {
+        if (!parsed.ok) {
+          sendJson(response, 400, { ok: false, reason: "malformed" })
+          return
+        }
+        const result = relay.register(scanId, grant, parsed.session, owned ? ownerId : undefined)
+        sendJson(response, result.ok ? 200 : 403, result)
+      })
+      .catch((err) => {
+        logger.error("Relay register handler error", { error: String(err) })
+        if (!response.headersSent) {
+          response.writeHead(500, { "Content-Type": "application/json" })
+        }
+        response.end(JSON.stringify({ ok: false, reason: "request_failed" }))
+      })
+    return
+  }
+  if (action === "revoke" || action === "revoke-owned") {
+    if (request.method !== "POST") {
+      sendJson(response, 405, {
+        ok: false,
+        reason: "request_failed",
+        detail: "Method not allowed",
+      })
+      return
+    }
+    if (action === "revoke-owned") {
+      const result = relay.revokeOwned(scanId, ownerId!, grant)
+      sendJson(response, result.ok ? 200 : 403, result)
+      return
+    }
+    relay.revoke(scanId)
+    sendJson(response, 200, { ok: true, revoked: scanId })
+    return
+  }
+  if (request.method !== "GET") {
+    sendJson(response, 405, {
+      ok: false,
+      reason: "request_failed",
+      detail: "Method not allowed",
+    })
+    return
+  }
+  sendJson(response, 200, { ok: true, entries: relay.getAudit(scanId) ?? [] })
+  return
+}
+
+function handleHealthRequest(
+  reqUrl: string,
+  response: ServerResponse,
+  relayEnabled: boolean
+): boolean {
+  if (reqUrl === "/health") {
+    response.writeHead(200, { "Content-Type": "text/plain" })
+    response.end("ok")
+    return true
+  }
+
+  if (reqUrl === "/health/relay") {
+    response.setHeader("Cache-Control", "no-store")
+    response.writeHead(relayEnabled ? 200 : 503, { "Content-Type": "application/json" })
+    response.end(JSON.stringify({ relay: relayEnabled }))
+    return true
+  }
+
+  return false
+}
+
 export function startProxy(options: ProxyOptions): ProxyServer {
   const { token, port = 4000, relaySigningSecret, relayDeps } = options
   const relay = relaySigningSecret ? createRelayHandler(relaySigningSecret, relayDeps) : null
@@ -233,81 +348,11 @@ export function startProxy(options: ProxyOptions): ProxyServer {
       return
     }
 
-    if (reqUrl === "/health") {
-      response.writeHead(200, { "Content-Type": "text/plain" })
-      response.end("ok")
-      return
-    }
+    if (handleHealthRequest(reqUrl, response, Boolean(relay))) return
 
-    // Relay administration: grant admission, audit retrieval and revocation.
-    if (
-      relay &&
-      (reqUrl.startsWith("/v1/audit/") ||
-        reqUrl.startsWith("/v1/revoke/") ||
-        reqUrl.startsWith("/v1/register/"))
-    ) {
-      if (!isAuthorized(request.headers, token)) {
-        sendJson(response, 401, { ok: false, reason: "request_failed", detail: "Unauthorized" })
-        return
-      }
-      const scanId = reqUrl.split("/")[3] ?? ""
-      if (!/^[a-zA-Z0-9_-]{1,128}$/.test(scanId)) {
-        sendJson(response, 400, { ok: false, reason: "invalid_response", detail: "bad scanId" })
-        return
-      }
-      if (reqUrl.startsWith("/v1/register/")) {
-        if (request.method !== "POST") {
-          sendJson(response, 405, { ok: false, reason: "method_not_allowed" })
-          return
-        }
-        // An optional bounded JSON body carries the authenticated-beta session
-        // binding. It arrives only over this admin-authenticated channel — the
-        // grant header stays credential-free.
-        void readRegisterSession(request)
-          .then((parsed) => {
-            if (!parsed.ok) {
-              sendJson(response, 400, { ok: false, reason: "malformed" })
-              return
-            }
-            const grant = request.headers["x-lyra-relay-grant"]
-            const result = relay.register(
-              scanId,
-              typeof grant === "string" ? grant : undefined,
-              parsed.session
-            )
-            sendJson(response, result.ok ? 200 : 403, result)
-          })
-          .catch((err) => {
-            logger.error("Relay register handler error", { error: String(err) })
-            if (!response.headersSent) {
-              response.writeHead(500, { "Content-Type": "application/json" })
-            }
-            response.end(JSON.stringify({ ok: false, reason: "request_failed" }))
-          })
-        return
-      }
-      if (reqUrl.startsWith("/v1/revoke/")) {
-        if (request.method !== "POST") {
-          sendJson(response, 405, {
-            ok: false,
-            reason: "request_failed",
-            detail: "Method not allowed",
-          })
-          return
-        }
-        relay.revoke(scanId)
-        sendJson(response, 200, { ok: true, revoked: scanId })
-        return
-      }
-      if (request.method !== "GET") {
-        sendJson(response, 405, {
-          ok: false,
-          reason: "request_failed",
-          detail: "Method not allowed",
-        })
-        return
-      }
-      sendJson(response, 200, { ok: true, entries: relay.getAudit(scanId) ?? [] })
+    const action = reqUrl.split("/")[2]
+    if (relay && action && reqUrl.startsWith(`/v1/${action}/`) && RELAY_ADMIN_ACTIONS.has(action)) {
+      handleRelayAdmin(request, response, relay, token, reqUrl, action)
       return
     }
 

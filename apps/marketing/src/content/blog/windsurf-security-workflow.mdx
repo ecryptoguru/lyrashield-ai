@@ -2,7 +2,7 @@
 title: Windsurf security workflow for AI generated apps
 description: Harden Windsurf MCP config, rules, dependencies and secrets with SARIF evidence for secure AI assisted releases of your app.
 pubDate: "2026-07-30"
-updatedDate: 2026-10-02
+updatedDate: 2026-10-11
 author: lyrashield-team
 tags: [vibe-coding-security, agent-security, verification, supply-chain]
 draft: false
@@ -80,7 +80,7 @@ Repeatable per release procedure:
 4. Add docs slash security evidence entry with date, commit hash, active MCP servers, tools run and reviewers.
 5. Store build and SARIF artifacts with release tag for later reference.
 
-See overview at [GitHub code scanning](https://docs.github.com/en/code-security/code-scanning) and hardening ideas for web apps at [Next.js security](https://nextjs.org/docs/app/guides/data-security) and [Cloudflare fundamentals](https://cloudflare.com/learning/). These help frame header and auth review while your app specific verified findings remain in SARIF.
+See overview at [GitHub code scanning](https://docs.github.com/en/code-security/code-scanning) and hardening ideas for web apps at [Next.js security](https://nextjs.org/docs/app/guides/data-security) and [Cloudflare fundamentals](https://cloudflare.com/learning/). These help frame header and auth review while your app-specific scan findings remain in SARIF.
 
 Keep evidence for several releases so you can show trend, exception closure and repeatability of controls. If you use remote MCP, record serverUrl and version used during generation so tool output drift can be reproduced.
 
@@ -96,7 +96,7 @@ Keep evidence for several releases so you can show trend, exception closure and 
 
 LyraShield AI at https://lyrashieldai.com is release assurance for AI built apps. The loop is target, review, evidence, fix, retest, report: detection stays separate from proof, recorded scans contribute to an assurance record and fix proposals are approval gated so PR execution is blocked until a server generated patch is bound to the exact approval.
 
-MCP integration fits Windsurf. Local stdio via npx -y @lyrashield/mcp@0.2.12 runs with env var keys and remote via serverUrl https://app.lyrashieldai.com/api/mcp accepts Bearer lsk key from env. Diff aware GitHub Action and SARIF output surface verified findings in pull requests so review stays in context.
+MCP integration fits Windsurf. Local stdio via npx -y @lyrashield/mcp@0.2.12 runs with env var keys and remote via serverUrl https://app.lyrashieldai.com/api/mcp accepts Bearer lsk key from env. The diff-aware GitHub Action emits SARIF candidate findings in pull requests so review stays in context; it does not treat candidates as confirmed outcomes.
 
 Build transparency: LyraShield is live in open beta with open registration. The scan pipeline, findings and evidence, approval-gated fix proposals, retests, reports, billing and Local/Desktop flows are implemented. Windsurf uses the supported config-file integration and the runner-local Action provides an advisory SARIF gate. Production availability remains bounded by release gates; automatic server-generated Fix PR execution is not enabled; self-serve checkout is live.
 

@@ -135,7 +135,7 @@ export function MyraPanel({
           <MessageCircleQuestion className="size-5" />
         </span>
         <div className="min-w-0">
-          <p className="text-muted-foreground font-mono text-[10px] font-semibold tracking-[0.16em] uppercase">
+          <p className="text-muted-foreground font-mono text-xs font-semibold tracking-[0.16em] uppercase">
             LyraShield support
           </p>
           <h2 className="text-foreground text-base font-semibold leading-5 tracking-tight">

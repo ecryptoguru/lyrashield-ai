@@ -1,62 +1,12 @@
+import type { RepositoryAuth } from "./repository-auth"
 import { env } from "@lyrashield/config"
 import { ENGINE_TEMP_ROOT } from "./workspace-path"
+import { assertSandboxSbomCoverageVerified, readJsonEvidence } from "./sandbox-sbom-coverage"
+import { verifyHeldSandboxPublicationRecord } from "@lyrashield/security/sandbox-publication-record"
 
-type ReasoningEffort = "medium" | "high"
-
-export interface EngineProfile {
-  model?: string
-  reasoningEffort: ReasoningEffort
-  delegateModel?: string
-  delegateReasoningEffort: ReasoningEffort
-}
-
-function assertSupportedRepositoryModel(model: string | undefined): void {
-  const normalizedModel = model?.toLowerCase().replaceAll("_", "-")
-  if (!normalizedModel) return
-  const parts = normalizedModel.split("/")
-  const deployment = parts.pop()
-  const provider = parts.shift()
-  const validProvider =
-    parts.length === 0 && provider === undefined
-      ? true
-      : (provider === "openai" || provider === "azure" || provider === "azure-ai") &&
-        parts.length <= 1 &&
-        parts.every(Boolean)
-  if (!validProvider || (deployment !== "gpt-6-sol" && deployment !== "gpt-6-luna")) {
-    throw new Error("LyraShield scans require a GPT-6 Sol or Luna deployment")
-  }
-}
-
-export function resolveEngineProfile(
-  mode: string,
-  routingEnv: NodeJS.ProcessEnv = process.env
-): EngineProfile {
-  const deep = mode.toUpperCase() === "DEEP" || mode.toUpperCase() === "CUSTOM"
-  const selectedModel = deep ? routingEnv.LYRASHIELD_SOL_LLM : routingEnv.LYRASHIELD_LUNA_LLM
-  const model = selectedModel?.trim() || routingEnv.LYRASHIELD_LLM?.trim() || undefined
-  const delegateModel = routingEnv.LYRASHIELD_LUNA_LLM?.trim() || model
-  assertSupportedRepositoryModel(model)
-  assertSupportedRepositoryModel(delegateModel)
-  const modelId = model?.toLowerCase().replaceAll("_", "-")
-  const delegateId = delegateModel?.toLowerCase().replaceAll("_", "-")
-  if (deep && (!routingEnv.LYRASHIELD_SOL_LLM?.trim() || !modelId?.endsWith("gpt-6-sol"))) {
-    throw new Error("Deep/Custom scans require LYRASHIELD_SOL_LLM=gpt-6-sol")
-  }
-  if (!delegateId?.endsWith("gpt-6-luna") || (!deep && !modelId?.endsWith("gpt-6-luna"))) {
-    throw new Error("LyraShield scan specialists and standard modes require GPT-6 Luna")
-  }
-
-  // DEEP/CUSTOM: Sol/medium coordinator + Luna/high specialists.
-  // SAFE/QUICK/STANDARD: Luna/medium throughout.
-  // Root and specialist models remain distinct, with Luna/high as the
-  // content-filter fallback (see strix/core/runner.py).
-  return {
-    model,
-    reasoningEffort: "medium",
-    delegateModel,
-    delegateReasoningEffort: deep ? "high" : "medium",
-  }
-}
+import { resolveEngineProfile, type EngineProfile } from "@lyrashield/security"
+export { resolveEngineProfile } from "@lyrashield/security"
+export type { EngineProfile } from "@lyrashield/security"
 
 export function resolveEngineSandboxNetwork(runtimeEnv: NodeJS.ProcessEnv = process.env): string {
   const network = runtimeEnv.LYRASHIELD_ENGINE_SANDBOX_NETWORK?.trim()
@@ -82,6 +32,7 @@ export function assertRepositoryScanRuntimeConfigured(
     throw new Error("A model provider credential must be configured for repository scans")
   }
   resolveEngineSandboxNetwork(runtimeEnv)
+
   if (runtimeEnv.NODE_ENV === "production") {
     const image = runtimeEnv.LYRASHIELD_IMAGE ?? ""
     if (!/^ghcr\.io\/ecryptoguru\/lyrashield-sandbox@sha256:[a-f0-9]{64}$/.test(image)) {
@@ -111,6 +62,22 @@ export function assertRepositoryScanRuntimeConfigured(
     if (/^tcp:\/\//.test(dockerHost) && runtimeEnv.DOCKER_TLS_VERIFY !== "1") {
       throw new Error("DOCKER_TLS_VERIFY=1 is required for a tcp:// production DOCKER_HOST")
     }
+    // Fail-closed consumer for the signed bounded SBOM coverage attestation.
+    // Scoped to the pinned sandbox image above; non-production flows and
+    // non-sandbox artifacts never reach this check.
+    const recordPath = runtimeEnv.LYRASHIELD_SANDBOX_PUBLICATION_RECORD_PATH?.trim()
+    if (recordPath) {
+      if (recordPath !== "/etc/lyrashield/sandbox-publication-record.json")
+        throw new Error("Signed sandbox publication must use the protected runtime path")
+      verifyHeldSandboxPublicationRecord(
+        readJsonEvidence(recordPath, "signed publication record", 0),
+        { sandboxImage: image, engineRevision: runtimeEnv.LYRASHIELD_ENGINE_REVISION ?? "" }
+      )
+      throw new Error(
+        "Authenticated sandbox publication remains held: independent native inventory and runtime authority are unavailable"
+      )
+    }
+    assertSandboxSbomCoverageVerified(runtimeEnv, image)
   }
 }
 
@@ -129,11 +96,40 @@ const WEB_SEARCH_DEFAULTS: Record<string, string> = {
   LYRASHIELD_WEB_SEARCH_MAX_CALLS_PER_SCAN: "50",
   LYRASHIELD_WEB_SEARCH_BUDGET_USD: "1.0",
 }
+export function repositoryAuthEnv(auth: RepositoryAuth): Record<string, string> {
+  if (
+    !/^[A-Za-z0-9_.-]{1,100}\/[A-Za-z0-9_.-]{1,100}$/.test(auth.repoFullName) ||
+    auth.repoFullName.split("/").some((part) => part === "." || part === "..")
+  )
+    throw new Error("Invalid repository credential scope")
+  if (!/^[A-Za-z0-9._-]{1,8192}$/.test(auth.token)) throw new Error("Invalid repository credential")
+  const url = `https://github.com/${auth.repoFullName}.git`
+  return {
+    GIT_CONFIG_NOSYSTEM: "1",
+    GIT_CONFIG_GLOBAL: "/dev/null",
+    GIT_TERMINAL_PROMPT: "0",
+    GIT_CONFIG_COUNT: "6",
+    GIT_CONFIG_KEY_0: `http.${url}.extraheader`,
+    GIT_CONFIG_VALUE_0: `Authorization: Basic ${Buffer.from(`x-access-token:${auth.token}`).toString("base64")}`,
+    GIT_CONFIG_KEY_1: "http.followRedirects",
+    GIT_CONFIG_VALUE_1: "false",
+    GIT_CONFIG_KEY_2: "credential.helper",
+    GIT_CONFIG_VALUE_2: "",
+    GIT_CONFIG_KEY_3: "core.hooksPath",
+    GIT_CONFIG_VALUE_3: "/dev/null",
+    GIT_CONFIG_KEY_4: "protocol.file.allow",
+    GIT_CONFIG_VALUE_4: "never",
+    GIT_CONFIG_KEY_5: "protocol.ext.allow",
+    GIT_CONFIG_VALUE_5: "never",
+  }
+}
+
 export function buildEngineEnv(
   profile: EngineProfile,
   scanId?: string,
   opts?: {
     runType?: string
+    repositoryAuth?: RepositoryAuth
     /** Scan-scoped relay for engine-backed URL/API targets. */
     relay?: { url: string; grant: string }
   }
@@ -191,6 +187,12 @@ export function buildEngineEnv(
       filtered[key] = value
     }
   }
+  // Deployment-only controls come from the validated startup snapshot, never
+  // from scan/profile/chat input or later ambient process.env mutations.
+  filtered.LYRASHIELD_RUN_RECORD_V1_1 = env.LYRASHIELD_RUN_RECORD_V1_1
+  filtered.LYRASHIELD_PENDING_HTTP_EVIDENCE = env.LYRASHIELD_PENDING_HTTP_EVIDENCE
+  if (env.LLM_API_MODE) filtered.LLM_API_MODE = env.LLM_API_MODE
+  if (env.DEDUPE_LLM_API_MODE) filtered.DEDUPE_LLM_API_MODE = env.DEDUPE_LLM_API_MODE
   if (!("LYRASHIELD_PROMPT_CACHE_EXPLICIT" in filtered)) {
     filtered.LYRASHIELD_PROMPT_CACHE_EXPLICIT = "1"
   }
@@ -234,5 +236,10 @@ export function buildEngineEnv(
     }
   }
 
+  if (opts?.repositoryAuth) {
+    if (opts.runType !== "repository")
+      throw new Error("Repository credentials require a repository run")
+    Object.assign(filtered, repositoryAuthEnv(opts.repositoryAuth))
+  }
   return filtered
 }

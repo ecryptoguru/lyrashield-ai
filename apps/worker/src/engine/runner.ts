@@ -51,7 +51,6 @@ export {
   redactEngineTailLine,
 } from "./runner-tail"
 export { runEngineTriage } from "./triage-runner"
-export type { EngineTriageRunParams } from "./triage-runner"
 
 export interface EngineRunResult {
   exitCode: number
@@ -187,7 +186,10 @@ export async function runEngine(
       () => readEngineSpendUsd(absWorkDir, scanId),
       onAgentLoopTick,
       config.relay,
-      STRIX_RUN_TYPES[config.target.type] ?? "repository"
+      {
+        runType: STRIX_RUN_TYPES[config.target.type] ?? "repository",
+        repositoryAuth: config.target.type === "REPO" ? config.repositoryAuth : undefined,
+      }
     )
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code
@@ -247,7 +249,9 @@ export async function runEngine(
     ? await readEngineOutput(outputDir)
     : { vulnerabilitiesRaw: "", runJsonRaw: "", artifacts: {} }
 
-  const output = parseEngineOutput(vulnerabilitiesRaw, runJsonRaw, artifacts)
+  const output = parseEngineOutput(vulnerabilitiesRaw, runJsonRaw, artifacts, {
+    expectedRunName: config.scanId,
+  })
   const sourceCheckoutPath = await resolveEngineSourceCheckout(output.runRecord, scanId)
   const sourceRevision = await resolveEngineSourceRevision(sourceCheckoutPath)
   const sandboxRemoved = await verifySandboxRemoved(scanId)

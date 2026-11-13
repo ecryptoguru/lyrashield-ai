@@ -176,10 +176,10 @@ export function McpIntegration({ endpointUrl, docsUrl }: { endpointUrl: string; 
             <li>
               Create an API key in{" "}
               <Link
-                href="/dashboard/settings"
+                href="/dashboard/settings/workspace#api-keys"
                 className="text-foreground underline underline-offset-2 hover:no-underline"
               >
-                Settings → API keys
+                Workspace settings → API keys
               </Link>{" "}
               (key starts with <code className="bg-muted rounded px-1 font-mono text-xs">lsk_</code>
               ).
@@ -200,7 +200,7 @@ export function McpIntegration({ endpointUrl, docsUrl }: { endpointUrl: string; 
             </Link>
             {" · "}
             <Link
-              href="/dashboard/settings"
+              href="/dashboard/settings/workspace#api-keys"
               className="text-foreground underline underline-offset-2 hover:no-underline"
             >
               Go to API keys

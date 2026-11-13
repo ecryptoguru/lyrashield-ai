@@ -346,20 +346,58 @@ export function parseHttpExchangeExport(
   }
   const doc = parsed.data
   const knownIds = new Set(doc.exchanges.map((exchange) => exchange.proxy_request_id))
+  const excludedIds = new Set([
+    ...(doc.missing_request_ids ?? []),
+    ...(doc.capacity_omitted_request_ids ?? []),
+    ...(doc.truncated?.omitted_request_ids ?? []),
+  ])
+  const requestHosts = new Map<string, string>()
+  const seenIds = new Set<string>()
+  for (const entry of doc.exchanges) {
+    if (seenIds.has(entry.proxy_request_id)) excludedIds.add(entry.proxy_request_id)
+    seenIds.add(entry.proxy_request_id)
+    if (entry.request?.host && /^[a-f0-9]{64}$/.test(entry.request.sha256 ?? "")) {
+      requestHosts.set(entry.proxy_request_id, entry.request.host.toLowerCase().replace(/\.+$/, ""))
+    }
+  }
+  // 1.2 ownership comes from current findings. The legacy targets array can
+  // carry arbitrary nested metadata and has no authority over captured bytes.
+  const binding =
+    doc.binding?.finding_revisions !== undefined
+      ? { ...doc.binding, targets: undefined }
+      : doc.binding
   // Persist the validated canonical document — not raw bytes — so nothing
   // outside the declared contract reaches encrypted storage.
   const document = JSON.stringify({
     ...(doc.schema_version !== undefined ? { schema_version: doc.schema_version } : {}),
     ...(doc.generated_at ? { generated_at: doc.generated_at } : {}),
-    ...(doc.binding ? { binding: doc.binding } : {}),
+    ...(binding ? { binding } : {}),
     exchanges: doc.exchanges,
     ...(doc.missing_request_ids?.length ? { missing_request_ids: doc.missing_request_ids } : {}),
+    ...(doc.capacity_omitted_request_ids?.length
+      ? { capacity_omitted_request_ids: doc.capacity_omitted_request_ids }
+      : {}),
     ...(doc.truncated ? { truncated: doc.truncated } : {}),
   })
   return {
     ...(doc.schema_version !== undefined ? { schemaVersion: String(doc.schema_version) } : {}),
+    ...(binding ? { binding } : {}),
     exchangeCount: doc.exchanges.length,
     knownIds,
+    requestHosts,
+    excludedIds,
     document,
   }
+}
+
+/** A conflict can remove a body from the canonical product artifact after the writer tuple has passed validation. */
+export function retainCapturedHttpExchanges(
+  exported: ParsedHttpExchangeExport,
+  capturedIds: ReadonlySet<string>
+): ParsedHttpExchangeExport | null {
+  if (!capturedIds.size) return null
+  if ([...exported.knownIds].every((id) => capturedIds.has(id))) return exported
+  const document: { exchanges: Array<{ proxy_request_id: string }> } = JSON.parse(exported.document)
+  document.exchanges = document.exchanges.filter((entry) => capturedIds.has(entry.proxy_request_id))
+  return document.exchanges.length ? parseHttpExchangeExport(JSON.stringify(document)) : null
 }

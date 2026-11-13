@@ -12,12 +12,13 @@
 
 import { logger } from "@lyrashield/logger"
 import type { PolarWebhookEvent } from "./webhooks"
-import { syncSubscription, downgradeToFree, type SubscriptionStatus } from "../../sync"
+import { syncSubscription, downgradeToFree } from "../../sync"
 import { creditTopUp } from "../../usage/packs"
 import { reverseRefund } from "../../usage/refund"
 import { MINUTE_PACK_MAP } from "@lyrashield/pricing"
 import { resolvePolarCatalogEvent } from "../../provider-catalog-validation"
 import { classifyProviderRefundEvidence } from "../../refund-evidence"
+import { resolvePolarSubscriptionLifecycle } from "./subscription-lifecycle"
 
 export interface PolarAdapterResult {
   handled: boolean
@@ -87,19 +88,7 @@ export async function processPolarEvent(event: PolarWebhookEvent): Promise<Polar
 
         const catalog = resolvePolarCatalogEvent(event.type, data)
         if (catalog?.kind !== "plan") throw new Error("polar_subscription_catalog_mismatch")
-        const status = mapPolarSubscriptionStatus(event.type, data)
-
-        const currentPeriodStart = data.current_period_start ?? data.currentPeriodStart
-        const currentPeriodEnd = data.current_period_end ?? data.currentPeriodEnd
-        const canceledAtValue = data.canceled_at ?? data.canceledAt
-        const modifiedAtValue = data.modified_at ?? data.modifiedAt
-        const periodStart = currentPeriodStart ? new Date(currentPeriodStart as string) : undefined
-        const periodEnd = currentPeriodEnd ? new Date(currentPeriodEnd as string) : undefined
-        const canceledAt = canceledAtValue ? new Date(canceledAtValue as string) : undefined
-        const eventOccurredAt = new Date(String(modifiedAtValue ?? ""))
-        if (Number.isNaN(eventOccurredAt.getTime())) {
-          throw new Error("polar_subscription_event_time_invalid")
-        }
+        const lifecycle = resolvePolarSubscriptionLifecycle(event.type, data)
 
         await syncSubscription({
           workspaceId,
@@ -107,15 +96,11 @@ export async function processPolarEvent(event: PolarWebhookEvent): Promise<Polar
           provider: "polar",
           externalId: String(data.id ?? ""),
           plan: catalog.plan,
-          status,
           interval: catalog.interval,
-          currentPeriodStart: periodStart,
-          currentPeriodEnd: periodEnd,
-          canceledAt,
-          eventOccurredAt,
+          ...lifecycle,
         })
 
-        return { handled: true, action: `subscription.${status}`, workspaceId }
+        return { handled: true, action: `subscription.${lifecycle.status}`, workspaceId }
       }
 
       case "customer.state_changed": {
@@ -185,43 +170,5 @@ export async function processPolarEvent(event: PolarWebhookEvent): Promise<Polar
       error: error instanceof Error ? error.message : String(error),
     })
     throw error
-  }
-}
-
-function mapPolarSubscriptionStatus(
-  eventType: string,
-  data: Record<string, unknown>
-): SubscriptionStatus {
-  const status = (data.status ?? "active") as string
-
-  switch (eventType) {
-    case "subscription.revoked":
-      return "canceled"
-    case "subscription.uncanceled":
-    case "subscription.resumed":
-      return "active"
-    case "subscription.active":
-      return "active"
-    case "subscription.paused":
-      return "paused"
-    case "subscription.past_due":
-      return "past_due"
-    case "subscription.canceled":
-      return data.status === "active" ? "active" : "canceled"
-    default:
-      if (
-        status === "active" ||
-        status === "canceled" ||
-        status === "paused" ||
-        status === "past_due" ||
-        status === "incomplete" ||
-        status === "trialing"
-      ) {
-        return status as SubscriptionStatus
-      }
-      // Fail-closed: unknown status defaults to past_due, not active.
-      // This prevents a malformed/unexpected event from silently granting
-      // full access when the subscription state is ambiguous.
-      return "past_due"
   }
 }

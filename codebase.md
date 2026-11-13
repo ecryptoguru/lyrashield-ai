@@ -82,7 +82,7 @@ Version rules:
 | `agent-registry`   | Install metadata for supported coding agents                                               |
 | `agent-rules`      | Agent policy/rule/skill rendering                                                          |
 | `agent-plugin`     | Portable plugin, MCP descriptor, skill, and client shims                                   |
-| `gate`             | Pure versioned Launch Gate standard (`lyrashield-gate/2.3.0`) and verdict computation      |
+| `gate`             | Pure versioned Launch Gate standard (`lyrashield-gate/2.4.0`) and verdict computation      |
 | `fix`              | Fix-PR core: plan-tiered diff scope policy, fail-closed diff validator, applier, checksums |
 
 Generated output—`.next`, `dist`, `.turbo`, `.astro`, `.wrangler`, motion renders, media-local, Prisma generated client, `node_modules`, and `*.tsbuildinfo`—is not source.
@@ -124,7 +124,7 @@ POST /api/scans
   → score, notifications, terminal state
 ```
 
-Repository scans invoke the controlled engine. Under `url-scan/3.0.0`, URL/API Safe/Quick stay deterministic-only; Standard and Deep/Custom select engine-backed profiles through a verified-domain, scan-scoped relay and run deterministic checks alongside.
+Repository scans invoke the controlled engine. URL/API launch supports deterministic Safe/Quick only; the engine-backed Standard/Deep/Custom profiles are removed from the launch offering (see `docs/Phase2.md`) and require a future explicit product decision. Historical engine-backed profile code remains a source contract, not an availability claim.
 Before execution, the worker binds every authority-bearing BullMQ field (`workspaceId`,
 `targetId`, `goal`, `mode`, and `policyId`) back to the stored scan; schema-valid queue
 data cannot upgrade routing, budget, or policy.
@@ -132,13 +132,15 @@ The scans list revalidates its first page with an ETag. If pagination hides a lo
 scan, one workspace-scoped query refreshes only those IDs, bounded by the three-scan
 workspace concurrency limit, so terminal transitions do not become stale polling loops.
 
+The v26 dependency capability registry is `packages/types/src/dependency-capabilities.ts`. `resolved-dependencies.ts` dispatches supported Cargo/Ruby/Go inputs through `additional-dependencies.ts`; unsupported/malformed/bounded discovered inputs keep the receipt incomplete. `ecosystem-lock-parsers.ts` retains exact source/platform/checksum identities and strict Cargo SemVer/source edges. `go-module-resolver.ts` runs pinned native Go metadata-only in a nonroot, network-none container; `go-metadata-broker.ts` mediates fixed-host metadata with bounded provenance receipts. No build/test/generate/source/VCS/toolchain download is allowed. Public-network and amd64 qualification remain separate. Scanner work budgets and cooperative yields bound hostile PHP/IaC/OpenAPI traversal; missing inputs never become clean coverage. OSV retains ≤100-package batches, two active streamed requests, a shared 15s deadline, bounded retries and complete-only cache writes, with case-sensitive Go/Ruby identity normalization.
+
 ### URL/API scan
 
 - Target creation performs SSRF validation.
 - Fetch time resolves, validates, pins, and revalidates each redirect.
 - Production URL fetching uses authenticated `packages/egress-proxy`.
 - Profiles bound documents, depth, bytes, concurrency, methods, origin probes, and wall time.
-- API Standard/Deep require validated public HTTPS OpenAPI input.
+- API Standard/Deep (source contract only; removed from the launch offering) require validated public HTTPS OpenAPI input.
 - Engine-backed tiers require current domain verification, sponsor entitlement, and a signed grant bound to the scan, workspace, target, host, methods, and request budgets.
 - The remote relay supports explicit absolute-form HTTP/HTTPS requests and rejects opaque CONNECT tunnels. The engine sandbox-local TLS adapter uses the installed sandbox CA to convert ordinary HTTPS client traffic into inspectable relay requests. Composed local curl and Chromium navigation/fetch tests passed allowed requests and denied path/method/redirect requests without TLS bypass; invalid upstream certificates were rejected. This verifies bounded local transport, while exact-image production deployment and a paid URL engine scan remain unverified.
 
@@ -191,6 +193,8 @@ Platform administration is intentionally outside this workspace role order:
 - Child tables are scoped through parents and protected by fail-closed RLS policies. `GateVerdict` is RLS-protected directly (batch-3 permissive/strict pattern).
 - Production runtime role must be neither superuser nor `BYPASSRLS`.
 
+`UserScanSlot` is initiating-user-owned through `app.current_scan_user_id`; `ScanCapacityReservation` is sponsor-account-owned through `app.current_account_id`. `scan-slot.ts` owns the user advisory lock and safe release. Keep initiating-user lock before workspace/target/account admission and keep account context distinct from the initiating user's slot context. `scan-capacity.ts` receives the caller's transaction; it does not create a second transaction. New tables use forced RLS and need explicit runtime grants at rollout.
+
 ### Audit chain
 
 Use `prisma.auditLog.create()` through the extended client. Its advisory-locked transaction owns `prevHash`/`hash` serialization. Do not place audit creation inside a broader transaction. Any mutation of hashed audit fields requires a locked chain rebuild.
@@ -204,6 +208,8 @@ Use `prisma.auditLog.create()` through the extended client. Its advisory-locked 
 - BullMQ workers use a 10-minute idle `drainDelay` and one-minute stalled check. The modeled 30-day idle command count is 324,019 before and 132,495 after this pacing change (59.11% reduction); it is not live telemetry.
 - Reconciliation runs unconditionally at startup. Its five-minute timer reconciles when the DB has nonterminal scans, backs off to an hourly Redis inspection when idle, and reconciles fail-safe when the DB preflight is uncertain. Queue/database orphans fail after five minutes and are never auto-replayed.
 - Status changes go through guarded transitions, not direct updates.
+- `createScan` atomically creates the immutable execution plan, version-2 user slot, capacity reservation and queued event. `Scan.accountingSettledAt` distinguishes execution/accounting finalization from terminal status. `capacity-lifecycle.ts` owns preparation, wait/defer and final safe release; unknown executor or settlement outcome retains the hold.
+- `schedule-service.ts` uses exact version/occurrence CAS in that same admission transaction, including lastScanId. Shared URL admission lives in `packages/types/src/url-review-admission.ts` with integrations/web wrappers. Transient deferrals preserve one pending occurrence; permanent denials advance with bounded reasons. Due reads use 50-row stable ID keysets and an inter-operation 15s poll budget. `ScanEnqueueNotSubmittedError` proves only this invocation did not call add and restores only its freshly created exact identity; uncertain acknowledgements preserve the original scan/job.
 - Worker cancellation terminates registered engine processes and preserves auditable state.
 
 Lifecycle:
@@ -216,7 +222,7 @@ Alternatives: `FAILED`, `PARTIAL` (engine stopped with findings preserved), `CAN
 
 ### Engine boundary
 
-Cloud and Desktop release workflows pin engine `3001517530300ca5f602536bfadcbd3c95ad3039`, including the request-bounded model-stream idle guard for Lyra's custom provider, four-agent concurrency for Quick scans, method/status-aware relay framing with audited dependency compatibility, the v23 remediation: runtime deadlines covering preprocessing/acquisition, bounded stream-timeout salvage of partial evidence, conservative abandoned-request spend, strict TUI types, source-acquisition decomposition and bounded Docker image acquisition, plus PR #199 artifact identity/revision recovery, usage accounting, sandbox identity and isolation, telemetry redaction, and viewer/TUI recovery. Product branch protection requires the `Pinned Engine / Worker Contract` job alongside security and lint/typecheck/test/build. Engine CI separately tests its exact `.lyrashield-worker-pin` consumer; refresh that reverse pin after the reviewed product merge. Source compatibility, production promotion and signed Desktop publication remain separate gates. Desktop launch work remains deferred.
+Candidate Cloud, recovery and Desktop release workflows pin merged engine `0793bcb9644a1985165963375586124c993c020a`, including engine PR #225 trusted normalization descriptors, #226 frozen evaluation-v3 corpus/scorer, #227–#232 diagnostics and CI safeguards, #233–#234 independent inventory verification, #235 scan-bound gateway identity, #236 nested Python inventory coverage, #237 signed attach-only controller sandbox execution, and #238 OpenTelemetry 1.45.2/0.66b2 for CVE-2026-126360 with the reverse worker-consumer pin. This revision retains the established model, relay, bounded-runtime, acquisition and immutable-evidence contracts. Evaluation profiles remain unmeasured and public benchmark claims disabled. The last verified deployed engine is `3001517530300ca5f602536bfadcbd3c95ad3039`. Production promotion remains held pending protected image qualification and isolated runtime authority. The cold native rehearsal does not establish that authority; retained-worker and high-availability lanes remain held. Product protection requires `Pinned Engine / Worker Contract` alongside security and lint/typecheck/test/build. Engine CI separately tests its exact `.lyrashield-worker-pin` consumer; update that reverse pin only after final merged-product compatibility verification. Source compatibility, production qualification and signed Desktop publication remain separate gates. Desktop launch remains deferred.
 
 - Product code lives in engine `lyrashield/**` and `lyrashield_adapter/**`; upstream `strix/**` retains only hard-gated generic seams.
 - Stable upstream releases enter through reviewed PRs; never force-push or auto-resolve conflicts.
@@ -235,7 +241,7 @@ Cloud and Desktop release workflows pin engine `3001517530300ca5f602536bfadcbd3c
 
 Authorities:
 
-- `apps/worker/src/engine/runner.ts`: `resolveEngineProfile()`.
+- `packages/security/src/engine-profile.ts`: `resolveEngineProfile()` (re-exported by the worker).
 - `apps/worker/src/engine/command-builder.ts`: `resolveScanBudgetUsd()`.
 - `apps/worker/src/engine/gpt6-pricing.ts`: GPT-6 rate card.
 
@@ -244,7 +250,10 @@ Safe/Quick/Standard use GPT-6 Luna/medium. Deep/Custom use GPT-6 Sol/medium root
 Agent-minute wall time starts immediately before `runEngine()`. An engine-backed run is
 metered only after a scan-bound completed receipt or scan-bound affirmative provider usage proves
 model-backed work occurred. Deterministic URL/API runs and pre-provider failures do not
-consume agent-minutes; failed runs with positive provider usage remain billable.
+consume agent-minutes. Failed scans are not billed, even when provider usage was observed.
+Cancelled and partial scans may consume agent-minutes when scan-bound evidence establishes billable work.
+
+Version-2 capacity authority is `packages/billing/src/usage/capacity.ts`; account funding waits are FIFO. `fundedRuntimeMs` floors whole multiplied capacity to wall time and subtracts `CAPACITY_STOP_MARGIN_MS=5000`. `meter.ts` records exact-cap partial usage and absorbed excess with immutable receipt identity; the funding projection distinguishes legacy gross consumption from version-2 allocated pool/pack/grace/overage. Legacy grant/consume reads use account/cycle/deletedAt-scoped SQL sums, without truncating totals. `confirmScanCapacityStopped` and slot helpers require actual stop/billing disposition before release. `REVIEW_REQUIRED` is conservative, not a timer-expiry permission to replay paid work.
 
 ### Standards evidence
 
@@ -252,9 +261,74 @@ consume agent-minutes; failed runs with positive provider usage remain billable.
 
 ### Findings and result integrity
 
+`engine/repository-auth.ts` binds a private GitHub scan to the stored target and
+active workspace integration before billable analysis. Its bounded, cancellable
+preflight obtains a fresh single-repository `contents:read` token and rechecks the
+same active integration after minting. Deterministic retest checkout uses the same
+workspace authorization path. Checkout tokens are never cached. The exact clone-URL
+credential scope passes only to the engine host through explicit child configuration;
+the sandbox environment excludes it. Authorized GitHub API/write helpers retain their
+installation grant; shared cache entries are encrypted and bound to app, installation,
+and grant identity.
+
+PHP detection reuses the existing `sca`, `iac`, `sast` and `url` families. Standard
+and Deep repository integration first detects PHP project scopes and gates
+PHP-specific analyzers and optional post-scan triage context on that result.
+Monorepo service scopes stay distinct, and uncertain discovery or absent exact runtime identity stays
+incomplete. Non-PHP repositories retain the ordinary scanner path without PHP
+analysis or PHP triage context. The existing IaC walk records eligible PHP source
+directories; `php-runtime.ts` reuses parsed declarations through
+`discoverPhpRuntimeInput()` before invoking runtime analysis for applicable
+inputs. `php-project.ts` owns documentation/test/fixture path exclusions shared
+with PHP SAST; source extension matching is case-insensitive. No separate PHP
+repository walk is added. `php-runtime-discovery.ts` builds a receipt from those
+existing inputs, capped at 32 PHP scopes and 64 service boundaries. Child service
+boundaries prevent inheriting a root runtime declaration or PHP context; overflow
+stays incomplete and suppresses context. `php-engine-context.ts` enriches only
+existing eligible medium-severity AI-security candidate excerpts in the enabled,
+accounted Standard/Deep triage cohort within their 4,096-byte bound, with anonymous scope identifiers
+and exact-identity completeness. Initial engine instructions and the number of
+engine calls do not change; this is not full PHP engine acceptance.
+`resolved-dependencies.ts` and `composer-dependencies.ts` resolve bounded exact
+Packagist locks with manifest content-hash checks; `dependency-manifests.ts`
+retains standalone discovery for other ecosystems. `php-runtime.ts` matches
+declared/reported identities against the pinned shared
+`packages/security/src/php-runtime-advisories.json` catalog through the worker
+`php-runtime-catalog.ts` compatibility export. A banner creates only a passive lead. `php_runtime_` findings cannot
+become `FIXED`/`VALIDATED` from source-only retests, even with complete source
+manifests. The [PHP runbook](./docs/php-security.md) owns supporting inventory,
+runtime replacement evidence and detection limitations. The free
+`/tools/php2shell-checker` consumes the shared browser-safe
+`@lyrashield/security/php-security` matcher for the original two advisories and
+keeps the 23 October CVE-2026-115560 configuration review separate; neither path
+performs a live probe or establishes deployed-runtime identity.
+
+`packages/db/src/osv-details.ts` owns bounded full-advisory hydration shared by the
+cached and standalone SCA paths. Incomplete detail retrieval or pagination cannot
+produce complete coverage or a trusted cache snapshot; `osv-querybatch/3` excludes
+legacy snapshots. `scanners/osv-cvss.ts` calculates complete CVSS 3.0/3.1 base
+vectors while preserving the source vector; the shared schema retains advisory
+CWE identifiers. Composer introduced-range boundaries may omit numeric minor or
+patch components, while installed/fixed releases remain exact and stable.
+
+Composer fixes use the existing job and encrypted artifact namespace through
+`jobs/composer-fix-proposal.ts` and the digest-pinned offline producer in
+`jobs/composer-fix.ts`. `packages/fix/src/composer-update.ts` binds exact identity,
+before/after bytes, single-package semantics and resolver checks. Approval and
+execution revalidate the receipt; ordinary patches still reject lockfiles.
+Production metadata uses the authenticated egress proxy. Resolver consistency
+does not prove application compatibility: summaries and approval inputs mark it
+unverified and the provider PR is forced to draft for customer CI and review.
+No new queue, schema or automatic merge path is added.
+The producer preserves original unchanged-package/root metadata and JSON format
+before its final validate/dry-run, keeping solver set/version changes visible to
+the strict artifact validator. Scope rejections retain bounded user guidance.
+
+- Deterministic repository retest authorization reads persisted lineage, parent-scoped manifests and coverage through one `withWorkspaceRLS` transaction. Failed proposal generation remains in history and does not block creating a fresh proposal.
 - `confidence` never sets `verified`.
 - Engine and scanner output create bounded candidates and receipts.
 - Evidence must use `uploadEvidence()` with checksum and encryption key reference.
+- Workspace integration credentials use workspace-bound encrypted artifacts; `Integration.configRef` stores the reference and safe list projections omit it. Account deletion enqueues eligible config artifacts through the existing `INTEGRATION_CONFIG` deletion-outbox kind in the same transaction as the metadata cascade; the worker removes external objects asynchronously with the existing lease/retry/dead-letter behavior. This cleanup path does not make account deletion self-service.
 - New claims are `DETECTED` unless trusted evidence establishes another state.
 - Deterministic clean retest can produce `VALIDATED` only with complete originating coverage.
 - Engine-only retest absence remains `INCONCLUSIVE`.
@@ -264,7 +338,7 @@ consume agent-minutes; failed runs with positive provider usage remain billable.
 - Findings list responses carry a deterministic page-local priority heuristic (severity, status, verified, confidence, target environment, business impact/exploitability context). It is triage context, never proof of exploitability or reachability, and does not change cursor pagination.
 - Finding detail never exposes raw evidence storage URIs; retest receipts surface baseline/retest scan IDs, manifest checksums, revisions, method, and coverage state.
 - Repository findings carry `baseCommit` (the scanned source revision, stamped by `persistFindings`), `implicatedFiles`, and structured fix evidence. The fix-PR pipeline: proposal → `fix-generate` job (deterministic diff from the engine's structured fix, plan-tiered scope validation: PRO+ implicated-set/200 lines, STARTER and below current-file/100) → approval-bound execution (`fix-pr.ts`, checksum-bound, re-validated at execute time, no merge call anywhere). A merged `lyrashield/fix-` branch closes the loop: PR marked merged, a NEW retest scan created and enqueued (the Retest binds to the NEW scan id), gate verdict re-evaluated. Loop-closure failures delete the webhook delivery marker so GitHub redelivers the idempotent path.
-- The Launch Gate: `packages/gate` computes the verdict (`lyrashield-gate/2.3.0`, pure, versioned); `packages/db/src/gate-evaluation-service.ts` persists append-only `GateVerdict` rows under RLS; uncovered target types always yield INSUFFICIENT_EVIDENCE. `packages/db/src/launch-report-payload.ts` is the ONLY public launch-report payload constructor (key-set regression test, same discipline as `buildScorecardPayload`).
+- The Launch Gate: `packages/gate` computes the verdict (`lyrashield-gate/2.4.0`, pure, versioned); `packages/db/src/gate-evaluation-service.ts` persists append-only `GateVerdict` rows under RLS; uncovered target types always yield INSUFFICIENT_EVIDENCE. `packages/db/src/launch-report-payload.ts` is the ONLY public launch-report payload constructor (key-set regression test, same discipline as `buildScorecardPayload`).
 - Launch report issuance (`launch-report-service.ts`) selects one verdict and evaluates its applicability at issue time inside a RepeatableRead snapshot (policy fingerprint, newer-attempt, evidence drift, freshness), never trusting the stored staleness flag; `stale` maps every non-applicable/unknown outcome. The report row's private `provenanceJson` binds the exact `gateVerdictId`, verdict checksum, assessed release identity (commit/artifact digest), and issue-time applicability — written atomically with the signed payload, readable on authenticated surfaces (`GET /api/reports/[id]` `launchReport` block, reports list). A recipient holding the signed report and its live share capability may submit an expected identity to `POST /api/reports/verify`; the confirmation-only response is `MATCH`, `MISMATCH`, or `UNAVAILABLE` and never returns the stored value. Legacy reports without provenance display "Release identity unavailable for this report".
 - Launch Readiness supports a target-scoped release check: `GET /api/launch-readiness?workspaceId=&targetId=&commit=|artifactDigest=` (full 40-hex SHA or `sha256:`+64-hex digest, mutually exclusive, repeated params rejected) runs the gate evaluation against the requested identity and returns `releaseCheck` with match/mismatch/cannot-confirm plus requested vs assessed identities. The dashboard form drives the same URL (`/dashboard/launch-readiness?targetId=&commit=`); without a reference the view stays informational.
 - `GET /api/billing/local-availability` is the public, origin-checked-CORS, rate-limited, no-store read the marketing pricing page uses to disclose Local purchase availability for the visitor's resolved provider before any checkout link. It is display state only — `/buy/local` and `/api/billing/local-checkout` re-check admission authoritatively.
@@ -278,7 +352,11 @@ consume agent-minutes; failed runs with positive provider usage remain billable.
 - Installation ownership must be provider-backed and bound to initiating user/workspace.
 - Approval claims exact action name and input hash atomically and once.
 - Fix PR route accepts no client-authored patch, branch, title, or body.
-- PR execution is fail-closed: privileged PR creation runs only a server-generated immutable patch/evidence artifact, immutably bound to an explicit human approval.
+- PR execution is fail-closed: privileged PR creation requires a content-addressed patch whose storage key binds the workspace, finding, proposal and decrypted-byte checksum to the server generator. Caller-supplied references may be recorded in drafts but cannot substitute for that binding, including in legacy proposals or pending approvals. The exact patch is bound to an authorization receipt: browser requests require human approval; API-key and delegated OAuth requests require verified credential permission and scope.
+
+`fix-pr-execution-service.ts` persists the immutable-proposal execution key before remote mutation. `fix-pr.ts` prepares and writes files under that ownership and reconciles deterministic remote identity after uncertain local persistence/completion; losing callers cannot change the winning intent. `fix-pr-context.ts` validates producer-bound storage references before access. `fix-pr-merge-service.ts` takes the initiating-user then Fix PR advisory lock before `findFixPrMergeAnchor`, account binding, retest association and canonical scan creation in the same caller transaction. Exact scanned/default-head equality remains mandatory.
+
+Repository acquisition and deterministic retest use fresh, uncached, repository-specific contents:read credentials through the separate checkout wrapper in integrations, with active-integration/repository validation. The remaining authorized installation-default token cache is encrypted and scoped by app identity, installation and grant; it is not repository scoped. Callback replay fixtures use real signed state with simulated provider exchange; they are not live GitHub acceptance.
 
 ### Public sharing
 
@@ -330,9 +408,9 @@ Cloud Sync connects through `/api/sync/connect`; the raw license key stays in th
 - `packages/affiliate/src/commission`: Cloud/Local commissions and clawback.
 - `packages/affiliate/src/fraud`: disposable email, velocity, device, self-referral.
 - `packages/affiliate/src/payout`: eligibility, reservations, provider routing, reserve release.
-- `apps/web/src/app/affiliates`: public application, partner dashboard, admin surfaces.
+- `apps/web/src/app/affiliates`: closed public application route, partner dashboard and admin surfaces.
 
-The affiliate service owns commission and exclusion rules; see [PRD affiliate terms](./PRD.md#affiliate-terms) for current commercial wording.
+The affiliate service owns commission and exclusion rules; new public application intake is paused while existing affiliate records and their recorded commission/refund handling remain intact. See [PRD affiliate terms](./PRD.md#affiliate-terms) for current commercial wording.
 
 ### Agent, MCP, CLI, and plugin
 
@@ -358,9 +436,11 @@ Hosted OAuth is read-only by default. A user can grant a connection a bounded se
 - Deploy generated `apps/marketing/dist/server/wrangler.json`.
 - `apps/marketing/src/pages/robots.txt.ts`, `llms.txt.ts`, `agents.md.ts`, sitemap configuration, canonical/schema helpers, comparison/research pages, and integration docs form the SEO/AEO/GEO surface. Production indexability gates crawler output; external indexing and citation still require separate receipts.
 
+The latest user instruction defers D5 film-loading and all landing motion/layout changes. The five changed landing motion/runtime/layout files (`ScrollWorld.astro`, `scroll-world.ts`, `PremiumHero.astro`, `EvidenceWorld.astro`, `evidence-journey.ts`) are byte-identical to main `284523ca381ee0d6ffa62ce22e855f7ecae9518f`; existing motion browser tests are restored unchanged. Film scheduling, runtime mapping, chapter counters, styles, media and generation retain that baseline. One static light-theme text-color accessibility fix in `EvidenceMap.astro` remains; it changes no motion, scrolling or geometry. Independent header dismissal/mobile-menu and CLI copy fixes remain in the candidate. No new loading policy or production performance improvement is claimed.
+
 ## 7. API surface
 
-The web app currently contains 170 route-handler files (154 under `app/api`). Grouped surfaces:
+The web app currently contains 170 route-handler files (164 under `app/api`). Grouped surfaces:
 
 - auth, OAuth metadata/consent/device approval, MCP;
 - workspaces, onboarding, team, and reviewed account-deletion requests;
@@ -399,6 +479,8 @@ Trust-boundary rules:
 - License: Key Vault and signing key identifiers.
 - Optional search: `LYRASHIELD_WEB_SEARCH_*`.
 
+`lint/env-ownership.mjs` checks literal production reads against the central schema or exact external owners; it is unconditional in CI code quality. `NEXT_PUBLIC_SENTRY_RELEASE` and `OPENAI_APPS_DOMAIN_VERIFICATION_TOKEN` are declared. `TURNSTILE_ENFORCE_ACTION=0` is the trusted staged default for independent widget/app rollouts: hostname, freshness, success and replay remain checked, wrong nonempty actions fail, and only missing/empty legacy actions remain compatible. Mode 1 requires the exact action. The Go resolver pin and host preparation live in `run-worker.sh`; startup qualifies availability before queue consumption.
+
 ### Desktop environment
 
 Public verification key and updater public key may ship. Private signing keys and LyraShield model keys may not.
@@ -419,6 +501,7 @@ Environment validation fails closed in production where a capability is required
 - Server components supply initial data; client components own interaction and typed mutations.
 - The dashboard is one adaptive surface: `lib/dashboard-overview.ts` is the typed server-side read model (scores bound to scans via `ScoreSnapshot.scanId`, per-target coverage from terminal-run receipts, workspace verdict gated on target coverage), and `lib/home-next-action.ts` derives the single next action. Progressive disclosure carries technical depth; presentation never changes authorization, data scope, or scan behavior.
 - Render and inspect real browser output for UI changes.
+- Onboarding explicitly chooses/creates a permission-eligible workspace in one server transaction. Repository selection is opt-in, paginated 50 at a time, with loaded-result search/reset and selected-form clearing. Approval and operation cursors remain independent; pending-page state is keyed by workspace/cursor while operation-only navigation preserves decisions. Scan capacity uses one stored-receipt `ScanCapacityBanner({scan})`, with elapsed time separate from charged minutes and conservative cancellation/finalization guidance. Error/empty/retention, missing-workspace and token-free password-reset recovery remain explicit.
 
 ## 10. Commands and verification
 
@@ -437,7 +520,11 @@ git diff --check
 
 Database changes also require fresh migration replay, drift check, RLS tests, and additive/backward-compatible review. Worker/engine changes require image build, OCI-label/digest verification, engine controlled-derivative gate, local sandbox proof, and relevant production proof. Marketing changes require Worker-backed browser/crawl verification. Desktop changes require frontend, Rust, updater, signing/notarization checks as applicable.
 
-Current command output is authoritative; never copy historical test counts forward as proof.
+Current command output is authoritative; never copy historical test counts forward as proof. `pnpm lint:env-ownership` checks configuration ownership. `pnpm lint:size` runs both TS and parser-aware Astro/MJS ratchets; baselines may only shrink. Presentation paths run their actual CSS/homepage source contracts; CI separately runs the real target-cap PostgreSQL fixture with named-case selection and restricted-role checks.
+
+Local v26 reviewed source and original issue dispositions are recorded in [the compact handoff](./docs/handoffs/v26-implementation-2026-10-30.md). The final correctness-fix rereview and separate motion-preservation review passed; local browser proof is 310 cases including 80 axe scans with zero reported violations. Full core, later targeted reruns, static/operations/database checks and remaining build/image/remote/manual qualifications are source-qualified in that record; §11 production identities are not changed by local implementation. See [the cutover runbook](./docs/operations.md#v26-admissioncapacity-cutover-and-compatible-rollback) before any production action.
+
+CI runs code quality, app/core/operations and selected marketing/motion work independently, then validates their results in the existing required aggregate. `.github/scripts/ci-selection.mjs` validates complete routing receipts, selects source consumers independently of image flags and combines selected quality dependency closures into one lint and one typecheck invocation; the app runner prepares SDK/MCP/plugin exports through the canonical plugin build closure before the full core suite. Optional PR image qualification covers packaging/build-environment inputs and copied worker host assets; ordinary source/test/style changes keep required host checks. Unknown inputs select all image targets. Release independently builds and verifies exact images before deployment, so an undeclared source packaging assumption may fail at release build before promotion. Knip remains manual reviewed maintenance (`pnpm lint:knip`, `pnpm lint:knip:baseline`), with no CI report step. Code quality has no dependency on runtime or image jobs and uses generated Prisma types without live services; marketing runtime separately generates its own schema exports. Static web presentation changes still compile and run the portable browser harness, while server/executable/unknown changes retain disposable-service proofs. `.github/scripts/qualify-release-source.mjs` binds successful required GitHub Actions checks and immutable PR base/head/merge evidence to the exact merged source tree before production routing. The latest genuine workflow attempt may still have optional jobs running or failed after all three required contexts succeed; queued, cancelled, malformed or unsupported outer states and incomplete required evidence fail closed. Both normal and squash merges require current main; unsupported or missing receipts fail closed. GitHub branch protection independently requires the three checks with strict base freshness and administrator enforcement.
 
 ## 11. Production topology and accepted evidence
 
@@ -459,17 +546,44 @@ Current command output is authoritative; never copy historical test counts forwa
 - A temporary `/api/ready/scans` `503` during that stop is a real period when new scans cannot be admitted, even when it is planned. Outside the matching controlled promotion, treat it as unexpected unavailability and follow the existing alert/readiness checks. DNS pin refresh is a different path: it applies the validated firewall union and in-place host update while preserving readiness and active work; failure retains the prior committed pins plus the union for retry.
 - The release identity to compare is the product's exact 40-hex revision, the worker's immutable `sha256:` image digest, and the engine's exact 40-hex revision. The worker derives these from its digest-pinned image and OCI labels, validates them before readiness, and binds them into each result manifest. Source pins, green CI, or a deployment command alone do not prove the running identity; use the release readback and live readiness result for the same revision.
 - App/scanner/egress promotion keeps the previous Container Apps revisions and restores traffic to them when candidate promotion or health smoke fails. Database migrations and app-scope configuration remain forward-only; image rollback never rolls back schema. Worker digest rollback is handled by the promotion script and its recorded prior digest, as described in [`ops/worker/README.md`](./ops/worker/README.md#promote-a-verified-worker-release).
+- [`prepare-verified-backup-connection.mjs`](./.github/scripts/prepare-verified-backup-connection.mjs) validates one explicit supported TLS mode and applies the existing strict backup endpoint, principal, scope, compatibility and query checks. It strengthens legacy `require` to `verify-full` before `pg_dump`, supplies fixed `sslrootcert=system` and `gssencmode=disable`, and removes only the already-validated Prisma schema option from the libpq URL. User-supplied trust paths, GSS/host overrides, duplicate TLS keys and weaker/missing modes remain rejected. A certificate or hostname failure stops the backup before encryption/upload/output. The producer emits a logical identity digest only after successful dump and upload; the proof writer recomputes the identity and requires the same digest. The shared runtime/maintenance parser and stored credentials are unchanged.
 - [`production-backup.yml`](./.github/workflows/production-backup.yml) creates scheduled PostgreSQL custom-format dumps of `public` and `app`, encrypts them with AES-256 GPG, uploads to R2, and verifies the plaintext dump checksum from object metadata. Retention is 30 days and runs only after a successful upload. The weekly isolated restore drill verifies checksum, schema/migrations, the audit chain, and application readiness against disposable PostgreSQL/Redis; a manual dispatch can also request the drill. A green isolated restore is recovery evidence, not a production restore or release proof; check the exact workflow run when relying on a specific backup.
 
-### Current release evidence — 2026-10-01
+### Current release evidence — 2026-11-02 IST
+
+[Production release 41438792830](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/41438792830) deployed `d488862bd269c07194afe87a918ca413e4a62217` after [exact-head CI 41436905869](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/41436905869). November 2 independent Azure readback found app `0000513`, scanner `0000487` and proxy `0000353` healthy at 100% traffic; app and scanner use web digest `sha256:155deca0b118249ab8590d87563bf0cffe839d15809bbb56dfceb4799843fc76`, while proxy uses `sha256:54f29c5b5502e03a0a3842ef454798b2565248b27ce0bc9c7ca8232a2bce3172`. A subsequent VM read found the worker service active and container healthy on `sha256:c84fe0c97554bd4003f005f86d0041b29c8cbf2cefcd0ebe038956bbf05293c0`, with matching product and engine `3001517530300ca5f602536bfadcbd3c95ad3039`. Public app, scanner and scan-readiness probes returned 200. Marketing was deployed with source unchanged from `0d8fc0f6c126271aa966ca895608cec2460f8cb4`, preserving landing motion. The [PRD release addendum](./PRD.md#nonbilling-production-release--2026-11-02-ist) and [restore runbook](./docs/operations.md#owner-approved-manual-isolated-restore) retain unresolved acceptance and recovery limits.
+
+### Historical release evidence — 2026-10-31 IST
+
+Product `6739563df7dad585cef1be14cedcb978bc0a5219` passed [production release 41117355986](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/41117355986). Retained independent readback records receipt `COMPLETE`, four expected migration checksums, forced RLS on both new tables, app/scanner 100% traffic on web digest `sha256:c73a978d3c9de1efa93b87e0e8524e775fa54cc1b627b8137a043541b7ce385b`, healthy worker `sha256:33a769654ba9c68116d07b4986da673d95d38ed58c8be8369cdc33895d78e723`, unchanged engine `3001517530300ca5f602536bfadcbd3c95ad3039` and admission stop absent. This documentation pass did not repeat privileged VM/database readback.
+
+Fresh public app/scanner `/api/ready` and app `/api/ready/scans` returned HTTP 200 at `2026-10-30T21:39:21Z`–`21:39:27Z`. Initial urllib app probes returned 403; curl probes succeeded. The previously failed [readiness workflow 41110605407](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/41110605407) remains a failed recovery-window receipt, not a later successful workflow run. At that checkpoint, marketing was at `0d8fc0f6c126271aa966ca895608cec2460f8cb4`; preserved landing motion and original specs matched their pre-v26 baseline. Recorded desktop and 390×844 smoke is not physical-device or screen-reader proof. See [PRD v26 addendum](./PRD.md#v26-production-addendum--2026-10-31-ist) for the first failed pre-migration release/owned-stop abort, retained evidence source, original-ID dispositions and unresolved acceptance limits. No financial conclusion or new loading/model policy is established.
+
+### Historical release evidence — 2026-10-27
+
+- Product `2d4e168da544306bf6cc9958a55f14bbfcb717e3` passed [production release 40538483543](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/40538483543). Provider readback showed app `0000507`, scanner `0000481` and egress proxy `0000347` each at 100% traffic. Scan readiness returned HTTP 200.
+- Independent VM readback confirmed healthy worker `sha256:690bac6ed42d1c450af94055e270d5f21baa937771ba828e7e4871e501067fbe`, matching product and engine `3001517530300ca5f602536bfadcbd3c95ad3039` provenance and 23 PHP/Composer and coverage source hashes.
+- Marketing readback on the earlier `d92315ac` revision: Seven articles passed two page-ready desktop/mobile rounds (28 observations), with loaded images, six cluster links, checker and signup links, and no horizontal overflow. The 17-page crawl found no errors among 368 unique links. Synthetic checker examples and the separate Windows notice were exercised; this does not verify deployed customer runtimes.
+
+Controlled private PHP Standard and Deep scans passed bounded fixture checks on the earlier `d62303b1` worker. A later cold-cache Composer proposal was generated and its sealed artifact checked; an unchanged-source negative retest left the Symfony finding OPEN/DETECTED and failed as expected. The approval-bound PR and positive retest remain pending; PR #1043 is deployed by [release 40538483543](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/40538483543). The October 25 isolated restore and one October 27 operator notification delivery test passed, each within its stated scope. See [PRD §8](./PRD.md#8-current-production-evidence) for identities and limits.
+
+### Previous production release — 2026-10-10
+
+- PR #992 merged as product revision `41462a3ff45f77e996823faf6d10f56053dec9e8`; [production release run 38082773161](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/38082773161) completed successfully.
+- The run selected and rehearsed worker digest `sha256:91203cb94795cc8ae143e4a07da86a2fc3eac5e38ed1ebc862e46c1333d55007` for engine revision `3001517530300ca5f602536bfadcbd3c95ad3039`, promoted the Container Apps revisions and production traffic, and completed the guarded worker VM promotion.
+- Successful promotion verifies the configured Docker image reference, the worker OCI product/engine labels, runtime product/engine revisions, the runtime image digest, Docker health, and scan readiness against the release inputs.
+- A public `GET https://app.lyrashieldai.com/api/ready/scans` at `2026-10-10T20:53:34Z` returned HTTP 200 and `{"status":"ready","checks":{"worker":true}}`.
+- This is release and scan-admission readiness evidence only. It does not prove billing reconciliation, settlement, paid-scan acceptance, authenticated client use, or commercial readiness.
+
+### Historical release evidence — 2026-10-01
 
 - Product revision `4822306e24f375800981bf282fd992a9c15dcde8` passed [main CI run 36905268255](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/36905268255) and [production release run 36908006265](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/36908006265). The release applied migrations `20261002000000_webhook_rejection_receipts` and `20261003000000_scan_delegated_authorization`, passed candidate/production smoke and queue preflight, and promoted the app, scanner, egress proxy, and worker.
 - Azure readback at approximately `2026-10-01T19:26Z` found app `lyrashield-app--0000461`, scanner `lyrashield-scanner--0000436`, and egress proxy `lyrashield-egress-proxy--0000302` latest-ready at 100% traffic. Web/scanner digest: `sha256:dbc43686e11f95a03d9f163c865683e3949ade4179839ef6d268e6ea55f9b78f`; egress digest: `sha256:2951a50935f458c16495ccee9005990b2d4a5ba0a5470be1922a90733729bd24`; worker digest: `sha256:d38f8b080ae62b88ba9c6273be76abff42adf5a86b831bde5b19f6d6fce466dc`; engine pin: `9d90be5aaf92f86bb5c1ba55a8138545764fdd44`.
 - [Scan-readiness workflow 36912801887](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/36912801887) passed. A fresh public GET at `2026-10-01T20:15:18Z` returned HTTP 200, `Cache-Control: no-store`, and `{"status":"ready","checks":{"worker":true}}`. This proves scan-admission readiness for that deployment only.
-- The report-only billing reconciliation on `2026-10-01T19:08:19Z` received Polar HTTP 403 `insufficient_scope`; its receipt was incomplete with zero Polar and Razorpay items checked. The worker invokes providers sequentially, but the response row count is not retained. Do not infer completed reconciliation from readiness or the zero counters. In the 2026-10-01 production rule readback, the runtime had a `reconciliation_drift` rule but lacked dedicated `reconciliation_backlog` and `reconciliation_duplicates` rules; receiver delivery was not verified. F4 source candidate `70a60aa7fd685aeaa42095703045a51b0fbbbb50` adds declarations for both rules but is absent from deployed product `4822306e24f375800981bf282fd992a9c15dcde8`. Source declarations are not runtime rule readback.
+- The 2026-10-01 report-only billing reconciliation received Polar HTTP 403 `insufficient_scope`; its receipt was incomplete with zero Polar and Razorpay items checked. The worker invokes providers sequentially, but the response row count is not retained. Do not infer completed reconciliation from readiness or the zero counters; no newer completed receipt is recorded here. The 2026-10-01 production rule readback found `reconciliation_drift` but lacked dedicated runtime rules for `reconciliation_backlog` and `reconciliation_duplicates`; receiver delivery was not verified. Current source declares both rules and product revision `e68c760c5189e65f1180200b7d2449d5537cee10` was released on 2026-10-11. The 2026-10-11 readback found both rules and `webhook-catalog-rejection` absent, and delivery was untested at that time; see the later evidence above.
 - The release sync maps the app's Polar credential into worker Key Vault. A worker-only credential replacement would be overwritten by the next release. Correct the source-of-truth provider grant or approve a separate worker binding, then use the guarded refresh/promotion path and rerun report-only reconciliation. No credential values were read or changed.
-- The latest recorded isolated restore predates the migrations in this release. A post-release backup and restore drill remains open. Cloud admission is configured public on both payment rails and Local admission is off; this is configuration evidence, not authorization for charges or proof of settlement, refunds, payouts, or commercial readiness.
-- The deployed retest finalizer does not require checksum `MATCH` for both the original and retest manifests before a validated outcome. The source audit did not inspect production finding rows or establish an incorrectly validated receipt. F1 `a18753a77ad04d5291a07f0ed1b95f94867baa72`, F2 `c6fda848228f3fd329e6df43c3f20ec82e2837c0`, and F4 `70a60aa7fd685aeaa42095703045a51b0fbbbb50` remain source candidates outside deployed product `4822306e`; see [PRD §9](./PRD.md#9-release-status).
+- The 2026-10-11 isolated restore passed the then-current schema/migrations and readiness but withheld its public proof on the TLS gate; see current evidence above. Cloud admission is configured public on both payment rails and Local admission is off; this is configuration evidence, not authorization for charges or proof of settlement, refunds, payouts, or commercial readiness.
+- The 2026-10-01 deployed retest finalizer lacked a requirement for checksum `MATCH` on both the original and retest manifests. The source audit did not inspect production finding rows or establish an incorrectly validated receipt. The fix shipped on 2026-10-10 and is included in deployed product revision `2d4e168da544306bf6cc9958a55f14bbfcb717e3`. Separately, current MCP delegated-operation handling persists terminal outcomes across grant rotation and retains late scan results only after fresh authorization checks; it never replays an uncertain mutation. See [PRD §9](./PRD.md#9-release-status) for the current release and remaining readbacks.
 - Public OAuth discovery and unauthenticated MCP denial were checked, but no OAuth login, authenticated workspace read, or real-client plugin discovery was performed. Package/export integrity is separate from npm publication, immutable marketplace release, and authenticated client-runtime acceptance.
 
 ### Browser error collection
@@ -520,7 +634,7 @@ This is target/revision-scoped runtime and accounting proof, not a security guar
 
 - `ai-app-source-discovery.ts` ranks production/config sources ahead of tests and fixtures, excludes generated artifacts, and applies explicit mode caps: Quick/Safe 200, Standard 500, Deep/Custom 1,000.
 - Discovery produces structured eligible/scanned/skipped/byte counts, skip reasons, limit codes, and a bounded representative skipped-path sample.
-- `scanner-orchestrator.ts` merges discovery limits into AI scoring and provenance. `result-integrity.ts` persists the `ai_app_security` family receipt in manifest v5 and later, preventing bounded AI coverage from becoming a complete clean claim. Current manifest v6 also binds the intended terminal outcome so crash recovery preserves partial, failed, budget-stopped, and timed-out results; historical v5 manifests remain readable.
+- `scanner-orchestrator.ts` merges discovery limits into AI scoring and provenance. `result-integrity.ts` persists the `ai_app_security` family receipt in manifest v5 and later, preventing bounded AI coverage from becoming a complete clean claim. Manifest v6 added the intended terminal outcome so crash recovery preserves partial, failed, budget-stopped, and timed-out results; current source writes manifest v7, while historical v5/v6 manifests remain readable.
 - The scan-detail UI shows coverage counts and skipped-path samples instead of only the legacy one-line warning.
 - Regression coverage uses an exact 217-file repository: Quick scans 200 and reports 17 skipped while retaining vulnerable production code; Standard scans all 217. Generated directories are excluded.
 - PR #386's coverage remediation and PR #450's secure source-checkout recovery are deployed. Scan `cmt9el7p7000001hdjnjo90wk` runtime-proved complete 217-file Standard discovery and immutable source identity for one target/revision. Historical scan `cmt35aj1s000001hck9fmguzk` remains bounded and unchanged.
@@ -540,7 +654,8 @@ This is target/revision-scoped runtime and accounting proof, not a security guar
 | `apps/worker/src/jobs/run-scan.job.ts`                  | Scan orchestration entry; delegates to `run-scan/` phases                           |
 | `apps/worker/src/jobs/run-scan/`                        | Scan lifecycle phases (authority, preparation, execution, settlement, finalization) |
 | `apps/worker/src/engine/runner.ts`                      | Bounded/cancellable engine subprocess                                               |
-| `apps/worker/src/engine/command-builder.ts`             | Engine arguments and budget policy                                                  |
+| `packages/security/src/engine-command.ts`               | Shared trusted engine arguments                                                     |
+| `apps/worker/src/engine/command-builder.ts`             | Worker command environment and budget policy                                        |
 | `apps/worker/src/engine/gpt6-pricing.ts`                | GPT-6 rate cards and per-request cache usage accounting                             |
 | `apps/worker/src/engine/scanner-orchestrator.ts`        | Deterministic and engine result merge                                               |
 | `apps/worker/src/engine/result-integrity.ts`            | Manifest/candidate/receipt boundary                                                 |
@@ -560,6 +675,8 @@ This is target/revision-scoped runtime and accounting proof, not a security guar
 | `ops/worker/*`                                          | Worker VM services, secrets, egress, promotion, verification                        |
 | `.github/workflows/ci.yml`                              | Main release gate                                                                   |
 | `.github/workflows/deploy-azure.yml`                    | Migration-first Azure deployment                                                    |
+
+CI's app, marketing and Desktop browser sites use `.github/scripts/ci-browser.mjs` to run the unchanged selected Playwright suites with local Chromium. Font assets come from the digest-pinned official Playwright 1.62.1 Jammy amd64 image: a bounded regular-file archive includes a SHA-256 manifest, and extraction rejects traversal, duplicate, link, sparse and special entries. A private Fontconfig overlay retains host rules and uses verified image fonts and a private cache; it does not install apt packages or copy image configuration or libraries. Startup independently verifies the locked headless shell used by all selected CI suites, every font asset, required font families, native libraries and native WebMCP, including a short local trace cleanup probe. The image container is nonroot, read-only, capability-free and network-disabled, with no host mounts or credentials; it extracts fonts and provides only the bounded synthetic FFmpeg fallback when host `lavfi` and `libx264` fail validation. Every browser job removes its owned container, font overlay and temporary FFmpeg wrapper, including failed startup. Required check routing, auth-mail privacy guards and marketing failure diagnostics remain in force.
 
 ## 13. Landmines
 

@@ -4,7 +4,7 @@ description: "How LyraShield AI compares to ZeroPath for AI-native SAST and auto
 competitor: "ZeroPath"
 heading: "LyraShield AI vs ZeroPath"
 disclaimer: "Factual comparison. ZeroPath by ZeroPath Inc. is an AI-native application security platform that unifies SAST, SCA, secrets, IaC and DAST-style runtime validation into a single reasoning engine and generates fix PRs. LyraShield AI is release assurance for AI-built apps — it keeps detected candidates and retest outcomes distinct in scoped evidence reports, with fixes gated behind approvals. Neither replaces the other."
-updatedDate: 2026-10-04
+updatedDate: 2026-10-11
 draft: false
 pricingLadder: true
 competitorClaims: true
@@ -31,21 +31,21 @@ faq:
 
 ## Capability comparison
 
-| Capability                | LyraShield AI                                                   | ZeroPath                                                                      |
-| ------------------------- | --------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| Static analysis (SAST)    | Via engine                                                      | Yes (AI-native flagship; business logic and auth flaws)                       |
-| Custom rules              | Not a primary feature                                           | Natural-language policy engine                                                |
-| SCA (dependency scanning) | Yes                                                             | Yes (reachability-aware, exploitability fusion)                               |
-| Secret scanning           | Yes (engine + GitHub Action)                                    | Yes (700+ detectors, rotation guidance PRs)                                   |
-| Agentic pentest           | Yes (core)                                                      | Dynamic testing that confirms SAST findings and discovers runtime-only issues |
-| Evidence states           | Yes (4 states)                                                  | Exploitation-setup metadata per finding                                       |
-| Deterministic retest      | Yes                                                             | Auto re-scan verification after fix                                           |
-| Coverage receipts         | Yes (per-control)                                               | No                                                                            |
-| Assurance reports         | Yes (checksum-bound snapshots)                                  | Compliance and audit reports; GRC sync                                        |
-| Reviewed fix proposals    | Fix PR requests require permission and a server-generated patch | One-click merge fix PRs; no formal approval gate                              |
-| MCP server integration    | Yes (documented MCP client workflows)                           | Yes (open-source MCP server for Claude, Cursor, Windsurf)                     |
-| AI-BOM / AI inventory     | Not a primary feature                                           | Yes (17 AI component kinds, CycloneDX AI-BOM)                                 |
-| Open-source CLI           | CLI is npm-published                                            | Downloadable CLI with SARIF output (closed source)                            |
+| Capability                | LyraShield AI                                                          | ZeroPath                                                                      |
+| ------------------------- | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| Static analysis (SAST)    | Via engine                                                             | Yes (AI-native flagship; business logic and auth flaws)                       |
+| Custom rules              | Not a primary feature                                                  | Natural-language policy engine                                                |
+| SCA (dependency scanning) | Yes                                                                    | Yes (reachability-aware, exploitability fusion)                               |
+| Secret scanning           | Yes (engine + GitHub Action)                                           | Yes (700+ detectors, rotation guidance PRs)                                   |
+| Agentic pentest           | Yes (core)                                                             | Dynamic testing that confirms SAST findings and discovers runtime-only issues |
+| Evidence states           | Three shipped states; `VERIFIED` is future-only and not produced today | Exploitation-setup metadata per finding                                       |
+| Deterministic retest      | Yes                                                                    | Auto re-scan verification after fix                                           |
+| Coverage receipts         | Yes (per-control)                                                      | No                                                                            |
+| Assurance reports         | Yes (checksum-bound snapshots)                                         | Compliance and audit reports; GRC sync                                        |
+| Reviewed fix proposals    | Fix PR requests require permission and a server-generated patch        | One-click merge fix PRs; no formal approval gate                              |
+| MCP server integration    | Yes (documented MCP client workflows)                                  | Yes (open-source MCP server for Claude, Cursor, Windsurf)                     |
+| AI-BOM / AI inventory     | Not a primary feature                                                  | Yes (17 AI component kinds, CycloneDX AI-BOM)                                 |
+| Open-source CLI           | CLI is npm-published                                                   | Downloadable CLI with SARIF output (closed source)                            |
 
 ## Deployment and pricing
 

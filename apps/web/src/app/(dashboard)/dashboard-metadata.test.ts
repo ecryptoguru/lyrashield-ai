@@ -61,11 +61,8 @@ const pages = collectPageFiles(DASHBOARD_ROOT).map((file) => ({
 }))
 
 describe("dashboard route metadata", () => {
-  it("finds the dashboard routes to check", () => {
-    expect(pages.length).toBeGreaterThan(20)
-  })
-
   it("declares a title on every rendering route", () => {
+    expect(pages.length).toBeGreaterThan(20)
     // `generateMetadata` counts too: a route whose title depends on whether the
     // record exists (e.g. a dead /dashboard/scans/<id> link) cannot use the
     // static export, and both forms satisfy "declares its own title".

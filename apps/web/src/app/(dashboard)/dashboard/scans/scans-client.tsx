@@ -1,8 +1,11 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react"
+import { useRouter } from "next/navigation"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { useScansWebMcp } from "./scans-webmcp"
 import { useScanListState } from "./use-scan-list-state"
+import { parseEngineBudgetField, useEngineBudgetDraft } from "./scan-advanced-options"
+import { useScanEligibility } from "./use-scan-eligibility"
 import { CreateScanSheet } from "./create-scan-sheet"
 import { resolveScanSubmissionFailure } from "./scan-submission-failure"
 import { ScanList } from "./scan-list"
@@ -12,14 +15,19 @@ import { z } from "zod"
 import { Button, Select } from "@lyrashield/ui"
 import {
   scanAttachmentListSchema,
-  scanEligibilitySchema,
   scanItemSchema,
   scansPaginatedSchema,
   type ScanAttachmentItem,
 } from "@/lib/api-schemas"
 import { ApiError, apiPost, apiGet } from "@/lib/api-client"
 import { SCAN_SINGULAR, TARGET_PLURAL, TARGET_SINGULAR } from "@/lib/terminology"
-import { findRecoveryPreset, getReviewSetupGuidance, scanRecoveryHref } from "./scans-client.utils"
+import {
+  findRecoveryPreset,
+  getReviewSetupGuidance,
+  getInitialPreset,
+  useMediaQuery,
+} from "./scans-client.utils"
+import { prepareScanRetry } from "./prepare-scan-retry"
 import {
   SCAN_STATE_FILTERS,
   scanStateStatusLabel,
@@ -27,11 +35,12 @@ import {
 } from "@/lib/scan-presentation"
 import { getDefaultScanOptionId, getManualScanOptions } from "@/lib/scan-presets"
 import { safeApiErrorMessage } from "@/components/api-error-card"
-import type { ScanEligibilityState, ScanItem, TargetItem } from "./scan-types"
+import type { ScanItem, TargetItem } from "./scan-types"
 import {
   beginScanSubmission,
   clearPendingScanSubmission,
   readPendingScanSubmission,
+  pendingEngineBudgetInput,
   recordAcceptedScan,
   runScanSubmission,
   scanOperationStatusSchema,
@@ -42,23 +51,6 @@ import {
 } from "@/lib/scan-submission"
 
 const scanCreateResponseSchema = scanItemSchema.extend({ operationId: z.string().optional() })
-
-/**
- * Media query with SSR-safe hydration: the server snapshot (mobile) is used
- * for the first render, then the client value applies — the same pattern the
- * reduced-motion hook uses, so server and hydrated HTML always match.
- */
-function useMediaQuery(query: string): boolean {
-  return useSyncExternalStore(
-    (callback) => {
-      const mql = window.matchMedia(query)
-      mql.addEventListener("change", callback)
-      return () => mql.removeEventListener("change", callback)
-    },
-    () => window.matchMedia(query).matches,
-    () => false
-  )
-}
 
 interface ScansClientProps {
   principalId: string
@@ -95,22 +87,19 @@ export function ScansClient({
   initialFilterUnavailable = false,
   canManageBilling = false,
 }: ScansClientProps) {
+  const router = useRouter()
   const [showCreate, setShowCreate] = useState(initialShowCreate)
   const reviewChoiceVersion = useRef(0)
-  // One active target and no explicit selection: preselect it. Choosing among
-  // several is the user's call, but being asked to pick the only option is not.
   const initialSelectedTarget = initialTargetId || (targets.length === 1 ? targets[0]!.id : "")
   const [selectedTarget, setSelectedTarget] = useState(initialSelectedTarget)
   const [selectedFocus, setSelectedFocus] = useState<string | null>(null)
-  const [selectedPreset, setSelectedPreset] = useState(() => {
-    const target = targets.find((item) => item.id === initialSelectedTarget)
-    const options = getManualScanOptions({
-      type: target?.type ?? "",
-      hasApiSpec: Boolean(target?.apiSpecUrl),
-    })
-    return findRecoveryPreset(options, initialGoal, initialMode) || getDefaultScanOptionId(options)
-  })
-  // Review Changes revision inputs — resolved to immutable SHAs server-side.
+  const [selectedPreset, setSelectedPreset] = useState(() =>
+    getInitialPreset(
+      targets.find((item) => item.id === initialSelectedTarget),
+      initialGoal,
+      initialMode
+    )
+  )
   const [baseRef, setBaseRef] = useState("")
   const [headRef, setHeadRef] = useState("")
   const [attachments, setAttachments] = useState<ScanAttachmentItem[]>([])
@@ -120,7 +109,8 @@ export function ScansClient({
     setSelectedPreset(id)
   }, [])
   const [modeResetNotice, setModeResetNotice] = useState<string | null>(null)
-  const [showAdvanced, setShowAdvanced] = useState(false)
+  const budgetDraft = useEngineBudgetDraft(principalId, workspaceId)
+  const { engineBudgetCeiling, prepareEngineBudget } = budgetDraft
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState<string | null>(
     initialRecoveryUnavailable ? "This target is no longer available. Choose another target." : null
@@ -154,8 +144,6 @@ export function ScansClient({
     setError,
     setErrorCode,
   })
-  const [eligibility, setEligibility] = useState<ScanEligibilityState>({ status: "idle" })
-  const [eligibilityAttempt, setEligibilityAttempt] = useState(0)
   const [startingTrial, setStartingTrial] = useState(false)
   const scanSubmissionLock = useRef({ current: false })
   const scopeGenerationRef = useRef(0)
@@ -169,18 +157,7 @@ export function ScansClient({
   const [scanRecoveryError, setScanRecoveryError] = useState<string | null>(null)
   const [scanRecoveryUnavailable, setScanRecoveryUnavailable] = useState(false)
   const [forceNewAfterRecovery, setForceNewAfterRecovery] = useState(false)
-
   const isDesktop = useMediaQuery("(min-width: 768px)")
-
-  useScansWebMcp({
-    workspaceId,
-    targets,
-    selectedPreset,
-    setSelectedTarget,
-    setSelectedPreset: choosePreset,
-    setShowCreate,
-    setModeResetNotice,
-  })
   async function handleCreateScan(startNewScan = false) {
     const scopeGeneration = scopeGenerationRef.current
     const isCurrentScope = () => scopeGeneration === scopeGenerationRef.current
@@ -189,19 +166,22 @@ export function ScansClient({
       setError("Select a target to scan")
       return
     }
-    if (!selectedOption) {
-      setError("No review option is available for this target")
+    if (!selectedOption?.available) {
+      setError(selectedOption?.disabledReason ?? "No review option is available for this target")
       return
     }
     if (selectedOption.requiresRevisionInputs && !baseRef.trim()) {
       setError("Enter the base revision to compare against")
       return
     }
+    if (engineBudget.error) {
+      setError(engineBudget.error)
+      return
+    }
     if (!createScanRequest) {
       setError("No review option is available for this target")
       return
     }
-
     await runScanSubmission(scanSubmissionLock.current, async () => {
       setCreating(true)
       if (startNewScan) setForceNewAfterRecovery(false)
@@ -231,10 +211,10 @@ export function ScansClient({
           clearPendingScanSubmission(scanSubmissionScope, begun.submission.idempotencyKey)
           begun = beginScanSubmission(scanSubmissionScope, createScanRequest)
         }
-
         let submission = begun.submission
         setPendingScanSubmission(submission)
         if (submission.state === "accepted" && submission.scanId) {
+          router.push(`/dashboard/scans/${encodeURIComponent(submission.scanId)}`)
           setShowCreate(false)
           return
         }
@@ -299,7 +279,9 @@ export function ScansClient({
           )
         }
         setShowCreate(false)
+        router.push(`/dashboard/scans/${encodeURIComponent(result.id)}`)
         setSelectedFocus(null)
+        budgetDraft.setEngineBudgetCeiling("")
         setBaseRef("")
         setHeadRef("")
         setSelectedAttachments([])
@@ -347,9 +329,23 @@ export function ScansClient({
   })
   const enabledOptions = availableOptions.filter((o) => o.available)
   const selectedOption =
-    enabledOptions.find((o) => o.id === selectedPreset) ??
+    availableOptions.find((o) => o.id === selectedPreset) ??
     enabledOptions.find((o) => o.id === getDefaultScanOptionId(availableOptions)) ??
     enabledOptions[0]
+  useScansWebMcp({
+    workspaceId,
+    principalId,
+    visibleDraft: showCreate
+      ? { targetId: selectedTarget, reviewType: selectedOption?.id, budget: engineBudgetCeiling }
+      : null,
+    targets,
+    selectedPreset,
+    setSelectedTarget,
+    setSelectedPreset: choosePreset,
+    setEngineBudgetCeiling: prepareEngineBudget,
+    setShowCreate,
+    setModeResetNotice,
+  })
   const reviewSetupGuidance = selectedTargetDetails
     ? getReviewSetupGuidance({
         targetId: selectedTargetDetails.id,
@@ -363,11 +359,15 @@ export function ScansClient({
     workspaceId,
     surface: "dashboard",
   }
+  const engineBudget = parseEngineBudgetField(engineBudgetCeiling, selectedOption)
   const createScanRequest =
     selectedTarget && selectedOption
       ? {
           workspaceId,
           targetId: selectedTarget,
+          ...(engineBudget.value !== undefined
+            ? { engineBudgetCeilingUsd: engineBudget.value }
+            : {}),
           goal: selectedOption.goal,
           mode: selectedOption.mode,
           ...(selectedOption.workflow !== "REVIEW_TARGET"
@@ -404,8 +404,11 @@ export function ScansClient({
     setScanRecoveryUnavailable(false)
     const scope: ScanSubmissionScope = { principalId, workspaceId, surface: "dashboard" }
     try {
-      setPendingScanSubmission(readPendingScanSubmission(scope))
+      const pending = readPendingScanSubmission(scope)
+      setPendingScanSubmission(pending)
+      prepareEngineBudget(pendingEngineBudgetInput(pending))
     } catch (cause) {
+      prepareEngineBudget("")
       setPendingScanSubmission(null)
       setScanRecoveryUnavailable(true)
       setScanRecoveryError(
@@ -415,7 +418,7 @@ export function ScansClient({
     return () => {
       ++scopeGeneration.current
     }
-  }, [principalId, workspaceId])
+  }, [principalId, workspaceId, prepareEngineBudget])
 
   useEffect(() => {
     const previous = errorScopeRef.current
@@ -493,85 +496,14 @@ export function ScansClient({
     }
   }
 
-  // ─── Eligibility preflight (advisory; POST re-checks authoritatively) ────
-
-  useEffect(() => {
-    if (!showCreate || !selectedTarget || !selectedOption) {
-      // Deferred so the reset lands inside a callback, not the synchronous
-      // effect body (avoids cascading renders).
-      let cancelled = false
-      const reset = () => {
-        if (!cancelled) setEligibility({ status: "idle" })
-      }
-      if (typeof queueMicrotask === "function") queueMicrotask(reset)
-      else setTimeout(reset, 0)
-      return () => {
-        cancelled = true
-      }
-    }
-    const controller = new AbortController()
-    // Deferred so the pending state lands inside a callback, not the
-    // synchronous effect body (avoids cascading renders).
-    let cancelled = false
-    const schedule = () => {
-      if (cancelled) return
-      setEligibility({ status: "checking" })
-      apiGet(
-        `/api/scans/eligibility?${new URLSearchParams({
-          workspaceId,
-          targetId: selectedTarget,
-          goal: selectedOption.goal,
-          mode: selectedOption.mode,
-        }).toString()}`,
-        { schema: scanEligibilitySchema, signal: controller.signal }
-      )
-        .then((result) => {
-          if (!controller.signal.aborted && result) {
-            setEligibility({ status: "ready", eligibility: result })
-          }
-        })
-        .catch((err) => {
-          if (controller.signal.aborted) return
-          if (err instanceof ApiError) {
-            // Structured 4xx (e.g. invalid target) still carries a user-safe reason.
-            setEligibility({
-              status: "ready",
-              eligibility: {
-                allowed: false,
-                code: err.code ?? "ELIGIBILITY_UNAVAILABLE",
-                message: err.message,
-                plan: "UNKNOWN",
-                isTrial: false,
-                remainingMinutes: 0,
-              },
-            })
-          } else {
-            setEligibility({ status: "error" })
-          }
-        })
-    }
-    if (typeof queueMicrotask === "function") queueMicrotask(schedule)
-    else setTimeout(schedule, 0)
-    return () => {
-      cancelled = true
-      controller.abort()
-    }
-    // selectedOption is derived from a freshly-built options array each render,
-    // so the effect keys on its identity fields instead of the object.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
+  const { eligibility, setEligibilityAttempt } = useScanEligibility({
     showCreate,
     workspaceId,
     selectedTarget,
-    selectedOption?.goal,
-    selectedOption?.mode,
-    eligibilityAttempt,
-  ])
-
-  // ─── Supporting files: workspace-scoped attachments for this review ────
-  // Loaded lazily when the sheet opens; only ACTIVE, workspace-owned artifacts
-  // are listed by the API. Selection is inert — ids are validated again
-  // server-side at creation and staged read-only by the worker.
+    selectedOption,
+    engineBudget,
+  })
+  // Attachment ids are validated again server-side before use.
   useEffect(() => {
     if (!showCreate) return
     const controller = new AbortController()
@@ -587,18 +519,18 @@ export function ScansClient({
       })
     return () => controller.abort()
   }, [showCreate, workspaceId])
-
   function toggleAttachment(id: string) {
     setSelectedAttachments((prev) =>
       prev.includes(id) ? prev.filter((v) => v !== id) : [...prev, id]
     )
   }
-
   const eligibilityBlocked = eligibility.status === "ready" && !eligibility.eligibility.allowed
   const startDisabled =
     creating ||
     !selectedTarget ||
+    Boolean(engineBudget.error) ||
     !selectedOption ||
+    !selectedOption.available ||
     (selectedOption?.requiresRevisionInputs === true && !baseRef.trim()) ||
     eligibility.status === "checking" ||
     eligibility.status === "error" ||
@@ -660,35 +592,19 @@ export function ScansClient({
     }
   }
 
-  function handleRetryScan(scan: ScanItem) {
-    const target = targets.find((item) => item.id === scan.target?.id)
-    if (!target) {
-      if (scan.target) {
-        window.location.assign(
-          scanRecoveryHref({ targetId: scan.target.id, goal: scan.goal, mode: scan.mode })
-        )
-      } else {
-        setError("This target is no longer available. Choose another target to run a new scan.")
-      }
-      return
-    }
-    const options = getManualScanOptions({
-      type: target.type,
-      hasApiSpec: Boolean(target.apiSpecUrl),
+  const handleRetryScan = (scan: ScanItem) =>
+    prepareScanRetry(scan, {
+      targets,
+      setSelectedTarget,
+      choosePreset,
+      setBaseRef,
+      setHeadRef,
+      setSelectedFocus,
+      setSelectedAttachments,
+      setError,
+      setModeResetNotice,
+      setShowCreate,
     })
-    const previousPreset = findRecoveryPreset(options, scan.goal, scan.mode)
-    setSelectedTarget(target.id)
-    choosePreset(previousPreset || getDefaultScanOptionId(options))
-    setBaseRef("")
-    setHeadRef("")
-    setSelectedFocus(null)
-    setSelectedAttachments([])
-    setError(null)
-    setModeResetNotice(
-      previousPreset ? null : "The previous review type is unavailable. Choose an available option."
-    )
-    setShowCreate(true)
-  }
 
   return (
     <div>
@@ -698,7 +614,7 @@ export function ScansClient({
             aria-label={`Filter by ${TARGET_SINGULAR.toLowerCase()}`}
             value={targetFilter}
             onChange={(e) => handleTargetFilterChange(e.target.value)}
-            className="h-9 w-44"
+            className="h-11 w-full sm:w-44"
           >
             <option value="">All {TARGET_PLURAL.toLowerCase()}</option>
             {targets.map((t) => (
@@ -711,7 +627,7 @@ export function ScansClient({
             aria-label="Filter by state"
             value={stateFilter}
             onChange={(e) => handleStateFilterChange(e.target.value)}
-            className="h-9 w-40"
+            className="h-11 w-full sm:w-40"
           >
             {SCAN_STATE_FILTERS.map((state) => (
               <option key={state} value={state}>
@@ -796,6 +712,8 @@ export function ScansClient({
         selectedOption={selectedOption}
         choosePreset={choosePreset}
         modeResetNotice={modeResetNotice}
+        engineBudgetCeiling={engineBudgetCeiling}
+        setEngineBudgetCeiling={budgetDraft.setEngineBudgetCeiling}
         selectedFocus={selectedFocus}
         setSelectedFocus={setSelectedFocus}
         reviewSetupGuidance={reviewSetupGuidance}
@@ -807,8 +725,8 @@ export function ScansClient({
         startDisabled={startDisabled}
         creating={creating}
         handleCreateScan={() => handleCreateScan(forceNewAfterRecovery)}
-        showAdvanced={showAdvanced}
-        setShowAdvanced={setShowAdvanced}
+        showAdvanced={budgetDraft.showAdvanced}
+        setShowAdvanced={budgetDraft.setShowAdvanced}
         baseRef={baseRef}
         setBaseRef={setBaseRef}
         headRef={headRef}

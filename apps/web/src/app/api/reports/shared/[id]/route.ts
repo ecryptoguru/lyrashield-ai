@@ -1,4 +1,4 @@
-import { getReportByShareToken, getShareableReport } from "@lyrashield/db"
+import { getReportByShareToken, getShareableReportByToken } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 import { apiError } from "../../../../../lib/api-response"
 import { jsonWithEtag } from "../../../../../lib/http-etag"
@@ -19,8 +19,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       return apiError("REPORT_NOT_FOUND", "Report not found or share link expired", 404)
     }
 
-    const shareable = await getShareableReport(report.id, report.workspaceId)
-    if (!shareable) {
+    const shareable = await getShareableReportByToken(report.id, report.workspaceId, token)
+    if (!shareable || shareable.type === "release_packet") {
       return apiError("REPORT_NOT_FOUND", "Report not found", 404)
     }
 

@@ -2,7 +2,7 @@
 title: "Dependency Scanning With OSV and Lockfiles"
 description: "Scan resolved dependencies with OSV Scanner v2, interpret advisory matches, manage exceptions, update safely and verify the result."
 pubDate: 2026-07-17
-updatedDate: 2026-08-07
+updatedDate: 2026-10-24
 author: lyrashield-team
 tags:
   - vibe-coding-security
@@ -79,6 +79,8 @@ Then answer four practical questions:
 4. Does your application use the affected feature under reachable deployment conditions?
 
 The first three support known-vulnerable-version detection. The fourth requires application context. A matching version can be present without the vulnerable path being reachable. The opposite problem also matters: a clean database match cannot exclude unknown vulnerabilities or dependencies the extraction step missed.
+
+For PHP applications, Composer dependency inventory and the PHP interpreter are separate review subjects. Updating a library or setting `config.platform.php` does not replace the serving runtime. Use the [PHP version evidence guide](/blog/check-php-version-php2shell) for CLI, FPM and image identity; if an alert persists after an update, [verify the complete vendor package and backport evidence](/blog/php2shell-still-flagged-after-updating) before deciding whether it applies.
 
 ## Handle transitive paths and exceptions honestly
 

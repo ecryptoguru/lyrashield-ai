@@ -1,6 +1,7 @@
 ---
 import Base from "@layouts/Base.astro"
 import ProductShot from "@components/ProductShot.astro"
+import { EVIDENCE_STATES, SHIPPED_EVIDENCE_STATES } from "../lib/evidence-states"
 
 const origin = Astro.site?.origin || "http://localhost:4321"
 const canonical = new URL("/methodology", origin).toString()
@@ -10,31 +11,13 @@ const description =
 // One editorial review date drives the visible "Last reviewed" text, the
 // <time datetime> attribute, the page JSON-LD dateModified and the sitemap
 // lastmod (parsed in astro.config.mjs). Change this constant only.
-const reviewed = "2026-10-05"
+const reviewed = "2026-10-24"
 const reviewedLabel = new Date(`${reviewed}T00:00:00Z`).toLocaleDateString("en-GB", {
   day: "numeric",
   month: "short",
   year: "numeric",
   timeZone: "UTC",
 })
-const evidenceStates = [
-  {
-    name: "Detected candidate",
-    meaning: "A scanner found a signal worth reviewing. Confidence can help prioritize it, but does not prove exploitability.",
-  },
-  {
-    name: "Independently verified (future step)",
-    meaning: "Defined for a future separate verification step: a separate receipt would have to support the finding. No shipped path produces this state today, so no finding is in it. Engine confidence alone never creates it.",
-  },
-  {
-    name: "Retest-confirmed",
-    meaning: "A server-owned deterministic retest found the relevant condition absent after a fix, with complete applicable coverage.",
-  },
-  {
-    name: "Inconclusive",
-    meaning: "The available retest evidence cannot establish that the condition is gone. The uncertainty remains visible.",
-  },
-]
 const faq = [
   {
     q: "What is an evidence state?",
@@ -93,10 +76,10 @@ const jsonLd = [
     "@type": "DefinedTermSet",
     name: "LyraShield AI Evidence States",
     description:
-      "The four evidence states LyraShield AI assigns to security findings, from initial detection to retest-confirmed resolution.",
-    hasDefinedTerm: evidenceStates.map((state) => ({
+      "The three shipped evidence states LyraShield AI assigns to security findings: DETECTED, VALIDATED and INCONCLUSIVE.",
+    hasDefinedTerm: SHIPPED_EVIDENCE_STATES.map((state) => ({
       "@type": "DefinedTerm",
-      name: state.name,
+      name: state.code,
       description: state.meaning,
     })),
   },
@@ -111,24 +94,18 @@ const jsonLd = [
 >
   <section class="mx-auto max-w-5xl px-4 py-14 sm:px-6 lg:py-24">
     <header class="max-w-3xl" data-reveal-group>
-      <p class="font-mono text-xs font-semibold tracking-wider text-accent uppercase" data-reveal="fade">Methodology</p>
+
       <h1 class="mt-4 text-4xl font-semibold tracking-tight text-text sm:text-5xl" data-reveal>
         A security result should say what it knows—and what it does not.
       </h1>
       <p class="mt-6 text-lg leading-8 text-text-muted" data-reveal>
-        An evidence state records how strongly a security finding is supported. Three states ship
-        today. Detected means a scanner saw a signal. Retest-confirmed means a server-owned
-        retest found the condition absent after a fix. Inconclusive means the evidence cannot
-        establish the condition is gone. A fourth state, independently verified, is defined for a
-        future separate verification step and no finding is in it today. These are never blended
-        into a single score.
+        Every finding keeps its scope, coverage and evidence state. A scanner signal is
+        detected; a complete deterministic retest can confirm a fix. Missing proof stays inconclusive.
       </p>
-      <div class="mt-6 rounded-xl border border-border bg-bg-raised p-5 text-sm leading-7 text-text-muted" data-reveal="fade">
-        <p class="font-semibold text-text">TL;DR</p>
-        <p class="mt-2">
-          Every finding carries one of three shipped evidence states: <strong>detected</strong> (a scanner signal that needs review), <strong>retest-confirmed</strong> (a deterministic retest found the condition absent) or <strong>inconclusive</strong> (the retained evidence cannot establish resolution). A fourth state, independently verified, is defined for a future separate verification step; no finding is in it today. A score or clean result never overrides these facts.
-        </p>
-      </div>
+      <p class="mt-4 text-sm leading-7 text-text-muted">
+        Independently verified is reserved for a future separate verification step; no finding is in it today.
+        A score or clean result never overrides the retained evidence.
+      </p>
       <p class="mt-4 text-sm text-text-muted" data-reveal="fade">Last reviewed: <time datetime={reviewed}>{reviewedLabel}</time> · Maintained by LyraShield Security + Engineering</p>
     </header>
 
@@ -143,41 +120,43 @@ const jsonLd = [
 
       <ProductShot
         class="mt-10"
-        src="/product/console-trust-runs.webp"
-        alt="The Scans list in the LyraShield console. Five completed scans are listed — release checks, a code review and a deep security review — each showing the engine status, the start and end timestamps and a retained finding count."
-        width={1400}
-        height={883}
-        chrome="app.lyrashieldai.com/scans"
+        src="/product/current-scan-dark.webp"
+        lightSrc="/product/current-scan-light.webp"
+        alt="A completed, sealed scan record in the current dashboard, with retained findings, a zero-count reserved verification column, coverage state and an assurance-report action. The private target name is redacted."
+        width={1600}
+        height={640}
+        chrome="app.lyrashieldai.com/dashboard/scans"
       >
-        <b>Records accumulate; they are not overwritten.</b> Each run keeps what ran, when it started
-        and ended and two counts held separately: what the engine reported and what was retained
-        after review. Target and repository names are blurred.
+        <b>A completed scan keeps its scope and evidence state.</b> This demo-workspace capture
+        shows duration, retained findings and coverage separately. The reserved verification count is zero.
+        Completion is not a guarantee of security. The private target name is redacted.
       </ProductShot>
     </section>
 
     <section aria-labelledby="states-heading" class="py-16">
       <h2 id="states-heading" class="text-2xl font-semibold text-text" data-reveal>Evidence states are not interchangeable</h2>
       <div class="mt-8 divide-y divide-border border-y border-border" data-reveal-group>
-        {evidenceStates.map((state, index) => (
+        {EVIDENCE_STATES.map((state, index) => (
           <article class="grid gap-3 py-7 md:grid-cols-[3rem_13rem_1fr] md:gap-6" data-reveal>
             <span class="font-mono text-xs text-text-muted" aria-hidden="true" data-countup={index + 1}>0{index + 1}</span>
-            <h3 class="font-semibold text-text">{state.name}</h3>
+            <h3 class="font-semibold text-text">{state.label}</h3>
             <p class="leading-7 text-text-muted">{state.meaning}</p>
           </article>
         ))}
       </div>
 
       <ProductShot
-        class="mt-10"
-        src="/product/console-issues.webp"
-        alt="The Findings view in the LyraShield console. Findings are listed with a severity, an evidence state, an open status and a CWE and CVSS reference. A side drawer for the selected finding shows tabs for what to do, technical detail and history, a plain-language explanation and a button to create a fix proposal."
-        width={1400}
-        height={883}
-        chrome="app.lyrashieldai.com/findings"
+        class="mt-10 mx-auto max-w-[48rem]"
+        src="/product/current-findings-dark.webp"
+        lightSrc="/product/current-findings-light.webp"
+        alt="The current finding detail panel separates severity from status and evidence state. Actions lead to retained evidence or a fix proposal. Private finding details are redacted."
+        width={960}
+        height={834}
+        chrome="app.lyrashieldai.com/dashboard/findings"
       >
-        <b>The states, carried on real findings.</b> Severity and evidence state are separate columns —{" "}
-        <i>detected</i> and <i>inconclusive</i> both appear here — and the drawer opens on what to do
-        next rather than raw scanner output. A fix proposal is something you create and review;
+        <b>Severity and evidence state remain distinct.</b> This captured finding is critical,
+        open and inconclusive. The detail panel leads to retained evidence and a fix proposal.
+        A fix proposal is something you create and review;
         nothing auto-merges. Finding titles, file paths and target names are blurred.
       </ProductShot>
     </section>
@@ -252,6 +231,13 @@ const jsonLd = [
           </tbody>
         </table>
       </div>
+    </section>
+
+    <section aria-labelledby="php-coverage-heading" class="border-t border-border py-16" data-reveal-group>
+      <h2 id="php-coverage-heading" class="text-2xl font-semibold text-text" data-reveal>PHP source evidence and runtime proof</h2>
+      <p class="mt-5 max-w-3xl leading-7 text-text-muted" data-reveal>Standard and Deep repository source support detects PHP projects before adding Composer inventory, runtime declaration checks and bounded PHP code analysis. In a monorepo, each PHP service needs its own usable runtime identity; missing identity and incomplete discovery stay visible as coverage limits. These source capabilities require separate release and customer acceptance evidence.</p>
+      <p class="mt-5 max-w-3xl leading-7 text-text-muted" data-reveal>A Dockerfile tag, a Composer platform setting or a public version header cannot establish what is running. Updating a Composer package cannot patch PHP itself. Runtime findings remain inconclusive after a source-only retest because LyraShield has no trusted deployed-runtime verifier; operators need deployment and worker replacement evidence plus independent runtime readback.</p>
+      <p class="mt-5 max-w-3xl leading-7 text-text-muted" data-reveal>The free <a href="/tools/php2shell-checker" class="font-medium text-accent underline underline-offset-4">PHP2Shell checker</a> reviews your reported version and conditions locally in your browser, including a separate 23 October session upload progress notice. It uploads no inputs and sends no exploit or target requests. Its result does not verify a deployment or rule out compromise.</p>
     </section>
 
     <section aria-labelledby="limits-heading" class="rounded-2xl border border-border bg-bg-raised p-7 sm:p-9" data-reveal="scale">

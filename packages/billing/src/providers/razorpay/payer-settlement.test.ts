@@ -205,3 +205,33 @@ describe("payment_link.paid — receipt without pack credit (documented distinct
     expect(ledger.rows.size).toBe(0)
   })
 })
+
+describe("checkout created before trial expiry", () => {
+  it("retains a valid paid pack receipt after expiry without upgrading subscription entitlement", async () => {
+    const { canPurchaseMinutePack } = await import("../../minute-pack-purchase")
+    const { syncSubscription } = await import("../../sync")
+    vi.mocked(syncSubscription).mockClear()
+    vi.useFakeTimers()
+    try {
+      const expiresAt = new Date("2026-10-30T12:00:00Z")
+      vi.setSystemTime(new Date(expiresAt.getTime() - 1_000))
+      expect(
+        canPurchaseMinutePack({ effectivePlan: "FREE", trialState: { isExpired: false } })
+      ).toBe(true)
+      const payment = capturedEvent("pay_PREEXPIRY_CHECKOUT", routePackNotes())
+      vi.setSystemTime(new Date(expiresAt.getTime() + 1_000))
+      expect(
+        canPurchaseMinutePack({ effectivePlan: "FREE", trialState: { isExpired: true } })
+      ).toBe(false)
+      expect((await processRazorpayEvent(payment)).action).toBe("payment.captured.credited")
+      expect(ledger.rows.size).toBe(1)
+      expect([...ledger.rows.values()][0]).toMatchObject({
+        accountId: ACCOUNT,
+        externalId: "pay_PREEXPIRY_CHECKOUT",
+      })
+      expect(syncSubscription).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})

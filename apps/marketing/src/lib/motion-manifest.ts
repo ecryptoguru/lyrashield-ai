@@ -1,3 +1,11 @@
+import {
+  MOTION_VERSION,
+  MOTION_DURATION,
+  MOTION_CHAPTER_DURATION,
+  MOTION_VARIANTS,
+  MOTION_FPS,
+} from "../../../marketing-motion/scripts/motion-media-contract.mjs"
+
 export type EvidenceChapterId =
   "gateway" | "target" | "scan" | "evidence-state" | "fix-proposal" | "retest" | "report"
 
@@ -5,7 +13,7 @@ export interface MotionTrack {
   src: string
   width: number
   height: number
-  duration: 42
+  duration: number
 }
 
 export interface EvidenceWorldChapter {
@@ -31,7 +39,8 @@ export interface EvidenceWorldSupportingCard {
 }
 
 export interface MotionMediaManifest {
-  version: "2"
+  version: string
+  fps: number
   renderHash: string
   desktop: MotionTrack
   portrait: MotionTrack
@@ -46,168 +55,98 @@ export interface MotionMediaManifest {
  */
 export const CHAPTER_POSTER_ALT: Readonly<Record<EvidenceChapterId, string>> = {
   gateway:
-    "Abstract 3D artwork for the opening chapter: a glowing cyan sphere on a pedestal with a white rail looping through dark pillars on a deep teal background.",
-  target:
-    "Abstract 3D artwork for the target chapter: a glowing faceted orb connected by white cables to a row of colored panels and a dark console.",
-  scan: "Abstract 3D artwork for the review chapter: glowing pale-blue arches framing four colored panels beneath a floating console in a dark void.",
+    "Architectural navy workspace with a cyan-edged aperture and a retained evidence record.",
+  target: "Evidence record inside a bounded scope plane along a continuous workspace.",
+  scan: "Parallel cyan review routes meet below the same retained evidence record.",
   "evidence-state":
-    "Abstract 3D artwork for the evidence chapter: four vertical panels in slate, mint, yellow and rose connected by a light beam to a dark console.",
+    "Evidence record framed by finding planes; an amber limitation remains visible.",
   "fix-proposal":
-    "Abstract 3D artwork for the fix chapter: a pale-yellow card with curled tabs layered over dark panels, with a cyan ribbon extending off-screen.",
-  retest:
-    "Abstract 3D artwork for the retest chapter: cyan and green orbital rings circling a dark core, with a light beam rising into a console showing data bars.",
-  report:
-    "Abstract 3D artwork for the report chapter: a dark floating console panel with colored indicator bars and a pale-blue beam extending downward.",
+    "A separate translucent proposal layer beside the evidence record and approval boundary.",
+  retest: "Two comparison planes with an amber gap representing incomplete evidence.",
+  report: "The retained record approaches a report stack with its amber limitation intact.",
 }
 
 const chapterCopy: ReadonlyArray<Omit<EvidenceWorldChapter, "desktopPoster" | "portraitPoster">> = [
   {
     id: "gateway",
-    start: 0,
-    end: 6,
-    eyebrow: 'From "it works" to "ready to ship"',
-    title: "One reviewable record of what you checked, fixed and retested before you ship.",
-    body: "AI builds fast. LyraShield keeps what you checked, how you checked it and what changed after in one reviewable record instead of scattered chats and manual checks.",
-    supportingCard: {
-      eyebrow: "Live in open beta",
-      title: "Start with the surface you need to ship.",
-      body: "Review a repository, public URL or API. Use a passive Lite Check for a quick public-surface read or create an account for the full evidence loop.",
-      items: [
-        "Repository, URL and API targets",
-        "GitHub and coding-agent workflows",
-        "Approval-gated fixes and fresh retests",
-      ],
-    },
+    start: 0 * MOTION_CHAPTER_DURATION,
+    end: 1 * MOTION_CHAPTER_DURATION,
+    eyebrow: "From target to report.",
+    title: "From target to report.",
+    body: "Keep your review, proposed fixes and retest results together.",
   },
   {
     id: "target",
-    start: 6,
-    end: 12,
-    eyebrow: "01 / Target",
-    title: "Choose what you are actually shipping.",
-    body: "Name your repo, live URL or API before anything runs. Nothing is tested outside the boundary you explicitly approve.",
+    start: 1 * MOTION_CHAPTER_DURATION,
+    end: 2 * MOTION_CHAPTER_DURATION,
+    eyebrow: "Set the scope.",
+    title: "Set the scope.",
+    body: "Choose a repository, website or API you are authorized to test.",
   },
   {
     id: "scan",
-    start: 12,
-    end: 18,
-    eyebrow: "02 / Review",
-    title: "Run checks that do not blur together.",
-    body: "Deterministic checks find known signals. AI-assisted review examines logic, auth flows and data handling. Separate coverage layers show what kind of evidence you actually have.",
-    supportingCard: {
-      eyebrow: "Vibe Security 50",
-      title: "Coverage stays explicit, including what needs human evidence.",
-      body: "The control ledger separates 43 code or URL review controls from 7 evidence-required controls. Unmatched or unsupported checks remain inconclusive, never silently passed.",
-      status: "43 review controls · 7 evidence-required",
-    },
+    start: 2 * MOTION_CHAPTER_DURATION,
+    end: 3 * MOTION_CHAPTER_DURATION,
+    eyebrow: "See the findings.",
+    title: "See the findings.",
+    body: "Coverage shows which checks ran and where assessment was limited.",
   },
   {
     id: "evidence-state",
-    start: 18,
-    end: 24,
-    eyebrow: "03 / Evidence",
-    title: 'Keep "we saw it" separate from "we proved it".',
-    body: "Detected, retest-confirmed and inconclusive remain distinct. Missing proof stays visible; it never becomes a silent pass.",
-    supportingCard: {
-      eyebrow: "Illustrative evidence ledger",
-      title: "Every conclusion carries its basis and its limit.",
-      body: "See which check produced the signal, whether independent proof exists and whether a fresh retest confirmed the change. Shared records omit repository coordinates and raw secrets.",
-      items: [
-        "Finding and evidence state",
-        "Control-level coverage receipt",
-        "Retest outcome and stated limitations",
-      ],
-    },
+    start: 3 * MOTION_CHAPTER_DURATION,
+    end: 4 * MOTION_CHAPTER_DURATION,
+    eyebrow: "See what is supported.",
+    title: "See what is supported.",
+    body: "Detected, retest-confirmed and inconclusive results stay distinct.",
   },
   {
     id: "fix-proposal",
-    start: 24,
-    end: 30,
-    eyebrow: "04 / Fix",
-    title: "Get a fix proposal you review. Nothing auto-merges.",
-    body: "Review a plain-English explanation and staged patch proposal. PR execution stays blocked until a server-generated patch is bound to your exact approval.",
-    supportingCard: {
-      eyebrow: "Where you build",
-      title: "Bring the review loop into your coding agent.",
-      body: "Use the hosted MCP server and supported agent integrations to inspect results and prepare approval-gated remediation without copying findings between tools.",
-      items: [
-        "OAuth-first agent connections",
-        "GitHub-aware review context",
-        "No automatic merge or silent write",
-      ],
-    },
+    start: 4 * MOTION_CHAPTER_DURATION,
+    end: 5 * MOTION_CHAPTER_DURATION,
+    eyebrow: "Review the proposed fix.",
+    title: "Review the proposed fix.",
+    body: "You approve the proposal. Nothing auto-merges.",
   },
   {
     id: "retest",
-    start: 30,
-    end: 36,
-    eyebrow: "05 / Retest",
-    title: "Confirm with a fresh check, not the same conversation.",
-    body: "A fresh, server-owned scan checks the fix. Complete deterministic coverage can confirm it; engine-only absence stays inconclusive.",
+    start: 5 * MOTION_CHAPTER_DURATION,
+    end: 6 * MOTION_CHAPTER_DURATION,
+    eyebrow: "Check the change again.",
+    title: "Check the change again.",
+    body: "Complete deterministic coverage can confirm a fix; missing proof stays inconclusive.",
   },
   {
     id: "report",
-    start: 36,
-    end: 42,
-    eyebrow: "06 / Report",
-    title: "Ship one report that shows its limits too.",
-    body: "Scope, coverage, findings, fixes, retest outcomes and limits become one checksum-bound launch report: a private snapshot written once per scan and report type, bound to a recorded sha256 manifest checksum. Shared versions exclude repository coordinates and raw secrets.",
-    supportingCard: {
-      eyebrow: "Your first launch report",
-      title: "Turn the next release into evidence your team can review.",
-      body: "Create a workspace, add the target you are shipping and choose the depth of review. LyraShield keeps the resulting scope, evidence and retest outcome together.",
-      primaryCta: {
-        label: "Start free trial",
-        href: "https://app.lyrashieldai.com/sign-up?source=landing_story&cta=report",
-        id: "story-report-create-account",
-      },
-      secondaryCta: {
-        label: "Read the definitions",
-        href: "/methodology",
-        id: "story-report-methodology",
-      },
-    },
+    start: 6 * MOTION_CHAPTER_DURATION,
+    end: 7 * MOTION_CHAPTER_DURATION,
+    eyebrow: "Share the result.",
+    title: "Share the result.",
+    body: "Bring scope, findings, retest outcomes and limitations into one report.",
   },
 ]
-
-function assertChapterContract() {
-  const ids = new Set<EvidenceChapterId>()
-  let expectedStart = 0
-
-  for (const chapter of chapterCopy) {
-    if (ids.has(chapter.id)) throw new Error(`Duplicate motion chapter: ${chapter.id}`)
-    if (chapter.start !== expectedStart || chapter.end <= chapter.start)
-      throw new Error(`Invalid motion chapter range: ${chapter.id}`)
-    ids.add(chapter.id)
-    expectedStart = chapter.end
-  }
-
-  if (expectedStart !== 42) throw new Error("Motion chapters must span exactly 42 seconds")
-}
-
-assertChapterContract()
 
 export function createMotionMediaManifest(
   mediaUrl: string,
   renderHash = "local"
 ): MotionMediaManifest {
   const base = mediaUrl.replace(/\/$/, "")
-  const root = `${base}/assurance-world/v2/${renderHash}`
+  const root = `${base}/assurance-world/v${MOTION_VERSION}/${renderHash}`
 
   return {
-    version: "2",
+    version: MOTION_VERSION,
+    fps: MOTION_FPS,
     renderHash,
     desktop: {
       src: `${root}/desktop/assurance-world.mp4`,
-      width: 1600,
-      height: 900,
-      duration: 42,
+      width: MOTION_VARIANTS.desktop.width,
+      height: MOTION_VARIANTS.desktop.height,
+      duration: MOTION_DURATION,
     },
     portrait: {
       src: `${root}/portrait/assurance-world.mp4`,
       width: 720,
       height: 1280,
-      duration: 42,
+      duration: MOTION_DURATION,
     },
     chapters: chapterCopy.map((chapter) => ({
       ...chapter,

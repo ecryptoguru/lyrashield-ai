@@ -127,6 +127,25 @@ describe.skipIf(!enabled)("bounded producers against disposable Redis", () => {
     expect(await inspect.getJob(scanId)).toBeTruthy()
     expect(await api.enqueueScan(data)).toBe(scanId)
     expect((await inspect.getRanges(["wait"], 0, -1)).filter((id) => id === scanId)).toHaveLength(1)
+    const executed: string[] = []
+    const worker = new Worker(
+      "scans",
+      async (job) => {
+        executed.push(job.id!)
+      },
+      {
+        connection: { url: backendUrl, maxRetriesPerRequest: null },
+        prefix: fixturePrefix,
+      }
+    )
+    try {
+      await new Promise<void>((resolve) => worker.once("completed", () => resolve()))
+      expect(await api.enqueueScan(data)).toBe(scanId)
+      expect(await (await inspect.getJob(scanId))?.getState()).toBe("completed")
+      expect(executed).toEqual([scanId])
+    } finally {
+      await worker.close()
+    }
     const job = await inspect.getJob(scanId)
     await job?.remove()
   }, 15_000)

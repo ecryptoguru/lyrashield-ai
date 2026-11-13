@@ -124,3 +124,42 @@ describe("withPreservedSearchParams", () => {
     ).toBe("/dashboard/findings?tab=evidence&scanId=scan-3&target=target-2")
   })
 })
+
+it("combines all three filter axes without losing scan and target scope", () => {
+  const state = parseFindingListParams({
+    status: "OPEN",
+    severity: "HIGH",
+    evidence: "VERIFIED",
+    scanId: "scan-1",
+    target: "target-1",
+  })
+  expect(state).toMatchObject({ scanId: "scan-1", target: "target-1", scopeValid: true })
+  expect(findingFilterToApiQuery(state.filter)).toEqual({
+    status: "OPEN",
+    severity: "HIGH",
+    verified: "true",
+  })
+})
+
+it("supports pending retest and unverified evidence independently", () => {
+  const state = parseFindingListParams({
+    status: "FIXED_PENDING_RETEST",
+    severity: "ALL",
+    evidence: "UNVERIFIED",
+  })
+  expect(findingFilterToApiQuery(state.filter)).toEqual({
+    status: "FIXED_PENDING_RETEST",
+    verified: "false",
+  })
+})
+
+it("preserves the scope of legacy exclusive links and validates new axes", () => {
+  expect(findingFilterToApiQuery(parseFindingListParams({ filter: "HIGH" }).filter)).toEqual({
+    severity: "HIGH",
+  })
+  expect(
+    findingFilterToApiQuery(
+      parseFindingListParams({ status: "ALL", severity: "DROP TABLE", evidence: "invalid" }).filter
+    )
+  ).toEqual({})
+})

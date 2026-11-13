@@ -4,6 +4,7 @@ import {
   clearPendingScanSubmission,
   clearPendingScanSubmissionIfNotSubmitted,
   readPendingScanSubmission,
+  pendingEngineBudgetInput,
   recordAcceptedScan,
   recordScanOperation,
   runScanSubmission,
@@ -37,6 +38,24 @@ const firstKey = "11111111-1111-4111-8111-111111111111"
 const secondKey = "22222222-2222-4222-8222-222222222222"
 
 describe("recoverable scan submissions", () => {
+  it("recovers the exact requested engine ceiling after reload and rejects a changed amount on retry", () => {
+    const storage = new MemoryStorage()
+    const limited = { ...payload, engineBudgetCeilingUsd: 1 }
+    beginScanSubmission(scope, limited, storage, () => firstKey)
+    const reloaded = readPendingScanSubmission(scope, storage)
+    expect(pendingEngineBudgetInput(reloaded)).toBe("1")
+    expect(beginScanSubmission(scope, limited, storage, () => secondKey).kind).toBe("existing")
+    expect(
+      beginScanSubmission(
+        scope,
+        { ...limited, engineBudgetCeilingUsd: 2 },
+        storage,
+        () => secondKey
+      ).kind
+    ).toBe("conflict")
+    expect(beginScanSubmission(scope, payload, storage, () => secondKey).kind).toBe("conflict")
+  })
+
   it("clears only a pending key whose response proves it was not submitted", () => {
     const storage = new MemoryStorage()
     beginScanSubmission(scope, payload, storage, () => firstKey)

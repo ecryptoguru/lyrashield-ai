@@ -14,6 +14,7 @@ export default defineConfig(({ mode }) => {
       assetsInlineLimit: 0,
     },
     define: {
+      __CAPTURE_DURATION__: Number(process.env.VITE_COMP_DURATION || env.VITE_COMP_DURATION || 56),
       __COMPOSITION_ID__: JSON.stringify(process.env.VITE_COMP_ID || env.VITE_COMP_ID),
       __COMPOSITION_WIDTH__: JSON.stringify(
         Number(process.env.VITE_COMP_WIDTH || env.VITE_COMP_WIDTH)

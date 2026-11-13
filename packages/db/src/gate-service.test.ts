@@ -162,9 +162,12 @@ describe("handleFixPrMergedAndReevaluate (WP3 loop-closure anchoring)", () => {
       await expect(
         handleFixPrMergedAndReevaluate("workspace-1", "lyrashield/fix-abc123", 42)
       ).resolves.not.toBeNull()
-      const advisoryKeys = mockPrisma.$executeRaw.mock.calls.map((call) => call[1])
+      const advisoryKeys = mockPrisma.$executeRaw.mock.calls
+        .filter((call) => String(call[0]).includes("pg_advisory_xact_lock"))
+        .map((call) => call[1])
       expect(advisoryKeys).toEqual([
         "fix-loop:workspace-1:lyrashield/fix-abc123",
+        "scan-user:owner-user",
         "fix-loop:workspace-1:lyrashield/fix-abc123",
       ])
     } finally {
@@ -181,7 +184,7 @@ describe("handleFixPrMergedAndReevaluate (WP3 loop-closure anchoring)", () => {
     expect(workerAvailable).toHaveBeenCalledOnce()
   })
 
-  it("loads only verdict-relevant verification receipts", async () => {
+  it("keeps legacy retest claims uncertain without complete bound evidence", async () => {
     mockPrisma.scan.findFirst.mockReset().mockResolvedValue(null)
     const receipts = [
       { status: "DETECTED", method: "RETEST", scanId: "retest-scan" },
@@ -202,15 +205,20 @@ describe("handleFixPrMergedAndReevaluate (WP3 loop-closure anchoring)", () => {
         verificationStatus: "VALIDATED",
         lastSeenAt: new Date(),
         scanId: "source-scan",
+        dedupeKey: "finding-key",
         disposition: null,
         dispositionActorUserId: null,
         dispositionReason: null,
         dispositionAssessmentId: null,
         dispositionAt: null,
         canonicalFindingId: null,
-        verificationReceipts: receipts.filter((receipt) =>
-          select.verificationReceipts.where.status.in.includes(receipt.status)
-        ),
+        verificationReceipts: receipts
+          .filter(
+            (receipt) =>
+              receipt.method === "RETEST" ||
+              select.verificationReceipts.where.OR[0].status.in.includes(receipt.status)
+          )
+          .reverse(),
       },
     ])
 
@@ -221,14 +229,14 @@ describe("handleFixPrMergedAndReevaluate (WP3 loop-closure anchoring)", () => {
         where: { workspaceId: "workspace-1", targetId: "target-1", deletedAt: null },
         select: expect.objectContaining({
           verificationReceipts: expect.objectContaining({
-            where: { status: { in: ["VALIDATED", "VERIFIED"] } },
+            where: { OR: [{ status: { in: ["VALIDATED", "VERIFIED"] } }, { method: "RETEST" }] },
           }),
         }),
       })
     )
     expect(vi.mocked(computeGateVerdict).mock.lastCall?.[0].findings[0]).toMatchObject({
-      hasPositiveEvidence: true,
-      retestConfirmedResolved: true,
+      hasPositiveEvidence: false,
+      retestConfirmedResolved: false,
     })
 
     receipts.pop()

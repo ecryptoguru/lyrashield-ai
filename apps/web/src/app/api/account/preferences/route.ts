@@ -1,10 +1,11 @@
+import { apiError } from "../../../../lib/api-response"
 import { getSession } from "@lyrashield/auth/server"
 import { env } from "@lyrashield/config"
 import { withAccountRLS } from "@lyrashield/db"
 import { logger } from "@lyrashield/logger"
 import { NextResponse } from "next/server"
 import { z } from "zod"
-import { withCookieMutation } from "../../../../lib/api-auth"
+import { withApiRequest, withCookieMutation } from "../../../../lib/api-auth"
 import { clearOptionalTrackingCookies } from "../../../../lib/analytics-preference"
 
 const PatchBody = z.object({ analyticsEnabled: z.boolean() }).strict()
@@ -169,7 +170,7 @@ function setPreferenceCookie(response: NextResponse, request: Request, enabled: 
   )
 }
 
-export async function GET(request: Request): Promise<NextResponse> {
+async function get(request: Request): Promise<NextResponse> {
   let phase: "session_lookup" | "preference_read" = "session_lookup"
   try {
     const session = await getSession()
@@ -192,13 +193,7 @@ export async function GET(request: Request): Promise<NextResponse> {
     )
   } catch (error) {
     logPreferenceFailure("GET", phase, error)
-    return privateResponse(
-      request,
-      NextResponse.json(
-        { success: false, error: { code: "INTERNAL_ERROR", message: "Could not load preference" } },
-        { status: 500 }
-      )
-    )
+    return privateResponse(request, apiError("INTERNAL_ERROR", "Could not load preference", 500))
   }
 }
 
@@ -212,13 +207,7 @@ async function patch(request: Request): Promise<NextResponse> {
     const body: unknown = await request.json().catch(() => null)
     const parsed = PatchBody.safeParse(body)
     if (!parsed.success) {
-      return privateResponse(
-        request,
-        NextResponse.json(
-          { success: false, error: { code: "VALIDATION_ERROR", message: "Invalid preference" } },
-          { status: 400 }
-        )
-      )
+      return privateResponse(request, apiError("VALIDATION_ERROR", "Invalid preference", 400))
     }
 
     phase = "preference_write"
@@ -243,13 +232,7 @@ async function patch(request: Request): Promise<NextResponse> {
     logPreferenceFailure("PATCH", phase, error)
     const response = privateResponse(
       request,
-      NextResponse.json(
-        {
-          success: false,
-          error: { code: "INTERNAL_ERROR", message: "Could not update preference" },
-        },
-        { status: 500 }
-      )
+      apiError("INTERNAL_ERROR", "Could not update preference", 500)
     )
     // A browser opt-out is honored locally even if the durable account write is
     // temporarily unavailable; the caller can retry the account save later.
@@ -260,3 +243,5 @@ async function patch(request: Request): Promise<NextResponse> {
 }
 
 export const PATCH = withCookieMutation(patch)
+
+export const GET = withApiRequest(get)

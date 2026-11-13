@@ -166,18 +166,6 @@ describe("installAgentPlugin", () => {
     await rm(tempDir, { recursive: true, force: true })
   })
 
-  it("stages plugin files without requiring local credentials", async () => {
-    delete process.env.LYRASHIELD_API_KEY
-    const tempDir = await mkdtemp(path.join(tmpdir(), "lyra-plugin-"))
-    const dest = path.join(tempDir, "plugins", "lyrashield")
-    const agent = makeAgent(dest)
-
-    const result = await installAgentPlugin({ agent, cwd: tempDir, yes: true })
-    expect(result.outcome).toBe("CONFIGURED")
-
-    await rm(tempDir, { recursive: true, force: true })
-  })
-
   it("installs a remote OAuth plugin before client authentication", async () => {
     delete process.env.LYRASHIELD_API_KEY
     const tempDir = await mkdtemp(path.join(tmpdir(), "lyra-plugin-"))
@@ -186,6 +174,7 @@ describe("installAgentPlugin", () => {
 
     const result = await installAgentPlugin({ agent, cwd: tempDir })
     expect(result.outcome).toBe("CONFIGURED")
+    expect(result.path).toBe(dest)
     await expect(access(path.join(dest, "plugin.json"))).resolves.toBeUndefined()
 
     await rm(tempDir, { recursive: true, force: true })
@@ -217,20 +206,6 @@ describe("installAgentPlugin", () => {
     await expect(access(path.join(outside, "lyrashield"))).rejects.toThrow()
     await rm(tempDir, { recursive: true, force: true })
     await rm(outside, { recursive: true, force: true })
-  })
-
-  it("installs to a fresh destination without --yes", async () => {
-    const tempDir = await mkdtemp(path.join(tmpdir(), "lyra-plugin-"))
-    const dest = path.join(tempDir, "plugins", "lyrashield")
-    const agent = makeAgent(dest)
-
-    const result = await installAgentPlugin({ agent, cwd: tempDir })
-    expect(result.outcome).toBe("CONFIGURED")
-    expect(result.path).toBe(dest)
-
-    await expect(access(dest)).resolves.toBeUndefined()
-
-    await rm(tempDir, { recursive: true, force: true })
   })
 
   it("preserves existing install on copy failure and restores backup", async () => {

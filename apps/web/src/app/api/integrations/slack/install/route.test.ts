@@ -23,6 +23,7 @@ const {
 
 vi.mock("../../../../../lib/api-auth", () => ({
   withCookieMutation: (handler: unknown) => handler,
+  withApiRequest: (handler: unknown) => handler,
   authErrorResponse: vi.fn((error: unknown) =>
     error instanceof Error && error.message === "FORBIDDEN"
       ? Response.json({ success: false, error: { code: "FORBIDDEN" } }, { status: 403 })

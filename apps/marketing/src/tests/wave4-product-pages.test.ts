@@ -57,10 +57,15 @@ describe("Wave 4 core product pages", () => {
     expect(scan).toContain("Review the repository too")
   })
 
-  it("pricing page opens with one trial block and a three-row audience chooser", () => {
+  it("pricing co-locates plan choices with prices after mode selection", () => {
     const pricing = page("pricing.astro")
     expect(pricing).toContain("trial-block")
     expect(pricing).toContain("Choose a starting point")
+    expect(pricing).not.toContain("Every limit below comes from the plan catalog")
+    expect(pricing.indexOf('id="tab-cloud"')).toBeLessThan(
+      pricing.indexOf("data-monthly={plan.price.usd.monthly}")
+    )
+    expect(pricing.match(/href=\{`\$\{appUrl\}\/sign-up\?plan=\$\{plan.id\}`\}/g)).toHaveLength(1)
     // The two internal-wording sentences from Spec finding B2 are gone.
     expect(pricing).not.toContain("existing monthly or annual catalog")
     expect(pricing).not.toContain("confirmed in the authenticated product")
@@ -74,11 +79,13 @@ describe("Wave 4 core product pages", () => {
     expect(pricing).not.toContain("Start with ${plan.name}")
   })
 
-  it("agents page leads with the login command and ends with the trial step", () => {
+  it("agents puts the client finder before general setup and retains the trial step", () => {
     const agents = page("agents.astro")
     expect(agents).toContain("CTA_LABEL.signUp")
     // A client picker over the documented workflows.
     expect(agents).toContain("data-agent-client-filter")
+    expect(agents.indexOf('id="clients"')).toBeLessThan(agents.indexOf('id="setup"'))
+    expect(agents).toContain('href="#clients"')
   })
 
   it("webmcp page puts the checker above the fold and lists the 14 controls once", () => {

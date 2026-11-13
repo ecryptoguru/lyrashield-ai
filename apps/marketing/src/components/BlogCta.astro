@@ -1,53 +1,25 @@
 ---
 import WaitlistForm from "@components/WaitlistForm.astro"
-
-// Product paths out of the 161-post library. Before this block, no post linked
-// to /pricing or /agents at all, so the largest content asset on the site sent
-// no reader and no equity to the pages that convert. Labels are the ones the
-// header and footer already use; nothing here makes a new claim.
-const productLinks = [
-  { label: "Pricing", href: "/pricing", description: "Cloud plans, minute packs and the free trial." },
-  {
-    label: "For coding agents",
-    href: "/agents",
-    description: "Run LyraShield from Claude Code, Cursor, Codex and 23 more clients.",
-  },
-  {
-    label: "Methodology",
-    href: "/methodology",
-    description: "What an evidence state means and what a result does not prove.",
-  },
-  { label: "Free Lite Check", href: "/scan", description: "A passive URL check with no signup." },
-]
+interface Props { tags?: string[] }
+const { tags = [] } = Astro.props
+const path = Astro.url.pathname
+const next = path.includes("php2shell") ? { href: "/tools/php2shell-checker", label: "Check your PHP version", description: "Use the browser-local version checker, then follow the relevant remediation guidance." } :
+  tags.includes("access-control") ? { href: "/tools/supabase-rls-checker", label: "Review policy SQL locally", description: "Look for policy patterns, then verify isolation with separate accounts." } :
+  tags.includes("agent-security") ? { href: "/agents", label: "Connect your coding agent", description: "Find the documented setup for your client and keep approvals in your workflow." } :
+  tags.includes("web-security") ? { href: "/tools/security-headers-checker", label: "Review your response headers", description: "Run a focused browser-local check and see its limitations." } :
+  { href: "/methodology", label: "See how evidence is assessed", description: "Understand scope, coverage and what a retest result can establish." }
 ---
-
-<section aria-labelledby="blog-cta-heading" class="mt-16 border-t border-border pt-12">
-  <div class="text-center">
-    <h2 id="blog-cta-heading" class="text-2xl font-semibold tracking-tight text-text">
-      Stay in the loop.
-    </h2>
-  </div>
-  <div class="mt-8">
-    <WaitlistForm />
-  </div>
-  <nav aria-labelledby="blog-next-steps-heading" class="mt-12 border-t border-border pt-8">
-    <h2 id="blog-next-steps-heading" class="font-mono text-xs font-semibold tracking-[.18em] text-accent uppercase">
-      Next steps
-    </h2>
-    <ul class="mt-5 grid gap-4 sm:grid-cols-2">
-      {
-        productLinks.map((link) => (
-          <li>
-            <a
-              href={link.href}
-              class="flex min-h-11 flex-col justify-center rounded-lg border border-border bg-bg-raised px-4 py-3 no-underline hover:border-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-            >
-              <span class="font-semibold text-text">{link.label}</span>
-              <span class="mt-1 text-sm text-text-muted">{link.description}</span>
-            </a>
-          </li>
-        ))
-      }
-    </ul>
+<section aria-labelledby="blog-cta-heading" class="mt-16 border-t border-border pt-10">
+  <h2 id="blog-cta-heading" class="text-2xl font-semibold tracking-tight text-text">Put this guide to work.</h2>
+  <p class="mt-3 max-w-prose leading-7 text-text-muted">{next.description}</p>
+  <a href={next.href} class="mt-5 inline-flex min-h-11 items-center rounded-lg bg-accent px-5 py-3 font-semibold text-bg transition-colors hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent">{next.label}<span aria-hidden="true" class="ml-2">→</span></a>
+  <nav aria-label="Explore LyraShield" class="mt-5 flex flex-wrap gap-x-6 gap-y-2 text-sm text-accent">
+    <a class="inline-flex min-h-11 items-center underline underline-offset-4" href="/pricing">Cloud plans and trial</a>
+    <a class="inline-flex min-h-11 items-center underline underline-offset-4" href="/agents">Coding agent setup</a>
+    <a class="inline-flex min-h-11 items-center underline underline-offset-4" href="/scan">Free Lite Check</a>
   </nav>
+  <details class="mt-8 border-t border-border pt-4">
+    <summary class="flex min-h-11 cursor-pointer items-center text-sm font-semibold text-text">Get occasional product updates</summary>
+    <div class="mt-4"><WaitlistForm /></div>
+  </details>
 </section>

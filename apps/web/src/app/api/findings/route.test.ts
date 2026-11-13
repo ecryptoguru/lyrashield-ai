@@ -1,3 +1,4 @@
+import { resolveOAuthReadScope } from "../../../../../../packages/auth/src/oauth-read-scope"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 vi.mock("next/cache", () => ({
@@ -12,10 +13,38 @@ vi.mock("next/cache", () => ({
 const listFindings = vi.fn()
 const getFindingStats = vi.fn()
 const validateFindingScope = vi.fn()
+const getDelegatedActiveTargetIds = vi.fn()
 const requirePermission = vi.fn()
 
-vi.mock("@lyrashield/db", () => ({ listFindings, getFindingStats, validateFindingScope }))
-vi.mock("@lyrashield/auth/server", () => ({ requirePermission }))
+vi.mock("@lyrashield/db", () => ({
+  listFindings,
+  getFindingStats,
+  validateFindingScope,
+  getDelegatedActiveTargetIds,
+  getDelegatedScanAccess: vi.fn(),
+  withDelegatedReadAuthority: async (
+    params: {
+      targetId?: string
+      allTargets?: boolean
+      allowedTargetIds?: string[]
+    },
+    run: (
+      tx: unknown,
+      authority: { targetId?: string; targetIds?: string[]; allowedProfiles: string[] }
+    ) => unknown
+  ) => {
+    const active = await getDelegatedActiveTargetIds(params)
+    if (params.targetId && !active?.includes(params.targetId)) throw new Error("FORBIDDEN")
+    return run(
+      {},
+      {
+        ...(params.targetId ? { targetId: params.targetId } : { targetIds: active ?? [] }),
+        allowedProfiles: ["SAFE", "STANDARD", "QUICK"],
+      }
+    )
+  },
+}))
+vi.mock("@lyrashield/auth/server", () => ({ resolveOAuthReadScope, requirePermission }))
 vi.mock("@lyrashield/auth", () => ({ PERMISSIONS: { finding: { view: "finding:view" } } }))
 vi.mock("@lyrashield/logger", () => ({ setRequestId: vi.fn(), logger: { error: vi.fn() } }))
 
@@ -49,6 +78,7 @@ describe("GET /api/findings", () => {
     vi.clearAllMocks()
     requirePermission.mockResolvedValue({ session: { userId: "user-1" } })
     getFindingStats.mockResolvedValue({ total: 0 })
+    getDelegatedActiveTargetIds.mockResolvedValue(["target-1"])
     validateFindingScope.mockResolvedValue({ available: true, target: null, scanId: null })
   })
 
@@ -141,7 +171,15 @@ describe("GET /api/findings", () => {
     )
     const body = await response.json()
 
-    expect(getFindingStats).toHaveBeenCalledWith("ws-1", undefined, undefined)
+    expect(getFindingStats).toHaveBeenCalledWith(
+      "ws-1",
+      undefined,
+      undefined,
+      undefined,
+      false,
+      undefined,
+      undefined
+    )
     expect(body.data).toEqual({ total: 0 })
     expect(listFindings).not.toHaveBeenCalled()
   })
@@ -195,4 +233,98 @@ describe("GET /api/findings", () => {
     expect(response.status).toBe(400)
     expect(listFindings).not.toHaveBeenCalled()
   })
+})
+
+describe("OAuth finding read scope", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    requirePermission.mockResolvedValue({
+      session: {
+        userId: "user-1",
+        oauth: {
+          workspaceId: "ws-1",
+          connectionId: "conn-1",
+          authorizationVersion: 2,
+          allTargets: false,
+          allowedTargetIds: ["target-1"],
+        },
+      },
+      workspace: {
+        member: { id: "member-1", role: "OWNER", updatedAt: new Date("2026-11-05T10:00:00Z") },
+      },
+    })
+    validateFindingScope.mockResolvedValue({ available: true, target: null, scanId: null })
+    listFindings.mockResolvedValue({ items: [], nextCursor: null })
+    getFindingStats.mockResolvedValue({ total: 0 })
+  })
+
+  it("rejects an explicit target outside the grant before any finding read", async () => {
+    const response = await GET(
+      new Request("http://localhost/api/findings?workspaceId=ws-1&targetId=target-2")
+    )
+    expect(response.status).toBe(403)
+    expect(listFindings).not.toHaveBeenCalled()
+    expect(validateFindingScope).not.toHaveBeenCalled()
+  })
+
+  it("bounds omitted-target pages and their cursors to the grant", async () => {
+    await GET(new Request("http://localhost/api/findings?workspaceId=ws-1&cursor=finding-1"))
+    expect(listFindings).toHaveBeenCalledWith(
+      expect.objectContaining({ targetIds: ["target-1"], cursor: "finding-1" }),
+      expect.any(Object)
+    )
+  })
+
+  it("uses the identical target scope for statistics", async () => {
+    await GET(new Request("http://localhost/api/findings?workspaceId=ws-1&stats=true"))
+    expect(getFindingStats).toHaveBeenCalledWith(
+      "ws-1",
+      undefined,
+      undefined,
+      ["target-1"],
+      true,
+      expect.any(Object),
+      ["SAFE", "STANDARD", "QUICK"]
+    )
+  })
+
+  it("denies an explicit target once its delegated lifecycle is unavailable", async () => {
+    requirePermission.mockResolvedValueOnce({
+      session: {
+        userId: "user-1",
+        oauth: {
+          workspaceId: "ws-1",
+          connectionId: "conn-1",
+          authorizationVersion: 2,
+          allTargets: false,
+          allowedTargetIds: ["target-deleted"],
+        },
+      },
+      workspace: {
+        member: { id: "member-1", role: "OWNER", updatedAt: new Date("2026-11-05T10:00:00Z") },
+      },
+    })
+    getDelegatedActiveTargetIds.mockResolvedValueOnce(null)
+
+    const response = await GET(
+      new Request("http://localhost/api/findings?workspaceId=ws-1&targetId=target-deleted")
+    )
+
+    expect(response.status).toBe(403)
+    expect(listFindings).not.toHaveBeenCalled()
+    expect(validateFindingScope).not.toHaveBeenCalled()
+  })
+})
+
+it("sends an empty OAuth grant to the query without widening it", async () => {
+  vi.clearAllMocks()
+  requirePermission.mockResolvedValueOnce({
+    session: { oauth: { connectionId: "conn-1", allTargets: false, allowedTargetIds: [] } },
+  })
+  listFindings.mockResolvedValueOnce({ items: [], nextCursor: null })
+  validateFindingScope.mockResolvedValueOnce({ available: true, target: null, scanId: null })
+  const response = await GET(new Request("http://localhost/api/findings?workspaceId=ws-1"))
+  expect(response.status).toBe(200)
+  expect((await response.json()).data).toEqual({ items: [], nextCursor: null })
+  expect(listFindings).toHaveBeenCalledWith(expect.objectContaining({ targetIds: [] }))
 })

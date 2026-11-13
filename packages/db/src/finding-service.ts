@@ -1,62 +1,23 @@
+import {
+  findingScopeWhere,
+  targetReadScopeWhere,
+  type FindingScopeParams,
+} from "./read-query-scope"
+export { findingScopeWhere, type FindingScopeParams } from "./read-query-scope"
 import { prisma } from "./client"
+import type { ScopedTransaction } from "./rls"
+import { Prisma } from "./generated/prisma"
 import type { Finding, FindingSeverity, FindingStatus } from "./generated/prisma"
 import { logger } from "@lyrashield/logger"
-
-const HISTORY_PREVIEW_LIMIT = 25
-
-export type FindingHistoryCollection =
-  "evidence" | "verificationReceipts" | "fixProposals" | "retests"
-
-export interface FindingHistoryPage<T = unknown> {
-  items: T[]
-  nextCursor: string | null
-  total: number
-}
-
-interface HistoryCursor {
-  findingId: string
-  collection: FindingHistoryCollection
-  createdAt: string
-  id: string
-}
-
-function encodeHistoryCursor(cursor: HistoryCursor): string {
-  return Buffer.from(JSON.stringify(cursor)).toString("base64url")
-}
-
-function decodeHistoryCursor(
-  value: string | undefined,
-  findingId: string,
-  collection: FindingHistoryCollection
-): HistoryCursor | null {
-  if (!value) return null
-  try {
-    const parsed: unknown = JSON.parse(Buffer.from(value, "base64url").toString("utf8"))
-    if (
-      !parsed ||
-      typeof parsed !== "object" ||
-      Array.isArray(parsed) ||
-      !("findingId" in parsed) ||
-      !("collection" in parsed) ||
-      !("id" in parsed) ||
-      !("createdAt" in parsed) ||
-      parsed.findingId !== findingId ||
-      parsed.collection !== collection ||
-      typeof parsed.id !== "string" ||
-      typeof parsed.createdAt !== "string" ||
-      Number.isNaN(Date.parse(parsed.createdAt))
-    ) {
-      return null
-    }
-    return { findingId, collection, createdAt: parsed.createdAt, id: parsed.id }
-  } catch {
-    return null
-  }
-}
+import { buildHistoryPreview, HISTORY_PREVIEW_LIMIT } from "./finding-history-cursor"
+import type { FindingHistoryCollection } from "./finding-history-service"
 
 export interface ListFindingsParams {
   workspaceId: string
   targetId?: string
+  targetIds?: string[]
+  requireActiveTarget?: boolean
+  allowedProfiles?: string[]
   /** Filter findings observed in a scan candidate receipt. `scanId` below remains the origin scan. */
   observedInScanId?: string
   scanId?: string
@@ -70,53 +31,31 @@ export interface ListFindingsParams {
   limit?: number
 }
 
-export interface FindingScopeParams {
-  workspaceId: string
-  targetId?: string
-  observedInScanId?: string
-}
-
-export function findingScopeWhere({ workspaceId, targetId, observedInScanId }: FindingScopeParams) {
-  return {
-    workspaceId,
-    deletedAt: null,
-    ...(targetId ? { targetId } : {}),
-    ...(observedInScanId
-      ? {
-          candidates: {
-            some: {
-              workspaceId,
-              scanId: observedInScanId,
-              ...(targetId ? { targetId } : {}),
-            },
-          },
-        }
-      : {}),
-  }
-}
-
-export async function validateFindingScope({
-  workspaceId,
-  targetId,
-  observedInScanId,
-}: FindingScopeParams): Promise<
+export async function validateFindingScope(
+  { workspaceId, targetId, targetIds, observedInScanId }: FindingScopeParams,
+  client?: ScopedTransaction
+): Promise<
   | { available: true; target: { id: string; name: string } | null; scanId: string | null }
   | { available: false; target: null; scanId: null }
 > {
+  if (targetId && targetIds !== undefined && !targetIds.includes(targetId)) {
+    return { available: false, target: null, scanId: null }
+  }
+  const db = client ?? prisma
   const [target, scan] = await Promise.all([
     targetId
-      ? prisma.target.findFirst({
+      ? db.target.findFirst({
           where: { id: targetId, workspaceId, deletedAt: null },
           select: { id: true, name: true },
         })
       : Promise.resolve(null),
     observedInScanId
-      ? prisma.scan.findFirst({
+      ? db.scan.findFirst({
           where: {
             id: observedInScanId,
             workspaceId,
             deletedAt: null,
-            ...(targetId ? { targetId } : {}),
+            ...targetReadScopeWhere({ targetId, targetIds }),
           },
           select: { id: true, targetId: true },
         })
@@ -131,7 +70,7 @@ export async function validateFindingScope({
   const resolvedTarget =
     target ??
     (resolvedTargetId
-      ? await prisma.target.findFirst({
+      ? await db.target.findFirst({
           where: { id: resolvedTargetId, workspaceId, deletedAt: null },
           select: { id: true, name: true },
         })
@@ -160,7 +99,10 @@ type FindingDispositionInput = {
   actorUserId: string
 }
 
-export async function listFindings(params: ListFindingsParams): Promise<{
+export async function listFindings(
+  params: ListFindingsParams,
+  client?: ScopedTransaction
+): Promise<{
   items: (Finding & {
     _count?: { evidence: number; fixProposals: number }
     target?: { id: string; name: string; type: string; environment: string | null } | null
@@ -169,6 +111,7 @@ export async function listFindings(params: ListFindingsParams): Promise<{
 }> {
   const limit = Math.min(Math.max(params.limit ?? 50, 1), 100)
   const search = params.q?.trim()
+  const db = client ?? prisma
   const where: Record<string, unknown> = {
     ...findingScopeWhere(params),
     ...(params.scanId ? { scanId: params.scanId } : {}),
@@ -189,7 +132,7 @@ export async function listFindings(params: ListFindingsParams): Promise<{
       : {}),
   }
 
-  const findings = await prisma.finding.findMany({
+  const findings = await db.finding.findMany({
     where,
     orderBy: [{ severity: "desc" }, { createdAt: "desc" }, { id: "desc" }],
     take: limit + 1,
@@ -213,11 +156,13 @@ export async function listFindings(params: ListFindingsParams): Promise<{
 }
 
 export async function listEvidenceFindings(
-  params: FindingScopeParams & { cursor?: string; limit?: number }
+  params: FindingScopeParams & { cursor?: string; limit?: number },
+  client?: ScopedTransaction
 ) {
   const limit = Math.min(Math.max(params.limit ?? 20, 1), 100)
   const evidenceWhere = { redactionStatus: "complete" }
-  const findings = await prisma.finding.findMany({
+  const db = client ?? prisma
+  const findings = await db.finding.findMany({
     where: {
       ...findingScopeWhere(params),
       verified: true,
@@ -249,10 +194,77 @@ export async function listEvidenceFindings(
   }
 }
 
+const FINDING_DETAIL_INCLUDE = Prisma.validator<Prisma.FindingInclude>()({
+  evidence: {
+    where: { redactionStatus: { not: "deleted" } },
+    select: { id: true, type: true, redactionStatus: true, createdAt: true },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    take: HISTORY_PREVIEW_LIMIT + 1,
+  },
+  verificationReceipts: {
+    select: {
+      id: true,
+      status: true,
+      method: true,
+      reason: true,
+      scanId: true,
+      sourceRevision: true,
+      verifierVersion: true,
+      evidence: true,
+      createdAt: true,
+    },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    take: HISTORY_PREVIEW_LIMIT + 1,
+  },
+  fixProposals: {
+    where: { deletedAt: null },
+    select: {
+      id: true,
+      status: true,
+      summary: true,
+      createdAt: true,
+      diffRef: true,
+      pullRequests: {
+        where: { deletedAt: null },
+        select: {
+          id: true,
+          status: true,
+          prNumber: true,
+          prUrl: true,
+          branchName: true,
+          createdAt: true,
+          mergedAt: true,
+          closedAt: true,
+        },
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      },
+    },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    take: HISTORY_PREVIEW_LIMIT + 1,
+  },
+  retests: {
+    select: { id: true, scanId: true, status: true, createdAt: true },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    take: HISTORY_PREVIEW_LIMIT + 1,
+  },
+  _count: {
+    select: {
+      evidence: { where: { redactionStatus: { not: "deleted" } } },
+      verificationReceipts: true,
+      fixProposals: { where: { deletedAt: null } },
+      retests: true,
+    },
+  },
+})
+
 export async function getFinding(
   findingId: string,
   workspaceId: string,
-  scope: Pick<FindingScopeParams, "targetId" | "observedInScanId"> = {}
+  scope: Pick<
+    FindingScopeParams,
+    "targetId" | "targetIds" | "observedInScanId" | "requireActiveTarget" | "allowedProfiles"
+  > = {},
+  client?: ScopedTransaction
 ): Promise<
   | (Finding & {
       evidence: { id: string; type: string; redactionStatus: string }[]
@@ -267,7 +279,13 @@ export async function getFinding(
         evidence: unknown
         createdAt: Date
       }[]
-      fixProposals: { id: string; status: string; summary: string; createdAt: Date }[]
+      fixProposals: {
+        id: string
+        status: string
+        summary: string
+        createdAt: Date
+        hasStoredPatch: boolean
+      }[]
       retests: { id: string; scanId: string; status: string; createdAt: Date }[]
       historyPagination: Record<
         FindingHistoryCollection,
@@ -276,115 +294,32 @@ export async function getFinding(
     })
   | null
 > {
-  const finding = await prisma.finding.findFirst({
+  const db = client ?? prisma
+  const finding = await db.finding.findFirst({
     where: { id: findingId, ...findingScopeWhere({ workspaceId, ...scope }) },
-    include: {
-      evidence: {
-        where: { redactionStatus: { not: "deleted" } },
-        select: {
-          id: true,
-          type: true,
-          redactionStatus: true,
-          createdAt: true,
-        },
-        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-        take: HISTORY_PREVIEW_LIMIT + 1,
-      },
-      verificationReceipts: {
-        select: {
-          id: true,
-          status: true,
-          method: true,
-          reason: true,
-          scanId: true,
-          sourceRevision: true,
-          verifierVersion: true,
-          evidence: true,
-          createdAt: true,
-        },
-        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-        take: HISTORY_PREVIEW_LIMIT + 1,
-      },
-      fixProposals: {
-        where: { deletedAt: null },
-        select: {
-          id: true,
-          status: true,
-          summary: true,
-          createdAt: true,
-          // W3-03: PR rows are the receipts behind "PR opened" and "merged"
-          // timeline events; creation alone never implies applied.
-          pullRequests: {
-            where: { deletedAt: null },
-            select: {
-              id: true,
-              status: true,
-              prNumber: true,
-              prUrl: true,
-              branchName: true,
-              createdAt: true,
-              mergedAt: true,
-              closedAt: true,
-            },
-            orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-          },
-        },
-        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-        take: HISTORY_PREVIEW_LIMIT + 1,
-      },
-      retests: {
-        select: {
-          id: true,
-          scanId: true,
-          status: true,
-          createdAt: true,
-        },
-        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-        take: HISTORY_PREVIEW_LIMIT + 1,
-      },
-      _count: {
-        select: {
-          evidence: { where: { redactionStatus: { not: "deleted" } } },
-          verificationReceipts: true,
-          fixProposals: { where: { deletedAt: null } },
-          retests: true,
-        },
-      },
-    },
+    include: FINDING_DETAIL_INCLUDE,
   })
   if (!finding) return null
 
-  const buildPreview = <T extends { id: string; createdAt?: Date }>(
-    collection: FindingHistoryCollection,
-    rows: T[],
-    total: number
-  ) => {
-    const items = rows.slice(0, HISTORY_PREVIEW_LIMIT)
-    const last = items.at(-1)
-    const nextCursor =
-      rows.length > HISTORY_PREVIEW_LIMIT && last?.createdAt
-        ? encodeHistoryCursor({
-            findingId,
-            collection,
-            createdAt: last.createdAt.toISOString(),
-            id: last.id,
-          })
-        : null
-    return { items, pagination: { total, nextCursor } }
-  }
-
-  const evidence = buildPreview("evidence", finding.evidence, finding._count.evidence)
-  const verificationReceipts = buildPreview(
+  const evidence = buildHistoryPreview(
+    findingId,
+    "evidence",
+    finding.evidence,
+    finding._count.evidence
+  )
+  const verificationReceipts = buildHistoryPreview(
+    findingId,
     "verificationReceipts",
     finding.verificationReceipts,
     finding._count.verificationReceipts
   )
-  const fixProposals = buildPreview(
+  const fixProposals = buildHistoryPreview(
+    findingId,
     "fixProposals",
     finding.fixProposals,
     finding._count.fixProposals
   )
-  const retests = buildPreview("retests", finding.retests, finding._count.retests)
+  const retests = buildHistoryPreview(findingId, "retests", finding.retests, finding._count.retests)
 
   const { _count, ...baseFinding } = finding
   void _count
@@ -392,7 +327,10 @@ export async function getFinding(
     ...baseFinding,
     evidence: evidence.items,
     verificationReceipts: verificationReceipts.items,
-    fixProposals: fixProposals.items,
+    fixProposals: fixProposals.items.map(({ diffRef, ...proposal }) => ({
+      ...proposal,
+      hasStoredPatch: Boolean(diffRef),
+    })),
     retests: retests.items,
     historyPagination: {
       evidence: evidence.pagination,
@@ -403,144 +341,21 @@ export async function getFinding(
   }
 }
 
-export async function getFindingReference(findingId: string, workspaceId: string) {
-  return prisma.finding.findFirst({
-    where: { id: findingId, workspaceId, deletedAt: null },
-    select: { id: true, scanId: true, targetId: true },
-  })
-}
-
-export async function getFindingHistoryPage(
+export async function getFindingReference(
   findingId: string,
   workspaceId: string,
-  collection: FindingHistoryCollection,
-  options: {
-    cursor?: string
-    limit?: number
-    targetId?: string
-    observedInScanId?: string
-  } = {}
-): Promise<FindingHistoryPage> {
-  const limit = Math.min(Math.max(options.limit ?? HISTORY_PREVIEW_LIMIT, 1), 100)
-  const cursor = decodeHistoryCursor(options.cursor, findingId, collection)
-  if (options.cursor && !cursor) throw new Error("Invalid finding history cursor")
-
-  const finding = await prisma.finding.findFirst({
-    where: {
-      id: findingId,
-      ...findingScopeWhere({
-        workspaceId,
-        ...(options.targetId ? { targetId: options.targetId } : {}),
-        ...(options.observedInScanId ? { observedInScanId: options.observedInScanId } : {}),
-      }),
+  client?: ScopedTransaction
+) {
+  const db = client ?? prisma
+  return db.finding.findFirst({
+    where: { id: findingId, workspaceId, deletedAt: null },
+    select: {
+      id: true,
+      scanId: true,
+      targetId: true,
+      scan: { select: { mode: true } },
     },
-    select: { id: true },
   })
-  if (!finding) throw new Error("Finding not found")
-
-  const after = cursor
-    ? {
-        OR: [
-          { createdAt: { lt: new Date(cursor.createdAt) } },
-          { createdAt: new Date(cursor.createdAt), id: { lt: cursor.id } },
-        ],
-      }
-    : {}
-  const page = <T extends { id: string; createdAt: Date }>(rows: T[], total: number) => {
-    const items = rows.slice(0, limit)
-    const last = items.at(-1)
-    return {
-      items,
-      total,
-      nextCursor:
-        rows.length > limit && last
-          ? encodeHistoryCursor({
-              findingId,
-              collection,
-              createdAt: last.createdAt.toISOString(),
-              id: last.id,
-            })
-          : null,
-    }
-  }
-
-  switch (collection) {
-    case "evidence": {
-      const where = {
-        findingId,
-        finding: { workspaceId },
-        redactionStatus: { not: "deleted" },
-        ...after,
-      }
-      const [rows, total] = await Promise.all([
-        prisma.evidence.findMany({
-          where,
-          select: { id: true, type: true, redactionStatus: true, createdAt: true },
-          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-          take: limit + 1,
-        }),
-        prisma.evidence.count({
-          where: {
-            findingId,
-            finding: { workspaceId },
-            redactionStatus: { not: "deleted" },
-          },
-        }),
-      ])
-      return page(rows, total)
-    }
-    case "verificationReceipts": {
-      const where = { findingId, workspaceId, ...after }
-      const [rows, total] = await Promise.all([
-        prisma.findingVerification.findMany({
-          where,
-          select: {
-            id: true,
-            status: true,
-            method: true,
-            reason: true,
-            scanId: true,
-            sourceRevision: true,
-            verifierVersion: true,
-            evidence: true,
-            createdAt: true,
-          },
-          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-          take: limit + 1,
-        }),
-        prisma.findingVerification.count({ where: { findingId, workspaceId } }),
-      ])
-      return page(rows, total)
-    }
-    case "fixProposals": {
-      const where = { findingId, finding: { workspaceId }, deletedAt: null, ...after }
-      const [rows, total] = await Promise.all([
-        prisma.fixProposal.findMany({
-          where,
-          select: { id: true, status: true, summary: true, createdAt: true },
-          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-          take: limit + 1,
-        }),
-        prisma.fixProposal.count({
-          where: { findingId, finding: { workspaceId }, deletedAt: null },
-        }),
-      ])
-      return page(rows, total)
-    }
-    case "retests": {
-      const where = { findingId, workspaceId, ...after }
-      const [rows, total] = await Promise.all([
-        prisma.retest.findMany({
-          where,
-          select: { id: true, scanId: true, status: true, createdAt: true },
-          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-          take: limit + 1,
-        }),
-        prisma.retest.count({ where: { findingId, workspaceId } }),
-      ])
-      return page(rows, total)
-    }
-  }
 }
 
 export async function updateFindingStatus(
@@ -639,15 +454,23 @@ export async function acceptRisk(
 export async function getFindingStats(
   workspaceId: string,
   targetId?: string,
-  observedInScanId?: string
+  observedInScanId?: string,
+  targetIds?: string[],
+  requireActiveTarget = false,
+  client?: ScopedTransaction,
+  allowedProfiles?: string[]
 ): Promise<FindingStats> {
+  const db = client ?? prisma
   const where: Record<string, unknown> = findingScopeWhere({
     workspaceId,
     ...(targetId ? { targetId } : {}),
+    ...(targetIds !== undefined ? { targetIds } : {}),
     ...(observedInScanId ? { observedInScanId } : {}),
+    ...(allowedProfiles !== undefined ? { allowedProfiles } : {}),
+    requireActiveTarget,
   })
 
-  const groups = await prisma.finding.groupBy({
+  const groups = await db.finding.groupBy({
     by: ["severity", "status", "verified"],
     where,
     _count: { _all: true },
@@ -676,3 +499,5 @@ export async function getFindingStats(
     unverified,
   }
 }
+
+export { getFindingHistoryPage, type FindingHistoryCollection } from "./finding-history-service"

@@ -40,6 +40,9 @@ const MAX_ENGINE_RUN_BYTES = 1 * 1024 * 1024
 const MAX_ENGINE_COVERAGE_BYTES = 256 * 1024
 const MAX_ENGINE_THREAT_MODEL_BYTES = 32 * 1024 * 1024
 const MAX_ENGINE_HTTP_EXCHANGES_BYTES = 2 * 1024 * 1024
+// Explicit evidence compatibility: a future additive run version does not
+// implicitly qualify this reader to bind its canonical artifact contract.
+const MANIFEST_BOUND_EVIDENCE_RUN_VERSIONS = new Set(["1.1", "1.2"])
 const ENGINE_RUN_LAYOUTS = ["strix_runs", "lyrashield_runs"] as const
 const ENGINE_OUTPUT_ARTIFACTS = ["run.json", "vulnerabilities.json"] as const
 const MAX_RUN_OUTPUT_ENTRIES = 50_000
@@ -244,7 +247,11 @@ export async function readTextFileBounded(path: string, maxBytes: number): Promi
       offset += bytesRead
     }
     if (offset > maxBytes) throw new Error(`Engine artifact exceeds ${maxBytes} byte limit`)
-    return buffer.subarray(0, offset).toString("utf8")
+    // Fatal decoding preserves the raw-byte manifest contract; replacement
+    // characters would change both byte counts and SHA-256 inputs. Preserve BOMs.
+    return new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(
+      buffer.subarray(0, offset)
+    )
   } finally {
     await handle.close()
   }
@@ -396,7 +403,7 @@ export async function readEngineOutput(outputDir: string): Promise<{
     "threat_model.json",
     MAX_ENGINE_THREAT_MODEL_BYTES
   )
-  // The singular owned artifact only exists under run.json 1.1. An absent or
+  // The singular owned artifact requires a supported evidence run version. An absent or
   // older receipt cannot bind its bytes; legacy plural evidence is separate.
   let verifiedThreatModelRaw = runJsonRaw || threatModelRaw === undefined ? threatModelRaw : null
   let allowLegacyPlural = runJsonRaw === undefined
@@ -407,9 +414,12 @@ export async function readEngineOutput(outputDir: string): Promise<{
         result_manifest?: { schema_version?: unknown; artifacts?: Record<string, unknown> }
       }
       allowLegacyPlural = run.schema_version === "1.0" && run.result_manifest === undefined
-      if (run.schema_version !== "1.1" && threatModelRaw !== undefined) {
+      const supportsManifestEvidence =
+        typeof run.schema_version === "string" &&
+        MANIFEST_BOUND_EVIDENCE_RUN_VERSIONS.has(run.schema_version)
+      if (!supportsManifestEvidence && threatModelRaw !== undefined) {
         verifiedThreatModelRaw = null
-      } else if (run.schema_version === "1.1" || run.result_manifest !== undefined) {
+      } else if (supportsManifestEvidence || run.result_manifest !== undefined) {
         const entry = run.result_manifest?.artifacts?.["threat_model.json"] as
           { path?: unknown; bytes?: unknown; sha256?: unknown } | undefined
         if (entry !== undefined || threatModelRaw !== undefined) {

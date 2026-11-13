@@ -52,7 +52,7 @@ const jsonLd: unknown[] = [
       <p class="mt-4 text-sm text-text-muted" data-reveal="fade">Last updated: <time datetime={updatedDate}>{updatedDate}</time></p>
     </header>
 
-    <div class="callout callout--warn mt-10" data-reveal>
+    <div class="callout mt-10" data-reveal>
       <strong>Research in progress.</strong> This page will be populated with statistics once a
       sufficient sample of anonymized scan data is available. The framework below describes what
       we plan to publish and how the data is collected and privacy-protected.
@@ -87,7 +87,7 @@ const jsonLd: unknown[] = [
           <span class="font-mono text-xs text-text-muted" aria-hidden="true">01</span>
           <div>
             <h3 class="font-semibold text-text">Most common vulnerability classes in AI-built apps</h3>
-            <p class="mt-2 leading-7 text-text-muted">Distribution of finding categories across the Vibe Security 50 controls. Which controls most frequently produce detected candidates and which most frequently produce verified findings.</p>
+            <p class="mt-2 leading-7 text-text-muted">Distribution of finding categories across the Vibe Security 50 controls. Which controls most often produce detected candidates or inconclusive outcomes? After an approved fix, how often does a complete deterministic retest confirm the condition is absent? Independent <code>VERIFIED</code> status is a future capability and is not produced by current scans.</p>
           </div>
         </article>
         <article class="grid gap-3 py-7 md:grid-cols-[3rem_1fr] md:gap-6" data-reveal>
@@ -115,7 +115,7 @@ const jsonLd: unknown[] = [
           <span class="font-mono text-xs text-text-muted" aria-hidden="true">05</span>
           <div>
             <h3 class="font-semibold text-text">Scan mode comparison</h3>
-            <p class="mt-2 leading-7 text-text-muted">How do finding rates, coverage and evidence-state distributions differ across scan modes? Are there control categories where deeper analysis consistently produces more verified findings?</p>
+            <p class="mt-2 leading-7 text-text-muted">How do finding rates, coverage and evidence-state distributions differ across scan modes? Are there control categories where deeper analysis improves coverage or produces more complete evidence?</p>
           </div>
         </article>
       </div>
@@ -133,8 +133,8 @@ const jsonLd: unknown[] = [
 
     <section class="mt-16 flex flex-col gap-5 border-t border-border pt-10 sm:flex-row sm:items-center sm:justify-between" data-reveal>
       <div>
-        <h2 class="text-2xl font-semibold text-text">Put this research to work on your own app.</h2>
-        <p class="mt-2 text-text-muted">Registration is open in the beta. New research is published to the guides feed.</p>
+        <h2 class="text-2xl font-semibold text-text">Explore the evidence approach.</h2>
+        <p class="mt-2 text-text-muted">Research results are not published yet. Read the practical guides or explore the open-beta workflow.</p>
       </div>
       <div class="flex flex-wrap gap-3">
         <a href={`${appUrl}/sign-up?source=research&cta=create_account`} class="lift inline-flex min-h-12 items-center justify-center rounded-lg bg-accent px-5 text-sm font-semibold text-bg hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">{CTA_LABEL.signUp}</a>

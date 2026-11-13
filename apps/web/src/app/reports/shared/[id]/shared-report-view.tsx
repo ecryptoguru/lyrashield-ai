@@ -136,7 +136,7 @@ export function SharedReportView({ report }: { report: ShareableReport }) {
             <div className="mb-5">
               <h2 className="font-semibold">Remediation posture</h2>
               <p className="text-muted-foreground mt-1 text-xs">
-                How verified findings are moving toward closure.
+                How findings and fixes are moving toward closure.
               </p>
             </div>
             {assurance ? (

@@ -90,7 +90,7 @@ describe("check_security_scan handler", () => {
     })
   })
 
-  it("maps the requested review type to the option's goal and mode", async () => {
+  it("refuses a removed engine-backed review type for a web target", async () => {
     const fetchFn = okFetch({ allowed: false, code: "DOMAIN_VERIFICATION_REQUIRED" })
     const handler = createCheckSecurityScanHandler({
       workspaceId: "ws-page",
@@ -99,12 +99,27 @@ describe("check_security_scan handler", () => {
       fetchFn: fetchFn as never,
     })
 
-    await handler({ targetName: "Storefront", reviewType: "WEB_APP_DEEP" }, { signal: abortSignal })
+    await expect(
+      handler({ targetName: "Storefront", reviewType: "WEB_APP_DEEP" }, { signal: abortSignal })
+    ).rejects.toThrow(/not available for Storefront/)
+    expect(fetchFn).not.toHaveBeenCalled()
+  })
+
+  it("maps the selected deterministic review option to the option's goal and mode", async () => {
+    const fetchFn = okFetch({ allowed: false, code: "DOMAIN_VERIFICATION_REQUIRED" })
+    const handler = createCheckSecurityScanHandler({
+      workspaceId: "ws-page",
+      getTargets: () => targets,
+      getSelectedPreset: () => "WEB_APP_SAFE",
+      fetchFn: fetchFn as never,
+    })
+
+    await handler({ targetName: "Storefront" }, { signal: abortSignal })
 
     const [url] = vi.mocked(fetchFn).mock.calls[0]! as [string]
     const params = new URL(url, "http://app.test").searchParams
-    expect(params.get("goal")).toBe("FULL_PENTEST")
-    expect(params.get("mode")).toBe("DEEP")
+    expect(params.get("goal")).toBe("LAUNCH_REVIEW")
+    expect(params.get("mode")).toBe("SAFE")
   })
 
   it("returns an eligibility denial as a successful read", async () => {
@@ -220,6 +235,114 @@ describe("scans page tool registrations", () => {
     const tool = registerTool.mock.calls.at(-1)?.[0] as Registered["tool"]
     return { store, tool, cleanup }
   }
+
+  it("carries the requested $1 ceiling through check, prepare and the durable request", async () => {
+    const deps = {
+      workspaceId: "ws-page",
+      getTargets: () => [target({ id: "repo", name: "Canary" })],
+      getSelectedPreset: () => "RELEASE_CHECK",
+    }
+    const input = { targetName: "Canary", engineBudgetCeilingUsd: 1 }
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: { allowed: true, id: "scan-9" } }),
+    })
+    const setters = {
+      setSelectedTarget: vi.fn(),
+      setSelectedPreset: vi.fn(),
+      setShowCreate: vi.fn(),
+      setModeResetNotice: vi.fn(),
+      setEngineBudgetCeiling: vi.fn(),
+    }
+    for (const [tool, params] of [
+      [register(createCheckSecurityScanTool(deps)).tool, input],
+      [register(createPrepareSecurityScanTool({ ...deps, ...setters })).tool, input],
+      [register(createRequestSecurityScanTool(deps)).tool, { ...input, requestId: "canary-1" }],
+    ] as const) {
+      await expect(tool.execute(params, { signal: abortSignal })).resolves.toMatchObject({
+        ok: true,
+      })
+    }
+    expect(
+      new URL(fetchMock.mock.calls[0]![0], "http://local").searchParams.get(
+        "engineBudgetCeilingUsd"
+      )
+    ).toBe("1")
+    expect(setters.setEngineBudgetCeiling).toHaveBeenCalledWith("1")
+    expect(JSON.parse(fetchMock.mock.calls[1]![1].body).engineBudgetCeilingUsd).toBe(1)
+  })
+
+  it.each([
+    ["1", undefined, 1],
+    ["1", 0.5, 0.5],
+    ["1", 1.2, false],
+    ["bad", undefined, false],
+    [undefined, undefined, undefined],
+  ] as const)(
+    "bounds a durable request by the matching draft (%s, %s)",
+    async (draft, requested, expected) => {
+      fetchMock.mockResolvedValue({ ok: true, json: async () => ({ data: { id: "scan" } }) })
+      const { tool } = register(
+        createRequestSecurityScanTool({
+          workspaceId: "ws-page",
+          getTargets: () => [target({ id: "repo", name: "Canary" })],
+          getSelectedPreset: () => "RELEASE_CHECK",
+          getMatchingDraftBudget: (targetId, reviewType) =>
+            targetId === "repo" && reviewType === "RELEASE_CHECK" ? draft : undefined,
+        })
+      )
+      const result = await tool.execute(
+        {
+          targetName: "Canary",
+          requestId: "same",
+          ...(requested !== undefined ? { engineBudgetCeilingUsd: requested } : {}),
+        },
+        { signal: abortSignal }
+      )
+      expect(result).toMatchObject({ ok: expected !== false })
+      if (expected === false) expect(fetchMock).not.toHaveBeenCalled()
+      else
+        expect(JSON.parse(fetchMock.mock.calls[0]![1].body).engineBudgetCeilingUsd).toBe(expected)
+    }
+  )
+
+  it("refuses a visible ceiling on a checks-only request before POST", async () => {
+    const { tool } = register(
+      createRequestSecurityScanTool({
+        workspaceId: "ws-page",
+        getTargets: () => [target({ id: "storefront", name: "Storefront", type: "WEB_APP" })],
+        getSelectedPreset: () => "WEB_APP_SAFE",
+        getMatchingDraftBudget: () => "1",
+      })
+    )
+    expect(
+      await tool.execute(
+        { targetName: "Storefront", requestId: "retained" },
+        { signal: abortSignal }
+      )
+    ).toMatchObject({ ok: false, error: expect.stringContaining("deterministic review") })
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it.each([0, -1, Number.NaN, Number.POSITIVE_INFINITY])(
+    "rejects engine ceiling %s before a durable request",
+    async (amount) => {
+      const { tool } = register(
+        createRequestSecurityScanTool({
+          workspaceId: "ws-page",
+          getTargets: () => [target({ id: "repo", name: "Canary" })],
+          getSelectedPreset: () => "RELEASE_CHECK",
+        })
+      )
+      await expect(
+        tool.execute(
+          { targetName: "Canary", requestId: "same", engineBudgetCeilingUsd: amount },
+          { signal: abortSignal }
+        )
+      ).resolves.toMatchObject({ ok: false })
+      expect(fetchMock).not.toHaveBeenCalled()
+    }
+  )
 
   it("request_security_scan posts the page workspace and carries safe receipt refs + recovery link", async () => {
     fetchMock.mockResolvedValue({
@@ -401,6 +524,7 @@ describe("scans page tool registrations", () => {
 
   it("prepare_security_scan keeps its contract: fills the form, never submits", async () => {
     const setters = {
+      setEngineBudgetCeiling: vi.fn(),
       setSelectedTarget: vi.fn(),
       setSelectedPreset: vi.fn(),
       setShowCreate: vi.fn(),
@@ -426,6 +550,7 @@ describe("scans page tool registrations", () => {
     })
     expect(result.output.nextStep).toMatch(/Start/i)
     expect(setters.setSelectedTarget).toHaveBeenCalledWith("t-1")
+    expect(setters.setEngineBudgetCeiling).not.toHaveBeenCalled()
     expect(setters.setShowCreate).toHaveBeenCalledWith(true)
     expect(fetchMock).not.toHaveBeenCalled()
     expect(store.getSnapshot().latest?.humanConfirmationRequired).toBe(true)

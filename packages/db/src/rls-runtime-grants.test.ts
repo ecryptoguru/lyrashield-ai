@@ -10,6 +10,11 @@ describe("CI restricted runtime-role contract", () => {
     expect(ciWorkflow).toContain("PlatformAdminElevation")
     expect(ciWorkflow).toContain("PlatformAdminChallengeLimit")
     expect(ciWorkflow).toContain("PlatformAdminAudit")
+    expect(
+      ciWorkflow.match(
+        /enqueue_integration_config_deletion_task\(text, text, text\) TO app_runtime_ci/g
+      )
+    ).toHaveLength(2)
   })
 
   it("runs a restricted-role read smoke for every workspace or account table", () => {

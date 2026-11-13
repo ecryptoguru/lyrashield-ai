@@ -1,6 +1,6 @@
 # LyraShield AI User Guide
 
-Last checked against the application code: 2026-09-19. Client-specific runtime and published-package acceptance remain separate checks.
+Last checked against the application code: 2026-10-11. Client-specific runtime and published-package acceptance remain separate checks.
 
 LyraShield AI helps builders review an application before release and retain an evidence-backed record of what was checked.
 
@@ -12,10 +12,10 @@ This guide covers the public Lite Check, authenticated dashboard, scan choices, 
 
 ## 1. Important product boundaries
 
-LyraShield AI currently produces three shipped evidence states: Detected, Validated and Inconclusive. Its schema also defines a future Verified state:
+LyraShield AI currently produces three shipped evidence states: Detected, Retest-confirmed and Inconclusive. Its schema also defines a future Verified state that is not produced today:
 
 - **Detected** means a scanner or engine returned evidence for a possible issue.
-- **Validated** or **retest-confirmed** means a fresh deterministic retest no longer found the issue within its completed scope.
+- **Retest-confirmed** means a fresh deterministic retest no longer found the issue within its completed scope.
 - **Verified** is defined for a future independent verification step; no finding is in it today. Model confidence alone never creates this state.
 - **Inconclusive** means the available scan could not establish a reliable result.
 - **No finding** means the assigned check completed without returning a mapped finding. It does not mean the application is universally safe.
@@ -196,7 +196,7 @@ For an authorized repository target, Deep is the intrusive agentic pentest profi
 
 ### Web App and API targets
 
-Web App and API Safe reviews use deterministic checks only. Standard and Deep also run the pinned AI engine against the verified target through a scan-scoped relay, with deterministic checks retained. The available modes are:
+Web App and API Safe reviews use deterministic checks only. Standard and Deep also run the pinned AI engine against the verified target through a scan-scoped relay, with deterministic checks retained. Only **Surface Review** and **Endpoint Review** are part of the current launch offering: the Standard and Deep reviews below are removed from it, and requesting one returns an unsupported-profile error instead of a downgraded review. The available modes are:
 
 | User option               | Target type | Backend mode | Requirements                          |
 | ------------------------- | ----------- | ------------ | ------------------------------------- |
@@ -236,7 +236,7 @@ Open a scan to review:
 - target and completed scanner scope;
 - summary and coverage warnings;
 - selected model and reasoning effort for repository scans;
-- immutable result-manifest checksum;
+- stored result-manifest checksum;
 - coverage receipts grouped by scanner and Vibe Security 50 family;
 - findings sorted by severity;
 - the chronological scan-event timeline.
@@ -254,7 +254,7 @@ The Vibe Security 50 ledger contains one receipt for each control. Read `NO_FIND
 
 ## 11. Findings
 
-Open **Findings** to review all retained findings in the active workspace. Available list filters are All, Critical, High, Medium, Low, Open, Fixed and Verified. Findings are ranked by a page-local **Priority** heuristic by default; switch to severity or newest ordering with the sort control. Priority combines severity, status, verification state, confidence, target environment and available business-impact/exploitability context. It is triage context for review order — not proof that a finding is reachable or exploitable — and the reason and limitations behind each rank are shown in an expandable note on every finding card.
+Open **Findings** to review all retained findings in the active workspace. Available list filters are All, Critical, High, Medium, Low, Open, Fixed and Verified. The Verified filter uses the separate independent-verification flag; current scans do not produce the reserved `VERIFIED` status, so new scan results will not appear there. Findings are ranked by a page-local **Priority** heuristic by default; switch to severity or newest ordering with the sort control. Priority combines severity, status, verification state, confidence, target environment and available business-impact/exploitability context. It is triage context for review order — not proof that a finding is reachable or exploitable — and the reason and limitations behind each rank are shown in an expandable note on every finding card.
 
 A finding may contain:
 
@@ -275,7 +275,7 @@ Threat-intelligence enrichment prioritizes review but does not change severity o
 2. Create and edit a fix proposal describing the change you intend to make.
 3. Apply the change yourself. Saving a proposal does not modify the repository.
 4. Queue a fresh retest after applying the change.
-5. Review whether the retest is validated, blocked or inconclusive; independently verified remains a future state.
+5. Review whether the retest is Retest-confirmed, blocked or Inconclusive. `VERIFIED` is a future-only status and is not produced today.
 6. Generate an assurance report from the retained retest when appropriate.
 
 Depending on your permission, you may also mark a finding as accepted risk or false positive. These are audited decisions, not silent deletion. When you do, the UI requires a short reason; the reason is stored as the finding's status reason and is shown on the finding detail for future reviewers.
@@ -284,14 +284,14 @@ Depending on your permission, you may also mark a finding as accepted risk or fa
 
 The **Fix proposals** page lists proposals created from findings. A proposal is guidance and an auditable plan; it is not proof that code changed.
 
-Automatic Fix PR execution is intentionally fail-closed. The application does not accept a client-authored patch, branch, title or body for privileged PR creation. A real PR is created only from a server-generated patch — deterministically assembled from the engine's structured fix and validated against a plan-tiered scope policy. A browser request binds that patch to an explicit human approval before anything is pushed to your repository. A direct REST request authenticated by an API key or a delegated OAuth request executes under verified credential authorization (the tighter `fix.approve` permission) instead of a per-request approval queue. Nothing auto-merges either way.
+Automatic Fix PR execution is intentionally fail-closed. The application does not accept a client-authored patch, branch, title or body for privileged PR creation. A real PR is created only from a server-generated patch — deterministically assembled from the engine's structured fix and validated against a plan-tiered scope policy. A browser request binds that patch to an explicit human approval before anything is pushed to your repository. Requesting a Fix PR requires `fix:create_pr`. Direct REST API-key requests and delegated OAuth requests also require `fix:approve` and execute under verified credential authorization instead of a per-request approval queue. Browser approval requires both `agent:approve` and `fix:approve`. Active members have operational fix permissions; credential scope and delegated grants are checked separately. Nothing auto-merges either way. Caller-supplied patch references can be recorded in draft proposals, but PR execution requires the server generator’s artifact for that exact finding and proposal. Readable encrypted references without this binding return `PROPOSAL_PATCH_PROVENANCE_REQUIRED`; create a new proposal without a supplied reference to generate a patch.
 
 Additional controls around fixes and releases:
 
-- **Launch Gate verdicts** — the gate evaluates a target's retained evidence (latest completed scan, coverage receipts and findings) into one of three immutable verdict states: `READY`, `NOT_READY` or `INSUFFICIENT_EVIDENCE`, with blocking reasons, coverage/non-coverage statements and a staleness signal that tells you when to re-run the gate. `GET /api/gate/[targetId]?workspaceId=…` returns the latest persisted verdict (404 `NOT_EVALUATED` before the first evaluation); `POST` on the same route re-evaluates against current evidence and is limited to members who can create scans.
+- **Launch Gate verdicts** — the gate evaluates a target's retained evidence (latest completed scan, coverage receipts and findings) into one of three persisted verdict states: `READY`, `NOT_READY` or `INSUFFICIENT_EVIDENCE`, with blocking reasons, coverage/non-coverage statements and a staleness signal that tells you when to re-run the gate. `GET /api/gate/[targetId]?workspaceId=…` returns the latest persisted verdict (404 `NOT_EVALUATED` before the first evaluation); `POST` on the same route re-evaluates against current evidence and is limited to members who can create scans.
 - **Release check on Launch Readiness** — the Launch Readiness surface can check a specific release: pick a target and paste the full 40-character commit SHA or `sha256:` artifact digest. The check is an identity-checked read, not a deployment gate: it answers whether the retained assessment covers that exact release (`Release reference matches this assessment` / `covers a different release` / `cannot confirm`) and what the effective readiness is. A matching release can still show expired evidence or a not-ready verdict; a mismatch always reads as insufficient evidence for the requested release. The check is shareable as a URL (`/dashboard/launch-readiness?targetId=…&commit=…`); without a reference the view shows what the latest assessment covers.
 - **Signed Launch Readiness Reports** — the launch-readiness report carries an ed25519 signature over its checksum when a signing key is configured for the deployment (`signed: true` on the generated report). Anyone can check a presented report at `/reports/verify` or against `POST /api/reports/verify` (`reportChecksum` + `signature`), which returns `{ verified, signingKeyId }` and never verifies against a client-supplied key. Without a configured key the report still issues, marked unsigned. A new report evaluates the bound assessment's applicability at issue time (freshness, policy changes, newer attempts, evidence drift) — a report for a no-longer-current assessment is issued marked `stale`. Signed-in members see each launch report's private binding on the Reports surface: the assessed release (full commit or artifact digest), assessed/issued/applicability-checked timestamps (UTC) and the applicability outcome at issue. Reports issued before this binding existed show "Release identity unavailable for this report". An owner may also give a recipient the revocable 30-day share URL: submitting that capability with an expected commit or `sha256:` artifact digest returns only `MATCH`, `MISMATCH` or `UNAVAILABLE`. It never discloses the stored identity; invalid, expired, revoked, cross-report, legacy or checksum-mismatched requests collapse to `UNAVAILABLE`.
-- **Approval-bound fix PRs with automatic retest** — a fix proposal with a server-generated patch can be turned into a pull request only under an explicit authorization (`fix.approve`, tighter than `fix.create`): a browser request records a human approval; direct REST API-key requests and delegated OAuth requests execute under verified credential permission. The patch is validated against a plan-tiered scope policy before execution either way. When the merged fix PR lands in your repository, the server automatically queues a retest scan for the finding and re-evaluates the gate; the finding stays `FIXED_PENDING_RETEST` until that retest records its result.
+- **Approval-bound fix PRs with automatic retest** — a fix proposal with a server-generated patch can be turned into a pull request only under an exact authorization receipt: requesting a PR requires `fix:create_pr`; browser approval requires `agent:approve` and `fix:approve`; direct REST API-key requests and delegated OAuth requests also require `fix:approve` and execute under verified credential permission and scope. The patch is validated against a plan-tiered scope policy before execution either way. When the merged fix PR lands in your repository, the server automatically queues a retest scan for the finding and re-evaluates the gate; the finding stays `FIXED_PENDING_RETEST` until that retest records its result.
 
 ## 13. Retests
 
@@ -316,7 +316,7 @@ Open **Home** or **Launch Readiness** to see:
 - `INSUFFICIENT_EVIDENCE` when no completed scan or required coverage exists;
 - `READY` or `NOT_READY` based on retained findings;
 - current score when available;
-- blocking and verified finding counts;
+- blocking finding counts and reserved future-state counts (current scans do not produce the reserved `VERIFIED` status);
 - severity distribution;
 - conditions and recommendations.
 
@@ -348,7 +348,7 @@ Open **Reports → Generate Report** and choose:
 - **Developer** — technical findings, remediation state, retest outcomes and fix guidance.
 - **Compliance** — evidence-oriented summary and methodology for lightweight assurance review.
 
-Enter a title and optionally select a completed scan. New reports retain an immutable creation-time snapshot.
+Enter a title and optionally select a completed scan. New reports retain a creation-time snapshot.
 
 Available actions:
 
@@ -362,7 +362,7 @@ Private report links expire after 30 days. Shared report pages are noindex and u
 
 ## 17. Monitoring schedules
 
-Open **Scans → Monitoring → New Schedule** and configure:
+Recurring schedules are deferred from the current launch offering. Creating and enabling a schedule is disabled; existing schedules and their run history remain readable. Where schedules are available, open **Scans → Monitoring → New Schedule** and configure:
 
 - target;
 - UTC cron expression;
@@ -381,7 +381,7 @@ Open **More → Notifications** to review scan alerts, critical-finding warnings
 - mark all notifications as read;
 - open the linked resource when a notification provides one.
 
-Personal notifications are visible only to their intended user; workspace-wide notifications are visible within the workspace.
+Scan updates remain in the dashboard notification feed, and personal notifications are visible only to their intended user. Workspace Owners and Admins can configure Slack or Discord alerts for completed scans, failed scans and critical findings in **Workspace settings → Notification channels**. Personal email and in-app controls are disabled because they do not change delivery; stored choices are retained for future implementation. Push preferences are unavailable. These personal controls do not change the dashboard feed or workspace alerts.
 
 ## 19. Team and roles
 
@@ -427,7 +427,7 @@ LyraShield Cloud offers a 7-day free trial: 60 agent-minutes, Safe, Quick and St
 
 - **Annual billing:** 15–30% discount, prepaid.
 - **Payment rails:** India uses Razorpay (INR pricing, UPI, GST invoices); Global uses Polar (USD).
-- **Minute packs:** 100/$15, 250/$35, 500/$65 — valid 180 days.
+- **Minute packs:** 100/$15, 250/$35, 500/$65 — valid 180 days. Purchases require billing permission and an available checkout provider for your region.
 - **Overage:** $0.15/min — Agency opt-in with a configurable spend limit.
 - **Deep/Custom scans:** 3× agent-minute multiplier, PRO+ only.
 - **Grace period:** 15 min free grace if minutes run out mid-scan.
@@ -464,7 +464,7 @@ Payouts:
 - $100 minimum, monthly net-30 on the 15th, with a 30-day hold.
 - Tax form required (W-9 or W-8BEN).
 - New affiliates carry a 25% reserve for the first 90 days. See [affiliate terms](../PRD.md#affiliate-terms).
-- Payouts are disabled pending provider and tax operations. RazorpayX is the only implemented rail (India); non-India applicants can apply without selecting a payout method while a provider is unapproved.
+- Payouts are disabled pending provider and tax operations. RazorpayX has an India provider implementation but is not enabled for payouts; Payoneer is not approved for production.
 
 ### 20.4 LyraShield Local/Desktop (BYOK)
 
@@ -586,15 +586,17 @@ For CI pipelines that don't need an AI editor at all, `ecryptoguru/lyrashield-ai
 
 ## 23. Current availability
 
-The public marketing site, Lite Check, browser-local tools, methodology and content are live. The authenticated dashboard is open for registration; its dedicated BullMQ/engine worker remains a separate controlled full-scan boundary. Ordinary web requests use a restricted `NOBYPASSRLS` database role and repository scan admission fails closed when the worker heartbeat is absent. Production Standard scan `cmt9el7p7000001hdjnjo90wk` completed with Luna/medium-only routing, reconciled accounting, exact source identity, complete repository scanner-family receipts, 217/217 eligible AI App Security files scanned and a sealed manifest. Its 25 retained findings remain unverified. This target- and revision-scoped result is bounded runtime proof, not a security guarantee or universal coverage proof; an approved Deep/Sol run remains a separate gate.
+The 2026-10-11 production release deployed product revision `851c16f2bdb0558cd5cff62b3d8de4cd5a70d437` with worker digest `sha256:22982fccfe6a72fbd50d669653451e44cf358454e2672e31e1c0861ba430b4f7`. Fresh public app and scan-readiness checks returned HTTP 200 with database, Redis and worker ready. This proves deployment and scan admission only; it does not prove authenticated customer-flow use, paid-scan acceptance, billing reconciliation or commercial readiness. See [PRD §8–9](../PRD.md#8-current-production-evidence) for the dated release receipt and remaining gates.
 
-The production application has an authenticated application origin, TLS Redis queue, sandbox-capable worker compute, authorized GPT-6 Luna/Sol deployments, actionable Azure alerts and DNS-pinned deny-by-default egress. The worker runs an explicitly promoted, CI-verified immutable digest rather than a mutable tag; each future release repeats VM digest, OCI-label, Docker-health and scan-readiness reconciliation with the prior digest retained for rollback. Azure Foundry repository scans use direct JSON function tools; optional programmatic tool calling remains capability-gated for the exact provider route. A scheduled pin change defers restart without removing readiness when the single worker already has an active scan. If a claim races after preflight, new admission may temporarily fail closed while the in-flight scan finishes; the scan is not cancelled or replayed. Production private-evidence round-trip/fail-closed, operator notification acknowledgment and controlled queue-orphan recovery passed on 2026-08-26. Longer-window capacity evidence and separate proof for each additional review profile remain required. No recovery or RPO/RTO claim is made.
+The historical Standard scan `cmt9el7p7000001hdjnjo90wk` completed on 2026-08-26 with Luna/medium-only routing, reconciled accounting, exact source identity, complete repository scanner-family receipts, 217/217 eligible AI App Security files scanned and a sealed manifest. Its 25 retained findings remain unverified. This target- and revision-scoped result is bounded runtime proof, not a security guarantee or universal coverage proof; an approved Deep/Sol run remains a separate gate.
+
+The production application has an authenticated origin, TLS Redis queue, sandbox-capable worker compute and DNS-pinned deny-by-default egress. The worker runs an explicitly promoted, CI-checked content-addressed digest; the 2026-10-11 release checked the image provenance, OCI labels, Docker health and scan readiness, with the prior digest retained for rollback. Azure alert rules are declared in source, but post-release live rule and receiver-delivery readback remains open. Azure Foundry repository scans use direct JSON function tools; optional programmatic tool calling remains capability-gated for the exact provider route. A scheduled pin change defers restart without removing readiness when the single worker already has an active scan. If a claim races after preflight, new admission may temporarily fail closed while the in-flight scan finishes; the scan is not cancelled or replayed. Production private-evidence round-trip/fail-closed, operator notification acknowledgment and controlled queue-orphan recovery passed on 2026-08-26. Longer-window capacity evidence and separate proof for each additional review profile remain required. No recovery or RPO/RTO claim is made.
 
 Billing, Local/Desktop licensing and the affiliate application/ledger are implemented. Razorpay Live is activated with the matching INR Cloud catalog and an enabled production webhook; Polar Live has its private Cloud/pack/Local catalog and lifecycle webhook. Historical Polar Sandbox and Razorpay Test Mode provider receipts are retained and their isolated deployment has been removed. No live checkout or payment was exercised. Production desktop distribution proof, payout API provisioning and the public affiliate opening remain controlled release gates.
 
 Myra, the AI support agent, is live on the marketing site and dashboard behind explicit feature flags with session and daily caps; the reviewed knowledge base and feedback capture ship with it. Delegated outbound connectors (GitHub and Slack) are an Agency-tier, admission-gated capability managed through workspace APIs without a dashboard tab yet.
 
-Automatic server-generated Fix PRs, intrusive exploit replay, a within-scan Luna-to-Sol cascade, Security Copilot and enterprise identity/deployment controls are not currently user features.
+Server-generated Fix PRs are implemented under the authorization and patch requirements in §12; this is not a claim of live customer-flow acceptance. Automatic merging, intrusive exploit replay, a within-scan Luna-to-Sol cascade, Security Copilot and enterprise identity/deployment controls are not currently user features.
 
 LyraShield does not claim "SOC 2 compliant," "certified," "guarantees security," "AI safety tested" (without a named framework) or "adversarial robustness proven." Each requires external attestation, a reproducible evaluation corpus, a defined threat model or a formal certificate. See `docs/whitepaper.md` §9 for the claims boundary.
 

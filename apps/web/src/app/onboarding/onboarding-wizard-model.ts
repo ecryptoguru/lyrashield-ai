@@ -24,6 +24,9 @@ export interface OnboardingData {
 
 export interface OnboardingWizardProps {
   principalId: string
+  githubStatus?: string
+  canManageGitHub?: boolean
+  workspaceChoices?: Array<{ id: string; name: string; role: string }>
   initialState: OnboardingData
   selectedPlan?: string | null
   /** Used to name a default workspace when the user has none (W2-01). */

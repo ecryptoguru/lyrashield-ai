@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test"
 import { prisma, withWorkspaceRLS } from "@lyrashield/db"
+import { registerScanWorker, unregisterScanWorker } from "../packages/integrations/src/queue"
+import { closeRedis } from "../packages/integrations/src/redis"
 
 const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 const simulatedClientOctet =
@@ -9,6 +11,8 @@ const ownerEmail = "e2e-owner@example.com"
 const otherEmail = "e2e-other@example.com"
 const workspaceName = `E2E ${suffix}`
 let createdWorkspaceId: string | null = null
+const relayFixtureWorkerId = `e2e-relay-capability-${suffix}`
+let relayFixtureRegistered = false
 
 async function signUp(
   page: import("@playwright/test").Page,
@@ -90,7 +94,12 @@ test.afterAll(async () => {
     }
     await prisma.user.deleteMany({ where: { email: { in: [ownerEmail, otherEmail] } } })
   } finally {
-    await prisma.$disconnect()
+    await (
+      relayFixtureRegistered ? unregisterScanWorker(relayFixtureWorkerId) : Promise.resolve()
+    ).finally(async () => {
+      await closeRedis()
+      await prisma.$disconnect()
+    })
   }
 })
 
@@ -151,10 +160,10 @@ test("tenant boundaries deny another user", async ({ page, browser }, testInfo) 
   createdWorkspaceId = workspaceId
 
   await page.goto("/dashboard")
-  await expect(page.getByRole("heading", { name: "Add your first target" })).toBeVisible()
-  await expect(page.getByRole("link", { name: "Add a target" }).first()).toHaveAttribute(
+  await expect(page.getByRole("heading", { name: "Start your first scan" })).toBeVisible()
+  await expect(page.getByRole("link", { name: "Start your first scan" })).toHaveAttribute(
     "href",
-    "/dashboard/targets"
+    "/dashboard/scans?new=1"
   )
 
   const targetResponse = await page.request.post("/api/targets", {
@@ -274,15 +283,26 @@ test("tenant boundaries deny another user", async ({ page, browser }, testInfo) 
   const targetSelect = page.getByLabel("Target", { exact: true })
   await targetSelect.selectOption({ label: "Example target (Web app)" })
   await expect(page.getByRole("radio", { name: /^Surface Review:/ })).toBeEnabled()
-  await expect(page.getByRole("radio", { name: /^Engine Review:/ })).toBeEnabled()
-  const webDeep = page.getByRole("radio", { name: /^Deep Live Review:/ })
-  await expect(webDeep).toBeEnabled()
-  await webDeep.click()
+  // URL/API launch offers only the deterministic tier: the engine tiers are
+  // removed from the offering, not merely unavailable.
+  await expect(page.getByRole("radio", { name: /^Engine Review:/ })).toHaveCount(0)
+  await expect(page.getByRole("radio", { name: /^Deep Live Review:/ })).toHaveCount(0)
+
+  // The relay is advertised so the API-spec/reset assertions keep their
+  // positive infrastructure case; URL/API reviews are deterministic-only, so
+  // the tiers stay absent regardless. No worker consumes jobs or contacts a
+  // target; this lease lives only in disposable CI Redis.
+  await registerScanWorker(relayFixtureWorkerId, Date.now(), true)
+  relayFixtureRegistered = true
+  await page.reload()
+  await targetSelect.selectOption({ label: "Example target (Web app)" })
+  await expect(page.getByRole("radio", { name: /^Surface Review:/ })).toBeEnabled()
+  await expect(page.getByRole("radio", { name: /^Engine Review:/ })).toHaveCount(0)
 
   await targetSelect.selectOption({ label: "API without contract (API)" })
   await expect(page.getByRole("radio", { name: /^Endpoint Review:/ })).toBeEnabled()
-  await expect(page.getByRole("radio", { name: /^Engine Contract Review:/ })).toBeDisabled()
-  await expect(page.getByRole("radio", { name: /^Deep Contract Review:/ })).toBeDisabled()
+  await expect(page.getByRole("radio", { name: /^Engine Contract Review:/ })).toHaveCount(0)
+  await expect(page.getByRole("radio", { name: /^Deep Contract Review:/ })).toHaveCount(0)
   await expect(page.getByRole("link", { name: "Add OpenAPI document" })).toHaveAttribute(
     "href",
     `/dashboard/targets/${apiTargetId}`
@@ -292,8 +312,7 @@ test("tenant boundaries deny another user", async ({ page, browser }, testInfo) 
   )
 
   await targetSelect.selectOption({ label: "API with contract (API)" })
-  await expect(page.getByRole("radio", { name: /^Engine Contract Review:/ })).toBeEnabled()
-  await expect(page.getByRole("radio", { name: /^Deep Contract Review:/ })).toBeEnabled()
+  await expect(page.getByRole("radio", { name: /^Endpoint Review:/ })).toBeEnabled()
 
   const owner = await prisma.user.findUniqueOrThrow({ where: { email: ownerEmail } })
   const fixture = await withWorkspaceRLS(workspaceId, async (tx) => {

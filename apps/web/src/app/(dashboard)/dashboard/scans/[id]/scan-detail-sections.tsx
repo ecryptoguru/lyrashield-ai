@@ -45,7 +45,7 @@ type ScanPresentationResult = ReturnType<typeof getScanPresentation>
 
 type CoverageReceipt = ScanData["integrity"]["coverage"][number]
 
-export function ScanCoverageDetail({
+function ScanCoverageDetail({
   scan,
   familyCoverage,
   controlCoverage,
@@ -142,7 +142,7 @@ export function ScanCoverageDetail({
                         <span
                           key={cat.id}
                           title={`${cat.id} — ${cat.title}${cat.limited ? " (partial coverage)" : ""}`}
-                          className={`rounded px-1.5 py-0.5 font-mono text-[10px] ${
+                          className={`rounded px-1.5 py-0.5 font-mono text-xs ${
                             cat.state === "evaluated"
                               ? cat.violationSignals > 0
                                 ? "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200"
@@ -175,7 +175,7 @@ export function ScanCoverageDetail({
   )
 }
 
-export function ScanFindingsSection({
+function ScanFindingsSection({
   currentFindings,
   sortedFindings,
   scan,
@@ -505,7 +505,7 @@ export function ScanRefreshPausedBanner({
   )
 }
 
-export function ScanCompletionNotice({
+function ScanCompletionNotice({
   notice,
   onDismiss,
 }: {
@@ -540,7 +540,7 @@ export function ScanCompletionNotice({
   )
 }
 
-export function ScanStatGrid({
+function ScanStatGrid({
   scan,
   findingsCount,
   verifiedCount,

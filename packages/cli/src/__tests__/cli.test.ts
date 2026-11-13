@@ -140,19 +140,6 @@ describe("json merge", () => {
     })
   })
 
-  it("is idempotent", async () => {
-    const file = path.join(tmp, "idempotent.json")
-    const value = { command: "npx", args: ["-y", "@lyrashield/mcp"] }
-    await mergeJson({ filePath: file, rootKey: "mcpServers", serverName: "lyrashield", value })
-    const second = await mergeJson({
-      filePath: file,
-      rootKey: "mcpServers",
-      serverName: "lyrashield",
-      value,
-    })
-    expect(second.changed).toBe(false)
-  })
-
   it("does not write in dry run", async () => {
     const file = path.join(tmp, "dryrun.json")
     const result = await mergeFile({

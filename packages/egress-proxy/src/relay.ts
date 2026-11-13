@@ -4,6 +4,7 @@ import type { Duplex } from "node:stream"
 import { isIP, type LookupFunction } from "node:net"
 import dns from "node:dns/promises"
 import { Agent, request as undiciRequest } from "undici"
+import { RelayOwnerRevocations } from "./relay-owner-revocations"
 import { logger } from "@lyrashield/logger"
 import { isBlockedIp, redactUrlForLogs } from "@lyrashield/security/ssrf"
 import {
@@ -50,6 +51,7 @@ const HOP_BY_HOP_HEADERS = new Set([
   "transfer-encoding",
   "upgrade",
   "x-lyra-relay-grant",
+  "x-lyra-relay-owner",
 ])
 
 interface RelayAuditEntry {
@@ -73,6 +75,7 @@ interface RateWindow {
 }
 
 interface ScanRelayState {
+  ownerId?: string
   scope: RelayGrantScope
   grant: string
   /**
@@ -98,10 +101,12 @@ export interface RelayHandler {
   register(
     scanId: string,
     grant: string | undefined,
-    session?: unknown
+    session?: unknown,
+    ownerId?: string
   ): { ok: true } | { ok: false; reason: string }
   handleForward(req: IncomingMessage, res: ServerResponse): Promise<void>
   handleConnect(req: IncomingMessage, clientSocket: Duplex, head: Buffer): void
+  revokeOwned(scanId: string, ownerId: string, grant: string | undefined): { ok: boolean }
   revoke(scanId: string): void
   getAudit(scanId: string): RelayAuditEntry[] | null
   /** Test/diagnostic: number of live scan states. */
@@ -171,11 +176,35 @@ export interface RelayDeps {
   ca?: string
 }
 
+const checkLimits = (state: ScanRelayState, pathPrefix: string | null): { deny: string } | null => {
+  const { scope } = state
+  if (state.requestCount >= scope.maxRequests) return { deny: "request_cap" }
+  if (state.bytesTotal >= scope.maxBytes) return { deny: "byte_cap" }
+
+  const now = Date.now()
+  if (now - state.rate.windowStart >= 60_000) {
+    state.rate = { windowStart: now, count: 0 }
+    state.perPath.clear()
+  }
+  if (state.rate.count >= scope.ratePerMinute) return { deny: "rate_limited" }
+
+  if (pathPrefix) {
+    const pathWindow = state.perPath.get(pathPrefix) ?? { windowStart: now, count: 0 }
+    if (pathWindow.count >= scope.perPathPerMinute) return { deny: "rate_limited" }
+    pathWindow.count += 1
+    state.perPath.set(pathPrefix, pathWindow)
+  }
+  state.rate.count += 1
+  state.requestCount += 1
+  return null
+}
+
 export function createRelayHandler(signingSecret: string, deps?: RelayDeps): RelayHandler {
   const resolveHost = deps?.resolveHost ?? resolveScopedHost
   const allowedPorts = deps?.allowedForwardPorts ?? ALLOWED_FORWARD_PORTS
   const states = new Map<string, ScanRelayState>()
   const revoked = new Map<string, number>()
+  const revokedOwners = new RelayOwnerRevocations()
   // Grants are revoked/expired before the worker fetches the audit — swept
   // states must keep their trail for a bounded window or the evidence is lost.
   const closedAudits = new Map<string, { entries: RelayAuditEntry[]; expiresAt: number }>()
@@ -207,32 +236,6 @@ export function createRelayHandler(signingSecret: string, deps?: RelayDeps): Rel
     if (!state) return { deny: "unregistered_grant" }
     if (state.grant !== grant) return { deny: "scope_changed" }
     return { state, scope }
-  }
-
-  const checkLimits = (
-    state: ScanRelayState,
-    pathPrefix: string | null
-  ): { deny: string } | null => {
-    const { scope } = state
-    if (state.requestCount >= scope.maxRequests) return { deny: "request_cap" }
-    if (state.bytesTotal >= scope.maxBytes) return { deny: "byte_cap" }
-
-    const now = Date.now()
-    if (now - state.rate.windowStart >= 60_000) {
-      state.rate = { windowStart: now, count: 0 }
-      state.perPath.clear()
-    }
-    if (state.rate.count >= scope.ratePerMinute) return { deny: "rate_limited" }
-
-    if (pathPrefix) {
-      const pathWindow = state.perPath.get(pathPrefix) ?? { windowStart: now, count: 0 }
-      if (pathWindow.count >= scope.perPathPerMinute) return { deny: "rate_limited" }
-      pathWindow.count += 1
-      state.perPath.set(pathPrefix, pathWindow)
-    }
-    state.rate.count += 1
-    state.requestCount += 1
-    return null
   }
 
   const denyForward = (
@@ -511,6 +514,7 @@ export function createRelayHandler(signingSecret: string, deps?: RelayDeps): Rel
     for (const [scanId, expiry] of revoked) {
       if (expiry <= now) revoked.delete(scanId)
     }
+    revokedOwners.sweep(now)
     for (const [scanId, closed] of closedAudits) {
       if (closed.expiresAt <= now) closedAudits.delete(scanId)
     }
@@ -523,8 +527,16 @@ export function createRelayHandler(signingSecret: string, deps?: RelayDeps): Rel
   const sweeper = setInterval(sweep, 60_000)
   sweeper.unref()
 
+  function revoke(scanId: string) {
+    revoked.set(scanId, Date.now() + MAX_RELAY_GRANT_TTL_MS)
+    const state = states.get(scanId)
+    if (state) for (const controller of state.active) controller.abort()
+    if (state)
+      record(state, scanId, { ts: Date.now(), type: "denied", denyReason: "revoked", host: "" })
+  }
+
   return {
-    register(scanId, grant, session) {
+    register(scanId, grant, session, ownerId) {
       const verified = verifyRelayGrant(grant, signingSecret)
       if (!verified.ok) return verified
       const { scope } = verified
@@ -543,12 +555,17 @@ export function createRelayHandler(signingSecret: string, deps?: RelayDeps): Rel
         const sameGrant = existing.grant === grant
         const sameSession =
           JSON.stringify(existing.session ?? null) === JSON.stringify(binding ?? null)
-        return sameGrant && sameSession ? { ok: true } : { ok: false, reason: "scope_changed" }
+        return existing.ownerId === ownerId && sameGrant && sameSession
+          ? { ok: true }
+          : { ok: false, reason: "scope_changed" }
       }
+      if (ownerId && revokedOwners.deniesAdmission(scanId, ownerId))
+        return { ok: false, reason: "revoked" }
       if (closedAudits.has(scanId)) return { ok: false, reason: "closed_scan" }
       states.set(scanId, {
         scope,
         grant: grant!,
+        ownerId,
         ...(binding ? { session: binding } : {}),
         active: new Set(),
         requestCount: 0,
@@ -561,12 +578,18 @@ export function createRelayHandler(signingSecret: string, deps?: RelayDeps): Rel
     },
     handleForward,
     handleConnect,
-    revoke(scanId: string) {
-      revoked.set(scanId, Date.now() + MAX_RELAY_GRANT_TTL_MS)
+    revoke,
+    revokeOwned(scanId, ownerId, grant) {
+      const verified = verifyRelayGrant(grant, signingSecret)
+      if (!ownerId || !verified.ok || verified.scope.scanId !== scanId) return { ok: false }
       const state = states.get(scanId)
-      if (state) for (const controller of state.active) controller.abort()
-      if (state)
-        record(state, scanId, { ts: Date.now(), type: "denied", denyReason: "revoked", host: "" })
+      if (state?.ownerId === ownerId && state.grant === grant) {
+        revoke(scanId)
+      } else {
+        // A delayed registration can outlive the other owner's state and its retained audit.
+        revokedOwners.revoke(scanId, ownerId, verified.scope.exp)
+      }
+      return { ok: true }
     },
     getAudit(scanId: string) {
       if (scanId === "unscoped") return unscopedAudit

@@ -12,10 +12,8 @@ set -eu
 : "${APP_RESOURCE_ID:?APP_RESOURCE_ID is required}"
 : "${SCANNER_RESOURCE_ID:?SCANNER_RESOURCE_ID is required}"
 : "${LYRASHIELD_PRIMARY_OPERATOR_EMAIL:?LYRASHIELD_PRIMARY_OPERATOR_EMAIL is required}"
-: "${LYRASHIELD_FOUNDER_ESCALATION_EMAIL:?LYRASHIELD_FOUNDER_ESCALATION_EMAIL is required}"
-
-if [ "$LYRASHIELD_PRIMARY_OPERATOR_EMAIL" = "$LYRASHIELD_FOUNDER_ESCALATION_EMAIL" ]; then
-  echo "Primary operator and founder escalation emails must be different" >&2
+if [ "$LYRASHIELD_PRIMARY_OPERATOR_EMAIL" != "ankit@lyrashieldai.com" ]; then
+  echo "Primary inbox must match the operator-approved Ankit inbox" >&2
   exit 1
 fi
 
@@ -107,7 +105,6 @@ action_group_id=$(az_run monitor action-group create \
   --name lyrashield-operator-alerts \
   --short-name LyraOps \
   --action email primary-operator "$LYRASHIELD_PRIMARY_OPERATOR_EMAIL" usecommonalertschema \
-  --action email founder-escalation "$LYRASHIELD_FOUNDER_ESCALATION_EMAIL" usecommonalertschema \
   --query id -o tsv)
 
 # Fail before creating/updating alert rules unless Azure retained exactly the
@@ -134,8 +131,8 @@ receiver_count=$(az_run monitor action-group show \
   --name lyrashield-operator-alerts \
   --resource-group "$AZURE_RESOURCE_GROUP" \
   --query "length(emailReceivers)" -o tsv)
-[ "$receiver_count" = "2" ] || {
-  echo "Action group must contain exactly two email receivers" >&2
+[ "$receiver_count" = "1" ] || {
+  echo "Action group must contain exactly one email receiver" >&2
   exit 1
 }
 
@@ -143,14 +140,12 @@ enabled_common_schema_count=$(az_run monitor action-group show \
   --name lyrashield-operator-alerts \
   --resource-group "$AZURE_RESOURCE_GROUP" \
   --query "length(emailReceivers[?status == 'Enabled' && useCommonAlertSchema == \`true\`])" -o tsv)
-[ "$enabled_common_schema_count" = "2" ] || {
-  echo "Both action-group email receivers must be enabled with common alert schema" >&2
+[ "$enabled_common_schema_count" = "1" ] || {
+  echo "The primary action-group email receiver must be enabled with common alert schema" >&2
   exit 1
 }
 
-expected_receiver_emails=$(printf '%s\n%s\n' \
-  "$LYRASHIELD_PRIMARY_OPERATOR_EMAIL" \
-  "$LYRASHIELD_FOUNDER_ESCALATION_EMAIL" | sort)
+expected_receiver_emails=$LYRASHIELD_PRIMARY_OPERATOR_EMAIL
 receiver_emails=$(az_run monitor action-group show \
   --name lyrashield-operator-alerts \
   --resource-group "$AZURE_RESOURCE_GROUP" \
@@ -196,6 +191,9 @@ worker_log_alert() {
   code=$2
   severity=$3
   query="Syslog | where TimeGenerated > ago(10m) | where SyslogMessage has '\"code\":\"${code}\"'"
+  if [ "$code" = "terminal_cost_unreconciled" ]; then
+    query=$(node --input-type=module -e 'import { terminalCostHealthQuery } from "./ops/monitoring/terminal-cost-health-query.mjs"; console.log(terminalCostHealthQuery(process.argv[1]))' "$WORKER_VM_RESOURCE_ID")
+  fi
   az_run monitor scheduled-query create \
     --resource-group "$AZURE_RESOURCE_GROUP" \
     --location "$AZURE_LOCATION" \
@@ -228,33 +226,13 @@ az_run monitor scheduled-query create \
   --description "Scan readiness unavailable for more than five minutes" \
   --output none
 
-app_log_alert() {
-  name=$1
-  code=$2
-  severity=$3
-  query="ContainerAppConsoleLogs_CL | where TimeGenerated > ago(10m) | where ContainerAppName_s =~ '$app_name' | where Log_s has '\"code\":\"${code}\"'"
-  az_run monitor scheduled-query create \
-    --resource-group "$AZURE_RESOURCE_GROUP" \
-    --location "$AZURE_LOCATION" \
-    --name "$name" \
-    --scopes "$LOG_ANALYTICS_WORKSPACE_ID" \
-    --condition "count 'Signal' > 0" \
-    --condition-query "Signal=$query" \
-    --evaluation-frequency 5m \
-    --window-size 10m \
-    --severity "$severity" \
-    --action-groups "$action_group_id" \
-    --auto-mitigate true \
-    --description "LyraShield application alert: $code" \
-    --output none
-}
-app_log_alert webhook-catalog-rejection webhook_catalog_rejection 1
+# These source signals remain available in telemetry. Their three paid alert
+# resources are intentionally excluded until the operator approves them:
+# reconciliation-backlog, reconciliation-duplicates, webhook-catalog-rejection.
 
 worker_log_alert scan-queue-depth-high scan_queue_depth_high 2
 worker_log_alert scan-queue-oldest-wait-high scan_queue_oldest_wait_high 2
 worker_log_alert reconciliation-drift reconciliation_drift 1
-worker_log_alert reconciliation-backlog reconciliation_backlog 1
-worker_log_alert reconciliation-duplicates reconciliation_duplicates 2
 worker_log_alert webhook-dead-letter webhook_dead_letter 1
 worker_log_alert evidence-persistence-failure evidence_persistence_failure 1
 worker_log_alert terminal-cost-unreconciled terminal_cost_unreconciled 1
@@ -338,9 +316,6 @@ for rule in \
   scan-queue-depth-high \
   scan-queue-oldest-wait-high \
   reconciliation-drift \
-  reconciliation-backlog \
-  reconciliation-duplicates \
-  webhook-catalog-rejection \
   webhook-dead-letter \
   evidence-persistence-failure \
   terminal-cost-unreconciled

@@ -257,7 +257,7 @@ describe("handleRemoteMcpRequest (Streamable HTTP, stateless)", () => {
     expect(res.status).toBe(200)
     expect(res.headers.get("mcp-session-id")).toBeNull()
     const body = await readJson(res)
-    expect((body.result as { tools?: unknown[] })?.tools?.length).toBe(21)
+    expect((body.result as { tools?: unknown[] })?.tools?.length).toBe(22)
   })
 
   it("rejects non-POST/GET/DELETE verbs with 405", async () => {
@@ -276,7 +276,7 @@ describe("handleRemoteMcpRequest (Streamable HTTP, stateless)", () => {
     )
     const body = await readJson(res)
     const tools = (body.result as { tools?: Array<{ name: string }> })?.tools ?? []
-    expect(tools.length).toBe(21)
+    expect(tools.length).toBe(22)
     expect(tools.map((t) => t.name)).toContain("lyrashield_run_pr_scan")
     expect(tools.map((t) => t.name)).toContain("lyrashield_get_scan_quality")
     expect(tools.map((t) => t.name)).toContain("lyrashield_get_scan_eligibility")
@@ -317,7 +317,8 @@ describe("handleRemoteMcpRequest (Streamable HTTP, stateless)", () => {
     const body = await readJson(res)
     const result = body.result as { isError?: boolean; content?: Array<{ text: string }> }
     expect(result?.isError).toBe(true)
-    expect(result?.content?.[0]?.text).toContain("no interactive approval channel")
+    expect(result?.content?.[0]?.text).toContain("locally configured credentials")
+    expect(result?.content?.[0]?.text).toContain("trusted automation")
     expect(fetchFn).not.toHaveBeenCalled()
   })
 

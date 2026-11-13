@@ -1,4 +1,9 @@
-import { getCurrentGateVerdicts, parseAssessmentSnapshot, withWorkspaceRLS } from "@lyrashield/db"
+import {
+  getCurrentGateVerdicts,
+  MAX_GATE_READ_BATCH_TARGETS,
+  parseAssessmentSnapshot,
+  withWorkspaceRLS,
+} from "@lyrashield/db"
 import type { GateReadinessTarget } from "./launch-readiness"
 
 interface ReadinessIdentityOptions {
@@ -7,35 +12,45 @@ interface ReadinessIdentityOptions {
 }
 
 /**
- * Uncached gate readiness for every active target. Reads are set-based: one
- * RLS transaction with a statement count constant in the number of targets
+ * Uncached gate readiness for a bounded page of active targets. Reads are set-based: one
+ * RLS transaction with a statement count constant in the page size
  * (Deep Review v16 2.1) — never a per-target verdict fan-out. The result must
  * stay uncached: release decisions are computed on every request.
  */
 export async function getGateReadinessTargets(
   workspaceId: string,
   targetId?: string,
-  identity: ReadinessIdentityOptions = {}
-): Promise<GateReadinessTarget[]> {
+  identity: ReadinessIdentityOptions = {},
+  cursor?: string
+): Promise<GateReadinessTarget[] & { nextCursor: string | null; partial: boolean }> {
   const targets = await withWorkspaceRLS(workspaceId, (tx) =>
     tx.target.findMany({
-      where: { workspaceId, deletedAt: null, ...(targetId ? { id: targetId } : {}) },
+      where: {
+        workspaceId,
+        deletedAt: null,
+        ...(targetId ? { id: targetId } : cursor ? { id: { gt: cursor } } : {}),
+      },
       select: { id: true, name: true },
-      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      orderBy: { id: "asc" },
+      take: targetId ? 1 : MAX_GATE_READ_BATCH_TARGETS + 1,
     })
   )
-  if (targets.length === 0) return []
+  const page = targets.slice(0, MAX_GATE_READ_BATCH_TARGETS)
+  const nextCursor =
+    !targetId && targets.length > MAX_GATE_READ_BATCH_TARGETS ? page.at(-1)!.id : null
+  const partial = !targetId && Boolean(cursor || nextCursor)
+  if (page.length === 0) return Object.assign([], { nextCursor, partial })
 
   const verdictsByTarget = await getCurrentGateVerdicts(
     workspaceId,
-    targets.map((target) => target.id),
+    page.map((target) => target.id),
     {
       expectedCommit: identity.expectedCommit,
       expectedArtifactDigest: identity.expectedArtifactDigest,
     }
   )
 
-  return targets.map((target) => {
+  const projected: GateReadinessTarget[] = page.map((target) => {
     const result = verdictsByTarget.get(target.id)
     if (!result) {
       return {
@@ -78,4 +93,5 @@ export async function getGateReadinessTargets(
       reasons: result.applicability.reasons,
     }
   })
+  return Object.assign(projected, { nextCursor, partial })
 }

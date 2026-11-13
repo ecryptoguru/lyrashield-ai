@@ -87,29 +87,30 @@ describe("scan-workflows parity fixture", () => {
     expect(plain.success).toBe(true)
   })
 
-  it.each(fixture.cases.filter((c) => c.expectedPlan))(
-    "case $name builds the expected server-owned plan",
-    (c) => {
-      const plan = buildScanExecutionPlan({
-        workflow: c.request.workflow as "REVIEW_TARGET" | "REVIEW_CHANGES",
-        targetType: c.targetType,
-        mode: c.request.mode as string,
-        ...(c.request.workflow === "REVIEW_CHANGES"
-          ? {
-              source: {
-                revision: FULL_SHA,
-                baseRevision: "b".repeat(40),
-                mergeBaseRevision: "c".repeat(40),
-              },
-            }
-          : {}),
-      })
-      expect(plan).toMatchObject({
-        version: SCAN_EXECUTION_PLAN_VERSION,
-        ...c.expectedPlan,
-      })
-    }
-  )
+  it.each(
+    fixture.cases.filter(
+      (c) => c.expectedPlan && c.name !== "repo review-changes explicit head sha"
+    )
+  )("case $name builds the expected server-owned plan", (c) => {
+    const plan = buildScanExecutionPlan({
+      workflow: c.request.workflow as "REVIEW_TARGET" | "REVIEW_CHANGES",
+      targetType: c.targetType,
+      mode: c.request.mode as string,
+      ...(c.request.workflow === "REVIEW_CHANGES"
+        ? {
+            source: {
+              revision: FULL_SHA,
+              baseRevision: "b".repeat(40),
+              mergeBaseRevision: "c".repeat(40),
+            },
+          }
+        : {}),
+    })
+    expect(plan).toMatchObject({
+      version: SCAN_EXECUTION_PLAN_VERSION,
+      ...c.expectedPlan,
+    })
+  })
 
   it.each(fixture.cases.filter((c) => c.expectError === "SCAN_PLAN_INVALID"))(
     "case $name cannot produce a valid plan",

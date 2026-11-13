@@ -37,3 +37,6 @@ export {
   OAUTH_CONNECTION_CLAIM,
   OAUTH_AUTH_VERSION_CLAIM,
 } from "./auth"
+
+export { resolveOAuthReadScope } from "./oauth-read-scope"
+export type { OAuthReadScope } from "./oauth-read-scope"

@@ -215,3 +215,32 @@ describe("retest-service", () => {
     })
   })
 })
+
+it.each([{ targetIds: [] }, { targetIds: ["target-1"] }])(
+  "restricts target-owned query relations before cursor pagination $targetIds",
+  async ({ targetIds }) => {
+    vi.clearAllMocks()
+    mockPrisma.retest.findMany.mockResolvedValueOnce([])
+    const result = await listRetests({
+      workspaceId: "ws-1",
+      targetIds,
+      cursor: "cursor-1",
+      findingId: "finding-2",
+      limit: 1,
+    })
+    expect(result).toEqual({ items: [], nextCursor: null })
+    expect(mockPrisma.retest.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          workspaceId: "ws-1",
+          findingId: "finding-2",
+          finding: { workspaceId: "ws-1", targetId: { in: targetIds } },
+          scan: { workspaceId: "ws-1", targetId: { in: targetIds } },
+        }),
+        cursor: { id: "cursor-1" },
+        skip: 1,
+        take: 2,
+      })
+    )
+  }
+)

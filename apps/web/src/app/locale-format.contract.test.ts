@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync, statSync } from "node:fs"
 import { join } from "node:path"
 import { describe, expect, it } from "vitest"
+import * as ts from "typescript"
 
 /**
  * Server components render in the host's locale and timezone; a bare
@@ -24,30 +25,37 @@ function* sources(dir: string): Generator<string> {
 const appDir = new URL("./", import.meta.url).pathname
 
 describe("locale-stable date formatting", () => {
-  it("has no bare toLocale*() calls in server components under app/", () => {
-    const violations: string[] = []
-    for (const file of sources(appDir)) {
-      const text = readFileSync(file, "utf8")
-      if (text.includes('"use client"')) continue
-      for (const match of text.matchAll(/\.toLocale(?:Date|Time)?String\(\)/g)) {
-        violations.push(`${file}:${text.slice(0, match.index).split("\n").length}`)
-      }
-    }
-    expect(violations).toEqual([])
-  })
-
   it("pins an explicit timezone wherever a server component formats with toLocale*", () => {
     const violations: string[] = []
     for (const file of sources(appDir)) {
       const text = readFileSync(file, "utf8")
       if (text.includes('"use client"')) continue
-      for (const match of text.matchAll(/\.toLocale(?:Date|Time)?String\(([^)]*)\)/g)) {
-        // The options object may span lines; check the 200 chars after the call.
-        const callSite = text.slice(match.index, match.index + 400)
-        if (!callSite.includes("timeZone")) {
-          violations.push(`${file}:${text.slice(0, match.index).split("\n").length}`)
+      const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true)
+      const visit = (node: ts.Node): void => {
+        if (
+          ts.isCallExpression(node) &&
+          ts.isPropertyAccessExpression(node.expression) &&
+          /^toLocale(?:Date|Time)?String$/.test(node.expression.name.text)
+        ) {
+          // Inspect this call's options, never an adjacent call or comment.
+          const options = node.arguments[1]
+          const hasTimeZone =
+            options &&
+            ts.isObjectLiteralExpression(options) &&
+            options.properties.some(
+              (property) =>
+                ts.isPropertyAssignment(property) &&
+                (ts.isIdentifier(property.name) || ts.isStringLiteral(property.name)) &&
+                property.name.text === "timeZone"
+            )
+          if (!hasTimeZone) {
+            const { line } = source.getLineAndCharacterOfPosition(node.getStart(source))
+            violations.push(`${file}:${line + 1}`)
+          }
         }
+        ts.forEachChild(node, visit)
       }
+      visit(source)
     }
     expect(violations).toEqual([])
   })

@@ -61,6 +61,7 @@ export function buildScanDetailData({
     id: scan.id,
     workspaceId: scan.workspaceId,
     status: scan.status,
+    capacity: scan.capacity ?? null,
     goal: scan.goal,
     mode: scan.mode,
     triggerType: scan.triggerType,

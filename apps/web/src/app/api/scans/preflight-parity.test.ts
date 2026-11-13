@@ -33,39 +33,54 @@ vi.mock("@lyrashield/config", async (importOriginal) => {
   }
 })
 
-vi.mock("@lyrashield/db", () => ({
-  WorkspaceScanConcurrencyLimitError: class WorkspaceScanConcurrencyLimitError extends Error {},
-  prisma: {
+vi.mock("@lyrashield/db", () => {
+  const prisma = {
     target: { findFirst: vi.fn() },
     workspace: { findUnique: vi.fn() },
     targetDomainVerification: { findFirst: vi.fn() },
     policy: { findFirst: vi.fn() },
     scan: { count: vi.fn(), update: vi.fn() },
     auditLog: { create: vi.fn() },
-  },
-  createScan: vi.fn(),
-  listScans: vi.fn(),
-  updateScanStatus: vi.fn(),
-  claimOrGetAgentOperation: vi.fn(),
-  completeAgentOperation: vi.fn(),
-  failAgentOperation: vi.fn(),
-  resolveScanAttachments: vi.fn().mockResolvedValue([]),
-  resolveAuthenticatedAssessmentAuthorization: vi.fn(),
-  LiveAiSafetyError: class LiveAiSafetyError extends Error {
-    readonly code: string
-    constructor(code: string) {
-      super(code)
-      this.code = code
-    }
-  },
-  ScanAttachmentError: class ScanAttachmentError extends Error {
-    code: string
-    constructor(code: string, message: string) {
-      super(message)
-      this.code = code
-    }
-  },
-}))
+  }
+  return {
+    findCurrentDomainProof: vi.fn(async (workspaceId: string, url: string | null | undefined) => {
+      const domain = url ? new URL(url).hostname.toLowerCase() : null
+      if (!domain) return { domain, verified: false }
+      const proof = await prisma.targetDomainVerification.findFirst({
+        where: { workspaceId, domain, status: "VERIFIED", expiresAt: { gt: new Date() } },
+        select: { id: true },
+      })
+      return { domain, verified: Boolean(proof) }
+    }),
+    WorkspaceScanConcurrencyLimitError: class WorkspaceScanConcurrencyLimitError extends Error {},
+    prisma,
+    withWorkspaceRLS: vi.fn(async (_workspaceId: string, fn: (tx: typeof prisma) => unknown) =>
+      fn(prisma)
+    ),
+    createScan: vi.fn(),
+    listScans: vi.fn(),
+    updateScanStatus: vi.fn(),
+    claimOrGetAgentOperation: vi.fn(),
+    completeAgentOperation: vi.fn(),
+    failAgentOperation: vi.fn(),
+    resolveScanAttachments: vi.fn().mockResolvedValue([]),
+    resolveAuthenticatedAssessmentAuthorization: vi.fn(),
+    LiveAiSafetyError: class LiveAiSafetyError extends Error {
+      readonly code: string
+      constructor(code: string) {
+        super(code)
+        this.code = code
+      }
+    },
+    ScanAttachmentError: class ScanAttachmentError extends Error {
+      code: string
+      constructor(code: string, message: string) {
+        super(message)
+        this.code = code
+      }
+    },
+  }
+})
 
 vi.mock("@lyrashield/auth/server", () => ({
   assertOAuthDelegatedScope: vi.fn(),
@@ -105,6 +120,7 @@ vi.mock("../../../lib/queue", () => ({
 }))
 
 vi.mock("@lyrashield/integrations", () => ({
+  isTargetRelayWorkerAvailable: vi.fn().mockResolvedValue(true),
   getBranchRefSha: vi.fn(),
   getDefaultBranch: vi.fn(),
   getMergeBaseSha: vi.fn(),
@@ -122,9 +138,14 @@ vi.mock("@lyrashield/billing", () => ({
   resolveAccountBilling: vi.fn(async () => ({ effectivePlan: "PRO", currentPlan: "PRO" })),
 }))
 
+import { isTargetRelayWorkerAvailable } from "@lyrashield/integrations"
 import { prisma, createScan } from "@lyrashield/db"
 import { requirePermission } from "@lyrashield/auth/server"
-import { assertScanAllowed, evaluateScanEntitlement } from "@lyrashield/billing"
+import {
+  assertScanAllowed,
+  evaluateScanEntitlement,
+  resolveAccountBilling,
+} from "@lyrashield/billing"
 import { GET as eligibilityGET } from "./eligibility/route"
 import { POST as scansPOST } from "./route"
 
@@ -152,6 +173,7 @@ const query = {
 describe("preflight → POST parity", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(isTargetRelayWorkerAvailable).mockResolvedValue(true)
     configMocks.authAssessment.enabled = "0"
     configMocks.authAssessment.allowlist = ""
     vi.mocked(requirePermission).mockResolvedValue({
@@ -192,6 +214,46 @@ describe("preflight → POST parity", () => {
     } as never)
   })
 
+  it.each(["WEB_APP", "API"])(
+    "refuses removed engine-backed %s reviews before mutation",
+    async (type) => {
+      vi.mocked(prisma.target.findFirst).mockResolvedValue({
+        id: "target-1",
+        type,
+        url: "https://app.example.com",
+        apiSpecUrl: "https://app.example.com/openapi.json",
+      } as never)
+      for (const mode of ["STANDARD", "DEEP", "CUSTOM"]) {
+        const preflight = await eligibilityGET(eligibilityRequest({ ...query, mode }))
+        const advisory = (await preflight.json()).data
+        expect(advisory).toMatchObject({ allowed: false, code: "URL_MODE_UNSUPPORTED" })
+        const post = await scansPOST(postRequest({ ...query, mode }))
+        expect(post.status).toBe(400)
+        expect((await post.json()).error.code).toBe("URL_MODE_UNSUPPORTED")
+      }
+      expect(createScan).not.toHaveBeenCalled()
+      expect(assertScanAllowed).not.toHaveBeenCalled()
+      expect(evaluateScanEntitlement).not.toHaveBeenCalled()
+    }
+  )
+
+  it("keeps repository and surface reviews available without a relay", async () => {
+    vi.mocked(isTargetRelayWorkerAvailable).mockResolvedValue(false)
+    for (const [type, mode] of [
+      ["REPO", "STANDARD"],
+      ["WEB_APP", "SAFE"],
+      ["API", "QUICK"],
+    ] as const) {
+      vi.mocked(prisma.target.findFirst).mockResolvedValue({
+        id: "target-1",
+        type,
+        url: "https://app.example.com",
+      } as never)
+      const preflight = await eligibilityGET(eligibilityRequest({ ...query, mode }))
+      expect((await preflight.json()).data.allowed).toBe(true)
+    }
+  })
+
   it("an allowed preflight never guarantees admission — POST re-gates on fresh state", async () => {
     // Preflight passes while the account has minutes…
     const preflight = await eligibilityGET(eligibilityRequest(query))
@@ -230,13 +292,12 @@ describe("preflight → POST parity", () => {
     })
   })
 
-  it("both routes report the same policy code for the same failing gate", async () => {
+  it("both routes report the same unsupported-URL code for the same failing gate", async () => {
     vi.mocked(prisma.target.findFirst).mockResolvedValue({
       id: "target-1",
       type: "WEB_APP",
       url: "https://app.example.com",
     } as never)
-    vi.mocked(prisma.targetDomainVerification.findFirst).mockResolvedValue(null as never)
 
     const preflight = await eligibilityGET(eligibilityRequest(query))
     const post = await scansPOST(postRequest(query))
@@ -244,9 +305,32 @@ describe("preflight → POST parity", () => {
     const preflightBody = await preflight.json()
     const postBody = await post.json()
     expect(preflightBody.data.allowed).toBe(false)
-    expect(preflightBody.data.code).toBe("DOMAIN_VERIFICATION_REQUIRED")
-    expect(post.status).toBe(403)
-    expect(postBody.error.code).toBe("DOMAIN_VERIFICATION_REQUIRED")
+    expect(preflightBody.data.code).toBe("URL_MODE_UNSUPPORTED")
+    expect(post.status).toBe(400)
+    expect(postBody.error.code).toBe("URL_MODE_UNSUPPORTED")
+  })
+
+  it("refuses a removed engine-backed tier consistently for an expired-trial FREE account", async () => {
+    vi.mocked(resolveAccountBilling).mockResolvedValue({
+      effectivePlan: "FREE",
+      currentPlan: "FREE",
+    } as never)
+    vi.mocked(prisma.target.findFirst).mockResolvedValue({
+      id: "target-1",
+      type: "WEB_APP",
+      url: "https://trial.example.com",
+    } as never)
+
+    const preflight = await eligibilityGET(eligibilityRequest(query))
+    const post = await scansPOST(postRequest(query))
+
+    expect((await preflight.json()).data).toMatchObject({
+      allowed: false,
+      code: "URL_MODE_UNSUPPORTED",
+    })
+    expect(post.status).toBe(400)
+    expect((await post.json()).error.code).toBe("URL_MODE_UNSUPPORTED")
+    expect(createScan).not.toHaveBeenCalled()
   })
 
   it("repeated preflights invoke no mutation code paths", async () => {
@@ -264,16 +348,13 @@ describe("preflight → POST parity", () => {
     )
   })
 
-  it("uses the explicitly selected policy for authenticated-assessment preflight", async () => {
+  it("reports authenticated-assessment as deferred when an explicit policy is selected", async () => {
     configMocks.authAssessment.enabled = "1"
     configMocks.authAssessment.allowlist = "ws-1:target-1"
     vi.mocked(prisma.target.findFirst).mockResolvedValue({
       id: "target-1",
       type: "WEB_APP",
       url: "https://app.example.com",
-    } as never)
-    vi.mocked(prisma.targetDomainVerification.findFirst).mockResolvedValue({
-      id: "proof-1",
     } as never)
     vi.mocked(prisma.policy.findFirst).mockResolvedValue({
       id: "selected-policy",
@@ -283,6 +364,7 @@ describe("preflight → POST parity", () => {
     const response = await eligibilityGET(
       eligibilityRequest({
         ...query,
+        mode: "SAFE",
         workflow: "AUTHENTICATED_ASSESSMENT",
         authorizationRef: "authz-1",
         policyId: "selected-policy",
@@ -291,7 +373,7 @@ describe("preflight → POST parity", () => {
 
     expect((await response.json()).data).toMatchObject({
       allowed: false,
-      code: "SCAN_PLAN_DENIED",
+      code: "SCAN_WORKFLOW_UNAVAILABLE",
     })
     expect(prisma.policy.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({

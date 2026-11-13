@@ -397,3 +397,38 @@ summary::-webkit-details-marker {
 .compare-body table td {
   color: var(--text-muted);
 }
+
+/* Keep comparison prose readable inside the table’s local scroll area. */
+@media (max-width: 767px) {
+  .compare-body table th,
+  .compare-body table td {
+    min-width: 13rem;
+  }
+  .compare-body table th:first-child,
+  .compare-body table td:first-child {
+    min-width: 9rem;
+  }
+}
+
+.compare-body table:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+/* User-triggered theme changes capture both palette and product-image variants. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 180ms;
+  animation-timing-function: ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation: none;
+  }
+}
+
+/* Dialogs keep the page aligned when their scroll lock hides the scrollbar. */
+html {
+  scrollbar-gutter: stable;
+}

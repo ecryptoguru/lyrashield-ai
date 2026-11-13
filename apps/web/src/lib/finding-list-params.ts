@@ -1,5 +1,45 @@
 import type { SortMode } from "@/app/(dashboard)/dashboard/findings/findings-client"
 
+export function updateFindingListUrl(updates: {
+  filter?: string
+  sort?: SortMode
+  target?: string
+  q?: string
+}) {
+  if (typeof window === "undefined") return
+  const params = new URLSearchParams(window.location.search)
+  if (updates.filter !== undefined) {
+    const selection = decodeFindingFilters(updates.filter)
+    params.delete("filter")
+    params.set("status", selection.status)
+    if (selection.severity === "ALL") params.delete("severity")
+    else params.set("severity", selection.severity)
+    if (selection.evidence === "ALL") params.delete("evidence")
+    else params.set("evidence", selection.evidence)
+  }
+  if (updates.sort !== undefined) {
+    if (updates.sort !== "priority") params.set("sort", updates.sort)
+    else params.delete("sort")
+  }
+  if (updates.target !== undefined) {
+    params.delete("targetId")
+    if (updates.target) params.set("target", updates.target)
+    else params.delete("target")
+  }
+  if (updates.q !== undefined) {
+    if (updates.q) params.set("q", updates.q)
+    else params.delete("q")
+  }
+  const search = params.toString()
+  const nextUrl = `${window.location.pathname}${search ? `?${search}` : ""}`
+  if (nextUrl === `${window.location.pathname}${window.location.search}`) return
+  const method =
+    updates.filter !== undefined || updates.target !== undefined || updates.sort !== undefined
+      ? "pushState"
+      : "replaceState"
+  window.history[method](null, "", nextUrl)
+}
+
 /**
  * Server-parsed findings-list state.
  *
@@ -11,9 +51,9 @@ import type { SortMode } from "@/app/(dashboard)/dashboard/findings/findings-cli
  * once hydration diverges, streamed Suspense boundary completion crashes with
  * the `$RS`/`parentNode` TypeError.
  *
- * URL contract: no `filter` parameter means Open. Choosing All must write
- * `filter=ALL` explicitly — the parameter is never removed, because absence
- * now carries meaning.
+ * URL contract: status, severity, and evidence combine independently. Missing
+ * status defaults to Open; All is explicit. Legacy filter links keep their
+ * original exclusive scope until the user changes a selection.
  */
 
 const FINDING_FILTERS = [
@@ -28,7 +68,63 @@ const FINDING_FILTERS = [
   "VERIFIED",
 ] as const
 
-export type FindingFilter = (typeof FINDING_FILTERS)[number]
+// A canonical selection travels through the existing list, history, and
+// WebMCP undo contracts. Legacy exclusive links retain their original scope.
+export const FINDING_STATUSES = [
+  "ALL",
+  "OPEN",
+  "FIX_READY",
+  "PR_OPENED",
+  "TICKET_CREATED",
+  "FIXED_PENDING_RETEST",
+  "FIXED",
+  "ACCEPTED_RISK",
+  "FALSE_POSITIVE",
+  "DUPLICATE",
+] as const
+export const FINDING_SEVERITIES = ["ALL", "CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"] as const
+export const FINDING_EVIDENCE = ["ALL", "VERIFIED", "UNVERIFIED"] as const
+export type FindingFilters = {
+  status: (typeof FINDING_STATUSES)[number]
+  severity: (typeof FINDING_SEVERITIES)[number]
+  evidence: (typeof FINDING_EVIDENCE)[number]
+}
+export type FindingFilter =
+  | (typeof FINDING_FILTERS)[number]
+  | `${FindingFilters["status"]}:${FindingFilters["severity"]}:${FindingFilters["evidence"]}`
+
+export function encodeFindingFilters(filters: FindingFilters): FindingFilter {
+  if (
+    filters.severity === "ALL" &&
+    filters.evidence === "ALL" &&
+    ["OPEN", "ALL", "FIXED"].includes(filters.status)
+  )
+    return filters.status as FindingFilter
+  return `${filters.status}:${filters.severity}:${filters.evidence}`
+}
+
+export function decodeFindingFilters(filter: string): FindingFilters {
+  const [status, severity, evidence] = filter.split(":")
+  if (
+    (FINDING_STATUSES as readonly string[]).includes(status ?? "") &&
+    (FINDING_SEVERITIES as readonly string[]).includes(severity ?? "") &&
+    (FINDING_EVIDENCE as readonly string[]).includes(evidence ?? "")
+  ) {
+    return {
+      status: status as FindingFilters["status"],
+      severity: severity as FindingFilters["severity"],
+      evidence: evidence as FindingFilters["evidence"],
+    }
+  }
+  if ((FINDING_SEVERITIES as readonly string[]).includes(filter) && filter !== "ALL")
+    return { status: "ALL", severity: filter as FindingFilters["severity"], evidence: "ALL" }
+  if (filter === "VERIFIED") return { status: "ALL", severity: "ALL", evidence: "VERIFIED" }
+  return {
+    status: filter === "ALL" || filter === "FIXED" ? filter : "OPEN",
+    severity: "ALL",
+    evidence: "ALL",
+  }
+}
 
 const FINDING_SORTS = ["priority", "severity", "newest"] as const
 
@@ -45,15 +141,36 @@ interface FindingListParams {
 
 export function parseFindingListParams(params: {
   filter?: string
+  status?: string
+  severity?: string
+  evidence?: string
   sort?: string
   scanId?: string
   target?: string
   targetId?: string
   q?: string
 }): FindingListParams {
-  const filter = (FINDING_FILTERS as readonly string[]).includes(params.filter ?? "")
+  let filter = (FINDING_FILTERS as readonly string[]).includes(params.filter ?? "")
     ? (params.filter as FindingFilter)
     : DEFAULT_FINDING_FILTER
+  if (
+    params.status !== undefined ||
+    params.severity !== undefined ||
+    params.evidence !== undefined
+  ) {
+    const legacy = decodeFindingFilters(filter)
+    filter = encodeFindingFilters({
+      status: (FINDING_STATUSES as readonly string[]).includes(params.status ?? "")
+        ? (params.status as FindingFilters["status"])
+        : legacy.status,
+      severity: (FINDING_SEVERITIES as readonly string[]).includes(params.severity ?? "")
+        ? (params.severity as FindingFilters["severity"])
+        : legacy.severity,
+      evidence: (FINDING_EVIDENCE as readonly string[]).includes(params.evidence ?? "")
+        ? (params.evidence as FindingFilters["evidence"])
+        : legacy.evidence,
+    })
+  }
   const sort = (FINDING_SORTS as readonly string[]).includes(params.sort ?? "")
     ? (params.sort as SortMode)
     : "priority"
@@ -114,10 +231,12 @@ export function withPreservedSearchParams(
  * is queried explicitly; ALL applies no status/severity constraint.
  */
 export function findingFilterToApiQuery(filter: FindingFilter): Record<string, string> {
-  if (filter === "ALL") return {}
-  if (["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"].includes(filter)) {
-    return { severity: filter }
+  const selection = decodeFindingFilters(filter)
+  return {
+    ...(selection.status !== "ALL" ? { status: selection.status } : {}),
+    ...(selection.severity !== "ALL" ? { severity: selection.severity } : {}),
+    ...(selection.evidence !== "ALL"
+      ? { verified: selection.evidence === "VERIFIED" ? "true" : "false" }
+      : {}),
   }
-  if (filter === "VERIFIED") return { verified: "true" }
-  return { status: filter }
 }

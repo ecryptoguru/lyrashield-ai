@@ -1,3 +1,5 @@
+import { EngineProcessStopUnconfirmedError } from "../../engine/runner-process"
+import { ColdDatabaseEpochError } from "../../cold-database-epoch"
 import { resolveAccountBilling } from "@lyrashield/billing"
 import { env } from "@lyrashield/config"
 import { addScanEvent, runWithAccountContext } from "@lyrashield/db"
@@ -171,11 +173,27 @@ async function attemptRepoTriageOverlay(args: {
         : triageResult.timedOut
           ? "TRIAGE_TIMEOUT"
           : "TRIAGE_ARTIFACT_UNAVAILABLE"
-  } catch {
+  } catch (error) {
+    if (
+      error instanceof ColdDatabaseEpochError ||
+      error instanceof EngineProcessStopUnconfirmedError
+    )
+      throw error
     // An additive overlay can never fail the deterministic scan.
     triageTerminalReason = "TRIAGE_COMMAND_FAILED"
   }
   return { aiSecuritySignals, triageSnapshot, triageTerminalReason, cacheOperations }
+}
+
+/** Keep the original orchestration call bounded as scanner evidence grows. */
+export function triageEvidence(result: {
+  aiAppSecuritySignals?: AISecuritySignal[]
+  scannerDiscovery?: import("../../engine/scanner-coverage").ScannerDiscovery
+}) {
+  return {
+    aiSecuritySignals: result.aiAppSecuritySignals ?? [],
+    phpContext: result.scannerDiscovery?.iac?.php,
+  }
 }
 
 export async function runEngineTriageOverlay(params: {
@@ -189,6 +207,7 @@ export async function runEngineTriageOverlay(params: {
   isScanCancelled: () => Promise<boolean>
   engineResult: EngineRunResult
   aiSecuritySignals: AISecuritySignal[]
+  phpContext?: import("../../engine/php-engine-context").PhpRepositoryContext
   billedCostUsd: number | null
   costReconciled: boolean
   budgetExceeded: boolean
@@ -232,7 +251,11 @@ export async function runEngineTriageOverlay(params: {
     reconciliationReason = updatedAccounting.reconciliationReason
   }
 
-  const triageInput = buildEngineTriageInput(aiSecuritySignals, engineResult.sourceRevision)
+  const triageInput = buildEngineTriageInput(
+    aiSecuritySignals,
+    engineResult.sourceRevision,
+    params.phpContext
+  )
   const triageFeatureEnabled =
     !deterministicRetest &&
     !agentMinuteTerminalError &&

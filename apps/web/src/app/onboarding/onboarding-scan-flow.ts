@@ -152,7 +152,7 @@ export async function checkPendingScanOperation(
       { schema: scanOperationStatusSchema }
     )
     ctx.setScanOperationStatus(status)
-    if (status.status === "COMPLETED" && status.resultLocation) {
+    if (status.resultLocation) {
       const accepted = {
         ...submission,
         state: "accepted" as const,
@@ -160,6 +160,11 @@ export async function checkPendingScanOperation(
         operationId: status.operationId,
       }
       ctx.setPendingScanSubmission(accepted)
+      if (status.status === "FAILED") {
+        ctx.setScanRecoveryError(
+          "This scan ended with an error. View its status and details before starting another."
+        )
+      }
       try {
         recordAcceptedScan(
           scope,
@@ -424,17 +429,6 @@ export async function runCreateTargetAndStart(
   skipEligibilityCheck = false,
   startTrial = false
 ) {
-  // Validate everything the user can see before creating anything, then resolve
-  // the workspace. The order is the fix (P1-1): an invalid submit must report
-  // its own problem, not provision a workspace first. A retry that reuses the
-  // persisted target skips the source checks — that target already exists, so
-  // there is nothing left to validate.
-  const preflight = await preflightScanStart(ctx)
-  if (!preflight.ok) {
-    ctx.setError(preflight.error)
-    return
-  }
-  const { workspaceId, hasExistingTarget, needsRepo } = preflight
   if (!ctx.selectedReview) {
     ctx.setError("Choose a goal for this review.")
     return
@@ -446,8 +440,19 @@ export async function runCreateTargetAndStart(
     ctx.setError(null)
     ctx.setFailure(null)
     ctx.setScanRecoveryError(null)
-    if (startNewScan) ctx.startNewScanAfterPreflight.current = true
     try {
+      // Workspace preparation writes state too: keep it inside the submission
+      // lock so a restored session cannot prepare twice on rapid Start clicks.
+      const preflight = await preflightScanStart(ctx)
+      if (!preflight.ok) {
+        ctx.setError(preflight.error)
+        return
+      }
+      const { workspaceId, hasExistingTarget, needsRepo } = preflight
+      // React's current render still holds the old data after persist resolves.
+      // Bind completion and recovery to the workspace prepared by this attempt.
+      ctx = { ...ctx, data: { ...ctx.data, workspaceId } }
+      if (startNewScan) ctx.startNewScanAfterPreflight.current = true
       const targetId = await ensureTargetId(ctx, workspaceId, needsRepo, hasExistingTarget)
       ctx.onTargetBound(needsRepo)
       if (

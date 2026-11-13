@@ -10,11 +10,13 @@
   },
   "dependencies": {
     "@lyrashield/config": "workspace:*",
+    "@lyrashield/evidence-storage": "workspace:*",
     "@lyrashield/logger": "workspace:*",
     "@lyrashield/security": "workspace:*",
     "@lyrashield/types": "workspace:*",
     "bullmq": "6.2.0",
-    "ioredis": "^5.11.1"
+    "ioredis": "^5.11.1",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@types/node": "catalog:",

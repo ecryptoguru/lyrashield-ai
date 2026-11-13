@@ -1,8 +1,8 @@
 # LyraShield AI — Whitepaper
 
-## Version 1.1.0 — 2026-10-06
+## Version 1.1.1 — 2026-10-11
 
-> The public product explanation for LyraShield AI: who it serves, what makes it different, how the assurance loop works and what its evidence can establish. The [litepaper](./litepaper.md) is the executive overview; the [yellowpaper](./yellowpaper.md) specifies the technical contracts. Executable source governs implementation; dated release evidence in [PRD.md](../PRD.md#8-current-production-evidence) governs deployment claims. This revision is a documentation review, not a new production acceptance.
+> The public product explanation for LyraShield AI: who it serves, what makes it different, how the assurance loop works and what its evidence can establish. The [litepaper](./litepaper.md) is the executive overview; the [yellowpaper](./yellowpaper.md) specifies the technical contracts. Executable source governs implementation; dated release evidence in [PRD.md](../PRD.md#8-current-production-evidence) governs deployment claims. Release and operational evidence changes over time, so consult the PRD before relying on a deployment claim; this paper does not claim customer-flow acceptance.
 
 ## Contents
 
@@ -270,7 +270,7 @@ Engine output is untrusted and bounded. Candidates, coverage receipts, findings 
 
 Manifest integrity binds the result to execution identity. New-format rows retain the exact checksum input; legacy rows without it remain integrity-unavailable rather than being rewritten to appear verifiable.
 
-Retest validation requires stored original and retest evidence, supported identity and complete deterministic coverage. Repository revisions can differ after a fix; missing identity remains inconclusive. The recorded production audit still identifies a checksum-match gate gap—see §9.3 rather than assuming source requirements prove deployed enforcement.
+Retest validation requires stored original and retest evidence, supported identity and complete deterministic coverage. Repository revisions can differ after a fix; missing identity remains inconclusive. Both stored manifest checksums must match before a deterministic retest can validate a finding. Legacy rows without their original checksum input remain unavailable and are not rewritten. Deployed-release status and the historical audit scope are recorded in the [PRD production evidence](../PRD.md#8-current-production-evidence).
 
 Evidence uploads require checksum and encryption metadata. Direct status changes cannot manufacture a trusted terminal fix; `FIXED_PENDING_RETEST` preserves the need for new evidence.
 
@@ -324,7 +324,7 @@ A repository's inclusion of bounded IaC checks does not mean standalone cloud-ac
 
 ### 5.2 Launch Gate
 
-`lyrashield-gate/2.3.0` evaluates stored assessment evidence into:
+`lyrashield-gate/2.4.0` evaluates stored assessment evidence into:
 
 - **READY:** the implemented evidence rules are satisfied for the assessed scope.
 - **NOT_READY:** an unresolved Critical or High blocker remains after applicable resolution/disposition checks.
@@ -332,7 +332,7 @@ A repository's inclusion of bounded IaC checks does not mean standalone cloud-ac
 
 Coverage and identity sufficiency take precedence over readiness. The gate also requires scoped positive evidence or an applicable disposition for unresolved findings that would otherwise make READY unsupported. Medium/Low are not direct blocking severities, but their evidentiary state can still prevent a positive result.
 
-Historical verdicts are immutable. Applicability is evaluated separately: the assessment expires after 24 hours, and changed identity, policy, newer attempts or evidence drift can make its effective state insufficient.
+Verdicts retain a stored historical assessment. Applicability is evaluated separately: the assessment expires after 24 hours, and changed identity, policy, newer attempts or evidence drift can make its effective state insufficient.
 
 The CLI verdict gate exits `0` for READY, `1` for NOT_READY and `2` for insufficient evidence or error. This is distinct from the local severity/diff gate.
 
@@ -694,7 +694,7 @@ The retained Standard acceptance is target- and revision-scoped, with zero indep
 
 Recorded open gates include billing reconciliation/provider operations, exact-release scan/client acceptance, signed Desktop distribution and broader operational capacity/recovery evidence.
 
-The recorded deployed retest audit identified missing enforcement of checksum MATCH for both manifests. Source remedies and exact deployment/runtime verification must be tracked separately. This paper does not claim the gap is closed or that any historical production result was proven incorrect.
+For dated findings about the historical manifest-checksum audit and its bounded conclusion, consult the [PRD release evidence](../PRD.md#8-current-production-evidence). Current implementation requires matching checksums for both stored manifests before deterministic retest validation; legacy checksum inputs remain unavailable and are not rewritten. A production release or readiness response does not establish authenticated client use or paid-scan acceptance.
 
 Consult [PRD release status](../PRD.md#9-release-status) before reusing operational claims. This documentation revision performs no live scan or financial action.
 
@@ -804,7 +804,7 @@ Document versions and executable methodology versions are separate. Expanding th
 | Contract                    | Version                                     |
 | --------------------------- | ------------------------------------------- |
 | Vibe Security 50            | `vibe-security-50/1.2.0`                    |
-| Launch Gate                 | `lyrashield-gate/2.3.0`                     |
+| Launch Gate                 | `lyrashield-gate/2.4.0`                     |
 | LyraShield Score            | `lyrashield-score/1.0.0`                    |
 | AI-Built Failure Taxonomy   | `ai-built-failure-taxonomy/1.0.0`           |
 | WebMCP detector / inventory | `webmcp-assurance/2` / `webmcp-inventory/1` |
@@ -822,7 +822,7 @@ Named versions make interpretation traceable. They do not make a removed histori
 ## Appendix B — Glossary
 
 - **Agent-minute:** metered engine-backed elapsed time under the terminal-billing policy; not a count of findings or a provider-dollar amount.
-- **Applicability:** whether an immutable assessment can still describe the requested release and current policy/evidence.
+- **Applicability:** whether a stored historical assessment can still describe the requested release and current policy/evidence.
 - **Assessment:** a retained scope, identity and evidence record evaluated by the gate.
 - **BYOK:** supported customer-supplied provider credentials for Local/Desktop.
 - **Coverage receipt:** a recorded scanner/control observation and its limits.

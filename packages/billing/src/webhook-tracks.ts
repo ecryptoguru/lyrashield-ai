@@ -88,8 +88,20 @@ export async function ensureWebhookTrackRows(
   webhookEventId: string,
   tracks: WebhookTrackId[]
 ): Promise<void> {
+  // Prisma materializes @default(now()) as client timestamps for createMany.
+  // Initial tracks must already be due under claimWebhookTrack's DB clock,
+  // including when this call runs inside an existing database transaction.
+  const [clock] = await prisma.$queryRaw<Array<{ initialDueAt: Date }>>`
+    SELECT date_trunc('milliseconds', now()) AS "initialDueAt"
+  `
+  if (!clock?.initialDueAt) throw new Error("Database clock unavailable for initial webhook tracks")
   await prisma.webhookEventTrack.createMany({
-    data: tracks.map((track) => ({ webhookEventId, track })),
+    data: tracks.map((track) => ({
+      webhookEventId,
+      track,
+      nextAttemptAt: clock.initialDueAt,
+      nextAttemptAtUtc: clock.initialDueAt,
+    })),
     skipDuplicates: true,
   })
 }

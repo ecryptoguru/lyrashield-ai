@@ -684,13 +684,7 @@ exports[`conformance: renderConfig round-trips through the format parser > junie
 }"
 `;
 
-exports[`conformance: renderConfig round-trips through the format parser > kilo-code × remote-http — interpolated secret is safe > kilo-code × remote-http — interpolated 1`] = `[Error: renderConfig cannot preserve JSONC comments; use renderEntry + mergeJsonc instead.]`;
-
 exports[`conformance: renderConfig round-trips through the format parser > kilo-code × stdio — interpolated secret is safe > kilo-code × stdio — interpolated 1`] = `[Error: renderConfig cannot preserve JSONC comments; use renderEntry + mergeJsonc instead.]`;
-
-exports[`conformance: renderConfig round-trips through the format parser > mimo-code × remote-http — interpolated secret is safe > mimo-code × remote-http — interpolated 1`] = `[Error: renderConfig cannot preserve JSONC comments; use renderEntry + mergeJsonc instead.]`;
-
-exports[`conformance: renderConfig round-trips through the format parser > mimo-code × stdio — interpolated secret is safe > mimo-code × stdio — interpolated 1`] = `[Error: renderConfig cannot preserve JSONC comments; use renderEntry + mergeJsonc instead.]`;
 
 exports[`conformance: renderConfig round-trips through the format parser > oh-my-pi × remote-http — inline secret may contain the literal key > oh-my-pi × remote-http — inline 1`] = `
 "{

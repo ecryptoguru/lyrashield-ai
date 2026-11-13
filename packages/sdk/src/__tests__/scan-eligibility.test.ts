@@ -69,6 +69,7 @@ describe("getScanEligibility", () => {
       baseRef: "main",
       headRef: "feature/42",
       attachmentIds: ["att_1", "att_2"],
+      engineBudgetCeilingUsd: 1,
     })
 
     const [url] = mockFetch.mock.calls[0] as [string, RequestInit]
@@ -77,6 +78,7 @@ describe("getScanEligibility", () => {
     expect(parsed.searchParams.get("baseRef")).toBe("main")
     expect(parsed.searchParams.get("headRef")).toBe("feature/42")
     expect(parsed.searchParams.getAll("attachmentIds")).toEqual(["att_1", "att_2"])
+    expect(parsed.searchParams.get("engineBudgetCeilingUsd")).toBe("1")
   })
 
   it("prefers an explicit workspaceId over the client default", async () => {

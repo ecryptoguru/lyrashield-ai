@@ -102,6 +102,8 @@ describe("marketing SEO metadata", () => {
     const home = source("../pages/index.astro")
     const methodology = source("../pages/methodology.astro")
     const llms = source("../pages/llms.txt.ts")
+    const hero = source("../components/landing/PremiumHero.astro")
+    const kiloGuide = source("../content/blog/kilo-code-mcp-security-workflow.mdx")
 
     expect(home).toContain('"@type": "WebPage"')
     expect(home).toContain('"@id": `${pageUrl}#application`')
@@ -113,6 +115,14 @@ describe("marketing SEO metadata", () => {
     // date the page displays (the Oct 2026 drift).
     expect(methodology).toContain('const reviewed = "')
     expect(methodology).toContain("dateModified: reviewed")
+    expect(methodology).toContain('const reviewed = "2026-10-24"')
+    expect(hero).toContain("Approve proposed fixes and retest before you ship.")
+    expect(source("../lib/motion-manifest.ts")).toContain("missing proof stays inconclusive")
+    expect(hero).not.toContain("A fresh retest confirms each fix")
+    expect(kiloGuide).toContain("staging-web")
+    expect(kiloGuide).not.toContain("staging-lyrafin-web")
+    expect(kiloGuide).toContain("updatedDate: 2026-10-11")
+    expect(llms).toContain('const LLMS_TXT_DATE_FLOOR = "2026-10-11"')
     // The 43/7 split is derived from the same control registry
     // vibe-security-50.astro builds its own counts from, not a hardcoded
     // literal here — hardcoding it as separate prose would let this file
@@ -144,7 +154,7 @@ describe("marketing SEO metadata", () => {
     expect(llms).toContain("const publicLinks = [")
     expect(llms).toContain("...publicLinks.map(({ label, url }) => markdownLink(label, url))")
     expect(llms).toContain('markdownLink("Start free trial"')
-    expect(llms).toContain('markdownLink("LyraShield AI source code on GitHub"')
+    expect(llms).toContain('markdownLink("Maintainer GitHub profile"')
     expect(llms).not.toContain("const publicPaths = [")
   })
 
@@ -163,7 +173,7 @@ describe("marketing SEO metadata", () => {
   it("keeps the 100-post blog surface crawlable, attributable, and draft-gated", () => {
     const index = source("../pages/blog/[...page].astro")
     const post = source("../layouts/BlogPost.astro")
-    const tag = source("../pages/blog/tags/[tag].astro")
+    const tag = source("../pages/blog/tags/[tag]/[...page].astro")
     const card = source("../components/BlogCard.astro")
     const footer = source("../components/Footer.astro")
 
@@ -328,16 +338,15 @@ describe("marketing SEO metadata", () => {
     expect(header).toContain('{ label: "Lite Check", href: "/scan", note: "Start here" }')
     expect(header.match(/\$\{appUrl\}\/sign-in/g)).toHaveLength(2)
     expect(header).not.toContain('href="/#free-scan"')
-    // The hero primary CTA now jumps to the on-page Lite Check form instead of the
-    // canonical page (founder-approved). The canonical page must still be reachable
-    // from the homepage, so assert that rather than dropping the guarantee.
-    expect(premiumHero).toContain('href="#free-scan" data-cta-id="premium-hero-lite-check"')
+    // The hero explores the workflow; the dedicated Lite section retains the
+    // canonical scanner destination and the consent-bound form.
+    expect(premiumHero).toContain('href="#how-it-works" data-cta-id="premium-hero-workflow"')
     expect(source("../components/landing/HomeLiteScan.astro")).toContain('href="/scan"')
-    expect(source("../components/landing/HomeLiteScan.astro")).toContain('action="/scan"')
+    expect(source("../components/landing/LiteCheckForm.astro")).toContain('action="/scan"')
     // The closing CTA is the single closer now and carries no methodology
     // button, so the guarantee is asserted where the homepage actually offers
     // it: block 2's evidence-states card.
-    expect(source("../pages/index.astro")).toContain('href="/methodology"')
+    expect(source("../components/landing/EvidenceMap.astro")).toContain('href="/methodology"')
     expect(source("../components/Footer.astro")).toContain('href: "/methodology"')
     expect(source("../components/Header.astro")).toContain('href: "/methodology"')
     expect(scanner).toContain(

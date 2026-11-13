@@ -14,6 +14,7 @@ import {
   type UrlRequestMethod,
 } from "@lyrashield/types"
 import type { EngineVulnerability } from "../output-parser"
+import { phpRuntimeBannerFindings } from "./php-runtime"
 import { recordCoverageIssue, type ScannerCoverageIssue } from "../scanner-coverage"
 import { runUrlBehaviorProbes } from "./url-behavior-probes"
 import { toEngineVulnerability } from "./openapi-scanner-support"
@@ -120,6 +121,7 @@ export async function scanUrl(config: UrlScanConfig): Promise<UrlScannerResult> 
   }
 
   const findings = signals.filter(isDetectedSignal).map(toEngineVulnerability)
+  findings.push(...phpRuntimeBannerFindings(document.headers, document.finalUrl))
 
   logger.info("URL scan complete", {
     targetUrl: redactUrlForLogs(targetUrl),

@@ -1,4 +1,5 @@
 import { prisma } from "./client"
+import type { ScopedTransaction } from "./rls"
 import {
   AI_ASSURANCE_CONTROL_IDS,
   listControlEvidence,
@@ -22,12 +23,51 @@ import type { ReportData, ReportWebMcpAssurance } from "./report-generator.valid
 export { isReportData, parseWebMcpAssurance }
 export type { ReportData, ReportWebMcpAssurance }
 
+type ReportCoverageReceipt = { controlId: string; scanner: string; status: string }
+
+function scoreSummary<T extends { score: unknown; grade: unknown; computedAt: Date }>(
+  scoreTrend: T[],
+  bySeverity: Record<string, number>
+) {
+  return {
+    currentScore: scoreTrend[0] ?? null,
+    criticalCount: bySeverity.CRITICAL ?? 0,
+    highCount: bySeverity.HIGH ?? 0,
+  }
+}
+
+function hasIncompleteWindowsReceipt(receipts: ReportCoverageReceipt[]): boolean {
+  return receipts.some(
+    (receipt) =>
+      receipt.controlId === "php-runtime:windows-brotli" &&
+      receipt.scanner === "php-windows-brotli" &&
+      !["COMPLETED", "NOT_APPLICABLE"].includes(receipt.status)
+  )
+}
+
+function getIncompleteScanners(receipts: ReportCoverageReceipt[]): string[] {
+  return [
+    ...new Set(
+      receipts
+        .filter((receipt) => !["COMPLETED", "NOT_APPLICABLE"].includes(receipt.status))
+        .map((receipt) =>
+          receipt.controlId === "php-runtime:windows-brotli" &&
+          receipt.scanner === "php-windows-brotli"
+            ? "PHP Windows Brotli package and cURL applicability"
+            : receipt.scanner
+        )
+    ),
+  ]
+}
+
 export async function gatherReportData(
   workspaceId: string,
   scanId?: string,
-  audience: "developer" | "executive" | "compliance" = "developer"
+  audience: "developer" | "executive" | "compliance" = "developer",
+  client?: ScopedTransaction
 ): Promise<ReportData> {
-  const workspace = await prisma.workspace.findFirst({
+  const db = client ?? prisma
+  const workspace = await db.workspace.findFirst({
     where: { id: workspaceId },
     select: { name: true },
   })
@@ -45,7 +85,7 @@ export async function gatherReportData(
       }
 
   if (scanId) {
-    const scan = await prisma.scan.findFirst({
+    const scan = await db.scan.findFirst({
       where: { id: scanId, workspaceId, deletedAt: null },
       include: {
         target: { select: { name: true, type: true, url: true } },
@@ -104,7 +144,7 @@ export async function gatherReportData(
 
   const FINDINGS_LIMIT = 500
 
-  const findings = await prisma.finding.findMany({
+  const findings = await db.finding.findMany({
     where: scanWhere,
     select: {
       id: true,
@@ -238,21 +278,22 @@ export async function gatherReportData(
     }
   }
 
-  const scoreTrend = await prisma.scoreSnapshot.findMany({
+  const scoreTrend = await db.scoreSnapshot.findMany({
     where: { workspaceId, ...(targetId ? { targetId } : {}) },
     orderBy: { computedAt: "desc" },
     take: 10,
     select: { score: true, grade: true, computedAt: true },
   })
-  const currentScore = scoreTrend[0] ?? null
-  const criticalCount = bySeverity.CRITICAL ?? 0
-  const highCount = bySeverity.HIGH ?? 0
+  const { currentScore, criticalCount, highCount } = scoreSummary(scoreTrend, bySeverity)
   // Only terminal scans with usable coverage can ground a readiness verdict.
   // Partial scans remain conditional even with no retained findings.
   // Historical rows may carry lowercase enum spellings.
   const scanStatus = scanInfo?.status.toUpperCase()
-  const scanUsableForVerdict = scanInfo !== null && scanStatus === "COMPLETED"
-  const isPartialScan = scanStatus === "PARTIAL"
+  const hasIncompleteWindowsBrotli = hasIncompleteWindowsReceipt(scanCoverageReceipts)
+  const scanUsableForVerdict =
+    scanInfo !== null && scanStatus === "COMPLETED" && !hasIncompleteWindowsBrotli
+  const isPartialScan =
+    scanStatus === "PARTIAL" || (scanStatus === "COMPLETED" && hasIncompleteWindowsBrotli)
   const verdict = !scanUsableForVerdict
     ? isPartialScan
       ? criticalCount > 0
@@ -264,15 +305,7 @@ export async function gatherReportData(
       : highCount > 0
         ? "GO_WITH_CONDITIONS"
         : "GO"
-  const incompleteScanners = isPartialScan
-    ? [
-        ...new Set(
-          scanCoverageReceipts
-            .filter((receipt) => !["COMPLETED", "NOT_APPLICABLE"].includes(receipt.status))
-            .map((receipt) => receipt.scanner)
-        ),
-      ]
-    : []
+  const incompleteScanners = isPartialScan ? getIncompleteScanners(scanCoverageReceipts) : []
   const coverageNarrative = isPartialScan
     ? incompleteScanners.length > 0
       ? `Coverage is incomplete; these checks did not complete: ${incompleteScanners.join(", ")}.`
@@ -312,8 +345,9 @@ export async function gatherReportData(
   if (isPartialScan && scanInfo)
     priorityActions.push({
       label: "Complete coverage",
-      detail:
-        "Run the existing scan flow for this target after reviewing the recorded limitations.",
+      detail: hasIncompleteWindowsBrotli
+        ? "Determine whether the serving runtime is Windows; if so, independently verify its package and effective cURL configuration. Review any other recorded limitations."
+        : "Run the existing scan flow for this target after reviewing the recorded limitations.",
       severity: "MEDIUM",
     })
   if (retestCounts.failed > 0)
@@ -335,7 +369,7 @@ export async function gatherReportData(
   )
 
   const aiSecurityScoreSnapshot = scanId
-    ? await getAiSecurityScoreSnapshot(scanId, workspaceId).catch(() => null)
+    ? await getAiSecurityScoreSnapshot(scanId, workspaceId, client).catch(() => null)
     : null
 
   const [aiSystemProfile, threatModel] = targetId

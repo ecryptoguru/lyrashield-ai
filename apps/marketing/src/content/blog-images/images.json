@@ -680,5 +680,82 @@
     "alt": "LyraShield MCP integration with Codex",
     "width": 1600,
     "height": 900
+  },
+  "php2shell-overview": {
+    "cluster": "web-execution",
+    "avif": "/images/blog/library/php2shell-overview/hero.avif",
+    "webp": "/images/blog/library/php2shell-overview/hero.webp",
+    "jpeg": "/images/blog/library/php2shell-overview/hero.jpg",
+    "og": "/images/blog/library/php2shell-overview/og.jpg",
+    "socialPortrait": "/images/blog/library/php2shell-overview/social-portrait.jpg",
+    "alt": "Two fractured glass memory chambers inside a graphite server runtime with amber fault signals",
+    "width": 1600,
+    "height": 900
+  },
+  "php2shell-version": {
+    "cluster": "web-execution",
+    "avif": "/images/blog/library/php2shell-version/hero.avif",
+    "webp": "/images/blog/library/php2shell-version/hero.webp",
+    "jpeg": "/images/blog/library/php2shell-version/hero.jpg",
+    "og": "/images/blog/library/php2shell-version/og.jpg",
+    "socialPortrait": "/images/blog/library/php2shell-version/social-portrait.jpg",
+    "alt": "A terminal connected to a separate web-worker chamber under a magnifying glass",
+    "width": 1600,
+    "height": 900
+  },
+  "php2shell-patching": {
+    "cluster": "web-execution",
+    "avif": "/images/blog/library/php2shell-patching/hero.avif",
+    "webp": "/images/blog/library/php2shell-patching/hero.webp",
+    "jpeg": "/images/blog/library/php2shell-patching/hero.jpg",
+    "og": "/images/blog/library/php2shell-patching/og.jpg",
+    "socialPortrait": "/images/blog/library/php2shell-patching/social-portrait.jpg",
+    "alt": "An amber server cartridge being replaced beside three teal worker instances",
+    "width": 1600,
+    "height": 900
+  },
+  "php2shell-wordpress": {
+    "cluster": "web-execution",
+    "avif": "/images/blog/library/php2shell-wordpress/hero.avif",
+    "webp": "/images/blog/library/php2shell-wordpress/hero.webp",
+    "jpeg": "/images/blog/library/php2shell-wordpress/hero.jpg",
+    "og": "/images/blog/library/php2shell-wordpress/og.jpg",
+    "socialPortrait": "/images/blog/library/php2shell-wordpress/social-portrait.jpg",
+    "alt": "Website and application layers above a hosting server with an amber runtime chamber",
+    "width": 1600,
+    "height": 900
+  },
+  "php2shell-session": {
+    "cluster": "web-execution",
+    "avif": "/images/blog/library/php2shell-session/hero.avif",
+    "webp": "/images/blog/library/php2shell-session/hero.webp",
+    "jpeg": "/images/blog/library/php2shell-session/hero.jpg",
+    "og": "/images/blog/library/php2shell-session/og.jpg",
+    "socialPortrait": "/images/blog/library/php2shell-session/social-portrait.jpg",
+    "alt": "Two session-state vessels connected through a controlled upload-progress aperture",
+    "width": 1600,
+    "height": 900
+  },
+  "php2shell-backports": {
+    "cluster": "web-execution",
+    "avif": "/images/blog/library/php2shell-backports/hero.avif",
+    "webp": "/images/blog/library/php2shell-backports/hero.webp",
+    "jpeg": "/images/blog/library/php2shell-backports/hero.jpg",
+    "og": "/images/blog/library/php2shell-backports/og.jpg",
+    "socialPortrait": "/images/blog/library/php2shell-backports/social-portrait.jpg",
+    "alt": "A repaired teal server core inspected beneath an unchanged amber package marker",
+    "width": 1600,
+    "height": 900
+  },
+  "php2shell-investigation": {
+    "cluster": "web-execution",
+    "avif": "/images/blog/library/php2shell-investigation/hero.avif",
+    "webp": "/images/blog/library/php2shell-investigation/hero.webp",
+    "jpeg": "/images/blog/library/php2shell-investigation/hero.jpg",
+    "og": "/images/blog/library/php2shell-investigation/og.jpg",
+    "socialPortrait": "/images/blog/library/php2shell-investigation/social-portrait.jpg",
+    "alt": "Preserved historical evidence tiles examined beside a repaired teal server",
+    "width": 1600,
+    "height": 900
   }
 }

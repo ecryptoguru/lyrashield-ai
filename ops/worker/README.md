@@ -2,10 +2,18 @@
 
 These files define the dedicated production worker boundary used by the open-registration beta. The worker image and sandbox image must both be immutable digests. Secrets are retrieved at every service start from Azure Key Vault by the VM's system-assigned managed identity and are written only to a root-readable runtime file. Worker startup also reapplies the egress policy after refreshing those endpoints.
 
-The worker container joins two Docker networks:
+The worker and sandbox containers use separate Docker networks:
 
-- `bridge` supplies deny-by-default outbound connectivity enforced in `DOCKER-USER`;
-- `lyrashield-sandbox` is an internal Docker network used only for worker-to-sandbox control traffic.
+- the worker joins only `bridge`, which supplies deny-by-default outbound connectivity enforced in `DOCKER-USER`;
+- sandboxes join only `lyrashield-sandbox`, an internal Docker bridge network with `com.docker.network.bridge.enable_icc=false`.
+
+`run-worker.sh` inspects the configured sandbox network before registry authentication, image pulls or consumer startup. A missing network, a non-bridge driver, external routing, a missing ICC option or enabled inter-container communication fails startup. The launcher never recreates a network. Repair requires stopping scan admission, draining active work and stopping the worker before replacing the network; verify the exact network settings and negative egress checks before restarting and reopening admission.
+
+The launcher refreshes the required control policy after creating the stopped worker and before starting its queue consumer. The firewall allows worker-bridge traffic to sandbox TCP port `48080` only; connection-tracked replies can return, while sandbox-originated connections remain subject to Docker isolation. Do not attach the worker to the sandbox bridge or rely on a same-bridge source-IP exception: a sandbox with raw-socket capabilities could spoof that source.
+
+When repairing an existing worker that is attached to the sandbox network, stop scan admission and prove active work is drained before removing that attachment and any temporary same-bridge firewall exception. Preserve `com.docker.network.bridge.enable_icc=false`, refresh the bounded cross-bridge policy and repeat the control/negative-connectivity checks before reopening admission.
+
+Workspace notification integrations also require the exact approved outbound endpoints `hooks.slack.com:443` and `discord.com:443`. The worker pins these hosts through the same egress policy. `Integration.configRef` points to a workspace-bound encrypted credential artifact; list projections never expose that reference. Account deletion queues eligible artifacts through the existing deletion outbox for asynchronous, retryable removal. Arbitrary webhook domains do not gain outbound access.
 
 Sandbox containers join only the internal network and therefore have no default external route. The egress policy permits DNS-only access to Azure's virtual resolver and resolves and permits only Postgres, Redis, Azure AI, R2, the authenticated URL-scan egress proxy, GitHub, OSV, FIRST EPSS, `api.parallel.ai` (Parallel Search), `api.polar.sh` and `api.razorpay.com` endpoints. The two billing hosts are used only by report-only reconciliation; the provider credentials may grant broader actions than the list/read calls made by that code. CISA KEV read-only GETs use the authenticated proxy instead of a direct pin. BullMQ uses the managed Upstash TLS TCP endpoint via `REDIS_URL`; `UPSTASH_REDIS_REST_URL` remains the HTTPS interface for distributed rate limiting and is never a BullMQ connection string. Worker startup stores the complete approved IPv4 answer set and injects it into the container's hosts file, closing the resolver-to-connect race for CDN and anycast endpoints. Metadata, private, loopback, benchmark, and multicast ranges are rejected before the final deny. Every five minutes the timer resolves and validates a sorted fresh pin set and logs changed hostnames with IP addresses redacted. On a change, it first applies the validated old/new firewall union, then replaces only approved-host entries in the running container's `/etc/hosts` as root while preserving Docker's base entries. It verifies every approved hostname resolves inside the container to exactly the new set before atomically committing the pin file and narrowing the firewall to new pins; established connections remain allowed. Any container write, resolution, or final firewall failure restores the old hosts and pin file where applicable, retains the union, fails closed, and never pauses readiness or restarts the worker. New sandbox scans continue to consume the committed pin file. Retained tuples must match a current reviewed host/port pair or the staged legacy `www.cisa.gov:443` pair.
 
@@ -27,6 +35,7 @@ Copy the four scripts to `/usr/local/libexec/`, including `capture-stop-provenan
 LYRASHIELD_WORKER_IMAGE=ghcr.io/ecryptoguru/lyrashield-ai/lyrashield-worker@sha256:<approved-worker-digest>
 LYRASHIELD_SANDBOX_IMAGE=ghcr.io/ecryptoguru/lyrashield-sandbox@sha256:<approved-sandbox-digest>
 LYRASHIELD_SANDBOX_NETWORK=lyrashield-sandbox
+LYRASHIELD_GITHUB_CREDENTIAL_VAULT_NAME=lyrashieldappsecrets
 # Required when either image is hosted on ghcr.io. GHCR_TOKEN is pulled from Key Vault by refresh-secrets.sh.
 GHCR_USERNAME=<github-username-or-bot>
 ```
@@ -37,9 +46,17 @@ GHCR_USERNAME=<github-username-or-bot>
 
 Deterministic retests run inside the worker without a sandbox bind. Their checkout lives on `/lyrashield-retests`, a separate 1 GiB tmpfs shared across retests. Production rejects an absent or uncapped mount before fetching credentials or source. Each checkout also has a sampled 512 MiB limit; concurrent retests can exhaust the shared cap sooner. Local development uses `/tmp/lyrashield-retests` with the sampled limit only. The stale-resource reaper covers both checkout roots.
 
+## Worker GitHub credential boundary
+
+Private repository fetches and Composer proposals need GitHub App mint authority even when the installation-token cache is cold. The existing app-only vault holds **only these worker-specific copies**: `worker-github-app-id` and `worker-github-app-private-key`. The VM system identity requires `Key Vault Secrets User` at each exact secret resource, never at the app vault, resource group or subscription. The public scanner and additional VM/scanner identities must have no assignments on that vault or its secrets. The ordinary worker/scanner vault must never hold these credentials. OAuth client and webhook secrets remain app-only.
+
+An operator with role-assignment authority must preconfigure the two secret-scoped VM grants. `.github/scripts/verify-worker-github-access.sh` verifies RBAC mode, exact grants, inherited/group assignments and scanner exclusion without creating grants or reading secrets. Deployment then syncs the two copies from the existing GitHub Actions inputs `LYRASHIELD_GITHUB_APP_ID` and `LYRASHIELD_GITHUB_APP_PRIVATE_KEY`; held recovery only validates access and retains existing secret versions. `AZURE_APP_SECRET_KEY_VAULT_NAME` in the `azure-production` environment supplies the vault name to controlled promotion. Its prior value is restored with the prior image on ordinary rollback.
+
+At service start, `refresh-secrets.sh` uses managed identity to load these copies into the root-only `worker.env` as `GITHUB_APP_ID` and a single-line `GITHUB_APP_PRIVATE_KEY` with literal `\n` separators. A dedicated PEM loader rejects empty, CR-containing, malformed and non-RSA keys without printing them. GitHub signing normalizes those separators while preserving multiline app secrets. Every refresh stages the whole environment with mode `0600`; failed reads or validation leave the prior file intact. Do not pass credential values on command lines, add them to runtime configuration or log the environment. Source/local tests do not establish deployed cold-cache private-repository acceptance.
+
 ## Promote a verified worker release
 
-Digest pinning prevents silent updates; it does not freeze the worker. After the application repository's main deployment verifies a SHA-only worker image, its exact digest, and its OCI labels, the production workflow stops admission, proves the database and both queues are idle, pre-pulls the digest, atomically installs the image-owned host scripts and systemd units with rollback copies, updates only `LYRASHIELD_WORKER_IMAGE`, restarts the service, verifies provenance and readiness, then resumes admission. This keeps host startup behavior bound to the reviewed worker digest instead of the VM's bootstrap date. The launcher also pulls an immutable image when it is absent locally, so an empty VM cache cannot break a reviewed promotion.
+Digest pinning prevents silent updates; it does not freeze the worker. After the application repository's main deployment verifies a SHA-only worker image, its exact digest, and its OCI labels, the production workflow stops admission, proves the database and both queues are idle, pre-pulls the digest, atomically installs the image-owned host scripts and systemd units with rollback copies, atomically persists `LYRASHIELD_WORKER_IMAGE` and the nonsecret `LYRASHIELD_GITHUB_CREDENTIAL_VAULT_NAME`, restarts the service, verifies provenance and readiness, then resumes admission. This keeps host startup behavior bound to the reviewed worker digest instead of the VM's bootstrap date. The launcher also pulls an immutable image when it is absent locally, so an empty VM cache cannot break a reviewed promotion.
 
 `run-worker.sh` derives the worker execution provenance entirely from the immutable image: `LYRASHIELD_PRODUCT_REVISION` from the `org.opencontainers.image.revision` label, `LYRASHIELD_ENGINE_REVISION` from the `io.lyrashield.engine.revision` label, and `LYRASHIELD_WORKER_IMAGE_DIGEST` from the pinned reference itself. All three are validated as exact 40-hex/`sha256:<64 hex>` values before the container is created, and the production worker fails closed before readiness if any is missing. Never set these three variables by hand in `worker.env` — the launcher owns them.
 
@@ -54,6 +71,10 @@ systemctl daemon-reload
 systemctl enable --now lyrashield-worker-egress-refresh.timer
 systemctl enable --now lyrashield-worker.service
 ```
+
+Promotion preflights and recovery candidate checks use the same committed DNS pin file as the live worker. They pass every validated address through Docker host mappings; missing or malformed pins stop the probe before container launch. Independent DNS resolution in a probe can select an address outside the committed firewall allowlist and must not substitute for this pin set.
+
+If the refresh timer is active but has no next activation, inspect the service result, committed pins and current DNS before recovery. Starting the reviewed `lyrashield-worker-egress-refresh.service` updates approved pins and live hosts through the existing firewall union and rollback path. Verify the timer returns to waiting and subsequently fires automatically. Do not clear queues or bypass the empty-queue promotion gate to work around a connectivity failure.
 
 Pin refresh does not inspect or interrupt the active job. The firewall union and in-place hosts update keep existing and new endpoint paths valid throughout rotation, so BullMQ clients, readiness, and paid work remain untouched. A failed refresh leaves the old committed pins plus the union for a later timer retry.
 
@@ -72,7 +93,7 @@ Before enabling scan admission:
 1. Verify both configured images contain `@sha256:` and the worker container uses the expected digests.
 2. Verify an allowed HTTPS endpoint, PostgreSQL, Redis, and R2 are reachable from a disposable container on `bridge`.
 3. Verify a non-allowlisted public endpoint, `169.254.169.254`, and RFC1918 destinations are blocked from that same network.
-4. Verify a disposable container on `lyrashield-sandbox` cannot reach a public IP.
+4. Verify the worker can reach sandbox control TCP port `48080`, while another sandbox port is blocked. Verify a disposable sandbox cannot initiate connections to another sandbox or the worker, and cannot reach a public IP. Keep `com.docker.network.bridge.enable_icc=false`; control traffic must enter from the worker bridge, with replies limited to established connections.
 5. Confirm the worker becomes healthy, `/api/ready/scans` becomes `200`, and the registry score advances after 45 seconds.
 6. Stop the service gracefully and confirm `/api/ready/scans` returns `503`, the worker container is absent, and `/run/lyrashield/worker-stop-provenance.json` is a fresh root-owned `0600` receipt; restart it and confirm readiness recovers without replaying work. Receipt capture failure never blocks an emergency stop, but it removes any prior receipt so the offline drill fails closed.
 7. Run the engine's bounded provider-contract baseline against the deployed Azure route. Record its capability result with the deployment revision; run the programmatic-tool gate only when evaluating that optional feature.
@@ -110,6 +131,115 @@ Web search is an optional engine capability that calls `https://api.parallel.ai/
 
 The daily report-only billing reconciliation reads Polar orders and Razorpay payments from the worker VM. The production workflow copies the app's `POLAR_ACCESS_TOKEN` into worker Key Vault as `worker-polar-access-token`; `refresh-secrets.sh` loads it only into the worker container, and `refresh-egress.sh` pins only `api.polar.sh:443` and `api.razorpay.com:443` for those requests. Engine child containers receive an explicit environment allowlist and must not receive billing credentials. The reconciliation code calls provider list/read endpoints only; the configured credentials themselves may permit broader actions, so treat the worker as having that full credential authority. Provider-scoped read-only credentials have not been verified.
 
-The 2026-10-01 production readback found the report-only reconciliation incomplete: Polar's list request returned HTTP 403 `insufficient_scope`; the receipt reported `completed=false`, `polarChecked=0`, `razorpayChecked=0`, and `packCreditsVerified=0`. Code runs Polar and Razorpay sequentially, but the receipt does not retain provider response row counts, so zero Razorpay count alone does not prove it was skipped or establish response contents. The current app-to-worker credential sync overwrites a worker-only token edit on the next release. Resolve the required read grant at the source of truth, then refresh through the guarded release/promotion procedure and retain a completed report-only receipt. Do not replay, clear exceptions, or reset the baseline to produce a green result.
+The 2026-10-01 production readback found the report-only reconciliation incomplete: Polar's list request returned HTTP 403 `insufficient_scope`; the receipt reported `completed=false`, `polarChecked=0`, `razorpayChecked=0`, and `packCreditsVerified=0`. Code runs Polar and Razorpay sequentially, but the receipt does not retain provider response row counts, so zero Razorpay count alone does not prove it was skipped or establish response contents. At that time, the app-to-worker credential sync overwrote a worker-only token edit on the next release. No newer completed reconciliation receipt is recorded in this handoff; confirm the current credential grant and sync contract before acting. Use the guarded release/promotion procedure and retain a completed report-only receipt. Do not replay, clear exceptions, or reset the baseline to produce a green result.
 
 Non-secret tuning variables (`LYRASHIELD_WEB_SEARCH_MODE`, `LYRASHIELD_WEB_SEARCH_MAX_RESULTS`, `LYRASHIELD_WEB_SEARCH_MAX_CHARS_TOTAL`, `LYRASHIELD_WEB_SEARCH_MAX_CALLS_PER_SCAN`, `LYRASHIELD_WEB_SEARCH_BUDGET_USD`) may be added to `/etc/lyrashield/worker-runtime.conf` and are passed to the worker container by `run-worker.sh`. The engine redacts target hosts, secrets, and PII before sending a query and records web-search cost under a separate per-scan budget.
+
+### Isolated Go dependency resolution
+
+The worker launcher provisions the reviewed `golang:1.26.8-alpine` image at digest
+`sha256:8ac98ca534ac3f51e1f420a1dd2c15e74c75cfa0f23f3ad27eb5d7236c349a0c`
+and checks its actual Go version before starting the queue consumer. Provisioning
+is bounded (60-second pull, 15-second qualification); the resolver itself uses
+`--pull=never`. The worker-image contract checks that launcher and runtime pins
+match. Changing either pin requires the native Docker fixture suite and a reviewed
+release. This local qualification does not establish a production deployment.
+
+Go scans copy only `go.mod`, `go.sum`, `go.work` and `go.work.sum` into a private,
+host-visible temporary directory. A non-root, read-only-root, network-disabled
+container runs only Go metadata commands, with toolchain downloading, direct VCS,
+telemetry and inherited credentials disabled. A host-side file relay obtains only
+exact `.mod` and `.info` metadata from `https://proxy.golang.org`; shared SSRF
+validation pins DNS addresses and redirects are refused. No source archives,
+opaque CONNECT tunnel, build, test or repository script execution is permitted.
+
+The total resolution budget is 90 seconds, 500 selected modules and 50 MiB of
+metadata. The receipt records source input SHA-256 hashes, fetched metadata hashes,
+requested image digest, expected/observed toolchain and selected-output hash.
+Known `go.sum` checksums are checked by Go; the relay does not query the checksum
+database. A `go.sum` file alone is never an installed dependency inventory.
+Private or unavailable modules, mutable lookups, missing metadata, newer required
+Go versions, escaping paths and exhausted budgets remain incomplete. Contained
+local replacements preserve native graph selection but have no public release
+identity and remain partial. The shared capability contract names these limits.
+
+Local qualification (no model/provider calls):
+
+```sh
+RUN_GO_RESOLVER_FIXTURE=1 pnpm exec vitest run apps/worker/src/engine/scanners/go-module-resolver.fixture.test.ts
+node --test .github/scripts/tests/go-resolver-image-contract.test.mjs
+```
+
+The Docker fixtures use synthetic metadata through the same file relay; they do
+not fetch repository source or depend on live public module availability.
+
+### Exclusive cold single-worker restart
+
+`cold-start-barrier.py` is explicit host maintenance for the concurrency-one
+first-release route. Supply `--worker-image` and `--sandbox-image` with the old
+immutable GHCR references, `--network lyrashield-sandbox` and
+`--confirm COLD_SINGLE_WORKER`. Invoke the image-qualified host asset with `/usr/bin/python3`
+as root only while the persistent scan-admission stop is held. The helper does
+not acquire or release that stop and never alters scan claims, UNKNOWN holds,
+slots or paid work.
+
+The helper rejects foreign active containers and unexpected restart policies
+before stopping the authenticated old worker service. Unrelated stopped
+containers with no restart policy are fingerprinted and preserved, including
+their volumes. Historical worker image-reference spelling may differ: ownership
+binds to the pinned image ID and its exact source/engine labels. CLI image
+references must include immutable digests. It verifies that systemd owner
+and Docker socket/daemon have stopped, then restarts Docker, authenticates native
+sandbox image IDs, run labels, network and bind roots, and removes exact IDs.
+Every acknowledgement must succeed and the final native inventory must contain
+only the unchanged preserved stopped containers. Failure leaves `/var/lib/lyrashield/worker-cold-start/pending` in place.
+Success writes a root-owned mode-0600 `receipt.json` with boot ID, old image
+references, removed IDs and completion time, then clears both startup fences.
+
+The launcher holds a host ownership lock for its lifetime, writes
+`owner-started` and requires Linux `sync -f` to persist the state filesystem before
+any native execution. Missing or failed sync denies startup. The host barrier
+fsyncs its pending marker and state-directory entries before stopping owners,
+then fsyncs the receipt and renamed directory entry before clearing startup
+fences. Fence removal is followed by another directory fsync. A later automatic restart
+rejects that fence: an empty container snapshot cannot prove that a delayed
+Docker create has drained. Repeat the explicit cold barrier before restarting;
+do not remove fences by hand. Production worker startup also rejects any
+remaining labeled native sandbox and fails if enabled startup cleanup cannot
+establish database ownership or acknowledge removal. Periodic cleanup preserves
+running resources and never automatically replays paid work.
+
+The isolated native proof is opt-in:
+`LYRASHIELD_RUN_ISOLATED_NATIVE_COLD_PROOF=1 python3 .github/scripts/tests/cold-start-barrier.native.py`.
+It uses an invocation-owned Docker-in-Docker daemon, actual daemon restart,
+ID-bound removal and a lost-acknowledgement rejection. Its systemd adapter is
+not production systemd qualification; verify the actual units and exact image
+assets on the exclusive production host before reopening admission.
+
+### Automatic bounded crash recovery
+
+An unexpected worker exit uses the existing `Restart=always` with its start
+limit, then `OnFailure=lyrashield-worker-recover.service`. The independent
+recovery unit has no Docker dependency, so its native daemon barrier survives
+stopping Docker. It preserves the original protected database epoch, claims an
+owned persistent admission stop, refuses changed/unavailable epochs and unquarantined or inconsistent
+paid authority, runs the Python barrier, rechecks the original epoch and starts
+the worker. Foreign admission stops are preserved. Persisted UNKNOWN operations and lifetime-claimed scans remain quarantined with
+their slots while other safe work may resume. Failure leaves recovery held;
+neither paid work nor an epoch pin is automatically reset. Repeated recovery
+starts are limited to three within five minutes.
+
+Install `recover-worker.sh` as `/usr/local/libexec/lyrashield-recover-worker`,
+`worker-recovery-probe.mjs` in the qualified host/image assets and
+`lyrashield-worker-recover.service` beside the worker unit. The probe runs inside
+the exact configured worker image; the host needs Python3 and Linux `sync`, not
+Node. Planned stops remain stopped; routine releases retain their guarded
+promotion procedure.
+
+The existing exact-image pipeline can run
+`LYRASHIELD_RUN_ISOLATED_SYSTEMD_PROOF=1 node .github/scripts/tests/worker-recovery.systemd.mjs`
+to exercise uniquely named transient units on its disposable GitHub Linux runner. It verifies one
+external recovery restart while cycling a simulated native dependency and a
+changed-epoch hold, then stops only its own units. This complements the native
+Docker-in-Docker daemon proof; actual production units still require host
+qualification before relying on automatic recovery.

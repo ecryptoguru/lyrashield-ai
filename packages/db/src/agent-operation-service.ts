@@ -1,7 +1,13 @@
+import { randomBytes } from "node:crypto"
 import { Prisma, type AgentOperation } from "./generated/prisma"
 import { logger } from "@lyrashield/logger"
-import { hashOperationInput } from "./agent-operation-hash"
+import {
+  hashDelegatedAdmissionProof,
+  hashOperationInput,
+  verifyDelegatedAdmissionProof,
+} from "./agent-operation-hash"
 import { withWorkspaceRLS } from "./rls"
+import { projectOperationStatus, type OperationStatusView } from "./operation-status-projection"
 
 function isPrismaInputJsonValue(value: unknown): value is Prisma.InputJsonValue {
   if (value === null || typeof value === "string" || typeof value === "boolean") return true
@@ -59,6 +65,8 @@ export interface ClaimAgentOperationParams {
   userId?: string
 }
 
+const ADMISSION_PROOF_BYTES = 32
+
 export type PrincipalIdentity = {
   principalType: "OAUTH_CONNECTION" | "API_KEY" | "BROWSER_SESSION"
   principalId: string
@@ -99,6 +107,8 @@ export type ClaimOperationResult =
   | {
       status: "NEW"
       operation: AgentOperation
+      /** Server-only proof carried to the synchronous admission boundary. */
+      admissionProof?: string
     }
   | {
       status: "REPLAY"
@@ -117,6 +127,7 @@ export type ClaimOperationResult =
 // unit tests and callers can apply the exact production hashing without
 // importing the Prisma-backed service surface.
 export { hashOperationInput }
+export { hashDelegatedAdmissionProof, verifyDelegatedAdmissionProof }
 
 /** Expire an abandoned outer claim, never reclaim execution or replay a mutation. */
 async function expireOuterExecution(
@@ -220,6 +231,7 @@ export async function claimOrGetAgentOperation(
 
   // Create new operation
   try {
+    const admissionProof = randomBytes(ADMISSION_PROOF_BYTES).toString("base64url")
     const operation = await withWorkspaceRLS(params.workspaceId, (tx) =>
       tx.agentOperation.create({
         data: {
@@ -231,6 +243,7 @@ export async function claimOrGetAgentOperation(
           principalType: principal.principalType,
           principalId: principal.principalId,
           authorizationVersion: params.authorizationVersion ?? 1,
+          admissionProofHash: hashDelegatedAdmissionProof(admissionProof),
           status: "EXECUTING",
         },
       })
@@ -239,6 +252,7 @@ export async function claimOrGetAgentOperation(
     return {
       status: "NEW",
       operation,
+      admissionProof,
     }
   } catch (err: unknown) {
     // Handle concurrent create race (unique constraint violation P2002)
@@ -460,6 +474,37 @@ export async function getAgentOperation(
   )
 }
 
+/** Resolve the exact server-claimed scan operation with its one-time proof. */
+export async function resolveDelegatedScanOperation(
+  workspaceId: string,
+  params: {
+    operationId: string
+    admissionProof: string
+    connectionId: string
+    authorizationVersion: number
+  }
+): Promise<AgentOperation | null> {
+  const operation = await withWorkspaceRLS(workspaceId, (tx) =>
+    tx.agentOperation.findFirst({
+      where: {
+        id: params.operationId,
+        workspaceId,
+        connectionId: params.connectionId,
+        principalType: "OAUTH_CONNECTION",
+        principalId: params.connectionId,
+        operationName: "scan.create",
+        authorizationVersion: params.authorizationVersion,
+        status: "EXECUTING",
+        resultReference: null,
+      },
+    })
+  )
+  return operation &&
+    verifyDelegatedAdmissionProof(params.admissionProof, operation.admissionProofHash)
+    ? operation
+    : null
+}
+
 export interface AgentOperationListItem {
   id: string
   operationName: string
@@ -479,14 +524,16 @@ export interface AgentOperationListItem {
  */
 export async function listRecentAgentOperations(
   workspaceId: string,
-  limit = 20
+  limit = 20,
+  cursor?: string
 ): Promise<AgentOperationListItem[]> {
   const boundedLimit = Math.max(1, Math.min(limit, 50))
   const rows = await withWorkspaceRLS(workspaceId, (tx) =>
     tx.agentOperation.findMany({
       where: { workspaceId },
-      orderBy: { createdAt: "desc" },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       take: boundedLimit,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
       select: {
         id: true,
         operationName: true,
@@ -544,21 +591,7 @@ export async function listAgentOperationsForTasks(params: {
   )
 }
 
-export type OperationStatusState = "PENDING" | "EXECUTING" | "COMPLETED" | "FAILED" | "CONFLICT"
-
-export interface OperationStatusView {
-  /** Stable operation identity, safe to share with the principal. */
-  operationId: string
-  status: OperationStatusState
-  /** Safe reason code; never raw provider or internal error text. */
-  reasonCode: string | null
-  /** Where the durable result lives (e.g. a scan id), when completed. */
-  resultLocation: string | null
-  /** The one recovery action this state permits. */
-  recovery: "wait" | "poll" | "retry_new_key" | "none"
-  createdAt: string
-  updatedAt: string
-}
+export type { OperationStatusState, OperationStatusView } from "./operation-status-projection"
 
 /**
  * One operation-status/recovery contract (W3-08) shared by the dashboard,
@@ -594,22 +627,14 @@ export function toOperationStatusView(operation: AgentOperation): OperationStatu
     typeof result === "object" &&
     !Array.isArray(result) &&
     result.isError === true
-  const status = operation.status === "COMPLETED" && failedResult ? "FAILED" : operation.status
-  const recovery: OperationStatusView["recovery"] =
-    status === "COMPLETED"
-      ? "none"
-      : status === "EXECUTING" || status === "PENDING"
-        ? "poll"
-        : status === "FAILED" && operation.error === "OPERATION_NOT_SUBMITTED"
-          ? "retry_new_key"
-          : "wait"
-  return {
-    operationId: operation.id,
-    status,
-    reasonCode: operation.error || failedResult ? "OPERATION_FAILED" : null,
+  return projectOperationStatus({
+    id: operation.id,
+    status: operation.status,
+    error: operation.error,
+    failedResult,
     resultLocation: operation.resultReference,
-    recovery,
-    createdAt: operation.createdAt.toISOString(),
-    updatedAt: operation.updatedAt.toISOString(),
-  }
+    allowRecoveryDetails: true,
+    createdAt: operation.createdAt,
+    updatedAt: operation.updatedAt,
+  })
 }

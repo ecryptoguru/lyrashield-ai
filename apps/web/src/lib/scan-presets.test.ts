@@ -47,10 +47,8 @@ describe("scan presets", () => {
     expect(repoOptions.find((option) => option.id === "DEEP_REVIEW")?.limitsSummary).toBe(
       "Up to 40 minutes of engine time"
     )
-    const deepUrl = getManualScanOptions({ type: "WEB_APP" }).find(
-      (option) => option.id === "WEB_APP_DEEP"
-    )
-    expect(deepUrl?.limitsSummary).toBe("Up to 40 minutes of engine time")
+    const urlSafe = getManualScanOptions({ type: "WEB_APP" })[0]
+    expect(urlSafe?.limitsSummary).toBe("Bounded deterministic checks only")
   })
 
   it("falls back to the release check for unknown client values", () => {
@@ -66,6 +64,7 @@ describe("getManualScanOptions", () => {
       "CODE_REVIEW",
       "REVIEW_CHANGES",
       "DEEP_REVIEW",
+      "CODE_REVIEW_LAUNCH_REVIEW",
     ])
     expect(options.every((o) => o.available)).toBe(true)
     expect(options.every((option) => !Object.hasOwn(option, "maxBudgetUsd"))).toBe(true)
@@ -97,10 +96,12 @@ describe("getManualScanOptions", () => {
       // No provider/model cost may ever leak into creation UX.
       expect(option.limitsSummary).not.toMatch(/\$|USD|cost/i)
     }
-    const engineBackedUrl = getManualScanOptions({ type: "WEB_APP" }).find(
-      (o) => o.id === "WEB_APP_STANDARD"
-    )
-    expect(engineBackedUrl?.authorizationHint).toContain("verified domain")
+    // URL/API launch is deterministic-only: no engine-backed option exists, so
+    // no option may carry an engine authorization hint.
+    for (const option of getManualScanOptions({ type: "WEB_APP" })) {
+      expect(option.usesAi).toBe(false)
+      expect(option.authorizationHint).toBeUndefined()
+    }
     // No preset copy may claim certification or guaranteed detection.
     for (const option of getManualScanOptions({ type: "REPO" })) {
       expect(`${option.label} ${option.description} ${option.hint}`).not.toMatch(
@@ -109,9 +110,9 @@ describe("getManualScanOptions", () => {
     }
   })
 
-  it("returns Safe, Standard, and Deep web review options", () => {
+  it("returns only the deterministic Safe web review option", () => {
     const options = getManualScanOptions({ type: "WEB_APP" })
-    expect(options.map((o) => o.id)).toEqual(["WEB_APP_SAFE", "WEB_APP_STANDARD", "WEB_APP_DEEP"])
+    expect(options.map((o) => o.id)).toEqual(["WEB_APP_SAFE"])
     expect(options[0]).toMatchObject({
       id: "WEB_APP_SAFE",
       label: "Surface Review",
@@ -120,24 +121,7 @@ describe("getManualScanOptions", () => {
       estimate: { low: 1, high: 2 },
       usesAi: false,
       available: true,
-    })
-    expect(options[1]).toMatchObject({
-      id: "WEB_APP_STANDARD",
-      label: "Engine Review",
-      mode: "STANDARD",
-      goal: "TEST_APP",
-      estimate: { low: 12, high: 23 },
-      usesAi: true,
-      available: true,
-    })
-    expect(options[2]).toMatchObject({
-      id: "WEB_APP_DEEP",
-      label: "Deep Live Review",
-      mode: "DEEP",
-      goal: "FULL_PENTEST",
-      estimate: { low: 25, high: 40 },
-      usesAi: true,
-      available: true,
+      applicableChecks: ["Public surface checks"],
     })
   })
 
@@ -145,8 +129,6 @@ describe("getManualScanOptions", () => {
     const options = getManualScanOptions({ type: "API" })
     expect(options.map((o) => ({ id: o.id, available: o.available }))).toEqual([
       { id: "API_SAFE", available: true },
-      { id: "API_STANDARD", available: false },
-      { id: "API_DEEP", available: false },
     ])
     expect(options[0]).toMatchObject({
       id: "API_SAFE",
@@ -159,9 +141,9 @@ describe("getManualScanOptions", () => {
     })
   })
 
-  it("returns Contract and Contract Behavior options for an API target with an OpenAPI spec", () => {
+  it("returns only the deterministic endpoint option for an API target with an OpenAPI spec", () => {
     const options = getManualScanOptions({ type: "API", hasApiSpec: true })
-    expect(options.map((o) => o.id)).toEqual(["API_SAFE", "API_STANDARD", "API_DEEP"])
+    expect(options.map((o) => o.id)).toEqual(["API_SAFE"])
     expect(options[0]).toMatchObject({
       id: "API_SAFE",
       label: "Endpoint Review",
@@ -169,24 +151,6 @@ describe("getManualScanOptions", () => {
       goal: "LAUNCH_REVIEW",
       estimate: { low: 1, high: 2 },
       usesAi: false,
-      available: true,
-    })
-    expect(options[1]).toMatchObject({
-      id: "API_STANDARD",
-      label: "Engine Contract Review",
-      mode: "STANDARD",
-      goal: "TEST_APP",
-      estimate: { low: 12, high: 23 },
-      usesAi: true,
-      available: true,
-    })
-    expect(options[2]).toMatchObject({
-      id: "API_DEEP",
-      label: "Deep Contract Review",
-      mode: "DEEP",
-      goal: "FULL_PENTEST",
-      estimate: { low: 25, high: 40 },
-      usesAi: true,
       available: true,
     })
   })
@@ -198,6 +162,7 @@ describe("getManualScanOptions", () => {
       "CODE_REVIEW",
       "REVIEW_CHANGES",
       "DEEP_REVIEW",
+      "CODE_REVIEW_LAUNCH_REVIEW",
     ])
   })
 })

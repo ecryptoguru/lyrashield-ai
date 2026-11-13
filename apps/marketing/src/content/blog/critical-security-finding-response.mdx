@@ -2,7 +2,7 @@
 title: "What to do with a critical security finding"
 description: "Treat critical severity as a triage input: confirm scope and exposure, contain credible risk, preserve evidence, fix and run a fresh retest."
 pubDate: 2026-07-17
-updatedDate: 2026-08-07
+updatedDate: 2026-10-24
 author: lyrashield-team
 tags: ["verification", "vibe-coding-security"]
 draft: false
@@ -101,6 +101,8 @@ Do not put secrets, personal data or exploit-ready details in a broadly visible 
 Review a proposed fix like any other security-sensitive change. Inspect authorization, error paths, dependency updates, migrations, rollback behavior and tests. Run normal regression checks plus an independent test derived from the original precondition.
 
 After deployment to an authorized test environment, run a fresh server-owned retest against the original condition. Preserve both results. A clean deterministic retest supports a retest-confirmed outcome only when the relevant scanner coverage was complete. If the affected path was skipped or the environment did not match, record the result as inconclusive.
+
+For a PHP runtime advisory, a clean source retest cannot show which binary or image is serving requests. Preserve the rollout and worker readback described in the [PHP2Shell patching guide](/blog/patch-php2shell-docker-fpm-apache). Patching also cannot establish that no earlier compromise occurred; use the [earlier-compromise review](/blog/php2shell-investigate-earlier-compromise) to keep that investigation separate from remediation.
 
 LyraShield AI can represent a finding workflow, approval-bound fix proposal and retest record. It does not automatically execute a fix pull request. Human approval and the repository's own merge controls remain required.
 

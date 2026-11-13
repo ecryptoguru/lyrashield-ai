@@ -10,7 +10,7 @@ vi.mock("@lyrashield/db", async () => {
   )
   return {
     getSystemPrisma: () => ({ scan: { findUnique: systemScanFindUnique } }),
-    updateScanStatus: updateScanStatusMock,
+    updateUnclaimedScanStatus: updateScanStatusMock,
     verifyStoredScanExecutionPlan: planModule.verifyStoredScanExecutionPlan,
   }
 })

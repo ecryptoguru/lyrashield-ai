@@ -1,5 +1,6 @@
 import { checksum } from "./checksum"
 import { prisma, verifyStoredManifestChecksum, withWorkspaceRLS } from "@lyrashield/db"
+import { DETERMINISTIC_RETEST_SCANNERS } from "@lyrashield/types"
 
 export async function markRetestsRunning(scanId: string): Promise<void> {
   await prisma.retest.updateMany({
@@ -8,16 +9,7 @@ export async function markRetestsRunning(scanId: string): Promise<void> {
   })
 }
 
-const DETERMINISTIC_RETEST_SCANNERS = new Set([
-  "sca",
-  "secrets",
-  "url",
-  "agent_config",
-  "ai_app_security",
-  "ml_supply_chain",
-  "sast",
-  "iac",
-])
+const deterministicRetestScanners = new Set<string>(DETERMINISTIC_RETEST_SCANNERS)
 const SOURCE_REVISION_PATTERN = /^[0-9a-f]{40}$/i
 const URL_CHECKSUM_PATTERN = /^[0-9a-f]{64}$/i
 
@@ -103,47 +95,11 @@ function retestReceipt(params: {
   }
 }
 
-function evaluateRetestOutcome(params: {
-  retestId: string
-  baselineScan: { id: string; targetId: string | null }
-  retestScan: { id: string; targetId: string | null }
-  baselineManifest: StoredManifest | null
-  retestManifest: StoredManifest | null
-  baselineCoverage: { id: string; controlId: string; status: string }[]
-  retestCoverage: { id: string; controlId: string; status: string }[]
-  sources: string[]
-}) {
-  const {
-    retestId,
-    baselineScan,
-    retestScan,
-    baselineManifest,
-    retestManifest,
-    baselineCoverage,
-    retestCoverage,
-    sources,
-  } = params
-  const baselineChecksumValid = verifyStoredManifestChecksum(baselineManifest) === "MATCH"
-  const retestChecksumValid = verifyStoredManifestChecksum(retestManifest) === "MATCH"
-  const trustedBaselineManifest = baselineChecksumValid ? baselineManifest : null
-  const trustedRetestManifest = retestChecksumValid ? retestManifest : null
-  const baselineIdentity = storedManifestIdentity(baselineScan.id, trustedBaselineManifest)
-  const retestIdentity = storedManifestIdentity(retestScan.id, trustedRetestManifest)
-  const deterministicSources = sources.filter((source) => DETERMINISTIC_RETEST_SCANNERS.has(source))
-  const hasEngineOrUnknownSource = sources.some(
-    (source) => !DETERMINISTIC_RETEST_SCANNERS.has(source)
-  )
-  const scannerSource = deterministicSources.join("+")
-
-  const baselineTargetMatches =
-    baselineChecksumValid &&
-    baselineIdentity?.scanId === baselineScan.id &&
-    baselineScan.targetId === baselineManifestTargetId(trustedBaselineManifest)
-  const retestTargetMatches =
-    retestChecksumValid &&
-    retestIdentity?.scanId === retestScan.id &&
-    retestScan.targetId === baselineManifestTargetId(trustedRetestManifest)
-
+function compareRetestIdentity(
+  trustedBaselineManifest: StoredManifest | null,
+  baselineIdentity: ReturnType<typeof storedManifestIdentity>,
+  retestIdentity: ReturnType<typeof storedManifestIdentity>
+) {
   // Repository scans prove identity by exact source revision: both
   // revisions must be present and well-formed, and may legitimately differ
   // after a fix. URL/API scans prove identity by a matching URL checksum.
@@ -162,6 +118,58 @@ function evaluateRetestOutcome(params: {
       baselineIdentity.targetUrlChecksum !== null &&
       retestIdentity.targetUrlChecksum !== null &&
       baselineIdentity.targetUrlChecksum === retestIdentity.targetUrlChecksum)
+
+  return { revisionIdentityValid, urlIdentityValid }
+}
+
+function evaluateRetestOutcome(params: {
+  retestId: string
+  baselineScan: { id: string; targetId: string | null }
+  retestScan: { id: string; targetId: string | null }
+  baselineManifest: StoredManifest | null
+  retestManifest: StoredManifest | null
+  baselineCoverage: { id: string; controlId: string; status: string }[]
+  retestCoverage: { id: string; controlId: string; status: string }[]
+  sources: string[]
+  requiresDeployedPhpEvidence?: boolean
+}) {
+  const {
+    retestId,
+    baselineScan,
+    retestScan,
+    baselineManifest,
+    retestManifest,
+    baselineCoverage,
+    retestCoverage,
+    sources,
+    requiresDeployedPhpEvidence,
+  } = params
+  const baselineChecksumValid = verifyStoredManifestChecksum(baselineManifest) === "MATCH"
+  const retestChecksumValid = verifyStoredManifestChecksum(retestManifest) === "MATCH"
+  const trustedBaselineManifest = baselineChecksumValid ? baselineManifest : null
+  const trustedRetestManifest = retestChecksumValid ? retestManifest : null
+  const baselineIdentity = storedManifestIdentity(baselineScan.id, trustedBaselineManifest)
+  const retestIdentity = storedManifestIdentity(retestScan.id, trustedRetestManifest)
+  const deterministicSources = sources.filter((source) => deterministicRetestScanners.has(source))
+  const hasEngineOrUnknownSource = sources.some(
+    (source) => !deterministicRetestScanners.has(source)
+  )
+  const scannerSource = deterministicSources.join("+")
+
+  const baselineTargetMatches =
+    baselineChecksumValid &&
+    baselineIdentity?.scanId === baselineScan.id &&
+    baselineScan.targetId === baselineManifestTargetId(trustedBaselineManifest)
+  const retestTargetMatches =
+    retestChecksumValid &&
+    retestIdentity?.scanId === retestScan.id &&
+    retestScan.targetId === baselineManifestTargetId(trustedRetestManifest)
+
+  const { revisionIdentityValid, urlIdentityValid } = compareRetestIdentity(
+    trustedBaselineManifest,
+    baselineIdentity,
+    retestIdentity
+  )
 
   const familyReceiptComplete = (receipts: { controlId: string; status: string }[]) =>
     deterministicSources.every((source) =>
@@ -185,6 +193,7 @@ function evaluateRetestOutcome(params: {
     }
   )
   const canValidate =
+    !requiresDeployedPhpEvidence &&
     identityValid &&
     coverageComplete &&
     revisionIdentityValid &&
@@ -216,6 +225,8 @@ function evaluateRetestOutcome(params: {
   }
 
   const missingParts: string[] = []
+  if (requiresDeployedPhpEvidence)
+    missingParts.push("trusted deployed PHP runtime identity and worker replacement evidence")
   if (!baselineChecksumValid) missingParts.push("baseline result manifest checksum")
   if (!retestChecksumValid) missingParts.push("retest result manifest checksum")
   if (sources.length === 0 || hasEngineOrUnknownSource)
@@ -231,6 +242,81 @@ function evaluateRetestOutcome(params: {
     reason: `The finding was not detected, but validation evidence is incomplete: ${missingParts.join(", ")}.`,
     evidence,
   }
+}
+
+function groupCandidateSources(
+  candidateRows: { findingId: string | null; scannerSource: string; payload: unknown }[]
+) {
+  const candidateSourcesByFinding = new Map<string, string[]>()
+  const deployedPhpEvidenceRequired = new Set<string>()
+  for (const candidate of candidateRows) {
+    if (!candidate.findingId) continue
+    const sources = candidateSourcesByFinding.get(candidate.findingId) ?? []
+    sources.push(candidate.scannerSource)
+    candidateSourcesByFinding.set(candidate.findingId, sources)
+    const payload = candidate.payload
+    if (
+      payload &&
+      typeof payload === "object" &&
+      !Array.isArray(payload) &&
+      "findingClass" in payload &&
+      typeof payload.findingClass === "string" &&
+      payload.findingClass.startsWith("php_runtime_")
+    ) {
+      deployedPhpEvidenceRequired.add(candidate.findingId)
+    }
+  }
+
+  return { candidateSourcesByFinding, deployedPhpEvidenceRequired }
+}
+
+/** Match current detections to both scoped and legacy Composer identities without mutating evidence. */
+function resolveRetestCandidateIdentity(
+  candidateRows: {
+    findingId: string | null
+    scanId: string
+    scannerSource: string
+    payload: unknown
+  }[],
+  retestFindings: { id: string }[],
+  scanId: string
+) {
+  const persistedFindingIds = new Set(retestFindings.map((finding) => finding.id))
+
+  const baselineCandidates = candidateRows.filter((candidate) => candidate.scanId !== scanId)
+  const currentComposerAliases = new Set<string>()
+  for (const candidate of candidateRows) {
+    if (
+      candidate.scanId !== scanId ||
+      !candidate.findingId ||
+      !persistedFindingIds.has(candidate.findingId)
+    )
+      continue
+    const payload = candidate.payload as {
+      dependencyIdentityVersion?: unknown
+      dependencyLegacyDedupeKey?: unknown
+    } | null
+    if (
+      payload?.dependencyIdentityVersion === "composer-lock/1" &&
+      typeof payload.dependencyLegacyDedupeKey === "string"
+    )
+      currentComposerAliases.add(payload.dependencyLegacyDedupeKey)
+  }
+  // Scoped Composer findings still represent legacy unscoped findings while any service remains affected.
+  for (const candidate of baselineCandidates) {
+    const payload = candidate.payload as {
+      dependencyIdentityVersion?: unknown
+      dedupeKey?: unknown
+    } | null
+    if (
+      candidate.findingId &&
+      payload?.dependencyIdentityVersion === undefined &&
+      typeof payload?.dedupeKey === "string" &&
+      currentComposerAliases.has(payload.dedupeKey)
+    )
+      persistedFindingIds.add(candidate.findingId)
+  }
+  return { persistedFindingIds, ...groupCandidateSources(baselineCandidates) }
 }
 
 export async function completeRetestsForScan(params: {
@@ -253,6 +339,7 @@ export async function completeRetestsForScan(params: {
     if (retests.length === 0) return
 
     const baselineScanIds = [...new Set(retests.map((retest) => retest.finding.scanId))]
+    const evidenceScanIds = [...new Set([params.scanId, ...baselineScanIds])]
     const [retestScan, baselineScans, candidateRows, retestFindings] = await Promise.all([
       tx.scan.findUnique({
         where: { id: params.scanId },
@@ -263,8 +350,8 @@ export async function completeRetestsForScan(params: {
         select: { id: true, targetId: true },
       }),
       tx.findingCandidate.findMany({
-        where: { scanId: { in: baselineScanIds } },
-        select: { findingId: true, scanId: true, scannerSource: true },
+        where: { workspaceId: params.workspaceId, scanId: { in: evidenceScanIds } },
+        select: { findingId: true, scanId: true, scannerSource: true, payload: true },
       }),
       tx.finding.findMany({
         where: {
@@ -278,18 +365,10 @@ export async function completeRetestsForScan(params: {
     if (!retestScan?.targetId) {
       throw new Error(`Retest scan has no target for retest finalization: ${params.scanId}`)
     }
-    const persistedFindingIds = new Set(retestFindings.map((finding) => finding.id))
     const scanById = new Map(baselineScans.map((scan) => [scan.id, scan]))
+    const { persistedFindingIds, candidateSourcesByFinding, deployedPhpEvidenceRequired } =
+      resolveRetestCandidateIdentity(candidateRows, retestFindings, params.scanId)
 
-    const candidateSourcesByFinding = new Map<string, string[]>()
-    for (const candidate of candidateRows) {
-      if (!candidate.findingId) continue
-      const sources = candidateSourcesByFinding.get(candidate.findingId) ?? []
-      sources.push(candidate.scannerSource)
-      candidateSourcesByFinding.set(candidate.findingId, sources)
-    }
-
-    const evidenceScanIds = [...new Set([params.scanId, ...baselineScanIds])]
     const [manifestRows, coverageRows] = await Promise.all([
       tx.scanResultManifest.findMany({
         where: { scanId: { in: evidenceScanIds } },
@@ -368,6 +447,7 @@ export async function completeRetestsForScan(params: {
         baselineCoverage,
         retestCoverage,
         sources: [...new Set(candidateSourcesByFinding.get(retest.findingId) ?? [])].sort(),
+        requiresDeployedPhpEvidence: deployedPhpEvidenceRequired.has(retest.findingId),
       })
 
       if (outcome.valid) {

@@ -1,3 +1,5 @@
+import { resolveOAuthReadScope } from "../../../../../../packages/auth/src/oauth-read-scope"
+import { GET as V1GET } from "../v1/schedules/route"
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
 vi.mock("next/cache", () => ({
@@ -21,6 +23,7 @@ vi.mock("@lyrashield/db", () => ({
 }))
 
 vi.mock("@lyrashield/auth/server", () => ({
+  resolveOAuthReadScope,
   requirePermission: vi.fn().mockResolvedValue({
     session: { userId: "user-1" },
     workspace: { id: "ws-1" },
@@ -62,27 +65,6 @@ function makeGetRequest(params: Record<string, string>): Request {
   return new Request(url, { method: "GET" })
 }
 
-const webTarget = {
-  id: "target-1",
-  name: "example.com",
-  type: "WEB_APP",
-  url: "https://example.com",
-  apiSpecUrl: null,
-}
-
-const apiTarget = {
-  id: "target-2",
-  name: "api.example.com",
-  type: "API",
-  url: "https://api.example.com",
-  apiSpecUrl: "https://api.example.com/openapi.json",
-}
-
-const apiTargetNoSpec = {
-  ...apiTarget,
-  apiSpecUrl: null,
-}
-
 describe("POST /api/schedules", () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -90,23 +72,10 @@ describe("POST /api/schedules", () => {
       session: { userId: "user-1" },
       workspace: { id: "ws-1" },
     } as never)
-    vi.mocked(createSchedule).mockResolvedValue({
-      id: "sched-1",
-      workspaceId: "ws-1",
-      targetId: "target-1",
-      cron: "0 0 * * 0",
-      goal: "TEST_APP",
-      mode: "SAFE",
-      enabled: true,
-      nextRunAt: new Date(),
-      createdById: "user-1",
-    } as never)
+    vi.mocked(createSchedule).mockResolvedValue({ id: "sched-1" } as never)
   })
 
-  it("creates a schedule for a web target", async () => {
-    vi.mocked(prisma.target.findFirst).mockResolvedValue(webTarget as never)
-    vi.mocked(prisma.schedule.findFirst).mockResolvedValue(null as never)
-
+  it("refuses new schedule creation at the shared boundary", async () => {
     const res = await POST(
       makeRequest({
         workspaceId: "ws-1",
@@ -117,61 +86,13 @@ describe("POST /api/schedules", () => {
       })
     )
 
-    expect(res.status).toBe(201)
-    expect(createSchedule).toHaveBeenCalled()
-  })
-
-  it("rejects API Contract schedules without a spec", async () => {
-    vi.mocked(prisma.target.findFirst).mockResolvedValue(apiTargetNoSpec as never)
-
-    const res = await POST(
-      makeRequest({
-        workspaceId: "ws-1",
-        targetId: "target-2",
-        cron: "0 0 * * 0",
-        goal: "TEST_APP",
-        mode: "STANDARD",
-      })
-    )
-
-    expect(res.status).toBe(400)
+    expect(res.status).toBe(403)
     const json = await res.json()
-    expect(json.error.code).toBe("API_SPEC_REQUIRED")
+    expect(json.error.code).toBe("SCHEDULE_UNAVAILABLE")
+    // No target lookup, schedule row or audit write happens.
+    expect(prisma.target.findFirst).not.toHaveBeenCalled()
     expect(createSchedule).not.toHaveBeenCalled()
-  })
-
-  it("accepts API Contract schedules when a spec is present", async () => {
-    vi.mocked(prisma.target.findFirst).mockResolvedValue(apiTarget as never)
-    vi.mocked(prisma.schedule.findFirst).mockResolvedValue(null as never)
-
-    const res = await POST(
-      makeRequest({
-        workspaceId: "ws-1",
-        targetId: "target-2",
-        cron: "0 0 * * 0",
-        goal: "TEST_APP",
-        mode: "STANDARD",
-      })
-    )
-
-    expect(res.status).toBe(201)
-    expect(createSchedule).toHaveBeenCalled()
-  })
-
-  it("rejects schedules for a deleted target", async () => {
-    vi.mocked(prisma.target.findFirst).mockResolvedValue(null as never)
-
-    const res = await POST(
-      makeRequest({
-        workspaceId: "ws-1",
-        targetId: "target-1",
-        cron: "0 0 * * 0",
-        goal: "TEST_APP",
-        mode: "STANDARD",
-      })
-    )
-
-    expect(res.status).toBe(404)
+    expect(prisma.auditLog.create).not.toHaveBeenCalled()
   })
 
   it("denies creation without schedule:create", async () => {
@@ -194,32 +115,7 @@ describe("POST /api/schedules", () => {
       "/api/schedules",
       "POST"
     )
-    expect(prisma.target.findFirst).not.toHaveBeenCalled()
     expect(createSchedule).not.toHaveBeenCalled()
-  })
-
-  it("maps legacy QUICK to SAFE for repository targets", async () => {
-    vi.mocked(prisma.target.findFirst).mockResolvedValue({
-      id: "target-3",
-      name: "repo",
-      type: "REPO",
-      url: null,
-      apiSpecUrl: null,
-    } as never)
-    vi.mocked(prisma.schedule.findFirst).mockResolvedValue(null as never)
-
-    const res = await POST(
-      makeRequest({
-        workspaceId: "ws-1",
-        targetId: "target-3",
-        cron: "0 0 * * 0",
-        goal: "TEST_APP",
-        mode: "QUICK",
-      })
-    )
-
-    expect(res.status).toBe(201)
-    expect(createSchedule).toHaveBeenCalledWith(expect.objectContaining({ mode: "QUICK" }))
   })
 })
 
@@ -254,4 +150,70 @@ describe("GET /api/schedules", () => {
     const res = await GET(makeGetRequest({}))
     expect(res.status).toBe(400)
   })
+})
+
+it.each([{ targetIds: ["target-1"] }, { targetIds: [] }])(
+  "bounds omitted target reads and pagination to $targetIds",
+  async ({ targetIds }) => {
+    vi.clearAllMocks()
+    vi.mocked(requirePermission).mockResolvedValueOnce({
+      session: {
+        userId: "user-1",
+        oauth: {
+          connectionId: "conn-1",
+          scopes: ["lyrashield.read"],
+          allTargets: false,
+          allowedTargetIds: targetIds,
+        },
+      },
+    } as never)
+    vi.mocked(listSchedules).mockResolvedValueOnce({ items: [], nextCursor: null })
+    const response = await (targetIds.length ? GET : V1GET)(
+      new Request("http://localhost/api/schedules?workspaceId=ws-1&cursor=cursor-1")
+    )
+    expect(response.status).toBe(200)
+    expect(listSchedules).toHaveBeenCalledWith(
+      expect.objectContaining({ workspaceId: "ws-1", targetIds, cursor: "cursor-1" })
+    )
+  }
+)
+
+it("rejects explicit ungranted schedule targets before querying", async () => {
+  vi.clearAllMocks()
+  vi.mocked(requirePermission).mockResolvedValueOnce({
+    session: {
+      oauth: { connectionId: "conn-1", allTargets: false, allowedTargetIds: ["target-1"] },
+    },
+  } as never)
+  const response = await GET(
+    new Request("http://localhost/api/schedules?workspaceId=ws-1&targetId=target-2")
+  )
+  expect(response.status).toBe(403)
+  expect(listSchedules).not.toHaveBeenCalled()
+})
+
+it("preserves omitted-target all-target delegation reads", async () => {
+  vi.clearAllMocks()
+  vi.mocked(requirePermission).mockResolvedValueOnce({
+    session: { oauth: { connectionId: "conn-1", allTargets: true, allowedTargetIds: [] } },
+  } as never)
+  vi.mocked(listSchedules).mockResolvedValueOnce({ items: [], nextCursor: null })
+  const response = await V1GET(new Request("http://localhost/api/schedules?workspaceId=ws-1"))
+  expect(response.status).toBe(200)
+  expect(vi.mocked(listSchedules).mock.calls.at(-1)?.[0]).not.toHaveProperty("targetIds")
+})
+
+it("allows a selected schedule target without widening the query", async () => {
+  vi.clearAllMocks()
+  vi.mocked(requirePermission).mockResolvedValueOnce({
+    session: {
+      oauth: { connectionId: "conn-1", allTargets: false, allowedTargetIds: ["target-1"] },
+    },
+  } as never)
+  vi.mocked(listSchedules).mockResolvedValueOnce({ items: [], nextCursor: null })
+  expect(
+    (await GET(new Request("http://localhost/api/schedules?workspaceId=ws-1&targetId=target-1")))
+      .status
+  ).toBe(200)
+  expect(listSchedules).toHaveBeenLastCalledWith(expect.objectContaining({ targetId: "target-1" }))
 })

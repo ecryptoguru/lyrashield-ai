@@ -216,5 +216,6 @@ export const SCANNER_LABELS: Record<string, string> = {
   ml_supply_chain: "ML supply chain",
   sast: "Static analysis",
   iac: "Infrastructure config scan",
+  "php-windows-brotli": "PHP Windows Brotli applicability",
   external_import: "Imported scan (third-party)",
 }

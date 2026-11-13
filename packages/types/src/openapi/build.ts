@@ -1,6 +1,7 @@
 import { z } from "zod"
 import {
   CreateScanSchema,
+  EngineBudgetCeilingUsdSchema,
   ScanStatusSchema,
   ScanGoalSchema,
   ScanModeSchema,
@@ -22,7 +23,7 @@ import {
   FindingQuerySchema,
   CreatePRSchema,
 } from ".."
-import { ScanExecutionPlanSchema } from "../scan-execution-plan"
+import { PublicScanExecutionPlanSchema } from "../scan-execution-plan"
 import {
   securitySchemes,
   workspaceIdParam,
@@ -136,14 +137,14 @@ export function buildOpenApiSpec(): Record<string, unknown> {
     FindingStatus: toJsonSchema(FindingStatusSchema),
     FindingVerificationStatus: toJsonSchema(FindingVerificationStatusSchema),
     ScanExecutionPlan: {
-      ...toJsonSchema(ScanExecutionPlanSchema),
+      ...toJsonSchema(PublicScanExecutionPlanSchema),
       description:
-        "Server-owned immutable execution plan recorded on each scan (lyrashield-scan-plan/1.0.0): workflow, target type, explicit depth, scope, resolved immutable source revisions, limits, capabilities and attachment references. Never client-supplied; absent only on legacy pre-plan scans.",
+        "Public view of the server-owned immutable execution plan (lyrashield-scan-plan/1.0.0): workflow, depth, scope, immutable source revisions, nonfinancial limits, capabilities and attachment references. Internal budget and authorization handles are omitted. A null view means legacy or unavailable provenance.",
     },
     Scan: {
       type: "object",
       description:
-        "Scan result. `executionPlan` carries the recorded workflow, scope and resolved immutable provenance; `executionPlanHash` is its content digest. A null plan means not recorded (legacy row), never an inferred plan.",
+        "Scan result. `executionPlan` is the public provenance view; `executionPlanHash` is SHA-256 of the canonical public plan and excludes private limits and authorization handles. Null provenance is never an inferred plan.",
       additionalProperties: true,
       properties: {
         id: { type: "string" },
@@ -258,6 +259,12 @@ export function buildOpenApiSpec(): Record<string, unknown> {
             "Read-only advisory check: whether POST /scans would currently admit the requested review — same permission, plan, domain-proof and entitlement gates, evaluated without any trial, billing, scan or audit mutation. `allowed:false` is a successful read carrying a structured denial (`code`, `message`, `blockers`), not an error. POST /scans re-checks authoritatively at creation; a pass here never guarantees admission. `attachmentIds` is a repeated query parameter.",
           parameters: [
             workspaceIdParam,
+            {
+              name: "engineBudgetCeilingUsd",
+              in: "query",
+              required: false,
+              schema: toJsonSchema(EngineBudgetCeilingUsdSchema),
+            },
             { name: "targetId", in: "query", required: true, schema: { type: "string" } },
             { name: "goal", in: "query", required: true, schema: ref("ScanGoal") },
             { name: "mode", in: "query", required: true, schema: ref("ScanMode") },
@@ -486,7 +493,19 @@ export function buildOpenApiSpec(): Record<string, unknown> {
             { name: "limit", in: "query", required: false, schema: { type: "string" } },
           ],
           responses: {
-            200: paginatedResponse(genericItem, "List of fix proposals"),
+            200: paginatedResponse(
+              {
+                ...genericItem,
+                properties: {
+                  hasStoredPatch: {
+                    type: "boolean",
+                    description:
+                      "Whether a patch reference exists. The stored reference remains private; availability does not verify patch provenance or compatibility.",
+                  },
+                },
+              },
+              "List of fix proposals"
+            ),
             ...commonErrors,
           },
         },

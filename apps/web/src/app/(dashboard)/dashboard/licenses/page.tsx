@@ -1,10 +1,12 @@
 import type { Metadata } from "next"
+import { z } from "zod"
 import { getSystemPrisma } from "@lyrashield/db"
 import { notFound } from "next/navigation"
 import { KeyRound } from "lucide-react"
 import { requirePlatformAdminIdentity } from "@lyrashield/auth/server"
 import { PageHeader } from "@/components/page-header"
 import { LicensesClient } from "./licenses-client"
+import { parseAdminCursor } from "@/lib/platform-admin-lists"
 
 /**
  * Platform administrator licenses dashboard.
@@ -20,7 +22,7 @@ export const metadata: Metadata = {
 export default async function LicensesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; status?: "active" | "revoked" }>
+  searchParams: Promise<{ q?: string; status?: string; cursor?: string }>
 }) {
   try {
     await requirePlatformAdminIdentity()
@@ -28,9 +30,16 @@ export default async function LicensesPage({
     notFound()
   }
 
-  const params = await searchParams
-  const query = params.q?.trim() ?? ""
-  const statusFilter = params.status ?? "active"
+  const params = z
+    .object({
+      q: z.string().optional().catch(undefined),
+      status: z.enum(["active", "revoked"]).catch("active"),
+      cursor: z.string().optional().catch(undefined),
+    })
+    .parse(await searchParams)
+  const query = params.q?.trim().slice(0, 320) ?? ""
+  const statusFilter = params.status === "revoked" ? "revoked" : "active"
+  const cursor = parseAdminCursor(params.cursor)
 
   const where = {
     revoked: statusFilter === "revoked",
@@ -39,8 +48,9 @@ export default async function LicensesPage({
 
   const licenses = await getSystemPrisma().license.findMany({
     where,
-    orderBy: { createdAt: "desc" },
-    take: 100,
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    take: 101,
+    ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
     include: {
       activations: {
         where: { deactivatedAt: null },
@@ -51,7 +61,8 @@ export default async function LicensesPage({
     },
   })
 
-  const initialData = licenses.map((l) => ({
+  const nextCursor = licenses.length > 100 ? licenses[99]!.id : null
+  const initialData = licenses.slice(0, 100).map((l) => ({
     id: l.id,
     ownerEmail: l.ownerEmail,
     sku: l.sku,
@@ -76,10 +87,12 @@ export default async function LicensesPage({
         icon={KeyRound}
       />
       <LicensesClient
-        key={`${statusFilter}:${query}`}
+        key={`${statusFilter}:${query}:${cursor ?? ""}`}
         initialData={initialData}
         query={query}
         statusFilter={statusFilter}
+        cursor={cursor ?? null}
+        nextCursor={nextCursor}
       />
     </div>
   )

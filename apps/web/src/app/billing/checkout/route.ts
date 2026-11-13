@@ -95,10 +95,9 @@ async function post(request: Request) {
       )
     }
 
-    // Affiliate promo-code attribution is closed while new admission is frozen.
-    // No affiliate_id, click_id or promo_code is attached to checkout metadata.
-    // A promoCode sent by an older client is still recorded as a promo code so
-    // the field keeps its published meaning; it never resolves to an affiliate.
+    // New affiliate admission and click tracking are frozen. An existing
+    // approved affiliate's typed promo code still keeps its published meaning
+    // in checkout metadata; this route does not create fresh click attribution.
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
     const successUrl = `${appUrl}/dashboard/billing?checkout=success`
     const metadata = {

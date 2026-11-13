@@ -1,3 +1,4 @@
+import { selectFixedVersion } from "./advisory-fixed-version"
 import { logger } from "@lyrashield/logger"
 import {
   AI_SECURITY_CONTROLS,
@@ -100,14 +101,7 @@ function toAdvisoryVulnerabilities(result: OsvQueryResult): EngineVulnerability[
   const control = AI_SECURITY_CONTROLS_BY_ID["AI-03"]
   const packageRef = `${result.package.name}@${result.package.version}`
   return result.vulns.map((vuln) => {
-    const fixedVersion = (
-      vuln.affected?.flatMap(
-        (affected) => affected.ranges?.flatMap((range) => range.events) ?? []
-      ) ?? []
-    )
-      .filter((event): event is { fixed: string } => event.fixed !== undefined)
-      .map((event) => event.fixed)
-      .sort()[0]
+    const fixedVersion = selectFixedVersion(vuln, result.package)
     return {
       id: vuln.id,
       title: control?.title ?? `AI-03: Dependency advisory in ${packageRef}`,
@@ -124,7 +118,7 @@ function toAdvisoryVulnerabilities(result: OsvQueryResult): EngineVulnerability[
       evidence: `dependency lockfile: ${result.package.filePath} — ${packageRef}`,
       technical_analysis: `${packageRef} is affected by ${vuln.id}. ${vuln.summary ?? ""}`,
       remediation_steps: fixedVersion
-        ? `Upgrade ${result.package.name} to ${fixedVersion} or later. Update the dependency in ${result.package.filePath}.`
+        ? `Upgrade ${result.package.name} to ${fixedVersion} after reviewing compatibility and the advisory. Update the dependency in ${result.package.filePath}.`
         : `Review ${vuln.id} for ${packageRef} and consider replacing the dependency or applying a workaround.`,
       scannerSource: "ai_app_security" as const,
     }
@@ -573,7 +567,7 @@ export async function scanAiAppSecurity({
       packageCount: dependencyResolution.packages.length,
     })
     try {
-      advisoryBatch = await queryOsvWithCache(dependencyResolution.packages)
+      advisoryBatch = await queryOsvWithCache(dependencyResolution.packages, { signal })
 
       for (const advisory of advisoryBatch.results) {
         if (advisory.vulns.length > 0) {

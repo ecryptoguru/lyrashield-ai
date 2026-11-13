@@ -139,11 +139,6 @@ const validEnv = {
 
 describe("Env Validation Schema", () => {
   describe("valid env", () => {
-    it("should parse with all required fields present", () => {
-      const result = envSchema.safeParse(validEnv)
-      expect(result.success).toBe(true)
-    })
-
     it("should parse with optional fields omitted", () => {
       const result = envSchema.safeParse(validEnv)
       expect(result.success).toBe(true)

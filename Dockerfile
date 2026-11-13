@@ -16,6 +16,7 @@ COPY packages/cli/package.json ./packages/cli/
 COPY packages/cli-alias/package.json ./packages/cli-alias/
 COPY packages/config/package.json ./packages/config/
 COPY packages/db/package.json ./packages/db/
+COPY packages/runtime-control/package.json ./packages/runtime-control/
 COPY packages/integrations/package.json ./packages/integrations/
 COPY packages/logger/package.json ./packages/logger/
 COPY packages/types/package.json ./packages/types/
@@ -156,6 +157,21 @@ RUN python3 -m venv /opt/uv-bootstrap && \
     /opt/lyrashield-venv/bin/lyrashield --version && \
     rm -rf /opt/uv-bootstrap
 
+# The controller launches the existing engine CLI directly, without worker/Docker access.
+FROM node:24-alpine@sha256:d32cdf619f63fe0471182d08996dd516c6275bb5fd31ae06e55a570bd9e1ad43 AS controller-engine
+ARG PRODUCT_REVISION
+ARG ENGINE_REVISION
+LABEL org.opencontainers.image.source="https://github.com/ecryptoguru/lyrashield-ai" \
+      org.opencontainers.image.revision="$PRODUCT_REVISION" \
+      com.lyrashield.engine.revision="$ENGINE_REVISION"
+RUN apk add --no-cache python3 git
+COPY --from=worker-engine /opt/lyrashield-venv /opt/lyrashield-venv
+ENV PATH="/opt/lyrashield-venv/bin:$PATH" PYTHONDONTWRITEBYTECODE=1
+WORKDIR /workspace
+USER 1000:1000
+ENTRYPOINT []
+CMD []
+
 # ─── Stage 6: Dedicated worker runtime ───────────────────────────────────────
 # Do not inherit `builder`: it contains the web production build and causes the
 # worker image to be needlessly large. The worker needs only workspace runtime
@@ -175,10 +191,15 @@ ENV PATH="/opt/lyrashield-venv/bin:$PATH"
 
 COPY --from=worker-deps /worker-runtime ./apps/worker
 COPY --from=worker-engine /opt/lyrashield-venv /opt/lyrashield-venv
+COPY ops/worker/recover-worker.sh /opt/lyrashield-worker-host/recover-worker.sh
+COPY ops/worker/worker-recovery-probe.mjs /opt/lyrashield-worker-host/worker-recovery-probe.mjs
+COPY ops/worker/lyrashield-worker-recover.service /opt/lyrashield-worker-host/lyrashield-worker-recover.service
+COPY ops/worker/cold-start-barrier.py /opt/lyrashield-worker-host/cold-start-barrier.py
 COPY ops/worker/run-worker.sh /opt/lyrashield-worker-host/run-worker.sh
 COPY ops/worker/worker-env.sh /opt/lyrashield-worker-host/worker-env.sh
 COPY ops/worker/webhook-cutover-recovery.mjs /opt/lyrashield-worker-host/webhook-cutover-recovery.mjs
 COPY ops/worker/webhook-cutover-schema.mjs /opt/lyrashield-worker-host/webhook-cutover-schema.mjs
+COPY ops/worker/v26-cutover-identity.mjs /opt/lyrashield-worker-host/v26-cutover-identity.mjs
 COPY ops/worker/refresh-secrets.sh /opt/lyrashield-worker-host/refresh-secrets.sh
 COPY ops/worker/refresh-egress.sh /opt/lyrashield-worker-host/refresh-egress.sh
 COPY ops/worker/capture-stop-provenance.sh /opt/lyrashield-worker-host/capture-stop-provenance.sh

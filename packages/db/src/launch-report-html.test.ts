@@ -47,6 +47,13 @@ function payload(
 }
 
 describe("generateLaunchReportHTML", () => {
+  it("rejects an extra prototype-named property in a signed report", () => {
+    const signed = payload()
+    const counts = JSON.parse(JSON.stringify(signed.counts)) as Record<string, unknown>
+    Object.defineProperty(counts, "__proto__", { value: { forged: true }, enumerable: true })
+    expect(isLaunchReportShareablePayload({ ...signed, counts })).toBe(false)
+  })
+
   it("rejects malformed stored launch snapshots", () => {
     expect(isLaunchReportShareablePayload(payload())).toBe(true)
     expect(isLaunchReportShareablePayload({ ...payload(), payloadVersion: "legacy" })).toBe(false)

@@ -1,7 +1,16 @@
 import { withCookieMutation } from "../../../lib/api-auth"
 import { NextResponse } from "next/server"
-import { prisma } from "@lyrashield/db"
-import { requirePermission, requireWorkspaceAccess } from "@lyrashield/auth/server"
+import {
+  lockWorkspaceScanAdmission,
+  prisma,
+  withWorkspaceRLS,
+  type ScopedTransaction,
+} from "@lyrashield/db"
+import {
+  requirePermission,
+  requireWorkspaceAccess,
+  resolveOAuthReadScope,
+} from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { CreateRepoTargetSchema, CreateUrlTargetSchema } from "@lyrashield/types"
 import { revalidateDashboardAggregates } from "../../../lib/cache"
@@ -33,8 +42,8 @@ const conflictTargetSelect = {
   apiSpecUrl: true,
 } as const
 
-async function findExistingTarget(data: TargetInput) {
-  return prisma.target.findFirst({
+async function findExistingTarget(data: TargetInput, tx?: ScopedTransaction) {
+  return (tx ?? prisma).target.findFirst({
     where: {
       workspaceId: data.workspaceId,
       deletedAt: null,
@@ -89,6 +98,63 @@ function targetExistsResponse(
     },
     { status: 409 }
   )
+}
+
+type TargetAdmission =
+  | {
+      kind: "existing"
+      target: NonNullable<Awaited<ReturnType<typeof findExistingTarget>>>
+      compatible: boolean
+    }
+  | { kind: "denied"; entitlement: Awaited<ReturnType<typeof assertTargetAllowed>> }
+  | { kind: "created"; target: { id: string; name: string; type: string; workspaceId: string } }
+
+async function createOrResolveTarget({
+  workspaceId,
+  userId,
+  data,
+  targetData,
+}: {
+  workspaceId: string
+  userId: string
+  data: TargetInput
+  targetData: Parameters<ScopedTransaction["target"]["create"]>[0]["data"]
+}): Promise<TargetAdmission> {
+  try {
+    return await withWorkspaceRLS(
+      workspaceId,
+      async (tx) => {
+        await lockWorkspaceScanAdmission(tx, workspaceId)
+        const existing = await findExistingTarget(data, tx)
+        if (existing) {
+          return {
+            kind: "existing",
+            target: existing,
+            compatible: isCompatibleTarget(data, existing),
+          }
+        }
+
+        const entitlement = await assertTargetAllowed(workspaceId, userId, tx)
+        if (!entitlement.allowed) return { kind: "denied", entitlement }
+
+        const target = await tx.target.create({ data: targetData })
+        return { kind: "created", target }
+      },
+      { accountId: userId }
+    )
+  } catch (error) {
+    if (typeof error === "object" && error !== null && "code" in error && error.code === "P2002") {
+      const existing = await findExistingTarget(data)
+      if (existing) {
+        return {
+          kind: "existing",
+          target: existing,
+          compatible: isCompatibleTarget(data, existing),
+        }
+      }
+    }
+    throw error
+  }
 }
 
 async function post(request: Request) {
@@ -172,22 +238,6 @@ async function post(request: Request) {
       }
     }
 
-    // The target cap comes from the ACTING account's plan — subscriptions are
-    // account-owned, so a member's limits travel with them across workspaces.
-    const entitlement = await assertTargetAllowed(workspaceId, session.userId)
-    if (!entitlement.allowed) {
-      const existing = await findExistingTarget(data)
-      if (existing) return targetExistsResponse(existing, isCompatibleTarget(data, existing))
-
-      return apiError(
-        entitlement.code ?? "TARGET_NOT_ALLOWED",
-        entitlement.message ?? "Target not allowed",
-        403,
-        undefined,
-        { targetsUsed: entitlement.targetsUsed, targetCap: entitlement.targetCap }
-      )
-    }
-
     // A caller-supplied installationId must belong to an active GitHub
     // integration in THIS workspace. Without this check a client could tag a
     // target with a foreign or invented installation id, which would then never
@@ -264,27 +314,29 @@ async function post(request: Request) {
             environment: data.environment,
           }
 
-    let target
-    try {
-      target = await prisma.target.create({ data: targetData })
-    } catch (error) {
-      // W2-02: same-source retries adopt the existing target instead of
-      // creating a second one. The unique constraints on (workspaceId,
-      // repoFullName) and (workspaceId, url) are the identity rules.
-      if (
-        typeof error === "object" &&
-        error !== null &&
-        "code" in error &&
-        error.code === "P2002"
-      ) {
-        const existing = await findExistingTarget(data)
-        return targetExistsResponse(
-          existing,
-          Boolean(existing && isCompatibleTarget(data, existing))
-        )
-      }
-      throw error
+    const admission = await createOrResolveTarget({
+      workspaceId,
+      userId: session.userId,
+      data,
+      targetData,
+    })
+
+    if (admission.kind === "existing") {
+      return targetExistsResponse(admission.target, admission.compatible)
     }
+    if (admission.kind === "denied") {
+      return apiError(
+        admission.entitlement.code ?? "TARGET_NOT_ALLOWED",
+        admission.entitlement.message ?? "Target not allowed",
+        403,
+        undefined,
+        {
+          targetsUsed: admission.entitlement.targetsUsed,
+          targetCap: admission.entitlement.targetCap,
+        }
+      )
+    }
+    const target = admission.target
 
     await prisma.auditLog.create({
       data: {
@@ -342,7 +394,8 @@ export async function GET(request: Request) {
       return apiError("MISSING_PARAM", "workspaceId is required", 400)
     }
 
-    await requireWorkspaceAccess(workspaceId)
+    const { session } = await requireWorkspaceAccess(workspaceId)
+    const readScope = resolveOAuthReadScope(session)
 
     const { cursor, limit } = parsePaginationParams(searchParams)
 
@@ -351,6 +404,7 @@ export async function GET(request: Request) {
         workspaceId,
         deletedAt: null,
         ...(projectId ? { projectId } : {}),
+        ...(readScope.targetIds !== undefined ? { id: { in: readScope.targetIds } } : {}),
       },
       include: {
         project: { select: { id: true, name: true } },

@@ -78,6 +78,18 @@ export function ScanSubmissionFooter({
         >
           {errorMessage && <p>{errorMessage}</p>}
           {recoveryError && recoveryError !== errorMessage && <p>{recoveryError}</p>}
+          {errorCode === "SCAN_ALREADY_ACTIVE" && (
+            <p className="mt-2">
+              Wait for the active review to finish, including finalizing accounting, or cancel it if
+              you have permission.{" "}
+              <Link
+                href="/dashboard/scans"
+                className="text-primary inline-flex min-h-11 items-center font-medium underline underline-offset-4"
+              >
+                Review active scans
+              </Link>
+            </p>
+          )}
           {errorMessage &&
             isBillingRecoveryCode(errorCode) &&
             (canManageBilling ? (

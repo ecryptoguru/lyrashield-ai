@@ -4,7 +4,8 @@ set -euo pipefail
 repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 script="$repo/.github/scripts/promote-worker-vm.sh"
 tmp=$(mktemp -d)
-trap 'rm -rf "$tmp"' EXIT
+http_fixture_pid=
+trap 'if [ -n "$http_fixture_pid" ]; then kill "$http_fixture_pid" 2>/dev/null || true; fi; rm -rf "$tmp"' EXIT
 
 digest="sha256:$(printf 'a%.0s' {1..64})"
 target="ghcr.io/ecryptoguru/lyrashield-ai/lyrashield-worker@${digest}"
@@ -30,6 +31,7 @@ write_mocks() {
   do
     printf 'image asset: %s\n' "$asset" > "$case_dir/image-assets/$asset"
   done
+  printf 'redis.fixture 13.200.201.38 6379\nredis.fixture 13.234.196.111 6379\n' > "$case_dir/egress-pins"
   local host_script
   for host_script in \
     lyrashield-run-worker \
@@ -85,7 +87,7 @@ case "$command:$unit" in
     fi
     [ "$quiet" = 1 ] || printf 'inactive\n'; exit 3 ;;
   is-active:lyrashield-worker-egress-refresh.service)
-    exit 1 ;;
+    [ "$quiet" = 1 ] || printf 'inactive\n'; exit 3 ;;
   is-active:lyrashield-worker.service)
     if [ "$(cat "$MOCK_SERVICE_ACTIVE")" = 1 ]; then
       [ "$quiet" = 1 ] || printf 'active\n'
@@ -94,7 +96,10 @@ case "$command:$unit" in
     [ "$quiet" = 1 ] || printf 'inactive\n'
     exit 3 ;;
   is-enabled:lyrashield-worker.service)
-    [ "$(cat "$MOCK_SERVICE_ENABLED")" = 1 ] ;;
+    if [ "$(cat "$MOCK_SERVICE_ENABLED")" = 1 ]; then
+      [ "$quiet" = 1 ] || printf 'enabled\n'; exit 0
+    fi
+    [ "$quiet" = 1 ] || printf 'disabled\n'; exit 1 ;;
   is-enabled:lyrashield-worker-egress-refresh.timer)
     if [ "$(cat "$MOCK_TIMER_ENABLED")" = 1 ]; then
       [ "$quiet" = 1 ] || printf 'enabled\n'; exit 0
@@ -109,6 +114,10 @@ case "$command:$unit" in
       esac
     done ;;
   disable:--now)
+    if [ "${2:-}" = lyrashield-worker.service ] && [ "${MOCK_CONTAINMENT_FAIL:-0}" = 1 ]; then exit 1; fi
+    if [ "${2:-}" = lyrashield-worker.service ] && [ "${MOCK_DISABLE_LIES:-0}" = 1 ]; then
+      printf 0 > "$MOCK_SERVICE_ACTIVE"; printf 0 > "$MOCK_CONTAINER_PRESENT"; exit 0
+    fi
     case "${2:-}" in
       lyrashield-worker-egress-refresh.timer)
         printf 0 > "$MOCK_TIMER_ACTIVE"
@@ -120,6 +129,7 @@ case "$command:$unit" in
       *) exit 1 ;;
     esac ;;
   stop:lyrashield-worker.service)
+    [ "${MOCK_CONTAINMENT_FAIL:-0}" != 1 ] || exit 1
     printf 0 > "$MOCK_SERVICE_ACTIVE"
     printf 0 > "$MOCK_CONTAINER_PRESENT" ;;
   stop:lyrashield-worker-egress-refresh.timer)
@@ -127,6 +137,11 @@ case "$command:$unit" in
   start:lyrashield-worker-egress-refresh.timer)
     printf 1 > "$MOCK_TIMER_ACTIVE" ;;
   restart:lyrashield-worker.service)
+    restart_count=$(cat "$MOCK_SERVICE_ACTIVE.restart-count" 2>/dev/null || printf 0)
+    restart_count=$((restart_count + 1))
+    printf '%s' "$restart_count" > "$MOCK_SERVICE_ACTIVE.restart-count"
+    if [ "$restart_count" = 2 ] && [ "${MOCK_ROLLBACK_REMOVAL:-0}" = 1 ]; then : > "$MOCK_ADMISSION_STOP"; fi
+    if [ "$restart_count" = 1 ] && [ -n "${MOCK_RESTART_SIGNAL:-}" ]; then kill -"$MOCK_RESTART_SIGNAL" "$PPID"; fi
     if [ "${MOCK_RESTART_FAIL:-0}" = 1 ]; then
       echo "simulated worker restart failure" >&2
       exit 1
@@ -185,8 +200,9 @@ case "$1:$2" in
     export REDIS_URL="$(sed -n 's/^REDIS_URL=//p' "$MOCK_WORKER_ENV_FILE" | head -n 1)"
     export LYRASHIELD_PRODUCT_REVISION="$MOCK_APP_REVISION"
     export LYRASHIELD_ENGINE_REVISION="$MOCK_ENGINE_REVISION"
+    export LYRASHIELD_WORKER_IMAGE_DIGEST="${MOCK_TARGET##*@}"
     case "$*" in
-      *'const [raw,owner,product,currentImage,durable,runId,engine,live]'*|*'candidateWorkerImage:target'*)
+      *'const [raw,owner,product,currentImage,durable,runId,engine,live]'*|*'candidateWorkerImage:target'*|*assertV26WorkerIdentity*|*assertPairedReleaseHold*)
         while [ "$1" != -e ]; do shift; done
         shift
         code=$1
@@ -196,16 +212,17 @@ import fs from "node:fs";
 const code = process.argv[2];
 const args = process.argv.slice(3);
 process.argv = ["node", ...args];
-const replacement = 'Promise.resolve({default: class Redis { async get() { return globalThis.readAdmission(); } async quit() {} }})';
+const replacement = 'Promise.resolve({default: class Redis { constructor() { return { get: async () => globalThis.readAdmission(), eval: async (lua, count, key, operation, receipt) => { if(count!==1 || key!=="lyrashield:scan-admission:stopped" || operation!=="assert")throw new Error("Unexpected hold mutation"); return globalThis.readAdmission()===receipt && Number(process.env.MOCK_HOLD_PTTL || -1)===-1 ? 1 : 0; }, quit: async () => {} }; } }})';
 globalThis.readAdmission = () => {
   fs.appendFileSync(process.env.MOCK_ORDER_LOG, "redis-read\n");
   return fs.readFileSync(process.env.MOCK_ADMISSION_STOP, "utf8");
 };
 const billing = `Promise.resolve({WEBHOOK_TRACK_CLAIM_PROTOCOL:${JSON.stringify(process.env.MOCK_CLAIM_PROTOCOL || "durable-claims/2")}})`;
-const source = code.replace('import("ioredis")', replacement).replace('import("@lyrashield/billing")', billing);
+const source = code.replace('import("ioredis")', replacement).replace('import("@lyrashield/billing")', billing).replace('import("@lyrashield/db")', `Promise.resolve({SCAN_ACCOUNTING_PROTOCOL:${JSON.stringify(process.env.MOCK_SCAN_PROTOCOL || "reservations/2")}})`);
 await import(`data:text/javascript;base64,${Buffer.from(source).toString("base64")}`);
 NODE
         ;;
+      *SCAN_ACCOUNTING_PROTOCOL*) printf '%s\n' "${MOCK_SCAN_PROTOCOL:-reservations/2}" ;;
       *WEBHOOK_TRACK_CLAIM_PROTOCOL*) printf '%s\n' "${MOCK_CLAIM_PROTOCOL:-durable-claims/2}" ;;
       *'cjson.decode'*)
         promotion_stop='{"operator":"github-actions","reason":"worker-promotion"}'
@@ -262,7 +279,11 @@ NODE
       *printenv\ DATABASE_URL*)
         if [ "$(cat "$MOCK_SERVICE_ACTIVE")" = 1 ]; then printf '%s\n' 'postgresql://current@database.test:5432/lyrashield'; else printf '%s\n' 'postgresql://retired@retired-database.test:5432/lyrashield'; fi ;;
       *LYRASHIELD_PRODUCT_REVISION*) printf '%s\n' "$MOCK_APP_REVISION" ;;
-      *LYRASHIELD_ENGINE_REVISION*) printf '%s\n' "$MOCK_ENGINE_REVISION" ;;
+      *LYRASHIELD_ENGINE_REVISION*) printf '%s\n' "${MOCK_LIVE_ENGINE_REVISION:-$MOCK_ENGINE_REVISION}" ;;
+      *LYRASHIELD_RUN_RECORD_V1_1*) printf '%s\n' "${MOCK_RUN_RECORD_V11:-0}" ;;
+      *LYRASHIELD_EVIDENCE_WRITER_CANARY*) [ -z "${MOCK_CANARY_SELECTOR:-}" ] || exit 1 ;;
+      *"printenv LYRASHIELD_IMAGE"*) printf '%s\n' "${MOCK_RUNTIME_SANDBOX:-$MOCK_PAIRED_SANDBOX}" ;;
+      *LYRASHIELD_PENDING_HTTP_EVIDENCE*) printf '%s\n' "${MOCK_PENDING_EVIDENCE:-0}" ;;
       *LYRASHIELD_WORKER_IMAGE_DIGEST*) printf '%s\n' "${MOCK_TARGET##*@}" ;;
       *) exit 1 ;;
     esac ;;
@@ -274,6 +295,8 @@ NODE
   image:prune) : ;;
   image:inspect)
     case "$*" in
+      *'.RepoDigests'*) printf '%s\n' "${MOCK_LOCAL_SANDBOX:-$MOCK_PAIRED_SANDBOX}" ;;
+      *'{{.Id}}'*) printf '%s\n' "${MOCK_CONFIG_ID:-sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd}" ;;
       *'{{.Size}}'*)
         case "$*" in
           *"$MOCK_OLD_IMAGE"*) [ "$MOCK_OLD_IMAGE_PRESENT" = 1 ] || exit 1 ;;
@@ -281,6 +304,7 @@ NODE
         printf '1000\n' ;;
       *org.opencontainers.image.revision*) printf '%s\n' "$MOCK_APP_REVISION" ;;
       *io.lyrashield.engine.revision*) printf '%s\n' "$MOCK_ENGINE_REVISION" ;;
+      *io.lyrashield.accounting.protocol*) printf '%s\n' "${MOCK_SCAN_PROTOCOL:-reservations/2}" ;;
       *) exit 1 ;;
     esac ;;
   *) echo "unexpected docker call: $*" >&2; exit 1 ;;
@@ -289,6 +313,14 @@ MOCK
 
   cat > "$case_dir/bin/curl" <<'MOCK'
 #!/bin/sh
+if [ -n "${MOCK_HTTP_PORT:-}" ]; then
+  exec node --input-type=module - "$@" <<'NODE'
+import {spawnSync} from "node:child_process";
+const args = process.argv.slice(2).map(arg => arg.replace("https://app.lyrashieldai.com/", `http://127.0.0.1:${process.env.MOCK_HTTP_PORT}/`));
+const result = spawnSync("/usr/bin/curl", ["--noproxy", "127.0.0.1", ...args], {stdio:"inherit"});
+process.exit(result.status ?? 1);
+NODE
+fi
 exit 0
 MOCK
 cat > "$case_dir/bin/df" <<'MOCK'
@@ -338,6 +370,7 @@ run_case() {
   [ "$name" != cutover-docker-uncertain ] || docker_ps_fail=1
   [ "$name" != cutover-live-environment-rotated ] || live_stale=1
   [ "$name" != cutover-health-failure ] || unhealthy=1
+  [ "$name" != paired-health-failure ] || unhealthy=1
   [ "$name" != cutover-insecure-receipt ] || receipt_stat=0:644
   local floor_env=""
   if [ "$floor_via" = env ]; then
@@ -356,7 +389,10 @@ run_case() {
   : > "$case_dir/systemctl.log"
   : > "$case_dir/journalctl.log"
   : > "$case_dir/order.log"
-  printf 'LYRASHIELD_WORKER_IMAGE=%s\nLYRASHIELD_SANDBOX_IMAGE=ghcr.io/example/sandbox@sha256:%s\nGHCR_USERNAME=test-user\n' "$old_image" "$(printf 'e%.0s' {1..64})" > "$case_dir/runtime.conf"
+  printf 'LYRASHIELD_WORKER_IMAGE=%s\nLYRASHIELD_SANDBOX_IMAGE=ghcr.io/example/sandbox@sha256:%s\nGHCR_USERNAME=test-user\nLYRASHIELD_SANDBOX_SBOM_COVERAGE_VERIFY_PATH=/tmp/coverage.json\nLYRASHIELD_SANDBOX_SBOM_COVERAGE_EXPECTED_PATH=/tmp/coverage-predicate.json\nLYRASHIELD_SANDBOX_SBOM_COVERAGE_REPO=ecryptoguru/lyrashield-engine\nLYRASHIELD_SANDBOX_SBOM_COVERAGE_REF=refs/heads/main\nLYRASHIELD_SANDBOX_SBOM_COVERAGE_ENGINE_REVISION=%s\nLYRASHIELD_SANDBOX_SBOM_COVERAGE_WORKFLOW_REVISION=%s\nLYRASHIELD_SANDBOX_SBOM_COVERAGE_RUN_ID=42487812345\nLYRASHIELD_SANDBOX_SBOM_COVERAGE_RUN_ATTEMPT=1\n' "$old_image" "$(printf 'e%.0s' {1..64})" "$(printf 'a%.0s' {1..40})" "$(printf 'a%.0s' {1..40})" > "$case_dir/runtime.conf"
+  if [ "$name" != healthy ]; then
+    printf 'LYRASHIELD_GITHUB_CREDENTIAL_VAULT_NAME=prior-app-vault\n' >> "$case_dir/runtime.conf"
+  fi
   if [ "$floor_via" = config ] && [ -n "$floor_bytes" ]; then
     printf 'LYRASHIELD_WORKER_IMAGE_FLOOR_BYTES=%s\n' "$floor_bytes" >> "$case_dir/runtime.conf"
   fi
@@ -366,7 +402,7 @@ run_case() {
     printf 'legacy maintenance source\n' > "$case_dir/host/assets/backfill-clear-wrong-trial-claims.ts"
   fi
 
-  local mode_arg=""
+  local mode_arg="" request_payload="" identity_payload=""
   local owned_stop=''
   local durable=''
   if [ "$cutover" = 1 ]; then
@@ -387,7 +423,7 @@ run_case() {
         [ "$receipt_mode" != wrong-candidate ] || recorded="ghcr.io/example/worker@sha256:$(printf 'f%.0s' {1..64})"
         durable=$(node -e 'const saved=JSON.parse(process.argv[1]); console.log(JSON.stringify({...saved,candidateWorkerImage:process.argv[2],candidateProductRevision:process.argv[3],candidateEngineRevision:process.argv[4],candidateWebhookTrackClaimProtocol:"durable-claims/2"}))' "$durable" "$recorded" "$app_revision" "$engine_revision")
         printf '%s' "$durable" > "$case_dir/cutover.json"
-        printf 'LYRASHIELD_WORKER_IMAGE=%s\nLYRASHIELD_SANDBOX_IMAGE=ghcr.io/example/sandbox@sha256:%s\nGHCR_USERNAME=test-user\n' "$target" "$(printf 'e%.0s' {1..64})" > "$case_dir/runtime.conf"
+        printf 'LYRASHIELD_WORKER_IMAGE=%s\nLYRASHIELD_SANDBOX_IMAGE=ghcr.io/example/sandbox@sha256:%s\nGHCR_USERNAME=test-user\nLYRASHIELD_SANDBOX_SBOM_COVERAGE_VERIFY_PATH=/tmp/coverage.json\nLYRASHIELD_SANDBOX_SBOM_COVERAGE_EXPECTED_PATH=/tmp/coverage-predicate.json\nLYRASHIELD_SANDBOX_SBOM_COVERAGE_REPO=ecryptoguru/lyrashield-engine\nLYRASHIELD_SANDBOX_SBOM_COVERAGE_REF=refs/heads/main\nLYRASHIELD_SANDBOX_SBOM_COVERAGE_ENGINE_REVISION=%s\nLYRASHIELD_SANDBOX_SBOM_COVERAGE_WORKFLOW_REVISION=%s\nLYRASHIELD_SANDBOX_SBOM_COVERAGE_RUN_ID=42487812345\nLYRASHIELD_SANDBOX_SBOM_COVERAGE_RUN_ATTEMPT=1\n' "$target" "$(printf 'e%.0s' {1..64})" "$(printf 'a%.0s' {1..40})" "$(printf 'a%.0s' {1..40})" > "$case_dir/runtime.conf"
         if [ "$receipt_mode" = rebuilt-retry ] || [ "$receipt_mode" = previous-candidate ]; then
           configured_candidate=$target
           target="ghcr.io/ecryptoguru/lyrashield-ai/lyrashield-worker@sha256:$(printf 'f%.0s' {1..64})"
@@ -399,12 +435,78 @@ run_case() {
         ;;
     esac
   fi
+  if [ "$cutover" = v26 ]; then
+    mode_arg=--v26-cutover
+    request_payload=$(node -e 'const hash=value=>require("node:crypto").createHash("sha256").update(value).digest("hex"); console.log(Buffer.from(JSON.stringify({runId:"123",attempt:1,owner:"123:1",sourceRevision:process.argv[1],engineRevision:process.argv[2],workerDigest:process.argv[3],webDigest:process.argv[3],databaseIdentity:hash("database"),redisIdentity:hash("rediss://current@redis.test:6379")})).toString("base64"))' "$app_revision" "$engine_revision" "$digest")
+    identity_payload=$(base64 < "$repo/ops/worker/v26-cutover-identity.mjs" | tr -d '\n')
+    durable=$(node -e 'const identity=JSON.parse(Buffer.from(process.argv[1],"base64").toString());const hash=value=>require("node:crypto").createHash("sha256").update(value).digest("hex");const stop=JSON.stringify({operator:"github-actions",reason:"v26-accounting-cutover",owner:identity.owner,runId:identity.runId,productRevision:identity.sourceRevision});console.log(JSON.stringify({version:1,kind:"v26-accounting-cutover",identity,stop,phase:"MIGRATED",recoveryPolicy:"REPAIR_FORWARD_ONLY",baseline:{worker:{databaseUrlSha256:hash("postgresql://current@database.test:5432/lyrashield"),databaseSystemUrlSha256:hash(""),redisUrlSha256:hash("rediss://current@redis.test:6379")}}}))' "$request_payload")
+    printf '%s' "$durable" > "$case_dir/v26.json"
+    owned_stop=$(node -e 'console.log(JSON.parse(process.argv[1]).stop)' "$durable")
+    printf '%s' "$owned_stop" > "$case_dir/admission-stop"
+    if [ "$receipt_mode" = foreign ]; then printf 'foreign-owner' > "$case_dir/admission-stop"; fi
+  fi
+  local paired_module_payload="" hold_pttl=-1 live_engine=""
+  local containment_fail=0 disable_lies=0 rollback_removal=0 restart_signal=""
+  case "$name" in
+    paired-stop-failure) containment_fail=1 ;;
+    paired-disable-lies) disable_lies=1 ;;
+    paired-rollback-removal) rollback_removal=1 ;;
+    paired-signal-*) restart_signal=TERM ;;
+  esac
+  if [ "$cutover" = paired ]; then
+    mode_arg=--paired-release-held
+    local prior_arg='' sandbox_arg=''
+    if [[ "$name" = paired-stopped-* ]]; then
+      mode_arg=--paired-release-stopped
+      prior_arg=$old_image
+      sandbox_arg="ghcr.io/ecryptoguru/lyrashield-sandbox@sha256:$(printf 'f%.0s' {1..64})"
+      [ "$name" != paired-stopped-wrong-prior ] || prior_arg=$target
+    fi
+    paired_module_payload=$(base64 < "$repo/ops/monitoring/paired-release-hold.mjs" | tr -d '\n')
+    owned_stop=$(node --input-type=module - "$repo/ops/monitoring/paired-release-hold.mjs" "$app_revision" "$engine_revision" "$digest" <<'NODE'
+import {pathToFileURL} from "node:url";
+const [modulePath,product,engine,digest]=process.argv.slice(2);
+const {pairedReleaseReceipt}=await import(pathToFileURL(modulePath));
+console.log(pairedReleaseReceipt("123:1",product,engine,digest));
+NODE
+)
+    case "$receipt_mode" in
+      missing-module) paired_module_payload='' ;;
+      tampered-module) paired_module_payload=$(printf 'export const bypass=true;' | base64 | tr -d '\n') ;;
+      missing) owned_stop='' ;;
+      malformed) owned_stop='not-json' ;;
+      foreign) owned_stop='{"operator":"on-call"}' ;;
+      stale-owner) owned_stop=${owned_stop/123:1/122:1} ;;
+      wrong-source) local wrong_source; wrong_source=$(printf 'f%.0s' {1..40}); owned_stop=${owned_stop/$app_revision/$wrong_source} ;;
+      expiring) hold_pttl=60000 ;;
+      live-engine) live_engine=$(printf 'f%.0s' {1..40}) ;;
+    esac
+    printf '%s' "$owned_stop" > "$case_dir/admission-stop"
+    node "$repo/.github/scripts/tests/fixtures/paired-release-readiness.mjs" "$case_dir/http-port" "$receipt_mode" "$case_dir/admission-stop" &
+    http_fixture_pid=$!
+    for _ in {1..100}; do [ ! -s "$case_dir/http-port" ] || break; /bin/sleep 0.01; done
+    [ -s "$case_dir/http-port" ]
+  fi
   local configured_image
   configured_image=$(sed -n 's/^LYRASHIELD_WORKER_IMAGE=//p' "$case_dir/runtime.conf")
   set +e
   output=$(
     PATH="$case_dir/bin:$PATH" \
+      LYRASHIELD_WORKER_GITHUB_CREDENTIAL_VAULT=app-only-vault \
       MOCK_TARGET="$target" \
+      LYRASHIELD_PAIRED_RELEASE_OWNER=123:1 \
+      LYRASHIELD_PAIRED_RELEASE_HOLD_MODULE_BASE64="$paired_module_payload" \
+      MOCK_HOLD_PTTL="$hold_pttl" \
+      MOCK_CONTAINMENT_FAIL="$containment_fail" \
+      MOCK_DISABLE_LIES="$disable_lies" \
+      MOCK_ROLLBACK_REMOVAL="$rollback_removal" \
+      MOCK_RESTART_SIGNAL="$restart_signal" \
+      MOCK_LIVE_ENGINE_REVISION="$live_engine" \
+      MOCK_HTTP_PORT="$(cat "$case_dir/http-port" 2>/dev/null || true)" \
+      LYRASHIELD_V26_RECEIPT_FILE="$case_dir/v26.json" \
+      LYRASHIELD_V26_REQUEST_BASE64="$request_payload" \
+      LYRASHIELD_V26_IDENTITY_MODULE_BASE64="$identity_payload" \
+      MOCK_SCAN_PROTOCOL="${MOCK_SCAN_PROTOCOL:-reservations/2}" \
       MOCK_CLAIM_PROTOCOL="$protocol" \
       MOCK_UNHEALTHY="$unhealthy" \
       MOCK_DOCKER_PS_FAIL="$docker_ps_fail" \
@@ -436,18 +538,87 @@ run_case() {
       MOCK_REPLACEMENT_STOP="$replacement_stop" \
       MOCK_RESTART_FAIL="$restart_fails" \
       LYRASHIELD_WORKER_IMAGE_FLOOR_BYTES="$floor_env" \
+      MOCK_PAIRED_SANDBOX="${sandbox_arg:-}" \
       LYRASHIELD_WORKER_RUNTIME_CONFIG="$case_dir/runtime.conf" \
       LYRASHIELD_WORKER_ENV_FILE="$case_dir/worker.env" \
+      LYRASHIELD_EGRESS_PIN_FILE="$case_dir/egress-pins" \
       LYRASHIELD_WORKER_PROMOTION_STATE_DIR="$case_dir/promotion" \
       LYRASHIELD_WORKER_HOST_LIBEXEC_DIR="$case_dir/host/libexec" \
       LYRASHIELD_WORKER_HOST_ASSETS_DIR="$case_dir/host/assets" \
       LYRASHIELD_WORKER_ENV_LIB="$repo/ops/worker/worker-env.sh" \
       LYRASHIELD_WORKER_SYSTEMD_DIR="$case_dir/host/systemd" \
-      sh "$script" ${mode_arg:+"$mode_arg"} "$target" "$app_revision" "$engine_revision" 2>&1
+      "${PROMOTION_SHELL:-sh}" "$script" ${mode_arg:+"$mode_arg"} ${prior_arg:+"$prior_arg"} "$target" "$app_revision" "$engine_revision" ${sandbox_arg:+"$sandbox_arg"} 2>&1
   )
   status=$?
   set -e
+  if [ -n "$http_fixture_pid" ]; then
+    kill "$http_fixture_pid" 2>/dev/null || true
+    wait "$http_fixture_pid" || true
+    http_fixture_pid=
+  fi
+  if [ "$cutover" = paired ]; then
+    if [ "$expected" = success ]; then
+      [ "$status" -eq 0 ] || { printf '%s\n' "$output"; exit 1; }
+      grep -Fq 'scan admission HELD' <<< "$output"
+      grep -Fq "LYRASHIELD_WORKER_IMAGE=$target" "$case_dir/runtime.conf"
+    else
+      [ "$status" -ne 0 ] || { printf '%s\n' "$output"; exit 1; }
+      if grep -Fq 'scan admission HELD' <<< "$output"; then echo "Failed held promotion reported success" >&2; exit 1; fi
+      if [ "$containment_fail" = 1 ] || [ "$disable_lies" = 1 ]; then
+        grep -Fq 'CONTAINMENT FAILED' <<< "$output"
+        if grep -Eq 'verified inactive and disabled|worker stopped' <<< "$output"; then echo "False containment claim" >&2; exit 1; fi
+      else
+        grep -Fq "LYRASHIELD_WORKER_IMAGE=$configured_image" "$case_dir/runtime.conf"
+      fi
+      if [ -n "$restart_signal" ]; then [ "$status" -eq 143 ]; fi
+      case "$receipt_mode" in
+        missing|malformed|foreign|stale-owner|wrong-source|expiring|missing-module|tampered-module) ;;
+        *)
+          if [ "$containment_fail" != 1 ] && [ "$disable_lies" != 1 ]; then
+            [ "$(cat "$case_dir/service-active")" = 0 ]
+            [ "$(cat "$case_dir/service-enabled")" = 0 ]
+            [ "$(cat "$case_dir/timer-active")" = 0 ]
+            [ "$(cat "$case_dir/timer-enabled")" = 0 ]
+          fi ;;
+      esac
+      if [ -e "$case_dir/service-active.restart-count" ]; then
+        [ "$(cat "$case_dir/service-active.restart-count")" -le 1 ]
+      fi
+    fi
+    if [ -n "$replacement_stop" ]; then
+      [ "$(cat "$case_dir/admission-stop")" = "$replacement_stop" ]
+      [ "$(cat "$case_dir/service-active")" = 0 ]
+    elif [ "$receipt_mode" = http-removal ]; then
+      [ ! -s "$case_dir/admission-stop" ]
+      if [ "$containment_fail" != 1 ]; then [ "$(cat "$case_dir/service-active")" = 0 ]; fi
+    elif [ "$receipt_mode" = http-replacement ]; then
+      [ "$(cat "$case_dir/admission-stop")" = '{"operator":"on-call","reason":"http-fixture"}' ]
+      [ "$(cat "$case_dir/service-active")" = 0 ]
+    else
+      [ "$(cat "$case_dir/admission-stop")" = "$owned_stop" ]
+    fi
+    if grep -Fq 'resuming-admission' "$case_dir/order.log" || grep -Fq 'cjson.decode' "$case_dir/docker.log"; then
+      echo "Held promotion touched ordinary admission ownership" >&2
+      exit 1
+    fi
+    case "$receipt_mode" in
+      missing|malformed|foreign|stale-owner|wrong-source|expiring|missing-module|tampered-module)
+        if grep -Fq 'systemctl restart' "$case_dir/order.log"; then echo "Invalid hold reached restart" >&2; exit 1; fi ;;
+    esac
+    return
+  fi
 
+  if [ "$cutover" = v26 ]; then
+    [ -s "$case_dir/admission-stop" ]
+    ! grep -Fq 'worker-promotion' "$case_dir/admission-stop"
+    if [ "$expected" = success ]; then
+      grep -Fq 'Worker v26 cutover passed' <<< "$output"
+    else
+      [ "$(cat "$case_dir/service-active")" = 0 ]
+      ! grep -Fq 'prior digest restored' <<< "$output"
+    fi
+    return 0
+  fi
   if [ "$cutover" = 1 ]; then
     if [ "$expected" = success ]; then
       [ "$status" -eq 0 ] || { printf '%s\n' "$output"; exit 1; }
@@ -543,6 +714,8 @@ run_case() {
     fi
   fi
   if [ "$expected" = success ]; then
+    grep -Fxq 'LYRASHIELD_GITHUB_CREDENTIAL_VAULT_NAME=app-only-vault' "$case_dir/runtime.conf"
+    [ "$(grep -c '^LYRASHIELD_GITHUB_CREDENTIAL_VAULT_NAME=' "$case_dir/runtime.conf")" -eq 1 ]
     # Exactly one restart and it happens after the admission-stop claim and
     # the empty-queue check: a scan admitted before promotion finishes against
     # the old worker before the container is replaced.
@@ -567,6 +740,7 @@ run_case() {
       grep -Fq '2147483648-byte floor' <<< "$output"
     fi
   else
+    grep -Fxq 'LYRASHIELD_GITHUB_CREDENTIAL_VAULT_NAME=prior-app-vault' "$case_dir/runtime.conf"
     # A rollback must restore legacy assets if the previous image needs them.
     if [ "$name" = rolls-back-maintenance-assets ]; then
       grep -Fxq 'legacy maintenance runner' "$case_dir/host/libexec/lyrashield-trial-claim-backfill"
@@ -606,6 +780,41 @@ run_case() {
     [ ! -s "$case_dir/journalctl.log" ]
   fi
 }
+
+if [ "${PAIRED_STOPPED_ONLY:-0}" = 1 ]; then
+  run_case paired-stopped-success 0 0 0 success 0 '' 0 '' 9999999000 0 1 '' env 0 paired
+  for label in wrong-prior foreign-container; do
+    container=0; [ "$label" != foreign-container ] || container=1
+    run_case "paired-stopped-$label" 0 0 0 failure 0 '' 0 '' 9999999000 "$container" 1 '' env 0 paired
+  done
+  MOCK_RUN_RECORD_V11=1 run_case paired-stopped-writer 0 0 0 failure 0 '' 0 '' 9999999000 0 1 '' env 0 paired
+  MOCK_CANARY_SELECTOR='set' run_case paired-stopped-canary 0 0 0 failure 0 '' 0 '' 9999999000 0 1 '' env 0 paired
+  MOCK_PENDING_EVIDENCE=1 run_case paired-stopped-pending 0 0 0 failure 0 '' 0 '' 9999999000 0 1 '' env 0 paired
+  MOCK_LOCAL_SANDBOX=wrong run_case paired-stopped-local-sandbox 0 0 0 failure 0 '' 0 '' 9999999000 0 1 '' env 0 paired
+  MOCK_RUNTIME_SANDBOX=wrong run_case paired-stopped-runtime-sandbox 0 0 0 failure 0 '' 0 '' 9999999000 0 1 '' env 0 paired
+  MOCK_CONFIG_ID=wrong run_case paired-stopped-image-id 0 0 0 failure 0 '' 0 '' 9999999000 0 1 '' env 0 paired
+  echo "Paired stopped-entry proof passed (real loopback HTTP)."
+  exit 0
+fi
+if [ "${PAIRED_RELEASE_ONLY:-0}" = 1 ]; then
+  run_case paired-success 1 1 1 success 1 '' 0 '' 9999999000 1 1 '' env 0 paired
+  for mode in missing malformed foreign stale-owner wrong-source expiring live-engine api-outage malformed-body scans-open scans-healthy-body http-replacement http-removal missing-module tampered-module; do
+    run_case "paired-$mode" 1 1 1 failure 1 '' 0 '' 9999999000 1 1 '' env 0 paired "$mode"
+  done
+  run_case paired-replaced 1 1 1 failure 1 '' 0 '{"operator":"on-call","reason":"new-incident"}' 9999999000 1 1 '' env 0 paired
+  run_case paired-image-mismatch 1 1 1 failure 1 '' 1 '' 9999999000 1 1 '' env 0 paired
+  run_case paired-health-failure 1 1 1 failure 1 '' 0 '' 9999999000 1 1 '' env 0 paired
+  run_case paired-restart-failure 1 1 1 failure 1 '' 0 '' 9999999000 1 1 '' env 1 paired
+  run_case paired-rollback-removal 1 1 1 failure 1 '' 0 '' 9999999000 1 1 '' env 0 paired scans-open
+  run_case paired-stop-failure 1 1 1 failure 1 '' 0 '' 9999999000 1 1 '' env 0 paired http-removal
+  run_case paired-disable-lies 1 1 1 failure 1 '' 0 '' 9999999000 1 1 '' env 0 paired http-removal
+  run_case paired-signal-sh 1 1 1 failure 1 '' 0 '' 9999999000 1 1 '' env 0 paired
+  if command -v dash >/dev/null; then
+    PROMOTION_SHELL="$(command -v dash)" run_case paired-signal-dash 1 1 1 failure 1 '' 0 '' 9999999000 1 1 '' env 0 paired
+  fi
+  echo "Paired release held promotion proof passed (real loopback HTTP)."
+  exit 0
+fi
 
 run_case cutover-rebuilt-candidate 0 0 0 success 0 '' 0 '' 9999999000 0 1 '' env 0 1 rebuilt-retry
 run_case cutover-before-config-crash-retry 0 0 0 success 0 '' 0 '' 9999999000 0 1 '' env 0 1 previous-candidate
@@ -658,6 +867,10 @@ run_case preserves-existing-stop-on-rollback 1 1 1 failure 1 '{"operator":"on-ca
 run_case rolls-back-maintenance-assets 1 1 1 failure 1 '' 0 '' 9999999000 1 1 '' env 1
 run_case insufficient-disk 1 1 1 failure 1 '' 0 '' 1000
 
+run_case v26-held-success 0 0 0 success 0 '' 0 '' 9999999000 0 1 '' env 0 v26
+run_case v26-held-start-failure 0 0 0 failure 0 '' 0 '' 9999999000 0 1 '' env 1 v26
+run_case v26-foreign-stop 0 0 0 failure 0 '' 0 '' 9999999000 0 1 '' env 0 v26 foreign
+
 preflight_dir="$tmp/preflight"
 write_mocks "$preflight_dir"
 printf 1 > "$preflight_dir/service-active"
@@ -669,7 +882,7 @@ printf 1 > "$preflight_dir/timer-enabled"
 : > "$preflight_dir/docker.log"
 : > "$preflight_dir/systemctl.log"
 : > "$preflight_dir/order.log"
-printf 'LYRASHIELD_WORKER_IMAGE=%s\nLYRASHIELD_SANDBOX_IMAGE=ghcr.io/example/sandbox@sha256:%s\n' "$old_image" "$(printf 'e%.0s' {1..64})" > "$preflight_dir/runtime.conf"
+printf 'LYRASHIELD_WORKER_IMAGE=%s\nLYRASHIELD_SANDBOX_IMAGE=ghcr.io/example/sandbox@sha256:%s\nLYRASHIELD_SANDBOX_SBOM_COVERAGE_VERIFY_PATH=/tmp/coverage.json\nLYRASHIELD_SANDBOX_SBOM_COVERAGE_EXPECTED_PATH=/tmp/coverage-predicate.json\nLYRASHIELD_SANDBOX_SBOM_COVERAGE_REPO=ecryptoguru/lyrashield-engine\nLYRASHIELD_SANDBOX_SBOM_COVERAGE_REF=refs/heads/main\nLYRASHIELD_SANDBOX_SBOM_COVERAGE_ENGINE_REVISION=%s\nLYRASHIELD_SANDBOX_SBOM_COVERAGE_WORKFLOW_REVISION=%s\nLYRASHIELD_SANDBOX_SBOM_COVERAGE_RUN_ID=42487812345\nLYRASHIELD_SANDBOX_SBOM_COVERAGE_RUN_ATTEMPT=1\n' "$old_image" "$(printf 'e%.0s' {1..64})" "$(printf 'a%.0s' {1..40})" "$(printf 'a%.0s' {1..40})" > "$preflight_dir/runtime.conf"
 printf 'REDIS_URL=rediss://current@redis.test:6379\nDATABASE_URL=postgresql://current@database.test:5432/lyrashield\n' > "$preflight_dir/worker.env"
 preflight_output=$(
   PATH="$preflight_dir/bin:$PATH" \
@@ -688,6 +901,7 @@ preflight_output=$(
     MOCK_ORDER_LOG="$preflight_dir/order.log" \
     LYRASHIELD_WORKER_RUNTIME_CONFIG="$preflight_dir/runtime.conf" \
     LYRASHIELD_WORKER_ENV_FILE="$preflight_dir/worker.env" \
+    LYRASHIELD_EGRESS_PIN_FILE="$preflight_dir/egress-pins" \
     LYRASHIELD_WORKER_HOST_LIBEXEC_DIR="$preflight_dir/host/libexec" \
     LYRASHIELD_WORKER_HOST_ASSETS_DIR="$preflight_dir/host/assets" \
     LYRASHIELD_WORKER_ENV_LIB="$repo/ops/worker/worker-env.sh" \
@@ -696,5 +910,16 @@ preflight_output=$(
 grep -Fq 'Worker empty-queue preflight passed' <<< "$preflight_output"
 [ "$(grep -Fxc 'refresh-secrets' "$preflight_dir/order.log")" -eq 1 ]
 [ ! -s "$preflight_dir/systemctl.log" ]
+
+while IFS= read -r log; do
+  while IFS= read -r line; do
+    case "$line" in
+      run*lyrashield-maintenance-*|run*lyrashield-candidate-check-*)
+        [[ "$line" == *"--add-host redis.fixture:13.200.201.38"* ]]
+        [[ "$line" == *"--add-host redis.fixture:13.234.196.111"* ]]
+        ;;
+    esac
+  done < "$log"
+done < <(find "$tmp" -name docker.log -type f)
 
 echo "Worker promotion systemd proof passed."

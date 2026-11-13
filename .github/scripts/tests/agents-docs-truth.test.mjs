@@ -49,8 +49,8 @@ test("AGENTS.md names verify:launch-assurance with its worker filter", () => {
   assert.ok(workerPackage.scripts["verify:launch-assurance"])
 })
 
-test("AGENTS.md records the knip report and the per-job timeouts", () => {
-  assert.match(agents, /`pnpm lint:knip`[^\n]*non-blocking/)
+test("AGENTS.md records manual Knip maintenance and the per-job timeouts", () => {
+  assert.match(agents, /`pnpm lint:knip`[^\n]*no CI job runs it/)
   assert.match(agents, /Every job declares its own `timeout-minutes`/)
   assert.equal(rootPackage.scripts["lint:knip"], "knip --no-exit-code")
 })

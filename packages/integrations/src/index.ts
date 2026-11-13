@@ -4,10 +4,13 @@ export type { LogLevel, LogEntry } from "@lyrashield/logger"
 export {
   createAppJWT,
   getInstallationToken,
+  getRepositoryReadToken,
   listInstallationRepos,
+  listInstallationReposPage,
   getAppInstallations,
   exchangeInstallUserCode,
   userCanAdminInstallation,
+  getUserAdminInstallations,
   GitHubOwnershipError,
   verifyWebhookSignature,
   getInstallAppUrl,
@@ -28,6 +31,12 @@ export {
   type NotificationPayload,
   type NotificationChannelSender,
 } from "./notifications"
+
+export {
+  sendWorkspaceNotification,
+  validateNotificationWebhookUrl,
+  type WorkspaceNotificationChannel,
+} from "./workspace-notifications"
 
 export {
   CONNECTOR_PROVIDERS,
@@ -87,10 +96,12 @@ export {
   enqueueScan,
   getScanQueuePosition,
   registerScanWorker,
+  isTargetRelayWorkerAvailable,
   unregisterScanWorker,
   isScanWorkerAvailable,
   assertScanWorkerAvailable,
   ScanWorkerUnavailableError,
+  ScanEnqueueNotSubmittedError,
   QueueEnqueueUncertainError,
   QUEUE_PRODUCER_TIMEOUT_MS,
   SCAN_ADMISSION_STOP_KEY,
@@ -111,3 +122,12 @@ export {
   enqueueFixGenerate,
   type FixGenerateJobData,
 } from "./queue"
+
+export { inspectFixPrRemote } from "./github-fix-pr"
+export {
+  resolveUrlReviewMode,
+  resolveAvailableUrlReview,
+  getTargetRelayAvailability,
+  TARGET_RELAY_UNAVAILABLE_MESSAGE,
+  type UrlReviewMode,
+} from "./url-review-admission"

@@ -1,3 +1,4 @@
+import { resolveOAuthReadScope } from "../../../../../../../packages/auth/src/oauth-read-scope"
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
 vi.mock("next/cache", () => ({
@@ -21,6 +22,7 @@ vi.mock("@lyrashield/db", () => ({
 }))
 
 vi.mock("@lyrashield/auth/server", () => ({
+  resolveOAuthReadScope,
   requirePermission: vi.fn().mockResolvedValue({
     session: { userId: "user-1" },
     workspace: { id: "ws-1" },
@@ -119,6 +121,17 @@ describe("PATCH /api/schedules/[id]", () => {
     expect(updateSchedule).toHaveBeenCalled()
   })
 
+  it("refuses enabling a stored schedule at the shared boundary", async () => {
+    const res = await PATCH(makePatchRequest("sched-1", { workspaceId: "ws-1", enabled: true }), {
+      params: Promise.resolve({ id: "sched-1" }),
+    })
+
+    expect(res.status).toBe(403)
+    const json = await res.json()
+    expect(json.error.code).toBe("SCHEDULE_UNAVAILABLE")
+    expect(updateSchedule).not.toHaveBeenCalled()
+  })
+
   it("denies updates without schedule:update", async () => {
     vi.mocked(requirePermission).mockRejectedValueOnce(new Error("FORBIDDEN") as never)
 
@@ -172,4 +185,41 @@ describe("PATCH /api/schedules/[id]", () => {
     expect(getSchedule).not.toHaveBeenCalled()
     expect(deleteSchedule).not.toHaveBeenCalled()
   })
+})
+
+it("bounds schedule detail to the grant before returning target metadata", async () => {
+  vi.clearAllMocks()
+  vi.mocked(requirePermission).mockResolvedValueOnce({
+    session: { oauth: { connectionId: "conn-1", allTargets: false, allowedTargetIds: [] } },
+  } as never)
+  vi.mocked(getSchedule).mockResolvedValueOnce(null)
+  const response = await GET(
+    new Request("http://localhost/api/schedules/schedule-2?workspaceId=ws-1"),
+    { params: Promise.resolve({ id: "schedule-2" }) }
+  )
+  expect(response.status).toBe(404)
+  expect(getSchedule).toHaveBeenCalledWith("schedule-2", "ws-1", [])
+})
+
+it.each([
+  {
+    name: "selected",
+    oauth: { connectionId: "conn-1", allTargets: false, allowedTargetIds: ["target-1"] },
+    targetIds: ["target-1"],
+  },
+  {
+    name: "all-target",
+    oauth: { connectionId: "conn-1", allTargets: true, allowedTargetIds: [] },
+    targetIds: undefined,
+  },
+])("returns allowed schedule metadata for $name grant", async ({ oauth, targetIds }) => {
+  vi.clearAllMocks()
+  vi.mocked(requirePermission).mockResolvedValueOnce({ session: { oauth } } as never)
+  vi.mocked(getSchedule).mockResolvedValueOnce({ id: "schedule-1", targetId: "target-1" } as never)
+  const response = await GET(
+    new Request("http://localhost/api/schedules/schedule-1?workspaceId=ws-1"),
+    { params: Promise.resolve({ id: "schedule-1" }) }
+  )
+  expect(response.status).toBe(200)
+  expect(getSchedule).toHaveBeenCalledWith("schedule-1", "ws-1", targetIds)
 })

@@ -28,12 +28,10 @@ case "$*" in
   *"log-analytics query"*"LyraShield worker starting"*) printf '%s\n' "${FAKE_WORKER_LOG_COUNT:-1}" ;;
   *"log-analytics query"*"ContainerAppConsoleLogs_CL"*) printf '%s\n' "${FAKE_APP_LOG_COUNT:-1}" ;;
   *"action-group create"*) printf '%s\n' "${FAKE_ACTION_GROUP_ID:-/subscriptions/test/resourceGroups/rg/providers/Microsoft.Insights/actionGroups/lyrashield-operator-alerts}" ;;
-  *"action-group show"*"useCommonAlertSchema"*) printf '%s\n' "${FAKE_COMMON_SCHEMA_COUNT:-2}" ;;
-  *"action-group show"*"length(emailReceivers)"*) printf '%s\n' "${FAKE_RECEIVER_COUNT:-2}" ;;
+  *"action-group show"*"useCommonAlertSchema"*) printf '%s\n' "${FAKE_COMMON_SCHEMA_COUNT:-1}" ;;
+  *"action-group show"*"length(emailReceivers)"*) printf '%s\n' "${FAKE_RECEIVER_COUNT:-1}" ;;
   *"action-group show"*"sort(emailReceivers"*)
-    printf '%s\n%s\n' \
-      "${FAKE_PRIMARY_OPERATOR_EMAIL:-ecryptoguru@gmail.com}" \
-      "${FAKE_FOUNDER_ESCALATION_EMAIL:-ankit@lyrashieldai.com}" | sort
+    printf '%s\n' "${FAKE_PRIMARY_OPERATOR_EMAIL:-ankit@lyrashieldai.com}"
     ;;
   *"action-group show"*"--query enabled"*) printf '%s\n' "${FAKE_ACTION_GROUP_ENABLED:-true}" ;;
   *"action-group show"*) printf 'lyrashield-operator-alerts\n' ;;
@@ -58,8 +56,7 @@ export WORKER_VM_NAME=worker
 export WORKER_VM_RESOURCE_ID=/subscriptions/test/resourceGroups/rg/providers/Microsoft.Compute/virtualMachines/worker
 export APP_RESOURCE_ID=/subscriptions/test/resourceGroups/rg/providers/Microsoft.App/containerApps/app
 export SCANNER_RESOURCE_ID=/subscriptions/test/resourceGroups/rg/providers/Microsoft.App/containerApps/scanner
-export LYRASHIELD_PRIMARY_OPERATOR_EMAIL=ecryptoguru@gmail.com
-export LYRASHIELD_FOUNDER_ESCALATION_EMAIL=ankit@lyrashieldai.com
+export LYRASHIELD_PRIMARY_OPERATOR_EMAIL=ankit@lyrashieldai.com
 
 sh ops/monitoring/provision-alerts.sh >/dev/null
 
@@ -72,8 +69,8 @@ grep -q 'log-analytics query.*contains.*LyraShield worker starting' "$capture"
 grep -q "log-analytics query.*ContainerAppConsoleLogs_CL.*ContainerAppName_s =~ 'app'" "$capture"
 test "$(grep -c 'log-analytics query.*--query \[0\]\.Count' "$capture")" = 2
 grep -q 'action-group create.*lyrashield-operator-alerts' "$capture"
-grep -q 'action-group create.*primary-operator ecryptoguru@gmail.com usecommonalertschema' "$capture"
-grep -q 'action-group create.*founder-escalation ankit@lyrashieldai.com usecommonalertschema' "$capture"
+grep -q 'action-group create.*primary-operator ankit@lyrashieldai.com usecommonalertschema' "$capture"
+if grep -q 'action-group create.*founder-escalation' "$capture"; then exit 1; fi
 grep -q 'worker-cpu-high.*Percentage CPU > 85.*window-size 15m' "$capture"
 grep -q 'app-no-active-replica.*Replicas < 1' "$capture"
 grep -q 'app-replica-restart.*RestartCount > 0' "$capture"
@@ -82,9 +79,6 @@ for code in \
   scan_queue_depth_high \
   scan_queue_oldest_wait_high \
   reconciliation_drift \
-  reconciliation_backlog \
-  reconciliation_duplicates \
-  webhook_catalog_rejection \
   webhook_dead_letter \
   evidence_persistence_failure \
   terminal_cost_unreconciled
@@ -98,7 +92,7 @@ if grep -q "ContainerAppConsoleLogs_CL.*_ResourceId" "$capture"; then
   exit 1
 fi
 
-test "$(grep -c 'monitor scheduled-query create' "$capture")" = 10
+test "$(grep -c 'monitor scheduled-query create' "$capture")" = 7
 test "$(grep -c 'monitor metrics alert create' "$capture")" = 6
 
 worker_readback_line=$(grep -n 'log-analytics query.*LyraShield worker starting' "$capture" | cut -d: -f1)
@@ -168,9 +162,9 @@ export FAKE_APP_LOG_COUNT=1
 sh ops/monitoring/provision-alerts.sh >/dev/null
 test "$(grep -c 'metrics alert show.*--query enabled' "$capture")" = 6
 test "$(grep -c 'metrics alert show.*actionGroupId' "$capture")" = 6
-test "$(grep -c 'scheduled-query show.*--query enabled' "$capture")" = 10
-test "$(grep -c 'scheduled-query show.*autoMitigate' "$capture")" = 10
-test "$(grep -c 'scheduled-query show.*actionGroups\[0\]' "$capture")" = 10
+test "$(grep -c 'scheduled-query show.*--query enabled' "$capture")" = 7
+test "$(grep -c 'scheduled-query show.*autoMitigate' "$capture")" = 7
+test "$(grep -c 'scheduled-query show.*actionGroups\[0\]' "$capture")" = 7
 test "$(grep -c 'action-group show' "$capture")" = 5
 for rule in \
   worker-vm-unavailable worker-cpu-high app-no-active-replica \
@@ -180,9 +174,9 @@ do
 done
 for rule in \
   scan-readiness-unavailable scan-queue-depth-high scan-queue-oldest-wait-high \
-  reconciliation-drift reconciliation-backlog reconciliation-duplicates \
+  reconciliation-drift \
   webhook-dead-letter evidence-persistence-failure \
-  terminal-cost-unreconciled webhook-catalog-rejection
+  terminal-cost-unreconciled
 do
   grep -q "scheduled-query show.*--name $rule" "$capture"
 done
@@ -190,11 +184,10 @@ done
 # ── Inventory: every application alert code maps exactly once ───────────────
 # Covers OperationalAlertCode in apps/worker/src/operational-health.ts and the
 # billing reconciliation signals in apps/worker/src/jobs/billing-reconciliation.job.ts:
-# each code maps to exactly one scheduled query or metric rule; the single
-# documented exception (scan_worker_lease_expired, no durable counter yet) is
-# never provisioned. The metric set also includes infrastructure-only rules
+# approved codes map to existing scheduled queries or metrics; three paid
+# additions and scan_worker_lease_expired (no durable counter) stay excluded. The metric set also includes infrastructure-only rules
 # (VM availability, scanner replicas) that have no application code.
-expected_scheduled="evidence-persistence-failure reconciliation-backlog reconciliation-drift reconciliation-duplicates scan-queue-depth-high scan-queue-oldest-wait-high scan-readiness-unavailable terminal-cost-unreconciled webhook-catalog-rejection webhook-dead-letter"
+expected_scheduled="evidence-persistence-failure reconciliation-drift scan-queue-depth-high scan-queue-oldest-wait-high scan-readiness-unavailable terminal-cost-unreconciled webhook-dead-letter"
 created_scheduled=$(grep 'scheduled-query create' "$capture" | sed -E 's/.*--name ([^ ]+) .*/\1/' | sort | tr '\n' ' ' | sed 's/ $//')
 test "$created_scheduled" = "$expected_scheduled"
 expected_metric="app-no-active-replica app-replica-restart scanner-no-active-replica scanner-replica-restart worker-cpu-high worker-vm-unavailable"
@@ -206,31 +199,21 @@ if grep -q 'scan_worker_lease_expired' "$capture"; then
 fi
 grep -q 'scan_worker_lease_expired' ops/monitoring/provision-alerts.sh
 
-# Both billing signals reuse the bounded worker helper with the exact routing.
-for code in reconciliation_backlog reconciliation_duplicates; do
-  rule=$(printf '%s' "$code" | tr '_' '-')
-  severity=1
-  [ "$code" != "reconciliation_duplicates" ] || severity=2
-  creation=$(grep "scheduled-query create.*--name $rule " "$capture")
-  printf '%s\n' "$creation" | grep -Fq "Signal=Syslog | where TimeGenerated > ago(10m) | where SyslogMessage has '\"code\":\"$code\"'"
-  printf '%s\n' "$creation" | grep -Fq -- "--scopes $LOG_ANALYTICS_WORKSPACE_ID"
-  printf '%s\n' "$creation" | grep -Fq -- "--evaluation-frequency 5m --window-size 10m --severity $severity"
-  printf '%s\n' "$creation" | grep -Fq -- "--action-groups /subscriptions/test/resourceGroups/rg/providers/Microsoft.Insights/actionGroups/lyrashield-operator-alerts --auto-mitigate true"
+# Existing telemetry remains; these three paid detectors require separate approval.
+for rule in reconciliation-backlog reconciliation-duplicates webhook-catalog-rejection; do
+  if grep -q "scheduled-query create.*--name $rule " "$capture"; then exit 1; fi
 done
-rejection_creation=$(grep 'scheduled-query create.*--name webhook-catalog-rejection ' "$capture")
-printf '%s\n' "$rejection_creation" | grep -Fq "Signal=ContainerAppConsoleLogs_CL | where TimeGenerated > ago(10m) | where ContainerAppName_s =~ 'app' | where Log_s has '\"code\":\"webhook_catalog_rejection\"'"
-printf '%s\n' "$rejection_creation" | grep -Fq -- "--evaluation-frequency 5m --window-size 10m --severity 1"
-printf '%s\n' "$rejection_creation" | grep -Fq -- "--action-groups /subscriptions/test/resourceGroups/rg/providers/Microsoft.Insights/actionGroups/lyrashield-operator-alerts --auto-mitigate true"
+grep -q 'coalesce(toscalar' "$capture"
 cp "$capture" "$test_dir/first-success.calls"
 
 # ── Idempotent rerun ────────────────────────────────────────────────────────
 : >"$capture"
 sh ops/monitoring/provision-alerts.sh >/dev/null
 cmp "$test_dir/first-success.calls" "$capture"
-test "$(grep -c 'monitor scheduled-query create' "$capture")" = 10
+test "$(grep -c 'monitor scheduled-query create' "$capture")" = 7
 test "$(grep -c 'monitor metrics alert create' "$capture")" = 6
 test "$(grep -c 'metrics alert show.*--query enabled' "$capture")" = 6
-test "$(grep -c 'scheduled-query show.*autoMitigate' "$capture")" = 10
+test "$(grep -c 'scheduled-query show.*autoMitigate' "$capture")" = 7
 if grep -q 'delete' "$capture"; then
   echo "provisioning rerun must not delete or recreate rules" >&2
   exit 1
@@ -244,16 +227,16 @@ if sh ops/monitoring/provision-alerts.sh >/dev/null 2>&1; then
   exit 1
 fi
 test "$(grep -c 'action-group create' "$capture" || true)" = 0
-export LYRASHIELD_PRIMARY_OPERATOR_EMAIL=ecryptoguru@gmail.com
+export LYRASHIELD_PRIMARY_OPERATOR_EMAIL=ankit@lyrashieldai.com
 
 : >"$capture"
-export LYRASHIELD_FOUNDER_ESCALATION_EMAIL="$LYRASHIELD_PRIMARY_OPERATOR_EMAIL"
+export LYRASHIELD_PRIMARY_OPERATOR_EMAIL=ecryptoguru@gmail.com
 if sh ops/monitoring/provision-alerts.sh >/dev/null 2>&1; then
-  echo "provisioning must fail when both delivery addresses are identical" >&2
+  echo "provisioning must fail when the delivery address differs from the approved primary" >&2
   exit 1
 fi
 test "$(grep -c 'action-group create' "$capture" || true)" = 0
-export LYRASHIELD_FOUNDER_ESCALATION_EMAIL=ankit@lyrashieldai.com
+export LYRASHIELD_PRIMARY_OPERATOR_EMAIL=ankit@lyrashieldai.com
 
 : >"$capture"
 export FAKE_RECEIVER_COUNT=3
@@ -266,17 +249,17 @@ test "$(grep -c 'monitor scheduled-query create' "$capture" || true)" = 0
 unset FAKE_RECEIVER_COUNT
 
 : >"$capture"
-export FAKE_FOUNDER_ESCALATION_EMAIL=unexpected@example.test
+export FAKE_PRIMARY_OPERATOR_EMAIL=unexpected@example.test
 if sh ops/monitoring/provision-alerts.sh >/dev/null 2>&1; then
   echo "provisioning must fail when receiver email readback differs" >&2
   exit 1
 fi
-unset FAKE_FOUNDER_ESCALATION_EMAIL
+unset FAKE_PRIMARY_OPERATOR_EMAIL
 
 : >"$capture"
-export FAKE_COMMON_SCHEMA_COUNT=1
+export FAKE_COMMON_SCHEMA_COUNT=0
 if sh ops/monitoring/provision-alerts.sh >/dev/null 2>&1; then
-  echo "provisioning must fail unless both receivers are enabled with common schema" >&2
+  echo "provisioning must fail unless the primary receiver is enabled with common schema" >&2
   exit 1
 fi
 unset FAKE_COMMON_SCHEMA_COUNT
@@ -291,26 +274,25 @@ fi
 test "$(grep -c 'monitor scheduled-query create' "$capture" || true)" = 0
 unset FAKE_ACTION_GROUP_ENABLED
 
-for rule in reconciliation-backlog reconciliation-duplicates webhook-catalog-rejection; do
-  export FAKE_FAILED_RULE="$rule"
-  for failure in enabled auto-mitigate action-group; do
-    : >"$capture"
-    case "$failure" in
-      enabled) export FAKE_RULE_ENABLED=false ;;
-      auto-mitigate) export FAKE_RULE_AUTO_MITIGATE=false ;;
-      action-group) export FAKE_RULE_ACTION_GROUP=/unexpected/action-group ;;
-    esac
-    if sh ops/monitoring/provision-alerts.sh >"$test_dir/readback.out" 2>&1; then
-      echo "provisioning must fail when $rule has invalid $failure readback" >&2
-      exit 1
-    fi
-    grep -q "Scheduled query $rule" "$test_dir/readback.out"
-    if grep -q 'monitoring alerts provisioned' "$test_dir/readback.out"; then
-      echo "failed readback must never report successful provisioning" >&2
-      exit 1
-    fi
-    unset FAKE_RULE_ENABLED FAKE_RULE_AUTO_MITIGATE FAKE_RULE_ACTION_GROUP
-  done
+rule=terminal-cost-unreconciled
+export FAKE_FAILED_RULE="$rule"
+for failure in enabled auto-mitigate action-group; do
+  : >"$capture"
+  case "$failure" in
+    enabled) export FAKE_RULE_ENABLED=false ;;
+    auto-mitigate) export FAKE_RULE_AUTO_MITIGATE=false ;;
+    action-group) export FAKE_RULE_ACTION_GROUP=/unexpected/action-group ;;
+  esac
+  if sh ops/monitoring/provision-alerts.sh >"$test_dir/readback.out" 2>&1; then
+    echo "provisioning must fail when $rule has invalid $failure readback" >&2
+    exit 1
+  fi
+  grep -q "Scheduled query $rule" "$test_dir/readback.out"
+  if grep -q 'monitoring alerts provisioned' "$test_dir/readback.out"; then
+    echo "failed readback must never report successful provisioning" >&2
+    exit 1
+  fi
+  unset FAKE_RULE_ENABLED FAKE_RULE_AUTO_MITIGATE FAKE_RULE_ACTION_GROUP
 done
 unset FAKE_FAILED_RULE
 

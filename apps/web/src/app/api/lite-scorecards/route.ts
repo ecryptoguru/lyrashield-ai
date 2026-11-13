@@ -69,7 +69,7 @@ export async function POST(request: Request) {
   // script on an allowed origin to mint unlimited tokens.
   if (!(await verifyTurnstile(parsed.data.turnstileToken))) {
     return Response.json(
-      { error: "bot_check_failed", message: "Please retry the abuse check." },
+      { error: "bot_check_failed", message: "Complete verification again, then retry." },
       { status: 403, headers: headers(request) }
     )
   }

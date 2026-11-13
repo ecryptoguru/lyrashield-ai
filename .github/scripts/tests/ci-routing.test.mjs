@@ -13,6 +13,7 @@ import { tmpdir } from "node:os"
 import path from "node:path"
 import test from "node:test"
 import { runInNewContext } from "node:vm"
+import { validateRouting } from "../ci-selection.mjs"
 
 const workflow = readFileSync(new URL("../../workflows/ci.yml", import.meta.url), "utf8")
 const lighthouseScript = readFileSync(
@@ -197,6 +198,7 @@ printf '<meta name="lyrashield-build-revision" content="%s">' "$CF_DEPLOYED_SHA"
       .split("\n")
       .map((line) => line.split("="))
   )
+  validateRouting(outputs)
   return { ...result, outputs }
 }
 
@@ -264,6 +266,7 @@ test("independent marketing projects select only their affected tests and browse
     [["pnpm-lock.yaml"], true, true],
     [["packages/ui/src/index.ts"], false, false],
     [["packages/security/src/index.ts"], true, false],
+    [["packages/evidence-storage/src/index.ts"], true, false],
     [["packages/egress-proxy/package.json"], true, false],
     [["new-runtime-entrypoint.js"], true, true],
     [[".github/workflows/ci.yml", "pnpm-workspace.yaml"], true, true],
@@ -320,17 +323,14 @@ test("marketing routing covers its current transitive workspace dependency graph
   assert.ok(seen.size > 0)
 })
 
-test("motion-only changes check their own artifact without duplicating broad builds", () => {
-  for (const name of ["Lint motion", "Typecheck motion", "Build motion"]) {
-    assert.equal(runs(name, ["apps/marketing-motion/src/scene.ts"]), true, name)
-    assert.equal(runs(name, ["apps/marketing/src/pages/index.astro"]), false, name)
-    assert.equal(runs(name, ["pnpm-lock.yaml"]), false, name)
-    assert.equal(
-      runs(name, ["apps/marketing-motion/src/scene.ts", "apps/web/src/app/page.tsx"]),
-      false,
-      name
-    )
-  }
+test("motion builds stay selected when app and root dependencies also change", () => {
+  for (const paths of [
+    ["apps/marketing-motion/src/scene.ts"],
+    ["pnpm-lock.yaml"],
+    ["apps/marketing-motion/src/scene.ts", "apps/web/src/app/page.tsx"],
+  ])
+    assert.equal(runs("Build motion", paths), true, String(paths))
+  assert.equal(runs("Build motion", ["apps/marketing/src/pages/index.astro"]), false)
 })
 
 test("ops and native service tests select their dependency closure without ordinary UI changes", () => {
@@ -368,8 +368,30 @@ test("ops and native service tests select their dependency closure without ordin
   assert.match(runner, /: \["\.github\/scripts\/tests\/\*\.test\.mjs"\]/)
 })
 
+test("v26 accounting diagnostic changes run their isolated PostgreSQL proof", () => {
+  for (const path of [
+    ".github/scripts/v26-accounting-diagnostic.mjs",
+    ".github/scripts/tests/v26-accounting-diagnostic.test.mjs",
+    ".github/scripts/tests/v26-accounting-diagnostic.postgres.test.mjs",
+    ".github/scripts/v26-post-migration-readback.mjs",
+    ".github/scripts/tests/v26-post-migration-readback.postgres.test.mjs",
+    ".github/scripts/v26-schema-classifier.mjs",
+  ]) {
+    assert.equal(runs("Start disposable PostgreSQL and Redis", [path]), true, path)
+    assert.equal(
+      runs("Test v26 accounting diagnostic with disposable PostgreSQL", [path]),
+      true,
+      path
+    )
+  }
+  assert.equal(
+    runs("Test v26 accounting diagnostic with disposable PostgreSQL", ["README.md"]),
+    false
+  )
+})
+
 test("ops owns the webhook and Lighthouse assertions without duplicate early invocations", () => {
-  const classifierJob = workflow.split("  changes:")[1].split("  lint-and-typecheck:")[0]
+  const classifierJob = workflow.split("  changes:")[1].split("  app-checks:")[0]
   assert.doesNotMatch(
     classifierJob,
     /webhook-cutover-verification\.workflow\.test|webhook-deploy-dispatch\.test|lighthouse-production\.test/
@@ -378,28 +400,6 @@ test("ops owns the webhook and Lighthouse assertions without duplicate early inv
     readFileSync(new URL("../../../run-all-tests.mjs", import.meta.url), "utf8"),
     /\.github\/scripts\/tests\/\*\.test\.mjs/
   )
-  // The dead-code report is advisory: it runs with --no-exit-code and
-  // continue-on-error so a knip finding or config error cannot fail the
-  // required aggregate. See the dedicated assertion below.
-  assert.doesNotMatch(workflow, /pnpm exec knip --no-exit-code/)
-})
-
-test("the dead-code report stays advisory and cannot fail the required aggregate", () => {
-  const block = workflow.match(
-    /\n      - name: Dead-code report \(knip, non-blocking\)\n([\s\S]*?)(?=\n      - name: )/
-  )
-  assert.ok(block, "ci.yml must carry the knip report step")
-  assert.match(block[0], /^ {8}continue-on-error: true$/m)
-  assert.match(block[0], /^ {8}if: needs\.changes\.outputs\.docs-only != 'true'$/m)
-  assert.match(block[0], /^ {8}run: pnpm lint:knip$/m)
-  assert.match(block[0], /^ {8}timeout-minutes: 10$/m)
-  const root = JSON.parse(readFileSync(new URL("../../../package.json", import.meta.url), "utf8"))
-  assert.equal(root.scripts["lint:knip"], "knip --no-exit-code")
-  assert.ok(root.devDependencies.knip, "knip must stay a declared devDependency")
-  // The step lives in the required aggregate, so its non-blocking shape is what
-  // keeps it from gating a merge.
-  const aggregate = workflow.split("\n  lint-and-typecheck:\n")[1]
-  assert.ok(aggregate.includes("- name: Dead-code report (knip, non-blocking)"))
 })
 
 test("known tooling retains executable operations checks without runtime suites", () => {
@@ -440,13 +440,16 @@ test("PR CI cancels superseded work and releases run independently from protecte
   assert.match(classifyStep, /git diff --no-renames --name-only/)
 })
 
-test("the PR image-build gate never pushes and never becomes a required check", () => {
+test("the selected PR image-build gate never pushes and feeds the required aggregate", () => {
   const start = workflow.indexOf("\n  container-build:\n")
   assert.notEqual(start, -1, "ci.yml must carry the PR image-build job")
   const nextJob = workflow.slice(start + 1).search(/\n  [a-z][a-z-]*:\n/)
   const job = workflow.slice(start, start + 1 + nextJob)
   assert.match(job, /^    name: Container image build \(no push\)$/m)
-  assert.match(job, /^    if: needs\.changes\.outputs\.azure-deploy == 'true'$/m)
+  assert.match(
+    job,
+    /^    if: needs\.changes\.outputs\.web-image == 'true' \|\| needs\.changes\.outputs\.worker-image == 'true' \|\| needs\.changes\.outputs\.egress-image == 'true'$/m
+  )
   assert.match(job, /^    permissions:\n      contents: read$/m)
   assert.doesNotMatch(job, /id-token|environment:|secrets\.(?!GITHUB_TOKEN)/)
   // Every build step is a no-push build of a release target.
@@ -454,10 +457,10 @@ test("the PR image-build gate never pushes and never becomes a required check", 
   assert.deepEqual(targets.sort(), ["egress-proxy", "runner", "worker"])
   assert.equal([...job.matchAll(/^ {10}push: false$/gm)].length, 3)
   assert.doesNotMatch(job, /^ {10}push: true$/m)
-  // Required-check preservation: nothing depends on this job, and it is not a
-  // dependency of the aggregate, so it cannot gate a merge while it proves out.
-  assert.doesNotMatch(workflow, /needs:[^\n]*container-build/)
-  assert.doesNotMatch(workflow, /- container-build/)
+  assert.match(
+    workflow,
+    /needs: \[changes, code-quality, app-checks, marketing-checks, desktop-frontend, container-build\]/
+  )
 })
 
 test("production Lighthouse remains a real quality gate outside the deployment path", () => {
@@ -607,6 +610,32 @@ test("tooling-only changes skip both deployments when both production baselines 
   assert.doesNotMatch(`${result.stdout}${result.stderr}`, /fixture-token-must-not-be-printed/)
 })
 
+test("serial-comma baseline changes skip both production deployments", (t) => {
+  const fixture = createMainGapFixture({ pendingFile: "lint/serial-comma-baseline.json" })
+  t.after(() => rmSync(fixture.directory, { recursive: true, force: true }))
+  const currentRelease = azureCodeReleaseFixture(
+    1,
+    fixture.deployedSha,
+    101,
+    ".github/workflows/release-production.yml"
+  )
+  const result = runMainGap(fixture, {
+    cloudflareSha: fixture.deployedSha,
+    ...azureFixtures([currentRelease]),
+  })
+
+  assert.equal(result.status, 0, result.stderr)
+  assert.equal(result.outputs["current-main"], "true")
+  assert.equal(result.outputs["azure-deploy"], "false")
+  assert.equal(result.outputs["marketing-deploy"], "false")
+  assert.match(
+    result.stdout,
+    new RegExp(
+      `release-routing current-main=true head=${fixture.headSha} azure-base=${fixture.deployedSha} marketing-base=${fixture.deployedSha} validation-base=${fixture.deployedSha} azure=skip marketing=skip reason=classified`
+    )
+  )
+})
+
 test("main change routing fails closed when a deployed baseline cannot be proven", (t) => {
   const fixture = createMainGapFixture()
   t.after(() => rmSync(fixture.directory, { recursive: true, force: true }))
@@ -658,10 +687,28 @@ test("Azure and marketing releases route the exact current merged SHA independen
   assert.match(productionRelease, /^  cancel-in-progress: false$/m)
   assert.match(productionRelease, /HEAD_SHA: \$\{\{ github\.sha \}\}/)
   assert.match(productionRelease, /classify-main-change-gap\.sh/)
+  const routing = productionRelease.split("  routing:\n")[1].split("\n  deploy-azure:")[0]
+  assert.match(routing, /timeout-minutes: 10/)
+  assert.match(routing, /checks: read/)
+  assert.match(routing, /pull-requests: read/)
+  assert.ok(
+    routing.indexOf("node .github/scripts/qualify-release-source.mjs") <
+      routing.indexOf("id: classify")
+  )
+  assert.doesNotMatch(routing, /continue-on-error:|if:.*always\(/)
+  assert.match(
+    workflow,
+    /name: "Detect changed paths \[source: pr=\$\{\{ github.event.pull_request.number \}\} base=\$\{\{ github.event.pull_request.base.sha \}\} head=\$\{\{ github.event.pull_request.head.sha \}\} merge=\$\{\{ github.sha \}\}\]"/
+  )
   for (const route of ["azure", "marketing"]) {
     const release = productionRelease.split(`  deploy-${route}:\n`)[1]?.split(/\n  [a-z-]+:\n/)[0]
     assert.ok(release)
-    assert.match(release, /needs: routing/)
+    if (route === "azure") {
+      assert.match(release, /needs: \[routing, qualify-runtime\]/)
+      assert.match(release, /cold_release: true/)
+    } else {
+      assert.match(release, /needs: routing/)
+    }
     assert.match(release, /needs\.routing\.outputs\.current-main == 'true'/)
     assert.match(release, /source_sha: \$\{\{ github\.sha \}\}/)
     assert.doesNotMatch(release, /needs:.*deploy-/)
@@ -766,3 +813,20 @@ for (const current of [true, false]) {
     assert.match(workflow, /if: needs\.source\.outputs\.current == 'true'/)
   })
 }
+
+test("cargo-only desktop harness quality generates its database client before typechecking", () => {
+  const quality = workflow.split("\n  code-quality:\n")[1].split("\n  app-checks:\n")[0]
+  assert.ok(
+    quality.indexOf("Generate Prisma Client for static analysis") <
+      quality.indexOf("Typecheck portable browser harness")
+  )
+  assert.equal(
+    runs("Generate Prisma Client for static analysis", ["apps/desktop/src-tauri/Cargo.lock"]),
+    true
+  )
+  assert.equal(
+    runs("Typecheck portable browser harness", ["apps/desktop/src-tauri/Cargo.lock"]),
+    true
+  )
+  assert.equal(runs("Typecheck portable browser harness", ["packages/db/src/client.ts"]), true)
+})

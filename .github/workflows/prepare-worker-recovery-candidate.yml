@@ -17,7 +17,7 @@ concurrency:
 
 env:
   SOURCE_SHA: ${{ inputs.source_sha }}
-  ENGINE_REVISION: 3001517530300ca5f602536bfadcbd3c95ad3039
+  ENGINE_REVISION: 0793bcb9644a1985165963375586124c993c020a
 
 jobs:
   build:
@@ -27,6 +27,9 @@ jobs:
     permissions:
       contents: read
       packages: write
+      actions: read
+      checks: read
+      pull-requests: read
     outputs:
       web_image: ${{ steps.references.outputs.web_image }}
       worker_image: ${{ steps.references.outputs.worker_image }}
@@ -51,6 +54,12 @@ jobs:
           ref: ${{ inputs.source_sha }}
           fetch-depth: 0
           persist-credentials: false
+
+      - name: Qualify exact merged source against required PR checks
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ inputs.source_sha }}
+        run: node .github/scripts/qualify-release-source.mjs
 
       - name: Checkout pinned engine
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -125,7 +134,9 @@ jobs:
             BUILD_NEXT_PUBLIC_POSTHOG_KEY=${{ vars.POSTHOG_PUBLIC_PROJECT_KEY }}
             BUILD_NEXT_PUBLIC_SENTRY_DSN=${{ vars.NEXT_PUBLIC_SENTRY_DSN }}
             BUILD_NEXT_PUBLIC_SENTRY_RELEASE=${{ inputs.source_sha }}
-          labels: org.opencontainers.image.revision=${{ inputs.source_sha }}
+          labels: |
+            org.opencontainers.image.revision=${{ inputs.source_sha }}
+            io.lyrashield.accounting.protocol=reservations/2
           cache-from: type=gha,scope=release-web
           cache-to: type=gha,mode=max,scope=recovery-web
       - name: Build worker candidate
@@ -142,6 +153,7 @@ jobs:
           labels: |
             org.opencontainers.image.revision=${{ inputs.source_sha }}
             io.lyrashield.engine.revision=${{ env.ENGINE_REVISION }}
+            io.lyrashield.accounting.protocol=reservations/2
           cache-from: type=gha,scope=release-worker
           cache-to: type=gha,mode=max,scope=recovery-worker
       - name: Build egress proxy candidate
@@ -173,6 +185,11 @@ jobs:
             echo "worker_image=$repository/lyrashield-worker@$WORKER_DIGEST"
             echo "egress_proxy_image=$repository/lyrashield-egress-proxy@$EGRESS_DIGEST"
           } >> "$GITHUB_OUTPUT"
+      - name: Verify the exact prepared web and worker image contracts
+        env:
+          PREPARED_WEB: ${{ steps.references.outputs.web_image }}
+          PREPARED_WORKER: ${{ steps.references.outputs.worker_image }}
+        run: bash .github/scripts/verify-v26-images.sh "$PREPARED_WEB" "$PREPARED_WORKER" "$SOURCE_SHA" "$ENGINE_REVISION"
 
   rehearse:
     needs: build

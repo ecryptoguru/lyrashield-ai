@@ -51,7 +51,7 @@ async function post(request: Request) {
       return apiError(
         result.alreadyUsed ? "TRIAL_ALREADY_USED" : "TRIAL_ALREADY_STARTED",
         result.alreadyUsed
-          ? "You have already started a trial on another workspace. Upgrade to continue."
+          ? "This account has already used its trial. Upgrade to continue."
           : "A trial has already been started for this workspace.",
         409
       )

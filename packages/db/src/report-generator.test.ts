@@ -340,6 +340,49 @@ describe("report-generator", () => {
       }
     })
 
+    it.each([
+      ["BLOCKED", "GO_WITH_CONDITIONS", true],
+      ["COMPLETED", "GO", false],
+      ["NOT_APPLICABLE", "GO", false],
+      [null, "GO", false],
+    ] as const)(
+      "reports scoped Windows package evidence %s without changing unrelated completed scans",
+      async (status, verdict, limited) => {
+        mockPrisma.workspace.findFirst.mockResolvedValue({ name: "Acme" })
+        mockPrisma.finding.findMany.mockResolvedValue([])
+        mockPrisma.scan.findFirst.mockResolvedValue({
+          id: "scan-1",
+          goal: "TEST_APP",
+          mode: "STANDARD",
+          status: "COMPLETED",
+          summary: null,
+          target: { name: "example", type: "REPO", url: null },
+          targetId: "target-1",
+          startedAt: new Date(),
+          endedAt: new Date(),
+          resultManifest: { checksum: "manifest-checksum", manifest: { version: 5 } },
+          coverageReceipts: [
+            { controlId: "iac", scanner: "iac", status: "COMPLETED" },
+            ...(status
+              ? [{ controlId: "php-runtime:windows-brotli", scanner: "php-windows-brotli", status }]
+              : []),
+          ],
+        })
+        const data = await gatherReportData("ws-1", "scan-1")
+        expect(data.assurance?.verdict).toBe(verdict)
+        if (limited) {
+          expect(data.assurance?.narrative).toMatch(/coverage is incomplete/i)
+          expect(data.assurance?.narrative).toMatch(/PHP Windows Brotli/i)
+          expect(generateReportHTML(data)).toMatch(/PHP Windows Brotli/i)
+          expect(
+            data.assurance?.priorityActions.some((action) => /coverage/i.test(action.label))
+          ).toBe(true)
+        } else {
+          expect(data.assurance?.narrative).not.toMatch(/PHP Windows Brotli/i)
+        }
+      }
+    )
+
     it.each(["critical", "high"] as const)(
       "does not evaluate workspace findings without a scan (%s)",
       async (severity) => {

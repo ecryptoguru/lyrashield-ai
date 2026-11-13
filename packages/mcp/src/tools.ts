@@ -10,6 +10,7 @@ import {
   createGetScanStatusTool,
   createGetScanQualityTool,
   createGetScanEligibilityTool,
+  createGetSetupHealthTool,
 } from "./tools-core"
 import {
   createCheckDiffTool,
@@ -45,6 +46,7 @@ export {
   createGetScanStatusTool,
   createGetScanQualityTool,
   createGetScanEligibilityTool,
+  createGetSetupHealthTool,
 } from "./tools-core"
 export {
   createCheckDiffTool,
@@ -115,6 +117,12 @@ export const MCP_TOOL_ANNOTATIONS: Record<string, ToolAnnotations> = {
   },
   lyrashield_get_scan_eligibility: {
     title: "Check scan eligibility (advisory preflight)",
+    readOnlyHint: true,
+    destructiveHint: false,
+    openWorldHint: false,
+  },
+  lyrashield_get_setup_health: {
+    title: "Check setup health (advisory)",
     readOnlyHint: true,
     destructiveHint: false,
     openWorldHint: false,
@@ -211,6 +219,7 @@ export function createAllTools(context: ToolHandlerContext): McpTool[] {
     createGetScanStatusTool(context),
     createGetScanQualityTool(context),
     createGetScanEligibilityTool(context),
+    createGetSetupHealthTool(context),
     // Core
     createScanTargetTool(context),
     createCancelScanTool(context),

@@ -116,7 +116,7 @@ A content-filter, model-error or runtime truncation can preserve findings as PAR
 
 ### 1.4 URL/API scan pipeline
 
-URL/API Safe is deterministic-only. Standard and Deep are engine-backed, with deterministic collection/probing retained alongside the engine.
+URL/API Safe is deterministic-only. Standard and Deep are engine-backed, with deterministic collection/probing retained alongside the engine. Those engine-backed URL/API profiles are removed from the launch offering: launch admission covers deterministic Safe and Quick only, and this section remains a source contract rather than a statement of launch availability.
 
 ```text
 Validated URL/API target
@@ -446,7 +446,7 @@ Repository revisions may differ after a fix; equality is not required. Matching 
 
 If requirements are missing or legacy-unavailable, the source emits an inconclusive receipt with missing-evidence reasons. Engine-only absence never establishes deterministic validation.
 
-**Deployment caveat:** the dated production audit records a deployed checksum-match gap. Current source checks do not prove its promotion or retrospectively validate historical receipts. This paper performs no production-row audit; [PRD release status](../PRD.md#9-release-status) owns that gate.
+Deployed-release status and historical-row audit scope are recorded in the [PRD production evidence](../PRD.md#8-current-production-evidence). This paper specifies the source-level validation contract; it does not audit production rows or retrospectively validate legacy receipts.
 
 ### 4.6 Fix-PR pipeline and scope policy
 
@@ -511,7 +511,7 @@ Non-coverage remains disclosed even when it is outside required families. READY 
 
 The assessment snapshot retains scan identity, completed time, manifest checksum/version, policy fingerprint and a commit/artifact identity. Gate assessment version is 2.
 
-Applicability checks are separate from immutable history:
+Applicability checks are separate from the stored historical assessment:
 
 | Reason code              | Condition                                                 |
 | ------------------------ | --------------------------------------------------------- |
@@ -862,7 +862,7 @@ SDK callers pass bare resource paths; the shared client adds `/api/v1` and rejec
 | Vibe Security 50          | `vibe-security-50/1.2.0`                    | Control catalog/coverage interpretation       |
 | URL scan capabilities     | `url-scan/3.0.0`                            | Six bounded URL/API profiles                  |
 | Repository scan depths    | `scan-depths/1.3.0`                         | Cross-language depth/ceiling fixture          |
-| Launch Gate               | `lyrashield-gate/2.3.0`                     | Verdict rules                                 |
+| Launch Gate               | `lyrashield-gate/2.4.0`                     | Verdict rules                                 |
 | Gate assessment           | 2                                           | Immutable release/policy/evidence binding     |
 | LyraShield Score          | `lyrashield-score/1.0.0`                    | Pure numeric/grade calculation                |
 | AI-Built Failure Taxonomy | `ai-built-failure-taxonomy/1.0.0`           | Eight named review classes                    |
@@ -906,7 +906,7 @@ The historical prompt-injection artifact records 42 OWASP cases and 85.7% expect
 
 The live safety catalog, source unit tests and that historical evaluation are distinct. None is a universal assessment of customer AI behavior.
 
-Production release/readiness, paid scan acceptance, signing/distribution, reconciliation, provider settlement and client-runtime acceptance require exact dated receipts. The current retest checksum-gap record and source fix must remain separately labeled until deployment evidence closes the gate.
+Production release/readiness, paid scan acceptance, signing/distribution, reconciliation, provider settlement and client-runtime acceptance require exact dated receipts. See [PRD release status](../PRD.md#9-release-status) for dated release evidence and current open gates.
 
 Use [PRD release status](../PRD.md#9-release-status), the [claims policy](./policies.md#public-claims-policy) and [distribution receipts](./marketplace/CLIENT-CONTRACTS.md) before making availability or operational assertions.
 
@@ -968,7 +968,7 @@ Operation access stays bound to the originating principal. Do not substitute a n
 - **Coverage family:** scanner execution class whose required receipt depends on target/profile.
 - **Exact checksum input:** original persisted JSON text, not a new JSONB serialization.
 - **Execution provenance:** product revision, immutable worker digest and engine revision bound to the result.
-- **Effective state:** current applicability result over immutable historical verdict.
+- **Effective state:** current applicability result over the stored historical assessment.
 - **Finding lifecycle:** issue/remediation workflow state, not verification tier.
 - **Idempotency key:** caller-retained request identity for identical retries, not an authorization grant.
 - **Model-declared scope:** bounded engine metadata, not independent coverage measurement.

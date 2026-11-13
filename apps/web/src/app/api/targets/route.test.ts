@@ -1,4 +1,10 @@
+import { resolveOAuthReadScope } from "../../../../../../packages/auth/src/oauth-read-scope"
 import { beforeEach, describe, expect, it, vi } from "vitest"
+
+const dbMocks = vi.hoisted(() => ({
+  target: { create: vi.fn(), findFirst: vi.fn(), findMany: vi.fn() },
+  lockWorkspaceScanAdmission: vi.fn(),
+}))
 
 vi.mock("next/cache", () => ({
   revalidatePath: vi.fn(),
@@ -13,14 +19,19 @@ vi.mock("@lyrashield/db", () => ({
   prisma: {
     project: { findFirst: vi.fn() },
     integration: { findFirst: vi.fn() },
-    target: { create: vi.fn(), findFirst: vi.fn(), findMany: vi.fn() },
+    target: dbMocks.target,
     auditLog: { create: vi.fn() },
     workspaceMember: { findUnique: vi.fn() },
   },
+  withWorkspaceRLS: vi.fn(async (_workspaceId: string, run: (tx: unknown) => unknown) =>
+    run({ target: dbMocks.target })
+  ),
+  lockWorkspaceScanAdmission: dbMocks.lockWorkspaceScanAdmission,
 }))
 
 const requireWorkspaceAccess = vi.fn()
 vi.mock("@lyrashield/auth/server", () => ({
+  resolveOAuthReadScope,
   getSession: vi.fn(),
   requirePermission: vi.fn().mockResolvedValue({ session: { userId: "user-1" } }),
   requireWorkspaceAccess: (...args: unknown[]) => requireWorkspaceAccess(...args),
@@ -48,6 +59,7 @@ vi.mock("@lyrashield/billing", () => ({
 }))
 
 import { prisma } from "@lyrashield/db"
+import { lockWorkspaceScanAdmission } from "@lyrashield/db"
 import { assertTargetAllowed } from "@lyrashield/billing"
 import { GET, POST } from "./route"
 
@@ -201,7 +213,7 @@ describe("POST /api/targets", () => {
 
   it("returns the matching target after a concurrent create wins the unique constraint", async () => {
     vi.mocked(assertTargetAllowed).mockResolvedValue({ allowed: true } as never)
-    vi.mocked(prisma.target.findFirst).mockResolvedValue({
+    const existing = {
       id: "target-existing",
       type: "REPO",
       name: "Existing target",
@@ -213,7 +225,10 @@ describe("POST /api/targets", () => {
       installationId: null,
       url: null,
       apiSpecUrl: null,
-    } as never)
+    }
+    vi.mocked(prisma.target.findFirst)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(existing as never)
     vi.mocked(prisma.target.create).mockRejectedValue(
       Object.assign(new Error("unique constraint"), { code: "P2002" }) as never
     )
@@ -278,4 +293,63 @@ describe("POST /api/targets", () => {
     })
     expect(prisma.target.create).not.toHaveBeenCalled()
   })
+
+  it("locks the workspace and rechecks the cap inside the target-create transaction", async () => {
+    vi.mocked(assertTargetAllowed).mockResolvedValue({ allowed: true } as never)
+    vi.mocked(prisma.target.create).mockResolvedValue({
+      id: "target-new",
+      name: "New target",
+      type: "REPO",
+      workspaceId: "ws-1",
+    } as never)
+
+    const response = await POST(
+      new Request("http://localhost:3000/api/targets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workspaceId: "ws-1",
+          type: "REPO",
+          name: "New target",
+          repoOwner: "ecryptoguru",
+          repoName: "new-target",
+        }),
+      })
+    )
+
+    expect(response.status).toBe(200)
+    expect(lockWorkspaceScanAdmission).toHaveBeenCalledWith(expect.any(Object), "ws-1")
+    expect(assertTargetAllowed).toHaveBeenCalledWith("ws-1", "user-1", expect.any(Object))
+    expect(prisma.target.create).toHaveBeenCalledOnce()
+    expect(vi.mocked(lockWorkspaceScanAdmission).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(assertTargetAllowed).mock.invocationCallOrder[0]!
+    )
+    expect(vi.mocked(assertTargetAllowed).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(prisma.target.create).mock.invocationCallOrder[0]!
+    )
+  })
+})
+
+it("bounds OAuth target pages inside the database query", async () => {
+  requireWorkspaceAccess.mockResolvedValueOnce({
+    session: {
+      userId: "user-1",
+      oauth: {
+        connectionId: "conn-1",
+        allTargets: false,
+        allowedTargetIds: ["target-1"],
+      },
+    },
+  })
+  vi.mocked(prisma.target.findMany).mockResolvedValueOnce([])
+  const response = await GET(
+    new Request("http://localhost/api/targets?workspaceId=ws-1&cursor=target-1")
+  )
+  expect(response.status).toBe(200)
+  expect(prisma.target.findMany).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      where: expect.objectContaining({ id: { in: ["target-1"] } }),
+      cursor: { id: "target-1" },
+    })
+  )
 })

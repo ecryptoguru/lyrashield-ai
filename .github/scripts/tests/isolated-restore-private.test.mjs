@@ -5,6 +5,7 @@ import {
   mkdirSync,
   writeFileSync,
   readFileSync,
+  readdirSync,
   existsSync,
   rmSync,
   chmodSync,
@@ -110,6 +111,7 @@ for (const scenario of [
   "ETag tamper",
   "fetch failure",
   "decrypt failure",
+  "randomness failure",
   "restore failure",
 ]) {
   test(`actual exact-object restore block: ${scenario}`, (t) => {
@@ -133,6 +135,14 @@ for (const scenario of [
     if (scenario === "ETag tamper") env.BACKUP_ETAG = '"def456"'
     if (scenario === "fetch failure") env.MOCK_FETCH_FAIL = "true"
     if (scenario === "decrypt failure") env.MOCK_DECRYPT_FAIL = "true"
+    if (scenario === "randomness failure")
+      writeFileSync(
+        join(f.bin, "openssl"),
+        "#!/bin/bash\necho PRIVATE_RANDOM_ERROR >&2\nexit 51\n",
+        {
+          mode: 0o755,
+        }
+      )
     if (scenario === "restore failure") env.MOCK_RESTORE_FAIL = "true"
     const result = f.run(
       runBlock("Restore the exact produced encrypted backup into PostgreSQL 17"),
@@ -156,7 +166,16 @@ for (const scenario of [
       (call) => call.command === "docker" && call.args[0] === "run" && call.args.includes("-d")
     )
     assert.equal(Boolean(launch), ["valid", "restore failure"].includes(scenario))
-    if (launch) assert.equal(launch.args[launch.args.indexOf("-p") + 1], "127.0.0.1:5433:5432")
+    if (launch) {
+      assert.equal(launch.args[launch.args.indexOf("-p") + 1], "127.0.0.1:5433:5432")
+      const password = readFileSync(join(f.directory, "restore-db-password"), "utf8")
+      assert.match(password, /^[a-f0-9]{64}$/)
+      assert.equal(
+        launch.args.some((arg) => arg.includes(password)),
+        false
+      )
+      assert.equal(readFileSync(join(f.root, "github-env"), "utf8").includes(password), false)
+    }
     const restore = calls.find(
       (call) =>
         call.command === "docker" &&
@@ -264,6 +283,9 @@ for (const kind of [
       writeFileSync(record, "987654 1234567\n", {
         mode: kind === "writable identity" ? 0o666 : 0o600,
       })
+    // Explicit chmod bypasses an inherited restrictive umask; mode on create
+    // alone can silently turn this unsafe fixture back into 0600.
+    if (kind === "writable identity") chmodSync(record, 0o666)
     const mock =
       kind === "foreign session"
         ? processMocks("1234567", "987654", "123456")
@@ -346,8 +368,8 @@ test("opt-in reviewed-source binding runs the actual guard and rejects expanded 
   assert.match(workflow, /isolated_restore:\n[\s\S]*?default: false/)
   assert.match(step("Retain last N days of backups"), /if: \$\{\{ !inputs\.isolated_restore \}\}/)
   assert.match(workflow, /github\.event_name == 'workflow_dispatch' && inputs\.isolated_restore/)
-  assert.match(workflow, /timeout-minutes: \$\{\{ inputs\.isolated_restore && 20 \|\| 360 \}\}/)
-  assert.match(workflow, /timeout-minutes: \$\{\{ inputs\.isolated_restore && 25 \|\| 360 \}\}/)
+  assert.match(workflow, /timeout-minutes: \$\{\{ inputs\.isolated_restore && 20 \|\| 60 \}\}/)
+  assert.match(workflow, /timeout-minutes: \$\{\{ inputs\.isolated_restore && 25 \|\| 45 \}\}/)
 })
 
 test("sensitive phases capture logs before work; exact-object linkage and digest-only artifacts remain", () => {
@@ -364,7 +386,15 @@ test("sensitive phases capture logs before work; exact-object linkage and digest
     const lines = run.split("\n")
     assert.ok(
       lines
-        .slice(0, 3)
+        .slice(
+          0,
+          [
+            "Emit public-safe exact-object restore proof",
+            "Create, encrypt, and upload backup",
+          ].includes(name)
+            ? 4
+            : 3
+        )
         .some((line) => line.includes("source .github/scripts/isolated-restore-private.sh")),
       name
     )
@@ -375,16 +405,20 @@ test("sensitive phases capture logs before work; exact-object linkage and digest
     /BACKUP_ENCRYPTED_SHA256: \$\{\{ needs\.backup\.outputs\.encrypted_sha256 \}\}/
   )
   assert.match(workflow, /BACKUP_DUMP_SHA256: \$\{\{ needs\.backup\.outputs\.dump_sha256 \}\}/)
-  assert.match(workflow, /-p "\$\{ISOLATED_RESTORE_BIND:-\}5433:5432"/)
-  assert.match(workflow, /-p "\$\{ISOLATED_RESTORE_BIND:-\}6379:6379"/)
+  assert.match(workflow, /-p "\$\{ISOLATED_RESTORE_BIND:-127\.0\.0\.1:\}5433:5432"/)
+  assert.match(workflow, /-p "\$\{ISOLATED_RESTORE_BIND:-127\.0\.0\.1:\}6379:6379"/)
   assert.match(workflow, /web_command=\(setsid bash -c/)
   assert.match(workflow, /exec pnpm[^\n]*--hostname 127\.0\.0\.1/)
   assert.match(workflow, /isolated-restore-private\.sh record-web "\$\$" \|\| exit 1/)
-  for (const name of [
-    "Remove private isolated backup files",
-    "Remove private isolated restore files and process group",
-  ])
-    assert.match(step(name), /always\(\) && inputs\.isolated_restore/)
+  assert.match(
+    step("Remove private isolated backup files"),
+    /always\(\) && inputs\.isolated_restore/
+  )
+  assert.match(step("Remove private isolated restore files and process group"), /always\(\)/)
+  assert.doesNotMatch(
+    step("Prepare private isolated restore files"),
+    /if: inputs\.isolated_restore/
+  )
   const artifact = step("Publish digest-only restore provenance")
   assert.match(artifact, /path: \$\{\{ runner\.temp \}\}\/webhook-empty-state-restore-proof\.json/)
   assert.doesNotMatch(artifact, /audit\.json|backup\.dump|private-operation\.log|restore-web\.log/)
@@ -392,14 +426,8 @@ test("sensitive phases capture logs before work; exact-object linkage and digest
 
 test("first isolated container removal deletes anonymous restored-data volumes", () => {
   const firstCleanup = step("Clean up isolated restore services")
-  assert.match(
-    firstCleanup,
-    /if \[ "\$ISOLATED_RESTORE" = true \]; then\n[\s\S]*?docker rm -fv lyrashield-restore-postgres lyrashield-restore-redis/
-  )
-  assert.match(
-    firstCleanup,
-    /else\n\s+docker rm -f lyrashield-restore-postgres lyrashield-restore-redis/
-  )
+  assert.match(firstCleanup, /docker rm -fv lyrashield-restore-postgres lyrashield-restore-redis/)
+  assert.doesNotMatch(firstCleanup, /else\n\s+docker rm -f /)
   assert.ok(
     workflow.indexOf("Clean up isolated restore services") <
       workflow.indexOf("Remove private isolated restore files and process group")
@@ -407,4 +435,68 @@ test("first isolated container removal deletes anonymous restored-data volumes",
   const cleanupHelper = readFileSync(helper, "utf8")
   assert.match(cleanupHelper, /docker rm -fv "lyrashield-isolated-backup-/)
   assert.match(cleanupHelper, /docker rm -fv lyrashield-restore-postgres lyrashield-restore-redis/)
+})
+
+for (const scenario of [
+  ["valid", "restore/snapshot/complete\n"],
+  ["binding", "restore/snapshot/archive-binding/failed\n"],
+  ["archive-export", "restore/snapshot/archive-export/failed\n"],
+  ["restored-export", "restore/snapshot/restored-export/failed\n"],
+  [
+    "archive-capture",
+    "restore/snapshot/reason/invalid-copy-header\nrestore/snapshot/archive-capture/failed\n",
+  ],
+  [
+    "restored-capture",
+    "restore/snapshot/reason/invalid-copy-header\nrestore/snapshot/restored-capture/failed\n",
+  ],
+  [
+    "compare",
+    "restore/snapshot/reason/snapshot-content-mismatch\nrestore/snapshot/compare/failed\n",
+  ],
+]) {
+  test(`actual snapshot workflow block has private output and fixed diagnostics: ${scenario[0]}`, (t) => {
+    const f = fixture(t)
+    const plain = "SYNTHETIC_PRIVATE_DUMP"
+    writeFileSync(join(f.directory, "backup.dump"), plain)
+    writeFileSync(
+      join(f.bin, "docker"),
+      `#!${process.execPath}
+const args=process.argv.slice(2), phase=process.env.SNAPSHOT_FAILURE;
+const archive=args.includes('pg_restore');
+console.error('PRIVATE_ROW_CONNECTION_ERROR');
+if((archive&&phase==='archive-export')||(!archive&&phase==='restored-export'))process.exit(44);
+if((archive&&phase==='archive-capture')||(!archive&&phase==='restored-capture')) {
+  console.log('COPY invalid PRIVATE_ROW;');
+} else {
+  console.log('COPY public."PrivateTable" (id) FROM stdin;');
+  console.log(!archive&&phase==='compare'?'PRIVATE_CHANGED_ROW':'PRIVATE_ROW');
+  console.log('\\\\.');
+}
+`,
+      { mode: 0o755 }
+    )
+    const result = f.run(runBlock("Verify private row integrity against the same dump snapshot"), {
+      ISOLATED_RESTORE_TEMP: f.directory,
+      BACKUP_DUMP_SHA256: fixtureDigest(scenario[0] === "binding" ? "wrong archive" : plain),
+      SNAPSHOT_FAILURE: scenario[0],
+    })
+    assert.equal(result.status === 0, scenario[0] === "valid")
+    assert.equal(result.stdout, scenario[1])
+    assert.equal(result.stderr, "")
+    assert.doesNotMatch(result.stdout, /PRIVATE|PrivateTable|postgresql|SYNTHETIC/)
+    assert.equal(existsSync(join(f.directory, "private-operation.log")), true)
+    assert.deepEqual(
+      readdirSync(f.directory).filter((name) => name.startsWith("snapshot-integrity.")),
+      []
+    )
+  })
+}
+
+test("CI explicitly enables the owned restore round trip", () => {
+  const ci = readFileSync(new URL("../../workflows/ci.yml", import.meta.url), "utf8")
+  assert.match(
+    ci,
+    /if: needs\.changes\.outputs\.ops-tests == 'true'\n[^\n]*\n\s+run: RESTORE_SNAPSHOT_RUNTIME_TEST=1 node --test \.github\/scripts\/tests\/restore-snapshot-postgres\.runtime\.test\.mjs/
+  )
 })

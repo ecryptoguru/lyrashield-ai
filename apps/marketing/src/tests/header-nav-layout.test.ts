@@ -131,14 +131,17 @@ describe("marketing header information architecture", () => {
 describe("marketing mobile nav sheet", () => {
   const dialog = code.slice(code.indexOf('id="mobile-menu"'), code.indexOf("</dialog>"))
 
-  it("scrolls inside the viewport with max-height 100dvh", () => {
+  it("subtracts the sheet offset and safe area from the dynamic viewport", () => {
     const rule = code.match(/#mobile-menu\s*\{([\s\S]*?)\n  \}/)?.[1] ?? ""
-    expect(rule, "mobile menu sizing rule not found").toContain("max-height: 100dvh")
+    expect(rule, "mobile menu sizing rule not found").toContain(
+      "max-height: calc(100dvh - max(4.5rem"
+    )
+    expect(rule).toContain("env(safe-area-inset-bottom)")
     expect(rule, "mobile menu must scroll").toContain("overflow-y: auto")
   })
 
   it("renders one accordion per menu", () => {
-    const accordions = [...dialog.matchAll(/<details class="mobile-menu__accordion">/g)]
+    const accordions = [...dialog.matchAll(/<details class="mobile-menu__accordion"[^>]*>/g)]
     expect(accordions).toHaveLength(3)
     for (const label of ["Product", "Free tools", "Learn"]) {
       expect(dialog).toContain(`<summary class="menu-link">${label}</summary>`)

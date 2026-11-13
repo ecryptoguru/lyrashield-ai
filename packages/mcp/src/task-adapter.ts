@@ -223,6 +223,29 @@ export function operationMatchesPrincipal(
 }
 
 /**
+ * Resolve a status-only delegated task from the authoritative operation
+ * projection. A null scan is intentional here and must not be converted into
+ * a synthetic failure. Protocol timestamps and status are retained; no scan id
+ * or target-derived detail is introduced.
+ */
+export function resolveOperationStatusTaskView(status: {
+  status: string
+  updatedAt: string
+}): TaskView {
+  if (status.status === "PENDING" || status.status === "EXECUTING") {
+    return { status: "working", lastUpdatedAt: status.updatedAt }
+  }
+  if (status.status === "COMPLETED") {
+    return { status: "completed", lastUpdatedAt: status.updatedAt }
+  }
+  return {
+    status: "failed",
+    statusMessage: "The recorded operation did not complete successfully.",
+    lastUpdatedAt: status.updatedAt,
+  }
+}
+
+/**
  * Resolve the task state from the durable operation + scan rows. This is the
  * ONLY status computation; recovery paths never re-execute the tool handler.
  */

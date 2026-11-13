@@ -18,19 +18,18 @@ import { describe, expect, it } from "vitest"
  */
 describe("findings list context preservation contract", () => {
   const client = readFileSync(new URL("./findings-client.tsx", import.meta.url), "utf8")
+  const urlState = readFileSync(
+    new URL("../../../../lib/finding-list-params.ts", import.meta.url),
+    "utf8"
+  )
   const effects = readFileSync(new URL("./findings-list-effects.ts", import.meta.url), "utf8")
   const drawer = readFileSync(new URL("./use-finding-drawer.ts", import.meta.url), "utf8")
 
   it("keeps filter/sort/target/query in the URL", () => {
-    expect(client).toContain('params.set("filter", updates.filter)')
-    expect(client).toContain('params.set("target", updates.target)')
+    expect(client).toContain("updateFindingListUrl(updates)")
+    expect(urlState).toContain('params.set("status", selection.status)')
+    expect(urlState).toContain('params.set("target", updates.target)')
     expect(drawer).toContain('url.searchParams.set("finding", finding.id)')
-  })
-
-  it("revalidates saved pages and restores scroll after mount, not during hydration", () => {
-    expect(effects).toContain("loadFindingsListContext(")
-    expect(effects).toContain("window.scrollTo(0, stored.scrollY)")
-    expect(client).toContain("setRestoreReady(true)")
   })
 
   it("persists the snapshot only after restoration and on pagehide", () => {

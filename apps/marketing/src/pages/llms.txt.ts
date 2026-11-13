@@ -48,7 +48,7 @@ const evidenceControlCount = VIBE_SECURITY_CONTROLS.filter(
 // and the tools registry. `new Date()` would print "today" per build and
 // teach crawlers the timestamp is meaningless; a floor keeps the date honest
 // even when a copy-only edit ships without touching a collection.
-const LLMS_TXT_DATE_FLOOR = "2026-10-06"
+const LLMS_TXT_DATE_FLOOR = "2026-10-11"
 
 function isoDay(date: Date): string {
   return date.toISOString().slice(0, 10)
@@ -168,10 +168,19 @@ export const GET: APIRoute = async (context) => {
       label: `LyraShield AI and ${page.data.competitor}`,
       url: `${origin}/compare/${page.id}`,
     }))
-  const tagLinks = (await getCategoriesWithCounts()).map((category) => ({
-    label: `${category.label} articles`,
-    url: `${origin}${categoryHref(category.id)}`,
-  }))
+  const archiveLinks = Array.from(
+    { length: Math.max(0, Math.ceil(sortedPosts.length / 10) - 1) },
+    (_, index) => ({
+      label: `Article archive, page ${index + 2}`,
+      url: `${origin}/blog/${index + 2}`,
+    })
+  )
+  const tagLinks = (await getCategoriesWithCounts()).flatMap((category) =>
+    Array.from({ length: Math.max(1, Math.ceil(category.count / 20)) }, (_, index) => ({
+      label: `${category.label} primary guides${index ? `, page ${index + 1}` : ""}`,
+      url: `${origin}${categoryHref(category.id)}${index ? `/${index + 1}` : ""}`,
+    }))
+  )
 
   const publicLinks = [
     { label: "LyraShield AI", url: `${origin}/` },
@@ -200,6 +209,7 @@ export const GET: APIRoute = async (context) => {
     { label: "Security and launch-readiness guides", url: `${origin}/blog` },
     { label: "Editorial policy", url: `${origin}/blog/editorial-policy` },
     ...tagLinks,
+    ...archiveLinks,
     ...docsLinks
       .map(({ label, path }) => ({ label, url: `${origin}${path}` }))
       .filter(({ url }) => !excludedPathnames.has(new URL(url).pathname)),
@@ -266,7 +276,7 @@ export const GET: APIRoute = async (context) => {
     `The passive Lite Check at /scan also needs no account, but it is not browser-local: LyraShield's server fetches the authorized public URL and its linked assets read-only.`,
     `The full launch-gate platform is in open beta with open registration: ${markdownLink("Start free trial", "https://app.lyrashieldai.com/sign-up")}. Access is not gated behind a waitlist; the email form on the site is an optional product-updates subscription.`,
     "LyraShield offers MCP connections for documented coding clients, including Pi's built-in MCP client, and standalone CLI/CI workflows for Aider. Setup and authenticated runtime evidence are client-specific; the CLI is published on npm.",
-    `LyraShield AI's ${markdownLink("LyraShield AI source code on GitHub", "https://github.com/ecryptoguru/lyrashield-ai")} is under the MIT License; the LyraShield AI name and logos are not included in that license. This covers the published source, not separately hosted backend services.`,
+    `Public projects: ${markdownLink("Maintainer GitHub profile", "https://github.com/ecryptoguru")}.`,
   ]
 
   return new Response(sections.join("\n"), {

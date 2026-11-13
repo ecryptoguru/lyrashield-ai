@@ -41,6 +41,10 @@ vi.mock("@lyrashield/billing", async () => {
     createPolarOneTimeCheckout: vi.fn(),
     createRazorpayPaymentLink: mocks.createRazorpayPaymentLink,
     resolveProviderId: vi.fn(),
+    canPurchaseMinutePack: (input: { effectivePlan: string; trialState: { isExpired: boolean } }) =>
+      !(input.effectivePlan === "FREE" && input.trialState.isExpired),
+    resolveAccountBilling: vi.fn().mockResolvedValue({ effectivePlan: "FREE" }),
+    getAccountTrialState: vi.fn().mockResolvedValue({ isExpired: false, isActive: false }),
     MINUTE_PACK_MAP: { pack_100: { name: "100 agent-minutes", minutes: 100, priceUsd: 15 } },
   }
 })
