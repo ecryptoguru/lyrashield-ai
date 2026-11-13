@@ -1086,6 +1086,7 @@ describe.skipIf(!enabled)("checked preparation intent authority", () => {
       "require_scan_preparation_role",
       "scan_preparation_gate_held",
       "scan_preparation_writer_gate",
+      "scan_preparation_account_writer_gate",
       "acquire_scan_preparation_gate",
       "scan_preparation_plan_json",
       "check_scan_preparation_authority",
@@ -1103,10 +1104,14 @@ describe.skipIf(!enabled)("checked preparation intent authority", () => {
         [names]
       )
     ).rows
-    expect(rows).toHaveLength(14)
+    expect(rows).toHaveLength(15)
     for (const row of rows) {
       expect(row.prosecdef).toBe(
-        ["scan_preparation_context", "scan_preparation_writer_gate"].includes(row.proname)
+        [
+          "scan_preparation_context",
+          "scan_preparation_writer_gate",
+          "scan_preparation_account_writer_gate",
+        ].includes(row.proname)
       )
       expect(row.proretset).toBe(
         ["scan_preparation_context", "check_scan_preparation_authority"].includes(row.proname)
@@ -1124,7 +1129,10 @@ describe.skipIf(!enabled)("checked preparation intent authority", () => {
       expect(t.tgenabled).toBe("O")
       expect(t.tgdeferrable).toBe(t.tgname === "scan_checked_preparation_bundle")
       expect(t.tginitdeferred).toBe(t.tgname === "scan_checked_preparation_bundle")
+      // Statement triggers on the source-authority tables stay row-shaped only
+      // where the bundle constraint needs per-row deferral.
       if (t.tgname === "scan_preparation_writer_gate") expect(t.tgtype).toBe(30)
+      if (t.tgname === "scan_preparation_account_writer_gate") expect(t.tgtype).toBe(30)
       if (t.tgname === "scan_checked_preparation_bundle") expect(t.tgtype).toBe(5)
     }
     expect(
@@ -1448,5 +1456,41 @@ describe.skipIf(!enabled)("checked preparation intent authority", () => {
         )
       ).rows[0].expiry_mutation
     ).toBe(false)
+  })
+
+  it("keeps money settlement writable under SERIALIZABLE while source authority needs READ COMMITTED", async () => {
+    const f = await preparationFixture(owner)
+    const policyId = (await owner.query('SELECT "policyId" FROM "Scan" WHERE id=$1', [f.scanId]))
+      .rows[0]?.policyId
+    // Source authority rejects a non-READ COMMITTED write.
+    const source = await owner.connect()
+    try {
+      await source.query("BEGIN ISOLATION LEVEL REPEATABLE READ")
+      await expect(
+        source.query('UPDATE "Policy" SET "maxBudgetUsd"=1 WHERE id=$1', [policyId])
+      ).rejects.toThrow(/READ COMMITTED/)
+    } finally {
+      await source.query("ROLLBACK")
+      source.release()
+    }
+    // Account-owned money rows settle under SERIALIZABLE, so the account gate
+    // must not carry the READ COMMITTED rule.
+    const money = await owner.connect()
+    try {
+      await money.query("BEGIN ISOLATION LEVEL SERIALIZABLE")
+      const account = (await owner.query('SELECT "accountId" FROM "BillingAccount" LIMIT 1'))
+        .rows[0]?.accountId
+      if (!account) return
+      await money.query(
+        'UPDATE "BillingAccount" SET "updatedAt"=clock_timestamp() WHERE "accountId"=$1',
+        [account]
+      )
+      await money.query("COMMIT")
+    } catch (error) {
+      await money.query("ROLLBACK").catch(() => undefined)
+      throw error
+    } finally {
+      money.release()
+    }
   })
 })

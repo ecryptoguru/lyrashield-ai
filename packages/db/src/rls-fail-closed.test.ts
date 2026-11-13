@@ -319,6 +319,9 @@ describe.skipIf(!runtimeUrl)("strict workspace RLS fails closed", () => {
       "ScanPhysicalExecution",
       "ScanPhysicalExecutionTransition",
       "ScanDispatchReleaseReceipt",
+      "ScanExecutionActionIntent",
+      "ScanExecutionInvocationGuard",
+      "ScanExecutionInvocationResolution",
     ]
     const physicalTableNames: Record<string, string> = {
       AgentConnection: "agent_connections",

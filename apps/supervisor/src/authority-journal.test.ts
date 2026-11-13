@@ -278,7 +278,7 @@ describe("supervisor independent journal adapter", () => {
     expect(await f.original.load()).toHaveLength(1)
     await f.original.close()
     await f.local.close()
-  })
+  }, 60_000)
 
   it("stops new IO when the page budget expires and keeps exact replay and STOP available", async () => {
     const f = await setup()

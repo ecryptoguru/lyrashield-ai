@@ -6,6 +6,18 @@ const PROPOSED_REVIEW = {
   workflow: "REVIEW_TARGET",
 } as const
 
+// URL/API launch admits only the deterministic tier, so a proposed review for
+// those targets must never point at a removed engine profile.
+const PROPOSED_URL_REVIEW = {
+  goal: "LAUNCH_REVIEW",
+  mode: "SAFE",
+  workflow: "REVIEW_TARGET",
+} as const
+
+function proposedReviewFor(targetType: string) {
+  return targetType === "WEB_APP" || targetType === "API" ? PROPOSED_URL_REVIEW : PROPOSED_REVIEW
+}
+
 export type ResourceResult<T> =
   { status: "available"; value: T } | { status: "unavailable"; code: string }
 
@@ -53,7 +65,7 @@ export interface TargetAssessmentSource {
 }
 
 export interface TargetAssessmentProjection {
-  proposedReview: typeof PROPOSED_REVIEW
+  proposedReview: typeof PROPOSED_REVIEW | typeof PROPOSED_URL_REVIEW
   target: TargetAssessmentSource["target"]
   assessment: TargetAssessmentGate | null
   assessmentState: ResourceResult<TargetAssessmentGate | null>["status"]
@@ -102,7 +114,10 @@ function deliveryState(status: string | undefined): "UNKNOWN" | "QUEUED" | "RUNN
   return "TERMINAL"
 }
 
-function reviewHref(targetId: string, intent: typeof PROPOSED_REVIEW): string {
+function reviewHref(
+  targetId: string,
+  intent: typeof PROPOSED_REVIEW | typeof PROPOSED_URL_REVIEW
+): string {
   return `/dashboard/scans?${new URLSearchParams({
     new: "1",
     target: targetId,
@@ -136,6 +151,7 @@ export function projectTargetAssessment(input: TargetAssessmentSource): TargetAs
           }
 
   const executionState = deliveryState(input.latestScan?.status)
+  const proposedReview = proposedReviewFor(input.target.type)
   let nextAction: TargetAssessmentProjection["nextAction"]
   if (executionState === "QUEUED" || executionState === "RUNNING") {
     nextAction = {
@@ -159,7 +175,7 @@ export function projectTargetAssessment(input: TargetAssessmentSource): TargetAs
     nextAction = {
       code: "START_REVIEW",
       label: "Start launch review",
-      href: reviewHref(input.target.id, PROPOSED_REVIEW),
+      href: reviewHref(input.target.id, proposedReview),
     }
   } else if (gate.state === "NOT_READY") {
     nextAction = {
@@ -186,7 +202,7 @@ export function projectTargetAssessment(input: TargetAssessmentSource): TargetAs
   }
 
   return {
-    proposedReview: PROPOSED_REVIEW,
+    proposedReview,
     target: input.target,
     assessment: gate,
     assessmentState: input.gate.status,

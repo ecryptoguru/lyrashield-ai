@@ -68,8 +68,22 @@ describe("projectTargetAssessment", () => {
     expect(query.get("mode")).toBe(projection.proposedReview.mode)
   })
 
-  it.each(["REPO", "WEB_APP", "API"])(
-    "selects the actual Standard launch-review preset for a %s target",
+  it("selects the actual Standard launch-review preset for a REPO target", () => {
+    const type = "REPO"
+    const projection = projectTargetAssessment({ ...source, target: { ...source.target, type } })
+    const query = new URL(projection.nextAction.href, "https://example.invalid").searchParams
+    const options = getManualScanOptions({ type, hasApiSpec: true })
+    const selected = findRecoveryPreset(options, query.get("goal") ?? "", query.get("mode") ?? "")
+    expect(options.find((option) => option.id === selected)).toMatchObject({
+      goal: "LAUNCH_REVIEW",
+      mode: "STANDARD",
+      workflow: "REVIEW_TARGET",
+      available: true,
+    })
+  })
+
+  it.each(["WEB_APP", "API"])(
+    "proposes only the deterministic launch review for a %s target",
     (type) => {
       const projection = projectTargetAssessment({ ...source, target: { ...source.target, type } })
       const query = new URL(projection.nextAction.href, "https://example.invalid").searchParams
@@ -77,14 +91,15 @@ describe("projectTargetAssessment", () => {
       const selected = findRecoveryPreset(options, query.get("goal") ?? "", query.get("mode") ?? "")
       expect(options.find((option) => option.id === selected)).toMatchObject({
         goal: "LAUNCH_REVIEW",
-        mode: "STANDARD",
+        mode: "SAFE",
         workflow: "REVIEW_TARGET",
         available: true,
+        usesAi: false,
       })
     }
   )
 
-  it("keeps an unavailable API Standard launch review selected instead of silently downgrading", () => {
+  it("keeps the deterministic launch review selected instead of silently downgrading", () => {
     const options = getManualScanOptions({ type: "API", hasApiSpec: false })
     const selected = resolveInitialScanPreset(
       options,
@@ -94,8 +109,9 @@ describe("projectTargetAssessment", () => {
     )
     expect(options.find((option) => option.id === selected)).toMatchObject({
       goal: "LAUNCH_REVIEW",
-      mode: "STANDARD",
-      available: false,
+      mode: "SAFE",
+      available: true,
+      usesAi: false,
     })
   })
 

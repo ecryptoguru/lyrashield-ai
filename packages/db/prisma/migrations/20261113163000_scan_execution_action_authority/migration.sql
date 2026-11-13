@@ -399,6 +399,22 @@ BEGIN
  END IF;
  RETURN NULL;
 END $$;
+-- Account-owned money rows settle under SERIALIZABLE so a concurrent replay
+-- cannot double-charge. The READ COMMITTED rule protects scan source authority
+-- only, so BillingAccount keeps the gate and advisory checks without it.
+CREATE OR REPLACE FUNCTION app.scan_preparation_account_writer_gate() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,app AS $$
+BEGIN
+ IF app.scan_preparation_gate_held() THEN
+  RAISE EXCEPTION 'authority writes are forbidden after the preparation gate' USING ERRCODE='23514';
+ END IF;
+ PERFORM pg_advisory_xact_lock_shared(1819234670,1);
+ RETURN NULL;
+END $$;
+REVOKE ALL ON FUNCTION app.scan_preparation_account_writer_gate() FROM PUBLIC;
+DROP TRIGGER IF EXISTS scan_preparation_writer_gate ON public."BillingAccount";
+CREATE TRIGGER scan_preparation_account_writer_gate BEFORE INSERT OR UPDATE OR DELETE
+  ON public."BillingAccount" FOR EACH STATEMENT EXECUTE FUNCTION app.scan_preparation_account_writer_gate();
 REVOKE ALL ON FUNCTION app.scan_execution_invocation_guard(),app.scan_execution_invocation_resolution_guard() FROM PUBLIC;
 
 CREATE FUNCTION app.require_scan_execution_action_role() RETURNS VOID

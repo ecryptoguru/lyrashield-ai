@@ -206,9 +206,13 @@ describe("listAdmissibleReviewOptions / matchReviewOption", () => {
   it("derives the bounded option list for each target kind", () => {
     const repo = listAdmissibleReviewOptions({ type: "REPO" })
     expect(repo.map((o) => o.id)).toContain("REVIEW_CHANGES")
-    const api = listAdmissibleReviewOptions({ type: "API", hasApiSpec: false })
-    expect(api.find((o) => o.id === "API_STANDARD")?.available).toBe(false)
-    expect(api.find((o) => o.id === "API_STANDARD")?.disabledReason).toContain("OpenAPI")
+    // URL/API launch offers only the deterministic tier, so no Standard option
+    // exists to be unavailable.
+    for (const type of ["API", "WEB_APP"]) {
+      const options = listAdmissibleReviewOptions({ type, hasApiSpec: false })
+      expect(options.map((o) => o.mode)).toEqual(["SAFE"])
+      expect(options.some((o) => o.usesAi)).toBe(false)
+    }
   })
 
   it("matches the requested review to the option that owns its coverage", () => {
@@ -220,8 +224,9 @@ describe("listAdmissibleReviewOptions / matchReviewOption", () => {
     expect(matchReviewOption(repo, { canonicalMode: "STANDARD" })?.id).toBe("CODE_REVIEW")
 
     const web = listAdmissibleReviewOptions({ type: "WEB_APP" })
-    // URL profiles share ids with their options — the profile match wins.
-    expect(matchReviewOption(web, { profileId: "WEB_APP_DEEP" })?.id).toBe("WEB_APP_DEEP")
+    // A removed engine profile must not resolve to an option; the deterministic
+    // profile id is the only URL match.
+    expect(matchReviewOption(web, { profileId: "WEB_APP_DEEP" })).toBeUndefined()
     expect(matchReviewOption(web, { profileId: "WEB_APP_NOPE", canonicalMode: "SAFE" })?.id).toBe(
       "WEB_APP_SAFE"
     )
