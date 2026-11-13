@@ -117,12 +117,12 @@ for (const width of [390, 1440]) {
     )
     await page.goto("?dashboard-ux=first-scan&launch-review&target-type=API")
     const dialog = page.getByRole("dialog", { name: "Start a scan" })
-    // An API target without a contract offers only the deterministic endpoint
-    // review, so there is no removed tier to fall back from.
+    // An API target without a contract is refused by the eligibility gate, and
+    // the deterministic endpoint review is the only offered tier — so there is
+    // no removed engine tier to fall back from, and Start stays blocked.
     const review = dialog.getByRole("radio", { name: /^Endpoint Review:/ })
     await expect(review).toHaveAttribute("aria-checked", "true")
-    await expect(review).toBeEnabled()
-    await expect(dialog.getByRole("button", { name: /^Start scan$/i })).toBeEnabled()
+    await expect(dialog.getByRole("button", { name: /^Start scan$/i })).toBeDisabled()
   })
 
   test(`first scan continues from source to explicit confirmation and progress at ${width}px`, async ({
