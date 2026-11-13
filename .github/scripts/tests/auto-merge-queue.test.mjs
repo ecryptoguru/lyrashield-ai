@@ -107,6 +107,7 @@ function fixture() {
   const state = {
     pulls: [pull(1)],
     details: new Map(),
+    files: new Map(),
     releases: [{ id: 5, head_sha: main, status: "completed", conclusion: "success" }],
     ci: new Map(
       heads.map((head, index) => [
@@ -156,6 +157,8 @@ function fixture() {
     }
     if (path === `${root}/git/ref/heads/main`) return { object: { sha: main } }
     if (path === `${root}/pulls`) return paginate(state.pulls)
+    const files = new RegExp(`^${root}/pulls/(\\d+)/files$`).exec(path)
+    if (files) return paginate(state.files.get(Number(files[1])) ?? [])
     if (path.startsWith(`${root}/pulls/`)) {
       const number = Number(path.split("/").at(-1))
       return state.details.get(number) ?? state.pulls.find((pr) => pr.number === number)
@@ -516,6 +519,14 @@ test("rejects fork, untrusted author, spoofed bot, draft, and changed head", () 
   f.state.details.set(2, pull(2, { head: { sha: heads[2], repo: { full_name: repository } } }))
   assert.equal(f.run().reason, "no eligible pull requests")
   assert.deepEqual(f.state.actions, [])
+})
+
+test("skips a behind workflow change it cannot update and merges the next candidate", () => {
+  const f = fixture()
+  f.state.pulls = [pull(1, { mergeable_state: "behind" }), pull(2)]
+  f.state.files.set(1, [{ filename: ".github/workflows/ci.yml" }])
+  assert.deepEqual(f.run(), { action: "auto-merge", number: 2 })
+  assert.deepEqual(f.state.actions, [["merge", 2, heads[1]]])
 })
 
 test("refuses to mutate when a required check is not bound to GitHub Actions", () => {

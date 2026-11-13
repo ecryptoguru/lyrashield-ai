@@ -55,6 +55,14 @@ function isDependabot(pr) {
   return pr.user?.id === dependabotId && pr.user?.login === "dependabot[bot]"
 }
 
+// The installation token lacks the workflows permission, so it cannot update a
+// branch whose diff touches .github/workflows. Skip those behind PRs for a human.
+function touchesWorkflows(api, pr) {
+  return list(api, `${root}/pulls/${pr.number}/files`).some((file) =>
+    file?.filename?.startsWith(".github/workflows/")
+  )
+}
+
 function latestCi(api, head) {
   const runs = list(
     api,
@@ -169,12 +177,7 @@ function requiredCheckState(api, pr, main) {
 }
 
 /** Decide and execute at most one branch update or verified automatic merge. */
-export function runAutoMergeQueue({
-  api,
-  updateBranch,
-  mergeReady,
-  disableAutoMerge,
-}) {
+export function runAutoMergeQueue({ api, updateBranch, mergeReady, disableAutoMerge }) {
   const main = api(`${root}/git/ref/heads/main`)?.object?.sha
   requireValue(sha40.test(main ?? ""), "main identity unavailable")
   // GitHub enforces the live branch protection at merge time. The Actions token
@@ -225,6 +228,10 @@ export function runAutoMergeQueue({
       return { action: "disable-auto-merge", number: pr.number }
     }
     if (pr.mergeable_state === "behind") {
+      if (touchesWorkflows(api, pr)) {
+        disableAutoMerge(pr.number, pr.head.sha)
+        return { action: "disable-auto-merge", number: pr.number }
+      }
       updateBranch(pr.number, pr.head.sha)
       return { action: "update", number: pr.number }
     }
@@ -242,7 +249,7 @@ export function runAutoMergeQueue({
     if (pr.mergeable_state === "dirty" || pr.mergeable_state === "unknown" || pr.mergeable === null)
       continue
     if (pr.mergeable_state === "behind") {
-      staleCandidate ??= pr
+      if (!touchesWorkflows(api, pr)) staleCandidate ??= pr
       continue
     }
     if (!["clean", "blocked", "unstable"].includes(pr.mergeable_state)) continue
