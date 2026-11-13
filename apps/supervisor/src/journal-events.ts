@@ -5,6 +5,8 @@ import {
   executorKeySchema,
   executorPlanSchema,
   providerGrantPolicySchema,
+  resourceInspectionSchema,
+  resourceOwnershipSchema,
   type AttemptBinding,
   type CommandStatus,
   type ExecutorKey,
@@ -139,6 +141,77 @@ export const supervisorJournalEventSchema = z.discriminatedUnion("type", [
     .strict(),
   z
     .object({
+      type: z.literal("native_invocation_ack"),
+      ...brokerEnvelope,
+      commandId: z.string().min(3).max(192),
+      attemptId: z.string().min(3).max(192),
+      operationId: z.string().min(3).max(192),
+      authorityEpochId: z.string().min(3).max(192),
+      executorKey: executorKeySchema,
+      guardId: z.string().min(3).max(192),
+      nativeRequestId: z.string().min(3).max(192),
+      nativeOperation: z.enum(["CONTAINER_CREATE_ACK", "CONTAINER_START_ACK"]),
+      bindingInputChecksum: z.string().regex(/^[a-f0-9]{64}$/),
+      actionChecksum: z.string().regex(/^[a-f0-9]{64}$/),
+      commandInputChecksum: z.string().regex(/^[a-f0-9]{64}$/),
+      ownership: resourceOwnershipSchema,
+      inspection: resourceInspectionSchema,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("prepare_invocation_completed"),
+      ...brokerEnvelope,
+      commandId: z.string().min(3).max(192),
+      attemptId: z.string().min(3).max(192),
+      operationId: z.string().min(3).max(192),
+      authorityEpochId: z.string().min(3).max(192),
+      guardId: z.string().min(3).max(192),
+      nativeRequestId: z.string().min(3).max(192),
+      bindingInputChecksum: z.string().regex(/^[a-f0-9]{64}$/),
+      actionChecksum: z.string().regex(/^[a-f0-9]{64}$/),
+      commandInputChecksum: z.string().regex(/^[a-f0-9]{64}$/),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("native_invocation_planned"),
+      ...brokerEnvelope,
+      commandId: z.string().min(3).max(192),
+      attemptId: z.string().min(3).max(192),
+      operationId: z.string().min(3).max(192),
+      authorityEpochId: z.string().min(3).max(192),
+      executorKey: executorKeySchema,
+      guardId: z.string().min(3).max(192),
+      nativeRequestId: z.string().min(3).max(192),
+      bindingInputChecksum: z.string().regex(/^[a-f0-9]{64}$/),
+      actionChecksum: z.string().regex(/^[a-f0-9]{64}$/),
+      commandInputChecksum: z.string().regex(/^[a-f0-9]{64}$/),
+      ownership: resourceOwnershipSchema,
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("native_invocation_retired"),
+      ...brokerEnvelope,
+      commandId: z.string().min(3).max(192),
+      stopCommandId: z.string().min(3).max(192),
+      attemptId: z.string().min(3).max(192),
+      operationId: z.string().min(3).max(192),
+      authorityEpochId: z.string().min(3).max(192),
+      executorKey: executorKeySchema,
+      guardId: z.string().min(3).max(192),
+      nativeRequestId: z.string().min(3).max(192),
+      bindingInputChecksum: z.string().regex(/^[a-f0-9]{64}$/),
+      actionChecksum: z.string().regex(/^[a-f0-9]{64}$/),
+      commandInputChecksum: z.string().regex(/^[a-f0-9]{64}$/),
+      nativeOperation: z.literal("CONTAINER_REMOVED"),
+      ownership: resourceOwnershipSchema,
+      inspection: resourceInspectionSchema,
+    })
+    .strict(),
+  z
+    .object({
       type: z.literal("command_terminal"),
       ...brokerEnvelope,
       commandId: z.string(),
@@ -200,6 +273,12 @@ export interface AttemptState {
   createAcknowledged: Set<ExecutorKey>
   startPlanned: Set<ExecutorKey>
   startAcknowledged: Set<ExecutorKey>
+  nativeAckGuards?: Set<string>
+  nativeCreateProofs?: Map<ExecutorKey, ResourceOwnership>
+  nativeStartIntents?: Map<
+    ExecutorKey,
+    Extract<SupervisorJournalEvent, { type: "native_invocation_planned" }>
+  >
   receipt: SupervisorReceipt
   status: "PREPARED" | "RUNNING" | "STOPPING" | "STOPPED" | "NEVER_DISPATCHED" | "UNKNOWN"
   createdExecutors: Set<ExecutorKey>
@@ -208,3 +287,15 @@ export interface AttemptState {
 export interface InFlightStart {
   stop?: { command: StopCommand; persisted: Promise<void>; revocation?: Promise<void> }
 }
+
+const hashSchema = z.string().regex(/^[a-f0-9]{64}$/)
+export const supervisorJournalRecordSchema = z
+  .object({
+    version: z.literal(1),
+    sequence: z.number().int().positive().safe(),
+    previousHash: hashSchema,
+    hash: hashSchema,
+    signature: hashSchema,
+    payload: supervisorJournalEventSchema,
+  })
+  .strict()

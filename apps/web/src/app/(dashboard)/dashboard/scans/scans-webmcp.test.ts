@@ -90,7 +90,7 @@ describe("check_security_scan handler", () => {
     })
   })
 
-  it("maps the requested review type to the option's goal and mode", async () => {
+  it("refuses a removed engine-backed review type for a web target", async () => {
     const fetchFn = okFetch({ allowed: false, code: "DOMAIN_VERIFICATION_REQUIRED" })
     const handler = createCheckSecurityScanHandler({
       workspaceId: "ws-page",
@@ -99,12 +99,27 @@ describe("check_security_scan handler", () => {
       fetchFn: fetchFn as never,
     })
 
-    await handler({ targetName: "Storefront", reviewType: "WEB_APP_DEEP" }, { signal: abortSignal })
+    await expect(
+      handler({ targetName: "Storefront", reviewType: "WEB_APP_DEEP" }, { signal: abortSignal })
+    ).rejects.toThrow(/not available for Storefront/)
+    expect(fetchFn).not.toHaveBeenCalled()
+  })
+
+  it("maps the selected deterministic review option to the option's goal and mode", async () => {
+    const fetchFn = okFetch({ allowed: false, code: "DOMAIN_VERIFICATION_REQUIRED" })
+    const handler = createCheckSecurityScanHandler({
+      workspaceId: "ws-page",
+      getTargets: () => targets,
+      getSelectedPreset: () => "WEB_APP_SAFE",
+      fetchFn: fetchFn as never,
+    })
+
+    await handler({ targetName: "Storefront" }, { signal: abortSignal })
 
     const [url] = vi.mocked(fetchFn).mock.calls[0]! as [string]
     const params = new URL(url, "http://app.test").searchParams
-    expect(params.get("goal")).toBe("FULL_PENTEST")
-    expect(params.get("mode")).toBe("DEEP")
+    expect(params.get("goal")).toBe("LAUNCH_REVIEW")
+    expect(params.get("mode")).toBe("SAFE")
   })
 
   it("returns an eligibility denial as a successful read", async () => {

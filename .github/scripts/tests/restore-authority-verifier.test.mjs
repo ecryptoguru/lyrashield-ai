@@ -37,6 +37,8 @@ const closed = {
   migration: true,
   tables: true,
   triggers: true,
+  receipts: true,
+  execution: true,
   helpers: true,
   extension: true,
   systemDefiners: true,

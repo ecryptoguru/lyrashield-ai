@@ -1,8 +1,9 @@
 // Finite controller for protected paired releases. Production activation remains
-// closed until a trusted broker/supervisor authority implementation exists.
+// closed without an installed signed authority and independently observed runtime.
 import { resolve } from "node:path"
 import { pathToFileURL } from "node:url"
 import { protectedLiveAdapter } from "./paired-runtime-live.mjs"
+import { verifyInstalledRuntimeAuthority } from "./paired-runtime-observation.mjs"
 import {
   qualificationControlPlaneFields,
   validateQualifiedFleetArchive,
@@ -295,12 +296,18 @@ export async function preflightQualifiedRelease(
     readRecord("qualified-fleet", rollback.archiveSha256)
   )
   const archivePair = compareRollbackArchive(parseRecord(archiveRaw), rollback)
-  await guarded("rollback archive unavailable", () =>
-    adapter.verifyQualifiedArchive(rollback.archiveSha256)
+  if (
+    (await guarded("rollback archive unavailable", () =>
+      adapter.verifyQualifiedArchive(rollback.archiveSha256)
+    )) !== true
   )
-  await guarded("rollback availability unverified", () =>
-    adapter.verifyRollbackAvailability(archivePair)
+    blocked("rollback archive unavailable")
+  if (
+    (await guarded("rollback availability unverified", () =>
+      adapter.verifyRollbackAvailability(archivePair)
+    )) !== true
   )
+    blocked("rollback availability unverified")
 
   const context = {
     source,
@@ -311,12 +318,21 @@ export async function preflightQualifiedRelease(
     rollback: Object.freeze({ ...rollback }),
     adapter,
   }
-  await guarded("paired broker/supervisor authority unavailable", () => verifyAuthority(context))
+  if (
+    (await guarded("paired broker/supervisor authority unavailable", () =>
+      verifyAuthority(context)
+    )) !== true
+  )
+    blocked("paired broker/supervisor authority unavailable")
   return Object.freeze(context)
 }
 
-export async function verifyPairedAuthority() {
-  throw new PairedControllerBlocked("paired broker/supervisor authority unavailable")
+export async function verifyPairedAuthority(context) {
+  try {
+    return verifyInstalledRuntimeAuthority(context)
+  } catch {
+    throw new PairedControllerBlocked("paired broker/supervisor authority unavailable")
+  }
 }
 
 function root(adapter) {

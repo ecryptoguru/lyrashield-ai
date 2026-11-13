@@ -122,6 +122,10 @@ closed-admission qualification blockers; no live provider request was used for t
 persisted attempt/scan/workspace/authority binding, outcome, approved policy digest, reservation,
 validated usage and the local journal receipt. It excludes raw requests, responses, credentials
 and ciphertext. A local receipt does not establish independent settlement or release a billing hold.
+`NEVER_DISPATCHED` is recorded only when the gateway did not invoke the provider; the signed
+record releases that request's local reservation and prevents reuse of its request ID, returning
+`REQUEST_NOT_DISPATCHED` on replay. If the record is absent after restart or provider invocation
+may have occurred, the hold remains uncertain.
 
 ## Closed default
 

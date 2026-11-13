@@ -1,8 +1,13 @@
 import { constants, type Stats, type BigIntStats } from "node:fs"
-import { lstat, open, unlink, type FileHandle } from "node:fs/promises"
-import { dirname } from "node:path"
+import { lstat, open, readdir, unlink, type FileHandle } from "node:fs/promises"
+import { basename, dirname, join } from "node:path"
 import { canonicalJson } from "./canonical-json"
 import { readIndexedJournalRange } from "./journal-range"
+import {
+  readJournalSegments,
+  type JournalSegment as Segment,
+  type SegmentRangeIndex,
+} from "./journal-segments"
 import {
   JournalIntegrityError,
   JournalReadLimitError,
@@ -10,7 +15,6 @@ import {
   signRecord,
   secureEqual,
   validateSecret,
-  validatedEnvelope,
   type JournalRecord,
 } from "./journal-record"
 export { JournalIntegrityError, JournalReadLimitError, verifyJournalRecord } from "./journal-record"
@@ -26,6 +30,8 @@ export interface JournalPort<T> {
   loadBounded?(limits: JournalReadLimits): Promise<JournalRecord<T>[]>
   /** Indexed read from the authenticated active writer; startup still verifies the full chain. */
   readRange?(afterSequence: number, limits: JournalReadLimits): Promise<JournalRange<T>>
+  /** Return the unchanged on-disk bytes of the verified range, including record newlines. */
+  readRawRange?(afterSequence: number, limits: JournalReadLimits): Promise<JournalRawRange<T>>
 }
 
 export interface JournalRange<T> {
@@ -33,6 +39,12 @@ export interface JournalRange<T> {
   head: JournalRecord<T> | null
   previousHash: string
   hasMore: boolean
+}
+
+export interface JournalRawRange<T> {
+  range: JournalRange<T>
+  records: Uint8Array[]
+  endPosition?: { segmentStartSequence: number; byteOffsetAfterLastSealedRecord: number }
 }
 
 export interface JournalReadLimits {
@@ -51,16 +63,24 @@ export class SignedJournal<T> implements JournalPort<T> {
   private closed = false
   private lockAcquired = false
   private lockIdentity: { dev: number; ino: number } | null = null
-  private fileIdentity: { dev: number; ino: number } | null = null
-  private rangeIndex: { offset: number; length: number; hash: string }[] = []
-  private indexedStat: string | null = null
+  private segments: Segment[] = []
+  private rangeIndex: SegmentRangeIndex = []
+  private readonly maxSegmentBytes: number
 
   constructor(
     private readonly path: string,
     private readonly secret: string,
-    private readonly validatePayload: (value: unknown) => T
+    private readonly validatePayload: (value: unknown) => T,
+    options: { maxSegmentBytes?: number } = {}
   ) {
     validateSecret(secret)
+    this.maxSegmentBytes = options.maxSegmentBytes ?? MAX_JOURNAL_BYTES
+    if (
+      !Number.isSafeInteger(this.maxSegmentBytes) ||
+      this.maxSegmentBytes < 1 ||
+      this.maxSegmentBytes > MAX_JOURNAL_BYTES
+    )
+      throw new JournalIntegrityError("invalid journal segment size")
   }
 
   async append(payload: T): Promise<JournalRecord<T>> {
@@ -121,6 +141,21 @@ export class SignedJournal<T> implements JournalPort<T> {
   }
 
   async readRange(afterSequence: number, limits: JournalReadLimits): Promise<JournalRange<T>> {
+    return (await this.readRangeInternal(afterSequence, limits, false)).range
+  }
+
+  async readRawRange(
+    afterSequence: number,
+    limits: JournalReadLimits
+  ): Promise<JournalRawRange<T>> {
+    return this.readRangeInternal(afterSequence, limits, true)
+  }
+
+  private async readRangeInternal(
+    afterSequence: number,
+    limits: JournalReadLimits,
+    captureBytes: boolean
+  ): Promise<JournalRawRange<T>> {
     const bounds = { maxBytes: limits.maxBytes, maxRecords: limits.maxRecords }
     if (
       !Number.isSafeInteger(afterSequence) ||
@@ -141,39 +176,63 @@ export class SignedJournal<T> implements JournalPort<T> {
         if (afterSequence >= this.nextSequence)
           throw new JournalReadLimitError("cursor is beyond the journal head")
         await this.assertLockIdentity()
-        if (!this.fileIdentity) {
-          // Detect a file created outside this writer even for empty genesis.
-          try {
-            // eslint-disable-next-line security/detect-non-literal-fs-filename
-            await lstat(this.path)
-            throw new JournalIntegrityError("journal appeared outside the active writer")
-          } catch (error) {
-            if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error
+        await this.assertSegmentIndex()
+        if (!this.segments.length) {
+          return {
+            range: { records: [], head: null, previousHash: "0".repeat(64), hasMore: false },
+            records: [],
           }
-          return { records: [], head: null, previousHash: "0".repeat(64), hasMore: false }
         }
-        // eslint-disable-next-line security/detect-non-literal-fs-filename
-        const file = await open(
-          this.path,
-          constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK
-        )
+        const files = new Map<number, FileHandle>()
+        const bytes = new Map<number, Uint8Array>()
         try {
-          await this.assertFileIdentity(file)
-          this.assertIndexedStat(await file.stat({ bigint: true }))
           const range = await readIndexedJournalRange(
-            file,
+            async (index) => {
+              const segmentIndex = this.rangeIndex[index]!.segment
+              let file = files.get(segmentIndex)
+              if (!file) {
+                const segment = this.segments[segmentIndex]!
+                // eslint-disable-next-line security/detect-non-literal-fs-filename
+                file = await open(
+                  segment.path,
+                  constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK
+                )
+                files.set(segmentIndex, file)
+                await this.assertFileIdentity(file, segment)
+                this.assertIndexedStat(await file.stat({ bigint: true }), segment)
+              }
+              return file
+            },
             this.rangeIndex,
             afterSequence,
             bounds,
             this.secret,
-            this.validatePayload
+            this.validatePayload,
+            captureBytes ? (sequence, raw) => bytes.set(sequence, raw) : undefined
           )
-          this.assertIndexedStat(await file.stat({ bigint: true }))
-          await this.assertFileIdentity(file)
+          for (const [index, file] of files) {
+            const segment = this.segments[index]!
+            this.assertIndexedStat(await file.stat({ bigint: true }), segment)
+            await this.assertFileIdentity(file, segment)
+          }
+          await this.assertSegmentIndex()
           await this.assertLockIdentity()
-          return range
+          const last = range.records.at(-1)
+          const position = last && captureBytes ? this.rangeIndex[last.sequence - 1] : undefined
+          return {
+            range,
+            records: captureBytes ? range.records.map((record) => bytes.get(record.sequence)!) : [],
+            ...(position
+              ? {
+                  endPosition: {
+                    segmentStartSequence: this.segments[position.segment]!.start,
+                    byteOffsetAfterLastSealedRecord: position.offset + position.length,
+                  },
+                }
+              : {}),
+          }
         } finally {
-          await file.close()
+          await Promise.all([...files.values()].map((file) => file.close()))
         }
       } catch (error) {
         if (!(error instanceof JournalReadLimitError)) this.latch(error)
@@ -191,8 +250,8 @@ export class SignedJournal<T> implements JournalPort<T> {
     return `${stat.dev}:${stat.ino}:${stat.size}:${stat.mtimeNs}:${stat.ctimeNs}`
   }
 
-  private assertIndexedStat(stat: BigIntStats): void {
-    if (!this.indexedStat || this.statStamp(stat) !== this.indexedStat) {
+  private assertIndexedStat(stat: BigIntStats, segment: Segment): void {
+    if (!segment.indexedStat || this.statStamp(stat) !== segment.indexedStat) {
       throw new JournalIntegrityError("journal changed outside the authenticated range index")
     }
   }
@@ -269,15 +328,18 @@ export class SignedJournal<T> implements JournalPort<T> {
         }
         // A successful read does not establish that a previous fsync completed.
         // Reconfirm the exact owned file and directory only during explicit replay.
+        const position = this.rangeIndex[record.sequence - 1]
+        if (!position) throw new JournalIntegrityError("journal confirmation record is missing")
+        const segment = this.segments[position.segment]!
         // eslint-disable-next-line security/detect-non-literal-fs-filename
         const file = await open(
-          this.path,
+          segment.path,
           constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK
         )
         try {
-          await this.assertFileIdentity(file)
+          await this.assertFileIdentity(file, segment)
           await file.sync()
-          await this.assertFileIdentity(file)
+          await this.assertFileIdentity(file, segment)
         } finally {
           await file.close()
         }
@@ -440,156 +502,147 @@ export class SignedJournal<T> implements JournalPort<T> {
     }
   }
 
-  private async assertFileIdentity(file: FileHandle): Promise<void> {
+  private async assertFileIdentity(file: FileHandle, segment: Segment): Promise<void> {
     const stat = await file.stat()
     this.assertPrivateFile(stat)
     if (
-      this.fileIdentity &&
-      (stat.dev !== this.fileIdentity.dev || stat.ino !== this.fileIdentity.ino)
+      segment.identity &&
+      (stat.dev !== segment.identity.dev || stat.ino !== segment.identity.ino)
     ) {
       throw new JournalIntegrityError("journal file was replaced")
     }
     // eslint-disable-next-line security/detect-non-literal-fs-filename
-    const current = await lstat(this.path)
+    const current = await lstat(segment.path)
     this.assertPrivateFile(current)
     if (current.dev !== stat.dev || current.ino !== stat.ino) {
       throw new JournalIntegrityError("journal path changed during access")
     }
-    this.fileIdentity = { dev: stat.dev, ino: stat.ino }
+    segment.identity = { dev: stat.dev, ino: stat.ino }
+  }
+
+  private async discoverSegments(): Promise<Segment[]> {
+    const directory = dirname(this.path)
+    const base = basename(this.path)
+    // The directory is checked for service ownership when acquiring the lock and syncing.
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
+    const names = await readdir(directory)
+    const prefix = `${base}.segment.`
+    const segments: Segment[] = []
+    for (const name of names) {
+      if (!name.startsWith(prefix)) continue
+      const suffix = name.slice(prefix.length)
+      const start = Number(suffix)
+      if (!/^[1-9][0-9]*$/.test(suffix) || !Number.isSafeInteger(start))
+        throw new JournalIntegrityError("invalid journal segment name")
+      segments.push({ path: join(directory, name), start, size: 0 })
+    }
+    segments.sort((a, b) => a.start - b.start)
+    if (names.includes(base)) segments.unshift({ path: this.path, start: 1, size: 0 })
+    else if (segments.length) throw new JournalIntegrityError("journal base segment is missing")
+    return segments
+  }
+
+  private async indexedSegments(): Promise<Segment[]> {
+    const found = await this.discoverSegments()
+    if (
+      this.loaded &&
+      (found.length !== this.segments.length ||
+        found.some((item, index) => item.path !== this.segments[index]?.path))
+    )
+      throw new JournalIntegrityError(
+        "journal segments changed or appeared outside the active writer"
+      )
+    const known = new Map(this.segments.map((segment) => [segment.path, segment]))
+    // A rejected bounded read must not update the active authenticated index.
+    return found.map((segment) => ({ ...(known.get(segment.path) ?? segment) }))
+  }
+
+  private async assertSegmentIndex(): Promise<void> {
+    await this.assertLockIdentity()
+    const segments = await this.indexedSegments()
+    for (const segment of segments) {
+      // eslint-disable-next-line security/detect-non-literal-fs-filename
+      const file = await open(
+        segment.path,
+        constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK
+      )
+      try {
+        await this.assertFileIdentity(file, segment)
+        this.assertIndexedStat(await file.stat({ bigint: true }), segment)
+      } finally {
+        await file.close()
+      }
+    }
   }
 
   private async readAll(limits?: JournalReadLimits): Promise<JournalRecord<T>[]> {
     await this.assertLockIdentity()
-    let file: FileHandle
-    try {
-      // No symlinks or blocking special files are accepted as journals.
-      // eslint-disable-next-line security/detect-non-literal-fs-filename
-      file = await open(this.path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK)
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT" && !this.fileIdentity) return []
-      throw error
-    }
-    let raw: string
-    let indexedStat: string
-    const maxBytes = limits?.maxBytes ?? MAX_JOURNAL_BYTES
-    try {
-      await this.assertFileIdentity(file)
-      const before = await file.stat()
-      const stamp = this.statStamp(await file.stat({ bigint: true }))
-      if (before.size > maxBytes) {
-        if (limits) throw new JournalReadLimitError("journal exceeds bounded read size")
-        throw new JournalIntegrityError("journal exceeds size cap")
-      }
-      const chunks: Buffer[] = []
-      let offset = 0
-      for (;;) {
-        const buffer = Buffer.alloc(Math.min(64 * 1024, maxBytes + 1 - offset))
-        const { bytesRead } = await file.read(buffer, 0, buffer.length, offset)
-        if (bytesRead === 0) break
-        offset += bytesRead
-        if (offset > maxBytes) {
-          if (limits) throw new JournalReadLimitError("journal exceeds bounded read size")
-          throw new JournalIntegrityError("journal exceeds size cap")
-        }
-        chunks.push(buffer.subarray(0, bytesRead))
-      }
-      const after = await file.stat()
-      indexedStat = this.statStamp(await file.stat({ bigint: true }))
-      if (
-        before.size !== after.size ||
-        before.mtimeMs !== after.mtimeMs ||
-        before.ctimeMs !== after.ctimeMs ||
-        stamp !== indexedStat
-      ) {
-        throw new JournalIntegrityError("journal changed while reading")
-      }
-      await this.assertFileIdentity(file)
-      raw = Buffer.concat(chunks, offset).toString("utf8")
-    } finally {
-      await file.close()
-    }
-    if (raw && !raw.endsWith("\n"))
-      throw new JournalIntegrityError("journal contains an incomplete record")
-    const rangeIndex: typeof this.rangeIndex = []
-    if (!raw.trim()) {
-      this.rangeIndex = rangeIndex
-      this.indexedStat = indexedStat
-      return []
-    }
-    const records: JournalRecord<T>[] = []
-    let position = 0
-    for (const line of raw.split("\n")) {
-      const length = Buffer.byteLength(line) + 1
-      if (!line) {
-        position += length
-        continue
-      }
-      if (limits && records.length >= limits.maxRecords) {
-        throw new JournalReadLimitError("journal exceeds bounded record count")
-      }
-      let parsed: unknown
-      try {
-        parsed = JSON.parse(line)
-      } catch {
-        throw new JournalIntegrityError("journal contains an incomplete or invalid record")
-      }
-      const record = validatedEnvelope(parsed, this.validatePayload)
-      records.push(record)
-      rangeIndex.push({ offset: position, length, hash: record.hash })
-      position += length
-    }
-    this.rangeIndex = rangeIndex
-    this.indexedStat = indexedStat
-    return records
+    const result = await readJournalSegments({
+      segments: await this.indexedSegments(),
+      limits,
+      maxSegmentBytes: MAX_JOURNAL_BYTES,
+      validatePayload: this.validatePayload,
+      statStamp: (stat) => this.statStamp(stat),
+      assertFileIdentity: (file, segment) => this.assertFileIdentity(file, segment),
+      assertIndexedStat: (stat, segment) => this.assertIndexedStat(stat, segment),
+      discoverSegments: () => this.discoverSegments(),
+      assertLockIdentity: () => this.assertLockIdentity(),
+    })
+    this.segments = result.segments
+    this.rangeIndex = result.rangeIndex
+    return result.records
   }
 
   private async writeRecord(record: JournalRecord<T>): Promise<void> {
     const line = `${JSON.stringify(record)}\n`
-    if (Buffer.byteLength(line) > MAX_JOURNAL_BYTES)
-      throw new JournalIntegrityError("journal record exceeds size cap")
-    await this.assertLockIdentity()
+    const length = Buffer.byteLength(line)
+    if (length > this.maxSegmentBytes)
+      throw new JournalIntegrityError("journal record exceeds segment size cap")
+    await this.assertSegmentIndex()
+    let segment = this.segments.at(-1)
     let created = false
-    let file: FileHandle
-    try {
-      // eslint-disable-next-line security/detect-non-literal-fs-filename
-      file = await open(
-        this.path,
-        constants.O_WRONLY |
-          constants.O_APPEND |
-          constants.O_CREAT |
-          constants.O_EXCL |
-          constants.O_NOFOLLOW |
-          constants.O_NONBLOCK,
-        0o600
-      )
-      created = true
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "EEXIST" || !this.fileIdentity) throw error
-      // eslint-disable-next-line security/detect-non-literal-fs-filename
-      file = await open(
-        this.path,
-        constants.O_WRONLY | constants.O_APPEND | constants.O_NOFOLLOW | constants.O_NONBLOCK
-      )
-    }
-    try {
-      await this.assertFileIdentity(file)
-      const before = await file.stat()
-      if (before.size + Buffer.byteLength(line) > MAX_JOURNAL_BYTES) {
-        throw new JournalIntegrityError("journal exceeds size cap")
+    if (!segment || segment.size + length > this.maxSegmentBytes) {
+      segment = {
+        path: segment ? `${this.path}.segment.${record.sequence}` : this.path,
+        start: record.sequence,
+        size: 0,
       }
+      created = true
+    }
+    // A segment is never overwritten, renamed, or adopted after failed creation.
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
+    const file = await open(
+      segment.path,
+      constants.O_WRONLY |
+        constants.O_APPEND |
+        constants.O_NOFOLLOW |
+        constants.O_NONBLOCK |
+        (created ? constants.O_CREAT | constants.O_EXCL : 0),
+      0o600
+    )
+    try {
+      await this.assertFileIdentity(file, segment)
+      const before = await file.stat()
+      if (before.size !== segment.size || before.size + length > this.maxSegmentBytes)
+        throw new JournalIntegrityError("journal segment changed before append")
+      if (!created) this.assertIndexedStat(await file.stat({ bigint: true }), segment)
       await file.writeFile(line, "utf8")
       await file.sync()
-      await this.assertFileIdentity(file)
+      await this.assertFileIdentity(file, segment)
       await this.assertLockIdentity()
+      if (created) this.segments.push(segment)
       this.rangeIndex.push({
         offset: before.size,
-        length: Buffer.byteLength(line),
+        length,
         hash: record.hash,
+        segment: this.segments.length - 1,
       })
-      this.indexedStat = this.statStamp(await file.stat({ bigint: true }))
+      segment.size = before.size + length
+      segment.indexedStat = this.statStamp(await file.stat({ bigint: true }))
     } finally {
       await file.close()
     }
     if (created) await this.syncDirectory()
+    await this.assertSegmentIndex()
   }
 }

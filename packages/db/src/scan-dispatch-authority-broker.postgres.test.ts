@@ -626,6 +626,44 @@ describe.skipIf(!enabled)("scan dispatch authority broker", () => {
     expect(replay).toEqual(started)
   })
 
+  it("holds a persisted attempt at START after null→policy→null without replacing it", async () => {
+    const fixture = await legacyPreparationFixture(owner, 0)
+    const prepared = await historicalPreparation(owner, fixture)
+    if (prepared.kind !== "committed") throw new Error("fixture preparation did not commit")
+    await markPrepared(fixture, prepared.attemptId, prepared.commandId)
+    const policyId = `start-policy-${randomUUID()}`
+    await owner.query(
+      'INSERT INTO "Policy"(id,"workspaceId",name,"blockedPaths","allowedDomains","updatedAt") VALUES($1,$2,$1,\'{}\',\'{}\',CURRENT_TIMESTAMP)',
+      [policyId, fixture.workspaceId]
+    )
+    await owner.query('UPDATE "Scan" SET "policyId"=$2 WHERE id=$1', [fixture.scanId, policyId])
+    await owner.query('UPDATE "Scan" SET "policyId"=NULL WHERE id=$1', [fixture.scanId])
+    await expect(
+      legacyBroker.startUnmetered({
+        operationId: fixture.operationId,
+        attemptId: prepared.attemptId,
+        workerInstanceId: fixture.instanceId,
+        workerGrantId: fixture.grantId,
+        authorityEpochId: fixture.epochId,
+      })
+    ).rejects.toMatchObject({ code: "DATABASE_REJECTED" })
+    expect(
+      (
+        await owner.query(
+          'SELECT count(*)::int n FROM "ScanDispatchStart" WHERE "operationId"=$1',
+          [fixture.operationId]
+        )
+      ).rows[0].n
+    ).toBe(0)
+    expect(
+      (
+        await owner.query('SELECT "attemptId" FROM "ScanDispatchAttempt" WHERE "operationId"=$1', [
+          fixture.operationId,
+        ])
+      ).rows[0].attemptId
+    ).toBe(prepared.attemptId)
+  })
+
   it("rejects unmetered start when the attempt carries a positive budget", async () => {
     const fixture = await legacyPreparationFixture(owner)
     const prepared = await historicalPreparation(owner, fixture)

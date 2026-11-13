@@ -158,7 +158,14 @@ function fixture() {
     repository: { id: 1297157605 },
     head_repository: { id: 1297157605 },
   }
-  return { predicate, row, run, ci, tree: INVENTORY_VERIFIER_TREE }
+  return {
+    predicate,
+    row,
+    run,
+    currentRun: structuredClone(run),
+    ci,
+    tree: INVENTORY_VERIFIER_TREE,
+  }
 }
 function options(v) {
   return {
@@ -167,6 +174,7 @@ function options(v) {
     verifyPublisher: () => {},
     read: (path) => {
       if (path === "actions/runs/52/attempts/2") return v.run
+      if (path === "actions/runs/52") return v.currentRun
       if (path === "git/commits/" + input.verifierRevision)
         return { sha: input.verifierRevision, tree: { sha: v.tree } }
       if (path === "actions/workflows/ci.yml") return { id: 7, path: ".github/workflows/ci.yml" }
@@ -261,4 +269,29 @@ test("allows an unchanged reviewed verifier after main advances, but rechecks an
     return read(path)
   }
   assert.throws(() => verifyIndependentSandboxInventory(input, base))
+})
+
+test("rejects a superseded or failed current inventory attempt, including reruns during verification", () => {
+  for (const state of [
+    { run_attempt: 3, status: "in_progress", conclusion: null },
+    { run_attempt: 2, status: "completed", conclusion: "failure" },
+    { run_attempt: 2, status: "completed", conclusion: "cancelled" },
+  ]) {
+    for (const duringVerification of [false, true]) {
+      const value = fixture()
+      const base = options(value)
+      const rerun = () => {
+        value.currentRun = { ...value.currentRun, ...state }
+      }
+      if (duringVerification) {
+        const run = base.run
+        base.run = (args) => {
+          const result = run(args)
+          rerun()
+          return result
+        }
+      } else rerun()
+      assert.throws(() => verifyIndependentSandboxInventory(input, base))
+    }
+  }
 })

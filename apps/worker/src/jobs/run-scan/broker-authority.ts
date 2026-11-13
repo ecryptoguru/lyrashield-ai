@@ -20,7 +20,7 @@ import { verifyScanJobAuthority, type StoredScanAuthority } from "./authority"
 import { verifyScanAdmission } from "./admission"
 import { readExecutionPolicy } from "./execution-policy"
 
-const id = z.string().min(1).max(128)
+const id = z.string().min(1)
 export const workerBrokerAuthoritySchema = z
   .object({
     qualificationDigest: z.string().regex(/^[a-f0-9]{64}$/),
@@ -42,7 +42,7 @@ export interface WorkerBrokerInstallation {
   verifyAuthority(authority: WorkerBrokerAuthority): Promise<boolean>
   broker: Pick<
     ReturnType<typeof createScanDispatchAuthorityBroker>,
-    "status" | "stop" | "reconcile"
+    "status" | "stop" | "reconcile" | "consumeSupervisorReceipts"
   >
   publication: Pick<ReturnType<typeof createScanQueueOutboxDispatcher>, "verifyDispatch">
 }
@@ -155,6 +155,33 @@ async function validateCurrentAdmission(
   })
 }
 
+const receiptSnapshotSchema = z
+  .object({
+    operationId: id,
+    confirmedSequence: z.number().int().nonnegative().safe(),
+    receipts: z.number().int().nonnegative(),
+    dispositions: z.array(
+      z
+        .object({
+          commandId: id,
+          status: z.enum(["HELD", "UNKNOWN", "PREPARED"]),
+          observedStatus: z.string().min(1).max(128),
+        })
+        .strict()
+    ),
+  })
+  .strict()
+
+async function syncBrokerReceipts(installation: WorkerBrokerInstallation, operationId: string) {
+  const result = receiptSnapshotSchema.parse(
+    await bounded(() => installation.broker.consumeSupervisorReceipts(operationId))
+  )
+  if (result.operationId !== operationId) throw new Error("broker receipt identity unavailable")
+  // Only authenticated ingestion can change persisted physical state. Positive
+  // observations remain HELD until the qualified native controller is complete.
+  return result
+}
+
 async function dispatchBoundJob(
   job: Job<ScanJobData, ScanJobResult>,
   installation: WorkerBrokerInstallation
@@ -176,12 +203,9 @@ async function dispatchBoundJob(
       workerInstanceId: installation.authority.workerInstanceId,
       workerGrantId: installation.authority.workerGrantId,
     }
+    const receipts = await syncBrokerReceipts(installation, operation.operationId)
     const status = await bounded(() => installation.broker.status(operation.operationId))
-    if (
-      status.operationId !== operation.operationId ||
-      status.kind !== "available" ||
-      status.state === "UNKNOWN"
-    )
+    if (status.operationId !== operation.operationId || status.kind !== "available")
       return retainedBrokerScanResult("BROKER_OUTCOME_UNKNOWN")
     if (current?.status === "CANCELLED") {
       if (!status.attemptId) return retainedBrokerScanResult("BROKER_CANCELLED_RETAINED")
@@ -200,6 +224,11 @@ async function dispatchBoundJob(
           : "BROKER_OUTCOME_UNKNOWN"
       )
     }
+    if (
+      status.state === "UNKNOWN" ||
+      receipts.dispositions.some((disposition) => disposition.status === "UNKNOWN")
+    )
+      return retainedBrokerScanResult("BROKER_OUTCOME_UNKNOWN")
     if (!current || current.deletedAt || !workspace || !target)
       return retainedBrokerScanResult("SCAN_AUTHORIZATION_REVOKED")
     const admission = await bounded(() => validateCurrentAdmission(authority, target.type))

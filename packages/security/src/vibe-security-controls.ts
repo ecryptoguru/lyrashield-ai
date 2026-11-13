@@ -397,7 +397,7 @@ export function buildUrlTargetInstruction(
     "",
     "Live target posture:",
     `- Test only the verified scope: ${opts.host} and its subdomains. The relay denies anything outside it — treat denies as hard scope limits, never as retries.`,
-    "- This is a deployed system: prefer non-destructive, idempotent evidence. Do not bulk-submit forms, mass-create accounts or trigger notification storms.",
+    "- This is a deployed target; prefer non-destructive, idempotent evidence. Do not bulk-submit forms, mass-create accounts or trigger notification storms.",
     "- Reproduce every finding and keep evidence excerpts minimal; redact secrets in transcripts.",
     "- Absence of a finding is meaningful only when the test actually ran — report coverage honestly in the run summary.",
   ]

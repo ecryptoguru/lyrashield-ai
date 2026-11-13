@@ -1,12 +1,15 @@
 #!/usr/bin/env bash
 # Owns a disposable network-none PostgreSQL fixture; never accepts a DB URL.
 set -euo pipefail
-if [[ "$#" -gt 1 ]]; then echo 'Usage: scan-dispatch-authority-pg.sh [--admission-only|--preparation-only]' >&2; exit 1; fi
+if [[ "$#" -gt 1 ]]; then echo 'Usage: scan-dispatch-authority-pg.sh [--admission-only|--preparation-only|--receipts-only|--actions-only|--context-only]' >&2; exit 1; fi
 case "${1:-}" in
-  '') test_files=(packages/db/src/scan-dispatch-authority-broker.postgres.test.ts packages/db/src/scan-dispatch-admission.postgres.test.ts packages/db/src/scan-queue-outbox.postgres.test.ts packages/db/src/scan-preparation-authority.postgres.test.ts) ;;
+  '') test_files=(packages/db/src/scan-dispatch-authority-broker.postgres.test.ts packages/db/src/scan-dispatch-admission.postgres.test.ts packages/db/src/scan-queue-outbox.postgres.test.ts packages/db/src/scan-preparation-authority.postgres.test.ts packages/db/src/scan-policy-authority.postgres.test.ts packages/db/src/scan-dispatch-command-descriptor.postgres.test.ts) ;;
   --admission-only) test_files=(packages/db/src/scan-dispatch-admission.postgres.test.ts) ;;
-  --preparation-only) test_files=(packages/db/src/scan-preparation-authority.postgres.test.ts) ;;
-  *) echo 'Usage: scan-dispatch-authority-pg.sh [--admission-only|--preparation-only]' >&2; exit 1 ;;
+  --actions-only) test_files=(packages/db/src/scan-execution-action-authority.postgres.test.ts) ;;
+  --receipts-only) test_files=(packages/db/src/scan-supervisor-receipt-ingestion.postgres.test.ts) ;;
+  --preparation-only) test_files=(packages/db/src/scan-preparation-authority.postgres.test.ts packages/db/src/scan-policy-authority.postgres.test.ts packages/db/src/scan-dispatch-command-descriptor.postgres.test.ts) ;;
+  --context-only) test_files=(packages/db/src/disposable-execution-context.postgres.test.ts) ;;
+  *) echo 'Usage: scan-dispatch-authority-pg.sh [--admission-only|--preparation-only|--receipts-only|--actions-only|--context-only]' >&2; exit 1 ;;
 esac
 repo_root=$(cd "$(dirname "$0")/../../../.." && pwd)
 cd "$repo_root"
@@ -27,6 +30,10 @@ container=''
 relay_pid=''
 redis_container=''
 redis_relay_pid=''
+provider_container=''
+provider_relay_pid=''
+provider_image=''
+provider_tag=''
 umask 077
 dir=$(mktemp -d "${TMPDIR:-/tmp}/lyra-dispatch-authority.XXXXXXXX")
 printf 'POSTGRES_PASSWORD=%s\nPOSTGRES_DB=lyrashield_test\n' "$admin_password" > "$dir/postgres.env"
@@ -35,6 +42,18 @@ cleanup() {
   trap - EXIT
   if [[ -n "$relay_pid" ]]; then kill "$relay_pid" 2>/dev/null || true; wait "$relay_pid" 2>/dev/null || true; fi
   if [[ -n "$redis_relay_pid" ]]; then kill "$redis_relay_pid" 2>/dev/null || true; wait "$redis_relay_pid" 2>/dev/null || true; fi
+  if [[ -n "$provider_relay_pid" ]]; then kill "$provider_relay_pid" 2>/dev/null || true; wait "$provider_relay_pid" 2>/dev/null || true; fi
+  if [[ -n "$provider_container" ]]; then
+    observed=$(docker inspect --format '{{.Id}}|{{.Config.Image}}|{{index .Config.Labels "lyrashield.dispatch-authority-fixture"}}|{{.HostConfig.NetworkMode}}' "$provider_container" 2>/dev/null) || observed=''
+    if [[ "$observed" == "$provider_container|$provider_image|$identity|none" ]]; then
+      docker rm -f -v "$provider_container" >/dev/null || status=1
+    else echo 'Refusing to remove unverified synthetic provider fixture' >&2; status=1; fi
+  fi
+  if [[ -n "$provider_image" ]]; then
+    observed=$(docker image inspect "$provider_tag" --format '{{.Id}}' 2>/dev/null) || observed=''
+    if [[ "$observed" == "$provider_image" ]]; then docker image rm "$provider_tag" >/dev/null || status=1
+    else echo 'Refusing to remove unverified synthetic provider image' >&2; status=1; fi
+  fi
   if [[ -n "$redis_container" ]]; then
     observed=$(docker inspect --format '{{.Id}}|{{.Config.Image}}|{{index .Config.Labels "lyrashield.dispatch-authority-fixture"}}|{{.HostConfig.NetworkMode}}' "$redis_container" 2>/dev/null) || observed=''
     if [[ "$observed" == "$redis_container|$redis_image|$identity|none" ]]; then
@@ -103,7 +122,9 @@ pnpm db:generate
 # migration. Test-owned staging copies preserve exact original migration bytes.
 mkdir "$dir/migrations"
 for migration in "$repo_root"/packages/db/prisma/migrations/*; do
-  [[ "$(basename "$migration")" == '20261111130000_scan_preparation_authority_fence' ]] && continue
+  case "$(basename "$migration")" in
+    20261111130000_scan_preparation_authority_fence|20261113140000_scan_dispatch_command_descriptor|20261113150000_supervisor_receipt_ingestion|20261113163000_scan_execution_action_authority|20261113170000_supervisor_execution_receipts|20261113181000_supervisor_native_invocation_resolution|20261113200000_supervisor_preparation_completion) continue ;;
+  esac
   if [[ -d "$migration" ]]; then
     mkdir "$dir/migrations/$(basename "$migration")"
     cp "$migration/migration.sql" "$dir/migrations/$(basename "$migration")/migration.sql"
@@ -139,7 +160,7 @@ DO \$\$ DECLARE item record; BEGIN
       'PlatformAdminElevation','PlatformAdminChallengeLimit','PlatformAdminAudit',
       'billing_reconciliation_state','ScanAuthorityEpoch','ScanWorkerInstanceGrant',
       'ScanDispatchOperation','ScanQueueOutbox','ScanDispatchAttempt','ScanDispatchOutbox',
-      'ScanDispatchStart','ScanSupervisorReceipt','ScanPhysicalExecution',
+      'ScanDispatchStart','ScanSupervisorReceipt','ScanSupervisorJournalStream','ScanSupervisorJournalRecord','ScanExecutionActionIntent','ScanExecutionInvocationGuard','ScanExecutionInvocationResolution','ScanPhysicalExecution',
       'ScanPhysicalExecutionTransition','ScanDispatchReleaseReceipt'
     )
   LOOP EXECUTE format('GRANT SELECT,INSERT,UPDATE,DELETE ON TABLE public.%I TO dispatch_authority_runtime',item.tablename); END LOOP;
@@ -186,14 +207,78 @@ done
 port=$(cat "$dir/fault-port")
 [[ "$port" =~ ^[0-9]+$ ]] || { echo 'Fixture fault relay unavailable' >&2; exit 1; }
 
+if [[ "${1:-}" == '--context-only' ]]; then
+  provider_tag="lyrashield-disposable-provider-${identity:0:16}"
+  mkdir "$dir/provider-source"
+  cp "$repo_root/ops/prototypes/dispatch-plan-test/synthetic_provider.sh" "$dir/provider-source/synthetic_provider.sh"
+  chmod 755 "$dir/provider-source/synthetic_provider.sh"
+  cat > "$dir/provider-source/Dockerfile" <<'EOF'
+FROM postgres:17-alpine
+COPY synthetic_provider.sh /opt/fixture/provider.sh
+USER postgres
+ENTRYPOINT ["/bin/busybox","nc","-lk","-s","127.0.0.1","-p","5432","-e","/opt/fixture/provider.sh"]
+CMD []
+EOF
+  DOCKER_BUILDKIT=0 docker build --network=none --pull=false -t "$provider_tag" "$dir/provider-source" >"$dir/provider-build.out" 2>"$dir/provider-build.err"
+  [[ "$(docker image inspect postgres:17-alpine --format '{{.Id}}')" == "$image" ]] || exit 1
+  provider_image=$(docker image inspect "$provider_tag" --format '{{.Id}}')
+  [[ "$provider_image" =~ ^sha256:[a-f0-9]{64}$ ]] || exit 1
+  provider_container=$(docker create --pull=never --read-only --tmpfs /var/lib/postgresql/data:ro,noexec,nosuid,nodev --network none \
+    --label "lyrashield.dispatch-authority-fixture=$identity" --label 'lyrashield.fixture-role=synthetic-provider' "$provider_image")
+  docker start "$provider_container" >/dev/null
+  python3 "$repo_root/ops/prototypes/dispatch-plan-test/relay.py" "$provider_container" "$dir/provider-port" >"$dir/provider-relay.out" 2>"$dir/provider-relay.err" &
+  provider_relay_pid=$!
+  for _ in {1..100}; do
+    [[ -s "$dir/provider-port" ]] && break
+    kill -0 "$provider_relay_pid" 2>/dev/null || { echo 'Provider fixture relay unavailable' >&2; exit 1; }
+    sleep 0.05
+  done
+  [[ -s "$dir/provider-port" ]] || exit 1
+  for _ in {1..100}; do
+    if docker exec "$provider_container" nc -z 127.0.0.1 5432 >/dev/null 2>&1; then break; fi
+    sleep 0.05
+  done
+  LYRA_DISPOSABLE_DATABASE_URL="postgresql://postgres:${admin_password}@127.0.0.1:${port}/lyrashield_test" \
+    python3 "$repo_root/ops/prototypes/dispatch-plan-test/observe_execution_context.py" \
+      --database-container "$container" --provider-container "$provider_container" --owner "$identity" \
+      --relay-pid "$relay_pid" --relay-port-file "$dir/fault-port" --database lyrashield_test \
+      --provider-relay-pid "$provider_relay_pid" --provider-relay-port-file "$dir/provider-port" > "$dir/context.json"
+  export LYRA_DISPOSABLE_CONTEXT_TEST=1 LYRA_CONTEXT_DATABASE_CONTAINER="$container" LYRA_CONTEXT_PROVIDER_CONTAINER="$provider_container"
+  export LYRA_CONTEXT_OWNER="$identity" LYRA_CONTEXT_DATABASE_RELAY_PID="$relay_pid" LYRA_CONTEXT_DATABASE_RELAY_PORT_FILE="$dir/fault-port"
+  export LYRA_CONTEXT_PROVIDER_RELAY_PID="$provider_relay_pid" LYRA_CONTEXT_PROVIDER_RELAY_PORT_FILE="$dir/provider-port"
+  export LYRA_CONTEXT_RECORD="$dir/context.json" LYRA_DISPOSABLE_DATABASE_URL="postgresql://postgres:${admin_password}@127.0.0.1:${port}/lyrashield_test"
+fi
+
 # Suites share the one-shot fault relay; serialize files while tests explicitly
 # exercise concurrent admissions, publishers and broker calls within each file.
 TZ=UTC DISPATCH_AUTHORITY_REVOKER_PASSWORD="$revoker_password" DISPATCH_AUTHORITY_REVOKER_DATABASE_URL="postgresql://dispatch_authority_revoker:${revoker_password}@127.0.0.1:${port}/lyrashield_test" DISPATCH_PREPARATION_BROKER_PASSWORD="$preparation_password" DISPATCH_PREPARATION_BROKER_DATABASE_URL="postgresql://dispatch_prepare_broker:${preparation_password}@127.0.0.1:${port}/lyrashield_test" BETTER_AUTH_SECRET=fixture-only-secret-32-characters-minimum BETTER_AUTH_URL=http://localhost:3000 NEXT_PUBLIC_APP_URL=http://localhost:3000 DATABASE_URL="postgresql://postgres:${admin_password}@127.0.0.1:${port}/lyrashield_test" RLS_RUNTIME_DATABASE_URL="postgresql://dispatch_authority_runtime:${runtime_password}@127.0.0.1:${port}/lyrashield_test" DISPATCH_AUTHORITY_DATABASE_URL="postgresql://postgres:${admin_password}@127.0.0.1:${port}/lyrashield_test" DISPATCH_AUTHORITY_RUNTIME_DATABASE_URL="postgresql://dispatch_authority_runtime:${runtime_password}@127.0.0.1:${port}/lyrashield_test" QUEUE_OUTBOX_DATABASE_URL="postgresql://dispatch_queue_publisher:${queue_runtime_password}@127.0.0.1:${port}/lyrashield_test" REDIS_URL="redis://outbox-publisher:${redis_publisher_password}@127.0.0.1:${redis_port}/0" FAULT_ARM_PATH="$dir/armed" FAULT_MARKER_PATH="$dir/commit-dropped" DELAY_ARM_PATH="$dir/delay-armed" DELAY_MARKER_PATH="$dir/commit-delayed" LIVE_DELAY_ARM_PATH="$dir/live-delay-armed" LIVE_DELAY_MARKER_PATH="$dir/live-delayed" LIVE_STALL_ARM_PATH="$dir/live-stall-armed" LIVE_STALL_MARKER_PATH="$dir/live-stalled" LYRASHIELD_TEST_DB_DISPOSABLE=1 SCAN_DISPATCH_AUTHORITY_POSTGRES_TEST=1   pnpm exec vitest run --no-file-parallelism "${test_files[@]}"
+
+if [[ "${1:-}" == '--context-only' ]]; then exit 0; fi
 
 # Admission-only does not load preparation fixtures. Apply the additive SQL only
 # after admission validation; never seed or relabel new rows as legacy.
 if [[ "$(docker exec -e "PGPASSWORD=$admin_password" "$container" psql -h 127.0.0.1 -X -q -At -U postgres -d lyrashield_test -c "SELECT count(*) FROM information_schema.columns WHERE table_name='ScanDispatchAttempt' AND column_name='authorityAcceptedAt'")" == '0' ]]; then
   docker exec -i -e "PGPASSWORD=$admin_password" "$container" psql -h 127.0.0.1 -X -v ON_ERROR_STOP=1 -U postgres -d lyrashield_test < "$repo_root/packages/db/prisma/migrations/20261111130000_scan_preparation_authority_fence/migration.sql" >/dev/null
+fi
+# Admission-only omits the checked-intent fixtures; restore dependent SQL in its
+# real chronological order after legacy admission validation.
+if [[ "$(docker exec -e "PGPASSWORD=$admin_password" "$container" psql -h 127.0.0.1 -X -q -At -U postgres -d lyrashield_test -c "SELECT count(*) FROM information_schema.columns WHERE table_name='ScanDispatchOutbox' AND column_name='commandInputJson'")" == '0' ]]; then
+  docker exec -i -e "PGPASSWORD=$admin_password" "$container" psql -h 127.0.0.1 -X -v ON_ERROR_STOP=1 -U postgres -d lyrashield_test < "$repo_root/packages/db/prisma/migrations/20261113140000_scan_dispatch_command_descriptor/migration.sql" >/dev/null
+fi
+if [[ "$(docker exec -e "PGPASSWORD=$admin_password" "$container" psql -h 127.0.0.1 -X -q -At -U postgres -d lyrashield_test -c "SELECT count(*) FROM information_schema.tables WHERE table_name='ScanSupervisorJournalStream'")" == '0' ]]; then
+  docker exec -i -e "PGPASSWORD=$admin_password" "$container" psql -h 127.0.0.1 -X -v ON_ERROR_STOP=1 -U postgres -d lyrashield_test < "$repo_root/packages/db/prisma/migrations/20261113150000_supervisor_receipt_ingestion/migration.sql" >/dev/null
+fi
+if [[ "$(docker exec -e "PGPASSWORD=$admin_password" "$container" psql -h 127.0.0.1 -X -q -At -U postgres -d lyrashield_test -c "SELECT count(*) FROM information_schema.tables WHERE table_name='ScanExecutionActionIntent'")" == '0' ]]; then
+  docker exec -i -e "PGPASSWORD=$admin_password" "$container" psql -h 127.0.0.1 -X -v ON_ERROR_STOP=1 -U postgres -d lyrashield_test < "$repo_root/packages/db/prisma/migrations/20261113163000_scan_execution_action_authority/migration.sql" >/dev/null
+fi
+if [[ "$(docker exec -e "PGPASSWORD=$admin_password" "$container" psql -h 127.0.0.1 -X -q -At -U postgres -d lyrashield_test -c "SELECT count(*) FROM pg_enum e JOIN pg_type t ON t.oid=e.enumtypid WHERE t.typname='ScanSupervisorReceiptType' AND e.enumlabel='EXECUTOR_CREATED'")" == '0' ]]; then
+  docker exec -i -e "PGPASSWORD=$admin_password" "$container" psql -h 127.0.0.1 -X -v ON_ERROR_STOP=1 -U postgres -d lyrashield_test < "$repo_root/packages/db/prisma/migrations/20261113170000_supervisor_execution_receipts/migration.sql" >/dev/null
+fi
+if [[ "$(docker exec -e "PGPASSWORD=$admin_password" "$container" psql -h 127.0.0.1 -X -q -At -U postgres -d lyrashield_test -c "SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='app' AND p.proname='scan_execution_invocation_resolution_guard' AND position('invocation resolution lacks exact confirmed original native ACK' in p.prosrc)>0 OR (n.nspname='app' AND p.proname='scan_supervisor_preparation_completed')")" == '0' ]]; then
+  docker exec -i -e "PGPASSWORD=$admin_password" "$container" psql -h 127.0.0.1 -X -v ON_ERROR_STOP=1 -U postgres -d lyrashield_test < "$repo_root/packages/db/prisma/migrations/20261113181000_supervisor_native_invocation_resolution/migration.sql" >/dev/null
+fi
+if [[ "$(docker exec -e "PGPASSWORD=$admin_password" "$container" psql -h 127.0.0.1 -X -q -At -U postgres -d lyrashield_test -c "SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='app' AND p.proname='scan_supervisor_preparation_completed'")" == '0' ]]; then
+  docker exec -i -e "PGPASSWORD=$admin_password" "$container" psql -h 127.0.0.1 -X -v ON_ERROR_STOP=1 -U postgres -d lyrashield_test < "$repo_root/packages/db/prisma/migrations/20261113200000_supervisor_preparation_completion/migration.sql" >/dev/null
 fi
 # Prisma first sends an SSL negotiation frame; fault injection is complete.
 # Restore the transparent owned relay for schema verification.
@@ -208,7 +293,9 @@ for _ in {1..100}; do
 done
 port=$(cat "$dir/schema-port")
 [[ "$port" =~ ^[0-9]+$ ]] || { echo 'Fixture schema port unavailable' >&2; exit 1; }
-DATABASE_URL="postgresql://postgres:${admin_password}@127.0.0.1:${port}/lyrashield_test" pnpm --filter @lyrashield/db exec prisma migrate resolve --applied 20261111130000_scan_preparation_authority_fence
+for applied_migration in 20261111130000_scan_preparation_authority_fence 20261113140000_scan_dispatch_command_descriptor 20261113150000_supervisor_receipt_ingestion 20261113163000_scan_execution_action_authority 20261113170000_supervisor_execution_receipts 20261113181000_supervisor_native_invocation_resolution 20261113200000_supervisor_preparation_completion; do
+  DATABASE_URL="postgresql://postgres:${admin_password}@127.0.0.1:${port}/lyrashield_test" pnpm --filter @lyrashield/db exec prisma migrate resolve --applied "$applied_migration"
+done
 DATABASE_URL="postgresql://postgres:${admin_password}@127.0.0.1:${port}/lyrashield_test" SHADOW_DATABASE_URL="postgresql://postgres:${admin_password}@127.0.0.1:${port}/lyrashield_authority_shadow" pnpm --filter @lyrashield/db exec prisma migrate diff --exit-code --from-migrations prisma/migrations --to-schema prisma/schema.prisma
 DATABASE_URL="postgresql://postgres:${admin_password}@127.0.0.1:${port}/lyrashield_test" pnpm --filter @lyrashield/db exec prisma migrate diff --exit-code --from-config-datasource --to-schema prisma/schema.prisma
 
@@ -216,5 +303,5 @@ DATABASE_URL="postgresql://postgres:${admin_password}@127.0.0.1:${port}/lyrashie
 # it cannot close the shared epoch used by another suite or depend on file order.
 if [[ "${1:-}" != '--admission-only' ]]; then
   docker exec -e "PGPASSWORD=$admin_password" "$container" psql -h 127.0.0.1 -X -v ON_ERROR_STOP=1 -U postgres -d lyrashield_test -c 'CREATE DATABASE lyrashield_epoch_test TEMPLATE lyrashield_test' >/dev/null
-  TZ=UTC BETTER_AUTH_SECRET=fixture-only-secret-32-characters-minimum BETTER_AUTH_URL=http://localhost:3000 NEXT_PUBLIC_APP_URL=http://localhost:3000 DATABASE_URL="postgresql://postgres:${admin_password}@127.0.0.1:${port}/lyrashield_epoch_test" DISPATCH_PREPARATION_BROKER_DATABASE_URL="postgresql://dispatch_prepare_broker:${preparation_password}@127.0.0.1:${port}/lyrashield_epoch_test" DISPATCH_AUTHORITY_REVOKER_PASSWORD="$revoker_password" DISPATCH_AUTHORITY_REVOKER_DATABASE_URL="postgresql://dispatch_authority_revoker:${revoker_password}@127.0.0.1:${port}/lyrashield_epoch_test" REDIS_URL="redis://outbox-publisher:${redis_publisher_password}@127.0.0.1:${redis_port}/0" LYRASHIELD_TEST_DB_DISPOSABLE=1 SCAN_DISPATCH_AUTHORITY_POSTGRES_TEST=1 pnpm exec vitest run packages/db/src/scan-preparation-epoch.postgres.test.ts
+  TZ=UTC BETTER_AUTH_SECRET=fixture-only-secret-32-characters-minimum BETTER_AUTH_URL=http://localhost:3000 NEXT_PUBLIC_APP_URL=http://localhost:3000 DATABASE_URL="postgresql://postgres:${admin_password}@127.0.0.1:${port}/lyrashield_epoch_test" DISPATCH_PREPARATION_BROKER_PASSWORD="$preparation_password" DISPATCH_PREPARATION_BROKER_DATABASE_URL="postgresql://dispatch_prepare_broker:${preparation_password}@127.0.0.1:${port}/lyrashield_epoch_test" DISPATCH_AUTHORITY_REVOKER_PASSWORD="$revoker_password" DISPATCH_AUTHORITY_REVOKER_DATABASE_URL="postgresql://dispatch_authority_revoker:${revoker_password}@127.0.0.1:${port}/lyrashield_epoch_test" REDIS_URL="redis://outbox-publisher:${redis_publisher_password}@127.0.0.1:${redis_port}/0" LYRASHIELD_TEST_DB_DISPOSABLE=1 SCAN_DISPATCH_AUTHORITY_POSTGRES_TEST=1 pnpm exec vitest run packages/db/src/scan-preparation-epoch.postgres.test.ts
 fi

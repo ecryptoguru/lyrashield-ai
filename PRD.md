@@ -51,7 +51,7 @@ Phase 1 serves AI app builders, founders, agencies, small SaaS teams, and develo
 
 - check an app before launch;
 - review a pull request;
-- monitor a target on a schedule;
+- monitor a target on a schedule (deferred from the current launch offering; see §9);
 - understand and remediate findings;
 - send a defensible client, investor, or engineering report.
 
@@ -77,7 +77,7 @@ Implemented:
 
 - Better Auth email/password, GitHub OAuth, optional Google OAuth, email verification, sessions, and reviewed account-deletion requests. Automated destructive deletion remains fail-closed until billing, audit, evidence, and legal-retention rules are approved.
 - Workspaces, memberships, invitations, roles, projects, repository/URL/API targets, onboarding, and active-workspace persistence.
-- BullMQ scan admission, queueing, preflight, target serialization, lifecycle events, cancellation, orphan reconciliation, schedules, and fail-closed worker readiness.
+- BullMQ scan admission, queueing, preflight, target serialization, lifecycle events, cancellation, orphan reconciliation, and fail-closed worker readiness. Schedule creation and enabling are disabled for the launch; stored schedule rows are preserved (§9).
 - Host-visible worker/engine temporary paths for Docker sandbox source mounts; pre-provider
   sandbox failures remain non-billable.
 - Findings, normalization, CWE/OWASP metadata, SCA, secrets, deterministic URL/API checks, AI App Security checks, evidence states, candidates, receipts, manifests, retests, reports, notifications, and launch readiness.
@@ -97,7 +97,7 @@ Implemented:
 - The review-changes scan workflow (`scan-workflows/1.0.0`) with parity across API, SDK, CLI, MCP and Desktop.
 - Release-identity confirmation for signed reports: opt-in and capability-bound, returning `MATCH`, `MISMATCH` or `UNAVAILABLE` for a caller-supplied commit or artifact digest.
 - A truthful scan-quality surface (`lyrashield-scan-quality/1.0.0`) exposed through the dashboard, `/api/v1` and the CLI.
-- A gated authenticated-assessment staging beta for authorized scope checks.
+- A gated authenticated-assessment staging beta for authorized scope checks. Its admission stays off for the launch and stored assessments are preserved (§9).
 
 Deliberately unavailable:
 
@@ -147,8 +147,8 @@ The passive Lite Scanner is separate from the BullMQ/engine repository pipeline.
 ### Target routing
 
 - `REPO`: external controlled engine plus deterministic repository scanners.
-- `WEB_APP`: Safe/Quick use deterministic URL checks; Standard and Deep/Custom select engine-backed profiles plus deterministic discovery and probes.
-- `API`: deterministic OpenAPI checks; Standard and Deep/Custom also select the engine and require a validated public HTTPS spec URL. Engine-backed URL/API tiers require domain verification and a scan-scoped relay grant.
+- `WEB_APP`: Safe and Quick use deterministic URL checks only. The Standard and Deep/Custom engine-backed profiles remain in source and require domain verification and a scan-scoped relay grant, but they are removed from the launch offering (§9).
+- `API`: Safe and Quick use deterministic OpenAPI checks only. The Standard and Deep/Custom engine-backed profiles also require a validated public HTTPS spec URL and are removed from the launch offering (§9).
 - Cloud, container, and standalone IaC targets remain roadmap work. Repository scans include bounded SAST and IaC scanner families.
 
 Standard and Deep repository scans condition PHP-specific analysis and optional
@@ -192,7 +192,7 @@ Rules:
 - Deep/Custom are deterministic two-tier profiles, not a Luna-to-Sol cascade.
 - Paid scans route through GPT-6 Sol/Luna with strict receipts; GPT-6 accounting fails closed and engine runtime is bounded by an accepted deadline with a tunable cache-routing knob.
 - Actual model, standard/long-context tokens, cache reads/writes, requests, and reconciled cost stay in the private ledger. Dashboard users see minutes, not provider spend.
-- URL/API Safe/Quick have zero AI budget. Standard selects GPT-6 Luna with a $3.20 provider cap; Deep/Custom select GPT-6 Sol-root/Luna-specialist routing with a $5 cap. These are source profile contracts, not completed live scan acceptance. The remote relay rejects opaque CONNECT tunnels; a sandbox-local TLS adapter converts HTTPS client traffic into inspectable requests using the installed sandbox CA. Composed local curl and Chromium navigation/fetch acceptance passed allowed requests and denied path/method/redirect requests without TLS bypass, including rejection of an invalid upstream certificate. Exact-image production deployment and a paid URL engine scan remain unverified.
+- URL/API Safe/Quick have zero AI budget. The Standard/Deep/Custom URL/API equivalents select GPT-6 Luna with a $3.20 provider cap and GPT-6 Sol-root/Luna-specialist routing with a $5 cap respectively, and are removed from the launch offering (§9). These are source profile contracts, not completed live scan acceptance. The remote relay rejects opaque CONNECT tunnels; a sandbox-local TLS adapter converts HTTPS client traffic into inspectable requests using the installed sandbox CA. Composed local curl and Chromium navigation/fetch acceptance passed allowed requests and denied path/method/redirect requests without TLS bypass, including rejection of an invalid upstream certificate. Exact-image production deployment and a paid URL engine scan remain unverified.
 
 ### Standards evidence mapping
 
@@ -404,6 +404,43 @@ Detailed file and package mapping: [codebase.md](./codebase.md).
 
 ## 8. Current production evidence
 
+### Unreleased controller integration — 2026-11-13
+
+The local integration now routes supervisor preparation, executor creation/start and provider dispatch through a shared native PostgreSQL transaction fence, with immutable action/authority checksums and bounded session-loss handling. It reuses the existing authority-writer gate and retains uncertain operations without retry. The installed production verifier and persisted execution descriptors are still incomplete; this plumbing does not authorize production execution. Native preparation-only verification passed 53 tests plus three migration checks. Controller/gateway suites passed 373 local tests, and seven real engine SDK bridge tests passed against a synthetic upstream. Typecheck, lint, formatting, the global size checks and `git diff --check` passed for the affected work. No paid request or production deployment followed.
+
+The descriptor must be compiled from the persisted scan plan and current authority, with execution settings from protected host policy and credentials supplied through scoped channels. No qualified supervisor/broker/gateway launcher or independently authenticated host-policy and image tuple is installed yet. The engine also still uses its legacy Docker backend; the complete scan-scoped controller transport for execution, terminal sessions, files and snapshots is not installed. Shared argument and model-profile builders now preserve the existing worker routing for the trusted descriptor compiler, with 162 relevant worker tests passing; this does not qualify a new backend. The existing database verifier covers repository preparation only; assessment authorization, target-domain verification, integration state and full funding parity still require the same transaction fence before the remaining supported modes can execute. The local policy-v2 migration now hashes the complete policy, assigns database-owned incarnation/revision values and tracks scan policy-binding changes. It invalidates stale preparation authority, including policy deletion/recreation and null-policy round trips. The disposable broker/admission/publication/preparation/policy and immutable-command descriptor suite passed 120 tests. The separate receipt-consumer run passed seven tests, both Prisma comparisons and three epoch tests. START independently rejects stale bindings; the owned-image restore suite passed 103 tests against this migration and its trigger/column/role checks. None of these database checks substitutes for the missing fence through physical invocation.
+
+The supervisor now rechecks the live fence and an accepted stop immediately before Docker or process creation/start. A disposable PostgreSQL test terminated the actual fenced session during executor inspection and observed no Docker start; the database verifier in that test covers preparation only, not production execution authority. Pending independent-journal writes retain the original event and revalidate before a queued or repeated command receives a response. The local journal now records signed supervisor-observed mirror acknowledgements only after an actual mirror response. A lost COMMIT response leaves the original pending after restart even when all heads match. Cursor continuation is bound to a compact authenticated snapshot head; the consumer must stage the continuous chain through that final head before applying dispositions, including later UNKNOWN holds. The focused journal/supervisor suites passed 238 tests and the real disposable PostgreSQL mirror suite passed nine, including actual COMMIT response loss, same-identity replay and tail removal. Authenticated broker receipt ingestion now stages the complete dual-signed snapshot against a protected preinstalled stream and commits its confirmed checkpoint. Its private source ledger preserves the original envelopes and retains UNKNOWN even when a later positive terminal record appears. Positive dispositions remain HELD; the physical execution and settlement consumers are not connected, so this path remains closed to production. The broker also reuses one reconciliation command ID, so an inconclusive observation cannot yet safely become a new observation without the authenticated terminal-receipt bridge.
+
+Engine [PR #235](https://github.com/ecryptoguru/lyrashield-engine/pull/235) merged as `9813f20b6136c6882d4becf5e7fa0766e243ee6d` after its exact head passed [required checks](https://github.com/ecryptoguru/lyrashield-engine/actions/runs/43308129973); [main-branch CI](https://github.com/ecryptoguru/lyrashield-engine/actions/runs/43311017834) also passed. The local product candidate now pins the later merged PR #236. Against its identical tested source tree, 546 local worker-contract and SDK bridge tests passed with a synthetic upstream, and [engine main-branch CI](https://github.com/ecryptoguru/lyrashield-engine/actions/runs/43340888742) passed on the merged commit. Exact-image qualification and the Cloud launch requirements below remain unresolved.
+
+The local candidate also aligns Better Auth at 1.7.17, groups future auth updates, fixes the Astro compiler dependency used by the size check and removes fixed Prisma and Playwright version assumptions from CI. The web production build, full lint and typecheck, dependency audit, focused authentication tests and local browser reset flow passed. The browser reset used a disposable PostgreSQL database and did not verify production mail delivery. A separate Linux Chromium probe matched the locked Playwright metadata; hosted CI has not yet tested these candidate changes.
+
+Container inspection, adoption, start and removal now require the exact retained ID and ownership label. Thirty focused tests, 124 supervisor lifecycle/recovery tests and a real disposable digest-pinned container create/adopt/start/mismatch-hold/cleanup check passed; this does not qualify the complete launcher. Provider dispatch now requires an acknowledged durable action intent with the original request ID before the native invocation fence. Gateway startup connects the restricted database grant authorizer, action publisher and committed invocation guard to a protected supervisor source. The source uses an authenticated private Unix socket; both controller processes support private socket startup. Nineteen focused configuration, source and actual socket tests passed, with gateway typecheck and affected lint passing. Admission remains closed until the exact installed runtime and positive START/provider path qualify; these connection tests do not establish complete execution or settlement.
+
+The provider gateway now releases a reservation only after its signed journal records that dispatch never occurred. A lost journal acknowledgement recovers from the authenticated record if present; otherwise the operation remains uncertain. Late or repeated fence callbacks cannot start a duplicate provider request. These are local tests, not deployed or end-to-end settlement evidence.
+
+Local journal segment rotation preserves the signed sequence across files and passed restart, tamper and mirror tests. The PostgreSQL mirror passed nine tests against a disposable database with restricted roles, including rotated restart and missing-tail detection; that is not production R2 or restore evidence. Rotation does not yet remove the operational history limit: some supervisor fallback reads retain whole-history bounds, startup and append scale with all records, and even a one-record range read checks every segment. Production backup has not captured or restored the journal segments. A standalone journal also cannot detect removal of its newest segment without an independent retained head. The real protected journal adapter and bounded recovery remain unqualified.
+
+The existing Cloudflare account now has an empty private `lyrashield-runtime-control` bucket, with public access disabled. Its control-only Object Read & Write credential is restricted to that bucket and stored as `runtime-control-r2-storage` in the existing qualification Key Vault; encrypted readback matched. The worker has no secret-reader role on that vault. No pin or runtime authority has been installed. Existing journal, backup and evidence credentials were read back as bucket-scoped. A disposable original-object CAS exercise against existing storage verified concurrent and stale writes, lost responses and owned cleanup; it does not qualify the new control namespace.
+
+The existing sandbox inventory producer measured both architectures in [engine run 43190373265](https://github.com/ecryptoguru/lyrashield-engine/actions/runs/43190373265); its retained receipt and OCI attestation were verified locally. That receipt expressly covers a bounded inventory and does not establish image-wide completeness or qualify the release. [Engine PR #236](https://github.com/ecryptoguru/lyrashield-engine/pull/236) corrected omitted nested Python package metadata and merged as `126a2a5fa85a8c856fd018757133af53b11f4124` after [exact-head checks](https://github.com/ecryptoguru/lyrashield-engine/actions/runs/43338751069) passed. A local check against the retained arm64 image and signed SBOM passed. The candidate verifier policy now pins the reviewed new source tree and tool checksum, so new protected inventory evidence is still required. The inventory consumer now rejects a failed, cancelled or superseding current verifier attempt, and rechecks after attestation work; 15 focused inventory/issuer/foundation tests passed. The issuer still needs authenticated exact-runtime, journal and compatible rollback evidence.
+
+The local automatic-merge candidate now checks that GitHub created a production push release for the exact merged source. The read-only verifier matched the existing main release run; this does not establish successful deployment or exercise an App-triggered merge.
+
+### Cloud launch checkpoint — 2026-11-12
+
+At this checkpoint product main was `9a49ad9a91b7b04bf789eb0d5e12d9e8addc9e56`; [PR #1113](https://github.com/ecryptoguru/lyrashield-ai/pull/1113) removed the 64-record paging ceiling for native journal readers. Full startup verification and the separate 64 MiB journal file cap remained. [Release 43260482617](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/43260482617) built the images and passed the disposable exact-worker rehearsal, but its paired preflight failed because no qualified release digest was supplied. It did not promote the candidate runtime.
+
+An independent Azure readback on November 12 found app and scanner at 100% traffic on product `b03f0bbe2b42f3a49e24e103655187372ba0a5f6`, web digest `sha256:b6bc5a4dab854a1949342808659ec79ff9d74d4bf1da71967ba1e012c1825726`; the egress proxy also reported 100% traffic and successful provisioning. Public scan readiness returned HTTP 200 with `worker: true`. This readback did not independently identify the worker image or qualify the candidate release.
+
+At this checkpoint auto-merge was enabled on the three LyraShield repositories, and product main retained strict Actions-bound checks without a reviewer requirement. The production environment had branch protection and no reviewer or wait timer. The following Cloud launch work remains:
+
+- Connect durable admission, physical execution, provider authority, authenticated receipts, settlement and recovery; the current controller and gateway entrypoints remain closed prototypes.
+- Issue and consume authenticated image, runtime, migration, journal and rollback qualification for the exact release; complete journal rotation before the file cap.
+- Verify the final deployed revision through the supported product journeys, recovery, accessibility, client integrations and commercial flows. Existing historical fixture results remain bounded to those fixtures.
+- Complete provider reconciliation and specifically authorized live checkout/refund proofs for commercial readiness. Desktop and the roadmap items listed below remain deferred.
+
 ### Nonbilling production release — 2026-11-02 IST
 
 [PR #1066](https://github.com/ecryptoguru/lyrashield-ai/pull/1066) incorporated [PR #1067](https://github.com/ecryptoguru/lyrashield-ai/pull/1067) and merged as `d488862bd269c07194afe87a918ca413e4a62217`. The three required checks passed on the combined head `fc29ef3f19b2d2775b93c90229cfe7ef883543d3` in [CI 41436905869](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/41436905869). [Production release 41438792830](https://github.com/ecryptoguru/lyrashield-ai/actions/runs/41438792830) succeeded, including source qualification, exact-worker disposable rehearsal, production smoke and worker promotion.
@@ -526,7 +563,7 @@ The 2026-08-21 acceptance scan `cmt35aj1s000001hck9fmguzk` remains historical ev
 
 ## 9. Release status
 
-Runtime product `2d4e168da544306bf6cc9958a55f14bbfcb717e3` passed production release 40538483543 and independent worker/image/source/readiness checks. Controlled Standard and Deep PHP acceptance is recorded in §8 on its earlier image; a cold-cache Composer proposal and unchanged-source negative retest were subsequently observed, while the approval-bound PR and positive retest remain pending. Deployment, specific-fixture acceptance, customer runtime assurance and commercial readiness remain separate gates. The Desktop app has no signed release in this record.
+Cloud launch is not yet qualified. The current runtime readback, candidate release failure and remaining launch work are recorded in the November 12 checkpoint above. Earlier controlled PHP scans and the unchanged-source negative retest remain historical evidence; the approval-bound PR and positive retest still require current acceptance. The Desktop app has no signed release in this record.
 
 ### Local v26 implementation — 2026-10-30
 
@@ -555,6 +592,8 @@ These are implementation or revision-scoped milestones, not a claim of universal
 
 ### Remaining before broader paid/untrusted exposure
 
+The Cloud launch requirements in §8 own launch qualification. The items below include one-time business obligations, historical triage and operational follow-up; webmaster indexing observations and later payout/tax work are not recurring software release gates. Keep essential monitoring and backup drills. Historical findings require triage before they become confirmed defects.
+
 1. Refresh the report-only Polar/Razorpay reconciliation after the incomplete 2026-10-01 receipt, and retain a completed receipt/checkpoint without replay or baseline reset. Cloud billing flags being `public` is configuration evidence, not proof of live checkout, settlement, refunds, or commercial readiness.
 2. Preserve the intentional disabled reconciliation/catalog rules and receiver configuration; one operator test notification was delivered, while individual rule behavior remains unproven. App and worker log ingestion are recorded separately in §8.
 3. Read back the public scorecard canonical URL and OG image URL on the deployed revision. The canonical-origin code fix is already included in the deployed revision; the current evidence set does not include the page-specific live readback.
@@ -572,10 +611,13 @@ These are implementation or revision-scoped milestones, not a claim of universal
 - Enterprise SSO/OIDC, SCIM, advanced policy, private worker, enterprise integrations, VPC/self-hosting, and data residency.
 - Local/self-hosted model support.
 - Human-validated pentest add-on.
+- Scheduled scans and authenticated assessments, with their stored rows preserved. See [`docs/Phase2.md`](./docs/Phase2.md#launch-scope-deferrals--2026-11-13).
+- URL/API Standard, Deep and Custom profiles, removed from the launch offering; URL/API launch retains deterministic Safe and Quick only, and their return needs a future explicit product decision.
+- Advanced sandbox capabilities that retained repository execution does not invoke.
 
 ### Known implementation and evidence debt
 
-- GitHub installation ownership still needs provider-backed proof before binding a fresh installation; Fix PR execution still needs a server-generated immutable patch/evidence artifact bound to exact approval.
+- Current source requires provider-backed GitHub installation ownership proof and a stored server-generated patch bound to the finding, proposal, scanned base and exact approval before Fix PR execution. The remaining launch task is positive provider-backed end-to-end acceptance, not implementation of those already-present checks.
 - Replace provider-managed object-encryption key references with an explicit KMS/Vault design when the evidence-storage provider is finalized.
 - Complete AI-03 lockfile/advisory coverage, production triage provenance/accounting, private-score disposition carry-forward, report UX, and live calibration proof.
 - New result manifests retain and hash their exact JSON checksum input; duplicate persistence, pending finalization and deterministic retest validation check stored integrity. These changes remain in deployed product revision `2d4e168da544306bf6cc9958a55f14bbfcb717e3` and worker digest `sha256:690bac6ed42d1c450af94055e270d5f21baa937771ba828e7e4871e501067fbe`. Historical rows with a null checksum input remain `UNAVAILABLE` and are not backfilled; no historical records were rewritten.

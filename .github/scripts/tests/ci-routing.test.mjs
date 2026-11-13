@@ -440,7 +440,7 @@ test("PR CI cancels superseded work and releases run independently from protecte
   assert.match(classifyStep, /git diff --no-renames --name-only/)
 })
 
-test("the PR image-build gate never pushes and never becomes a required check", () => {
+test("the selected PR image-build gate never pushes and feeds the required aggregate", () => {
   const start = workflow.indexOf("\n  container-build:\n")
   assert.notEqual(start, -1, "ci.yml must carry the PR image-build job")
   const nextJob = workflow.slice(start + 1).search(/\n  [a-z][a-z-]*:\n/)
@@ -457,10 +457,10 @@ test("the PR image-build gate never pushes and never becomes a required check", 
   assert.deepEqual(targets.sort(), ["egress-proxy", "runner", "worker"])
   assert.equal([...job.matchAll(/^ {10}push: false$/gm)].length, 3)
   assert.doesNotMatch(job, /^ {10}push: true$/m)
-  // Required-check preservation: nothing depends on this job, and it is not a
-  // dependency of the aggregate, so it cannot gate a merge while it proves out.
-  assert.doesNotMatch(workflow, /needs:[^\n]*container-build/)
-  assert.doesNotMatch(workflow, /- container-build/)
+  assert.match(
+    workflow,
+    /needs: \[changes, code-quality, app-checks, marketing-checks, desktop-frontend, container-build\]/
+  )
 })
 
 test("production Lighthouse remains a real quality gate outside the deployment path", () => {
@@ -703,8 +703,12 @@ test("Azure and marketing releases route the exact current merged SHA independen
   for (const route of ["azure", "marketing"]) {
     const release = productionRelease.split(`  deploy-${route}:\n`)[1]?.split(/\n  [a-z-]+:\n/)[0]
     assert.ok(release)
-    assert.match(release, /needs: routing/)
-    if (route === "azure") assert.match(release, /cold_release: true/)
+    if (route === "azure") {
+      assert.match(release, /needs: \[routing, qualify-runtime\]/)
+      assert.match(release, /cold_release: true/)
+    } else {
+      assert.match(release, /needs: routing/)
+    }
     assert.match(release, /needs\.routing\.outputs\.current-main == 'true'/)
     assert.match(release, /source_sha: \$\{\{ github\.sha \}\}/)
     assert.doesNotMatch(release, /needs:.*deploy-/)

@@ -336,6 +336,7 @@ export function protectedLiveAdapter() {
     },
     async verifyRollbackAvailability(p) {
       cloud.verifyRollbackAvailability(p)
+      return true
     },
     readWorker: () => guest("worker", {}),
     readPhysicalDrain: () => guest("physical", {}),

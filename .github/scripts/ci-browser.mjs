@@ -11,6 +11,7 @@ import {
 } from "node:fs"
 import { createRequire } from "node:module"
 import { fontconfigOverlay, unpackFonts, FONT_COMPRESSED_LIMIT } from "./ci-browser-fonts.mjs"
+import { checkPlaywrightVersions } from "./ci-browser-identity.mjs"
 import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import {
@@ -22,7 +23,6 @@ import {
 
 export const BROWSER_IMAGE =
   "mcr.microsoft.com/playwright@sha256:75d2d72c89da49d06aa7f6e623987392019aebbc52c09fd8cd6e2c94c7c7d71d"
-export const BROWSER_VERSION = "1.62.1"
 const root = fileURLToPath(new URL("../..", import.meta.url))
 const require = createRequire(import.meta.url)
 const label = "lyrashield.ci-browser"
@@ -94,10 +94,13 @@ function packageDirectories() {
   const test = require.resolve("@playwright/test/package.json")
   const playwright = createRequire(test).resolve("playwright/package.json")
   const core = createRequire(playwright).resolve("playwright-core/package.json")
-  for (const path of [test, playwright, core])
-    // eslint-disable-next-line security/detect-non-literal-fs-filename -- Paths come from the validated CI identity, locked package resolution or guarded fixture output.
-    if (JSON.parse(readFileSync(path, "utf8")).version !== BROWSER_VERSION)
-      throw new Error("Update and qualify the CI browser image with the Playwright lockfile")
+  checkPlaywrightVersions(
+    [test, playwright, core].map(
+      (path) =>
+        // eslint-disable-next-line security/detect-non-literal-fs-filename -- Paths come from locked package resolution.
+        JSON.parse(readFileSync(path, "utf8")).version
+    )
+  )
   // eslint-disable-next-line security/detect-non-literal-fs-filename -- Paths come from the validated CI identity, locked package resolution or guarded fixture output.
   return [realpathSync(dirname(playwright)), realpathSync(dirname(core))]
 }

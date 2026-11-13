@@ -492,7 +492,7 @@ test(
             "SET ROLE authority_app_restore; SET search_path=pg_catalog,public; SELECT app.scan_policy_digest(NULL::text); RESET ROLE;",
             "lyrashield_restore"
           ),
-          sha256('{"schemaVersion": "scan-policy/none"}')
+          sha256('{"schemaVersion": "scan-policy/none/2"}')
         )
         assert.equal(
           sql(
@@ -709,12 +709,40 @@ test(
         "CREATE FUNCTION pg_catalog.digest(bytea,text) RETURNS bytea LANGUAGE sql IMMUTABLE STRICT AS $$ SELECT public.digest($1,$2) $$;",
       ],
       [
+        "public access to retained supervisor source",
+        'GRANT SELECT ON "ScanSupervisorJournalRecord" TO PUBLIC;',
+      ],
+      [
+        "runtime inherited access to private supervisor stream",
+        'GRANT authority_restore_group TO authority_app_restore; GRANT UPDATE ON "ScanSupervisorJournalStream" TO authority_restore_group;',
+      ],
+      [
+        "retained supervisor source becomes mutable",
+        'DROP TRIGGER scan_supervisor_journal_record_retained ON "ScanSupervisorJournalRecord";',
+      ],
+      [
+        "unreviewed checked preparation consumption",
+        "CREATE OR REPLACE FUNCTION app.scan_checked_prepare_command() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NEW; END $$;",
+      ],
+      [
         "altered migration checksum",
         `UPDATE public."_prisma_migrations" SET checksum=repeat('a',64) WHERE migration_name='${DISPATCH_MIGRATION}';`,
       ],
       [
         "unfinished migration",
         `UPDATE public."_prisma_migrations" SET finished_at=null WHERE migration_name='${DISPATCH_MIGRATION}';`,
+      ],
+      [
+        "native resolution trigger disabled",
+        'ALTER TABLE public."ScanExecutionInvocationResolution" DISABLE TRIGGER scan_execution_invocation_resolution_guard;',
+      ],
+      [
+        "native resolution source drift",
+        "ALTER FUNCTION app.scan_execution_invocation_resolution_guard() SET search_path=public;",
+      ],
+      [
+        "runtime self-resolution permission",
+        'GRANT INSERT ON public."ScanExecutionInvocationResolution" TO authority_app_restore;',
       ],
       [
         "disabled immutable trigger",
@@ -747,6 +775,46 @@ test(
       [
         "constant dispatch scope helper",
         "CREATE OR REPLACE FUNCTION app.scan_dispatch_scope_digest(scan_id text) RETURNS text LANGUAGE sql STABLE AS $$ SELECT repeat('a',64) $$;",
+      ],
+      [
+        "policy generation trigger removed",
+        'DROP TRIGGER scan_policy_authority_generation ON public."Policy";',
+      ],
+      [
+        "policy binding trigger removed",
+        'DROP TRIGGER scan_policy_binding_generation ON public."Scan";',
+      ],
+      [
+        "policy generation nullable",
+        'ALTER TABLE public."Policy" ALTER COLUMN "authorityIncarnation" DROP NOT NULL;',
+      ],
+      [
+        "policy generation constraint removed",
+        'ALTER TABLE public."Policy" DROP CONSTRAINT "Policy_authorityRevision_positive";',
+      ],
+      [
+        "scan binding constraint removed",
+        'ALTER TABLE public."Scan" DROP CONSTRAINT "Scan_policyBindingRevision_positive";',
+      ],
+      [
+        "START policy binding guard removed",
+        'DROP TRIGGER scan_policy_start_binding_guard ON public."ScanDispatchStart";',
+      ],
+      [
+        "descriptor trigger removed",
+        'DROP TRIGGER scan_dispatch_command_descriptor_guard ON public."ScanDispatchOutbox";',
+      ],
+      [
+        "descriptor constraint removed",
+        'ALTER TABLE public."ScanDispatchOutbox" DROP CONSTRAINT "ScanDispatchOutbox_command_input_check";',
+      ],
+      [
+        "descriptor column type changed",
+        'ALTER TABLE public."ScanDispatchOutbox" ALTER COLUMN "commandInputJson" TYPE varchar;',
+      ],
+      [
+        "descriptor check helper drift",
+        "CREATE OR REPLACE FUNCTION app.scan_dispatch_command_input_valid(input_json text,checksum text,command_digest text) RETURNS boolean LANGUAGE sql IMMUTABLE AS $$ SELECT true $$;",
       ],
       ["helper strictness drift", "ALTER FUNCTION app.scan_policy_digest(text) STRICT;"],
       ["helper volatility drift", "ALTER FUNCTION app.scan_policy_digest(text) IMMUTABLE;"],

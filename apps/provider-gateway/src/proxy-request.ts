@@ -5,6 +5,8 @@ import {
   sha256Hex,
   type JournalRecord,
   type ProviderGrantRequest,
+  type ScanAuthorityFence,
+  type AuthorityAction,
 } from "@lyrashield/runtime-control"
 import type { ProviderRoute } from "./config"
 import type { GrantState, ProviderJournalEvent, RequestState } from "./journal-events"
@@ -27,6 +29,15 @@ export interface ProviderGatewayServiceOptions {
   // Trusted broker adapter must revalidate the persisted attempt/authority
   // binding and return its approved policy; no request body supplies policy.
   authorizeGrant?: (request: ProviderGrantRequest) => Promise<RequestPolicy>
+  authorityFence?: ScanAuthorityFence
+  publishActionIntent?: (input: {
+    binding: AuthorityAction
+    authorityInput: unknown
+    actionInput: unknown
+  }) => Promise<
+    | { kind: "committed"; requestId: string; actionId: string }
+    | { kind: "unknown"; requestId: string; reasonCode: "COMMIT_OUTCOME_UNKNOWN" }
+  >
   admission: "closed" | "open"
   providers: ReadonlyMap<string, ProviderRoute>
   fetchImpl?: typeof fetch
@@ -61,6 +72,20 @@ export interface ProxyInput {
   accept?: string
   body: Buffer
 }
+
+export function snapshotProxyInput(input: ProxyInput): ProxyInput {
+  if (input.body.byteLength > MAX_UPSTREAM_BODY_BYTES)
+    throw new ProviderGatewayError(
+      "REQUEST_TOO_LARGE",
+      "provider request exceeds the byte cap",
+      413
+    )
+  return Object.freeze({
+    ...input,
+    method: input.method.toUpperCase(),
+    body: Buffer.from(input.body),
+  })
+}
 export interface InFlightRequest {
   grantId: string
   controller: AbortController
@@ -77,6 +102,19 @@ export interface ProxyRequestContext {
   assertGrantActive: (grant: GrantState) => void
   authorizedPolicy: (request: ProviderGrantRequest, route: ProviderRoute) => Promise<RequestPolicy>
   apply: (record: JournalRecord<ProviderJournalEvent>) => void
+}
+
+export async function recordNotDispatched(context: ProxyRequestContext, requestId: string) {
+  const request = context.requests.get(requestId)
+  if (!request || request.outcome !== "PENDING")
+    throw new ProviderGatewayError("JOURNAL_INTEGRITY", "request is not pending", 500)
+  const record = await context.options.journal.append({
+    type: "request_not_dispatched",
+    requestId,
+    grantId: request.grantId,
+    attemptId: request.attemptId,
+  })
+  context.apply(record)
 }
 
 async function replayRequest(
@@ -129,11 +167,13 @@ async function replayRequest(
       },
     }
   }
-  throw new ProviderGatewayError(
-    existing.outcome === "PENDING" ? "REQUEST_IN_PROGRESS" : "REQUEST_UNKNOWN",
-    "request identity cannot be replayed",
-    409
-  )
+  const code =
+    existing.outcome === "PENDING"
+      ? "REQUEST_IN_PROGRESS"
+      : existing.outcome === "NEVER_DISPATCHED"
+        ? "REQUEST_NOT_DISPATCHED"
+        : "REQUEST_UNKNOWN"
+  throw new ProviderGatewayError(code, "request identity cannot be replayed", 409)
 }
 
 export async function prepareProxyRequest(context: ProxyRequestContext, input: ProxyInput) {

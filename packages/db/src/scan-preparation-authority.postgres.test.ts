@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto"
 import pg from "pg"
-import { writeFile, readFile } from "node:fs/promises"
+import { chmod, mkdtemp, rm, writeFile, readFile } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import { beforeAll, afterAll, describe, it, expect, vi } from "vitest"
 import { hasPermission, PERMISSIONS } from "../../auth/src/permissions"
 import {
@@ -27,6 +29,11 @@ import {
   type PreparationFixture,
 } from "../scripts/tests/scan-preparation-fixture"
 import { queueFixtureWorker } from "../scripts/tests/queue-outbox-fixture"
+import {
+  PostgresScanAuthorityFence,
+  type AuthorityAction,
+} from "../../runtime-control/src/authority-fence"
+import { DockerRuntimeExecutor } from "../../../apps/supervisor/src/executor"
 
 const enabled =
   process.env.SCAN_DISPATCH_AUTHORITY_POSTGRES_TEST === "1" &&
@@ -154,6 +161,198 @@ describe.skipIf(!enabled)("checked preparation intent authority", () => {
       }
     }
   )
+  it("holds actual revocation through a fenced invocation and denies the next invocation", async () => {
+    const f = await preparationFixture(owner)
+    const binding: AuthorityAction = {
+      phase: "PREPARE",
+      operationId: f.operationId,
+      attemptId: "native-fixture-attempt",
+      commandId: "native-fixture-command",
+      workspaceId: f.workspaceId,
+      scanId: f.scanId,
+      authorityEpochId: f.epochId,
+      authorityRevision: 1,
+      authorityChecksum: "a".repeat(64),
+      actionChecksum: "b".repeat(64),
+    }
+    // This real DB fixture qualifies the preparation fence's lifetime only.
+    const fence = new PostgresScanAuthorityFence(runtime, async (client, action) => {
+      if (action.phase !== "PREPARE")
+        throw new Error("Physical authority is not qualified by this fixture")
+      const context = (
+        await client.query("SELECT * FROM app.scan_preparation_context($1)", [action.operationId])
+      ).rows[0]
+      if (!context || context.workspaceId !== action.workspaceId)
+        throw new Error("Context unavailable")
+      await client.query(
+        "SELECT set_config('app.current_workspace_id',$1,true),set_config('app.current_account_id',$2,true),set_config('app.current_scan_user_id',$3,true)",
+        [String(context.workspaceId), String(context.accountId), String(context.userId)]
+      )
+      const checked = (
+        await client.query(
+          "SELECT \"deadlineAt\" AT TIME ZONE 'UTC' AS deadline FROM app.check_scan_preparation_authority($1,(clock_timestamp() AT TIME ZONE 'UTC')+interval '1 minute')",
+          [action.scanId]
+        )
+      ).rows[0]
+      if (!(checked?.deadline instanceof Date)) throw new Error("Native authority unavailable")
+      return { deadlineAt: checked.deadline }
+    })
+    let notifyEntered!: () => void, releaseEffect!: () => void
+    const entered = new Promise<void>((resolve) => {
+      notifyEntered = resolve
+    })
+    const resume = new Promise<void>((resolve) => {
+      releaseEffect = resolve
+    })
+    let effects = 0
+    const invocation = fence.run(binding, async (assertActive) => {
+      assertActive()
+      effects++
+      notifyEntered()
+      await resume
+      assertActive()
+      return "acknowledged"
+    })
+    const w = await writerTransaction(f)
+    let revoked = false
+    try {
+      await entered
+      const revocation = w
+        .query('UPDATE "WorkspaceMember" SET status=\'removed\' WHERE "workspaceId"=$1', [
+          f.workspaceId,
+        ])
+        .then(() => {
+          revoked = true
+        })
+      await waitingForLock("ShareLock")
+      expect(revoked).toBe(false)
+      releaseEffect()
+      expect(await invocation).toBe("acknowledged")
+      await revocation
+      await w.query("COMMIT")
+      await expect(
+        fence.run(binding, () => {
+          effects++
+        })
+      ).rejects.toThrow("membership revoked")
+      expect(effects).toBe(1)
+    } finally {
+      releaseEffect()
+      await invocation.catch(() => undefined)
+      await w.query("ROLLBACK")
+      w.release()
+    }
+  })
+
+  it("does not start an executor after a real fenced database session is terminated", async () => {
+    const f = await preparationFixture(owner)
+    const root = await mkdtemp(join(tmpdir(), "native-fence-executor-"))
+    const docker = join(root, "docker")
+    const marker = join(root, "mutated")
+    await writeFile(docker, `#!/bin/sh\ntouch '${marker}'\n`)
+    await chmod(docker, 0o700)
+    vi.stubEnv("PATH", `${root}:${process.env.PATH}`)
+    const executor = new DockerRuntimeExecutor()
+    const ownership = {
+      executorKey: "engine" as const,
+      kind: "container" as const,
+      ownershipId: `own_${"a".repeat(40)}`,
+      containerId: "b".repeat(64),
+    }
+    let enter!: () => void,
+      resume!: () => void,
+      backendPid = 0
+    const entered = new Promise<void>((resolve) => {
+      enter = resolve
+    })
+    const continueInspection = new Promise<void>((resolve) => {
+      resume = resolve
+    })
+    vi.spyOn(executor, "inspect").mockImplementation(async () => {
+      enter()
+      await continueInspection
+      return { state: "PRESENT", running: false, ownership }
+    })
+    const fence = new PostgresScanAuthorityFence(runtime, async (client, action) => {
+      const context = (
+        await client.query("SELECT * FROM app.scan_preparation_context($1)", [action.operationId])
+      ).rows[0]
+      if (!context || context.workspaceId !== action.workspaceId)
+        throw new Error("Context unavailable")
+      await client.query(
+        "SELECT set_config('app.current_workspace_id',$1,true),set_config('app.current_account_id',$2,true),set_config('app.current_scan_user_id',$3,true)",
+        [String(context.workspaceId), String(context.accountId), String(context.userId)]
+      )
+      const checked = (
+        await client.query(
+          "SELECT pg_backend_pid() AS pid, \"deadlineAt\" AT TIME ZONE 'UTC' AS deadline FROM app.check_scan_preparation_authority($1,(clock_timestamp() AT TIME ZONE 'UTC')+interval '1 minute')",
+          [action.scanId]
+        )
+      ).rows[0]
+      if (!(checked?.deadline instanceof Date) || typeof checked.pid !== "number")
+        throw new Error("Native authority unavailable")
+      backendPid = checked.pid
+      return { deadlineAt: checked.deadline }
+    })
+    const binding: AuthorityAction = {
+      phase: "EXECUTOR_START",
+      operationId: f.operationId,
+      attemptId: "native-fixture-attempt",
+      commandId: "native-fixture-command",
+      workspaceId: f.workspaceId,
+      scanId: f.scanId,
+      authorityEpochId: f.epochId,
+      authorityRevision: 1,
+      executorKey: "engine",
+      authorityChecksum: "a".repeat(64),
+      actionChecksum: "b".repeat(64),
+    }
+    const spec = {
+      kind: "container" as const,
+      image: `fixture@sha256:${"a".repeat(64)}`,
+      argv: [],
+      env: {},
+      network: "fixture",
+      cpus: 1,
+      memoryMb: 64,
+      pidsLimit: 16,
+      readOnly: true,
+      grantEnvName: "LLM_API_KEY",
+    }
+    let start: Promise<unknown> | undefined
+    const invocation = fence.run(binding, (assertActive) => {
+      start = executor.start(ownership, spec, {
+        attemptId: binding.attemptId,
+        commandId: binding.commandId!,
+        assertActive,
+      })
+      return start
+    })
+    const result = invocation.catch((error: unknown) => error)
+    try {
+      await Promise.race([
+        entered,
+        invocation.then(() => {
+          throw new Error("inspection not reached")
+        }),
+      ])
+      expect(backendPid).toBeGreaterThan(0)
+      expect(
+        (await owner.query("SELECT pg_terminate_backend($1) AS stopped", [backendPid])).rows[0]
+          ?.stopped
+      ).toBe(true)
+      expect(await result).toBeInstanceOf(Error)
+      resume()
+      await expect(start).rejects.toThrow()
+      await expect(readFile(marker)).rejects.toMatchObject({ code: "ENOENT" })
+    } finally {
+      resume()
+      await result
+      vi.unstubAllEnvs()
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
   it("holds later revocation until preparation transaction commit and releases on rollback", async () => {
     const f = await preparationFixture(owner),
       c = await lockedClient(f),
@@ -303,7 +502,7 @@ describe.skipIf(!enabled)("checked preparation intent authority", () => {
     const f = await preparationFixture(owner),
       c = await lockedClient(f)
     try {
-      await expect(insertPreparationAttempt(c, f)).rejects.toThrow("transaction gate")
+      await expect(insertPreparationAttempt(c, f)).rejects.toThrow("exclusive authority gate")
     } finally {
       await c.query("ROLLBACK")
       c.release()
@@ -579,7 +778,7 @@ describe.skipIf(!enabled)("checked preparation intent authority", () => {
         'INSERT INTO "ScanPhysicalExecutionTransition"("attemptId","operationId","toState") VALUES($1,$2,\'PREPARING\')',
         [r.attemptId, f.operationId]
       )
-    ).rejects.toThrow("consumption is closed")
+    ).rejects.toThrow("checked execution consumption is not qualified")
     // Trigger checks run before required-field/FK checks; a late PREPARE cannot revive intent.
     await expect(
       owner.query(
@@ -881,7 +1080,7 @@ describe.skipIf(!enabled)("checked preparation intent authority", () => {
       c.release()
     }
   })
-  it("retains the additive closed catalog: one private definer, invoker guards and twenty-one enabled triggers", async () => {
+  it("retains the additive closed catalog: private definers, invoker guards and twenty-seven enabled triggers", async () => {
     const names = [
       "scan_preparation_context",
       "require_scan_preparation_role",
@@ -906,7 +1105,9 @@ describe.skipIf(!enabled)("checked preparation intent authority", () => {
     ).rows
     expect(rows).toHaveLength(14)
     for (const row of rows) {
-      expect(row.prosecdef).toBe(row.proname === "scan_preparation_context")
+      expect(row.prosecdef).toBe(
+        ["scan_preparation_context", "scan_preparation_writer_gate"].includes(row.proname)
+      )
       expect(row.proretset).toBe(
         ["scan_preparation_context", "check_scan_preparation_authority"].includes(row.proname)
       )
@@ -918,7 +1119,7 @@ describe.skipIf(!enabled)("checked preparation intent authority", () => {
         [names]
       )
     ).rows
-    expect(triggers).toHaveLength(21)
+    expect(triggers).toHaveLength(27)
     for (const t of triggers) {
       expect(t.tgenabled).toBe("O")
       expect(t.tgdeferrable).toBe(t.tgname === "scan_checked_preparation_bundle")

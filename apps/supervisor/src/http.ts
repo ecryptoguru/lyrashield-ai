@@ -48,7 +48,11 @@ function authorized(request: IncomingMessage, expectedToken: string): boolean {
 
 export function createSupervisorHandler(
   service: SupervisorService,
-  options: { controlToken: string; admission: "closed" | "open" }
+  options: {
+    controlToken: string
+    admission: "closed" | "open"
+    sandboxToolHandler?: (request: IncomingMessage, response: ServerResponse) => Promise<void>
+  }
 ): RequestListener {
   if (Buffer.byteLength(options.controlToken, "utf8") < 32) {
     throw new Error("supervisor control token must be at least 32 bytes")
@@ -83,11 +87,23 @@ async function handleRequest(
   request: IncomingMessage,
   response: ServerResponse,
   service: SupervisorService,
-  options: { controlToken: string; admission: "closed" | "open" }
+  options: {
+    controlToken: string
+    admission: "closed" | "open"
+    sandboxToolHandler?: (request: IncomingMessage, response: ServerResponse) => Promise<void>
+  }
 ): Promise<void> {
   const url = new URL(request.url ?? "/", "http://supervisor.invalid")
   if (request.method === "GET" && url.pathname === "/healthz") {
     sendJson(response, 200, { status: "ok", admission: options.admission })
+    return
+  }
+  if (url.pathname.startsWith("/v1/sandbox/")) {
+    if (!options.sandboxToolHandler) {
+      sendJson(response, 503, { code: "SANDBOX_TOOL_UNAVAILABLE" })
+      return
+    }
+    await options.sandboxToolHandler(request, response)
     return
   }
   if (!authorized(request, options.controlToken)) {
@@ -111,11 +127,17 @@ async function handleRequest(
   }
   if (request.method === "GET" && url.pathname === "/v1/journal") {
     const fields = ["epochId", "supervisorInstanceId", "afterSequence", "afterHash", "limit"]
+    const hasSnapshot =
+      url.searchParams.has("snapshotSequence") || url.searchParams.has("snapshotHash")
+    if (hasSnapshot) fields.push("snapshotSequence", "snapshotHash")
     if (
       url.searchParams.size !== fields.length ||
       fields.some((field) => url.searchParams.getAll(field).length !== 1) ||
       !/^(0|[1-9][0-9]*)$/.test(url.searchParams.get("afterSequence") ?? "") ||
-      !/^[1-9][0-9]*$/.test(url.searchParams.get("limit") ?? "")
+      !/^[1-9][0-9]*$/.test(url.searchParams.get("limit") ?? "") ||
+      (hasSnapshot &&
+        (!/^(0|[1-9][0-9]*)$/.test(url.searchParams.get("snapshotSequence") ?? "") ||
+          !/^[a-f0-9]{64}$/.test(url.searchParams.get("snapshotHash") ?? "")))
     ) {
       throw new RuntimeControlError("INVALID_CURSOR", "invalid supervisor journal cursor", 400)
     }
@@ -126,6 +148,9 @@ async function handleRequest(
         ...Object.fromEntries(url.searchParams),
         afterSequence: Number(url.searchParams.get("afterSequence")),
         limit: Number(url.searchParams.get("limit")),
+        ...(hasSnapshot
+          ? { snapshotSequence: Number(url.searchParams.get("snapshotSequence")) }
+          : {}),
       })
     )
     return

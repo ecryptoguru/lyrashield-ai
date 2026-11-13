@@ -13,6 +13,7 @@ import {
   type IndependentAuthorityJournalOptions,
 } from "./independent-journal"
 import { R2ConditionalObjectStore } from "./r2-store"
+import { canonicalJson } from "./canonical-json"
 
 const roots: string[] = []
 afterEach(async () => {
@@ -89,7 +90,12 @@ describe("conditional R2 adapter with authority journal", () => {
             return mirroredRecords.get(sequence) ?? null
           },
           async compareAndAppend(previous, next, record) {
-            if (JSON.stringify(previous) !== JSON.stringify(mirrored)) return "conflict" as const
+            if (
+              canonicalJson(next) === canonicalJson(mirrored) &&
+              canonicalJson(mirroredRecords.get(record.sequence)) === canonicalJson(record)
+            )
+              return "written" as const
+            if (canonicalJson(previous) !== canonicalJson(mirrored)) return "conflict" as const
             mirrored = next
             mirroredRecords.set(record.sequence, structuredClone(record))
             if (boundary === "mirror" && loseAcknowledgement) {
@@ -129,8 +135,9 @@ describe("conditional R2 adapter with authority journal", () => {
         expect(await journal.appendIntent(intent)).toEqual(original)
         expect(await readFile(path)).toEqual(originalBytes)
         expect(await local.load()).toHaveLength(1)
-        expect(objects.size).toBe(2)
-        expect(writes).toBe(2)
+        expect(objects.size).toBe(3)
+        expect(writes).toBe(3)
+        expect([...objects.keys()].some((key) => key.endsWith("/acknowledgements/1"))).toBe(true)
       } finally {
         await local.close()
       }

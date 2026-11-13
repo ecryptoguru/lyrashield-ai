@@ -51,6 +51,27 @@ export function restoreJournalState(
   }
   for (const [commandId, command] of restoredCommands) {
     const attempt = restoredAttempts.get(command.attemptId)
+    if (attempt && (attempt.status === "STOPPED" || attempt.status === "NEVER_DISPATCHED")) {
+      const terminalRecorded = records.some((record) => {
+        const event = record.payload
+        if (
+          event.type !== "command_terminal" ||
+          event.attemptId !== command.attemptId ||
+          event.status !== attempt.status
+        )
+          return false
+        const request = restoredCommands.get(event.commandId)?.request
+        return Boolean(
+          request &&
+          request.type !== "PREPARE" &&
+          request.attemptId === command.attemptId &&
+          (event.status === "NEVER_DISPATCHED" ||
+            request.type === "STOP" ||
+            request.type === "RECONCILE")
+        )
+      })
+      if (!terminalRecorded) attempt.status = "UNKNOWN"
+    }
     if (
       command.status === "UNKNOWN" &&
       attempt &&

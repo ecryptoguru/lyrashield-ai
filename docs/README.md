@@ -50,7 +50,7 @@ Keep these three documents separate: the litepaper gives a short executive overv
 
 ## Historical archive
 
-- [`Phase2.md`](./Phase2.md) — Phase 2 roadmap archive: dated planning overlays (2026-08-26, 2026-09-25) plus a condensed enterprise-platform roadmap. The newest overlay records the current direction; `PRD.md` remains current truth and the verbatim original is recoverable from Git history.
+- [`Phase2.md`](./Phase2.md) — Phase 2 roadmap archive: dated planning overlays (2026-08-26, 2026-09-25, 2026-11-13 launch-scope deferrals) plus a condensed enterprise-platform roadmap. The newest overlay records the launch scope boundary and the current direction; `PRD.md` remains current truth and the verbatim original is recoverable from Git history.
 
 ## Superseded material
 

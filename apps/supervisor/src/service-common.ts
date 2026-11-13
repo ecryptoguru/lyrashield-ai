@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "node:crypto"
 import {
   canonicalJson,
   computeEvidenceDigest,
@@ -5,10 +6,17 @@ import {
   toBrokerReceiptType,
   type CommandStatus,
   type JournalRecord,
+  type ResourceOwnership,
   type SupervisorCommand,
   type SupervisorReceipt,
 } from "@lyrashield/runtime-control"
 import type { SupervisorJournalEvent } from "./journal-events"
+
+export function timingSafeStringEqual(left: string, right: string): boolean {
+  const a = Buffer.from(left)
+  const b = Buffer.from(right)
+  return a.length === b.length && timingSafeEqual(a, b)
+}
 
 const terminalStatuses = new Set<CommandStatus>([
   "PREPARED",
@@ -58,4 +66,15 @@ export function commandAttemptId(command: SupervisorCommand): string {
 
 export function commandRequestHash(command: SupervisorCommand): string {
   return sha256Hex(canonicalJson(command))
+}
+
+export function matchesOwnership(expected: ResourceOwnership, actual: ResourceOwnership): boolean {
+  return (
+    expected.executorKey === actual.executorKey &&
+    expected.kind === actual.kind &&
+    expected.ownershipId === actual.ownershipId &&
+    (!expected.cgroupPath || expected.cgroupPath === actual.cgroupPath) &&
+    (!expected.containerId || expected.containerId === actual.containerId) &&
+    (!expected.processGroupId || expected.processGroupId === actual.processGroupId)
+  )
 }

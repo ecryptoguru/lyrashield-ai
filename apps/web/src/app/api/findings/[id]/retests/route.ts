@@ -71,6 +71,11 @@ async function checkRetestAdmission({
   })
   if (!urlAdmission.ok) {
     confirmNotSubmitted()
+    // A historical URL/API Standard, Deep or Custom source scan has no retest
+    // path in the launch offering — report it as unavailable, not retryable.
+    if (urlAdmission.code === "URL_MODE_UNSUPPORTED") {
+      return apiError("RETEST_UNAVAILABLE", urlAdmission.reason, 409)
+    }
     return apiError(
       urlAdmission.code,
       urlAdmission.reason,

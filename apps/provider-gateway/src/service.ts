@@ -12,17 +12,20 @@ import { ProviderGatewayError } from "./errors"
 import { deliverReplay, type ProviderStreamSink } from "./downstream"
 import { type ProviderJournalEvent, type GrantState, type RequestState } from "./journal-events"
 import { abortable } from "./proxy-utils"
+import { dispatchProviderRequest, NonDispatchReceiptError } from "./proxy-dispatch"
 import {
   applyProviderJournalRecord,
   grantStatus,
   requestStatus,
   grantResponse,
-  providerUsageId,
+  recordProviderResult,
   responseIdentityReused,
 } from "./journal-state"
 import {
   prepareProxyRequest,
+  snapshotProxyInput,
   prepareGrantIssue,
+  recordNotDispatched,
   authorizedPolicy,
   type ProxyRequestContext,
   type ProviderGatewayServiceOptions,
@@ -32,7 +35,11 @@ import {
   type InFlightRequest,
   type ReadyProxyRequest,
 } from "./proxy-request"
-import { readProviderResponse, prepareRetainedResponse } from "./proxy-response"
+import {
+  deliverCommittedStream,
+  readProviderResponse,
+  prepareRetainedResponse,
+} from "./proxy-response"
 
 export { ProviderGatewayError } from "./errors"
 export { providerJournalEventSchema } from "./journal-events"
@@ -196,7 +203,8 @@ export class ProviderGatewayService {
     }
   }
 
-  async proxy(input: ProxyInput, sink?: ProviderStreamSink): Promise<ProxyResponse> {
+  async proxy(request: ProxyInput, sink?: ProviderStreamSink): Promise<ProxyResponse> {
+    const input = snapshotProxyInput(request)
     if (sink && !input.scanId)
       throw new ProviderGatewayError(
         "SCAN_ID_REQUIRED",
@@ -264,7 +272,7 @@ export class ProviderGatewayService {
         "content-type": upstream.headers.get("content-type") ?? "application/octet-stream",
         "x-lyra-request-id": input.requestId,
       }
-      const { responseBody, usage, responseHash } = await readProviderResponse(
+      const { responseBody, usage, responseHash, deliveredBytes } = await readProviderResponse(
         upstream,
         policy,
         approved,
@@ -296,12 +304,6 @@ export class ProviderGatewayService {
                   activeSink.write(chunk)
                 )
             : undefined,
-          complete: activeSink
-            ? () =>
-                this.deliverEffect(grant, signal, policy.idleTimeoutMs, deadlineAt, () =>
-                  activeSink.complete()
-                )
-            : undefined,
         }
       )
       const result = await this.finalizeResponse(
@@ -316,6 +318,18 @@ export class ProviderGatewayService {
         usage,
         !!activeSink
       )
+      if (signal.aborted || performance.now() >= deadlineAt)
+        throw new ProviderGatewayError(
+          "PROVIDER_UNAVAILABLE",
+          "provider response return was aborted",
+          502
+        )
+      if (activeSink) {
+        // A terminal event is only visible after its usage receipt is durable.
+        await deliverCommittedStream(responseBody, deliveredBytes, activeSink, (effect) =>
+          this.deliverEffect(grant, signal, policy.idleTimeoutMs, deadlineAt, effect)
+        )
+      }
       if (result.usageId && !activeSink) responseHeaders["x-lyra-usage-id"] = result.usageId
       await this.serialized(async () => this.assertGrantActive(grant))
       this.assertGrantActive(grant)
@@ -333,7 +347,7 @@ export class ProviderGatewayService {
         ...(activeSink ? { streamed: true as const } : {}),
       }
     } catch (error) {
-      if (activeSink) {
+      if (activeSink && !(error instanceof NonDispatchReceiptError)) {
         await this.serialized(async () => {
           const request = this.requests.get(input.requestId)
           if (request && (request.outcome === "PENDING" || request.outcome === "SUCCEEDED")) {
@@ -480,44 +494,43 @@ export class ProviderGatewayService {
     signal: AbortSignal,
     deadlineAt: number
   ): Promise<Response> {
-    const { target, headers, grant } = prepared
-    try {
-      // The last grant check and fetch invocation share the serialization
-      // boundary with revocation. Return the promise inside an object so
-      // slow providers never hold the control-plane serialization lock.
-      const dispatched = await this.serialized(async () => {
-        this.assertGrantActive(grant)
-        if (signal.aborted || performance.now() >= deadlineAt)
-          throw new ProviderGatewayError(
-            "PROVIDER_UNAVAILABLE",
-            "provider dispatch was aborted",
-            502
-          )
-        return {
-          upstream: (this.options.fetchImpl ?? fetch)(target, {
-            method: input.method,
-            headers,
-            body: input.body.byteLength > 0 ? input.body : undefined,
-            redirect: "error",
-            signal,
-          }),
-        }
-      })
-      return await abortable(dispatched.upstream, signal)
-    } catch (error) {
-      await this.serialized(() =>
-        this.recordResult(
-          input.requestId,
-          "UNKNOWN",
-          undefined,
-          undefined,
-          undefined,
-          "upstream outcome unavailable"
-        )
-      )
-      if (error instanceof ProviderGatewayError) throw error
-      throw new ProviderGatewayError("PROVIDER_UNAVAILABLE", "provider outcome is unknown", 502)
-    }
+    return dispatchProviderRequest(
+      {
+        options: this.options,
+        serialized: (work) => this.serialized(work),
+        assertGrantActive: (grant) => this.assertGrantActive(grant),
+        recordNative: async (event) => {
+          try {
+            this.apply(await this.options.journal.append(event))
+          } catch (error) {
+            this.failed = true
+            throw error
+          }
+        },
+        recordNotDispatched: (requestId) =>
+          this.serialized(() =>
+            recordNotDispatched(this.requestContext(), requestId).catch((error: unknown) => {
+              this.failed = true
+              throw error
+            })
+          ),
+        recordUnknown: (requestId) =>
+          this.serialized(() =>
+            this.recordResult(
+              requestId,
+              "UNKNOWN",
+              undefined,
+              undefined,
+              undefined,
+              "upstream outcome unavailable"
+            )
+          ),
+      },
+      input,
+      prepared,
+      signal,
+      deadlineAt
+    )
   }
 
   private assertGrantActive(grant: GrantState): void {
@@ -539,30 +552,17 @@ export class ProviderGatewayService {
     usage?: TerminalUsage,
     retainedResponse?: RetainedResponse
   ): Promise<RequestState> {
-    const state = this.requests.get(requestId)
-    if (!state) throw new ProviderGatewayError("JOURNAL_INTEGRITY", "request is missing", 500)
-    const usageId = usage ? providerUsageId(this.options.signingSecret, state, usage) : undefined
-    const record = await this.options.journal.append({
-      type: "request_result",
-      result: {
-        requestId,
-        grantId: this.requests.get(requestId)?.grantId ?? "",
-        attemptId: this.requests.get(requestId)?.attemptId ?? "",
-        outcome,
-        ...(statusCode !== undefined ? { statusCode } : {}),
-        ...(responseHash ? { responseHash } : {}),
-        ...(responseBytes !== undefined ? { responseBytes } : {}),
-        ...(usageId ? { usageId } : {}),
-        ...(usage ? { usage } : {}),
-        ...(retainedResponse ? { retainedResponse } : {}),
-        ...(detail ? { detail } : {}),
-      },
-    })
-    this.apply(record)
-    const result = this.requests.get(requestId)
-    if (!result)
-      throw new ProviderGatewayError("JOURNAL_INTEGRITY", "request result is missing", 500)
-    return result
+    return recordProviderResult(
+      this.requestContext(),
+      requestId,
+      outcome,
+      statusCode,
+      responseHash,
+      responseBytes,
+      detail,
+      usage,
+      retainedResponse
+    )
   }
 
   private apply(record: JournalRecord<ProviderJournalEvent>): void {

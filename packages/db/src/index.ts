@@ -529,3 +529,15 @@ export {
   verifyReleasePacketChecksum,
   type ReleasePacketVerificationKey,
 } from "./release-packet-signing"
+
+export {
+  createProtectedSupervisorReceiptAuthority,
+  type ProtectedSupervisorReceiptSource,
+} from "./scan-supervisor-receipt-source"
+export { readRetainedSupervisorCommand } from "./scan-supervisor-command-history"
+export {
+  SupervisorCommandHistoryReader,
+  createDisposableSupervisorCommandHistoryReader,
+  createSupervisorCommandHistoryReader,
+} from "./scan-supervisor-command-history-reader"
+export type { SupervisorCommandHistoryInput } from "./scan-supervisor-command-history"

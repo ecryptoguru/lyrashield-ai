@@ -13,6 +13,8 @@ import {
   commandRequestHash,
   receiptFromRecord,
 } from "./service-common"
+import { applyNativeInvocationAck, applyPrepareInvocationCompleted } from "./native-ack-state"
+import { applyNativeRetirement, applyNativeStartPlan } from "./native-retirement-state"
 
 function prepareAttempt(
   command: Extract<SupervisorCommand, { type: "PREPARE" }>,
@@ -118,6 +120,24 @@ function applyRecoveryHold(
   attempt.receipt = receipt
 }
 
+function applyNativeRecord(
+  event: SupervisorJournalEvent,
+  receipt: SupervisorReceipt,
+  attempts: Map<string, AttemptState>,
+  commands: Map<string, CommandState>
+): boolean {
+  if (event.type === "native_invocation_ack")
+    applyNativeInvocationAck(event, receipt, attempts, commands)
+  else if (event.type === "prepare_invocation_completed")
+    applyPrepareInvocationCompleted(event, attempts, commands)
+  else if (event.type === "native_invocation_planned")
+    applyNativeStartPlan(event, receipt, attempts, commands)
+  else if (event.type === "native_invocation_retired")
+    applyNativeRetirement(event, attempts, commands)
+  else return false
+  return true
+}
+
 export function applyJournalRecord(
   record: JournalRecord<SupervisorJournalEvent>,
   attempts: Map<string, AttemptState>,
@@ -155,6 +175,7 @@ export function applyJournalRecord(
     if (command) command.receipt = receipt
     return
   }
+  if (applyNativeRecord(event, receipt, attempts, commands)) return
   if (event.type === "resource_create_acknowledged" || event.type === "resource_start_planned") {
     const attempt = attempts.get(event.attemptId)
     if (

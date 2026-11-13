@@ -10,6 +10,9 @@ import type {
   ResourceOwnership,
 } from "@lyrashield/runtime-control"
 import { isWithin } from "./policy"
+import { providerEnvironment } from "./provider-environment"
+import { loadProtectedResourceInstallation } from "./protected-resource-installation"
+import { verifyProtectedContainer } from "./protected-container-verification"
 
 const execFileAsync = promisify(execFile)
 const COMMAND_TIMEOUT_MS = 20_000
@@ -18,6 +21,25 @@ const MAX_COMMAND_OUTPUT = 256 * 1024
 export interface ExecutorContext {
   attemptId: string
   commandId: string
+  assertActive: () => void
+  // Protected supervisor composition supplies this only for the original
+  // committed invocation guard. It is never derived from a tool request.
+  nativeInvocation?: {
+    requestId: string
+    acknowledge: (fact: {
+      operation: "CONTAINER_CREATE_ACK" | "CONTAINER_START_ACK"
+      nativeRequestId: string
+      inspection: ResourceInspection
+    }) => Promise<void>
+  }
+  provider?: { token: string; providerId: string; gatewayUrl: string; scanId: string }
+}
+
+export function chainChecks(first: () => void, second: () => void): () => void {
+  return () => {
+    first()
+    second()
+  }
 }
 
 export interface RuntimeExecutor {
@@ -28,7 +50,18 @@ export interface RuntimeExecutor {
     context: ExecutorContext
   ): Promise<ResourceOwnership>
   inspect(ownership: ResourceOwnership): Promise<ResourceInspection>
-  stop(ownership: ResourceOwnership, graceMs?: number): Promise<ResourceInspection>
+  stop(
+    ownership: ResourceOwnership,
+    graceMs?: number,
+    nativeRetirement?: NativeRetirement
+  ): Promise<ResourceInspection>
+}
+
+export interface NativeRetirement {
+  acknowledge: (fact: {
+    ownership: ResourceOwnership
+    inspection: ResourceInspection
+  }) => Promise<void>
 }
 
 export class AmbiguousResourceError extends Error {
@@ -60,6 +93,7 @@ function dockerUnavailable(error: unknown): boolean {
 interface DockerInspect {
   Id?: unknown
   State?: { Running?: unknown }
+  Config?: { Labels?: Record<string, unknown> }
 }
 
 async function listContainerIds(ownership: string): Promise<string[]> {
@@ -86,18 +120,37 @@ export class DockerRuntimeExecutor implements RuntimeExecutor {
     context: ExecutorContext
   ): Promise<ResourceOwnership> {
     if (spec.kind !== "container") throw new Error("docker executor requires a container spec")
+    if (spec.resourceDescriptor && !context.nativeInvocation)
+      throw new Error("protected resource installation requires durable native authority")
+    const installed = spec.resourceDescriptor
+      ? await loadProtectedResourceInstallation(
+          spec.resourceDescriptor,
+          context.attemptId,
+          spec.network
+        )
+      : undefined
+    context.assertActive()
     const ownership = deriveOwnershipId(context.attemptId, context.commandId, key)
     const existing = await listContainerIds(ownership)
+    context.assertActive()
     if (existing.length > 1)
       throw new AmbiguousResourceError("multiple containers match one ownership")
     if (existing.length === 1) {
-      return {
+      const candidate: ResourceOwnership = {
         executorKey: key,
         kind: "container",
         ownershipId: ownership,
         containerId: existing[0]!,
         createdAt: new Date().toISOString(),
       }
+      const inspection = await this.inspect(candidate)
+      context.assertActive()
+      if (inspection.state !== "PRESENT" || !inspection.ownership) {
+        throw new AmbiguousResourceError("existing container ownership cannot be verified")
+      }
+      if (installed) await verifyProtectedContainer(inspection.ownership, spec, installed)
+      context.assertActive()
+      return inspection.ownership
     }
     const name = `lyrashield-supervisor-${ownership.slice(4, 36)}`
     const args = [
@@ -129,47 +182,127 @@ export class DockerRuntimeExecutor implements RuntimeExecutor {
     )) {
       args.push("--env", `${keyName}=${value}`)
     }
+    if (installed) args.push(...installed.args)
+    const provider = providerEnvironment(spec, context)
+    args.push(...provider.args)
     args.push(spec.image, ...spec.argv)
-    const { stdout } = await execFileAsync("docker", args, {
-      timeout: COMMAND_TIMEOUT_MS,
-      maxBuffer: MAX_COMMAND_OUTPUT,
-    })
+    let stdout: string
+    context.assertActive()
+    try {
+      const result = await execFileAsync("docker", args, {
+        timeout: COMMAND_TIMEOUT_MS,
+        maxBuffer: MAX_COMMAND_OUTPUT,
+        ...(provider.env ? { env: provider.env } : {}),
+      })
+      stdout = result.stdout
+    } catch (error) {
+      if (provider.env) throw new Error("Docker create outcome unavailable")
+      throw error
+    }
     const containerId = stdout.trim()
     if (!/^[a-f0-9]{64}$/.test(containerId)) {
       throw new Error("docker create did not return an exact immutable container id")
     }
-    return {
+    const created: ResourceOwnership = {
       executorKey: key,
       kind: "container",
       ownershipId: ownership,
       containerId,
       createdAt: new Date().toISOString(),
     }
+    if (installed) await verifyProtectedContainer(created, spec, installed)
+    if (context.nativeInvocation) {
+      context.assertActive()
+      const inspection = await this.inspect(created)
+      context.assertActive()
+      if (
+        inspection.state !== "PRESENT" ||
+        inspection.running !== false ||
+        inspection.ownership?.containerId !== containerId ||
+        inspection.ownership.ownershipId !== created.ownershipId
+      )
+        throw new AmbiguousResourceError("created container acknowledgement cannot be verified")
+      await context.nativeInvocation.acknowledge({
+        operation: "CONTAINER_CREATE_ACK",
+        nativeRequestId: context.nativeInvocation.requestId,
+        inspection,
+      })
+      context.assertActive()
+    }
+    return created
   }
 
   async start(
     ownership: ResourceOwnership,
-    _spec: ExecutorSpec,
-    _context: ExecutorContext
+    spec: ExecutorSpec,
+    context: ExecutorContext
   ): Promise<ResourceOwnership> {
-    if (!ownership.containerId || !/^[a-f0-9]{12,64}$/.test(ownership.containerId)) {
+    if (spec.kind !== "container") throw new Error("docker executor requires a container spec")
+    if (spec.resourceDescriptor && !context.nativeInvocation)
+      throw new Error("protected resource installation requires durable native authority")
+    const installed = spec.resourceDescriptor
+      ? await loadProtectedResourceInstallation(
+          spec.resourceDescriptor,
+          context.attemptId,
+          spec.network
+        )
+      : undefined
+    if (installed) await verifyProtectedContainer(ownership, spec, installed)
+    context.assertActive()
+    if (!ownership.containerId || !/^[a-f0-9]{64}$/.test(ownership.containerId)) {
       throw new Error("container ownership has no valid container id")
     }
     const inspection = await this.inspect(ownership)
-    if (inspection.state === "UNKNOWN") throw new Error("container state is unavailable")
-    if (inspection.state === "PRESENT" && inspection.running) return ownership
-    await execFileAsync("docker", ["start", ownership.containerId], {
+    context.assertActive()
+    if (inspection.state !== "PRESENT" || !inspection.ownership?.containerId) {
+      throw new Error("owned container state is unavailable")
+    }
+    if (inspection.running) return inspection.ownership
+    const result = await execFileAsync("docker", ["start", inspection.ownership.containerId], {
       timeout: COMMAND_TIMEOUT_MS,
       maxBuffer: MAX_COMMAND_OUTPUT,
     })
-    return ownership
+    if (context.nativeInvocation) {
+      context.assertActive()
+      if (result.stdout.trim() !== inspection.ownership.containerId)
+        throw new AmbiguousResourceError("Docker start acknowledgement identity differs")
+      const verified = await this.inspect(inspection.ownership)
+      context.assertActive()
+      if (
+        verified.state !== "PRESENT" ||
+        verified.running !== true ||
+        verified.ownership?.containerId !== inspection.ownership.containerId ||
+        verified.ownership.ownershipId !== inspection.ownership.ownershipId
+      )
+        throw new AmbiguousResourceError("started container acknowledgement cannot be verified")
+      await context.nativeInvocation.acknowledge({
+        operation: "CONTAINER_START_ACK",
+        nativeRequestId: context.nativeInvocation.requestId,
+        inspection: verified,
+      })
+      context.assertActive()
+    }
+    return inspection.ownership
   }
 
   async inspect(ownership: ResourceOwnership): Promise<ResourceInspection> {
+    if (
+      ownership.kind !== "container" ||
+      !/^own_[a-f0-9]{40}$/.test(ownership.ownershipId) ||
+      (ownership.containerId !== undefined && !/^[a-f0-9]{64}$/.test(ownership.containerId))
+    ) {
+      return { state: "UNKNOWN", detail: "container ownership is malformed" }
+    }
     try {
       const ids = await listContainerIds(ownership.ownershipId)
       if (ids.length === 0) return { state: "ABSENT" }
       if (ids.length > 1) return { state: "UNKNOWN", detail: "multiple containers match ownership" }
+      if (
+        !/^[a-f0-9]{64}$/.test(ids[0]!) ||
+        (ownership.containerId !== undefined && ownership.containerId !== ids[0])
+      ) {
+        return { state: "UNKNOWN", detail: "container lookup differs from retained ownership" }
+      }
       const { stdout } = await execFileAsync("docker", ["container", "inspect", ids[0]!], {
         timeout: COMMAND_TIMEOUT_MS,
         maxBuffer: MAX_COMMAND_OUTPUT,
@@ -184,8 +317,11 @@ export class DockerRuntimeExecutor implements RuntimeExecutor {
       }
       const inspectRecord: DockerInspect = record
       const id = typeof inspectRecord.Id === "string" ? inspectRecord.Id : ""
-      if (!/^[a-f0-9]{64}$/.test(id)) {
-        return { state: "UNKNOWN", detail: "container inspect has no exact id" }
+      if (
+        id !== ids[0] ||
+        inspectRecord.Config?.Labels?.["lyrashield.supervisor.ownership"] !== ownership.ownershipId
+      ) {
+        return { state: "UNKNOWN", detail: "container inspect differs from retained ownership" }
       }
       return {
         state: "PRESENT",
@@ -199,28 +335,34 @@ export class DockerRuntimeExecutor implements RuntimeExecutor {
     }
   }
 
-  async stop(ownership: ResourceOwnership): Promise<ResourceInspection> {
+  async stop(
+    ownership: ResourceOwnership,
+    _graceMs?: number,
+    nativeRetirement?: NativeRetirement
+  ): Promise<ResourceInspection> {
     if (ownership.kind !== "container") {
       return { state: "UNKNOWN", detail: "container executor received non-container ownership" }
     }
-    let containerId = ownership.containerId
-    if (!containerId) {
-      const current = await this.inspect(ownership)
-      if (current.state === "ABSENT") return current
-      if (current.state === "UNKNOWN" || !current.ownership?.containerId) return current
-      containerId = current.ownership.containerId
-    }
+    const current = await this.inspect(ownership)
+    if (current.state !== "PRESENT" || !current.ownership?.containerId) return current
+    const containerId = current.ownership.containerId
     try {
-      await execFileAsync("docker", ["container", "rm", "--force", containerId], {
+      const result = await execFileAsync("docker", ["container", "rm", "--force", containerId], {
         timeout: COMMAND_TIMEOUT_MS,
         maxBuffer: MAX_COMMAND_OUTPUT,
       })
+      if (nativeRetirement && result.stdout.trim() !== containerId)
+        return { state: "UNKNOWN", detail: "container removal acknowledgement identity differs" }
     } catch {
       const afterFailure = await this.inspect(ownership)
       if (afterFailure.state === "ABSENT") return afterFailure
       return { state: "UNKNOWN", detail: "container removal failed" }
     }
-    return this.inspect(ownership)
+    const after = await this.inspect(ownership)
+    if (nativeRetirement && after.state === "ABSENT") {
+      await nativeRetirement.acknowledge({ ownership: current.ownership, inspection: after })
+    }
+    return after
   }
 }
 
@@ -266,7 +408,9 @@ export class LinuxProcessExecutor implements RuntimeExecutor {
     if (!isWithin(resolve(this.allowedCgroupRoot), resolve(spec.cgroupPath))) {
       throw new Error("cgroup path is outside the supervisor root")
     }
-    if (await this.pathExists(spec.cgroupPath)) {
+    const exists = await this.pathExists(spec.cgroupPath)
+    context.assertActive()
+    if (exists) {
       return {
         executorKey: key,
         kind: "process",
@@ -288,7 +432,7 @@ export class LinuxProcessExecutor implements RuntimeExecutor {
   async start(
     ownership: ResourceOwnership,
     spec: ExecutorSpec,
-    _context: ExecutorContext
+    context: ExecutorContext
   ): Promise<ResourceOwnership> {
     if (!this.qualified)
       throw new Error("process execution is held pending isolation qualification")
@@ -297,15 +441,16 @@ export class LinuxProcessExecutor implements RuntimeExecutor {
     }
     const cgroupPath = resolve(ownership.cgroupPath)
     const procsPath = resolve(cgroupPath, "cgroup.procs")
+    let existing: number[] = []
     try {
-      const existing = await readPids(procsPath)
-      if (existing.length > 0) {
-        return { ...ownership, processGroupId: existing[0] }
-      }
+      existing = await readPids(procsPath)
     } catch (error) {
       if (errorCode(error) !== "ENOENT") throw error
     }
+    context.assertActive()
+    if (existing.length > 0) return { ...ownership, processGroupId: existing[0] }
     const script = 'printf "%s" "$$" > "$1" || exit 125; shift; exec "$@"'
+    context.assertActive()
     const child = spawn(
       "/bin/sh",
       ["-c", script, "lyrashield-owner", procsPath, spec.command, ...spec.args],

@@ -727,6 +727,7 @@ export {
   resolveUrlReviewMode,
   resolveUrlReviewAvailability,
   TARGET_RELAY_UNAVAILABLE_MESSAGE,
+  URL_PROFILE_UNSUPPORTED_MESSAGE,
   type UrlReviewMode,
 } from "./url-review-admission"
 export { DEPENDENCY_RESOLUTION_CAPABILITIES } from "./dependency-capabilities"

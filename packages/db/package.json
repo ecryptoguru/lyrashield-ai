@@ -21,6 +21,7 @@
     "@prisma/client-runtime-utils": "7.9.1",
     "pg": "^8.23.0",
     "pg-connection-string": "2.14.0",
+    "@lyrashield/runtime-control": "workspace:*",
     "@lyrashield/logger": "workspace:*",
     "@lyrashield/config": "workspace:*",
     "@lyrashield/score": "workspace:*",

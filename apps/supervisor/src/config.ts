@@ -34,6 +34,7 @@ function jsonArray(value: string | undefined, name: string): string[] {
 }
 
 export interface SupervisorConfig {
+  socketPath?: string
   host: string
   port: number
   journalPath: string
@@ -60,6 +61,7 @@ export function loadSupervisorConfig(env: NodeJS.ProcessEnv = process.env): Supe
   if (!Number.isInteger(port) || port < 1 || port > 65_535)
     throw new Error("invalid supervisor port")
   return {
+    socketPath: env.LYRASHIELD_SUPERVISOR_SOCKET_PATH?.trim() || undefined,
     host: env.LYRASHIELD_SUPERVISOR_HOST?.trim() || "127.0.0.1",
     port,
     journalPath: resolve(required(env, "LYRASHIELD_SUPERVISOR_JOURNAL_PATH")),

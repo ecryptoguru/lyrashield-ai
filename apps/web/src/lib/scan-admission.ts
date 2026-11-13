@@ -18,7 +18,6 @@ import {
   TARGET_RELAY_UNAVAILABLE_MESSAGE,
 } from "@lyrashield/types"
 import { resolveAccountBilling, resolveWorkspaceScanSponsor } from "@lyrashield/billing"
-import { env, evaluateAuthAssessmentAdmission } from "@lyrashield/config"
 import { isTargetRelayWorkerAvailable } from "@lyrashield/integrations"
 import { getManualScanOptions, type ManualScanOption } from "./scan-presets"
 
@@ -126,17 +125,24 @@ export async function findScanPolicy(workspaceId: string, policyId?: string) {
 }
 
 /**
- * Deployment-level authenticated-assessment admission — the same flag +
- * per-workspace/target allowlist gate POST evaluates. Pure (env read).
+ * Deployment-level authenticated-assessment admission — the same gate POST and
+ * the eligibility preflight evaluate. Authenticated assessments are deferred
+ * from the launch offering: new admission is refused at this shared boundary
+ * while the recorded rows and the worker's execution-time re-check are left in
+ * place so in-flight work is never silently dropped. Pure.
  */
 export function authAssessmentAdmission(workspaceId: string, targetId: string) {
-  return evaluateAuthAssessmentAdmission({
-    enabled: env.LYRASHIELD_AUTH_ASSESSMENT_ENABLED === "1",
-    allowlist: env.LYRASHIELD_AUTH_ASSESSMENT_ALLOWLIST,
-    workspaceId,
-    targetId,
-  })
+  void workspaceId
+  void targetId
+  return { allowed: false, reason: "flag_off" } as const
 }
+
+/**
+ * Scheduled scans are deferred from the launch offering. New schedule creation
+ * and enabling an existing one are refused here; stored schedule rows are
+ * preserved and existing queued/in-flight work is reconciled by the worker.
+ */
+export const SCHEDULE_ADMISSION_ENABLED = false
 
 /**
  * The bounded list of review options a target offers — the same pure option

@@ -1,7 +1,6 @@
-import { timingSafeEqual } from "node:crypto"
 import {
-  resourceOwnershipSchema,
   supervisorCommandSchema,
+  IndependentAuthorityError,
   type AttemptBinding,
   type CommandStatus,
   type ExecutorKey,
@@ -16,10 +15,11 @@ import {
   type SupervisorJournalReader,
   type SupervisorJournalRecoveryPort,
   type SupervisorRecoveryResult,
+  type ScanAuthorityFence,
 } from "@lyrashield/runtime-control"
 import type { JournalPort, JournalRecord } from "@lyrashield/runtime-control"
-import { deriveOwnershipId, type ExecutorContext, type RuntimeExecutor } from "./executor"
-import { assertExecutorAllowed, type SupervisorPolicy } from "./policy"
+import type { RuntimeExecutor } from "./executor"
+import type { SupervisorPolicy } from "./policy"
 import type {
   AttemptState,
   CommandState,
@@ -31,13 +31,17 @@ export { supervisorJournalEventSchema } from "./journal-events"
 export type { SupervisorJournalEvent } from "./journal-events"
 import { applyJournalRecord } from "./journal-state"
 import { restoreJournalState } from "./restore-state"
-import { recoverServiceState } from "./service-recovery"
-import { matchesOwnership, SupervisorOperations } from "./supervisor-operations"
+import { loadServiceState, recoverServiceState, retryInitialization } from "./service-recovery"
+import { readSupervisorAttempt, readSupervisorContainers } from "./supervisor-resources"
+import { startFencedExecutor } from "./supervisor-start-executor"
+import { SupervisorOperations } from "./supervisor-operations"
 import {
   RuntimeControlError,
   commandAttemptId,
   commandRequestHash,
   isTerminal,
+  matchesOwnership,
+  timingSafeStringEqual,
 } from "./service-common"
 export { RuntimeControlError } from "./service-common"
 
@@ -56,13 +60,8 @@ export interface SupervisorServiceOptions {
   signingSecret: string
   admission: "closed" | "open"
   supervisorInstanceId: string
+  authorityFence?: ScanAuthorityFence
   now?: () => Date
-}
-
-function timingSafeStringEqual(left: string, right: string): boolean {
-  const a = Buffer.from(left)
-  const b = Buffer.from(right)
-  return a.length === b.length && timingSafeEqual(a, b)
 }
 
 export class SupervisorService {
@@ -97,6 +96,7 @@ export class SupervisorService {
       appendTerminal: (command, status, reason) => this.appendTerminal(command, status, reason),
       hasUnresolvedExecutorEffect: (attempt) => this.hasUnresolvedExecutorEffect(attempt),
       startCommandIdFor: (attemptId, executorKey) => this.startCommandIdFor(attemptId, executorKey),
+      resultFor: (commandId) => this.resultFor(commandId),
     })
   }
 
@@ -106,7 +106,10 @@ export class SupervisorService {
 
   async initialize(): Promise<void> {
     if (!this.initialized) {
-      this.initialized = this.load()
+      const attempt = (this.initialized = this.load())
+      retryInitialization(attempt, () => {
+        if (this.initialized === attempt) this.initialized = null
+      })
     }
     await this.initialized
   }
@@ -191,14 +194,14 @@ export class SupervisorService {
       if (inFlight) {
         const accepted = this.acceptConcurrentStop(command, inFlight)
         await accepted.persisted
-        return this.serialized(async () => {
+        return this.serializedCommand(async () => {
           const state = this.commands.get(command.commandId)
           if (state && isTerminal(state.status)) return this.resultFor(command.commandId)
           return this.operations.stop(command, true, accepted.revocation)
         })
       }
     }
-    return this.serialized(async () => {
+    return this.serializedCommand(async () => {
       const requestHash = commandRequestHash(command)
       const existing = this.commands.get(command.commandId)
       if (existing) {
@@ -217,7 +220,7 @@ export class SupervisorService {
       ) {
         throw new RuntimeControlError("ADMISSION_CLOSED", "runtime admission is closed", 403)
       }
-      if (command.type === "PREPARE") return this.prepare(command)
+      if (command.type === "PREPARE") return this.operations.prepare(command)
       if (command.type === "STOP") return this.operations.stop(command)
       if (command.type === "RECONCILE") return this.operations.reconcile(command)
       return this.start(command)
@@ -268,15 +271,7 @@ export class SupervisorService {
     grants: GrantBinding[]
   }> {
     await this.initialize()
-    const attempt = this.attempts.get(attemptId)
-    if (!attempt) throw new RuntimeControlError("ATTEMPT_NOT_FOUND", "attempt not found", 404)
-    return {
-      binding: attempt.binding,
-      status: attempt.status,
-      receipt: attempt.receipt,
-      resources: [...attempt.resources.values()],
-      grants: [...attempt.grants.values()],
-    }
+    return readSupervisorAttempt(this.attempts, attemptId)
   }
 
   async listOwnedContainers(scanId?: string): Promise<
@@ -289,79 +284,17 @@ export class SupervisorService {
     }>
   > {
     await this.initialize()
-    const result: Array<{
-      attemptId: string
-      scanId: string
-      executorKey: ExecutorKey
-      containerId: string
-      createdAt: string
-      running: boolean
-      receiptHash: string
-    }> = []
-    for (const [attemptId, attempt] of this.attempts) {
-      if (scanId && attempt.binding.scanId !== scanId) continue
-      for (const resource of attempt.resources.values()) {
-        if (resource.kind !== "container" || !resource.containerId) continue
-        const inspection = await this.options.executor.inspect(resource)
-        result.push({
-          attemptId,
-          scanId: attempt.binding.scanId,
-          executorKey: resource.executorKey,
-          containerId: resource.containerId,
-          createdAt: resource.createdAt ?? attempt.binding.expiresAt,
-          running: inspection.state === "PRESENT" && inspection.running === true,
-          receiptHash: attempt.receipt.hash,
-        })
-      }
-    }
-    return result
-  }
-
-  private async prepare(command: Extract<SupervisorCommand, { type: "PREPARE" }>) {
-    if (command.attempt.billingMode === "PAID" && !command.provider) {
-      throw new RuntimeControlError(
-        "PROVIDER_POLICY_REQUIRED",
-        "paid execution requires a provider budget policy",
-        400
-      )
-    }
-    if (command.attempt.billingMode === "UNMETERED" && command.provider) {
-      throw new RuntimeControlError(
-        "PROVIDER_POLICY_NOT_ALLOWED",
-        "unmetered execution may not hold provider grants",
-        400
-      )
-    }
-    const keys = new Set<ExecutorKey>()
-    for (const plan of command.executors) {
-      if (keys.has(plan.key))
-        throw new RuntimeControlError("DUPLICATE_EXECUTOR_KEY", "executor keys must be unique", 400)
-      keys.add(plan.key)
-      assertExecutorAllowed(plan, this.options.policy)
-    }
-    if (this.attempts.has(command.attempt.attemptId)) {
-      throw new RuntimeControlError(
-        "ATTEMPT_CONFLICT",
-        "attempt already exists with different input"
-      )
-    }
-    // The broker must observe durable command acceptance before completion.
-    // An interrupted intent stays unresolved and is never replayed on restart.
-    await this.appendIntent(command)
-    const record = await this.options.journal.append({
-      type: "attempt_prepared",
-      supervisorInstanceId: this.options.supervisorInstanceId,
-      observedAt: this.nowIso(),
-      commandId: command.commandId,
-      binding: command.attempt,
-      executors: command.executors,
-      ...(command.provider ? { provider: command.provider } : {}),
-    })
-    this.apply(record)
-    return this.resultFor(command.commandId)
+    return readSupervisorContainers(this.attempts, this.options.executor, scanId)
   }
 
   private async start(command: StartCommand) {
+    const authorityFence = this.options.authorityFence
+    if (!authorityFence)
+      throw new RuntimeControlError(
+        "AUTHORITY_UNAVAILABLE",
+        "Native scan authority is unavailable",
+        503
+      )
     const attempt = this.attempts.get(command.attemptId)
     if (!attempt) throw new RuntimeControlError("ATTEMPT_NOT_FOUND", "attempt not found", 404)
     this.assertCurrentReceipt(attempt, command.expectedReceiptHash)
@@ -412,46 +345,25 @@ export class SupervisorService {
     const inFlight: InFlightStart = {}
     this.inFlightStarts.set(command.attemptId, inFlight)
     let physicalAttempted = false
+    let creationFenceEntered = false
     try {
       await this.appendIntent(command)
       this.abortIfStopAccepted(command.attemptId)
-      // Durable create intent: the ownership identity is journaled before the
-      // executor effect so a crash, failed follow-up append or a delayed daemon
-      // response can never look like "nothing was ever created".
-      const plannedOwnership = resourceOwnershipSchema.parse({
-        executorKey: command.executorKey,
-        kind: plan.spec.kind,
-        ownershipId: deriveOwnershipId(
-          attempt.binding.attemptId,
-          command.commandId,
-          command.executorKey
-        ),
-        ...(plan.spec.kind === "process" ? { cgroupPath: plan.spec.cgroupPath } : {}),
-      })
-      const plannedRecord = await this.options.journal.append({
-        type: "resource_create_planned",
-        supervisorInstanceId: this.options.supervisorInstanceId,
-        observedAt: this.nowIso(),
-        commandId: command.commandId,
-        attemptId: attempt.binding.attemptId,
-        executorKey: plannedOwnership.executorKey,
-        kind: plannedOwnership.kind,
-        ownershipId: plannedOwnership.ownershipId,
-        ...(plannedOwnership.cgroupPath ? { cgroupPath: plannedOwnership.cgroupPath } : {}),
-      })
-      this.apply(plannedRecord)
-      this.abortIfStopAccepted(command.attemptId)
-      const context: ExecutorContext = {
-        attemptId: attempt.binding.attemptId,
-        commandId: command.commandId,
-      }
       physicalAttempted = true
-      if (command.type === "START_PAID") {
-        await this.operations.ensureProviderGrant(attempt, command.commandId)
-      }
+      const context = await this.operations.executorContext(attempt, command)
       this.abortIfStopAccepted(command.attemptId)
-      let ownership = await this.options.executor.create(command.executorKey, plan.spec, context)
-      if (!matchesOwnership(plannedOwnership, ownership)) {
+      const created = await this.operations.createFencedExecutor(
+        attempt,
+        command,
+        plan.spec,
+        context,
+        () => {
+          creationFenceEntered = true
+        },
+        () => this.abortIfStopAccepted(command.attemptId)
+      )
+      let { ownership } = created
+      if (!matchesOwnership(created.planned, ownership)) {
         throw new Error("executor create returned a foreign ownership identity")
       }
       let resourceRecord = await this.options.journal.append({
@@ -473,17 +385,20 @@ export class SupervisorService {
       })
       this.apply(createAcknowledged)
       this.abortIfStopAccepted(command.attemptId)
-      const startPlanned = await this.options.journal.append({
-        type: "resource_start_planned",
-        supervisorInstanceId: this.options.supervisorInstanceId,
-        observedAt: this.nowIso(),
-        commandId: command.commandId,
-        attemptId: attempt.binding.attemptId,
-        executorKey: command.executorKey,
-      })
-      this.apply(startPlanned)
+      await this.operations.recordExecutorStartIntent(attempt, command)
       this.abortIfStopAccepted(command.attemptId)
-      const started = await this.options.executor.start(ownership, plan.spec, context)
+      const started = await startFencedExecutor({
+        service: this.options,
+        operations: this.operations,
+        attempt,
+        command,
+        spec: plan.spec,
+        context,
+        ownership,
+        checkStop: () => this.abortIfStopAccepted(command.attemptId),
+        nowIso: () => this.nowIso(),
+        apply: (record) => this.apply(record),
+      })
       if (!matchesOwnership(ownership, started)) {
         throw new Error("executor start returned a foreign ownership identity")
       }
@@ -503,15 +418,44 @@ export class SupervisorService {
       await this.appendTerminal(command, "STARTED")
       return this.resultFor(command.commandId)
     } catch (error) {
-      if (!physicalAttempted && !inFlight.stop) throw error
-      if (inFlight.stop) await inFlight.stop.persisted
-      const reason = error instanceof Error ? error.message : "executor effect is ambiguous"
-      await this.appendAttemptStatus(attempt, "UNKNOWN", command.commandId)
-      await this.appendTerminal(command, "UNKNOWN", reason.slice(0, 512))
-      return this.resultFor(command.commandId)
+      return await this.handleStartFailure(
+        error,
+        attempt,
+        command,
+        inFlight,
+        physicalAttempted,
+        creationFenceEntered
+      )
     } finally {
       this.inFlightStarts.delete(command.attemptId)
     }
+  }
+
+  private async handleStartFailure(
+    error: unknown,
+    attempt: AttemptState,
+    command: StartCommand,
+    inFlight: InFlightStart,
+    physicalAttempted: boolean,
+    creationFenceEntered: boolean
+  ) {
+    if (error instanceof IndependentAuthorityError) {
+      if (inFlight.stop) await inFlight.stop.persisted.catch(() => undefined)
+      throw error
+    }
+    if (!physicalAttempted && !inFlight.stop) throw error
+    if (physicalAttempted && !creationFenceEntered && !inFlight.stop) {
+      const rejected = await this.operations.rejectUnstarted(attempt, command, () =>
+        Boolean(inFlight.stop)
+      )
+      if (rejected) return rejected
+    }
+    if (inFlight.stop) await inFlight.stop.persisted
+    const reason =
+      error instanceof RuntimeControlError ? error.code : "executor or provider outcome unavailable"
+    await this.appendAttemptStatus(attempt, "UNKNOWN", command.commandId)
+    await this.appendTerminal(command, "UNKNOWN", reason.slice(0, 512))
+    return this.resultFor(command.commandId)
   }
 
   private startCommandIdFor(attemptId: string, executorKey: ExecutorKey): string | null {
@@ -615,7 +559,23 @@ export class SupervisorService {
   }
 
   private async load(): Promise<void> {
-    restoreJournalState(await this.options.journal.load(), this.attempts, this.commands)
+    return loadServiceState(
+      this.options.journal,
+      () => this.inFlightStarts.size > 0 || this.pendingRevocations.size > 0,
+      (records) => restoreJournalState(records, this.attempts, this.commands)
+    )
+  }
+
+  private async serializedCommand<T>(operation: () => Promise<T>): Promise<T> {
+    return this.serialized(async () => {
+      try {
+        await this.initialize()
+        return await operation()
+      } catch (error) {
+        if (error instanceof IndependentAuthorityError) this.initialized = null
+        throw error
+      }
+    })
   }
 
   private async serialized<T>(operation: () => Promise<T>): Promise<T> {

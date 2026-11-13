@@ -1,3 +1,4 @@
+import { fixtureAuthorityFence } from "./test-fixtures"
 import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
@@ -15,8 +16,9 @@ import {
   type ResourceInspection,
   type ResourceOwnership,
   type SupervisorPort,
+  type ScanAuthorityFence,
 } from "@lyrashield/runtime-control"
-import { deriveOwnershipId, type RuntimeExecutor } from "./executor"
+import { deriveOwnershipId, type ExecutorContext, type RuntimeExecutor } from "./executor"
 import {
   SupervisorService,
   supervisorJournalEventSchema,
@@ -188,7 +190,8 @@ async function serviceWith<G extends SupervisorPort = FakeProviderGateway>(
   journalPort?: JournalPort<SupervisorJournalEvent>,
   executor = new FakeExecutor(),
   gateway: G = new FakeProviderGateway() as unknown as G,
-  admission: "open" | "closed" = "open"
+  admission: "open" | "closed" = "open",
+  authorityFence: ScanAuthorityFence | null = fixtureAuthorityFence
 ) {
   const activeJournal = journalPort ?? (await journal())
   return {
@@ -197,6 +200,7 @@ async function serviceWith<G extends SupervisorPort = FakeProviderGateway>(
       executor,
       providerGateway: gateway,
       providerGatewayUrl: "http://127.0.0.1:8791",
+      authorityFence: authorityFence ?? undefined,
       signingSecret: secret,
       supervisorInstanceId: "supervisor-test-1",
       admission,
@@ -215,6 +219,244 @@ async function serviceWith<G extends SupervisorPort = FakeProviderGateway>(
 }
 
 describe("SupervisorService", () => {
+  it.each(["EXECUTOR_CREATE", "EXECUTOR_START"] as const)(
+    "passes the live fence guard to the executor during %s",
+    async (phase) => {
+      let expired = false
+      const authorityFence: ScanAuthorityFence = {
+        run: async (binding, effect) =>
+          effect(() => {
+            if (binding.phase === phase && expired) throw new Error("authority expired")
+          }),
+      }
+      class ExpiringExecutor extends FakeExecutor {
+        override async create(
+          key: ExecutorPlan["key"],
+          spec: ExecutorPlan["spec"],
+          context: { attemptId: string; commandId: string; assertActive?: () => void }
+        ): Promise<ResourceOwnership> {
+          await Promise.resolve()
+          if (phase === "EXECUTOR_CREATE") expired = true
+          context.assertActive?.()
+          return super.create(key, spec, context)
+        }
+        override async start(
+          ownership: ResourceOwnership,
+          _spec?: ExecutorPlan["spec"],
+          context?: { assertActive?: () => void }
+        ): Promise<ResourceOwnership> {
+          await Promise.resolve()
+          if (phase === "EXECUTOR_START") expired = true
+          context?.assertActive?.()
+          return super.start(ownership)
+        }
+      }
+      const executor = new ExpiringExecutor()
+      const { service } = await serviceWith(undefined, executor, undefined, "open", authorityFence)
+      const prepared = await service.execute(prepareCommand())
+      const result = await service.execute({
+        type: "START_PAID",
+        commandId: "start-expiring-authority",
+        attemptId: "attempt-1",
+        executorKey: "engine",
+        expectedReceiptHash: prepared.receipt.hash,
+      })
+      expect(result.status).toBe("UNKNOWN")
+      expect(executor.createCalls).toBe(phase === "EXECUTOR_CREATE" ? 0 : 1)
+      expect(executor.startCalls).toBe(0)
+    }
+  )
+  it("rejects preparation without native authority before retaining a command", async () => {
+    const stored = await journal()
+    const gateway = new FakeProviderGateway()
+    const { service, executor } = await serviceWith(stored, undefined, gateway, "open", null)
+    await expect(service.execute(prepareCommand())).rejects.toMatchObject({
+      code: "AUTHORITY_UNAVAILABLE",
+    })
+    expect(await stored.load()).toEqual([])
+    expect(executor.createCalls).toBe(0)
+    expect(gateway.issueCalls).toBe(0)
+  })
+
+  it.each(["EXECUTOR_CREATE", "EXECUTOR_START"] as const)(
+    "revalidates authority at %s without repeating effects",
+    async (deniedPhase) => {
+      const phases: string[] = []
+      const authorityFence: ScanAuthorityFence = {
+        run: async (binding, effect) => {
+          phases.push(binding.phase)
+          expect(binding).toMatchObject({
+            operationId: "operation-1",
+            scanId: "scan-1",
+            workspaceId: "workspace-1",
+            authorityEpochId: "epoch-1",
+            authorityRevision: 3,
+          })
+          expect(binding.authorityChecksum).toMatch(/^[a-f0-9]{64}$/)
+          expect(binding.actionChecksum).toMatch(/^[a-f0-9]{64}$/)
+          if (binding.phase === deniedPhase) throw new Error("membership revoked")
+          return effect(() => undefined)
+        },
+      }
+      const stored = await journal()
+      const gateway = new FakeProviderGateway()
+      const { service, executor } = await serviceWith(
+        stored,
+        undefined,
+        gateway,
+        "open",
+        authorityFence
+      )
+      const prepared = await service.execute(prepareCommand())
+      const start = {
+        type: "START_PAID" as const,
+        commandId: "start-fenced",
+        attemptId: "attempt-1",
+        executorKey: "engine" as const,
+        expectedReceiptHash: prepared.receipt.hash,
+      }
+      const expected = deniedPhase === "EXECUTOR_CREATE" ? "NEVER_DISPATCHED" : "UNKNOWN"
+      expect((await service.execute(start)).status).toBe(expected)
+      expect((await service.execute(start)).status).toBe(expected)
+      expect(phases).toEqual(
+        deniedPhase === "EXECUTOR_CREATE"
+          ? ["PREPARE", "EXECUTOR_CREATE"]
+          : ["PREPARE", "EXECUTOR_CREATE", "EXECUTOR_START"]
+      )
+      expect(executor.createCalls).toBe(deniedPhase === "EXECUTOR_CREATE" ? 0 : 1)
+      expect(executor.startCalls).toBe(0)
+      expect(gateway.revokeCalls).toBe(deniedPhase === "EXECUTOR_CREATE" ? 1 : 0)
+      const { service: restarted } = await serviceWith(
+        stored,
+        executor,
+        gateway,
+        "open",
+        authorityFence
+      )
+      expect((await restarted.getAttempt("attempt-1")).status).toBe(expected)
+      expect((await restarted.execute(start)).status).toBe(expected)
+      expect(executor.createCalls).toBe(deniedPhase === "EXECUTOR_CREATE" ? 0 : 1)
+    }
+  )
+
+  it.each(["revocation", "lookup", "usage"] as const)(
+    "keeps pre-create rejection uncertain when provider %s cannot prove a clean stop",
+    async (failure) => {
+      const authorityFence: ScanAuthorityFence = {
+        run: async (binding, effect) => {
+          if (binding.phase === "EXECUTOR_CREATE") throw new Error("membership revoked")
+          return effect(() => undefined)
+        },
+      }
+      const stored = await journal()
+      const gateway = new FakeProviderGateway()
+      gateway.revokeUnavailable = failure === "revocation"
+      gateway.lookupUnavailable = failure === "lookup"
+      gateway.requestCount = failure === "usage" ? 1 : 0
+      const { service, executor } = await serviceWith(
+        stored,
+        undefined,
+        gateway,
+        "open",
+        authorityFence
+      )
+      const prepared = await service.execute(prepareCommand())
+      const start = {
+        type: "START_PAID" as const,
+        commandId: "start-unsettled",
+        attemptId: "attempt-1",
+        executorKey: "engine" as const,
+        expectedReceiptHash: prepared.receipt.hash,
+      }
+      expect((await service.execute(start)).status).toBe("UNKNOWN")
+      expect((await service.execute(start)).status).toBe("UNKNOWN")
+      expect(executor.createCalls).toBe(0)
+      const { service: restarted } = await serviceWith(
+        stored,
+        executor,
+        gateway,
+        "open",
+        authorityFence
+      )
+      expect((await restarted.getAttempt("attempt-1")).status).toBe("UNKNOWN")
+    }
+  )
+
+  it("retains uncertainty after a terminal journal write fails before acknowledgement", async () => {
+    const stored = await journal()
+    const gateway = new FakeProviderGateway()
+    const fault: JournalPort<SupervisorJournalEvent> = {
+      load: () => stored.load(),
+      append: async (event) => {
+        if (event.type === "command_terminal" && event.status === "NEVER_DISPATCHED")
+          throw new Error("terminal write unavailable")
+        return stored.append(event)
+      },
+    }
+    const authorityFence: ScanAuthorityFence = {
+      run: async (binding, effect) => {
+        if (binding.phase === "EXECUTOR_CREATE") throw new Error("membership revoked")
+        return effect(() => undefined)
+      },
+    }
+    const { service, executor } = await serviceWith(
+      fault,
+      undefined,
+      gateway,
+      "open",
+      authorityFence
+    )
+    const prepared = await service.execute(prepareCommand())
+    const start = {
+      type: "START_PAID" as const,
+      commandId: "start-terminal-unavailable",
+      attemptId: "attempt-1",
+      executorKey: "engine" as const,
+      expectedReceiptHash: prepared.receipt.hash,
+    }
+    await expect(service.execute(start)).rejects.toThrow("terminal write unavailable")
+    const { service: restarted } = await serviceWith(
+      stored,
+      executor,
+      gateway,
+      "open",
+      authorityFence
+    )
+    expect((await restarted.getAttempt("attempt-1")).status).toBe("UNKNOWN")
+    expect((await restarted.execute(start)).status).toBe("UNKNOWN")
+    expect(executor.createCalls).toBe(0)
+    expect(gateway.revokeCalls).toBe(1)
+  })
+
+  it("holds an unacknowledged planned creation even when the daemon was not invoked", async () => {
+    const stored = await journal()
+    const gateway = new FakeProviderGateway()
+    const fault: JournalPort<SupervisorJournalEvent> = {
+      load: () => stored.load(),
+      append: async (event) => {
+        const record = await stored.append(event)
+        if (event.type === "resource_create_planned")
+          throw new Error("planned acknowledgement lost")
+        return record
+      },
+    }
+    const { service, executor } = await serviceWith(fault, undefined, gateway)
+    const prepared = await service.execute(prepareCommand())
+    const start = {
+      type: "START_PAID" as const,
+      commandId: "start-plan-unavailable",
+      attemptId: "attempt-1",
+      executorKey: "engine" as const,
+      expectedReceiptHash: prepared.receipt.hash,
+    }
+    expect((await service.execute(start)).status).toBe("UNKNOWN")
+    const { service: restarted } = await serviceWith(stored, executor, gateway)
+    expect((await restarted.getAttempt("attempt-1")).status).toBe("UNKNOWN")
+    expect((await restarted.execute(start)).status).toBe("UNKNOWN")
+    expect(executor.createCalls).toBe(0)
+    expect(gateway.revokeCalls).toBe(0)
+  })
+
   it.each(["intent", "prepared"] as const)(
     "rejects a signed %s record that changes an existing command on restart",
     async (kind) => {
@@ -427,76 +669,87 @@ describe("SupervisorService", () => {
     expect(executor.startCalls).toBe(0)
   })
 
-  it("durably accepts STOP during create and never starts the late-created executor", async () => {
-    let createEntered: () => void = () => undefined
-    let finishCreate: () => void = () => undefined
-    const entered = new Promise<void>((resolve) => {
-      createEntered = resolve
-    })
-    const release = new Promise<void>((resolve) => {
-      finishCreate = resolve
-    })
-    class DelayedExecutor extends FakeExecutor {
-      override async create(
-        ...args: Parameters<FakeExecutor["create"]>
-      ): Promise<ResourceOwnership> {
-        createEntered()
-        await release
-        return super.create(...args)
-      }
-    }
-    const storedJournal = await journal()
-    let confirmStop: () => void = () => undefined
-    const stopPersisted = new Promise<void>((resolve) => {
-      confirmStop = resolve
-    })
-    const observedJournal: JournalPort<SupervisorJournalEvent> = {
-      load: () => storedJournal.load(),
-      append: async (event) => {
-        const record = await storedJournal.append(event)
-        if (event.type === "command_intent" && event.command.commandId === "cmd-stop-delayed") {
-          confirmStop()
+  it.each([false, true])(
+    "durably accepts STOP during create (guard before mutation=%s)",
+    async (guardBeforeCreate) => {
+      let guardedCallbackSeen = false
+      let createEntered: () => void = () => undefined
+      let finishCreate: () => void = () => undefined
+      const entered = new Promise<void>((resolve) => {
+        createEntered = resolve
+      })
+      const release = new Promise<void>((resolve) => {
+        finishCreate = resolve
+      })
+      class DelayedExecutor extends FakeExecutor {
+        override async create(
+          ...args: Parameters<FakeExecutor["create"]>
+        ): Promise<ResourceOwnership> {
+          createEntered()
+          await release
+          if (guardBeforeCreate) {
+            const guard = (args[2] as ExecutorContext).assertActive
+            guardedCallbackSeen = typeof guard === "function"
+            guard()
+          }
+          return super.create(...args)
         }
-        return record
-      },
+      }
+      const storedJournal = await journal()
+      let confirmStop: () => void = () => undefined
+      const stopPersisted = new Promise<void>((resolve) => {
+        confirmStop = resolve
+      })
+      const observedJournal: JournalPort<SupervisorJournalEvent> = {
+        load: () => storedJournal.load(),
+        append: async (event) => {
+          const record = await storedJournal.append(event)
+          if (event.type === "command_intent" && event.command.commandId === "cmd-stop-delayed") {
+            confirmStop()
+          }
+          return record
+        },
+      }
+      const executor = new DelayedExecutor()
+      const { service } = await serviceWith(observedJournal, executor)
+      const prepared = await service.execute(prepareCommand())
+      const starting = service.execute({
+        type: "START_PAID",
+        commandId: "cmd-start-delayed",
+        attemptId: "attempt-1",
+        executorKey: "engine",
+        expectedReceiptHash: prepared.receipt.hash,
+      })
+      await entered
+      const beforeStop = await service.getAttempt("attempt-1")
+      const stopCommand = {
+        type: "STOP" as const,
+        commandId: "cmd-stop-delayed",
+        attemptId: "attempt-1",
+        expectedReceiptHash: beforeStop.receipt.hash,
+      }
+      const stopping = service.execute(stopCommand)
+      await stopPersisted
+      const beforeRelease = await storedJournal.load()
+      expect(
+        beforeRelease.some(
+          (entry) =>
+            entry.payload.type === "command_intent" &&
+            entry.payload.command.commandId === stopCommand.commandId
+        )
+      ).toBe(true)
+      finishCreate()
+      const [started, stopped] = await Promise.all([starting, stopping])
+      expect(started.status).toBe("UNKNOWN")
+      expect(stopped.status).toBe(guardBeforeCreate ? "UNKNOWN" : "STOPPED")
+      expect(guardedCallbackSeen).toBe(guardBeforeCreate)
+      expect(executor.createCalls).toBe(guardBeforeCreate ? 0 : 1)
+      expect(executor.startCalls).toBe(0)
+      expect(executor.stopCalls).toBe(guardBeforeCreate ? 0 : 1)
+      expect(executor.state).toBe("ABSENT")
+      await expect(service.execute(stopCommand)).resolves.toEqual(stopped)
     }
-    const executor = new DelayedExecutor()
-    const { service } = await serviceWith(observedJournal, executor)
-    const prepared = await service.execute(prepareCommand())
-    const starting = service.execute({
-      type: "START_PAID",
-      commandId: "cmd-start-delayed",
-      attemptId: "attempt-1",
-      executorKey: "engine",
-      expectedReceiptHash: prepared.receipt.hash,
-    })
-    await entered
-    const beforeStop = await service.getAttempt("attempt-1")
-    const stopCommand = {
-      type: "STOP" as const,
-      commandId: "cmd-stop-delayed",
-      attemptId: "attempt-1",
-      expectedReceiptHash: beforeStop.receipt.hash,
-    }
-    const stopping = service.execute(stopCommand)
-    await stopPersisted
-    const beforeRelease = await storedJournal.load()
-    expect(
-      beforeRelease.some(
-        (entry) =>
-          entry.payload.type === "command_intent" &&
-          entry.payload.command.commandId === stopCommand.commandId
-      )
-    ).toBe(true)
-    finishCreate()
-    const [started, stopped] = await Promise.all([starting, stopping])
-    expect(started.status).toBe("UNKNOWN")
-    expect(stopped.status).toBe("STOPPED")
-    expect(executor.startCalls).toBe(0)
-    expect(executor.stopCalls).toBe(1)
-    expect(executor.state).toBe("ABSENT")
-    await expect(service.execute(stopCommand)).resolves.toEqual(stopped)
-  })
+  )
 
   it("begins grant revocation while a start acknowledgement is still pending", async () => {
     let startEntered: () => void = () => undefined
@@ -733,90 +986,107 @@ describe("SupervisorService", () => {
     expect(again.status).toBe("UNKNOWN")
   })
 
-  it("keeps the attempt unsettled with a real gateway and an upstream that ignores abort", async () => {
-    const gatewayModule = "../../provider-gateway/src/service.ts"
-    const fixtureModule = "../../provider-gateway/src/test-fixtures.ts"
-    const { fixturePolicy } = await import(fixtureModule)
-    const { ProviderGatewayService, providerJournalEventSchema } = await import(gatewayModule)
-    const root = await mkdtemp(join(tmpdir(), "supervisor-gateway-test-"))
-    roots.push(root)
-    let notifyStarted: () => void = () => undefined
-    const requestStarted = new Promise<void>((resolve) => {
-      notifyStarted = resolve
-    })
-    const gateway = new ProviderGatewayService({
-      journal: new SignedJournal(join(root, "provider.jsonl"), secret, (value: unknown) =>
-        providerJournalEventSchema.parse(value)
-      ),
-      signingSecret: secret,
-      responseEncryptionSecret: "e".repeat(48),
-      authorizeGrant: async (request: ProviderGrantRequest) => {
-        expect(request).toMatchObject({
-          attemptId: "attempt-1",
-          scanId: "scan-1",
-          workspaceId: "workspace-1",
-          operationId: "operation-1",
-          authorityEpochId: "epoch-1",
-          authorityRevision: 3,
-          providerId: "azure-ai",
-          expiresAt,
-        })
-        return fixturePolicy
-      },
-      admission: "open",
-      providers: new Map([
-        [
-          "azure-ai",
-          {
-            id: "azure-ai",
-            baseUrl: "https://provider.example.test/openai",
-            auth: { kind: "api-key", credential: "fixture-secret", headerName: "api-key" },
-            allowedPathPrefixes: ["/openai/"],
-            requestPolicy: fixturePolicy,
-          },
-        ],
-      ]),
-      fetchImpl: () => {
-        notifyStarted()
-        return new Promise<Response>(() => undefined)
-      },
-      now: () => now,
-    })
-    const { service, executor } = await serviceWith(await journal(), new FakeExecutor(), gateway)
-    const prepared = await service.execute(prepareCommand())
-    const started = await service.execute({
-      type: "START_PAID",
-      commandId: "cmd-start-real-gateway",
-      attemptId: "attempt-1",
-      executorKey: "engine",
-      expectedReceiptHash: prepared.receipt.hash,
-    })
-    const grant = await gateway.findGrantByRequest("cmd-start-real-gateway")
-    expect(grant).not.toBeNull()
-    const pending = gateway
-      .proxy({
-        providerId: "azure-ai",
-        path: fixturePolicy.endpoint,
-        method: "POST",
-        authorization: `Bearer ${grant!.token}`,
-        requestId: "unsettled-provider-call",
-        contentType: "application/json",
-        body: Buffer.from(
-          JSON.stringify({ model: "gpt-6-luna", input: "hello", max_output_tokens: 64 })
-        ),
+  it.each(["invoked", "denied"] as const)(
+    "stops a real gateway attempt with provider dispatch %s",
+    async (dispatch) => {
+      const gatewayModule = "../../provider-gateway/src/service.ts"
+      const fixtureModule = "../../provider-gateway/src/test-fixtures.ts"
+      const {
+        fixturePolicy,
+        fixtureActionIntentPublisher,
+        fixtureAuthorityFence: gatewayFixtureAuthorityFence,
+      } = await import(fixtureModule)
+      const { ProviderGatewayService, providerJournalEventSchema } = await import(gatewayModule)
+      const root = await mkdtemp(join(tmpdir(), "supervisor-gateway-test-"))
+      roots.push(root)
+      let notifyStarted: () => void = () => undefined
+      const requestStarted = new Promise<void>((resolve) => {
+        notifyStarted = resolve
       })
-      .catch((error: unknown) => error)
-    await requestStarted
-    const stopped = await service.execute({
-      type: "STOP",
-      commandId: "cmd-stop-real-gateway",
-      attemptId: "attempt-1",
-      expectedReceiptHash: started.receipt.hash,
-    })
-    expect(await pending).toMatchObject({ code: "PROVIDER_UNAVAILABLE" })
-    expect(executor.stopCalls).toBe(1)
-    expect(stopped.status).toBe("UNKNOWN")
-  })
+      const gateway = new ProviderGatewayService({
+        publishActionIntent: fixtureActionIntentPublisher,
+        journal: new SignedJournal(join(root, "provider.jsonl"), secret, (value: unknown) =>
+          providerJournalEventSchema.parse(value)
+        ),
+        authorityFence:
+          dispatch === "denied"
+            ? {
+                run: async () => {
+                  throw new Error("dispatch authority revoked")
+                },
+              }
+            : gatewayFixtureAuthorityFence,
+        signingSecret: secret,
+        responseEncryptionSecret: "e".repeat(48),
+        authorizeGrant: async (request: ProviderGrantRequest) => {
+          expect(request).toMatchObject({
+            attemptId: "attempt-1",
+            scanId: "scan-1",
+            workspaceId: "workspace-1",
+            operationId: "operation-1",
+            authorityEpochId: "epoch-1",
+            authorityRevision: 3,
+            providerId: "azure-ai",
+            expiresAt,
+          })
+          return fixturePolicy
+        },
+        admission: "open",
+        providers: new Map([
+          [
+            "azure-ai",
+            {
+              id: "azure-ai",
+              baseUrl: "https://provider.example.test/openai",
+              auth: { kind: "api-key", credential: "fixture-secret", headerName: "api-key" },
+              allowedPathPrefixes: ["/openai/"],
+              requestPolicy: fixturePolicy,
+            },
+          ],
+        ]),
+        fetchImpl: () => {
+          notifyStarted()
+          return new Promise<Response>(() => undefined)
+        },
+        now: () => now,
+      })
+      const { service, executor } = await serviceWith(await journal(), new FakeExecutor(), gateway)
+      const prepared = await service.execute(prepareCommand())
+      const started = await service.execute({
+        type: "START_PAID",
+        commandId: "cmd-start-real-gateway",
+        attemptId: "attempt-1",
+        executorKey: "engine",
+        expectedReceiptHash: prepared.receipt.hash,
+      })
+      const grant = await gateway.findGrantByRequest("cmd-start-real-gateway")
+      expect(grant).not.toBeNull()
+      const pending = gateway
+        .proxy({
+          providerId: "azure-ai",
+          path: fixturePolicy.endpoint,
+          method: "POST",
+          authorization: `Bearer ${grant!.token}`,
+          requestId: "unsettled-provider-call",
+          contentType: "application/json",
+          body: Buffer.from(
+            JSON.stringify({ model: "gpt-6-luna", input: "hello", max_output_tokens: 64 })
+          ),
+        })
+        .catch((error: unknown) => error)
+      if (dispatch === "invoked") await requestStarted
+      else await pending
+      const stopped = await service.execute({
+        type: "STOP",
+        commandId: "cmd-stop-real-gateway",
+        attemptId: "attempt-1",
+        expectedReceiptHash: started.receipt.hash,
+      })
+      expect(await pending).toMatchObject({ code: "PROVIDER_UNAVAILABLE" })
+      expect(executor.stopCalls).toBe(1)
+      expect(stopped.status).toBe(dispatch === "invoked" ? "UNKNOWN" : "STOPPED")
+    }
+  )
 
   it.each(["STOP", "RECONCILE"] as const)(
     "%s attempts every teardown even when one executor fails",
@@ -1079,7 +1349,7 @@ describe("SupervisorService", () => {
         executorKey: "engine",
         expectedReceiptHash: prepared.receipt.hash,
       })
-    ).rejects.toThrow(/disk full/)
+    ).resolves.toMatchObject({ status: "UNKNOWN" })
     expect(executor.createCalls).toBe(0)
   })
 

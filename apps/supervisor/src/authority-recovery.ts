@@ -131,10 +131,38 @@ async function recoveryPosition(ctx: RecoveryContext, originals: Record[], wrapp
   return { pending, pendingStart, confirmedHistory }
 }
 
+function pendingRecoveryRequest(
+  ctx: RecoveryContext,
+  originals: Record[],
+  pending: Record | undefined
+): SupervisorRecoveryRequest {
+  if (!pending) rejected("automatic recovery requires a pending original", true)
+  const commandId = eventCommandId(pending.payload)
+  const intents = originals.filter(
+    (record) =>
+      record.payload.type === "command_intent" && record.payload.command.commandId === commandId
+  )
+  if (intents.length !== 1 || intents[0]!.payload.type !== "command_intent")
+    rejected("pending event has no unique original command")
+  const intent = intents[0]!
+  if (intent.payload.type !== "command_intent") rejected("original command is unavailable")
+  const binding = ctx.bindingFor(intent, originals)
+  return {
+    epochId: binding.authorityEpochId,
+    supervisorInstanceId: intent.payload.supervisorInstanceId,
+    workspaceId: binding.workspaceId,
+    scanId: binding.scanId,
+    operationId: binding.operationId,
+    attemptId: binding.attemptId,
+    commandId: intent.payload.command.commandId,
+    expectedCommandHash: sha256Hex(canonicalJson(intent.payload.command)),
+  }
+}
+
 /** Explicit durability repair and a durable UNKNOWN hold; never execution/revocation. */
 export async function recoverSignedEvent(
   ctx: RecoveryContext,
-  request: SupervisorRecoveryRequest
+  input: SupervisorRecoveryRequest | undefined
 ): Promise<SupervisorJournalRecovery<SupervisorJournalEvent>> {
   await ctx.assertStreamAuthorized()
   const { originals, wrapped } = await ctx.localHistory()
@@ -143,6 +171,7 @@ export async function recoverSignedEvent(
     originals,
     wrapped.length
   )
+  const request = input ?? pendingRecoveryRequest(ctx, originals, pending)
   const intents = originals.filter(
     (record) =>
       record.payload.type === "command_intent" &&

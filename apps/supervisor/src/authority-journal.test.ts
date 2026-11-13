@@ -1,4 +1,5 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
+import { explicitRecoveryJournal, fixtureAuthorityFence } from "./test-fixtures"
+import { link, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { createServer } from "node:http"
@@ -24,7 +25,7 @@ import {
 } from "./authority-journal"
 import { supervisorJournalEventSchema, type SupervisorJournalEvent } from "./journal-events"
 import { createSupervisorHandler } from "./http"
-import { SupervisorService } from "./service"
+import { SupervisorService, type SupervisorServiceOptions } from "./service"
 
 const roots: string[] = []
 const signingSecret = "a".repeat(48)
@@ -112,6 +113,8 @@ class Mirror implements AuthorityMirror {
     head: AuthorityHead,
     record: JournalRecord<unknown>
   ) {
+    if (same(head, this.head) && same(this.records.get(record.sequence) ?? null, record))
+      return "written" as const
     if (!same(previous, this.head)) return "conflict" as const
     this.head = structuredClone(head)
     this.records.set(record.sequence, structuredClone(record))
@@ -241,7 +244,7 @@ describe("supervisor independent journal adapter", () => {
     )
     expect(originalRange).toHaveBeenCalledTimes(2)
     expect(wrapperRange).toHaveBeenCalledTimes(2)
-    expect(objectReads).toHaveBeenCalledTimes(6)
+    expect(objectReads).toHaveBeenCalledTimes(10)
     expect(mirrorReads).toHaveBeenCalledTimes(4)
     await f.original.close()
     await f.local.close()
@@ -509,7 +512,7 @@ describe("supervisor independent journal adapter", () => {
   it("holds service retries and restart until exact trusted journal recovery occurs", async () => {
     const fixture = await setup()
     let clock = new Date("2026-11-11T10:00:00.000Z")
-    const first = serviceFixture(fixture.journal, () => clock)
+    const first = serviceFixture(explicitRecoveryJournal(fixture.journal), () => clock)
     fixture.store.loseAcknowledgement = true
     await expect(first.service.execute(first.prepare)).rejects.toMatchObject({
       code: "AUTHORITY_UNKNOWN",
@@ -518,7 +521,7 @@ describe("supervisor independent journal adapter", () => {
     const bytes = await readFile(fixture.originalPath, "utf8")
     clock = new Date(clock.getTime() + 1)
     await expect(first.service.execute(first.prepare)).rejects.toMatchObject({
-      code: "IDENTITY_CONFLICT",
+      code: "REPLAY_REQUIRED",
     })
     expect(first.effects.count).toBe(0)
     await fixture.original.close()
@@ -537,7 +540,7 @@ describe("supervisor independent journal adapter", () => {
       authorizeRecovery: async () => true,
     })
     try {
-      const second = serviceFixture(restarted.journal, () => clock)
+      const second = serviceFixture(explicitRecoveryJournal(restarted.journal), () => clock)
       await expect(second.service.initialize()).rejects.toMatchObject({ code: "REPLAY_REQUIRED" })
       await expect(second.service.execute(second.prepare)).rejects.toMatchObject({
         code: "REPLAY_REQUIRED",
@@ -671,10 +674,49 @@ describe("supervisor independent journal adapter", () => {
       expect(await journal.append(intent)).toEqual(pending)
       expect(await original.load()).toEqual([pending])
       expect(await local.load()).toEqual([wrapped])
-      expect(store.writes).toBe(2)
+      expect(store.writes).toBe(3)
       expect(mirror.writes).toBe(1)
     }
   )
+
+  it("binds paginated evidence to one authenticated head and rejects changed continuation", async () => {
+    const f = await setup()
+    await f.journal.append(intent)
+    await f.journal.append({
+      type: "attempt_status",
+      supervisorInstanceId,
+      observedAt: intent.observedAt,
+      attemptId: binding.attemptId,
+      status: "UNKNOWN",
+    })
+    const first = await f.journal.readCursor({ ...cursor, limit: 1 })
+    expect(first.hasMore).toBe(true)
+    expect(first.snapshotHead).toEqual(f.mirror.head)
+    expect(first.nextCursor).toMatchObject({
+      snapshotSequence: 2,
+      snapshotHash: f.mirror.head!.recordHash,
+    })
+    const second = await f.journal.readCursor(first.nextCursor)
+    expect(second.hasMore).toBe(false)
+    expect(second.snapshotHead).toEqual(first.snapshotHead)
+    await f.journal.append({
+      type: "attempt_status",
+      supervisorInstanceId,
+      observedAt: intent.observedAt,
+      attemptId: binding.attemptId,
+      status: "UNKNOWN",
+    })
+    await expect(f.journal.readCursor(first.nextCursor)).rejects.toMatchObject({
+      code: "CURSOR_CONFLICT",
+    })
+  })
+
+  it("rejects a cursor with only one snapshot binding field", async () => {
+    const f = await setup()
+    await expect(f.journal.readCursor({ ...cursor, snapshotSequence: 0 })).rejects.toMatchObject({
+      code: "INVALID_CURSOR",
+    })
+  })
 
   it("requires exact original replay when the original fsync acknowledgement is lost", async () => {
     const fixture = await setup()
@@ -857,6 +899,94 @@ describe("supervisor independent journal adapter", () => {
       })
     ).toThrow("separate files")
   })
+
+  it.each([
+    "segment",
+    "segment-reversed",
+    "segment-stem",
+    "segment-stem-reversed",
+    "lock",
+    "case-variant-segment",
+    "case-variant-lock",
+    "unicode-variant-segment",
+    "parent-alias-segment",
+  ])("rejects %s factory namespace collisions before creating either writer", async (kind) => {
+    const root = await mkdtemp(join(tmpdir(), "supervisor-factory-namespace-"))
+    roots.push(root)
+    let originalPath = join(root, "original.jsonl")
+    let independentPath = `${originalPath}.segment.2`
+    if (kind === "segment-reversed")
+      [originalPath, independentPath] = [independentPath, originalPath]
+    if (kind === "segment-stem") independentPath = `${originalPath}.segment`
+    if (kind === "segment-stem-reversed") {
+      independentPath = originalPath
+      originalPath = `${originalPath}.segment`
+    }
+    if (kind === "lock") independentPath = `${originalPath}.lock`
+    if (kind === "case-variant-segment") independentPath = join(root, "ORIGINAL.JSONL.SEGMENT.2")
+    if (kind === "case-variant-lock") independentPath = join(root, "ORIGINAL.JSONL.LOCK")
+    if (kind === "unicode-variant-segment") {
+      originalPath = join(root, "café")
+      independentPath = join(root, "cafe\u0301.segment.2")
+    }
+    if (kind === "parent-alias-segment") {
+      await symlink(root, join(root, "alias"))
+      independentPath = join(root, "alias", "original.jsonl.segment.2")
+    }
+    const names = await readdir(root)
+    expect(() =>
+      createSupervisorAuthorityJournal({
+        originalPath,
+        independentPath,
+        originalSigningSecret: signingSecret,
+        signingSecret,
+        epochId,
+        supervisorInstanceId,
+        store: new Store(),
+        mirror: new Mirror(),
+        authorize: async () => false,
+        authorizeStream: async () => true,
+        authorizeRecovery: async () => true,
+      })
+    ).toThrow(/namespace|separate files/)
+    expect(await readdir(root)).toEqual(names)
+  })
+
+  it.each(["normalized", "symlink", "parent-alias", "hardlink"])(
+    "rejects %s factory file aliases without changing retained bytes",
+    async (kind) => {
+      const root = await mkdtemp(join(tmpdir(), "supervisor-factory-alias-"))
+      roots.push(root)
+      const originalPath = join(root, "original.jsonl")
+      let independentPath = join(root, "independent.jsonl")
+      await writeFile(originalPath, "retained bytes")
+      if (kind === "normalized") independentPath = `${root}/./original.jsonl`
+      if (kind === "symlink") await symlink(originalPath, independentPath)
+      if (kind === "hardlink") await link(originalPath, independentPath)
+      if (kind === "parent-alias") {
+        await symlink(root, join(root, "alias"))
+        independentPath = join(root, "alias", "original.jsonl")
+      }
+      const names = await readdir(root)
+      expect(() =>
+        createSupervisorAuthorityJournal({
+          originalPath,
+          independentPath,
+          originalSigningSecret: signingSecret,
+          signingSecret,
+          epochId,
+          supervisorInstanceId,
+          store: new Store(),
+          mirror: new Mirror(),
+          authorize: async () => false,
+          authorizeStream: async () => true,
+          authorizeRecovery: async () => true,
+        })
+      ).toThrow(/separate files|symbolic/)
+      expect(await readdir(root)).toEqual(names)
+      expect(await readFile(originalPath, "utf8")).toBe("retained bytes")
+    }
+  )
 
   it("reopens the factory's original and wrapper files without changing signed bytes", async () => {
     const root = await mkdtemp(join(tmpdir(), "supervisor-factory-test-"))
@@ -1045,7 +1175,7 @@ describe("supervisor independent journal adapter", () => {
 })
 
 function serviceFixture(
-  journal: SupervisorAuthorityJournal,
+  journal: SupervisorServiceOptions["journal"],
   now: () => Date = () => new Date("2026-11-11T10:00:00.000Z")
 ) {
   const effects = { count: 0 }
@@ -1072,6 +1202,7 @@ function serviceFixture(
     ],
   }
   const service = new SupervisorService({
+    authorityFence: fixtureAuthorityFence,
     journal,
     signingSecret,
     supervisorInstanceId,

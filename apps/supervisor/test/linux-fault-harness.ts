@@ -1,3 +1,4 @@
+import { fixtureAuthorityFence } from "../src/test-fixtures"
 import assert from "node:assert/strict"
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
@@ -208,6 +209,7 @@ function service(
     executor,
     providerGateway: gateway,
     providerGatewayUrl: "http://127.0.0.1:8791",
+    authorityFence: fixtureAuthorityFence,
     signingSecret: secret,
     supervisorInstanceId: "supervisor-fault-1",
     admission: "open",

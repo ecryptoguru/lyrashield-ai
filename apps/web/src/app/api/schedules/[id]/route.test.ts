@@ -121,6 +121,17 @@ describe("PATCH /api/schedules/[id]", () => {
     expect(updateSchedule).toHaveBeenCalled()
   })
 
+  it("refuses enabling a stored schedule at the shared boundary", async () => {
+    const res = await PATCH(makePatchRequest("sched-1", { workspaceId: "ws-1", enabled: true }), {
+      params: Promise.resolve({ id: "sched-1" }),
+    })
+
+    expect(res.status).toBe(403)
+    const json = await res.json()
+    expect(json.error.code).toBe("SCHEDULE_UNAVAILABLE")
+    expect(updateSchedule).not.toHaveBeenCalled()
+  })
+
   it("denies updates without schedule:update", async () => {
     vi.mocked(requirePermission).mockRejectedValueOnce(new Error("FORBIDDEN") as never)
 

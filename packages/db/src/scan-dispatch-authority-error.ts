@@ -12,7 +12,8 @@ export class ScanDispatchAuthorityError extends Error {
       | "DATABASE_REJECTED"
       | "PREPARATION_AUTHORITY_CLOSED"
       | "PREPARATION_AUTHORITY_BUSY"
-      | "PREPARATION_AUTHORITY_UNAVAILABLE",
+      | "PREPARATION_AUTHORITY_UNAVAILABLE"
+      | `SUPERVISOR_${string}`,
     message: string,
     options?: ErrorOptions
   ) {

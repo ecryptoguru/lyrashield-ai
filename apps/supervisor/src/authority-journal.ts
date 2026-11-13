@@ -1,4 +1,3 @@
-import { z } from "zod"
 import {
   IndependentAuthorityError,
   IndependentAuthorityJournal,
@@ -8,6 +7,7 @@ import {
   SignedJournal,
   authorityEventSchema,
   canonicalJson,
+  bindSupervisorJournalSnapshot,
   supervisorJournalCursorSchema,
   supervisorRecoveryRequestSchema,
   type AttemptBinding,
@@ -18,12 +18,18 @@ import {
   type BoundedAuthorityMirror,
   type BoundedConditionalObjectStore,
   type SupervisorJournalPage,
+  type SupervisorJournalCursor,
   type SupervisorJournalReader,
   type SupervisorJournalRecovery,
   type SupervisorJournalRecoveryPort,
 } from "@lyrashield/runtime-control"
-import { supervisorJournalEventSchema, type SupervisorJournalEvent } from "./journal-events"
-import { bindingFor, attemptFor } from "./authority-bindings"
+import {
+  supervisorJournalEventSchema,
+  supervisorJournalRecordSchema,
+  type SupervisorJournalEvent,
+} from "./journal-events"
+import { inspectJournalPath, journalPathsOverlap } from "./journal-paths"
+import { bindingFor, attemptFor, same, conflict } from "./authority-bindings"
 import {
   recoverSignedEvent,
   RecoverySelectionError,
@@ -46,18 +52,6 @@ export const SUPERVISOR_CURSOR_HISTORY_LIMITS = {
 } as const
 type LocalSnapshot = { originals: OriginalRecord[]; wrapped: WrappedRecord[] }
 
-const hashSchema = z.string().regex(/^[a-f0-9]{64}$/)
-const originalRecordSchema = z
-  .object({
-    version: z.literal(1),
-    sequence: z.number().int().positive().safe(),
-    previousHash: hashSchema,
-    hash: hashSchema,
-    signature: hashSchema,
-    payload: supervisorJournalEventSchema,
-  })
-  .strict()
-
 type DurabilityOptions = Omit<
   IndependentAuthorityJournalOptions<OriginalRecord>,
   "local" | "payloadSchema" | "authorize"
@@ -77,14 +71,6 @@ type DurabilityOptions = Omit<
 export interface SupervisorAuthorityJournalOptions extends DurabilityOptions {
   original: JournalPort<SupervisorJournalEvent>
   local: JournalPort<WrappedEvent>
-}
-
-function same(left: unknown, right: unknown): boolean {
-  return canonicalJson(left) === canonicalJson(right)
-}
-
-function conflict(message: string): never {
-  throw new IndependentAuthorityError("AUTHORITY_CONFLICT", message)
 }
 
 /**
@@ -124,7 +110,7 @@ export class SupervisorAuthorityJournal
             }
           : {}),
       },
-      payloadSchema: originalRecordSchema,
+      payloadSchema: supervisorJournalRecordSchema,
       authorize: async (event) => {
         const originals = this.originals
         if (!originals)
@@ -426,8 +412,9 @@ export class SupervisorAuthorityJournal
   }
 
   async recoverStored(input: unknown): Promise<SupervisorJournalRecovery<SupervisorJournalEvent>> {
-    const parsed = supervisorRecoveryRequestSchema.safeParse(input)
-    if (!parsed.success)
+    const parsed =
+      input === undefined ? undefined : supervisorRecoveryRequestSchema.safeParse(input)
+    if (parsed && !parsed.success)
       throw new IndependentAuthorityError("INVALID_RECOVERY", "invalid recovery selector")
     return this.serialized(() =>
       recoverSignedEvent(
@@ -453,9 +440,13 @@ export class SupervisorAuthorityJournal
             this.options.authorize(this.eventFor(record, originals), bindingFor(record, originals)),
           authorizeRecovery: this.options.authorizeRecovery,
         },
-        parsed.data
+        parsed?.data
       )
     )
+  }
+
+  async recoverPending(): Promise<SupervisorJournalRecovery<SupervisorJournalEvent>> {
+    return this.recoverStored(undefined)
   }
 
   async readCursor(input: unknown): Promise<SupervisorJournalPage<SupervisorJournalEvent>> {
@@ -515,16 +506,20 @@ export class SupervisorAuthorityJournal
         ) {
           conflict("bounded original and independent streams disagree")
         }
+        const snapshotHead = this.independent.confirmedHead()
+        const snapshotCursor = bindSupervisorJournalSnapshot(cursor, snapshotHead)
         const page: SupervisorJournalPage<SupervisorJournalEvent> = {
           records: [],
-          nextCursor: cursor,
+          snapshotHead,
+          nextCursor: snapshotCursor,
           hasMore: originals.hasMore,
         }
         for (const record of confirmed.records) {
           const next = {
             records: [...page.records, record],
+            snapshotHead,
             nextCursor: {
-              ...cursor,
+              ...snapshotCursor,
               afterSequence: record.sequence,
               afterHash: record.payload.payload.hash,
             },
@@ -551,6 +546,12 @@ export class SupervisorAuthorityJournal
         return page
       })
     }
+    return this.readFallbackCursor(cursor)
+  }
+
+  private async readFallbackCursor(
+    cursor: SupervisorJournalCursor
+  ): Promise<SupervisorJournalPage<SupervisorJournalEvent>> {
     await this.assertStreamAuthorized()
     const snapshot = await this.captureCursorSnapshot()
     return this.serialized(async () => {
@@ -573,9 +574,12 @@ export class SupervisorAuthorityJournal
       ) {
         throw new IndependentAuthorityError("CURSOR_CONFLICT", "cursor predecessor does not match")
       }
+      const snapshotHead = this.independent.confirmedHead()
+      const snapshotCursor = bindSupervisorJournalSnapshot(cursor, snapshotHead)
       const page: SupervisorJournalPage<SupervisorJournalEvent> = {
         records: [],
-        nextCursor: cursor,
+        snapshotHead,
+        nextCursor: snapshotCursor,
         hasMore: cursor.afterSequence < history.length,
       }
       for (const record of history.slice(
@@ -584,8 +588,9 @@ export class SupervisorAuthorityJournal
       )) {
         const candidate = {
           records: [...page.records, record],
+          snapshotHead,
           nextCursor: {
-            ...cursor,
+            ...snapshotCursor,
             afterSequence: record.payload.payload.sequence,
             afterHash: record.payload.payload.hash,
           },
@@ -615,14 +620,21 @@ export function createSupervisorAuthorityJournal(
     originalSigningSecret: string
   }
 ): { journal: SupervisorAuthorityJournal; close: () => Promise<void> } {
-  if (options.originalPath === options.independentPath) {
-    throw new Error("original and independent journals require separate files")
+  if (
+    journalPathsOverlap(
+      inspectJournalPath(options.originalPath),
+      inspectJournalPath(options.independentPath)
+    )
+  ) {
+    throw new Error(
+      "original and independent journals require separate files and namespaces, including case variants"
+    )
   }
   const original = new SignedJournal(options.originalPath, options.originalSigningSecret, (value) =>
     supervisorJournalEventSchema.parse(value)
   )
   const local = new SignedJournal(options.independentPath, options.signingSecret, (value) =>
-    authorityEventSchema(originalRecordSchema).parse(value)
+    authorityEventSchema(supervisorJournalRecordSchema).parse(value)
   )
   return {
     journal: new SupervisorAuthorityJournal({ ...options, original, local }),

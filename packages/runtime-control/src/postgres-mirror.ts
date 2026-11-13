@@ -1,6 +1,7 @@
 import { z } from "zod"
 import { performance } from "node:perf_hooks"
-import { canonicalJson } from "./canonical-json"
+import { canonicalJson, sha256Hex } from "./canonical-json"
+import { journalSealSchema, type JournalSeal } from "./journal-seal"
 import {
   authorityEventSchema,
   headSchema,
@@ -16,6 +17,8 @@ export interface AuthoritySqlClient {
 }
 export interface AuthoritySqlConnection extends AuthoritySqlClient {
   release(destroy?: boolean): void
+  on?(event: "error" | "end", listener: () => void): unknown
+  off?(event: "error" | "end", listener: () => void): unknown
 }
 export interface AuthoritySqlPool extends AuthoritySqlClient {
   /** Must check out a fresh idle connection, never a caller's transaction. */
@@ -275,6 +278,88 @@ export class PostgresAuthorityMirror implements AuthorityMirror, BoundedAuthorit
         z.number().int().positive().safe().parse(sequence)
       }
     )
+  }
+
+  readSealHeadBounded(maxBytes: number): Promise<JournalSeal | null> {
+    return this.boundedRead(
+      maxBytes,
+      (connection) =>
+        connection.query(
+          `WITH evidence AS MATERIALIZED (SELECT lyrashield_authority.read_seal_head($1,$2) AS bytes)
+         SELECT CASE WHEN octet_length(bytes) <= $3::integer THEN bytes END AS bytes,
+                COALESCE(octet_length(bytes) > $3::integer, false) AS oversized FROM evidence`,
+          [this.epochId, this.supervisorInstanceId, String(maxBytes)]
+        ),
+      (value) => (value === null ? null : this.parseSeal(value))
+    )
+  }
+
+  readSealBounded(revision: number, maxBytes: number): Promise<JournalSeal | null> {
+    return this.boundedRead(
+      maxBytes,
+      (connection) =>
+        connection.query(
+          `WITH evidence AS MATERIALIZED (SELECT lyrashield_authority.read_seal($1,$2,$3::bigint) AS bytes)
+         SELECT CASE WHEN octet_length(bytes) <= $4::integer THEN bytes END AS bytes,
+                COALESCE(octet_length(bytes) > $4::integer, false) AS oversized FROM evidence`,
+          [this.epochId, this.supervisorInstanceId, String(revision), String(maxBytes)]
+        ),
+      (value) => {
+        if (value === null) return null
+        const seal = this.parseSeal(value)
+        if (seal.revision !== revision) throw new Error("authority seal revision mismatch")
+        return seal
+      },
+      () => {
+        z.number().int().positive().safe().parse(revision)
+      }
+    )
+  }
+
+  private parseSeal(value: unknown): JournalSeal {
+    const seal = journalSealSchema.parse(value)
+    if (seal.epochId !== this.epochId || seal.supervisorInstanceId !== this.supervisorInstanceId)
+      throw new Error("authority seal stream mismatch")
+    return seal
+  }
+
+  async compareAndAppendSeal(
+    previous: JournalSeal | null,
+    next: JournalSeal,
+    expectedJournalHead: AuthorityHead
+  ): Promise<"written" | "conflict"> {
+    const parsed = this.parseSeal(next)
+    const prior = previous ? this.parseSeal(previous) : null
+    const head = headSchema.parse(expectedJournalHead)
+    this.bind(head)
+    if (
+      parsed.revision !== (prior?.revision ?? 0) + 1 ||
+      parsed.firstSequence !== (prior?.lastSequence ?? 0) + 1 ||
+      parsed.previousSealHash !== (prior?.sealHash ?? "0".repeat(64)) ||
+      parsed.originalPreviousHash !== (prior?.originalLastHash ?? "0".repeat(64)) ||
+      parsed.wrapperPreviousHash !== (prior?.wrapperLastHash ?? "0".repeat(64)) ||
+      parsed.lastSequence > head.sequence ||
+      (parsed.lastSequence === head.sequence && parsed.wrapperLastHash !== head.recordHash) ||
+      parsed.independentHeadHash !== sha256Hex(canonicalJson(head))
+    ) {
+      throw new Error("authority seal binding mismatch")
+    }
+    return this.transaction(async (connection) => {
+      const result = await connection.query(
+        "SELECT lyrashield_authority.append_seal($1, $2, $3, $4, $5) AS status",
+        [
+          this.epochId,
+          this.supervisorInstanceId,
+          prior ? encode(prior) : "",
+          encode(parsed),
+          encode(head),
+        ]
+      )
+      const status = result.rows[0]?.status
+      if (status !== "written" && status !== "conflict")
+        throw new Error("authority seal append response is unavailable")
+      return status
+    })
   }
 
   async compareAndAppend(

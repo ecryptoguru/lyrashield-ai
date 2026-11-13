@@ -1,5 +1,16 @@
 import { z } from "zod"
-import { providerGrantRequestSchema, type ProviderGrantRequest } from "@lyrashield/runtime-control"
+import {
+  providerInvocationSchema,
+  providerTransportAckSchema,
+  type ProviderInvocation,
+  type ProviderTransportAck,
+  type ProviderNativeEvent,
+} from "./native-invocation"
+import {
+  providerGrantRequestSchema,
+  type ProviderGrantRequest,
+  type JournalRecord,
+} from "@lyrashield/runtime-control"
 import { requestPolicySchema, type RequestPolicy } from "./request-policy"
 import { terminalUsageSchema, type TerminalUsage } from "./provider-usage"
 import { retainedResponseSchema, type RetainedResponse } from "./retained-response"
@@ -56,10 +67,22 @@ const requestResultSchema = z
   .strict()
 
 export const providerJournalEventSchema = z.discriminatedUnion("type", [
+  z
+    .object({ type: z.literal("request_invocation_bound"), invocation: providerInvocationSchema })
+    .strict(),
+  z.object({ type: z.literal("request_transport_ack"), ack: providerTransportAckSchema }).strict(),
   z.object({ type: z.literal("grant_issued"), grant: issuedGrantSchema }).strict(),
   z.object({ type: z.literal("grant_revoked"), revocation: revocationEventSchema }).strict(),
   z.object({ type: z.literal("request_started"), request: requestStartedSchema }).strict(),
   z.object({ type: z.literal("request_result"), result: requestResultSchema }).strict(),
+  z
+    .object({
+      type: z.literal("request_not_dispatched"),
+      requestId: z.string(),
+      grantId: z.string(),
+      attemptId: z.string(),
+    })
+    .strict(),
   z
     .object({
       type: z.literal("stream_delivery_uncertain"),
@@ -99,6 +122,10 @@ export interface GrantState {
 }
 
 export interface RequestState {
+  invocation?: ProviderInvocation
+  invocationReceipt?: JournalRecord<ProviderNativeEvent>
+  transportAck?: ProviderTransportAck
+  transportAckReceipt?: JournalRecord<ProviderNativeEvent>
   requestId: string
   grantId: string
   attemptId: string
@@ -114,7 +141,7 @@ export interface RequestState {
   model?: string
   maxOutputTokens?: number
   stream?: boolean
-  outcome: "PENDING" | "SUCCEEDED" | "FAILED" | "UNKNOWN"
+  outcome: "PENDING" | "SUCCEEDED" | "FAILED" | "UNKNOWN" | "NEVER_DISPATCHED"
   // A durable dispatch intent remains physically outstanding until trusted
   // terminal evidence is recorded. Local abort/timeout is not stop proof.
   physicalOutstanding: boolean

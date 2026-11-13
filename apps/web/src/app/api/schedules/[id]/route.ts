@@ -4,6 +4,7 @@ import { PatchScheduleSchema, resolveTargetScanMode } from "@lyrashield/types"
 import { requirePermission, resolveOAuthReadScope } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
+import { SCHEDULE_ADMISSION_ENABLED } from "../../../../lib/scan-admission"
 import { authErrorResponse } from "../../../../lib/api-auth"
 import { apiError, apiSuccess } from "../../../../lib/api-response"
 
@@ -50,6 +51,14 @@ async function patch(request: Request, { params }: { params: Promise<{ id: strin
     if (updateData.cron) updateData.cron = updateData.cron.trim()
 
     const { session } = await requirePermission(workspaceId, PERMISSIONS.schedule.update)
+
+    if (!SCHEDULE_ADMISSION_ENABLED && updateData.enabled === true) {
+      return apiError(
+        "SCHEDULE_UNAVAILABLE",
+        "Enabling scheduled scans is not available in this release.",
+        403
+      )
+    }
 
     const schedule = await getSchedule(id, workspaceId)
     if (!schedule) {

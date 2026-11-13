@@ -1,12 +1,14 @@
 import { z } from "zod"
 import { canonicalJson, sha256Hex } from "@lyrashield/runtime-control"
 import { ProviderGatewayError } from "./errors"
+import { agentRequestSchema } from "./agent-request"
+import { parseStrictJson } from "./strict-json"
 
 const rateSchema = z.number().int().nonnegative().max(1_000_000_000_000)
 export const requestPolicySchema = z
   .object({
     version: z.literal(1),
-    adapter: z.literal("responses-text-v1"),
+    adapter: z.enum(["responses-text-v1", "responses-agent-v1"]),
     // Exact pathname and query, including a server-approved API version.
     endpoint: z.string().min(1).max(4_096).startsWith("/"),
     pricingRevision: z.string().min(1).max(192),
@@ -105,11 +107,13 @@ export function authorizeRequest(
     )
   let value: unknown
   try {
-    value = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(input.body))
+    value = parseStrictJson(input.body)
   } catch {
     throw new ProviderGatewayError("INVALID_PROVIDER_REQUEST", "provider request is invalid", 400)
   }
-  const parsed = requestBodySchema.safeParse(value)
+  const parsed = (
+    policy.adapter === "responses-agent-v1" ? agentRequestSchema : requestBodySchema
+  ).safeParse(value)
   if (!parsed.success)
     throw new ProviderGatewayError(
       "INVALID_PROVIDER_REQUEST",
@@ -122,10 +126,14 @@ export function authorizeRequest(
   // Reserve the full server-approved input envelope. This intentionally
   // conservative text-only byte bound still needs tokenizer qualification;
   // it is not a token estimate or permission to open production admission.
-  if (
-    Buffer.byteLength(request.input, "utf8") + 1_024 > policy.maxInputTokens ||
-    request.max_output_tokens > policy.maxOutputTokens
-  )
+  const inputBound =
+    policy.adapter === "responses-agent-v1"
+      ? input.body.byteLength +
+        1_024 +
+        128 * (Array.isArray(request.input) ? request.input.length : 1) +
+        128 * ("tools" in request ? (request.tools?.length ?? 0) : 0)
+      : Buffer.byteLength(request.input as string, "utf8") + 1_024
+  if (inputBound > policy.maxInputTokens || request.max_output_tokens > policy.maxOutputTokens)
     throw new ProviderGatewayError(
       "TOKEN_CAP_EXCEEDED",
       "provider request exceeds token policy",

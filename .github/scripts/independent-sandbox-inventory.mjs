@@ -244,21 +244,27 @@ export function verifyIndependentSandboxInventory(
   assert.equal(source?.sha, expected.verifierRevision)
   assert.equal(source?.tree?.sha, INVENTORY_VERIFIER_TREE)
   const verifierCi = verifyVerifierCi(expected.verifierRevision, get)
-  const verifierRun = get(
-    `actions/runs/${expected.verifierRunId}/attempts/${expected.verifierAttempt}`
-  )
-  assert.ok(
-    String(verifierRun?.id) === expected.verifierRunId &&
-      String(verifierRun?.run_attempt) === expected.verifierAttempt &&
-      verifierRun.status === "completed" &&
-      verifierRun.conclusion === "success" &&
-      verifierRun.event === "workflow_dispatch" &&
-      verifierRun.head_branch === "main" &&
-      verifierRun.head_sha === expected.verifierRevision &&
-      verifierRun.path === ".github/workflows/verify-sandbox-inventory.yml" &&
-      verifierRun.repository?.id === 1297157605 &&
-      verifierRun.head_repository?.id === 1297157605
-  )
+  const verifyRun = () => {
+    for (const path of [
+      `actions/runs/${expected.verifierRunId}`,
+      `actions/runs/${expected.verifierRunId}/attempts/${expected.verifierAttempt}`,
+    ]) {
+      const verifierRun = get(path)
+      assert.ok(
+        String(verifierRun?.id) === expected.verifierRunId &&
+          String(verifierRun?.run_attempt) === expected.verifierAttempt &&
+          verifierRun.status === "completed" &&
+          verifierRun.conclusion === "success" &&
+          verifierRun.event === "workflow_dispatch" &&
+          verifierRun.head_branch === "main" &&
+          verifierRun.head_sha === expected.verifierRevision &&
+          verifierRun.path === ".github/workflows/verify-sandbox-inventory.yml" &&
+          verifierRun.repository?.id === 1297157605 &&
+          verifierRun.head_repository?.id === 1297157605
+      )
+    }
+  }
+  verifyRun()
   const verifier = {
     publicationRevision: expected.verifierRevision,
     publishRunId: expected.verifierRunId,
@@ -268,6 +274,7 @@ export function verifyIndependentSandboxInventory(
   const predicate = verifyInventoryAttestation(verifier, { run, when })
   validateInventoryPredicate(predicate, expected, publication)
   assert.equal(verifyVerifierCi(expected.verifierRevision, get), verifierCi)
+  verifyRun()
   return Object.freeze({
     ...expected,
     qualified: false,

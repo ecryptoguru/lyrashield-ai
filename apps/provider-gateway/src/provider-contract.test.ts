@@ -1,3 +1,4 @@
+import { fixtureActionIntentPublisher, fixtureAuthorityFence } from "./test-fixtures"
 import { mkdtemp, readFile, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
@@ -74,6 +75,8 @@ async function setup(
   const authorizeGrant = vi.fn(async (_request: ProviderGrantRequest) => policy)
   const serviceOptions = {
     journal: options.journal ?? journal,
+    authorityFence: fixtureAuthorityFence,
+    publishActionIntent: fixtureActionIntentPublisher,
     signingSecret: secret,
     responseEncryptionSecret: encryptionSecret,
     admission: "open" as const,
@@ -205,6 +208,41 @@ describe("server-authorized provider contract", () => {
     expect(
       (await journal.load()).find((record) => record.payload.type === "request_started")?.payload
     ).toMatchObject({ request: { reservationMicros: 288 } })
+  })
+
+  it("sends an authorized agent tool turn unchanged and records terminal usage", async () => {
+    let wireBody: Uint8Array | undefined
+    const fetchImpl: typeof fetch = async (_target, init) => {
+      wireBody = init?.body as Uint8Array
+      return response()
+    }
+    const policy: RequestPolicy = {
+      ...fixturePolicy,
+      adapter: "responses-agent-v1",
+      maxInputTokens: 8_192,
+      maxOutputTokens: 128,
+    }
+    const { service } = await setup({ policy, fetchImpl })
+    const input = await proxyInput(service)
+    input.body = Buffer.from(
+      JSON.stringify({
+        model: "gpt-6-luna",
+        input: [
+          { role: "user", content: "inspect synthetic data" },
+          { type: "function_call", call_id: "call_1", name: "lookup", arguments: "{}" },
+          { type: "function_call_output", call_id: "call_1", output: "ok" },
+        ],
+        max_output_tokens: 128,
+        tools: [{ type: "function", name: "lookup", parameters: { type: "object" }, strict: true }],
+      })
+    )
+    await service.proxy(input)
+    expect(Buffer.from(wireBody ?? [])).toEqual(input.body)
+    expect(await service.inspectRequest(input.requestId)).toMatchObject({
+      outcome: "SUCCEEDED",
+      physicalOutstanding: false,
+      usage: { model: "gpt-6-luna" },
+    })
   })
 
   it("rejects an underfunded aggregate reservation before any provider dispatch", async () => {
@@ -366,6 +404,37 @@ describe("server-authorized provider contract", () => {
         outcome: "UNKNOWN",
         usage: null,
         usageId: null,
+      })
+      await expect(service.proxy(input)).rejects.toMatchObject({ code: "REQUEST_UNKNOWN" })
+      expect(fetchImpl).toHaveBeenCalledTimes(1)
+    }
+  )
+
+  it.each([false, true])(
+    "rejects duplicate usage fields in a provider response (stream=%s)",
+    async (stream) => {
+      const raw = JSON.stringify(terminal).replace(
+        '"input_tokens":12',
+        '"input_tokens":999,"input_tokens":12'
+      )
+      const wire = stream
+        ? `event: response.completed\ndata: {"type":"response.completed","response":${raw}}\n\n`
+        : raw
+      const { service, fetchImpl } = await setup({
+        fetchImpl: vi.fn(async () =>
+          stream
+            ? streamResponse(wire)
+            : new Response(wire, { headers: { "content-type": "application/json" } })
+        ),
+      })
+      const base = await proxyInput(service)
+      const input = stream ? streamingInput(base) : base
+      await expect(service.proxy(input)).rejects.toMatchObject({
+        code: "PROVIDER_RESPONSE_UNKNOWN",
+      })
+      expect(await service.inspectRequest(input.requestId)).toMatchObject({
+        outcome: "UNKNOWN",
+        usage: null,
       })
       await expect(service.proxy(input)).rejects.toMatchObject({ code: "REQUEST_UNKNOWN" })
       expect(fetchImpl).toHaveBeenCalledTimes(1)

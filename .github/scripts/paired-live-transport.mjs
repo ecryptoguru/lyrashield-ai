@@ -8,6 +8,8 @@ const root = fileURLToPath(new URL("../../", import.meta.url))
 const files = [
   ".github/scripts/paired-stage-store.py",
   ".github/scripts/paired-live-host.sh",
+  ".github/scripts/paired-runtime-host-observation.py",
+  "packages/security/src/runtime-qualification-key.json",
   ".github/scripts/paired-live-guest.mjs",
   ".github/scripts/v26-runtime-database.mjs",
   ".github/scripts/v26-execution-drain.sh",
@@ -17,6 +19,7 @@ const files = [
 ]
 const phases = new Set([
   "stage-store",
+  "runtime-authority",
   "rpc",
   "drain",
   "continuity",
@@ -104,7 +107,7 @@ export function guest(phase, params) {
 umask 077
 d=$(mktemp -d)
 trap 'rm -rf -- "$d"' EXIT
-mkdir -p "$d/.github/scripts" "$d/ops/worker" "$d/ops/monitoring"
+mkdir -p "$d/.github/scripts" "$d/ops/worker" "$d/ops/monitoring" "$d/packages/security/src"
 ${install}
 result=$(sh "$d/.github/scripts/paired-live-host.sh" '${phase}' '${Buffer.from(body).toString("base64")}' "$d")
 [ "\${#result}" -le 2200 ]

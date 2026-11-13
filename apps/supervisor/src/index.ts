@@ -1,5 +1,5 @@
 import { createServer } from "node:http"
-import { SignedJournal } from "@lyrashield/runtime-control"
+import { SignedJournal, listenPrivateControlServer } from "@lyrashield/runtime-control"
 import { loadSupervisorConfig } from "./config"
 import { DockerRuntimeExecutor, LinuxProcessExecutor } from "./executor"
 import { createSupervisorHandler } from "./http"
@@ -29,10 +29,8 @@ const executor = {
     ownership.kind === "container"
       ? containerExecutor.inspect(ownership)
       : processExecutor.inspect(ownership),
-  stop: async (ownership: Parameters<DockerRuntimeExecutor["stop"]>[0]) =>
-    ownership.kind === "container"
-      ? containerExecutor.stop(ownership)
-      : processExecutor.stop(ownership),
+  stop: async (...args: Parameters<DockerRuntimeExecutor["stop"]>) =>
+    args[0].kind === "container" ? containerExecutor.stop(...args) : processExecutor.stop(args[0]),
 }
 const service = new SupervisorService({
   journal,
@@ -54,7 +52,7 @@ const server = createServer(
     admission: config.admission,
   })
 )
-server.listen(config.port, config.host, () => {
+const ready = () => {
   process.stdout.write(
     JSON.stringify({
       service: "lyrashield-supervisor",
@@ -62,7 +60,13 @@ server.listen(config.port, config.host, () => {
       admission: config.admission,
     }) + "\n"
   )
-})
+}
+if (config.socketPath) {
+  await listenPrivateControlServer(server, config.socketPath)
+  ready()
+} else {
+  server.listen(config.port, config.host, ready)
+}
 let shuttingDown = false
 const shutdown = () => {
   if (shuttingDown) return

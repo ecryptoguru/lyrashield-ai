@@ -106,7 +106,7 @@ const pinnedNodeBase =
 describe("worker Docker runtime", () => {
   it("pins every Node base stage to one immutable digest", () => {
     expect(dockerfile).not.toMatch(/^FROM node:24-alpine AS/m)
-    expect(dockerfile.match(/^FROM node:24-alpine@sha256:[0-9a-f]{64} AS/gm) ?? []).toHaveLength(6)
+    expect(dockerfile.match(/^FROM node:24-alpine@sha256:[0-9a-f]{64} AS/gm) ?? []).toHaveLength(7)
     expect(new Set(dockerfile.match(/node:24-alpine@sha256:[0-9a-f]{64}/g))).toHaveLength(1)
   })
 
@@ -176,7 +176,7 @@ describe("worker Docker runtime", () => {
   })
 
   it("pins and records the exact engine revision for release worker builds", () => {
-    const reviewedEngineRevision = "ddb1c5ea6a5014cfc5e1cfadac03a5db7e8cc25d"
+    const reviewedEngineRevision = "2b1d044308ec2c31c1a657ff0aa808b3e900ce24"
     expect(deployWorkflow).toContain(`ENGINE_REVISION: ${reviewedEngineRevision}`)
     expect(desktopReleaseWorkflow).toContain(`ENGINE_REVISION: ${reviewedEngineRevision}`)
     expect(recoveryCandidateWorkflow).toContain(`ENGINE_REVISION: ${reviewedEngineRevision}`)

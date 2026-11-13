@@ -38,6 +38,14 @@ on:
         required: false
         default: ""
         type: string
+      runtime_fleet_qualification:
+        required: false
+        default: ""
+        type: string
+      runtime_fleet_record_sha256:
+        required: false
+        default: ""
+        type: string
   workflow_dispatch:
     inputs:
       source_sha:
@@ -73,7 +81,7 @@ env:
   WEB_IMAGE: ghcr.io/${{ github.repository }}/lyrashield-web
   WORKER_IMAGE: ghcr.io/${{ github.repository }}/lyrashield-worker
   EGRESS_PROXY_IMAGE: ghcr.io/${{ github.repository }}/lyrashield-egress-proxy
-  ENGINE_REVISION: ddb1c5ea6a5014cfc5e1cfadac03a5db7e8cc25d
+  ENGINE_REVISION: 2b1d044308ec2c31c1a657ff0aa808b3e900ce24
   MARKETING_URL: ${{ vars.LYRASHIELD_MARKETING_URL || 'https://lyrashieldai.com' }}
   APP_URL: ${{ vars.LYRASHIELD_APP_URL || 'https://app.lyrashieldai.com' }}
   SCANNER_URL: ${{ vars.LYRASHIELD_SCANNER_URL || 'https://scanner.lyrashieldai.com' }}
@@ -144,6 +152,25 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           SOURCE_SHA: ${{ env.DEPLOY_SHA }}
         run: node .github/scripts/assert-cold-release-caller.mjs
+      # A normal push deploys only behind the protected issuer's signed
+      # exact-artifact record for this exact source. Health and fixture
+      # signatures use other purposes and are rejected inside the verifier.
+      - name: Require the authenticated exact-artifact release record
+        if: inputs.cold_release == true
+        env:
+          RUNTIME_FLEET_QUALIFICATION: ${{ inputs.runtime_fleet_qualification }}
+          RUNTIME_FLEET_RECORD_SHA256: ${{ inputs.runtime_fleet_record_sha256 }}
+          SOURCE_SHA: ${{ env.DEPLOY_SHA }}
+          ENGINE_REVISION: ${{ env.ENGINE_REVISION }}
+        run: |
+          set -euo pipefail
+          [ -n "$RUNTIME_FLEET_RECORD_SHA256" ] || {
+            echo '::error::Missing authenticated exact-artifact release qualification'
+            exit 1
+          }
+          export SOURCE_TREE
+          SOURCE_TREE=$(git --no-replace-objects rev-parse 'HEAD^{tree}')
+          node .github/scripts/assert-runtime-fleet-qualification.mjs
       - name: Confirm deployment source remains current main
         env:
           GH_TOKEN: ${{ github.token }}
@@ -596,6 +623,12 @@ jobs:
       egress_proxy_digest: ${{ steps.select.outputs.egress_proxy_digest }}
       engine_revision: ${{ steps.select.outputs.engine_revision }}
     steps:
+      - name: Checkout exact deployment source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.DEPLOY_SHA }}
+          persist-credentials: false
+
       - name: Select only the image source authorized for this release mode
         id: select
         env:
@@ -635,6 +668,23 @@ jobs:
             [ "$key" != egress_digest ] || key=egress_proxy_digest
             echo "$key=$value" >> "$GITHUB_OUTPUT"
           done
+
+      - name: Require the built images to be the qualified images
+        if: inputs.runtime_fleet_record_sha256 != ''
+        env:
+          RUNTIME_FLEET_QUALIFICATION: ${{ inputs.runtime_fleet_qualification }}
+          RUNTIME_FLEET_RECORD_SHA256: ${{ inputs.runtime_fleet_record_sha256 }}
+          REQUIRE_QUALIFIED_IMAGES: "1"
+          SOURCE_SHA: ${{ env.DEPLOY_SHA }}
+          ENGINE_REVISION: ${{ steps.select.outputs.engine_revision }}
+          WEB_DIGEST: ${{ steps.select.outputs.web_digest }}
+          WORKER_DIGEST: ${{ steps.select.outputs.worker_digest }}
+          PROXY_DIGEST: ${{ steps.select.outputs.egress_proxy_digest }}
+        run: |
+          set -euo pipefail
+          export SOURCE_TREE
+          SOURCE_TREE=$(git --no-replace-objects rev-parse 'HEAD^{tree}')
+          node .github/scripts/assert-runtime-fleet-qualification.mjs
 
   # Every merge to main pushes new SHA-tagged images; web also re-points :latest, while workers
   # remain immutable and deploy by verified digest. Multi-arch buildx pushes leave untagged manifests

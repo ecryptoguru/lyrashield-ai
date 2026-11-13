@@ -215,9 +215,8 @@ describe("preflight → POST parity", () => {
   })
 
   it.each(["WEB_APP", "API"])(
-    "refuses unavailable relay-dependent %s reviews before mutation",
+    "refuses removed engine-backed %s reviews before mutation",
     async (type) => {
-      vi.mocked(isTargetRelayWorkerAvailable).mockResolvedValue(false)
       vi.mocked(prisma.target.findFirst).mockResolvedValue({
         id: "target-1",
         type,
@@ -227,20 +226,10 @@ describe("preflight → POST parity", () => {
       for (const mode of ["STANDARD", "DEEP", "CUSTOM"]) {
         const preflight = await eligibilityGET(eligibilityRequest({ ...query, mode }))
         const advisory = (await preflight.json()).data
-        expect(advisory).toMatchObject({ allowed: false, code: "TARGET_RELAY_UNAVAILABLE" })
-        expect(
-          advisory.supportedModes
-            .filter((option: { usesAi: boolean }) => option.usesAi)
-            .every((option: { available: boolean }) => !option.available)
-        ).toBe(true)
-        expect(
-          advisory.supportedModes.some(
-            (option: { usesAi: boolean; available: boolean }) => !option.usesAi && option.available
-          )
-        ).toBe(true)
+        expect(advisory).toMatchObject({ allowed: false, code: "URL_MODE_UNSUPPORTED" })
         const post = await scansPOST(postRequest({ ...query, mode }))
-        expect(post.status).toBe(503)
-        expect((await post.json()).error.code).toBe("TARGET_RELAY_UNAVAILABLE")
+        expect(post.status).toBe(400)
+        expect((await post.json()).error.code).toBe("URL_MODE_UNSUPPORTED")
       }
       expect(createScan).not.toHaveBeenCalled()
       expect(assertScanAllowed).not.toHaveBeenCalled()
@@ -303,13 +292,12 @@ describe("preflight → POST parity", () => {
     })
   })
 
-  it("both routes report the same policy code for the same failing gate", async () => {
+  it("both routes report the same unsupported-URL code for the same failing gate", async () => {
     vi.mocked(prisma.target.findFirst).mockResolvedValue({
       id: "target-1",
       type: "WEB_APP",
       url: "https://app.example.com",
     } as never)
-    vi.mocked(prisma.targetDomainVerification.findFirst).mockResolvedValue(null as never)
 
     const preflight = await eligibilityGET(eligibilityRequest(query))
     const post = await scansPOST(postRequest(query))
@@ -317,12 +305,12 @@ describe("preflight → POST parity", () => {
     const preflightBody = await preflight.json()
     const postBody = await post.json()
     expect(preflightBody.data.allowed).toBe(false)
-    expect(preflightBody.data.code).toBe("DOMAIN_VERIFICATION_REQUIRED")
-    expect(post.status).toBe(403)
-    expect(postBody.error.code).toBe("DOMAIN_VERIFICATION_REQUIRED")
+    expect(preflightBody.data.code).toBe("URL_MODE_UNSUPPORTED")
+    expect(post.status).toBe(400)
+    expect(postBody.error.code).toBe("URL_MODE_UNSUPPORTED")
   })
 
-  it("keeps engine-backed proof requirements consistent for an expired-trial FREE account", async () => {
+  it("refuses a removed engine-backed tier consistently for an expired-trial FREE account", async () => {
     vi.mocked(resolveAccountBilling).mockResolvedValue({
       effectivePlan: "FREE",
       currentPlan: "FREE",
@@ -332,17 +320,16 @@ describe("preflight → POST parity", () => {
       type: "WEB_APP",
       url: "https://trial.example.com",
     } as never)
-    vi.mocked(prisma.targetDomainVerification.findFirst).mockResolvedValue(null as never)
 
     const preflight = await eligibilityGET(eligibilityRequest(query))
     const post = await scansPOST(postRequest(query))
 
     expect((await preflight.json()).data).toMatchObject({
       allowed: false,
-      code: "DOMAIN_VERIFICATION_REQUIRED",
+      code: "URL_MODE_UNSUPPORTED",
     })
-    expect(post.status).toBe(403)
-    expect((await post.json()).error.code).toBe("DOMAIN_VERIFICATION_REQUIRED")
+    expect(post.status).toBe(400)
+    expect((await post.json()).error.code).toBe("URL_MODE_UNSUPPORTED")
     expect(createScan).not.toHaveBeenCalled()
   })
 
@@ -361,16 +348,13 @@ describe("preflight → POST parity", () => {
     )
   })
 
-  it("uses the explicitly selected policy for authenticated-assessment preflight", async () => {
+  it("reports authenticated-assessment as deferred when an explicit policy is selected", async () => {
     configMocks.authAssessment.enabled = "1"
     configMocks.authAssessment.allowlist = "ws-1:target-1"
     vi.mocked(prisma.target.findFirst).mockResolvedValue({
       id: "target-1",
       type: "WEB_APP",
       url: "https://app.example.com",
-    } as never)
-    vi.mocked(prisma.targetDomainVerification.findFirst).mockResolvedValue({
-      id: "proof-1",
     } as never)
     vi.mocked(prisma.policy.findFirst).mockResolvedValue({
       id: "selected-policy",
@@ -380,6 +364,7 @@ describe("preflight → POST parity", () => {
     const response = await eligibilityGET(
       eligibilityRequest({
         ...query,
+        mode: "SAFE",
         workflow: "AUTHENTICATED_ASSESSMENT",
         authorizationRef: "authz-1",
         policyId: "selected-policy",
@@ -388,7 +373,7 @@ describe("preflight → POST parity", () => {
 
     expect((await response.json()).data).toMatchObject({
       allowed: false,
-      code: "SCAN_PLAN_DENIED",
+      code: "SCAN_WORKFLOW_UNAVAILABLE",
     })
     expect(prisma.policy.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({

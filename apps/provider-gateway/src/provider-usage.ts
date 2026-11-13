@@ -2,6 +2,7 @@ import { z } from "zod"
 import type { RequestPolicy } from "./request-policy"
 import { costMicros } from "./request-policy"
 import { ProviderGatewayError } from "./errors"
+import { parseStrictJson } from "./strict-json"
 
 const tokenCount = z.number().int().nonnegative().max(1_000_000)
 const responseIdentifierSchema = z
@@ -67,6 +68,10 @@ export class ResponsesUsageParser {
     }
   ) {}
 
+  get hasTerminal(): boolean {
+    return this.terminal !== undefined
+  }
+
   push(chunk: Uint8Array): void {
     try {
       this.pending += this.decoder.decode(chunk, { stream: true })
@@ -74,6 +79,9 @@ export class ResponsesUsageParser {
       invalid()
     }
     if (!this.expected.stream) return
+    // The SDK recognizes bare CR as an SSE delimiter. Reject it before that
+    // byte can reach the client; a trailing CR may be the first half of CRLF.
+    if (/\r(?!\n|$)/.test(this.pending)) invalid()
     // Process complete SSE frames while retaining only a bounded fragment.
     for (;;) {
       const match = /\r?\n\r?\n/.exec(this.pending)
@@ -103,7 +111,7 @@ export class ResponsesUsageParser {
 
   private parseJson(value: string): unknown {
     try {
-      return JSON.parse(value)
+      return parseStrictJson(Buffer.from(value, "utf8"))
     } catch {
       return invalid()
     }

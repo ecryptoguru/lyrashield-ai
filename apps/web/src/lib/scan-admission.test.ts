@@ -37,6 +37,7 @@ vi.mock("@lyrashield/billing", () => ({
 
 import { prisma } from "@lyrashield/db"
 import { resolveAccountBilling, resolveWorkspaceScanSponsor } from "@lyrashield/billing"
+import { URL_PROFILE_UNSUPPORTED_MESSAGE } from "@lyrashield/types"
 import {
   authAssessmentAdmission,
   findScanPolicy,
@@ -48,25 +49,41 @@ import {
 } from "./scan-admission"
 
 describe("resolveUrlReviewMode", () => {
-  it("marks engine-backed URL tiers and never touches other target types", () => {
-    expect(
-      resolveUrlReviewMode({ targetType: "WEB_APP", mode: "STANDARD", hasApiSpec: false })
-    ).toEqual({ ok: true, engineBacked: true })
+  it("admits only the deterministic Safe/Quick tier for URL/API targets", () => {
     expect(
       resolveUrlReviewMode({ targetType: "WEB_APP", mode: "SAFE", hasApiSpec: false })
     ).toEqual({ ok: true, engineBacked: false })
+    expect(
+      resolveUrlReviewMode({ targetType: "WEB_APP", mode: "QUICK", hasApiSpec: false })
+    ).toEqual({ ok: true, engineBacked: false })
+    // Omitted profile defaults to Quick.
+    expect(resolveUrlReviewMode({ targetType: "API", mode: "", hasApiSpec: false })).toEqual({
+      ok: true,
+      engineBacked: false,
+    })
+    // Non-URL targets are never affected by URL admission.
     expect(
       resolveUrlReviewMode({ targetType: "REPO", mode: "STANDARD", hasApiSpec: false })
     ).toEqual({ ok: true, engineBacked: false })
   })
 
-  it("fails closed with the availability code POST would return", () => {
-    expect(
-      resolveUrlReviewMode({ targetType: "API", mode: "STANDARD", hasApiSpec: false })
-    ).toMatchObject({ ok: false, code: "API_SPEC_REQUIRED" })
-    expect(resolveUrlReviewMode({ targetType: "API", mode: "STANDARD", hasApiSpec: true })).toEqual(
-      { ok: true, engineBacked: true }
-    )
+  it("refuses explicit Standard/Deep/Custom for URL/API with a clear unsupported profile", () => {
+    for (const mode of ["STANDARD", "DEEP", "CUSTOM"] as const) {
+      expect(resolveUrlReviewMode({ targetType: "WEB_APP", mode, hasApiSpec: false })).toEqual({
+        ok: false,
+        code: "URL_MODE_UNSUPPORTED",
+        reason: URL_PROFILE_UNSUPPORTED_MESSAGE,
+      })
+      // Refused even when an OpenAPI spec would otherwise make API tiers pass.
+      expect(resolveUrlReviewMode({ targetType: "API", mode, hasApiSpec: true })).toEqual({
+        ok: false,
+        code: "URL_MODE_UNSUPPORTED",
+        reason: URL_PROFILE_UNSUPPORTED_MESSAGE,
+      })
+    }
+  })
+
+  it("fails closed with the availability code for genuinely unknown modes", () => {
     expect(
       resolveUrlReviewMode({ targetType: "WEB_APP", mode: "MASSIVE", hasApiSpec: false })
     ).toMatchObject({ ok: false, code: "URL_MODE_UNSUPPORTED" })
@@ -177,15 +194,11 @@ describe("authAssessmentAdmission", () => {
     configMocks.authAssessment.allowlist = ""
   })
 
-  it("fails closed unless flag and allowlist both admit the pair", () => {
-    expect(authAssessmentAdmission("ws-1", "t-1").allowed).toBe(false)
+  it("is deferred: refuses every pair even when the env flag and allowlist admit it", () => {
+    expect(authAssessmentAdmission("ws-1", "t-1")).toEqual({ allowed: false, reason: "flag_off" })
     configMocks.authAssessment.enabled = "1"
-    expect(authAssessmentAdmission("ws-1", "t-1").allowed).toBe(false)
     configMocks.authAssessment.allowlist = "ws-1:t-1,ws-2"
-    expect(authAssessmentAdmission("ws-1", "t-1").allowed).toBe(true)
-    expect(authAssessmentAdmission("ws-2", "t-9").allowed).toBe(true)
-    expect(authAssessmentAdmission("ws-2", "t-1").allowed).toBe(true)
-    expect(authAssessmentAdmission("ws-3", "t-1").allowed).toBe(false)
+    expect(authAssessmentAdmission("ws-1", "t-1")).toEqual({ allowed: false, reason: "flag_off" })
   })
 })
 

@@ -21,7 +21,11 @@ describe("unqualified process executor", () => {
       ownershipId: `own_${"a".repeat(40)}`,
       cgroupPath: tmpdir(),
     }
-    const context = { attemptId: "attempt-test", commandId: "command-test" }
+    const context = {
+      attemptId: "attempt-test",
+      commandId: "command-test",
+      assertActive: () => undefined,
+    }
     await expect(executor.create("engine", spec, context)).rejects.toThrow(/held/)
     await expect(executor.start(ownership, spec, context)).rejects.toThrow(/held/)
     await expect(executor.inspect(ownership)).resolves.toMatchObject({ state: "UNKNOWN" })

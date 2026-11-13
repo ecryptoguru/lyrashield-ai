@@ -10,6 +10,10 @@ import {
 } from "./scan-preparation-authority"
 import { requirePublishedScanQueueAuthority } from "./scan-queue-outbox-store"
 import { ScanQueueOutboxError, scanQueueDigest } from "./scan-queue-payload"
+import {
+  compilePreparationCommand,
+  type ScanPreparationCompiler,
+} from "./scan-dispatch-command-descriptor"
 import type {
   DispatchBrokerResult,
   DispatchOperationState,
@@ -38,6 +42,7 @@ type TransactionOutcome<T extends object> =
 
 export type DispatchBrokerContext = {
   preparationAuthority?: "checked-intent-v1"
+  compilePreparation?: ScanPreparationCompiler
   transaction: <T>(
     operationId: string,
     work: (client: pg.PoolClient) => Promise<T>
@@ -181,7 +186,9 @@ async function createPrepareAttempt(
   },
   input: PrepareDispatchInput,
   expiresAt: string,
-  focusDigest: string | null
+  focusDigest: string | null,
+  compilePreparation: ScanPreparationCompiler | undefined,
+  focus: import("@lyrashield/types").ScanJobData["focus"]
 ): Promise<{
   waiting: false
   state: "PREPARING"
@@ -241,16 +248,24 @@ async function createPrepareAttempt(
       input.workerGrantId,
     ]
   )
+  const descriptor = await compilePreparationCommand(
+    client,
+    { commandId, attemptId, operationId: operation.operationId },
+    compilePreparation,
+    focus
+  )
   await client.query(
     `INSERT INTO "ScanDispatchOutbox" (
       "id","operationId","attemptId","commandType","sequence","commandDigest","status",
-      "attempts","availableAt","createdAt","updatedAt"
-    ) VALUES ($1,$2,$3,'PREPARE',1,$4,'PENDING',0,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`,
+      "attempts","availableAt","createdAt","updatedAt","commandInputJson","commandInputChecksum"
+    ) VALUES ($1,$2,$3,'PREPARE',1,$4,'PENDING',0,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,$5,$6)`,
     [
       commandId,
       operation.operationId,
       attemptId,
-      commandDigest("PREPARE", operation.operationId, attemptId),
+      descriptor.commandInputChecksum ?? commandDigest("PREPARE", operation.operationId, attemptId),
+      descriptor.commandInputJson,
+      descriptor.commandInputChecksum,
     ]
   )
   await client.query(
@@ -327,7 +342,9 @@ export async function prepareDispatch(
           scanRow,
           input,
           expiresAt,
-          payload.focus === undefined ? null : scanQueueDigest(JSON.stringify(payload.focus))
+          payload.focus === undefined ? null : scanQueueDigest(JSON.stringify(payload.focus)),
+          ctx.compilePreparation,
+          payload.focus
         ),
         authority
       )

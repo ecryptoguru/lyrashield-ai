@@ -163,6 +163,8 @@ export async function verifyRestoredAuthority(
       "migration",
       "tables",
       "triggers",
+      "receipts",
+      "execution",
       "helpers",
       "extension",
       "systemDefiners",

@@ -344,7 +344,7 @@ describe("POST /api/findings/[id]/retests", () => {
     expect(enqueueScanJob).not.toHaveBeenCalled()
   })
 
-  it("rejects engine-backed URL retests before creating work when the relay is unavailable", async () => {
+  it("returns RETEST_UNAVAILABLE for a removed engine-backed URL source scan", async () => {
     prisma.scan.findFirst.mockResolvedValue({
       id: "source-scan",
       targetId: "target-1",
@@ -352,14 +352,13 @@ describe("POST /api/findings/[id]/retests", () => {
       mode: "STANDARD",
       policyId: null,
     })
+    prisma.findingCandidate.findMany.mockResolvedValue([{ scannerSource: "engine" }])
     prisma.target.findFirst.mockResolvedValue({
       id: "target-1",
       type: "WEB_APP",
       url: "https://api.example.com",
       apiSpecUrl: null,
     })
-    findCurrentDomainProof.mockResolvedValue({ domain: "api.example.com", verified: true })
-    isTargetRelayWorkerAvailable.mockResolvedValue(false)
     const response = await POST(
       new Request("http://localhost/api/findings/finding-1/retests", {
         method: "POST",
@@ -368,8 +367,8 @@ describe("POST /api/findings/[id]/retests", () => {
       }),
       { params: Promise.resolve({ id: "finding-1" }) }
     )
-    expect(response.status).toBe(503)
-    expect((await response.json()).error.code).toBe("TARGET_RELAY_UNAVAILABLE")
+    expect(response.status).toBe(409)
+    expect((await response.json()).error.code).toBe("RETEST_UNAVAILABLE")
     expect(createScan).not.toHaveBeenCalled()
   })
 
@@ -404,7 +403,7 @@ describe("POST /api/findings/[id]/retests", () => {
     expect(isTargetRelayWorkerAvailable).not.toHaveBeenCalled()
   })
 
-  it("requires current domain proof for an engine-backed URL retest", async () => {
+  it("does not consult domain proof for a removed engine-backed URL retest", async () => {
     prisma.scan.findFirst.mockResolvedValue({
       id: "source-scan",
       targetId: "target-1",
@@ -429,10 +428,10 @@ describe("POST /api/findings/[id]/retests", () => {
       { params: Promise.resolve({ id: "finding-1" }) }
     )
 
-    expect(response.status).toBe(403)
-    expect((await response.json()).error.code).toBe("DOMAIN_VERIFICATION_REQUIRED")
+    expect(response.status).toBe(409)
+    expect((await response.json()).error.code).toBe("RETEST_UNAVAILABLE")
     expect(createScan).not.toHaveBeenCalled()
-    expect(findCurrentDomainProof).toHaveBeenCalledWith("workspace-1", "https://api.example.com")
+    expect(findCurrentDomainProof).not.toHaveBeenCalled()
   })
 
   it("applies the existing free deterministic URL limit and Retry-After", async () => {
