@@ -1,0 +1,25 @@
+name: Queue token probe
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
+        with:
+          app-id: ${{ secrets.LYRASHIELD_GITHUB_APP_ID }}
+          private-key: ${{ secrets.LYRASHIELD_GITHUB_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: lyrashield-ai
+          permission-administration: read
+      - name: Read branch protection with the app token
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: gh api repos/${{ github.repository }}/branches/main/protection --jq '{strict:.required_status_checks.strict,checks:[.required_status_checks.checks[]|{context,app_id}]}'
