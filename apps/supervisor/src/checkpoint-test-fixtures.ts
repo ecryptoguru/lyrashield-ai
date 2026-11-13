@@ -1,3 +1,11 @@
+import { fixtureAuthorityFence } from "./test-fixtures"
+import {
+  checkpointKeys,
+  checkpointStream,
+  fixtureHead,
+  fixtureRecordBytes,
+} from "./checkpoint-evidence-fixtures"
+export { checkpointKeys, checkpointStream, fixtureHead } from "./checkpoint-evidence-fixtures"
 import { constants } from "node:fs"
 import { mkdtemp, open, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
@@ -34,15 +42,6 @@ import type {
   SupervisorCheckpointReaderOptions,
 } from "./checkpoint-ports"
 
-export const checkpointKeys = {
-  originalSigningSecret: "o".repeat(48),
-  wrapperSigningSecret: "w".repeat(48),
-  checkpointSigningSecret: "c".repeat(48),
-}
-export const checkpointStream = {
-  epochId: "epoch-checkpoint-1",
-  supervisorInstanceId: "supervisor-checkpoint-1",
-}
 export const checkpointBinding = {
   attemptId: "attempt-checkpoint-1",
   scanId: "scan-checkpoint-1",
@@ -92,38 +91,6 @@ export const recoverySelector: SupervisorRecoveryRequest = {
   expectedCommandHash: sha256Hex(canonicalJson(checkpointPrepare)),
 }
 const prefix = `epochs/${checkpointStream.epochId}/supervisors/${checkpointStream.supervisorInstanceId}`
-export function fixtureHead(record: CheckpointRecord): AuthorityHead {
-  const { epochId, operationId, scanId, workspaceId, attemptId, eventId } = record.payload
-  const body = {
-    schema: "lyrashield-independent-authority-head/1" as const,
-    supervisorInstanceId: checkpointStream.supervisorInstanceId,
-    epochId,
-    operationId,
-    scanId,
-    workspaceId,
-    attemptId,
-    eventId,
-    sequence: record.sequence,
-    previousHash: record.previousHash,
-    recordHash: record.hash,
-  }
-  return { ...body, signature: checkpointSign(checkpointKeys.wrapperSigningSecret, body) }
-}
-function fixtureRecordBytes(record: CheckpointRecord): Uint8Array {
-  const body = {
-    schema: "lyrashield-independent-authority-record/1",
-    supervisorInstanceId: checkpointStream.supervisorInstanceId,
-    record,
-  }
-  return Buffer.from(
-    canonicalJson({
-      ...body,
-      signature: checkpointSign(checkpointKeys.wrapperSigningSecret, body),
-    }),
-    "utf8"
-  )
-}
-
 export class CheckpointFixtureStore implements ConditionalObjectStore {
   objects = new Map<string, StoredObject>()
   writes = 0
@@ -185,6 +152,11 @@ export class CheckpointFixtureMirror implements AuthorityMirror {
     head: AuthorityHead,
     record: CheckpointRecord
   ) {
+    if (
+      checkpointSame(head, this.head) &&
+      checkpointSame(this.records.get(record.sequence) ?? null, record)
+    )
+      return "written" as const
     if (!checkpointSame(previous, this.head)) return "conflict" as const
     this.head = structuredClone(head)
     this.records.set(record.sequence, structuredClone(record))
@@ -543,6 +515,19 @@ async function populateFixture(
       bytes: Buffer.from(canonicalJson(fixtureHead(record))),
       etag: '"head-fixture"',
     })
+    const acknowledgement = {
+      schema: "lyrashield-supervisor-observed-mirror-ack/1",
+      head: fixtureHead(record),
+    }
+    store.objects.set(`${prefix}/acknowledgements/${record.sequence}`, {
+      bytes: Buffer.from(
+        canonicalJson({
+          ...acknowledgement,
+          signature: checkpointSign(checkpointKeys.wrapperSigningSecret, acknowledgement),
+        })
+      ),
+      etag: '"ack-fixture"',
+    })
     mirror.records.set(record.sequence, structuredClone(record))
     mirror.head = fixtureHead(record)
   }
@@ -552,6 +537,7 @@ function fixtureService(
   effects: { create: number; start: number; inspect: number; stop: number; provider: number }
 ) {
   return new SupervisorService({
+    authorityFence: fixtureAuthorityFence,
     journal,
     signingSecret: checkpointKeys.wrapperSigningSecret,
     ...checkpointStream,

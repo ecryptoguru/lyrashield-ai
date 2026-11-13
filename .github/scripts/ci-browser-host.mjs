@@ -8,6 +8,7 @@ import { createServer } from "node:http"
 import { once } from "node:events"
 import { FONT_FAMILIES } from "./ci-browser-fonts.mjs"
 import { browserFailureReason } from "./ci-browser.mjs"
+import { checkPlaywrightVersions, chromiumIdentity } from "./ci-browser-identity.mjs"
 
 const require = createRequire(import.meta.url)
 const playwright = createRequire(require.resolve("@playwright/test/package.json")).resolve(
@@ -82,10 +83,13 @@ async function verify() {
   item = "2"
   assert.notEqual(process.getuid(), 0)
   item = "3"
-  assert.equal(require("@playwright/test/package.json").version, "1.62.1")
-  item = "4"
-  // eslint-disable-next-line security/detect-non-literal-fs-filename -- Paths come from locked packages or the validated private CI font and trace directories.
-  assert.equal(JSON.parse(readFileSync(core, "utf8")).version, "1.62.1")
+  checkPlaywrightVersions([
+    require("@playwright/test/package.json").version,
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- Path comes from locked package resolution.
+    JSON.parse(readFileSync(playwright, "utf8")).version,
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- Path comes from locked package resolution.
+    JSON.parse(readFileSync(core, "utf8")).version,
+  ])
   phase = "manifest"
   item = "0"
   // eslint-disable-next-line security/detect-non-literal-fs-filename -- Paths come from locked packages or the validated private CI font and trace directories.
@@ -125,25 +129,10 @@ async function verify() {
   const browsers = JSON.parse(readFileSync(join(dirname(core), "browsers.json"), "utf8")).browsers
   const full = chromium.executablePath()
   item = "1"
-  assert.ok(
-    full.endsWith("/chromium-1234/chrome-linux64/chrome"),
-    "Unexpected locked Chromium cache path"
-  )
-  const binaries = [
-    join(
-      dirname(dirname(dirname(full))),
-      "chromium_headless_shell-1234/chrome-headless-shell-linux64/chrome-headless-shell"
-    ),
-  ]
+  const identity = chromiumIdentity(browsers, full)
+  const binaries = [identity.binary]
   // Every selected CI suite uses Playwright's default headless shell. Full
   // Chromium is downloaded by the unchanged install command but is not used.
-  for (const [index, name] of ["chromium-headless-shell"].entries()) {
-    const browser = browsers.find((entry) => entry.name === name)
-    item = String(index * 2 + 2)
-    assert.equal(browser.revision, "1234")
-    item = String(index * 2 + 3)
-    assert.equal(browser.browserVersion, "151.0.7922.34")
-  }
   phase = "native-libraries"
   for (const [index, binary] of binaries.entries()) {
     item = String(index)
@@ -180,7 +169,7 @@ async function verify() {
       try {
         phase = "browser-identity"
         item = String(index + 6)
-        assert.equal(browser.version(), "151.0.7922.34")
+        assert.equal(browser.version(), identity.version)
         phase = "webmcp"
         item = String(index * 2)
         const page = await browser.newPage()

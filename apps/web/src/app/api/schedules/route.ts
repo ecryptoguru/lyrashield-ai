@@ -4,6 +4,7 @@ import { CreateScheduleSchema, resolveTargetScanMode } from "@lyrashield/types"
 import { requirePermission, resolveOAuthReadScope } from "@lyrashield/auth/server"
 import { PERMISSIONS } from "@lyrashield/auth"
 import { logger } from "@lyrashield/logger"
+import { SCHEDULE_ADMISSION_ENABLED } from "../../../lib/scan-admission"
 import { authErrorResponse } from "../../../lib/api-auth"
 import {
   apiError,
@@ -57,6 +58,14 @@ async function post(request: Request) {
     const { workspaceId, targetId, cron, goal, mode } = parsed.data
 
     const { session } = await requirePermission(workspaceId, PERMISSIONS.schedule.create)
+
+    if (!SCHEDULE_ADMISSION_ENABLED) {
+      return apiError(
+        "SCHEDULE_UNAVAILABLE",
+        "Scheduled scans are not available in this release.",
+        403
+      )
+    }
 
     const target = await prisma.target.findFirst({
       where: { id: targetId, workspaceId, deletedAt: null },

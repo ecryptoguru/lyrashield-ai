@@ -196,7 +196,7 @@ For an authorized repository target, Deep is the intrusive agentic pentest profi
 
 ### Web App and API targets
 
-Web App and API Safe reviews use deterministic checks only. Standard and Deep also run the pinned AI engine against the verified target through a scan-scoped relay, with deterministic checks retained. The available modes are:
+Web App and API Safe reviews use deterministic checks only. Standard and Deep also run the pinned AI engine against the verified target through a scan-scoped relay, with deterministic checks retained. Only **Surface Review** and **Endpoint Review** are part of the current launch offering: the Standard and Deep reviews below are removed from it, and requesting one returns an unsupported-profile error instead of a downgraded review. The available modes are:
 
 | User option               | Target type | Backend mode | Requirements                          |
 | ------------------------- | ----------- | ------------ | ------------------------------------- |
@@ -362,7 +362,7 @@ Private report links expire after 30 days. Shared report pages are noindex and u
 
 ## 17. Monitoring schedules
 
-Open **Scans → Monitoring → New Schedule** and configure:
+Recurring schedules are deferred from the current launch offering. Creating and enabling a schedule is disabled; existing schedules and their run history remain readable. Where schedules are available, open **Scans → Monitoring → New Schedule** and configure:
 
 - target;
 - UTC cron expression;

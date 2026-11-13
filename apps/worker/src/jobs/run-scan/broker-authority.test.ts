@@ -116,6 +116,12 @@ function fixture() {
       attemptId: "attempt-1",
       commandId: "cmd-1",
     }),
+    consumeSupervisorReceipts: vi.fn().mockResolvedValue({
+      operationId: "op-1",
+      confirmedSequence: 0,
+      receipts: 0,
+      dispositions: [],
+    }),
     status: vi.fn().mockResolvedValue({
       kind: "available",
       operationId: "op-1",
@@ -201,6 +207,27 @@ describe("broker worker boundary and retained authority", () => {
       getState: async () => "waiting",
     })
     mocks.legacy.mockResolvedValue({ status: "completed" })
+  })
+  it("ingests authenticated receipts before reading state and retains lost or foreign acknowledgements", async () => {
+    const f = fixture()
+    await f.processor(f.job)
+    expect(f.broker.consumeSupervisorReceipts).toHaveBeenCalledWith("op-1")
+    expect(f.broker.consumeSupervisorReceipts.mock.invocationCallOrder[0]).toBeLessThan(
+      f.broker.status.mock.invocationCallOrder[0]!
+    )
+    f.broker.consumeSupervisorReceipts.mockRejectedValueOnce(new Error("lost receipt ACK"))
+    const statusCalls = f.broker.status.mock.calls.length
+    expect((await f.processor(f.job)).errorCategory).toBe("BROKER_OUTCOME_UNKNOWN")
+    expect(f.broker.status).toHaveBeenCalledTimes(statusCalls)
+    f.broker.consumeSupervisorReceipts.mockResolvedValueOnce({
+      operationId: "foreign-operation",
+      confirmedSequence: 0,
+      receipts: 0,
+      dispositions: [],
+    })
+    expect((await f.processor(f.job)).errorCategory).toBe("BROKER_OUTCOME_UNKNOWN")
+    expect(f.broker.startPaid).not.toHaveBeenCalled()
+    expect(f.broker.startUnmetered).not.toHaveBeenCalled()
   })
   it("defaults closed and has no legacy fallback without installation", async () => {
     const { job } = fixture()

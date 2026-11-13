@@ -71,6 +71,48 @@ describe("closed supervisor independent-journal composition inspection", () => {
     }
   )
 
+  it.each([
+    "segment",
+    "segment-reversed",
+    "segment-stem",
+    "segment-stem-reversed",
+    "lock",
+    "case-variant-segment",
+    "case-variant-lock",
+    "unicode-variant-segment",
+    "parent-alias-segment",
+  ])("rejects %s overlapping namespaces without writing", async (kind) => {
+    const f = await fixture()
+    if (kind === "segment") f.options.independentPath = `${f.options.originalPath}.segment.2`
+    if (kind === "segment-reversed") {
+      f.options.independentPath = f.options.originalPath
+      f.options.originalPath = `${f.options.originalPath}.segment.2`
+    }
+    if (kind === "segment-stem") f.options.independentPath = `${f.options.originalPath}.segment`
+    if (kind === "segment-stem-reversed") {
+      f.options.independentPath = f.options.originalPath
+      f.options.originalPath = `${f.options.originalPath}.segment`
+    }
+    if (kind === "lock") f.options.independentPath = `${f.options.originalPath}.lock`
+    if (kind === "case-variant-segment")
+      f.options.independentPath = join(f.root, "ORIGINAL.JSONL.SEGMENT.2")
+    if (kind === "case-variant-lock")
+      f.options.independentPath = join(f.root, "ORIGINAL.JSONL.LOCK")
+    if (kind === "unicode-variant-segment") {
+      f.options.originalPath = join(f.root, "café")
+      f.options.independentPath = join(f.root, "cafe\u0301.segment.2")
+    }
+    if (kind === "parent-alias-segment") {
+      await symlink(f.root, join(f.root, "alias"))
+      f.options.independentPath = join(f.root, "alias", "original.jsonl.segment.2")
+    }
+    const files = await readdir(f.root)
+    await expect(inspectSupervisorIndependentComposition(f.options)).rejects.toThrow(
+      /alias|namespace/
+    )
+    expect(await readdir(f.root)).toEqual(files)
+  })
+
   it.each(["equal-keys", "invalid-epoch", "oversized-supervisor", "open", "invented-authority"])(
     "rejects %s before creating the independent file",
     async (failure) => {

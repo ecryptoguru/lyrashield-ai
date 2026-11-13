@@ -1,3 +1,4 @@
+import { fixtureActionIntentPublisher, fixtureAuthorityFence } from "./test-fixtures"
 import { mkdtemp, rm } from "node:fs/promises"
 import { createServer } from "node:http"
 import { tmpdir } from "node:os"
@@ -30,6 +31,8 @@ describe("provider gateway HTTP boundary", () => {
     })
     const service = new ProviderGatewayService({
       journal,
+      authorityFence: fixtureAuthorityFence,
+      publishActionIntent: fixtureActionIntentPublisher,
       signingSecret: secret,
       responseEncryptionSecret: "e".repeat(48),
       authorizeGrant: async () => fixturePolicy,
@@ -111,6 +114,8 @@ describe("provider gateway HTTP boundary", () => {
     )
     const service = new ProviderGatewayService({
       journal,
+      authorityFence: fixtureAuthorityFence,
+      publishActionIntent: fixtureActionIntentPublisher,
       signingSecret: secret,
       admission: "closed",
       providers: new Map(),
@@ -147,6 +152,8 @@ describe("provider gateway HTTP boundary", () => {
     )
     const service = new ProviderGatewayService({
       journal,
+      authorityFence: fixtureAuthorityFence,
+      publishActionIntent: fixtureActionIntentPublisher,
       signingSecret: secret,
       responseEncryptionSecret: "e".repeat(48),
       authorizeGrant: async () => fixturePolicy,

@@ -170,12 +170,12 @@ describe("processDueSchedules", () => {
     expect(advanceBlockedSchedule).not.toHaveBeenCalled()
   })
 
-  it("defers live relay loss without advancing or notifying", async () => {
+  it("allows a deterministic WEB_APP review even while the live relay is unavailable", async () => {
     schedulerMocks.relayAvailable.mockResolvedValue(false)
-    vi.mocked(getDueSchedules).mockResolvedValue([{ ...schedule, mode: "STANDARD" }] as never)
-    expect(await processDueSchedules()).toBe(0)
+    vi.mocked(getDueSchedules).mockResolvedValue([schedule] as never)
+    expect(await processDueSchedules()).toBe(1)
+    expect(createScheduledScan).toHaveBeenCalled()
     expect(advanceBlockedSchedule).not.toHaveBeenCalled()
-    expect(createScheduledScan).not.toHaveBeenCalled()
     expect(sendScheduleBlockedNotice).not.toHaveBeenCalled()
   })
 
@@ -217,23 +217,15 @@ describe("processDueSchedules", () => {
     )
   })
 
-  it("fails closed when a scheduled URL review has no current domain proof", async () => {
-    vi.mocked(getDueSchedules).mockResolvedValue([
-      { ...schedule, mode: "STANDARD", target: { ...schedule.target, type: "WEB_APP" } },
-    ] as never)
+  it("never runs a domain proof for a deterministic URL review", async () => {
+    vi.mocked(getDueSchedules).mockResolvedValue([schedule] as never)
     vi.mocked(lookupDomainProof).mockResolvedValue({ domain: "example.com", verified: false })
 
-    expect(await processDueSchedules(new Date("2026-01-01T12:00:00Z"))).toBe(0)
+    expect(await processDueSchedules(new Date("2026-01-01T12:00:00Z"))).toBe(1)
 
-    expect(lookupDomainProof).toHaveBeenCalledWith("workspace-1", "https://example.com")
-    expect(createScheduledScan).not.toHaveBeenCalled()
-    expect(sendScheduleBlockedNotice).toHaveBeenCalledWith(
-      "workspace-1",
-      "schedule-1",
-      "Example",
-      "DOMAIN_VERIFICATION_REQUIRED",
-      "2026-01-01"
-    )
+    expect(lookupDomainProof).not.toHaveBeenCalled()
+    expect(createScheduledScan).toHaveBeenCalled()
+    expect(sendScheduleBlockedNotice).not.toHaveBeenCalled()
   })
 
   it("fails closed without a persisted schedule creator", async () => {
@@ -377,9 +369,9 @@ describe("processDueSchedules", () => {
     expect(restoreUnsubmittedScheduleOccurrence).not.toHaveBeenCalled()
   })
 
-  it("allows scheduled WEB_APP STANDARD scans after surface review is implemented", async () => {
+  it("allows scheduled WEB_APP SAFE scans", async () => {
     vi.mocked(getDueSchedules).mockResolvedValue([
-      { ...schedule, mode: "STANDARD", target: { ...schedule.target, type: "WEB_APP" } },
+      { ...schedule, mode: "SAFE", target: { ...schedule.target, type: "WEB_APP" } },
     ] as never)
 
     const enqueued = await processDueSchedules()
@@ -388,9 +380,9 @@ describe("processDueSchedules", () => {
     expect(createScheduledScan).toHaveBeenCalled()
   })
 
-  it("advances and records unavailable profiles with a bounded notice", async () => {
+  it("advances and records removed URL tiers with a bounded notice", async () => {
     vi.mocked(getDueSchedules).mockResolvedValue([
-      { ...schedule, mode: "DEEP", target: { ...schedule.target, type: "API" } },
+      { ...schedule, mode: "STANDARD", target: { ...schedule.target, type: "API" } },
     ] as never)
     expect(await processDueSchedules(new Date("2026-01-01T12:00:00Z"))).toBe(0)
     expect(advanceBlockedSchedule).toHaveBeenCalledWith(
@@ -409,11 +401,11 @@ describe("processDueSchedules", () => {
     expect(createScheduledScan).not.toHaveBeenCalled()
   })
 
-  it("allows scheduled API STANDARD scans when an OpenAPI spec is configured", async () => {
+  it("allows scheduled API SAFE scans when an OpenAPI spec is configured", async () => {
     vi.mocked(getDueSchedules).mockResolvedValue([
       {
         ...schedule,
-        mode: "STANDARD",
+        mode: "SAFE",
         target: {
           ...schedule.target,
           type: "API",

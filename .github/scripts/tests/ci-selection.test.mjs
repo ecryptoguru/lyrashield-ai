@@ -49,6 +49,11 @@ function results(outputs = classify("README.md")) {
     "desktop-frontend": {
       result: outputs["desktop-frontend-tests"] === "true" ? "success" : "skipped",
     },
+    "container-build": {
+      result: ["web-image", "worker-image", "egress-image"].some((flag) => outputs[flag] === "true")
+        ? "success"
+        : "skipped",
+    },
     "marketing-checks": {
       result:
         outputs["marketing-tests"] === "true" || outputs["motion-tests"] === "true"
@@ -101,6 +106,10 @@ test("aggregate rejects every failed, skipped, missing or cancelled selected dep
     if (needs["desktop-frontend"].result === "success") {
       assert.throws(() => validateResults({ ...needs, "desktop-frontend": { result: "skipped" } }))
     }
+    if (needs["container-build"].result === "success") {
+      for (const status of ["failure", "cancelled", "skipped", undefined])
+        assert.throws(() => validateResults({ ...needs, "container-build": { result: status } }))
+    }
     for (const status of ["failure", "cancelled", "", undefined]) {
       assert.throws(() => validateResults({ ...needs, "desktop-frontend": { result: status } }))
     }
@@ -122,6 +131,7 @@ test("aggregate rejects every failed, skipped, missing or cancelled selected dep
     "app-checks",
     "marketing-checks",
     "desktop-frontend",
+    "container-build",
   ])
   assert.equal(aggregate.steps.at(-1).if, "${{ cancelled() }}")
   const check = aggregate.steps.find((step) => step.run?.includes("ci-selection.mjs results"))
@@ -193,7 +203,7 @@ test("only web CSS and public assets narrow runtime gates; mixed, renamed and se
   }
 })
 
-test("optional images qualify packaging while required source consumers remain selected", () => {
+test("selected images qualify packaging while required source consumers remain selected", () => {
   for (const file of [
     "Dockerfile",
     ".dockerignore",
@@ -249,7 +259,7 @@ test("optional images qualify packaging while required source consumers remain s
     )
   }
   // Read every actual copied host asset so adding a new COPY cannot silently
-  // bypass the optional packaging proof.
+  // bypass the selected packaging proof.
   for (const [, file] of readFileSync("Dockerfile", "utf8").matchAll(/^COPY (ops\/worker\/\S+) /gm))
     assert.equal(classify(file)["worker-image"], "true", file)
   const container = workflow.jobs["container-build"]

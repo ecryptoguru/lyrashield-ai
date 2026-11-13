@@ -61,14 +61,19 @@ async function post(request: Request) {
     await resolveDelegatedTargetReadScope(session, workspace, targetId)
     assertOAuthDelegatedScope(session, targetId)
 
-    // Resolve the signing key server-side (env in dev, Key Vault in prod). Null
-    // means unsigned — the report still issues, marked as such.
     const signingPrivateKey = await resolveLaunchReportSigningPrivateKey().catch((error) => {
       logger.error("Launch report signing key resolution failed", {
         error: error instanceof Error ? error.message : String(error),
       })
       return null
     })
+    if (!signingPrivateKey) {
+      return apiError(
+        "REPORT_SIGNING_UNAVAILABLE",
+        "Report signing is temporarily unavailable. Please try again.",
+        503
+      )
+    }
 
     const execute = async (
       client?: NonNullable<Parameters<typeof generateLaunchReport>[3]>["client"],
@@ -79,7 +84,7 @@ async function post(request: Request) {
       }
       const result = await generateLaunchReport(workspaceId, targetId, session.userId, {
         appDisplayName,
-        signingPrivateKey: signingPrivateKey ?? undefined,
+        signingPrivateKey,
         ...(client ? { client } : {}),
       })
       if (!result) {

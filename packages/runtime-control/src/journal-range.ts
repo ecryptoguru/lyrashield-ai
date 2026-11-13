@@ -11,12 +11,13 @@ export type JournalRangeIndex = { offset: number; length: number; hash: string }
 
 /** The owner authenticates file identity and timestamps around this bounded read. */
 export async function readIndexedJournalRange<T>(
-  file: FileHandle,
+  fileForIndex: (index: number) => Promise<FileHandle>,
   positions: JournalRangeIndex,
   afterSequence: number,
   bounds: JournalReadLimits,
   secret: string,
-  validatePayload: (value: unknown) => T
+  validatePayload: (value: unknown) => T,
+  capture?: (sequence: number, bytes: Uint8Array) => void
 ): Promise<JournalRange<T>> {
   let bytes = 0
   const read = async (index: number) => {
@@ -25,6 +26,7 @@ export async function readIndexedJournalRange<T>(
       throw new JournalReadLimitError("journal range exceeds byte limit")
     bytes += position.length
     const buffer = Buffer.alloc(position.length)
+    const file = await fileForIndex(index)
     let offset = 0
     while (offset < buffer.length) {
       const result = await file.read(
@@ -45,6 +47,7 @@ export async function readIndexedJournalRange<T>(
     ) {
       throw new JournalIntegrityError("journal range differs from authenticated chain")
     }
+    capture?.(record.sequence, buffer)
     return record
   }
   const head = positions.length ? await read(positions.length - 1) : null

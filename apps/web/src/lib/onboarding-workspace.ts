@@ -9,6 +9,7 @@ import {
   type ScopedTransaction,
 } from "@lyrashield/db"
 import { getOrCreateOnboardingState } from "./onboarding-state"
+import { deliverOnboardingWorkspaceAudit } from "./onboarding-workspace-audit"
 import { createWorkspaceInTransaction, isWorkspaceSlugUniqueError } from "./workspace-creation"
 import type { OnboardingWorkspaceChoice } from "./onboarding-workspace-schema"
 
@@ -38,6 +39,8 @@ export class OnboardingWorkspaceError extends Error {
     super(code)
   }
 }
+
+class OnboardingAuditPendingError extends Error {}
 
 async function eligibleWorkspace(tx: ScopedTransaction, workspaceId: string, userId: string) {
   // Membership mutations share this workspace lock; permission cannot change
@@ -78,6 +81,9 @@ export async function chooseOrCreateOnboardingWorkspace(
               return { state, workspace: existing, trialStarted: false, created: false }
             }
           }
+          if (input.kind === "create" && state.pendingWorkspaceCreatedAuditId) {
+            throw new OnboardingAuditPendingError()
+          }
           if (state.completed || state.updatedAt.toISOString() !== input.expectedUpdatedAt)
             throw new OnboardingWorkspaceError("ONBOARDING_CHANGED")
           let workspace
@@ -114,25 +120,23 @@ export async function chooseOrCreateOnboardingWorkspace(
               currentStep: 1,
               updatedAt: new Date(Math.max(Date.now(), state.updatedAt.getTime() + 1)),
               skipped: false,
+              ...(input.kind === "create" ? { pendingWorkspaceCreatedAuditId: workspaceId } : {}),
             },
           })
           return { state: next, workspace, trialStarted, created: input.kind === "create" }
         },
         { accountId: userId }
       )
-      // Audit chain serialization owns its own transaction; never nest it in the claim.
-      if (result.created)
-        await prisma.auditLog.create({
-          data: {
-            workspaceId: result.workspace.id,
-            actorUserId: userId,
-            action: "workspace.created",
-            resourceType: "workspace",
-            resourceId: result.workspace.id,
-          },
-        })
+      if (result.state.pendingWorkspaceCreatedAuditId) {
+        await deliverOnboardingWorkspaceAudit(userId, result.state.pendingWorkspaceCreatedAuditId)
+        result.state.pendingWorkspaceCreatedAuditId = null
+      }
       return result
     } catch (error) {
+      if (error instanceof OnboardingAuditPendingError && attempt < 4) {
+        await getOrCreateOnboardingState(userId)
+        continue
+      }
       if (attempt >= 4 || !isWorkspaceSlugUniqueError(error)) throw error
     }
   }

@@ -470,7 +470,7 @@ test("target fetch failure preserves schedules already loaded", async ({ page })
   await expect(page.getByRole("heading", { name: "Existing checkout target" })).toBeVisible()
 })
 
-test("changing scheduled target resets an unavailable API review to the new target's options", async ({
+test("changing scheduled target resets the review to the new target's options", async ({
   page,
 }) => {
   await page.route("**/api/schedules?*", (route) =>
@@ -482,13 +482,8 @@ test("changing scheduled target resets an unavailable API review to the new targ
         success: true,
         data: {
           items: [
-            {
-              id: "api-target",
-              name: "API",
-              type: "API",
-              apiSpecUrl: "https://example.test/openapi.json",
-            },
-            { id: "url-target", name: "Web", type: "URL", apiSpecUrl: null },
+            { id: "repo-target", name: "Repo", type: "REPO", apiSpecUrl: null },
+            { id: "url-target", name: "Web", type: "WEB_APP", apiSpecUrl: null },
           ],
           nextCursor: null,
         },
@@ -497,20 +492,22 @@ test("changing scheduled target resets an unavailable API review to the new targ
   )
   await page.goto("?dashboard-ux=schedules")
   await page.getByRole("button", { name: "New Schedule" }).click()
-  await page.getByLabel("Target", { exact: true }).selectOption("api-target")
+  await page.getByLabel("Target", { exact: true }).selectOption("repo-target")
   await page.getByRole("button", { name: "Advanced", exact: true }).click()
   const depth = page.getByLabel("Scan depth", { exact: true })
-  const apiOption = await depth
+  const repoOption = await depth
     .locator("option")
     .evaluateAll(
       (options: HTMLOptionElement[]) =>
-        options.find((option) => /Contract/.test(option.text) && !option.disabled)?.value
+        options.find((option) => /Code scan/.test(option.text) && !option.disabled)?.value
     )
-  expect(apiOption).toBeTruthy()
-  await depth.selectOption(apiOption!)
+  expect(repoOption).toBeTruthy()
+  await depth.selectOption(repoOption!)
   await page.getByLabel("Target", { exact: true }).selectOption("url-target")
-  await expect(depth).not.toHaveValue(apiOption!)
-  await expect(page.getByRole("status")).toContainText("Review depth reset")
+  // URL/API offers only the deterministic surface review, so the depth resets
+  // to it rather than to a removed engine tier.
+  await expect(depth.locator("option")).toHaveCount(1)
+  await expect(depth.locator("option")).toContainText(/Surface Review/)
 })
 
 test("score history handles an empty state and a single completed scan accessibly", async ({

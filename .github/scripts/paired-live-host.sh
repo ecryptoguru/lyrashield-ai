@@ -1,10 +1,16 @@
 #!/bin/sh
-# Unwired protected VM entry point, transferred with its exact Git sources.
+# Protected VM entry point, transferred with its exact Git sources.
 set -eu
 phase=$1 argument=$2 dir=$3
-case "$phase" in stage-store|rpc|drain|continuity|relay|accounted|evidence|unused|worker|stopped|physical|stop|contain|stage-sandbox|clear|selector-absent|armed-selector) ;; *) exit 2 ;; esac
+case "$phase" in stage-store|runtime-authority|rpc|drain|continuity|relay|accounted|evidence|unused|worker|stopped|physical|stop|contain|stage-sandbox|clear|selector-absent|armed-selector) ;; *) exit 2 ;; esac
 if [ "$phase" = stage-store ]; then
   exec python3 -I "$dir/.github/scripts/paired-stage-store.py" "$argument"
+fi
+exec 9>/run/lyrashield/paired-runtime-operation.lock
+flock -n 9 || exit 1
+if [ "$phase" = runtime-authority ]; then
+  [ "$(id -u)" = 0 ] || exit 1
+  exec python3 -I "$dir/.github/scripts/paired-runtime-host-observation.py" "$argument" "$dir/packages/security/src/runtime-qualification-key.json"
 fi
 config=/etc/lyrashield/worker-runtime.conf
 env_file=/etc/lyrashield/worker.env
@@ -23,8 +29,6 @@ printf '%s\n' "$image" | grep -Eq '^ghcr\.io/ecryptoguru/lyrashield-ai/lyrashiel
 printf '%s\n' "$sandbox" | grep -Eq '^ghcr\.io/ecryptoguru/lyrashield-sandbox@sha256:[a-f0-9]{64}$'
 sibling="$config.evidence-writer-canary"
 command -v jq >/dev/null
-exec 9>/run/lyrashield/paired-runtime-operation.lock
-flock -n 9 || exit 1
 active=lyrashield-worker.service
 timer=lyrashield-worker-egress-refresh.timer
 # This dedicated worker VM has no separate allowlist of trustworthy consumers.

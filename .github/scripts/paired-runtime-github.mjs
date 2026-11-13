@@ -23,6 +23,7 @@ const qualificationKinds = new Set([
   "sandbox-qualification",
   "financial-qualification",
   "reader-qualification",
+  "runtime-fleet-qualification",
   "arm-approval",
   "rebind-approval",
   "handoff",
@@ -52,6 +53,7 @@ const kinds = new Set([
   "financial-qualification",
   "reader-qualification",
   "release-readback",
+  "runtime-fleet-qualification",
   "arm-approval",
   "rebind-approval",
 ])

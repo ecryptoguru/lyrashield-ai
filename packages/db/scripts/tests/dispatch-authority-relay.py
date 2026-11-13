@@ -15,6 +15,7 @@ listener.listen(64)
 with open(port_file, "x", encoding="ascii") as output:
     output.write(str(listener.getsockname()[1]))
 fired = threading.Event()
+projection_fired = threading.Event()
 delayed = threading.Event()
 live_delayed = threading.Event()
 live_stalled = threading.Event()
@@ -60,7 +61,7 @@ def relay(connection):
         fields = dict(zip(parts[::2], parts[1::2]))
         if len(fields) * 2 != len(parts):
             raise ValueError("duplicate startup parameter")
-        target = fields.get(b"user") in (b"postgres", b"dispatch_prepare_broker")
+        target = fields.get(b"user") in (b"postgres", b"dispatch_prepare_broker", b"dispatch_receipt_consumer")
 
         process = subprocess.Popen(
             ["docker", "exec", "-i", container, "nc", "127.0.0.1", "5432"],
@@ -71,7 +72,7 @@ def relay(connection):
         process.stdin.write(startup_header + startup)
         process.stdin.flush()
 
-        transaction = {"begin": False, "attempt_insert": False, "liveness": False}
+        transaction = {"begin": False, "attempt_insert": False, "receipt_insert": False, "liveness": False}
         transaction_lock = threading.Lock()
 
         def to_database():
@@ -92,10 +93,12 @@ def relay(connection):
                     normalized = sql.upper()
                     with transaction_lock:
                         if normalized.lstrip().startswith(b"BEGIN"):
-                            transaction.update(begin=True, attempt_insert=False)
+                            transaction.update(begin=True, attempt_insert=False, receipt_insert=False)
                         elif transaction["begin"] and normalized.lstrip().startswith(b"INSERT"):
-                            if b'"SCANDISPATCHATTEMPT"' in normalized:
+                            if b'"SCANDISPATCHATTEMPT"' in normalized or (fields.get(b"user") == b"dispatch_receipt_consumer" and b'"SCANSUPERVISORJOURNALRECORD"' in normalized):
                                 transaction["attempt_insert"] = True
+                            if fields.get(b"user") == b"dispatch_receipt_consumer" and b'"SCANSUPERVISORRECEIPT"' in normalized:
+                                transaction["receipt_insert"] = True
                     with transaction_lock:
                         if not transaction["begin"] and b"CLOCK_TIMESTAMP()" in normalized and normalized.endswith(b" AS LIVE"):
                             transaction["liveness"] = True
@@ -135,6 +138,15 @@ def relay(connection):
             if header[:1] == b"C" and body == b"COMMIT\x00":
                 with transaction_lock:
                     matches = target and transaction["begin"] and transaction["attempt_insert"]
+                if target and transaction["receipt_insert"] and os.path.isfile(arm + ".projection"):
+                    with fired_lock:
+                        should_drop_projection = not projection_fired.is_set()
+                        if should_drop_projection:
+                            projection_fired.set()
+                    if should_drop_projection:
+                        with open(marker + ".projection", "x", encoding="ascii") as output:
+                            output.write("receipt-projection-commit-response-dropped\n")
+                        return
                 if os.path.isfile(arm):
                     print(
                         f"commit_observed target={int(target)} matches={int(matches)} fired={int(fired.is_set())}",

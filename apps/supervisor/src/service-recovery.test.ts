@@ -1,3 +1,4 @@
+import { explicitRecoveryJournal, fixtureAuthorityFence } from "./test-fixtures"
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { createServer } from "node:http"
 import { tmpdir } from "node:os"
@@ -121,6 +122,11 @@ class Mirror implements AuthorityMirror {
     head: AuthorityHead,
     record: JournalRecord<unknown>
   ) {
+    if (
+      canonicalJson(head) === canonicalJson(this.head) &&
+      canonicalJson(this.records.get(record.sequence) ?? null) === canonicalJson(record)
+    )
+      return "written" as const
     if (canonicalJson(previous) !== canonicalJson(this.head)) return "conflict" as const
     this.head = structuredClone(head)
     this.records.set(record.sequence, structuredClone(record))
@@ -146,7 +152,7 @@ function selector(command: SupervisorCommand): SupervisorRecoveryRequest {
   }
 }
 
-async function setup() {
+async function setup(automaticRecovery = false) {
   const root = await mkdtemp(join(tmpdir(), "supervisor-service-recovery-"))
   roots.push(root)
   const store = new Store()
@@ -192,8 +198,9 @@ async function setup() {
     const factory = createSupervisorAuthorityJournal(options)
     closes.push(factory.close)
     const service = new SupervisorService({
-      journal: factory.journal,
+      journal: automaticRecovery ? factory.journal : explicitRecoveryJournal(factory.journal),
       admission,
+      authorityFence: fixtureAuthorityFence,
       signingSecret: secret,
       supervisorInstanceId: instance,
       now: () => clock,
@@ -269,6 +276,96 @@ async function setup() {
 }
 
 describe("explicit supervisor same-operation recovery", () => {
+  it.each(["command_intent", "attempt_prepared", "resource_bound", "resource_started"] as const)(
+    "automatically holds the original operation after a lost %s acknowledgement",
+    async (event) => {
+      const f = await setup(true)
+      let command: SupervisorCommand = prepare
+      if (event === "resource_bound" || event === "resource_started") {
+        const prepared = await f.service.execute(prepare)
+        command = {
+          type: "START_UNMETERED",
+          commandId: "start-automatic-recovery",
+          attemptId: binding.attemptId,
+          executorKey: "scanner",
+          expectedReceiptHash: prepared.receipt.hash,
+        }
+      }
+      f.store.loseOn = event
+      await expect(f.service.execute(command)).rejects.toMatchObject({ code: "AUTHORITY_UNKNOWN" })
+      const before = { ...f.effects }
+      await f.factory.close()
+      const restarted = f.create()
+      await restarted.service.initialize()
+      expect((await restarted.service.execute(command)).status).toBe("UNKNOWN")
+      expect(f.effects).toEqual(before)
+      expect(f.authority.calls).toBeGreaterThan(0)
+      await restarted.factory.close()
+      const again = f.create()
+      await again.service.initialize()
+      expect((await again.service.execute(command)).status).toBe("UNKNOWN")
+      expect(f.effects).toEqual(before)
+    }
+  )
+
+  it("does not automatically repair a pending operation when recovery authority is revoked", async () => {
+    const f = await setup(true)
+    f.store.loseOn = "command_intent"
+    await expect(f.service.execute(prepare)).rejects.toMatchObject({ code: "AUTHORITY_UNKNOWN" })
+    const bytes = await readFile(f.options.originalPath, "utf8")
+    await f.factory.close()
+    f.authority.recovery = false
+    const restarted = f.create()
+    await expect(restarted.service.initialize()).rejects.toMatchObject({
+      code: "AUTHORITY_CONFLICT",
+    })
+    expect(await readFile(f.options.originalPath, "utf8")).toBe(bytes)
+    expect(f.effects.create + f.effects.start + f.effects.provider).toBe(0)
+  })
+
+  it("automatically recovers a lost acknowledgement in the running supervisor", async () => {
+    const f = await setup(true)
+    f.store.loseOn = "command_intent"
+    await expect(f.service.execute(prepare)).rejects.toMatchObject({ code: "AUTHORITY_UNKNOWN" })
+    const original = await readFile(f.options.originalPath, "utf8")
+    expect((await f.service.execute(prepare)).status).toBe("UNKNOWN")
+    expect((await readFile(f.options.originalPath, "utf8")).startsWith(original)).toBe(true)
+    expect(f.effects.create + f.effects.start + f.effects.provider).toBe(0)
+  })
+
+  it("automatically resumes a recovery whose own acknowledgement was lost", async () => {
+    const f = await setup(true)
+    f.store.loseOn = "command_intent"
+    await expect(f.service.execute(prepare)).rejects.toMatchObject({ code: "AUTHORITY_UNKNOWN" })
+    await f.factory.close()
+    f.store.loseOn = "command_recovery_hold"
+    const recovering = f.create()
+    await expect(recovering.service.initialize()).rejects.toMatchObject({
+      code: "AUTHORITY_UNKNOWN",
+    })
+    const heldBytes = await readFile(f.options.originalPath, "utf8")
+    expect(heldBytes).toContain("command_recovery_hold")
+    await recovering.factory.close()
+    const restarted = f.create()
+    await restarted.service.initialize()
+    expect((await restarted.service.execute(prepare)).status).toBe("UNKNOWN")
+    expect(await readFile(f.options.originalPath, "utf8")).toBe(heldBytes)
+    expect(f.effects.create + f.effects.start + f.effects.provider).toBe(0)
+  })
+
+  it("retries an interrupted automatic recovery without restarting the supervisor", async () => {
+    const f = await setup(true)
+    f.store.loseOn = "command_intent"
+    await expect(f.service.execute(prepare)).rejects.toMatchObject({ code: "AUTHORITY_UNKNOWN" })
+    f.store.loseOn = "command_recovery_hold"
+    await expect(f.service.execute(prepare)).rejects.toMatchObject({ code: "AUTHORITY_UNKNOWN" })
+    const heldBytes = await readFile(f.options.originalPath, "utf8")
+    expect(heldBytes).toContain("command_recovery_hold")
+    expect((await f.service.execute(prepare)).status).toBe("UNKNOWN")
+    expect(await readFile(f.options.originalPath, "utf8")).toBe(heldBytes)
+    expect(f.effects.create + f.effects.start + f.effects.provider).toBe(0)
+  })
+
   it.each([
     "workspaceId",
     "operationId",
@@ -448,7 +545,7 @@ describe("explicit supervisor same-operation recovery", () => {
       const bytes = await readFile(f.options.originalPath, "utf8")
       const original = JSON.parse(bytes.trim())
       f.advance()
-      await expect(f.service.execute(prepare)).rejects.toMatchObject({ code: "IDENTITY_CONFLICT" })
+      await expect(f.service.execute(prepare)).rejects.toMatchObject({ code: "REPLAY_REQUIRED" })
       const recovered = await f.service.recover(selector(prepare))
       expect(recovered.status).toBe("UNKNOWN")
       expect(recovered.recoveredRecord).toEqual(original)
@@ -546,9 +643,11 @@ describe("explicit supervisor same-operation recovery", () => {
         expectedReceiptHash: prepared.receipt.hash,
       }
       f.store.loseOn = event
-      await expect(f.service.execute(start)).rejects.toMatchObject({ code: "IDENTITY_CONFLICT" })
+      await expect(f.service.execute(start)).rejects.toMatchObject({ code: "AUTHORITY_UNKNOWN" })
       expect(f.effects.create).toBe(1)
       const counts = { ...f.effects }
+      await expect(f.service.execute(start)).rejects.toMatchObject({ code: "REPLAY_REQUIRED" })
+      expect(f.effects).toEqual(counts)
       const recovered = await f.service.recover(selector(start))
       expect(recovered.command.status).toBe("UNKNOWN")
       expect((await f.service.execute(start)).status).toBe("UNKNOWN")
@@ -561,6 +660,50 @@ describe("explicit supervisor same-operation recovery", () => {
       expect(f.effects).toEqual(counts)
     }
   )
+
+  it("does not acknowledge a queued replay after a journal write loses its acknowledgement", async () => {
+    const f = await setup()
+    const prepared = await f.service.execute(prepare)
+    const start: SupervisorCommand = {
+      type: "START_UNMETERED",
+      commandId: "start-queued-recovery",
+      attemptId: binding.attemptId,
+      executorKey: "scanner",
+      expectedReceiptHash: prepared.receipt.hash,
+    }
+    let enter!: () => void, release!: () => void
+    const entered = new Promise<void>((resolve) => {
+      enter = resolve
+    })
+    const proceed = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    f.store.loseOn = "resource_bound"
+    f.store.onRecordWrite = async (type) => {
+      if (type === "resource_bound") {
+        enter()
+        await proceed
+      }
+    }
+    const first = f.service.execute(start).catch((error: unknown) => error)
+    await entered
+    const replay = f.service.execute(start).catch((error: unknown) => error)
+    await new Promise<void>((resolve) => setImmediate(resolve))
+    release()
+    expect(await first).toMatchObject({ code: "AUTHORITY_UNKNOWN" })
+    expect(await replay).toMatchObject({ code: "REPLAY_REQUIRED" })
+    expect(f.effects.create).toBe(1)
+    expect((await f.service.recover(selector(start))).command.status).toBe("UNKNOWN")
+  })
+
+  it("holds PREPARE replay after its preparation receipt acknowledgement is lost", async () => {
+    const f = await setup()
+    f.store.loseOn = "attempt_prepared"
+    await expect(f.service.execute(prepare)).rejects.toMatchObject({ code: "AUTHORITY_UNKNOWN" })
+    await expect(f.service.execute(prepare)).rejects.toMatchObject({ code: "REPLAY_REQUIRED" })
+    expect(f.effects.create + f.effects.start + f.effects.provider).toBe(0)
+    expect((await f.service.recover(selector(prepare))).command.status).toBe("UNKNOWN")
+  })
 
   it.each([
     "operationId",
@@ -694,9 +837,7 @@ describe("explicit supervisor same-operation recovery", () => {
         throw new Error("wrapper applied but local acknowledgement lost")
       return record
     })
-    await expect(f.service.execute(command)).rejects.toMatchObject({
-      code: event === "attempt_prepared" ? "AUTHORITY_UNKNOWN" : "AUTHORITY_CONFLICT",
-    })
+    await expect(f.service.execute(command)).rejects.toMatchObject({ code: "AUTHORITY_UNKNOWN" })
     const effects = { ...f.effects }
     first.mockRestore()
     const originalBytes = await readFile(f.options.originalPath, "utf8")
@@ -746,15 +887,10 @@ describe("explicit supervisor same-operation recovery", () => {
     f.store.onRecordWrite = undefined
     await recovering.factory.close()
     const restarted = f.create()
-    if (boundary === "hold-database") {
-      // The commit is independently visible despite its lost reply; the durable hold is UNKNOWN.
-      await restarted.service.initialize()
-      expect((await restarted.service.execute(command)).status).toBe("UNKNOWN")
-    } else {
-      await expect(restarted.service.initialize()).rejects.toMatchObject({
-        code: "REPLAY_REQUIRED",
-      })
-    }
+    // A committed mirror record without observed ACK remains pending across restart.
+    await expect(restarted.service.initialize()).rejects.toMatchObject({
+      code: "REPLAY_REQUIRED",
+    })
     const result = await restarted.service.recover(selector(command))
     expect(result.command.status).toBe("UNKNOWN")
     expect(result.recoveredRecord.payload.type).toBe(event)
@@ -918,6 +1054,37 @@ describe("explicit supervisor same-operation recovery", () => {
     expect((await running).status).toBe("STARTED")
     expect(f.effects.create).toBe(1)
     expect(f.effects.start).toBe(1)
+  })
+
+  it("keeps a recovered positive receipt staged until its UNKNOWN hold in the same snapshot", async () => {
+    const f = await setup()
+    f.store.onRecordWrite = async (type) => {
+      if (type === "attempt_prepared") f.mirror.loseNext = true
+    }
+    await expect(f.service.execute(prepare)).rejects.toMatchObject({ code: "AUTHORITY_UNKNOWN" })
+    f.store.onRecordWrite = undefined
+    await f.factory.close()
+    const restarted = f.create()
+    await expect(restarted.service.initialize()).rejects.toMatchObject({ code: "REPLAY_REQUIRED" })
+    await restarted.service.recover(selector(prepare))
+    const originals = await restarted.factory.journal.load()
+    const positive = originals.find((record) => record.payload.type === "attempt_prepared")!
+    const predecessor = originals[positive.sequence - 2]!
+    const page = await restarted.factory.journal.readCursor({
+      epochId: binding.authorityEpochId,
+      supervisorInstanceId: instance,
+      afterSequence: predecessor.sequence,
+      afterHash: predecessor.hash,
+      limit: 1,
+    })
+    expect(page.records[0]!.payload.payload).toEqual(positive)
+    expect(page.hasMore).toBe(true)
+    const final = await restarted.factory.journal.readCursor(page.nextCursor)
+    expect(final.records[0]!.payload.payload.payload.type).toBe("command_recovery_hold")
+    expect(final.hasMore).toBe(false)
+    expect(final.snapshotHead).toEqual(page.snapshotHead)
+    expect((await restarted.service.execute(prepare)).status).toBe("UNKNOWN")
+    expect(f.effects).toEqual({ create: 0, start: 0, inspect: 0, stop: 0, provider: 0 })
   })
 
   it("rejects caller content and legacy unbound pending status", async () => {

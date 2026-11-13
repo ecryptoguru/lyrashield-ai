@@ -1,8 +1,9 @@
+import { fixtureAuthorityFence } from "./test-fixtures"
 import { mkdtemp, rm } from "node:fs/promises"
 import { createServer } from "node:http"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { afterEach, describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import {
   SignedJournal,
   type ProviderGrantRevocation,
@@ -65,6 +66,7 @@ describe("supervisor HTTP boundary", () => {
       executor: new NoopExecutor(),
       providerGateway: new NoopGateway(),
       providerGatewayUrl: "http://127.0.0.1:1",
+      authorityFence: fixtureAuthorityFence,
       signingSecret: secret,
       supervisorInstanceId: "supervisor-http-1",
       admission: "closed",
@@ -100,9 +102,39 @@ describe("supervisor HTTP boundary", () => {
       const localOnly = await fetch(`${base}/v1/journal?${query}`, { headers })
       expect(localOnly.status).toBe(503)
       expect(await localOnly.json()).toMatchObject({ code: "JOURNAL_AUTHORITY_UNAVAILABLE" })
+      const read = vi.spyOn(service, "readJournal").mockResolvedValueOnce({
+        records: [],
+        snapshotHead: null,
+        hasMore: false,
+        nextCursor: {
+          epochId: "epoch-http",
+          supervisorInstanceId: "supervisor-http-1",
+          afterSequence: 0,
+          afterHash: "0".repeat(64),
+          limit: 10,
+          snapshotSequence: 0,
+          snapshotHash: "0".repeat(64),
+        },
+      })
+      const continuation = `${query}&snapshotSequence=0&snapshotHash=${"0".repeat(64)}`
+      expect((await fetch(`${base}/v1/journal?${continuation}`, { headers })).status).toBe(200)
+      expect(read).toHaveBeenCalledWith({
+        epochId: "epoch-http",
+        supervisorInstanceId: "supervisor-http-1",
+        afterSequence: 0,
+        afterHash: "0".repeat(64),
+        limit: 10,
+        snapshotSequence: 0,
+        snapshotHash: "0".repeat(64),
+      })
+      read.mockRestore()
       for (const malformed of [
         `${query}&limit=1`,
         `${query}&extra=1`,
+        `${query}&snapshotSequence=0`,
+        `${continuation}&snapshotHash=${"0".repeat(64)}`,
+        continuation.replace("snapshotSequence=0", "snapshotSequence=00"),
+        continuation.replace("snapshotHash=", "snapshotHash=x"),
         query.toString().replace("afterSequence=0", "afterSequence="),
         query.toString().replace("limit=10", "limit=0"),
       ]) {

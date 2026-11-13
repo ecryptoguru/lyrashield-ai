@@ -9,7 +9,10 @@ import {
 import { signToken } from "./grant-tokens"
 import { policyDigest } from "./request-policy"
 import { ProviderGatewayError } from "./errors"
+import { applyProviderNativeEvent } from "./native-invocation"
 import type { GrantState, RequestState, ProviderJournalEvent } from "./journal-events"
+import type { ProxyRequestContext } from "./proxy-request"
+import type { RetainedResponse } from "./retained-response"
 import type { TerminalUsage } from "./provider-usage"
 
 export interface ProviderJournalState {
@@ -78,12 +81,43 @@ export function responseIdentityReused(
   )
 }
 
+function applyNotDispatched(
+  state: ProviderJournalState,
+  record: JournalRecord<ProviderJournalEvent & { type: "request_not_dispatched" }>
+): void {
+  const event = record.payload
+  const request = state.requests.get(event.requestId)
+  const grant = state.grants.get(event.grantId)
+  if (
+    !request ||
+    !grant ||
+    request.outcome !== "PENDING" ||
+    request.grantId !== event.grantId ||
+    request.attemptId !== event.attemptId ||
+    grant.request.attemptId !== event.attemptId ||
+    grant.requestCount < 1 ||
+    grant.reservedCostMicros < request.reservationMicros
+  )
+    throw new ProviderGatewayError("JOURNAL_INTEGRITY", "non-dispatch binding is invalid", 500)
+  request.outcome = "NEVER_DISPATCHED"
+  request.physicalOutstanding = false
+  request.receiptHash = record.hash
+  request.receipt = { sequence: record.sequence, hash: record.hash, signature: record.signature }
+  grant.requestCount -= 1
+  grant.reservedCostMicros -= request.reservationMicros
+  grant.receiptHash = record.hash
+}
+
 export function applyProviderJournalRecord(
   state: ProviderJournalState,
   signingSecret: string,
   record: JournalRecord<ProviderJournalEvent>
 ): void {
   const event = record.payload
+  if (event.type === "request_invocation_bound" || event.type === "request_transport_ack") {
+    applyProviderNativeEvent(state, { ...record, payload: event })
+    return
+  }
   if (event.type === "grant_issued") {
     state.grants.set(event.grant.grantId, {
       request: event.grant.request,
@@ -126,6 +160,10 @@ export function applyProviderJournalRecord(
       grant.reservedCostMicros += request.reservationMicros
       grant.receiptHash = record.hash
     }
+    return
+  }
+  if (event.type === "request_not_dispatched") {
+    applyNotDispatched(state, { ...record, payload: event })
     return
   }
   if (event.type === "stream_delivery_uncertain") {
@@ -189,6 +227,15 @@ export function applyProviderJournalRecord(
     if (grant) grant.receiptHash = record.hash
     return
   }
+  applyProviderResult(state, signingSecret, { ...record, payload: event })
+}
+
+function applyProviderResult(
+  state: ProviderJournalState,
+  signingSecret: string,
+  record: JournalRecord<Extract<ProviderJournalEvent, { type: "request_result" }>>
+): void {
+  const event = record.payload
   const result = event.result
   const existing = state.requests.get(result.requestId)
   if (
@@ -254,4 +301,40 @@ export function requestStatus(request: RequestState, grant: GrantState) {
     reservationMicros: request.reservationMicros,
     receipt: request.receipt ?? null,
   }
+}
+
+export async function recordProviderResult(
+  context: ProxyRequestContext,
+  requestId: string,
+  outcome: "SUCCEEDED" | "FAILED" | "UNKNOWN",
+  statusCode?: number,
+  responseHash?: string,
+  responseBytes?: number,
+  detail?: string,
+  usage?: TerminalUsage,
+  retainedResponse?: RetainedResponse
+): Promise<RequestState> {
+  const state = context.requests.get(requestId)
+  if (!state) throw new ProviderGatewayError("JOURNAL_INTEGRITY", "request is missing", 500)
+  const usageId = usage ? providerUsageId(context.options.signingSecret, state, usage) : undefined
+  const record = await context.options.journal.append({
+    type: "request_result",
+    result: {
+      requestId,
+      grantId: context.requests.get(requestId)?.grantId ?? "",
+      attemptId: context.requests.get(requestId)?.attemptId ?? "",
+      outcome,
+      ...(statusCode !== undefined ? { statusCode } : {}),
+      ...(responseHash ? { responseHash } : {}),
+      ...(responseBytes !== undefined ? { responseBytes } : {}),
+      ...(usageId ? { usageId } : {}),
+      ...(usage ? { usage } : {}),
+      ...(retainedResponse ? { retainedResponse } : {}),
+      ...(detail ? { detail } : {}),
+    },
+  })
+  context.apply(record)
+  const result = context.requests.get(requestId)
+  if (!result) throw new ProviderGatewayError("JOURNAL_INTEGRITY", "request result is missing", 500)
+  return result
 }

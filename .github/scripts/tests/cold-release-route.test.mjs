@@ -76,6 +76,15 @@ test("same-run release images and successful native checks are required before A
   const harness = parse(readFileSync(".github/workflows/verify-webhook-worker-image.yml", "utf8"))
   const runtime = parse(readFileSync(".github/workflows/deploy-azure-runtime.yml", "utf8"))
   assert.equal(release.jobs["deploy-azure"].with.cold_release, true)
+  assert.deepEqual(release.jobs["deploy-azure"].needs, ["routing", "qualify-runtime"])
+  assert.equal(
+    release.jobs["qualify-runtime"].uses,
+    "./.github/workflows/issue-runtime-qualification.yml"
+  )
+  assert.equal(
+    release.jobs["deploy-azure"].with.runtime_fleet_record_sha256,
+    "${{ needs.qualify-runtime.outputs.runtime_fleet_record_sha256 }}"
+  )
   assert.ok(
     release.jobs.routing.steps.some((step) => step.run?.includes("qualify-release-source.mjs"))
   )

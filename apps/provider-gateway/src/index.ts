@@ -1,14 +1,17 @@
 import { createServer } from "node:http"
-import { SignedJournal } from "@lyrashield/runtime-control"
+import { SignedJournal, listenPrivateControlServer } from "@lyrashield/runtime-control"
 import { loadProviderGatewayConfig } from "./config"
+import { loadDatabaseProviderAuthority } from "./database-installation"
 import { createProviderGatewayHandler } from "./http"
 import { ProviderGatewayService, providerJournalEventSchema } from "./service"
 
 const config = loadProviderGatewayConfig()
+const authority = loadDatabaseProviderAuthority(config.providers)
 const journal = new SignedJournal(config.journalPath, config.signingSecret, (value) =>
   providerJournalEventSchema.parse(value)
 )
 const service = new ProviderGatewayService({
+  ...authority,
   journal,
   signingSecret: config.signingSecret,
   responseEncryptionSecret: config.responseEncryptionSecret,
@@ -22,7 +25,7 @@ const server = createServer(
     admission: config.admission,
   })
 )
-server.listen(config.port, config.host, () => {
+const ready = () => {
   process.stdout.write(
     JSON.stringify({
       service: "lyrashield-provider-gateway",
@@ -30,7 +33,13 @@ server.listen(config.port, config.host, () => {
       admission: config.admission,
     }) + "\n"
   )
-})
+}
+if (config.socketPath) {
+  await listenPrivateControlServer(server, config.socketPath)
+  ready()
+} else {
+  server.listen(config.port, config.host, ready)
+}
 let shuttingDown = false
 const shutdown = () => {
   if (shuttingDown) return
@@ -42,6 +51,7 @@ const shutdown = () => {
   void (async () => {
     await Promise.all([service.drain(), closed])
     await journal.close()
+    await authority?.close()
     clearTimeout(deadline)
     process.exit(0)
   })().catch(() => process.exit(1))

@@ -1,6 +1,11 @@
 import { z } from "zod"
-import type { AuthorityEvent } from "./independent-journal"
+import {
+  IndependentAuthorityError,
+  type AuthorityEvent,
+  type AuthorityHead,
+} from "./independent-journal"
 import type { JournalRecord } from "./journal"
+import { executorResourceDescriptorSchema } from "./executor-resource-descriptor"
 
 /**
  * Canonical supervisor executor keys. The tenth key is singular `scanner`
@@ -45,16 +50,45 @@ export const supervisorJournalCursorSchema = z
     afterSequence: z.number().int().nonnegative().safe(),
     afterHash: receiptHashSchema,
     limit: z.number().int().min(1).max(100),
+    snapshotSequence: z.number().int().nonnegative().safe().optional(),
+    snapshotHash: receiptHashSchema.optional(),
   })
   .strict()
+  .refine(
+    (cursor) => (cursor.snapshotSequence === undefined) === (cursor.snapshotHash === undefined),
+    "snapshot sequence and hash must be supplied together"
+  )
 export type SupervisorJournalCursor = z.infer<typeof supervisorJournalCursorSchema>
 
 export interface SupervisorJournalPage<T> {
   // Each independently signed wrapper retains the complete original signed
   // envelope at payload.payload. Neither envelope is reconstructed or re-signed.
   records: JournalRecord<AuthorityEvent<JournalRecord<T>>>[]
+  // Consumers authenticate this head and the continuous wrapper chain, then stage
+  // pages until the final wrapper matches it before applying command dispositions.
+  // A later recovery hold must override an earlier positive record.
+  // This protocol does not implement or authenticate a broker database consumer.
+  snapshotHead: AuthorityHead | null
   nextCursor: SupervisorJournalCursor
   hasMore: boolean
+}
+
+export function bindSupervisorJournalSnapshot(
+  cursor: SupervisorJournalCursor,
+  head: AuthorityHead | null
+): SupervisorJournalCursor {
+  const sequence = head?.sequence ?? 0
+  const hash = head?.recordHash ?? "0".repeat(64)
+  if (
+    cursor.snapshotSequence !== undefined &&
+    (cursor.snapshotSequence !== sequence || cursor.snapshotHash !== hash)
+  ) {
+    throw new IndependentAuthorityError(
+      "CURSOR_CONFLICT",
+      "journal snapshot changed; discard staged pages"
+    )
+  }
+  return { ...cursor, snapshotSequence: sequence, snapshotHash: hash }
 }
 
 export interface SupervisorJournalReader<T> {
@@ -84,6 +118,7 @@ export interface SupervisorJournalRecovery<T> {
 
 export interface SupervisorJournalRecoveryPort<T> {
   recoverStored(input: unknown): Promise<SupervisorJournalRecovery<T>>
+  recoverPending?(): Promise<SupervisorJournalRecovery<T>>
 }
 
 export interface SupervisorRecoveryResult<T> {
@@ -111,8 +146,14 @@ const containerExecutorSchema = z
     pidsLimit: z.number().int().min(16).max(8_192),
     readOnly: z.boolean().default(true),
     grantEnvName: envNameSchema.default("LLM_API_KEY"),
+    resourceDescriptor: executorResourceDescriptorSchema.optional(),
   })
   .strict()
+  .refine(
+    (spec) =>
+      !spec.resourceDescriptor ||
+      (spec.readOnly && spec.image.endsWith(`@${spec.resourceDescriptor.imageDigest}`))
+  )
 
 const processExecutorSchema = z
   .object({

@@ -1,3 +1,4 @@
+import { fixtureActionIntentPublisher, fixtureAuthorityFence } from "./test-fixtures"
 import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
@@ -9,6 +10,7 @@ import {
 } from "@lyrashield/runtime-control"
 import {
   ProviderGatewayService,
+  ProviderGatewayError,
   providerJournalEventSchema,
   type ProviderJournalEvent,
 } from "./service"
@@ -63,6 +65,8 @@ async function setup(deadlineMs = 1_000) {
   const authorizeGrant = vi.fn(async (_request: ProviderGrantRequest) => policy)
   const options = {
     journal,
+    authorityFence: fixtureAuthorityFence,
+    publishActionIntent: fixtureActionIntentPublisher,
     signingSecret: secret,
     responseEncryptionSecret: "e".repeat(48),
     admission: "open" as const,
@@ -103,6 +107,100 @@ async function input(service: ProviderGatewayService, number = 1) {
 }
 
 describe("provider lifecycle race boundaries", () => {
+  it("closes admission before a queued grant when a receipt append fails with a gateway error", async () => {
+    const fixture = await setup()
+    let entered: () => void = () => undefined
+    let release: () => void = () => undefined
+    const writing = new Promise<void>((resolve) => {
+      entered = resolve
+    })
+    const resume = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const journal: JournalPort<ProviderJournalEvent> = {
+      load: () => fixture.journal.load(),
+      append: async (event) => {
+        if (event.type === "request_not_dispatched") {
+          entered()
+          await resume
+          throw new ProviderGatewayError("JOURNAL_INTEGRITY", "receipt unavailable", 500)
+        }
+        return fixture.journal.append(event)
+      },
+    }
+    const service = new ProviderGatewayService({
+      ...fixture.options,
+      journal,
+      authorityFence: undefined,
+    })
+    const proxy = await input(service)
+    const denied = service.proxy(proxy).catch((error: unknown) => error)
+    await writing
+    const nextGrant = service.issueGrant({ ...request, grantRequestId: "next-grant" })
+    const grantResult = nextGrant.catch((error: unknown) => error)
+    release()
+    await denied
+    expect(await grantResult).toMatchObject({ code: "ADMISSION_CLOSED" })
+  })
+
+  it("rejects a signed non-dispatch record that does not bind to a pending request", async () => {
+    const fixture = await setup()
+    await fixture.journal.append({
+      type: "request_not_dispatched",
+      requestId: "unknown-request",
+      grantId: "unknown-grant",
+      attemptId: request.attemptId,
+    })
+    const service = new ProviderGatewayService(fixture.options)
+    await expect(service.initialize()).rejects.toMatchObject({ code: "JOURNAL_INTEGRITY" })
+    expect(fixture.fetchImpl).not.toHaveBeenCalled()
+  })
+
+  it.each(["before", "after"] as const)(
+    "recovers conservatively when the non-dispatch journal acknowledgement is lost %s append",
+    async (failure) => {
+      const fixture = await setup()
+      const journal: JournalPort<ProviderJournalEvent> = {
+        load: () => fixture.journal.load(),
+        append: async (event) => {
+          if (event.type === "request_not_dispatched" && failure === "before")
+            throw new Error("journal append failed")
+          const record = await fixture.journal.append(event)
+          if (event.type === "request_not_dispatched" && failure === "after")
+            throw new Error("journal acknowledgement lost")
+          return record
+        },
+      }
+      const service = new ProviderGatewayService({
+        ...fixture.options,
+        journal,
+        authorityFence: undefined,
+      })
+      const proxy = await input(service)
+      const grant = await service.findGrantByRequest(request.grantRequestId)
+      if (!grant) throw new Error("fixture grant missing")
+      await expect(service.proxy(proxy)).rejects.toThrow()
+      await fixture.journal.close()
+      const recoveredJournal = new SignedJournal(fixture.path, secret, (value) =>
+        providerJournalEventSchema.parse(value)
+      )
+      const recovered = new ProviderGatewayService({
+        ...fixture.options,
+        journal: recoveredJournal,
+      })
+      expect(await recovered.inspectRequest(proxy.requestId)).toMatchObject({
+        outcome: failure === "after" ? "NEVER_DISPATCHED" : "UNKNOWN",
+        physicalOutstanding: failure === "before",
+      })
+      expect((await recovered.inspectGrant(grant.grantId))?.requestCount).toBe(
+        failure === "after" ? 0 : 1
+      )
+      await expect(recovered.proxy(proxy)).rejects.toThrow()
+      expect(fixture.fetchImpl).not.toHaveBeenCalled()
+      await recoveredJournal.close()
+    }
+  )
+
   it("never dispatches after the grant expires during awaited broker authorization", async () => {
     const fixture = await setup()
     let clock = beforeExpiry
@@ -138,8 +236,8 @@ describe("provider lifecycle race boundaries", () => {
     await expect(service.proxy(proxy)).rejects.toMatchObject({ code: "GRANT_EXPIRED" })
     expect(fixture.fetchImpl).not.toHaveBeenCalled()
     expect(await service.inspectRequest(proxy.requestId)).toMatchObject({
-      outcome: "UNKNOWN",
-      physicalOutstanding: true,
+      outcome: "NEVER_DISPATCHED",
+      physicalOutstanding: false,
     })
   })
 

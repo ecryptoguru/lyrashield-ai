@@ -1,9 +1,10 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises"
+import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { z } from "zod"
 import { SignedJournal, type JournalRecord } from "./journal"
+import { canonicalJson } from "./canonical-json"
 import {
   IndependentAuthorityJournal,
   authorityEventSchema,
@@ -94,7 +95,12 @@ class Mirror implements AuthorityMirror {
     head: AuthorityHead,
     record: JournalRecord<unknown>
   ) {
-    if (JSON.stringify(this.head) !== JSON.stringify(previous)) return "conflict" as const
+    if (
+      canonicalJson(this.head) === canonicalJson(head) &&
+      canonicalJson(this.records.get(record.sequence) ?? null) === canonicalJson(record)
+    )
+      return "written" as const
+    if (canonicalJson(this.head) !== canonicalJson(previous)) return "conflict" as const
     this.applications += 1
     this.head = head
     this.records.set(record.sequence, structuredClone(record))
@@ -109,12 +115,16 @@ class Mirror implements AuthorityMirror {
 async function setup(
   store = new Store(),
   mirror = new Mirror(),
-  authorizeEvent = async () => true
+  authorizeEvent = async () => true,
+  maxSegmentBytes?: number
 ) {
   const root = await mkdtemp(join(tmpdir(), "independent-journal-test-"))
   roots.push(root)
-  const local = new SignedJournal(join(root, "local.jsonl"), secret, (value) =>
-    authorityEventSchema(z.object({ action: z.string() }).strict()).parse(value)
+  const local = new SignedJournal(
+    join(root, "local.jsonl"),
+    secret,
+    (value) => authorityEventSchema(z.object({ action: z.string() }).strict()).parse(value),
+    { maxSegmentBytes }
   )
   const journal = new IndependentAuthorityJournal({
     local,
@@ -130,6 +140,152 @@ async function setup(
 }
 
 describe("independent authority journal", () => {
+  it("does not reconstruct an observed ACK from matching local, object and mirror heads", async () => {
+    const { journal, local, store, mirror } = await setup()
+    mirror.loseAcknowledgement = true
+    await expect(journal.appendIntent(event)).rejects.toMatchObject({ code: "AUTHORITY_UNKNOWN" })
+    expect(mirror.head?.sequence).toBe(1)
+    expect([...store.objects.keys()].some((key) => key.includes("/acknowledgements/"))).toBe(false)
+    const restarted = new IndependentAuthorityJournal({
+      local,
+      store,
+      mirror,
+      epochId: "epoch-2",
+      supervisorInstanceId: "supervisor-1",
+      signingSecret: "k".repeat(48),
+      payloadSchema: z.object({ action: z.string() }).strict(),
+      authorize: async () => true,
+    })
+    await expect(restarted.loadConfirmed()).rejects.toMatchObject({ code: "REPLAY_REQUIRED" })
+    const replay = vi.spyOn(mirror, "compareAndAppend")
+    await restarted.appendIntent(event)
+    expect(replay).toHaveBeenCalledTimes(1)
+    expect(mirror.applications).toBe(1)
+    expect(await restarted.loadConfirmed()).toHaveLength(1)
+  })
+
+  it("retains a genuinely observed mirror ACK when its object-store response is lost", async () => {
+    const { journal, local, store, mirror } = await setup()
+    const put = store.put.bind(store)
+    vi.spyOn(store, "put").mockImplementation(async (key, bytes, condition) => {
+      const result = await put(key, bytes, condition)
+      if (key.includes("/acknowledgements/")) throw new Error("observed ACK stored but reply lost")
+      return result
+    })
+    await expect(journal.appendIntent(event)).rejects.toMatchObject({ code: "AUTHORITY_UNKNOWN" })
+    const restarted = new IndependentAuthorityJournal({
+      local,
+      store,
+      mirror,
+      epochId: "epoch-2",
+      supervisorInstanceId: "supervisor-1",
+      signingSecret: "k".repeat(48),
+      payloadSchema: z.object({ action: z.string() }).strict(),
+      authorize: async () => true,
+    })
+    expect(await restarted.loadConfirmed()).toHaveLength(1)
+    expect(mirror.applications).toBe(1)
+  })
+
+  it("rejects using a signed authority head as an observed ACK", async () => {
+    const { journal, store } = await setup()
+    await journal.appendIntent(event)
+    const prefix = [...store.objects.keys()].find((key) => key.endsWith("/head"))!.slice(0, -5)
+    store.objects.set(`${prefix}/acknowledgements/1`, store.objects.get(`${prefix}/head`)!)
+    await expect(journal.loadConfirmed()).rejects.toMatchObject({ code: "AUTHORITY_CONFLICT" })
+  })
+
+  it("rejects an absent observed ACK inside history instead of replaying a paid operation", async () => {
+    const { journal, local, store, mirror } = await setup()
+    await journal.appendIntent(event)
+    await journal.appendIntent({ ...event, eventId: "command-2" })
+    store.objects.delete(
+      [...store.objects.keys()].find((key) => key.endsWith("/acknowledgements/1"))!
+    )
+    const restarted = new IndependentAuthorityJournal({
+      local,
+      store,
+      mirror,
+      epochId: "epoch-2",
+      supervisorInstanceId: "supervisor-1",
+      signingSecret: "k".repeat(48),
+      payloadSchema: z.object({ action: z.string() }).strict(),
+      authorize: async () => true,
+    })
+    await expect(restarted.loadConfirmed()).rejects.toMatchObject({ code: "AUTHORITY_CONFLICT" })
+    expect(mirror.applications).toBe(2)
+  })
+  it("recovers a lost mirror acknowledgement across a rotated segment and restart", async () => {
+    const { journal, local, store, mirror, root } = await setup(
+      new Store(),
+      new Mirror(),
+      async () => true,
+      640
+    )
+    const first = await journal.appendIntent(event)
+    const secondEvent = { ...event, eventId: "command-2", payload: { action: "STOP" } }
+    mirror.loseAcknowledgement = true
+    await expect(journal.appendIntent(secondEvent)).rejects.toMatchObject({
+      code: "AUTHORITY_UNKNOWN",
+    })
+    expect((await readdir(root)).some((name) => name.startsWith("local.jsonl.segment."))).toBe(true)
+    await local.close()
+    const restartedLocal = new SignedJournal(
+      join(root, "local.jsonl"),
+      secret,
+      (value) => authorityEventSchema(z.object({ action: z.string() }).strict()).parse(value),
+      { maxSegmentBytes: 640 }
+    )
+    const restarted = new IndependentAuthorityJournal({
+      local: restartedLocal,
+      store,
+      mirror,
+      epochId: "epoch-2",
+      supervisorInstanceId: "supervisor-1",
+      signingSecret: "k".repeat(48),
+      payloadSchema: z.object({ action: z.string() }).strict(),
+      authorize: async () => true,
+    })
+    await expect(restarted.loadConfirmed()).rejects.toMatchObject({ code: "REPLAY_REQUIRED" })
+    const second = await restarted.appendIntent(secondEvent)
+    expect(second.sequence).toBe(2)
+    expect(second.previousHash).toBe(first.hash)
+    expect(await restarted.loadConfirmed()).toEqual([first, second])
+    expect(mirror.applications).toBe(2)
+    await restartedLocal.close()
+  })
+
+  it("rejects rollback of the final local segment against independent committed history", async () => {
+    const { journal, local, store, mirror, root } = await setup(
+      new Store(),
+      new Mirror(),
+      async () => true,
+      640
+    )
+    await journal.appendIntent(event)
+    await journal.appendIntent({ ...event, eventId: "command-2", payload: { action: "STOP" } })
+    await local.close()
+    const segment = (await readdir(root)).find((name) => name.startsWith("local.jsonl.segment."))
+    expect(segment).toBeDefined()
+    await rm(join(root, segment!))
+    const restartedLocal = new SignedJournal(
+      join(root, "local.jsonl"),
+      secret,
+      (value) => authorityEventSchema(z.object({ action: z.string() }).strict()).parse(value),
+      { maxSegmentBytes: 640 }
+    )
+    const restarted = new IndependentAuthorityJournal({
+      local: restartedLocal,
+      store,
+      mirror,
+      epochId: "epoch-2",
+      supervisorInstanceId: "supervisor-1",
+      signingSecret: "k".repeat(48),
+      payloadSchema: z.object({ action: z.string() }).strict(),
+      authorize: async () => true,
+    })
+    await expect(restarted.loadConfirmed()).rejects.toMatchObject({ code: "AUTHORITY_CONFLICT" })
+  })
   it("reconfirms a recovered pending local record only on exact explicit replay", async () => {
     const { journal, local, store, mirror } = await setup()
     const record = await local.append(event)
@@ -288,7 +444,7 @@ describe("independent authority journal", () => {
     expect(first).toEqual(replay)
     expect(first.sequence).toBe(1)
     expect(await local.load()).toHaveLength(1)
-    expect(store.objects.size).toBe(2)
+    expect(store.objects.size).toBe(3)
     expect(mirror.head?.recordHash).toBe(first.hash)
     expect(mirror.applications).toBe(1)
   })
@@ -339,7 +495,7 @@ describe("independent authority journal", () => {
     await expect(journal.appendIntent(event)).rejects.toMatchObject({ code: "AUTHORITY_UNKNOWN" })
     const recovered = await journal.appendIntent(event)
     expect(recovered.sequence).toBe(1)
-    expect(store.objects.size).toBe(2)
+    expect(store.objects.size).toBe(3)
     expect(mirror.head?.recordHash).toBe(recovered.hash)
   })
 

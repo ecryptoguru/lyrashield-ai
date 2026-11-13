@@ -892,13 +892,26 @@ describe.skipIf(!enabled)("agent-minute metering against disposable PostgreSQL",
     const finalize = vi.fn(async () => {
       await owner.$transaction(
         async (tx) => {
-          // A real SSI cycle: meter read Scan and writes MinutePack; this
-          // independent transaction reads MinutePack and durably writes Scan.
+          // A real SSI cycle on the account ledger: meter reads MinutePack and
+          // writes UsageRecord; this independent transaction reads MinutePack
+          // and durably writes UsageRecord.
           await tx.minutePack.findMany({ where: { accountId: f.accountId } })
-          await tx.scan.update({ where: { id: f.scanId }, data: { status: "PARTIAL" } })
+          await tx.usageRecord.create({
+            data: {
+              id: `ssi-partner-${f.scanId}`,
+              accountId: f.accountId,
+              workspaceId: f.workspaceId,
+              kind: "agent_minute",
+              quantity: 1,
+              createdAt: new Date(),
+            },
+          })
         },
         { isolationLevel: "Serializable" }
       )
+      // Source authority is READ COMMITTED only, so the terminal status is
+      // written by its own transaction rather than inside the SSI cycle.
+      await owner.scan.update({ where: { id: f.scanId }, data: { status: "PARTIAL" } })
     })
     await expect(
       recordAgentMinutes(f.workspaceId, f.scanId, 175_000, {

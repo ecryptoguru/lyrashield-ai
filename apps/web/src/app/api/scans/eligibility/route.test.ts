@@ -138,7 +138,6 @@ import {
   createScan,
   resolveScanAttachments,
   resolveAuthenticatedAssessmentAuthorization,
-  LiveAiSafetyError,
   ScanAttachmentError,
 } from "@lyrashield/db"
 import { assertOAuthDelegatedScope, requirePermission } from "@lyrashield/auth/server"
@@ -332,31 +331,27 @@ describe("GET /api/scans/eligibility", () => {
     expect(evaluateScanEntitlement).not.toHaveBeenCalled()
   })
 
-  it("mirrors the POST domain-verification gate for engine-backed remote targets", async () => {
-    // Preflight parity: a paid WEB_APP target without a verified domain must
-    // report DOMAIN_VERIFICATION_REQUIRED on an engine-backed tier here, not
-    // an allowed verdict that POST would then reject with a raw error.
+  it("refuses an explicit Standard URL tier as an unsupported profile, matching POST", async () => {
+    // Standard/Deep/Custom are removed from the URL/API launch offering: the
+    // preflight refuses them with the same unsupported code POST returns,
+    // before any entitlement, queue or provider work.
     vi.mocked(prisma.target.findFirst).mockResolvedValue({
       id: "target-1",
       type: "WEB_APP",
       url: "https://app.example.com",
     } as never)
     vi.mocked(prisma.workspace.findUnique).mockResolvedValue({ plan: "PRO" } as never)
-    vi.mocked(prisma.targetDomainVerification.findFirst).mockResolvedValue(null as never)
 
     const response = await GET(request({ ...validQuery, mode: "STANDARD" }))
 
     expect(response.status).toBe(200)
     const body = await response.json()
     expect(body.data.allowed).toBe(false)
-    expect(body.data.code).toBe("DOMAIN_VERIFICATION_REQUIRED")
+    expect(body.data.code).toBe("URL_MODE_UNSUPPORTED")
     expect(body.data.blockers).toEqual([
-      {
-        code: "DOMAIN_VERIFICATION_REQUIRED",
-        message: "Verify control of this domain once to enable engine-backed reviews.",
-      },
+      { code: "URL_MODE_UNSUPPORTED", message: body.data.message },
     ])
-    expect(body.data.remediation.txtName).toBe("_lyrashield.app.example.com")
+    expect(body.data.message).toContain("Safe and Quick")
     expect(body.data.supportedModes.length).toBeGreaterThan(0)
     expect(evaluateScanEntitlement).not.toHaveBeenCalled()
   })
@@ -379,7 +374,7 @@ describe("GET /api/scans/eligibility", () => {
     expect(prisma.targetDomainVerification.findFirst).not.toHaveBeenCalled()
   })
 
-  it("reports an engine-backed target as allowed once a current domain proof exists", async () => {
+  it("keeps a Standard URL tier unsupported even when a current domain proof exists", async () => {
     vi.mocked(prisma.target.findFirst).mockResolvedValue({
       id: "target-1",
       type: "WEB_APP",
@@ -394,22 +389,12 @@ describe("GET /api/scans/eligibility", () => {
 
     expect(response.status).toBe(200)
     const body = await response.json()
-    expect(body.data.allowed).toBe(true)
-    expect(body.data.canonicalMode).toBe("STANDARD")
-    expect(body.data.canonicalProfileId).toBe("WEB_APP_STANDARD")
-    expect(evaluateScanEntitlement).toHaveBeenCalled()
-    expect(prisma.targetDomainVerification.findFirst).toHaveBeenCalledWith({
-      where: {
-        workspaceId: "ws-1",
-        domain: "app.example.com",
-        status: "VERIFIED",
-        expiresAt: { gt: expect.any(Date) },
-      },
-      select: { id: true },
-    })
+    expect(body.data.allowed).toBe(false)
+    expect(body.data.code).toBe("URL_MODE_UNSUPPORTED")
+    expect(evaluateScanEntitlement).not.toHaveBeenCalled()
   })
 
-  it("denies an API contract review without an OpenAPI document like POST does", async () => {
+  it("denies an explicit API contract review as unsupported like POST does", async () => {
     vi.mocked(prisma.target.findFirst).mockResolvedValue({
       id: "target-1",
       type: "API",
@@ -421,8 +406,8 @@ describe("GET /api/scans/eligibility", () => {
 
     const body = await response.json()
     expect(body.data.allowed).toBe(false)
-    expect(body.data.code).toBe("API_SPEC_REQUIRED")
-    expect(body.data.blockers[0].code).toBe("API_SPEC_REQUIRED")
+    expect(body.data.code).toBe("URL_MODE_UNSUPPORTED")
+    expect(body.data.blockers[0].code).toBe("URL_MODE_UNSUPPORTED")
     expect(body.data.supportedModes.length).toBeGreaterThan(0)
     expect(evaluateScanEntitlement).not.toHaveBeenCalled()
   })
@@ -625,7 +610,9 @@ describe("GET /api/scans/eligibility", () => {
     expect(resolveAuthenticatedAssessmentAuthorization).not.toHaveBeenCalled()
   })
 
-  it("reports a recorded authorization failure for the gated beta", async () => {
+  it("keeps the gated beta unavailable even with the env flag and allowlist on", async () => {
+    // Authenticated assessments are deferred: the shared boundary refuses them
+    // regardless of the deployment flag, so no authorization is resolved.
     configMocks.authAssessment.enabled = "1"
     configMocks.authAssessment.allowlist = "ws-1:target-1"
     vi.mocked(prisma.target.findFirst).mockResolvedValue({
@@ -641,9 +628,6 @@ describe("GET /api/scans/eligibility", () => {
       id: "default-policy",
       destructiveTestsAllowed: false,
     } as never)
-    vi.mocked(resolveAuthenticatedAssessmentAuthorization).mockRejectedValue(
-      new LiveAiSafetyError("AUTH_ASSESSMENT_AUTH_NOT_FOUND")
-    )
 
     const response = await GET(
       request({ ...validQuery, workflow: "AUTHENTICATED_ASSESSMENT", authorizationRef: "authz-9" })
@@ -651,14 +635,8 @@ describe("GET /api/scans/eligibility", () => {
 
     const body = await response.json()
     expect(body.data.allowed).toBe(false)
-    expect(body.data.code).toBe("AUTH_ASSESSMENT_AUTH_NOT_FOUND")
-    expect(resolveAuthenticatedAssessmentAuthorization).toHaveBeenCalledWith({
-      workspaceId: "ws-1",
-      targetId: "target-1",
-      authorizationRef: "authz-9",
-    })
-    // Read-only check — the policy lookup is a find, never a write.
-    expect(prisma.policy.findFirst).toHaveBeenCalled()
+    expect(body.data.code).toBe("SCAN_WORKFLOW_UNAVAILABLE")
+    expect(resolveAuthenticatedAssessmentAuthorization).not.toHaveBeenCalled()
   })
 
   it("keeps the entitlement verdict first when workflow gates would also fail", async () => {

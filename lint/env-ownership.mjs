@@ -20,11 +20,22 @@ export const externalEnvOwners = {
   LYRASHIELD_WORKER_STOP_RECEIPT: ["apps/worker/src/operations/verify-queue-orphan-fixture.ts"],
   DISPATCH_AUTHORITY_REVOKER_PASSWORD: ["packages/db/scripts/tests/scan-preparation-fixture.ts"],
   DISPATCH_PREPARATION_BROKER_PASSWORD: ["packages/db/scripts/tests/scan-preparation-fixture.ts"],
+  DISPATCH_PREPARATION_BROKER_DATABASE_URL: [
+    "packages/db/scripts/tests/scan-preparation-fixture.ts",
+    "packages/db/scripts/tests/supervisor-native-fixture.ts",
+    "packages/db/scripts/tests/supervisor-receipt-fixture.ts",
+  ],
+  GITHUB_ACTIONS: [
+    "packages/db/src/disposable-preparation-execution-capability.ts",
+    "packages/db/src/managed-disposable-preparation-issuer.ts",
+  ],
   LYRASHIELD_TEST_DB_DISPOSABLE: [
     "packages/config/src/env.ts",
     "packages/auth/src/password-reset-capture.ts",
     "packages/myra/src/server/password-reset-capture.ts",
     "packages/db/scripts/tests/scan-preparation-fixture.ts",
+    "packages/db/scripts/tests/supervisor-receipt-fixture.ts",
+    "packages/db/src/scan-supervisor-command-history-reader.ts",
   ],
   NEXT_PHASE: ["packages/config/src/env.ts", "packages/auth/src/auth.ts"],
   NEXT_RUNTIME: ["apps/web/src/instrumentation.ts"],

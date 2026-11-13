@@ -1,7 +1,26 @@
 import { createHash } from "node:crypto"
 import { readFileSync } from "node:fs"
+import {
+  EXECUTION_ACTION_MIGRATION,
+  EXECUTION_RECEIPT_MIGRATION,
+  executionSql,
+  preparationSql,
+  nativeResolutionSql,
+  NATIVE_RESOLUTION_MIGRATION,
+  PREPARATION_COMPLETION_MIGRATION,
+  preparationCompletionSql,
+  executionReceiptSql,
+  extraSources,
+  executionTables,
+  sourceAttributes,
+  writerTables,
+  executionVerificationSql,
+} from "./restore-execution-authority-contract.mjs"
 
 export const DISPATCH_MIGRATION = "20261105130000_durable_dispatch_authority"
+export const POLICY_AUTHORITY_MIGRATION = "20261113130000_scan_policy_authority_v2"
+export const COMMAND_DESCRIPTOR_MIGRATION = "20261113140000_scan_dispatch_command_descriptor"
+export const SUPERVISOR_RECEIPT_MIGRATION = "20261113150000_supervisor_receipt_ingestion"
 // Offline linux/arm64 fixture qualification, not a production/provider version allowance.
 // Its fresh PG17.11 catalog contains no SECURITY DEFINER functions, also after installing the
 // checked-out pgcrypto/btree_gist extensions. No system-definer identity is therefore allowlisted.
@@ -17,6 +36,46 @@ const dispatchSql = readFileSync(
     import.meta.url
   ),
   "utf8"
+)
+// eslint-disable-next-line security/detect-non-literal-fs-filename
+const policySql = readFileSync(
+  new URL(
+    `../../packages/db/prisma/migrations/${POLICY_AUTHORITY_MIGRATION}/migration.sql`,
+    import.meta.url
+  ),
+  "utf8"
+)
+// eslint-disable-next-line security/detect-non-literal-fs-filename
+const descriptorSql = readFileSync(
+  new URL(
+    `../../packages/db/prisma/migrations/${COMMAND_DESCRIPTOR_MIGRATION}/migration.sql`,
+    import.meta.url
+  ),
+  "utf8"
+)
+// eslint-disable-next-line security/detect-non-literal-fs-filename
+const receiptSql = readFileSync(
+  new URL(
+    `../../packages/db/prisma/migrations/${SUPERVISOR_RECEIPT_MIGRATION}/migration.sql`,
+    import.meta.url
+  ),
+  "utf8"
+)
+const privateReceiptTables = ["ScanSupervisorJournalStream", "ScanSupervisorJournalRecord"]
+const receiptConfigs = new Map(
+  [
+    ...receiptSql.matchAll(
+      /CREATE (?:OR REPLACE )?FUNCTION app\.([a-z_]+)\([^]*?LANGUAGE plpgsql SET search_path\s*=\s*([^]*?) AS \$\$/g
+    ),
+  ].map((match) => [
+    match[1],
+    [
+      `search_path=${match[2]
+        .trim()
+        .split(/\s*,\s*/)
+        .join(", ")}`,
+    ],
+  ])
 )
 // eslint-disable-next-line security/detect-non-literal-fs-filename
 const mirrorSql = readFileSync(
@@ -115,9 +174,19 @@ export const dispatchTables = [...dispatchSql.matchAll(/CREATE TABLE "([A-Za-z]+
   (match) => match[1]
 )
 const bodies = new Map(
-  [...dispatchSql.matchAll(/CREATE FUNCTION app\.([a-z_]+)\([^]*?AS \$\$([^]*?)\$\$;/g)].map(
-    (match) => [match[1], match[2]]
-  )
+  [
+    ...(
+      dispatchSql +
+      preparationSql +
+      policySql +
+      descriptorSql +
+      receiptSql +
+      executionSql +
+      executionReceiptSql +
+      nativeResolutionSql +
+      preparationCompletionSql
+    ).matchAll(/CREATE (?:OR REPLACE )?FUNCTION app\.([a-z_]+)\([^]*?AS \$\$([^]*?)\$\$;/g),
+  ].map((match) => [match[1], match[2]])
 )
 const dispatchHelpers = [
   {
@@ -130,24 +199,52 @@ const dispatchHelpers = [
   },
   { name: "scan_target_snapshot_digest", arguments: "text", names: ["target_id"] },
   { name: "scan_policy_digest", arguments: "text", names: ["policy_id"] },
+  {
+    name: "scan_dispatch_command_input_valid",
+    arguments: "text, text, text",
+    names: ["input_json", "checksum", "command_digest"],
+    result: "boolean",
+    volatility: "i",
+  },
   { name: "scan_dispatch_scope_digest", arguments: "text", names: ["scan_id"] },
 ]
 const triggers = [
-  ...dispatchSql.matchAll(
-    /CREATE TRIGGER ([a-z_]+)\s+BEFORE (INSERT|UPDATE|DELETE)(?: OR (INSERT|UPDATE|DELETE))? ON "([A-Za-z]+)"\s+FOR EACH ROW EXECUTE FUNCTION app\.([a-z_]+)\(\);/g
+  ...(
+    dispatchSql +
+    preparationSql +
+    policySql +
+    descriptorSql +
+    receiptSql +
+    executionSql +
+    executionReceiptSql +
+    nativeResolutionSql +
+    preparationCompletionSql
+  ).matchAll(
+    /CREATE TRIGGER ([a-z_]+)\s+BEFORE ((?:INSERT|UPDATE|DELETE)(?: OR (?:INSERT|UPDATE|DELETE)){0,2}) ON "([A-Za-z]+)"\s+FOR EACH ROW EXECUTE FUNCTION app\.([a-z_]+)\(\);/g
   ),
 ].map((match) => ({
   name: match[1],
-  table: match[4],
-  function: match[5],
-  type:
-    3 |
-    { INSERT: 4, DELETE: 8, UPDATE: 16 }[match[2]] |
-    (match[3] ? { INSERT: 4, DELETE: 8, UPDATE: 16 }[match[3]] : 0),
+  table: match[3],
+  function: match[4],
+  type: match[2]
+    .split(" OR ")
+    .reduce((type, event) => type | { INSERT: 4, DELETE: 8, UPDATE: 16 }[event], 3),
 }))
+const deferredBundle = extraSources.match(
+  /CREATE CONSTRAINT TRIGGER ([a-z_]+) AFTER INSERT ON "([A-Za-z]+)"\s+DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION app\.([a-z_]+)\(\);/
+)
+requireCheck(Boolean(deferredBundle), "SOURCE_CONTRACT_UNAVAILABLE")
+triggers.push({
+  name: deferredBundle[1],
+  table: deferredBundle[2],
+  function: deferredBundle[3],
+  type: 5,
+  deferred: true,
+})
 requireCheck(
   dispatchTables.length === 11 &&
-    triggers.length === 25 &&
+    triggers.length === 43 &&
+    writerTables.length === 20 &&
     triggers.every((trigger) => bodies.has(trigger.function)) &&
     dispatchHelpers.every((helper) => bodies.has(helper.name)),
   "SOURCE_CONTRACT_UNAVAILABLE"
@@ -183,15 +280,19 @@ function functionContract(schema, definition) {
     strict = false,
     definer = false,
     config,
+    returnsSet = false,
+    argModes,
+    allArgTypes,
   } = definition
   return `n.nspname=${literal(schema)} AND p.proname=${literal(name)}
     AND pg_catalog.oidvectortypes(p.proargtypes)=${literal(args)}
     AND p.proargnames ${names ? `=${tableArray(names)}` : "IS NULL"}
-    AND p.prorettype=${literal(result)}::regtype AND NOT p.proretset AND p.prokind='f'
-    AND p.proargmodes IS NULL AND p.proallargtypes IS NULL AND p.pronargdefaults=0 AND p.proargdefaults IS NULL AND p.provariadic=0
+    AND p.prorettype=${literal(result)}::regtype AND p.proretset=${returnsSet} AND p.prokind='f'
+    AND p.proargmodes ${argModes ? `=ARRAY[${argModes.map(literal).join(",")}]::"char"[]` : "IS NULL"}
+    AND p.proallargtypes ${allArgTypes ? `=ARRAY[${allArgTypes.map((type) => `${literal(type)}::regtype`).join(",")}]::oid[]` : "IS NULL"} AND p.pronargdefaults=0 AND p.proargdefaults IS NULL AND p.provariadic=0
     AND p.protrftypes IS NULL AND p.prosupport=0 AND p.prosqlbody IS NULL AND p.probin IS NULL
     AND p.provolatile=${literal(volatility)} AND p.proisstrict=${strict}
-    AND NOT p.proleakproof AND p.proparallel='u' AND p.procost=100 AND p.prorows=0
+    AND NOT p.proleakproof AND p.proparallel='u' AND p.procost=100 AND p.prorows=${returnsSet ? 1000 : 0}
     AND p.prosecdef=${definer} AND p.proconfig ${config ? `=${tableArray(config)}` : "IS NULL"}
     AND language.lanname=${literal(language)} AND p.prosrc=${literal(body)}`
 }
@@ -239,8 +340,10 @@ export function dispatchVerificationSql(deniedRoles) {
     JOIN pg_catalog.pg_namespace n ON n.oid=p.pronamespace
     WHERE t.tgrelid=${literal(`public."${trigger.table}"`)}::regclass
       AND t.tgname=${literal(trigger.name)} AND NOT t.tgisinternal AND t.tgenabled='O'
+      AND t.tgdeferrable=${Boolean(trigger.deferred)} AND t.tginitdeferred=${Boolean(trigger.deferred)}
+      AND ${trigger.deferred ? "t.tgconstraint<>0" : "t.tgconstraint=0"}
       AND t.tgtype=${trigger.type} AND t.tgqual IS NULL AND t.tgnargs=0 AND t.tgattr=''::int2vector
-      AND ${functionContract("app", { name: trigger.function, body: bodies.get(trigger.function), result: "trigger" })})`
+      AND ${functionContract("app", { name: trigger.function, body: bodies.get(trigger.function), result: "trigger", config: receiptConfigs.get(trigger.function), ...sourceAttributes.get(trigger.function) })})`
     )
     .join(" AND ")
   const helpers = dispatchHelpers
@@ -251,6 +354,30 @@ export function dispatchVerificationSql(deniedRoles) {
     WHERE ${functionContract("app", { result: "text", language: "sql", volatility: "s", ...helper, body: bodies.get(helper.name) })})`
     )
     .join(" AND ")
+  const execution = executionVerificationSql({
+    functionContract,
+    bodies,
+    literal,
+    tableArray,
+    reachablePrivilege,
+  })
+  const receiptTables = `
+      (SELECT count(*)=2 AND bool_and(c.relkind='r' AND NOT c.relrowsecurity AND NOT c.relforcerowsecurity)
+        FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
+        WHERE n.nspname='public' AND c.relname=ANY(${tableArray(privateReceiptTables)}))
+      AND NOT EXISTS(SELECT 1 FROM unnest(${tableArray(privateReceiptTables)}) name,
+        pg_catalog.pg_class c, LATERAL pg_catalog.aclexplode(COALESCE(c.relacl,pg_catalog.acldefault('r',c.relowner))) acl
+        WHERE c.oid=format('public.%I',name)::regclass AND acl.grantee=0)
+      AND (SELECT count(*)=3 AND bool_and(a.atttypid='text'::regtype AND NOT a.attnotnull AND NOT a.attisdropped AND a.attgenerated='')
+        FROM pg_catalog.pg_attribute a WHERE a.attrelid='public."ScanSupervisorReceipt"'::regclass
+          AND a.attname IN ('journalRecordId','eventType','terminalStatus'))
+      AND EXISTS(SELECT 1 FROM pg_catalog.pg_constraint c WHERE c.conrelid='public."ScanSupervisorReceipt"'::regclass
+        AND c.conname='ScanSupervisorReceipt_source_check' AND c.contype='c' AND c.convalidated)
+      AND EXISTS(SELECT 1 FROM pg_catalog.pg_trigger t JOIN pg_catalog.pg_proc p ON p.oid=t.tgfoid
+        JOIN pg_catalog.pg_language language ON language.oid=p.prolang JOIN pg_catalog.pg_namespace n ON n.oid=p.pronamespace
+        WHERE t.tgrelid='public."ScanDispatchOutbox"'::regclass AND t.tgname='scan_checked_prepare_command'
+          AND NOT t.tgisinternal AND t.tgenabled='O' AND t.tgtype=23 AND t.tgqual IS NULL
+          AND ${functionContract("app", { name: "scan_checked_prepare_command", body: bodies.get("scan_checked_prepare_command"), result: "trigger", config: receiptConfigs.get("scan_checked_prepare_command") })})`
   const roleChecks = deniedRoles
     .map(
       (role) => `${restrictedRole(role)}
@@ -261,18 +388,55 @@ export function dispatchVerificationSql(deniedRoles) {
     AND pg_catalog.has_function_privilege(${literal(role)},'app.current_workspace_id()','EXECUTE')
     AND pg_catalog.has_function_privilege(${literal(role)},'public.digest(bytea,text)','EXECUTE')
     AND NOT EXISTS (
-    SELECT 1 FROM unnest(${tableArray(dispatchTables)}) name WHERE
+    SELECT 1 FROM unnest(${tableArray([...dispatchTables, ...privateReceiptTables, ...executionTables])}) name WHERE
       ${reachablePrivilege(role, "table", "format('public.%I',name)", allPrivileges)})`
     )
     .join(" AND ")
   return `SELECT json_build_object(
     'migration', (SELECT count(*)=1 AND bool_and(checksum=${literal(sha256(dispatchSql))}
       AND finished_at IS NOT NULL AND rolled_back_at IS NULL)
-      FROM public."_prisma_migrations" WHERE migration_name=${literal(DISPATCH_MIGRATION)}),
+      FROM public."_prisma_migrations" WHERE migration_name=${literal(DISPATCH_MIGRATION)}) AND
+      (SELECT count(*)=1 AND bool_and(checksum=${literal(sha256(policySql))}
+      AND finished_at IS NOT NULL AND rolled_back_at IS NULL)
+      FROM public."_prisma_migrations" WHERE migration_name=${literal(POLICY_AUTHORITY_MIGRATION)}) AND
+      (SELECT count(*)=1 AND bool_and(checksum=${literal(sha256(descriptorSql))}
+        AND finished_at IS NOT NULL AND rolled_back_at IS NULL)
+       FROM public."_prisma_migrations" WHERE migration_name=${literal(COMMAND_DESCRIPTOR_MIGRATION)}) AND
+      (SELECT count(*)=1 AND bool_and(checksum=${literal(sha256(receiptSql))}
+        AND finished_at IS NOT NULL AND rolled_back_at IS NULL)
+       FROM public."_prisma_migrations" WHERE migration_name=${literal(SUPERVISOR_RECEIPT_MIGRATION)}) AND
+      (SELECT count(*)=1 AND bool_and(checksum=${literal(sha256(executionSql))} AND finished_at IS NOT NULL AND rolled_back_at IS NULL)
+       FROM public."_prisma_migrations" WHERE migration_name=${literal(EXECUTION_ACTION_MIGRATION)}) AND
+      (SELECT count(*)=1 AND bool_and(checksum=${literal(sha256(executionReceiptSql))} AND finished_at IS NOT NULL AND rolled_back_at IS NULL)
+       FROM public."_prisma_migrations" WHERE migration_name=${literal(EXECUTION_RECEIPT_MIGRATION)}) AND
+      (SELECT count(*)=1 AND bool_and(checksum=${literal(sha256(nativeResolutionSql))} AND finished_at IS NOT NULL AND rolled_back_at IS NULL)
+        FROM public."_prisma_migrations" WHERE migration_name=${literal(NATIVE_RESOLUTION_MIGRATION)}) AND
+      (SELECT count(*)=1 AND bool_and(checksum=${literal(sha256(preparationCompletionSql))} AND finished_at IS NOT NULL AND rolled_back_at IS NULL)
+        FROM public."_prisma_migrations" WHERE migration_name=${literal(PREPARATION_COMPLETION_MIGRATION)}),
     'tables', (SELECT count(*)=11 AND bool_and(c.relkind='r' AND c.relrowsecurity AND c.relforcerowsecurity)
       FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
-      WHERE n.nspname='public' AND c.relname=ANY(${tableArray(dispatchTables)})),
+      WHERE n.nspname='public' AND c.relname=ANY(${tableArray(dispatchTables)})) AND
+      (SELECT count(*)=3 AND bool_and(a.attnotnull AND NOT a.attisdropped AND a.attgenerated='' AND
+        a.atttypid=CASE WHEN a.attname='authorityIncarnation' THEN 'text'::regtype ELSE 'int4'::regtype END)
+       FROM pg_catalog.pg_attribute a
+       WHERE (a.attrelid='public.\"Policy\"'::regclass AND a.attname IN ('authorityIncarnation','authorityRevision'))
+          OR (a.attrelid='public.\"Scan\"'::regclass AND a.attname='policyBindingRevision')) AND
+      (SELECT count(*)=2 AND bool_and(c.contype='c' AND c.convalidated AND NOT c.connoinherit AND
+        pg_catalog.pg_get_constraintdef(c.oid)=CASE c.conname
+          WHEN 'Policy_authorityRevision_positive' THEN 'CHECK ((\"authorityRevision\" > 0))'
+          ELSE 'CHECK ((\"policyBindingRevision\" > 0))' END)
+       FROM pg_catalog.pg_constraint c
+       WHERE (c.conrelid='public.\"Policy\"'::regclass AND c.conname='Policy_authorityRevision_positive')
+          OR (c.conrelid='public.\"Scan\"'::regclass AND c.conname='Scan_policyBindingRevision_positive')) AND
+      (SELECT count(*)=2 AND bool_and(a.atttypid='text'::regtype AND NOT a.attnotnull AND NOT a.attisdropped AND a.attgenerated='')
+       FROM pg_catalog.pg_attribute a WHERE a.attrelid='public.\"ScanDispatchOutbox\"'::regclass
+         AND a.attname IN ('commandInputJson','commandInputChecksum')) AND
+      EXISTS(SELECT 1 FROM pg_catalog.pg_constraint c WHERE c.conrelid='public.\"ScanDispatchOutbox\"'::regclass
+        AND c.conname='ScanDispatchOutbox_command_input_check' AND c.contype='c' AND c.convalidated AND NOT c.connoinherit
+        AND pg_catalog.pg_get_constraintdef(c.oid)='CHECK (app.scan_dispatch_command_input_valid(\"commandInputJson\", \"commandInputChecksum\", \"commandDigest\"))'),
     'triggers', ${triggerChecks},
+    'receipts', ${receiptTables},
+    'execution', ${execution.tables} AND ${execution.checks},
     'helpers', ${helpers} AND EXISTS (
       SELECT 1 FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid=p.pronamespace
       JOIN pg_catalog.pg_language language ON language.oid=p.prolang
@@ -291,7 +455,7 @@ export function dispatchDigestProbeSql(role) {
   roleName(role)
   // PostgreSQL jsonb::text uses this canonical spacing. The NULL policy branch always hashes
   // these synthetic bytes, including on an empty database, and never returns restored row data.
-  const expected = sha256('{"schemaVersion": "scan-policy/none"}')
+  const expected = sha256('{"schemaVersion": "scan-policy/none/2"}')
   const resolved = `(pg_catalog.to_regprocedure('digest(bytea,text)')='public.digest(bytea,text)'::regprocedure AND ${digestCatalog})`
   // SQL CASE does not prevent helper inlining during planning. Plan the fixed helper query
   // only after the catalog gate; a transaction-local setting carries synthetic booleans only.

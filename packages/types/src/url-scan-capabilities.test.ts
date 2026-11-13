@@ -125,6 +125,17 @@ describe("URL scan capabilities", () => {
     expect(getUrlScanProfile("API", "CUSTOM").id).toBe("API_DEEP")
   })
 
+  it("defaults an omitted profile to Quick", () => {
+    expect(resolveTargetScanMode({ targetType: "WEB_APP", mode: "", hasApiSpec: false })).toEqual({
+      ok: true,
+      profile: expect.objectContaining({ id: "WEB_APP_SAFE", mode: "SAFE" }),
+    })
+    expect(resolveTargetScanMode({ targetType: "API", mode: "   ", hasApiSpec: false })).toEqual({
+      ok: true,
+      profile: expect.objectContaining({ id: "API_SAFE", mode: "SAFE" }),
+    })
+  })
+
   it("rejects only truly unsupported modes through availability", () => {
     expect(getUrlModeAvailability("WEB_APP", "CUSTOM", false)).toEqual({ available: true })
     // API Deep via Custom still requires an OpenAPI document.

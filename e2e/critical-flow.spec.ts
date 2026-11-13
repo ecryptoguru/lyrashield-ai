@@ -283,28 +283,26 @@ test("tenant boundaries deny another user", async ({ page, browser }, testInfo) 
   const targetSelect = page.getByLabel("Target", { exact: true })
   await targetSelect.selectOption({ label: "Example target (Web app)" })
   await expect(page.getByRole("radio", { name: /^Surface Review:/ })).toBeEnabled()
-  // No scan worker/relay runs in this disposable browser fixture. Its live
-  // tiers must be visibly unavailable while the surface tier remains usable.
-  await expect(page.getByRole("radio", { name: /^Engine Review:/ })).toBeDisabled()
-  const webDeep = page.getByRole("radio", { name: /^Deep Live Review:/ })
-  await expect(webDeep).toBeDisabled()
-  await expect(webDeep).toHaveAttribute("aria-label", /Live reviews are temporarily unavailable/)
+  // URL/API launch offers only the deterministic tier: the engine tiers are
+  // removed from the offering, not merely unavailable.
+  await expect(page.getByRole("radio", { name: /^Engine Review:/ })).toHaveCount(0)
+  await expect(page.getByRole("radio", { name: /^Deep Live Review:/ })).toHaveCount(0)
 
-  // Advertise a test-only capability so the existing API-spec/reset assertions
-  // exercise their positive infrastructure case. No worker consumes jobs or
-  // contacts a target; this lease lives only in disposable CI Redis.
+  // The relay is advertised so the API-spec/reset assertions keep their
+  // positive infrastructure case; URL/API reviews are deterministic-only, so
+  // the tiers stay absent regardless. No worker consumes jobs or contacts a
+  // target; this lease lives only in disposable CI Redis.
   await registerScanWorker(relayFixtureWorkerId, Date.now(), true)
   relayFixtureRegistered = true
   await page.reload()
   await targetSelect.selectOption({ label: "Example target (Web app)" })
-  await expect(page.getByRole("radio", { name: /^Engine Review:/ })).toBeEnabled()
-  await expect(webDeep).toBeEnabled()
-  await webDeep.click()
+  await expect(page.getByRole("radio", { name: /^Surface Review:/ })).toBeEnabled()
+  await expect(page.getByRole("radio", { name: /^Engine Review:/ })).toHaveCount(0)
 
   await targetSelect.selectOption({ label: "API without contract (API)" })
   await expect(page.getByRole("radio", { name: /^Endpoint Review:/ })).toBeEnabled()
-  await expect(page.getByRole("radio", { name: /^Engine Contract Review:/ })).toBeDisabled()
-  await expect(page.getByRole("radio", { name: /^Deep Contract Review:/ })).toBeDisabled()
+  await expect(page.getByRole("radio", { name: /^Engine Contract Review:/ })).toHaveCount(0)
+  await expect(page.getByRole("radio", { name: /^Deep Contract Review:/ })).toHaveCount(0)
   await expect(page.getByRole("link", { name: "Add OpenAPI document" })).toHaveAttribute(
     "href",
     `/dashboard/targets/${apiTargetId}`
@@ -314,8 +312,7 @@ test("tenant boundaries deny another user", async ({ page, browser }, testInfo) 
   )
 
   await targetSelect.selectOption({ label: "API with contract (API)" })
-  await expect(page.getByRole("radio", { name: /^Engine Contract Review:/ })).toBeEnabled()
-  await expect(page.getByRole("radio", { name: /^Deep Contract Review:/ })).toBeEnabled()
+  await expect(page.getByRole("radio", { name: /^Endpoint Review:/ })).toBeEnabled()
 
   const owner = await prisma.user.findUniqueOrThrow({ where: { email: ownerEmail } })
   const fixture = await withWorkspaceRLS(workspaceId, async (tx) => {

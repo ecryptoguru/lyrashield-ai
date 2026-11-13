@@ -139,6 +139,22 @@ describe("POST /api/reports/launch-readiness delegated target scope (W0.3)", () 
     })
   })
 
+  it.each(["missing", "failed"])(
+    "does not issue or share a report when signing is %s",
+    async (failure) => {
+      if (failure === "missing") resolveLaunchReportSigningPrivateKey.mockResolvedValue(null)
+      else
+        resolveLaunchReportSigningPrivateKey.mockRejectedValue(new Error("Key Vault unavailable"))
+
+      const response = await post({ workspaceId: "ws-1", targetId: "target-a", share: true })
+
+      expect(response.status).toBe(503)
+      expect((await response.json()).error.code).toBe("REPORT_SIGNING_UNAVAILABLE")
+      expect(generateLaunchReport).not.toHaveBeenCalled()
+      expect(generateShareToken).not.toHaveBeenCalled()
+    }
+  )
+
   it("denies generation for a target outside a narrowed grant — before key resolution, generation or share token", async () => {
     vi.mocked(requirePermission).mockResolvedValue({ session: narrowSession } as never)
 

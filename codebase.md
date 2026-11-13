@@ -124,7 +124,7 @@ POST /api/scans
   → score, notifications, terminal state
 ```
 
-Repository scans invoke the controlled engine. Under `url-scan/3.0.0`, URL/API Safe/Quick stay deterministic-only; Standard and Deep/Custom select engine-backed profiles through a verified-domain, scan-scoped relay and run deterministic checks alongside.
+Repository scans invoke the controlled engine. URL/API launch supports deterministic Safe/Quick only; the engine-backed Standard/Deep/Custom profiles are removed from the launch offering (see `docs/Phase2.md`) and require a future explicit product decision. Historical engine-backed profile code remains a source contract, not an availability claim.
 Before execution, the worker binds every authority-bearing BullMQ field (`workspaceId`,
 `targetId`, `goal`, `mode`, and `policyId`) back to the stored scan; schema-valid queue
 data cannot upgrade routing, budget, or policy.
@@ -140,7 +140,7 @@ The v26 dependency capability registry is `packages/types/src/dependency-capabil
 - Fetch time resolves, validates, pins, and revalidates each redirect.
 - Production URL fetching uses authenticated `packages/egress-proxy`.
 - Profiles bound documents, depth, bytes, concurrency, methods, origin probes, and wall time.
-- API Standard/Deep require validated public HTTPS OpenAPI input.
+- API Standard/Deep (source contract only; removed from the launch offering) require validated public HTTPS OpenAPI input.
 - Engine-backed tiers require current domain verification, sponsor entitlement, and a signed grant bound to the scan, workspace, target, host, methods, and request budgets.
 - The remote relay supports explicit absolute-form HTTP/HTTPS requests and rejects opaque CONNECT tunnels. The engine sandbox-local TLS adapter uses the installed sandbox CA to convert ordinary HTTPS client traffic into inspectable relay requests. Composed local curl and Chromium navigation/fetch tests passed allowed requests and denied path/method/redirect requests without TLS bypass; invalid upstream certificates were rejected. This verifies bounded local transport, while exact-image production deployment and a paid URL engine scan remain unverified.
 
@@ -222,7 +222,7 @@ Alternatives: `FAILED`, `PARTIAL` (engine stopped with findings preserved), `CAN
 
 ### Engine boundary
 
-Cloud, recovery and Desktop release workflows pin merged engine `ddb1c5ea6a5014cfc5e1cfadac03a5db7e8cc25d`, including engine PR #225 trusted normalization descriptors, #226 frozen evaluation-v3 corpus/scorer and #227–#232 diagnostics and CI safeguards. This revision retains the established model, relay, bounded-runtime, acquisition and immutable-evidence contracts. Evaluation profiles remain unmeasured and public benchmark claims disabled. The last verified deployed engine is `3001517530300ca5f602536bfadcbd3c95ad3039`. Production promotion remains held pending protected image qualification and isolated runtime authority. The cold native rehearsal does not establish that authority; retained-worker and high-availability lanes remain held. Product protection requires `Pinned Engine / Worker Contract` alongside security and lint/typecheck/test/build. Engine CI separately tests its exact `.lyrashield-worker-pin` consumer; update that reverse pin only after final merged-product compatibility verification. Source compatibility, production qualification and signed Desktop publication remain separate gates. Desktop launch remains deferred.
+Candidate Cloud, recovery and Desktop release workflows pin merged engine `126a2a5fa85a8c856fd018757133af53b11f4124`, including engine PR #225 trusted normalization descriptors, #226 frozen evaluation-v3 corpus/scorer, #227–#232 diagnostics and CI safeguards, #233–#234 independent inventory verification, #235 scan-bound gateway identity, and #236 nested Python inventory coverage. This revision retains the established model, relay, bounded-runtime, acquisition and immutable-evidence contracts. Evaluation profiles remain unmeasured and public benchmark claims disabled. The last verified deployed engine is `3001517530300ca5f602536bfadcbd3c95ad3039`. Production promotion remains held pending protected image qualification and isolated runtime authority. The cold native rehearsal does not establish that authority; retained-worker and high-availability lanes remain held. Product protection requires `Pinned Engine / Worker Contract` alongside security and lint/typecheck/test/build. Engine CI separately tests its exact `.lyrashield-worker-pin` consumer; update that reverse pin only after final merged-product compatibility verification. Source compatibility, production qualification and signed Desktop publication remain separate gates. Desktop launch remains deferred.
 
 - Product code lives in engine `lyrashield/**` and `lyrashield_adapter/**`; upstream `strix/**` retains only hard-gated generic seams.
 - Stable upstream releases enter through reviewed PRs; never force-push or auto-resolve conflicts.
@@ -241,7 +241,7 @@ Cloud, recovery and Desktop release workflows pin merged engine `ddb1c5ea6a5014c
 
 Authorities:
 
-- `apps/worker/src/engine/runner.ts`: `resolveEngineProfile()`.
+- `packages/security/src/engine-profile.ts`: `resolveEngineProfile()` (re-exported by the worker).
 - `apps/worker/src/engine/command-builder.ts`: `resolveScanBudgetUsd()`.
 - `apps/worker/src/engine/gpt6-pricing.ts`: GPT-6 rate card.
 
@@ -654,7 +654,8 @@ This is target/revision-scoped runtime and accounting proof, not a security guar
 | `apps/worker/src/jobs/run-scan.job.ts`                  | Scan orchestration entry; delegates to `run-scan/` phases                           |
 | `apps/worker/src/jobs/run-scan/`                        | Scan lifecycle phases (authority, preparation, execution, settlement, finalization) |
 | `apps/worker/src/engine/runner.ts`                      | Bounded/cancellable engine subprocess                                               |
-| `apps/worker/src/engine/command-builder.ts`             | Engine arguments and budget policy                                                  |
+| `packages/security/src/engine-command.ts`               | Shared trusted engine arguments                                                     |
+| `apps/worker/src/engine/command-builder.ts`             | Worker command environment and budget policy                                        |
 | `apps/worker/src/engine/gpt6-pricing.ts`                | GPT-6 rate cards and per-request cache usage accounting                             |
 | `apps/worker/src/engine/scanner-orchestrator.ts`        | Deterministic and engine result merge                                               |
 | `apps/worker/src/engine/result-integrity.ts`            | Manifest/candidate/receipt boundary                                                 |

@@ -1,6 +1,7 @@
 import {
   IndependentAuthorityError,
   MAX_SUPERVISOR_JOURNAL_PAGE_BYTES,
+  bindSupervisorJournalSnapshot,
   canonicalJson,
   headSchema,
   supervisorJournalCursorSchema,
@@ -355,6 +356,7 @@ export class SupervisorCheckpointReader implements SupervisorJournalReader<Super
       checkpointFailure("CURSOR_CONFLICT", "checkpoint cursor belongs to another stream")
     const authority = await this.authority(),
       before = await this.snapshot(authority)
+    const snapshotCursor = bindSupervisorJournalSnapshot(cursor, before.remote)
     if (cursor.afterSequence > authority.confirmedSequence)
       checkpointFailure("CURSOR_CONFLICT", "checkpoint cursor is beyond the confirmed head")
     if (!before.checkpoint) {
@@ -365,7 +367,7 @@ export class SupervisorCheckpointReader implements SupervisorJournalReader<Super
       if (!checkpointSame(before, after) || !checkpointSame(authority, current))
         checkpointFailure("CURSOR_CONFLICT", "checkpoint genesis changed while read")
       this.commitObservation(current)
-      return { records: [], nextCursor: cursor, hasMore: false }
+      return { records: [], snapshotHead: null, nextCursor: snapshotCursor, hasMore: false }
     }
     await this.checkpointEvidence(before.checkpoint, authority)
     const point = Math.min(cursor.afterSequence + 1, authority.confirmedSequence)
@@ -391,7 +393,8 @@ export class SupervisorCheckpointReader implements SupervisorJournalReader<Super
     await this.recordEvidence(records, authority)
     const page: SupervisorJournalPage<SupervisorJournalEvent> = {
       records: [],
-      nextCursor: cursor,
+      snapshotHead: before.remote,
+      nextCursor: snapshotCursor,
       hasMore: cursor.afterSequence < authority.confirmedSequence,
     }
     for (const record of records
@@ -399,8 +402,9 @@ export class SupervisorCheckpointReader implements SupervisorJournalReader<Super
       .slice(0, cursor.limit)) {
       const next = {
         records: [...page.records, record],
+        snapshotHead: before.remote,
         nextCursor: {
-          ...cursor,
+          ...snapshotCursor,
           afterSequence: record.sequence,
           afterHash: record.payload.payload.hash,
         },

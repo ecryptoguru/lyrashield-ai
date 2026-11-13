@@ -123,6 +123,7 @@ function conflict(message: string): IndependentAuthorityError {
 }
 
 export class IndependentAuthorityJournal<T> {
+  private readonly options: IndependentAuthorityJournalOptions<T>
   private readonly eventSchema: ReturnType<typeof authorityEventSchema<z.ZodType<T>>>
   private readonly prefix: string
   private readonly byEvent = new Map<string, JournalRecord<AuthorityEvent<T>>>()
@@ -133,7 +134,7 @@ export class IndependentAuthorityJournal<T> {
   private serial: Promise<void> = Promise.resolve()
   private failed: IndependentAuthorityError | null = null
 
-  constructor(private readonly options: IndependentAuthorityJournalOptions<T>) {
+  constructor(options: IndependentAuthorityJournalOptions<T>) {
     id.parse(options.epochId)
     id.parse(options.supervisorInstanceId)
     if (Buffer.byteLength(options.signingSecret, "utf8") < 32) {
@@ -141,6 +142,14 @@ export class IndependentAuthorityJournal<T> {
     }
     this.eventSchema = authorityEventSchema(options.payloadSchema)
     this.prefix = `epochs/${options.epochId}/supervisors/${options.supervisorInstanceId}`
+    this.options = Object.freeze({ ...options })
+  }
+
+  streamIdentity(): Readonly<{ epochId: string; supervisorInstanceId: string }> {
+    return Object.freeze({
+      epochId: this.options.epochId,
+      supervisorInstanceId: this.options.supervisorInstanceId,
+    })
   }
 
   async appendIntent(input: AuthorityEvent<T>): Promise<JournalRecord<AuthorityEvent<T>>> {
@@ -245,6 +254,8 @@ export class IndependentAuthorityJournal<T> {
             if (!object || !mirrored) throw unknown("bounded authority record is unavailable")
             if (!Buffer.from(object.bytes).equals(bytes) || !same(mirrored, record))
               throw conflict("bounded authority record differs")
+            if (!(await this.hasAcknowledgement(record, true)))
+              throw unknown("observed mirror acknowledgement is unavailable")
             await this.assertAuthorized(record.payload)
             assertDeadline()
           }
@@ -269,6 +280,13 @@ export class IndependentAuthorityJournal<T> {
       () => undefined
     )
     return run
+  }
+
+  /** Last verified observation only; callers must first complete a confirmed read. */
+  confirmedHead(): AuthorityHead | null {
+    if (!this.records || this.pending || this.failed)
+      throw unknown("confirmed authority head is unavailable")
+    return this.confirmed ? this.headFor(this.records[this.confirmed - 1]!) : null
   }
 
   private async loadConfirmedSerial(): Promise<JournalRecord<AuthorityEvent<T>>[]> {
@@ -340,6 +358,15 @@ export class IndependentAuthorityJournal<T> {
       await this.persist(record)
       await this.assertHeads(record.sequence)
       await this.assertAuthorized(event)
+      // This signature is created only after the mirror response was received.
+      const acknowledgement = this.acknowledgementBytes(record)
+      await this.options.store.put(
+        `${this.prefix}/acknowledgements/${record.sequence}`,
+        acknowledgement,
+        { ifNoneMatch: true }
+      )
+      if (!(await this.hasAcknowledgement(record)))
+        throw unknown("observed mirror acknowledgement is unavailable")
       this.confirmed = record.sequence
       this.pending = null
       return structuredClone(record)
@@ -458,9 +485,17 @@ export class IndependentAuthorityJournal<T> {
       ) {
         throw conflict("local, independent and database authority histories disagree")
       }
-      this.confirmed = mirrorSeq
-      if (records.length > mirrorSeq) {
-        this.pending = records[mirrorSeq]!
+      let acknowledgedSeq = mirrorSeq
+      for (let index = 0; index < mirrorSeq; index += 1) {
+        if (!(await this.hasAcknowledgement(records[index]!))) {
+          if (index !== mirrorSeq - 1 || records.length > mirrorSeq)
+            throw conflict("observed acknowledgement is missing inside committed history")
+          acknowledgedSeq = index
+        }
+      }
+      this.confirmed = acknowledgedSeq
+      if (records.length > acknowledgedSeq) {
+        this.pending = records[acknowledgedSeq]!
         this.pendingRequiresConfirmation = true
       }
       for (let index = 0; index < remoteSeq; index += 1) await this.verifyRecord(records[index]!)
@@ -477,6 +512,28 @@ export class IndependentAuthorityJournal<T> {
       this.byEvent.clear()
       throw error
     }
+  }
+
+  private acknowledgementBytes(record: JournalRecord<AuthorityEvent<T>>): Buffer {
+    const unsigned = {
+      schema: "lyrashield-supervisor-observed-mirror-ack/1",
+      head: this.headFor(record),
+    }
+    return Buffer.from(canonicalJson({ ...unsigned, signature: this.sign(unsigned) }))
+  }
+
+  private async hasAcknowledgement(
+    record: JournalRecord<AuthorityEvent<T>>,
+    bounded = false
+  ): Promise<boolean> {
+    const bytes = this.acknowledgementBytes(record)
+    const key = `${this.prefix}/acknowledgements/${record.sequence}`
+    const store = this.options.store as BoundedConditionalObjectStore
+    const object = bounded ? await store.readBounded(key, bytes.byteLength) : await store.read(key)
+    if (!object) return false
+    if (!Buffer.from(object.bytes).equals(bytes))
+      throw conflict("observed mirror acknowledgement is changed or foreign")
+    return true
   }
 
   private async verifyRecord(record: JournalRecord<AuthorityEvent<T>>): Promise<void> {
@@ -496,6 +553,10 @@ export class IndependentAuthorityJournal<T> {
 
   private async assertConfirmed(): Promise<void> {
     await this.assertHeads(this.confirmed)
+    for (const record of this.records!.slice(0, this.confirmed)) {
+      if (!(await this.hasAcknowledgement(record)))
+        throw unknown("observed mirror acknowledgement is unavailable")
+    }
   }
 
   private async assertHeads(sequence: number): Promise<void> {
@@ -543,11 +604,11 @@ export class IndependentAuthorityJournal<T> {
     if (!same(mirrored, previous) && !same(mirrored, expected)) {
       throw conflict("database mirror changed while replaying an intent")
     }
-    if (!same(mirrored, expected)) {
-      await this.options.mirror.compareAndAppend(previous, expected, record)
-      const readback = await this.readMirrorHead()
-      if (!readback) throw unknown("database mirror readback is unavailable")
-      if (!same(readback, expected)) throw conflict("database mirror does not match the intent")
-    }
+    // Replayed commits need an actual idempotent mirror response, not matching heads.
+    const outcome = await this.options.mirror.compareAndAppend(previous, expected, record)
+    if (outcome !== "written") throw conflict("database mirror rejected the intent")
+    const readback = await this.readMirrorHead()
+    if (!readback) throw unknown("database mirror readback is unavailable")
+    if (!same(readback, expected)) throw conflict("database mirror does not match the intent")
   }
 }

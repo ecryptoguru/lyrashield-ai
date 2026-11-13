@@ -6,10 +6,10 @@ import {
 } from "@lyrashield/runtime-control"
 import type { SupervisorJournalEvent } from "./journal-events"
 type OriginalEventPosition = Pick<JournalRecord<SupervisorJournalEvent>, "payload" | "sequence">
-function same(left: unknown, right: unknown): boolean {
+export function same(left: unknown, right: unknown): boolean {
   return canonicalJson(left) === canonicalJson(right)
 }
-function conflict(message: string): never {
+export function conflict(message: string): never {
   throw new IndependentAuthorityError("AUTHORITY_CONFLICT", message)
 }
 export function bindingFor(

@@ -118,6 +118,12 @@ export function validateResults(needs, cancelled = false) {
       outputs["marketing-tests"] === "true" || outputs["motion-tests"] === "true",
     ],
     ["desktop-frontend", outputs["desktop-frontend-tests"] === "true"],
+    [
+      "container-build",
+      outputs["web-image"] === "true" ||
+        outputs["worker-image"] === "true" ||
+        outputs["egress-image"] === "true",
+    ],
   ]) {
     const result = needs[job]?.result
     if (selected ? result !== "success" : result !== "skipped") {

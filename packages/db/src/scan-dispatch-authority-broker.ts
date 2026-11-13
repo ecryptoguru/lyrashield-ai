@@ -51,6 +51,8 @@
 import { createId } from "@paralleldrive/cuid2"
 import pg from "pg"
 import { createPgConnectionConfig } from "./connection-config"
+import { createSupervisorReceiptConsumer } from "./scan-supervisor-receipt-ingestion"
+import type { SupervisorReceiptAuthority } from "./scan-supervisor-receipt-ingestion-verifier"
 import {
   bindScanPreparationContext,
   commitPreparationAcknowledgement,
@@ -63,6 +65,7 @@ import {
   valueDigest,
 } from "./scan-dispatch-authority-broker-methods"
 import { startPaidDispatch } from "./scan-dispatch-authority-broker-start"
+import type { ScanPreparationCompiler } from "./scan-dispatch-command-descriptor"
 
 export type DispatchOperationState =
   | "QUEUED"
@@ -165,10 +168,13 @@ export type DispatchStatus =
 export { ScanDispatchAuthorityError }
 
 type BrokerOptions = {
+  /** Protected installation only; separate restricted consumer credentials. */
+  receiptAuthority?: SupervisorReceiptAuthority
   connectionString: string
   maximumPoolSize?: number
   /** Internal installation only. This intent contract cannot execute work. */
   preparationAuthority?: "checked-intent-v1"
+  compilePreparation?: ScanPreparationCompiler
 }
 
 type LockedOperation = {
@@ -527,6 +533,7 @@ export function createScanDispatchAuthorityBroker(options: BrokerOptions) {
 
   const ctx = {
     preparationAuthority: options.preparationAuthority,
+    compilePreparation: options.compilePreparation,
     transaction: <T>(
       operationId: string,
       work: (client: pg.PoolClient) => Promise<T>
@@ -534,7 +541,20 @@ export function createScanDispatchAuthorityBroker(options: BrokerOptions) {
     lockOperation,
   }
 
+  const receiptConsumer = options.receiptAuthority
+    ? createSupervisorReceiptConsumer(options.receiptAuthority, lockOperation)
+    : undefined
+
   return {
+    consumeSupervisorReceipts: (operationId: unknown) =>
+      receiptConsumer
+        ? receiptConsumer.consume(operationId)
+        : Promise.reject(
+            new ScanDispatchAuthorityError(
+              "SUPERVISOR_CONSUMER_NOT_INSTALLED",
+              "Protected supervisor receipt consumer is not installed"
+            )
+          ),
     prepare: (input: PrepareDispatchInput) => prepareDispatch(ctx, input),
     startPaid: (input: StartPaidDispatchInput) =>
       ctx.preparationAuthority
@@ -558,7 +578,7 @@ export function createScanDispatchAuthorityBroker(options: BrokerOptions) {
     reconcile: (input: ReconcileDispatchInput) => reconcileDispatch(pool, input),
     status: (operationId: string) => getDispatchStatus(pool, operationId),
     async close(): Promise<void> {
-      await pool.end()
+      await Promise.all([pool.end(), receiptConsumer?.close()])
     },
   }
 }

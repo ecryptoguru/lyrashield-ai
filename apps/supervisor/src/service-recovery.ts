@@ -1,5 +1,7 @@
 import {
   supervisorRecoveryRequestSchema,
+  IndependentAuthorityError,
+  type JournalPort,
   type JournalRecord,
   type SupervisorCommandResult,
   type SupervisorJournalRecoveryPort,
@@ -19,6 +21,37 @@ interface RecoveryServiceContext {
   resultFor(commandId: string): SupervisorCommandResult
   enter(run: Promise<unknown>): void
   leave(): void
+}
+
+export function retryInitialization(attempt: Promise<void>, reset: () => void): void {
+  void attempt.catch((error: unknown) => {
+    if (
+      error instanceof IndependentAuthorityError &&
+      (error.code === "AUTHORITY_UNKNOWN" || error.code === "REPLAY_REQUIRED")
+    )
+      reset()
+  })
+}
+
+export async function loadServiceState(
+  journal: JournalPort<SupervisorJournalEvent> &
+    Partial<SupervisorJournalRecoveryPort<SupervisorJournalEvent>>,
+  busy: () => boolean,
+  install: (records: JournalRecord<SupervisorJournalEvent>[]) => void
+): Promise<void> {
+  try {
+    install(await journal.load())
+  } catch (error) {
+    if (
+      !(error instanceof IndependentAuthorityError) ||
+      error.code !== "REPLAY_REQUIRED" ||
+      !journal.recoverPending ||
+      busy()
+    )
+      throw error
+    const recovered = await journal.recoverPending()
+    install(recovered.records)
+  }
 }
 
 /** Gates normal initialization while explicit authorized durability recovery runs. */

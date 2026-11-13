@@ -3,9 +3,22 @@ import { ProviderGatewayError } from "./errors"
 import type { RequestState } from "./journal-events"
 import { policyDigest, type RequestPolicy, authorizeRequest } from "./request-policy"
 import { ResponsesUsageParser, type TerminalUsage } from "./provider-usage"
-import { abortable, readBoundedResponse } from "./proxy-utils"
+import { abortable, MAX_DELIVERY_CHUNK_BYTES, readBoundedResponse } from "./proxy-utils"
 import { retainResponse } from "./retained-response"
 import { providerUsageId } from "./journal-state"
+
+export async function deliverCommittedStream(
+  body: Buffer,
+  deliveredBytes: number,
+  sink: { write: (chunk: Uint8Array) => Promise<void>; complete: () => Promise<void> },
+  deliver: (effect: () => Promise<void>) => Promise<void>
+): Promise<void> {
+  for (let offset = deliveredBytes; offset < body.byteLength; offset += MAX_DELIVERY_CHUNK_BYTES) {
+    const chunk = body.subarray(offset, offset + MAX_DELIVERY_CHUNK_BYTES)
+    await deliver(() => sink.write(chunk))
+  }
+  await deliver(() => sink.complete())
+}
 
 // Pure payload preparation; the service fences authority and durably records it.
 export function prepareRetainedResponse(
@@ -42,7 +55,6 @@ export async function readProviderResponse(
     deadlineAt?: number
     start?: () => Promise<void>
     write?: (chunk: Uint8Array) => Promise<void>
-    complete?: () => Promise<void>
   } = {}
 ) {
   const parser = new ResponsesUsageParser(policy, {
@@ -52,6 +64,8 @@ export async function readProviderResponse(
   const responseHasher = createHash("sha256")
   let responseBody: Buffer
   let usage: TerminalUsage | undefined
+  let deliveredBytes = 0
+  let pendingCarriageReturn = false
   try {
     if (
       !upstream.ok ||
@@ -68,13 +82,24 @@ export async function readProviderResponse(
         onChunk: async (chunk) => {
           responseHasher.update(chunk)
           parser.push(chunk)
-          await delivery.write?.(chunk)
+          if (delivery.write && !parser.hasTerminal) {
+            // A trailing CR might itself end an SSE frame; wait for its LF.
+            if (pendingCarriageReturn) {
+              await delivery.write(Buffer.from("\r"))
+              deliveredBytes += 1
+            }
+            pendingCarriageReturn = chunk.at(-1) === 13
+            const safeChunk = pendingCarriageReturn ? chunk.subarray(0, -1) : chunk
+            if (safeChunk.byteLength) {
+              await delivery.write(safeChunk)
+              deliveredBytes += safeChunk.byteLength
+            }
+          }
         },
       }),
       signal
     )
     usage = parser.finish()
-    await delivery.complete?.()
   } catch {
     await recordUnknown()
     throw new ProviderGatewayError(
@@ -83,7 +108,7 @@ export async function readProviderResponse(
       502
     )
   }
-  return { responseBody, usage, responseHash: responseHasher.digest("hex") }
+  return { responseBody, usage, responseHash: responseHasher.digest("hex"), deliveredBytes }
 }
 
 export function responseBinding(state: RequestState) {

@@ -63,6 +63,8 @@ SQL
 {
   printf 'SET ROLE authority_owner;\n'
   cat packages/runtime-control/sql/authority-mirror.sql
+  cat packages/runtime-control/sql/authority-seal.sql
+  cat packages/runtime-control/sql/authority-seal-v2.sql
   printf 'RESET ROLE; REVOKE CREATE ON DATABASE lyrashield_test FROM authority_owner;\n'
 } > "$dir/install.sql"
 docker exec -i "$container" psql -X -v ON_ERROR_STOP=1 -U postgres -d lyrashield_test < "$dir/install.sql"
@@ -76,4 +78,4 @@ SQL
 DATABASE_URL="postgresql://postgres:${admin_password}@127.0.0.1:${port}/lyrashield_test" \
 RLS_RUNTIME_DATABASE_URL="postgresql://authority_mirror:${runtime_password}@127.0.0.1:${port}/lyrashield_test" \
 LYRASHIELD_TEST_DB_DISPOSABLE=1 AUTHORITY_MIRROR_POSTGRES_TEST=1 \
-  pnpm exec vitest run packages/runtime-control/src/postgres-mirror.runtime.test.ts
+  pnpm exec vitest run packages/runtime-control/src/postgres-mirror.runtime.test.ts "$@"

@@ -11,6 +11,7 @@ export interface ProviderRoute {
 }
 
 export interface ProviderGatewayConfig {
+  socketPath?: string
   host: string
   port: number
   journalPath: string
@@ -115,6 +116,7 @@ export function loadProviderGatewayConfig(
   if (!Number.isInteger(port) || port < 1 || port > 65_535)
     throw new Error("invalid provider gateway port")
   return {
+    socketPath: env.LYRASHIELD_PROVIDER_GATEWAY_SOCKET_PATH?.trim() || undefined,
     host: env.LYRASHIELD_PROVIDER_GATEWAY_HOST?.trim() || "127.0.0.1",
     port,
     journalPath: required(env, "LYRASHIELD_PROVIDER_GATEWAY_JOURNAL_PATH"),

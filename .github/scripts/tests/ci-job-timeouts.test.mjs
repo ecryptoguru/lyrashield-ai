@@ -77,7 +77,7 @@ test("the aggregate waits for independent quality, app and marketing jobs", () =
   assert.match(aggregate, /^ {4}needs: changes$/m)
   assert.match(
     jobs.get("lint-and-typecheck"),
-    /needs: \[changes, code-quality, app-checks, marketing-checks, desktop-frontend\]/
+    /needs: \[changes, code-quality, app-checks, marketing-checks, desktop-frontend, container-build\]/
   )
   assert.match(jobs.get("marketing-checks"), /- name: Marketing browser E2E/)
 })

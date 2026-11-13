@@ -49,13 +49,38 @@ jobs:
           HEAD_SHA: ${{ github.sha }}
         run: bash .github/scripts/classify-main-change-gap.sh
 
-  deploy-azure:
+  # A normal main push reaches the protected issuer, which managed-signs one
+  # exact-artifact record from authenticated evidence. Deployment consumes only
+  # that record. The selectors come from repository variable
+  # LYRASHIELD_RUNTIME_FLEET_EVIDENCE; without authenticated evidence the issuer
+  # issues nothing and this job produces no digest, so deployment stays held.
+  qualify-runtime:
+    name: Issue the exact-artifact release qualification
     needs: routing
-    if: needs.routing.outputs.current-main == 'true' && needs.routing.outputs.azure-deploy == 'true'
+    if: needs.routing.outputs.current-main == 'true'
+    uses: ./.github/workflows/issue-runtime-qualification.yml
+    with:
+      runtime_fleet_evidence: ${{ vars.LYRASHIELD_RUNTIME_FLEET_EVIDENCE }}
+    secrets: inherit
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+      packages: read
+
+  deploy-azure:
+    needs: [routing, qualify-runtime]
+    if: >-
+      needs.routing.outputs.current-main == 'true' &&
+      needs.routing.outputs.azure-deploy == 'true' &&
+      needs.qualify-runtime.result == 'success' &&
+      needs.qualify-runtime.outputs.runtime_fleet_record_sha256 != ''
     uses: ./.github/workflows/deploy-azure.yml
     with:
       source_sha: ${{ github.sha }}
       cold_release: true
+      runtime_fleet_qualification: ${{ needs.qualify-runtime.outputs.runtime_fleet_qualification }}
+      runtime_fleet_record_sha256: ${{ needs.qualify-runtime.outputs.runtime_fleet_record_sha256 }}
     secrets: inherit
     permissions:
       actions: read

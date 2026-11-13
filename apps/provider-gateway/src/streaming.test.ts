@@ -1,3 +1,4 @@
+import { fixtureActionIntentPublisher, fixtureAuthorityFence } from "./test-fixtures"
 import { performance } from "node:perf_hooks"
 import { mkdtemp, rm, copyFile, readFile, open, writeFile, type FileHandle } from "node:fs/promises"
 import { createServer, type ServerResponse } from "node:http"
@@ -84,6 +85,8 @@ async function fixture(
   journals.push(journal)
   const options = {
     journal,
+    authorityFence: fixtureAuthorityFence,
+    publishActionIntent: fixtureActionIntentPublisher,
     signingSecret: secret,
     responseEncryptionSecret: "e".repeat(48),
     admission: "open" as const,
@@ -146,6 +149,42 @@ function sink() {
 }
 
 describe("bounded scan-bound SSE delivery", () => {
+  it.each(["before", "after"] as const)(
+    "recovers a lost non-dispatch receipt acknowledgement %s append without corrupting the stream journal",
+    async (failure) => {
+      const fetchImpl = vi.fn(async () => source().response)
+      const f = await fixture(fetchImpl)
+      const fault: JournalPort<ProviderJournalEvent> = {
+        load: () => f.journal.load(),
+        append: async (event) => {
+          if (event.type === "request_not_dispatched" && failure === "before")
+            throw new Error("receipt append failed")
+          const record = await f.journal.append(event)
+          if (event.type === "request_not_dispatched" && failure === "after")
+            throw new Error("receipt acknowledgement lost")
+          return record
+        },
+      }
+      const service = new ProviderGatewayService({
+        ...f.options,
+        journal: fault,
+        authorityFence: undefined,
+      })
+      await expect(service.proxy(f.input, sink().value)).rejects.toThrow()
+      await f.journal.close()
+      const journal = new SignedJournal(f.path, secret, (value) =>
+        providerJournalEventSchema.parse(value)
+      )
+      journals.push(journal)
+      const replacement = new ProviderGatewayService({ ...f.options, journal })
+      expect(await replacement.inspectRequest(f.input.requestId)).toMatchObject({
+        outcome: failure === "after" ? "NEVER_DISPATCHED" : "UNKNOWN",
+        physicalOutstanding: failure === "before",
+      })
+      expect(fetchImpl).not.toHaveBeenCalled()
+    }
+  )
+
   it("honors the HTTP writable backpressure signal and write acknowledgement", async () => {
     const response = new EventEmitter()
     let acknowledge: () => void = () => undefined
@@ -689,6 +728,93 @@ describe("bounded scan-bound SSE delivery", () => {
       physicalOutstanding: true,
     })
     expect(f.options.fetchImpl).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([false, true])(
+    "withholds the terminal event when the usage receipt acknowledgement is lost (fragmented=%s)",
+    async (fragmented) => {
+      const terminalBytes = pieces[2]!
+      const chunks = fragmented
+        ? [...pieces.slice(0, 2), ...Array.from(terminalBytes, (byte) => Buffer.from([byte]))]
+        : pieces
+      const f = await fixture(vi.fn(async () => source(chunks).response))
+      const client = sink()
+      const fault: JournalPort<ProviderJournalEvent> = {
+        load: () => f.journal.load(),
+        append: async (event) => {
+          const record = await f.journal.append(event)
+          if (event.type === "request_result" && event.result.outcome === "SUCCEEDED")
+            throw new Error("lost stream acknowledgement")
+          return record
+        },
+      }
+      const service = new ProviderGatewayService({ ...f.options, journal: fault })
+      await expect(service.proxy(f.input, client.value)).rejects.toThrow(
+        "lost stream acknowledgement"
+      )
+      const delivered = Buffer.concat(client.received)
+      expect(delivered.subarray(0, pieces[0]!.length)).toEqual(pieces[0])
+      expect(delivered.includes(terminalBytes)).toBe(false)
+      expect(client.complete).not.toHaveBeenCalled()
+      expect(await service.inspectRequest(f.input.requestId)).toMatchObject({
+        outcome: "UNKNOWN",
+        physicalOutstanding: true,
+      })
+      expect(f.options.fetchImpl).toHaveBeenCalledTimes(1)
+    }
+  )
+
+  it.each([false, true])(
+    "rejects bare carriage-return SSE delimiters before forwarding a terminal event (fragmented=%s)",
+    async (fragmented) => {
+      const terminalBytes = Buffer.from(pieces[2]!.toString("utf8").replaceAll("\n", "\r"))
+      const chunks = fragmented
+        ? [...pieces.slice(0, 2), ...Array.from(terminalBytes, (byte) => Buffer.from([byte]))]
+        : [...pieces.slice(0, 2), terminalBytes]
+      const f = await fixture(vi.fn(async () => source(chunks).response))
+      const client = sink()
+      await expect(f.service.proxy(f.input, client.value)).rejects.toMatchObject({
+        code: "PROVIDER_RESPONSE_UNKNOWN",
+      })
+      expect(Buffer.concat(client.received).includes(terminalBytes)).toBe(false)
+      expect(client.complete).not.toHaveBeenCalled()
+      expect(await f.service.inspectRequest(f.input.requestId)).toMatchObject({
+        outcome: "UNKNOWN",
+        physicalOutstanding: true,
+      })
+      expect(f.options.fetchImpl).toHaveBeenCalledTimes(1)
+    }
+  )
+
+  it("accepts CRLF event delimiters split across chunks", async () => {
+    const body = Buffer.from(
+      pieces
+        .map((piece) => piece.toString("utf8"))
+        .join("")
+        .replaceAll("\n", "\r\n")
+    )
+    const chunks = Array.from(body, (byte) => Buffer.from([byte]))
+    const f = await fixture(vi.fn(async () => source(chunks).response))
+    const client = sink()
+    await expect(f.service.proxy(f.input, client.value)).resolves.toMatchObject({ streamed: true })
+    expect(Buffer.concat(client.received)).toEqual(body)
+    expect(client.complete).toHaveBeenCalledOnce()
+    expect(await f.service.inspectRequest(f.input.requestId)).toMatchObject({
+      outcome: "SUCCEEDED",
+    })
+  })
+
+  it("withholds a trailing CR that could complete an SSE frame", async () => {
+    const terminalBytes = Buffer.from(pieces[2]!.toString("utf8").replace(/\n\n$/, "\n\r"))
+    const f = await fixture(
+      vi.fn(async () => source([...pieces.slice(0, 2), terminalBytes]).response)
+    )
+    const client = sink()
+    await expect(f.service.proxy(f.input, client.value)).rejects.toMatchObject({
+      code: "PROVIDER_RESPONSE_UNKNOWN",
+    })
+    expect(Buffer.concat(client.received).includes(terminalBytes)).toBe(false)
+    expect(client.complete).not.toHaveBeenCalled()
   })
 
   it.each([false, true])(

@@ -1,4 +1,6 @@
+import type { ScanAuthorityFence } from "@lyrashield/runtime-control"
 import type { RequestPolicy } from "./request-policy"
+import type { ProviderGatewayServiceOptions } from "./proxy-request"
 export const fixturePolicy: RequestPolicy = {
   version: 1,
   adapter: "responses-text-v1",
@@ -22,3 +24,18 @@ export const fixturePolicy: RequestPolicy = {
   deadlineMs: 1_000,
   idleTimeoutMs: 100,
 }
+
+// Synthetic lifecycle fixtures do not establish database authorization.
+export const fixtureAuthorityFence: ScanAuthorityFence = {
+  run: async (binding, effect) =>
+    effect(() => undefined, { guardId: `fixture-${binding.requestId ?? binding.operationId}` }),
+}
+
+// Synthetic producer acknowledgement; real database intent validation is separate.
+export const fixtureActionIntentPublisher: NonNullable<
+  ProviderGatewayServiceOptions["publishActionIntent"]
+> = async ({ binding }) => ({
+  kind: "committed",
+  requestId: binding.requestId!,
+  actionId: `fixture-${binding.requestId}`,
+})

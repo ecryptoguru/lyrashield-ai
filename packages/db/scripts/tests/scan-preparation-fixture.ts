@@ -249,6 +249,71 @@ export async function applyPreparationFixtureMigration(owner: pg.Pool) {
     )
     await owner.query(sql)
   }
+  for (const [migration, table, column] of [
+    ["20261113140000_scan_dispatch_command_descriptor", "ScanDispatchOutbox", "commandInputJson"],
+    ["20261113150000_supervisor_receipt_ingestion", "ScanSupervisorReceipt", "journalRecordId"],
+    ["20261113163000_scan_execution_action_authority", "ScanExecutionActionIntent", "id"],
+  ]) {
+    const installed = await owner.query(
+      "SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name=$1 AND column_name=$2",
+      [table, column]
+    )
+    if (!installed.rowCount) {
+      // Fixed reviewed fixture migration names only.
+      // eslint-disable-next-line security/detect-non-literal-fs-filename
+      const sql = await readFile(
+        new URL(`../../prisma/migrations/${migration}/migration.sql`, import.meta.url),
+        "utf8"
+      )
+      await owner.query(sql)
+    }
+  }
+  const executionReceipts = await owner.query(
+    "SELECT 1 FROM pg_enum e JOIN pg_type t ON t.oid=e.enumtypid WHERE t.typname='ScanSupervisorReceiptType' AND e.enumlabel='EXECUTOR_CREATED'"
+  )
+  if (!executionReceipts.rowCount) {
+    // Fixed reviewed additive receipt migration, applied after its dependencies.
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
+    const sql = await readFile(
+      new URL(
+        "../../prisma/migrations/20261113170000_supervisor_execution_receipts/migration.sql",
+        import.meta.url
+      ),
+      "utf8"
+    )
+    await owner.query(sql)
+  }
+  const nativeResolution =
+    await owner.query(`SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+    WHERE n.nspname='app' AND p.proname='scan_execution_invocation_resolution_guard'
+      AND position('invocation resolution lacks exact confirmed original native ACK' in p.prosrc)>0
+    UNION ALL SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+    WHERE n.nspname='app' AND p.proname='scan_supervisor_preparation_completed'`)
+  if (!nativeResolution.rowCount) {
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
+    const sql = await readFile(
+      new URL(
+        "../../prisma/migrations/20261113181000_supervisor_native_invocation_resolution/migration.sql",
+        import.meta.url
+      ),
+      "utf8"
+    )
+    await owner.query(sql)
+  }
+  const completion = await owner.query(
+    "SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='app' AND p.proname='scan_supervisor_preparation_completed'"
+  )
+  if (!completion.rowCount) {
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
+    const sql = await readFile(
+      new URL(
+        "../../prisma/migrations/20261113200000_supervisor_preparation_completion/migration.sql",
+        import.meta.url
+      ),
+      "utf8"
+    )
+    await owner.query(sql)
+  }
 }
 
 const usedLegacy = new Set<string>()
@@ -307,7 +372,7 @@ GRANT UPDATE(state,"updatedAt") ON "ScanDispatchOperation" TO dispatch_prepare_b
 -- Immutable attempt identity allows row locks only; mutation trigger still rejects writes.
 GRANT UPDATE("attemptId") ON "ScanDispatchAttempt" TO dispatch_prepare_broker;
 GRANT INSERT ON "ScanDispatchAttempt","ScanDispatchOutbox","ScanPhysicalExecution" TO dispatch_prepare_broker;
-GRANT EXECUTE ON FUNCTION app.scan_preparation_plan_json(jsonb),app.scan_preparation_context(text),app.require_scan_preparation_role(),app.scan_preparation_gate_held(),app.acquire_scan_preparation_gate(),app.check_scan_preparation_authority(text,timestamp),app.scan_dispatch_scope_digest(text),app.scan_target_snapshot_digest(text),app.scan_policy_digest(text),public.digest(bytea,text) TO dispatch_prepare_broker;
+GRANT EXECUTE ON FUNCTION app.scan_dispatch_command_input_valid(text,text,text),app.scan_preparation_plan_json(jsonb),app.scan_preparation_context(text),app.require_scan_preparation_role(),app.require_scan_execution_action_role(),app.scan_preparation_gate_held(),app.scan_execution_gate_held(),app.check_scan_current_execution_authority(text,timestamp,text),app.acquire_scan_preparation_gate(),app.check_scan_preparation_authority(text,timestamp),app.scan_dispatch_scope_digest(text),app.scan_target_snapshot_digest(text),app.scan_policy_digest(text),public.digest(bytea,text) TO dispatch_prepare_broker;
 DO $$ DECLARE name TEXT; BEGIN
  FOREACH name IN ARRAY ARRAY['ScanDispatchOperation','ScanDispatchAttempt','ScanDispatchOutbox','ScanPhysicalExecution','ScanDispatchStart','ScanSupervisorReceipt','ScanPhysicalExecutionTransition','ScanDispatchReleaseReceipt'] LOOP
   IF NOT EXISTS(SELECT 1 FROM pg_policies WHERE tablename=name AND policyname='fixture_preparation_scope') THEN

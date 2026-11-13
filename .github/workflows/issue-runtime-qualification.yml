@@ -13,6 +13,18 @@ on:
         type: string
         required: false
         default: ""
+      runtime_fleet_evidence:
+        description: "Optional exact authenticated fleet-evidence selectors; the only production release record input"
+        type: string
+        required: false
+        default: ""
+    outputs:
+      runtime_fleet_qualification:
+        description: "Signed exact-artifact release qualification envelope"
+        value: ${{ jobs.verify-signing-boundary.outputs.runtime_fleet_qualification }}
+      runtime_fleet_record_sha256:
+        description: "SHA-256 of the exact signed qualification bytes"
+        value: ${{ jobs.verify-signing-boundary.outputs.runtime_fleet_record_sha256 }}
 
 permissions:
   contents: read
@@ -22,14 +34,18 @@ jobs:
     # Optional publication verification precedes the fixed health signature.
     # Only an internally constructed held record may be signed. Runtime
     # admission still requires independent inventory and runtime authority.
+    # A normal main push reaches this protected issuer through release-production.
     if: >-
       github.repository_id == '1286618458' &&
       github.repository_owner_id == '116722580' &&
       github.ref == 'refs/heads/main' &&
-      github.event_name == 'workflow_dispatch'
+      (github.event_name == 'workflow_dispatch' || github.event_name == 'push')
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     environment: release-qualification
+    outputs:
+      runtime_fleet_qualification: ${{ steps.fleet.outputs.runtime_fleet_qualification }}
+      runtime_fleet_record_sha256: ${{ steps.fleet.outputs.runtime_fleet_record_sha256 }}
     permissions:
       contents: read
       actions: read
@@ -44,7 +60,7 @@ jobs:
         with:
           node-version: "24"
       - name: Prepare checksum-pinned protected Linux verifier
-        if: inputs.fresh_sandbox_publication != '' || inputs.fresh_sandbox_inventory != ''
+        if: inputs.fresh_sandbox_publication != '' || inputs.fresh_sandbox_inventory != '' || inputs.runtime_fleet_evidence != ''
         run: bash .github/scripts/prepare-qualification-verifier.sh
       - name: Authenticate and managed-sign held sandbox publication
         if: inputs.fresh_sandbox_publication != ''
@@ -70,6 +86,23 @@ jobs:
         with:
           name: held-sandbox-inventory-${{ github.run_id }}-${{ github.run_attempt }}
           path: sandbox-inventory-record.json
+          if-no-files-found: error
+          retention-days: 7
+      - name: Authenticate and managed-sign the exact-artifact release record
+        id: fleet
+        if: inputs.runtime_fleet_evidence != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUNTIME_FLEET_EVIDENCE: ${{ inputs.runtime_fleet_evidence }}
+        run: node .github/scripts/issue-runtime-fleet-qualification.mjs
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: inputs.runtime_fleet_evidence != ''
+        with:
+          name: runtime-fleet-qualification-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            runtime-fleet-qualification.json
+            runtime-fleet-qualification-receipt.json
+            paired-witness.json
           if-no-files-found: error
           retention-days: 7
       - name: Verify issuer identity and exact managed signing key

@@ -1,11 +1,22 @@
+import { fixtureActionIntentPublisher, fixtureAuthorityFence } from "./test-fixtures"
 import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { SignedJournal, type ProviderGrantRequest } from "@lyrashield/runtime-control"
+import {
+  SignedJournal,
+  type JournalPort,
+  type ProviderGrantRequest,
+  type ScanAuthorityFence,
+} from "@lyrashield/runtime-control"
 import type { ProviderRoute } from "./config"
 import { fixturePolicy } from "./test-fixtures"
-import { ProviderGatewayService, providerJournalEventSchema } from "./service"
+import {
+  ProviderGatewayService,
+  providerJournalEventSchema,
+  type ProviderJournalEvent,
+  type ProviderGatewayServiceOptions,
+} from "./service"
 
 const roots: string[] = []
 const secret = "p".repeat(48)
@@ -66,7 +77,7 @@ const route: ProviderRoute = {
 }
 
 async function createService(
-  journalPort?: Awaited<ReturnType<typeof journal>>,
+  journalPort?: JournalPort<ProviderJournalEvent>,
   fetchImpl: typeof fetch = vi.fn(
     async () =>
       new Response(providerBody(), {
@@ -74,11 +85,16 @@ async function createService(
         headers: { "content-type": "application/json" },
       })
   ),
-  admission: "closed" | "open" = "open"
+  admission: "closed" | "open" = "open",
+  authorityFence: ScanAuthorityFence | null = fixtureAuthorityFence,
+  publishActionIntent:
+    ProviderGatewayServiceOptions["publishActionIntent"] | null = fixtureActionIntentPublisher
 ) {
   const activeJournal = journalPort ?? (await journal())
   return new ProviderGatewayService({
     journal: activeJournal,
+    authorityFence: authorityFence ?? undefined,
+    publishActionIntent: publishActionIntent ?? undefined,
     signingSecret: secret,
     responseEncryptionSecret: "e".repeat(48),
     authorizeGrant: async () => fixturePolicy,
@@ -90,6 +106,305 @@ async function createService(
 }
 
 describe("ProviderGatewayService", () => {
+  it("dispatches the approved snapshot when caller input changes during intent publication", async () => {
+    const body = Buffer.from(inputBody)
+    const fetchImpl = vi.fn(async (_target: unknown, init: RequestInit | undefined) => {
+      expect(init?.method).toBe("POST")
+      expect(Buffer.from(init?.body as Uint8Array)).toEqual(inputBody)
+      return new Response(providerBody(), { headers: { "content-type": "application/json" } })
+    }) as unknown as typeof fetch
+    let input: Parameters<ProviderGatewayService["proxy"]>[0]
+    const publishActionIntent: NonNullable<
+      ProviderGatewayServiceOptions["publishActionIntent"]
+    > = async (intent) => {
+      expect(intent.actionInput).toMatchObject({ method: "POST" })
+      body.fill(0)
+      input.method = "DELETE"
+      input.path = "/unapproved"
+      return fixtureActionIntentPublisher(intent)
+    }
+    const service = await createService(
+      undefined,
+      fetchImpl,
+      "open",
+      fixtureAuthorityFence,
+      publishActionIntent
+    )
+    const grant = await service.issueGrant(request())
+    input = {
+      providerId: "azure-ai",
+      path: fixturePolicy.endpoint,
+      method: "post",
+      authorization: `Bearer ${grant.token}`,
+      requestId: "provider-snapshot",
+      contentType: "application/json",
+      body,
+    }
+    await expect(service.proxy(input)).resolves.toMatchObject({ statusCode: 200 })
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
+  })
+
+  it.each(["missing", "unknown", "wrong-request", "lost-ack"] as const)(
+    "does not dispatch an unconfirmed durable intent: %s",
+    async (failure) => {
+      const fetchImpl = vi.fn(async () => new Response(providerBody()))
+      const publisher: ProviderGatewayServiceOptions["publishActionIntent"] = async ({
+        binding,
+      }) => {
+        if (failure === "lost-ack") throw new Error("database acknowledgement lost")
+        return failure === "unknown"
+          ? { kind: "unknown", requestId: binding.requestId!, reasonCode: "COMMIT_OUTCOME_UNKNOWN" }
+          : { kind: "committed", requestId: "another-request", actionId: "original-intent" }
+      }
+      const service = await createService(
+        undefined,
+        fetchImpl,
+        "open",
+        fixtureAuthorityFence,
+        failure === "missing" ? null : publisher
+      )
+      const grant = await service.issueGrant(request())
+      const input = {
+        providerId: "azure-ai",
+        path: fixturePolicy.endpoint,
+        method: "POST",
+        authorization: `Bearer ${grant.token}`,
+        requestId: "provider-original-intent",
+        contentType: "application/json",
+        body: inputBody,
+      }
+      await expect(service.proxy(input)).rejects.toThrow()
+      expect(await service.inspectRequest(input.requestId)).toMatchObject({
+        outcome: failure === "missing" ? "NEVER_DISPATCHED" : "UNKNOWN",
+        physicalOutstanding: failure !== "missing",
+      })
+      await expect(service.proxy(input)).rejects.toThrow()
+      expect(fetchImpl).not.toHaveBeenCalled()
+    }
+  )
+
+  it("publishes the exact grant and dispatch descriptor before invoking the native fence", async () => {
+    const calls: string[] = []
+    const fetchImpl = vi.fn(async () => {
+      calls.push("fetch")
+      return new Response(providerBody(), { headers: { "content-type": "application/json" } })
+    })
+    let retained: Parameters<NonNullable<ProviderGatewayServiceOptions["publishActionIntent"]>>[0]
+    const publishActionIntent: NonNullable<
+      ProviderGatewayServiceOptions["publishActionIntent"]
+    > = async (input) => {
+      calls.push("publish")
+      retained = input
+      expect(input.authorityInput).toEqual({ request: request(), policy: fixturePolicy })
+      expect(input.actionInput).toMatchObject({
+        requestId: "provider-durable-intent",
+        providerId: "azure-ai",
+        path: "/openai/responses",
+        query: "?api-version=1",
+        method: "POST",
+        contentType: "application/json",
+        accept: "application/json",
+      })
+      expect(JSON.stringify(input)).not.toContain("real-provider-secret")
+      return { kind: "committed", requestId: input.binding.requestId!, actionId: "original-intent" }
+    }
+    const authorityFence: ScanAuthorityFence = {
+      run: async (binding, effect) => {
+        calls.push("fence")
+        expect(binding).toEqual(retained.binding)
+        return effect(() => undefined, { guardId: `fixture-${binding.requestId}` })
+      },
+    }
+    const service = await createService(
+      undefined,
+      fetchImpl,
+      "open",
+      authorityFence,
+      publishActionIntent
+    )
+    const grant = await service.issueGrant(request())
+    await service.proxy({
+      providerId: "azure-ai",
+      path: fixturePolicy.endpoint,
+      method: "POST",
+      authorization: `Bearer ${grant.token}`,
+      requestId: "provider-durable-intent",
+      contentType: "application/json",
+      body: inputBody,
+    })
+    expect(calls).toEqual(["publish", "fence", "fetch"])
+  })
+
+  it.each(["missing", "revoked"] as const)(
+    "releases the unused reservation when native dispatch authority is %s",
+    async (failure) => {
+      const fetchImpl = vi.fn(
+        async () =>
+          new Response(providerBody(), { headers: { "content-type": "application/json" } })
+      )
+      let checks = 0
+      const authorityFence: ScanAuthorityFence = {
+        run: async (binding) => {
+          checks++
+          expect(binding).toMatchObject({
+            phase: "PROVIDER_DISPATCH",
+            attemptId: "attempt-1",
+            scanId: "scan-1",
+            workspaceId: "workspace-1",
+            requestId: "provider-fenced",
+          })
+          expect(binding.authorityChecksum).toMatch(/^[a-f0-9]{64}$/)
+          expect(binding.actionChecksum).toMatch(/^[a-f0-9]{64}$/)
+          throw new Error("membership revoked")
+        },
+      }
+      const service = await createService(
+        undefined,
+        fetchImpl,
+        "open",
+        failure === "missing" ? null : authorityFence
+      )
+      const grant = await service.issueGrant(request())
+      const input = {
+        providerId: "azure-ai",
+        path: fixturePolicy.endpoint,
+        method: "POST",
+        authorization: `Bearer ${grant.token}`,
+        requestId: "provider-fenced",
+        contentType: "application/json",
+        body: inputBody,
+      }
+      await expect(service.proxy(input)).rejects.toThrow()
+      expect(await service.inspectRequest(input.requestId)).toMatchObject({
+        outcome: "NEVER_DISPATCHED",
+        physicalOutstanding: false,
+      })
+      expect(await service.inspectGrant(grant.grantId)).toMatchObject({
+        requestCount: 0,
+        reservedCostMicros: 0,
+      })
+      await expect(service.proxy(input)).rejects.toMatchObject({ code: "REQUEST_NOT_DISPATCHED" })
+      expect(checks).toBe(failure === "missing" ? 0 : 1)
+      expect(fetchImpl).not.toHaveBeenCalled()
+    }
+  )
+
+  it("holds the reservation if the fence fails after provider invocation", async () => {
+    const fetchImpl = vi.fn(async () => new Response(providerBody()))
+    const authorityFence: ScanAuthorityFence = {
+      run: async (binding, work) => {
+        await work(() => undefined, { guardId: `fixture-${binding.requestId}` })
+        throw new Error("lost fence acknowledgement")
+      },
+    }
+    const service = await createService(undefined, fetchImpl, "open", authorityFence)
+    const grant = await service.issueGrant(request())
+    const input = {
+      providerId: "azure-ai",
+      path: fixturePolicy.endpoint,
+      method: "POST",
+      authorization: `Bearer ${grant.token}`,
+      requestId: "provider-fence-ack-lost",
+      contentType: "application/json",
+      body: inputBody,
+    }
+    await expect(service.proxy(input)).rejects.toThrow()
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
+    expect(await service.inspectRequest(input.requestId)).toMatchObject({
+      outcome: "UNKNOWN",
+      physicalOutstanding: true,
+    })
+    expect(await service.inspectGrant(grant.grantId)).toMatchObject({
+      requestCount: 1,
+      reservedCostMicros: (await service.inspectRequest(input.requestId))?.reservationMicros,
+    })
+  })
+
+  it("preserves an earlier provider reservation when a later dispatch is denied", async () => {
+    const authorityFence: ScanAuthorityFence = {
+      run: async (binding, work) => {
+        if (binding.requestId === "provider-denied") throw new Error("authority revoked")
+        return work(() => undefined, { guardId: `fixture-${binding.requestId}` })
+      },
+    }
+    const service = await createService(undefined, undefined, "open", authorityFence)
+    const grant = await service.issueGrant(request())
+    const input = {
+      providerId: "azure-ai",
+      path: fixturePolicy.endpoint,
+      method: "POST",
+      authorization: `Bearer ${grant.token}`,
+      requestId: "provider-first",
+      contentType: "application/json",
+      body: inputBody,
+    }
+    await service.proxy(input)
+    const previous = await service.inspectGrant(grant.grantId)
+    await expect(service.proxy({ ...input, requestId: "provider-denied" })).rejects.toThrow()
+    expect(await service.inspectGrant(grant.grantId)).toMatchObject({
+      requestCount: previous?.requestCount,
+      reservedCostMicros: previous?.reservedCostMicros,
+    })
+  })
+
+  it("prevents a delayed fence callback from dispatching after the reservation is released", async () => {
+    const fetchImpl = vi.fn(async () => new Response(providerBody()))
+    let lateDispatch: (() => Promise<unknown>) | undefined
+    const authorityFence: ScanAuthorityFence = {
+      run: async (binding, work) => {
+        lateDispatch = async () =>
+          work(() => undefined, { guardId: `fixture-${binding.requestId}` })
+        throw new Error("fence timed out")
+      },
+    }
+    const service = await createService(undefined, fetchImpl, "open", authorityFence)
+    const grant = await service.issueGrant(request())
+    const input = {
+      providerId: "azure-ai",
+      path: fixturePolicy.endpoint,
+      method: "POST",
+      authorization: `Bearer ${grant.token}`,
+      requestId: "provider-late-fence",
+      contentType: "application/json",
+      body: inputBody,
+    }
+    await expect(service.proxy(input)).rejects.toThrow()
+    expect(lateDispatch).toBeDefined()
+    await expect(lateDispatch?.()).rejects.toThrow()
+    expect(fetchImpl).not.toHaveBeenCalled()
+    expect(await service.inspectRequest(input.requestId)).toMatchObject({
+      outcome: "NEVER_DISPATCHED",
+      physicalOutstanding: false,
+    })
+  })
+
+  it("does not dispatch twice if a fence invokes the callback twice", async () => {
+    const fetchImpl = vi.fn(async () => new Response(providerBody()))
+    const authorityFence: ScanAuthorityFence = {
+      run: async (binding, work) => {
+        await work(() => undefined, { guardId: `fixture-${binding.requestId}` })
+        return work(() => undefined, { guardId: `fixture-${binding.requestId}` })
+      },
+    }
+    const service = await createService(undefined, fetchImpl, "open", authorityFence)
+    const grant = await service.issueGrant(request())
+    const input = {
+      providerId: "azure-ai",
+      path: fixturePolicy.endpoint,
+      method: "POST",
+      authorization: `Bearer ${grant.token}`,
+      requestId: "provider-double-fence",
+      contentType: "application/json",
+      body: inputBody,
+    }
+    await expect(service.proxy(input)).rejects.toThrow()
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
+    expect(await service.inspectRequest(input.requestId)).toMatchObject({
+      outcome: "UNKNOWN",
+      physicalOutstanding: true,
+    })
+  })
+
   it("revokes and aborts an in-flight request without waiting for the provider", async () => {
     let observedSignal: AbortSignal | undefined
     let notifyStarted: () => void = () => undefined
