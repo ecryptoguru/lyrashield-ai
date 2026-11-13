@@ -1080,7 +1080,7 @@ describe.skipIf(!enabled)("checked preparation intent authority", () => {
       c.release()
     }
   })
-  it("retains the additive closed catalog: private definers, invoker guards and twenty-seven enabled triggers", async () => {
+  it("retains the additive closed catalog: private definers, invoker guards and twenty-nine enabled triggers", async () => {
     const names = [
       "scan_preparation_context",
       "require_scan_preparation_role",
@@ -1124,7 +1124,7 @@ describe.skipIf(!enabled)("checked preparation intent authority", () => {
         [names]
       )
     ).rows
-    expect(triggers).toHaveLength(27)
+    expect(triggers).toHaveLength(29)
     for (const t of triggers) {
       expect(t.tgenabled).toBe("O")
       expect(t.tgdeferrable).toBe(t.tgname === "scan_checked_preparation_bundle")
@@ -1473,16 +1473,20 @@ describe.skipIf(!enabled)("checked preparation intent authority", () => {
       await source.query("ROLLBACK")
       source.release()
     }
-    // Account-owned money rows settle under SERIALIZABLE, so the account gate
-    // must not carry the READ COMMITTED rule.
+    // Account-owned money and ledger rows settle under SERIALIZABLE, so the
+    // account gate must not carry the READ COMMITTED rule.
     const money = await owner.connect()
+    const account = (await owner.query('SELECT "accountId" FROM "BillingAccount" LIMIT 1')).rows[0]
+      ?.accountId
+    if (!account) return
     try {
       await money.query("BEGIN ISOLATION LEVEL SERIALIZABLE")
-      const account = (await owner.query('SELECT "accountId" FROM "BillingAccount" LIMIT 1'))
-        .rows[0]?.accountId
-      if (!account) return
       await money.query(
         'UPDATE "BillingAccount" SET "updatedAt"=clock_timestamp() WHERE "accountId"=$1',
+        [account]
+      )
+      await money.query(
+        'UPDATE "ScanCapacityReservation" SET "updatedAt"=clock_timestamp() WHERE "accountId"=$1',
         [account]
       )
       await money.query("COMMIT")
