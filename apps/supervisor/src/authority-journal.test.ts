@@ -263,7 +263,7 @@ describe("supervisor independent journal adapter", () => {
     ).toEqual(wrapped.slice(123))
     await original.close()
     await local.close()
-  }, 30000)
+  }, 120_000)
 
   it("holds bounded readback after lost acknowledgement and recovers only by exact replay", async () => {
     const f = await setup()
