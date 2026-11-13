@@ -144,10 +144,6 @@ function fixture() {
     mergeBase: main,
     ciReads: 0,
     onSecondCiRead: null,
-    protection: {
-      requiresStrictStatusChecks: true,
-      requiredStatusChecks: required.map((context) => ({ context, app: { databaseId: 15368 } })),
-    },
     actions: [],
   }
   const api = (url) => {
@@ -235,7 +231,6 @@ function fixture() {
     run: () =>
       runAutoMergeQueue({
         api,
-        readProtection: () => state.protection,
         updateBranch: (number, head) => state.actions.push(["update", number, head]),
         mergeReady: (number, head) => state.actions.push(["merge", number, head]),
         disableAutoMerge: (number, head) => state.actions.push(["disable", number, head]),
@@ -523,13 +518,10 @@ test("rejects fork, untrusted author, spoofed bot, draft, and changed head", () 
   assert.deepEqual(f.state.actions, [])
 })
 
-test("refuses to mutate if strict protection or an Actions-bound required check is missing", () => {
+test("refuses to mutate when a required check is not bound to GitHub Actions", () => {
   const f = fixture()
-  f.state.protection.requiresStrictStatusChecks = false
-  assert.throws(() => f.run(), /protection unavailable/)
-  f.state.protection.requiresStrictStatusChecks = true
-  f.state.protection.requiredStatusChecks[0].app.databaseId = 10
-  assert.throws(() => f.run(), /not bound to GitHub Actions/)
+  f.state.checks.get(heads[0])[0].app.id = 10
+  assert.equal(f.run().reason, "no eligible pull requests")
   assert.deepEqual(f.state.actions, [])
 })
 
