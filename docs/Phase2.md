@@ -26,12 +26,12 @@ This overlay records the deferrals and removals that bound the current Cloud lau
 
 ### Enterprise, infrastructure-expansion and speculative integration roadmap
 
-- **Status.** Already deferred further down this document, in `Current Phase 2 direction` and `Explicitly deferred`: enterprise SSO/OIDC and SCIM, advanced policy, private worker, VPC/self-hosting, data residency, IaC/container/cloud-account and reachability scanning, SIEM/Jira/CI integration adapters, and a large speculative integration catalog.
-- **Reason, impact and re-entry condition.** Unchanged and recorded there. They are cross-referenced here rather than restated, so the launch does not carry a second backlog, and nothing is pulled forward by this overlay.
+- **Status.** Already deferred further down this document, in `Current Phase 2 direction` and `Explicitly deferred`: enterprise SSO/OIDC and SCIM, advanced policy, private worker, VPC/self-hosting, data residency, IaC/container/cloud-account and reachability scanning, SIEM/Jira/CI integration adapters, plus a large speculative integration catalog.
+- **Reason, impact and re-entry condition.** Unchanged and recorded there. They are cross-referenced here rather than restated, so the launch does not carry a second backlog and nothing is pulled forward by this overlay.
 
 ### LyraShield Local/Desktop launch and its deferred roadmap
 
-- **Status.** Untouched. This deferral makes no change to Desktop implementation, packaging, signing, releases or Desktop-only dependency work, and records no Desktop roadmap item.
+- **Status.** Untouched. This deferral makes no change to Desktop implementation, packaging, signing, releases or Desktop-only dependency work, and it records no Desktop roadmap item.
 - **Reason.** Desktop has no signed release and is outside this Cloud launch.
 - **Impact.** Desktop MCP clients — for example a vendor's desktop coding assistant — are not this product and keep their supported MCP installation paths.
 - **Re-entry condition.** A separate, explicit Desktop launch decision.
@@ -42,7 +42,7 @@ This overlay records the deferrals and removals that bound the current Cloud lau
 - **Impact.** URL and API targets launch with deterministic **Safe** and **Quick** only — no model calls and no agent-minutes. Standard, Deep and Custom are not offered. Historical scans stay readable and immutable at their recorded mode, and an explicit Standard/Deep/Custom request returns an unsupported-profile error before any queue, provider or financial side effect rather than silently downgrading to Safe/Quick.
 - **Re-entry condition.** A future explicit product decision. Phase 2 does not automatically re-enable these profiles, and nothing here schedules their return.
 
-None of these deferrals changes the evidence boundaries in `PRD.md` §8 and §9: unverified work stays `DETECTED` or `INCONCLUSIVE`, preserved data is not a capability claim, and no deferral is described as acceptance evidence.
+None of these deferrals changes the evidence boundaries in `PRD.md` §8 and §9: unverified work stays `DETECTED` or `INCONCLUSIVE`; preserved data is not a capability claim; no deferral is described as acceptance evidence.
 
 ## Planning overlay — 2026-09-25
 
