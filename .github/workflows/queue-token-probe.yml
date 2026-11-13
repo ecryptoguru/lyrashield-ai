@@ -1,6 +1,8 @@
 name: Queue token probe
 
 on:
+  push:
+    branches: [docs/production-handoff-closeout]
   workflow_dispatch:
 
 permissions:
