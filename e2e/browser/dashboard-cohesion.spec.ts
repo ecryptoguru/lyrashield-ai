@@ -84,13 +84,15 @@ for (const width of [390, 1440]) {
     )
     await page.goto("?dashboard-ux=first-scan&launch-review")
     const dialog = page.getByRole("dialog", { name: "Start a scan" })
-    await expect(dialog.getByRole("radio", { name: /^Standard launch review:/ })).toHaveAttribute(
+    // URL/API launch is deterministic-only: a Standard launch intent resolves
+    // to the deterministic surface review, never a removed engine tier.
+    await expect(dialog.getByRole("radio", { name: /^Surface Review:/ })).toHaveAttribute(
       "aria-checked",
       "true"
     )
     await expect(dialog.getByRole("button", { name: /^Start scan$/i })).toBeEnabled()
     expect(requests.at(-1)?.searchParams.get("goal")).toBe("LAUNCH_REVIEW")
-    expect(requests.at(-1)?.searchParams.get("mode")).toBe("STANDARD")
+    expect(requests.at(-1)?.searchParams.get("mode")).toBe("SAFE")
   })
 
   test(`unavailable API launch review does not fall back at ${width}px`, async ({ page }) => {
@@ -115,10 +117,12 @@ for (const width of [390, 1440]) {
     )
     await page.goto("?dashboard-ux=first-scan&launch-review&target-type=API")
     const dialog = page.getByRole("dialog", { name: "Start a scan" })
-    const review = dialog.getByRole("radio", { name: /^Standard launch review:/ })
+    // An API target without a contract offers only the deterministic endpoint
+    // review, so there is no removed tier to fall back from.
+    const review = dialog.getByRole("radio", { name: /^Endpoint Review:/ })
     await expect(review).toHaveAttribute("aria-checked", "true")
-    await expect(review).toBeDisabled()
-    await expect(dialog.getByRole("button", { name: /^Start scan$/i })).toBeDisabled()
+    await expect(review).toBeEnabled()
+    await expect(dialog.getByRole("button", { name: /^Start scan$/i })).toBeEnabled()
   })
 
   test(`first scan continues from source to explicit confirmation and progress at ${width}px`, async ({
