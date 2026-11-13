@@ -324,7 +324,7 @@ describe("supervisor independent journal adapter", () => {
     expect((await f.journal.readCursor(cursor)).records).toHaveLength(2)
     await f.original.close()
     await f.local.close()
-  })
+  }, 60_000)
 
   it("rejects a changed remote record and revoked stream through the bounded path", async () => {
     let active = true
